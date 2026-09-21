@@ -140,11 +140,16 @@ class SeriesMatcher:
         norm = normalize_title(raw_title)
 
         # ── Exacto normalizado ───────────────────────────────────────────────
+        # title_norm es una columna generada por Postgres (f_title_norm(title),
+        # migración 0006) que espeja normalize_title(): antes se comparaba
+        # contra lower(title) crudo y un título acentuado en la BD ("Nausicaä")
+        # nunca hacía exact-match con un archivo sin tilde ("Nausicaa") — H1
+        # del peer review v2.
         exact = await self.db.execute(sa.text("""
             SELECT id, title, start_year, 1.0::float AS score
             FROM series
-            WHERE lower(title) = :norm
-               OR lower(COALESCE(sort_title, '')) = :norm
+            WHERE title_norm = :norm
+               OR f_title_norm(COALESCE(sort_title, '')) = :norm
         """), {"norm": norm})
         hits = [SeriesHit(UUID(str(r.id)), r.title, r.start_year, r.score)
                 for r in exact]
@@ -153,9 +158,9 @@ class SeriesMatcher:
         if not hits:
             fuzzy = await self.db.execute(sa.text("""
                 SELECT id, title, start_year,
-                       similarity(lower(title), :norm) AS score
+                       similarity(title_norm, :norm) AS score
                 FROM series
-                WHERE lower(title) % :norm
+                WHERE title_norm % :norm
                 ORDER BY score DESC
                 LIMIT 5
             """), {"norm": norm})

@@ -4,7 +4,7 @@ from datetime import date, datetime
 from uuid import uuid4
 
 from sqlalchemy import (
-    BigInteger, Boolean, CheckConstraint, Column, Date, DateTime,
+    BigInteger, Boolean, CheckConstraint, Column, Computed, Date, DateTime,
     Enum, Float, ForeignKey, Integer, SmallInteger, String, Table, Text,
     UniqueConstraint, func,
 )
@@ -161,6 +161,9 @@ class Creator(Base):
     photo_url:       Mapped[str|None] = mapped_column(String(500))
     metadata_:       Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))
+    # H3 (peer review v2): campos que el enricher nunca sobrescribe aunque
+    # metadata_source no sea 'manual' — bloqueo granular, no todo-o-nada.
+    locked_fields:   Mapped[list]     = mapped_column(ARRAY(String), default=list)
     created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     issue_credits: Mapped[list["IssueCreator"]] = relationship(back_populates="creator")
@@ -179,6 +182,7 @@ class Character(Base):
     image_url:              Mapped[str|None] = mapped_column(String(500))
     metadata_:              Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source:        Mapped[str|None] = mapped_column(String(20))
+    locked_fields:          Mapped[list]     = mapped_column(ARRAY(String), default=list)
     created_at:             Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:             Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     universe: Mapped["Universe|None"] = relationship(back_populates="characters")
@@ -189,10 +193,14 @@ class Series(Base):
     id:              Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     title:           Mapped[str]      = mapped_column(String(500), nullable=False)
     sort_title:      Mapped[str|None] = mapped_column(String(500))
+    # H1 (peer review v2): columna generada por Postgres (f_title_norm(title),
+    # ver migración 0006) — espejo de core.matcher.normalize_title. Nunca se
+    # asigna desde Python; SQLAlchemy solo la lee de vuelta tras un refresh.
+    title_norm:      Mapped[str|None] = mapped_column(Text, Computed("f_title_norm(title)", persisted=True))
     publisher_id:    Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL"))
     imprint_id:      Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("imprints.id", ondelete="SET NULL"))
     universe_id:     Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL"))
-    tradition:       Mapped[ComicTradition] = mapped_column(Enum(ComicTradition, name="comic_tradition"), default=ComicTradition.AMERICAN)
+    tradition:       Mapped[ComicTradition] = mapped_column(Enum(ComicTradition, name="comic_tradition", values_callable=lambda obj: [e.value for e in obj]), default=ComicTradition.AMERICAN)
     start_year:      Mapped[int|None] = mapped_column(SmallInteger)
     end_year:        Mapped[int|None] = mapped_column(SmallInteger)
     total_issues:    Mapped[int|None] = mapped_column(Integer)
@@ -210,6 +218,13 @@ class Series(Base):
     cover_url:       Mapped[str|None] = mapped_column(String(500))
     metadata_:       Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))
+    # H2 (peer review v2): último intento de enriquecimiento, con o sin
+    # match. NULL = nunca intentado. El enricher solo reintenta series con
+    # NULL o con más de 30 días — antes reintentaba en CADA ciclo para
+    # siempre a las que nunca encontraban fuente, quemando rate limit.
+    enrichment_attempted_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+    # H3 (peer review v2): ver Creator.locked_fields.
+    locked_fields:   Mapped[list]     = mapped_column(ARRAY(String), default=list)
     created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     publisher: Mapped["Publisher|None"]  = relationship(back_populates="series")
@@ -240,7 +255,7 @@ class Issue(Base):
     volume:          Mapped[int]          = mapped_column(Integer, default=1)
     title:           Mapped[str|None]     = mapped_column(String(500))
     release_date:    Mapped[date|None]    = mapped_column(Date)
-    format:          Mapped[IssueFormat]  = mapped_column(Enum(IssueFormat, name="issue_format"), default=IssueFormat.SINGLE_ISSUE)
+    format:          Mapped[IssueFormat]  = mapped_column(Enum(IssueFormat, name="issue_format", values_callable=lambda obj: [e.value for e in obj]), default=IssueFormat.SINGLE_ISSUE)
     page_count:      Mapped[int|None]     = mapped_column(Integer)
     isbn:            Mapped[str|None]     = mapped_column(String(20))
     synopsis:        Mapped[str|None]     = mapped_column(Text)
@@ -249,6 +264,9 @@ class Issue(Base):
     sort_order:      Mapped[float|None]   = mapped_column(Float)
     metadata_:       Mapped[dict]         = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None]     = mapped_column(String(20))
+    # H2/H3 (peer review v2): ver Series.enrichment_attempted_at / Creator.locked_fields.
+    enrichment_attempted_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
+    locked_fields:   Mapped[list]         = mapped_column(ARRAY(String), default=list)
     created_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     series:           Mapped["Series"]               = relationship(back_populates="issues")
@@ -263,7 +281,7 @@ class IssueCreator(Base):
     __tablename__ = "issue_creators"
     issue_id:   Mapped[str]         = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
     creator_id: Mapped[str]         = mapped_column(UUID(as_uuid=True), ForeignKey("creators.id", ondelete="CASCADE"), primary_key=True)
-    role:       Mapped[CreatorRole] = mapped_column(Enum(CreatorRole, name="creator_role"), primary_key=True)
+    role:       Mapped[CreatorRole] = mapped_column(Enum(CreatorRole, name="creator_role", values_callable=lambda obj: [e.value for e in obj]), primary_key=True)
     issue:   Mapped["Issue"]   = relationship(back_populates="credits")
     creator: Mapped["Creator"] = relationship(back_populates="issue_credits")
 
@@ -290,7 +308,7 @@ class File(Base):
     issue_id:            Mapped[str|None]     = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="SET NULL"))
     file_path:           Mapped[str]          = mapped_column(String(1000), unique=True, nullable=False)
     file_name:           Mapped[str]          = mapped_column(String(500), nullable=False)
-    file_format:         Mapped[FileFormat]   = mapped_column(Enum(FileFormat, name="file_format"), nullable=False)
+    file_format:         Mapped[FileFormat]   = mapped_column(Enum(FileFormat, name="file_format", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     file_size_bytes:     Mapped[int|None]     = mapped_column(BigInteger)
     sha256_hash:         Mapped[str|None]     = mapped_column(String(64), index=True)
     source_tag:          Mapped[str|None]     = mapped_column(String(50))
@@ -315,10 +333,9 @@ class Wishlist(Base):
     id:               Mapped[str]             = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     series_id:        Mapped[str|None]        = mapped_column(UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"))
     issue_id:         Mapped[str|None]        = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"))
-    status:           Mapped[WishlistStatus]  = mapped_column(Enum(WishlistStatus, name="wishlist_status"), default=WishlistStatus.WANTED)
+    status:           Mapped[WishlistStatus]  = mapped_column(Enum(WishlistStatus, name="wishlist_status", values_callable=lambda obj: [e.value for e in obj]), default=WishlistStatus.WANTED)
     priority:         Mapped[int]             = mapped_column(Integer, default=5)
     search_query:     Mapped[str|None]        = mapped_column(String(500))
-    locked_fields:    Mapped[list]            = mapped_column(ARRAY(String), default=list)
     added_at:         Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_searched_at: Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     downloaded_at:    Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
@@ -331,7 +348,7 @@ class ReadingProgress(Base):
     __tablename__ = "reading_progress"
     id:           Mapped[str]           = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     issue_id:     Mapped[str]           = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), unique=True, nullable=False)
-    status:       Mapped[ReadingStatus] = mapped_column(Enum(ReadingStatus, name="reading_status"), default=ReadingStatus.UNREAD)
+    status:       Mapped[ReadingStatus] = mapped_column(Enum(ReadingStatus, name="reading_status", values_callable=lambda obj: [e.value for e in obj]), default=ReadingStatus.UNREAD)
     current_page: Mapped[int]           = mapped_column(Integer, default=0)
     rating:       Mapped[int|None]      = mapped_column(SmallInteger)
     started_at:   Mapped[datetime|None] = mapped_column(DateTime(timezone=True))

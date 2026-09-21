@@ -10,8 +10,11 @@ issue_id=None. El coleccionista los resuelve a mano desde la UI:
 
 Una asignación manual confirmada por el coleccionista es EXACTAMENTE el
 caso para el que existe la convención metadata_source='manual' (fix C3
-del peer review): tanto el File como el Issue nuevo se marcan así, y el
-enricher nunca los tocará.
+del peer review): el File se marca así y el enricher nunca lo toca (los
+archivos no son su terreno). El Issue nuevo, en cambio, NO se marca
+'manual' — eso bloquearía sinopsis/portada/créditos que el enricher sí
+debería poder rellenar más adelante — sino que protege únicamente la
+asignación serie+número vía locked_fields (H3, peer review v2).
 """
 from __future__ import annotations
 
@@ -76,10 +79,15 @@ class ReviewService:
             .where(Issue.issue_number == issue_number)
         )).scalar_one_or_none()
         if not issue:
+            # H3 (peer review v2): antes se marcaba metadata_source='manual',
+            # lo que bloqueaba TODO el issue para el enricher (sinopsis,
+            # portada, créditos incluidos) solo por proteger la asignación
+            # serie+número que hizo el coleccionista. locked_fields protege
+            # justo eso y deja que el resto se siga rellenando.
             issue = Issue(
                 series_id=series.id,
                 issue_number=issue_number,
-                metadata_source=MetadataSource.MANUAL.value,
+                locked_fields=["series_id", "issue_number"],
             )
             self.db.add(issue)
             await self.db.flush()

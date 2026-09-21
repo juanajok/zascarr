@@ -33,9 +33,10 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from secuenciarr.core.matcher import normalize_title
@@ -72,6 +73,14 @@ _COMIC_VINE_TRADITIONS = {ComicTradition.AMERICAN, ComicTradition.BRITISH}
 # Desambiguación por año como en matcher.py: ±1 absorbe discrepancias de
 # "año de la serie" vs "año del primer número" entre fuentes.
 _YEAR_TOLERANCE = 1
+
+# H2 (peer review v2): antes, una serie/issue sin match entraba en el batch
+# en CADA ciclo para siempre, quemando rate limit de APIs externas en
+# búsquedas condenadas. enrichment_attempted_at marca "lo intentamos" (con o
+# sin match) y esto es cuánto se espera antes de reintentar — no en el
+# siguiente ciclo (cada pocos minutos), sino a plazo largo: una fuente puede
+# indexar una serie recién publicada con retraso.
+ENRICHMENT_RETRY_AFTER = timedelta(days=30)
 
 
 @dataclass
@@ -140,6 +149,10 @@ class EnrichmentService:
             .where(Series.anilist_id.is_(None))
             .where(Series.tebeosfera_slug.is_(None))
             .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(or_(
+                Series.enrichment_attempted_at.is_(None),
+                Series.enrichment_attempted_at < datetime.now(timezone.utc) - ENRICHMENT_RETRY_AFTER,
+            ))
             .limit(limit)
         )).scalars().all()
 
@@ -157,9 +170,15 @@ class EnrichmentService:
                 else:
                     match = await self._find_cv_series_match(cv_client, series)
             except Exception:
+                # No se marca enrichment_attempted_at: un fallo de red es
+                # transitorio y debe poder reintentarse en el próximo ciclo,
+                # no dentro de 30 días como un "no encontrado" genuino.
                 logger.exception("enricher.series_lookup_failed", series=series.title, source=source_label)
                 report.errors.append(f"serie '{series.title}': error consultando {source_label}")
                 continue
+
+            # H2: se marca el intento tanto si hay match como si no.
+            series.enrichment_attempted_at = datetime.now(timezone.utc)
 
             if match is None:
                 report.series_no_match.append(series.title)
@@ -185,12 +204,17 @@ class EnrichmentService:
 
     @staticmethod
     def _apply_series_match(series: Series, match: SeriesMatch, id_field: str, source_value: str) -> None:
-        setattr(series, id_field, match.source_id)
-        if not series.description:
+        # H3 (peer review v2): locked_fields protege campos concretos aunque
+        # metadata_source no sea 'manual' (ese caso ya lo excluye la query
+        # de _enrich_series_batch, que es bloqueo total, no granular).
+        locked = series.locked_fields or []
+        if id_field not in locked:
+            setattr(series, id_field, match.source_id)
+        if "description" not in locked and not series.description:
             series.description = match.description
-        if not series.cover_url:
+        if "cover_url" not in locked and not series.cover_url:
             series.cover_url = match.cover_url
-        if not series.total_issues and match.count_of_issues:
+        if "total_issues" not in locked and not series.total_issues and match.count_of_issues:
             series.total_issues = match.count_of_issues
         if series.metadata_source is None:
             series.metadata_source = source_value
@@ -267,6 +291,10 @@ class EnrichmentService:
             .where(Issue.comic_vine_id.is_(None))
             .where(Issue.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
             .where(Issue.issue_number.is_not(None))
+            .where(or_(
+                Issue.enrichment_attempted_at.is_(None),
+                Issue.enrichment_attempted_at < datetime.now(timezone.utc) - ENRICHMENT_RETRY_AFTER,
+            ))
             .limit(limit)
         )).all()
 
@@ -275,18 +303,27 @@ class EnrichmentService:
             try:
                 match = await client.find_issue(series.comic_vine_id, issue.issue_number)
             except Exception:
+                # Igual que en series: fallo transitorio, no cuenta como
+                # intento para la caché negativa de 30 días.
                 logger.exception("enricher.issue_lookup_failed", issue=label)
                 report.errors.append(f"issue {label}: error consultando Comic Vine")
                 continue
+
+            issue.enrichment_attempted_at = datetime.now(timezone.utc)  # H2
 
             if match is None:
                 report.issues_no_match.append(label)
                 continue
 
-            issue.comic_vine_id = match.cv_id
-            if not issue.synopsis:
+            # H3: locked_fields protege la asignación manual desde la
+            # bandeja de pendientes (review.py) sin bloquear el resto del
+            # contenido — ver ReviewService.assign_to_series.
+            locked = issue.locked_fields or []
+            if "comic_vine_id" not in locked:
+                issue.comic_vine_id = match.cv_id
+            if "synopsis" not in locked and not issue.synopsis:
                 issue.synopsis = match.description
-            if not issue.cover_url:
+            if "cover_url" not in locked and not issue.cover_url:
                 issue.cover_url = match.image_url
             if issue.metadata_source is None:
                 issue.metadata_source = MetadataSource.COMIC_VINE.value

@@ -93,7 +93,11 @@ class TestAssignToSeries:
         issues_created = [o for o in session.added if isinstance(o, Issue)]
         assert len(issues_created) == 1
         assert issues_created[0].issue_number == "12"
-        assert issues_created[0].metadata_source == MetadataSource.MANUAL.value
+        # H3 (peer review v2): el Issue creado al vuelo ya NO se marca
+        # metadata_source='manual' (eso bloquearía sinopsis/portada/créditos
+        # para el enricher); se protege solo la asignación vía locked_fields.
+        assert issues_created[0].metadata_source is None
+        assert issues_created[0].locked_fields == ["series_id", "issue_number"]
         assert not orig.exists()  # se movió de verdad
         assert Path(result.file_path).exists()
         assert "Batman #012" in result.file_name

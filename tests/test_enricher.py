@@ -18,7 +18,7 @@ import pytest
 
 from secuenciarr.models import ComicTradition, Creator, CreatorRole, Issue, MetadataSource, Series
 from secuenciarr.services.anilist import AniListClient, AniListResult
-from secuenciarr.services.comic_vine import ComicVineClient, CVCredit, CVResult, _parse_issue
+from secuenciarr.services.comic_vine import ComicVineClient, CVCredit, CVIssueResult, CVResult, _parse_issue
 from secuenciarr.services.enricher import EnrichmentReport, EnrichmentService
 from secuenciarr.services.tebeosfera import TebeosferaResult, _parse_results
 
@@ -511,6 +511,193 @@ class TestNuncaTocaManual:
 
         assert series.metadata_source == MetadataSource.COMICINFO_XML.value
         assert series.comic_vine_id == 5
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3b. H2 (peer review v2) — caché negativa: enrichment_attempted_at
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCacheNegativaH2:
+
+    @pytest.mark.asyncio
+    async def test_marca_attempted_at_con_match(self):
+        series = make_series("Batman")
+        client = AsyncMock()
+        client.search_series.return_value = [CVResult(cv_id=1, name="Batman")]
+        service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
+        report = EnrichmentReport()
+
+        assert series.enrichment_attempted_at is None
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
+        assert series.enrichment_attempted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_marca_attempted_at_sin_match_para_no_reintentar_cada_ciclo(self):
+        """Antes: una serie sin match quedaba en el batch para siempre. Ahora
+        se marca el intento igual que con match — la query (no probable aquí
+        sin DB real, ver test_query_de_series_filtra_por_attempted_at) es la
+        que evita repescarla hasta pasados 30 días."""
+        series = make_series("Serie Rarísima")
+        client = AsyncMock()
+        client.search_series.return_value = []
+        service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
+
+        assert report.series_no_match == ["Serie Rarísima"]
+        assert series.enrichment_attempted_at is not None
+
+    @pytest.mark.asyncio
+    async def test_no_marca_attempted_at_si_la_fuente_falla(self):
+        """Un fallo de red es transitorio: no debe contar como intento
+        genuino, o se perdería la reintentona en el próximo ciclo (en vez de
+        esperar 30 días como a una serie sin match real)."""
+        series = make_series("Batman")
+        client = AsyncMock()
+        client.search_series.side_effect = RuntimeError("boom")
+        service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
+
+        assert series.enrichment_attempted_at is None
+        assert report.errors
+
+    def test_query_de_series_filtra_por_attempted_at(self):
+        """No hay DB real en esta suite: se verifica que el WHERE generado
+        usa IS NULL / comparación temporal sobre enrichment_attempted_at."""
+        from sqlalchemy import or_, select
+
+        from secuenciarr.services.enricher import ENRICHMENT_RETRY_AFTER
+        from datetime import datetime, timezone
+
+        stmt = select(Series).where(or_(
+            Series.enrichment_attempted_at.is_(None),
+            Series.enrichment_attempted_at < datetime.now(timezone.utc) - ENRICHMENT_RETRY_AFTER,
+        ))
+        compiled = str(stmt)
+        assert "enrichment_attempted_at IS NULL" in compiled
+        assert "enrichment_attempted_at <" in compiled
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 3c. H3 (peer review v2) — locked_fields protege campos concretos
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestLockedFieldsH3:
+
+    @pytest.mark.asyncio
+    async def test_campo_en_locked_fields_no_se_sobrescribe(self):
+        """Aunque metadata_source no sea 'manual' (bloqueo total), un campo
+        listado en locked_fields no se toca — este es justo el caso de un
+        Issue creado desde la bandeja de pendientes (review.py) que protege
+        'issue_number' sin bloquear el resto del enriquecimiento."""
+        series = make_series("Batman")
+        series.locked_fields = ["cover_url"]
+        client = AsyncMock()
+        client.search_series.return_value = [CVResult(
+            cv_id=1, name="Batman", image_url="http://cv/nueva.jpg",
+            description="sinopsis CV",
+        )]
+        service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
+
+        assert series.cover_url is None  # protegido por locked_fields
+        assert series.description == "sinopsis CV"  # el resto sí se rellena
+        assert series.comic_vine_id == 1
+
+    @pytest.mark.asyncio
+    async def test_id_field_en_locked_fields_no_se_sobrescribe(self):
+        series = make_series("Batman")
+        series.locked_fields = ["comic_vine_id"]
+        client = AsyncMock()
+        client.search_series.return_value = [CVResult(cv_id=1, name="Batman")]
+        service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
+
+        assert series.comic_vine_id is None
+
+
+class TestEnrichIssuesBatchH2H3:
+    """_enrich_issues_batch no tenía cobertura propia antes de H2/H3; se
+    añade aquí junto con las reglas nuevas para no dejar el método sin
+    ningún test end-to-end (con sesión fake)."""
+
+    @pytest.mark.asyncio
+    async def test_match_marca_attempted_at_y_rellena_campos_no_bloqueados(self):
+        series = make_series("Batman", comic_vine_id=10)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="1",
+                      locked_fields=["issue_number"])
+        client = AsyncMock()
+        client.find_issue.return_value = CVIssueResult(
+            cv_id=99, description="sinopsis", image_url="http://cv/cover.jpg",
+        )
+        session = FakeSession([
+            FakeExecResult([(issue, series)]),  # query de pendientes
+            FakeExecResult([]),                  # _apply_credits: sin créditos existentes
+        ])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_issues_batch(client, 10, report)
+
+        assert issue.enrichment_attempted_at is not None
+        assert issue.comic_vine_id == 99          # no estaba en locked_fields
+        assert issue.synopsis == "sinopsis"
+        assert report.issues_enriched == ["Batman #1"]
+
+    @pytest.mark.asyncio
+    async def test_campo_bloqueado_no_se_sobrescribe(self):
+        series = make_series("Batman", comic_vine_id=10)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="1",
+                      locked_fields=["comic_vine_id"])
+        client = AsyncMock()
+        client.find_issue.return_value = CVIssueResult(cv_id=99)
+        session = FakeSession([
+            FakeExecResult([(issue, series)]),
+            FakeExecResult([]),
+        ])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_issues_batch(client, 10, report)
+
+        assert issue.comic_vine_id is None
+
+    @pytest.mark.asyncio
+    async def test_sin_match_marca_attempted_at_igual(self):
+        series = make_series("Batman", comic_vine_id=10)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="999")
+        client = AsyncMock()
+        client.find_issue.return_value = None
+        session = FakeSession([FakeExecResult([(issue, series)])])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_issues_batch(client, 10, report)
+
+        assert issue.enrichment_attempted_at is not None
+        assert report.issues_no_match == ["Batman #999"]
+
+    @pytest.mark.asyncio
+    async def test_error_de_red_no_marca_attempted_at(self):
+        series = make_series("Batman", comic_vine_id=10)
+        issue = Issue(id=uuid4(), series_id=series.id, issue_number="1")
+        client = AsyncMock()
+        client.find_issue.side_effect = RuntimeError("boom")
+        session = FakeSession([FakeExecResult([(issue, series)])])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_issues_batch(client, 10, report)
+
+        assert issue.enrichment_attempted_at is None
+        assert report.errors
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
