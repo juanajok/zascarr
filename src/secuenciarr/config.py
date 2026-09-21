@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     comicvine_base_url: str = "https://comicvine.gamespot.com/api"
     comicvine_rate_limit: float = 1.0
 
+    # ── AniList API (manga/manhwa/manhua) ────────────────────────────
+    # Sin API key: es pública. 1.5s es conservador a propósito — AniList
+    # ha tenido temporadas en modo degradado (30 req/min en vez de 90).
+    anilist_rate_limit: float = 1.5
+
     # ── Prowlarr (baremetal) ───────────────────────────────────────
     prowlarr_url: str = Field(default="http://127.0.0.1:9696")
     prowlarr_api_key: str = Field(default="")

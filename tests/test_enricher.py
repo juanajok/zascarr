@@ -16,18 +16,20 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from secuenciarr.models import Creator, CreatorRole, Issue, MetadataSource, Series
+from secuenciarr.models import ComicTradition, Creator, CreatorRole, Issue, MetadataSource, Series
+from secuenciarr.services.anilist import AniListClient, AniListResult
 from secuenciarr.services.comic_vine import ComicVineClient, CVCredit, CVResult, _parse_issue
 from secuenciarr.services.enricher import EnrichmentReport, EnrichmentService
 
 
 def make_series(title="Batman", start_year=None, comic_vine_id=None,
                 metadata_source=None, description=None, cover_url=None,
-                total_issues=None) -> Series:
+                total_issues=None, tradition=ComicTradition.AMERICAN) -> Series:
     return Series(
         id=uuid4(), title=title, start_year=start_year,
         comic_vine_id=comic_vine_id, metadata_source=metadata_source,
         description=description, cover_url=cover_url, total_issues=total_issues,
+        tradition=tradition,
     )
 
 
@@ -98,8 +100,30 @@ class TestComicVineRetry:
         assert caller_params == {"query": "batman"}  # sin api_key ni format inyectados
 
 
+class TestAniListRetry:
+
+    @pytest.mark.asyncio
+    async def test_reintenta_en_429_y_devuelve_datos_al_reintentar(self, monkeypatch):
+        monkeypatch.setattr("asyncio.sleep", AsyncMock())
+
+        client = AniListClient()
+        responses = [
+            httpx.Response(429, headers={"Retry-After": "0"}, request=httpx.Request("POST", "http://x")),
+            httpx.Response(200, json={"data": {"Page": {"media": []}}},
+                           request=httpx.Request("POST", "http://x")),
+        ]
+        fake_http = MagicMock()
+        fake_http.post = AsyncMock(side_effect=responses)
+        client._client = fake_http
+
+        results = await client.search_manga("berserk")
+
+        assert results == []
+        assert fake_http.post.await_count == 2
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# 2. EnrichmentService._find_series_match — solo acepta título exacto
+# 2. EnrichmentService._find_cv_series_match — solo acepta título exacto
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestFindSeriesMatch:
@@ -110,7 +134,7 @@ class TestFindSeriesMatch:
         client.search_series.return_value = []
         service = EnrichmentService(db=MagicMock())
 
-        result = await service._find_series_match(client, make_series("Serie Rarísima"))
+        result = await service._find_cv_series_match(client, make_series("Serie Rarísima"))
         assert result is None
 
     @pytest.mark.asyncio
@@ -122,8 +146,8 @@ class TestFindSeriesMatch:
         ]
         service = EnrichmentService(db=MagicMock())
 
-        result = await service._find_series_match(client, make_series("Batman"))
-        assert result.cv_id == 2  # "Batman Beyond" no matchea, solo el exacto
+        result = await service._find_cv_series_match(client, make_series("Batman"))
+        assert result.source_id == 2  # "Batman Beyond" no matchea, solo el exacto
 
     @pytest.mark.asyncio
     async def test_solo_coincidencia_parcial_no_hace_match(self):
@@ -135,7 +159,7 @@ class TestFindSeriesMatch:
         ]
         service = EnrichmentService(db=MagicMock())
 
-        result = await service._find_series_match(client, make_series("Batman"))
+        result = await service._find_cv_series_match(client, make_series("Batman"))
         assert result is None
 
     @pytest.mark.asyncio
@@ -149,8 +173,128 @@ class TestFindSeriesMatch:
         ]
         service = EnrichmentService(db=MagicMock())
 
-        result = await service._find_series_match(client, make_series("Batman", start_year=2012))
-        assert result.cv_id == 2
+        result = await service._find_cv_series_match(client, make_series("Batman", start_year=2012))
+        assert result.source_id == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2b. EnrichmentService._find_anilist_match + enrutado por tradition
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFindAniListMatch:
+
+    @pytest.mark.asyncio
+    async def test_match_por_titulo_romaji(self):
+        client = AsyncMock()
+        client.search_manga.return_value = [
+            AniListResult(anilist_id=1, title_romaji="Berserk", title_english=None, start_year=1989),
+        ]
+        service = EnrichmentService(db=MagicMock())
+
+        result = await service._find_anilist_match(
+            client, make_series("Berserk", tradition=ComicTradition.MANGA))
+        assert result.source_id == 1
+
+    @pytest.mark.asyncio
+    async def test_match_por_titulo_ingles_si_no_matchea_romaji(self):
+        client = AsyncMock()
+        client.search_manga.return_value = [
+            AniListResult(anilist_id=2, title_romaji="Shingeki no Kyojin",
+                         title_english="Attack on Titan", start_year=2009),
+        ]
+        service = EnrichmentService(db=MagicMock())
+
+        result = await service._find_anilist_match(
+            client, make_series("Attack on Titan", tradition=ComicTradition.MANGA))
+        assert result.source_id == 2
+
+    @pytest.mark.asyncio
+    async def test_sin_coincidencia_exacta_no_hay_match(self):
+        client = AsyncMock()
+        client.search_manga.return_value = [
+            AniListResult(anilist_id=3, title_romaji="Berserk 2", title_english=None),
+        ]
+        service = EnrichmentService(db=MagicMock())
+
+        result = await service._find_anilist_match(
+            client, make_series("Berserk", tradition=ComicTradition.MANGA))
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_chapters_se_mapea_a_count_of_issues(self):
+        client = AsyncMock()
+        client.search_manga.return_value = [
+            AniListResult(anilist_id=4, title_romaji="One Piece", chapters=1100,
+                         description="sinopsis", cover_url="http://x/y.jpg"),
+        ]
+        service = EnrichmentService(db=MagicMock())
+
+        result = await service._find_anilist_match(
+            client, make_series("One Piece", tradition=ComicTradition.MANGA))
+        assert result.count_of_issues == 1100
+        assert result.description == "sinopsis"
+        assert result.cover_url == "http://x/y.jpg"
+
+
+class TestSourceRouting:
+
+    def test_manga_va_a_anilist(self):
+        service = EnrichmentService(db=MagicMock())
+        field, source, label = service._source_for(ComicTradition.MANGA)
+        assert (field, source, label) == ("anilist_id", MetadataSource.ANILIST.value, "AniList")
+
+    def test_manhwa_y_manhua_van_a_anilist(self):
+        service = EnrichmentService(db=MagicMock())
+        for tradition in (ComicTradition.MANHWA, ComicTradition.MANHUA):
+            field, _, _ = service._source_for(tradition)
+            assert field == "anilist_id"
+
+    def test_american_y_british_van_a_comic_vine(self):
+        service = EnrichmentService(db=MagicMock())
+        for tradition in (ComicTradition.AMERICAN, ComicTradition.BRITISH):
+            field, source, label = service._source_for(tradition)
+            assert (field, source, label) == ("comic_vine_id", MetadataSource.COMIC_VINE.value, "Comic Vine")
+
+    def test_tradiciones_sin_fuente_devuelven_none(self):
+        """BD/tebeo/fumetti: ni Comic Vine ni AniList las indexan bien.
+        Mejor no enriquecer que enriquecer con la fuente equivocada."""
+        service = EnrichmentService(db=MagicMock())
+        for tradition in (ComicTradition.FRANCO_BELGIAN, ComicTradition.TEBEO, ComicTradition.FUMETTI):
+            assert service._source_for(tradition) is None
+
+    @pytest.mark.asyncio
+    async def test_serie_sin_fuente_no_aparece_ni_como_match_ni_como_no_match(self):
+        series = make_series("Astérix", tradition=ComicTradition.FRANCO_BELGIAN)
+        session = FakeSession([FakeExecResult([series])])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(AsyncMock(), AsyncMock(), 10, report)
+
+        assert report.series_enriched == []
+        assert report.series_no_match == []
+        assert series.comic_vine_id is None
+        assert series.anilist_id is None
+
+    @pytest.mark.asyncio
+    async def test_serie_manga_se_enriquece_via_anilist_no_comic_vine(self):
+        series = make_series("Berserk", tradition=ComicTradition.MANGA)
+        cv_client = AsyncMock()
+        anilist_client = AsyncMock()
+        anilist_client.search_manga.return_value = [
+            AniListResult(anilist_id=42, title_romaji="Berserk", chapters=370),
+        ]
+        session = FakeSession([FakeExecResult([series])])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(cv_client, anilist_client, 10, report)
+
+        assert series.anilist_id == 42
+        assert series.comic_vine_id is None
+        assert series.metadata_source == MetadataSource.ANILIST.value
+        assert report.series_enriched == ["Berserk"]
+        cv_client.search_series.assert_not_called()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -226,7 +370,7 @@ class TestNuncaTocaManual:
                                                        count_of_issues=850)]
         service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
         report = EnrichmentReport()
-        await service._enrich_series_batch(client, 10, report)
+        await service._enrich_series_batch(client, AsyncMock(), 10, report)
 
         assert series.description == "Descripción humana"
         assert series.cover_url == "http://ya-tengo/portada.jpg"
@@ -244,7 +388,7 @@ class TestNuncaTocaManual:
         client.search_series.return_value = [CVResult(cv_id=5, name="Sandman")]
         service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
         report = EnrichmentReport()
-        await service._enrich_series_batch(client, 10, report)
+        await service._enrich_series_batch(client, AsyncMock(), 10, report)
 
         assert series.metadata_source == MetadataSource.COMICINFO_XML.value
         assert series.comic_vine_id == 5
