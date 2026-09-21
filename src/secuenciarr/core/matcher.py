@@ -58,10 +58,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 SIMILARITY_THRESHOLD = 0.35
 FUZZY_THRESHOLD = 0.60      # por debajo: ruido, aunque supere el WHERE
 
-_ARTICLES = re.compile(
-    r"^(the|el|la|los|las|le|les|il|lo|die|der|das)\s+",
-    re.IGNORECASE,
-)
+_ARTICLE_WORDS = r"the|el|la|los|las|le|les|il|lo|die|der|das"
+# Artículo inicial: "The Sandman" → "Sandman". El (?:\s+|$) en vez de \s+
+# a secas cubre el caso patológico de un título que ES solo el artículo
+# ("The" a secas), que antes no matcheaba por no tener nada detrás.
+_ARTICLE_LEADING = re.compile(rf"^(?:{_ARTICLE_WORDS})(?:\s+|$)", re.IGNORECASE)
+# Artículo pospuesto tras coma: "Sandman, The" → "Sandman".
+_ARTICLE_TRAILING = re.compile(rf",\s*(?:{_ARTICLE_WORDS})\s*$", re.IGNORECASE)
 _ABBREV = re.compile(r"(?<=\w)\.(?=\w)")   # punto entre letras → eliminar
 _PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
 _WS = re.compile(r"\s+")
@@ -69,7 +72,7 @@ _WS = re.compile(r"\s+")
 
 def normalize_title(title: str) -> str:
     """Normalización para matching: minúsculas, sin acentos, sin artículo
-    inicial, sin puntuación.
+    inicial o pospuesto, sin puntuación.
 
     Decisiones documentadas:
     - Acentos eliminados (NFKD): los filenames de la escena son ASCII-seguros
@@ -77,12 +80,15 @@ def normalize_title(title: str) -> str:
       SMB). La DB puede tener tildes, pero la normalización las quita a ambos.
     - Abreviaciones: "S.H.I.E.L.D." → "shield" (no "s h i e l d").
       El paso _ABBREV elimina puntos entre letras antes de la limpieza general.
-    - 'The Sandman' y 'Sandman, The' colapsan al mismo valor.
+    - 'The Sandman' y 'Sandman, The' colapsan al mismo valor: el artículo
+      pospuesto tras coma se quita ANTES que el inicial, porque tras quitar
+      la coma "Sandman The" ya no tiene el artículo al principio.
     """
     nfkd = unicodedata.normalize("NFKD", title)
     asciiish = "".join(c for c in nfkd if not unicodedata.combining(c))
     no_abbrev = _ABBREV.sub("", asciiish)           # S.H.I.E.L.D. → SHIELD
-    no_article = _ARTICLES.sub("", no_abbrev.strip())
+    no_trailing_article = _ARTICLE_TRAILING.sub("", no_abbrev.strip())
+    no_article = _ARTICLE_LEADING.sub("", no_trailing_article.strip())
     no_punct = _PUNCT.sub(" ", no_article)
     return _WS.sub(" ", no_punct).strip().lower()
 

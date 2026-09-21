@@ -63,12 +63,16 @@ _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 def guess_source_tag(filename: str) -> str | None:
     """Extrae el tag de origen del sufijo de release del filename.
 
-    Busca en el último bloque entre paréntesis antes de la extensión.
-    Si no hay bloque de paréntesis, busca en el stem completo como fallback.
+    Busca SOLO en el último bloque entre paréntesis antes de la extensión.
+    Sin bloque de paréntesis no hay tag: no cae a buscar en el stem completo
+    a propósito, para no confundir el título de la obra con un sufijo de
+    release ("Digital Conan Vol.01" no es una release digital).
     """
     stem = Path(filename).stem
     match = _LAST_PAREN.search(stem)
-    target = match.group(1) if match else stem
+    if not match:
+        return None
+    target = match.group(1)
     for pattern, tag in _TAG_PATTERNS:
         if re.search(pattern, target):
             return tag
@@ -78,14 +82,16 @@ def guess_source_tag(filename: str) -> str | None:
 # ── Parseo de ComicInfo.xml ──────────────────────────────────────────────────
 
 _ROLE_MAP = {
-    "writer": "writer",
-    "penciller": "penciler",   # ComicInfo usa "penciller" (doble L)
-    "inker": "inker",
-    "colorist": "colorist",
-    "letterer": "letterer",
-    "coverartist": "cover_artist",
-    "editor": "editor",
-    "translator": "translator",
+    # Claves = nombre del tag TAL CUAL aparece en ComicInfo.xml (PascalCase,
+    # como <Series>/<Number>): root.find() es sensible a mayúsculas.
+    "Writer": "writer",
+    "Penciller": "penciler",   # ComicInfo usa "Penciller" (doble L)
+    "Inker": "inker",
+    "Colorist": "colorist",
+    "Letterer": "letterer",
+    "CoverArtist": "cover_artist",
+    "Editor": "editor",
+    "Translator": "translator",
 }
 _CREDIT_TAGS = tuple(_ROLE_MAP)
 
@@ -204,11 +210,16 @@ def triage(path: Path) -> TriageResult:
         return result
 
     try:
-        result.sha256, buf = _hash_and_buffer(path)
+        sha256, buf = _hash_and_buffer(path)
         zf = zipfile.ZipFile(buf)
     except (OSError, zipfile.BadZipFile) as exc:
+        # sha256 se deja sin asignar a propósito: el hash de basura binaria
+        # de un zip roto no sirve para dedupe (dos descargas incompletas
+        # del mismo origen casi nunca cortan en el mismo byte) y dejarlo
+        # puesto sugeriría una identidad de contenido que no existe.
         result.warnings.append(f"zip ilegible: {exc}")
         return result
+    result.sha256 = sha256
 
     with zf:
         names = zf.namelist()

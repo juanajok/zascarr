@@ -24,7 +24,6 @@ from secuenciarr.core.importer_triage import (
     ComicInfo,
     TriageResult,
     guess_source_tag,
-    normalize_title,
     parse_comic_info,
     triage,
 )
@@ -116,12 +115,10 @@ class TestGuessSourceTag:
     def test_hd_detectado(self):
         assert guess_source_tag("Saga 001 (HD).cbz") == "scan_hq"
 
-    def test_sin_parentesis_digital_en_nombre(self):
-        # "Digital" sin paréntesis en el stem: caso ambiguo.
-        # El fallback busca en el stem completo, así que sí matchea.
-        # Documentamos el comportamiento actual.
-        result = guess_source_tag("Digital Edition Batman.cbz")
-        assert result == "digital"  # Correcto: sin paréntesis, busca en stem
+    def test_sin_parentesis_no_hay_fallback_al_stem(self):
+        # Sin bloque de paréntesis no hay tag, ni aunque "Digital" aparezca
+        # en el título: sería el mismo falso positivo que Digital Conan.
+        assert guess_source_tag("Digital Edition Batman.cbz") is None
 
     def test_sin_tag(self):
         assert guess_source_tag("Batman #001.cbz") is None
@@ -352,7 +349,15 @@ def make_session_mock(series_hits: list[SeriesHit],
         norm = (params or {}).get("norm", "")
         sid = (params or {}).get("sid", "")
 
-        if "series" in str(query):
+        # OJO: no dispatchar mirando si "series" está en el SQL — la query
+        # de find_issue hace "FROM issues WHERE series_id = ...", así que
+        # "series" (de "series_id") también aparecería ahí y esta rama
+        # nunca se alcanzaría. Hay que mirar la tabla real (FROM issues).
+        if "FROM issues" in str(query):
+            row = MagicMock(id=str(issue_id)) if issue_id else None
+            result_mock.first = MagicMock(return_value=row)
+            return result_mock
+        else:  # find_series query
             rows = [
                 MagicMock(id=str(h.series_id), title=h.title,
                           start_year=h.start_year, score=h.score)
@@ -360,10 +365,6 @@ def make_session_mock(series_hits: list[SeriesHit],
             ]
             result_mock.__iter__ = MagicMock(return_value=iter(rows))
             result_mock.scalars = MagicMock(return_value=rows)
-            return result_mock
-        else:  # find_issue query
-            row = MagicMock(id=str(issue_id)) if issue_id else None
-            result_mock.first = MagicMock(return_value=row)
             return result_mock
 
     session.execute = execute_side_effect
@@ -436,9 +437,10 @@ class TestSeriesMatcherDecide:
         session = make_session_mock(hits, iid)
         matcher = SeriesMatcher(session)
 
-        # ComicInfo dice Year=2013 → debe matchear Batman (2011), no (1940)
+        # ComicInfo dice Year=2012 (dentro de la tolerancia ±1 del matcher)
+        # → debe matchear Batman (2011), no (1940)
         result = await matcher.decide(
-            make_triage_result("Batman", "12", year=2013)
+            make_triage_result("Batman", "12", year=2012)
         )
         assert result.status == MatchStatus.DIRECT
         assert result.series_id == sid2
@@ -497,23 +499,27 @@ class TestRealWorldFilenames:
     cada bug de naming que encuentres en producción.
     """
 
-    # Importar naming.py cuando esté implementado
-    # from secuenciarr.utils.naming import parse_comic_filename
+    # naming.py ya existe (a diferencia de cuando se escribió este
+    # placeholder original), pero conectar estos casos reales revela que
+    # su limpieza de ruido no cubre sufijos parentéticos tipo "(New 52)"
+    # ni títulos con "- Subtítulo": marcados xfail en vez de perderse otra
+    # vez como placeholder invisible. Arreglar naming.py para estos casos
+    # es, literalmente, el backlog B5 — no un fix de una línea.
+    _b5 = pytest.mark.xfail(reason="naming.py: limpieza de ruido incompleta (backlog B5)")
 
     @pytest.mark.parametrize("filename,expected_series,expected_num", [
-        ("Batman_v2_012.cbz",                   "Batman",    "12"),
-        ("Saga 001 (2013).cbz",                 "Saga",      "1"),
-        ("One Piece c1054.cbz",                 "One Piece", "1054"),
-        ("Batman (New 52) 012 (2013).cbz",      "Batman",    "12"),
-        ("Sandman.001.(1989).(Digital).cbz",    "Sandman",   "1"),
-        ("Berserk Vol.01.cbz",                  "Berserk",   None),  # manga: sin número
-        ("MF #001 - Safari Callejero.cbz",      "MF",        "1"),
-        ("Asterix T01 - Asterix el Galo.cbz",   "Asterix",   "1"),
+        pytest.param("Batman_v2_012.cbz",               "Batman",    "12",   marks=_b5),
+        pytest.param("Saga 001 (2013).cbz",              "Saga",      "1"),
+        pytest.param("One Piece c1054.cbz",              "One Piece", "1054"),
+        pytest.param("Batman (New 52) 012 (2013).cbz",   "Batman",    "12",   marks=_b5),
+        pytest.param("Sandman.001.(1989).(Digital).cbz", "Sandman",   "1",    marks=_b5),
+        pytest.param("Berserk Vol.01.cbz",               "Berserk",   None),  # manga: sin número
+        pytest.param("MF #001 - Safari Callejero.cbz",   "MF",        "1",    marks=_b5),
+        pytest.param("Asterix T01 - Asterix el Galo.cbz", "Asterix",  "1",    marks=_b5),
     ])
     def test_parse_filename(self, filename, expected_series, expected_num):
-        """Placeholder hasta que naming.py esté implementado.
+        from secuenciarr.utils.naming import parse_comic_filename
 
-        Reemplazar el skip con la importación real de parse_comic_filename.
-        Cada fila de parametrize es un bug potencial que hay que cubrir.
-        """
-        pytest.skip("naming.py pendiente de implementación (Fase B)")
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert (result.issue_number or None) == expected_num
