@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     import_interval_minutes: int = 15
     max_concurrent_downloads: int = 2
 
+    # ── Enricher (Comic Vine) ────────────────────────────────────────
+    # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el
+    # enricher procesa por lotes pequeños en cada ciclo (ver enricher.py).
+    enrich_interval_minutes: int = 120
+    enrich_batch_size: int = 20
+
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "SecuenciArr"
     app_version: str = "0.1.0"
