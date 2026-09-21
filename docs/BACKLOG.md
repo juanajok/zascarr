@@ -28,7 +28,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| A1 | Como coleccionista, quiero un único comando o script que lo instale todo, para no tener que seguir un manual de 20 pasos | `bootstrap.sh` pregunta 3 cosas (¿dónde están tus tebeos? ¿dónde descargas? ¿idioma?) y termina con una URL que funciona | P0 | M |
+| A1 | ~~Como coleccionista, quiero un único comando o script que lo instale todo, para no tener que seguir un manual de 20 pasos~~ | ~~`bootstrap.sh` pregunta 3 cosas (¿dónde están tus tebeos? ¿dónde descargas? ¿idioma?) y termina con una URL que funciona~~ | ✅ Hecho | M |
 | A2 | Como coleccionista, quiero que el instalador me diga en español llano qué falló ("no encuentro el disco", no "exit code 1") | Mensajes de error del bootstrap mapeados a causas y soluciones comunes | P0 | S |
 | A3 | Como coleccionista, quiero que si algo se tuerce, mi colección nunca se dañe | El instalador y el importador NUNCA borran archivos originales; solo copian/mueven a destinos verificados | P0 | S |
 | A4 | Como coleccionista, quiero desinstalar sin dejar restos ni perder mi tebeoteca | `make uninstall` conserva biblioteca y BD con aviso claro | P1 | S |
@@ -66,15 +66,22 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | D1 | Como coleccionista, quiero marcar "quiero esta serie" y olvidarme: el sistema la encuentra y la añade | Wishlist → orchestrator → Transmission/aMule → import; visible como "Buscando... Descargando... En tu biblioteca" en la UI | P0 | L |
 | D2 | Como coleccionista, quiero elegir "solo CBZ de calidad" o "acepto escaneos" sin entender qué es un quality profile | Selector de 3 opciones legibles ("solo lo mejor / equilibrado / lo que haya"); mapea a `quality_tier` interno | P1 | M |
 | D3 | Como coleccionista, quiero que si sale una edición mejor de algo que ya tengo, el sistema me la ofrezca | Lógica de upgrade sobre `quality_tier`; la UI propone, no sustituye sin confirmar | P1 | M |
-| D4 | Como coleccionista, quiero que el sistema me avise si está descargando sin VPN sin que se pare todo | Warning del healthcheck visible como aviso en UI + log del orchestrator (decisión ya acordada, ver fix C2) | P0 | S |
+| D4 | ~~Como coleccionista, quiero que el sistema me avise si está descargando sin VPN sin que se pare todo~~ | ~~Warning del healthcheck visible como aviso en UI + log del orchestrator (decisión ya acordada, ver fix C2)~~ | ✅ Hecho (vía E1) | S |
 
 ### Épica E — "Confío en el sistema"
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| E1 | Como coleccionista, quiero una pantalla de estado con semáforos ("todo bien / atención: sin VPN / error: disco lleno") | Dashboard sobre `/api/health` con iconos y textos en español, no JSON | P0 | M |
-| E2 | Como coleccionista, quiero que haya copias de seguridad automáticas sin configurar nada por mi parte | Cron de `pg_dump` a segundo disco (el backup actual al mismo disco del dato era hallazgo del review) | P0 | S |
+| E1 | ~~Como coleccionista, quiero una pantalla de estado con semáforos ("todo bien / atención: sin VPN / error: disco lleno")~~ | ~~Dashboard sobre `/api/health` con iconos y textos en español, no JSON~~ | ✅ Hecho | M |
+| E2 | ~~Como coleccionista, quiero que haya copias de seguridad automáticas sin configurar nada por mi parte~~ | ~~Cron de `pg_dump` a segundo disco (el backup actual al mismo disco del dato era hallazgo del review)~~ | ✅ Hecho | S |
 | E3 | Como coleccionista, quiero un botón "restaurar copia" si algo sale mal | Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo) | P1 | M |
+
+**Notas de implementación (E1/A1/E2/D4):**
+
+- **E1 (dashboard):** `src/secuenciarr/static/dashboard.html`, servido en `GET /` (antes esa ruta no existía; la API vivía solo bajo `/api/*`). Página única sin build tooling, sondea `/api/health` cada 10s. Verificado visualmente en el navegador en los 4 estados (todo bien / atención / error / sin conexión) y en viewport móvil. Al mostrar el array `warnings` del healthcheck (VPN sin proteger, etc.) como un aviso visible, esta misma pieza cierra también **D4**.
+- **E1 (empaquetado):** `pyproject.toml` no incluía datos no-Python en `pip install .` (no editable, el que usa el Dockerfile) — sin `[tool.setuptools.package-data]`, `dashboard.html` no habría llegado a la imagen. Verificado con una instalación real no-editable en un venv limpio.
+- **A1 (bootstrap.sh):** 3 preguntas (biblioteca, raíz de descargas, idioma), escritas en `.env` de forma idempotente (`set_env_var`, no duplica al re-ejecutar). `docker-compose.yml` parametriza el lado HOST de los 3 volúmenes correspondientes (`HOST_LIBRARY_DIR`, `HOST_DOWNLOADS_DIR`, `HOST_AMULE_INCOMING_DIR`) manteniendo el lado del contenedor fijo, así que `config.py` no necesitó cambios. El idioma se guarda en `APP_LOCALE` para cuando exista i18n real — hoy no traduce nada. Probado en aislamiento (sin Docker) con respuestas por defecto y personalizadas, incluyendo idempotencia.
+- **E2 (backup):** `scripts/backup.sh` (mismo patrón que `vpn-state.sh`: script host + timer systemd embebido), escribe en `/media/WDElements/backups/postgres/` (disco distinto al de los datos) con retención automática de 14 días. `make backup` ahora lo invoca en vez de duplicar la lógica.
 
 ## Fuera de alcance (parking lot honesto)
 

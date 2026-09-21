@@ -36,6 +36,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# Sin esto, `pip install .` (no editable, el que usa el Dockerfile) no
+# empaqueta dashboard.html: setuptools solo incluye .py por defecto. Un
+# `pip install -e .` en local lo esconde porque lee directo del working
+# tree, así que este bug solo se vería dentro del contenedor construido.
+[tool.setuptools.package-data]
+secuenciarr = ["static/*.html"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100

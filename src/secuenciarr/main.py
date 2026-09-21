@@ -2,14 +2,18 @@
 import asyncio
 import contextlib
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from secuenciarr.config import get_settings
 
 logger = structlog.get_logger()
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 async def _import_loop(interval_minutes: int) -> None:
@@ -97,6 +101,15 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
+async def dashboard() -> FileResponse:
+    """E1: dashboard de estado en español con semáforos en vez de JSON crudo.
+
+    Página única sin dependencias externas (nada de build tooling en una
+    Pi): fetch() propio a /api/health, mismo origen, sin líos de CORS.
+    """
+    return FileResponse(STATIC_DIR / "dashboard.html")
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
@@ -118,6 +131,8 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api")
     app.include_router(series_router, prefix="/api")
     app.include_router(wishlist_router, prefix="/api")
+    app.get("/", include_in_schema=False)(dashboard)
+
     return app
 
 

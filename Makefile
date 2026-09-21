@@ -63,8 +63,9 @@ lint:
 format:
 	$(SA) python -m ruff format src/
 
+# Antes escribía en /mnt/nvme/tebeoteca/config/postgres/, el MISMO disco
+# donde vive el propio dato de Postgres (hallazgo del peer review: un
+# backup que muere con el disco que respalda no sirve). scripts/backup.sh
+# escribe en un disco distinto y de paso aplica retención automática.
 backup:
-	@TS=$$(date +%Y%m%d_%H%M%S); \
-	$(COMPOSE) exec -T postgres pg_dump -U comics_admin tebeoteca | \
-	gzip > /mnt/nvme/tebeoteca/config/postgres/backup_$${TS}.sql.gz && \
-	echo "Backup: backup_$${TS}.sql.gz"
+	@BACKUP_DIR=/media/WDElements/backups/postgres bash scripts/backup.sh

@@ -112,10 +112,15 @@ services:
       - LIBRARY_PATH=/media/WDElements/Tebeos
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
       - TZ=Europe/Madrid
+    # El lado IZQUIERDO (host) de cada volumen es configurable vía .env
+    # (A1: bootstrap.sh pregunta dónde viven tebeos/descargas y escribe
+    # estas variables). El lado derecho (dentro del contenedor) se queda
+    # fijo a propósito: coincide con los defaults de config.py, así que
+    # la app nunca necesita saber dónde vive físicamente cada disco.
     volumes:
-      - /media/DiscoDuro/downloads:/media/DiscoDuro/downloads:ro
-      - /media/DiscoDuro/aMule/Incoming:/media/DiscoDuro/aMule/Incoming:ro
-      - /media/WDElements/Tebeos:/media/WDElements/Tebeos     # biblioteca organizada (lectura+escritura para el importer)
+      - ${HOST_DOWNLOADS_DIR:-/media/DiscoDuro/downloads}:/media/DiscoDuro/downloads:ro
+      - ${HOST_AMULE_INCOMING_DIR:-/media/DiscoDuro/aMule/Incoming}:/media/DiscoDuro/aMule/Incoming:ro
+      - ${HOST_LIBRARY_DIR:-/media/WDElements/Tebeos}:/media/WDElements/Tebeos     # biblioteca organizada (lectura+escritura para el importer)
       # FIX C2: estado de la VPN escrito por Confiraspa en el host.
       # Si el directorio no existe en el host todavía, Docker lo crea vacío:
       # health.py tolera fichero ausente y reporta "unknown".
