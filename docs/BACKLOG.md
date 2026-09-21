@@ -42,6 +42,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B3 | ~~Como coleccionista, quiero que los duplicados se detecten y no se importen dos veces~~ | ~~Dedupe por SHA256 ya existe; la UI muestra "duplicado de X, descartado" en el informe~~ | ✅ Backend hecho | S |
 | B4 | Como coleccionista, quiero que cada tebeo aparezca con portada, guionista, dibujante y sinopsis aunque el archivo no traiga metadatos | Enricher multi-fuente (GCD/AniList/Tebeosfera/Comic Vine) + corrección del bug de `metadata_source='manual'` del peer review (C3) | P0 | L |
 | B5 | ~~Como coleccionista de tankōbon y álbumes BD, quiero que Vol./T/Tomo funcionen tan bien como el # americano~~ | ~~Tests de naming con fixtures reales de releases españolas (patrones `nº`, `v01c047` rescatados de zascarr)~~ | ✅ Hecho | M |
+| B6 | Como coleccionista, quiero que mi biblioteca sea legible por Kavita/ComicTagger/cualquier otra herramienta sin depender de SecuenciArr | Tras enriquecer, escribir `ComicInfo.xml` dentro del CBZ (hoy solo se lee, nunca se escribe) | P1 | M |
 
 **Notas de implementación:**
 
@@ -65,6 +66,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | C2 | Como coleccionista, quiero saber de un vistazo qué números me faltan de cada serie | Vista "huecos" por serie: `missing` ya existe en API; corregir el bug de `sort_order` truncado detectado en el review | P0 | M |
 | C3 | Como coleccionista, quiero marcar un tebeo como leído y puntuarlo | `reading_progress` ya está en el modelo; falta exponerlo + UI | P1 | M |
 | C4 | Como coleccionista, quiero listas como "Court of Owls en orden" aunque crucen varias series | `story_arc_issues.reading_order` ya soporta crossovers; falta UI de arcos | P1 | M |
+| C5 | Como coleccionista, quiero leer mi catálogo enriquecido desde cualquier lector (tablet, e-reader) sin pasar por Kavita | Endpoint OPDS de solo catálogo (no de contenido) sobre los datos ya enriquecidos | P2 | M |
 
 **Notas de implementación (Fase 6 / UI web):**
 
@@ -76,10 +78,11 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| D1 | Como coleccionista, quiero marcar "quiero esta serie" y olvidarme: el sistema la encuentra y la añade | Wishlist → orchestrator → Transmission/aMule → import; visible como "Buscando... Descargando... En tu biblioteca" en la UI | P0 | L |
+| D1 | Como coleccionista, quiero marcar "quiero esta serie" y olvidarme: el sistema la encuentra y la añade | Wishlist → orchestrator → Transmission/aMule → import; visible como "Buscando... Descargando... En tu biblioteca" en la UI. Incluye reintentar automáticamente con el siguiente resultado del pool si una descarga falla, no solo marcar `failed` y parar (ver nota de benchmarking) | P0 | L |
 | D2 | Como coleccionista, quiero elegir "solo CBZ de calidad" o "acepto escaneos" sin entender qué es un quality profile | Selector de 3 opciones legibles ("solo lo mejor / equilibrado / lo que haya"); mapea a `quality_tier` interno | P1 | M |
 | D3 | Como coleccionista, quiero que si sale una edición mejor de algo que ya tengo, el sistema me la ofrezca | Lógica de upgrade sobre `quality_tier`; la UI propone, no sustituye sin confirmar | P1 | M |
 | D4 | ~~Como coleccionista, quiero que el sistema me avise si está descargando sin VPN sin que se pare todo~~ | ~~Warning del healthcheck visible como aviso en UI + log del orchestrator (decisión ya acordada, ver fix C2)~~ | ✅ Hecho (vía E1) | S |
+| D5 | Como coleccionista, quiero saber qué sale la semana que viene de mis series marcadas, sin tener que mirar yo | Calendario/pull-list sobre fechas de publicación futuras de Comic Vine; requiere que el enricher las traiga y las persista (hoy no lo hace) | P2 | M |
 
 ### Épica E — "Confío en el sistema"
 
@@ -114,6 +117,43 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   en el host** para poder correr las migraciones fuera de Docker. Frágil en
   distros que no sean Debian/Ubuntu recientes; considerar ejecutar la
   migración inicial dentro de un contenedor efímero en su lugar.
+
+## Benchmarking competitivo (2026-09-21)
+
+Comparado contra tres proyectos del mismo espacio para no reinventar ni
+perder de vista el hueco real:
+
+- **[Kapowarr](https://github.com/Casvt/Kapowarr)** (Python, GPL-3.0): el más
+  parecido en forma (UI server-side, Docker, Pi-friendly). Solo Comic Vine
+  como fuente, descarga por DDL (MediaFire/Mega/GetComics, sin eD2K), sin
+  naming consciente de tradición. Confirma que el ADR-0001 (server-side, sin
+  SPA) es la elección correcta para este dominio.
+- **[Mylar3](https://github.com/mylar3/mylar3)** (Python, GPL-3.0): el veterano
+  del espacio arr-cómic. Aporta tres ideas de valor que SecuenciArr no
+  tiene todavía — pull-list/calendario de lanzamientos (**D5** arriba),
+  reintento automático con el siguiente resultado si una descarga falla
+  (nota añadida a **D1**), y escritura de `ComicInfo.xml` tras enriquecer
+  (**B6** arriba) para que la biblioteca sea legible por cualquier otra
+  herramienta sin pasar por la API de SecuenciArr. Mismo punto ciego que
+  Kapowarr: solo Comic Vine, sin tebeo español.
+- **[Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server)**
+  (Kotlin/JVM, MPL-2.0): servidor de manga con arquitectura de fuentes como
+  plugins independientes y OPDS nativo (**C5** arriba). JVM no encaja en el
+  presupuesto de memoria de una Pi junto al resto del stack — se estudia
+  como referencia de diseño, no se integra.
+- **Corrección sobre una idea propuesta en el análisis:** se sugirió que
+  Tebeosfera ya tenía un flag `optional=True` y que solo faltaba "el toggle
+  operativo" para poder desactivar fuentes de enriquecimiento sin
+  redeploy. Verificado contra el código actual: **no existe tal flag** — ni
+  en `tebeosfera.py`, ni en `enricher.py`, ni en `config.py` (que sí tiene
+  `forum_enabled`, pero para la fuente de descarga del foro, sin relación
+  con el enricher). Un toggle por fuente (`comicvine_enabled`,
+  `anilist_enabled`, `tebeosfera_enabled` en `Settings`, mirando el patrón
+  ya usado por `forum_enabled`) sigue siendo una mejora barata y razonable
+  — pendiente de registrar como historia si se decide priorizar — pero
+  parte de cero, no de una base ya construida.
+- **Ninguno de los tres cubre tebeo español con fuentes honestas + eD2K**:
+  ese sigue siendo el hueco real de SecuenciArr frente a los tres.
 
 ## Fuera de alcance (parking lot honesto)
 
