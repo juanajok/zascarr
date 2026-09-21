@@ -1,0 +1,114 @@
+# =============================================================================
+# SecuenciArr / Tebeoteca Digital — docker-compose.yml v1.3
+# =============================================================================
+# Topología híbrida:
+#
+#   Baremetal (Confiraspa):
+#     Transmission → localhost:9091   Kavita → localhost:5000
+#     aMule        → localhost:4711   Prowlarr → localhost:9696
+#
+#   Docker (este compose) — solo servicios de datos nuevos:
+#     postgres     → 127.0.0.1:5432  (bridge, solo loopback)
+#     redis        → 127.0.0.1:6379  (bridge, solo loopback)
+#     secuenciarr  → 127.0.0.1:8000  (host, accede a baremetal en localhost)
+#
+# Seguridad:
+#   - postgres/redis mapeados SOLO a 127.0.0.1 (no expuestos a LAN)
+#   - secuenciarr usa extra_hosts host-gateway para alcanzar servicios baremetal
+#     sin network_mode: host (más portátil, Docker ≥ 20.10)
+#   - uvicorn escucha en 127.0.0.1:8000 (no 0.0.0.0)
+# =============================================================================
+
+name: tebeoteca-arr
+
+networks:
+  tebeoteca-internal:
+    driver: bridge
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: tebeoteca_db
+    restart: unless-stopped
+    networks:
+      - tebeoteca-internal
+    environment:
+      POSTGRES_USER: comics_admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-SuperSecretPassword123}
+      POSTGRES_DB: tebeoteca
+    command: >
+      -c listen_addresses='*'
+      -c max_connections=50
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - /mnt/nvme/tebeoteca/config/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U comics_admin -d tebeoteca"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    container_name: tebeoteca_cache
+    restart: unless-stopped
+    networks:
+      - tebeoteca-internal
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - /mnt/nvme/tebeoteca/config/redis:/data
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  secuenciarr:
+    build:
+      context: ./secuenciarr
+      dockerfile: Dockerfile
+    container_name: tebeoteca_orquestador
+    restart: unless-stopped
+    # extra_hosts permite alcanzar servicios baremetal en localhost
+    # sin perder el aislamiento de network_mode: host.
+    # host-gateway resuelve a la IP del host automáticamente (Docker ≥ 20.10).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - tebeoteca-internal
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/tebeoteca
+      - REDIS_URL=redis://redis:6379/0
+      - COMICVINE_API_KEY=${COMICVINE_API_KEY}
+      - PROWLARR_URL=http://host.docker.internal:9696
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY}
+      - TRANSMISSION_URL=http://host.docker.internal:9091
+      - TRANSMISSION_USERNAME=${TRANSMISSION_USERNAME:-}
+      - TRANSMISSION_PASSWORD=${TRANSMISSION_PASSWORD:-}
+      - AMULE_URL=http://host.docker.internal:4711
+      - AMULE_PASSWORD=${AMULE_PASSWORD:-}
+      - FORUM_ENABLED=${FORUM_ENABLED:-false}
+      - FORUM_USERNAME=${FORUM_USERNAME:-}
+      - FORUM_PASSWORD=${FORUM_PASSWORD:-}
+      - LIBRARY_PATH=/media/WDElements/Tebeos
+      - TZ=Europe/Madrid
+    volumes:
+      - /media/DiscoDuro/downloads:/media/DiscoDuro/downloads:ro
+      - /media/DiscoDuro/aMule/Incoming:/media/DiscoDuro/aMule/Incoming:ro
+      - /media/WDElements/Tebeos:/media/WDElements/Tebeos     # biblioteca organizada (lectura+escritura para el importer)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 512M
