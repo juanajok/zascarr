@@ -336,6 +336,26 @@ class ReadingList(Base):
     items: Mapped[list["ReadingListItem"]] = relationship(back_populates="reading_list", cascade="all, delete-orphan")
 
 
+class ImportRun(Base):
+    """Un ciclo de Importer.scan_and_import(). Persistido para poder
+    responder "¿qué pasó en el ciclo de las 03:00?" desde una futura UI
+    sin depender solo de los logs (idea rescatada de zascarr: scrape_runs)."""
+    __tablename__ = "import_runs"
+    id:              Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    started_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at:     Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    files_scanned:   Mapped[int]      = mapped_column(Integer, default=0)
+    imported_count:  Mapped[int]      = mapped_column(Integer, default=0)
+    duplicate_count: Mapped[int]      = mapped_column(Integer, default=0)
+    unsorted_count:  Mapped[int]      = mapped_column(Integer, default=0)
+    error_count:     Mapped[int]      = mapped_column(Integer, default=0)
+    # {"imported": [...], "duplicates": [...], "unsorted": [...], "errors": [...]}
+    # — cada entrada es una línea legible, no un objeto estructurado: este
+    # informe está pensado para mostrarse tal cual, no para consultarse campo
+    # a campo (para eso ya están los contadores de arriba).
+    details:         Mapped[dict]     = mapped_column(JSONB, default=dict)
+
+
 class ReadingListItem(Base):
     __tablename__ = "reading_list_items"
     reading_list_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("reading_lists.id", ondelete="CASCADE"), primary_key=True)

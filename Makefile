@@ -26,18 +26,24 @@ logs:
 build:
 	$(COMPOSE) build secuenciarr
 
+# OJO: "alembic", nunca "python -m alembic". El directorio de migraciones
+# del propio repo se llama alembic/ igual que el paquete instalado; dentro
+# del contenedor (WORKDIR /app, con /app/alembic/) "python -m alembic"
+# resuelve al directorio local (sin __main__.py) en vez de a la librería
+# real, y falla con "cannot be directly executed". El binario alembic no
+# sufre esto: su propio sys.path[0] es site-packages, no el cwd.
 migrate:
-	$(SA) python -m alembic upgrade head
+	$(SA) alembic upgrade head
 
 migrate-down:
-	$(SA) python -m alembic downgrade -1
+	$(SA) alembic downgrade -1
 
 migrate-status:
-	$(SA) python -m alembic current
-	$(SA) python -m alembic history --verbose
+	$(SA) alembic current
+	$(SA) alembic history --verbose
 
 migration:
-	$(SA) python -m alembic revision --autogenerate -m "$(name)"
+	$(SA) alembic revision --autogenerate -m "$(name)"
 
 health:
 	@curl -sf http://127.0.0.1:8000/api/health | python3 -m json.tool

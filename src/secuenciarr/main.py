@@ -12,6 +12,36 @@ from secuenciarr.config import get_settings
 logger = structlog.get_logger()
 
 
+async def _import_loop(interval_minutes: int) -> None:
+    """Job periódico del importador (B1/B3): organiza /downloads solo.
+
+    Sin este loop, `import_interval_minutes` era un ajuste que nadie leía
+    y el importador solo se ejecutaba si alguien lo invocaba a mano —
+    la visión de "arrastro mi carpeta y el sistema se organiza solo" del
+    backlog no existía en producción hasta ahora.
+    """
+    from secuenciarr.database import async_session_factory
+    from secuenciarr.services.importer import Importer
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                report = await Importer(session).scan_and_import()
+                await session.commit()
+            if report.files_scanned:
+                logger.info(
+                    "importer.cycle_done",
+                    escaneados=report.files_scanned,
+                    importados=report.imported_count,
+                    duplicados=report.duplicate_count,
+                    sin_clasificar=report.unsorted_count,
+                    errores=report.error_count,
+                )
+        except Exception:
+            logger.exception("importer.cycle_failed")
+        await asyncio.sleep(interval_minutes * 60)
+
+
 async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
     """Job periódico del enricher (B4): completa metadatos vía Comic Vine.
 
@@ -49,15 +79,20 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("SELECT 1"))
     logger.info("secuenciarr.db_connected")
 
-    enrichment_task = asyncio.create_task(
-        _enrichment_loop(settings.enrich_interval_minutes, settings.enrich_batch_size)
-    )
+    background_tasks = [
+        asyncio.create_task(_import_loop(settings.import_interval_minutes)),
+        asyncio.create_task(
+            _enrichment_loop(settings.enrich_interval_minutes, settings.enrich_batch_size)
+        ),
+    ]
 
     yield
 
-    enrichment_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await enrichment_task
+    for task in background_tasks:
+        task.cancel()
+    for task in background_tasks:
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
     logger.info("secuenciarr.shutting_down")
     await engine.dispose()
 

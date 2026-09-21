@@ -67,7 +67,12 @@ source <(grep -E "^DB_PASSWORD=" "${ENV_FILE}")
 export DATABASE_URL="postgresql+asyncpg://comics_admin:${DB_PASSWORD}@127.0.0.1:5432/tebeoteca"
 cd "${TEBEOTECA_ROOT}/secuenciarr"
 python3 -c "import alembic" 2>/dev/null || pip install --break-system-packages -e ".[dev]" -q
-python3 -m alembic upgrade head
+# "alembic", nunca "python3 -m alembic": estamos parados (cd de arriba)
+# dentro del propio directorio del repo, que tiene su propia carpeta
+# alembic/ (las migraciones) con el mismo nombre que el paquete instalado.
+# "python3 -m alembic" resuelve esa carpeta local en vez de la librería
+# real y falla con "cannot be directly executed" (ver Makefile).
+alembic upgrade head
 success "Migraciones aplicadas"
 
 info "Levantando SecuenciArr..."

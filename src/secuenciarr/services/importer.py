@@ -11,14 +11,24 @@ Pipeline por archivo:
   3. Matcher (capas 1-2): naming.py → pg_trgm
   4. Mover a /library/{tradición}/{Serie (Año)}/{Serie #NNN.ext}
   5. Registrar en tabla files
+
+Cada ciclo produce un ImportReport (B1/B3 del backlog): quién se importó,
+quién se descartó por duplicado y de qué, quién quedó sin clasificar y por
+qué. Se persiste en import_runs para poder responder "¿qué pasó en el
+ciclo de las 03:00?" sin depender solo de los logs.
 """
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+
 import shutil, structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from secuenciarr.config import get_settings
-from secuenciarr.models import File, FileFormat, Series
+from secuenciarr.models import File, FileFormat, ImportRun, Series
 from secuenciarr.core.importer_triage import triage, TriageResult
 from secuenciarr.core.matcher import SeriesMatcher, MatchStatus
 from secuenciarr.utils.naming import parse_comic_filename
@@ -40,6 +50,39 @@ TRADITION_MAP = {
 }
 
 
+@dataclass
+class ImportReport:
+    """Resultado de un ciclo de scan_and_import(), en líneas legibles.
+
+    Son cadenas ya formateadas, no datos estructurados: este informe está
+    pensado para mostrarse tal cual (log, futura UI), no para consultarse
+    campo a campo — para eso están los contadores (*_count en ImportRun).
+    """
+    started_at: datetime
+    finished_at: datetime | None = None
+    files_scanned: int = 0
+    imported: list[str] = field(default_factory=list)
+    duplicates: list[str] = field(default_factory=list)
+    unsorted: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def imported_count(self) -> int:
+        return len(self.imported)
+
+    @property
+    def duplicate_count(self) -> int:
+        return len(self.duplicates)
+
+    @property
+    def unsorted_count(self) -> int:
+        return len(self.unsorted)
+
+    @property
+    def error_count(self) -> int:
+        return len(self.errors)
+
+
 class Importer:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -51,7 +94,9 @@ class Importer:
             s.downloads_path,
         ]
 
-    async def scan_and_import(self) -> int:
+    async def scan_and_import(self) -> ImportReport:
+        report = ImportReport(started_at=datetime.now(timezone.utc))
+
         files = []
         seen: set[str] = set()
         for d in self._scan_dirs:
@@ -63,17 +108,20 @@ class Importer:
                     if resolved not in seen:
                         seen.add(resolved)
                         files.append(f)
+        report.files_scanned = len(files)
 
-        imported = 0
         for path in sorted(files):
             try:
-                if await self._import_file(path):
-                    imported += 1
-            except Exception:
+                await self._import_file(path, report)
+            except Exception as exc:
                 logger.exception("importer.file_failed", path=str(path))
-        return imported
+                report.errors.append(f"{path.name}: {exc}")
 
-    async def _import_file(self, path: Path) -> bool:
+        report.finished_at = datetime.now(timezone.utc)
+        await self._persist_run(report)
+        return report
+
+    async def _import_file(self, path: Path, report: ImportReport) -> None:
         tr: TriageResult = triage(path)
 
         # Deduplicación
@@ -82,8 +130,11 @@ class Importer:
                 select(File).where(File.sha256_hash == tr.sha256)
             )).scalar_one_or_none()
             if existing:
+                report.duplicates.append(
+                    f"{path.name} — duplicado de {existing.file_name}, descartado"
+                )
                 logger.info("importer.duplicate", path=str(path), hash=tr.sha256[:12])
-                return False
+                return
 
         # Matching
         matcher = SeriesMatcher(self._db)
@@ -95,17 +146,10 @@ class Importer:
             return None
 
         result = await matcher.decide(tr, extractor=extractor)
+        is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
 
         # Determinar tradición y ruta destino
-        tradition = "other"
-        if result.series_id:
-            series = (await self._db.execute(
-                select(Series).where(Series.id == result.series_id)
-            )).scalar_one_or_none()
-            if series:
-                tradition = series.tradition.value if series.tradition else "other"
-
-        if result.status == MatchStatus.UNSORTED or not result.series_id:
+        if is_unsorted:
             dest = self._library / "_Unsorted" / path.name
         else:
             series_obj = (await self._db.execute(
@@ -140,8 +184,32 @@ class Importer:
         )
         self._db.add(file_rec)
         await self._db.flush()
+
+        if is_unsorted:
+            motivo = "; ".join(result.notes) or "sin match fiable"
+            report.unsorted.append(f"{path.name} → _Unsorted ({motivo})")
+        else:
+            report.imported.append(f"{path.name} → {dest.relative_to(self._library)}")
         logger.info("importer.imported", dest=str(dest), status=result.status)
-        return True
+
+    async def _persist_run(self, report: ImportReport) -> None:
+        run = ImportRun(
+            started_at=report.started_at,
+            finished_at=report.finished_at,
+            files_scanned=report.files_scanned,
+            imported_count=report.imported_count,
+            duplicate_count=report.duplicate_count,
+            unsorted_count=report.unsorted_count,
+            error_count=report.error_count,
+            details={
+                "imported": report.imported,
+                "duplicates": report.duplicates,
+                "unsorted": report.unsorted,
+                "errors": report.errors,
+            },
+        )
+        self._db.add(run)
+        await self._db.flush()
 
     def _build_dest(self, series, tr: TriageResult, orig: Path) -> Path:
         if not series:
