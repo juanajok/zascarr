@@ -126,7 +126,12 @@ class Importer:
             source_tag=tr.source_tag,
             width_px=tr.width_px,
             covered_issue_ids=[],
-            metadata_source="comicinfo_xml" if tr.strong_candidate else "manual",
+            # 'manual' está reservado para correcciones humanas (nunca las
+            # toca el enricher). Un match por naming.py es una heurística,
+            # no una corrección: se deja en NULL para que el enricher pueda
+            # completarlo más tarde. Solo ComicInfo.xml, que trae metadatos
+            # estructurados de la propia release, se marca como fuente.
+            metadata_source="comicinfo_xml" if tr.strong_candidate else None,
             metadata_={
                 "match_status": result.status,
                 "match_score": result.score,

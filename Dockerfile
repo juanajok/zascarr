@@ -1,3 +1,18 @@
+# =============================================================================
+# SecuenciArr — Dockerfile (fix C1 del peer review)
+# =============================================================================
+# Cambio: uvicorn escucha en 0.0.0.0 dentro del contenedor.
+#
+# Antes (bug): --host 127.0.0.1 + bridge network SIN ports: publicado en el
+# compose => la API quedaba 100% inalcanzable salvo desde dentro del propio
+# contenedor (el HEALTHCHECK pasaba, dando falsa sensación de salud).
+#
+# Ahora: uvicorn en 0.0.0.0 + "127.0.0.1:8000:8000" en el compose. La
+# decisión de seguridad ("no exponer a LAN") vive en el lado del host del
+# mapeo de puertos, donde es verificable con `ss -tlnp`, no dentro del
+# contenedor donde era ciega.
+# =============================================================================
+
 FROM python:3.11-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -29,10 +44,11 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
 
 ENTRYPOINT ["tini", "--"]
 
-# Uvicorn en 127.0.0.1 (network_mode: host — no exponer a LAN sin proxy)
+# 0.0.0.0 ES INTENCIONAL: ver cabecera. La exposición real la decide el
+# compose ("127.0.0.1:8000:8000" = solo loopback del host).
 CMD ["python", "-m", "uvicorn", \
      "secuenciarr.main:app", \
-     "--host", "127.0.0.1", \
+     "--host", "0.0.0.0", \
      "--port", "8000", \
      "--workers", "1", \
      "--loop", "uvloop", \

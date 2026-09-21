@@ -1,22 +1,30 @@
 # =============================================================================
-# SecuenciArr / Tebeoteca Digital — docker-compose.yml v1.3
+# SecuenciArr / Tebeoteca Digital — docker-compose.yml v1.4
 # =============================================================================
-# Topología híbrida:
+# Cambios respecto a v1.3 (fix bloque crítico C1 + C2 del peer review):
 #
+#   C1 — API inalcanzable:
+#     Al eliminar network_mode: host se olvidó publicar el puerto 8000.
+#     Ahora se mapea 127.0.0.1:8000 → 8000 del contenedor, y uvicorn
+#     escucha en 0.0.0.0 dentro del contenedor (el aislamiento lo da
+#     el binding a loopback del HOST en esta línea, no el de uvicorn).
+#
+#   C2 — Healthcheck de VPN imposible:
+#     Sin network_mode: host, el contenedor no ve wg0 del host, y la
+#     imagen slim no trae iproute2. Solución: Confiraspa escribe el
+#     estado de la VPN en un fichero JSON en el host (cron/timer
+#     systemd, ver scripts/vpn-state.sh), montado read-only aquí.
+#     health.py lo lee. Cero subprocess, cero iproute2.
+#
+# Topología (sin cambios):
 #   Baremetal (Confiraspa):
 #     Transmission → localhost:9091   Kavita → localhost:5000
 #     aMule        → localhost:4711   Prowlarr → localhost:9696
 #
-#   Docker (este compose) — solo servicios de datos nuevos:
-#     postgres     → 127.0.0.1:5432  (bridge, solo loopback)
-#     redis        → 127.0.0.1:6379  (bridge, solo loopback)
-#     secuenciarr  → 127.0.0.1:8000  (host, accede a baremetal en localhost)
-#
-# Seguridad:
-#   - postgres/redis mapeados SOLO a 127.0.0.1 (no expuestos a LAN)
-#   - secuenciarr usa extra_hosts host-gateway para alcanzar servicios baremetal
-#     sin network_mode: host (más portátil, Docker ≥ 20.10)
-#   - uvicorn escucha en 127.0.0.1:8000 (no 0.0.0.0)
+#   Docker (este compose):
+#     postgres     → 127.0.0.1:5432
+#     redis        → 127.0.0.1:6379
+#     secuenciarr  → 127.0.0.1:8000
 # =============================================================================
 
 name: tebeoteca-arr
@@ -76,13 +84,17 @@ services:
       dockerfile: Dockerfile
     container_name: tebeoteca_orquestador
     restart: unless-stopped
-    # extra_hosts permite alcanzar servicios baremetal en localhost
-    # sin perder el aislamiento de network_mode: host.
+    # extra_hosts permite alcanzar servicios baremetal sin network_mode: host.
     # host-gateway resuelve a la IP del host automáticamente (Docker ≥ 20.10).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - tebeoteca-internal
+    # FIX C1: sin esta línea la API era inalcanzable desde el host.
+    # Loopback-only: la API no se expone a la LAN; el acceso externo
+    # será vía reverse proxy con auth (fuera de alcance por ahora).
+    ports:
+      - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/tebeoteca
       - REDIS_URL=redis://redis:6379/0
@@ -98,11 +110,16 @@ services:
       - FORUM_USERNAME=${FORUM_USERNAME:-}
       - FORUM_PASSWORD=${FORUM_PASSWORD:-}
       - LIBRARY_PATH=/media/WDElements/Tebeos
+      - VPN_STATE_FILE=/run/vpn-state/wg0.json
       - TZ=Europe/Madrid
     volumes:
       - /media/DiscoDuro/downloads:/media/DiscoDuro/downloads:ro
       - /media/DiscoDuro/aMule/Incoming:/media/DiscoDuro/aMule/Incoming:ro
       - /media/WDElements/Tebeos:/media/WDElements/Tebeos     # biblioteca organizada (lectura+escritura para el importer)
+      # FIX C2: estado de la VPN escrito por Confiraspa en el host.
+      # Si el directorio no existe en el host todavía, Docker lo crea vacío:
+      # health.py tolera fichero ausente y reporta "unknown".
+      - /mnt/nvme/tebeoteca/config/vpn-state:/run/vpn-state:ro
     depends_on:
       postgres:
         condition: service_healthy

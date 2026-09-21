@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     library_path: Path = Field(default=Path("/media/WDElements/Tebeos"))
     downloads_path: Path = Field(default=Path("/media/DiscoDuro/downloads"))
 
+    # ── VPN state (Confiraspa) ──────────────────────────────────────
+    # Fichero JSON escrito por scripts/vpn-state.sh (baremetal, fuera del
+    # contenedor) y montado read-only. Ver fix C2 del peer review.
+    vpn_state_file: str = Field(default="/run/vpn-state/wg0.json")
+
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60
     import_interval_minutes: int = 15
