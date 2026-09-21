@@ -38,7 +38,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
 | B1 | ~~Como coleccionista, quiero arrastrar mi carpeta de descargas y que el sistema la organice solo~~ | ~~El importador procesa `/downloads` y `_Unsorted/` según matcher/triage ya construidos, con informe final legible~~ | ✅ Backend hecho | M |
-| B2 | Como coleccionista, quiero ver los tebeos que el sistema no supo clasificar y decidir yo con un clic | Bandeja de "pendientes de revisar" en la UI: miniatura, título detectado, botones "es esta serie / ninguna / ignorar" | P0 | L |
+| B2 | ~~Como coleccionista, quiero ver los tebeos que el sistema no supo clasificar y decidir yo con un clic~~ | ~~Bandeja de "pendientes de revisar" en la UI: miniatura, título detectado, botones "es esta serie / ninguna / ignorar"~~ | ✅ Hecho | L |
 | B3 | ~~Como coleccionista, quiero que los duplicados se detecten y no se importen dos veces~~ | ~~Dedupe por SHA256 ya existe; la UI muestra "duplicado de X, descartado" en el informe~~ | ✅ Backend hecho | S |
 | B4 | Como coleccionista, quiero que cada tebeo aparezca con portada, guionista, dibujante y sinopsis aunque el archivo no traiga metadatos | Enricher multi-fuente (GCD/AniList/Tebeosfera/Comic Vine) + corrección del bug de `metadata_source='manual'` del peer review (C3) | P0 | L |
 | B5 | ~~Como coleccionista de tankōbon y álbumes BD, quiero que Vol./T/Tomo funcionen tan bien como el # americano~~ | ~~Tests de naming con fixtures reales de releases españolas (patrones `nº`, `v01c047` rescatados de zascarr)~~ | ✅ Hecho | M |
@@ -54,16 +54,16 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| C1 | Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad | Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia (o integración OPDS) con filtros por tradición, editorial, personaje, saga | 🔧 P0, en progreso | L |
+| C1 | Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad | Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia (o integración OPDS) con filtros por tradición, editorial, personaje, saga | P0 | L |
 | C2 | Como coleccionista, quiero saber de un vistazo qué números me faltan de cada serie | Vista "huecos" por serie: `missing` ya existe en API; corregir el bug de `sort_order` truncado detectado en el review | P0 | M |
 | C3 | Como coleccionista, quiero marcar un tebeo como leído y puntuarlo | `reading_progress` ya está en el modelo; falta exponerlo + UI | P1 | M |
 | C4 | Como coleccionista, quiero listas como "Court of Owls en orden" aunque crucen varias series | `story_arc_issues.reading_order` ya soporta crossovers; falta UI de arcos | P1 | M |
 
-**Notas de implementación (arranque de la Fase 6 / UI web):**
+**Notas de implementación (Fase 6 / UI web):**
 
 - **Decisión de arquitectura:** ver [`docs/adr/0001-ui-stack.md`](adr/0001-ui-stack.md) — Jinja2 servido por el propio FastAPI + HTMX vendorizado (no CDN), sin SPA ni build de Node. Primer ADR del repo; las decisiones previas (PostgreSQL, enrutado del enricher) no quedaron documentadas como ADR retroactivamente.
-- **Esqueleto construido:** `src/secuenciarr/web/` (router `/ui`, `Jinja2Templates`, layout `base.html` con nav), `src/secuenciarr/static/vendor/htmx.min.js` (v4.0.0, verificado en un navegador real antes de vendorizarlo — encontró y confirmó que la versión funciona sin errores de consola), `src/secuenciarr/static/web.css`. El dashboard de E1 se queda como está por ahora (página autocontenida que funciona); se migra a este layout cuando exista una segunda pantalla real con la que compartir cabecera.
-- **Pendiente inmediato:** B2 (bandeja de pendientes) es la primera pantalla real que se construye sobre este esqueleto — la que valida si HTMX aguanta el patrón de interacción del backlog.
+- **Esqueleto:** `src/secuenciarr/web/` (router `/ui`, `Jinja2Templates`, layout `base.html` con nav), `src/secuenciarr/static/vendor/htmx.min.js` (v4.0.0, verificado en un navegador real antes de vendorizarlo), `src/secuenciarr/static/web.css`. El dashboard de E1 se queda como está por ahora (página autocontenida que funciona); se migra a este layout cuando exista otra pantalla más con la que compartir cabecera.
+- **B2 (hecho), primera pantalla real:** `src/secuenciarr/web/pendientes.py` — bandeja en `/ui/pendientes` sobre `ReviewService` (`src/secuenciarr/services/review.py`). Dos acciones, no tres: "es esta serie" (busca y asigna, creando el `Issue` al vuelo si el número no existe — marcado `metadata_source='manual'`, igual que el `File`, así el enricher nunca lo toca) e "ignorar" (nueva columna `files.review_dismissed`, migración `0005`). "Ninguna" se fusionó con "ignorar" — sin candidatos del matcher persistidos en BD, mantenerlas separadas no aportaba distinción real (ver hilo de decisión). Miniaturas extraídas bajo demanda de la primera página del CBZ y redimensionadas con Pillow (`src/secuenciarr/utils/cover.py`); CBR se queda sin miniatura a propósito (necesitaría unrar). Verificado en un navegador real de principio a fin: listar, buscar, asignar (con movimiento de archivo real a disco, confirmado con `find`), ignorar, y que ambas acciones persisten tras recargar. Nota de la propia verificación: el disparo `hx-trigger="keyup changed"` no siempre reaccionaba a la escritura simulada por la herramienta de automatización del navegador (sí a un evento `keyup` real) — probable limitación de la herramienta, no del código, pero queda anotado por si un usuario real reporta que la búsqueda no responde al teclear.
 
 ### Épica D — "El sistema busca lo que me falta"
 

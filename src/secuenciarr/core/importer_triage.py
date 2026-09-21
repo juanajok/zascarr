@@ -56,7 +56,7 @@ _TAG_PATTERNS: list[tuple[str, str]] = [
     (r"(?i)\b(scan|scanned|c2c)\b", "scan"),
     (r"(?i)\b(hd|uhd|4k)\b", "scan_hq"),
 ]
-_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 
 
@@ -149,7 +149,7 @@ def parse_comic_info(data: bytes) -> ComicInfo:
 
 # ── Triaje ───────────────────────────────────────────────────────────────────
 
-def _natural_key(name: str) -> list:
+def natural_key(name: str) -> list:
     """Orden natural para que página2 < página10."""
     return [int(t) if t.isdigit() else t.lower()
             for t in re.split(r"(\d+)", name)]
@@ -237,8 +237,8 @@ def triage(path: Path) -> TriageResult:
 
         # width_px: primera página en orden natural.
         pages = sorted(
-            (n for n in names if Path(n).suffix.lower() in _IMAGE_EXTS),
-            key=_natural_key,
+            (n for n in names if Path(n).suffix.lower() in IMAGE_EXTS),
+            key=natural_key,
         )
         if pages:
             try:

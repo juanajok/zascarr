@@ -301,6 +301,11 @@ class File(Base):
     metadata_source:     Mapped[str|None]     = mapped_column(String(20))
     imported_at:         Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now())
     metadata_:           Mapped[dict]         = mapped_column("metadata", JSONB, default=dict)
+    # B2: el coleccionista descartó este archivo desde la bandeja de
+    # pendientes ("ignorar"). Distinto de tener issue_id — un archivo
+    # puede seguir sin issue_id (posible hueco del enricher) sin haber
+    # sido nunca revisado ni descartado a mano.
+    review_dismissed:    Mapped[bool]         = mapped_column(Boolean, default=False, server_default="false")
     issue: Mapped["Issue|None"] = relationship(back_populates="files")
 
 

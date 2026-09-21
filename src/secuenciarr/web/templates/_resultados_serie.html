@@ -1,0 +1,18 @@
+{% if not series_list %}
+<p class="no-results">Sin coincidencias.</p>
+{% else %}
+<ul class="series-list">
+  {% for s in series_list %}
+  <li>
+    <form class="assign-form"
+          hx-post="/ui/pendientes/{{ file_id }}/asignar"
+          hx-target="#card-{{ file_id }}" hx-swap="outerHTML">
+      <input type="hidden" name="series_id" value="{{ s.id }}">
+      <span class="series-name">{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
+      <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4">
+      <button type="submit">Confirmar</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

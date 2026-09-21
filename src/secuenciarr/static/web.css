@@ -53,3 +53,93 @@ body {
   margin: 0 auto;
   padding: 24px 16px 48px;
 }
+
+.subtitle { color: var(--text-muted); margin-top: -8px; }
+.empty { color: var(--text-muted); font-style: italic; }
+
+/* ── Bandeja de pendientes (B2) ─────────────────────────────────────── */
+.pending-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+.pending-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.pending-card .cover {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  background: var(--border);
+}
+.pending-card .cover.cover-missing {
+  visibility: hidden;
+}
+.pending-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.filename {
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detected { font-size: 0.82rem; color: var(--text-muted); }
+
+.series-search, .issue-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.issue-input { width: auto; flex: none; }
+
+.series-results ul.series-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.assign-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.series-name { font-size: 0.85rem; flex: 1; }
+.no-results { color: var(--text-muted); font-size: 0.85rem; }
+
+.btn-ignorar {
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.btn-ignorar:hover { border-color: #dc2626; color: #dc2626; }
+
+button[type="submit"] {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}

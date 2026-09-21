@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Pendientes — SecuenciArr{% endblock %}
+{% block content %}
+<h1>Pendientes de revisar</h1>
+<p class="subtitle">Archivos que el sistema no supo clasificar solo. Busca la serie correcta y confirma el número, o ignóralos si no pertenecen a tu colección.</p>
+
+{% if not cards %}
+<p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
+{% endif %}
+
+<div class="pending-grid">
+  {% for c in cards %}
+  <div class="pending-card" id="card-{{ c.file.id }}">
+    <img class="cover" src="/ui/pendientes/{{ c.file.id }}/portada" alt=""
+         onerror="this.classList.add('cover-missing')">
+    <div class="pending-body">
+      <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
+      <div class="detected">Detectado: {{ c.detected }}</div>
+      <input type="search" class="series-search" placeholder="Buscar serie…"
+             name="q"
+             hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
+             hx-trigger="keyup changed delay:400ms"
+             hx-target="#resultados-{{ c.file.id }}"
+             hx-swap="innerHTML">
+      <div id="resultados-{{ c.file.id }}" class="series-results"></div>
+      <button type="button" class="btn-ignorar"
+              hx-post="/ui/pendientes/{{ c.file.id }}/ignorar"
+              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML"
+              hx-confirm="¿Ignorar este archivo? No volverá a aparecer aquí.">
+        Ignorar
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

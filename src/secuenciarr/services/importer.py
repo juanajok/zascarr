@@ -214,18 +214,29 @@ class Importer:
     def _build_dest(self, series, tr: TriageResult, orig: Path) -> Path:
         if not series:
             return self._library / "_Unsorted" / orig.name
+        number = tr.comic_info.number if tr.comic_info else None
+        return build_library_path(self._library, series, number, orig.suffix, fallback_name=orig.name)
 
-        tradition_folder = TRADITION_MAP.get(
-            series.tradition.value if series.tradition else "other", "_Unsorted"
-        )
-        year_suffix = f" ({series.start_year})" if series.start_year else ""
-        folder = f"{series.title}{year_suffix}"
 
-        ci = tr.comic_info
-        if ci and ci.number:
-            num = ci.number.zfill(3)
-            filename = f"{series.title} #{num}{orig.suffix}"
-        else:
-            filename = orig.name
+def build_library_path(library: Path, series: Series, issue_number: str | None,
+                       suffix: str, fallback_name: str | None = None) -> Path:
+    """Ruta canónica /library/{tradición}/{Serie (Año)}/{Serie #NNN.ext}.
 
-        return self._library / tradition_folder / folder / filename
+    Compartida entre el importer (issue_number viene de ComicInfo.xml, si
+    lo hay) y ReviewService (B2: issue_number lo escribe el coleccionista
+    a mano al asignar un archivo de _Unsorted). Sin número, se conserva el
+    nombre de archivo original en vez de inventar uno.
+    """
+    tradition_folder = TRADITION_MAP.get(
+        series.tradition.value if series.tradition else "other", "_Unsorted"
+    )
+    year_suffix = f" ({series.start_year})" if series.start_year else ""
+    folder = f"{series.title}{year_suffix}"
+
+    if issue_number:
+        num = issue_number.zfill(3)
+        filename = f"{series.title} #{num}{suffix}"
+    else:
+        filename = fallback_name or f"{series.title}{suffix}"
+
+    return library / tradition_folder / folder / filename
