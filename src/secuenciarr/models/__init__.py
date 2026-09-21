@@ -201,9 +201,12 @@ class Series(Base):
     comic_vine_id:   Mapped[int|None] = mapped_column(BigInteger, unique=True)
     # Fuente separada de comic_vine_id: AniList tiene su propio espacio de
     # IDs (manga/manhwa/manhua, que Comic Vine no indexa bien). Una serie
-    # solo se enriquece con UNA de las dos fuentes según su tradition
-    # (ver enricher.py), así que en la práctica nunca tienen ambas a la vez.
+    # solo se enriquece con UNA de las fuentes según su tradition (ver
+    # enricher.py), así que en la práctica nunca tienen más de una a la vez.
     anilist_id:      Mapped[int|None] = mapped_column(BigInteger, unique=True)
+    # Tebeosfera no tiene IDs numéricos como Comic Vine/AniList: identifica
+    # sus fichas por slug de texto (p.ej. "thorgal_1981_distrinovel").
+    tebeosfera_slug: Mapped[str|None] = mapped_column(String(255), unique=True)
     cover_url:       Mapped[str|None] = mapped_column(String(500))
     metadata_:       Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))

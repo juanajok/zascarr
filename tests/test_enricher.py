@@ -20,6 +20,7 @@ from secuenciarr.models import ComicTradition, Creator, CreatorRole, Issue, Meta
 from secuenciarr.services.anilist import AniListClient, AniListResult
 from secuenciarr.services.comic_vine import ComicVineClient, CVCredit, CVResult, _parse_issue
 from secuenciarr.services.enricher import EnrichmentReport, EnrichmentService
+from secuenciarr.services.tebeosfera import TebeosferaResult, _parse_results
 
 
 def make_series(title="Batman", start_year=None, comic_vine_id=None,
@@ -236,6 +237,96 @@ class TestFindAniListMatch:
         assert result.cover_url == "http://x/y.jpg"
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 2c. TebeosferaClient._parse_results — HTML real capturado en vivo contra
+#     tebeosfera.com (POST a buscador_txt_post.php, 21/09/2026). Si el sitio
+#     cambia de estructura, este test lo detecta antes que un ciclo real.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_COLECCIONES_HTML_REAL = '''<div id="div_buscador_txt_T3_publicaciones"><div class="help-block">Colecciones</div><div class="linea_resultados" style="clear:both;"><div style="float:left;"><img id="img_principal" src="https://www.tebeosfera.com/T3content/img/T3_numeros/_/1/thorgal_distrinovel_1981_1/R-100_thorgal_distrinovel_1981_1.jpg" width="100" height="100"  /></div><a href="/colecciones/thorgal_1981_distrinovel.html">THORGAL (1981, DISTRINOVEL)</a><br><div><div style="color:#834003;"><strong>THORGAL</strong> </div>1981 <br>3 números+ 1 variante</div></div><div class="linea_resultados" style="clear:both;"><div style="float:left;"><img id="img_principal" src="https://www.tebeosfera.com/T3content/img/T3_numeros/_/1/thorgal_1990_norma_1/R-100_thorgal_1990_norma_1.jpg" width="100" height="100"  /></div><a href="/colecciones/thorgal_1990_norma_-subcoleccion-.html">THORGAL (1990, NORMA) -SUBCOLECCION-</a><br><div><div style="color:#834003;"><strong>THORGAL</strong> </div>1990 <br>40 números</div></div></div>'''
+
+_SAGAS_HTML_REAL = '''<div id="div_buscador_txt_T3_series"><div class="help-block">Sagas</div><div class="linea_resultados" style="clear:both;"><div style="float:left;"><a href="https://www.tebeosfera.com/T3content/img/T3_series/7/7/thorgal_van_hamme_rosinski_1977.jpg" class="highslide"><img id="img_principal" src="https://www.tebeosfera.com/T3content/img/T3_series/7/7/thorgal_van_hamme_rosinski_1977/R-100_thorgal_van_hamme_rosinski_1977.jpg" width="100" height="100"  /></a></div><a href="/sagas/thorgal_1977_van_hamme_rosinski.html">THORGAL (1977, VAN HAMME/ROSINSKI)</a><br><div>THORGAL es una serie de c&oacute;mic cuya andadura comenz&oacute; en 1977 de la mano de Van Hamme y Rosinki<a href="/personajes/thorgal_1977_van_hamme_rosinski.html">...</a></div></div></div>'''
+
+
+class TestTebeosferaParseResults:
+
+    def test_colecciones_extrae_slug_titulo_limpio_año_y_numeros(self):
+        results = _parse_results(_COLECCIONES_HTML_REAL, "collection")
+        assert len(results) == 2
+
+        distrinovel = results[0]
+        assert distrinovel.slug == "thorgal_1981_distrinovel"
+        assert distrinovel.title == "THORGAL"  # sufijo "(1981, DISTRINOVEL)" limpiado
+        assert distrinovel.start_year == 1981
+        assert distrinovel.count_of_issues == 3
+
+        norma = results[1]
+        assert norma.slug == "thorgal_1990_norma_-subcoleccion-"
+        assert norma.title == "THORGAL"  # "-SUBCOLECCION-" también fuera
+        assert norma.count_of_issues == 40
+
+    def test_sagas_extrae_slug_y_titulo_limpio(self):
+        results = _parse_results(_SAGAS_HTML_REAL, "saga")
+        assert len(results) == 1
+        assert results[0].slug == "thorgal_1977_van_hamme_rosinski"
+        assert results[0].title == "THORGAL"
+        assert results[0].start_year == 1977
+
+    def test_html_vacio_no_falla(self):
+        assert _parse_results("", "collection") == []
+        assert _parse_results("<div>sin resultados</div>", "saga") == []
+
+    def test_html_roto_no_lanza_excepcion(self):
+        # Contiene "linea_resultados" (pasa el check rápido) pero es HTML
+        # roto de verdad: no debe propagar la excepción de lxml.
+        assert _parse_results("<div class='linea_resultados'<<<", "collection") == []
+
+
+class TestFindTebeosferaMatch:
+
+    @pytest.mark.asyncio
+    async def test_match_por_titulo_exacto_tras_limpiar_sufijo(self):
+        client = AsyncMock()
+        client.search_series.return_value = [
+            TebeosferaResult(slug="thorgal_1977_van_hamme_rosinski", title="Thorgal",
+                            kind="saga", start_year=1977),
+        ]
+        service = EnrichmentService(db=MagicMock())
+
+        result = await service._find_tebeosfera_match(
+            client, make_series("Thorgal", tradition=ComicTradition.FRANCO_BELGIAN))
+        assert result.source_id == "thorgal_1977_van_hamme_rosinski"
+
+    @pytest.mark.asyncio
+    async def test_desambiguacion_por_año_entre_varias_ediciones(self):
+        """Varias colecciones distintas de la misma obra (reediciones):
+        el año de nuestra Series decide, igual que Comic Vine/AniList."""
+        client = AsyncMock()
+        client.search_series.return_value = [
+            TebeosferaResult(slug="thorgal_1981_distrinovel", title="Thorgal",
+                            kind="collection", start_year=1981),
+            TebeosferaResult(slug="thorgal_1986_zinco", title="Thorgal",
+                            kind="collection", start_year=1986),
+        ]
+        service = EnrichmentService(db=MagicMock())
+
+        result = await service._find_tebeosfera_match(
+            client, make_series("Thorgal", tradition=ComicTradition.FRANCO_BELGIAN, start_year=1987))
+        assert result.source_id == "thorgal_1986_zinco"
+
+    @pytest.mark.asyncio
+    async def test_sin_coincidencia_exacta_no_hay_match(self):
+        client = AsyncMock()
+        client.search_series.return_value = [
+            TebeosferaResult(slug="thorgal_saga_derivada", title="Thorgal: Kriss de Valnor", kind="collection"),
+        ]
+        service = EnrichmentService(db=MagicMock())
+
+        result = await service._find_tebeosfera_match(
+            client, make_series("Thorgal", tradition=ComicTradition.TEBEO))
+        assert result is None
+
+
 class TestSourceRouting:
 
     def test_manga_va_a_anilist(self):
@@ -255,26 +346,32 @@ class TestSourceRouting:
             field, source, label = service._source_for(tradition)
             assert (field, source, label) == ("comic_vine_id", MetadataSource.COMIC_VINE.value, "Comic Vine")
 
+    def test_tebeo_y_franco_belgian_van_a_tebeosfera(self):
+        service = EnrichmentService(db=MagicMock())
+        for tradition in (ComicTradition.TEBEO, ComicTradition.FRANCO_BELGIAN):
+            field, source, label = service._source_for(tradition)
+            assert (field, source, label) == ("tebeosfera_slug", MetadataSource.TEBEOSFERA.value, "Tebeosfera")
+
     def test_tradiciones_sin_fuente_devuelven_none(self):
-        """BD/tebeo/fumetti: ni Comic Vine ni AniList las indexan bien.
+        """fumetti: ninguna fuente activa la indexa con confianza todavía.
         Mejor no enriquecer que enriquecer con la fuente equivocada."""
         service = EnrichmentService(db=MagicMock())
-        for tradition in (ComicTradition.FRANCO_BELGIAN, ComicTradition.TEBEO, ComicTradition.FUMETTI):
-            assert service._source_for(tradition) is None
+        assert service._source_for(ComicTradition.FUMETTI) is None
 
     @pytest.mark.asyncio
     async def test_serie_sin_fuente_no_aparece_ni_como_match_ni_como_no_match(self):
-        series = make_series("Astérix", tradition=ComicTradition.FRANCO_BELGIAN)
+        series = make_series("Corto Maltese", tradition=ComicTradition.FUMETTI)
         session = FakeSession([FakeExecResult([series])])
         service = EnrichmentService(db=session)
         report = EnrichmentReport()
 
-        await service._enrich_series_batch(AsyncMock(), AsyncMock(), 10, report)
+        await service._enrich_series_batch(AsyncMock(), AsyncMock(), AsyncMock(), 10, report)
 
         assert report.series_enriched == []
         assert report.series_no_match == []
         assert series.comic_vine_id is None
         assert series.anilist_id is None
+        assert series.tebeosfera_slug is None
 
     @pytest.mark.asyncio
     async def test_serie_manga_se_enriquece_via_anilist_no_comic_vine(self):
@@ -288,12 +385,34 @@ class TestSourceRouting:
         service = EnrichmentService(db=session)
         report = EnrichmentReport()
 
-        await service._enrich_series_batch(cv_client, anilist_client, 10, report)
+        await service._enrich_series_batch(cv_client, anilist_client, AsyncMock(), 10, report)
 
         assert series.anilist_id == 42
         assert series.comic_vine_id is None
         assert series.metadata_source == MetadataSource.ANILIST.value
         assert report.series_enriched == ["Berserk"]
+        cv_client.search_series.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_serie_tebeo_se_enriquece_via_tebeosfera(self):
+        series = make_series("Mortadelo y Filemón", tradition=ComicTradition.TEBEO)
+        cv_client = AsyncMock()
+        tebeosfera_client = AsyncMock()
+        tebeosfera_client.search_series.return_value = [
+            TebeosferaResult(slug="mortadelo_1969_bruguera", title="Mortadelo y Filemón",
+                            kind="collection", count_of_issues=200),
+        ]
+        session = FakeSession([FakeExecResult([series])])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(cv_client, AsyncMock(), tebeosfera_client, 10, report)
+
+        assert series.tebeosfera_slug == "mortadelo_1969_bruguera"
+        assert series.comic_vine_id is None
+        assert series.total_issues == 200
+        assert series.metadata_source == MetadataSource.TEBEOSFERA.value
+        assert report.series_enriched == ["Mortadelo y Filemón"]
         cv_client.search_series.assert_not_called()
 
 
@@ -370,7 +489,7 @@ class TestNuncaTocaManual:
                                                        count_of_issues=850)]
         service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
         report = EnrichmentReport()
-        await service._enrich_series_batch(client, AsyncMock(), 10, report)
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
 
         assert series.description == "Descripción humana"
         assert series.cover_url == "http://ya-tengo/portada.jpg"
@@ -388,7 +507,7 @@ class TestNuncaTocaManual:
         client.search_series.return_value = [CVResult(cv_id=5, name="Sandman")]
         service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
         report = EnrichmentReport()
-        await service._enrich_series_batch(client, AsyncMock(), 10, report)
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
 
         assert series.metadata_source == MetadataSource.COMICINFO_XML.value
         assert series.comic_vine_id == 5

@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # ha tenido temporadas en modo degradado (30 req/min en vez de 90).
     anilist_rate_limit: float = 1.5
 
+    # ── Tebeosfera (scraping — tebeo/BD en español) ──────────────────
+    # Sin API ni contrato de rate limit: es scraping de un sitio ajeno,
+    # no una API pública. Más conservador que Comic Vine/AniList a
+    # propósito, y encima cada búsqueda de serie hace 2 peticiones
+    # (colecciones + sagas), el doble que las otras fuentes.
+    tebeosfera_rate_limit: float = 2.0
+
     # ── Prowlarr (baremetal) ───────────────────────────────────────
     prowlarr_url: str = Field(default="http://127.0.0.1:9696")
     prowlarr_api_key: str = Field(default="")
