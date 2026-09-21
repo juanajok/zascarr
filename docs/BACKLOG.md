@@ -41,13 +41,13 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B2 | Como coleccionista, quiero ver los tebeos que el sistema no supo clasificar y decidir yo con un clic | Bandeja de "pendientes de revisar" en la UI: miniatura, título detectado, botones "es esta serie / ninguna / ignorar" | P0 | L |
 | B3 | Como coleccionista, quiero que los duplicados se detecten y no se importen dos veces | Dedupe por SHA256 ya existe; la UI muestra "duplicado de X, descartado" en el informe | P0 | S |
 | B4 | Como coleccionista, quiero que cada tebeo aparezca con portada, guionista, dibujante y sinopsis aunque el archivo no traiga metadatos | Enricher multi-fuente (GCD/AniList/Tebeosfera/Comic Vine) + corrección del bug de `metadata_source='manual'` del peer review (C3) | P0 | L |
-| B5 | Como coleccionista de tankōbon y álbumes BD, quiero que Vol./T/Tomo funcionen tan bien como el # americano | Tests de naming con fixtures reales de releases españolas (patrones `nº`, `v01c047` rescatados de zascarr) | P0 | M |
+| B5 | ~~Como coleccionista de tankōbon y álbumes BD, quiero que Vol./T/Tomo funcionen tan bien como el # americano~~ | ~~Tests de naming con fixtures reales de releases españolas (patrones `nº`, `v01c047` rescatados de zascarr)~~ | ✅ Hecho | M |
 
 **Notas de implementación:**
 
 - **B4 (parcial):** implementado `EnrichmentService` (`src/secuenciarr/services/enricher.py`) solo con Comic Vine, como job periódico en `main.py`. GCD, AniList y Tebeosfera quedan pendientes — el diseño es pluggable, añadirlas no requiere tocar el core del enricher.
 - **B4 (Tebeosfera):** para el scraper de Tebeosfera, partir de [theotocopulitos/tebeosfera-scraper](https://github.com/theotocopulitos/tebeosfera-scraper) en vez de empezar de cero — cubre el sitio que más aporta para grapa/álbum español y ya resuelve el scraping HTML (sin API oficial).
-- **B5:** ya hay 5 casos reales fallando y documentados como `xfail` en `tests/test_naming_core.py::TestRealWorldFilenames` (paréntesis tipo "(New 52)" y sufijos "- Subtítulo" que `naming.py` no limpia todavía). Son el punto de partida cuando se aborde esta historia.
+- **B5 (hecho):** `naming.py` ahora resuelve los 8 casos reales de `tests/test_naming_core.py::TestRealWorldFilenames`, incluyendo "Batman_v2_012" (guion bajo como separador), "Batman (New 52) 012 (2013)" (paréntesis de reboot no confundidos con año), "Sandman.001.(1989)" (años 19xx, no solo 20xx), "MF #001 - Safari Callejero" y "Asterix T01 - Asterix el Galo" (subtítulo tras " - ", y "T01" de BD de tomo único tratado como número, a diferencia de "Vol."/"Tomo N" que siguen siendo volumen puro).
 
 ### Épica C — "Exploro y leo mi tebeoteca"
 

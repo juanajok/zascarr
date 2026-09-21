@@ -22,12 +22,18 @@ NOISE_PATTERNS = [
     r"\(Digital\)", r"\(digital\)", r"\(Digital-\w+\)",
     r"\(Minutemen-\w+\)", r"\(Zone-\w+\)", r"\(Empire\)",
     r"\(Glorith-HD\)", r"\(F\)\s*", r"\(c2c\)", r"\(noads\)",
-    r"\(HD\)", r"\(SD\)", r"\(Webrip\)", r"\(Scan\)", r"\(2[0-9]{3}\)",
+    r"\(HD\)", r"\(SD\)", r"\(Webrip\)", r"\(Scan\)",
+    r"\((?:19|20)[0-9]{2}\)",   # año entre paréntesis: cubre 19xx Y 20xx
+                                # (antes solo "20xx"; perdía años como 1989)
 ]
 
 ISSUE_PATTERNS = [
     r"#\s*(\d+\.?\d*)",
     r"c(\d{3,4})\b",                    # One Piece c1054
+    r"\bT(\d{2})\b",                     # Astérix T01: BD de tomo único,
+                                          # el tomo ES el número de cara
+                                          # a catalogación (no un volumen
+                                          # de trade paperback americano).
     r"\b(\d{3,4})\b(?!\s*\))",
     r"(?:Issue|No\.?|N[úu]mero)\s*(\d+)",
 ]
@@ -35,7 +41,6 @@ ISSUE_PATTERNS = [
 VOLUME_PATTERNS = [
     r"Vol\.?\s*(\d+)", r"Volume\s*(\d+)",
     r"\bv(\d+)\b", r"Tomo\s*(\d+)",
-    r"T(\d{2})\b",                       # T01 formato BD
 ]
 
 YEAR_PATTERN = re.compile(r"\((\d{4})\)")
@@ -67,6 +72,13 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     else:
         working = filename
 
+    # "_" es un separador de facto en la escena ("Batman_v2_012"), pero \b
+    # no lo trata como frontera de palabra (es \w igual que letras/dígitos):
+    # sin este reemplazo, "v2"/"012" pegados a "_" nunca matchean \bv(\d+)\b
+    # ni \b(\d{3,4})\b. Convertirlo a espacio antes de todo lo demás arregla
+    # volumen/número a la vez que la limpieza de puntuación de más abajo.
+    working = working.replace("_", " ")
+
     year_match = YEAR_PATTERN.search(working)
     if year_match:
         year = int(year_match.group(1))
@@ -93,6 +105,18 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
 
     for noise in NOISE_PATTERNS:
         working = re.sub(noise, "", working, flags=re.IGNORECASE)
+
+    # Catch-all: cualquier paréntesis que sobreviva a los patrones curados de
+    # arriba es casi siempre metadata de release que no anticipamos ("Batman
+    # (New 52) 012" — el reboot no es parte del título de la serie), nunca
+    # parte legítima de un título de cómic real.
+    working = re.sub(r"\([^)]*\)", "", working)
+
+    # "Serie - Subtítulo" y "Serie #001 - Título del número": todo lo que
+    # sigue a un separador " - " (con espacios a los dos lados, a diferencia
+    # de un guion pegado como en "Spider-Man") es el título del propio
+    # número, no parte del nombre de la serie.
+    working = re.split(r"\s+-\s+", working, maxsplit=1)[0]
 
     series = working.strip()
     series = re.sub(r"[\.\-_]+", " ", series)

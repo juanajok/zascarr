@@ -499,23 +499,15 @@ class TestRealWorldFilenames:
     cada bug de naming que encuentres en producción.
     """
 
-    # naming.py ya existe (a diferencia de cuando se escribió este
-    # placeholder original), pero conectar estos casos reales revela que
-    # su limpieza de ruido no cubre sufijos parentéticos tipo "(New 52)"
-    # ni títulos con "- Subtítulo": marcados xfail en vez de perderse otra
-    # vez como placeholder invisible. Arreglar naming.py para estos casos
-    # es, literalmente, el backlog B5 — no un fix de una línea.
-    _b5 = pytest.mark.xfail(reason="naming.py: limpieza de ruido incompleta (backlog B5)")
-
     @pytest.mark.parametrize("filename,expected_series,expected_num", [
-        pytest.param("Batman_v2_012.cbz",               "Batman",    "12",   marks=_b5),
-        pytest.param("Saga 001 (2013).cbz",              "Saga",      "1"),
-        pytest.param("One Piece c1054.cbz",              "One Piece", "1054"),
-        pytest.param("Batman (New 52) 012 (2013).cbz",   "Batman",    "12",   marks=_b5),
-        pytest.param("Sandman.001.(1989).(Digital).cbz", "Sandman",   "1",    marks=_b5),
-        pytest.param("Berserk Vol.01.cbz",               "Berserk",   None),  # manga: sin número
-        pytest.param("MF #001 - Safari Callejero.cbz",   "MF",        "1",    marks=_b5),
-        pytest.param("Asterix T01 - Asterix el Galo.cbz", "Asterix",  "1",    marks=_b5),
+        ("Batman_v2_012.cbz",                   "Batman",    "12"),
+        ("Saga 001 (2013).cbz",                 "Saga",      "1"),
+        ("One Piece c1054.cbz",                 "One Piece", "1054"),
+        ("Batman (New 52) 012 (2013).cbz",      "Batman",    "12"),
+        ("Sandman.001.(1989).(Digital).cbz",    "Sandman",   "1"),
+        ("Berserk Vol.01.cbz",                  "Berserk",   None),  # manga: sin número
+        ("MF #001 - Safari Callejero.cbz",      "MF",        "1"),
+        ("Asterix T01 - Asterix el Galo.cbz",   "Asterix",   "1"),
     ])
     def test_parse_filename(self, filename, expected_series, expected_num):
         from secuenciarr.utils.naming import parse_comic_filename
@@ -523,3 +515,25 @@ class TestRealWorldFilenames:
         result = parse_comic_filename(filename)
         assert result.series == expected_series
         assert (result.issue_number or None) == expected_num
+
+    def test_guion_pegado_no_se_confunde_con_subtitulo(self):
+        """'Spider-Man' no tiene espacios alrededor del guion: a diferencia
+        de ' - Subtítulo', no debe cortarse el título por ahí."""
+        from secuenciarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Spider-Man 001.cbz")
+        assert result.issue_number == "1"
+        # El guion sigue colapsando a espacio en la limpieza final (mismo
+        # criterio que matcher.normalize_title), pero el título no se trunca.
+        assert result.series == "Spider Man"
+
+    def test_tomo_sigue_siendo_volumen_no_issue(self):
+        """'Tomo N' (manga/BD con tomo Y numeración de issue separada) se
+        queda como volumen, a diferencia de 'T01' (BD de tomo único donde
+        el tomo ES el número): ver test_parse_filename de más arriba."""
+        from secuenciarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Astro Boy Tomo 5.cbz")
+        assert result.series == "Astro Boy"
+        assert result.volume == 5
+        assert result.issue_number == ""
