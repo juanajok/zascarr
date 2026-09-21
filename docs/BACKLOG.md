@@ -54,10 +54,16 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| C1 | Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad | Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia (o integración OPDS) con filtros por tradición, editorial, personaje, saga | P0 | L |
+| C1 | Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad | Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia (o integración OPDS) con filtros por tradición, editorial, personaje, saga | 🔧 P0, en progreso | L |
 | C2 | Como coleccionista, quiero saber de un vistazo qué números me faltan de cada serie | Vista "huecos" por serie: `missing` ya existe en API; corregir el bug de `sort_order` truncado detectado en el review | P0 | M |
 | C3 | Como coleccionista, quiero marcar un tebeo como leído y puntuarlo | `reading_progress` ya está en el modelo; falta exponerlo + UI | P1 | M |
 | C4 | Como coleccionista, quiero listas como "Court of Owls en orden" aunque crucen varias series | `story_arc_issues.reading_order` ya soporta crossovers; falta UI de arcos | P1 | M |
+
+**Notas de implementación (arranque de la Fase 6 / UI web):**
+
+- **Decisión de arquitectura:** ver [`docs/adr/0001-ui-stack.md`](adr/0001-ui-stack.md) — Jinja2 servido por el propio FastAPI + HTMX vendorizado (no CDN), sin SPA ni build de Node. Primer ADR del repo; las decisiones previas (PostgreSQL, enrutado del enricher) no quedaron documentadas como ADR retroactivamente.
+- **Esqueleto construido:** `src/secuenciarr/web/` (router `/ui`, `Jinja2Templates`, layout `base.html` con nav), `src/secuenciarr/static/vendor/htmx.min.js` (v4.0.0, verificado en un navegador real antes de vendorizarlo — encontró y confirmó que la versión funciona sin errores de consola), `src/secuenciarr/static/web.css`. El dashboard de E1 se queda como está por ahora (página autocontenida que funciona); se migra a este layout cuando exista una segunda pantalla real con la que compartir cabecera.
+- **Pendiente inmediato:** B2 (bandeja de pendientes) es la primera pantalla real que se construye sobre este esqueleto — la que valida si HTMX aguanta el patrón de interacción del backlog.
 
 ### Épica D — "El sistema busca lo que me falta"
 

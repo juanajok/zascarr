@@ -8,6 +8,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from secuenciarr.config import get_settings
 
@@ -127,11 +128,14 @@ def create_app() -> FastAPI:
     from secuenciarr.api.health import router as health_router
     from secuenciarr.api.series import router as series_router
     from secuenciarr.api.wishlist import router as wishlist_router
+    from secuenciarr.web.routes import router as ui_router
 
     app.include_router(health_router, prefix="/api")
     app.include_router(series_router, prefix="/api")
     app.include_router(wishlist_router, prefix="/api")
+    app.include_router(ui_router)
     app.get("/", include_in_schema=False)(dashboard)
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     return app
 

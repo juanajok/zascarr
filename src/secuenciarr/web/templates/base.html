@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SecuenciArr{% endblock %}</title>
+<link rel="stylesheet" href="/static/web.css">
+<script src="/static/vendor/htmx.min.js" defer></script>
+</head>
+<body>
+  <nav class="topnav">
+    <a href="/ui/" class="brand">SecuenciArr</a>
+    <a href="/">Estado</a>
+  </nav>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
