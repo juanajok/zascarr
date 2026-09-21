@@ -4,7 +4,7 @@ Revision ID: 0001
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, ENUM as PGEnum, JSONB, UUID
 
 revision = "0001"
 down_revision = None
@@ -94,7 +94,7 @@ def upgrade() -> None:
         sa.Column("publisher_id", UUID(as_uuid=True), sa.ForeignKey("publishers.id", ondelete="SET NULL")),
         sa.Column("imprint_id", UUID(as_uuid=True), sa.ForeignKey("imprints.id", ondelete="SET NULL")),
         sa.Column("universe_id", UUID(as_uuid=True), sa.ForeignKey("universes.id", ondelete="SET NULL")),
-        sa.Column("tradition", sa.Enum("american","franco_belgian","manga","tebeo","fumetti","manhwa","manhua","british","other", name="comic_tradition"), nullable=False, server_default="american"),
+        sa.Column("tradition", PGEnum("american","franco_belgian","manga","tebeo","fumetti","manhwa","manhua","british","other", name="comic_tradition", create_type=False), nullable=False, server_default="american"),
         sa.Column("start_year", sa.SmallInteger),
         sa.Column("end_year", sa.SmallInteger),
         sa.Column("total_issues", sa.Integer),
@@ -124,7 +124,7 @@ def upgrade() -> None:
         sa.Column("volume", sa.Integer, server_default="1"),
         sa.Column("title", sa.String(500)),
         sa.Column("release_date", sa.Date),
-        sa.Column("format", sa.Enum("single_issue","trade_paperback","hardcover","omnibus","graphic_novel","album","manga_tankobon","digital", name="issue_format"), server_default="single_issue"),
+        sa.Column("format", PGEnum("single_issue","trade_paperback","hardcover","omnibus","graphic_novel","album","manga_tankobon","digital", name="issue_format", create_type=False), server_default="single_issue"),
         sa.Column("page_count", sa.Integer),
         sa.Column("isbn", sa.String(20)),
         sa.Column("synopsis", sa.Text),
@@ -144,7 +144,7 @@ def upgrade() -> None:
     op.create_table("issue_creators",
         sa.Column("issue_id",   UUID(as_uuid=True), sa.ForeignKey("issues.id",   ondelete="CASCADE"), primary_key=True),
         sa.Column("creator_id", UUID(as_uuid=True), sa.ForeignKey("creators.id", ondelete="CASCADE"), primary_key=True),
-        sa.Column("role", sa.Enum("writer","penciler","inker","colorist","letterer","cover_artist","editor","translator", name="creator_role"), primary_key=True),
+        sa.Column("role", PGEnum("writer","penciler","inker","colorist","letterer","cover_artist","editor","translator", name="creator_role", create_type=False), primary_key=True),
     )
     op.create_table("issue_characters",
         sa.Column("issue_id",     UUID(as_uuid=True), sa.ForeignKey("issues.id",     ondelete="CASCADE"), primary_key=True),
@@ -170,7 +170,7 @@ def upgrade() -> None:
         sa.Column("issue_id",         UUID(as_uuid=True), sa.ForeignKey("issues.id", ondelete="SET NULL")),
         sa.Column("file_path",        sa.String(1000), nullable=False, unique=True),
         sa.Column("file_name",        sa.String(500), nullable=False),
-        sa.Column("file_format",      sa.Enum("cbz","cbr","cb7","pdf","epub", name="file_format"), nullable=False),
+        sa.Column("file_format",      PGEnum("cbz","cbr","cb7","pdf","epub", name="file_format", create_type=False), nullable=False),
         sa.Column("file_size_bytes",  sa.BigInteger),
         sa.Column("sha256_hash",      sa.String(64)),
         sa.Column("source_tag",       sa.String(50)),
@@ -186,7 +186,7 @@ def upgrade() -> None:
         sa.Column("id",               UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("series_id",        UUID(as_uuid=True), sa.ForeignKey("series.id", ondelete="CASCADE")),
         sa.Column("issue_id",         UUID(as_uuid=True), sa.ForeignKey("issues.id", ondelete="CASCADE")),
-        sa.Column("status",           sa.Enum("wanted","searching","downloading","downloaded","imported","failed", name="wishlist_status"), server_default="wanted"),
+        sa.Column("status",           PGEnum("wanted","searching","downloading","downloaded","imported","failed", name="wishlist_status", create_type=False), server_default="wanted"),
         sa.Column("priority",         sa.Integer, server_default="5"),
         sa.Column("search_query",     sa.String(500)),
         sa.Column("locked_fields",    ARRAY(sa.String), server_default="{}"),
@@ -199,7 +199,7 @@ def upgrade() -> None:
     op.create_table("reading_progress",
         sa.Column("id",           UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("issue_id",     UUID(as_uuid=True), sa.ForeignKey("issues.id", ondelete="CASCADE"), nullable=False, unique=True),
-        sa.Column("status",       sa.Enum("unread","reading","completed","on_hold","dropped", name="reading_status"), server_default="unread"),
+        sa.Column("status",       PGEnum("unread","reading","completed","on_hold","dropped", name="reading_status", create_type=False), server_default="unread"),
         sa.Column("current_page", sa.Integer, server_default="0"),
         sa.Column("rating",       sa.SmallInteger),
         sa.Column("started_at",   sa.DateTime(timezone=True)),
