@@ -1,15 +1,29 @@
 """Router de Wishlist — cola de deseos tipo Sonarr."""
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from secuenciarr.database import get_db
 from secuenciarr.models import Wishlist, WishlistStatus
+from secuenciarr.services.wishlist import WishlistService
 
 router = APIRouter(prefix="/wishlist", tags=["wishlist"])
+
+
+class WishlistCreate(BaseModel):
+    series_id: UUID | None = None
+    issue_id: UUID | None = None
+    priority: int = 5
+    notes: str | None = None
+
+
+class WishlistUpdate(BaseModel):
+    priority: int | None = None
+    notes: str | None = None
+    status: WishlistStatus | None = None
 
 
 @router.get("")
@@ -31,22 +45,24 @@ async def list_wishlist(
 
 
 @router.post("", status_code=201)
-async def add_to_wishlist(data: dict, db: AsyncSession = Depends(get_db)):
-    if not data.get("series_id") and not data.get("issue_id"):
-        raise HTTPException(status_code=422, detail="Indica series_id o issue_id.")
-    item = Wishlist(**data)
-    db.add(item)
-    await db.flush()
-    await db.refresh(item)
+async def add_to_wishlist(data: WishlistCreate, db: AsyncSession = Depends(get_db)):
+    try:
+        item = await WishlistService(db).add(
+            series_id=data.series_id, issue_id=data.issue_id,
+            priority=data.priority, notes=data.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await db.refresh(item)  # trae added_at (server_default) para la respuesta
     return item
 
 
 @router.patch("/{item_id}")
-async def update_wishlist_item(item_id: UUID, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_wishlist_item(item_id: UUID, data: WishlistUpdate, db: AsyncSession = Depends(get_db)):
     item = (await db.execute(select(Wishlist).where(Wishlist.id == item_id))).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item no encontrado")
-    for field, value in data.items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(item, field, value)
     await db.flush()
     return item
@@ -54,19 +70,16 @@ async def update_wishlist_item(item_id: UUID, data: dict, db: AsyncSession = Dep
 
 @router.delete("/{item_id}", status_code=204)
 async def remove_from_wishlist(item_id: UUID, db: AsyncSession = Depends(get_db)):
-    item = (await db.execute(select(Wishlist).where(Wishlist.id == item_id))).scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=404, detail="Item no encontrado")
-    await db.delete(item)
+    try:
+        await WishlistService(db).remove(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/{item_id}/search")
 async def trigger_search(item_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Lanza búsqueda manual inmediata."""
-    item = (await db.execute(select(Wishlist).where(Wishlist.id == item_id))).scalar_one_or_none()
-    if not item:
-        raise HTTPException(status_code=404, detail="Item no encontrado")
-    item.status = WishlistStatus.SEARCHING
-    item.last_searched_at = datetime.now(timezone.utc)
-    await db.flush()
-    return item
+    """Reintento/búsqueda manual inmediata: salta el cooldown."""
+    try:
+        return await WishlistService(db).retry(item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -340,6 +340,11 @@ class Wishlist(Base):
     last_searched_at: Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     downloaded_at:    Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     notes:            Mapped[str|None]        = mapped_column(Text)
+    # D1: solo observabilidad (qué backend, qué hash) — no participan en
+    # detectar si algo terminó; eso lo hace Orchestrator.check_completions
+    # comprobando si ya existe un File enlazado, agnóstico de backend.
+    download_ref:     Mapped[str|None]        = mapped_column(String(255))
+    download_backend: Mapped[str|None]        = mapped_column(String(20))
     series: Mapped["Series|None"] = relationship()
     issue:  Mapped["Issue|None"]  = relationship()
 

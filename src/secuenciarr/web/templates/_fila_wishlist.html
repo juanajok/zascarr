@@ -1,0 +1,17 @@
+<div class="wishlist-row" id="fila-{{ row.item.id }}">
+  <span class="wishlist-title">{{ row.titulo }}</span>
+  <span class="wishlist-badge estado-{{ row.item.status.value }}">{{ row.estado }}</span>
+  {% if row.puede_reintentar %}
+  <button type="button" class="btn-reintentar"
+          hx-post="/ui/wishlist/{{ row.item.id }}/reintentar"
+          hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML">
+    Reintentar
+  </button>
+  {% endif %}
+  <button type="button" class="btn-ignorar"
+          hx-post="/ui/wishlist/{{ row.item.id }}/quitar"
+          hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
+          hx-confirm="¿Quitar de la lista de deseos?">
+    Quitar
+  </button>
+</div>

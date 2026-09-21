@@ -74,6 +74,31 @@ async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
+async def _orchestrator_loop(interval_minutes: int, limit: int) -> None:
+    """Job periódico del orquestador (D1): wishlist → búsqueda en cascada
+    → Transmission/aMule, y cierre del círculo (¿ya está en la biblioteca?).
+
+    Sin este loop, `scan_interval_minutes`/`max_concurrent_downloads` eran
+    ajustes que nadie leía y nada llamaba a `process_wishlist()` jamás —
+    mismo bug de fondo que tenía el importador antes de B1/B3.
+    """
+    from secuenciarr.database import async_session_factory
+    from secuenciarr.services.orchestrator import Orchestrator
+
+    while True:
+        try:
+            async with async_session_factory() as session:
+                orchestrator = Orchestrator(session)
+                sent = await orchestrator.process_wishlist(limit=limit)
+                imported = await orchestrator.check_completions(limit=limit)
+                await session.commit()
+            if sent or imported:
+                logger.info("orchestrator.cycle_done", enviados=sent, importados=imported)
+        except Exception:
+            logger.exception("orchestrator.cycle_failed")
+        await asyncio.sleep(interval_minutes * 60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -88,6 +113,9 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_import_loop(settings.import_interval_minutes)),
         asyncio.create_task(
             _enrichment_loop(settings.enrich_interval_minutes, settings.enrich_batch_size)
+        ),
+        asyncio.create_task(
+            _orchestrator_loop(settings.scan_interval_minutes, settings.max_concurrent_downloads)
         ),
     ]
 
@@ -130,12 +158,14 @@ def create_app() -> FastAPI:
     from secuenciarr.api.wishlist import router as wishlist_router
     from secuenciarr.web.pendientes import router as pendientes_router
     from secuenciarr.web.routes import router as ui_router
+    from secuenciarr.web.wishlist import router as wishlist_ui_router
 
     app.include_router(health_router, prefix="/api")
     app.include_router(series_router, prefix="/api")
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(ui_router)
     app.include_router(pendientes_router)
+    app.include_router(wishlist_ui_router)
     app.get("/", include_in_schema=False)(dashboard)
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

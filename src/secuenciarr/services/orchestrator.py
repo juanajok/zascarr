@@ -1,17 +1,42 @@
 """
 Orquestador — motor de búsqueda en cascada.
 
-Flujo: wishlist (wanted) → Prowlarr → foro CRG → Transmission/aMule
-Backend auto-detectado por tipo de URL:
+Flujo: wishlist (wanted/failed, con cooldown) → Prowlarr → foro CRG →
+Transmission/aMule → (import loop, ya existente) → check_completions
+cierra el círculo. Backend auto-detectado por tipo de URL:
   magnet:// o .torrent → Transmission
   ed2k://              → aMule
+
+D1: dos reglas nuevas respecto al diseño original.
+  - Si el mejor candidato falla al enviarse (backend caído, etc.), se
+    prueba el siguiente del pool rankeado antes de rendirse — no una
+    sola oportunidad (idea tomada de Mylar3 al comparar herramientas del
+    mismo espacio).
+  - Un item sin resultados o cuyo envío falla se reintenta solo tras
+    `orchestrator_retry_cooldown_hours` (ver config.py), no en cada
+    ciclo para siempre — mismo patrón que `enrichment_attempted_at` del
+    enricher (H2 del peer review v2), aplicado aquí porque el bug es
+    idéntico: sin cooldown, un item condenado quema Prowlarr/foro cada
+    ciclo indefinidamente.
+
+check_completions() cierra "descargado → en tu biblioteca" sin preguntarle
+a Transmission/aMule si terminaron: ninguno de los dos da una forma fiable
+de correlacionar un item de la wishlist con su descarga (Transmission sí
+tiene hash, pero aMule no expone nombre/hash del completado hoy). En vez
+de eso, se comprueba si ya existe un File enlazado al Issue/Series que el
+item pedía — el import loop periódico ya existente es quien de verdad
+clasifica el archivo, este método solo refleja ese hecho en el estado de
+la wishlist.
 """
+from datetime import datetime, timedelta, timezone
 from enum import Enum
+
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from secuenciarr.models import Issue, Series, Wishlist, WishlistStatus
+from secuenciarr.config import get_settings
+from secuenciarr.models import File, Issue, Series, Wishlist, WishlistStatus
 from secuenciarr.services.amule import AMuleClient
 from secuenciarr.services.prowlarr import ProwlarrClient, SearchResult
 from secuenciarr.services.transmission import TransmissionClient
@@ -40,9 +65,15 @@ class Orchestrator:
         self._amule        = AMuleClient()
 
     async def process_wishlist(self, limit: int = 10) -> int:
+        cooldown = timedelta(hours=get_settings().orchestrator_retry_cooldown_hours)
+        cutoff = datetime.now(timezone.utc) - cooldown
         items = list((await self.db.execute(
             select(Wishlist)
-            .where(Wishlist.status == WishlistStatus.WANTED)
+            .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
+            .where(or_(
+                Wishlist.last_searched_at.is_(None),
+                Wishlist.last_searched_at < cutoff,
+            ))
             .order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
             .limit(limit)
         )).scalars().all())
@@ -64,31 +95,43 @@ class Orchestrator:
             return False
 
         item.status = WishlistStatus.SEARCHING
+        # D1/H2: marca el intento ya aquí, con o sin resultado — es lo que
+        # activa el cooldown de process_wishlist y evita quemar Prowlarr/
+        # foro en cada ciclo con un item condenado.
+        item.last_searched_at = datetime.now(timezone.utc)
         await self.db.flush()
 
         results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
-        best = self._select_best(results, query) if results else None
+        candidates = self._ranked_candidates(results, query) if results else []
 
-        if not best:
-            best = await self._forum_fallback(query)
+        if not candidates:
+            forum_result = await self._forum_fallback(query)
+            if forum_result:
+                candidates = [forum_result]
 
-        if not best:
-            item.status = WishlistStatus.WANTED
+        if not candidates:
+            item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
             await self.db.flush()
             return False
 
-        backend = _detect_backend(best.download_url)
-        success = await self._send(backend, best)
+        # D1 (Mylar3): si el mejor candidato falla al enviarse, se prueba
+        # el siguiente del pool rankeado antes de rendirse.
+        for candidate in candidates:
+            backend = _detect_backend(candidate.download_url)
+            ref = await self._send(backend, candidate)
+            if ref is not None:
+                item.status = WishlistStatus.DOWNLOADING
+                item.download_backend = backend.value
+                item.download_ref = ref
+                await self.db.flush()
+                logger.info("orchestrator.download_started", title=candidate.title, backend=backend.value)
+                return True
 
-        if success:
-            item.status = WishlistStatus.DOWNLOADING
-            from datetime import datetime, timezone
-            item.last_searched_at = datetime.now(timezone.utc)
-            logger.info("orchestrator.download_started", title=best.title, backend=backend.value)
-        else:
-            item.status = WishlistStatus.FAILED
+        # Hubo candidatos pero ninguno se pudo enviar (backend caído, etc.):
+        # esto sí es un fallo real, distinto de "sin resultados todavía".
+        item.status = WishlistStatus.FAILED
         await self.db.flush()
-        return success
+        return False
 
     async def _build_query(self, item: Wishlist) -> str | None:
         if item.search_query:
@@ -111,17 +154,25 @@ class Orchestrator:
                     return f"{series.title} {issue.issue_number}"
         return None
 
-    async def _send(self, backend: DownloadBackend, result: SearchResult) -> bool:
+    async def _send(self, backend: DownloadBackend, result: SearchResult) -> str | None:
+        """Devuelve un identificador de la descarga (hash de Transmission, o
+        el hash ed2k ya presente en la propia URL) para observabilidad en
+        Wishlist.download_ref — no participa en detectar si terminó (ver
+        check_completions). None si el envío falló."""
         if backend == DownloadBackend.TRANSMISSION:
-            return (await self._transmission.add_torrent(result.download_url)) is not None
+            added = await self._transmission.add_torrent(result.download_url)
+            if not added:
+                return None
+            return added.get("hashString") or added.get("name") or ""
         if backend == DownloadBackend.AMULE:
             if not await self._amule.login():
-                return False
-            return await self._amule.add_ed2k_link(result.download_url)
-        return False
+                return None
+            if not await self._amule.add_ed2k_link(result.download_url):
+                return None
+            return _extract_ed2k_hash(result.download_url) or result.download_url
+        return None
 
     async def _forum_fallback(self, query: str) -> SearchResult | None:
-        from secuenciarr.config import get_settings
         s = get_settings()
         if not s.forum_enabled or not s.forum_username:
             return None
@@ -138,7 +189,11 @@ class Orchestrator:
             logger.exception("orchestrator.forum_fallback_error")
         return None
 
-    def _select_best(self, results: list[SearchResult], query: str) -> SearchResult | None:
+    def _ranked_candidates(self, results: list[SearchResult], query: str) -> list[SearchResult]:
+        """Todo el pool rankeado, no solo el ganador — D1 prueba el
+        siguiente si el primero falla al enviarse, en vez de rendirse.
+        Preferencia torrents-antes-que-ed2k se conserva concatenando los
+        pools en ese orden, cada uno ordenado por score descendente."""
         norm = normalize_series_name(query)
         torrents, ed2k = [], []
         for r in results:
@@ -151,11 +206,9 @@ class Orchestrator:
                     torrents.append((score, r))
             else:
                 ed2k.append((score, r))
-        for pool in (torrents, ed2k):
-            if pool:
-                pool.sort(key=lambda x: x[0], reverse=True)
-                return pool[0][1]
-        return None
+        torrents.sort(key=lambda x: x[0], reverse=True)
+        ed2k.sort(key=lambda x: x[0], reverse=True)
+        return [r for _, r in torrents] + [r for _, r in ed2k]
 
     @staticmethod
     def _score(r: SearchResult, norm: str) -> float:
@@ -166,3 +219,49 @@ class Orchestrator:
         seeder_score = min(r.seeders / 50, 1.0) if r.seeders > 0 else 0.1
         fmt = 1.0 if ".cbz" in r.title.lower() else (0.8 if ".cbr" in r.title.lower() else 0.5)
         return title_score * 0.6 + seeder_score * 0.3 + fmt * 0.1
+
+    # ── Cierre del círculo: descargado → en tu biblioteca (D1) ───────────────
+
+    async def check_completions(self, limit: int = 50) -> int:
+        """Para cada item DOWNLOADING, ¿ya existe un File enlazado a lo que
+        pedía? El import loop periódico ya existente es quien de verdad
+        clasifica el archivo; esto solo refleja ese hecho en la wishlist."""
+        items = list((await self.db.execute(
+            select(Wishlist)
+            .where(Wishlist.status == WishlistStatus.DOWNLOADING)
+            .limit(limit)
+        )).scalars().all())
+
+        completed = 0
+        for item in items:
+            if await self._is_fulfilled(item):
+                item.status = WishlistStatus.IMPORTED
+                item.downloaded_at = datetime.now(timezone.utc)
+                await self.db.flush()
+                completed += 1
+                logger.info("orchestrator.item_imported", id=str(item.id))
+        return completed
+
+    async def _is_fulfilled(self, item: Wishlist) -> bool:
+        if item.issue_id:
+            row = (await self.db.execute(
+                select(File.id).where(File.issue_id == item.issue_id).limit(1)
+            )).first()
+            return row is not None
+        if item.series_id:
+            row = (await self.db.execute(
+                select(File.id)
+                .join(Issue, File.issue_id == Issue.id)
+                .where(Issue.series_id == item.series_id)
+                .where(File.imported_at >= item.added_at)
+                .limit(1)
+            )).first()
+            return row is not None
+        return False
+
+
+def _extract_ed2k_hash(url: str) -> str | None:
+    """ed2k://|file|NOMBRE|TAMAÑO|HASH|/ — el hash ya viaja en la propia
+    URL, no hace falta preguntarle nada a aMule para tenerlo."""
+    parts = url.split("|")
+    return parts[4] if len(parts) >= 5 else None

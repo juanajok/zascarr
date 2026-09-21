@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     scan_interval_minutes: int = 60
     import_interval_minutes: int = 15
     max_concurrent_downloads: int = 2
+    # D1: cuánto esperar antes de reintentar un item sin resultados o cuya
+    # descarga falló (mismo patrón que enrichment_attempted_at del enricher,
+    # pero mucho más corto: la disponibilidad en un indexer/foro cambia en
+    # horas, no en meses).
+    orchestrator_retry_cooldown_hours: int = 6
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el

@@ -1,0 +1,17 @@
+{% if not series_list %}
+<p class="no-results">Sin coincidencias.</p>
+{% else %}
+<ul class="series-list">
+  {% for s in series_list %}
+  <li class="series-result-item">
+    <span class="series-name">{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
+    <button type="button"
+            hx-post="/ui/wishlist/anadir"
+            hx-vals='{"series_id": "{{ s.id }}"}'
+            hx-target="#wishlist-list" hx-swap="beforeend">
+      Añadir a deseados
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

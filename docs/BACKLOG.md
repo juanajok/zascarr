@@ -78,7 +78,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| D1 | Como coleccionista, quiero marcar "quiero esta serie" y olvidarme: el sistema la encuentra y la añade | Wishlist → orchestrator → Transmission/aMule → import; visible como "Buscando... Descargando... En tu biblioteca" en la UI. Incluye reintentar automáticamente con el siguiente resultado del pool si una descarga falla, no solo marcar `failed` y parar (ver nota de benchmarking) | P0 | L |
+| D1 | ~~Como coleccionista, quiero marcar "quiero esta serie" y olvidarme: el sistema la encuentra y la añade~~ | ~~Wishlist → orchestrator → Transmission/aMule → import; visible como "Buscando... Descargando... En tu biblioteca" en la UI, con reintento automático de candidato y de búsqueda~~ | ✅ Hecho | L |
 | D2 | Como coleccionista, quiero elegir "solo CBZ de calidad" o "acepto escaneos" sin entender qué es un quality profile | Selector de 3 opciones legibles ("solo lo mejor / equilibrado / lo que haya"); mapea a `quality_tier` interno | P1 | M |
 | D3 | Como coleccionista, quiero que si sale una edición mejor de algo que ya tengo, el sistema me la ofrezca | Lógica de upgrade sobre `quality_tier`; la UI propone, no sustituye sin confirmar | P1 | M |
 | D4 | ~~Como coleccionista, quiero que el sistema me avise si está descargando sin VPN sin que se pare todo~~ | ~~Warning del healthcheck visible como aviso en UI + log del orchestrator (decisión ya acordada, ver fix C2)~~ | ✅ Hecho (vía E1) | S |
@@ -99,15 +99,80 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 - **A1 (bootstrap.sh):** 3 preguntas (biblioteca, raíz de descargas, idioma), escritas en `.env` de forma idempotente (`set_env_var`, no duplica al re-ejecutar). `docker-compose.yml` parametriza el lado HOST de los 3 volúmenes correspondientes (`HOST_LIBRARY_DIR`, `HOST_DOWNLOADS_DIR`, `HOST_AMULE_INCOMING_DIR`) manteniendo el lado del contenedor fijo, así que `config.py` no necesitó cambios. El idioma se guarda en `APP_LOCALE` para cuando exista i18n real — hoy no traduce nada. Probado en aislamiento (sin Docker) con respuestas por defecto y personalizadas, incluyendo idempotencia.
 - **E2 (backup):** `scripts/backup.sh` (mismo patrón que `vpn-state.sh`: script host + timer systemd embebido), escribe en `/media/WDElements/backups/postgres/` (disco distinto al de los datos) con retención automática de 14 días. `make backup` ahora lo invoca en vez de duplicar la lógica.
 
+**Notas de implementación (D1):**
+
+- **El backend de búsqueda/descarga ya existía y era sustancial**
+  (`orchestrator.py`, `transmission.py`, `amule.py`, `prowlarr.py`,
+  `forum_scraper.py`) pero D1 no funcionaba en absoluto: tenía tres huecos
+  sin documentar, encontrados al explorar el repo para esta historia.
+  - **El orquestador nunca se ejecutaba solo** — mismo bug de fondo que
+    B1/B3 encontraron en el importador antes de arreglarlo:
+    `scan_interval_minutes`/`max_concurrent_downloads` eran ajustes que
+    nadie leía, ningún código llamaba `process_wishlist()` jamás. Fijado
+    con un `_orchestrator_loop` en `main.py`, calcado de
+    `_import_loop`/`_enrichment_loop`.
+  - **Un item sin resultados o cuya descarga fallaba se abandonaba para
+    siempre** — mismo bug que H2 del enricher (peer review v2), aplicado
+    aquí: `process_wishlist` solo seleccionaba `status == WANTED`, así que
+    un `FAILED` no se reintentaba nunca, y uno sin resultados se
+    reintentaba en CADA ciclo sin límite. Fijado con un cooldown de
+    `orchestrator_retry_cooldown_hours` (6h por defecto, config.py) sobre
+    `last_searched_at` — mismo patrón que `enrichment_attempted_at`.
+  - **Nada cerraba el círculo "descargado → en tu biblioteca"**: cero
+    referencias a `WishlistStatus.DOWNLOADED`/`IMPORTED` en todo el código
+    aparte de su propia definición. En vez de scrapear el estado de
+    Transmission/aMule (aMule no da nombre/hash del completado hoy, solo
+    un % global), `Orchestrator.check_completions()` comprueba si ya
+    existe un `File` enlazado al `Issue`/`Series` que el item pedía — el
+    import loop periódico ya existente es quien de verdad clasifica el
+    archivo, esto solo refleja ese hecho en la wishlist. Agnóstico de
+    backend, sin scraping frágil de HTML de aMule.
+- **Reintento con el siguiente candidato del pool (idea de Mylar3,
+  benchmarking anterior):** si el mejor resultado falla al enviarse al
+  backend de descarga, se prueba el siguiente en vez de rendirse a la
+  primera. `_select_best` pasó a `_ranked_candidates` (devuelve todo el
+  pool rankeado, no solo el ganador).
+- **M1 cerrado de raíz** (no en otra pasada): `Wishlist(**data)` y
+  `setattr(item, field, value)` sobre el body crudo en `api/wishlist.py`
+  sustituidos por `WishlistCreate`/`WishlistUpdate` (Pydantic, campos
+  explícitos) delegando en el nuevo `WishlistService`
+  (`src/secuenciarr/services/wishlist.py`) — misma fuente de verdad para
+  la API JSON y la nueva UI, sin lógica duplicada.
+- **UI**: `/ui/wishlist` (`src/secuenciarr/web/wishlist.py`), mismo patrón
+  HTMX que `pendientes.py` — buscar una serie ya catalogada, añadirla,
+  ver su badge de estado ("Buscando…"/"Descargando…"/"En tu
+  biblioteca"/"Sin resultados"), reintentar manualmente o quitarla.
+  Verificado en un navegador real de principio a fin contra Postgres real
+  (no solo con FakeSession): buscar, añadir, recargar y comprobar que
+  persiste, quitar, recargar y comprobar que desaparece. El botón
+  "Quitar" usa `hx-confirm` (diálogo nativo del navegador) — la
+  herramienta de automatización no lo acepta sola (mismo tipo de
+  limitación que el `hx-trigger="keyup changed"` de B2, confirmado
+  disparando la petición directamente por fetch: el backend responde
+  bien, es la herramienta la que no interactúa con el diálogo nativo).
+- **Verificación end-to-end contra Postgres real**, no solo con dobles:
+  migración 0001→0007 aplicada de cero; un ciclo completo simulado
+  (`Series` + `Wishlist` WANTED → `Orchestrator` con Prowlarr/Transmission
+  simulados → `DOWNLOADING` con `download_ref`/`download_backend`
+  correctos → insertar el `File` que el import loop habría creado →
+  `check_completions` → `IMPORTED` con `downloaded_at`); y un segundo
+  ciclo confirmando que un `FAILED` reciente NO se reintenta antes del
+  cooldown (Prowlarr no se vuelve a llamar).
+- **Fuera de alcance deliberado**: tabla `OrchestratorRun` estilo
+  `ImportRun` para historial (no la pide el criterio de aceptación);
+  ampliar `AMuleClient`/`TransmissionClient` (no hace falta, ver arriba);
+  cancelar/pausar una descarga en curso desde la UI (solo "quitar" antes
+  de que empiece a descargar, vía el `DELETE` ya existente).
+
 ## Deuda técnica registrada (peer review v2, hallazgos medios)
 
 Sin arreglar todavía — nombrados aquí a propósito para que no vuelvan a caer
 en el agujero de "estaba en el review pero nadie lo pasó al board":
 
-- **M1 — mass assignment en la API:** algún endpoint acepta y persiste campos
-  del payload sin whitelist explícita, más allá de lo que el caso de uso
-  necesita escribir. Revisar los routers de escritura (`web/pendientes.py`,
-  futuros de C/D) antes de exponer más superficie editable.
+- ~~**M1 — mass assignment en la API**~~ — ✅ cerrado al implementar D1
+  (`WishlistCreate`/`WishlistUpdate` + `WishlistService`, ver notas de D1
+  arriba). `web/pendientes.py` ya usaba `Form(...)` con campos explícitos,
+  no dict crudo — no tenía el mismo problema.
 - **M2 — normalizador duplicado:** `naming.normalize_series_name` y
   `matcher.normalize_title` resuelven un problema parecido (limpiar un
   título para comparar) con lógica independiente y ya divergente en algún

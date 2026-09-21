@@ -143,3 +143,69 @@ button[type="submit"] {
   font-size: 0.82rem;
   cursor: pointer;
 }
+
+/* ── Lista de deseos (D1) ───────────────────────────────────────────── */
+.series-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.series-result-item button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wishlist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.wishlist-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.wishlist-title { flex: 1; font-size: 0.95rem; }
+.wishlist-badge {
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.wishlist-badge.estado-downloading,
+.wishlist-badge.estado-searching,
+.wishlist-badge.estado-wanted {
+  background: #fef3c7;
+  color: #92400e;
+}
+.wishlist-badge.estado-imported {
+  background: #d1fae5;
+  color: #065f46;
+}
+.wishlist-badge.estado-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.btn-reintentar {
+  background: none;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
