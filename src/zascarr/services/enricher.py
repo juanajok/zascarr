@@ -1,0 +1,385 @@
+"""
+Enricher — completa metadatos de series e issues consultando fuentes externas.
+
+Fuentes activas: Comic Vine (grapa americana/British), AniList (manga/
+manhwa/manhua) y Tebeosfera (tebeo/franco_belgian — grapa/álbum en
+español, confirmado con búsquedas reales, no solo supuesto). GCD queda
+fuera a propósito: no tiene API pública ni una referencia de scraping ya
+identificada. El enum MetadataSource ya la contempla para cuando exista
+un cliente propio.
+
+Enrutado por Series.tradition: cada serie se enriquece con UNA sola fuente,
+la que le corresponde (nunca se prueban varias por si acaso — evitaría el
+mismo error que el peer review señaló en el matcher: adivinar en vez de
+aceptar solo lo inequívoco). Tradiciones sin fuente todavía (fumetti...)
+no se tocan: ninguna fuente activa las indexa con confianza, y es mejor
+no enriquecer que enriquecer con la fuente equivocada.
+
+AniList y Tebeosfera enriquecen SOLO a nivel de serie (título, sinopsis,
+portada, nº de números/capítulos): ninguna de las dos tiene aquí un
+concepto de "issue" equivalente al de Comic Vine — así que
+Issue.metadata_source nunca se pone a 'anilist' ni 'tebeosfera' en esta
+versión; _enrich_issues_batch sigue siendo solo Comic Vine.
+
+Reglas de convivencia con datos ya existentes (peer review, fix C3):
+  - NUNCA se toca una fila con metadata_source == 'manual': es corrección
+    humana y el enricher no pisa criterio humano.
+  - NUNCA se sobrescribe un campo ya relleno; solo se completan huecos
+    (None / cadena vacía). Si comicinfo_xml ya puso una sinopsis, se respeta.
+  - Solo se marca metadata_source con la fuente que aportó el dato (no se
+    reetiqueta lo que ya vino de comicinfo_xml).
+"""
+from __future__ import annotations
+
+from contextlib import AsyncExitStack
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+
+import structlog
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from zascarr.core.matcher import normalize_title
+from zascarr.models import (
+    ComicTradition, Creator, CreatorRole, Issue, IssueCreator, MetadataSource, Series,
+)
+from zascarr.services.anilist import AniListClient, AniListResult
+from zascarr.services.comic_vine import ComicVineClient, CVCredit, CVResult
+from zascarr.services.tebeosfera import TebeosferaClient, TebeosferaResult
+
+logger = structlog.get_logger()
+
+# Roles de Comic Vine que sabemos mapear a CreatorRole. El resto de roles en
+# texto libre que devuelve la API ("plotter", "cover" ambiguo, etc.) se
+# ignoran en vez de adivinar un enum incorrecto.
+_CV_ROLE_MAP: dict[str, CreatorRole] = {
+    "writer": CreatorRole.WRITER,
+    "penciler": CreatorRole.PENCILER,
+    "penciller": CreatorRole.PENCILER,
+    "inker": CreatorRole.INKER,
+    "colorist": CreatorRole.COLORIST,
+    "letterer": CreatorRole.LETTERER,
+    "cover": CreatorRole.COVER_ARTIST,
+    "editor": CreatorRole.EDITOR,
+    "translator": CreatorRole.TRANSLATOR,
+}
+
+# Tradiciones que cubre cada fuente. El resto (fumetti...) se deja sin
+# tocar: ver docstring del módulo.
+_ANILIST_TRADITIONS = {ComicTradition.MANGA, ComicTradition.MANHWA, ComicTradition.MANHUA}
+_TEBEOSFERA_TRADITIONS = {ComicTradition.TEBEO, ComicTradition.FRANCO_BELGIAN}
+_COMIC_VINE_TRADITIONS = {ComicTradition.AMERICAN, ComicTradition.BRITISH}
+
+# Desambiguación por año como en matcher.py: ±1 absorbe discrepancias de
+# "año de la serie" vs "año del primer número" entre fuentes.
+_YEAR_TOLERANCE = 1
+
+# H2 (peer review v2): antes, una serie/issue sin match entraba en el batch
+# en CADA ciclo para siempre, quemando rate limit de APIs externas en
+# búsquedas condenadas. enrichment_attempted_at marca "lo intentamos" (con o
+# sin match) y esto es cuánto se espera antes de reintentar — no en el
+# siguiente ciclo (cada pocos minutos), sino a plazo largo: una fuente puede
+# indexar una serie recién publicada con retraso.
+ENRICHMENT_RETRY_AFTER = timedelta(days=30)
+
+
+@dataclass
+class EnrichmentReport:
+    series_enriched: list[str] = field(default_factory=list)
+    series_no_match: list[str] = field(default_factory=list)
+    issues_enriched: list[str] = field(default_factory=list)
+    issues_no_match: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def total_enriched(self) -> int:
+        return len(self.series_enriched) + len(self.issues_enriched)
+
+
+@dataclass
+class SeriesMatch:
+    """Resultado de match a nivel de serie, normalizado entre fuentes.
+
+    source_id es int para Comic Vine/AniList pero str para Tebeosfera
+    (slug de texto, no ID numérico) — de ahí el tipo unión.
+    """
+    source_id: int | str
+    description: str | None = None
+    cover_url: str | None = None
+    count_of_issues: int | None = None
+
+
+class EnrichmentService:
+    """Enriquecimiento incremental: cada llamada procesa un lote pequeño.
+
+    Pensado para correr como job periódico (ver main.py), no como proceso
+    batch de una sola vez: las APIs externas limitan a ~1 req/s y una
+    biblioteca de miles de series tardaría horas en una sola pasada.
+    Procesar en lotes pequeños y frecuentes converge igual sin bloquear
+    nada más.
+    """
+
+    def __init__(self, db: AsyncSession, cv_client: ComicVineClient | None = None,
+                 anilist_client: AniListClient | None = None,
+                 tebeosfera_client: TebeosferaClient | None = None):
+        self.db = db
+        self._injected_cv = cv_client                  # para tests
+        self._injected_anilist = anilist_client        # para tests
+        self._injected_tebeosfera = tebeosfera_client  # para tests
+
+    async def enrich_pending(self, limit: int = 20) -> EnrichmentReport:
+        report = EnrichmentReport()
+        async with AsyncExitStack() as stack:
+            cv_client = self._injected_cv or await stack.enter_async_context(ComicVineClient())
+            anilist_client = self._injected_anilist or await stack.enter_async_context(AniListClient())
+            tebeosfera_client = (self._injected_tebeosfera
+                                or await stack.enter_async_context(TebeosferaClient()))
+            await self._enrich_series_batch(cv_client, anilist_client, tebeosfera_client, limit, report)
+            await self._enrich_issues_batch(cv_client, limit, report)
+        return report
+
+    # ── Series ───────────────────────────────────────────────────────────
+
+    async def _enrich_series_batch(self, cv_client: ComicVineClient, anilist_client: AniListClient,
+                                    tebeosfera_client: TebeosferaClient, limit: int,
+                                    report: EnrichmentReport) -> None:
+        pending = (await self.db.execute(
+            select(Series)
+            .where(Series.comic_vine_id.is_(None))
+            .where(Series.anilist_id.is_(None))
+            .where(Series.tebeosfera_slug.is_(None))
+            .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(or_(
+                Series.enrichment_attempted_at.is_(None),
+                Series.enrichment_attempted_at < datetime.now(timezone.utc) - ENRICHMENT_RETRY_AFTER,
+            ))
+            .limit(limit)
+        )).scalars().all()
+
+        for series in pending:
+            source = self._source_for(series.tradition)
+            if source is None:
+                continue  # tradición sin fuente todavía (fumetti...)
+
+            id_field, source_value, source_label = source
+            try:
+                if source_value == MetadataSource.ANILIST.value:
+                    match = await self._find_anilist_match(anilist_client, series)
+                elif source_value == MetadataSource.TEBEOSFERA.value:
+                    match = await self._find_tebeosfera_match(tebeosfera_client, series)
+                else:
+                    match = await self._find_cv_series_match(cv_client, series)
+            except Exception:
+                # No se marca enrichment_attempted_at: un fallo de red es
+                # transitorio y debe poder reintentarse en el próximo ciclo,
+                # no dentro de 30 días como un "no encontrado" genuino.
+                logger.exception("enricher.series_lookup_failed", series=series.title, source=source_label)
+                report.errors.append(f"serie '{series.title}': error consultando {source_label}")
+                continue
+
+            # H2: se marca el intento tanto si hay match como si no.
+            series.enrichment_attempted_at = datetime.now(timezone.utc)
+
+            if match is None:
+                report.series_no_match.append(series.title)
+                continue
+
+            self._apply_series_match(series, match, id_field, source_value)
+            await self.db.flush()
+            report.series_enriched.append(series.title)
+            logger.info("enricher.series_enriched", series=series.title,
+                       source=source_label, source_id=match.source_id)
+
+    @staticmethod
+    def _source_for(tradition: ComicTradition) -> tuple[str, str, str] | None:
+        """(campo de id, valor de metadata_source, etiqueta legible) o None
+        si esa tradición no tiene fuente de enriquecimiento todavía."""
+        if tradition in _ANILIST_TRADITIONS:
+            return "anilist_id", MetadataSource.ANILIST.value, "AniList"
+        if tradition in _TEBEOSFERA_TRADITIONS:
+            return "tebeosfera_slug", MetadataSource.TEBEOSFERA.value, "Tebeosfera"
+        if tradition in _COMIC_VINE_TRADITIONS:
+            return "comic_vine_id", MetadataSource.COMIC_VINE.value, "Comic Vine"
+        return None
+
+    @staticmethod
+    def _apply_series_match(series: Series, match: SeriesMatch, id_field: str, source_value: str) -> None:
+        # H3 (peer review v2): locked_fields protege campos concretos aunque
+        # metadata_source no sea 'manual' (ese caso ya lo excluye la query
+        # de _enrich_series_batch, que es bloqueo total, no granular).
+        locked = series.locked_fields or []
+        if id_field not in locked:
+            setattr(series, id_field, match.source_id)
+        if "description" not in locked and not series.description:
+            series.description = match.description
+        if "cover_url" not in locked and not series.cover_url:
+            series.cover_url = match.cover_url
+        if "total_issues" not in locked and not series.total_issues and match.count_of_issues:
+            series.total_issues = match.count_of_issues
+        if series.metadata_source is None:
+            series.metadata_source = source_value
+
+    async def _find_cv_series_match(self, client: ComicVineClient, series: Series) -> SeriesMatch | None:
+        """Solo acepta coincidencia de título normalizado exacto.
+
+        El ranking de relevancia de /search/ de Comic Vine es una caja negra;
+        aceptar el primer resultado sin más repetiría el error que el propio
+        peer review señaló en el matcher (ambigüedad resuelta adivinando).
+        Sin coincidencia exacta, se prefiere no enriquecer a enriquecer mal.
+        """
+        candidates = await client.search_series(series.title, limit=10)
+        norm = normalize_title(series.title)
+        matches = [c for c in candidates if normalize_title(c.name) == norm]
+        chosen = self._pick_by_year(matches, series.start_year, lambda c: c.start_year)
+        if chosen is None:
+            return None
+        return SeriesMatch(source_id=chosen.cv_id, description=chosen.description,
+                           cover_url=chosen.image_url, count_of_issues=chosen.count_of_issues)
+
+    async def _find_anilist_match(self, client: AniListClient, series: Series) -> SeriesMatch | None:
+        """Mismo criterio conservador que Comic Vine: solo título exacto
+        (romaji O inglés) tras normalizar. AniList no tiene "sort_title"
+        separado, así que no hay desambiguación extra más allá del año."""
+        candidates = await client.search_manga(series.title, limit=10)
+        norm = normalize_title(series.title)
+        matches = [
+            c for c in candidates
+            if norm in (normalize_title(c.title_romaji or ""), normalize_title(c.title_english or ""))
+        ]
+        chosen = self._pick_by_year(matches, series.start_year, lambda c: c.start_year)
+        if chosen is None:
+            return None
+        return SeriesMatch(source_id=chosen.anilist_id, description=chosen.description,
+                           cover_url=chosen.cover_url, count_of_issues=chosen.chapters)
+
+    async def _find_tebeosfera_match(self, client: TebeosferaClient, series: Series) -> SeriesMatch | None:
+        """Mismo criterio conservador: solo título exacto tras normalizar.
+
+        TebeosferaClient ya limpia el sufijo "(año, editorial)" que el
+        sitio concatena a cada resultado (ver tebeosfera.py), así que el
+        título recibido aquí ya es comparable directamente contra
+        Series.title. Sin sort_title propio, igual que AniList.
+        """
+        candidates = await client.search_series(series.title, limit=10)
+        norm = normalize_title(series.title)
+        matches = [c for c in candidates if normalize_title(c.title) == norm]
+        chosen = self._pick_by_year(matches, series.start_year, lambda c: c.start_year)
+        if chosen is None:
+            return None
+        return SeriesMatch(source_id=chosen.slug, description=chosen.description,
+                           cover_url=chosen.cover_url, count_of_issues=chosen.count_of_issues)
+
+    @staticmethod
+    def _pick_by_year(matches: list, target_year: int | None, year_of):
+        """Común a ambas fuentes: sin match exacto de título, nada; con uno
+        solo, ese; con varios, el año de nuestra Series desempata (±1)."""
+        if not matches:
+            return None
+        if len(matches) == 1 or not target_year:
+            return matches[0]
+        by_year = [c for c in matches if year_of(c) and abs(year_of(c) - target_year) <= _YEAR_TOLERANCE]
+        return by_year[0] if by_year else matches[0]
+
+    # ── Issues (solo Comic Vine: ver docstring del módulo) ────────────────
+
+    async def _enrich_issues_batch(self, client: ComicVineClient, limit: int,
+                                    report: EnrichmentReport) -> None:
+        rows = (await self.db.execute(
+            select(Issue, Series)
+            .join(Series, Issue.series_id == Series.id)
+            .where(Series.comic_vine_id.is_not(None))
+            .where(Issue.comic_vine_id.is_(None))
+            .where(Issue.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
+            .where(Issue.issue_number.is_not(None))
+            .where(or_(
+                Issue.enrichment_attempted_at.is_(None),
+                Issue.enrichment_attempted_at < datetime.now(timezone.utc) - ENRICHMENT_RETRY_AFTER,
+            ))
+            .limit(limit)
+        )).all()
+
+        for issue, series in rows:
+            label = f"{series.title} #{issue.issue_number}"
+            try:
+                match = await client.find_issue(series.comic_vine_id, issue.issue_number)
+            except Exception:
+                # Igual que en series: fallo transitorio, no cuenta como
+                # intento para la caché negativa de 30 días.
+                logger.exception("enricher.issue_lookup_failed", issue=label)
+                report.errors.append(f"issue {label}: error consultando Comic Vine")
+                continue
+
+            issue.enrichment_attempted_at = datetime.now(timezone.utc)  # H2
+
+            if match is None:
+                report.issues_no_match.append(label)
+                continue
+
+            # H3: locked_fields protege la asignación manual desde la
+            # bandeja de pendientes (review.py) sin bloquear el resto del
+            # contenido — ver ReviewService.assign_to_series.
+            locked = issue.locked_fields or []
+            if "comic_vine_id" not in locked:
+                issue.comic_vine_id = match.cv_id
+            if "synopsis" not in locked and not issue.synopsis:
+                issue.synopsis = match.description
+            if "cover_url" not in locked and not issue.cover_url:
+                issue.cover_url = match.image_url
+            if issue.metadata_source is None:
+                issue.metadata_source = MetadataSource.COMIC_VINE.value
+            await self._apply_credits(issue, match.credits)
+            await self.db.flush()
+            report.issues_enriched.append(label)
+            logger.info("enricher.issue_enriched", issue=label, cv_id=match.cv_id)
+
+    async def _apply_credits(self, issue: Issue, credits: list[CVCredit]) -> None:
+        """Añade créditos SOLO si el issue no tiene ninguno todavía.
+
+        Se consulta issue_creators directamente en vez de `issue.credits`:
+        tocar una relación lazy sobre un objeto de AsyncSession sin haberla
+        cargado explícitamente dispara IO síncrono oculto (MissingGreenlet).
+        """
+        existing = (await self.db.execute(
+            select(IssueCreator).where(IssueCreator.issue_id == issue.id)
+        )).scalars().first()
+        if existing:
+            return
+
+        seen: set[tuple[str, CreatorRole]] = set()
+        for credit in credits:
+            role = None
+            for role_text in credit.roles:
+                role = _CV_ROLE_MAP.get(role_text)
+                if role is None:
+                    continue
+                creator = await self._get_or_create_creator(credit)
+                key = (creator.id, role)
+                if key in seen:
+                    continue
+                seen.add(key)
+                self.db.add(IssueCreator(issue_id=issue.id, creator_id=creator.id, role=role))
+
+    async def _get_or_create_creator(self, credit: CVCredit) -> Creator:
+        if credit.cv_id:
+            existing = (await self.db.execute(
+                select(Creator).where(Creator.comic_vine_id == credit.cv_id)
+            )).scalar_one_or_none()
+            if existing:
+                return existing
+
+        existing = (await self.db.execute(
+            select(Creator).where(Creator.name == credit.name)
+        )).scalar_one_or_none()
+        if existing:
+            if credit.cv_id and not existing.comic_vine_id:
+                existing.comic_vine_id = credit.cv_id
+            return existing
+
+        creator = Creator(
+            name=credit.name,
+            comic_vine_id=credit.cv_id,
+            metadata_source=MetadataSource.COMIC_VINE.value,
+        )
+        self.db.add(creator)
+        await self.db.flush()
+        return creator

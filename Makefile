@@ -1,5 +1,5 @@
 COMPOSE = docker compose
-SA      = $(COMPOSE) exec secuenciarr
+SA      = $(COMPOSE) exec zascarr
 
 .PHONY: help up down restart logs build migrate migrate-down migrate-status health shell db-shell test lint format backup
 
@@ -18,13 +18,13 @@ down:
 	$(COMPOSE) down
 
 restart:
-	$(COMPOSE) restart secuenciarr
+	$(COMPOSE) restart zascarr
 
 logs:
-	$(COMPOSE) logs -f secuenciarr
+	$(COMPOSE) logs -f zascarr
 
 build:
-	$(COMPOSE) build secuenciarr
+	$(COMPOSE) build zascarr
 
 # OJO: "alembic", nunca "python -m alembic". El directorio de migraciones
 # del propio repo se llama alembic/ igual que el paquete instalado; dentro

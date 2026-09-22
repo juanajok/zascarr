@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from fastapi.responses import FileResponse
 
-from secuenciarr.main import STATIC_DIR, dashboard
+from zascarr.main import STATIC_DIR, dashboard
 
 
 class TestDashboardRoute:

@@ -13,8 +13,8 @@ from uuid import uuid4
 
 import pytest
 
-from secuenciarr.models import ComicTradition, Series, Wishlist, WishlistStatus
-from secuenciarr.services.wishlist import WishlistService
+from zascarr.models import ComicTradition, Series, Wishlist, WishlistStatus
+from zascarr.services.wishlist import WishlistService
 
 
 class FakeScalarResult:

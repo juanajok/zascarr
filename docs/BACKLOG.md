@@ -1,8 +1,8 @@
-# Backlog de producto: SecuenciArr "listo para usar"
+# Backlog de producto: ZascArr "listo para usar"
 
 ## Visión y persona
 
-**Visión:** un coleccionista de tebeos instala SecuenciArr una vez, apunta a su
+**Visión:** un coleccionista de tebeos instala ZascArr una vez, apunta a su
 carpeta de descargas, y a partir de ahí su tebeoteca se organiza, se enriquece
 y se completa sola — sin saber qué es Docker, PostgreSQL ni un indexador.
 
@@ -33,7 +33,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | A3 | Como coleccionista, quiero que si algo se tuerce, mi colección nunca se dañe | El instalador y el importador NUNCA borran archivos originales; solo copian/mueven a destinos verificados | P0 | S |
 | A4 | Como coleccionista, quiero desinstalar sin dejar restos ni perder mi tebeoteca | `make uninstall` conserva biblioteca y BD con aviso claro | P1 | S |
 | A5 | Como coleccionista con el disco casi lleno, quiero repartir tradiciones entre discos sin engañar al sistema | N carpetas-raíz; cada una asignada a una o varias tradiciones; el importer escribe en la raíz que le toca a esa tradición | P2 | L |
-| A6 | Como coleccionista, cuando abra SecuenciArr fuera de localhost quiero contraseña y que funcione tras un reverse proxy | Auth none/password/user+password + `base_url` configurable | P1 | M |
+| A6 | Como coleccionista, cuando abra ZascArr fuera de localhost quiero contraseña y que funcione tras un reverse proxy | Auth none/password/user+password + `base_url` configurable | P1 | M |
 
 ### Épica B — "Importo mi caos actual"
 
@@ -44,7 +44,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B3 | ~~Como coleccionista, quiero que los duplicados se detecten y no se importen dos veces~~ | ~~Dedupe por SHA256 ya existe; la UI muestra "duplicado de X, descartado" en el informe~~ | ✅ Backend hecho | S |
 | B4 | Como coleccionista, quiero que cada tebeo aparezca con portada, guionista, dibujante y sinopsis aunque el archivo no traiga metadatos | Enricher multi-fuente (GCD/AniList/Tebeosfera/Comic Vine) + corrección del bug de `metadata_source='manual'` del peer review (C3) | P0 | L |
 | B5 | ~~Como coleccionista de tankōbon y álbumes BD, quiero que Vol./T/Tomo funcionen tan bien como el # americano~~ | ~~Tests de naming con fixtures reales de releases españolas (patrones `nº`, `v01c047` rescatados de zascarr)~~ | ✅ Hecho | M |
-| B6 | Como coleccionista, quiero que mi biblioteca sea legible por Kavita/ComicTagger/cualquier otra herramienta sin depender de SecuenciArr | Tras enriquecer, escribir `ComicInfo.xml` dentro del CBZ (hoy solo se lee, nunca se escribe) | P1 | M |
+| B6 | Como coleccionista, quiero que mi biblioteca sea legible por Kavita/ComicTagger/cualquier otra herramienta sin depender de ZascArr | Tras enriquecer, escribir `ComicInfo.xml` dentro del CBZ (hoy solo se lee, nunca se escribe) | P1 | M |
 | B7 | Como coleccionista, si borro un tebeo del disco a mano, quiero que deje de contar como "lo tengo" sin que yo avise | El ciclo de scan detecta `File.file_path` que ya no existe y lo marca desaparecido, con aviso en el informe del ciclo | P1 | S |
 | B8 | Como administrador de la Pi, quiero apagar una fuente de metadatos (p.ej. Tebeosfera) sin redesplegar si se rompe su scraping | Toggle runtime por proveedor (`comicvine_enabled`/`anilist_enabled`/`tebeosfera_enabled` en `Settings`, mismo patrón que `forum_enabled`) + estado visible en el healthcheck | P1 | S |
 | B9 | Como coleccionista, quiero que un número sin título no se quede "Issue 5 - Unknown" y que cada tradición nombre distinto sin que yo edite plantillas | Plantillas de naming por tipo (número / sin título / special version / pack) con padding configurable; UI solo on/off y preset | P2 | M |
@@ -53,7 +53,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 **Notas de implementación:**
 
 - **B4 (parcial, Comic Vine + AniList + Tebeosfera):** `EnrichmentService` enruta cada serie a UNA fuente según `Series.tradition`: `american`/`british` → Comic Vine, `manga`/`manhwa`/`manhua` → AniList, `tebeo`/`franco_belgian` → Tebeosfera. Solo `fumetti` queda sin fuente todavía. AniList y Tebeosfera enriquecen solo a nivel de Serie (título/sinopsis/portada/nº de números): ninguna tiene aquí un concepto de "issue" equivalente al de Comic Vine, así que `Issue.metadata_source` nunca se pone a `anilist` ni `tebeosfera`. Nuevas columnas `series.anilist_id` (migración `0003`) y `series.tebeosfera_slug` (migración `0004`, texto — Tebeosfera identifica por slug, no por ID numérico), paralelas a `comic_vine_id`.
-- **B4 (Tebeosfera, hecho):** `src/secuenciarr/services/tebeosfera.py` — scraping de los dos endpoints AJAX internos del buscador de tebeosfera.com (sin API oficial), portado con inspiración de [theotocopulitos/tebeosfera-scraper](https://github.com/theotocopulitos/tebeosfera-scraper) tras leer su cliente HTTP y su parser. Confirmado en vivo contra el sitio real (no solo contra el repo de referencia, que puede haber quedado desactualizado): búsquedas de "Thorgal" (BD) y "Mortadelo y Filemón" (tebeo español) devuelven resultados correctos. Se encontró y arregló un bug real solo visible probando en vivo — `lxml.text_content()` no inserta espacio donde había un `<br>`, así que "1986 a 1988<br>4 números" se leía como el número de colección "19884" en vez de "4". GCD queda como única fuente pendiente — sin API ni referencia de scraping ya identificada, a diferencia de Tebeosfera.
+- **B4 (Tebeosfera, hecho):** `src/zascarr/services/tebeosfera.py` — scraping de los dos endpoints AJAX internos del buscador de tebeosfera.com (sin API oficial), portado con inspiración de [theotocopulitos/tebeosfera-scraper](https://github.com/theotocopulitos/tebeosfera-scraper) tras leer su cliente HTTP y su parser. Confirmado en vivo contra el sitio real (no solo contra el repo de referencia, que puede haber quedado desactualizado): búsquedas de "Thorgal" (BD) y "Mortadelo y Filemón" (tebeo español) devuelven resultados correctos. Se encontró y arregló un bug real solo visible probando en vivo — `lxml.text_content()` no inserta espacio donde había un `<br>`, así que "1986 a 1988<br>4 números" se leía como el número de colección "19884" en vez de "4". GCD queda como única fuente pendiente — sin API ni referencia de scraping ya identificada, a diferencia de Tebeosfera.
 - **B4 (H1+H2+H3 del peer review v2, hecho):** migración `0006`, una sola pasada porque las tres tocan schema.
   - **H1 (tildes en el matcher):** `matcher.find_series` comparaba `lower(title)` crudo contra un `:norm` ya sin acentos/puntuación — un título con tilde en BD ("Nausicaä") nunca hacía exact-match con un archivo sin tilde ("Nausicaa"). Se añadió `series.title_norm` (columna generada por Postgres, `f_title_norm(title)`, espejo inmutable de `core.matcher.normalize_title`) y el matcher pasa a consultar contra ella. Verificado con una batería de títulos patológicos, no solo los de la propuesta original, encontrando y corrigiendo **dos divergencias reales** antes de aceptar la función: (1) `f_title_norm` no replicaba el paso que quita puntos de abreviación antes de la limpieza general ("S.H.I.E.L.D." salía "s h i e l d" en vez de "shield"); (2) el patrón de artículo inicial no cubría el caso de un título que ES solo el artículo ("The" a secas quedaba en "the" en vez de ""), un caso que el propio `matcher.py` ya documentaba como corrección deliberada en Python. Test de paridad automatizado en `tests/test_title_norm.py` (se salta si no hay `TEST_DATABASE_URL` — es la única prueba de la suite que toca Postgres real).
   - **H2 (caché negativa del enricher):** una serie/issue sin match en ninguna fuente entraba en el batch en CADA ciclo para siempre, quemando rate limit de APIs externas en búsquedas condenadas. Ahora `enrichment_attempted_at` (columnas nuevas en `series`/`issues`) marca el intento — con match o sin él — y solo se reintenta pasados 30 días o si nunca se intentó. Un fallo de red (excepción) NO marca el intento, para poder reintentar en el siguiente ciclo en vez de esperar 30 días.
@@ -68,7 +68,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| C1 | ~~Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad~~ | ~~Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia con filtros por tradición, editorial, personaje, saga~~ | ✅ Hecho | L |
+| C1 | ~~Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad~~ | ~~Kavita cubre lectura; ZascArr aporta el *catálogo enriquecido*: UI propia con filtros por tradición, editorial, personaje, saga~~ | ✅ Hecho | L |
 | C2 | ~~Como coleccionista, quiero saber de un vistazo qué números me faltan de cada serie~~ | ~~Vista "huecos" por serie: `missing` ya existe en API; corregir el bug de `sort_order` truncado detectado en el review~~ | ✅ Hecho | M |
 | C3 | Como coleccionista, quiero marcar un tebeo como leído y puntuarlo | `reading_progress` ya está en el modelo; falta exponerlo + UI | P1 | M |
 | C4 | Como coleccionista, quiero listas como "Court of Owls en orden" aunque crucen varias series | `story_arc_issues.reading_order` ya soporta crossovers; falta UI de arcos | P1 | M |
@@ -79,8 +79,8 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 **Notas de implementación (Fase 6 / UI web):**
 
 - **Decisión de arquitectura:** ver [`docs/adr/0001-ui-stack.md`](adr/0001-ui-stack.md) — Jinja2 servido por el propio FastAPI + HTMX vendorizado (no CDN), sin SPA ni build de Node. Primer ADR del repo; las decisiones previas (PostgreSQL, enrutado del enricher) no quedaron documentadas como ADR retroactivamente.
-- **Esqueleto:** `src/secuenciarr/web/` (router `/ui`, `Jinja2Templates`, layout `base.html` con nav), `src/secuenciarr/static/vendor/htmx.min.js` (v4.0.0, verificado en un navegador real antes de vendorizarlo), `src/secuenciarr/static/web.css`. El dashboard de E1 se queda como está por ahora (página autocontenida que funciona); se migra a este layout cuando exista otra pantalla más con la que compartir cabecera.
-- **B2 (hecho), primera pantalla real:** `src/secuenciarr/web/pendientes.py` — bandeja en `/ui/pendientes` sobre `ReviewService` (`src/secuenciarr/services/review.py`). Dos acciones, no tres: "es esta serie" (busca y asigna, creando el `Issue` al vuelo si el número no existe — marcado `metadata_source='manual'`, igual que el `File`, así el enricher nunca lo toca) e "ignorar" (nueva columna `files.review_dismissed`, migración `0005`). "Ninguna" se fusionó con "ignorar" — sin candidatos del matcher persistidos en BD, mantenerlas separadas no aportaba distinción real (ver hilo de decisión). Miniaturas extraídas bajo demanda de la primera página del CBZ y redimensionadas con Pillow (`src/secuenciarr/utils/cover.py`); CBR se queda sin miniatura a propósito (necesitaría unrar). Verificado en un navegador real de principio a fin: listar, buscar, asignar (con movimiento de archivo real a disco, confirmado con `find`), ignorar, y que ambas acciones persisten tras recargar. Nota de la propia verificación: el disparo `hx-trigger="keyup changed"` no siempre reaccionaba a la escritura simulada por la herramienta de automatización del navegador (sí a un evento `keyup` real) — probable limitación de la herramienta, no del código, pero queda anotado por si un usuario real reporta que la búsqueda no responde al teclear.
+- **Esqueleto:** `src/zascarr/web/` (router `/ui`, `Jinja2Templates`, layout `base.html` con nav), `src/zascarr/static/vendor/htmx.min.js` (v4.0.0, verificado en un navegador real antes de vendorizarlo), `src/zascarr/static/web.css`. El dashboard de E1 se queda como está por ahora (página autocontenida que funciona); se migra a este layout cuando exista otra pantalla más con la que compartir cabecera.
+- **B2 (hecho), primera pantalla real:** `src/zascarr/web/pendientes.py` — bandeja en `/ui/pendientes` sobre `ReviewService` (`src/zascarr/services/review.py`). Dos acciones, no tres: "es esta serie" (busca y asigna, creando el `Issue` al vuelo si el número no existe — marcado `metadata_source='manual'`, igual que el `File`, así el enricher nunca lo toca) e "ignorar" (nueva columna `files.review_dismissed`, migración `0005`). "Ninguna" se fusionó con "ignorar" — sin candidatos del matcher persistidos en BD, mantenerlas separadas no aportaba distinción real (ver hilo de decisión). Miniaturas extraídas bajo demanda de la primera página del CBZ y redimensionadas con Pillow (`src/zascarr/utils/cover.py`); CBR se queda sin miniatura a propósito (necesitaría unrar). Verificado en un navegador real de principio a fin: listar, buscar, asignar (con movimiento de archivo real a disco, confirmado con `find`), ignorar, y que ambas acciones persisten tras recargar. Nota de la propia verificación: el disparo `hx-trigger="keyup changed"` no siempre reaccionaba a la escritura simulada por la herramienta de automatización del navegador (sí a un evento `keyup` real) — probable limitación de la herramienta, no del código, pero queda anotado por si un usuario real reporta que la búsqueda no responde al teclear.
 - **C2 (hecho):** el bug de `sort_order` truncado era real —
   `int(1.5) == 1` hacía que un Annual/especial "cubriera" el hueco del
   número entero adyacente aunque ese número no existiera de verdad.
@@ -172,7 +172,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 **Notas de implementación (E1/A1/E2/D4):**
 
-- **E1 (dashboard):** `src/secuenciarr/static/dashboard.html`, servido en `GET /` (antes esa ruta no existía; la API vivía solo bajo `/api/*`). Página única sin build tooling, sondea `/api/health` cada 10s. Verificado visualmente en el navegador en los 4 estados (todo bien / atención / error / sin conexión) y en viewport móvil. Al mostrar el array `warnings` del healthcheck (VPN sin proteger, etc.) como un aviso visible, esta misma pieza cierra también **D4**.
+- **E1 (dashboard):** `src/zascarr/static/dashboard.html`, servido en `GET /` (antes esa ruta no existía; la API vivía solo bajo `/api/*`). Página única sin build tooling, sondea `/api/health` cada 10s. Verificado visualmente en el navegador en los 4 estados (todo bien / atención / error / sin conexión) y en viewport móvil. Al mostrar el array `warnings` del healthcheck (VPN sin proteger, etc.) como un aviso visible, esta misma pieza cierra también **D4**.
 - **E1 (empaquetado):** `pyproject.toml` no incluía datos no-Python en `pip install .` (no editable, el que usa el Dockerfile) — sin `[tool.setuptools.package-data]`, `dashboard.html` no habría llegado a la imagen. Verificado con una instalación real no-editable en un venv limpio.
 - **A1 (bootstrap.sh):** 3 preguntas (biblioteca, raíz de descargas, idioma), escritas en `.env` de forma idempotente (`set_env_var`, no duplica al re-ejecutar). `docker-compose.yml` parametriza el lado HOST de los 3 volúmenes correspondientes (`HOST_LIBRARY_DIR`, `HOST_DOWNLOADS_DIR`, `HOST_AMULE_INCOMING_DIR`) manteniendo el lado del contenedor fijo, así que `config.py` no necesitó cambios. El idioma se guarda en `APP_LOCALE` para cuando exista i18n real — hoy no traduce nada. Probado en aislamiento (sin Docker) con respuestas por defecto y personalizadas, incluyendo idempotencia.
 - **E2 (backup):** `scripts/backup.sh` (mismo patrón que `vpn-state.sh`: script host + timer systemd embebido), escribe en `/media/WDElements/backups/postgres/` (disco distinto al de los datos) con retención automática de 14 días. `make backup` ahora lo invoca en vez de duplicar la lógica.
@@ -214,9 +214,9 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
   `setattr(item, field, value)` sobre el body crudo en `api/wishlist.py`
   sustituidos por `WishlistCreate`/`WishlistUpdate` (Pydantic, campos
   explícitos) delegando en el nuevo `WishlistService`
-  (`src/secuenciarr/services/wishlist.py`) — misma fuente de verdad para
+  (`src/zascarr/services/wishlist.py`) — misma fuente de verdad para
   la API JSON y la nueva UI, sin lógica duplicada.
-- **UI**: `/ui/wishlist` (`src/secuenciarr/web/wishlist.py`), mismo patrón
+- **UI**: `/ui/wishlist` (`src/zascarr/web/wishlist.py`), mismo patrón
   HTMX que `pendientes.py` — buscar una serie ya catalogada, añadirla,
   ver su badge de estado ("Buscando…"/"Descargando…"/"En tu
   biblioteca"/"Sin resultados"), reintentar manualmente o quitarla.
@@ -340,12 +340,12 @@ perder de vista el hueco real:
   naming consciente de tradición. Confirma que el ADR-0001 (server-side, sin
   SPA) es la elección correcta para este dominio.
 - **[Mylar3](https://github.com/mylar3/mylar3)** (Python, GPL-3.0): el veterano
-  del espacio arr-cómic. Aporta tres ideas de valor que SecuenciArr no
+  del espacio arr-cómic. Aporta tres ideas de valor que ZascArr no
   tiene todavía — pull-list/calendario de lanzamientos (**D5** arriba),
   reintento automático con el siguiente resultado si una descarga falla
   (nota añadida a **D1**), y escritura de `ComicInfo.xml` tras enriquecer
   (**B6** arriba) para que la biblioteca sea legible por cualquier otra
-  herramienta sin pasar por la API de SecuenciArr. Mismo punto ciego que
+  herramienta sin pasar por la API de ZascArr. Mismo punto ciego que
   Kapowarr: solo Comic Vine, sin tebeo español.
 - **[Suwayomi-Server](https://github.com/Suwayomi/Suwayomi-Server)**
   (Kotlin/JVM, MPL-2.0): servidor de manga con arquitectura de fuentes como
@@ -364,7 +364,7 @@ perder de vista el hueco real:
   — pendiente de registrar como historia si se decide priorizar — pero
   parte de cero, no de una base ya construida.
 - **Ninguno de los tres cubre tebeo español con fuentes honestas + eD2K**:
-  ese sigue siendo el hueco real de SecuenciArr frente a los tres.
+  ese sigue siendo el hueco real de ZascArr frente a los tres.
 
 ## Benchmarking competitivo, ronda 2 (2026-09-22)
 
@@ -415,7 +415,7 @@ huecos reales no mencionados por ningún documento:
   competencia).
 - **Regla nueva, pendiente de auditar:** no mantener la transacción de
   BD abierta cruzando un `shutil.move` de archivo grande — el tracker de
-  Kapowarr está lleno de bloqueos de SQLite por esto. SecuenciArr usa
+  Kapowarr está lleno de bloqueos de SQLite por esto. ZascArr usa
   Postgres (MVCC, no bloqueo de fichero completo), así que el riesgo no
   es idéntico, pero `ReviewService.assign_to_series` y el importer sí
   hacen `shutil.move` con la sesión de la request todavía abierta — no
@@ -427,7 +427,7 @@ huecos reales no mencionados por ningún documento:
   necesita reconciliación amable (upsert/mensaje claro), no una excepción
   cruda de integridad — Kapowarr tiene un bug abierto justo por esto con
   sus carpetas raíz. Aplica el día que exista alguna tabla así en
-  SecuenciArr (hoy ninguna se gestiona desde la UI salvo `wishlist`, que
+  ZascArr (hoy ninguna se gestiona desde la UI salvo `wishlist`, que
   no tiene UNIQUE propio).
 
 **Lo que no se roba (y por qué), del propio documento — confirmado

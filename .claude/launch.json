@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "secuenciarr-legal-demo",
+      "name": "zascarr-legal-demo",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "DATABASE_URL='postgresql+asyncpg://postgres:test@localhost:15438/tebeoteca' /tmp/claude-1000/-mnt-Datos-Documentos-Repos-secuenciarr/2b517341-0df7-41bf-b4fe-00da861c5b1a/scratchpad/venv/bin/uvicorn secuenciarr.main:app --host 0.0.0.0 --port 8203 --app-dir src"],
+      "runtimeArgs": ["-c", "DATABASE_URL='postgresql+asyncpg://postgres:test@localhost:15438/tebeoteca' /tmp/claude-1000/-mnt-Datos-Documentos-Repos-zascarr/2b517341-0df7-41bf-b4fe-00da861c5b1a/scratchpad/venv/bin/uvicorn zascarr.main:app --host 0.0.0.0 --port 8203 --app-dir src"],
       "port": 8203
     }
   ]

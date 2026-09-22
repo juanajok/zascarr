@@ -14,7 +14,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from secuenciarr.utils.cover import extract_cover_thumbnail
+from zascarr.utils.cover import extract_cover_thumbnail
 
 
 def make_cbz_with_page(path: Path, size: tuple[int, int] = (600, 900)) -> None:

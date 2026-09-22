@@ -1,0 +1,21 @@
+{% macro legal_disclaimer(kind) %}
+{% if kind == "footer" %}
+<p class="legal-notice legal-notice-footer">
+  ZascArr gestiona bibliotecas personales y no distribuye contenido.
+  <a href="/legal">Aviso legal</a>.
+</p>
+{% elif kind == "wishlist" %}
+<aside class="legal-notice legal-notice-warn">
+  <strong>Uso responsable.</strong> Añadir una serie aquí puede disparar
+  búsquedas y descargas a través de las integraciones que actives. Eres
+  responsable de verificar que tienes derecho a acceder al contenido que
+  solicites. <a href="/legal">Aviso legal</a>.
+</aside>
+{% elif kind == "metadata" %}
+<aside class="legal-notice legal-notice-info">
+  Los metadatos de esta ficha proceden de fuentes de terceros (Comic Vine,
+  AniList, Tebeosfera) y se cachean localmente para tu uso personal.
+  <a href="/legal">Fuentes y atribución</a>.
+</aside>
+{% endif %}
+{% endmacro %}

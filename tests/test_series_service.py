@@ -18,8 +18,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import delete
 
-from secuenciarr.models import ComicTradition, Publisher, Series
-from secuenciarr.services.series import SeriesService
+from zascarr.models import ComicTradition, Publisher, Series
+from zascarr.services.series import SeriesService
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -123,7 +123,7 @@ class TestFiltrosPorJoinRealesContraPostgres:
 
     @pytest.mark.asyncio
     async def test_filtro_por_personaje_solo_devuelve_la_serie_correcta(self, session):
-        from secuenciarr.models import Character, Issue, issue_characters
+        from zascarr.models import Character, Issue, issue_characters
 
         con_personaje = Series(title=f"Con Personaje {uuid4()}", tradition=ComicTradition.AMERICAN)
         sin_personaje = Series(title=f"Sin Personaje {uuid4()}", tradition=ComicTradition.AMERICAN)
@@ -154,7 +154,7 @@ class TestFiltrosPorJoinRealesContraPostgres:
 
     @pytest.mark.asyncio
     async def test_filtro_por_saga_solo_devuelve_la_serie_correcta(self, session):
-        from secuenciarr.models import Issue, StoryArc, StoryArcIssue
+        from zascarr.models import Issue, StoryArc, StoryArcIssue
 
         con_saga = Series(title=f"Con Saga {uuid4()}", tradition=ComicTradition.AMERICAN)
         sin_saga = Series(title=f"Sin Saga {uuid4()}", tradition=ComicTradition.AMERICAN)

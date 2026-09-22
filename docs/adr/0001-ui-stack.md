@@ -36,13 +36,13 @@ Restricciones del proyecto que condicionan esta decisión:
 interactividad puramente de cliente (toggles, modales). Sin build step de
 Node ni framework SPA.**
 
-- Un router nuevo bajo el prefijo `/ui` (`src/secuenciarr/web/`), separado
+- Un router nuevo bajo el prefijo `/ui` (`src/zascarr/web/`), separado
   del router `/api` existente, que devuelve `HTMLResponse` vía
   `Jinja2Templates`.
 - Las plantillas llaman a la misma capa de servicios que ya usa la API
   (`Importer`, `EnrichmentService`, etc.), no una segunda copia de la
   lógica de negocio.
-- HTMX vendorizado en `src/secuenciarr/static/vendor/htmx.min.js` (v4.0.0,
+- HTMX vendorizado en `src/zascarr/static/vendor/htmx.min.js` (v4.0.0,
   descargado de la release oficial en GitHub y verificado en un navegador
   real antes de vendorizarlo — ver "Verificación" más abajo), no cargado
   desde un CDN.
@@ -76,14 +76,14 @@ backlog y sirve de referencia de diseño, no de arquitectura:
   ruta bajo `/ui/*` con su plantilla y, cuando haga falta interacción
   parcial, un endpoint que devuelve solo el fragmento HTML a intercambiar
   (`hx-get`/`hx-target`/`hx-swap`).
-- El dashboard de E1 (`src/secuenciarr/static/dashboard.html`, servido en
+- El dashboard de E1 (`src/zascarr/static/dashboard.html`, servido en
   `/`) se queda como está por ahora: es una página autocontenida que
   funciona. Se migra al layout de `web/` cuando exista una segunda
   pantalla real con la que compartir cabecera/navegación — no antes, para
   no reescribir algo que ya funciona sin necesidad.
 - Vendorizar HTMX implica actualizarlo a mano cuando convenga (no hay
   gestor de paquetes JS de por medio); el fichero indica su versión y
-  origen en `src/secuenciarr/static/vendor/README.md`.
+  origen en `src/zascarr/static/vendor/README.md`.
 - Vía de escape documentada: si alguna pantalla necesita de verdad
   interacción rica en cliente (arrastrar y soltar, edición masiva en
   línea) que HTMX no cubre razonablemente, se monta React *sobre la misma

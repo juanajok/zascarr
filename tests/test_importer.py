@@ -15,8 +15,8 @@ from uuid import uuid4
 
 import pytest
 
-from secuenciarr.models import File, ImportRun
-from secuenciarr.services.importer import Importer, ImportReport
+from zascarr.models import File, ImportRun
+from zascarr.services.importer import Importer, ImportReport
 
 
 def make_cbz(path: Path) -> None:
@@ -62,7 +62,7 @@ class TestImportFileDuplicado:
     @pytest.mark.asyncio
     async def test_duplicado_no_se_mueve_y_queda_en_el_informe(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "secuenciarr.services.importer.get_settings",
+            "zascarr.services.importer.get_settings",
             lambda: MagicMock(
                 library_path=tmp_path / "library",
                 transmission_download_dir=str(tmp_path / "downloads"),

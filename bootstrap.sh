@@ -32,8 +32,8 @@ command -v python3 >/dev/null 2>&1 || die "Python 3 no encontrado."
 ENV_FILE="${TEBEOTECA_ROOT}/.env"
 mkdir -p "${TEBEOTECA_ROOT}"
 if [[ ! -f "${ENV_FILE}" ]]; then
-    cp "${TEBEOTECA_ROOT}/secuenciarr/.env.example" "${ENV_FILE}" 2>/dev/null || \
-        die "No encuentro .env.example en ${TEBEOTECA_ROOT}/secuenciarr/. ¿Está el repo clonado ahí?"
+    cp "${TEBEOTECA_ROOT}/zascarr/.env.example" "${ENV_FILE}" 2>/dev/null || \
+        die "No encuentro .env.example en ${TEBEOTECA_ROOT}/zascarr/. ¿Está el repo clonado ahí?"
 fi
 
 # ── A1: 3 preguntas, nada más. El resto se deduce o tiene un valor
@@ -109,7 +109,7 @@ echo ""; success "PostgreSQL listo"
 info "Corriendo migraciones Alembic..."
 source <(grep -E "^DB_PASSWORD=" "${ENV_FILE}")
 export DATABASE_URL="postgresql+asyncpg://comics_admin:${DB_PASSWORD}@127.0.0.1:5432/tebeoteca"
-cd "${TEBEOTECA_ROOT}/secuenciarr"
+cd "${TEBEOTECA_ROOT}/zascarr"
 python3 -c "import alembic" 2>/dev/null || pip install --break-system-packages -e ".[dev]" -q
 # "alembic", nunca "python3 -m alembic": estamos parados (cd de arriba)
 # dentro del propio directorio del repo, que tiene su propia carpeta
@@ -119,15 +119,15 @@ python3 -c "import alembic" 2>/dev/null || pip install --break-system-packages -
 alembic upgrade head
 success "Migraciones aplicadas"
 
-info "Levantando SecuenciArr..."
+info "Levantando ZascArr..."
 cd "${TEBEOTECA_ROOT}"
-docker compose up -d secuenciarr
+docker compose up -d zascarr
 
 info "Verificando healthcheck..."
 MAX=30; ELAPSED=0
 until curl -sf http://127.0.0.1:8000/api/health >/dev/null 2>&1; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && warn "SecuenciArr aún no responde. Revisa:\n  docker compose logs secuenciarr" && break
+    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  docker compose logs zascarr" && break
     echo -n "."; sleep 2
 done
 echo ""
@@ -139,13 +139,13 @@ echo "$HEALTH" | python3 -m json.tool 2>/dev/null || echo "$HEALTH"
 echo -e "\n${B}====================================${N}"
 echo -e "${G}${B}  Bootstrap completado${N}"
 echo -e "${B}====================================${N}\n"
-echo "  SecuenciArr:      http://127.0.0.1:8000  (E1: estado del sistema, en español)"
+echo "  ZascArr:      http://127.0.0.1:8000  (E1: estado del sistema, en español)"
 echo "  API (para curiosos): http://127.0.0.1:8000/api/docs"
 echo "  Kavita:           http://127.0.0.1:5000  (si está instalado)"
 echo "  Prowlarr:         http://127.0.0.1:9696  (si está instalado)"
 echo ""
 echo "  Logs en tiempo real:"
-echo "    docker compose logs -f secuenciarr"
+echo "    docker compose logs -f zascarr"
 echo ""
 curl -sf http://127.0.0.1:5000 >/dev/null 2>&1 || \
-    warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${TEBEOTECA_ROOT}/secuenciarr/scripts/kavita.sh install"
+    warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${TEBEOTECA_ROOT}/zascarr/scripts/kavita.sh install"

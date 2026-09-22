@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Aviso legal — ZascArr{% endblock %}
+{% block content %}
+{% if accepted %}
+<h1>Aviso legal aceptado</h1>
+<p class="subtitle">Aceptaste la versión vigente el {{ accepted_at.strftime("%d/%m/%Y %H:%M") }}.</p>
+<p><a href="/ui/biblioteca">← Volver a la biblioteca</a></p>
+{% else %}
+<h1>Antes de buscar o descargar</h1>
+<p class="subtitle">
+  Ver tu biblioteca no requiere aceptar nada. Pero para que ZascArr
+  busque o descargue algo por ti, primero necesitas leer y aceptar esto.
+</p>
+
+<form method="post" action="/ui/legal/accept" class="legal-form">
+  <label class="legal-checkbox">
+    <input type="checkbox" name="acepto_1" value="true" required>
+    Entiendo que este software gestiona bibliotecas personales y no distribuye contenido protegido por derechos de autor.
+  </label>
+  <label class="legal-checkbox">
+    <input type="checkbox" name="acepto_2" value="true" required>
+    Soy responsable de verificar que tengo derecho a usar el contenido que gestione con esta herramienta.
+  </label>
+  <label class="legal-checkbox">
+    <input type="checkbox" name="acepto_3" value="true" required>
+    Acepto los términos del <a href="/legal" target="_blank">aviso legal completo</a> (versión {{ legal_version }}).
+  </label>
+  <button type="submit">Aceptar y continuar</button>
+</form>
+{% endif %}
+{% endblock %}

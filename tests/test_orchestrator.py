@@ -15,10 +15,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from secuenciarr.config import get_settings
-from secuenciarr.models import ComicTradition, File, FileFormat, Issue, Series, Wishlist, WishlistStatus
-from secuenciarr.services.orchestrator import DownloadBackend, Orchestrator, _extract_ed2k_hash
-from secuenciarr.services.prowlarr import SearchResult
+from zascarr.config import get_settings
+from zascarr.models import ComicTradition, File, FileFormat, Issue, Series, Wishlist, WishlistStatus
+from zascarr.services.orchestrator import DownloadBackend, Orchestrator, _extract_ed2k_hash
+from zascarr.services.prowlarr import SearchResult
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +31,7 @@ def _p2p_enabled(monkeypatch):
     settings = settings.model_copy(update={
         "prowlarr_enabled": True, "transmission_enabled": True, "amule_enabled": True,
     })
-    monkeypatch.setattr("secuenciarr.services.orchestrator.get_settings", lambda: settings)
+    monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
 
 
 class FakeScalarResult:
@@ -309,7 +309,7 @@ class TestGateLegalYOptInP2P:
         settings = get_settings().model_copy(update={
             "prowlarr_enabled": True, "transmission_enabled": False, "amule_enabled": False,
         })
-        monkeypatch.setattr("secuenciarr.services.orchestrator.get_settings", lambda: settings)
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
 
         orch = Orchestrator(db=FakeSession())
         orch._prowlarr = AsyncMock()

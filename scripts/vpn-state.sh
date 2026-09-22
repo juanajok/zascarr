@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # =============================================================================
 # vpn-state.sh — Confiraspa: publica el estado del túnel WireGuard para
-# que SecuenciArr (contenedor, sin network_mode: host ni iproute2) pueda
+# que ZascArr (contenedor, sin network_mode: host ni iproute2) pueda
 # leerlo en su healthcheck.
 #
 # Instalación:
 #   1. Copia este script a /usr/local/bin/vpn-state.sh y chmod +x
 #   2. Instala el timer systemd incluido al final de este fichero:
-#        sudo cp secuenciarr-vpn-state.{service,timer} /etc/systemd/system/
+#        sudo cp zascarr-vpn-state.{service,timer} /etc/systemd/system/
 #        sudo systemctl daemon-reload
-#        sudo systemctl enable --now secuenciarr-vpn-state.timer
+#        sudo systemctl enable --now zascarr-vpn-state.timer
 #   3. Ajusta WG_INTERFACE si tu túnel no se llama wg0.
 #
 # Contrato con health.py:
@@ -44,16 +44,16 @@ echo "[vpn-state] $WG_INTERFACE active=$ACTIVE → $STATE_FILE"
 # =============================================================================
 # unidades systemd para el timer (guardar como ficheros separados):
 #
-# --- /etc/systemd/system/secuenciarr-vpn-state.service ---
+# --- /etc/systemd/system/zascarr-vpn-state.service ---
 # [Unit]
-# Description=Publica estado de WireGuard para SecuenciArr
+# Description=Publica estado de WireGuard para ZascArr
 # After=network-online.target wg-quick@wg0.service
 #
 # [Service]
 # Type=oneshot
 # ExecStart=/usr/local/bin/vpn-state.sh
 #
-# --- /etc/systemd/system/secuenciarr-vpn-state.timer ---
+# --- /etc/systemd/system/zascarr-vpn-state.timer ---
 # [Unit]
 # Description=Refresca estado de VPN cada minuto
 #

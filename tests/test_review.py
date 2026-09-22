@@ -14,8 +14,8 @@ from uuid import uuid4
 
 import pytest
 
-from secuenciarr.models import ComicTradition, File, FileFormat, Issue, MetadataSource, Series
-from secuenciarr.services.review import ReviewService
+from zascarr.models import ComicTradition, File, FileFormat, Issue, MetadataSource, Series
+from zascarr.services.review import ReviewService
 
 
 class FakeScalarResult:

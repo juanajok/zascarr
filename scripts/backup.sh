@@ -13,9 +13,9 @@
 # Instalación:
 #   1. Copia este script a /usr/local/bin/backup.sh y chmod +x
 #   2. Instala el timer systemd incluido al final de este fichero:
-#        sudo cp secuenciarr-backup.{service,timer} /etc/systemd/system/
+#        sudo cp zascarr-backup.{service,timer} /etc/systemd/system/
 #        sudo systemctl daemon-reload
-#        sudo systemctl enable --now secuenciarr-backup.timer
+#        sudo systemctl enable --now zascarr-backup.timer
 #   3. Ajusta BACKUP_DIR/RETENTION_DAYS si tu disco de respaldo es otro.
 #
 # NOTA (E3, no implementado aquí): un backup que nunca se ha restaurado no
@@ -48,18 +48,18 @@ find "$BACKUP_DIR" -name 'backup_*.sql.gz' -mtime "+${RETENTION_DAYS}" -delete
 # =============================================================================
 # unidades systemd para el timer (guardar como ficheros separados):
 #
-# --- /etc/systemd/system/secuenciarr-backup.service ---
+# --- /etc/systemd/system/zascarr-backup.service ---
 # [Unit]
-# Description=Backup diario de PostgreSQL para SecuenciArr
+# Description=Backup diario de PostgreSQL para ZascArr
 # After=docker.service
 #
 # [Service]
 # Type=oneshot
 # ExecStart=/usr/local/bin/backup.sh
 #
-# --- /etc/systemd/system/secuenciarr-backup.timer ---
+# --- /etc/systemd/system/zascarr-backup.timer ---
 # [Unit]
-# Description=Ejecuta el backup de SecuenciArr una vez al día
+# Description=Ejecuta el backup de ZascArr una vez al día
 #
 # [Timer]
 # OnCalendar=*-*-* 04:00:00

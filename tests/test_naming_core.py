@@ -20,14 +20,14 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from secuenciarr.core.importer_triage import (
+from zascarr.core.importer_triage import (
     ComicInfo,
     TriageResult,
     guess_source_tag,
     parse_comic_info,
     triage,
 )
-from secuenciarr.core.matcher import (
+from zascarr.core.matcher import (
     MatchStatus,
     SeriesHit,
     SeriesMatcher,
@@ -510,7 +510,7 @@ class TestRealWorldFilenames:
         ("Asterix T01 - Asterix el Galo.cbz",   "Asterix",   "1"),
     ])
     def test_parse_filename(self, filename, expected_series, expected_num):
-        from secuenciarr.utils.naming import parse_comic_filename
+        from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename(filename)
         assert result.series == expected_series
@@ -519,7 +519,7 @@ class TestRealWorldFilenames:
     def test_guion_pegado_no_se_confunde_con_subtitulo(self):
         """'Spider-Man' no tiene espacios alrededor del guion: a diferencia
         de ' - Subtítulo', no debe cortarse el título por ahí."""
-        from secuenciarr.utils.naming import parse_comic_filename
+        from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename("Spider-Man 001.cbz")
         assert result.issue_number == "1"
@@ -531,7 +531,7 @@ class TestRealWorldFilenames:
         """'Tomo N' (manga/BD con tomo Y numeración de issue separada) se
         queda como volumen, a diferencia de 'T01' (BD de tomo único donde
         el tomo ES el número): ver test_parse_filename de más arriba."""
-        from secuenciarr.utils.naming import parse_comic_filename
+        from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename("Astro Boy Tomo 5.cbz")
         assert result.series == "Astro Boy"
