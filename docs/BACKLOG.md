@@ -69,11 +69,11 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
 | C1 | Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad | Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia (o integración OPDS) con filtros por tradición, editorial, personaje, saga | P0 | L |
-| C2 | Como coleccionista, quiero saber de un vistazo qué números me faltan de cada serie | Vista "huecos" por serie: `missing` ya existe en API; corregir el bug de `sort_order` truncado detectado en el review | P0 | M |
+| C2 | ~~Como coleccionista, quiero saber de un vistazo qué números me faltan de cada serie~~ | ~~Vista "huecos" por serie: `missing` ya existe en API; corregir el bug de `sort_order` truncado detectado en el review~~ | ✅ Hecho | M |
 | C3 | Como coleccionista, quiero marcar un tebeo como leído y puntuarlo | `reading_progress` ya está en el modelo; falta exponerlo + UI | P1 | M |
 | C4 | Como coleccionista, quiero listas como "Court of Owls en orden" aunque crucen varias series | `story_arc_issues.reading_order` ya soporta crossovers; falta UI de arcos | P1 | M |
 | C5 | Como coleccionista, quiero leer mi catálogo enriquecido desde cualquier lector (tablet, e-reader) sin pasar por Kavita | Endpoint OPDS de solo catálogo (no de contenido) sobre los datos ya enriquecidos | P2 | M |
-| C6 | Como coleccionista, quiero un botón en cada serie que detecte los números que me faltan y los ponga todos en búsqueda, para completar sagas sin ir número a número | Desde la ficha de serie, "Completar" ejecuta el cálculo de huecos y crea los items de wishlist correspondientes, visibles con su estado en `/ui/wishlist` — depende de arreglar antes el bug de `sort_order` truncado de C2 | P1 | M |
+| C6 | Como coleccionista, quiero un botón en cada serie que detecte los números que me faltan y los ponga todos en búsqueda, para completar sagas sin ir número a número | Desde la ficha de serie (`/ui/series/{id}`, ya existe desde C2), "Completar" crea los items de wishlist correspondientes a `missing`, visibles con su estado en `/ui/wishlist` | P1 | M |
 | C7 | Como coleccionista curioso, quiero que cada carpeta de serie lleve un fichero que describa su estado, para que otras herramientas lo lean sin hablar con la API | `series.json` por carpeta de serie, regenerado tras cada cambio relevante | P2 | S |
 
 **Notas de implementación (Fase 6 / UI web):**
@@ -81,6 +81,23 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 - **Decisión de arquitectura:** ver [`docs/adr/0001-ui-stack.md`](adr/0001-ui-stack.md) — Jinja2 servido por el propio FastAPI + HTMX vendorizado (no CDN), sin SPA ni build de Node. Primer ADR del repo; las decisiones previas (PostgreSQL, enrutado del enricher) no quedaron documentadas como ADR retroactivamente.
 - **Esqueleto:** `src/secuenciarr/web/` (router `/ui`, `Jinja2Templates`, layout `base.html` con nav), `src/secuenciarr/static/vendor/htmx.min.js` (v4.0.0, verificado en un navegador real antes de vendorizarlo), `src/secuenciarr/static/web.css`. El dashboard de E1 se queda como está por ahora (página autocontenida que funciona); se migra a este layout cuando exista otra pantalla más con la que compartir cabecera.
 - **B2 (hecho), primera pantalla real:** `src/secuenciarr/web/pendientes.py` — bandeja en `/ui/pendientes` sobre `ReviewService` (`src/secuenciarr/services/review.py`). Dos acciones, no tres: "es esta serie" (busca y asigna, creando el `Issue` al vuelo si el número no existe — marcado `metadata_source='manual'`, igual que el `File`, así el enricher nunca lo toca) e "ignorar" (nueva columna `files.review_dismissed`, migración `0005`). "Ninguna" se fusionó con "ignorar" — sin candidatos del matcher persistidos en BD, mantenerlas separadas no aportaba distinción real (ver hilo de decisión). Miniaturas extraídas bajo demanda de la primera página del CBZ y redimensionadas con Pillow (`src/secuenciarr/utils/cover.py`); CBR se queda sin miniatura a propósito (necesitaría unrar). Verificado en un navegador real de principio a fin: listar, buscar, asignar (con movimiento de archivo real a disco, confirmado con `find`), ignorar, y que ambas acciones persisten tras recargar. Nota de la propia verificación: el disparo `hx-trigger="keyup changed"` no siempre reaccionaba a la escritura simulada por la herramienta de automatización del navegador (sí a un evento `keyup` real) — probable limitación de la herramienta, no del código, pero queda anotado por si un usuario real reporta que la búsqueda no responde al teclear.
+- **C2 (hecho):** el bug de `sort_order` truncado era real —
+  `int(1.5) == 1` hacía que un Annual/especial "cubriera" el hueco del
+  número entero adyacente aunque ese número no existiera de verdad.
+  Extraído `compute_missing_issues()` (`api/series.py`) como función
+  compartida: un hueco `i` solo se da por cubierto si existe un `Issue`
+  cuyo `sort_order` es EXACTAMENTE `float(i)`, no su truncamiento. Usada
+  tanto por `GET /api/series/{id}/missing` como por la nueva
+  `GET /ui/series/{id}` (ficha de serie **mínima**: solo números
+  presentes/ausentes, sin pósters/filtros/navegación — eso es trabajo de
+  C1, que sigue sin construir; esta pantalla se ampliará o rehará
+  cuando llegue, no es el diseño final, y por eso no tiene enlace en el
+  topnav — no hay desde dónde navegar a ella todavía). Test de
+  regresión con `sort_order=1.5` en `tests/test_api_series.py` y
+  `tests/test_web_series.py`. Verificado en un navegador real contra
+  Postgres real con el caso exacto del bug: una serie con SOLO un
+  Annual `sort_order=1.5` (sin el `1.0`) muestra correctamente `#1` como
+  pendiente — con el código anterior se habría dado por presente.
 
 ### Épica D — "El sistema busca lo que me falta"
 

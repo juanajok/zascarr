@@ -209,3 +209,26 @@ button[type="submit"] {
   font-size: 0.82rem;
   cursor: pointer;
 }
+
+/* ── Ficha de serie mínima (C2) ─────────────────────────────────────── */
+.issue-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 20px;
+}
+.issue-chip {
+  font-size: 0.82rem;
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.issue-chip.issue-present {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: transparent;
+}
+.issue-chip.issue-missing {
+  background: var(--card-bg);
+  color: var(--text-muted);
+}

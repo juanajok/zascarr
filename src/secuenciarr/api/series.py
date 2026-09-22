@@ -75,6 +75,29 @@ async def delete_series(series_id: UUID, db: AsyncSession = Depends(get_db)):
     await db.delete(series)
 
 
+def compute_missing_issues(total_issues: int | None, sort_orders: set[float]) -> list[int]:
+    """Números 1..total_issues sin Issue cuyo sort_order sea EXACTAMENTE
+    ese entero. Compartida entre la API y la ficha de serie (web/series.py)
+    para que el fix de C2 viva en un solo sitio.
+
+    C2 (peer review): antes se truncaba sort_order con int(), así que un
+    Annual/especial con sort_order=1.5 "cubría" el hueco del nº 1 aunque
+    ese número no existiera de verdad — un truncado no es una presencia.
+    """
+    if not total_issues:
+        return []
+    return [i for i in range(1, total_issues + 1) if float(i) not in sort_orders]
+
+
+async def _fetch_sort_orders(db: AsyncSession, series_id: UUID) -> set[float]:
+    return {
+        r for r in (await db.execute(
+            select(Issue.sort_order).where(Issue.series_id == series_id, Issue.sort_order.is_not(None))
+        )).scalars().all()
+        if r is not None
+    }
+
+
 @router.get("/{series_id}/missing")
 async def get_missing_issues(series_id: UUID, db: AsyncSession = Depends(get_db)):
     """Números faltantes respecto a total_issues. Alimenta la wishlist."""
@@ -83,10 +106,5 @@ async def get_missing_issues(series_id: UUID, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=404, detail="Serie no encontrada")
     if not series.total_issues:
         return []
-    existing = {
-        int(r) for r in (await db.execute(
-            select(Issue.sort_order).where(Issue.series_id == series_id, Issue.sort_order.is_not(None))
-        )).scalars().all()
-        if r is not None
-    }
-    return sorted(set(range(1, series.total_issues + 1)) - existing)
+    sort_orders = await _fetch_sort_orders(db, series_id)
+    return compute_missing_issues(series.total_issues, sort_orders)
