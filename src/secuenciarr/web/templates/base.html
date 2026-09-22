@@ -18,5 +18,9 @@
   <main class="content">
     {% block content %}{% endblock %}
   </main>
+  <footer class="site-footer">
+    {% from "_legal_disclaimer.html" import legal_disclaimer %}
+    {{ legal_disclaimer("footer") }}
+  </footer>
 </body>
 </html>

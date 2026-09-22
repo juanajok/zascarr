@@ -15,7 +15,14 @@ from fastapi.testclient import TestClient
 
 from secuenciarr.database import get_db
 from secuenciarr.main import app
-from secuenciarr.models import ComicTradition, Series, Wishlist, WishlistStatus
+from secuenciarr.models import ComicTradition, LegalAcknowledgment, Series, Wishlist, WishlistStatus
+
+
+def _accepted() -> "FakeExecResult":
+    """Fila de la comprobación de aviso legal (gate de rutas de riesgo)
+    — va SIEMPRE la primera en la cola de las rutas gateadas, antes que
+    cualquier query propia del endpoint."""
+    return FakeExecResult([LegalAcknowledgment(legal_version="x")])
 
 
 class FakeScalarResult:
@@ -38,6 +45,9 @@ class FakeExecResult:
 
     def scalar_one(self):
         return self._rows[0]
+
+    def scalar_one_or_none(self):
+        return self._rows[0] if self._rows else None
 
 
 class FakeSession:
@@ -124,12 +134,19 @@ class TestAnadir:
         item = make_wishlist_item(series)
         item.series = series
         item.issue = None
-        session = FakeSession(exec_queue=[FakeExecResult([item])])
+        session = FakeSession(exec_queue=[_accepted(), FakeExecResult([item])])
         with use_fake_session(session) as client:
             r = client.post("/ui/wishlist/anadir", data={"series_id": str(series.id)})
         assert r.status_code == 200
         assert "Thorgal" in r.text
         assert len(session.added) == 1
+
+    def test_sin_aceptar_el_aviso_legal_da_403_con_hx_redirect(self):
+        session = FakeSession(exec_queue=[FakeExecResult([])])  # sin acknowledgment
+        with use_fake_session(session) as client:
+            r = client.post("/ui/wishlist/anadir", data={"series_id": str(uuid4())})
+        assert r.status_code == 403
+        assert r.headers["hx-redirect"] == "/ui/legal"
 
 
 class TestQuitar:
@@ -159,7 +176,7 @@ class TestReintentar:
         row_item.issue = None
         session = FakeSession(
             get_map={(Wishlist, item.id): item},
-            exec_queue=[FakeExecResult([row_item])],
+            exec_queue=[_accepted(), FakeExecResult([row_item])],
         )
         with use_fake_session(session) as client:
             r = client.post(f"/ui/wishlist/{item.id}/reintentar")
@@ -167,6 +184,6 @@ class TestReintentar:
         assert "Mortadelo" in r.text
 
     def test_item_inexistente_da_404(self):
-        with use_fake_session(FakeSession()) as client:
+        with use_fake_session(FakeSession(exec_queue=[_accepted()])) as client:
             r = client.post(f"/ui/wishlist/{uuid4()}/reintentar")
         assert r.status_code == 404

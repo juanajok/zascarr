@@ -15,9 +15,23 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
+from secuenciarr.config import get_settings
 from secuenciarr.models import ComicTradition, File, FileFormat, Issue, Series, Wishlist, WishlistStatus
 from secuenciarr.services.orchestrator import DownloadBackend, Orchestrator, _extract_ed2k_hash
 from secuenciarr.services.prowlarr import SearchResult
+
+
+@pytest.fixture(autouse=True)
+def _p2p_enabled(monkeypatch):
+    """Blindaje legal: prowlarr/transmission/amule están deshabilitados
+    por defecto (opt-in). Esta suite prueba la lógica de búsqueda/envío
+    en sí, no el propio opt-in (eso tiene su test dedicado más abajo),
+    así que se habilitan los tres para no romper cada test existente."""
+    settings = get_settings()
+    settings = settings.model_copy(update={
+        "prowlarr_enabled": True, "transmission_enabled": True, "amule_enabled": True,
+    })
+    monkeypatch.setattr("secuenciarr.services.orchestrator.get_settings", lambda: settings)
 
 
 class FakeScalarResult:
@@ -266,3 +280,44 @@ class TestCheckCompletions:
 
         completed = await orch.check_completions()
         assert completed == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 5. Blindaje legal (aceptación) y opt-in P2P — no tocar red sin ninguno
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestGateLegalYOptInP2P:
+
+    @pytest.mark.asyncio
+    async def test_process_wishlist_no_hace_nada_sin_aceptar_el_aviso(self):
+        """Ni siquiera llega a mirar la wishlist si no hay acknowledgment
+        — el ciclo entero se salta, Prowlarr no se toca."""
+        session = FakeSession([FakeExecResult([])])  # is_acknowledged: ninguna fila
+        orch = Orchestrator(db=session)
+        orch._prowlarr = AsyncMock()
+
+        sent = await orch.process_wishlist()
+
+        assert sent == 0
+        orch._prowlarr.search.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_backend_deshabilitado_descarta_el_candidato(self, monkeypatch):
+        """Aunque Prowlarr encuentre algo, un backend no activado
+        (transmission_enabled=False, default de fábrica) no se intenta."""
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "transmission_enabled": False, "amule_enabled": False,
+        })
+        monkeypatch.setattr("secuenciarr.services.orchestrator.get_settings", lambda: settings)
+
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=50)]  # magnet:// -> Transmission
+        orch._transmission = AsyncMock()
+
+        result = await orch._process_item(item)
+
+        assert result is False
+        assert item.status == WishlistStatus.WANTED  # sin candidatos utilizables, no es un fallo
+        orch._transmission.add_torrent.assert_not_called()

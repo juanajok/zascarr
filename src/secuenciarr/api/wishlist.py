@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from secuenciarr.database import get_db
 from secuenciarr.models import Wishlist, WishlistStatus
+from secuenciarr.services.legal import require_legal_acknowledgment
 from secuenciarr.services.wishlist import WishlistService
 
 router = APIRouter(prefix="/wishlist", tags=["wishlist"])
@@ -44,7 +45,7 @@ async def list_wishlist(
             "pages": (total + page_size - 1) // page_size}
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(require_legal_acknowledgment)])
 async def add_to_wishlist(data: WishlistCreate, db: AsyncSession = Depends(get_db)):
     try:
         item = await WishlistService(db).add(
@@ -76,7 +77,7 @@ async def remove_from_wishlist(item_id: UUID, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/{item_id}/search")
+@router.post("/{item_id}/search", dependencies=[Depends(require_legal_acknowledgment)])
 async def trigger_search(item_id: UUID, db: AsyncSession = Depends(get_db)):
     """Reintento/búsqueda manual inmediata: salta el cooldown."""
     try:

@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from secuenciarr.database import get_db
 from secuenciarr.main import app
-from secuenciarr.models import Wishlist, WishlistStatus
+from secuenciarr.models import LegalAcknowledgment, Wishlist, WishlistStatus
 
 
 class FakeScalarResult:
@@ -24,6 +24,9 @@ class FakeScalarResult:
 
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
+
+
+_ACCEPTED = FakeScalarResult([LegalAcknowledgment(legal_version="x")])
 
 
 class FakeSession:
@@ -70,7 +73,7 @@ class TestAddToWishlistM1:
         """Antes: Wishlist(**data) — un id/added_at/download_ref arbitrario
         en el body se habría colado directo al modelo. Ahora WishlistCreate
         solo declara series_id/issue_id/priority/notes."""
-        session = FakeSession()
+        session = FakeSession(exec_result=_ACCEPTED)  # gate legal: aviso ya aceptado
         forged_id = str(uuid4())
         with use_fake_session(session) as client:
             r = client.post("/api/wishlist", json={
@@ -87,9 +90,15 @@ class TestAddToWishlistM1:
         assert created.status != WishlistStatus.IMPORTED  # "status" no está en WishlistCreate
 
     def test_sin_series_id_ni_issue_id_da_422(self):
-        with use_fake_session(FakeSession()) as client:
+        with use_fake_session(FakeSession(exec_result=_ACCEPTED)) as client:
             r = client.post("/api/wishlist", json={})
         assert r.status_code == 422
+
+    def test_sin_aceptar_el_aviso_legal_da_403(self):
+        with use_fake_session(FakeSession(exec_result=FakeScalarResult([]))) as client:
+            r = client.post("/api/wishlist", json={"series_id": str(uuid4())})
+        assert r.status_code == 403
+        assert r.json()["detail"] == "legal_acknowledgment_required"
 
 
 class TestUpdateWishlistM1:

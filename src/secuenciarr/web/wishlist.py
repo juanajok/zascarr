@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from secuenciarr.database import get_db
 from secuenciarr.models import Issue, Wishlist, WishlistStatus
+from secuenciarr.services.legal import require_legal_acknowledgment
 from secuenciarr.services.wishlist import WishlistService
 from secuenciarr.web.routes import TEMPLATES_DIR
 
@@ -80,7 +81,7 @@ async def buscar_serie(request: Request, q: str = "", db: AsyncSession = Depends
     )
 
 
-@router.post("/anadir", response_class=HTMLResponse)
+@router.post("/anadir", response_class=HTMLResponse, dependencies=[Depends(require_legal_acknowledgment)])
 async def anadir(request: Request, series_id: UUID = Form(...), db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     try:
         item = await WishlistService(db).add(series_id=series_id)
@@ -99,7 +100,7 @@ async def quitar(item_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLRespo
     return HTMLResponse("")
 
 
-@router.post("/{item_id}/reintentar", response_class=HTMLResponse)
+@router.post("/{item_id}/reintentar", response_class=HTMLResponse, dependencies=[Depends(require_legal_acknowledgment)])
 async def reintentar(item_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     try:
         await WishlistService(db).retry(item_id)

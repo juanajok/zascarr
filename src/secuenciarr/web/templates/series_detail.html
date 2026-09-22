@@ -12,6 +12,8 @@
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>
     {% endif %}
+    {% from "_legal_disclaimer.html" import legal_disclaimer %}
+    {{ legal_disclaimer("metadata") }}
     <p class="subtitle">
       {% if series.total_issues %}
         {{ series.total_issues }} números en total —

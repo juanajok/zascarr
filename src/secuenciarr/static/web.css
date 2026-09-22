@@ -358,3 +358,62 @@ button[type="submit"] {
   color: white;
   border-color: transparent;
 }
+
+/* ── Blindaje legal ─────────────────────────────────────────────────── */
+.site-footer {
+  margin-top: 40px;
+  border-top: 1px solid var(--border);
+  padding: 14px 20px;
+}
+.legal-notice {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.legal-notice a { color: inherit; }
+.legal-notice-footer {
+  text-align: center;
+  margin: 0;
+}
+.legal-notice-warn, .legal-notice-info {
+  display: block;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+}
+.legal-notice-warn {
+  background: #fef3c7;
+  color: #78350f;
+}
+.legal-notice-info {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+.legal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 620px;
+  margin-top: 20px;
+}
+.legal-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.92rem;
+}
+.legal-checkbox input { margin-top: 3px; flex-shrink: 0; }
+.legal-full {
+  max-width: 720px;
+  line-height: 1.6;
+}
+.legal-full table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+}
+.legal-full th, .legal-full td {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.9rem;
+}

@@ -44,22 +44,33 @@ class Settings(BaseSettings):
     tebeosfera_rate_limit: float = 2.0
 
     # ── Prowlarr (baremetal) ───────────────────────────────────────
+    # Blindaje legal: deshabilitado por defecto a propósito (igual que
+    # forum_enabled) — el usuario tiene que activar cada integración de
+    # descarga explícitamente, no viene "encendida" de fábrica.
     prowlarr_url: str = Field(default="http://127.0.0.1:9696")
     prowlarr_api_key: str = Field(default="")
+    prowlarr_enabled: bool = Field(default=False)
 
     # ── Transmission (baremetal) ───────────────────────────────────
     transmission_url: str = Field(default="http://127.0.0.1:9091")
     transmission_username: str = Field(default="")
     transmission_password: str = Field(default="")
     transmission_download_dir: str = Field(default="/media/DiscoDuro/downloads/comics")
+    transmission_enabled: bool = Field(default=False)
 
     # ── aMule (baremetal) ──────────────────────────────────────────
     amule_url: str = Field(default="http://127.0.0.1:4711")
     amule_password: str = Field(default="")
     amule_incoming_dir: str = Field(default="/media/DiscoDuro/aMule/Incoming")
+    amule_enabled: bool = Field(default=False)
 
     # ── Forum scraper ──────────────────────────────────────────────
-    forum_url: str = Field(default="http://lamansion-crg.net/forum")
+    # Blindaje legal: sin URL por defecto — antes apuntaba a un foro
+    # real concreto de fábrica, lo más cercano a "facilitación
+    # organizada" que tenía el proyecto. Es un plugin IPB genérico: la
+    # URL la aporta el usuario, el proyecto no incluye ni recomienda
+    # ningún foro concreto.
+    forum_url: str = Field(default="")
     forum_username: str = Field(default="")
     forum_password: str = Field(default="")
     forum_rate_limit: float = Field(default=2.0)

@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from secuenciarr.config import get_settings
 from secuenciarr.models import File, Issue, Series, Wishlist, WishlistStatus
 from secuenciarr.services.amule import AMuleClient
+from secuenciarr.services.legal import is_acknowledged
 from secuenciarr.services.prowlarr import ProwlarrClient, SearchResult
 from secuenciarr.services.transmission import TransmissionClient
 from secuenciarr.utils.naming import normalize_series_name
@@ -65,6 +66,14 @@ class Orchestrator:
         self._amule        = AMuleClient()
 
     async def process_wishlist(self, limit: int = 10) -> int:
+        # Blindaje legal: nada de esto se ejecuta hasta que se acepte el
+        # aviso legal — ver services/legal.py. No es un middleware que
+        # bloquee la app entera (biblioteca/pendientes siguen accesibles),
+        # solo la parte que dispara red/descarga de verdad.
+        if not await is_acknowledged(self.db):
+            logger.info("orchestrator.cycle_skipped_no_legal_acknowledgment")
+            return 0
+
         cooldown = timedelta(hours=get_settings().orchestrator_retry_cooldown_hours)
         cutoff = datetime.now(timezone.utc) - cooldown
         items = list((await self.db.execute(
@@ -101,13 +110,22 @@ class Orchestrator:
         item.last_searched_at = datetime.now(timezone.utc)
         await self.db.flush()
 
-        results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
+        settings = get_settings()
+        results = (
+            await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
+            if settings.prowlarr_enabled else []
+        )
         candidates = self._ranked_candidates(results, query) if results else []
 
         if not candidates:
             forum_result = await self._forum_fallback(query)
             if forum_result:
                 candidates = [forum_result]
+
+        # Blindaje legal: opt-in por backend (deshabilitados por defecto,
+        # igual que forum_enabled ya lo estaba) — un candidato de un
+        # backend no activado ni se intenta enviar.
+        candidates = [c for c in candidates if self._backend_enabled(_detect_backend(c.download_url), settings)]
 
         if not candidates:
             item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
@@ -172,9 +190,20 @@ class Orchestrator:
             return _extract_ed2k_hash(result.download_url) or result.download_url
         return None
 
+    @staticmethod
+    def _backend_enabled(backend: DownloadBackend, settings) -> bool:
+        if backend == DownloadBackend.TRANSMISSION:
+            return settings.transmission_enabled
+        if backend == DownloadBackend.AMULE:
+            return settings.amule_enabled
+        return False
+
     async def _forum_fallback(self, query: str) -> SearchResult | None:
         s = get_settings()
-        if not s.forum_enabled or not s.forum_username:
+        # forum_url vacío por defecto a propósito (blindaje legal): es un
+        # plugin IPB genérico, la URL la aporta el usuario, el proyecto no
+        # incluye ni recomienda ningún foro concreto.
+        if not s.forum_enabled or not s.forum_username or not s.forum_url:
             return None
         try:
             from secuenciarr.services.forum_scraper import ForumScraper

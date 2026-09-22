@@ -19,6 +19,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "structlog>=24.1.0",
     "jinja2>=3.1.0",
+    "markdown>=3.6",
 ]
 
 [project.optional-dependencies]
@@ -43,7 +44,7 @@ where = ["src"]
 # tree, así que este bug solo se vería dentro del contenedor construido
 # (ya nos pasó una vez con dashboard.html — ver commit de E1).
 [tool.setuptools.package-data]
-secuenciarr = ["static/*.html", "static/*.css", "static/vendor/*.js", "web/templates/*.html"]
+secuenciarr = ["static/*.html", "static/*.css", "static/vendor/*.js", "web/templates/*.html", "LEGAL.md"]
 
 [tool.ruff]
 target-version = "py311"

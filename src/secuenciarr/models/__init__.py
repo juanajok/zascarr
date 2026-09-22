@@ -398,3 +398,14 @@ class ReadingListItem(Base):
     position:        Mapped[int] = mapped_column(Integer, nullable=False)
     reading_list: Mapped["ReadingList"] = relationship(back_populates="items")
     issue:        Mapped["Issue"]       = relationship()
+
+
+class LegalAcknowledgment(Base):
+    """Blindaje legal: sin user_id — SecuenciArr es de un solo operador,
+    sin autenticación. "¿Aceptado?" es "¿existe una fila con
+    legal_version == la versión actual?" (hash de LEGAL.md, ver
+    services/legal.py), no un estado por usuario."""
+    __tablename__ = "legal_acknowledgments"
+    id:            Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    accepted_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    legal_version: Mapped[str]      = mapped_column(String(64), nullable=False)

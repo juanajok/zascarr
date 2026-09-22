@@ -37,6 +37,9 @@ class FakeExecResult:
     def scalars(self):
         return FakeScalarResult(self._rows)
 
+    def scalar(self):
+        return self._rows
+
 
 class FakeSession:
     """Cola de resultados: primero la serie, luego los sort_order."""
@@ -125,3 +128,20 @@ class TestMissingIssues:
         with use_fake_session(session) as client:
             r = client.get(f"/api/series/{series.id}/missing")
         assert r.json() == []
+
+
+class TestNoExportMasivo:
+    """Blindaje legal (recomendable, ya satisfecho): ningún listado
+    devuelve más de 100 series de golpe — deja explícito lo que ya
+    hace `Query(..., le=100)` en list_series, no una feature nueva."""
+
+    def test_page_size_por_encima_de_100_se_rechaza(self):
+        with use_fake_session(FakeSession([])) as client:
+            r = client.get("/api/series?page_size=101")
+        assert r.status_code == 422
+
+    def test_page_size_100_se_acepta(self):
+        session = FakeSession([FakeExecResult(0), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/api/series?page_size=100")
+        assert r.status_code == 200
