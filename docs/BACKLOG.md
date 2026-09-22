@@ -90,7 +90,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | D2 | Como coleccionista, quiero elegir "solo CBZ de calidad" o "acepto escaneos" sin entender qué es un quality profile | Selector de 3 opciones legibles ("solo lo mejor / equilibrado / lo que haya"); mapea a `quality_tier` interno | P1 | M |
 | D3 | Como coleccionista, quiero que si sale una edición mejor de algo que ya tengo, el sistema me la ofrezca | Lógica de upgrade sobre `quality_tier`; la UI propone, no sustituye sin confirmar | P1 | M |
 | D4 | ~~Como coleccionista, quiero que el sistema me avise si está descargando sin VPN sin que se pare todo~~ | ~~Warning del healthcheck visible como aviso en UI + log del orchestrator (decisión ya acordada, ver fix C2)~~ | ✅ Hecho (vía E1) | S |
-| D5 | Como coleccionista, quiero saber qué sale la semana que viene de mis series marcadas, sin tener que mirar yo | Calendario/pull-list sobre fechas de publicación futuras de Comic Vine; requiere que el enricher las traiga y las persista (hoy no lo hace) | P2 | M |
+| D5 | Como coleccionista, quiero ver lo que sale esta semana —tanto grapa americana como novedades de Norma/ECC/Panini España— de las series que sigo, para no perderme lanzamientos | Vista de novedades agrupada por semana y filtrable por editorial; doble track por tradición (Comic Vine para fechas futuras USA, scrapers editoriales españoles para el resto); cada novedad se cruza contra wishlist/series monitorizadas y queda marcada "Te interesa" | P2 | L |
 | D6 | Como coleccionista, quiero agrupar series en colecciones ("grapas en curso", "clásicos Bruguera") y que cada colección decida si se busca, con qué fuentes y con qué calidad | Tabla `collections` con políticas tri-estado (include/exclude/unset) de auto-búsqueda aplicadas en el orquestador; una serie sin colección conserva el comportamiento actual | P1 | M |
 | D7 | Como coleccionista, quiero pedir un arco argumental entero aunque cruce varias series, en orden de lectura | Wishlist por `story_arc` que genera items por issue respetando `reading_order` | P2 | L |
 
@@ -175,6 +175,51 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
   ampliar `AMuleClient`/`TransmissionClient` (no hace falta, ver arriba);
   cancelar/pausar una descarga en curso desde la UI (solo "quitar" antes
   de que empiece a descargar, vía el `DELETE` ya existente).
+**Notas de implementación (D5 — módulo Novedades, spec recibida
+2026-09-22, NO implementado todavía):**
+
+- Spec completa en `/mnt/Datos/Descargas/SPEC_MODULO_NOVEDADES.md` (fuera
+  del repo — copiar a `docs/` si se decide construir, para que no se
+  pierda): tabla `novedades` nueva, scrapers Comic Vine (reutiliza
+  `ComicVineClient`) + Norma/Panini/ECC (HTML nuevo) + Whakoom opcional,
+  `NovedadItem` como contrato Pydantic entre scrapers y core, matching
+  contra `series.title_norm` (exacto, luego fuzzy pg_trgm ≥0.60), job
+  semanal, endpoint `/api/novedades`, pantalla `/ui/novedades`.
+- **Dos correcciones antes de dar la spec por buena:**
+  - **La migración que propone es `0007`, pero ese número ya existe**
+    (`20260921_0007_wishlist_download_ref.py`, de D1). La tabla
+    `novedades` sería `0008`. Revisar el resto de la spec por si asume
+    algo más sobre el estado de las migraciones que ya no es cierto.
+  - **La spec asume que ya existe un patrón `optional=True` en los
+    scrapers ("mismo patrón que el scraper del foro CRG") — no existe.**
+    Verificado de nuevo contra el código (tercera vez que un documento
+    externo da esto por hecho): ningún scraper del repo tiene un
+    parámetro `optional`; `forum_enabled` es un booleano de config para
+    activar/desactivar la fuente del foro, no un mecanismo genérico
+    reutilizable. Este mecanismo es exactamente **F15/B8** (toggle por
+    proveedor), que sigue sin construir — la spec de Novedades lo da por
+    prerequisito sin serlo todavía.
+- **Dependencias reales, no las que asume el orden sugerido de la spec**
+  ("tras H1-H3 y F1/F2"): H1-H3 sí están hechos. F1 (reintento) también,
+  pero solo la parte de reintento — el "motivo de fallo legible" que F1
+  también pedía sigue pendiente (ver nota de D1 arriba). **F2 NO está
+  hecho** (ni el fix de `sort_order` ni el botón "Completar", C6) — la
+  propia spec depende de un estado que todavía no existe. F4 (webhooks),
+  F15/B8 (toggle por proveedor) y C1/C2 (ficha de serie) tampoco existen,
+  y la spec los da por disponibles en varios puntos (notificación al
+  casar novedad, ficha de serie con insignia "próximo número").
+- **No verificado en vivo todavía**: a diferencia de Tebeosfera (scrapeado
+  y confirmado contra el sitio real antes de construir el cliente), no se
+  ha comprobado la estructura HTML real de Norma/Panini/ECC/Whakoom. Antes
+  de escribir un solo scraper nuevo, tocaría repetir esa disciplina —
+  visitar los sitios reales, confirmar que la cadencia semanal/rate limit
+  propuestos son viables, y que el HTML no cambia tan rápido como para
+  que el diseño "un WARNING silencioso si rompe" sea suficiente en la
+  práctica.
+- **Fuera de alcance de la v1 (según la propia spec, razonable):**
+  disparar descargas automáticas desde novedades, precios históricos,
+  novedades de tiendas/quiosco.
+
 - **Hueco confirmado por el benchmarking de ronda 2 (F1):** el reintento
   con el siguiente candidato ya está (ver arriba), pero un `FAILED` no
   guarda ningún motivo legible en ningún sitio — solo hay un
