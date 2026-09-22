@@ -1,5 +1,5 @@
 # =============================================================================
-# SecuenciArr / Tebeoteca Digital — docker-compose.yml v1.4
+# ZascArr / Tebeoteca Digital — docker-compose.yml v1.4
 # =============================================================================
 # Cambios respecto a v1.3 (fix bloque crítico C1 + C2 del peer review):
 #
@@ -24,7 +24,7 @@
 #   Docker (este compose):
 #     postgres     → 127.0.0.1:5432
 #     redis        → 127.0.0.1:6379
-#     secuenciarr  → 127.0.0.1:8000
+#     zascarr  → 127.0.0.1:8000
 # =============================================================================
 
 name: tebeoteca-arr
@@ -78,9 +78,9 @@ services:
         limits:
           memory: 128M
 
-  secuenciarr:
+  zascarr:
     build:
-      context: ./secuenciarr
+      context: ./zascarr
       dockerfile: Dockerfile
     container_name: tebeoteca_orquestador
     restart: unless-stopped

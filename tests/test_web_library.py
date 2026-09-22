@@ -12,9 +12,9 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from secuenciarr.database import get_db
-from secuenciarr.main import app
-from secuenciarr.models import ComicTradition, Publisher, Series
+from zascarr.database import get_db
+from zascarr.main import app
+from zascarr.models import ComicTradition, Publisher, Series
 
 
 class FakeScalarResult:
@@ -101,7 +101,7 @@ class TestResultados:
         assert r.status_code == 200
         assert "Thorgal" in r.text
         # Es un fragmento: no repite el layout completo (topnav).
-        assert "SecuenciArr" not in r.text
+        assert "ZascArr" not in r.text
 
     def test_campos_uuid_vacios_no_dan_422(self):
         """Regresión: el formulario de filtros manda publisher_id/

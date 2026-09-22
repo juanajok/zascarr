@@ -9,7 +9,7 @@ Requiere una Postgres real y corriendo — no forma parte del resto de la
 suite (que es deliberadamente sin DB). Se salta automáticamente si
 TEST_DATABASE_URL no está definida:
 
-    docker run --rm -d --name secuenciarr_test_pg -e POSTGRES_PASSWORD=test \\
+    docker run --rm -d --name zascarr_test_pg -e POSTGRES_PASSWORD=test \\
         -e POSTGRES_DB=tebeoteca -p 15433:5432 postgres:15-alpine
     TEST_DATABASE_URL=postgresql://postgres:test@localhost:15433/tebeoteca \\
         pytest tests/test_title_norm.py
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from secuenciarr.core.matcher import normalize_title
+from zascarr.core.matcher import normalize_title
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(

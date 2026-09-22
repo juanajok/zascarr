@@ -1,4 +1,4 @@
-"""conftest.py — Configuración de pytest para SecuenciArr."""
+"""conftest.py — Configuración de pytest para ZascArr."""
 import pytest
 
 

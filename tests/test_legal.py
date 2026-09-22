@@ -14,10 +14,10 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from secuenciarr.database import get_db
-from secuenciarr.main import app
-from secuenciarr.models import LegalAcknowledgment
-from secuenciarr.services.legal import (
+from zascarr.database import get_db
+from zascarr.main import app
+from zascarr.models import LegalAcknowledgment
+from zascarr.services.legal import (
     current_legal_version, get_acknowledgment, is_acknowledged,
     require_legal_acknowledgment,
 )
@@ -70,7 +70,7 @@ class TestAcknowledgment:
 
     @pytest.mark.asyncio
     async def test_acknowledge_anade_una_fila_con_la_version_actual(self):
-        from secuenciarr.services.legal import acknowledge
+        from zascarr.services.legal import acknowledge
         session = FakeSession()
         ack = await acknowledge(session)
         assert ack.legal_version == current_legal_version()

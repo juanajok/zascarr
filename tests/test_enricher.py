@@ -16,11 +16,11 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from secuenciarr.models import ComicTradition, Creator, CreatorRole, Issue, MetadataSource, Series
-from secuenciarr.services.anilist import AniListClient, AniListResult
-from secuenciarr.services.comic_vine import ComicVineClient, CVCredit, CVIssueResult, CVResult, _parse_issue
-from secuenciarr.services.enricher import EnrichmentReport, EnrichmentService
-from secuenciarr.services.tebeosfera import TebeosferaResult, _parse_results
+from zascarr.models import ComicTradition, Creator, CreatorRole, Issue, MetadataSource, Series
+from zascarr.services.anilist import AniListClient, AniListResult
+from zascarr.services.comic_vine import ComicVineClient, CVCredit, CVIssueResult, CVResult, _parse_issue
+from zascarr.services.enricher import EnrichmentReport, EnrichmentService
+from zascarr.services.tebeosfera import TebeosferaResult, _parse_results
 
 
 def make_series(title="Batman", start_year=None, comic_vine_id=None,
@@ -466,7 +466,7 @@ class TestNuncaTocaManual:
         se puede verificar que el WHERE usa is_distinct_from('manual') y no
         una igualdad simple (que trataría NULL de forma incorrecta)."""
         from sqlalchemy import select
-        from secuenciarr.models import MetadataSource as MS
+        from zascarr.models import MetadataSource as MS
 
         stmt = (
             select(Series)
@@ -569,7 +569,7 @@ class TestCacheNegativaH2:
         usa IS NULL / comparación temporal sobre enrichment_attempted_at."""
         from sqlalchemy import or_, select
 
-        from secuenciarr.services.enricher import ENRICHMENT_RETRY_AFTER
+        from zascarr.services.enricher import ENRICHMENT_RETRY_AFTER
         from datetime import datetime, timezone
 
         stmt = select(Series).where(or_(

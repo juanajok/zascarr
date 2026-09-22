@@ -13,9 +13,9 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from secuenciarr.database import get_db
-from secuenciarr.main import app
-from secuenciarr.models import ComicTradition, LegalAcknowledgment, Series, Wishlist, WishlistStatus
+from zascarr.database import get_db
+from zascarr.main import app
+from zascarr.models import ComicTradition, LegalAcknowledgment, Series, Wishlist, WishlistStatus
 
 
 def _accepted() -> "FakeExecResult":

@@ -1,5 +1,5 @@
 # =============================================================================
-# SecuenciArr — Dockerfile (fix C1 del peer review)
+# ZascArr — Dockerfile (fix C1 del peer review)
 # =============================================================================
 # Cambio: uvicorn escucha en 0.0.0.0 dentro del contenedor.
 #
@@ -29,15 +29,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 libxml2 libxslt1.1 tini \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 1000 secuenciarr && \
-    useradd -u 1000 -g secuenciarr -m -s /bin/bash secuenciarr
+RUN groupadd -g 1000 zascarr && \
+    useradd -u 1000 -g zascarr -m -s /bin/bash zascarr
 
 COPY --from=builder /install /usr/local
 
 WORKDIR /app
-COPY --chown=secuenciarr:secuenciarr . .
+COPY --chown=zascarr:zascarr . .
 
-USER secuenciarr
+USER zascarr
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import httpx; r = httpx.get('http://localhost:8000/api/health'); r.raise_for_status()"
@@ -47,7 +47,7 @@ ENTRYPOINT ["tini", "--"]
 # 0.0.0.0 ES INTENCIONAL: ver cabecera. La exposición real la decide el
 # compose ("127.0.0.1:8000:8000" = solo loopback del host).
 CMD ["python", "-m", "uvicorn", \
-     "secuenciarr.main:app", \
+     "zascarr.main:app", \
      "--host", "0.0.0.0", \
      "--port", "8000", \
      "--workers", "1", \

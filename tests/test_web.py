@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from secuenciarr.main import app
+from zascarr.main import app
 
 client = TestClient(app)
 
@@ -45,4 +45,4 @@ class TestStaticAssets:
     def test_dashboard_e1_sigue_funcionando_tras_montar_static_y_ui(self):
         r = client.get("/")
         assert r.status_code == 200
-        assert "SecuenciArr" in r.text
+        assert "ZascArr" in r.text

@@ -1,5 +1,5 @@
 [project]
-name = "secuenciarr"
+name = "zascarr"
 version = "0.1.0"
 description = "Orquestador inteligente de tebeoteca digital para Raspberry Pi"
 requires-python = ">=3.11"
@@ -44,7 +44,7 @@ where = ["src"]
 # tree, así que este bug solo se vería dentro del contenedor construido
 # (ya nos pasó una vez con dashboard.html — ver commit de E1).
 [tool.setuptools.package-data]
-secuenciarr = ["static/*.html", "static/*.css", "static/vendor/*.js", "web/templates/*.html", "LEGAL.md"]
+zascarr = ["static/*.html", "static/*.css", "static/vendor/*.js", "web/templates/*.html", "LEGAL.md"]
 
 [tool.ruff]
 target-version = "py311"

@@ -16,7 +16,7 @@ import pytest
 from fastapi import Request
 from PIL import Image
 
-from secuenciarr.utils.cover import cached_image_response, fetch_and_cache_cover
+from zascarr.utils.cover import cached_image_response, fetch_and_cache_cover
 
 
 def make_request(headers: dict | None = None) -> Request:
