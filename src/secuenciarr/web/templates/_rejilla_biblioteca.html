@@ -1,0 +1,34 @@
+{% macro pagina_url(p) -%}
+/ui/biblioteca/resultados?page={{ p }}&tradition={{ tradition }}&q={{ q|urlencode }}{% if publisher_id %}&publisher_id={{ publisher_id }}{% endif %}{% if character_id %}&character_id={{ character_id }}{% endif %}{% if story_arc_id %}&story_arc_id={{ story_arc_id }}{% endif %}
+{%- endmacro %}
+
+{% if not items %}
+<p class="empty">Ninguna serie coincide con estos filtros.</p>
+{% else %}
+<div class="library-grid">
+  {% for series in items %}
+  <a class="library-card" href="/ui/series/{{ series.id }}">
+    <img class="cover" src="/ui/series/{{ series.id }}/portada" alt=""
+         onerror="this.classList.add('cover-missing')">
+    <div class="library-card-body">
+      <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
+      <div class="library-card-meta">
+        {{ series.start_year or "" }}
+        {% if series.start_year %}·{% endif %}
+        {{ series.tradition.value if series.tradition else "" }}
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if pages > 1 %}
+<div class="pagination"
+     hx-target="#rejilla" hx-swap="innerHTML" hx-push-url="true">
+  {% for p in range(1, pages + 1) %}
+  <a href="{{ pagina_url(p) }}" hx-get="{{ pagina_url(p) }}"
+     class="page-link{% if p == page %} page-current{% endif %}">{{ p }}</a>
+  {% endfor %}
+</div>
+{% endif %}

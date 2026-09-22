@@ -1,0 +1,9 @@
+{% if not story_arcs %}
+<p class="no-results">Sin coincidencias.</p>
+{% else %}
+<ul class="series-list">
+  {% for arc in story_arcs %}
+  <li><a href="/ui/biblioteca?story_arc_id={{ arc.id }}">{{ arc.title }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}

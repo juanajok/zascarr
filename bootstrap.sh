@@ -69,7 +69,7 @@ success "Idioma:     ${APP_LOCALE}"
 info "Creando estructura de directorios..."
 
 # Configs Docker (en NVMe — rendimiento)
-mkdir -p "${TEBEOTECA_ROOT}/config/"{postgres,redis}
+mkdir -p "${TEBEOTECA_ROOT}/config/"{postgres,redis,covers}
 
 # Biblioteca (donde el coleccionista haya dicho que vive)
 for dir in "Comics/_Specials" "Comics/_Omnibus" \

@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # ── Filesystem ────────────────────────────────────────────────
     library_path: Path = Field(default=Path("/media/WDElements/Tebeos"))
     downloads_path: Path = Field(default=Path("/media/DiscoDuro/downloads"))
+    # C1: caché unificada de portadas (extraídas de CBZ o descargadas de
+    # fuentes externas una sola vez) — ver utils/cover.py.
+    covers_cache_path: Path = Field(default=Path("/mnt/nvme/tebeoteca/config/covers"))
 
     # ── VPN state (Confiraspa) ──────────────────────────────────────
     # Fichero JSON escrito por scripts/vpn-state.sh (baremetal, fuera del

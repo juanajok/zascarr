@@ -2,12 +2,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from secuenciarr.database import get_db
 from secuenciarr.models import Issue, Series
+from secuenciarr.services.series import SeriesService
 
 router = APIRouter(prefix="/series", tags=["series"])
 
@@ -19,21 +20,16 @@ async def list_series(
     tradition: str | None = None,
     status: str | None = None,
     search: str | None = Query(default=None),
+    publisher_id: UUID | None = None,
+    character_id: UUID | None = None,
+    story_arc_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Series)
-    if tradition:
-        query = query.where(Series.tradition == tradition)
-    if status:
-        query = query.where(Series.status == status)
-    if search:
-        query = query.where(
-            func.to_tsvector("spanish", Series.title).match(search)
-        )
-    total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
-    query = query.order_by(Series.sort_title, Series.start_year)
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    items = list((await db.execute(query)).scalars().all())
+    items, total = await SeriesService(db).list_series(
+        page=page, page_size=page_size, tradition=tradition, status=status,
+        search=search, publisher_id=publisher_id, character_id=character_id,
+        story_arc_id=story_arc_id,
+    )
     return {"items": items, "total": total, "page": page, "page_size": page_size,
             "pages": (total + page_size - 1) // page_size}
 

@@ -8,6 +8,7 @@ la lógica de negocio vive en ReviewService, no aquí.
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from uuid import UUID
 
@@ -19,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from secuenciarr.database import get_db
 from secuenciarr.models import File
 from secuenciarr.services.review import ReviewService
-from secuenciarr.utils.cover import extract_cover_thumbnail
+from secuenciarr.utils.cover import cached_image_response, extract_cover_thumbnail
 from secuenciarr.utils.naming import parse_comic_filename
 from secuenciarr.web.routes import TEMPLATES_DIR
 
@@ -43,15 +44,19 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
 
 
 @router.get("/{file_id}/portada")
-async def portada(file_id: UUID, db: AsyncSession = Depends(get_db)) -> Response:
+async def portada(file_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     file = await db.get(File, file_id)
     if not file:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    result = extract_cover_thumbnail(Path(file.file_path))
+    path = Path(file.file_path)
+    # extract_cover_thumbnail es zipfile+Pillow, síncrono y bloqueante:
+    # se manda a un hilo aparte para no congelar el event loop (M4).
+    result = await asyncio.to_thread(extract_cover_thumbnail, path)
     if result is None:
         raise HTTPException(status_code=404, detail="Sin miniatura disponible")
     data, content_type = result
-    return Response(content=data, media_type=content_type)
+    etag = f'"{path.stat().st_mtime}"'
+    return cached_image_response(request, data, content_type, etag)
 
 
 @router.get("/{file_id}/buscar-serie", response_class=HTMLResponse)

@@ -68,7 +68,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| C1 | Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad | Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia (o integración OPDS) con filtros por tradición, editorial, personaje, saga | P0 | L |
+| C1 | ~~Como coleccionista, quiero ver mi biblioteca en una web bonita desde el móvil o el sofá, ordenada por serie, autor o nacionalidad~~ | ~~Kavita cubre lectura; SecuenciArr aporta el *catálogo enriquecido*: UI propia con filtros por tradición, editorial, personaje, saga~~ | ✅ Hecho | L |
 | C2 | ~~Como coleccionista, quiero saber de un vistazo qué números me faltan de cada serie~~ | ~~Vista "huecos" por serie: `missing` ya existe en API; corregir el bug de `sort_order` truncado detectado en el review~~ | ✅ Hecho | M |
 | C3 | Como coleccionista, quiero marcar un tebeo como leído y puntuarlo | `reading_progress` ya está en el modelo; falta exponerlo + UI | P1 | M |
 | C4 | Como coleccionista, quiero listas como "Court of Owls en orden" aunque crucen varias series | `story_arc_issues.reading_order` ya soporta crossovers; falta UI de arcos | P1 | M |
@@ -98,6 +98,55 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
   Postgres real con el caso exacto del bug: una serie con SOLO un
   Annual `sort_order=1.5` (sin el `1.0`) muestra correctamente `#1` como
   pendiente — con el código anterior se habría dado por presente.
+- **C1 (hecho):** `/ui/biblioteca` — primera pantalla de navegación real
+  de la biblioteca (hasta ahora solo había pantallas de un único
+  propósito). Filtros por tradición/editorial (dropdown) y
+  personaje/saga (búsqueda-y-navegación, universo demasiado grande para
+  un dropdown); clic en una tarjeta lleva a la ficha de C2, que por fin
+  tiene desde dónde ser alcanzada (gana portada + editorial + géneros +
+  enlace de vuelta). `SeriesService` (`services/series.py`) centraliza
+  el listado/filtrado — usado tanto por la API JSON como por la UI, con
+  JOIN explícito (no `.any()` anidado) para personaje/saga, verificado
+  con Postgres real (no solo `FakeSession`, que no detecta un JOIN M:N
+  mal construido): `Series → Issue → issue_characters`/`StoryArcIssue`.
+  - **Portadas — cascada unificada de 3 niveles**: (1) primera página
+    del CBZ ya importado más antiguo, (2) `cover_url` externo descargado
+    y cacheado una sola vez, (3) placeholder si no hay ninguna — nunca
+    se cachea una ausencia. Todo el resultado (venga de CBZ o de fuente
+    externa) se escribe a un único fichero en disco
+    (`covers_cache_path/{series_id}.jpg`), así que una segunda petición
+    no vuelve a tocar ni el CBZ ni la red. **Cierra M4** de paso (el
+    thumbnail de B2 nació sin cabeceras de caché): `cached_image_response`
+    compartida entre `pendientes.py` y `series.py` (304 con `If-None-Match`,
+    `Cache-Control: private, max-age=86400`).
+  - **Bug real encontrado probando en vivo** (no algo que un mock hubiera
+    revelado): `httpx.AsyncClient` no sigue redirecciones por defecto, y
+    tanto `picsum.photos` (usado para verificar esto) como CDNs reales de
+    portadas devuelven 302 con normalidad — sin `follow_redirects=True`,
+    `raise_for_status()` trataba el redirect como fallo y ninguna portada
+    externa se descargaba nunca. Corregido y reverificado en vivo.
+  - **Bug real encontrado probando en un navegador real**: los campos
+    ocultos del formulario de filtros (`publisher_id`/`character_id`/
+    `story_arc_id`) llegan como `""` cuando no hay selección, no
+    ausentes de la query string — un parámetro `UUID | None` de FastAPI
+    no acepta `""` y daba 422 en cuanto se tocaba cualquier otro filtro.
+    Corregido convirtiendo a mano (`_uuid_or_none`) y añadido como test
+    de regresión explícito (ningún test con query string vacía lo había
+    cubierto hasta entonces).
+  - Trabajo bloqueante (zipfile, Pillow, descarga, disco) siempre en
+    `asyncio.to_thread`/`httpx.AsyncClient`, con un semáforo
+    (`asyncio.Semaphore(2)`) limitando descargas externas concurrentes —
+    no disparar una ráfaga al CDN cuando una rejilla entera carga en frío.
+  - **Deuda registrada, no resuelta aquí**: la caché de portada en disco
+    no se invalida nunca automáticamente — si una serie cachea primero
+    la externa y más tarde llega un archivo real, o si el enricher
+    cambia de fuente, el fichero viejo se sirve indefinidamente hasta
+    que alguien lo borre a mano. Aceptable para una biblioteca personal
+    de un solo usuario; revisar si algún día se vuelve confuso en la
+    práctica.
+  - Nuevo volumen Docker + `mkdir` en `bootstrap.sh` para
+    `covers_cache_path` (`/mnt/nvme/tebeoteca/config/covers`, mismo
+    patrón que `config/{postgres,redis}`).
 
 ### Épica D — "El sistema busca lo que me falta"
 
@@ -272,6 +321,13 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   en el host** para poder correr las migraciones fuera de Docker. Frágil en
   distros que no sean Debian/Ubuntu recientes; considerar ejecutar la
   migración inicial dentro de un contenedor efímero en su lugar.
+- **M5 — caché de portada en disco sin invalidación (de C1):**
+  `covers_cache_path/{series_id}.jpg` se escribe una vez y no se vuelve
+  a comprobar nunca. Si se cachea primero una portada externa y más
+  tarde llega un archivo real, o si el enricher cambia de fuente, el
+  fichero viejo se sirve indefinidamente hasta que alguien lo borre a
+  mano. Aceptable para una biblioteca personal de un solo usuario por
+  ahora; revisar si se vuelve confuso en la práctica.
 
 ## Benchmarking competitivo (2026-09-21)
 

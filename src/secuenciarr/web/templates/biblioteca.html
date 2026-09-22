@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Biblioteca — SecuenciArr{% endblock %}
+{% block content %}
+<h1>Tu biblioteca</h1>
+<p class="subtitle">{{ total }} serie{{ "s" if total != 1 else "" }} catalogada{{ "s" if total != 1 else "" }}.</p>
+
+<form id="filtros" class="filter-bar"
+      hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
+      hx-trigger="change, submit" hx-push-url="true">
+  <input type="search" name="q" placeholder="Buscar por título…" value="{{ q }}">
+  <select name="tradition">
+    <option value="">Todas las tradiciones</option>
+    {% for value, label in tradiciones %}
+    <option value="{{ value }}" {% if value == tradition %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="publisher_id">
+    <option value="">Todas las editoriales</option>
+    {% for p in publishers %}
+    <option value="{{ p.id }}" {% if publisher_id and p.id == publisher_id %}selected{% endif %}>{{ p.name }}</option>
+    {% endfor %}
+  </select>
+  <input type="hidden" name="character_id" value="{{ character_id or '' }}">
+  <input type="hidden" name="story_arc_id" value="{{ story_arc_id or '' }}">
+  <input type="hidden" name="page" value="1">
+</form>
+
+<div class="filter-bar filter-bar-secondary">
+  <div class="filter-search-box">
+    <input type="search" placeholder="Buscar personaje…"
+           hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="keyup changed delay:400ms"
+           hx-target="#resultados-personaje" hx-swap="innerHTML" name="q">
+    <div id="resultados-personaje" class="series-results"></div>
+  </div>
+  <div class="filter-search-box">
+    <input type="search" placeholder="Buscar saga…"
+           hx-get="/ui/biblioteca/buscar-saga" hx-trigger="keyup changed delay:400ms"
+           hx-target="#resultados-saga" hx-swap="innerHTML" name="q">
+    <div id="resultados-saga" class="series-results"></div>
+  </div>
+  {% if character_id or story_arc_id %}
+  <a href="/ui/biblioteca" class="btn-ignorar">Quitar filtro de personaje/saga</a>
+  {% endif %}
+</div>
+
+<div id="rejilla">
+  {% include "_rejilla_biblioteca.html" %}
+</div>
+{% endblock %}

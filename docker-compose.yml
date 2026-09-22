@@ -111,6 +111,7 @@ services:
       - FORUM_PASSWORD=${FORUM_PASSWORD:-}
       - LIBRARY_PATH=/media/WDElements/Tebeos
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
+      - COVERS_CACHE_PATH=/mnt/nvme/tebeoteca/config/covers
       - TZ=Europe/Madrid
     # El lado IZQUIERDO (host) de cada volumen es configurable vía .env
     # (A1: bootstrap.sh pregunta dónde viven tebeos/descargas y escribe
@@ -125,6 +126,8 @@ services:
       # Si el directorio no existe en el host todavía, Docker lo crea vacío:
       # health.py tolera fichero ausente y reporta "unknown".
       - /mnt/nvme/tebeoteca/config/vpn-state:/run/vpn-state:ro
+      # C1: caché de portadas (lectura-escritura, la app escribe aquí).
+      - /mnt/nvme/tebeoteca/config/covers:/mnt/nvme/tebeoteca/config/covers
     depends_on:
       postgres:
         condition: service_healthy
