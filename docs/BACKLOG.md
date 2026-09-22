@@ -32,6 +32,8 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | A2 | Como coleccionista, quiero que el instalador me diga en español llano qué falló ("no encuentro el disco", no "exit code 1") | Mensajes de error del bootstrap mapeados a causas y soluciones comunes | P0 | S |
 | A3 | Como coleccionista, quiero que si algo se tuerce, mi colección nunca se dañe | El instalador y el importador NUNCA borran archivos originales; solo copian/mueven a destinos verificados | P0 | S |
 | A4 | Como coleccionista, quiero desinstalar sin dejar restos ni perder mi tebeoteca | `make uninstall` conserva biblioteca y BD con aviso claro | P1 | S |
+| A5 | Como coleccionista con el disco casi lleno, quiero repartir tradiciones entre discos sin engañar al sistema | N carpetas-raíz; cada una asignada a una o varias tradiciones; el importer escribe en la raíz que le toca a esa tradición | P2 | L |
+| A6 | Como coleccionista, cuando abra SecuenciArr fuera de localhost quiero contraseña y que funcione tras un reverse proxy | Auth none/password/user+password + `base_url` configurable | P1 | M |
 
 ### Épica B — "Importo mi caos actual"
 
@@ -43,6 +45,10 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B4 | Como coleccionista, quiero que cada tebeo aparezca con portada, guionista, dibujante y sinopsis aunque el archivo no traiga metadatos | Enricher multi-fuente (GCD/AniList/Tebeosfera/Comic Vine) + corrección del bug de `metadata_source='manual'` del peer review (C3) | P0 | L |
 | B5 | ~~Como coleccionista de tankōbon y álbumes BD, quiero que Vol./T/Tomo funcionen tan bien como el # americano~~ | ~~Tests de naming con fixtures reales de releases españolas (patrones `nº`, `v01c047` rescatados de zascarr)~~ | ✅ Hecho | M |
 | B6 | Como coleccionista, quiero que mi biblioteca sea legible por Kavita/ComicTagger/cualquier otra herramienta sin depender de SecuenciArr | Tras enriquecer, escribir `ComicInfo.xml` dentro del CBZ (hoy solo se lee, nunca se escribe) | P1 | M |
+| B7 | Como coleccionista, si borro un tebeo del disco a mano, quiero que deje de contar como "lo tengo" sin que yo avise | El ciclo de scan detecta `File.file_path` que ya no existe y lo marca desaparecido, con aviso en el informe del ciclo | P1 | S |
+| B8 | Como administrador de la Pi, quiero apagar una fuente de metadatos (p.ej. Tebeosfera) sin redesplegar si se rompe su scraping | Toggle runtime por proveedor (`comicvine_enabled`/`anilist_enabled`/`tebeosfera_enabled` en `Settings`, mismo patrón que `forum_enabled`) + estado visible en el healthcheck | P1 | S |
+| B9 | Como coleccionista, quiero que un número sin título no se quede "Issue 5 - Unknown" y que cada tradición nombre distinto sin que yo edite plantillas | Plantillas de naming por tipo (número / sin título / special version / pack) con padding configurable; UI solo on/off y preset | P2 | M |
+| B10 | Como coleccionista, si descargo un pack con varios números quiero que se deshaga solo; y si llega un CBR, prefiero CBZ si es posible | Extracción de archives multi-número; conversión cbr→cbz opt-in con cadena de preferencia documentada | P2 | M |
 
 **Notas de implementación:**
 
@@ -67,6 +73,8 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | C3 | Como coleccionista, quiero marcar un tebeo como leído y puntuarlo | `reading_progress` ya está en el modelo; falta exponerlo + UI | P1 | M |
 | C4 | Como coleccionista, quiero listas como "Court of Owls en orden" aunque crucen varias series | `story_arc_issues.reading_order` ya soporta crossovers; falta UI de arcos | P1 | M |
 | C5 | Como coleccionista, quiero leer mi catálogo enriquecido desde cualquier lector (tablet, e-reader) sin pasar por Kavita | Endpoint OPDS de solo catálogo (no de contenido) sobre los datos ya enriquecidos | P2 | M |
+| C6 | Como coleccionista, quiero un botón en cada serie que detecte los números que me faltan y los ponga todos en búsqueda, para completar sagas sin ir número a número | Desde la ficha de serie, "Completar" ejecuta el cálculo de huecos y crea los items de wishlist correspondientes, visibles con su estado en `/ui/wishlist` — depende de arreglar antes el bug de `sort_order` truncado de C2 | P1 | M |
+| C7 | Como coleccionista curioso, quiero que cada carpeta de serie lleve un fichero que describa su estado, para que otras herramientas lo lean sin hablar con la API | `series.json` por carpeta de serie, regenerado tras cada cambio relevante | P2 | S |
 
 **Notas de implementación (Fase 6 / UI web):**
 
@@ -83,6 +91,8 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | D3 | Como coleccionista, quiero que si sale una edición mejor de algo que ya tengo, el sistema me la ofrezca | Lógica de upgrade sobre `quality_tier`; la UI propone, no sustituye sin confirmar | P1 | M |
 | D4 | ~~Como coleccionista, quiero que el sistema me avise si está descargando sin VPN sin que se pare todo~~ | ~~Warning del healthcheck visible como aviso en UI + log del orchestrator (decisión ya acordada, ver fix C2)~~ | ✅ Hecho (vía E1) | S |
 | D5 | Como coleccionista, quiero saber qué sale la semana que viene de mis series marcadas, sin tener que mirar yo | Calendario/pull-list sobre fechas de publicación futuras de Comic Vine; requiere que el enricher las traiga y las persista (hoy no lo hace) | P2 | M |
+| D6 | Como coleccionista, quiero agrupar series en colecciones ("grapas en curso", "clásicos Bruguera") y que cada colección decida si se busca, con qué fuentes y con qué calidad | Tabla `collections` con políticas tri-estado (include/exclude/unset) de auto-búsqueda aplicadas en el orquestador; una serie sin colección conserva el comportamiento actual | P1 | M |
+| D7 | Como coleccionista, quiero pedir un arco argumental entero aunque cruce varias series, en orden de lectura | Wishlist por `story_arc` que genera items por issue respetando `reading_order` | P2 | L |
 
 ### Épica E — "Confío en el sistema"
 
@@ -91,6 +101,8 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | E1 | ~~Como coleccionista, quiero una pantalla de estado con semáforos ("todo bien / atención: sin VPN / error: disco lleno")~~ | ~~Dashboard sobre `/api/health` con iconos y textos en español, no JSON~~ | ✅ Hecho | M |
 | E2 | ~~Como coleccionista, quiero que haya copias de seguridad automáticas sin configurar nada por mi parte~~ | ~~Cron de `pg_dump` a segundo disco (el backup actual al mismo disco del dato era hallazgo del review)~~ | ✅ Hecho | S |
 | E3 | Como coleccionista, quiero un botón "restaurar copia" si algo sale mal | Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo) | P1 | M |
+| E4 | Como coleccionista, quiero un aviso al móvil cuando una descarga se importa, para no estar mirando el dashboard | Webhook configurable (Gotify/ntfy/Telegram/URL genérica) al completar descarga+import; desactivado por defecto | P1 | S |
+| E5 | Como coleccionista que reporta un fallo, quiero un botón en el dashboard que genere un fichero con los logs recientes, sin tocar la terminal | Botón "Descargar logs" en el dashboard, sin acceso a shell | P2 | S |
 
 **Notas de implementación (E1/A1/E2/D4):**
 
@@ -163,16 +175,32 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
   ampliar `AMuleClient`/`TransmissionClient` (no hace falta, ver arriba);
   cancelar/pausar una descarga en curso desde la UI (solo "quitar" antes
   de que empiece a descargar, vía el `DELETE` ya existente).
+- **Hueco confirmado por el benchmarking de ronda 2 (F1):** el reintento
+  con el siguiente candidato ya está (ver arriba), pero un `FAILED` no
+  guarda ningún motivo legible en ningún sitio — solo hay un
+  `logger.exception` sin persistir. La UI de `/ui/wishlist` muestra "Sin
+  resultados" para cualquier fallo, sin distinguir "nada encontrado" de
+  "Transmission no responde". Pendiente: columna `Wishlist.last_error`
+  (texto corto) rellenada en el `except` de `process_wishlist` y en la
+  rama "todos los candidatos fallaron" de `_process_item`, mostrada en
+  la fila de la wishlist.
 
 ## Deuda técnica registrada (peer review v2, hallazgos medios)
 
 Sin arreglar todavía — nombrados aquí a propósito para que no vuelvan a caer
 en el agujero de "estaba en el review pero nadie lo pasó al board":
 
-- ~~**M1 — mass assignment en la API**~~ — ✅ cerrado al implementar D1
-  (`WishlistCreate`/`WishlistUpdate` + `WishlistService`, ver notas de D1
-  arriba). `web/pendientes.py` ya usaba `Form(...)` con campos explícitos,
-  no dict crudo — no tenía el mismo problema.
+- **M1 — mass assignment en la API — parcialmente cerrado, reabierto.**
+  Se cerró para `api/wishlist.py` al implementar D1
+  (`WishlistCreate`/`WishlistUpdate` + `WishlistService`). Pero al revisar
+  `api/series.py` por el benchmarking de ronda 2 (F2) se confirmó el
+  MISMO patrón sin tocar: `create_series(data: dict)` hace
+  `Series(**data)` y `update_series` hace `setattr(series, field, value)`
+  sobre el body crudo — cualquier campo del modelo (incluido `id`,
+  `comic_vine_id`, `metadata_source`) se puede inyectar desde fuera.
+  `web/pendientes.py` sigue sin el problema (usa `Form(...)` con campos
+  explícitos). Pendiente: aplicar a `series.py` el mismo tratamiento
+  (`SeriesCreate`/`SeriesUpdate` Pydantic) que ya se le dio a wishlist.
 - **M2 — normalizador duplicado:** `naming.normalize_series_name` y
   `matcher.normalize_title` resuelven un problema parecido (limpiar un
   título para comparar) con lógica independiente y ya divergente en algún
@@ -219,6 +247,80 @@ perder de vista el hueco real:
   parte de cero, no de una base ya construida.
 - **Ninguno de los tres cubre tebeo español con fuentes honestas + eD2K**:
   ese sigue siendo el hueco real de SecuenciArr frente a los tres.
+
+## Benchmarking competitivo, ronda 2 (2026-09-22)
+
+El usuario trajo un segundo documento de benchmarking (mismas tres
+herramientas, análisis más profundo: 16 historias F1-F16 + lecciones de
+modelo de datos). Antes de registrar nada se verificó cada claim contra
+el código real — tres de las 16 historias resultaron ser lo mismo que ya
+se había registrado la ronda anterior, y de paso se encontraron dos
+huecos reales no mencionados por ningún documento:
+
+- **F3 = B6, F5 = D5** exactamente (mismo alcance) — no se duplican,
+  solo se referencian.
+- **F9 vs C5: relacionadas pero no iguales.** C5 se decidió a propósito
+  como "solo catálogo, no contenido". F9 añade OPDS-PSE (streaming
+  progresivo de páginas), que ES servir contenido — en tensión directa
+  con esa decisión. Se deja fuera de C5 por ahora (ver "Lo que no se
+  roba" más abajo); si algún día se quiere lectura progresiva por OPDS,
+  es una historia nueva, no una ampliación silenciosa de C5.
+- **F1 (reintento) ya estaba hecho por D1** (ver sus notas); lo que
+  faltaba de verdad —motivo de fallo legible— se registró como hueco
+  pendiente en las notas de D1, no como historia nueva.
+- **F2 llevó a revisar `api/series.py` de verdad, no solo confiar en la
+  descripción del documento**: confirmado el bug de `sort_order`
+  truncado (`int(r) for r in ... Issue.sort_order`, con `sort_order`
+  siendo `Float` — un `1.5` trunca a `1` y puede colisionar con el
+  issue entero 1 en el cálculo de huecos) — ya estaba anotado en C2
+  desde el review anterior, esto solo lo confirma con el código delante.
+  De paso se encontró que **M1 (mass assignment) no estaba tan cerrado
+  como decía este mismo documento el día anterior**: `api/series.py`
+  tiene el mismo `Series(**data)`/`setattr` crudo que `api/wishlist.py`
+  tenía antes de D1, sin tocar. Corregido el propio backlog (ver M1
+  arriba) — más vale corregirse a uno mismo que dejar un "cerrado" falso.
+- Los 16 ítems restantes (F4, F6, F7, F8, F10-F16) se registraron como
+  historias nuevas en sus épicas correspondientes (A5/A6, B7-B10, C6/C7,
+  D6/D7, E4/E5) — ninguno estaba construido, confirmado contra el código
+  antes de anotarlo, no solo contra lo que decía el documento.
+
+**Lecciones de diseño del documento (no son historias, son principios):**
+
+- **Validado por comparación, no tocar:** JSONB por entidad para
+  metadata suelta (mismo patrón que el `memo` de Suwayomi), IDs de
+  proveedor en columnas paralelas en vez de una clave global acoplada a
+  una sola fuente (a diferencia de Mylar3, que usa el ID de Comic Vine
+  como clave y se queda cojo sin él), `issue_number VARCHAR + sort_order
+  FLOAT` (Suwayomi necesitó un módulo entero para resolver lo que este
+  diseño ya resolvía, aparte del propio bug de truncado de arriba),
+  `story_arc_issues.reading_order` (ya modelado antes de mirar a la
+  competencia).
+- **Regla nueva, pendiente de auditar:** no mantener la transacción de
+  BD abierta cruzando un `shutil.move` de archivo grande — el tracker de
+  Kapowarr está lleno de bloqueos de SQLite por esto. SecuenciArr usa
+  Postgres (MVCC, no bloqueo de fichero completo), así que el riesgo no
+  es idéntico, pero `ReviewService.assign_to_series` y el importer sí
+  hacen `shutil.move` con la sesión de la request todavía abierta — no
+  es un incidente confirmado, pero vale la pena revisar si conviene
+  mover primero y hacer el upsert en una transacción corta después,
+  antes de que la biblioteca crezca lo bastante para que un `move` de
+  archivos grandes tarde de verdad.
+- **Regla nueva:** cualquier `UNIQUE` de una tabla gestionada desde la UI
+  necesita reconciliación amable (upsert/mensaje claro), no una excepción
+  cruda de integridad — Kapowarr tiene un bug abierto justo por esto con
+  sus carpetas raíz. Aplica el día que exista alguna tabla así en
+  SecuenciArr (hoy ninguna se gestiona desde la UI salvo `wishlist`, que
+  no tiene UNIQUE propio).
+
+**Lo que no se roba (y por qué), del propio documento — confirmado
+razonable:** Comic Vine como fuente única (mata el diferencial), NZB/
+usenet (ecosistema ajeno), extensiones Tachiyomi/JVM (no cabe en la Pi),
+GraphQL como segunda API (REST+OPDS bastan para un usuario), WebView
+embebido para logins (la vía de cookies exportadas ya lo cubre), sync de
+progreso con trackers externos (duplica a Kavita), editor de plantillas
+de naming con variables en UI (demasiada superficie para el
+coleccionista) — y, añadido en esta ronda, **OPDS-PSE** (streaming de
+contenido) por la misma razón que ya motivó que C5 fuera solo catálogo.
 
 ## Fuera de alcance (parking lot honesto)
 
