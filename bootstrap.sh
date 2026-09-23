@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bootstrap.sh — Arranque completo de la Tebeoteca Digital
-# Ejecutar UNA SOLA VEZ desde /mnt/nvme/tebeoteca/
+# Ejecutar UNA SOLA VEZ desde la carpeta del repo (o desde donde lo clones).
 #
 # Garantía (A3): este instalador NUNCA borra ni modifica los ficheros de tu
 # colección. Solo crea directorios, copia .env.example a .env y levanta
@@ -10,7 +10,14 @@
 # queda exactamente como estaba.
 set -euo pipefail
 
-TEBEOTECA_ROOT="/mnt/nvme/tebeoteca"
+# ── Raíz derivada desde la ubicación del script (portable) ──
+# El repo vive en SCRIPT_DIR; la carpeta de datos/config (Postgres, Redis,
+# portadas) en el PADRE (TEBEOTECA_ROOT), igual que el layout original
+# (/mnt/nvme/tebeoteca/zascarr → /mnt/nvme/tebeoteca). En una Pi limpia
+# (~/tebeoteca/zascarr) da ~/tebeoteca.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEBEOTECA_ROOT="${TEBEOTECA_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
 B='\033[1m'; G='\033[0;32m'; Y='\033[0;33m'; R='\033[0;31m'; N='\033[0m'
 info()    { echo -e "${B}→${N} $*"; }
 success() { echo -e "${G}✓${N} $*"; }
@@ -35,7 +42,7 @@ set_env_var() {
 }
 
 echo -e "\n${B}====================================${N}"
-echo -e "${B}  Tebeoteca Digital — Bootstrap v1.6${N}"
+echo -e "${B}  Tebeoteca Digital — Bootstrap v1.7${N}"
 echo -e "${B}====================================${N}\n"
 
 # ── Comprobaciones previas (A2): cada fallo explica causa y solución ──
@@ -57,10 +64,10 @@ docker info >/dev/null 2>&1 || die \
 
 ENV_FILE="${TEBEOTECA_ROOT}/.env"
 mkdir -p "${TEBEOTECA_ROOT}" || die \
-    "No puedo crear ${TEBEOTECA_ROOT}. ¿Tienes permisos de escritura en /mnt/nvme?"
+    "No puedo crear ${TEBEOTECA_ROOT}. ¿Tienes permisos de escritura en el directorio padre?"
 if [[ ! -f "${ENV_FILE}" ]]; then
-    cp "${TEBEOTECA_ROOT}/zascarr/.env.example" "${ENV_FILE}" 2>/dev/null || \
-        die "No encuentro .env.example en ${TEBEOTECA_ROOT}/zascarr/. ¿Está el repo clonado ahí?"
+    cp "${SCRIPT_DIR}/.env.example" "${ENV_FILE}" 2>/dev/null || \
+        die "No encuentro .env.example en ${SCRIPT_DIR}/. ¿Está el repo completo clonado?"
 fi
 
 # ── A1: 3 preguntas, nada más. El resto se deduce o tiene un valor
@@ -133,8 +140,8 @@ grep -q "DB_PASSWORD=cambia_esto_ahora" "${ENV_FILE}" && \
 success ".env válido"
 
 info "Levantando PostgreSQL y Redis..."
-cd "${TEBEOTECA_ROOT}" || die "No puedo entrar en ${TEBEOTECA_ROOT}. ¿Existe el directorio?"
-docker compose up -d postgres redis || die \
+cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
+docker compose --env-file "${ENV_FILE}" up -d postgres redis || die \
     "No pude levantar PostgreSQL/Redis. Revisa el detalle con: docker compose logs postgres"
 
 info "Esperando a PostgreSQL..."
@@ -151,7 +158,7 @@ info "Corriendo migraciones Alembic..."
 # no debe ejecutarse). cut -d= -f2- conserva contraseñas que contengan "=".
 DB_PASSWORD="$(grep -E '^DB_PASSWORD=' "${ENV_FILE}" | head -n1 | cut -d= -f2-)"
 export DATABASE_URL="postgresql+asyncpg://comics_admin:${DB_PASSWORD}@127.0.0.1:5432/tebeoteca"
-cd "${TEBEOTECA_ROOT}/zascarr" || die "No encuentro el proyecto en ${TEBEOTECA_ROOT}/zascarr/. ¿Clonaste el repo ahí?"
+cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 # -e . (no -e ".[dev]"): solo se necesita alembic + deps runtime para migrar;
 # pytest/ruff/mypy no tienen que instalarse en el host de producción (L8).
 python3 -c "import alembic" 2>/dev/null || pip install --break-system-packages -e . -q || die \
@@ -166,8 +173,8 @@ alembic upgrade head || die \
 success "Migraciones aplicadas"
 
 info "Levantando ZascArr..."
-cd "${TEBEOTECA_ROOT}" || die "No puedo volver a ${TEBEOTECA_ROOT}."
-docker compose up -d zascarr || die \
+cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
+docker compose --env-file "${ENV_FILE}" up -d zascarr || die \
     "No pude arrancar ZascArr. Revisa el detalle con: docker compose logs zascarr"
 
 info "Verificando healthcheck..."
@@ -195,4 +202,4 @@ echo "  Logs en tiempo real:"
 echo "    docker compose logs -f zascarr"
 echo ""
 curl -sf http://127.0.0.1:5000 >/dev/null 2>&1 || \
-    warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${TEBEOTECA_ROOT}/zascarr/scripts/kavita.sh install"
+    warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${SCRIPT_DIR}/scripts/kavita.sh install"

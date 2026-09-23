@@ -1,31 +1,12 @@
-# =============================================================================
-# ZascArr / Tebeoteca Digital — docker-compose.yml v1.4
-# =============================================================================
-# Cambios respecto a v1.3 (fix bloque crítico C1 + C2 del peer review):
+# docker-compose.yml — Tebeoteca Digital (ZascArr)
 #
-#   C1 — API inalcanzable:
-#     Al eliminar network_mode: host se olvidó publicar el puerto 8000.
-#     Ahora se mapea 127.0.0.1:8000 → 8000 del contenedor, y uvicorn
-#     escucha en 0.0.0.0 dentro del contenedor (el aislamiento lo da
-#     el binding a loopback del HOST en esta línea, no el de uvicorn).
+# Uso:
+#   cd /path/a/zascarr   # raíz del repo
+#   cp .env.example .env
+#   docker compose up -d
 #
-#   C2 — Healthcheck de VPN imposible:
-#     Sin network_mode: host, el contenedor no ve wg0 del host, y la
-#     imagen slim no trae iproute2. Solución: Confiraspa escribe el
-#     estado de la VPN en un fichero JSON en el host (cron/timer
-#     systemd, ver scripts/vpn-state.sh), montado read-only aquí.
-#     health.py lo lee. Cero subprocess, cero iproute2.
-#
-# Topología (sin cambios):
-#   Baremetal (Confiraspa):
-#     Transmission → localhost:9091   Kavita → localhost:5000
-#     aMule        → localhost:4711   Prowlarr → localhost:9696
-#
-#   Docker (este compose):
-#     postgres     → 127.0.0.1:5432
-#     redis        → 127.0.0.1:6379
-#     zascarr  → 127.0.0.1:8000
-# =============================================================================
+# La carpeta de datos (config/) vive en el PADRE del repo; los discos del
+# usuario (biblioteca/descargas) se pasan por .env (HOST_*_DIR).
 
 name: tebeoteca-arr
 
@@ -34,10 +15,9 @@ networks:
     driver: bridge
 
 services:
-
   postgres:
     image: postgres:15-alpine
-    container_name: tebeoteca_db
+    container_name: tebeoteca-db
     restart: unless-stopped
     networks:
       - tebeoteca-internal
@@ -45,13 +25,15 @@ services:
       POSTGRES_USER: comics_admin
       POSTGRES_PASSWORD: ${DB_PASSWORD:-SuperSecretPassword123}
       POSTGRES_DB: tebeoteca
-    command: >
-      -c listen_addresses='*'
-      -c max_connections=50
+    command:
+      - -c
+      - listen_addresses=*
+      - -c
+      - max_connections=50
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - /mnt/nvme/tebeoteca/config/postgres:/var/lib/postgresql/data
+      - ../config/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U comics_admin -d tebeoteca"]
       interval: 10s
@@ -64,7 +46,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: tebeoteca_cache
+    container_name: tebeoteca-cache
     restart: unless-stopped
     networks:
       - tebeoteca-internal
@@ -72,7 +54,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - /mnt/nvme/tebeoteca/config/redis:/data
+      - ../config/redis:/data
     deploy:
       resources:
         limits:
@@ -80,54 +62,41 @@ services:
 
   zascarr:
     build:
-      context: ./zascarr
+      context: .
       dockerfile: Dockerfile
-    container_name: tebeoteca_orquestador
+    container_name: tebeoteca-orquestador
     restart: unless-stopped
-    # extra_hosts permite alcanzar servicios baremetal sin network_mode: host.
-    # host-gateway resuelve a la IP del host automáticamente (Docker ≥ 20.10).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - tebeoteca-internal
-    # FIX C1: sin esta línea la API era inalcanzable desde el host.
-    # Loopback-only: la API no se expone a la LAN; el acceso externo
-    # será vía reverse proxy con auth (fuera de alcance por ahora).
     ports:
       - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/tebeoteca
       - REDIS_URL=redis://redis:6379/0
-      - COMICVINE_API_KEY=${COMICVINE_API_KEY}
-      - PROWLARR_URL=http://host.docker.internal:9696
-      - PROWLARR_API_KEY=${PROWLARR_API_KEY}
-      - TRANSMISSION_URL=http://host.docker.internal:9091
+      - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
+      - PROWLARR_URL=${PROWLARR_URL:-http://host.docker.internal:9696}
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY:-}
+      - TRANSMISSION_URL=${TRANSMISSION_URL:-http://host.docker.internal:9091}
       - TRANSMISSION_USERNAME=${TRANSMISSION_USERNAME:-}
       - TRANSMISSION_PASSWORD=${TRANSMISSION_PASSWORD:-}
-      - AMULE_URL=http://host.docker.internal:4711
+      - AMULE_URL=${AMULE_URL:-http://host.docker.internal:4711}
       - AMULE_PASSWORD=${AMULE_PASSWORD:-}
       - FORUM_ENABLED=${FORUM_ENABLED:-false}
+      - FORUM_URL=${FORUM_URL:-}
       - FORUM_USERNAME=${FORUM_USERNAME:-}
       - FORUM_PASSWORD=${FORUM_PASSWORD:-}
       - LIBRARY_PATH=/media/WDElements/Tebeos
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
       - COVERS_CACHE_PATH=/mnt/nvme/tebeoteca/config/covers
-      - TZ=Europe/Madrid
-    # El lado IZQUIERDO (host) de cada volumen es configurable vía .env
-    # (A1: bootstrap.sh pregunta dónde viven tebeos/descargas y escribe
-    # estas variables). El lado derecho (dentro del contenedor) se queda
-    # fijo a propósito: coincide con los defaults de config.py, así que
-    # la app nunca necesita saber dónde vive físicamente cada disco.
+      - TZ=${TZ:-Europe/Madrid}
     volumes:
       - ${HOST_DOWNLOADS_DIR:-/media/DiscoDuro/downloads}:/media/DiscoDuro/downloads:ro
       - ${HOST_AMULE_INCOMING_DIR:-/media/DiscoDuro/aMule/Incoming}:/media/DiscoDuro/aMule/Incoming:ro
-      - ${HOST_LIBRARY_DIR:-/media/WDElements/Tebeos}:/media/WDElements/Tebeos     # biblioteca organizada (lectura+escritura para el importer)
-      # FIX C2: estado de la VPN escrito por Confiraspa en el host.
-      # Si el directorio no existe en el host todavía, Docker lo crea vacío:
-      # health.py tolera fichero ausente y reporta "unknown".
-      - /mnt/nvme/tebeoteca/config/vpn-state:/run/vpn-state:ro
-      # C1: caché de portadas (lectura-escritura, la app escribe aquí).
-      - /mnt/nvme/tebeoteca/config/covers:/mnt/nvme/tebeoteca/config/covers
+      - ${HOST_LIBRARY_DIR:-/media/WDElements/Tebeos}:/media/WDElements/Tebeos
+      - ../config/vpn-state:/run/vpn-state:ro
+      - ../config/covers:/mnt/nvme/tebeoteca/config/covers
     depends_on:
       postgres:
         condition: service_healthy
