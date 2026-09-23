@@ -159,7 +159,12 @@ class EnrichmentService:
         for series in pending:
             source = self._source_for(series.tradition)
             if source is None:
-                continue  # tradición sin fuente todavía (fumetti...)
+                # Tradición sin fuente (fumetti/other): no hay API que
+                # consultar, pero se marca el intento para que la caché
+                # negativa (H2) no la re-seleccione en cada ciclo y acapare
+                # el lote en detrimento de series sí enriquecibles (ADR-0002).
+                series.enrichment_attempted_at = datetime.now(timezone.utc)
+                continue
 
             id_field, source_value, source_label = source
             try:
