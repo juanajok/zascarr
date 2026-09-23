@@ -1,8 +1,9 @@
 """
 Orquestador — motor de búsqueda en cascada.
 
-Flujo: wishlist (wanted/failed, con cooldown) → Prowlarr → foro CRG →
-Transmission/aMule → (import loop, ya existente) → check_completions
+Flujo: wishlist (wanted/failed, con cooldown) → Prowlarr → foro (plugin
+genérico, desactivado por defecto) → Transmission/aMule → (import loop,
+ya existente) → check_completions
 cierra el círculo. Backend auto-detectado por tipo de URL:
   magnet:// o .torrent → Transmission
   ed2k://              → aMule

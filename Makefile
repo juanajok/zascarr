@@ -63,9 +63,7 @@ lint:
 format:
 	$(SA) python -m ruff format src/
 
-# Antes escribía en /mnt/nvme/tebeoteca/config/postgres/, el MISMO disco
-# donde vive el propio dato de Postgres (hallazgo del peer review: un
-# backup que muere con el disco que respalda no sirve). scripts/backup.sh
-# escribe en un disco distinto y de paso aplica retención automática.
+# El backup se escribe en un disco distinto al de los datos (BACKUP_DIR,
+# configurable en scripts/backup.sh) y aplica retención automática.
 backup:
-	@BACKUP_DIR=/media/WDElements/backups/postgres bash scripts/backup.sh
+	@bash scripts/backup.sh

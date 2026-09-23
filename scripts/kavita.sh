@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# kavita.sh — Gestión de Kavita en baremetal ARM64 (Confiraspa)
+# kavita.sh — Gestión de Kavita en baremetal ARM64
 # Uso: sudo bash kavita.sh {install|update|status|logs|restart|uninstall}
 set -euo pipefail
 
 KAVITA_USER="pi"; KAVITA_GROUP="pi"
 INSTALL_DIR="/opt/kavita"
-DATA_DIR="/mnt/nvme/tebeoteca/config/kavita"
-LIBRARY_DIR="/media/WDElements/Tebeos"    # biblioteca real
+DATA_DIR="${KAVITA_DATA_DIR:-/opt/kavita/config}"
+LIBRARY_DIR="${KAVITA_LIBRARY_DIR:-/media/library}"    # biblioteca real
 PORT="5000"; ARCH="arm64"
 RELEASES="https://api.github.com/repos/kareadita/kavita/releases/latest"
 [[ ${EUID} -ne 0 ]] && echo "Ejecuta como root" && exit 1

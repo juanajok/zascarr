@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# backup.sh — Confiraspa: copia de seguridad diaria de PostgreSQL (E2 del
-# backlog: "quiero que haya copias de seguridad automáticas sin configurar
-# nada por mi parte").
+# backup.sh — copia de seguridad diaria de PostgreSQL (E2 del backlog:
+# "quiero que haya copias de seguridad automáticas sin configurar nada").
 #
-# Fix del hallazgo del peer review: el backup anterior (target `backup` del
-# Makefile) escribía en /mnt/nvme/tebeoteca/config/postgres/, el MISMO disco
-# donde vive el propio dato de Postgres — un backup que muere con el disco
-# que respalda no es un backup. Este escribe en un disco distinto
-# (/media/WDElements, el de la biblioteca) y de paso se ejecuta solo.
+# El backup se escribe en un disco distinto al de los datos (BACKUP_DIR,
+# configurable) — un backup que muere con el disco que respalda no es un
+# backup. De paso aplica retención automática.
 #
 # Instalación:
 #   1. Copia este script a /usr/local/bin/backup.sh y chmod +x
@@ -23,8 +20,11 @@
 # =============================================================================
 set -euo pipefail
 
-TEBEOTECA_ROOT="${TEBEOTECA_ROOT:-/mnt/nvme/tebeoteca}"
-BACKUP_DIR="${BACKUP_DIR:-/media/WDElements/backups/postgres}"
+# Directorio del repo (donde vive docker-compose.yml). Si copias este script
+# a /usr/local/bin, define ZASCARR_REPO a mano.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${ZASCARR_REPO:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/zascarr/postgres}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 DB_NAME="${DB_NAME:-tebeoteca}"
 DB_USER="${DB_USER:-comics_admin}"
@@ -35,7 +35,7 @@ TS=$(date +%Y%m%d_%H%M%S)
 DEST="${BACKUP_DIR}/backup_${TS}.sql.gz"
 TMP="${DEST}.tmp"
 
-cd "$TEBEOTECA_ROOT"
+cd "$REPO_DIR"
 docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$TMP"
 mv "$TMP" "$DEST"
 
