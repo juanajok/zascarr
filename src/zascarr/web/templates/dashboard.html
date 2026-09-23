@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ZascArr{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+  <h1>Mientras tanto, en tu biblioteca…</h1>
+  <p class="subtitle">Resumen del estado de tu colección y últimas actualizaciones.</p>
+  
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <span class="metric-value">{{ total_series }}</span>
+      <span class="metric-label">Series en la biblioteca</span>
+      {% if series_con_archivos > 0 %}
+      <span class="metric-delta">▲ {{ series_con_archivos }} con archivos</span>
+      {% endif %}
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-value">{{ porcentaje_completitud }}%</span>
+      <span class="metric-label">Biblioteca completa</span>
+      <span class="metric-detail">{{ total_issues }} números</span>
+    </div>
+    
+    <div class="metric-card metric-warning">
+      <span class="metric-value">{{ huecos_pendientes }}</span>
+      <span class="metric-label">Números pendientes</span>
+      <span class="metric-detail">Requieren atención</span>
+    </div>
+    
+    <div class="metric-card">
+      <span class="metric-value">{{ ultimas_series|length }}</span>
+      <span class="metric-label">Actualizadas recientemente</span>
+      <span class="metric-detail">con actividad reciente</span>
+    </div>
+  </div>
+  
+  <section class="latest-updates">
+    <div class="section-header">
+      <h2>Últimas actualizaciones</h2>
+      <a href="/ui/biblioteca" class="view-all">Ver toda la biblioteca →</a>
+    </div>
+    
+    {% if ultimas_series %}
+    <div class="series-grid">
+      {% for series in ultimas_series %}
+      <a href="/ui/series/{{ series.id }}" class="series-card">
+        <img 
+          src="/ui/series/{{ series.id }}/portada" 
+          alt="{{ series.title }}"
+          onerror="this.classList.add('cover-missing')"
+        >
+        <span class="series-title">{{ series.title }}</span>
+        {% if series.start_year %}
+        <span class="series-year">{{ series.start_year }}</span>
+        {% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">Aún no hay series importadas. ¡Empieza añadiendo tebeos a tu colección!</p>
+    {% endif %}
+  </section>
+  
+  <section class="discover">
+    <h2>Descubre tu próxima serie</h2>
+    <p class="discover-desc">Busca por título, autor, personaje, género o editorial y añádela a tu seguimiento.</p>
+    
+    <form action="/ui/wishlist" method="get" class="search-form">
+      <input 
+        type="search" 
+        name="q" 
+        placeholder="Buscar serie para añadir a deseados" 
+        class="search-input"
+        hx-get="/ui/wishlist/buscar-serie"
+        hx-trigger="keyup changed delay:400ms"
+        hx-target="#resultados-wishlist"
+        hx-swap="innerHTML"
+      >
+      <button type="submit" class="btn-primary">Ir a deseados →</button>
+    </form>
+    
+    <div id="resultados-wishlist" class="series-results"></div>
+  </section>
+</div>
+{% endblock %}

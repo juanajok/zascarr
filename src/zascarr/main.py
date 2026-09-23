@@ -157,6 +157,7 @@ def create_app() -> FastAPI:
     from zascarr.api.legal import router as legal_router
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
+    from zascarr.web.dashboard import router as dashboard_router
     from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
     from zascarr.web.pendientes import router as pendientes_router
@@ -169,6 +170,7 @@ def create_app() -> FastAPI:
     app.include_router(series_router, prefix="/api")
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(ui_router)
+    app.include_router(dashboard_router)
     app.include_router(legal_ui_router)
     app.include_router(library_router)
     app.include_router(pendientes_router)

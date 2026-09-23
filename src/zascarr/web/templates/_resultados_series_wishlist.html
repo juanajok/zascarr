@@ -8,7 +8,8 @@
     <button type="button"
             hx-post="/ui/wishlist/anadir"
             hx-vals='{"series_id": "{{ s.id }}"}'
-            hx-target="#wishlist-list" hx-swap="beforeend">
+            hx-swap="none"
+            hx-on::after-request="setTimeout(() => window.location.reload(), 400)">
       Añadir a deseados
     </button>
   </li>
