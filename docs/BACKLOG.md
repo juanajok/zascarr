@@ -29,11 +29,34 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
 | A1 | ~~Como coleccionista, quiero un único comando o script que lo instale todo, para no tener que seguir un manual de 20 pasos~~ | ~~`bootstrap.sh` pregunta 3 cosas (¿dónde están tus tebeos? ¿dónde descargas? ¿idioma?) y termina con una URL que funciona~~ | ✅ Hecho | M |
-| A2 | Como coleccionista, quiero que el instalador me diga en español llano qué falló ("no encuentro el disco", no "exit code 1") | Mensajes de error del bootstrap mapeados a causas y soluciones comunes | P0 | S |
-| A3 | Como coleccionista, quiero que si algo se tuerce, mi colección nunca se dañe | El instalador y el importador NUNCA borran archivos originales; solo copian/mueven a destinos verificados | P0 | S |
+| A2 | ~~Como coleccionista, quiero que el instalador me diga en español llano qué falló ("no encuentro el disco", no "exit code 1")~~ | ~~Mensajes de error del bootstrap mapeados a causas y soluciones comunes~~ | ✅ Hecho | S |
+| A3 | ~~Como coleccionista, quiero que si algo se tuerce, mi colección nunca se dañe~~ | ~~El instalador y el importador NUNCA borran archivos originales; solo copian/mueven a destinos verificados~~ | ✅ Hecho | S |
 | A4 | Como coleccionista, quiero desinstalar sin dejar restos ni perder mi tebeoteca | `make uninstall` conserva biblioteca y BD con aviso claro | P1 | S |
 | A5 | Como coleccionista con el disco casi lleno, quiero repartir tradiciones entre discos sin engañar al sistema | N carpetas-raíz; cada una asignada a una o varias tradiciones; el importer escribe en la raíz que le toca a esa tradición | P2 | L |
 | A6 | Como coleccionista, cuando abra ZascArr fuera de localhost quiero contraseña y que funcione tras un reverse proxy | Auth none/password/user+password + `base_url` configurable | P1 | M |
+
+**Notas de implementación (A2+A3, hecho):**
+
+- **A2 (bootstrap en español llano):** cada punto de fallo de `bootstrap.sh`
+  queda mapeado a una causa y una acción concretas en lugar de un "exit code":
+  Docker ausente (cómo instalarlo), plugin compose ausente, demonio parado
+  (`systemctl start docker`), disco de tebeos no montado ("no encuentro el
+  disco… ¿está conectado?"), disco de descargas sin permisos, PostgreSQL/Redis
+  que no levantan (apunta a `docker compose logs`), migraciones fallidas y
+  ZascArr que no arranca. Añadido chequeo previo del demonio (`docker info`) y
+  guardas `|| die` en cada `mkdir`/`cd`/`docker compose up`/`alembic`/`pip`.
+- **A3 (nunca dañar la colección):** nuevo `src/zascarr/utils/fs.py` con
+  `sanitize_segment` (un título con "/" o ".." ya no puede escapar de la
+  biblioteca al construir la ruta canónica) y `safe_move`/`safe_move_async`
+  (nunca sobreescribe un destino ocupado — elige nombre único con sufijo — y,
+  entre discos distintos, copia a un temporal y verifica el tamaño ANTES de
+  borrar el original; si la copia falla, el original queda intacto). Aplicado
+  en `Importer._import_file` y `ReviewService.assign_to_series`, que antes
+  usaban `shutil.move` a ciegas (sobrescribía en silencio). `build_library_path`
+  sanitiza título y número de issue. Regresión: `tests/test_fs.py` y
+  `tests/test_importer.py::TestBuildLibraryPathSanitizado`. El instalador
+  documenta su garantía en cabecera: solo crea directorios y copia `.env`,
+  jamás borra ni mueve ficheros de la colección.
 
 ### Épica B — "Importo mi caos actual"
 
