@@ -65,7 +65,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B1 | ~~Como coleccionista, quiero arrastrar mi carpeta de descargas y que el sistema la organice solo~~ | ~~El importador procesa `/downloads` y `_Unsorted/` según matcher/triage ya construidos, con informe final legible~~ | ✅ Backend hecho | M |
 | B2 | ~~Como coleccionista, quiero ver los tebeos que el sistema no supo clasificar y decidir yo con un clic~~ | ~~Bandeja de "pendientes de revisar" en la UI: miniatura, título detectado, botones "es esta serie / ninguna / ignorar"~~ | ✅ Hecho | L |
 | B3 | ~~Como coleccionista, quiero que los duplicados se detecten y no se importen dos veces~~ | ~~Dedupe por SHA256 ya existe; la UI muestra "duplicado de X, descartado" en el informe~~ | ✅ Backend hecho | S |
-| B4 | Como coleccionista, quiero que cada tebeo aparezca con portada, guionista, dibujante y sinopsis aunque el archivo no traiga metadatos | Enricher multi-fuente (GCD/AniList/Tebeosfera/Comic Vine) + corrección del bug de `metadata_source='manual'` del peer review (C3) | P0 | L |
+| B4 | ~~Como coleccionista, quiero que cada tebeo aparezca con portada, guionista, dibujante y sinopsis aunque el archivo no traiga metadatos~~ | ~~Enricher multi-fuente (Comic Vine/AniList/Tebeosfera; GCD pospuesto — ADR-0002) + corrección del bug de `metadata_source='manual'` (C3)~~ | ✅ Hecho | L |
 | B5 | ~~Como coleccionista de tankōbon y álbumes BD, quiero que Vol./T/Tomo funcionen tan bien como el # americano~~ | ~~Tests de naming con fixtures reales de releases españolas (patrones `nº`, `v01c047` rescatados de zascarr)~~ | ✅ Hecho | M |
 | B6 | Como coleccionista, quiero que mi biblioteca sea legible por Kavita/ComicTagger/cualquier otra herramienta sin depender de ZascArr | Tras enriquecer, escribir `ComicInfo.xml` dentro del CBZ (hoy solo se lee, nunca se escribe) | P1 | M |
 | B7 | Como coleccionista, si borro un tebeo del disco a mano, quiero que deje de contar como "lo tengo" sin que yo avise | El ciclo de scan detecta `File.file_path` que ya no existe y lo marca desaparecido, con aviso en el informe del ciclo | P1 | S |
@@ -86,6 +86,15 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
     - Los 6 `Enum(PythonEnum, name=...)` del ORM (`models/__init__.py`) mandaban el `.name` del enum de Python (mayúsculas, p.ej. `"AMERICAN"`) en vez del `.value` (minúsculas, `"american"`) — que es justo lo que el tipo `comic_tradition` de Postgres acepta. Ninguna escritura ORM de `tradition`/`format`/`role`/`file_format`/`status` (wishlist y reading_progress) había funcionado nunca contra una Postgres real. Corregido con `values_callable=lambda obj: [e.value for e in obj]` en los 6.
 - **B5 (hecho):** `naming.py` ahora resuelve los 8 casos reales de `tests/test_naming_core.py::TestRealWorldFilenames`, incluyendo "Batman_v2_012" (guion bajo como separador), "Batman (New 52) 012 (2013)" (paréntesis de reboot no confundidos con año), "Sandman.001.(1989)" (años 19xx, no solo 20xx), "MF #001 - Safari Callejero" y "Asterix T01 - Asterix el Galo" (subtítulo tras " - ", y "T01" de BD de tomo único tratado como número, a diferencia de "Vol."/"Tomo N" que siguen siendo volumen puro).
 - **B1/B3 (backend hecho, falta UI):** `Importer.scan_and_import()` ahora devuelve un `ImportReport` (importados/duplicados/sin-clasificar/errores, en líneas legibles) y corre solo como job periódico en `main.py` (antes `import_interval_minutes` era un ajuste sin usar — el importador nunca se ejecutaba solo). Cada ciclo se persiste en la nueva tabla `import_runs` (migración `0002`), idea rescatada de zascarr (`scrape_runs`) para poder responder "¿qué pasó en el ciclo de las 03:00?" desde una futura UI. Sin endpoint API todavía — eso le toca a B2/Épica C cuando haya UI que lo consuma.
+- **B4 (cierre formal, ADR-0002):** declarada completa con alcance Comic Vine
+  + AniList + Tebeosfera, que cubren **7 de las 9** tradiciones
+  (`american`/`british` → Comic Vine; `manga`/`manhwa`/`manhua` → AniList;
+  `tebeo`/`franco_belgian` → Tebeosfera). GCD queda pospuesta a post-1.0 con
+  estrategia de mirror local de dumps (no API en vivo); quedan sin fuente
+  `fumetti` (pospuesto a GCD) y `other` (cajón de sastre). De paso se corrigió
+  que las series sin fuente se re-seleccionaran en cada ciclo acaparando el
+  lote: ahora se marcan `enrichment_attempted_at` igual que las que no
+  encuentran match (H2). Decisión completa en `docs/adr/0002-enricher-scope.md`.
 
 ### Épica C — "Exploro y leo mi tebeoteca"
 

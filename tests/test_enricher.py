@@ -374,6 +374,23 @@ class TestSourceRouting:
         assert series.tebeosfera_slug is None
 
     @pytest.mark.asyncio
+    async def test_serie_sin_fuente_se_marca_como_intentada(self):
+        """ADR-0002: una serie de tradición sin fuente (fumetti/other) no debe
+        re-seleccionarse en cada ciclo y acaparar el lote: se marca
+        enrichment_attempted_at para que la caché negativa (H2) la deje en
+        paz 30 días."""
+        series = make_series("Corto Maltese", tradition=ComicTradition.FUMETTI)
+        session = FakeSession([FakeExecResult([series])])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(AsyncMock(), AsyncMock(), AsyncMock(), 10, report)
+
+        assert series.enrichment_attempted_at is not None
+        assert report.series_enriched == []
+        assert report.series_no_match == []
+
+    @pytest.mark.asyncio
     async def test_serie_manga_se_enriquece_via_anilist_no_comic_vine(self):
         series = make_series("Berserk", tradition=ComicTradition.MANGA)
         cv_client = AsyncMock()
