@@ -5,7 +5,7 @@ Cambio principal: el estado de la VPN ya NO se consulta con subprocess
   1. Sin network_mode: host, el contenedor no ve las interfaces del host.
   2. La imagen slim no incluye iproute2 → FileNotFoundError → siempre warning.
 
-Ahora health.py LEE UN FICHERO JSON que Confiraspa escribe en el host
+Ahora health.py LEE UN FICHERO JSON que un script del host escribe
 (scripts/vpn-state.sh, vía cron o systemd timer) y que el compose monta
 read-only en /run/vpn-state/. El contenedor no necesita iproute2 ni
 privilegios de red para saber si el túnel está activo.
@@ -34,7 +34,7 @@ from zascarr.database import get_db
 router = APIRouter(tags=["health"])
 
 # Si el fichero de estado no se refresca en este margen, se considera
-# "stale": el script de Confiraspa probablemente ha muerto sin avisar.
+# "stale": el script del host probablemente ha muerto sin avisar.
 VPN_STALE_AFTER_S = 300  # 5 minutos (el timer corre cada minuto)
 
 
@@ -44,7 +44,7 @@ def _check_vpn() -> tuple[str, str]:
     state_path = Path(settings.vpn_state_file)
 
     if not state_path.exists():
-        return "unknown", (f"fichero {state_path} ausente — Confiraspa aún "
+        return "unknown", (f"fichero {state_path} ausente — el host aún "
                            "no ha escrito el estado (o el timer no corre)")
 
     try:
@@ -56,7 +56,7 @@ def _check_vpn() -> tuple[str, str]:
     age = time.time() - updated
     if age > VPN_STALE_AFTER_S:
         return "warning", (f"estado stale ({age:.0f}s sin refrescar; "
-                           "¿murió el timer de Confiraspa?)")
+                           "¿murió el timer del host?)")
 
     if state.get("vpn_active"):
         return "ok", f"interfaz {state.get('interface', 'wg0')} activa"
@@ -91,7 +91,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     except Exception:
         amule_ok = False
 
-    # ── VPN (via fichero de Confiraspa; nunca bloqueante) ──
+    # ── VPN (vía fichero del host; nunca bloqueante) ──
     vpn_status, vpn_detail = _check_vpn()
 
     core_ok = db_ok

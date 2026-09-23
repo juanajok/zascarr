@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# vpn-state.sh — Confiraspa: publica el estado del túnel WireGuard para
+# vpn-state.sh — publica el estado del túnel WireGuard para
 # que ZascArr (contenedor, sin network_mode: host ni iproute2) pueda
 # leerlo en su healthcheck.
 #
@@ -13,7 +13,7 @@
 #   3. Ajusta WG_INTERFACE si tu túnel no se llama wg0.
 #
 # Contrato con health.py:
-#   Escribe /mnt/nvme/tebeoteca/config/vpn-state/wg0.json con:
+#   Escribe <STATE_DIR>/wg0.json con:
 #     {"interface": "wg0", "vpn_active": true|false, "updated_at_epoch": N}
 #   Escritura atómica (.tmp + mv) para que health.py nunca lea medio JSON.
 #   Idempotente: ejecutarlo N veces es seguro.
@@ -21,7 +21,8 @@
 set -euo pipefail
 
 WG_INTERFACE="${WG_INTERFACE:-wg0}"
-STATE_DIR="/mnt/nvme/tebeoteca/config/vpn-state"
+# Debe coincidir con el lado HOST del volumen ../config/vpn-state del compose.
+STATE_DIR="${VPN_STATE_DIR:-/var/lib/zascarr/vpn-state}"
 STATE_FILE="${STATE_DIR}/${WG_INTERFACE}.json"
 
 mkdir -p "$STATE_DIR"

@@ -55,13 +55,13 @@ class Settings(BaseSettings):
     transmission_url: str = Field(default="http://127.0.0.1:9091")
     transmission_username: str = Field(default="")
     transmission_password: str = Field(default="")
-    transmission_download_dir: str = Field(default="/media/DiscoDuro/downloads/comics")
+    transmission_download_dir: str = Field(default="/media/downloads/comics")
     transmission_enabled: bool = Field(default=False)
 
     # ── aMule (baremetal) ──────────────────────────────────────────
     amule_url: str = Field(default="http://127.0.0.1:4711")
     amule_password: str = Field(default="")
-    amule_incoming_dir: str = Field(default="/media/DiscoDuro/aMule/Incoming")
+    amule_incoming_dir: str = Field(default="/media/incoming")
     amule_enabled: bool = Field(default=False)
 
     # ── Forum scraper ──────────────────────────────────────────────
@@ -76,14 +76,17 @@ class Settings(BaseSettings):
     forum_rate_limit: float = Field(default=2.0)
     forum_enabled: bool = Field(default=False)
 
-    # ── Filesystem ────────────────────────────────────────────────
-    library_path: Path = Field(default=Path("/media/WDElements/Tebeos"))
-    downloads_path: Path = Field(default=Path("/media/DiscoDuro/downloads"))
+    # ── Filesystem (rutas DENTRO del contenedor — genéricas y estables) ──
+    # El contenedor monta los discos reales del usuario en estas rutas
+    # (ver docker-compose.yml); los discos en sí se configuran en .env con
+    # HOST_LIBRARY_DIR / HOST_DOWNLOADS_DIR / HOST_AMULE_INCOMING_DIR.
+    library_path: Path = Field(default=Path("/media/library"))
+    downloads_path: Path = Field(default=Path("/media/downloads"))
     # C1: caché unificada de portadas (extraídas de CBZ o descargadas de
     # fuentes externas una sola vez) — ver utils/cover.py.
-    covers_cache_path: Path = Field(default=Path("/mnt/nvme/tebeoteca/config/covers"))
+    covers_cache_path: Path = Field(default=Path("/config/covers"))
 
-    # ── VPN state (Confiraspa) ──────────────────────────────────────
+    # ── VPN state (fichero escrito por un script del host) ────────
     # Fichero JSON escrito por scripts/vpn-state.sh (baremetal, fuera del
     # contenedor) y montado read-only. Ver fix C2 del peer review.
     vpn_state_file: str = Field(default="/run/vpn-state/wg0.json")

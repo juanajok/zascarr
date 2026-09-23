@@ -1,4 +1,4 @@
-"""Scraper de foros IPB (La Mansión del CRG). Rate limit: 2s mínimo."""
+"""Scraper de foros IPB (plugin genérico; la URL la aporta el usuario). Rate limit: 2s mínimo."""
 import asyncio, re
 from dataclasses import dataclass, field
 from urllib.parse import quote, urljoin

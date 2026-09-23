@@ -2,8 +2,8 @@
 Importador de archivos a la biblioteca.
 
 Escanea dos fuentes de descargas:
-  - Transmission: /media/DiscoDuro/downloads/comics
-  - aMule:        /media/DiscoDuro/aMule/Incoming
+  - Transmission: /media/downloads/comics
+  - aMule:        /media/incoming
 
 Pipeline por archivo:
   1. SHA256 (deduplicación)
