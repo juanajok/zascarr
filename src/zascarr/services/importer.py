@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-import shutil, structlog
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ from zascarr.config import get_settings
 from zascarr.models import File, FileFormat, ImportRun, Series
 from zascarr.core.importer_triage import triage, TriageResult
 from zascarr.core.matcher import SeriesMatcher, MatchStatus
+from zascarr.utils.fs import safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -157,15 +158,16 @@ class Importer:
             )).scalar_one_or_none()
             dest = self._build_dest(series_obj, tr, path)
 
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(path), str(dest))
+        # A3: mover a destino verificado — nunca sobreescribe y no borra el
+        # original hasta que la copia está completa (ver utils/fs.safe_move).
+        final_dest = await safe_move_async(path, dest)
 
         file_rec = File(
             issue_id=str(result.issue_id) if result.issue_id else None,
-            file_path=str(dest),
-            file_name=dest.name,
+            file_path=str(final_dest),
+            file_name=final_dest.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
-            file_size_bytes=dest.stat().st_size,
+            file_size_bytes=final_dest.stat().st_size,
             sha256_hash=tr.sha256,
             source_tag=tr.source_tag,
             width_px=tr.width_px,
@@ -189,8 +191,8 @@ class Importer:
             motivo = "; ".join(result.notes) or "sin match fiable"
             report.unsorted.append(f"{path.name} → _Unsorted ({motivo})")
         else:
-            report.imported.append(f"{path.name} → {dest.relative_to(self._library)}")
-        logger.info("importer.imported", dest=str(dest), status=result.status)
+            report.imported.append(f"{path.name} → {final_dest.relative_to(self._library)}")
+        logger.info("importer.imported", dest=str(final_dest), status=result.status)
 
     async def _persist_run(self, report: ImportReport) -> None:
         run = ImportRun(
@@ -226,17 +228,24 @@ def build_library_path(library: Path, series: Series, issue_number: str | None,
     lo hay) y ReviewService (B2: issue_number lo escribe el coleccionista
     a mano al asignar un archivo de _Unsorted). Sin número, se conserva el
     nombre de archivo original en vez de inventar uno.
+
+    A3: `series.title` y `issue_number` son datos externos (ComicInfo.xml,
+    fuentes de metadatos, escritura manual) y pueden traer "/", ".." o
+    caracteres de control. Se sanitizan para que la ruta canónica NUNCA
+    escape de la biblioteca — el destino siempre es verificable dentro de
+    `library`.
     """
     tradition_folder = TRADITION_MAP.get(
         series.tradition.value if series.tradition else "other", "_Unsorted"
     )
     year_suffix = f" ({series.start_year})" if series.start_year else ""
-    folder = f"{series.title}{year_suffix}"
+    safe_title = sanitize_segment(series.title)
+    folder = f"{safe_title}{year_suffix}"
 
     if issue_number:
-        num = issue_number.zfill(3)
-        filename = f"{series.title} #{num}{suffix}"
+        num = sanitize_segment(str(issue_number)).zfill(3)
+        filename = f"{safe_title} #{num}{suffix}"
     else:
-        filename = fallback_name or f"{series.title}{suffix}"
+        filename = fallback_name or f"{safe_title}{suffix}"
 
     return library / tradition_folder / folder / filename

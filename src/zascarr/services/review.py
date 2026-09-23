@@ -18,7 +18,6 @@ asignación serie+número vía locked_fields (H3, peer review v2).
 """
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from sqlalchemy import select
@@ -27,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.models import File, Issue, MetadataSource, Series
 from zascarr.services.importer import build_library_path
+from zascarr.utils.fs import safe_move_async
 
 
 class ReviewService:
@@ -94,12 +94,13 @@ class ReviewService:
 
         orig = Path(file.file_path)
         dest = build_library_path(self._library, series, issue_number, orig.suffix)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(orig), str(dest))
+        # A3: mover a destino verificado — nunca sobreescribe ni borra el
+        # original hasta que la copia está completa (ver utils/fs.safe_move).
+        final_dest = await safe_move_async(orig, dest)
 
         file.issue_id = issue.id
-        file.file_path = str(dest)
-        file.file_name = dest.name
+        file.file_path = str(final_dest)
+        file.file_name = final_dest.name
         file.metadata_source = MetadataSource.MANUAL.value
         await self.db.flush()
         return file

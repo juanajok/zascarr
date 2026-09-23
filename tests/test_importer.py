@@ -15,8 +15,8 @@ from uuid import uuid4
 
 import pytest
 
-from zascarr.models import File, ImportRun
-from zascarr.services.importer import Importer, ImportReport
+from zascarr.models import ComicTradition, File, ImportRun, Series
+from zascarr.services.importer import Importer, ImportReport, build_library_path
 
 
 def make_cbz(path: Path) -> None:
@@ -122,3 +122,37 @@ class TestPersistRun:
         assert run.details["imported"] == report.imported
         assert run.details["duplicates"] == report.duplicates
         session.flush.assert_awaited_once()
+
+
+class TestBuildLibraryPathSanitizado:
+    """A3: un título con "/" o ".." no puede escapar de la biblioteca."""
+
+    def test_titulo_con_barra_queda_dentro_de_la_biblioteca(self, tmp_path):
+        library = tmp_path / "library"
+        series = Series(
+            id=uuid4(), title="Batman/Superman",
+            tradition=ComicTradition.AMERICAN, start_year=2011,
+        )
+
+        dest = build_library_path(library, series, "1", ".cbz")
+
+        assert dest.is_relative_to(library)
+        assert dest.name == "Batman Superman #001.cbz"
+        assert "Batman Superman (2011)" in str(dest)
+
+    def test_titulo_punto_punto_no_escapa(self, tmp_path):
+        library = tmp_path / "library"
+        series = Series(id=uuid4(), title="..", tradition=ComicTradition.OTHER)
+
+        dest = build_library_path(library, series, None, ".cbz")
+
+        assert dest.is_relative_to(library)
+
+    def test_numero_con_barra_no_crea_subcarpeta(self, tmp_path):
+        library = tmp_path / "library"
+        series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN)
+
+        dest = build_library_path(library, series, "1/2", ".cbz")
+
+        assert dest.is_relative_to(library)
+        assert "/" not in dest.name  # "1/2" ya no es un separador de ruta
