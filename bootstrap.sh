@@ -12,11 +12,12 @@ set -euo pipefail
 
 # ── Raíz derivada desde la ubicación del script (portable) ──
 # El repo vive en SCRIPT_DIR; la carpeta de datos/config (Postgres, Redis,
-# portadas) en el PADRE (TEBEOTECA_ROOT), igual que el layout original
-# (/mnt/nvme/tebeoteca/zascarr → /mnt/nvme/tebeoteca). En una Pi limpia
-# (~/tebeoteca/zascarr) da ~/tebeoteca.
+# portadas) en el PADRE (TEBEOTECA_ROOT). En una Pi limpia (~/tebeoteca/
+# zascarr) da ~/tebeoteca.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEBEOTECA_ROOT="${TEBEOTECA_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# Compose vive en el repo; se invoca con -f explícito para no depender del cwd.
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 B='\033[1m'; G='\033[0;32m'; Y='\033[0;33m'; R='\033[0;31m'; N='\033[0m'
 info()    { echo -e "${B}→${N} $*"; }
@@ -74,11 +75,11 @@ fi
 # ── razonable por defecto (Intro acepta lo que hay entre corchetes). ──
 echo -e "${B}Configuración inicial${N} (pulsa Intro para aceptar el valor por defecto)\n"
 
-read -rp "¿Dónde están tus tebeos ya organizados? [/media/WDElements/Tebeos]: " ANS_LIBRARY || true
-LIBRARY="${ANS_LIBRARY:-/media/WDElements/Tebeos}"
+read -rp "¿Dónde están tus tebeos ya organizados? [/media/library]: " ANS_LIBRARY || true
+LIBRARY="${ANS_LIBRARY:-/media/library}"
 
-read -rp "¿Dónde caen tus descargas (Transmission/aMule)? [/media/DiscoDuro]: " ANS_DOWNLOADS || true
-DOWNLOADS_ROOT="${ANS_DOWNLOADS:-/media/DiscoDuro}"
+read -rp "¿Dónde caen tus descargas (Transmission/aMule)? [/media/data]: " ANS_DOWNLOADS || true
+DOWNLOADS_ROOT="${ANS_DOWNLOADS:-/media/data}"
 
 read -rp "¿Idioma de la interfaz? [es/en, por defecto es]: " ANS_LOCALE || true
 APP_LOCALE="${ANS_LOCALE:-es}"
@@ -141,14 +142,14 @@ success ".env válido"
 
 info "Levantando PostgreSQL y Redis..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
-docker compose --env-file "${ENV_FILE}" up -d postgres redis || die \
-    "No pude levantar PostgreSQL/Redis. Revisa el detalle con: docker compose logs postgres"
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d postgres redis || die \
+    "No pude levantar PostgreSQL/Redis. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs postgres"
 
 info "Esperando a PostgreSQL..."
 MAX=60; ELAPSED=0
-until docker compose exec -T postgres pg_isready -U comics_admin -d tebeoteca -q 2>/dev/null; do
+until docker compose -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U comics_admin -d tebeoteca -q 2>/dev/null; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: docker compose logs postgres"
+    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
     echo -n "."; sleep 2
 done
 echo ""; success "PostgreSQL listo"
@@ -169,19 +170,19 @@ python3 -c "import alembic" 2>/dev/null || pip install --break-system-packages -
 # "python3 -m alembic" resuelve esa carpeta local en vez de la librería
 # real y falla con "cannot be directly executed" (ver Makefile).
 alembic upgrade head || die \
-    "Las migraciones de la base de datos fallaron. Revisa con: docker compose logs postgres"
+    "Las migraciones de la base de datos fallaron. Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
 success "Migraciones aplicadas"
 
 info "Levantando ZascArr..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
-docker compose --env-file "${ENV_FILE}" up -d zascarr || die \
-    "No pude arrancar ZascArr. Revisa el detalle con: docker compose logs zascarr"
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d zascarr || die \
+    "No pude arrancar ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck..."
 MAX=30; ELAPSED=0
 until curl -sf http://127.0.0.1:8000/api/health >/dev/null 2>&1; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  docker compose logs zascarr" && break
+    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  docker compose -f ${COMPOSE_FILE} logs zascarr" && break
     echo -n "."; sleep 2
 done
 echo ""
@@ -199,7 +200,7 @@ echo "  Kavita:           http://127.0.0.1:5000  (si está instalado)"
 echo "  Prowlarr:         http://127.0.0.1:9696  (si está instalado)"
 echo ""
 echo "  Logs en tiempo real:"
-echo "    docker compose logs -f zascarr"
+echo "    docker compose -f ${COMPOSE_FILE} logs -f zascarr"
 echo ""
 curl -sf http://127.0.0.1:5000 >/dev/null 2>&1 || \
     warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${SCRIPT_DIR}/scripts/kavita.sh install"

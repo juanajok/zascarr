@@ -9,7 +9,9 @@
             hx-post="/ui/wishlist/anadir"
             hx-vals='{"series_id": "{{ s.id }}"}'
             hx-swap="none"
-            hx-on::after-request="setTimeout(() => window.location.reload(), 400)">
+            hx-disabled-elt="this"
+            hx-on::before-request="this.textContent='Añadiendo…'"
+            hx-on::after-request="this.textContent='Añadido'; setTimeout(() => window.location.reload(), 400)">
       Añadir a deseados
     </button>
   </li>
