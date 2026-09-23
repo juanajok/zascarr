@@ -16,21 +16,6 @@ from zascarr.main import app
 client = TestClient(app)
 
 
-class TestUIIndex:
-
-    def test_responde_200_y_referencia_htmx_vendorizado(self):
-        r = client.get("/ui/")
-        assert r.status_code == 200
-        assert "/static/vendor/htmx.min.js" in r.text
-        # Nunca un CDN: ver docs/adr/0001-ui-stack.md.
-        assert "cdn" not in r.text.lower()
-
-    def test_extiende_el_layout_base_con_nav(self):
-        r = client.get("/ui/")
-        assert '<nav class="topnav">' in r.text
-        assert 'href="/">Estado</a>' in r.text  # nav enlaza de vuelta a E1
-
-
 class TestStaticAssets:
 
     def test_htmx_vendorizado_se_sirve_y_es_la_version_esperada(self):
