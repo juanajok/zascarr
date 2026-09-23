@@ -75,23 +75,63 @@ español.
 
 ## Requisitos
 
-- **Raspberry Pi 4/5** (o cualquier Linux) con **Docker** y **Docker Compose**.
+- **Raspberry Pi 4/5** (o cualquier Linux) con **Raspberry Pi OS (64-bit)** y
+  conexión a internet. Docker se instala en el paso 1; no necesitas saber qué es.
 - Para desarrollo: **Python 3.11+**.
 
 Opcional, fuera de Docker (baremetal): Transmission, aMule, Prowlarr y Kavita.
 
 ## Instalación
 
+Pensada para **"El Coleccionista"**: no hace falta entender qué es Docker ni
+una terminal. Son tres pasos de copiar y pegar, y el instalador solo te hace 3
+preguntas.
+
+### Paso 1 — Instala Docker (una sola vez)
+
 ```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker "$USER"
+```
+
+Cierra la sesión y vuelve a entrar (o reinicia) para que el grupo `docker`
+haga efecto.
+
+### Paso 2 — Descarga ZascArr
+
+```bash
+mkdir -p ~/tebeoteca && cd ~/tebeoteca
 git clone https://github.com/juanajok/zascarr.git
+```
+
+### Paso 3 — Ejecuta el instalador
+
+```bash
 sudo bash zascarr/bootstrap.sh
 ```
 
-`bootstrap.sh` hace **3 preguntas** (dónde están tus tebeos, dónde caen las
-descargas, idioma) y levanta PostgreSQL, Redis y ZascArr por ti. Al terminar,
-todo está en `http://127.0.0.1:8000`.
+`bootstrap.sh` te hace **3 preguntas** (pulsa `Intro` para aceptar lo que va
+entre corchetes):
 
-Instalación manual con Docker Compose:
+1. ¿Dónde están tus tebeos ya organizados?
+2. ¿Dónde caen tus descargas (Transmission/aMule)?
+3. ¿Idioma de la interfaz? (`es`/`en`)
+
+Al terminar, ZascArr ya está funcionando. Ábrelo en:
+
+**http://127.0.0.1:8000** — el panel de estado, en español.
+
+Puedes volver a ejecutar `sudo bash zascarr/bootstrap.sh` cuando quieras: es
+idempotente (no duplica nada) y nunca toca los archivos de tu colección.
+
+### Qué hace el instalador
+
+- Crea la estructura de carpetas de la biblioteca (`Comics`, `Manga`, `BD`,
+  `Tebeos`, …) **sin tocar tus archivos**.
+- Levanta PostgreSQL, Redis y ZascArr como contenedores Docker.
+- Aplica las migraciones de la base de datos y comprueba que todo está sano.
+
+### Instalación manual (para quien prefiera Docker Compose)
 
 ```bash
 cp .env.example .env        # edita .env (contraseña de BD, claves opcionales)
