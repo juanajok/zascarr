@@ -58,6 +58,17 @@ instalar_docker_si_falta() {
     success "Docker instalado"
 }
 
+# Bug real: todo git de este script corre como root (EUID=0 exigido más
+# abajo), pero el repo queda con propietario "media" (ver
+# asegurar_usuario_servicio) — git rechaza por seguridad tocar un repo de
+# otro propietario ("dubious ownership") salvo que se autorice
+# explícitamente. Como aquí SÍ somos root a propósito y de forma
+# consciente (instalador con sudo), se autoriza sin más: es lo mismo que
+# ya hacen scripts/update.sh y scripts/rollback.sh vía _comun.sh.
+autorizar_git_en() {
+    git config --global --add safe.directory "$1" 2>/dev/null || true
+}
+
 # Usuario/grupo de SERVICIO (no el usuario personal que ejecuta sudo):
 # mismo patrón que ARR_USER/ARR_GROUP de otros instaladores *arr (Sonarr,
 # Radarr, Prowlarr...) — por defecto "media", para que ZascArr conviva con
@@ -101,7 +112,26 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
     mkdir -p "${ZASCARR_ROOT}" || die "No puedo crear ${ZASCARR_ROOT}."
 
     if [[ -d "${ZASCARR_ROOT}/zascarr/.git" ]]; then
-        info "Ya existe un clon en ${ZASCARR_ROOT}/zascarr, lo reutilizo."
+        # Bug real: reutilizar el clon SIN actualizarlo deja a cualquiera que
+        # reintente el instalador (el caso típico: falló, se corrige en
+        # GitHub, se reintenta) pegado para siempre a la primera versión que
+        # se descargó — viendo mensajes de error ya corregidos, sin el
+        # arreglo aplicado. Se actualiza con fetch + ff-only (mismo patrón
+        # seguro que update.sh); si el árbol está sucio o ha divergido, se
+        # avisa y se sigue con lo que haya en vez de abortar la instalación.
+        info "Ya existe un clon en ${ZASCARR_ROOT}/zascarr, lo actualizo..."
+        autorizar_git_en "${ZASCARR_ROOT}/zascarr"
+        if git -C "${ZASCARR_ROOT}/zascarr" diff --quiet 2>/dev/null && \
+           git -C "${ZASCARR_ROOT}/zascarr" diff --cached --quiet 2>/dev/null; then
+            if git -C "${ZASCARR_ROOT}/zascarr" fetch -q origin main 2>/dev/null && \
+               git -C "${ZASCARR_ROOT}/zascarr" merge -q --ff-only origin/main 2>/dev/null; then
+                success "Clon actualizado a la última versión."
+            else
+                warn "No pude actualizar el clon existente (sin red, o la rama local ha divergido). Sigo con lo que hay."
+            fi
+        else
+            warn "El clon en ${ZASCARR_ROOT}/zascarr tiene cambios locales sin guardar; no lo toco. Sigo con lo que hay."
+        fi
     else
         info "Descargando ZascArr..."
         git clone -q https://github.com/juanajok/zascarr.git "${ZASCARR_ROOT}/zascarr" || die \
@@ -125,6 +155,10 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
     # verdad en un subshell aparte (para no tocar los descriptores de este
     # proceso) antes de decidir; el subshell absorbe el error de verdad,
     # a diferencia de intentarlo directamente en este shell.
+    # Marca para que la fase 2 no intente autoactualizarse OTRA VEZ (ya se
+    # hizo aquí arriba, y hacerlo dos veces reemplazaría el propio fichero
+    # bootstrap.sh mientras se está ejecutando).
+    export _ZASCARR_YA_ACTUALIZADO=1
     if (exec < /dev/tty) 2>/dev/null; then
         exec bash "${ZASCARR_ROOT}/zascarr/bootstrap.sh" "$@" < /dev/tty
     else
@@ -148,6 +182,33 @@ COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 [[ "${EUID}" -eq 0 ]] || die \
     "Este instalador necesita permisos de administrador. Ejecútalo así:
   sudo bash ${SCRIPT_DIR}/bootstrap.sh"
+
+# Bug real: quien reinvoca este script DIRECTAMENTE ("sudo bash
+# .../bootstrap.sh", el camino documentado para reconfigurar o reintentar,
+# sin pasar por "curl | sudo bash") nunca pasa por la rama de instalación
+# en frío de más arriba, así que se quedaba pegado para siempre a la
+# versión que tenía en disco — viendo errores ya corregidos en GitHub sin
+# el arreglo aplicado. Se autoactualiza aquí también, salvo que ya se haya
+# hecho justo antes (viniendo de esa rama, para no tocar el propio fichero
+# mientras se está ejecutando: en su lugar se relanza limpio después).
+if [[ -z "${_ZASCARR_YA_ACTUALIZADO:-}" ]]; then
+    autorizar_git_en "${SCRIPT_DIR}"
+    if git -C "${SCRIPT_DIR}" diff --quiet 2>/dev/null && \
+       git -C "${SCRIPT_DIR}" diff --cached --quiet 2>/dev/null; then
+        if git -C "${SCRIPT_DIR}" fetch -q origin main 2>/dev/null; then
+            ANTES="$(git -C "${SCRIPT_DIR}" rev-parse HEAD 2>/dev/null || true)"
+            if git -C "${SCRIPT_DIR}" merge -q --ff-only origin/main 2>/dev/null; then
+                DESPUES="$(git -C "${SCRIPT_DIR}" rev-parse HEAD 2>/dev/null || true)"
+                if [[ -n "${DESPUES}" && "${ANTES}" != "${DESPUES}" ]]; then
+                    success "Código actualizado (${ANTES:0:7} → ${DESPUES:0:7}). Reiniciando con la nueva versión..."
+                    export _ZASCARR_YA_ACTUALIZADO=1
+                    exec bash "${SCRIPT_DIR}/bootstrap.sh" "$@"
+                fi
+            fi
+        fi
+    fi
+    export _ZASCARR_YA_ACTUALIZADO=1
+fi
 
 # Actualiza (o añade si no existe) una variable en .env. Idempotente:
 # volver a ejecutar el bootstrap no duplica líneas.

@@ -3,6 +3,30 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.3] — 2026-09-24
+
+### Corregido
+
+- **Reinvocar el instalador (`curl | sudo bash` de nuevo, o `sudo bash
+  bootstrap.sh` directo sobre el clon ya existente) nunca traía las
+  correcciones publicadas** — el script reutilizaba el clon en disco tal
+  cual, sin actualizarlo, así que cualquiera que reintentara tras un fallo
+  se quedaba viendo el mismo error ya corregido en GitHub, para siempre.
+  Confirmado en vivo por un usuario: tres reintentos seguidos del bug de
+  `typing_extensions` (ya corregido en v1.2.2) porque su clon en
+  `/opt/zascarr/zascarr` nunca se actualizaba. Ahora el instalador se
+  autoactualiza (fetch + merge `--ff-only`, el mismo patrón seguro que
+  `scripts/update.sh`) tanto si se reinvoca desde cero como si se
+  reejecuta el script ya clonado directamente — si hay una versión nueva,
+  se reinicia solo con ella.
+- **Esa autoactualización habría fallado en silencio por "dubious
+  ownership"**: los `git` de `bootstrap.sh` corren como `root`, pero el
+  repo pertenece a `media` (v1.2.0) — git rechaza tocar un repo de otro
+  propietario salvo que se autorice explícitamente
+  (`git config --global --add safe.directory`), igual que ya resolvían
+  `scripts/update.sh`/`rollback.sh`. Corregido en el mismo commit que la
+  autoactualización, antes de que llegara a publicarse sin esto.
+
 ## [1.2.2] — 2026-09-24
 
 ### Corregido

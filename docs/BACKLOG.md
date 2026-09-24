@@ -556,6 +556,32 @@ tres problemas reales:
   PATH, no el import), que no sufre el shadowing. Reproducido y verificado
   el fix contra el mismo sandbox que lo encontró.
 
+## Deuda técnica registrada (el instalador no se autoactualizaba, 2026-09-24)
+
+Confirmado en vivo por el mismo usuario: tras corregir el bug de
+`typing_extensions` (v1.2.2), reintentó la instalación **tres veces**
+(`curl | sudo bash` de nuevo, y `sudo bash bootstrap.sh` directo sobre el
+clon) y siguió viendo el error YA CORREGIDO, siempre idéntico. Causa: la
+rama "ya existe un clon, lo reutilizo" nunca actualizaba nada — cualquier
+reintento se quedaba pegado a la primera versión descargada, para
+siempre, aunque se publicaran correcciones en GitHub.
+
+**Fix:** `bootstrap.sh` se autoactualiza ahora (fetch + `merge --ff-only`,
+mismo patrón que `scripts/update.sh`) en los dos puntos de entrada: la
+rama de instalación en frío (clon ya existente) y la reinvocación directa
+del script ya clonado — con una marca de entorno
+(`_ZASCARR_YA_ACTUALIZADO`) para no intentarlo dos veces ni reemplazar el
+propio fichero mientras se ejecuta (se relanza limpio si hubo cambios).
+
+**Y ese mismo fix habría fallado en silencio sin un segundo hallazgo**: el
+usuario probó `sudo git pull` a mano primero y le dio `fatal: detected
+dubious ownership in repository` — los `git` de `bootstrap.sh` corren
+como `root`, pero el repo es de `media` desde v1.2.0, y git rechaza
+tocarlo sin autorización explícita. Añadido `git config --global --add
+safe.directory` antes de cualquier operación git sobre el repo, mismo
+patrón que `scripts/_comun.sh::comprobar_git_utilizable()` ya resolvía
+para `update.sh`/`rollback.sh`. Publicado como v1.2.3.
+
 ## Deuda técnica registrada (cwd inválido heredado del shell, 2026-09-24)
 
 Tercer bug real reportado por el mismo usuario en la misma Pi: al hacer
