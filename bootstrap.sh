@@ -101,7 +101,13 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
     # tragaría esos restos como si fueran la respuesta del usuario (visto
     # en vivo: el idioma leía un comentario del propio script y el sed
     # posterior reventaba). Reconectamos stdin a la terminal real antes.
-    if [[ -r /dev/tty ]]; then
+    # "-r /dev/tty" no basta: el nodo existe y es legible por permisos
+    # aunque no haya terminal controladora detrás (p.ej. "docker exec" sin
+    # -t), y ahí la apertura real falla con ENXIO. Se intenta abrir de
+    # verdad en un subshell aparte (para no tocar los descriptores de este
+    # proceso) antes de decidir; el subshell absorbe el error de verdad,
+    # a diferencia de intentarlo directamente en este shell.
+    if (exec < /dev/tty) 2>/dev/null; then
         exec bash "${ZASCARR_ROOT}/zascarr/bootstrap.sh" "$@" < /dev/tty
     else
         warn "Sin terminal para las preguntas interactivas: usaré los valores por defecto."
