@@ -3,7 +3,7 @@
 Revision ID: 0008
 Revises: 0007
 
-Sin user_id ni FK a ninguna tabla de usuarios: SecuenciArr es una
+Sin user_id ni FK a ninguna tabla de usuarios: ZascArr es una
 herramienta de un solo operador, sin autenticación (ver docs/BACKLOG.md,
 Épica A). "¿Se ha aceptado el aviso legal?" es "¿existe una fila con
 legal_version == la versión actual?" — un estado único del sistema, no

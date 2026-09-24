@@ -20,6 +20,7 @@ Semántica (decisión de diseño documentada en ADR del peer review):
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -32,6 +33,15 @@ from zascarr.config import get_settings
 from zascarr.database import get_db
 
 router = APIRouter(tags=["health"])
+
+# Transmission/aMule tienen su propio timeout interno de hasta 30s cada uno;
+# si ambos están caídos sin devolver RST inmediato (VPN aún no arriba, firewall
+# con DROP en vez de REJECT — el caso normal al arrancar una Pi), un health
+# check secuencial tardaría hasta ~60s y Docker (HEALTHCHECK --timeout=10s)
+# marcaría el contenedor unhealthy aunque la app esté perfectamente sana.
+# "Healthcheck observacional, no bloqueante" (CLAUDE.md §4): se acotan y se
+# lanzan en paralelo para que /api/health responda siempre en este margen.
+_EXTERNAL_CHECK_TIMEOUT_S = 3.0
 
 # Si el fichero de estado no se refresca en este margen, se considera
 # "stale": el script del host probablemente ha muerto sin avisar.
@@ -65,6 +75,25 @@ def _check_vpn() -> tuple[str, str]:
                        "— las descargas torrent irán en claro")
 
 
+async def _check_transmission() -> bool:
+    from zascarr.services.transmission import TransmissionClient
+    stats = await TransmissionClient().get_session_stats()
+    return bool(stats)
+
+
+async def _check_amule() -> bool:
+    from zascarr.services.amule import AMuleClient
+    status = await AMuleClient().get_status()
+    return status.get("reachable", False)
+
+
+async def _check_reachable(coro) -> bool:
+    try:
+        return await asyncio.wait_for(coro, timeout=_EXTERNAL_CHECK_TIMEOUT_S)
+    except Exception:
+        return False
+
+
 @router.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
     settings = get_settings()
@@ -76,20 +105,13 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     except Exception:
         db_ok = False
 
-    # ── Servicios baremetal (no críticos para health, pero informativos) ──
-    try:
-        from zascarr.services.transmission import TransmissionClient
-        stats = await TransmissionClient().get_session_stats()
-        transmission_ok = bool(stats)
-    except Exception:
-        transmission_ok = False
-
-    try:
-        from zascarr.services.amule import AMuleClient
-        status = await AMuleClient().get_status()
-        amule_ok = status.get("reachable", False)
-    except Exception:
-        amule_ok = False
+    # ── Servicios baremetal (no críticos para health, pero informativos).
+    # En paralelo y con timeout corto: nunca deben convertir un GET
+    # /api/health en una espera de hasta 60s (2 × 30s secuenciales). ──
+    transmission_ok, amule_ok = await asyncio.gather(
+        _check_reachable(_check_transmission()),
+        _check_reachable(_check_amule()),
+    )
 
     # ── VPN (vía fichero del host; nunca bloqueante) ──
     vpn_status, vpn_detail = _check_vpn()

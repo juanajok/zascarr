@@ -404,6 +404,79 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   real, y `redis-cli FLUSHDB`. Su fase ya está documentada en
   `docs/TESTING_E2E.md` (§16.1-16.8); falta ejecutarla contra el sandbox real.
 
+## Deuda técnica registrada (ejecución real de TESTING_E2E.md/TESTING_NFR_Zascarr.md, 2026-09-24)
+
+Primera ejecución real de ambos planes de testing contra un stack Docker
+aislado (clon limpio de GitHub, sin tocar el entorno local). Encontró tres
+bugs P0/P1 que bloqueaban el release 1.0 — ninguno visible en la suite
+unitaria porque ninguno de los tres tiene cobertura de integración contra
+Docker/Postgres reales. Los tres están **corregidos y verificados** en este
+commit:
+
+- **`Dockerfile` no compilaba nunca (P0, corregido).** El stage `builder`
+  copiaba solo `pyproject.toml` y ejecutaba `pip install .` antes de copiar
+  `src/`; como el paquete usa layout `src` (`where = ["src"]`), `setuptools`
+  fallaba en `egg_info` el 100% de las veces, en cualquier máquina. Fix:
+  `COPY src ./src` antes del `pip install`. Verificado con `docker compose
+  build --no-cache`.
+- **El importador no importaba nada con el `docker-compose.yml` real (P0,
+  corregido).** Dos bugs independientes que se combinaban:
+  1. `utils/fs.py::_same_filesystem()` compara `st_dev`, pero dos bind
+     mounts distintos del mismo filesystem host reportan el mismo `st_dev`
+     dentro del contenedor aunque el kernel trate cruzar entre ellos como
+     `rename()` entre mounts distintos — `os.replace()` fallaba con
+     `OSError: Invalid cross-device link` (EXDEV) en vez de caer al camino
+     de copia-y-verifica que sí funciona. Fix: capturar `EXDEV` y caer al
+     camino de discos distintos existente, sin duplicar lógica.
+  2. `HOST_DOWNLOADS_DIR`/`HOST_AMULE_INCOMING_DIR` estaban montados `:ro`
+     en `docker-compose.yml`, pero `safe_move` necesita borrar el origen
+     tras copiar (`src.unlink()`, A3) — con solo lectura eso también habría
+     fallado. Fix: quitado el `:ro` de ambos mounts (el importador SÍ
+     necesita escribir ahí; era un despiste, no una decisión deliberada
+     documentada en ningún ADR).
+  Verificado con el fixture completo del runbook (dedupe, saneado de rutas,
+  `_Unsorted`, asignación manual con `locked_fields`) tras el fix.
+- **La restauración de un backup fallaba siempre, en cualquier dump (P0/P1,
+  corregido).** No era un problema de orden de volcado (hipótesis inicial
+  descartada tras reproducir el caso aislado): `pg_dump` antepone `SELECT
+  pg_catalog.set_config('search_path', '', false)` al restore, y la
+  migración 0006 definió `f_title_norm()` llamando a `f_unaccent($1)` SIN
+  cualificar el esquema. Con `search_path` vacío esa llamada no resuelve, y
+  `CREATE FUNCTION`/su inlining posterior fallan con "function
+  f_unaccent(text) does not exist" — tumbando la tabla `series` entera y
+  todo lo que depende de ella. `scripts/rollback.sh` (usa `-v
+  ON_ERROR_STOP=1`) habría abortado en el primer intento de cualquier
+  restore real. Fix: migración `0009_fix_title_norm_search_path` (0006 ya
+  aplicada, no se reescribe) que re-declara la función con `CREATE OR
+  REPLACE` usando `public.f_unaccent($1)`. Verificado extremo a extremo:
+  migrar 0001→0009, sembrar datos, `pg_dump`, `dropdb`+`createdb`, restore
+  con `psql -v ON_ERROR_STOP=1` (igual que `rollback.sh`) → `exit 0`, datos
+  y columna generada `title_norm` intactos.
+- **`GET /api/health` tardaba 60-90s cuando Transmission/aMule no responden
+  rápido (P1, corregido).** `TransmissionClient`/`AMuleClient` se llamaban
+  secuencialmente, cada uno con `timeout=30.0`; si ninguno responde con RST
+  inmediato (servicio parado, VPN aún no arriba, firewall con DROP en vez
+  de REJECT — nada raro en una Pi real), cada `/api/health` tardaba hasta
+  ~60s. El `HEALTHCHECK` del `Dockerfile` tiene `--timeout=10s`, así que
+  Docker marcaría el contenedor `unhealthy` de forma casi permanente,
+  justo lo contrario de "healthcheck observacional, no bloqueante"
+  (CLAUDE.md §4). Fix: ambas comprobaciones ahora corren en paralelo
+  (`asyncio.gather`) con `asyncio.wait_for(timeout=3.0)` cada una — el
+  endpoint responde siempre en ese margen, reachable o no.
+- **Hallazgo menor sin corregir:** el enricher llama a Comic Vine con
+  `api_key` vacía (sin configurar) y recibe 401 en cada ciclo — no rompe
+  nada, pero es ruido evitable en los logs. Queda como mejora futura, no
+  bloquea release.
+- **No ejecutado por tiempo/recursos** (dejar constancia explícita, no dar
+  por probado): carga sintética a escala (NFR-07, 1000 series), 20 ciclos
+  de restart (NFR-09), concurrencia/doble-procesamiento (NFR-10), abuso con
+  100 peticiones simultáneas (NFR-14), escaneo de dependencias/imagen con
+  `trivy`/`pip-audit` (NFR-17, no instalados en el sandbox → `NOT RUN`,
+  nunca `PASS`, tal como exige el propio documento), portabilidad ARM64
+  (NFR-19, sin runner ARM disponible), y la fase 16 de `TESTING_E2E.md`
+  (`update.sh`/`rollback.sh` destructivo contra Docker/Postgres reales —
+  sigue pendiente, ver entrada de arriba sobre `rollback.sh`).
+
 ## Benchmarking competitivo (2026-09-21)
 
 Comparado contra tres proyectos del mismo espacio para no reinventar ni
