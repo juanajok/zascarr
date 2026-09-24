@@ -6,7 +6,6 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -150,8 +149,9 @@ def create_app() -> FastAPI:
         openapi_url="/api/openapi.json",
         lifespan=lifespan,
     )
-    app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                       allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+    # Sin CORS: la UI (Jinja2/HTMX) y la API viven en el mismo origen, así que
+    # no hay peticiones cross-origin legítimas. Un allow_origins=["*"] junto a
+    # allow_credentials=True es inválido e inseguro según el spec CORS.
 
     from zascarr.api.health import router as health_router
     from zascarr.api.legal import router as legal_router
