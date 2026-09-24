@@ -61,7 +61,9 @@ _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 
 # DoS: un ComicInfo.xml real mide pocos KB. Rechazar los enormes ANTES de
 # descomprimirlos en memoria (una ZIP bomb no debe reventar una Pi).
-MAX_COMICINFO_BYTES = 1 * 1024 * 1024  # 1 MiB
+MAX_COMICINFO_BYTES = 1 * 1024 * 1024   # 1 MiB
+MAX_ZIP_ENTRIES = 1000                  # entradas máximas por CBZ
+MAX_ZIP_UNCOMPRESSED = 500 * 1024 * 1024  # descompresión total máxima (500 MiB)
 
 
 def guess_source_tag(filename: str) -> str | None:
@@ -227,6 +229,15 @@ def triage(path: Path) -> TriageResult:
 
     with zf:
         names = zf.namelist()
+
+        # DoS (ZIP bomb): rechazar antes de descomprimir nada.
+        if len(names) > MAX_ZIP_ENTRIES:
+            result.warnings.append("ZIP con demasiadas entradas (ignorado)")
+            return result
+        total_uncompressed = sum(i.file_size for i in zf.infolist())
+        if total_uncompressed > MAX_ZIP_UNCOMPRESSED:
+            result.warnings.append("ZIP demasiado grande descomprimido (ignorado)")
+            return result
 
         # ComicInfo.xml: convención: en la raíz del zip.
         entry = next(
