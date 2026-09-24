@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Estado — ZascArr{% endblock %}
+{% block content %}
+<h1>Estado del sistema</h1>
+<p class="subtitle">Semáforos en vez de JSON crudo — se actualiza solo cada 10s.</p>
+
+<div class="pending-card estado-summary">
+  <div id="summary-dot" class="estado-dot estado-neutral"></div>
+  <div>
+    <div id="summary-label" class="estado-summary-label">Comprobando…</div>
+    <div id="summary-detail" class="estado-summary-detail"></div>
+  </div>
+</div>
+
+<div id="warnings" class="caption estado-warnings">
+  <div class="estado-warnings-title">Avisos</div>
+  <ul id="warnings-list"></ul>
+</div>
+
+<div class="pending-card estado-checks" id="checks"></div>
+
+<p class="empty" id="footer">—</p>
+
+<script>
+  const POLL_INTERVAL_MS = 10000;
+
+  const CHECK_LABELS = {
+    database: "Base de datos",
+    transmission: "Transmission",
+    amule: "aMule",
+    vpn: "VPN",
+  };
+
+  const CHECK_TEXT = {
+    database:     { ok: "Conectada",  error: "Sin conexión" },
+    transmission: { ok: "Conectado",  unreachable: "No disponible" },
+    amule:        { ok: "Conectado",  unreachable: "No disponible" },
+    vpn:          { ok: "Activa", warning: "Sin proteger", unknown: "Sin datos" },
+  };
+
+  const CHECK_LEVEL = {
+    ok: "ok", error: "bad", unreachable: "bad",
+    warning: "warn", unknown: "warn",
+  };
+
+  const SUMMARY_META = {
+    healthy:      { level: "ok",  label: "Todo bien" },
+    degraded:     { level: "warn", label: "Atención" },
+    unhealthy:    { level: "bad",  label: "Error" },
+    unreachable:  { level: "neutral", label: "Sin conexión con el servidor" },
+  };
+
+  function renderHealth(data) {
+    const meta = SUMMARY_META[data && data.status] || SUMMARY_META.unreachable;
+    document.getElementById("summary-dot").className = "estado-dot estado-" + meta.level;
+    document.getElementById("summary-label").textContent = meta.label;
+
+    const checksEl = document.getElementById("checks");
+    checksEl.innerHTML = "";
+    const checks = (data && data.checks) || {};
+    const detailParts = [];
+
+    for (const key of Object.keys(CHECK_LABELS)) {
+      const raw = checks[key];
+      const level = CHECK_LEVEL[raw] || "neutral";
+      const text = (CHECK_TEXT[key] && CHECK_TEXT[key][raw]) || "Sin datos";
+      if (level !== "ok") detailParts.push(CHECK_LABELS[key]);
+
+      const row = document.createElement("div");
+      row.className = "estado-check-row";
+      row.innerHTML =
+        '<div class="estado-dot estado-dot-sm estado-' + level + '"></div>' +
+        '<div class="estado-check-name">' + CHECK_LABELS[key] + "</div>" +
+        '<div class="estado-check-status">' + text + "</div>";
+      checksEl.appendChild(row);
+    }
+
+    document.getElementById("summary-detail").textContent =
+      meta.level === "ok" ? "" : detailParts.join(", ");
+
+    const warnings = (data && data.warnings) || {};
+    const warningMessages = Object.values(warnings);
+    const warningsEl = document.getElementById("warnings");
+    const warningsList = document.getElementById("warnings-list");
+    warningsList.innerHTML = "";
+    if (warningMessages.length) {
+      warningMessages.forEach((msg) => {
+        const li = document.createElement("li");
+        li.textContent = msg;
+        warningsList.appendChild(li);
+      });
+      warningsEl.classList.add("visible");
+    } else {
+      warningsEl.classList.remove("visible");
+    }
+
+    const footer = document.getElementById("footer");
+    const version = data && data.version ? "v" + data.version + " · " : "";
+    footer.textContent = version + "Última comprobación: " + new Date().toLocaleTimeString("es-ES");
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch("/api/health", { cache: "no-store" });
+      const data = await res.json();
+      renderHealth(data);
+    } catch (err) {
+      renderHealth({ status: "unreachable" });
+    }
+  }
+
+  poll();
+  setInterval(poll, POLL_INTERVAL_MS);
+</script>
+{% endblock %}
