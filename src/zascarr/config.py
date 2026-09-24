@@ -15,8 +15,11 @@ class Settings(BaseSettings):
     )
 
     # ── Base de datos ──────────────────────────────────────────────
+    # Fallback deliberadamente inválido: en producción el compose inyecta
+    # DATABASE_URL y en local el .env. Si se llega a usar este valor, la
+    # conexión falla de forma obvia en vez de usar una credencial "de ejemplo".
     database_url: str = Field(
-        default="postgresql+asyncpg://comics_admin:changeme@127.0.0.1:5432/tebeoteca"
+        default="postgresql+asyncpg://INVALID:INVALID@127.0.0.1:5432/INVALID"
     )
     db_pool_size: int = 5
     db_max_overflow: int = 2

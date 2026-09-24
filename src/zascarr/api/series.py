@@ -2,15 +2,50 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from zascarr.database import get_db
-from zascarr.models import Issue, Series
+from zascarr.models import ComicTradition, Issue, Series
 from zascarr.services.series import SeriesService
 
 router = APIRouter(prefix="/series", tags=["series"])
+
+
+# ── Schemas de escritura (M1: mass assignment prohibido) ───────────────────
+# Solo se permite escribir los campos de cara al coleccionista. Los campos
+# internos o calculados (id, title_norm, comic_vine_id/anilist_id/
+# tebeosfera_slug, metadata_*, locked_fields, enrichment_attempted_at,
+# created_at/updated_at) NO están en el schema y `extra="forbid"` los rechaza
+# con 422 en vez de inyectarlos en el ORM.
+class SeriesCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(..., min_length=1, max_length=500)
+    sort_title: str | None = Field(default=None, max_length=500)
+    tradition: ComicTradition = ComicTradition.AMERICAN
+    start_year: int | None = Field(default=None, ge=1800, le=2100)
+    end_year: int | None = Field(default=None, ge=1800, le=2100)
+    total_issues: int | None = Field(default=None, ge=0)
+    status: str = Field(default="ongoing", max_length=50)
+    description: str | None = None
+    cover_url: str | None = Field(default=None, max_length=500)
+
+
+class SeriesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    sort_title: str | None = Field(default=None, max_length=500)
+    tradition: ComicTradition | None = None
+    start_year: int | None = Field(default=None, ge=1800, le=2100)
+    end_year: int | None = Field(default=None, ge=1800, le=2100)
+    total_issues: int | None = Field(default=None, ge=0)
+    status: str | None = Field(default=None, max_length=50)
+    description: str | None = None
+    cover_url: str | None = Field(default=None, max_length=500)
 
 
 @router.get("")
@@ -44,8 +79,8 @@ async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-async def create_series(data: dict, db: AsyncSession = Depends(get_db)):
-    series = Series(**data)
+async def create_series(data: SeriesCreate, db: AsyncSession = Depends(get_db)):
+    series = Series(**data.model_dump())
     db.add(series)
     await db.flush()
     await db.refresh(series)
@@ -53,11 +88,11 @@ async def create_series(data: dict, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{series_id}")
-async def update_series(series_id: UUID, data: dict, db: AsyncSession = Depends(get_db)):
+async def update_series(series_id: UUID, data: SeriesUpdate, db: AsyncSession = Depends(get_db)):
     series = (await db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
     if not series:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
-    for field, value in data.items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(series, field, value)
     await db.flush()
     return series

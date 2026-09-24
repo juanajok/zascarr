@@ -13,11 +13,18 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-db_url = os.environ.get("DATABASE_URL", "")
-if db_url:
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    config.set_main_option("sqlalchemy.url", db_url)
+# Exigir DATABASE_URL: el valor del .ini es un placeholder inválido a propósito.
+# Así una migración accidental sin entorno falla de forma clara, en vez de
+# conectar con una credencial de ejemplo (el bootstrap y el compose ya la fijan).
+db_url = os.environ.get("DATABASE_URL")
+if not db_url:
+    raise RuntimeError(
+        "DATABASE_URL es obligatoria para ejecutar las migraciones. "
+        "Fíjala antes de ejecutar `alembic` (bootstrap.sh y docker compose ya lo hacen)."
+    )
+if db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+config.set_main_option("sqlalchemy.url", db_url)
 
 
 def run_migrations_offline() -> None:
