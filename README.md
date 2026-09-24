@@ -148,6 +148,74 @@ make migrate                # aplica las migraciones de Alembic
 | API (OpenAPI/Swagger) | `http://127.0.0.1:8000/api/docs` |
 | Comandos | `make help` (`logs`, `migrate`, `health`, `backup`, …) |
 
+## Actualizar ZascArr
+
+Cuando haya una versión nueva, ejecuta el script de actualización desde donde
+instalaste ZascArr:
+
+```bash
+cd ~/tebeoteca/zascarr     # o la carpeta donde clonaste el repo
+sudo bash scripts/update.sh
+```
+
+El script hace, **en este orden** (el orden importa):
+
+1. Comprueba Docker, Compose y git, y que el árbol del repo esté limpio.
+2. **Copia de seguridad de PostgreSQL** (obligatoria, atómica y con retención).
+3. Actualiza el código con `git pull --ff-only` (si la rama ha divergido, aborta sin tocar la BD).
+4. Reconstruye la imagen Docker (las dependencias viven en la imagen, no en el host).
+5. Aplica las migraciones **dentro del contenedor** (`alembic upgrade head`).
+6. Reinicia ZascArr y verifica el healthcheck en `http://127.0.0.1:8000`.
+
+Si algo falla antes del paso 6, **la base de datos queda con el backup previo**,
+y el script imprime la ruta del backup y la orden exacta para volver al commit
+anterior. Mientras la actualización está en marcha el script mantiene una
+referencia temporal (`refs/zascarr/update/<fecha>`) apuntando a ese commit, y la
+borra al terminar bien. Si el script muere a mitad, esa referencia sigue ahí y sus
+mensajes de error ya incluyen el `git reset --hard` exacto que hay que ejecutar.
+
+> **Tiempo estimado:** 2-5 minutos. En una Raspberry Pi el paso 4 (rebuild de la
+> imagen) puede tardar más, porque compila dependencias nativas.
+
+### Si algo va mal (rollback)
+
+Un rollback **no es solo cambiar el código**: si la actualización aplicó
+migraciones nuevas, hay que restaurar también la base de datos, o el esquema
+nuevo y el código viejo quedarán desacompasados.
+
+```bash
+cd ~/tebeoteca/zascarr
+COMPOSE="docker compose -f docker-compose.yml --env-file ../.env"
+
+# 1. Levantar la base de datos
+$COMPOSE up -d postgres
+
+# 2. Vaciar y restaurar el backup que hizo el script (usa la ruta que imprimió)
+$COMPOSE exec -T postgres dropdb -U comics_admin --if-exists tebeoteca
+$COMPOSE exec -T postgres createdb -U comics_admin tebeoteca
+gunzip -c /var/backups/zascarr/postgres/backup_AAAAMMDD_HHMMSS.sql.gz | \
+  $COMPOSE exec -T postgres psql -U comics_admin tebeoteca
+
+# 3. Volver al commit anterior (el SHA que imprimió el script; si la
+#    actualización murió a mitad, vale igual la referencia de rescate
+#    refs/zascarr/update/<fecha> que también imprimió)
+git reset --hard <SHA-anterior>
+
+# 4. Reconstruir y arrancar la versión anterior
+$COMPOSE build zascarr
+$COMPOSE up -d zascarr
+```
+
+### Copia de seguridad manual
+
+El script ya hace una automáticamente antes de actualizar. Si quieres una extra
+en cualquier momento, usa el script de backup del proyecto (atómico y con
+retención):
+
+```bash
+BACKUP_DIR=/var/backups/zascarr/postgres bash scripts/backup.sh
+```
+
 ## Integraciones (todas opcionales y desactivadas por defecto)
 
 | Tipo | Integración | Activación |
