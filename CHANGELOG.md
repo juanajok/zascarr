@@ -3,6 +3,32 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.0] — 2026-09-24
+
+### Cambiado
+
+- **Rutas de instalación coherentes con el resto de la suite *arr**
+  (Sonarr/Radarr/Prowlarr...), a petición de un usuario que ya los tiene
+  instalados así. Antes ZascArr vivía en el `HOME` del usuario que ejecutaba
+  `sudo`; ahora:
+  - **Código** en `ZASCARR_ROOT` (por defecto `/opt/zascarr`).
+  - **Datos** de los contenedores (Postgres, Redis, portadas, estado VPN)
+    en `ZASCARR_DATA_DIR`, **separados del código** (por defecto
+    `/var/lib/zascarr`) — antes vivían mezclados dentro de `ZASCARR_ROOT`.
+  - **Propietario** `ZASCARR_USER`/`ZASCARR_GROUP` (por defecto `media`,
+    creado como usuario de sistema si no existe), no el usuario personal
+    que invocó `sudo`.
+  - Las tres son variables de entorno que se pueden fijar antes de instalar
+    (`export ZASCARR_ROOT=... && curl ... | sudo -E bash`) para quien
+    prefiera otra convención.
+  - Verificado que Postgres/Redis no se ven afectados por este cambio: sus
+    contenedores arrancan como root y se autocorrigen el propietario de su
+    propio directorio de datos, así que el `chown` del host a `media` no
+    interfiere. `config/covers` (y la biblioteca del usuario) siguen fijos
+    en `uid 1000`: los escribe el contenedor de ZascArr, que corre como ese
+    usuario sin privilegios para autocorregirse — restricción técnica, no
+    parte de la convención `media`.
+
 ## [1.1.1] — 2026-09-24
 
 ### Corregido

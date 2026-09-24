@@ -48,6 +48,21 @@ instalar_docker_si_falta() {
     success "Docker instalado"
 }
 
+# Usuario/grupo de SERVICIO (no el usuario personal que ejecuta sudo):
+# mismo patrón que ARR_USER/ARR_GROUP de otros instaladores *arr (Sonarr,
+# Radarr, Prowlarr...) — por defecto "media", para que ZascArr conviva con
+# el resto de la suite bajo la misma identidad. Se crea como usuario de
+# sistema (sin login, sin home propio) si todavía no existe.
+asegurar_usuario_servicio() {
+    ZASCARR_USER="${ZASCARR_USER:-media}"
+    ZASCARR_GROUP="${ZASCARR_GROUP:-media}"
+    getent group "${ZASCARR_GROUP}" >/dev/null 2>&1 || groupadd --system "${ZASCARR_GROUP}" || die \
+        "No pude crear el grupo ${ZASCARR_GROUP}. Créalo a mano: sudo groupadd --system ${ZASCARR_GROUP}"
+    getent passwd "${ZASCARR_USER}" >/dev/null 2>&1 || useradd --system --no-create-home \
+        --shell /usr/sbin/nologin -g "${ZASCARR_GROUP}" "${ZASCARR_USER}" || die \
+        "No pude crear el usuario ${ZASCARR_USER}. Créalo a mano: sudo useradd --system -g ${ZASCARR_GROUP} ${ZASCARR_USER}"
+}
+
 # ── Modo "instalación desde cero" ────────────────────────────────────────────
 # Si nos han invocado sueltos (curl | sudo bash, sin haber clonado el repo
 # antes), no hay docker-compose.yml al lado de este script: lo detectamos así,
@@ -66,19 +81,12 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
 
     instalar_git_si_falta
     instalar_docker_si_falta
+    asegurar_usuario_servicio
 
-    # Si nos han invocado con sudo, la carpeta de trabajo va en el HOME del
-    # usuario real, no en /root — root es solo quien instala, no quien usa.
-    if [[ -n "${SUDO_USER:-}" ]]; then
-        DEST_USER="${SUDO_USER}"
-        DEST_HOME="$(getent passwd "${SUDO_USER}" | cut -d: -f6)"
-    else
-        DEST_USER="$(id -un)"
-        DEST_HOME="${HOME}"
-    fi
-    [[ -n "${DEST_HOME}" ]] || die "No puedo determinar el directorio personal de ${DEST_USER}."
-
-    ZASCARR_ROOT="${ZASCARR_ROOT:-${DEST_HOME}/zascarr}"
+    # Mismo patrón que el resto de la suite *arr (Sonarr/Radarr/Prowlarr...):
+    # código en /opt, propiedad del usuario de servicio (media por defecto),
+    # no del usuario personal que ejecutó sudo ni de root.
+    ZASCARR_ROOT="${ZASCARR_ROOT:-/opt/zascarr}"
     info "Preparando ${ZASCARR_ROOT}..."
     mkdir -p "${ZASCARR_ROOT}" || die "No puedo crear ${ZASCARR_ROOT}."
 
@@ -89,8 +97,8 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
         git clone -q https://github.com/juanajok/zascarr.git "${ZASCARR_ROOT}/zascarr" || die \
             "No pude clonar el repositorio. ¿Hay conexión a internet?"
     fi
-    chown -R "${DEST_USER}:${DEST_USER}" "${ZASCARR_ROOT}" 2>/dev/null || \
-        warn "No pude ajustar el propietario de ${ZASCARR_ROOT} a ${DEST_USER}."
+    chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_ROOT}" 2>/dev/null || \
+        warn "No pude ajustar el propietario de ${ZASCARR_ROOT} a ${ZASCARR_USER}."
 
     success "Continuando la instalación..."
     # Bug real (reproducido): tras "curl | sudo bash", el stdin de ESTE
@@ -116,11 +124,14 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
 fi
 
 # ── A partir de aquí, siempre dentro de un clon real del repo ──────────────
-# El repo vive en SCRIPT_DIR; la carpeta de datos/config (Postgres, Redis,
-# portadas) en el PADRE (ZASCARR_ROOT). En una Pi limpia (~/zascarr/zascarr)
-# da ~/zascarr.
+# El repo (código) vive en SCRIPT_DIR, dentro de ZASCARR_ROOT (su padre — en
+# /opt/zascarr por defecto, da /opt/zascarr/zascarr). Los DATOS (Postgres,
+# Redis, portadas) viven aparte, en ZASCARR_DATA_DIR (/var/lib/zascarr por
+# defecto) — mismo patrón que el resto de la suite *arr: código en /opt,
+# datos en /var/lib, nunca mezclados.
 SCRIPT_DIR="${_SD}"
 ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+ZASCARR_DATA_DIR="${ZASCARR_DATA_DIR:-/var/lib/zascarr}"
 # Compose vive en el repo; se invoca con -f explícito para no depender del cwd.
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
@@ -151,6 +162,7 @@ echo -e "${B}====================================${N}\n"
 # ── Comprobaciones previas (A2): cada fallo explica causa y solución, y lo
 # ── que se puede instalar solo, se instala solo. ──
 instalar_docker_si_falta
+asegurar_usuario_servicio
 
 command -v python3 >/dev/null 2>&1 || {
     info "Instalando Python 3..."
@@ -198,6 +210,7 @@ set_env_var "HOST_LIBRARY_DIR" "${HOST_LIBRARY_DIR}"
 set_env_var "HOST_DOWNLOADS_DIR" "${HOST_DOWNLOADS_DIR}"
 set_env_var "HOST_AMULE_INCOMING_DIR" "${HOST_AMULE_INCOMING_DIR}"
 set_env_var "APP_LOCALE" "${APP_LOCALE}"
+set_env_var "ZASCARR_DATA_DIR" "${ZASCARR_DATA_DIR}"
 
 success "Biblioteca: ${LIBRARY}"
 success "Descargas:  ${DOWNLOADS_ROOT}"
@@ -205,9 +218,11 @@ success "Idioma:     ${APP_LOCALE}"
 
 info "Creando estructura de directorios..."
 
-# Configs Docker (en NVMe — rendimiento), creadas por este script.
-mkdir -p "${ZASCARR_ROOT}/config/"{postgres,redis,covers} || die \
-    "No puedo crear ${ZASCARR_ROOT}/config/. ¿Tienes permisos de escritura?"
+# Datos de los contenedores (Postgres, Redis, estado de VPN, portadas),
+# separados del código (ZASCARR_ROOT) — mismo patrón que el resto de la
+# suite *arr: código en /opt, datos en /var/lib.
+mkdir -p "${ZASCARR_DATA_DIR}/"{postgres,redis,covers,vpn-state} || die \
+    "No puedo crear ${ZASCARR_DATA_DIR}/. ¿Tienes permisos de escritura?"
 
 # Biblioteca (donde el coleccionista haya dicho que vive).
 # A3: solo tocamos (mkdir + chown) los directorios que ESTE script crea. Si
@@ -231,10 +246,23 @@ mkdir -p "${HOST_DOWNLOADS_DIR}/comics" 2>/dev/null || \
 mkdir -p "${HOST_AMULE_INCOMING_DIR}" 2>/dev/null || \
     die "No puedo crear ${HOST_AMULE_INCOMING_DIR}. ¿Existe el disco de descargas (${DOWNLOADS_ROOT}) y tienes permisos?"
 
-# Solo la config del propio bootstrap (creada más arriba) se chown en
+# Solo los datos del propio bootstrap (creados más arriba) se chown en
 # profundidad; la colección del usuario no se toca (H5).
-chown -R 1000:1000 "${ZASCARR_ROOT}/config" 2>/dev/null || \
-    warn "Sin permisos para ajustar propietario de ${ZASCARR_ROOT}/config (ejecuta como root si es necesario)"
+#
+# Postgres y Redis arrancan como root dentro del contenedor y se
+# autocorrigen el propietario de su propio directorio de datos (verificado:
+# el entrypoint oficial de postgres hace "find $PGDATA ! -user postgres
+# -exec chown postgres"), así que su propietario en el host puede seguir la
+# convención de la suite *arr sin riesgo.
+chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_DATA_DIR}/postgres" "${ZASCARR_DATA_DIR}/redis" \
+    "${ZASCARR_DATA_DIR}/vpn-state" 2>/dev/null || \
+    warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR} (ejecuta como root si es necesario)"
+# "covers" SÍ tiene que quedarse en uid 1000: lo escribe el propio
+# contenedor de ZascArr, que corre como ese usuario fijo SIN privilegios
+# para autocorregirse (a diferencia de postgres/redis) — no es una
+# preferencia de convención, es una restricción técnica del Dockerfile.
+chown -R 1000:1000 "${ZASCARR_DATA_DIR}/covers" 2>/dev/null || \
+    warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/covers"
 success "Directorios creados en ${LIBRARY}"
 
 info "Validando .env..."

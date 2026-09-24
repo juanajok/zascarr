@@ -12,7 +12,7 @@
 # Instalación:
 #   1. Copia este script a /usr/local/bin/backup.sh y chmod +x
 #   2. Define ZASCARR_REPO (o ZASCARR_ROOT) apuntando a tu instalación:
-#        echo 'ZASCARR_REPO=/home/USUARIO/zascarr/zascarr' | sudo tee /etc/default/zascarr
+#        echo 'ZASCARR_REPO=/opt/zascarr/zascarr' | sudo tee /etc/default/zascarr
 #      (y lee ese fichero con EnvironmentFile= en el unit de abajo)
 #   3. Instala el timer systemd incluido al final de este fichero:
 #        sudo cp zascarr-backup.{service,timer} /etc/systemd/system/
