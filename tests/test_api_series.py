@@ -46,9 +46,19 @@ class FakeSession:
 
     def __init__(self, queue: list):
         self._queue = list(queue)
+        self.added: list = []
 
     async def execute(self, _statement):
         return self._queue.pop(0)
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def flush(self):
+        return None
+
+    async def refresh(self, obj):
+        return None
 
 
 def override_get_db(session):
@@ -144,4 +154,50 @@ class TestNoExportMasivo:
         session = FakeSession([FakeExecResult(0), FakeExecResult([])])
         with use_fake_session(session) as client:
             r = client.get("/api/series?page_size=100")
+        assert r.status_code == 200
+
+
+class TestMassAssignmentSeries:
+    """M1: POST/PATCH /api/series usan esquemas Pydantic con extra='forbid'.
+    Un campo interno (id, metadata_source, locked_fields, *_id de proveedor,
+    title_norm, timestamps…) debe rechazarse con 422, no inyectarse en el ORM."""
+
+    FORBIDDEN = {
+        "id": str(uuid4()),
+        "metadata_source": "manual",
+        "locked_fields": ["id"],
+        "comic_vine_id": 1,
+        "anilist_id": 2,
+        "tebeosfera_slug": "thorgal",
+        "title_norm": "batman",
+        "enrichment_attempted_at": "2026-01-01T00:00:00Z",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+    }
+
+    def test_post_rechaza_campos_internos(self):
+        for campo, valor in self.FORBIDDEN.items():
+            with use_fake_session(FakeSession([])) as client:
+                r = client.post("/api/series", json={"title": "M1", campo: valor})
+            assert r.status_code == 422, f"POST con '{campo}' debería dar 422, dio {r.status_code}"
+
+    def test_post_acepta_campos_validos(self):
+        with use_fake_session(FakeSession([])) as client:
+            r = client.post(
+                "/api/series",
+                json={"title": "Batman", "tradition": "american", "start_year": 2011},
+            )
+        assert r.status_code == 201
+
+    def test_patch_rechaza_campos_internos(self):
+        for campo, valor in self.FORBIDDEN.items():
+            with use_fake_session(FakeSession([])) as client:
+                r = client.patch(f"/api/series/{uuid4()}", json={campo: valor})
+            assert r.status_code == 422, f"PATCH con '{campo}' debería dar 422, dio {r.status_code}"
+
+    def test_patch_acepta_campos_validos(self):
+        series = make_series()
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.patch(f"/api/series/{series.id}", json={"status": "completed"})
         assert r.status_code == 200
