@@ -11,8 +11,8 @@
 #
 # Instalación:
 #   1. Copia este script a /usr/local/bin/backup.sh y chmod +x
-#   2. Define ZASCARR_REPO (o TEBEOTECA_ROOT) apuntando a tu instalación:
-#        echo 'ZASCARR_REPO=/home/USUARIO/tebeoteca/zascarr' | sudo tee /etc/default/zascarr
+#   2. Define ZASCARR_REPO (o ZASCARR_ROOT) apuntando a tu instalación:
+#        echo 'ZASCARR_REPO=/home/USUARIO/zascarr/zascarr' | sudo tee /etc/default/zascarr
 #      (y lee ese fichero con EnvironmentFile= en el unit de abajo)
 #   3. Instala el timer systemd incluido al final de este fichero:
 #        sudo cp zascarr-backup.{service,timer} /etc/systemd/system/
@@ -20,26 +20,27 @@
 #        sudo systemctl enable --now zascarr-backup.timer
 #   4. Ajusta BACKUP_DIR/RETENTION_DAYS si tu disco de respaldo es otro.
 #
-# NOTA (E3): el RESTORE ya no es una historia pendiente: es
-# scripts/rollback.sh (empareja commit y dump por la referencia de rescate
-# que deja update.sh). Un backup que nunca se ha restaurado sigue sin ser un
-# backup probado: queda probar ambos contra Docker/PostgreSQL reales.
+# NOTA (E3, cerrada 2026-09-24): el RESTORE ya no es una historia pendiente:
+# es scripts/rollback.sh (empareja commit y dump por la referencia de
+# rescate que deja update.sh). Backup y rollback ya se probaron los dos
+# contra Docker/PostgreSQL reales, incluido dropdb --force con una conexión
+# concurrente abierta — ver docs/BACKLOG.md.
 # =============================================================================
 set -euo pipefail
 
-# El .env vive en TEBEOTECA_ROOT (el padre del repo), NO en el repo: por eso
+# El .env vive en ZASCARR_ROOT (el padre del repo), NO en el repo: por eso
 # todo va con -f y --env-file explícitos. Si este script se copia a
 # /usr/local/bin, el repo ya no es "el directorio de al lado": ZASCARR_REPO
-# (o TEBEOTECA_ROOT) lo fija a mano.
+# (o ZASCARR_ROOT) lo fija a mano.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${ZASCARR_REPO:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
-TEBEOTECA_ROOT="${TEBEOTECA_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
+ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
 COMPOSE_FILE="${REPO_DIR}/docker-compose.yml"
-ENV_FILE="${TEBEOTECA_ROOT}/.env"
+ENV_FILE="${ZASCARR_ROOT}/.env"
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/zascarr/postgres}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
-DB_NAME="${DB_NAME:-tebeoteca}"
+DB_NAME="${DB_NAME:-zascarr}"
 DB_USER="${DB_USER:-comics_admin}"
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
