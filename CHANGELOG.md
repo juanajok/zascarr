@@ -3,6 +3,25 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.2] — 2026-09-24
+
+### Corregido
+
+- **El instalador se paraba en "Corriendo migraciones Alembic..." en
+  Raspberry Pi OS real** con `error: uninstall-no-record-file — Cannot
+  uninstall typing_extensions... installed by debian`. Raspberry Pi OS trae
+  paquetes Python instalados vía `apt` (sin fichero `RECORD` de pip); al
+  intentar actualizarlos, `pip install -e .` aborta en vez de instalar por
+  delante. Corregido con `--ignore-installed` (deuda **M3** en
+  `docs/BACKLOG.md`: el parche mínimo es este flag, el cierre de fondo es
+  mover la migración a un contenedor efímero en vez de instalar en el
+  host).
+- El mensaje de error de ese mismo paso, si aun así falla, ahora incluye
+  el `cd` al directorio correcto — antes decía "ejecuta a mano" sin más,
+  y ejecutarlo desde el directorio equivocado (p.ej. el `$HOME` del
+  usuario) daba un segundo error distinto y confuso ("neither setup.py
+  nor pyproject.toml found").
+
 ## [1.2.1] — 2026-09-24
 
 ### Corregido

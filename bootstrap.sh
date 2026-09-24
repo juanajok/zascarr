@@ -315,8 +315,15 @@ cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 # vez de la librería real — el check "pasaría" aunque pip install nunca se
 # hubiera ejecutado, y el "alembic upgrade head" de más abajo fallaría con
 # "orden no encontrada" en cualquier instalación de verdad desde cero.
-command -v alembic >/dev/null 2>&1 || pip install --break-system-packages -e . -q || die \
-    "No pude instalar las dependencias del proyecto. Ejecuta a mano para ver el error: pip install --break-system-packages -e ."
+# --ignore-installed (bug real, reportado): Raspberry Pi OS trae paquetes
+# como typing_extensions instalados vía apt/dpkg, sin fichero RECORD de
+# pip. Sin este flag, pip intenta desinstalar esa versión antes de
+# actualizarla y aborta con "uninstall-no-record-file" — el instalador se
+# paraba ahí en cualquier Pi real. Con --ignore-installed, pip no lo toca
+# y simplemente instala la versión que necesita por delante.
+command -v alembic >/dev/null 2>&1 || pip install --break-system-packages --ignore-installed -e . -q || die \
+    "No pude instalar las dependencias del proyecto. Ejecuta a mano para ver el error:
+  cd ${SCRIPT_DIR} && pip install --break-system-packages --ignore-installed -e ."
 # "alembic", nunca "python3 -m alembic": estamos parados (cd de arriba)
 # dentro del propio directorio del repo, que tiene su propia carpeta
 # alembic/ (las migraciones) con el mismo nombre que el paquete instalado.
