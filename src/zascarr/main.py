@@ -6,7 +6,7 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from zascarr.config import get_settings
@@ -131,7 +131,7 @@ async def lifespan(app: FastAPI):
 
 
 async def dashboard() -> FileResponse:
-    """E1: dashboard de estado en español con semáforos en vez de JSON crudo.
+    """E1: página de estado en español con semáforos en vez de JSON crudo.
 
     Página única sin dependencias externas (nada de build tooling en una
     Pi): fetch() propio a /api/health, mismo origen, sin líos de CORS.
@@ -177,7 +177,14 @@ def create_app() -> FastAPI:
     app.include_router(pendientes_router)
     app.include_router(series_ui_router)
     app.include_router(wishlist_ui_router)
-    app.get("/", include_in_schema=False)(dashboard)
+    # Bug real (reportado): "/" mandaba a Estado (E1) en vez de a la
+    # biblioteca — quien entra por primera vez esperaba ver su colección,
+    # no un panel de semáforos técnico. Estado sigue disponible, en su
+    # propia URL, enlazado desde la navegación (base.html).
+    app.get("/estado", include_in_schema=False)(dashboard)
+    app.get("/", include_in_schema=False)(
+        lambda: RedirectResponse("/ui/", status_code=307)
+    )
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     return app

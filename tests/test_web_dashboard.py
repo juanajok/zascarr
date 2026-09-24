@@ -92,7 +92,7 @@ class TestDashboard:
         # Nunca un CDN: ver docs/adr/0001-ui-stack.md.
         assert "cdn" not in r.text.lower()
         assert '<nav class="topnav">' in r.text
-        assert 'href="/">Estado</a>' in r.text  # nav enlaza de vuelta a E1
+        assert 'href="/estado">Estado</a>' in r.text  # nav enlaza a E1
 
     def test_vacio_muestra_estado_vacio(self):
         with use_fake_session(_empty_session()) as client:

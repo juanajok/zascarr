@@ -27,7 +27,14 @@ class TestStaticAssets:
         r = client.get("/static/web.css")
         assert r.status_code == 200
 
-    def test_dashboard_e1_sigue_funcionando_tras_montar_static_y_ui(self):
-        r = client.get("/")
+    def test_estado_e1_sigue_funcionando_tras_montar_static_y_ui(self):
+        r = client.get("/estado")
         assert r.status_code == 200
         assert "ZascArr" in r.text
+
+    def test_raiz_redirige_a_la_biblioteca(self):
+        """Bug real (reportado): "/" mandaba a Estado en vez de a la
+        biblioteca, sin forma de volver. Ahora "/" es solo un redirect."""
+        r = client.get("/", follow_redirects=False)
+        assert r.status_code == 307
+        assert r.headers["location"] == "/ui/"

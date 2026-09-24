@@ -3,6 +3,13 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.7] — 2026-09-25
+
+### Corregido
+
+- **"Estado" (E1) era un callejón sin salida — sin navegación, sin forma de volver.** Reportado por un usuario: es un fichero estático fuera de `base.html`/la barra de navegación a propósito (página única sin dependencias, ver docstring de `dashboard()`), pero eso significaba que quien entraba ahí se quedaba sin cómo salir salvo el botón "atrás" del navegador. Añadido un enlace "← Volver a la biblioteca" (`src/zascarr/static/dashboard.html`).
+- **`http://.../` mandaba a Estado en vez de a la biblioteca.** La raíz servía directamente el panel de semáforos técnico (E1) — quien entra por primera vez espera ver su colección, no un panel de estado. Ahora `/` redirige (307) a `/ui/` (Biblioteca); Estado se muda a su propia URL, `/estado`, enlazada desde la navegación.
+
 ## [1.2.6] — 2026-09-25
 
 ### Corregido
