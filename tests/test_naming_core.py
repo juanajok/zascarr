@@ -527,6 +527,36 @@ class TestRealWorldFilenames:
         # criterio que matcher.normalize_title), pero el título no se trunca.
         assert result.series == "Spider Man"
 
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # Casos reales reportados en producción (colección CRG en español) —
+        # ninguno tenía número extraído antes del ampliado del parser.
+        ("La Patrulla X Omnigold 5 (Decisiones) [CRG].cbr",
+         "La Patrulla X", "5"),
+        ("Marvel Gold - La Patrulla-X Original 1 .cbr",
+         "La Patrulla X Original", "1"),
+        ("The Boys - Edición Integral 01 [por The RockJR][CRG].cbr",
+         "The Boys", "1"),
+    ])
+    def test_parse_filename_real_world_crg(self, filename, expected_series, expected_num):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    def test_sin_numero_real_no_inventa_uno(self):
+        """'[ML] La Patrulla-X - Los Años Perdidos [MQ][DI] by The Murdock
+        [CRG].cbr': una recopilación sin número de grapa. El parser debe
+        limpiar los corchetes de release y quedarse con la serie, sin
+        inventar un número que no existe en el nombre."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "[ML] La Patrulla-X - Los Años Perdidos [MQ][DI] by The Murdock [CRG].cbr"
+        )
+        assert result.series == "La Patrulla X"
+        assert result.issue_number == ""
+
     def test_tomo_sigue_siendo_volumen_no_issue(self):
         """'Tomo N' (manga/BD con tomo Y numeración de issue separada) se
         queda como volumen, a diferencia de 'T01' (BD de tomo único donde
