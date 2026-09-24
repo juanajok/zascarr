@@ -52,6 +52,9 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+# B008: Depends(...) en la firma es el patrón obligatorio de FastAPI, no un
+# antipatrón real — falso positivo conocido, no un "no hacer nunca" genérico.
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

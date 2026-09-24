@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
 
-import httpx, structlog
+import httpx
+import structlog
+
 from zascarr.config import get_settings
 
 logger = structlog.get_logger()

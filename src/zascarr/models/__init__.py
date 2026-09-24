@@ -4,15 +4,28 @@ from datetime import date, datetime
 from uuid import uuid4
 
 from sqlalchemy import (
-    BigInteger, Boolean, CheckConstraint, Column, Computed, Date, DateTime,
-    Enum, Float, ForeignKey, Integer, SmallInteger, String, Table, Text,
-    UniqueConstraint, func,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    Computed,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from zascarr.database import Base
-
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
 

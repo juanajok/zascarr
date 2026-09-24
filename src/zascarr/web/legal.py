@@ -13,7 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.services.legal import (
-    acknowledge, current_legal_version, get_acknowledgment, render_legal_html,
+    acknowledge,
+    current_legal_version,
+    get_acknowledgment,
+    render_legal_html,
 )
 from zascarr.web.routes import TEMPLATES_DIR
 

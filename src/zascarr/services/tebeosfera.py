@@ -41,7 +41,8 @@ import asyncio
 import re
 from dataclasses import dataclass
 
-import httpx, structlog
+import httpx
+import structlog
 from lxml import html as lxml_html
 
 from zascarr.config import get_settings

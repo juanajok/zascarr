@@ -20,7 +20,7 @@ ciclo de las 03:00?" sin depender solo de los logs.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
@@ -28,9 +28,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.core.importer_triage import TriageResult, triage
+from zascarr.core.matcher import MatchStatus, SeriesMatcher
 from zascarr.models import File, FileFormat, ImportRun, Series
-from zascarr.core.importer_triage import triage, TriageResult
-from zascarr.core.matcher import SeriesMatcher, MatchStatus
 from zascarr.utils.fs import safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
 
@@ -96,7 +96,7 @@ class Importer:
         ]
 
     async def scan_and_import(self) -> ImportReport:
-        report = ImportReport(started_at=datetime.now(timezone.utc))
+        report = ImportReport(started_at=datetime.now(UTC))
 
         files = []
         seen: set[str] = set()
@@ -118,7 +118,7 @@ class Importer:
                 logger.exception("importer.file_failed", path=str(path))
                 report.errors.append(f"{path.name}: {exc}")
 
-        report.finished_at = datetime.now(timezone.utc)
+        report.finished_at = datetime.now(UTC)
         await self._persist_run(report)
         return report
 

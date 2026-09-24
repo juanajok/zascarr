@@ -42,8 +42,8 @@ Requisito de esquema:
 """
 from __future__ import annotations
 
-import unicodedata
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 from uuid import UUID
