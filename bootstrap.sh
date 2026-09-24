@@ -291,6 +291,21 @@ set_env_var "HOST_AMULE_INCOMING_DIR" "${HOST_AMULE_INCOMING_DIR}"
 set_env_var "APP_LOCALE" "${APP_LOCALE}"
 set_env_var "ZASCARR_DATA_DIR" "${ZASCARR_DATA_DIR}"
 
+# Bug real (reportado): el contenedor corre fijo como UID 1000, pero
+# ZASCARR_USER es un usuario de SISTEMA (useradd --system) — Debian le
+# asigna el UID que tenga libre en su rango, casi nunca 1000. El
+# importador podía copiar los tebeos del usuario (lectura vía "otros")
+# pero no borrar el original tras importarlo (falta permiso de escritura
+# en el directorio de descargas, propiedad de ese usuario). PUID/PGID
+# (docker-entrypoint.sh) ajustan el UID interno del contenedor para que
+# coincida con el usuario de servicio real — se resuelven aquí, no hace
+# falta que el coleccionista sepa qué es un UID.
+RESOLVED_UID="$(id -u "${ZASCARR_USER}" 2>/dev/null || echo 1000)"
+RESOLVED_GID="$(getent group "${ZASCARR_GROUP}" 2>/dev/null | cut -d: -f3)"
+RESOLVED_GID="${RESOLVED_GID:-1000}"
+set_env_var "PUID" "${RESOLVED_UID}"
+set_env_var "PGID" "${RESOLVED_GID}"
+
 success "Biblioteca: ${LIBRARY}"
 success "Descargas:  ${DOWNLOADS_ROOT}"
 success "Idioma:     ${APP_LOCALE}"
@@ -313,19 +328,26 @@ for dir in "Comics" "Comics/_Specials" "Comics/_Omnibus" \
     if [[ ! -d "${LIBRARY}/${dir}" ]]; then
         mkdir -p "${LIBRARY}/${dir}" || die \
             "No encuentro el disco donde están tus tebeos (${LIBRARY}). ¿Está conectado y montado? ¿Tienes permisos de escritura?"
-        # Directorio nuevo (quizá creado como root): se lo damos al contenedor
-        # (uid 1000) para que pueda escribir. Sin -R: solo el directorio.
-        chown 1000:1000 "${LIBRARY}/${dir}" 2>/dev/null || true
+        # Directorio nuevo (quizá creado como root): se lo damos al UID/GID
+        # real con el que corre el contenedor (PUID/PGID) para que pueda
+        # escribir. Sin -R: solo el directorio.
+        chown "${RESOLVED_UID}:${RESOLVED_GID}" "${LIBRARY}/${dir}" 2>/dev/null || true
     fi
 done
 
 # Descargas — se crea la carpeta EXACTA si no existe, sin inventar
 # subcarpetas dentro (el importador ya escanea recursivamente: no necesita
-# "comics/" ni "aMule/Incoming/" para encontrar los archivos).
-mkdir -p "${HOST_DOWNLOADS_DIR}" 2>/dev/null || \
-    die "No puedo crear ${HOST_DOWNLOADS_DIR}. ¿Existe el disco de descargas y tienes permisos?"
-mkdir -p "${HOST_AMULE_INCOMING_DIR}" 2>/dev/null || \
-    die "No puedo crear ${HOST_AMULE_INCOMING_DIR}. ¿Existe el disco de descargas y tienes permisos?"
+# "comics/" ni "aMule/Incoming/" para encontrar los archivos). Si YA
+# existían (el caso normal: Transmission/aMule llevan tiempo escribiendo
+# ahí), se respetan tal cual (H5) — el contenedor necesitará entonces el
+# UID/GID real de quien sea su dueño, que es justo lo que resuelve PUID/PGID.
+for d in "${HOST_DOWNLOADS_DIR}" "${HOST_AMULE_INCOMING_DIR}"; do
+    if [[ ! -d "${d}" ]]; then
+        mkdir -p "${d}" || die \
+            "No puedo crear ${d}. ¿Existe el disco de descargas y tienes permisos?"
+        chown "${RESOLVED_UID}:${RESOLVED_GID}" "${d}" 2>/dev/null || true
+    fi
+done
 
 # Solo los datos del propio bootstrap (creados más arriba) se chown en
 # profundidad; la colección del usuario no se toca (H5).
@@ -342,13 +364,15 @@ mkdir -p "${HOST_AMULE_INCOMING_DIR}" 2>/dev/null || \
 # postgres/redis arrancan como root y se autoasignan lo que necesitan.
 chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_DATA_DIR}/vpn-state" 2>/dev/null || \
     warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/vpn-state"
-# "covers" SÍ tiene que quedarse en uid 1000: lo escribe el propio
-# contenedor de ZascArr, que corre como ese usuario fijo SIN privilegios
-# para autocorregirse (a diferencia de postgres/redis) — no es una
-# preferencia de convención, es una restricción técnica del Dockerfile.
-# Aquí sí es seguro repetirlo: el contenedor de ZascArr nunca cambia su
-# propio UID entre arranques, así que no hay nada que se pueda corromper.
-chown -R 1000:1000 "${ZASCARR_DATA_DIR}/covers" 2>/dev/null || \
+# "covers" SÍ tiene que quedarse en el UID/GID real del contenedor
+# (RESOLVED_UID/RESOLVED_GID = PUID/PGID): lo escribe el propio contenedor
+# de ZascArr, que tras el ajuste de docker-entrypoint.sh corre como ese
+# usuario SIN privilegios para autocorregirse (a diferencia de
+# postgres/redis) — no es una preferencia de convención, es una
+# restricción técnica. Aquí sí es seguro repetirlo: el contenedor nunca
+# cambia su propio UID entre arranques (mismo PUID/PGID en el .env), así
+# que no hay nada que se pueda corromper.
+chown -R "${RESOLVED_UID}:${RESOLVED_GID}" "${ZASCARR_DATA_DIR}/covers" 2>/dev/null || \
     warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/covers"
 success "Directorios creados en ${LIBRARY}"
 

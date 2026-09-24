@@ -29,6 +29,8 @@ FROM python:3.11-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 libxml2 libxslt1.1 tini \
     && rm -rf /var/lib/apt/lists/*
+# usermod/groupmod (paquete "passwd") y runuser (paquete "util-linux") ya
+# vienen en python:3.11-slim-bookworm — sin dependencia nueva.
 
 RUN groupadd -g 1000 zascarr && \
     useradd -u 1000 -g zascarr -m -s /bin/bash zascarr
@@ -37,13 +39,17 @@ COPY --from=builder /install /usr/local
 
 WORKDIR /app
 COPY --chown=zascarr:zascarr . .
-
-USER zascarr
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -c "import httpx; r = httpx.get('http://localhost:8000/api/health'); r.raise_for_status()"
 
-ENTRYPOINT ["tini", "--"]
+# Se queda como root a propósito: /entrypoint.sh ajusta PUID/PGID y hace
+# `runuser` a zascarr antes de ejecutar el CMD real — nunca corre la app
+# como root. Ver docker-entrypoint.sh para el porqué (bug real de permisos
+# entre el UID fijo del contenedor y el usuario de servicio del host).
+ENTRYPOINT ["tini", "--", "/entrypoint.sh"]
 
 # 0.0.0.0 ES INTENCIONAL: ver cabecera. La exposición real la decide el
 # compose ("127.0.0.1:8000:8000" = solo loopback del host).
