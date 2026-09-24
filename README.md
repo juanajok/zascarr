@@ -160,19 +160,19 @@ sudo bash scripts/update.sh
 
 El script hace, **en este orden** (el orden importa):
 
-1. Comprueba Docker, Compose y git, y que el árbol del repo esté limpio.
-2. **Copia de seguridad de PostgreSQL** (obligatoria, atómica y con retención).
-3. Actualiza el código con `git pull --ff-only` (si la rama ha divergido, aborta sin tocar la BD).
+1. Comprueba Docker, Compose, git, curl y gzip, y que el árbol del repo esté limpio.
+2. **Copia de seguridad de PostgreSQL** (obligatoria, atómica, verificada y con retención).
+3. Actualiza el código con `git fetch` + `merge --ff-only` (si la rama ha divergido, aborta sin tocar la BD).
 4. Reconstruye la imagen Docker (las dependencias viven en la imagen, no en el host).
 5. Aplica las migraciones **dentro del contenedor** (`alembic upgrade head`).
 6. Reinicia ZascArr y verifica el healthcheck en `http://127.0.0.1:8000`.
 
-Si algo falla antes del paso 6, **la base de datos queda con el backup previo**,
-y el script imprime la ruta del backup y la orden exacta para volver al commit
-anterior. Mientras la actualización está en marcha el script mantiene una
-referencia temporal (`refs/zascarr/update/<fecha>`) apuntando a ese commit, y la
-borra al terminar bien. Si el script muere a mitad, esa referencia sigue ahí y sus
-mensajes de error ya incluyen el `git reset --hard` exacto que hay que ejecutar.
+Antes de tocar nada, el script deja **dos cosas emparejadas**: una referencia de
+git (`refs/zascarr/update/<fecha>`) apuntando al commit anterior, y el dump
+`update_<la-misma-fecha>.sql.gz`. Esa pareja es la que usa el rollback, y **no se
+borra al terminar bien**: si la actualización fue bien pero la app va rara tres
+días después, el ancla sigue ahí. Las referencias cuyo dump ya ha caducado por
+la retención se podan solas, así que no se acumulan sin límite.
 
 > **Tiempo estimado:** 2-5 minutos. En una Raspberry Pi el paso 4 (rebuild de la
 > imagen) puede tardar más, porque compila dependencias nativas.
@@ -181,30 +181,74 @@ mensajes de error ya incluyen el `git reset --hard` exacto que hay que ejecutar.
 
 Un rollback **no es solo cambiar el código**: si la actualización aplicó
 migraciones nuevas, hay que restaurar también la base de datos, o el esquema
-nuevo y el código viejo quedarán desacompasados.
+nuevo y el código viejo quedarán desacompasados. Está automatizado:
+
+```bash
+cd ~/tebeoteca/zascarr
+sudo bash scripts/rollback.sh              # añade --dry-run para ver el plan sin tocar nada
+```
+
+Qué hace:
+
+1. Empareja el commit y el backup por la referencia que dejó `update.sh`. **No**
+   coge «el backup más reciente»: `backup.sh` corre a diario a las 04:00, así que
+   el más reciente puede tener ya el esquema nuevo y entonces no revertiría nada.
+2. Comprueba que el árbol del repo está limpio (no descarta cambios locales sin
+   avisar) y enseña el plan pidiendo confirmación (hay que escribir `SI`).
+3. Hace **su propia copia de seguridad de la base de datos actual**
+   (`rollback-safety_<fecha>.sql.gz`), por si el dump elegido no fuera el que creías.
+4. Para ZascArr, comprueba que el dump es un gzip íntegro, lo restaura con
+   `psql -v ON_ERROR_STOP=1` y verifica que la base de datos resultante es una
+   BD de ZascArr de verdad (tablas `series`, `files`, `wishlist` y revisión de
+   Alembic), no un HTTP 200 cualquiera del healthcheck.
+5. Vuelve el código al commit anterior —dejando antes una referencia para poder
+   **deshacer el rollback**—, vacía la caché de Redis, reconstruye y arranca.
+   Verifica el healthcheck.
+
+Si el commit al que vuelve es anterior a la existencia de `rollback.sh`, el
+`reset` borra el script del repo: por eso guarda una copia en
+`/tmp/zascarr-rollback-<fecha>.sh` y su ruta aparece en el informe final.
+
+Opciones: `--sha <SHA>`, `--backup <ruta.sql.gz>`, `--dry-run`, `--yes` (para
+automatizar) y `--forzar` (repetir un rollback ya hecho o descartar cambios
+locales sin guardar — ambos destructivos a propósito).
+
+### Restaurar a mano (plan B)
+
+Si prefieres hacerlo tú, o el script no puede seguir, esto es lo que hace por
+dentro:
 
 ```bash
 cd ~/tebeoteca/zascarr
 COMPOSE="docker compose -f docker-compose.yml --env-file ../.env"
 
-# 1. Levantar la base de datos
+# 1. Copia de la base de datos ACTUAL antes de destruirla. No te la saltes.
+$COMPOSE exec -T postgres pg_dump -U comics_admin tebeoteca | gzip > /tmp/antes.sql.gz
+gzip -t /tmp/antes.sql.gz        # si falla, PARA: ese fichero no te vale
+
+# 2. Comprobar el dump que vas a restaurar ANTES de borrar nada
+gzip -t /var/backups/zascarr/postgres/update_AAAAMMDD_HHMMSS.sql.gz
+
+# 3. Levantar la base de datos, vaciarla y restaurar
 $COMPOSE up -d postgres
-
-# 2. Vaciar y restaurar el backup que hizo el script (usa la ruta que imprimió)
-$COMPOSE exec -T postgres dropdb -U comics_admin --if-exists tebeoteca
+$COMPOSE exec -T postgres dropdb -U comics_admin --if-exists --force tebeoteca
 $COMPOSE exec -T postgres createdb -U comics_admin tebeoteca
-gunzip -c /var/backups/zascarr/postgres/backup_AAAAMMDD_HHMMSS.sql.gz | \
-  $COMPOSE exec -T postgres psql -U comics_admin tebeoteca
+gunzip -c /var/backups/zascarr/postgres/update_AAAAMMDD_HHMMSS.sql.gz | \
+  $COMPOSE exec -T postgres psql -q -v ON_ERROR_STOP=1 -U comics_admin tebeoteca
 
-# 3. Volver al commit anterior (el SHA que imprimió el script; si la
-#    actualización murió a mitad, vale igual la referencia de rescate
-#    refs/zascarr/update/<fecha> que también imprimió)
+# 4. Volver al commit anterior, limpiar la caché y reconstruir
 git reset --hard <SHA-anterior>
-
-# 4. Reconstruir y arrancar la versión anterior
-$COMPOSE build zascarr
-$COMPOSE up -d zascarr
+$COMPOSE exec -T redis redis-cli FLUSHDB
+$COMPOSE build zascarr && $COMPOSE up -d zascarr
 ```
+
+Dos detalles que no son opcionales: `psql` **sin** `ON_ERROR_STOP=1` devuelve
+éxito aunque fallen sentencias sueltas (te quedaría una restauración a medias
+con cara de haber ido bien), y `dropdb --force` evita el fallo típico de
+«database is being accessed by other users» (necesita PostgreSQL 13+, que es el
+que fija este repo). El `FLUSHDB` de Redis es seguro aquí porque Redis es
+exclusivo de ZascArr (`tebeoteca-cache` en el compose); no copies ese patrón a
+un Redis compartido con otras aplicaciones.
 
 ### Copia de seguridad manual
 

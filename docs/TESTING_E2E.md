@@ -98,7 +98,13 @@ siguientes usan esos nombres exactos, no los de este documento.
 cd "$ROOT/zascarr"
 
 # 2.1 Shell
-bash -n bootstrap.sh && bash -n scripts/backup.sh && bash -n scripts/kavita.sh && bash -n scripts/vpn-state.sh
+bash -n bootstrap.sh
+bash -n scripts/_comun.sh
+bash -n scripts/update.sh
+bash -n scripts/rollback.sh
+bash -n scripts/backup.sh
+bash -n scripts/kavita.sh
+bash -n scripts/vpn-state.sh
 echo "PASS shell si exit 0"
 
 # 2.2 Compose (combinado, con override)
@@ -672,7 +678,113 @@ BD ni se escribe fuera de la biblioteca) y no bloquea el ciclo.
 | 12. Persistencia | PASS/FAIL | cuentas tras restart |
 | 13. Look-and-feel | PASS/FAIL | capturas |
 | 14. Edge/seguridad | PASS/FAIL/known-fail | … |
+| 16. Update+rollback | PASS/FAIL | destructivo real (dropdb --force, ON_ERROR_STOP, FLUSHDB) |
 
 > Reglas de reporte: un "known failure" (p.ej. 14.1 M1) se lista **aparte** y
 > no cuenta como PASS del release; todo FAIL con error se acompaña de logs,
 > HTTP status y ruta inesperada para poder corregirlo antes de la Pi.
+
+---
+
+## 16. Actualización + rollback (prueba destructiva, layout de producción)
+
+> `update.sh`/`rollback.sh` están pensados para el layout de producción: un
+> único proyecto `tebeoteca-arr`, el `.env` en el **padre** del repo y la app en
+> `127.0.0.1:8000`. No caben en paralelo con el stack E2E (compartirían los
+> puertos 5432/6379/8000), así que esta fase va **después del teardown de la 15**,
+> con esos puertos libres. Es la prueba que valida de verdad lo que la
+> simulación no puede: `dropdb --force`, `psql -v ON_ERROR_STOP=1` y
+> `redis-cli FLUSHDB` contra Docker/PostgreSQL reales.
+
+```bash
+cd "$ROOT"
+
+# ── 16.1 TEBEOTECA_ROOT aislado con su propio clon completo y .env ──
+UT="$ROOT/update-test"
+mkdir -p "$UT"
+git clone -q "$ROOT/zascarr" "$UT/zascarr"    # clon local completo (tiene Dockerfile)
+cd "$UT/zascarr"
+V2="$(git rev-parse HEAD)"
+git reset -q --hard HEAD~1                    # dejamos el clon UNA versión por detrás
+V1="$(git rev-parse HEAD)"
+printf 'DB_PASSWORD=SuperSecretPassword123\n' > "$UT/.env"
+export TEBEOTECA_ROOT="$UT" BACKUP_DIR="$UT/backups"
+PCOMPOSE=(docker compose -f "$UT/zascarr/docker-compose.yml" --env-file "$UT/.env")
+
+# ── 16.2 Stack en v1: build, migrar y sembrar un dato "antes" ──
+"${PCOMPOSE[@]}" build zascarr
+"${PCOMPOSE[@]}" up -d postgres redis
+"${PCOMPOSE[@]}" run --rm zascarr alembic upgrade head
+"${PCOMPOSE[@]}" run --rm zascarr python - <<'PY'
+import asyncio
+from zascarr.database import async_session_factory
+from zascarr.models import ComicTradition, Series
+async def main():
+    async with async_session_factory() as db:
+        db.add(Series(title="serie_antes", tradition=ComicTradition.AMERICAN, start_year=2011))
+        await db.commit()
+asyncio.run(main())
+PY
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+  "select count(*) from series;"        # → 1 (serie_antes)
+
+# ── 16.3 Actualización v1 → v2 ──
+bash scripts/update.sh
+#  Criterio: exit 0; HEAD == $V2; existe $UT/backups/update_<TS>.sql.gz y
+#  `gzip -t` lo da íntegro; refs/zascarr/update/<TS> apunta a $V1; healthcheck ok.
+git rev-parse HEAD                       # == $V2
+git for-each-ref refs/zascarr/update --format='%(refname) %(objectname)'
+
+# ── 16.4 Sembrar un dato "después" en v2 (no está en el dump de v1) ──
+"${PCOMPOSE[@]}" exec -T zascarr python - <<'PY'
+import asyncio
+from zascarr.database import async_session_factory
+from zascarr.models import ComicTradition, Series
+async def main():
+    async with async_session_factory() as db:
+        db.add(Series(title="serie_despues", tradition=ComicTradition.AMERICAN, start_year=2012))
+        await db.commit()
+asyncio.run(main())
+PY
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+  "select count(*) from series;"        # → 2 (serie_antes + serie_despues)
+
+# ── 16.5 Rollback a v1 (destructivo de verdad) ──
+bash scripts/rollback.sh --yes
+#  Criterio: exit 0; HEAD == $V1; serie_despues HA DESAPARECIDO; serie_antes
+#  sigue; el informe dice "esquema de ZascArr completo"; existen
+#  $UT/backups/rollback-safety_<TS>.sql.gz y refs/zascarr/rollback-rescue/<TS>.
+git rev-parse HEAD                       # == $V1
+
+# ── 16.6 Verificar la BD restaurada ──
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+  "select count(*) from series;"        # → 1
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+  "select title from series;"           # → serie_antes (serie_despues desapareció)
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+  "select version_num from alembic_version;"
+
+# ── 16.7 dropdb --force con una conexión concurrente abierta ──
+#  El riesgo "database is being accessed by other users": se abre una psql que
+#  duerme dentro de una transacción y, con ella viva, se repite el rollback.
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+  "begin; select pg_sleep(120);" &
+PSQL_PID=$!
+sleep 2
+bash scripts/rollback.sh --yes --forzar   # el código ya está en v1 → hace falta --forzar
+kill "$PSQL_PID" 2>/dev/null || true
+#  Criterio: exit 0 incluso con la conexión abierta (dropdb --force la corta).
+#  Si dropdb fallara, el rollback aborta dejando la BD intacta y su copia de
+#  seguridad; registrar el mensaje exacto como evidencia.
+
+# ── 16.8 Limpieza del subproyecto ──
+"${PCOMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+rm -rf "$UT"
+```
+
+**Criterio 16.x**: el ciclo completo `update → rollback` revierte **código y
+base de datos** a la vez (la serie sembrada en v2 desaparece, la de v1 persiste);
+`dropdb --force` corta una conexión concurrente; y el informe final de
+`rollback.sh` imprime la revisión de Alembic y el recuento `series/files/wishlist`
+de la BD restaurada. Cualquier `exit != 0` se registra con el log
+`$UT/backups/rollback_<TS>.log` y la copia de seguridad correspondiente.

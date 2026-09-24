@@ -198,7 +198,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 |---|---|---|---|---|
 | E1 | ~~Como coleccionista, quiero una pantalla de estado con semáforos ("todo bien / atención: sin VPN / error: disco lleno")~~ | ~~Dashboard sobre `/api/health` con iconos y textos en español, no JSON~~ | ✅ Hecho | M |
 | E2 | ~~Como coleccionista, quiero que haya copias de seguridad automáticas sin configurar nada por mi parte~~ | ~~Cron de `pg_dump` a segundo disco (el backup actual al mismo disco del dato era hallazgo del review)~~ | ✅ Hecho | S |
-| E3 | Como coleccionista, quiero un botón "restaurar copia" si algo sale mal | Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo) | P1 | M |
+| E3 | Como coleccionista, quiero un botón "restaurar copia" si algo sale mal | Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo) | 🟡 Parcial | M |
 | E4 | Como coleccionista, quiero un aviso al móvil cuando una descarga se importa, para no estar mirando el dashboard | Webhook configurable (Gotify/ntfy/Telegram/URL genérica) al completar descarga+import; desactivado por defecto | P1 | S |
 | E5 | Como coleccionista que reporta un fallo, quiero un botón en el dashboard que genere un fichero con los logs recientes, sin tocar la terminal | Botón "Descargar logs" en el dashboard, sin acceso a shell | P2 | S |
 
@@ -207,7 +207,8 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 - **E1 (dashboard):** `src/zascarr/static/dashboard.html`, servido en `GET /` (antes esa ruta no existía; la API vivía solo bajo `/api/*`). Página única sin build tooling, sondea `/api/health` cada 10s. Verificado visualmente en el navegador en los 4 estados (todo bien / atención / error / sin conexión) y en viewport móvil. Al mostrar el array `warnings` del healthcheck (VPN sin proteger, etc.) como un aviso visible, esta misma pieza cierra también **D4**.
 - **E1 (empaquetado):** `pyproject.toml` no incluía datos no-Python en `pip install .` (no editable, el que usa el Dockerfile) — sin `[tool.setuptools.package-data]`, `dashboard.html` no habría llegado a la imagen. Verificado con una instalación real no-editable en un venv limpio.
 - **A1 (bootstrap.sh):** 3 preguntas (biblioteca, raíz de descargas, idioma), escritas en `.env` de forma idempotente (`set_env_var`, no duplica al re-ejecutar). `docker-compose.yml` parametriza el lado HOST de los 3 volúmenes correspondientes (`HOST_LIBRARY_DIR`, `HOST_DOWNLOADS_DIR`, `HOST_AMULE_INCOMING_DIR`) manteniendo el lado del contenedor fijo, así que `config.py` no necesitó cambios. El idioma se guarda en `APP_LOCALE` para cuando exista i18n real — hoy no traduce nada. Probado en aislamiento (sin Docker) con respuestas por defecto y personalizadas, incluyendo idempotencia.
-- **E2 (backup):** `scripts/backup.sh` (mismo patrón que `vpn-state.sh`: script host + timer systemd embebido), escribe en `/media/WDElements/backups/postgres/` (disco distinto al de los datos) con retención automática de 14 días. `make backup` ahora lo invoca en vez de duplicar la lógica.
+- **E2 (backup):** `scripts/backup.sh` (mismo patrón que `vpn-state.sh`: script host + timer systemd embebido), escribe en `BACKUP_DIR` (por defecto `/var/backups/zascarr/postgres`, configurable con la variable de entorno; debe ser un disco distinto al de los datos) con retención automática de 14 días. `make backup` ahora lo invoca en vez de duplicar la lógica.
+- **E3 (restaurar copia — parcial, no cerrada):** `scripts/rollback.sh` es el "script de restore" que la nota de E2 dejaba apuntado como historia aparte. Hace el rollback completo: empareja el commit y el dump por la referencia de rescate `refs/zascarr/update/<TS>` que deja `update.sh`, hace **su propia** copia de seguridad de la BD actual antes de destruir nada, restaura con `psql -v ON_ERROR_STOP=1`, verifica que la BD restaurada tiene tablas, resetea el código, vacía Redis, reconstruye y comprueba el healthcheck. Se niega a adivinar: **no** usa "el backup más reciente" (backup.sh corre a diario a las 04:00, así que el más reciente puede tener ya el esquema nuevo y el rollback no revertiría nada) ni `HEAD@{1}` (cambia con cualquier operación intermedia y caduca). **Le falta para cerrar E3:** el botón en el dashboard, y probarlo una vez contra Docker + PostgreSQL reales (aquí solo se ha verificado en simulación con dobles de `docker`/`curl`, con `bash -n` limpio). El rollback tampoco está cubierto por el runbook de `docs/TESTING_E2E.md`.
 
 **Notas de implementación (D1):**
 
@@ -366,6 +367,41 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   proceso muere entre el move y el commit, fichero y BD divergen. Solución
   completa: tabla `file_operations` con estados y un reconciliador al arrancar.
   Para 1.0 se acepta el riesgo (single-user, sin concurrencia masiva).
+
+## Deuda técnica registrada (peer review de los scripts de operación, 2026-09-24)
+
+- **`scripts/backup.sh` rompía la convención del `.env` — corregido.** Antes hacía
+  `cd "$REPO_DIR"` y `docker compose exec` sin `-f` ni `--env-file` (el `.env`
+  vive en `TEBEOTECA_ROOT`, el padre del repo, así que Compose no lo cargaba y
+  las variables caían a sus defaults). Ahora usa
+  `COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")` y hace el
+  dump con temporal + `gzip -t` + `mv` atómico (antes ni verificaba el gzip).
+  Sigue siendo self-contained a propósito: no comparte `_comun.sh` porque está
+  pensado para copiarse a `/usr/local/bin` (unit systemd); se localiza el repo
+  con `ZASCARR_REPO`. Decidir en el futuro si compensa acercarlo a `_comun.sh`.
+- **Nombres de dump ahora inequívocos (corregido):** `backup_<TS>` = copia diaria
+  de `backup.sh`; `update_<TS>` = copia previa a la actualización, emparejada con
+  la ref `refs/zascarr/update/<TS>`; `rollback-safety_<TS>` = copia de la BD
+  actual que hace `rollback.sh` justo antes de destruirla. Los tres comparten la
+  retención de `RETENTION_DAYS`. `rollback.sh` también deja
+  `refs/zascarr/rollback-rescue/<TS>` apuntando al commit que se abandona, para
+  poder deshacer un rollback equivocado sin depender del reflog.
+- **Cabecera obsoleta en `docker-compose.yml`:** el comentario de uso dice
+  `cd /path/a/zascarr; cp .env.example .env; docker compose up -d`, que dejaría
+  el `.env` **dentro** del repo. `bootstrap.sh` lo escribe en
+  `TEBEOTECA_ROOT/.env` y todos los scripts lo buscan ahí. Induce a error justo
+  en el paso que `rollback.sh` valida.
+- **Sin `make update` / `make rollback`:** el `Makefile` ya tiene `backup` y el
+  `README` cita `make help` como referencia de comandos, pero los dos scripts
+  nuevos solo se invocan a mano. Decidir si se añaden o si se documenta que son
+  comandos de host a propósito.
+- **`rollback.sh` sin probar contra Docker + PostgreSQL reales:** verificado en
+  simulación (dobles de `docker`/`curl`, ~90 aserciones cubriendo camino feliz,
+  `--dry-run`, dump corrupto, pareja ausente, referencia huérfana, árbol sucio,
+  destino igual al actual, repetición de rollback y todas las rutas de aborto).
+  Queda la prueba destructiva en un sandbox efímero real: `dropdb --force` con
+  una conexión concurrente abierta, `psql -v ON_ERROR_STOP=1` contra un dump
+  real, y `redis-cli FLUSHDB`. Falta además su fase en `docs/TESTING_E2E.md`.
 
 ## Benchmarking competitivo (2026-09-21)
 
