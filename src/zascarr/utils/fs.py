@@ -19,6 +19,7 @@ es la implementación de esa regla para todo lo que mueve ficheros:
 from __future__ import annotations
 
 import asyncio
+import errno
 import os
 import re
 import shutil
@@ -126,10 +127,20 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
         # Mismo disco: renombrado atómico, sin copia que verificar. La
         # re-comprobación acorta la ventana entre "comprobar" y "colocar".
         dest = _unique_path(dest)
-        os.replace(src, dest)
-        return dest
+        try:
+            os.replace(src, dest)
+            return dest
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise
+            # st_dev puede coincidir entre dos bind mounts distintos del
+            # mismo filesystem host (downloads/library montados por
+            # separado en docker-compose.yml) y aun así el kernel rechazar
+            # rename() por cruzar el límite de mount. Cae al camino de
+            # copia entre discos de más abajo con el mismo `dest`.
 
-    # Discos distintos: copiar y verificar ANTES de borrar el original.
+    # Discos distintos (o el rename anterior cruzó un límite de mount):
+    # copiar y verificar ANTES de borrar el original.
     fd, tmp_name = tempfile.mkstemp(
         dir=str(dest.parent), prefix=f".{dest.name}.", suffix=".part"
     )

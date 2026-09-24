@@ -8,6 +8,8 @@ biblioteca al construir la ruta canónica.
 """
 from __future__ import annotations
 
+import errno
+
 import pytest
 
 from zascarr.utils import fs
@@ -114,3 +116,53 @@ class TestSafeMove:
         assert src.read_bytes() == b"original"
         # el temporal a medias no debe quedar en el directorio destino
         assert list(tmp_path.iterdir()) == [src]
+
+    def test_exdev_con_mismo_st_dev_cae_a_copia_entre_discos(self, tmp_path, monkeypatch):
+        """Hallazgo E2E release 1.0: dos bind mounts distintos del mismo
+        filesystem host reportan el mismo st_dev dentro de un contenedor
+        Docker, pero el kernel rechaza rename() entre ellos con EXDEV. Antes
+        de este fix, safe_move confiaba ciegamente en _same_filesystem() y
+        dejaba escapar el OSError, tumbando el importador al 100% con el
+        docker-compose.yml real."""
+        src = tmp_path / "a.cbz"
+        src.write_bytes(b"contenido")
+        dest = tmp_path / "sub" / "b.cbz"
+
+        # _same_filesystem() dice "mismo disco" (como con dos bind mounts),
+        # pero el os.replace() real se comporta como si cruzara un mount.
+        monkeypatch.setattr(fs, "_same_filesystem", lambda s, d: True)
+        original_replace = fs.os.replace
+        calls = {"n": 0}
+
+        def replace_primero_exdev(src_arg, dest_arg):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+            return original_replace(src_arg, dest_arg)
+
+        monkeypatch.setattr(fs.os, "replace", replace_primero_exdev)
+
+        result = safe_move(src, dest)
+
+        assert result == dest
+        assert dest.read_bytes() == b"contenido"
+        assert not src.exists()
+
+    def test_exdev_no_enmascara_otros_oserror(self, tmp_path, monkeypatch):
+        """Solo EXDEV cae al camino de discos distintos; cualquier otro
+        OSError (disco lleno, permiso denegado...) debe propagarse tal cual."""
+        src = tmp_path / "a.cbz"
+        src.write_bytes(b"x")
+        dest = tmp_path / "b.cbz"
+
+        monkeypatch.setattr(fs, "_same_filesystem", lambda s, d: True)
+
+        def replace_permiso_denegado(*_a, **_k):
+            raise OSError(errno.EACCES, "Permission denied")
+
+        monkeypatch.setattr(fs.os, "replace", replace_permiso_denegado)
+
+        with pytest.raises(OSError, match="Permission denied"):
+            safe_move(src, dest)
+
+        assert src.exists()

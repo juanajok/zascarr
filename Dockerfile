@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 COPY pyproject.toml .
+COPY src ./src
 RUN pip install --no-cache-dir --prefix=/install .
 
 FROM python:3.11-slim-bookworm AS runtime
