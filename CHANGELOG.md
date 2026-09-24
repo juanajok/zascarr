@@ -3,6 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.1] — 2026-09-24
+
+### Corregido
+
+- **El instalador fallaba en cascada si el shell que lo invocaba tenía un
+  `cwd` borrado bajo los pies** (reportado por un usuario en una Raspberry
+  Pi real: `cd ~/zascarr` + `rm -rf ~/zascarr` en el mismo terminal —
+  exactamente lo que este mismo proyecto recomienda para reintentar una
+  instalación fallida). `getcwd()` falla para cualquier proceso que lo
+  resuelva en ese estado; reproducido en sandbox: no solo `git clone`
+  abortaba (`fatal: Unable to read current working directory`), el propio
+  instalador oficial de Docker también fallaba en cada paso (`sh: 0:
+  getcwd() failed`). Corregido con un `cd /tmp` al principio del script,
+  antes de cualquier otra cosa, para no heredar un `cwd` inválido del
+  proceso padre.
+
 ## [1.2.0] — 2026-09-24
 
 ### Cambiado
