@@ -19,6 +19,16 @@
 # queda exactamente como estaba.
 set -euo pipefail
 
+# Bug real (reportado): si el shell que invoca este script está posicionado
+# dentro de un directorio que ya no existe (p.ej. "cd ~/zascarr" seguido de
+# "rm -rf ~/zascarr" en el mismo terminal, exactamente lo que se recomienda
+# para reintentar una instalación fallida), getcwd() falla para cualquier
+# proceso que intente resolverlo — incluido "git clone" con ruta de destino
+# absoluta, que igualmente consulta el cwd por dentro y aborta con "Unable
+# to read current working directory". Nos movemos a un sitio que sí existe
+# ANTES de hacer nada más, para no heredar ese problema del shell padre.
+cd /tmp 2>/dev/null || cd / || true
+
 B='\033[1m'; G='\033[0;32m'; Y='\033[0;33m'; R='\033[0;31m'; N='\033[0m'
 info()    { echo -e "${B}→${N} $*"; }
 success() { echo -e "${G}✓${N} $*"; }

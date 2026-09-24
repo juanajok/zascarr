@@ -549,6 +549,21 @@ tres problemas reales:
   PATH, no el import), que no sufre el shadowing. Reproducido y verificado
   el fix contra el mismo sandbox que lo encontró.
 
+## Deuda técnica registrada (cwd inválido heredado del shell, 2026-09-24)
+
+Tercer bug real reportado por el mismo usuario en la misma Pi: al hacer
+`cd ~/zascarr` + `sudo rm -rf ~/zascarr` en el mismo terminal (justo lo que
+este documento recomienda como workaround para reintentar una instalación
+fallida) y ejecutar el instalador desde ahí, todo revienta con
+`getcwd: cannot access parent directories: No such file or directory` en
+cascada — hasta el propio instalador oficial de `get.docker.com` fallaba
+en cada paso, no solo `git clone`. Reproducido en un sandbox antes de
+corregir: `mkdir` + `cd` + `rm -rf` (el mismo directorio) + invocar
+`bootstrap.sh` en el mismo proceso de shell, exactamente el escenario real.
+Corregido con `cd /tmp` al principio del script (antes de cualquier otra
+cosa), para no heredar un `cwd` inválido del proceso padre. Publicado como
+v1.2.1.
+
 ## Deuda técnica registrada (rutas de instalación coherentes con la suite *arr, 2026-09-24)
 
 El mismo usuario que reportó el bug de arriba ya tiene todo el resto de la
