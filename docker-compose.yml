@@ -1,4 +1,4 @@
-# docker-compose.yml — Tebeoteca Digital (ZascArr)
+# docker-compose.yml — ZascArr
 #
 # Uso:
 #   cd /path/a/zascarr   # raíz del repo
@@ -8,23 +8,23 @@
 # La carpeta de datos (config/) vive en el PADRE del repo; los discos del
 # usuario (biblioteca/descargas) se pasan por .env (HOST_*_DIR).
 
-name: tebeoteca-arr
+name: zascarr
 
 networks:
-  tebeoteca-internal:
+  zascarr-internal:
     driver: bridge
 
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: tebeoteca-db
+    container_name: zascarr-db
     restart: unless-stopped
     networks:
-      - tebeoteca-internal
+      - zascarr-internal
     environment:
       POSTGRES_USER: comics_admin
       POSTGRES_PASSWORD: ${DB_PASSWORD:-SuperSecretPassword123}
-      POSTGRES_DB: tebeoteca
+      POSTGRES_DB: zascarr
     command:
       - -c
       - listen_addresses=*
@@ -35,7 +35,7 @@ services:
     volumes:
       - ../config/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U comics_admin -d tebeoteca"]
+      test: ["CMD-SHELL", "pg_isready -U comics_admin -d zascarr"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -46,10 +46,10 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: tebeoteca-cache
+    container_name: zascarr-cache
     restart: unless-stopped
     networks:
-      - tebeoteca-internal
+      - zascarr-internal
     command: redis-server --save 60 1 --loglevel warning
     ports:
       - "127.0.0.1:6379:6379"
@@ -64,16 +64,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: tebeoteca-orquestador
+    container_name: zascarr-orquestador
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - tebeoteca-internal
+      - zascarr-internal
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/tebeoteca
+      - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/zascarr
       - REDIS_URL=redis://redis:6379/0
       - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
       - PROWLARR_URL=${PROWLARR_URL:-http://host.docker.internal:9696}

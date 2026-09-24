@@ -199,7 +199,7 @@ Medir durante una carga sintética:
 
 ```bash
 docker stats --no-stream
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select count(*) from pg_stat_activity;"
 ```
 

@@ -489,6 +489,66 @@ commit:
   se ejecutó** en una segunda pasada — ver la entrada de arriba sobre
   `rollback.sh` (cierra E3).
 
+## Deuda técnica registrada (instalador de un comando + rename de infraestructura, 2026-09-24)
+
+Tras publicar v1.0.0, revisión del flujo de instalación desde el punto de
+vista de "El Coleccionista" (persona: no técnico, no abre terminales) sacó
+tres problemas reales:
+
+- **`git` y Docker eran dependencias invisibles y no gestionadas.**
+  `bootstrap.sh` comprobaba que existieran y moría con instrucciones de
+  `apt-get`/`curl` si no — nunca los instalaba él mismo. Para alguien sin
+  conocimientos técnicos, eso rompe la promesa de "instalador de un solo
+  comando" que ya hacía el propio README.
+- **La instalación eran 3 pasos manuales, no 1.** `mkdir` + `git clone` +
+  `sudo bash bootstrap.sh` — el usuario tenía que teclear `git clone` sin
+  que nadie le explicara qué es git.
+- **Nombres de infraestructura heredados de "Tebeoteca Digital"** (el
+  nombre original del proyecto, antes de SecuenciArr y de ZascArr — el
+  docstring de la migración 0001 lo confirma: *"Initial schema — Tebeoteca
+  Digital v1.3"*): el proyecto Compose (`tebeoteca-arr`), los contenedores
+  (`tebeoteca-db`/`-cache`/`-orquestador`), la red (`tebeoteca-internal`),
+  la base de datos (`tebeoteca`) y la variable `TEBEOTECA_ROOT` en los tres
+  scripts de operación sobrevivieron a los dos renames posteriores, que
+  solo tocaron la capa superficial (paquete Python, README, badges).
+
+**Fix aplicado:**
+
+- `bootstrap.sh` ahora es el **único comando** de instalación
+  (`curl -fsSL .../bootstrap.sh | sudo bash`). El mismo fichero detecta si
+  se le invoca suelto (sin `docker-compose.yml` al lado, típico de un
+  `curl | bash`) o desde dentro de un clon ya existente: en el primer caso,
+  instala `git`/Docker si faltan, crea `~/zascarr` (en el HOME del usuario
+  real que invocó `sudo`, no en `/root`), clona el repo, y se relanza a sí
+  mismo (`exec`) desde dentro del clon para continuar con la configuración
+  de siempre (3 preguntas, `docker compose up`, migraciones). Verificado de
+  extremo a extremo en un sandbox aislado: rama de instalación en frío
+  (detecta modo suelto, prepara `ZASCARR_ROOT`, clona, relanza) y la
+  configuración completa después (build, migrar 0001→0009, arrancar,
+  healthcheck), incluida una segunda ejecución idempotente.
+- **Rename completo `tebeoteca` → `zascarr`** en toda la capa de
+  infraestructura: `docker-compose.yml` (proyecto, contenedores, red, BD),
+  `scripts/_comun.sh`/`backup.sh`/`rollback.sh` (`TEBEOTECA_ROOT` →
+  `ZASCARR_ROOT`, `DB_NAME` por defecto), `bootstrap.sh`, `README.md`, y los
+  comandos literales de `docs/TESTING_E2E.md`/`TESTING_NFR_Zascarr.md`. Se
+  hizo ahora a propósito: el mismo día del release 1.0.0, sin instalaciones
+  reales todavía — mañana, con gente ya corriendo `tebeoteca-db` en su Pi,
+  habría sido un cambio incompatible con cualquier `update.sh` futuro.
+- **Hallazgo colateral real, no cosmético:** al ejecutar `bootstrap.sh` de
+  verdad por primera vez en este proyecto (hasta ahora solo se había
+  probado la migración vía `docker compose run zascarr alembic upgrade
+  head`, nunca el camino de host que usa `bootstrap.sh`), salió que la
+  comprobación `python3 -c "import alembic"` **siempre daba positivo**
+  incluso sin `pip install` — porque se ejecuta con el cwd puesto en la
+  raíz del repo, que tiene su propia carpeta `alembic/` (las migraciones),
+  y `python3 -c` añade el cwd a `sys.path` antes que el paquete instalado.
+  El check "pasaba" con la carpeta local, saltaba el `pip install`, y el
+  `alembic upgrade head` posterior fallaba con "orden no encontrada" —
+  **esto habría roto toda instalación real desde cero**, en cualquier
+  versión anterior a esta. Corregido a `command -v alembic` (comprueba el
+  PATH, no el import), que no sufre el shadowing. Reproducido y verificado
+  el fix contra el mismo sandbox que lo encontró.
+
 ## Benchmarking competitivo (2026-09-21)
 
 Comparado contra tres proyectos del mismo espacio para no reinventar ni

@@ -170,17 +170,17 @@ rm -rf "$ROOT/config/postgres"; mkdir -p "$ROOT/config/postgres"
 
 # 4.2 Salud por servicio (separar running de healthy)
 "${COMPOSE[@]}" ps --format json
-"${COMPOSE[@]}" exec -T postgres pg_isready -U comics_admin -d tebeoteca
+"${COMPOSE[@]}" exec -T postgres pg_isready -U comics_admin -d zascarr
 "${COMPOSE[@]}" exec -T redis redis-cli ping          # → PONG
 
 # 4.3 Estado de migración y esquema
 "${COMPOSE[@]}" run --rm zascarr alembic current      # → head
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select version_num from alembic_version;"
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select table_name from information_schema.tables where table_schema='public' order by 1;"
 #  Verificar columnas sensibles:
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select column_name from information_schema.columns where table_name in ('series','issues','wishlist','legal_acknowledgments') order by table_name, column_name;"
 ```
 
@@ -253,7 +253,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/api/wishlist" \
 #  Criterio: != 403 por legal_acknowledgment_required.
 
 # 5.5 La aceptación es global y persistente (sin usuarios)
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select legal_version, accepted_at from legal_acknowledgments;"
 ```
 
@@ -353,7 +353,7 @@ asyncio.run(main())
 PY
 
 # 7.2 Verificar rutas DESDE LA BD (no fijar la ruta de ejemplo)
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select f.file_name, f.file_path from files f order by f.imported_at desc;"
 
 #  Criterio:
@@ -367,7 +367,7 @@ PY
 # 7.3 Deduplicación (el original se conservó en $ROOT/fixtures)
 cp "$ROOT/fixtures/Batman 001.cbz" "$ROOT/data/downloads/comics/Batman 001 (copia).cbz"
 # re-ejecutar 7.1 → debe aparecer en "duplicados" y NO crear un segundo File:
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select count(*) from files where file_name like 'Batman 001%';"   # sigue siendo 1
 ```
 
@@ -386,9 +386,9 @@ cd "$ROOT/zascarr"
 curl -s "$APP_URL/ui/pendientes" | grep -i "zzz-misterioso" && echo "PASS listado"
 
 # 8.2 Obtener file_id y series_id
-FILE_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+FILE_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select id from files where file_name='zzz-misterioso.cbz';" )
-SERIES_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+SERIES_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select id from series where title='Batman';" )
 
 # 8.3 Asignar a una serie (número nuevo → crea Issue con locked_fields)
@@ -397,7 +397,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/ui/pendientes/$FILE_I
   --data "series_id=$SERIES_ID&issue_number=12"          # → 200
 
 # 8.4 Verificar efectos en BD
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select i.issue_number, i.locked_fields, f.file_path from files f left join issues i on i.id=f.issue_id where f.file_name='zzz-misterioso.cbz';"
 #  Criterio: el archivo se movió a la biblioteca; file.issue_id está enlazado;
 #  el Issue nuevo tiene locked_fields = {series_id, issue_number} (H3) y metadata_source no es 'manual'.
@@ -414,7 +414,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/ui/pendientes/$FILE_I
 
 ```bash
 cd "$ROOT/zascarr"
-SERIES_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+SERIES_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select id from series where title='Batman';" )
 
 # 9.1 Portada extraída del CBZ + cabeceras de caché
@@ -471,7 +471,7 @@ kill "$MOCK_PID" 2>/dev/null || true
 cd "$ROOT/zascarr"
 
 # 10.1 Añadir a deseados (form-encoded; requiere legal ya aceptado)
-SERIES_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+SERIES_ID=$( "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select id from series where title='Saga';" )
 curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/ui/wishlist/anadir" \
   -H 'Content-Type: application/x-www-form-urlencoded' \
@@ -593,7 +593,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "$APP_URL/api/health"    # 200
 # 12.2 down/up SIN borrar volúmenes → los datos persisten
 "${COMPOSE[@]}" down
 "${COMPOSE[@]}" up -d postgres redis zascarr
-"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select (select count(*) from series) as series, (select count(*) from files) as files, (select count(*) from legal_acknowledgments) as legal;"
 #  Criterio: las cuentas NO bajan; la portada cacheada sigue en $ROOT/config/covers.
 ```
@@ -690,7 +690,7 @@ BD ni se escribe fuera de la biblioteca) y no bloquea el ciclo.
 ## 16. Actualización + rollback (prueba destructiva, layout de producción)
 
 > `update.sh`/`rollback.sh` están pensados para el layout de producción: un
-> único proyecto `tebeoteca-arr`, el `.env` en el **padre** del repo y la app en
+> único proyecto `zascarr`, el `.env` en el **padre** del repo y la app en
 > `127.0.0.1:8000`. No caben en paralelo con el stack E2E (compartirían los
 > puertos 5432/6379/8000), así que esta fase va **después del teardown de la 15**,
 > con esos puertos libres. Es la prueba que valida de verdad lo que la
@@ -700,7 +700,7 @@ BD ni se escribe fuera de la biblioteca) y no bloquea el ciclo.
 ```bash
 cd "$ROOT"
 
-# ── 16.1 TEBEOTECA_ROOT aislado con su propio clon completo y .env ──
+# ── 16.1 ZASCARR_ROOT aislado con su propio clon completo y .env ──
 UT="$ROOT/update-test"
 mkdir -p "$UT"
 git clone -q "$ROOT/zascarr" "$UT/zascarr"    # clon local completo (tiene Dockerfile)
@@ -709,7 +709,7 @@ V2="$(git rev-parse HEAD)"
 git reset -q --hard HEAD~1                    # dejamos el clon UNA versión por detrás
 V1="$(git rev-parse HEAD)"
 printf 'DB_PASSWORD=SuperSecretPassword123\n' > "$UT/.env"
-export TEBEOTECA_ROOT="$UT" BACKUP_DIR="$UT/backups"
+export ZASCARR_ROOT="$UT" BACKUP_DIR="$UT/backups"
 PCOMPOSE=(docker compose -f "$UT/zascarr/docker-compose.yml" --env-file "$UT/.env")
 
 # ── 16.2 Stack en v1: build, migrar y sembrar un dato "antes" ──
@@ -726,7 +726,7 @@ async def main():
         await db.commit()
 asyncio.run(main())
 PY
-"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select count(*) from series;"        # → 1 (serie_antes)
 
 # ── 16.3 Actualización v1 → v2 ──
@@ -747,7 +747,7 @@ async def main():
         await db.commit()
 asyncio.run(main())
 PY
-"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select count(*) from series;"        # → 2 (serie_antes + serie_despues)
 
 # ── 16.5 Rollback a v1 (destructivo de verdad) ──
@@ -758,17 +758,17 @@ bash scripts/rollback.sh --yes
 git rev-parse HEAD                       # == $V1
 
 # ── 16.6 Verificar la BD restaurada ──
-"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select count(*) from series;"        # → 1
-"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select title from series;"           # → serie_antes (serie_despues desapareció)
-"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -tAc \
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -tAc \
   "select version_num from alembic_version;"
 
 # ── 16.7 dropdb --force con una conexión concurrente abierta ──
 #  El riesgo "database is being accessed by other users": se abre una psql que
 #  duerme dentro de una transacción y, con ella viva, se repite el rollback.
-"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d tebeoteca -c \
+"${PCOMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "begin; select pg_sleep(120);" &
 PSQL_PID=$!
 sleep 2

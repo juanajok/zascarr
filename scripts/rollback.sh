@@ -70,7 +70,7 @@ Opciones:
 
 Variables de entorno:
   BACKUP_DIR (def. /var/backups/zascarr/postgres), DB_NAME, DB_USER,
-  TEBEOTECA_ROOT, HEALTH_URL, HEALTH_TIMEOUT.
+  ZASCARR_ROOT, HEALTH_URL, HEALTH_TIMEOUT.
 EOF
 }
 
@@ -340,7 +340,7 @@ success "Código en ${TARGET_SHA:0:7}"
 # ── 8. Redis, reconstruir y arrancar ─────────────────────────────────────────
 FASE="arranque del servicio"
 # Redis es EXCLUSIVO de ZascArr: docker-compose.yml levanta un contenedor
-# tebeoteca-cache que solo consume la app, así que FLUSHDB no toca datos ajenos.
+# zascarr-cache que solo consume la app, así que FLUSHDB no toca datos ajenos.
 info "Vaciando la caché de Redis (puede tener estado de la versión nueva)..."
 "${COMPOSE[@]}" exec -T redis redis-cli FLUSHDB >/dev/null 2>&1 \
     || warn "No pude vaciar Redis. Si algo se comporta raro: docker compose -f ${COMPOSE_FILE} restart redis"

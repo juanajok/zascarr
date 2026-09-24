@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-1.0.0-brightgreen.svg)
+![Estado](https://img.shields.io/badge/estado-1.1.0-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -39,7 +39,7 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-✅ **v1.0.0.** Backend e interfaz web funcionales, verificados end-to-end
+✅ **v1.1.0.** Backend e interfaz web funcionales, verificados end-to-end
 contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
 wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
 actualización/rollback destructivo. Detalle de la verificación en
@@ -87,42 +87,25 @@ español.
 ## Requisitos
 
 - **Raspberry Pi 4/5** (o cualquier Linux) con **Raspberry Pi OS (64-bit)** y
-  conexión a internet. Docker se instala en el paso 1; no necesitas saber qué es.
+  conexión a internet. Docker y git se instalan solos si faltan; no necesitas
+  saber qué son.
 - Para desarrollo: **Python 3.11+**.
 
 Opcional, fuera de Docker (baremetal): Transmission, aMule, Prowlarr y Kavita.
 
 ## Instalación
 
-Pensada para **"El Coleccionista"**: no hace falta entender qué es Docker ni
-una terminal. Son tres pasos de copiar y pegar, y el instalador solo te hace 3
-preguntas.
-
-### Paso 1 — Instala Docker (una sola vez)
+Pensada para **"El Coleccionista"**: no hace falta entender qué es Docker,
+git ni una terminal más allá de pegar una línea. Un único comando deja todo
+listo:
 
 ```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker "$USER"
+curl -fsSL https://raw.githubusercontent.com/juanajok/zascarr/main/bootstrap.sh | sudo bash
 ```
 
-Cierra la sesión y vuelve a entrar (o reinicia) para que el grupo `docker`
-haga efecto.
-
-### Paso 2 — Descarga ZascArr
-
-```bash
-mkdir -p ~/tebeoteca && cd ~/tebeoteca
-git clone https://github.com/juanajok/zascarr.git
-```
-
-### Paso 3 — Ejecuta el instalador
-
-```bash
-sudo bash zascarr/bootstrap.sh
-```
-
-`bootstrap.sh` te hace **3 preguntas** (pulsa `Intro` para aceptar lo que va
-entre corchetes):
+Instala git y Docker si te faltan, descarga ZascArr en `~/zascarr/zascarr`,
+y te hace **3 preguntas** (pulsa `Intro` para aceptar lo que va entre
+corchetes):
 
 1. ¿Dónde están tus tebeos ya organizados?
 2. ¿Dónde caen tus descargas (Transmission/aMule)?
@@ -132,8 +115,33 @@ Al terminar, ZascArr ya está funcionando. Ábrelo en:
 
 **http://127.0.0.1:8000** — el panel de estado, en español.
 
-Puedes volver a ejecutar `sudo bash zascarr/bootstrap.sh` cuando quieras: es
-idempotente (no duplica nada) y nunca toca los archivos de tu colección.
+Puedes volver a ejecutar `sudo bash ~/zascarr/zascarr/bootstrap.sh` cuando
+quieras: es idempotente (no duplica nada) y nunca toca los archivos de tu
+colección.
+
+### Si prefieres revisar el script antes de ejecutarlo
+
+Es buena práctica desconfiar de `curl | bash` a ciegas. Descárgalo y léelo
+primero:
+
+```bash
+curl -fsSL -o bootstrap.sh https://raw.githubusercontent.com/juanajok/zascarr/main/bootstrap.sh
+less bootstrap.sh          # revísalo
+sudo bash bootstrap.sh
+```
+
+### Paso a paso, sin el comando único
+
+Si prefieres controlar cada paso tú mismo (o ya tienes git y Docker):
+
+```bash
+sudo apt-get install -y git                       # si no lo tienes
+curl -fsSL https://get.docker.com | sudo sh        # si no tienes Docker
+
+mkdir -p ~/zascarr && cd ~/zascarr
+git clone https://github.com/juanajok/zascarr.git
+sudo bash zascarr/bootstrap.sh
+```
 
 ### Qué hace el instalador
 
@@ -165,7 +173,7 @@ Cuando haya una versión nueva, ejecuta el script de actualización desde donde
 instalaste ZascArr:
 
 ```bash
-cd ~/tebeoteca/zascarr     # o la carpeta donde clonaste el repo
+cd ~/zascarr/zascarr     # o la carpeta donde clonaste el repo
 sudo bash scripts/update.sh
 ```
 
@@ -195,7 +203,7 @@ migraciones nuevas, hay que restaurar también la base de datos, o el esquema
 nuevo y el código viejo quedarán desacompasados. Está automatizado:
 
 ```bash
-cd ~/tebeoteca/zascarr
+cd ~/zascarr/zascarr
 sudo bash scripts/rollback.sh              # añade --dry-run para ver el plan sin tocar nada
 ```
 
@@ -230,11 +238,11 @@ Si prefieres hacerlo tú, o el script no puede seguir, esto es lo que hace por
 dentro:
 
 ```bash
-cd ~/tebeoteca/zascarr
+cd ~/zascarr/zascarr
 COMPOSE="docker compose -f docker-compose.yml --env-file ../.env"
 
 # 1. Copia de la base de datos ACTUAL antes de destruirla. No te la saltes.
-$COMPOSE exec -T postgres pg_dump -U comics_admin tebeoteca | gzip > /tmp/antes.sql.gz
+$COMPOSE exec -T postgres pg_dump -U comics_admin zascarr | gzip > /tmp/antes.sql.gz
 gzip -t /tmp/antes.sql.gz        # si falla, PARA: ese fichero no te vale
 
 # 2. Comprobar el dump que vas a restaurar ANTES de borrar nada
@@ -242,10 +250,10 @@ gzip -t /var/backups/zascarr/postgres/update_AAAAMMDD_HHMMSS.sql.gz
 
 # 3. Levantar la base de datos, vaciarla y restaurar
 $COMPOSE up -d postgres
-$COMPOSE exec -T postgres dropdb -U comics_admin --if-exists --force tebeoteca
-$COMPOSE exec -T postgres createdb -U comics_admin tebeoteca
+$COMPOSE exec -T postgres dropdb -U comics_admin --if-exists --force zascarr
+$COMPOSE exec -T postgres createdb -U comics_admin zascarr
 gunzip -c /var/backups/zascarr/postgres/update_AAAAMMDD_HHMMSS.sql.gz | \
-  $COMPOSE exec -T postgres psql -q -v ON_ERROR_STOP=1 -U comics_admin tebeoteca
+  $COMPOSE exec -T postgres psql -q -v ON_ERROR_STOP=1 -U comics_admin zascarr
 
 # 4. Volver al commit anterior, limpiar la caché y reconstruir
 git reset --hard <SHA-anterior>
@@ -258,7 +266,7 @@ Dos detalles que no son opcionales: `psql` **sin** `ON_ERROR_STOP=1` devuelve
 con cara de haber ido bien), y `dropdb --force` evita el fallo típico de
 «database is being accessed by other users» (necesita PostgreSQL 13+, que es el
 que fija este repo). El `FLUSHDB` de Redis es seguro aquí porque Redis es
-exclusivo de ZascArr (`tebeoteca-cache` en el compose); no copies ese patrón a
+exclusivo de ZascArr (`zascarr-cache` en el compose); no copies ese patrón a
 un Redis compartido con otras aplicaciones.
 
 ### Copia de seguridad manual

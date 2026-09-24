@@ -9,7 +9,7 @@
 # (y empezaba a divergir): rutas, array COMPOSE, colores, mensajes y esperas.
 #
 # Dato clave que justifica el array COMPOSE: el .env NO vive en el repo, vive
-# en TEBEOTECA_ROOT (el padre, junto a config/), así que ningún comando puede
+# en ZASCARR_ROOT (el padre, junto a config/), así que ningún comando puede
 # depender del cwd. Todo va con -f y --env-file explícitos.
 # =============================================================================
 
@@ -24,13 +24,13 @@ _ZASCARR_COMUN_CARGADO=1
 # SCRIPT_DIR es el del script que hace `source`, no el de este fichero.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TEBEOTECA_ROOT="${TEBEOTECA_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
+ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
 COMPOSE_FILE="${REPO_DIR}/docker-compose.yml"
-ENV_FILE="${TEBEOTECA_ROOT}/.env"
+ENV_FILE="${ZASCARR_ROOT}/.env"
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/zascarr/postgres}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
-DB_NAME="${DB_NAME:-tebeoteca}"
+DB_NAME="${DB_NAME:-zascarr}"
 DB_USER="${DB_USER:-comics_admin}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8000/api/health}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
@@ -59,7 +59,7 @@ comprobar_requisitos() {
     [[ -f "${COMPOSE_FILE}" ]] || die \
         "No encuentro ${COMPOSE_FILE}. ¿Está el repo completo en ${REPO_DIR}?"
     [[ -f "${ENV_FILE}" ]] || die \
-        "No encuentro ${ENV_FILE}. Se espera el .env que creó bootstrap.sh en ${TEBEOTECA_ROOT}."
+        "No encuentro ${ENV_FILE}. Se espera el .env que creó bootstrap.sh en ${ZASCARR_ROOT}."
 }
 
 # Los scripts se invocan con sudo (el backup va a /var/backups, que es de root),

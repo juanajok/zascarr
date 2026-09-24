@@ -3,6 +3,40 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.1.0] — 2026-09-24
+
+### Añadido
+
+- **Instalación de un solo comando de verdad**:
+  `curl -fsSL .../bootstrap.sh | sudo bash` instala `git` y Docker si
+  faltan, crea la carpeta de trabajo en el `HOME` del usuario real (no en
+  `/root`), clona el repo y continúa con la configuración habitual — antes
+  eran 3 pasos manuales (instalar Docker, `git clone`, `bootstrap.sh`), y
+  el usuario tenía que teclear `git clone` sin que nadie le explicara qué
+  es `git`.
+
+### Corregido
+
+- **`bootstrap.sh` fallaba en toda instalación real desde cero** en el
+  paso de migraciones: la comprobación `python3 -c "import alembic"` daba
+  siempre positivo (aunque `pip install` nunca se hubiera ejecutado) porque
+  el cwd en ese punto es la raíz del repo, que tiene su propia carpeta
+  `alembic/` (las migraciones) — Python la confundía con el paquete
+  instalado. Corregido a `command -v alembic`. Encontrado y verificado
+  ejecutando `bootstrap.sh` de verdad por primera vez, no solo el camino
+  vía contenedor que ya se había probado en la 1.0.0.
+
+### Cambiado
+
+- **Renombrada toda la infraestructura de `tebeoteca` a `zascarr`**
+  (proyecto Docker Compose, contenedores, red, base de datos, variable
+  `TEBEOTECA_ROOT` → `ZASCARR_ROOT`): resto del nombre original del
+  proyecto ("Tebeoteca Digital", anterior a SecuenciArr y a ZascArr) que
+  sobrevivió a los dos renames previos sin que nadie lo tocara. Se hace
+  ahora, el mismo día del primer release, porque no hay instalaciones
+  reales todavía — después habría sido un cambio incompatible con
+  `update.sh`.
+
 ## [1.0.0] — 2026-09-24
 
 Primera release estable. Backend e interfaz web funcionales y verificados

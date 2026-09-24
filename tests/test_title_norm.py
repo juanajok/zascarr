@@ -10,8 +10,8 @@ suite (que es deliberadamente sin DB). Se salta automáticamente si
 TEST_DATABASE_URL no está definida:
 
     docker run --rm -d --name zascarr_test_pg -e POSTGRES_PASSWORD=test \\
-        -e POSTGRES_DB=tebeoteca -p 15433:5432 postgres:15-alpine
-    TEST_DATABASE_URL=postgresql://postgres:test@localhost:15433/tebeoteca \\
+        -e POSTGRES_DB=zascarr -p 15433:5432 postgres:15-alpine
+    TEST_DATABASE_URL=postgresql://postgres:test@localhost:15433/zascarr \\
         pytest tests/test_title_norm.py
 
 Las funciones SQL se extraen del propio fichero de migración (no se
