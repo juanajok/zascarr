@@ -351,6 +351,13 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   migrar Alembic a contenedor también permitiría **eliminar el
   `ports: 127.0.0.1:5432` de PostgreSQL** (hoy el bootstrap corre `alembic`
   en el host contra loopback; sin ese `ports` bastaría con `expose`).
+  **Materializada en producción (2026-09-24):** un usuario real en
+  Raspberry Pi OS lo confirmó — `typing_extensions` venía instalado vía
+  `apt` (paquete `python3-typing-extensions`, sin fichero `RECORD` de pip)
+  y `pip install -e .` abortaba con `uninstall-no-record-file`. Parcheado
+  con `--ignore-installed` (v1.2.2) como parche mínimo, no como cierre de
+  M3: la solución de fondo sigue siendo mover la migración inicial a un
+  contenedor efímero, tal como ya decía esta entrada.
 - **M5 — caché de portada en disco sin invalidación (de C1):**
   `covers_cache_path/{series_id}.jpg` se escribe una vez y no se vuelve
   a comprobar nunca. Si se cachea primero una portada externa y más
