@@ -52,7 +52,7 @@ shell:
 	$(SA) /bin/bash
 
 db-shell:
-	$(COMPOSE) exec postgres psql -U comics_admin -d tebeoteca
+	$(COMPOSE) exec postgres psql -U comics_admin -d zascarr
 
 test:
 	$(SA) python -m pytest tests/ -v
