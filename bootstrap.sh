@@ -93,7 +93,20 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
         warn "No pude ajustar el propietario de ${ZASCARR_ROOT} a ${DEST_USER}."
 
     success "Continuando la instalación..."
-    exec bash "${ZASCARR_ROOT}/zascarr/bootstrap.sh" "$@"
+    # Bug real (reproducido): tras "curl | sudo bash", el stdin de ESTE
+    # proceso sigue siendo el pipe de curl. Bash lo va leyendo por bloques
+    # a medida que ejecuta, así que en este punto puede quedar contenido
+    # del propio bootstrap.sh sin consumir todavía en ese pipe. Si nos
+    # relanzáramos sin más, el "read" de las 3 preguntas de la fase 2 se
+    # tragaría esos restos como si fueran la respuesta del usuario (visto
+    # en vivo: el idioma leía un comentario del propio script y el sed
+    # posterior reventaba). Reconectamos stdin a la terminal real antes.
+    if [[ -r /dev/tty ]]; then
+        exec bash "${ZASCARR_ROOT}/zascarr/bootstrap.sh" "$@" < /dev/tty
+    else
+        warn "Sin terminal para las preguntas interactivas: usaré los valores por defecto."
+        exec bash "${ZASCARR_ROOT}/zascarr/bootstrap.sh" "$@" < /dev/null
+    fi
 fi
 
 # ── A partir de aquí, siempre dentro de un clon real del repo ──────────────

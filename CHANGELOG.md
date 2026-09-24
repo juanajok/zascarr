@@ -3,6 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.1.1] — 2026-09-24
+
+### Corregido
+
+- **El instalador de un solo comando rompía las 3 preguntas en instalación
+  real** (reportado por un usuario en una Raspberry Pi limpia, reproducido
+  en sandbox antes de corregir). Tras `curl -fsSL .../bootstrap.sh | sudo
+  bash`, el proceso hace `exec` hacia el script ya clonado para continuar —
+  pero heredaba el `stdin` original, que todavía podía tener restos sin
+  consumir del propio código fuente del script (bash lee el pipe de curl
+  por bloques). El primer `read` (la pregunta del idioma) se tragaba esos
+  restos como si fueran la respuesta del usuario — en el caso real, un
+  comentario del propio `bootstrap.sh` — y el `sed` posterior reventaba con
+  `unknown option to 's'`. Corregido reconectando `stdin` a `/dev/tty`
+  antes de relanzarse.
+
 ## [1.1.0] — 2026-09-24
 
 ### Añadido
