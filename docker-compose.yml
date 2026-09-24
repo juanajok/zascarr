@@ -94,6 +94,14 @@ services:
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
       - COVERS_CACHE_PATH=/config/covers
       - TZ=${TZ:-Europe/Madrid}
+      # UID/GID reales del usuario de servicio del host (ZASCARR_USER,
+      # resuelto por bootstrap.sh) — sin esto el contenedor corre fijo
+      # como UID 1000 y no puede borrar los originales tras importarlos
+      # si el usuario de servicio del host tiene otro UID (el caso normal:
+      # es un usuario de sistema, Debian no le da el 1000). Ver
+      # docker-entrypoint.sh.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       - ${HOST_DOWNLOADS_DIR:-/media/data/downloads}:/media/downloads
       - ${HOST_AMULE_INCOMING_DIR:-/media/data/aMule/Incoming}:/media/incoming

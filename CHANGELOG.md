@@ -3,6 +3,18 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.5] — 2026-09-25
+
+### Corregido
+
+- **`PermissionError: [Errno 13]` al importar tebeos reales, en cada archivo, siempre.** El contenedor corre fijo como UID 1000 desde el `Dockerfile`, pero `ZASCARR_USER` (por defecto `media`, desde v1.2.0) es un usuario de **sistema** creado con `useradd --system` — Debian le asigna el UID que tenga libre en su rango, casi nunca 1000. El importador podía **copiar** el archivo a la biblioteca (lectura vía "otros", el `.cbr` tiene `-rw-rw-r--`) pero no **borrar el original** en descargas: borrar exige permiso de escritura en el directorio, y ese directorio (`rwxrwsr-x`, propiedad de `media:media`) no se lo da a "otros". Confirmado en vivo contra la Pi real del usuario (usuario `media` con UID 996 en su sistema) — cada uno de sus 15 `.cbr` reales fallaba igual.
+
+  Arreglo estructural, mismo patrón que usa toda imagen *arr de LinuxServer.io (**PUID/PGID**): `docker-entrypoint.sh` (nuevo) ajusta el UID/GID internos del contenedor en cada arranque con `usermod`/`groupmod` y baja privilegios con `runuser` antes de ejecutar la app — nunca corre como root. `bootstrap.sh` resuelve `PUID`/`PGID` automáticamente a partir del UID/GID real de `ZASCARR_USER`/`ZASCARR_GROUP` (`id -u`/`getent group`) y los escribe en `.env`; el coleccionista no tiene que saber qué es un UID. Los `chown` que ya hacía el instalador sobre sus propios directorios (subcarpetas nuevas de biblioteca, `covers`, descargas si las crea él) pasan de `1000:1000` fijo al UID/GID resuelto.
+
+  Sin dependencia nueva: `usermod`/`groupmod` (paquete `passwd`) y `runuser` (paquete `util-linux`) ya vienen en `python:3.11-slim-bookworm`.
+
+  Verificado en Docker-en-Docker desde cero: usuario de sistema `media` (UID 996/GID 995, igual que en la Pi real) dueño de una carpeta de descargas con los permisos exactos del caso real; tras el bootstrap, `/proc/<pid>/status` del proceso real de `uvicorn` confirma `Uid: 996 Gid: 995` (no root, no 1000); el `.cbr` de prueba se importa y el original desaparece de descargas sin error. Suite completa sin regresiones (257 tests).
+
 ## [1.2.4] — 2026-09-25
 
 ### Corregido
