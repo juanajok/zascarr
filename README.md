@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-pre--1.0%20(desarrollo)-orange.svg)
+![Estado](https://img.shields.io/badge/estado-1.0.0-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -17,6 +17,11 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 > se activa de forma explícita y bajo tu responsabilidad. ZascArr **no
 > distribuye ni facilita** contenido protegido por derechos de autor.
 > Lee [`src/zascarr/LEGAL.md`](src/zascarr/LEGAL.md) antes de usarlo.
+
+> 🔒 **Sin autenticación.** ZascArr no tiene login ni contraseña propios —
+> por defecto solo escucha en `127.0.0.1`, lo cual es seguro sin ella, pero
+> **si lo publicas en tu LAN o en internet, pon un reverse proxy con
+> autenticación delante**. Detalle en [`SECURITY.md`](SECURITY.md).
 
 ---
 
@@ -34,10 +39,16 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-🚧 **Pre-1.0, en desarrollo activo.** El backend y la interfaz web están
-funcionales y verificados end-to-end, pero quedan piezas por cerrar antes del
-release 1.0. El backlog canónico con el detalle y el orden de prioridades está
-en [`docs/BACKLOG.md`](docs/BACKLOG.md).
+✅ **v1.0.0.** Backend e interfaz web funcionales, verificados end-to-end
+contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
+wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
+actualización/rollback destructivo. Detalle de la verificación en
+[`CHANGELOG.md`](CHANGELOG.md) y `docs/TESTING_E2E.md`.
+
+Queda deuda conocida y no bloqueante — sobre todo la falta de autenticación
+propia (ver el aviso de seguridad arriba) — documentada en
+[`docs/BACKLOG.md`](docs/BACKLOG.md), que sigue siendo el backlog canónico
+del producto.
 
 ## Características
 
@@ -300,7 +311,7 @@ src/zascarr/
   schemas/    # contratos Pydantic
   utils/      # naming, portadas, ComicInfo
   LEGAL.md    # aviso legal (blindaje legal)
-alembic/      # migraciones (0001–0008)
+alembic/      # migraciones (0001–0009)
 docs/         # backlog y ADRs
 tests/        # suite de tests autosuficiente
 scripts/      # backup, VPN, Kavita
@@ -310,8 +321,11 @@ docker-compose.yml
 
 ## Documentación
 
+- [`CHANGELOG.md`](CHANGELOG.md) — qué trae cada release y qué queda pendiente.
+- [`SECURITY.md`](SECURITY.md) — postura de seguridad y cómo reportar una vulnerabilidad.
 - [`docs/BACKLOG.md`](docs/BACKLOG.md) — backlog canónico del producto.
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura registradas.
+- [`docs/TESTING_E2E.md`](docs/TESTING_E2E.md) / [`docs/TESTING_NFR_Zascarr.md`](docs/TESTING_NFR_Zascarr.md) — planes de testing end-to-end y no funcional.
 - [`src/zascarr/LEGAL.md`](src/zascarr/LEGAL.md) — aviso legal y marco de uso.
 - Docstrings de cada módulo — explican el *por qué* de las decisiones.
 

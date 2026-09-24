@@ -1,6 +1,6 @@
 [project]
 name = "zascarr"
-version = "0.1.0"
+version = "1.0.0"
 description = "Orquestador inteligente de tebeoteca digital para Raspberry Pi"
 requires-python = ">=3.11"
 dependencies = [

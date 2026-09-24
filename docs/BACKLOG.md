@@ -198,7 +198,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 |---|---|---|---|---|
 | E1 | ~~Como coleccionista, quiero una pantalla de estado con semáforos ("todo bien / atención: sin VPN / error: disco lleno")~~ | ~~Dashboard sobre `/api/health` con iconos y textos en español, no JSON~~ | ✅ Hecho | M |
 | E2 | ~~Como coleccionista, quiero que haya copias de seguridad automáticas sin configurar nada por mi parte~~ | ~~Cron de `pg_dump` a segundo disco (el backup actual al mismo disco del dato era hallazgo del review)~~ | ✅ Hecho | S |
-| E3 | Como coleccionista, quiero un botón "restaurar copia" si algo sale mal | Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo) | 🟡 Parcial | M |
+| E3 | ~~Como coleccionista, quiero un botón "restaurar copia" si algo sale mal~~ | ~~Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo)~~ | ✅ Hecho | M |
 | E4 | Como coleccionista, quiero un aviso al móvil cuando una descarga se importa, para no estar mirando el dashboard | Webhook configurable (Gotify/ntfy/Telegram/URL genérica) al completar descarga+import; desactivado por defecto | P1 | S |
 | E5 | Como coleccionista que reporta un fallo, quiero un botón en el dashboard que genere un fichero con los logs recientes, sin tocar la terminal | Botón "Descargar logs" en el dashboard, sin acceso a shell | P2 | S |
 
@@ -395,14 +395,25 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   `README` cita `make help` como referencia de comandos, pero los dos scripts
   nuevos solo se invocan a mano. Decidir si se añaden o si se documenta que son
   comandos de host a propósito.
-- **`rollback.sh` sin probar contra Docker + PostgreSQL reales:** verificado en
-  simulación (dobles de `docker`/`curl`, ~90 aserciones cubriendo camino feliz,
-  `--dry-run`, dump corrupto, pareja ausente, referencia huérfana, árbol sucio,
-  destino igual al actual, repetición de rollback y todas las rutas de aborto).
-  Queda la prueba destructiva en un sandbox efímero real: `dropdb --force` con
-  una conexión concurrente abierta, `psql -v ON_ERROR_STOP=1` contra un dump
-  real, y `redis-cli FLUSHDB`. Su fase ya está documentada en
-  `docs/TESTING_E2E.md` (§16.1-16.8); falta ejecutarla contra el sandbox real.
+- **`rollback.sh` probado contra Docker + PostgreSQL reales (2026-09-24,
+  cierra E3).** Además de la simulación (dobles de `docker`/`curl`, ~90
+  aserciones cubriendo camino feliz, `--dry-run`, dump corrupto, pareja
+  ausente, referencia huérfana, árbol sucio, destino igual al actual,
+  repetición de rollback y todas las rutas de aborto), se ejecutó §16.1-16.8
+  de `docs/TESTING_E2E.md` de verdad: `TEBEOTECA_ROOT` aislado con `.env` en
+  el padre del repo (layout de producción), `update.sh` V1→V2 (build +
+  migración 0001→0009 + backup previo verificado + healthcheck), siembra de
+  datos "antes"/"después", `rollback.sh --yes` (destructivo: `dropdb --force`
+  + `psql -v ON_ERROR_STOP=1` + verificación de esquema) revirtiendo código y
+  BD a la vez (`serie_despues` desaparece, `serie_antes` persiste, alembic
+  vuelve a la revisión de V1), y `rollback.sh --yes --forzar` repetido con
+  una conexión `psql` abierta en transacción (`pg_sleep(120)`) — `dropdb
+  --force` la cortó y el rollback terminó en `exit 0`. V1 se usó `d4564a2`
+  (con los fixes de hoy ya aplicados) en vez del commit real anterior porque
+  ese tenía el bug del Dockerfile ya corregido — probar el mecanismo de
+  rollback con un Dockerfile que no compila no aporta nada nuevo. `redis-cli
+  FLUSHDB` no se verificó por separado (lo ejecuta el propio script en el
+  paso 8; no se comprobó el estado de Redis antes/después explícitamente).
 
 ## Deuda técnica registrada (ejecución real de TESTING_E2E.md/TESTING_NFR_Zascarr.md, 2026-09-24)
 
@@ -473,9 +484,10 @@ commit:
   100 peticiones simultáneas (NFR-14), escaneo de dependencias/imagen con
   `trivy`/`pip-audit` (NFR-17, no instalados en el sandbox → `NOT RUN`,
   nunca `PASS`, tal como exige el propio documento), portabilidad ARM64
-  (NFR-19, sin runner ARM disponible), y la fase 16 de `TESTING_E2E.md`
-  (`update.sh`/`rollback.sh` destructivo contra Docker/Postgres reales —
-  sigue pendiente, ver entrada de arriba sobre `rollback.sh`).
+  (NFR-19, sin runner ARM disponible). La fase 16 de `TESTING_E2E.md`
+  (`update.sh`/`rollback.sh` destructivo contra Docker/Postgres reales) **sí
+  se ejecutó** en una segunda pasada — ver la entrada de arriba sobre
+  `rollback.sh` (cierra E3).
 
 ## Benchmarking competitivo (2026-09-21)
 
