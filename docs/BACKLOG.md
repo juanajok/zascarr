@@ -34,6 +34,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | A4 | Como coleccionista, quiero desinstalar sin dejar restos ni perder mi tebeoteca | `make uninstall` conserva biblioteca y BD con aviso claro | P1 | S |
 | A5 | Como coleccionista con el disco casi lleno, quiero repartir tradiciones entre discos sin engañar al sistema | N carpetas-raíz; cada una asignada a una o varias tradiciones; el importer escribe en la raíz que le toca a esa tradición | P2 | L |
 | A6 | Como coleccionista, cuando abra ZascArr fuera de localhost quiero contraseña y que funcione tras un reverse proxy | Auth none/password/user+password + `base_url` configurable | P1 | M |
+| A7 | Como quien ya tiene un usuario de servicio propio para toda la suite *arr (o quiere uno distinto de `media`), quiero poder elegirlo al instalar en vez de depender de exportar `ZASCARR_USER` a mano | `bootstrap.sh` pregunta el usuario de servicio (por defecto `media`, Intro lo acepta) igual que ya pregunta biblioteca/descargas/idioma; si no existe, `asegurar_usuario_servicio()` lo crea (ya es idempotente, solo falta que el nombre venga de la pregunta y no solo de la variable de entorno) | P2 | S |
 
 **Notas de implementación (A2+A3, hecho):**
 

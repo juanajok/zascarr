@@ -3,6 +3,64 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.4] — 2026-09-25
+
+### Corregido
+
+- **Bug de diseño real: el `.env` vive en `ZASCARR_ROOT` (el padre del
+  repo), pero Docker Compose por defecto solo busca `.env` en el
+  directorio desde el que se invoca** — cualquier `docker compose ...`
+  manual ejecutado dentro del repo, sin `--env-file` explícito, lo
+  ignoraba en silencio y arrancaba con los valores por defecto de
+  `docker-compose.yml` (incluida la contraseña de la BD). Así es como un
+  `docker compose down/up zascarr` manual dejó un contenedor real en
+  bucle de reinicio. Arreglo estructural, no solo documentación:
+  `bootstrap.sh` ahora crea un symlink `SCRIPT_DIR/.env -> ZASCARR_ROOT/.env`
+  (no versionado, recreado en cada ejecución) para que el descubrimiento
+  **por defecto** de Compose ya encuentre el `.env` real sin que nadie
+  tenga que acordarse de `--env-file`; `scripts/_comun.sh` lo
+  autorrepara en cada uso por si se pierde. Verificado en sandbox:
+  `docker compose config` sin `--env-file` resuelve ya la contraseña
+  real, no la de fábrica.
+- **Ese symlink, a su vez, destapó un bug latente**: en cuanto
+  `Settings()` empezó a ver el `.env` real (antes, ejecutándose con cwd
+  en el repo, nunca lo encontraba), `pydantic-settings` reventaba con
+  `Extra inputs are not permitted` — las variables de infraestructura
+  del `.env` (`HOST_LIBRARY_DIR`, `ZASCARR_DATA_DIR`, `APP_LOCALE`, `TZ`)
+  no son campos de `Settings`, y su comportamiento por defecto es
+  rechazarlas, no ignorarlas. Corregido con `extra="ignore"` en
+  `Settings.model_config` (`src/zascarr/config.py`): esas variables las
+  consume `docker-compose.yml`, no la app Python.
+- **`HOST_DOWNLOADS_DIR`/`HOST_AMULE_INCOMING_DIR` añadían `/downloads`
+  y `/aMule/Incoming` a la ruta que daba el usuario**, asumiendo que
+  siempre sería una raíz genérica para organizar debajo. Un usuario con
+  Transmission/aMule ya apuntando sus descargas reales a esa carpeta (el
+  caso normal, no la excepción — así lo reportó un usuario con ~15GB de
+  cómics reales sin detectar) se encontraba con una subcarpeta nueva y
+  vacía en vez de sus archivos. Ahora se usa la ruta exacta que da el
+  usuario, tal cual, para las dos — el importador ya escanea de forma
+  recursiva y no necesita subcarpetas concretas.
+- **Ese mismo cambio expone un caso normal, no un edge case: si
+  descargas y aMule comparten disco (una sola respuesta a la pregunta
+  de descargas), el mismo archivo aparece bajo `/media/downloads` y
+  `/media/incoming` — dos bind-mounts distintos del mismo inodo — y el
+  importador lo escaneaba dos veces por ciclo**; la segunda pasada
+  fallaba porque el archivo ya se había movido en la primera
+  (`errores=1` confuso en cada ciclo, sin pérdida de datos pero
+  ruidoso). La deduplicación existente comparaba rutas resueltas
+  (`Path.resolve()`), que no detecta dos bind-mounts distintos del mismo
+  disco; ahora compara `(st_dev, st_ino)` (`services/importer.py`).
+  Regresión: `tests/test_importer.py::TestScanDedupePorInodo`
+  (hard-link real entre dos directorios, sin symlinks, para reproducir
+  el bind-mount).
+
+Verificación: contenedor Docker-en-Docker desde cero (Debian 12, sin
+Docker/git preinstalados, usuario `pi` con sudo real) — instalación
+completa de punta a punta con un `.cbr` puesto directamente en la
+carpeta de descargas (sin subcarpeta), confirmado `importer.imported
+dest=.../\_Unsorted/... status=unsorted` en los logs del orquestador;
+suite completa (257 tests, 20 skips esperados) sin regresiones.
+
 ## [1.2.3] — 2026-09-24
 
 ### Corregido

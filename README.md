@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-1.2.3-brightgreen.svg)
+![Estado](https://img.shields.io/badge/estado-1.2.4-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -39,7 +39,7 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-✅ **v1.2.3.** Backend e interfaz web funcionales, verificados end-to-end
+✅ **v1.2.4.** Backend e interfaz web funcionales, verificados end-to-end
 contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
 wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
 actualización/rollback destructivo. Detalle de la verificación en
@@ -168,10 +168,26 @@ sudo bash zascarr/bootstrap.sh
 
 ### Instalación manual (para quien prefiera Docker Compose)
 
+El `.env` real vive en el **padre** del repo (`ZASCARR_ROOT`, `/opt/zascarr`
+por defecto), no junto a `docker-compose.yml` — así el reset de código de un
+rollback nunca puede tocarlo por accidente. Docker Compose, por defecto,
+solo busca `.env` en el directorio desde el que se invoca — sin esto, un
+`docker compose up -d` a secas ejecutado dentro del repo lo ignoraría en
+silencio y arrancaría con los valores por defecto (incluida la contraseña
+de la BD): exactamente el fallo real que dejó un contenedor en bucle de
+reinicio la primera vez que alguien lo hizo así.
+
+El instalador ya deja resuelto esto con un enlace simbólico
+(`zascarr/.env -> ../.env`, no versionado) para que el descubrimiento por
+defecto de Compose encuentre el `.env` real sin tener que acordarse de
+`--env-file` cada vez. Si instalaste con `bootstrap.sh`, esto ya existe;
+en una instalación manual desde cero, créalo tú mismo:
+
 ```bash
-cp .env.example .env        # edita .env (contraseña de BD, claves opcionales)
+cp ../.env.example ../.env     # ajusta HOST_*_DIR y DB_PASSWORD
+ln -sf ../.env .env            # una vez — Compose ya lo encontrará solo
 docker compose up -d
-make migrate                # aplica las migraciones de Alembic
+docker compose run --rm zascarr alembic upgrade head
 ```
 
 ## Uso
