@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.8] — 2026-09-25
+
+### Corregido
+
+- **"Estado" seguía sin migas de pan y con un look distinto al resto de la app** tras el fix de v1.2.7 (que solo le añadió un enlace de vuelta): reportado de nuevo por un usuario. Causa real: era un fichero estático (`static/dashboard.html`) fuera de `base.html`, con su propio CSS inline y su propia paleta de colores — el enlace de vuelta no arreglaba la inconsistencia visual ni daba navegación real. Convertido en una vista Jinja2 más (`web/estado.py` + `templates/estado.html`), con el mismo `topnav` (que hace de navegación consistente en las 4 pantallas) y las mismas clases/tokens de `web.css` que el resto de la app — mismo `fetch()` a `/api/health` de siempre, sin JS nuevo. `static/dashboard.html` eliminado (muerto).
+
+### Añadido
+
+- **Parser de nombres de archivo (`naming.py`) ampliado para releases en español (CRG y similares)**, tras los 14 archivos reales de un usuario que quedaron en `_Unsorted` por no extraerse ni título ni número: tags de release entre corchetes (`[CRG]`, `[MQ]`, `[DI]`, `[ML]`) ahora se limpian como ruido (antes solo se limpiaba ruido entre paréntesis); líneas editoriales de reedición delante del nombre real ("Marvel Gold - La Patrulla-X Original 1.cbr") ya no se confunden con el título; "Omnigold N"/"Integral N"/"Edición Integral N" se reconocen como marcador de tomo; y un número suelto de 1-3 cifras al final del nombre (sin "#", sin "T", sin año) ya no se pierde. Alcance deliberadamente acotado a la extracción sintáctica (Fase 1 de un diseño en 3 fases): el matcher sigue sin crear series nuevas ni asignar con baja confianza — con la BD vacía, estos archivos seguirán en `_Unsorted`, correctamente, hasta que exista una `Series` con la que comparar (ver **C0** en `docs/BACKLOG.md`). Fases 2 (sugerencia con confirmación) y 3 (alias aprendidos localmente) quedan registradas como **B12**/**B13**, no implementadas en esta pasada. 8 fixtures existentes sin regresión + 4 nuevas con los nombres reales.
+
 ## [1.2.7] — 2026-09-25
 
 ### Corregido
