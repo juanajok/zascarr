@@ -114,10 +114,24 @@
     color: var(--text-muted);
     font-size: 0.78rem;
   }
+
+  /* Migas de pan (bug real reportado: esta página no tenía forma de volver
+     — es un fichero estático fuera de base.html/topnav a propósito, ver
+     docstring de dashboard() en main.py, así que la navegación se repite
+     aquí a mano en vez de heredarla). */
+  .volver {
+    display: block;
+    text-align: center;
+    margin-bottom: 14px;
+    font-size: 0.9rem;
+  }
+  .volver a { color: var(--text-muted); text-decoration: none; }
+  .volver a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
   <div class="wrap">
+    <nav class="volver"><a href="/ui/">← Volver a la biblioteca</a></nav>
     <header>
       <h1>ZascArr</h1>
       <p>Estado del sistema</p>
