@@ -549,6 +549,50 @@ tres problemas reales:
   PATH, no el import), que no sufre el shadowing. Reproducido y verificado
   el fix contra el mismo sandbox que lo encontró.
 
+## Deuda técnica registrada (bug real en producción, instalador de un comando, 2026-09-24)
+
+Un usuario ejecutó el instalador de la 1.1.0 en una Raspberry Pi real y
+limpia: `curl -fsSL .../bootstrap.sh | sudo bash` se detuvo en la primera
+pregunta con `sed: -e expression #1, char 47: unknown option to 's'`, tras
+un aviso de que el idioma `'# El repo vive en SCRIPT_DIR; ...'` no era
+reconocido — un comentario del propio `bootstrap.sh` colándose como si
+fuera la respuesta a "¿Idioma de la interfaz?".
+
+**Sandbox de verificación anterior no lo cazó porque no probaba el camino
+real.** La verificación fiel de la 1.1.0 (contenedor limpio, git/Docker sin
+instalar, usuario con sudo real — ver entrada de más abajo) validó la rama
+de instalación en frío y la fase de configuración **por separado**: la
+primera con `curl | sudo bash` sin preguntas interactivas (moría antes,
+en la comprobación de Docker), y la segunda invocando `bootstrap.sh`
+directamente desde el clon con las respuestas ya preparadas por `printf`
+— nunca las dos cosas seguidas, en la misma tubería, tal como las
+ejecutaría un usuario real. Reproducido en cuanto se probó así de seguido.
+
+**Causa raíz confirmada (reproducida en sandbox antes de corregir):**
+`curl -fsSL URL | sudo bash` deja el `stdin` de ese primer proceso
+conectado al pipe de `curl`. Bash lee el script de ese pipe **por bloques**
+a medida que lo ejecuta, no de golpe; cuando la rama de instalación en frío
+llega a `exec bash "$ZASCARR_ROOT/zascarr/bootstrap.sh" "$@"`, el proceso
+nuevo **hereda ese mismo stdin** — y en él pueden quedar restos sin
+consumir del propio código fuente de `bootstrap.sh` todavía en el pipe. El
+primer `read -rp` de la fase 2 (la pregunta del idioma) se traga esos
+restos como si fueran la respuesta tecleada, y el `set_env_var` posterior
+pasa esa cadena (con `/`, `(`, `)`...) a un `sed` que no la espera.
+
+**Fix:** reconectar `stdin` a `/dev/tty` justo antes del `exec` de la rama
+de instalación en frío (con un `< /dev/null` de reserva si no hay terminal
+controladora disponible, en vez de heredar el pipe roto). Reproducido el
+bug en un sandbox limpio (mismos pasos, mismo error letra por letra) antes
+de tocar el código, y reproducida también la corrección en el mismo
+sandbox tras el fix. Publicado como v1.1.1.
+
+**Nota sobre una explicación incorrecta que llegó junto al reporte:** el
+reporte inicial venía acompañado de un diagnóstico y un *workaround*
+apuntando a un fichero `languages/es.sh` inexistente en este repo, con
+variables de entorno (`ZASCARR_LANG`, `ZASCARR_HOST`, `ZASCARR_DATA_DIR`...)
+que no existen en `.env.example` ni en `config.py`. Se descartó sin
+aplicarlo — no coincidía con el código real del proyecto.
+
 ## Deuda técnica registrada (CI + lint, 2026-09-24)
 
 No había ningún pipeline de CI (`.github/workflows` no existía): los 256
