@@ -17,7 +17,7 @@ LEGAL.md invalida automáticamente cualquier aceptación anterior.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -64,7 +64,7 @@ async def is_acknowledged(db: AsyncSession) -> bool:
 
 async def acknowledge(db: AsyncSession) -> LegalAcknowledgment:
     ack = LegalAcknowledgment(
-        accepted_at=datetime.now(timezone.utc),
+        accepted_at=datetime.now(UTC),
         legal_version=current_legal_version(),
     )
     db.add(ack)

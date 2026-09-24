@@ -1,6 +1,9 @@
 """Cliente Prowlarr REST API."""
 from dataclasses import dataclass
-import httpx, structlog
+
+import httpx
+import structlog
+
 from zascarr.config import get_settings
 
 logger = structlog.get_logger()

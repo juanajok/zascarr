@@ -1,7 +1,11 @@
 """Cliente aMule vía amuleweb HTTP."""
-import hashlib, re
+import hashlib
+import re
 from urllib.parse import quote
-import httpx, structlog
+
+import httpx
+import structlog
+
 from zascarr.config import get_settings
 
 logger = structlog.get_logger()

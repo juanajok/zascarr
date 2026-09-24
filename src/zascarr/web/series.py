@@ -23,7 +23,12 @@ from zascarr.api.series import _fetch_sort_orders, compute_missing_issues
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import File, Issue, Series
-from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, fetch_and_cache_cover, write_cover_cache
+from zascarr.utils.cover import (
+    cached_image_response,
+    extract_cover_thumbnail,
+    fetch_and_cache_cover,
+    write_cover_cache,
+)
 from zascarr.web.routes import TEMPLATES_DIR
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

@@ -1,9 +1,11 @@
 """Scraper de foros IPB (plugin genérico; la URL la aporta el usuario). Rate limit: 2s mínimo."""
-import asyncio, re
+import asyncio
+import re
 from dataclasses import dataclass, field
 from urllib.parse import quote, urljoin
-import httpx, structlog
-from zascarr.config import get_settings
+
+import httpx
+import structlog
 
 logger = structlog.get_logger()
 

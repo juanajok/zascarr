@@ -29,7 +29,7 @@ item pedía — el import loop periódico ya existente es quien de verdad
 clasifica el archivo, este método solo refleja ese hecho en el estado de
 la wishlist.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 
 import structlog
@@ -76,7 +76,7 @@ class Orchestrator:
             return 0
 
         cooldown = timedelta(hours=get_settings().orchestrator_retry_cooldown_hours)
-        cutoff = datetime.now(timezone.utc) - cooldown
+        cutoff = datetime.now(UTC) - cooldown
         items = list((await self.db.execute(
             select(Wishlist)
             .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
@@ -108,7 +108,7 @@ class Orchestrator:
         # D1/H2: marca el intento ya aquí, con o sin resultado — es lo que
         # activa el cooldown de process_wishlist y evita quemar Prowlarr/
         # foro en cada ciclo con un item condenado.
-        item.last_searched_at = datetime.now(timezone.utc)
+        item.last_searched_at = datetime.now(UTC)
         await self.db.flush()
 
         settings = get_settings()
@@ -266,7 +266,7 @@ class Orchestrator:
         for item in items:
             if await self._is_fulfilled(item):
                 item.status = WishlistStatus.IMPORTED
-                item.downloaded_at = datetime.now(timezone.utc)
+                item.downloaded_at = datetime.now(UTC)
                 await self.db.flush()
                 completed += 1
                 logger.info("orchestrator.item_imported", id=str(item.id))

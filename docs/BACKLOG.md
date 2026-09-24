@@ -549,6 +549,44 @@ tres problemas reales:
   PATH, no el import), que no sufre el shadowing. Reproducido y verificado
   el fix contra el mismo sandbox que lo encontró.
 
+## Deuda técnica registrada (CI + lint, 2026-09-24)
+
+No había ningún pipeline de CI (`.github/workflows` no existía): los 256
+tests solo corrían si alguien se acordaba de ejecutarlos a mano. Tampoco se
+había corrido nunca `ruff check`/`mypy` como gate — al hacerlo salieron 214
+errores de ruff y 7 de mypy, ninguno descubierto hasta ahora porque nada los
+exigía.
+
+- **`.github/workflows/ci.yml` nuevo:** tres jobs en push/PR a `main` — suite
+  unitaria (bloqueante), `ruff check` (informativo, `continue-on-error`
+  hasta que se limpie el resto de la deuda de abajo, para no bloquear
+  merges con un lint que ya arrastraba 214 errores antes de este commit), y
+  build de la imagen Docker (bloqueante — habría cazado el bug P0 del
+  `Dockerfile` de la 1.0.0 al instante).
+- **36 de los 214 errores de ruff eran falso positivo, no deuda real:**
+  regla `B008` ("no llamar a una función en un valor por defecto") marcando
+  los 33 usos de `Depends(...)` en firmas de rutas FastAPI — es el patrón
+  obligatorio del framework, no un antipatrón. Añadido `ignore = ["B008"]`
+  a `[tool.ruff.lint]`.
+- **48 errores corregidos automáticamente** (`ruff check --fix`): imports
+  desordenados/sin usar, `datetime.timezone.utc` → `datetime.UTC` (Python
+  3.11+). Solo cambios mecánicos, verificados contra la suite completa
+  (256/20 sin regresiones) y revisados a mano los ficheros de lógica de
+  negocio (`enricher.py`, `importer.py`) para confirmar que ningún import
+  "sin usar" eliminado era en realidad un re-export que otro módulo
+  necesitara.
+- **132 errores de ruff sin tocar, deuda real pendiente:** 118 líneas por
+  encima de 100 caracteres, 8 candidatos a `StrEnum` nativo de Python 3.11
+  (`UP042`, incluye enums de dominio como `ComicTradition` — cambiarlos
+  altera semántica de `__str__` en según qué versión, no es mecánico),
+  5 sentencias múltiples en una línea, 1 excepción que podría ser
+  `contextlib.suppress`. No se tocan en esta pasada: no es proporcional
+  arreglarlos a ciegas en ficheros de dominio que nadie pidió tocar.
+- **7 errores de mypy sin tocar:** 2 son solo stubs de tipos que faltan
+  (`types-Markdown`, `lxml-stubs`, triviales de instalar); los otros 5 son
+  incompatibilidades de tipo reales en `enricher.py`/`transmission.py` que
+  requieren entender la intención del código, no un fix mecánico.
+
 ## Benchmarking competitivo (2026-09-21)
 
 Comparado contra tres proyectos del mismo espacio para no reinventar ni

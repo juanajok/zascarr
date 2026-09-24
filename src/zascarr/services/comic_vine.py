@@ -7,7 +7,10 @@ Documentación: https://comicvine.gamespot.com/api/documentation
 import asyncio
 from dataclasses import dataclass, field
 from typing import Any
-import httpx, structlog
+
+import httpx
+import structlog
+
 from zascarr.config import get_settings
 
 logger = structlog.get_logger()

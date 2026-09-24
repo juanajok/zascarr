@@ -13,10 +13,7 @@ de la escena que debe resolver.
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass, field
-from pathlib import Path
-
 
 NOISE_PATTERNS = [
     r"\(Digital\)", r"\(digital\)", r"\(Digital-\w+\)",

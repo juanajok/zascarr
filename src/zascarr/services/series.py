@@ -18,7 +18,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import (
-    Character, Issue, Publisher, Series, StoryArc, StoryArcIssue, issue_characters,
+    Character,
+    Issue,
+    Publisher,
+    Series,
+    StoryArc,
+    StoryArcIssue,
+    issue_characters,
 )
 
 

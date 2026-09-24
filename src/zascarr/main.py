@@ -102,8 +102,9 @@ async def _orchestrator_loop(interval_minutes: int, limit: int) -> None:
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("zascarr.starting", version=settings.app_version)
-    from zascarr.database import engine
     from sqlalchemy import text
+
+    from zascarr.database import engine
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
     logger.info("zascarr.db_connected")

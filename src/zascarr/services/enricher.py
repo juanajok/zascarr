@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import or_, select
@@ -41,11 +41,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
-    ComicTradition, Creator, CreatorRole, Issue, IssueCreator, MetadataSource, Series,
+    ComicTradition,
+    Creator,
+    CreatorRole,
+    Issue,
+    IssueCreator,
+    MetadataSource,
+    Series,
 )
-from zascarr.services.anilist import AniListClient, AniListResult
-from zascarr.services.comic_vine import ComicVineClient, CVCredit, CVResult
-from zascarr.services.tebeosfera import TebeosferaClient, TebeosferaResult
+from zascarr.services.anilist import AniListClient
+from zascarr.services.comic_vine import ComicVineClient, CVCredit
+from zascarr.services.tebeosfera import TebeosferaClient
 
 logger = structlog.get_logger()
 
@@ -151,7 +157,7 @@ class EnrichmentService:
             .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
             .where(or_(
                 Series.enrichment_attempted_at.is_(None),
-                Series.enrichment_attempted_at < datetime.now(timezone.utc) - ENRICHMENT_RETRY_AFTER,
+                Series.enrichment_attempted_at < datetime.now(UTC) - ENRICHMENT_RETRY_AFTER,
             ))
             .limit(limit)
         )).scalars().all()
@@ -163,7 +169,7 @@ class EnrichmentService:
                 # consultar, pero se marca el intento para que la caché
                 # negativa (H2) no la re-seleccione en cada ciclo y acapare
                 # el lote en detrimento de series sí enriquecibles (ADR-0002).
-                series.enrichment_attempted_at = datetime.now(timezone.utc)
+                series.enrichment_attempted_at = datetime.now(UTC)
                 continue
 
             id_field, source_value, source_label = source
@@ -183,7 +189,7 @@ class EnrichmentService:
                 continue
 
             # H2: se marca el intento tanto si hay match como si no.
-            series.enrichment_attempted_at = datetime.now(timezone.utc)
+            series.enrichment_attempted_at = datetime.now(UTC)
 
             if match is None:
                 report.series_no_match.append(series.title)
@@ -298,7 +304,7 @@ class EnrichmentService:
             .where(Issue.issue_number.is_not(None))
             .where(or_(
                 Issue.enrichment_attempted_at.is_(None),
-                Issue.enrichment_attempted_at < datetime.now(timezone.utc) - ENRICHMENT_RETRY_AFTER,
+                Issue.enrichment_attempted_at < datetime.now(UTC) - ENRICHMENT_RETRY_AFTER,
             ))
             .limit(limit)
         )).all()
@@ -314,7 +320,7 @@ class EnrichmentService:
                 report.errors.append(f"issue {label}: error consultando Comic Vine")
                 continue
 
-            issue.enrichment_attempted_at = datetime.now(timezone.utc)  # H2
+            issue.enrichment_attempted_at = datetime.now(UTC)  # H2
 
             if match is None:
                 report.issues_no_match.append(label)
