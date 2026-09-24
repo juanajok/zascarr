@@ -33,7 +33,30 @@ ISSUE_PATTERNS = [
                                           # de trade paperback americano).
     r"\b(\d{3,4})\b(?!\s*\))",
     r"(?:Issue|No\.?|N[úu]mero)\s*(\d+)",
+    # Ediciones de recopilación (CRG y similares): "Omnigold 5", "Integral
+    # 01", "Edición Integral 01" — el número que traen no es una grapa
+    # #NNN, es el tomo de la recopilación, pero a efectos de matching es
+    # lo único que tenemos (naming.py solo pasa (título, número, año) al
+    # matcher — no hay un campo "tomo de colección" separado todavía; ver
+    # docs/BACKLOG.md, ampliación del parser pendiente en varias capas).
+    r"\b(?:Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b",
+    # Último recurso: un número suelto de 1-3 cifras pegado al final del
+    # nombre (sin "#", sin "T", sin años de 4 cifras que ya cubre el
+    # patrón de arriba con \b(\d{3,4})\b). Bug real: "La Patrulla-X
+    # Original 1.cbr" no llevaba NINGÚN marcador delante del número.
+    r"\s(\d{1,3})\s*$",
 ]
+
+# Líneas editoriales de reedición que anteponen su propio nombre al de la
+# serie real, con " - " como separador ("Marvel Gold - La Patrulla-X
+# Original 1.cbr") — al revés que "Serie - Subtítulo". Sin esto, el split
+# de subtítulo de más abajo se queda con el nombre de la línea editorial
+# en vez de con la serie.
+IMPRINT_PREFIX_PATTERN = re.compile(
+    r"^(?:Marvel\s+Gold|Marvel\s+Deluxe|Biblioteca\s+Marvel|Panini\s+Cl[aá]sicos)"
+    r"\s*-\s*",
+    re.IGNORECASE,
+)
 
 VOLUME_PATTERNS = [
     r"Vol\.?\s*(\d+)", r"Volume\s*(\d+)",
@@ -75,6 +98,23 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # ni \b(\d{3,4})\b. Convertirlo a espacio antes de todo lo demás arregla
     # volumen/número a la vez que la limpieza de puntuación de más abajo.
     working = working.replace("_", " ")
+
+    # Tags de release entre corchetes ("[CRG]", "[MQ]", "[DI]", "[ML]"):
+    # grupo/calidad/procedencia, nunca parte del título. A diferencia del
+    # ruido entre paréntesis (NOISE_PATTERNS, más abajo, curado caso a
+    # caso), esto es un corte genérico — en la práctica de la escena en
+    # español, TODO corchete es metadata de release, nunca título. Debe
+    # ir ANTES de extraer número/volumen: si no, un corchete a mitad de
+    # cadena ("... [DI] by The Murdock [CRG]") deja basura pegada al
+    # título o esconde un número final ("...Integral 01 [CRG]").
+    working = re.sub(r"\[[^\]]*\]", "", working)
+
+    # Líneas editoriales de reedición ANTES del nombre real de la serie
+    # ("Marvel Gold - La Patrulla-X Original 1.cbr"): al revés que "Serie
+    # - Subtítulo" (el split de subtítulo de más abajo se quedaría con
+    # "Marvel Gold", no con la serie). Se descarta el prefijo entero y se
+    # sigue procesando el resto como si fuera el nombre completo.
+    working = IMPRINT_PREFIX_PATTERN.sub("", working, count=1)
 
     year_match = YEAR_PATTERN.search(working)
     if year_match:
