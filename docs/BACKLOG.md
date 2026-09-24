@@ -333,17 +333,11 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 Sin arreglar todavía — nombrados aquí a propósito para que no vuelvan a caer
 en el agujero de "estaba en el review pero nadie lo pasó al board":
 
-- **M1 — mass assignment en la API — parcialmente cerrado, reabierto.**
-  Se cerró para `api/wishlist.py` al implementar D1
-  (`WishlistCreate`/`WishlistUpdate` + `WishlistService`). Pero al revisar
-  `api/series.py` por el benchmarking de ronda 2 (F2) se confirmó el
-  MISMO patrón sin tocar: `create_series(data: dict)` hace
-  `Series(**data)` y `update_series` hace `setattr(series, field, value)`
-  sobre el body crudo — cualquier campo del modelo (incluido `id`,
-  `comic_vine_id`, `metadata_source`) se puede inyectar desde fuera.
-  `web/pendientes.py` sigue sin el problema (usa `Form(...)` con campos
-  explícitos). Pendiente: aplicar a `series.py` el mismo tratamiento
-  (`SeriesCreate`/`SeriesUpdate` Pydantic) que ya se le dio a wishlist.
+- **M1 — mass assignment en la API — cerrado.**
+  Se cerró para `api/wishlist.py` en D1 y, para `api/series.py`, con
+  `SeriesCreate`/`SeriesUpdate` Pydantic (`extra="forbid"`, campos
+  explícitos snake_case) en POST/PATCH. Regresión en `tests/test_api_series.py`
+  (campos internos como `id`, `metadata_source`, `locked_fields` → 422).
 - **M2 — normalizador duplicado:** `naming.normalize_series_name` y
   `matcher.normalize_title` resuelven un problema parecido (limpiar un
   título para comparar) con lógica independiente y ya divergente en algún
@@ -352,7 +346,10 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
 - **M3 — `bootstrap.sh` sigue instalando con `pip install --break-system-packages`
   en el host** para poder correr las migraciones fuera de Docker. Frágil en
   distros que no sean Debian/Ubuntu recientes; considerar ejecutar la
-  migración inicial dentro de un contenedor efímero en su lugar.
+  migración inicial dentro de un contenedor efímero en su lugar. Relacionado:
+  migrar Alembic a contenedor también permitiría **eliminar el
+  `ports: 127.0.0.1:5432` de PostgreSQL** (hoy el bootstrap corre `alembic`
+  en el host contra loopback; sin ese `ports` bastaría con `expose`).
 - **M5 — caché de portada en disco sin invalidación (de C1):**
   `covers_cache_path/{series_id}.jpg` se escribe una vez y no se vuelve
   a comprobar nunca. Si se cachea primero una portada externa y más
@@ -360,6 +357,15 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   fichero viejo se sirve indefinidamente hasta que alguien lo borre a
   mano. Aceptable para una biblioteca personal de un solo usuario por
   ahora; revisar si se vuelve confuso en la práctica.
+- **Riesgo symlink (seguridad, P0-4):** si un usuario crea manualmente un
+  symlink en `DOWNLOADS_PATH` apuntando fuera, el importador podría seguirlo
+  al leer/copiar. Riesgo bajo en single-user. Mitigación: documentar en
+  README.md que no se deben crear symlinks en la carpeta de descargas.
+- **Deuda P1 — `ReviewService.assign_to_series` mueve archivos con la sesión
+  abierta:** `safe_move_async` ocurre con la transacción de BD viva; si el
+  proceso muere entre el move y el commit, fichero y BD divergen. Solución
+  completa: tabla `file_operations` con estados y un reconciliador al arrancar.
+  Para 1.0 se acepta el riesgo (single-user, sin concurrencia masiva).
 
 ## Benchmarking competitivo (2026-09-21)
 
