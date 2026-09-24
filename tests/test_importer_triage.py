@@ -15,8 +15,9 @@ from xml.etree import ElementTree
 
 import pytest
 
+from zascarr.core import importer_triage
 from zascarr.core.importer_triage import (
-    MAX_COMICINFO_BYTES, parse_comic_info, triage,
+    MAX_COMICINFO_BYTES, MAX_ZIP_ENTRIES, parse_comic_info, triage,
 )
 
 
@@ -60,3 +61,24 @@ class TestTriageLimiteTamano:
 
         assert result.comic_info is None
         assert any("demasiado grande" in w for w in result.warnings)
+
+    def test_zip_con_demasiadas_entradas_se_ignora(self, tmp_path):
+        cbz = tmp_path / "many.cbz"
+        with zipfile.ZipFile(cbz, "w") as z:
+            for i in range(MAX_ZIP_ENTRIES + 1):
+                z.writestr(f"p{i:04d}.jpg", b"")
+
+        result = triage(cbz)
+
+        assert any("demasiadas entradas" in w for w in result.warnings)
+
+    def test_zip_demasiado_grande_descomprimido_se_ignora(self, tmp_path, monkeypatch):
+        # Reducir el umbral para no materializar 500 MiB en el test.
+        monkeypatch.setattr(importer_triage, "MAX_ZIP_UNCOMPRESSED", 10)
+        cbz = tmp_path / "big.cbz"
+        with zipfile.ZipFile(cbz, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("page001.jpg", b"x" * 100)
+
+        result = triage(cbz)
+
+        assert any("demasiado grande descomprimido" in w for w in result.warnings)

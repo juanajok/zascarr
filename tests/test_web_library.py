@@ -90,6 +90,21 @@ class TestIndex:
         assert r.status_code == 200
         assert "Ninguna serie coincide" in r.text
 
+    def test_titulo_con_script_se_escapa(self):
+        """XSS: un título con <script> debe renderizarse escapado por Jinja2,
+        nunca como HTML ejecutable."""
+        series = make_series('<script>alert(1)</script>')
+        session = FakeSession([
+            FakeExecResult([]),        # list_publishers_with_series
+            FakeExecResult(1),         # count
+            FakeExecResult([series]),  # items
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert r.status_code == 200
+        assert "&lt;script&gt;" in r.text
+        assert "<script>alert(1)</script>" not in r.text
+
 
 class TestResultados:
 
