@@ -249,18 +249,24 @@ mkdir -p "${HOST_AMULE_INCOMING_DIR}" 2>/dev/null || \
 # Solo los datos del propio bootstrap (creados más arriba) se chown en
 # profundidad; la colección del usuario no se toca (H5).
 #
-# Postgres y Redis arrancan como root dentro del contenedor y se
-# autocorrigen el propietario de su propio directorio de datos (verificado:
-# el entrypoint oficial de postgres hace "find $PGDATA ! -user postgres
-# -exec chown postgres"), así que su propietario en el host puede seguir la
-# convención de la suite *arr sin riesgo.
-chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_DATA_DIR}/postgres" "${ZASCARR_DATA_DIR}/redis" \
-    "${ZASCARR_DATA_DIR}/vpn-state" 2>/dev/null || \
-    warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR} (ejecuta como root si es necesario)"
+# "postgres" y "redis" NO se tocan aquí a propósito (bug real, encontrado
+# en una reejecución idempotente): sus contenedores autocorrigen el
+# propietario de su directorio de datos a SU PROPIO usuario interno en
+# cada arranque — pero solo en el arranque. Si bootstrap.sh se vuelve a
+# ejecutar con los contenedores YA vivos (el caso normal de "ejecútalo de
+# nuevo cuando quieras"), un chown aquí reescribe por debajo los ficheros
+# de un Postgres en marcha, y las migraciones revientan con "Permission
+# denied" en cuanto pierde acceso a sus propios ficheros. No hace falta:
+# el propietario que deje el "mkdir -p" (root) es indiferente, porque
+# postgres/redis arrancan como root y se autoasignan lo que necesitan.
+chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_DATA_DIR}/vpn-state" 2>/dev/null || \
+    warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/vpn-state"
 # "covers" SÍ tiene que quedarse en uid 1000: lo escribe el propio
 # contenedor de ZascArr, que corre como ese usuario fijo SIN privilegios
 # para autocorregirse (a diferencia de postgres/redis) — no es una
 # preferencia de convención, es una restricción técnica del Dockerfile.
+# Aquí sí es seguro repetirlo: el contenedor de ZascArr nunca cambia su
+# propio UID entre arranques, así que no hay nada que se pueda corromper.
 chown -R 1000:1000 "${ZASCARR_DATA_DIR}/covers" 2>/dev/null || \
     warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/covers"
 success "Directorios creados en ${LIBRARY}"
