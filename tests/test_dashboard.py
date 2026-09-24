@@ -1,30 +1,29 @@
 """
 tests/test_dashboard.py
 
-Suite del dashboard de estado (E1). No usa TestClient contra la app
-completa: create_app() registra un lifespan que abre una conexión real a
-PostgreSQL, que este entorno de tests no tiene. dashboard() es una función
-de módulo justamente para poder probarla aislada de eso.
+Suite de Estado (E1). Antes vivía como fichero estático fuera de
+base.html (sin navegación, look distinto al resto de la app — bug real
+reportado); ahora es una vista Jinja2 más (zascarr.web.estado), así que
+se comprueba igual que cualquier otra plantilla: contra el fichero fuente,
+sin tocar la app completa (create_app() abre una conexión real a
+PostgreSQL en su lifespan, que este entorno de tests no tiene).
 """
 from __future__ import annotations
 
-from fastapi.responses import FileResponse
-
-from zascarr.main import STATIC_DIR, dashboard
+from zascarr.web.routes import TEMPLATES_DIR
 
 
-class TestDashboardRoute:
+class TestEstadoTemplate:
 
-    async def test_sirve_el_fichero_dashboard_html(self):
-        response = await dashboard()
-        assert isinstance(response, FileResponse)
-        assert str(response.path) == str(STATIC_DIR / "dashboard.html")
+    def test_extiende_base_con_nav(self):
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
+        assert '{% extends "base.html" %}' in html
 
-    def test_el_fichero_existe_y_referencia_api_health(self):
-        html = (STATIC_DIR / "dashboard.html").read_text(encoding="utf-8")
+    def test_referencia_api_health(self):
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
         assert "/api/health" in html
         # Los 4 checks que expone /api/health deben tener una etiqueta en
-        # español: si se añade un check nuevo al backend sin tocar el
-        # dashboard, este test lo detecta.
+        # español: si se añade un check nuevo al backend sin tocar la
+        # plantilla, este test lo detecta.
         for label in ("Base de datos", "Transmission", "aMule", "VPN"):
             assert label in html

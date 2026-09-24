@@ -592,6 +592,37 @@ button[type="submit"],
   .metrics-grid { grid-template-columns: 1fr; }
 }
 
+/* ── 16b. ESTADO (E1) — mismos tokens/tarjetas que el resto de la app,
+   nunca una paleta propia (bug real reportado: la página vivía fuera de
+   base.html con su CSS inline, look distinto al resto) ────────────────── */
+.estado-summary {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 20px; margin-bottom: 18px;
+}
+.estado-checks { padding: 0; margin-bottom: 18px; overflow: hidden; }
+.estado-check-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; border-bottom: 2px solid var(--ink);
+}
+.estado-check-row:last-child { border-bottom: none; }
+.estado-check-name { flex: 1; font-weight: 700; }
+.estado-check-status { color: var(--ink-soft); font-size: .9rem; }
+
+.estado-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.estado-dot-sm { width: 12px; height: 12px; }
+.estado-dot.estado-ok { background: var(--ok); }
+.estado-dot.estado-warn { background: var(--yellow); }
+.estado-dot.estado-bad { background: var(--warn); }
+.estado-dot.estado-neutral { background: var(--ink-faint); }
+
+.estado-summary-label { font-size: 1.15rem; font-weight: 700; }
+.estado-summary-detail { color: var(--ink-soft); font-size: .85rem; margin-top: 2px; }
+
+.estado-warnings { display: none; margin-bottom: 18px; }
+.estado-warnings.visible { display: block; }
+.estado-warnings-title { font-weight: 700; margin-bottom: 6px; }
+.estado-warnings ul { margin: 6px 0 0; padding-left: 18px; }
+
 /* ── 17. MOTION ──────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

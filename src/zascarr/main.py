@@ -6,7 +6,7 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from zascarr.config import get_settings
@@ -130,15 +130,6 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-async def dashboard() -> FileResponse:
-    """E1: página de estado en español con semáforos en vez de JSON crudo.
-
-    Página única sin dependencias externas (nada de build tooling en una
-    Pi): fetch() propio a /api/health, mismo origen, sin líos de CORS.
-    """
-    return FileResponse(STATIC_DIR / "dashboard.html")
-
-
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
@@ -159,6 +150,7 @@ def create_app() -> FastAPI:
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
     from zascarr.web.dashboard import router as dashboard_router
+    from zascarr.web.estado import router as estado_router
     from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
     from zascarr.web.pendientes import router as pendientes_router
@@ -172,6 +164,7 @@ def create_app() -> FastAPI:
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(ui_router)
     app.include_router(dashboard_router)
+    app.include_router(estado_router)
     app.include_router(legal_ui_router)
     app.include_router(library_router)
     app.include_router(pendientes_router)
@@ -181,7 +174,6 @@ def create_app() -> FastAPI:
     # biblioteca — quien entra por primera vez esperaba ver su colección,
     # no un panel de semáforos técnico. Estado sigue disponible, en su
     # propia URL, enlazado desde la navegación (base.html).
-    app.get("/estado", include_in_schema=False)(dashboard)
     app.get("/", include_in_schema=False)(
         lambda: RedirectResponse("/ui/", status_code=307)
     )
