@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.6] — 2026-09-25
+
+### Corregido
+
+- **Reejecutar `bootstrap.sh` tras un `git pull` (manual o autoactualizado) nunca aplicaba el código nuevo si el contenedor ya existía.** `docker compose up -d zascarr` sin `--build` reutiliza la imagen ya construida — Compose solo construye sola cuando la imagen todavía no existe. Encontrado mientras se preparaba la instrucción de actualización de v1.2.5: la recomendación de "haz `git pull` y vuelve a correr `bootstrap.sh`" dada para v1.2.4 no habría aplicado ese fix en una instalación ya existente. Corregido con `up -d --build zascarr`. Verificado en Docker-en-Docker: instalación limpia, luego un cambio de versión simulado + `git commit` + reejecución de `bootstrap.sh` sin tocar nada a mano — el contenedor queda con el código nuevo.
+
 ## [1.2.5] — 2026-09-25
 
 ### Corregido

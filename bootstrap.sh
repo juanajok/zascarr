@@ -451,7 +451,11 @@ success "Migraciones aplicadas"
 
 info "Levantando ZascArr..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
-docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d zascarr || die \
+# --build: bug real (reportado) — sin esto, reejecutar bootstrap.sh tras un
+# autoactualizado (git pull) recreaba el contenedor con la imagen VIEJA ya
+# construida, así que un fix de código nunca llegaba a aplicarse aunque el
+# repo ya lo tuviera. "up" solo construye solo si la imagen no existe.
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d --build zascarr || die \
     "No pude arrancar ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck..."
