@@ -401,7 +401,8 @@ en el agujero de "estaba en el review pero nadie lo pasó al board":
   destino igual al actual, repetición de rollback y todas las rutas de aborto).
   Queda la prueba destructiva en un sandbox efímero real: `dropdb --force` con
   una conexión concurrente abierta, `psql -v ON_ERROR_STOP=1` contra un dump
-  real, y `redis-cli FLUSHDB`. Falta además su fase en `docs/TESTING_E2E.md`.
+  real, y `redis-cli FLUSHDB`. Su fase ya está documentada en
+  `docs/TESTING_E2E.md` (§16.1-16.8); falta ejecutarla contra el sandbox real.
 
 ## Benchmarking competitivo (2026-09-21)
 
