@@ -43,6 +43,18 @@ die()     { echo -e "${R}✗${N} $*" >&2; exit 1; }
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
+# bootstrap.sh deja un symlink REPO_DIR/.env -> ENV_FILE para que un
+# "docker compose" manual (sin --env-file) invocado desde el repo también
+# encuentre la configuración real, en vez de arrancar en silencio con los
+# valores por defecto de docker-compose.yml. Estos scripts ya son inmunes por
+# el array COMPOSE de arriba, pero se re-verifica aquí en cada ejecución por
+# si el symlink se perdió (está en .gitignore, no lo repone un git reset):
+# así el contrato ".env vive en ZASCARR_ROOT, se ve desde REPO_DIR" se
+# mantiene desde un único sitio, no repartido por cada script.
+if [[ -f "${ENV_FILE}" ]] && [[ "$(readlink -f "${REPO_DIR}/.env" 2>/dev/null)" != "$(readlink -f "${ENV_FILE}")" ]]; then
+    ln -sf "${ENV_FILE}" "${REPO_DIR}/.env" 2>/dev/null || true
+fi
+
 comprobar_requisitos() {
     command -v docker >/dev/null 2>&1 || die \
         "No encuentro Docker. Instálalo con: sudo apt-get install docker.io docker-compose-plugin"

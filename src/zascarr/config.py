@@ -10,8 +10,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # extra="ignore": el .env real también lleva variables de infraestructura
+    # que solo consume docker-compose.yml (HOST_LIBRARY_DIR, ZASCARR_DATA_DIR,
+    # APP_LOCALE, TZ...), no la app Python. El comportamiento por defecto de
+    # BaseSettings es rechazar cualquier variable del .env que no sea un
+    # campo declarado aquí — sin este "ignore", cualquier ejecución que vea
+    # el .env real (p. ej. "alembic upgrade head" en el host durante el
+    # bootstrap) revienta con "Extra inputs are not permitted".
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False,
+        extra="ignore",
     )
 
     # ── Base de datos ──────────────────────────────────────────────
@@ -112,7 +120,7 @@ class Settings(BaseSettings):
 
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "ZascArr"
-    app_version: str = "1.2.3"
+    app_version: str = "1.2.4"
     log_level: str = "INFO"
     log_json: bool = True
     debug: bool = False

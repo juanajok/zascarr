@@ -263,7 +263,7 @@ echo -e "${B}Configuración inicial${N} (pulsa Intro para aceptar el valor por d
 read -rp "¿Dónde están tus tebeos ya organizados? [/media/library]: " ANS_LIBRARY || true
 LIBRARY="${ANS_LIBRARY:-/media/library}"
 
-read -rp "¿Dónde caen tus descargas (Transmission/aMule)? [/media/data]: " ANS_DOWNLOADS || true
+read -rp "¿Dónde caen tus descargas ya completadas (la carpeta exacta, no una raíz)? [/media/data]: " ANS_DOWNLOADS || true
 DOWNLOADS_ROOT="${ANS_DOWNLOADS:-/media/data}"
 
 read -rp "¿Idioma de la interfaz? [es/en, por defecto es]: " ANS_LOCALE || true
@@ -274,8 +274,16 @@ if [[ "${APP_LOCALE}" != "es" && "${APP_LOCALE}" != "en" ]]; then
 fi
 
 HOST_LIBRARY_DIR="${LIBRARY}"
-HOST_DOWNLOADS_DIR="${DOWNLOADS_ROOT}/downloads"
-HOST_AMULE_INCOMING_DIR="${DOWNLOADS_ROOT}/aMule/Incoming"
+# Bug real (reportado): antes se añadía "/downloads" y "/aMule/Incoming" a
+# lo que el usuario tecleaba, asumiendo que siempre daría una raíz genérica
+# para organizar debajo. Un usuario con Transmission/aMule ya apuntando sus
+# descargas reales a esa carpeta (el caso normal, no la excepción) se
+# encontraba con una subcarpeta nueva y vacía en vez de sus archivos —
+# bootstrap.sh "veía" la ruta correcta pero miraba un nivel más abajo de
+# donde estaban de verdad. Ahora se usa la ruta EXACTA que da el usuario,
+# tal cual, para las dos.
+HOST_DOWNLOADS_DIR="${DOWNLOADS_ROOT}"
+HOST_AMULE_INCOMING_DIR="${DOWNLOADS_ROOT}"
 
 set_env_var "HOST_LIBRARY_DIR" "${HOST_LIBRARY_DIR}"
 set_env_var "HOST_DOWNLOADS_DIR" "${HOST_DOWNLOADS_DIR}"
@@ -311,11 +319,13 @@ for dir in "Comics" "Comics/_Specials" "Comics/_Omnibus" \
     fi
 done
 
-# Descargas
-mkdir -p "${HOST_DOWNLOADS_DIR}/comics" 2>/dev/null || \
-    die "No puedo crear ${HOST_DOWNLOADS_DIR}/comics. ¿Existe el disco de descargas (${DOWNLOADS_ROOT}) y tienes permisos?"
+# Descargas — se crea la carpeta EXACTA si no existe, sin inventar
+# subcarpetas dentro (el importador ya escanea recursivamente: no necesita
+# "comics/" ni "aMule/Incoming/" para encontrar los archivos).
+mkdir -p "${HOST_DOWNLOADS_DIR}" 2>/dev/null || \
+    die "No puedo crear ${HOST_DOWNLOADS_DIR}. ¿Existe el disco de descargas y tienes permisos?"
 mkdir -p "${HOST_AMULE_INCOMING_DIR}" 2>/dev/null || \
-    die "No puedo crear ${HOST_AMULE_INCOMING_DIR}. ¿Existe el disco de descargas (${DOWNLOADS_ROOT}) y tienes permisos?"
+    die "No puedo crear ${HOST_AMULE_INCOMING_DIR}. ¿Existe el disco de descargas y tienes permisos?"
 
 # Solo los datos del propio bootstrap (creados más arriba) se chown en
 # profundidad; la colección del usuario no se toca (H5).
@@ -346,6 +356,27 @@ info "Validando .env..."
 grep -q "DB_PASSWORD=cambia_esto_ahora" "${ENV_FILE}" && \
     die "DB_PASSWORD tiene el valor por defecto. Edita ${ENV_FILE} y pon una contraseña segura."
 success ".env válido"
+
+# Bug real (reportado): el .env vive en ZASCARR_ROOT (el padre), pero Docker
+# Compose por defecto solo busca .env en el directorio desde el que se
+# invoca (el "project directory"), que para cualquiera que haga
+# "cd ${SCRIPT_DIR} && docker compose ..." a mano es SCRIPT_DIR, no
+# ZASCARR_ROOT. Sin --env-file explícito, Compose no lo encuentra y arranca
+# con los valores por defecto de docker-compose.yml (incluida la contraseña
+# de la BD) en silencio — así fue como un "docker compose up -d" manual dejó
+# un contenedor en bucle de reinicio la primera vez que pasó.
+#
+# Arreglo estructural (no solo documentación): un symlink SCRIPT_DIR/.env ->
+# ENV_FILE hace que el descubrimiento POR DEFECTO de Compose ya encuentre el
+# .env real sin que nadie tenga que acordarse de --env-file. El fichero de
+# verdad sigue viviendo en ZASCARR_ROOT (a salvo de un "git reset --hard" de
+# rollback.sh); el symlink es solo el puente, está en .gitignore y se
+# recrea aquí en cada ejecución (idempotente).
+if [[ -e "${SCRIPT_DIR}/.env" || -L "${SCRIPT_DIR}/.env" ]] && [[ "$(readlink -f "${SCRIPT_DIR}/.env" 2>/dev/null)" != "$(readlink -f "${ENV_FILE}")" ]]; then
+    rm -f "${SCRIPT_DIR}/.env"
+fi
+ln -sf "${ENV_FILE}" "${SCRIPT_DIR}/.env" || \
+    warn "No pude crear el enlace ${SCRIPT_DIR}/.env -> ${ENV_FILE}. Un 'docker compose' sin --env-file ejecutado desde ${SCRIPT_DIR} no verá tu configuración."
 
 info "Levantando PostgreSQL y Redis..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."

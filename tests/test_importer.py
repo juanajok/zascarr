@@ -7,6 +7,7 @@ duplicado y de qué, quién quedó sin clasificar y por qué.
 """
 from __future__ import annotations
 
+import os
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,6 +88,51 @@ class TestImportFileDuplicado:
         assert report.imported == []
         assert src.exists()          # nunca se movió
         assert session.queries == 1  # nunca llegó a consultar el matcher
+
+
+class TestScanDedupePorInodo:
+    """Bug real: HOST_DOWNLOADS_DIR y HOST_AMULE_INCOMING_DIR pueden apuntar
+    al mismo disco (caso normal cuando el usuario da una sola carpeta de
+    descargas — ver bootstrap.sh), y entonces el contenedor monta ese mismo
+    disco dos veces, en /media/downloads Y /media/incoming. El mismo archivo
+    aparece con dos rutas DISTINTAS (sin symlink de por medio, como en un
+    bind-mount de verdad) — deduplicar por ruta resuelta no lo detecta;
+    hace falta el inodo."""
+
+    @pytest.mark.asyncio
+    async def test_mismo_inodo_en_dos_rutas_se_escanea_una_sola_vez(self, tmp_path, monkeypatch):
+        descargas = tmp_path / "downloads"
+        incoming = tmp_path / "amule"
+        descargas.mkdir()
+        incoming.mkdir()
+
+        original = descargas / "Batman 001.cbz"
+        make_cbz(original)
+        # Hard link, no symlink: mismo inodo bajo dos rutas independientes,
+        # igual que dos bind-mounts del mismo disco host.
+        os.link(original, incoming / "Batman 001.cbz")
+
+        monkeypatch.setattr(
+            "zascarr.services.importer.get_settings",
+            lambda: MagicMock(
+                library_path=tmp_path / "library",
+                transmission_download_dir=str(descargas),
+                amule_incoming_dir=str(incoming),
+                downloads_path=descargas,
+            ),
+        )
+
+        importer = Importer(AsyncMock())
+
+        vistos = []
+        async def fake_import_file(path, rep):
+            vistos.append(path)
+        importer._import_file = fake_import_file
+
+        report = await importer.scan_and_import()
+
+        assert len(vistos) == 1
+        assert report.files_scanned == 1
 
 
 class TestPersistRun:

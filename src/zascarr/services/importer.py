@@ -99,15 +99,26 @@ class Importer:
         report = ImportReport(started_at=datetime.now(UTC))
 
         files = []
-        seen: set[str] = set()
+        # (st_dev, st_ino), no la ruta resuelta: HOST_DOWNLOADS_DIR y
+        # HOST_AMULE_INCOMING_DIR pueden apuntar al mismo disco (caso normal,
+        # no la excepción — bootstrap.sh los deja iguales cuando el usuario
+        # da una sola carpeta de descargas), y entonces el mismo archivo
+        # aparece bajo /media/downloads Y /media/incoming: dos bind-mounts
+        # distintos del mismo inodo. Path.resolve() no lo detecta (son rutas
+        # de verdad distintas dentro del contenedor); el inodo sí.
+        seen: set[tuple[int, int]] = set()
         for d in self._scan_dirs:
             if not d.exists():
                 continue
             for ext in COMIC_EXTS:
                 for f in d.rglob(f"*{ext}"):
-                    resolved = str(f.resolve())
-                    if resolved not in seen:
-                        seen.add(resolved)
+                    try:
+                        st = f.stat()
+                    except OSError:
+                        continue
+                    clave = (st.st_dev, st.st_ino)
+                    if clave not in seen:
+                        seen.add(clave)
                         files.append(f)
         report.files_scanned = len(files)
 
