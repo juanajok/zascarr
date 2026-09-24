@@ -549,6 +549,49 @@ tres problemas reales:
   PATH, no el import), que no sufre el shadowing. Reproducido y verificado
   el fix contra el mismo sandbox que lo encontró.
 
+## Deuda técnica registrada (rutas de instalación coherentes con la suite *arr, 2026-09-24)
+
+El mismo usuario que reportó el bug de arriba ya tiene todo el resto de la
+suite *arr (Sonarr, Radarr, Prowlarr, Bazarr, Lidarr, Readarr, Whisparr)
+instalada con una convención concreta — compartió el script real
+(`arr_suite.sh`, parte de su propio "confiraspa"): binarios en
+`/opt/<AppCapitalizado>`, datos en `/var/lib/<appname>` (separados a
+propósito), y todo corriendo bajo un usuario de servicio dedicado
+(`ARR_USER`/`ARR_GROUP`, por defecto `media`) vía `systemd`, no el usuario
+personal. ZascArr (Docker, no binarios nativos con systemd) vivía hasta
+ahora en el `HOME` de quien ejecutaba `sudo`, con código y datos mezclados
+en la misma carpeta — inconsistente con esa convención ya establecida en
+la Pi real del usuario.
+
+**Verificación previa a tocar nada:** antes de cambiar el propietario de
+los directorios de datos, se comprobó que Postgres y Redis arrancan como
+`root` dentro del contenedor y se autocorrigen el propietario de su propio
+directorio de datos en el entrypoint oficial (`find $PGDATA ! -user
+postgres -exec chown postgres`) — así que el `chown` del host a `media` no
+les afecta. El caso distinto es `config/covers` (portadas) y la biblioteca
+del usuario: los escribe el propio contenedor de ZascArr, que corre como
+`uid 1000` fijo *sin* privilegios para autocorregirse (a diferencia de
+postgres/redis) — esos dos siguen en `uid 1000` a propósito, no es una
+inconsistencia sino una restricción técnica real del `Dockerfile`.
+
+**Cambio aplicado (v1.2.0):**
+- `ZASCARR_ROOT` (código): por defecto pasa de `$HOME/zascarr` a
+  `/opt/zascarr`.
+- `ZASCARR_DATA_DIR` (datos de los contenedores, variable nueva): por
+  defecto `/var/lib/zascarr`, separado del código — `docker-compose.yml`
+  deja de usar rutas relativas `../config/...` y pasa a usar
+  `${ZASCARR_DATA_DIR:-/var/lib/zascarr}/...`.
+- `ZASCARR_USER`/`ZASCARR_GROUP` (variables nuevas, por defecto `media`):
+  `bootstrap.sh` crea el usuario de sistema si no existe
+  (`asegurar_usuario_servicio()`, idempotente, llamada tanto en la rama de
+  instalación en frío como en la fase de configuración) y le da la
+  propiedad del código y de los datos de postgres/redis/vpn-state.
+  `config/covers` y la biblioteca del usuario NO cambian: siguen en
+  `uid 1000` explícito.
+- Las tres variables son overridables (`export VAR=... && sudo -E bash`),
+  para quien prefiera otra convención (p.ej. `/opt/Zascarr` con mayúscula,
+  como el resto de sus apps vía `${app_name^}`).
+
 ## Deuda técnica registrada (bug real en producción, instalador de un comando, 2026-09-24)
 
 Un usuario ejecutó el instalador de la 1.1.0 en una Raspberry Pi real y

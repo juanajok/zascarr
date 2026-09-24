@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-1.1.1-brightgreen.svg)
+![Estado](https://img.shields.io/badge/estado-1.2.0-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -39,7 +39,7 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-✅ **v1.1.1.** Backend e interfaz web funcionales, verificados end-to-end
+✅ **v1.2.0.** Backend e interfaz web funcionales, verificados end-to-end
 contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
 wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
 actualización/rollback destructivo. Detalle de la verificación en
@@ -103,9 +103,11 @@ listo:
 curl -fsSL https://raw.githubusercontent.com/juanajok/zascarr/main/bootstrap.sh | sudo bash
 ```
 
-Instala git y Docker si te faltan, descarga ZascArr en `~/zascarr/zascarr`,
-y te hace **3 preguntas** (pulsa `Intro` para aceptar lo que va entre
-corchetes):
+Instala git y Docker si te faltan, crea un usuario de servicio `media`
+(igual que Sonarr/Radarr/Prowlarr si ya los tienes — código en `/opt`,
+nunca mezclado con tu usuario personal), descarga ZascArr en
+`/opt/zascarr/zascarr`, y te hace **3 preguntas** (pulsa `Intro` para
+aceptar lo que va entre corchetes):
 
 1. ¿Dónde están tus tebeos ya organizados?
 2. ¿Dónde caen tus descargas (Transmission/aMule)?
@@ -115,9 +117,19 @@ Al terminar, ZascArr ya está funcionando. Ábrelo en:
 
 **http://127.0.0.1:8000** — el panel de estado, en español.
 
-Puedes volver a ejecutar `sudo bash ~/zascarr/zascarr/bootstrap.sh` cuando
-quieras: es idempotente (no duplica nada) y nunca toca los archivos de tu
-colección.
+Puedes volver a ejecutar `sudo bash /opt/zascarr/zascarr/bootstrap.sh`
+cuando quieras: es idempotente (no duplica nada) y nunca toca los archivos
+de tu colección.
+
+> **¿Ya tienes el resto de la suite *arr en otra ruta?** El código va en
+> `ZASCARR_ROOT` (por defecto `/opt/zascarr`), los datos de los
+> contenedores en `ZASCARR_DATA_DIR` (por defecto `/var/lib/zascarr`), y el
+> propietario en `ZASCARR_USER`/`ZASCARR_GROUP` (por defecto `media`).
+> Cambia lo que necesites antes de instalar:
+> ```bash
+> export ZASCARR_ROOT=/opt/Zascarr ZASCARR_DATA_DIR=/var/lib/zascarr ZASCARR_USER=media ZASCARR_GROUP=media
+> curl -fsSL https://raw.githubusercontent.com/juanajok/zascarr/main/bootstrap.sh | sudo -E bash
+> ```
 
 ### Si prefieres revisar el script antes de ejecutarlo
 
@@ -137,14 +149,18 @@ Si prefieres controlar cada paso tú mismo (o ya tienes git y Docker):
 ```bash
 sudo apt-get install -y git                       # si no lo tienes
 curl -fsSL https://get.docker.com | sudo sh        # si no tienes Docker
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin media   # si no lo tienes
 
-mkdir -p ~/zascarr && cd ~/zascarr
-git clone https://github.com/juanajok/zascarr.git
+sudo mkdir -p /opt/zascarr && cd /opt/zascarr
+sudo git clone https://github.com/juanajok/zascarr.git
+sudo chown -R media:media /opt/zascarr
 sudo bash zascarr/bootstrap.sh
 ```
 
 ### Qué hace el instalador
 
+- Crea el usuario de servicio `media` si no existe, y deja el código y los
+  datos a su nombre — no al tuyo personal ni a `root`.
 - Crea la estructura de carpetas de la biblioteca (`Comics`, `Manga`, `BD`,
   `Tebeos`, …) **sin tocar tus archivos**.
 - Levanta PostgreSQL, Redis y ZascArr como contenedores Docker.
@@ -173,7 +189,7 @@ Cuando haya una versión nueva, ejecuta el script de actualización desde donde
 instalaste ZascArr:
 
 ```bash
-cd ~/zascarr/zascarr     # o la carpeta donde clonaste el repo
+cd /opt/zascarr/zascarr     # o la carpeta donde clonaste el repo
 sudo bash scripts/update.sh
 ```
 
@@ -203,7 +219,7 @@ migraciones nuevas, hay que restaurar también la base de datos, o el esquema
 nuevo y el código viejo quedarán desacompasados. Está automatizado:
 
 ```bash
-cd ~/zascarr/zascarr
+cd /opt/zascarr/zascarr
 sudo bash scripts/rollback.sh              # añade --dry-run para ver el plan sin tocar nada
 ```
 
@@ -238,7 +254,7 @@ Si prefieres hacerlo tú, o el script no puede seguir, esto es lo que hace por
 dentro:
 
 ```bash
-cd ~/zascarr/zascarr
+cd /opt/zascarr/zascarr
 COMPOSE="docker compose -f docker-compose.yml --env-file ../.env"
 
 # 1. Copia de la base de datos ACTUAL antes de destruirla. No te la saltes.

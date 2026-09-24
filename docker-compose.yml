@@ -5,8 +5,11 @@
 #   cp .env.example .env
 #   docker compose up -d
 #
-# La carpeta de datos (config/) vive en el PADRE del repo; los discos del
-# usuario (biblioteca/descargas) se pasan por .env (HOST_*_DIR).
+# Código en ZASCARR_ROOT (p.ej. /opt/zascarr), datos de los contenedores en
+# ZASCARR_DATA_DIR (por defecto /var/lib/zascarr) — separados a propósito,
+# mismo patrón que el resto de la suite *arr (código en /opt, datos en
+# /var/lib). Los discos del usuario (biblioteca/descargas) se pasan por
+# .env (HOST_*_DIR).
 
 name: zascarr
 
@@ -33,7 +36,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - ../config/postgres:/var/lib/postgresql/data
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U comics_admin -d zascarr"]
       interval: 10s
@@ -54,7 +57,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - ../config/redis:/data
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/redis:/data
     deploy:
       resources:
         limits:
@@ -95,8 +98,8 @@ services:
       - ${HOST_DOWNLOADS_DIR:-/media/data/downloads}:/media/downloads
       - ${HOST_AMULE_INCOMING_DIR:-/media/data/aMule/Incoming}:/media/incoming
       - ${HOST_LIBRARY_DIR:-/media/library}:/media/library
-      - ../config/vpn-state:/run/vpn-state:ro
-      - ../config/covers:/config/covers
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/vpn-state:/run/vpn-state:ro
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
     depends_on:
       postgres:
         condition: service_healthy
