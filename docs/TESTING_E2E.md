@@ -261,9 +261,10 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/api/wishlist" \
 
 ## 6. Fixtures (por Python, no por el endpoint de escritura)
 
-> No se usa `POST /api/series` para sembrar datos (ese endpoint tiene la deuda
-> M1 de mass-assignment; se prueba aparte en 14.1). Se siembra con la sesión
-> async directamente, igual que hacen los tests.
+> No se usa `POST /api/series` para sembrar datos (ese endpoint se prueba
+> aparte en 14.1, que verifica el rechazo de mass-assignment de M1, ya
+> cerrado). Se siembra con la sesión async directamente, igual que hacen
+> los tests.
 
 ```bash
 cd "$ROOT/zascarr"
@@ -627,13 +628,13 @@ sin overflow horizontal en móvil; tema oscuro aplica; el botón no permite dobl
 ```bash
 cd "$ROOT/zascarr"
 
-# 14.1 Mass-assignment en POST /api/series (deuda M1): la prueba DEBE fallar hoy
-#     (documentarlo como "known failure", no como PASS del release).
+# 14.1 Mass-assignment en POST /api/series (deuda M1, cerrada): regresión.
 curl -s -o "$ROOT/m1.json" -w '%{http_code}\n' -X POST "$APP_URL/api/series" \
   -H 'Content-Type: application/json' \
   -d '{"title":"M1","id":"11111111-1111-1111-1111-111111111111","metadata_source":"manual","locked_fields":["id"]}'
-#  Criterio esperado (hasta cerrar M1): la respuesta DEBERÍA rechazar campos
-#  como id/metadata_source/locked_fields; si los acepta → registrar FAIL conocido.
+#  Criterio esperado: 422 (Pydantic con extra="forbid" rechaza id/
+#  metadata_source/locked_fields inyectados). Un 201 aquí es una
+#  regresión real de M1, no un known failure — FAIL del release.
 
 # 14.2 ZIP con path traversal interno (../../evil.txt) → al importar/leer no
 #     escribe fuera del destino.
@@ -677,12 +678,12 @@ BD ni se escribe fuera de la biblioteca) y no bloquea el ciclo.
 | 11. Backup | PASS/FAIL | restore ok |
 | 12. Persistencia | PASS/FAIL | cuentas tras restart |
 | 13. Look-and-feel | PASS/FAIL | capturas |
-| 14. Edge/seguridad | PASS/FAIL/known-fail | … |
+| 14. Edge/seguridad | PASS/FAIL | … |
 | 16. Update+rollback | PASS/FAIL | destructivo real (dropdb --force, ON_ERROR_STOP, FLUSHDB) |
 
-> Reglas de reporte: un "known failure" (p.ej. 14.1 M1) se lista **aparte** y
-> no cuenta como PASS del release; todo FAIL con error se acompaña de logs,
-> HTTP status y ruta inesperada para poder corregirlo antes de la Pi.
+> Reglas de reporte: no hay "known failures" aceptados en el release; todo
+> FAIL (incluido 14.1 si algún día regresa) se acompaña de logs, HTTP status
+> y ruta inesperada para poder corregirlo antes de la Pi.
 
 ---
 

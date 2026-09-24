@@ -186,9 +186,8 @@ como marco permanente.
 |---|---|
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
 | `docs/adr/0001-ui-stack.md` | Stack de UI y razonamiento |
-| `LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
+| `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
-| `docs/PLAN_RELEASE_1.0.md` | Cola ordenada de release (creada con PO 2026-09-22) |
 
 ## 12. Principios de arquitectura del propio código (confirmados por
 benchmarking ronda 2)
