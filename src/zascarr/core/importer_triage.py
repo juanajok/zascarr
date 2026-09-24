@@ -59,6 +59,10 @@ _TAG_PATTERNS: list[tuple[str, str]] = [
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 
+# DoS: un ComicInfo.xml real mide pocos KB. Rechazar los enormes ANTES de
+# descomprimirlos en memoria (una ZIP bomb no debe reventar una Pi).
+MAX_COMICINFO_BYTES = 1 * 1024 * 1024  # 1 MiB
+
 
 def guess_source_tag(filename: str) -> str | None:
     """Extrae el tag de origen del sufijo de release del filename.
@@ -230,10 +234,14 @@ def triage(path: Path) -> TriageResult:
             None,
         )
         if entry:
-            try:
-                result.comic_info = parse_comic_info(zf.read(entry))
-            except ElementTree.ParseError as exc:
-                result.warnings.append(f"ComicInfo.xml malformado: {exc}")
+            info = zf.getinfo(entry)
+            if info.file_size > MAX_COMICINFO_BYTES:
+                result.warnings.append("ComicInfo.xml demasiado grande (ignorado)")
+            else:
+                try:
+                    result.comic_info = parse_comic_info(zf.read(entry))
+                except ElementTree.ParseError as exc:
+                    result.warnings.append(f"ComicInfo.xml malformado: {exc}")
 
         # width_px: primera página en orden natural.
         pages = sorted(
