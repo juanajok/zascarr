@@ -3,6 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.9] — 2026-09-25
+
+### Añadido
+
+- **Revisión de la biblioteca antes de adoptarla (B16, `/ui/auditoria`)**: ZascArr mira qué hay en el disco y te enseña, agrupado y en español llano, *el mismo tebeo dos veces* (archivos idénticos), *el mismo número en dos ediciones* (mismo título y número, archivo distinto — puede que los quieras los dos), *carpetas repetidas* y *carpetas sin ningún tebeo*. **No borra, no mueve, no renombra y no sugiere qué borrar**: las rutas se enseñan para que decidas tú en tu disco.
+
+  Pensado para la Pi: solo se leen a fondo los archivos que coinciden en tamaño con algún otro — dos ficheros de distinto tamaño no pueden ser idénticos, así que el resto no se toca.
+
+### Cambiado
+
+- **La adopción de la biblioteca (B11) ya no se dispara sola en el primer arranque**; ahora el primer arranque hace la revisión, y adoptar es un botón con el informe delante. El motivo es concreto: en una biblioteca real había carpetas duplicadas enteras (~140 archivos la misma colección en dos rutas), y adoptar sin avisar significaba que el deduplicador se quedaba con una copia **eligiendo por orden alfabético**, sin que el coleccionista llegara a saber que había una decisión que tomar.
+
+### Corregido
+
+- **Ningún archivo `.cbr` tenía huella digital, así que los duplicados nunca se detectaban en ellos.** Encontrado verificando lo anterior contra Postgres real. El triaje salía antes de calcular el SHA256 para todo lo que no fuera `.cbz`, confundiendo dos cosas distintas: no poder *abrir* un RAR sin `unrar` (cierto, y sigue igual) y no poder *hashearlo* (falso — son los bytes del fichero, da igual el formato). Como una tebeoteca española típica es mayoritariamente CBR, **la detección de duplicados (B3) no funcionaba casi nunca, y en silencio**. Medido antes y después sobre la misma biblioteca de prueba: 21 archivos registrados con 0 duplicados detectados → 13 registrados con 8 duplicados. El test que cubría ese camino afirmaba el bug como comportamiento correcto; se corrigió separando las dos afirmaciones.
+
 ## [1.4.8] — 2026-09-25
 
 ### Corregido

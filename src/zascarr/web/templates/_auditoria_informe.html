@@ -1,0 +1,101 @@
+{% if not informe %}
+<p class="empty">Todavía no se ha revisado la biblioteca. Pulsa "Revisar mi biblioteca" para mirar qué hay en el disco.</p>
+{% else %}
+
+<p class="subtitle">
+  Se han mirado <strong>{{ informe.files_scanned }}</strong> tebeos del disco.
+  {% if informe.files_hashed %}De ellos, {{ informe.files_hashed }} se han comparado a fondo porque coincidían en tamaño con algún otro.{% endif %}
+</p>
+
+{% set nada = not informe.mismo_contenido and not informe.misma_obra
+              and not informe.carpetas_repetidas and not informe.carpetas_vacias %}
+{% if nada %}
+<p class="audit-ok">Tu biblioteca está limpia: ni repetidos ni carpetas vacías. Puedes adoptarla con tranquilidad.</p>
+{% endif %}
+
+{% if informe.carpetas_repetidas %}
+<section class="audit-block">
+  <h2>Carpetas repetidas <span class="audit-count">{{ informe.carpetas_repetidas|length }}</span></h2>
+  <p class="audit-why">Dos carpetas con los mismos tebeos dentro. Decide tú cuál quieres conservar: ZascArr no va a elegir por ti.</p>
+  {% for c in informe.carpetas_repetidas %}
+  <div class="audit-item">
+    <div class="audit-path">{{ c.ruta_a }}</div>
+    <div class="audit-path">{{ c.ruta_b }}</div>
+    <div class="audit-detail">
+      {{ c.comunes }} tebeos en común.
+      {% if c.solo_en_a == 0 and c.solo_en_b == 0 %}
+        Son exactamente iguales.
+      {% elif c.solo_en_a == 0 %}
+        La primera está entera dentro de la segunda, que además tiene {{ c.solo_en_b }} más.
+      {% elif c.solo_en_b == 0 %}
+        La segunda está entera dentro de la primera, que además tiene {{ c.solo_en_a }} más.
+      {% else %}
+        La primera tiene {{ c.solo_en_a }} que no están en la segunda, y la segunda {{ c.solo_en_b }} que no están en la primera.
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if informe.mismo_contenido %}
+<section class="audit-block">
+  <h2>El mismo tebeo, dos veces <span class="audit-count">{{ informe.mismo_contenido|length }}</span></h2>
+  <p class="audit-why">Archivos idénticos en sitios distintos. Borrar los que sobran liberaría
+    {{ informe.bytes_recuperables | tamano }} — pero eso lo haces tú en tu disco, no ZascArr.</p>
+  {% for d in informe.mismo_contenido %}
+  <div class="audit-item">
+    {% for r in d.rutas %}<div class="audit-path">{{ r }}</div>{% endfor %}
+    <div class="audit-detail">{{ d.size_bytes | tamano }} cada uno.</div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if informe.misma_obra %}
+<section class="audit-block">
+  <h2>El mismo número, en dos ediciones <span class="audit-count">{{ informe.misma_obra|length }}</span></h2>
+  <p class="audit-why">Mismo título y número, pero archivos distintos: otra calidad, otro idioma u otra
+    edición. <strong>Puede que los quieras los dos</strong> — esto es solo para que lo sepas.</p>
+  {% for d in informe.misma_obra %}
+  <div class="audit-item">
+    <div class="audit-detail"><strong>{{ d.obra }}</strong></div>
+    {% for r in d.rutas %}<div class="audit-path">{{ r }}</div>{% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if informe.carpetas_vacias %}
+<section class="audit-block">
+  <h2>Carpetas sin ningún tebeo <span class="audit-count">{{ informe.carpetas_vacias|length }}</span></h2>
+  <p class="audit-why">Están creadas pero no tienen nada dentro. Si esperabas contenido aquí, puede que
+    falte un disco por montar o que quedaran a medias de una mudanza de archivos.</p>
+  {% for c in informe.carpetas_vacias %}
+  <div class="audit-item">
+    <div class="audit-path">{{ c.ruta }}</div>
+    {% if c.subcarpetas %}<div class="audit-detail">Con {{ c.subcarpetas }} subcarpeta{{ 's' if c.subcarpetas != 1 }}, también vac{{ 'ías' if c.subcarpetas != 1 else 'ía' }}.</div>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if informe.truncado %}
+<p class="audit-why">Hay más hallazgos de los que caben en esta pantalla; se muestran los primeros de cada tipo.</p>
+{% endif %}
+
+{% if adopcion_pendiente %}
+<section class="audit-block audit-adoptar">
+  <h2>Cuando lo tengas revisado</h2>
+  <p class="audit-why">Adoptar registra tus tebeos en el catálogo de ZascArr <strong>sin mover ni renombrar
+    ni un archivo</strong>: se quedan exactamente donde los tienes.</p>
+  <button type="button" class="btn-primary"
+          hx-post="/ui/auditoria/adoptar"
+          hx-target="#resultado-adopcion" hx-swap="innerHTML"
+          hx-disabled-elt="this">
+    Adoptar mi biblioteca
+  </button>
+</section>
+{% endif %}
+
+{% endif %}

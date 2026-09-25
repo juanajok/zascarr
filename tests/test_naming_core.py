@@ -295,11 +295,17 @@ class TestTriage:
         assert any("malformado" in w for w in result.warnings)
         path.unlink()
 
-    def test_cbr_pasa_a_capa_1(self, tmp_path):
+    def test_cbr_pasa_a_capa_1_pero_si_se_hashea(self, tmp_path):
+        """Este test afirmaba `sha256 is None` con el comentario "no se
+        intenta abrir el RAR", confundiendo dos cosas distintas: no
+        abrirlo (correcto, haría falta unrar) y no hashearlo (un bug,
+        dejaba sin dedupe a toda una biblioteca de CBR). El hash son los
+        bytes del fichero, no su contenido descomprimido."""
         path = tmp_path / "test.cbr"
         path.write_bytes(b"Rar!")  # header mínimo RAR
         result = triage(path)
-        assert result.sha256 is None  # no se intenta abrir el RAR
+        assert result.comic_info is None  # el RAR no se abre: eso sigue igual
+        assert result.sha256 is not None  # pero el dedupe necesita el hash
         assert any("triaje solo por filename" in w for w in result.warnings)
 
     def test_source_tag_detectado(self):

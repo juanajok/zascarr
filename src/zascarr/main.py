@@ -98,34 +98,46 @@ async def _orchestrator_loop(interval_minutes: int, limit: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
-async def _library_adoption_task() -> None:
-    """B11: adopta una biblioteca ya organizada en el primer arranque —
-    ver docstring de services/library_adopter.py para el porqué y el
-    disparo (biblioteca con contenido + catálogo vacío + no hecho ya
-    antes). Tarea de UNA sola vez, no un loop — se lanza junto a los
-    otros background_tasks pero termina sola; cancelarla al apagar
-    (como el resto) es un no-op si ya terminó."""
+async def _library_audit_task() -> None:
+    """B16: AUDITA la biblioteca en el primer arranque; ya no la adopta.
+
+    Hasta v1.4.8 esta tarea llamaba a LibraryAdopter directamente. El
+    cambio viene de mirar una biblioteca real (2026-09-25): tenía
+    carpetas duplicadas ENTERAS (la misma colección en dos rutas, ~140
+    archivos), y adoptar sin avisar significaba que el dedupe por SHA256
+    se quedaba con una copia y descartaba la otra **eligiendo por orden
+    alfabético**. El coleccionista no llegaba a enterarse de que había
+    una decisión que tomar. Decisión de producto: el sistema informa, la
+    persona decide — la adopción pasa a dispararse a mano desde
+    /ui/auditoria, con el informe delante.
+
+    Tarea de UNA sola vez, no un loop: se lanza con los otros
+    background_tasks pero termina sola, y cancelarla al apagar es un
+    no-op si ya terminó."""
     from zascarr.database import async_session_factory
     from zascarr.services.library_adopter import LibraryAdopter
+    from zascarr.services.library_audit import LibraryAudit
 
     try:
         async with async_session_factory() as session:
-            adopter = LibraryAdopter(session)
-            if not await adopter.should_run():
+            # Mismo disparo que tenía la adopción: biblioteca con
+            # contenido, catálogo vacío y no hecho ya antes.
+            if not await LibraryAdopter(session).should_run():
                 return
-            logger.info("library_adopter.starting")
-            report = await adopter.adopt()
+            logger.info("library_audit.starting")
+            report = await LibraryAudit(session).run()
             await session.commit()
         logger.info(
-            "library_adopter.done",
+            "library_audit.done",
             escaneados=report.files_scanned,
-            registrados=report.registered_count,
-            duplicados=report.duplicate_count,
-            sin_clasificar=report.unsorted_count,
-            errores=report.error_count,
+            hasheados=report.files_hashed,
+            mismo_contenido=len(report.mismo_contenido),
+            misma_obra=len(report.misma_obra),
+            carpetas_repetidas=len(report.carpetas_repetidas),
+            carpetas_vacias=len(report.carpetas_vacias),
         )
     except Exception:
-        logger.exception("library_adopter.failed")
+        logger.exception("library_audit.failed")
 
 
 @asynccontextmanager
@@ -148,7 +160,7 @@ async def lifespan(app: FastAPI):
         await load_overrides_at_startup(session)
 
     background_tasks = [
-        asyncio.create_task(_library_adoption_task()),
+        asyncio.create_task(_library_audit_task()),
         asyncio.create_task(_import_loop(settings.import_interval_minutes)),
         asyncio.create_task(
             _enrichment_loop(settings.enrich_interval_minutes, settings.enrich_batch_size)
@@ -189,6 +201,7 @@ def create_app() -> FastAPI:
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
     from zascarr.web.ajustes import router as ajustes_router
+    from zascarr.web.auditoria import router as auditoria_router
     from zascarr.web.dashboard import router as dashboard_router
     from zascarr.web.discovery import router as discovery_router
     from zascarr.web.estado import router as estado_router
@@ -205,6 +218,7 @@ def create_app() -> FastAPI:
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(ui_router)
     app.include_router(ajustes_router)
+    app.include_router(auditoria_router)
     app.include_router(dashboard_router)
     app.include_router(discovery_router)
     app.include_router(estado_router)

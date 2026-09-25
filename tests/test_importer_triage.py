@@ -82,3 +82,41 @@ class TestTriageLimiteTamano:
         result = triage(cbz)
 
         assert any("demasiado grande descomprimido" in w for w in result.warnings)
+
+
+class TestHashPorFormato:
+    """Bug real (2026-09-25, encontrado verificando B16 en vivo): triage()
+    salía antes de calcular el sha256 para todo lo que no fuera .cbz/.zip,
+    así que ningún .cbr tenía hash y la deduplicación de B3 no funcionaba
+    con ellos. En una tebeoteca española típica, que es mayoritariamente
+    CBR, no funcionaba casi nunca y además en silencio.
+
+    Leer ComicInfo.xml sí exige descomprimir el RAR (y por eso el CBR
+    sigue yendo a Capa 1); hashear no depende del formato."""
+
+    def test_cbr_tiene_hash_aunque_no_se_pueda_abrir(self, tmp_path):
+        cbr = tmp_path / "Astérix 01 [CRG].cbr"
+        cbr.write_bytes(b"contenido que no es un rar de verdad")
+
+        result = triage(cbr)
+
+        assert result.sha256 is not None
+        assert len(result.sha256) == 64
+        assert any("solo por filename" in w for w in result.warnings)
+
+    def test_dos_cbr_identicos_dan_el_mismo_hash(self, tmp_path):
+        """Es justo lo que necesita el dedupe: el mismo tebeo en dos
+        carpetas debe colisionar."""
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        (tmp_path / "a/Superman 011.cbr").write_bytes(b"identico")
+        (tmp_path / "b/Superman 011.cbr").write_bytes(b"identico")
+
+        assert triage(tmp_path / "a/Superman 011.cbr").sha256 == \
+               triage(tmp_path / "b/Superman 011.cbr").sha256
+
+    def test_cbr_distintos_dan_hashes_distintos(self, tmp_path):
+        (tmp_path / "uno.cbr").write_bytes(b"AAAA")
+        (tmp_path / "dos.cbr").write_bytes(b"BBBB")
+
+        assert triage(tmp_path / "uno.cbr").sha256 != triage(tmp_path / "dos.cbr").sha256
