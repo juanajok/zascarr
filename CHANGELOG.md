@@ -3,6 +3,21 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.8] — 2026-09-25
+
+### Corregido
+
+- **El parser inventaba números de grapa a partir de fechas, prefijos de orden y rangos.** Encontrado midiendo el parser contra 44 rutas REALES de la tebeoteca del coleccionista (no contra fixtures inventados), a raíz de un análisis que predecía que "casi todo caería a Pendientes". La predicción era optimista: el fallo real no era quedarse corto, sino **afirmar datos falsos con confianza**, que es peor —
+  - `JSA (2004-08) 62 (digital)...` → se registraba como **JSA #2004** (la fecha de publicación de los scans de DCP/Novus caía en el patrón genérico de 3-4 cifras). Ahora `(AAAA-MM)` se lee como año.
+  - `247.- Wonder Woman v2 214...` → se registraba como **#247** (el prefijo numera la colección del coleccionista, no la grapa). Ahora da Wonder Woman #214, correcto.
+  - `La Imposible Patrulla X (144-158)...` y `Superman Vol2 049-051a` → se quedaban con el primero del rango (**#144**, **#49**), inventando una pertenencia que el archivo no afirma. Ahora se quedan sin número y van a Pendientes, que es la respuesta honesta para un pack.
+
+  El agravante que motivó tratarlo como urgente: con la sugerencia de un clic (B12, v1.4.6) el coleccionista confirmaba "¿Es esta serie? JSA — nº 2004" sin ver el error, y el alias local (B13, v1.4.7) **aprendía el patrón equivocado**. Los tres defectos son anteriores a B12/B13, pero esas dos funciones los convertían de ruido en corrupción persistente.
+
+### Añadido
+
+- **El número antes del subtítulo ya se extrae** (`Astérix (DI) 01 - Astérix el galo`, `AIDP 05 - La Llama Negra`, `Gideon Falls 01 - El Granero Negro`): es el idiom más común de la escena en español y se quedaba pegado al título (`"Astérix 01"`), con lo que ninguna serie igualaba nunca. En la muestra real son ~1 de cada 3 archivos.
+
 ## [1.4.7] — 2026-09-25
 
 ### Añadido
