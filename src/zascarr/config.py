@@ -128,7 +128,7 @@ class Settings(BaseSettings):
 
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "ZascArr"
-    app_version: str = "1.4.1"
+    app_version: str = "1.4.2"
     log_level: str = "INFO"
     log_json: bool = True
     debug: bool = False

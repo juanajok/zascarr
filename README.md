@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-1.4.1-brightgreen.svg)
+![Estado](https://img.shields.io/badge/estado-1.4.2-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -39,7 +39,7 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-✅ **v1.4.1.** Backend e interfaz web funcionales, verificados end-to-end
+✅ **v1.4.2.** Backend e interfaz web funcionales, verificados end-to-end
 contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
 wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
 actualización/rollback destructivo. Detalle de la verificación en
@@ -332,15 +332,37 @@ antes de guardar.
 **Prowlarr/Transmission/aMule corren en la propia Raspberry Pi ("baremetal"),
 fuera de Docker** — el contenedor los alcanza vía `host.docker.internal`
 (la puerta de enlace del puente de Docker, ya configurada en
-`docker-compose.yml`), no por `127.0.0.1`. Si "Probar conexión" falla con
-"no se pudo conectar" aunque la URL/credenciales sean correctas, lo más
-habitual es que ese servicio esté escuchando solo en `127.0.0.1` — cámbialo
-a `0.0.0.0` en su propia configuración. Compruébalo con:
-```bash
-ss -tlnp | grep -E ':9696|:9091|:4711'   # Prowlarr / Transmission / aMule
-```
-Si ves `127.0.0.1:<puerto>` en vez de `0.0.0.0:<puerto>` o `*:<puerto>`, ahí
-está la causa.
+`docker-compose.yml`), no por `127.0.0.1` ni como si fuera tu LAN. Si
+"Probar conexión" falla con "no se pudo conectar" aunque la URL/credenciales
+sean correctas, hay dos causas habituales — comprueba las dos:
+
+1. **Un cortafuegos (`ufw`/`iptables`) con reglas limitadas a tu LAN.** Si
+   tienes reglas tipo "solo 192.168.1.0/24" para esos puertos (patrón
+   habitual si ya proteges el resto de la suite *arr así), el puente de
+   Docker no cuenta como LAN y la conexión se descarta antes de llegar al
+   servicio — **esta fue la causa real, confirmada**, en la primera
+   instalación que lo reportó. Compruébalo con:
+   ```bash
+   sudo ufw status
+   ip addr show docker0 | grep inet   # subred real del puente
+   ```
+   Y si hace falta, añade una regla para esa subred en cada puerto:
+   ```bash
+   sudo ufw allow from 172.17.0.0/16 to any port 9696 proto tcp comment 'Prowlarr desde Docker'
+   sudo ufw allow from 172.17.0.0/16 to any port 9091 proto tcp comment 'Transmission desde Docker'
+   sudo ufw allow from 172.17.0.0/16 to any port 4711 proto tcp comment 'aMule desde Docker'
+   sudo ufw reload
+   ```
+   (usa la subred real que te dé `ip addr show docker0`, no asumas que es
+   `172.17.0.0/16` — puede variar según tu instalación de Docker).
+
+2. **El servicio escucha solo en `127.0.0.1`, no en `0.0.0.0`.** Menos
+   habitual que lo anterior, pero compruébalo también:
+   ```bash
+   ss -tlnp | grep -E ':9696|:9091|:4711'   # Prowlarr / Transmission / aMule
+   ```
+   Si ves `127.0.0.1:<puerto>` en vez de `0.0.0.0:<puerto>` o `*:<puerto>`,
+   cámbialo en la configuración propia de ese servicio.
 
 ## Desarrollo
 

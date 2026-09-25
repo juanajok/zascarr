@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.2] — 2026-09-25
+
+### Corregido
+
+- **Diagnóstico de "no se pudo conectar" en `/ui/ajustes` corregido con datos reales de producción.** La v1.4.1 apuntaba solo a "el servicio escucha en 127.0.0.1, no en 0.0.0.0" — hipótesis razonable pero **descartada con evidencia real**: en la primera instalación que lo reportó, `ss -tlnp` mostró Prowlarr/Transmission/aMule escuchando correctamente en `0.0.0.0`/`*`. La causa real, confirmada con `sudo ufw status` + `ip addr show docker0`: un cortafuegos `ufw` con política `DROP` y reglas "solo LAN" para esos puertos — el puente de Docker no encajaba en ninguna subred permitida, así que ufw descartaba la conexión antes de llegar al servicio. No es un bug de ZascArr: es un contrato de red entre Docker y un firewall ya bien configurado para el resto de la suite *arr, que el proyecto no documentaba. El mensaje de "Probar conexión" ahora cubre ambas causas (ufw primero, bind después) con el comando `ufw allow` exacto; README ampliado igual.
+
 ## [1.4.1] — 2026-09-25
 
 ### Añadido
