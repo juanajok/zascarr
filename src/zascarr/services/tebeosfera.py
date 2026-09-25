@@ -72,6 +72,7 @@ class TebeosferaResult:
     count_of_issues: int | None = None
     cover_url: str | None = None
     description: str | None = None  # solo disponible a veces, en sagas
+    site_url: str | None = None
 
 
 class TebeosferaClient:
@@ -163,5 +164,6 @@ def _parse_results(html_fragment: str, kind: str) -> list[TebeosferaResult]:
             start_year=int(year_match.group(0)) if year_match else None,
             count_of_issues=int(count_match.group(1)) if count_match else None,
             cover_url=thumb[0] if thumb else None,
+            site_url=f"{_BASE_URL}{href}",
         ))
     return results

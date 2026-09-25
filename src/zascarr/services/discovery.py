@@ -50,6 +50,11 @@ class DiscoveryResult:
     start_year: int | None
     description: str | None
     cover_url: str | None
+    # Enlace a la ficha real en la fuente (bug real, reportado: sin esto no
+    # hay forma de confirmar CUÁL de varias ediciones/resultados similares
+    # es la correcta antes de darla de alta — un "Thorgal" en Tebeosfera
+    # son 10 ediciones españolas distintas, cada una con su propia ficha).
+    site_url: str | None
     # Punto de partida editable en el formulario de alta, NO una asignación
     # definitiva: Comic Vine también indexa BRITISH, Tebeosfera también
     # indexa FRANCO_BELGIAN. El coleccionista corrige antes de confirmar.
@@ -89,7 +94,8 @@ class DiscoveryService:
             DiscoveryResult(
                 source=MetadataSource.COMIC_VINE, external_id=str(h.cv_id),
                 title=h.name, start_year=h.start_year, description=h.description,
-                cover_url=h.image_url, tradition_guess=ComicTradition.AMERICAN,
+                cover_url=h.image_url, site_url=h.site_url,
+                tradition_guess=ComicTradition.AMERICAN,
             )
             for h in hits
         ]
@@ -102,7 +108,8 @@ class DiscoveryService:
                 source=MetadataSource.ANILIST, external_id=str(h.anilist_id),
                 title=h.title_romaji or h.title_english or "?",
                 start_year=h.start_year, description=h.description,
-                cover_url=h.cover_url, tradition_guess=ComicTradition.MANGA,
+                cover_url=h.cover_url, site_url=h.site_url,
+                tradition_guess=ComicTradition.MANGA,
             )
             for h in hits
         ]
@@ -114,7 +121,8 @@ class DiscoveryService:
             DiscoveryResult(
                 source=MetadataSource.TEBEOSFERA, external_id=h.slug,
                 title=h.title, start_year=h.start_year, description=h.description,
-                cover_url=h.cover_url, tradition_guess=ComicTradition.TEBEO,
+                cover_url=h.cover_url, site_url=h.site_url,
+                tradition_guess=ComicTradition.TEBEO,
             )
             for h in hits
         ]

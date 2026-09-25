@@ -26,6 +26,7 @@ class CVResult:
     image_url: str | None = None
     start_year: int | None = None
     count_of_issues: int | None = None
+    site_url: str | None = None
     raw: dict | None = None
 
 
@@ -106,7 +107,7 @@ class ComicVineClient:
     async def search_series(self, query: str, limit: int = 10) -> list[CVResult]:
         data = await self._get("/search/", {
             "query": query, "resources": "volume", "limit": limit,
-            "field_list": "id,name,description,image,start_year,count_of_issues",
+            "field_list": "id,name,description,image,start_year,count_of_issues,site_detail_url",
         })
         return [CVResult(
             cv_id=item["id"], name=item.get("name", ""),
@@ -114,6 +115,7 @@ class ComicVineClient:
             image_url=item.get("image", {}).get("medium_url"),
             start_year=_safe_int(item.get("start_year")),
             count_of_issues=item.get("count_of_issues"),
+            site_url=item.get("site_detail_url"),
             raw=item,
         ) for item in data.get("results", [])]
 

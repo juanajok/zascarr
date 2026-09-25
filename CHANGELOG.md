@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.3.1] — 2026-09-25
+
+### Añadido
+
+- **Enlace a la ficha original en cada resultado de `/ui/descubrir`**, reportado tras la primera prueba en vivo: buscar "Thorgal" devuelve 10 ediciones españolas distintas (Distrinovel 1981, Zinco 1986, varias sub-colecciones de Norma) y no había forma de confirmar cuál era cuál antes de darla de alta. Cada resultado lleva ahora un enlace "↗" a su página real (Tebeosfera/Comic Vine/AniList, se abre en pestaña nueva) — no es hotlinking de imagen, es un enlace de texto de salida, igual que una cita. Comic Vine añade `site_detail_url` al `field_list` que ya pedía; AniList se construye con su patrón de URL estable (`anilist.co/manga/{id}`); Tebeosfera reutiliza el `href` real ya extraído del HTML.
+
 ## [1.3.0] — 2026-09-25
 
 ### Añadido
