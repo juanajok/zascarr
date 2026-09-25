@@ -202,6 +202,24 @@ class SeriesMatcher:
 
         return hits
 
+    async def find_alias(self, raw_title: str) -> SeriesHit | None:
+        """B13: alias local aprendido de una asignación manual anterior
+        en Pendientes (ver ReviewService.assign_to_series). Se consulta
+        ANTES del fuzzy de la capa 2 — si el coleccionista ya corrigió
+        este patrón una vez, no vuelve a preguntarse."""
+        pattern = normalize_title(raw_title)
+        if not pattern:
+            return None
+        row = (await self.db.execute(sa.text("""
+            SELECT s.id, s.title, s.start_year
+            FROM local_aliases la
+            JOIN series s ON s.id = la.series_id
+            WHERE la.pattern_norm = :pattern
+        """), {"pattern": pattern})).first()
+        if not row:
+            return None
+        return SeriesHit(UUID(str(row.id)), row.title, row.start_year, 1.0)
+
     async def find_issue(self, series_id: UUID, number: str) -> UUID | None:
         """issue_number es VARCHAR por los '1.5' y 'Annual 3': match textual
         exacto tras recortar ceros a la izquierda ('007' ~ '7')."""
@@ -242,6 +260,13 @@ class SeriesMatcher:
                 notes=["sin título/número tras capas 0-1"],
             )
 
+        # B13: alias local (corrección manual previa en Pendientes) manda
+        # sobre el fuzzy — se salta capa 2 por completo si hay uno.
+        alias_hit = await self.find_alias(title)
+        if alias_hit:
+            return await self._resolve(alias_hit, number, [alias_hit],
+                                        MatchStatus.DIRECT, ["alias local aprendido"])
+
         hits = await self.find_series(title, year, volume)
         good = [h for h in hits if h.score >= FUZZY_THRESHOLD]
 
@@ -262,14 +287,23 @@ class SeriesMatcher:
             )
 
         hit = good[0]
-        issue_id = await self.find_issue(hit.series_id, number)
         status = MatchStatus.DIRECT if hit.score == 1.0 else MatchStatus.FUZZY
+        return await self._resolve(hit, number, good, status, [])
 
-        notes = [] if issue_id else [
-            f"issue '{number}' no registrado en serie '{hit.title}': "
-            "posible hueco del enricher, encolar consulta a metadata.py"
-        ]
-        return MatchResult(status, hit.series_id, issue_id, hit.score, good, notes)
+    async def _resolve(self, hit: SeriesHit, number: str, candidates: list[SeriesHit],
+                        status: MatchStatus, extra_notes: list[str]) -> MatchResult:
+        """Cola común de decide(): buscar el issue exacto y componer el
+        MatchResult final, compartida entre el camino normal (fuzzy) y el
+        alias local (B13) — ambos terminan igual, solo cambia cómo se
+        encontró la serie."""
+        issue_id = await self.find_issue(hit.series_id, number)
+        notes = list(extra_notes)
+        if not issue_id:
+            notes.append(
+                f"issue '{number}' no registrado en serie '{hit.title}': "
+                "posible hueco del enricher, encolar consulta a metadata.py"
+            )
+        return MatchResult(status, hit.series_id, issue_id, hit.score, candidates, notes)
 
 
 def _volume_matches(hit: SeriesHit, volume: int) -> bool:

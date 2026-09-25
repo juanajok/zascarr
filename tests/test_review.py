@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 
-from zascarr.models import ComicTradition, File, FileFormat, Issue, MetadataSource, Series
+from zascarr.models import ComicTradition, File, FileFormat, Issue, LocalAlias, MetadataSource, Series
 from zascarr.services.review import ReviewService
 
 
@@ -82,7 +82,10 @@ class TestAssignToSeries:
 
         session = FakeSession(
             get_map={(File, file.id): file, (Series, series.id): series},
-            exec_queue=[FakeExecResult([])],  # sin issue existente para ese número
+            exec_queue=[
+                FakeExecResult([]),  # sin issue existente para ese número
+                FakeExecResult([]),  # B13: sin alias previo para ese patrón
+            ],
         )
         service = ReviewService(db=session)
         service._library = library  # evita depender de settings/disco reales
@@ -117,7 +120,10 @@ class TestAssignToSeries:
 
         session = FakeSession(
             get_map={(File, file.id): file, (Series, series.id): series},
-            exec_queue=[FakeExecResult([existing_issue])],
+            exec_queue=[
+                FakeExecResult([existing_issue]),
+                FakeExecResult([]),  # B13: sin alias previo para ese patrón
+            ],
         )
         service = ReviewService(db=session)
         service._library = library
@@ -146,6 +152,82 @@ class TestAssignToSeries:
         service = ReviewService(db=session)
         with pytest.raises(ValueError, match="Serie"):
             await service.assign_to_series(file.id, uuid4(), "12")
+
+
+class TestAprendeAlias:
+    """B13: cada asignación manual desde Pendientes aprende un alias
+    local (patrón de nombre → serie) para no volver a preguntar."""
+
+    @pytest.mark.asyncio
+    async def test_crea_alias_nuevo(self, tmp_path):
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "la patrulla x omnigold 12.cbz"
+        orig.write_bytes(b"x")
+
+        series = make_series("La Patrulla-X", start_year=1985)
+        file = make_file(orig)
+
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        service = ReviewService(db=session)
+        service._library = library
+
+        await service.assign_to_series(file.id, series.id, "12")
+
+        alias = next(o for o in session.added if isinstance(o, LocalAlias))
+        assert alias.pattern_norm == "patrulla x omnigold"
+        assert alias.series_id == series.id
+
+    @pytest.mark.asyncio
+    async def test_alias_existente_se_actualiza_en_vez_de_duplicarse(self, tmp_path):
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "la patrulla x omnigold 12.cbz"
+        orig.write_bytes(b"x")
+
+        series_correcta = make_series("La Patrulla-X", start_year=1985)
+        file = make_file(orig)
+        alias_previo = LocalAlias(id=uuid4(), pattern_norm="patrulla x omnigold", series_id=uuid4())
+
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series_correcta.id): series_correcta},
+            exec_queue=[FakeExecResult([]), FakeExecResult([alias_previo])],
+        )
+        service = ReviewService(db=session)
+        service._library = library
+
+        await service.assign_to_series(file.id, series_correcta.id, "12")
+
+        assert not any(isinstance(o, LocalAlias) for o in session.added)  # no crea uno nuevo
+        assert alias_previo.series_id == series_correcta.id  # corrige el existente
+
+    @pytest.mark.asyncio
+    async def test_sin_serie_detectable_en_el_nombre_no_aprende_nada(self, tmp_path):
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "___.cbz"  # naming.py no extrae título de esto
+        orig.write_bytes(b"x")
+
+        series = make_series("Algo")
+        file = make_file(orig)
+
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([])],  # solo el lookup de Issue: sin segunda query
+        )
+        service = ReviewService(db=session)
+        service._library = library
+
+        await service.assign_to_series(file.id, series.id, "12")
+
+        assert not any(isinstance(o, LocalAlias) for o in session.added)
+        assert session._exec_queue == []  # no se llegó a consultar el alias
 
 
 class TestDismiss:

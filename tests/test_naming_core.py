@@ -339,9 +339,11 @@ def make_triage_result(series="Batman", number="12", year=None,
 
 
 def make_session_mock(series_hits: list[SeriesHit],
-                      issue_id: UUID | None = uuid4()) -> AsyncMock:
-    """Mock de AsyncSession que devuelve series_hits en find_series
-    e issue_id en find_issue."""
+                      issue_id: UUID | None = uuid4(),
+                      alias_hit: SeriesHit | None = None) -> AsyncMock:
+    """Mock de AsyncSession que devuelve series_hits en find_series,
+    issue_id en find_issue, y alias_hit en find_alias (B13 — None por
+    defecto: sin alias local aprendido, el camino normal de estos tests)."""
     session = AsyncMock()
 
     async def execute_side_effect(query, params=None):
@@ -355,6 +357,13 @@ def make_session_mock(series_hits: list[SeriesHit],
         # nunca se alcanzaría. Hay que mirar la tabla real (FROM issues).
         if "FROM issues" in str(query):
             row = MagicMock(id=str(issue_id)) if issue_id else None
+            result_mock.first = MagicMock(return_value=row)
+            return result_mock
+        elif "local_aliases" in str(query):  # find_alias (B13)
+            row = None
+            if alias_hit is not None:
+                row = MagicMock(id=str(alias_hit.series_id), title=alias_hit.title,
+                                 start_year=alias_hit.start_year)
             result_mock.first = MagicMock(return_value=row)
             return result_mock
         else:  # find_series query
@@ -484,6 +493,63 @@ class TestSeriesMatcherDecide:
 
         assert result.status == MatchStatus.DIRECT
         assert result.series_id == sid
+
+
+class TestSeriesMatcherAlias:
+    """B13: un alias local aprendido (ReviewService._learn_alias tras una
+    asignación manual en Pendientes) manda sobre el fuzzy — se consulta
+    ANTES de find_series, y ni siquiera se llega a ejecutar esa query."""
+
+    @pytest.mark.asyncio
+    async def test_alias_encontrado_gana_al_fuzzy(self):
+        """Aunque find_series() devolvería candidatos distintos/ambiguos,
+        el alias resuelve directo sin tocar esa rama."""
+        sid_alias = uuid4()
+        iid = uuid4()
+        alias_hit = SeriesHit(sid_alias, "La Patrulla-X", 1985, 1.0)
+        # Candidatos de fuzzy que NO deberían usarse si el alias gana:
+        hits_fuzzy_que_no_deben_usarse = [
+            SeriesHit(uuid4(), "Otra Cosa", 1990, 0.9),
+            SeriesHit(uuid4(), "Otra Cosa Más", 1991, 0.9),
+        ]
+        session = make_session_mock(hits_fuzzy_que_no_deben_usarse, iid, alias_hit=alias_hit)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla X Omnigold", "12"))
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid_alias
+        assert result.issue_id == iid
+        assert "alias local aprendido" in result.notes
+
+    @pytest.mark.asyncio
+    async def test_sin_alias_sigue_el_camino_normal(self):
+        """Sin fila en local_aliases, decide() se comporta exactamente
+        como antes de B13 — find_alias no interfiere."""
+        sid = uuid4()
+        iid = uuid4()
+        hits = [SeriesHit(sid, "Batman", 2011, 1.0)]
+        session = make_session_mock(hits, iid, alias_hit=None)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("Batman", "12"))
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.series_id == sid
+
+    @pytest.mark.asyncio
+    async def test_alias_con_issue_no_registrado_anota_nota(self):
+        sid_alias = uuid4()
+        alias_hit = SeriesHit(sid_alias, "La Patrulla-X", 1985, 1.0)
+        session = make_session_mock([], issue_id=None, alias_hit=alias_hit)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla X Omnigold", "99"))
+
+        assert result.series_id == sid_alias
+        assert result.issue_id is None
+        assert any("alias local aprendido" in n for n in result.notes)
+        assert any("enricher" in n for n in result.notes)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

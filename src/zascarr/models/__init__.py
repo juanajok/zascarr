@@ -443,3 +443,20 @@ class RuntimeSetting(Base):
     id:         Mapped[int]      = mapped_column(Integer, primary_key=True, default=1)
     values:     Mapped[dict]     = mapped_column(JSONB, default=dict, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class LocalAlias(Base):
+    """B13: patrón de nombre → serie, aprendido de asignaciones manuales
+    en Pendientes (ReviewService.assign_to_series). SeriesMatcher.decide()
+    lo consulta ANTES del matcher fuzzy — si el coleccionista ya corrigió
+    a mano un patrón una vez, no debe volver a preguntarse.
+
+    Alias LOCAL de esta instalación, nunca una regla global (CLAUDE.md
+    §5, "el sistema gestiona, nunca facilita"): pattern_norm es
+    core.matcher.normalize_title(título extraído por naming.py del
+    nombre de archivo original), no un regex ni nada exportable."""
+    __tablename__ = "local_aliases"
+    id:           Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    pattern_norm: Mapped[str]      = mapped_column(String(500), nullable=False, unique=True)
+    series_id:    Mapped[str]      = mapped_column(UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False)
+    created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

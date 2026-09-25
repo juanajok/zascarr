@@ -15,6 +15,11 @@ archivos no son su terreno). El Issue nuevo, en cambio, NO se marca
 'manual' — eso bloquearía sinopsis/portada/créditos que el enricher sí
 debería poder rellenar más adelante — sino que protege únicamente la
 asignación serie+número vía locked_fields (H3, peer review v2).
+
+Cada asignación manual también alimenta el alias local de B13
+(`_learn_alias`): el patrón de nombre que llevó a este archivo a
+Pendientes queda memorizado → la serie elegida, para que
+SeriesMatcher.decide() no vuelva a preguntar la próxima vez.
 """
 from __future__ import annotations
 
@@ -24,9 +29,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import File, Issue, MetadataSource, Series
+from zascarr.core.matcher import normalize_title
+from zascarr.models import File, Issue, LocalAlias, MetadataSource, Series
 from zascarr.services.importer import build_library_path
 from zascarr.utils.fs import safe_move_async
+from zascarr.utils.naming import parse_comic_filename
 
 
 class ReviewService:
@@ -109,6 +116,7 @@ class ReviewService:
             await self.db.flush()
 
         orig = Path(file.file_path)
+        original_name = file.file_name  # capturado antes de reescribirlo abajo (B13: patrón de aprendizaje)
         dest = build_library_path(self._library, series, issue_number, orig.suffix)
         # A3: mover a destino verificado — nunca sobreescribe ni borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
@@ -119,7 +127,31 @@ class ReviewService:
         file.file_name = final_dest.name
         file.metadata_source = MetadataSource.MANUAL.value
         await self.db.flush()
+        await self._learn_alias(original_name, series.id)
         return file
+
+    async def _learn_alias(self, original_filename: str, series_id) -> None:
+        """B13: cada asignación manual desde Pendientes es, por definición,
+        una corrección — el matcher ya no supo resolverla solo (esa es la
+        única razón por la que el archivo llegó a esta bandeja). Se
+        aprende el patrón (título que naming.py extrae del nombre de
+        archivo, normalizado) → serie, para que SeriesMatcher.decide()
+        no vuelva a preguntar la próxima vez que aparezca. Una corrección
+        más reciente sobre el mismo patrón sustituye a la anterior."""
+        parsed = parse_comic_filename(original_filename)
+        if not parsed.series:
+            return
+        pattern = normalize_title(parsed.series)
+        if not pattern:
+            return
+        existing = (await self.db.execute(
+            select(LocalAlias).where(LocalAlias.pattern_norm == pattern)
+        )).scalar_one_or_none()
+        if existing:
+            existing.series_id = series_id
+        else:
+            self.db.add(LocalAlias(pattern_norm=pattern, series_id=series_id))
+        await self.db.flush()
 
     async def dismiss(self, file_id) -> None:
         file = await self.db.get(File, file_id)
