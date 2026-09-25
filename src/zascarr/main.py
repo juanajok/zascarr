@@ -104,10 +104,18 @@ async def lifespan(app: FastAPI):
     logger.info("zascarr.starting", version=settings.app_version)
     from sqlalchemy import text
 
-    from zascarr.database import engine
+    from zascarr.database import async_session_factory, engine
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
     logger.info("zascarr.db_connected")
+
+    # D11: aplica los overrides de /ui/ajustes guardados en una ejecución
+    # anterior — sin esto, tras un reinicio real (deploy, reboot de la Pi)
+    # los ajustes seguirían en la BD pero no se verían hasta el primer
+    # guardado nuevo desde la UI.
+    from zascarr.services.runtime_settings import load_overrides_at_startup
+    async with async_session_factory() as session:
+        await load_overrides_at_startup(session)
 
     background_tasks = [
         asyncio.create_task(_import_loop(settings.import_interval_minutes)),
@@ -149,6 +157,7 @@ def create_app() -> FastAPI:
     from zascarr.api.legal import router as legal_router
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
+    from zascarr.web.ajustes import router as ajustes_router
     from zascarr.web.dashboard import router as dashboard_router
     from zascarr.web.discovery import router as discovery_router
     from zascarr.web.estado import router as estado_router
@@ -164,6 +173,7 @@ def create_app() -> FastAPI:
     app.include_router(series_router, prefix="/api")
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(ui_router)
+    app.include_router(ajustes_router)
     app.include_router(dashboard_router)
     app.include_router(discovery_router)
     app.include_router(estado_router)

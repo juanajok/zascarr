@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Ajustes — ZascArr{% endblock %}
+{% block content %}
+<h1>Ajustes</h1>
+<p class="subtitle">Conecta tus fuentes de metadatos y clientes de descarga sin editar el .env a mano. Cada cambio se aplica al momento, sin reiniciar.</p>
+
+<div class="ajustes-grid">
+
+  <fieldset class="ajustes-card">
+    <legend>Comic Vine</legend>
+    <p class="ajustes-desc">Fuente de metadatos para grapa americana y británica.</p>
+    <form hx-post="/ui/ajustes/guardar/comic-vine" hx-target="#resultado-comic-vine" hx-swap="innerHTML">
+      <label>Clave de API
+        <input type="password" name="comicvine_api_key" autocomplete="off"
+               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if comicvine_api_key_configurada else 'sin configurar' }}">
+      </label>
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+        <button type="button" hx-post="/ui/ajustes/probar/comic-vine" hx-include="closest form"
+                hx-target="#prueba-comic-vine" hx-swap="innerHTML">Probar conexión</button>
+      </div>
+    </form>
+    <div id="resultado-comic-vine"></div>
+    <div id="prueba-comic-vine"></div>
+  </fieldset>
+
+  <fieldset class="ajustes-card">
+    <legend>Prowlarr</legend>
+    <p class="ajustes-desc">Indexador de búsquedas para Deseados.</p>
+    <form hx-post="/ui/ajustes/guardar/prowlarr" hx-target="#resultado-prowlarr" hx-swap="innerHTML">
+      <label>URL
+        <input type="text" name="prowlarr_url" value="{{ prowlarr_url }}" placeholder="http://127.0.0.1:9696">
+      </label>
+      <label>Clave de API
+        <input type="password" name="prowlarr_api_key" autocomplete="off"
+               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if prowlarr_api_key_configurada else 'sin configurar' }}">
+      </label>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="prowlarr_enabled" value="true" {% if prowlarr_enabled %}checked{% endif %}>
+        Activar Prowlarr en las búsquedas de Deseados
+      </label>
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+        <button type="button" hx-post="/ui/ajustes/probar/prowlarr" hx-include="closest form"
+                hx-target="#prueba-prowlarr" hx-swap="innerHTML">Probar conexión</button>
+      </div>
+    </form>
+    <div id="resultado-prowlarr"></div>
+    <div id="prueba-prowlarr"></div>
+  </fieldset>
+
+  <fieldset class="ajustes-card">
+    <legend>Transmission</legend>
+    <p class="ajustes-desc">Cliente de descarga para torrents.</p>
+    <form hx-post="/ui/ajustes/guardar/transmission" hx-target="#resultado-transmission" hx-swap="innerHTML">
+      <label>URL
+        <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://127.0.0.1:9091">
+      </label>
+      <label>Usuario
+        <input type="text" name="transmission_username" value="{{ transmission_username }}" autocomplete="off">
+      </label>
+      <label>Contraseña
+        <input type="password" name="transmission_password" autocomplete="off"
+               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if transmission_password_configurada else 'sin configurar' }}">
+      </label>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="transmission_enabled" value="true" {% if transmission_enabled %}checked{% endif %}>
+        Activar Transmission para descargas de Deseados
+      </label>
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+        <button type="button" hx-post="/ui/ajustes/probar/transmission" hx-include="closest form"
+                hx-target="#prueba-transmission" hx-swap="innerHTML">Probar conexión</button>
+      </div>
+    </form>
+    <div id="resultado-transmission"></div>
+    <div id="prueba-transmission"></div>
+  </fieldset>
+
+  <fieldset class="ajustes-card">
+    <legend>aMule</legend>
+    <p class="ajustes-desc">Cliente de descarga eD2k/Kad, vía amuleweb.</p>
+    <form hx-post="/ui/ajustes/guardar/amule" hx-target="#resultado-amule" hx-swap="innerHTML">
+      <label>URL de amuleweb
+        <input type="text" name="amule_url" value="{{ amule_url }}" placeholder="http://127.0.0.1:4711">
+      </label>
+      <label>Contraseña
+        <input type="password" name="amule_password" autocomplete="off"
+               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if amule_password_configurada else 'sin configurar' }}">
+      </label>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="amule_enabled" value="true" {% if amule_enabled %}checked{% endif %}>
+        Activar aMule para descargas de Deseados
+      </label>
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+        <button type="button" hx-post="/ui/ajustes/probar/amule" hx-include="closest form"
+                hx-target="#prueba-amule" hx-swap="innerHTML">Probar conexión</button>
+      </div>
+    </form>
+    <div id="resultado-amule"></div>
+    <div id="prueba-amule"></div>
+  </fieldset>
+
+</div>
+
+{% from "_legal_disclaimer.html" import legal_disclaimer %}
+{{ legal_disclaimer("wishlist") }}
+{% endblock %}

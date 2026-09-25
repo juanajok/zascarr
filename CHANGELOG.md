@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.0] — 2026-09-25
+
+### Añadido
+
+- **Pantalla de ajustes (`/ui/ajustes`, D11)**: conecta Comic Vine, Prowlarr, Transmission y aMule desde la interfaz, sin editar `.env` a mano ni reiniciar el contenedor. Cada integración tiene su formulario con "Guardar" (se aplica al instante) y "Probar conexión" (petición real con lo que haya en el formulario, guardado o no). Los secretos (claves de API, contraseñas) nunca se devuelven en claro: el campo llega siempre vacío, y guardarlo vacío significa "no cambiar", nunca "borrar".
+
+  Diseño de mínimo impacto: `config.py`/`.env` siguen siendo la única declaración de campos/tipos/valores por defecto — una nueva tabla `runtime_settings` (fila única, JSONB) guarda los overrides, que se aplican MUTANDO el `Settings` ya cacheado por `get_settings()`. Como la app corre con un solo proceso (`--workers 1`), esto es visible al instante para todos los clientes existentes (Comic Vine, Prowlarr, Transmission, aMule, el orquestador, el descubrimiento de series) sin tocar una sola línea de esos ficheros. Los overrides también se cargan al arrancar, para sobrevivir a un reinicio real.
+
+  Verificado en vivo contra Postgres real: guardar y activar Prowlarr se refleja al instante, confirmado tanto en la base de datos como en el HTML servido por una petición directa al servidor.
+
 ## [1.3.3] — 2026-09-25
 
 ### Añadido

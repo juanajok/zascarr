@@ -625,6 +625,38 @@ button[type="submit"],
   display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px;
 }
 
+/* ── 16a2. AJUSTES (D11) — conectar Comic Vine/Prowlarr/Transmission/
+   aMule desde la UI, mismos tokens que el resto ────────────────────── */
+.ajustes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--gutter);
+  margin: 26px 0;
+}
+.ajustes-card {
+  background: var(--paper-2); border: 3px solid var(--ink);
+  border-radius: var(--radius-panel); padding: 16px;
+}
+.ajustes-card legend {
+  font-family: var(--font-display); text-transform: uppercase;
+  letter-spacing: .02em; padding: 0 6px;
+}
+.ajustes-desc { color: var(--ink-soft); font-size: .82rem; margin: 0 0 12px; }
+.ajustes-card form { display: flex; flex-direction: column; gap: 10px; }
+.ajustes-card label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: .85rem; font-weight: 700;
+}
+.ajustes-card input[type="text"],
+.ajustes-card input[type="password"] {
+  font: inherit; padding: 8px 10px;
+  border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper); color: var(--ink);
+}
+.ajustes-actions { display: flex; gap: 8px; margin-top: 4px; }
+.ajustes-ok { color: var(--ok); }
+.ajustes-error { color: var(--warn); }
+
 /* ── 16b. ESTADO (E1) — mismos tokens/tarjetas que el resto de la app,
    nunca una paleta propia (bug real reportado: la página vivía fuera de
    base.html con su CSS inline, look distinto al resto) ────────────────── */

@@ -425,3 +425,21 @@ class LegalAcknowledgment(Base):
     id:            Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     accepted_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     legal_version: Mapped[str]      = mapped_column(String(64), nullable=False)
+
+
+class RuntimeSetting(Base):
+    """D11: ajustes de integraciones (Comic Vine, Prowlarr, Transmission,
+    aMule) editables desde /ui/ajustes, sin editar .env ni reiniciar.
+
+    Fila única (id=1 fijo, mismo patrón singleton que
+    LegalAcknowledgment pero con una sola fila en vez de "la más
+    reciente"): un JSONB con solo los campos que el coleccionista
+    cambió alguna vez desde la UI. NO es una segunda fuente de verdad
+    de configuración — config.py/.env siguen declarando todos los
+    campos, tipos y valores por defecto (CLAUDE.md §2); esto es
+    exclusivamente el override en caliente que services/
+    runtime_settings.py aplica sobre el Settings ya cacheado."""
+    __tablename__ = "runtime_settings"
+    id:         Mapped[int]      = mapped_column(Integer, primary_key=True, default=1)
+    values:     Mapped[dict]     = mapped_column(JSONB, default=dict, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
