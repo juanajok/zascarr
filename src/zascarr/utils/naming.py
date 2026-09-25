@@ -53,13 +53,6 @@ ISSUE_PATTERNS = [
     # El sufijo de letra es real y frecuente ("Superman Vol2 123a" son las
     # entregas partidas de Zinco); sin él, esos números se perdían enteros.
     (r"\b(\d{3,4}[a-zA-Z]?)\b(?!\s*\))", False),
-    # Ediciones de recopilación (CRG y similares): "Omnigold 5", "Integral
-    # 01", "Edición Integral 01" — el número que traen no es una grapa
-    # #NNN, es el tomo de la recopilación, pero a efectos de matching es
-    # lo único que tenemos (naming.py solo pasa (título, número, año) al
-    # matcher — no hay un campo "tomo de colección" separado todavía; ver
-    # docs/BACKLOG.md, ampliación del parser pendiente en varias capas).
-    (r"\b(?:Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b", False),
     # "Serie NN - MM": los dos son números y el de la IZQUIERDA es parte
     # del título ("Delta 99 - 04" es el 4 de la serie "Delta 99"). Va
     # antes que el patrón de subtítulo de abajo, que si no se quedaría
@@ -167,6 +160,21 @@ ARC_POSITION_PATTERN = re.compile(r"\b\d{1,3}\s+de\s+\d{1,3}\b", re.IGNORECASE)
 # Cats/Mukankakuna). Se captura ANTES de la limpieza genérica de
 # corchetes (más abajo), que si no se la comería sin dejar rastro.
 PART_NUMBER_PATTERN = re.compile(r"\[P(\d+)N(\d+)\]", re.IGNORECASE)
+
+# Ediciones de recopilación ("Omnigold 5", "Integral 01", "Edición
+# Integral 01"): el número que traen es el TOMO de la recopilación, no
+# la grapa #NNN original — son cosas distintas y afirmar la segunda a
+# partir de la primera es mentir (decisión del PO, 2026-09-25, tras
+# REQUISITOS_PARSER.md RF-07: "mejor Pendientes que un número falso").
+# El modelo no tiene hoy un campo `collection_number` separado (B15,
+# subida de prioridad) — mientras tanto se quita el número de en medio,
+# SIN capturarlo como issue_number, y se conserva la palabra de la
+# edición en el título: "La Patrulla X Omnigold" es un candidato mucho
+# más preciso en Pendientes que "La Patrulla X" a secas, aunque el
+# archivo siga sin poder clasificarse solo.
+EDITION_NUMBER_PATTERN = re.compile(
+    r"\b((?:Omnigold|Integral|Edici[oó]n\s+Integral))\s+\d{1,3}\b", re.IGNORECASE
+)
 
 # Prefijo de ORDEN DE LECTURA al principio del nombre ("069.- Flash v2
 # 62", "247.- Wonder Woman v2 214"): numera la colección/orden del
@@ -304,6 +312,10 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # "1 de 4": posición dentro de un arco en fascículos, nunca el número
     # de grapa — ver docstring de ARC_POSITION_PATTERN.
     working = ARC_POSITION_PATTERN.sub(" ", working)
+
+    # "Omnigold 5" → "Omnigold": se quita el tomo de la edición, nunca se
+    # captura como grapa — ver docstring de EDITION_NUMBER_PATTERN.
+    working = EDITION_NUMBER_PATTERN.sub(r"\1", working)
 
     working = ANIVERSARIO_PATTERN.sub(" ", working)
 

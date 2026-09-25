@@ -600,14 +600,11 @@ class TestRealWorldFilenames:
         assert result.series == "Spider Man"
 
     @pytest.mark.parametrize("filename,expected_series,expected_num", [
-        # Casos reales reportados en producción (colección CRG en español) —
-        # ninguno tenía número extraído antes del ampliado del parser.
-        ("La Patrulla X Omnigold 5 (Decisiones) [CRG].cbr",
-         "La Patrulla X", "5"),
+        # Casos reales reportados en producción (colección CRG en español).
+        # "Marvel Gold - La Patrulla-X Original 1": el "1" es un número
+        # suelto sin marcador de edición delante — issue_number real.
         ("Marvel Gold - La Patrulla-X Original 1 .cbr",
          "La Patrulla X Original", "1"),
-        ("The Boys - Edición Integral 01 [por The RockJR][CRG].cbr",
-         "The Boys", "1"),
     ])
     def test_parse_filename_real_world_crg(self, filename, expected_series, expected_num):
         from zascarr.utils.naming import parse_comic_filename
@@ -615,6 +612,24 @@ class TestRealWorldFilenames:
         result = parse_comic_filename(filename)
         assert result.series == expected_series
         assert result.issue_number == expected_num
+
+    @pytest.mark.parametrize("filename,expected_series", [
+        # Decisión del PO (2026-09-25, REQUISITOS_PARSER.md RF-07): el
+        # número que acompaña a Omnigold/Integral es el TOMO de la
+        # recopilación, no la grapa original — afirmar la segunda a partir
+        # del primero es mentir. Antes de esta decisión, estos DOS casos
+        # daban issue_number="5"/"1" y clasificaban solos; ahora van a
+        # Pendientes con un título más preciso (la palabra de la edición
+        # se conserva) en vez de un número inventado.
+        ("La Patrulla X Omnigold 5 (Decisiones) [CRG].cbr", "La Patrulla X Omnigold"),
+        ("The Boys - Edición Integral 01 [por The RockJR][CRG].cbr", "The Boys"),
+    ])
+    def test_omnigold_integral_no_inventa_numero_de_grapa(self, filename, expected_series):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == ""
 
     def test_sin_numero_real_no_inventa_uno(self):
         """'[ML] La Patrulla-X - Los Años Perdidos [MQ][DI] by The Murdock
@@ -759,22 +774,31 @@ class TestRealWorldFilenames:
         assert result.series == expected_series
         assert result.issue_number == expected_num
 
-    @pytest.mark.parametrize("filename,expected_series,expected_num", [
-        ("La.Mazmorra..Integral.6.-.Sfar.&.Trondheim.&.Larcenet.[jbabylon5][CRG].cbr",
-         "La Mazmorra", "6"),
-        ("El.departamento.de.la.verdad.3.-.James.Tynion.IV.&.Martin.Simmonds.[jbabylon5][CRG].cbr",
-         "El departamento de la verdad", "3"),
-    ])
-    def test_puntos_como_separador_no_esconden_el_numero(
-        self, filename, expected_series, expected_num
-    ):
-        """Con los puntos sin convertir, ni "Integral 6" ni el corte de
-        subtítulo se reconocían y el título arrastraba a los autores."""
+    def test_puntos_como_separador_no_esconden_el_numero(self):
+        """Con los puntos sin convertir, ni el "3" ni el corte de subtítulo
+        se reconocían y el título arrastraba a los autores."""
         from zascarr.utils.naming import parse_comic_filename
 
-        result = parse_comic_filename(filename)
-        assert result.series == expected_series
-        assert result.issue_number == expected_num
+        result = parse_comic_filename(
+            "El.departamento.de.la.verdad.3.-.James.Tynion.IV.&.Martin.Simmonds."
+            "[jbabylon5][CRG].cbr"
+        )
+        assert result.series == "El departamento de la verdad"
+        assert result.issue_number == "3"
+
+    def test_puntos_como_separador_no_esconden_la_edicion(self):
+        """Mismo caso que arriba, pero con "Integral N": desde la decisión
+        de RF-07 (ver test_omnigold_integral_no_inventa_numero_de_grapa),
+        el "6" es el tomo de la recopilación, no una grapa — no debe
+        colarse como issue_number aunque los puntos lo tapen igual que
+        antes tapaban un número real."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "La.Mazmorra..Integral.6.-.Sfar.&.Trondheim.&.Larcenet.[jbabylon5][CRG].cbr"
+        )
+        assert result.series == "La Mazmorra Integral"
+        assert result.issue_number == ""
 
     def test_punto_entre_cifras_sigue_siendo_un_decimal(self):
         """El paso anterior no debe romper los números decimales, que el

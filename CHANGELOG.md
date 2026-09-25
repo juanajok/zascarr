@@ -3,6 +3,14 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.5.3] — 2026-09-25
+
+### Cambiado
+
+- **Omnigold/Integral/Edición Integral ya no inventan un número de grapa.** `La Patrulla X Omnigold 5` daba `issue_number="5"` — pero el 5 es el tomo de la recopilación, no la grapa original, y afirmar la segunda a partir del primero es exactamente el tipo de dato falso que este proyecto lleva evitando desde v1.4.8. Decisión explícita del coleccionista (RF-07 de `REQUISITOS_PARSER.md`), con el argumento completo sobre la mesa: un número de grapa falso corrompe el cálculo de huecos/faltantes, que es una de las funciones centrales del producto.
+
+  Ahora estos archivos van a Pendientes con un título más preciso (`"La Patrulla X Omnigold"`, no solo `"La Patrulla X"`) en vez de un número inventado. Coste medido y aceptado: el ratio de acierto del banco de 41 rutas reales baja de 28/41 a 26/41 — pero los **errores bajan de 1 a 0**. B15 (deuda ya conocida) sube a P0: es la pieza que, con un campo `collection_number` propio, revierte este aumento de trabajo manual sin volver a inventar números.
+
 ## [1.5.2] — 2026-09-25
 
 ### Corregido
