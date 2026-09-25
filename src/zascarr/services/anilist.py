@@ -19,12 +19,20 @@ Documentación: https://docs.anilist.co/guide/graphql/
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 
 import httpx
 import structlog
 
 from zascarr.config import get_settings
+
+# Bug real (reportado, visible en /ui/descubrir): "description(asHtml:
+# false)" en la query de más abajo NO quita los "<br>" — AniList los deja
+# tal cual en su modo de texto plano, y Jinja2 los escapa a "&lt;br&gt;"
+# literal en vez de un salto de línea. Se limpia una vez aquí, en el
+# origen, no en cada plantilla que muestre la sinopsis.
+_BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 logger = structlog.get_logger()
 
@@ -115,7 +123,7 @@ def _parse_media(item: dict) -> AniListResult:
         anilist_id=item["id"],
         title_romaji=title.get("romaji"),
         title_english=title.get("english"),
-        description=item.get("description"),
+        description=_clean_description(item.get("description")),
         cover_url=(item.get("coverImage") or {}).get("large"),
         start_year=(item.get("startDate") or {}).get("year"),
         chapters=item.get("chapters"),
@@ -123,3 +131,9 @@ def _parse_media(item: dict) -> AniListResult:
         site_url=f"https://anilist.co/manga/{item['id']}",
         raw=item,
     )
+
+
+def _clean_description(text: str | None) -> str | None:
+    if not text:
+        return text
+    return _BR_PATTERN.sub("\n", text).strip()

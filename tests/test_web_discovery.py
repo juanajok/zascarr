@@ -129,3 +129,50 @@ class TestCrear:
 
         assert r.status_code == 200
         assert "ya estaba en tu biblioteca" in r.text
+
+
+class TestPortada:
+    """Bug real reportado ("¿puede tener algo así como el pantallazo de
+    Sonarr?"): portadas de candidatos de búsqueda, antes de que exista
+    una Series. El endpoint es un proxy — nunca hotlinking directo — con
+    lista blanca de host por fuente para no convertirse en un proxy
+    abierto de imágenes arbitrarias (SSRF)."""
+
+    def test_host_no_permitido_para_la_fuente_da_400(self):
+        client = TestClient(app)
+        r = client.get("/ui/descubrir/portada", params={
+            "url": "https://evil.example.com/steal.jpg",
+            "source": "comic_vine",
+        })
+        assert r.status_code == 400
+
+    def test_host_de_otra_fuente_no_vale_para_comic_vine(self):
+        """anilist.co es un host válido para ANILIST, pero no para
+        COMIC_VINE — la lista blanca es por fuente, no global."""
+        client = TestClient(app)
+        r = client.get("/ui/descubrir/portada", params={
+            "url": "https://s4.anilist.co/file/x.jpg",
+            "source": "comic_vine",
+        })
+        assert r.status_code == 400
+
+    def test_host_permitido_sirve_la_imagen_cacheada(self, tmp_path, monkeypatch):
+        from zascarr.config import get_settings
+        get_settings.cache_clear()
+        monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path))
+
+        async def fake_fetch(url, dest):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(b"\xff\xd8\xff")  # cabecera JPEG mínima
+            return True
+
+        with patch("zascarr.web.discovery.fetch_and_cache_cover", fake_fetch):
+            client = TestClient(app)
+            r = client.get("/ui/descubrir/portada", params={
+                "url": "https://s4.anilist.co/file/x.jpg",
+                "source": "anilist",
+            })
+
+        get_settings.cache_clear()
+        assert r.status_code == 200
+        assert r.content == b"\xff\xd8\xff"

@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.3.3] — 2026-09-25
+
+### Añadido
+
+- **Tarjetas visuales con portada en `/ui/descubrir`** (reportado con un pantallazo de referencia, estilo Sonarr): cada resultado ahora muestra la portada real, no solo texto. Nuevo proxy `/ui/descubrir/portada` — nunca hotlinking directo del navegador al CDN externo (regla permanente, §3.1.4): valida el host contra una lista blanca por fuente antes de descargar (si no, sería un proxy abierto de imágenes arbitrarias, SSRF real) y cachea en disco por hash de la URL, reutilizando `utils/cover.py` tal cual. Tras crear la serie, la confirmación pasa a usar el cascade de portadas ya existente (`/ui/series/{id}/portada`) en vez del proxy nuevo.
+
+### Corregido
+
+- **AniList dejaba `<br>` literal en la sinopsis** (visible en la propia captura de pantalla que motivó esta mejora) pese a pedir `description(asHtml: false)` — Jinja2 lo escapaba a `&lt;br&gt;` en vez de un salto de línea. Limpiado en el origen (`services/anilist.py`), con test de regresión.
+
 ## [1.3.2] — 2026-09-25
 
 ### Añadido
