@@ -20,6 +20,39 @@
 # =============================================================================
 set -e
 
+# Bug real de producción, confirmado con datos reales (2026-09-25): el
+# valor mágico "host-gateway" de extra_hosts (docker-compose.yml) puede
+# resolver a la puerta de enlace del puente POR DEFECTO (docker0,
+# 172.17.0.1 en el caso real) en vez de a la de la red PERSONALIZADA que
+# de verdad usa este contenedor (docker-compose siempre crea una propia,
+# p.ej. zascarr_zascarr-internal, gateway 172.18.0.1 en ese mismo caso) —
+# host.docker.internal apuntaba a una red que este contenedor ni
+# siquiera usa, así que Prowlarr/Transmission/aMule (baremetal en el
+# host) eran inalcanzables aunque el firewall y el servicio estuvieran
+# bien configurados. Se corrige aquí con la puerta de enlace REAL de la
+# propia interfaz del contenedor (vía /proc/net/route, sin depender de
+# `ip`/iproute2 — no es una dependencia del Dockerfile; python3 sí lo es
+# siempre, es la propia app).
+GATEWAY_REAL="$(python3 -c "
+import struct, socket
+with open('/proc/net/route') as f:
+    for line in f.readlines()[1:]:
+        campos = line.split()
+        if campos[1] == '00000000':
+            print(socket.inet_ntoa(struct.pack('<L', int(campos[2], 16))))
+            break
+" 2>/dev/null || true)"
+if [ -n "${GATEWAY_REAL}" ]; then
+    # /etc/hosts es un bind-mount especial de Docker: "sed -i" falla con
+    # "Device or resource busy" porque reemplaza por renombrado, y no se
+    # puede renombrar ENCIMA de un bind-mount (bug real, encontrado en la
+    # propia verificación de este fix). Truncar-y-escribir sí funciona.
+    grep -v '[[:space:]]host\.docker\.internal$' /etc/hosts > /tmp/hosts.nuevo 2>/dev/null || true
+    echo "${GATEWAY_REAL}	host.docker.internal" >> /tmp/hosts.nuevo
+    cat /tmp/hosts.nuevo > /etc/hosts
+    rm -f /tmp/hosts.nuevo
+fi
+
 PUID="${PUID:-1000}"
 PGID="${PGID:-1000}"
 

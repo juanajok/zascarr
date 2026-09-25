@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.4] — 2026-09-25
+
+### Corregido
+
+- **Causa real (tercera ronda) de "no se pudo conectar" con Prowlarr/Transmission/aMule: `host.docker.internal` resolvía a la red Docker equivocada.** Tras descartar el bind (v1.4.1) y confirmar+corregir el cortafuegos (v1.4.2), el fallo persistió. Causa real, encontrada comparando `docker exec ... getent hosts host.docker.internal` (`172.17.0.1`, el puente `docker0` por defecto) contra `docker inspect ... Networks.*.Gateway` (`172.18.0.1`, la red `zascarr_zascarr-internal` que de verdad usa el contenedor) — el valor mágico `host-gateway` de Docker (usado en `docker-compose.yml`) no siempre acierta con redes personalizadas, y `docker-compose` siempre crea una. Reproducido de forma aislada en sandbox antes de escribir el fix (red Docker personalizada + `--add-host=host.docker.internal:host-gateway`, mismo resultado que en producción).
+
+  Corregido en `docker-entrypoint.sh`: detecta la puerta de enlace real de la propia interfaz del contenedor (vía `/proc/net/route`, sin nueva dependencia — python3 ya es la propia app) y reescribe `/etc/hosts` en el arranque, antes de que arranque nada más. Bug encontrado a su vez verificando este mismo fix: `sed -i` sobre `/etc/hosts` falla con "Device or resource busy" (Docker lo monta como bind especial, no se puede renombrar encima) — corregido con truncar-y-escribir en vez de edición in-place por renombrado.
+
+  Mensaje de "Probar conexión" y README ampliados con las tres causas encontradas en el proceso completo; regla de `ufw` recomendada ahora con `172.16.0.0/12` (todo el rango de Docker) en vez de una subred exacta, más robusta ante una futura reasignación de red.
+
 ## [1.4.3] — 2026-09-25
 
 ### Corregido
