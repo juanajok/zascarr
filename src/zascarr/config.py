@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     # (colecciones + sagas), el doble que las otras fuentes.
     tebeosfera_rate_limit: float = 2.0
 
+    # ── GCD / Grand Comics Database (descubrimiento, C0) ─────────────
+    # API pública real en /api/ (verificado en vivo 2026-09-25, ver
+    # docs/adr/0002-enricher-scope.md), sin clave, anónima. Su propia
+    # documentación solo avisa de "límites por hora" sin cifra — mismo
+    # criterio conservador que Tebeosfera: asociación/proyecto cultural
+    # sin ánimo de lucro, no una API comercial con SLA.
+    gcd_rate_limit: float = 2.0
+
     # ── Prowlarr (baremetal) ───────────────────────────────────────
     # Blindaje legal: deshabilitado por defecto a propósito (igual que
     # forum_enabled) — el usuario tiene que activar cada integración de
@@ -120,7 +128,7 @@ class Settings(BaseSettings):
 
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "ZascArr"
-    app_version: str = "1.3.1"
+    app_version: str = "1.3.2"
     log_level: str = "INFO"
     log_json: bool = True
     debug: bool = False

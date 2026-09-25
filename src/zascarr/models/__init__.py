@@ -228,6 +228,9 @@ class Series(Base):
     # Tebeosfera no tiene IDs numéricos como Comic Vine/AniList: identifica
     # sus fichas por slug de texto (p.ej. "thorgal_1981_distrinovel").
     tebeosfera_slug: Mapped[str|None] = mapped_column(String(255), unique=True)
+    # GCD (C0, descubrimiento — ver docs/adr/0002-enricher-scope.md): sí
+    # tiene IDs numéricos, igual que Comic Vine/AniList.
+    gcd_id:          Mapped[int|None] = mapped_column(BigInteger, unique=True)
     cover_url:       Mapped[str|None] = mapped_column(String(500))
     metadata_:       Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))

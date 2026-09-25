@@ -28,18 +28,21 @@ from zascarr.config import get_settings
 from zascarr.models import ComicTradition, MetadataSource, Series
 from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
+from zascarr.services.gcd import GCDClient
 from zascarr.services.tebeosfera import TebeosferaClient
 
 logger = structlog.get_logger()
 
 # Traducción fuente → columna de identidad externa en Series. Cada serie
-# solo lleva UNA de las tres (igual que en enricher.py): la que corresponde
-# a la fuente donde se encontró.
+# solo lleva UNA de las cuatro (igual que en enricher.py): la que
+# corresponde a la fuente donde se encontró.
 _EXTERNAL_ID_FIELD: dict[MetadataSource, str] = {
     MetadataSource.COMIC_VINE: "comic_vine_id",
     MetadataSource.ANILIST: "anilist_id",
     MetadataSource.TEBEOSFERA: "tebeosfera_slug",
+    MetadataSource.GCD: "gcd_id",
 }
+_TEXT_ID_FIELDS = {"tebeosfera_slug"}
 
 
 @dataclass
@@ -65,24 +68,38 @@ class DiscoveryService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def search(self, query: str, limit: int = 10) -> list[DiscoveryResult]:
-        query = (query or "").strip()
+    async def search(self, query: str, limit: int = 10) -> tuple[list[DiscoveryResult], list[str]]:
+        """Devuelve (resultados, avisos). Los avisos son texto en español
+        listo para mostrar — bug real reportado: sin esto, "Comic Vine no
+        devuelve nada" era indistinguible de "no está configurado" (sin
+        COMICVINE_API_KEY), y el coleccionista no tenía forma de saberlo."""
+        query = query.strip()
         if not query:
-            return []
+            return [], []
 
-        outcomes = await asyncio.gather(
-            self._search_comic_vine(query, limit),
-            self._search_anilist(query, limit),
-            self._search_tebeosfera(query, limit),
-            return_exceptions=True,
+        avisos: list[str] = []
+        if not get_settings().comicvine_api_key:
+            avisos.append(
+                "Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env "
+                "para incluirlo en la búsqueda."
+            )
+
+        fuentes = (
+            ("Comic Vine", self._search_comic_vine(query, limit)),
+            ("AniList", self._search_anilist(query, limit)),
+            ("Tebeosfera", self._search_tebeosfera(query, limit)),
+            ("GCD", self._search_gcd(query, limit)),
         )
+        outcomes = await asyncio.gather(*(coro for _, coro in fuentes), return_exceptions=True)
+
         results: list[DiscoveryResult] = []
-        for outcome in outcomes:
+        for (nombre, _), outcome in zip(fuentes, outcomes, strict=True):
             if isinstance(outcome, BaseException):
-                logger.warning("discovery.source_failed", error=str(outcome))
+                logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
+                avisos.append(f"{nombre}: no se pudo consultar ahora mismo.")
                 continue
             results.extend(outcome)
-        return results
+        return results, avisos
 
     async def _search_comic_vine(self, query: str, limit: int) -> list[DiscoveryResult]:
         # Sin API key, la petición está condenada (401) — no la intentamos.
@@ -127,6 +144,22 @@ class DiscoveryService:
             for h in hits
         ]
 
+    async def _search_gcd(self, query: str, limit: int) -> list[DiscoveryResult]:
+        async with GCDClient() as client:
+            hits = await client.search_series(query, limit=limit)
+        return [
+            DiscoveryResult(
+                source=MetadataSource.GCD, external_id=str(h.gcd_id),
+                title=h.name, start_year=h.year_began,
+                # La API de búsqueda de GCD no trae sinopsis ni portada a
+                # nivel de serie (solo datos bibliográficos) — ver
+                # docstring de services/gcd.py.
+                description=None, cover_url=None, site_url=h.site_url,
+                tradition_guess=ComicTradition(h.tradition_guess),
+            )
+            for h in hits
+        ]
+
     async def get_or_create_series(
         self,
         source: MetadataSource,
@@ -144,7 +177,7 @@ class DiscoveryService:
         if field is None:
             raise ValueError(f"Fuente de descubrimiento desconocida: {source}")
 
-        value: int | str = int(external_id) if field != "tebeosfera_slug" else external_id
+        value: int | str = external_id if field in _TEXT_ID_FIELDS else int(external_id)
         existing = (await self.db.execute(
             select(Series).where(getattr(Series, field) == value)
         )).scalar_one_or_none()

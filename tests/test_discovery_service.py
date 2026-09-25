@@ -17,6 +17,7 @@ from zascarr.models import ComicTradition, MetadataSource, Series
 from zascarr.services.anilist import AniListResult
 from zascarr.services.comic_vine import CVResult
 from zascarr.services.discovery import DiscoveryService
+from zascarr.services.gcd import GCDResult
 from zascarr.services.tebeosfera import TebeosferaResult
 
 
@@ -56,10 +57,10 @@ class TestSearch:
     @pytest.mark.asyncio
     async def test_query_vacia_no_busca_nada(self):
         service = DiscoveryService(db=FakeSession())
-        assert await service.search("   ") == []
+        assert await service.search("   ") == ([], [])
 
     @pytest.mark.asyncio
-    async def test_fusiona_resultados_de_las_tres_fuentes(self, monkeypatch):
+    async def test_fusiona_resultados_de_las_cuatro_fuentes(self, monkeypatch):
         monkeypatch.setattr(
             "zascarr.services.discovery.get_settings",
             lambda: MagicMock(comicvine_api_key="una-key"),
@@ -67,19 +68,25 @@ class TestSearch:
         cv = [CVResult(cv_id=1, name="Batman", start_year=2011)]
         anilist = [AniListResult(anilist_id=2, title_romaji="Naruto")]
         tebeo = [TebeosferaResult(slug="thorgal_1981", title="Thorgal", kind="saga")]
+        gcd = [GCDResult(gcd_id=3, name="Batman", language="en", country="us")]
 
         with patch("zascarr.services.discovery.ComicVineClient", _client_ctx(cv)), \
              patch("zascarr.services.discovery.AniListClient", _client_ctx(anilist)), \
-             patch("zascarr.services.discovery.TebeosferaClient", _client_ctx(tebeo)):
+             patch("zascarr.services.discovery.TebeosferaClient", _client_ctx(tebeo)), \
+             patch("zascarr.services.discovery.GCDClient", _client_ctx(gcd)):
             service = DiscoveryService(db=FakeSession())
-            resultados = await service.search("algo")
+            resultados, avisos = await service.search("algo")
 
         fuentes = {r.source for r in resultados}
-        assert fuentes == {MetadataSource.COMIC_VINE, MetadataSource.ANILIST, MetadataSource.TEBEOSFERA}
-        assert len(resultados) == 3
+        assert fuentes == {
+            MetadataSource.COMIC_VINE, MetadataSource.ANILIST,
+            MetadataSource.TEBEOSFERA, MetadataSource.GCD,
+        }
+        assert len(resultados) == 4
+        assert avisos == []
 
     @pytest.mark.asyncio
-    async def test_sin_api_key_de_comic_vine_no_lo_intenta(self, monkeypatch):
+    async def test_sin_api_key_de_comic_vine_avisa_y_no_lo_intenta(self, monkeypatch):
         monkeypatch.setattr(
             "zascarr.services.discovery.get_settings",
             lambda: MagicMock(comicvine_api_key=""),
@@ -87,17 +94,20 @@ class TestSearch:
         cv_client = _client_ctx([CVResult(cv_id=1, name="Batman")])
         with patch("zascarr.services.discovery.ComicVineClient", cv_client), \
              patch("zascarr.services.discovery.AniListClient", _client_ctx([])), \
-             patch("zascarr.services.discovery.TebeosferaClient", _client_ctx([])):
+             patch("zascarr.services.discovery.TebeosferaClient", _client_ctx([])), \
+             patch("zascarr.services.discovery.GCDClient", _client_ctx([])):
             service = DiscoveryService(db=FakeSession())
-            resultados = await service.search("algo")
+            resultados, avisos = await service.search("algo")
 
         assert resultados == []
         cv_client.return_value.search_series.assert_not_called()
+        assert any("Comic Vine" in a for a in avisos)
 
     @pytest.mark.asyncio
-    async def test_un_fallo_de_fuente_no_tumba_la_busqueda(self, monkeypatch):
+    async def test_un_fallo_de_fuente_no_tumba_la_busqueda_y_lo_avisa(self, monkeypatch):
         """Bug real que se evita a propósito: Tebeosfera caído/lento no debe
-        impedir ver los resultados de AniList/Comic Vine."""
+        impedir ver los resultados de AniList/Comic Vine, pero el
+        coleccionista debe enterarse de que Tebeosfera no respondió."""
         monkeypatch.setattr(
             "zascarr.services.discovery.get_settings",
             lambda: MagicMock(comicvine_api_key=""),
@@ -107,12 +117,14 @@ class TestSearch:
         tebeo_roto.__aenter__.side_effect = RuntimeError("tebeosfera caída")
 
         with patch("zascarr.services.discovery.AniListClient", _client_ctx(anilist)), \
-             patch("zascarr.services.discovery.TebeosferaClient", MagicMock(return_value=tebeo_roto)):
+             patch("zascarr.services.discovery.TebeosferaClient", MagicMock(return_value=tebeo_roto)), \
+             patch("zascarr.services.discovery.GCDClient", _client_ctx([])):
             service = DiscoveryService(db=FakeSession())
-            resultados = await service.search("algo")
+            resultados, avisos = await service.search("algo")
 
         assert len(resultados) == 1
         assert resultados[0].source == MetadataSource.ANILIST
+        assert any("Tebeosfera" in a for a in avisos)
 
 
 class TestGetOrCreateSeries:

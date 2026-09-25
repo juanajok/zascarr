@@ -33,11 +33,11 @@ async def index(request: Request) -> HTMLResponse:
 
 @router.get("/buscar", response_class=HTMLResponse)
 async def buscar(request: Request, q: str = "", db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    resultados = await DiscoveryService(db).search(q)
+    resultados, avisos = await DiscoveryService(db).search(q)
     tradiciones = [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition]
     return templates.TemplateResponse(
         request, "_resultados_descubrir.html",
-        {"resultados": resultados, "tradiciones": tradiciones},
+        {"resultados": resultados, "avisos": avisos, "tradiciones": tradiciones},
     )
 
 
