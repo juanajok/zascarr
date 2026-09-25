@@ -29,8 +29,9 @@
     <p class="ajustes-desc">Indexador de búsquedas para Deseados.</p>
     <form hx-post="/ui/ajustes/guardar/prowlarr" hx-target="#resultado-prowlarr" hx-swap="innerHTML">
       <label>URL
-        <input type="text" name="prowlarr_url" value="{{ prowlarr_url }}" placeholder="http://127.0.0.1:9696">
+        <input type="text" name="prowlarr_url" value="{{ prowlarr_url }}" placeholder="http://host.docker.internal:9696">
       </label>
+      <p class="ajustes-hint">Prowlarr corre en esta misma Raspberry Pi, fuera de Docker — <code>host.docker.internal</code> es como ZascArr (que sí vive dentro de un contenedor) dice "la máquina que me aloja". No pongas <code>127.0.0.1</code>: ahí dentro significaría "el propio contenedor", no tu Pi.</p>
       <label>Clave de API
         <input type="password" name="prowlarr_api_key" autocomplete="off"
                placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if prowlarr_api_key_configurada else 'sin configurar' }}">
@@ -54,8 +55,9 @@
     <p class="ajustes-desc">Cliente de descarga para torrents.</p>
     <form hx-post="/ui/ajustes/guardar/transmission" hx-target="#resultado-transmission" hx-swap="innerHTML">
       <label>URL
-        <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://127.0.0.1:9091">
+        <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://host.docker.internal:9091">
       </label>
+      <p class="ajustes-hint">Transmission corre en esta misma Raspberry Pi, fuera de Docker — <code>host.docker.internal</code> es como ZascArr (que sí vive dentro de un contenedor) dice "la máquina que me aloja". No pongas <code>127.0.0.1</code>: ahí dentro significaría "el propio contenedor", no tu Pi.</p>
       <label>Usuario
         <input type="text" name="transmission_username" value="{{ transmission_username }}" autocomplete="off">
       </label>
@@ -82,8 +84,9 @@
     <p class="ajustes-desc">Cliente de descarga eD2k/Kad, vía amuleweb.</p>
     <form hx-post="/ui/ajustes/guardar/amule" hx-target="#resultado-amule" hx-swap="innerHTML">
       <label>URL de amuleweb
-        <input type="text" name="amule_url" value="{{ amule_url }}" placeholder="http://127.0.0.1:4711">
+        <input type="text" name="amule_url" value="{{ amule_url }}" placeholder="http://host.docker.internal:4711">
       </label>
+      <p class="ajustes-hint">amuleweb corre en esta misma Raspberry Pi, fuera de Docker — <code>host.docker.internal</code> es como ZascArr (que sí vive dentro de un contenedor) dice "la máquina que me aloja". No pongas <code>127.0.0.1</code>: ahí dentro significaría "el propio contenedor", no tu Pi.</p>
       <label>Contraseña
         <input type="password" name="amule_password" autocomplete="off"
                placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if amule_password_configurada else 'sin configurar' }}">
