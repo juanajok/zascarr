@@ -80,7 +80,7 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B12 | ~~Como coleccionista, cuando el parser SÍ extrae título+número pero no hay serie que iguale (o el score queda por debajo del umbral), quiero ver una sugerencia con la que confío en un clic, en vez de rebuscar a mano en Pendientes~~ | ~~`MatchResult.candidates` (ya existía) se serializa en `File.metadata_` (`Importer` y `LibraryAdopter`, mismo helper compartido); `/ui/pendientes` muestra el mejor candidato con su score y un botón "sí es esta serie" que reutiliza el formulario de asignación ya existente — confirmación explícita, nunca autoasignación~~ | ✅ Hecho | M |
 | B13 | ~~Como coleccionista, si asigno a mano varios archivos del mismo patrón ("La Patrulla X Omnigold N (...)") a la misma serie, quiero que ZascArr deje de preguntarme para ese patrón~~ | ~~Tabla `local_aliases` (patrón de nombre → series_id), aprendida en `ReviewService.assign_to_series` (toda asignación manual desde Pendientes es por definición una corrección) y consultada por `SeriesMatcher.decide()` ANTES del fuzzy. Alias local de esta instalación, nunca una regla global — CLAUDE.md §5~~ | ✅ Hecho | M |
 | B14 | Como coleccionista con la tebeoteca ya ordenada por carpetas, quiero que ZascArr use el NOMBRE DE LA CARPETA para saber de qué serie es cada archivo, porque es justo lo que yo ya le dije al ordenarla | La carpeta es la señal más fiable de esta biblioteca y hoy se tira entera: `Comics/JSA (1999)/JSA (2004-08) 62` da serie `JSA 62`, mientras la carpeta dice `JSA` + año `1999`. Medido sobre 44 rutas reales (2026-09-25): la carpeta arregla ~la mitad de los fallos que quedan tras el fix del parser de v1.4.8 (XIII, JSA, Promethea, Superman, La Mazmorra, Monstress, Flash, WildCATS, Patrulla-X). La carpeta debe ser un CANDIDATO más que se valida contra la BD, nunca un override ciego: en `Comics/Green Lantern - Saga de Geoff Johns/03 Green Lantern Corps - Recarga.cbr` la carpeta miente y el nombre de archivo acierta | P0 | M |
-| B15 | Como coleccionista, quiero que una carpeta que NO es una serie (un autor, una saga, un recopilatorio) no se trate como si lo fuera | Casos reales medidos: `Graphic Novels/Carlos Gimenez` (autor, ~30 obras unitarias), `Comics/Green Lantern - Saga de Geoff Johns` (lista de lectura editorial: mezcla Green Lantern, GL Corps y La noche más oscura, y el `01`/`03`/`18` es orden de lectura, no la grapa), `Comics/_Omnibus/Dinastia y Potencias de X` (crossover con doble numeración: `Crossover 01 - Dinastia de X 01` son DOS hechos, issue + posición en el arco). El modelo ya tiene `story_arc_issues.reading_order` para el tercero; los otros dos necesitan decisión de producto. Ninguno debe producir un issue fantasma | P1 | L |
+| B15 | Como coleccionista, quiero que una carpeta que NO es una serie (un autor, una saga, un recopilatorio) no se trate como si lo fuera, y que las ediciones tipo Omnigold/Integral no se queden en Pendientes para siempre | Casos reales medidos: `Graphic Novels/Carlos Gimenez` (autor, ~30 obras unitarias), `Comics/Green Lantern - Saga de Geoff Johns` (lista de lectura editorial), `Comics/_Omnibus/Dinastia y Potencias de X` (crossover con doble numeración — el modelo ya tiene `story_arc_issues.reading_order` para esto). **Prioridad subida a P0 el 2026-09-25**: tras la decisión de RF-07 (`collection_number`/`covered_range` separados de `issue_number`, nunca inventar una grapa a partir del tomo de una recopilación), los Omnigold/Integral/Edición-Integral pasaron a ir SIEMPRE a Pendientes (antes clasificaban solos con un número aproximado). Es un aumento de trabajo manual aceptado a propósito por ser lo honesto — B15 es la pieza que lo revierte: con `collection_number` como campo propio, esos Pendientes se re-procesan solos | P0 | L |
 | B16 | ~~Como coleccionista, quiero saber cuándo tengo el mismo tebeo en dos carpetas, en vez de que el sistema elija una en silencio~~ | ~~`LibraryAudit` (nuevo) + `/ui/auditoria`: informe de SOLO LECTURA que agrupa *mismo contenido* (SHA256), *misma obra en otra edición*, *carpetas repetidas* y *carpetas sin ningún tebeo*. No borra, no mueve y no sugiere qué borrar. La adopción (B11) deja de dispararse sola en el primer arranque y pasa a ser un botón explícito con el informe delante~~ | ✅ Hecho | M |
 
 **Notas de implementación:**
@@ -181,7 +181,7 @@ fixes de regex.
 | RF-04 | ✅ Hecho | Créditos con y sin corchetes, con y sin preposición reconocida. El caso "crédito desnudo sin preposición" (`shadowdrago + lukarda` al final) no tiene marcador textual que lo distinga de un título real — queda sin resolver a propósito, mejor un título con ruido que descartar texto a ciegas. |
 | RF-05 | 🟡 Parcial | El prefijo nunca contamina el número (con y sin punto, con sufijo de letra). No se guarda en un campo `reading_order` propio — se descarta, como antes; añadirlo es un cambio de contrato, ver arriba. |
 | RF-06 | ⛔ No implementado | Mapeo "(Epic 01)"/"(Dreadstar 27 Ed.Forum)" a una serie/edición anfitriona — la serie real y su "host issue" son dos cosas relacionadas pero distintas que el modelo actual no tiene dónde guardar por separado. Baja frecuencia (una saga, Metamorphosis Odyssey/Dreadstar). Los archivos afectados van a Pendientes hoy — no se afirma nada falso. |
-| RF-07 | 🔴 **Conflicto con decisión ya tomada — ver nota abajo** | |
+| RF-07 | ✅ Hecho — decisión tomada, ver nota abajo | |
 | RF-08 | ✅ Hecho | Las 5 prohibiciones (fecha, orden de lectura, rango, número-abre-título, contador `(N)`) ya cumplidas desde v1.5.0/v1.5.1. |
 | RF-09 | ✅ Hecho | Rangos con guion Y con palabra (`al`/`a`) — el segundo era un hueco real, corregido en v1.5.2. `is_pack`/`covered_range` como campos propios no implementados (ver nota de contrato). |
 | RF-10 | ✅ Hecho, por otra vía | El contador `(N)` de descarga duplicada ya no se cuela como número (va dentro de un paréntesis, se limpia antes de buscar). No se guarda un flag `duplicate_download` — B16 ya detecta el duplicado real por SHA256, que es más fiable que adivinar por nombre (pilla también copias renombradas). |
@@ -196,22 +196,26 @@ fixes de regex.
 | RF-19 | ✅ Hecho | Es el principio que ha guiado TODO este trabajo desde v1.4.8 — "preferir Pendientes a afirmar un dato falso" ya estaba en CLAUDE.md antes de este documento. |
 | RF-20 | ✅ Cumplido | `parse_comic_filename` es una función pura, sin estado oculto; mismo input → mismo output siempre. |
 
-**🔴 RF-07 — conflicto real, no resuelto, decisión pendiente del PO:**
-El RF pide que `La Patrulla X Omnigold 5` dé `series="La Patrulla X"`,
-`collection_number=5`, **`issue_number` vacío** — porque el 5 es el
-tomo de la recopilación Omnigold, no la grapa #5 original, y afirmar
-lo segundo sería mentir. Pero `test_parse_filename_real_world_crg`
-(anterior a este documento, "casos reales reportados en producción")
-fija exactamente lo contrario: `series="La Patrulla X"`,
-**`issue_number="5"`** — precisamente para que el archivo SÍ clasifique
-solo en vez de ir a Pendientes. No he tocado ninguna de las dos
-posturas. Adoptar RF-07 tal cual mandaría a Pendientes TODOS los
-archivos de colecciones tipo Omnigold/Integral que hoy clasifican solos
-(varios en la biblioteca real) — un cambio de comportamiento real, no
-un matiz. Pendiente de que el coleccionista decida: ¿prefiere que
-Omnigold/Integral clasifiquen solos (con el número aproximado que hoy
-dan) o que vayan siempre a Pendientes hasta tener `collection_number`
-como campo propio?
+**RF-07 — conflicto real resuelto por decisión explícita del PO
+(2026-09-25):** el RF pedía que `La Patrulla X Omnigold 5` diera
+`series="La Patrulla X Omnigold"`, `issue_number` vacío — el 5 es el
+tomo de la recopilación, no la grapa original, y afirmar lo segundo es
+mentir. Esto chocaba con `test_parse_filename_real_world_crg` (anterior
+a este documento), que fijaba justo lo contrario para que el archivo
+clasificara solo. Se preguntó al coleccionista con el argumento
+completo de ambos lados (incluida la consecuencia real: el cálculo de
+huecos/faltantes creería tener una grapa que en realidad es una
+recopilación) — **decisión: adoptar RF-07**. `EDITION_NUMBER_PATTERN`
+(nuevo en `naming.py`) quita el tomo de `Omnigold N`/`Integral N`/
+`Edición Integral N` SIN capturarlo como `issue_number`, conservando la
+palabra de la edición en el título (`"La Patrulla X Omnigold"` en vez
+de solo `"La Patrulla X"` — un candidato más preciso para cuando el
+coleccionista lo resuelva a mano en Pendientes). Coste medido: el ratio
+del banco de 41 rutas bajó de 28/41 a 26/41 aciertos, pero **los errores
+bajaron de 1 a 0** — el resultado que se buscaba. `test_parse_filename_real_world_crg`
+y el test de puntos-como-separador de `La Mazmorra Integral` se
+actualizaron para reflejar el nuevo comportamiento honesto. B15 (arriba)
+sube a P0 porque es la pieza que revierte el aumento de Pendientes.
 
 **Medición del ratio de acierto (2026-09-25, v1.5.0):**
 
