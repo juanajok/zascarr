@@ -74,6 +74,34 @@ No se reabre por presión de completitud: 7/9 con fuentes honestas (y las dos
 restantes con estrategia explícita) es mejor producto que 9/9 con una fuente
 ilegalmente scrapeada.
 
+## Actualización — 2026-09-25: GCD sí tiene API pública
+
+La premisa "no existe una [API] que podamos respetar con rate limit cortés"
+(punto 2 de la Decisión) **ya no es cierta** — verificado en vivo, no
+supuesto: GCD publica una API REST en `https://www.comics.org/api/`,
+anónima (con límite por hora sin cifra publicada), documentada (Redoc/
+Swagger, wiki del proyecto), y con los datos bajo **CC BY-SA 4.0** exigiendo
+atribución + enlace de vuelta — justo lo que ya hace `/ui/descubrir` con
+las otras tres fuentes. A diferencia del resto de la web de GCD (detrás de
+Cloudflare con challenge JS), el propio `/api/` está exento del challenge
+— señal de que está pensado para acceso programático, no es scraping a
+ciegas de HTML protegido.
+
+**Esto NO reabre la decisión de B4/el enricher** (sigue cerrada con CV +
+AniList + Tebeosfera: la API de GCD no trae sinopsis ni portada a nivel de
+serie, solo datos bibliográficos — editorial, idioma, formato físico,
+lista de números — así que no sirve para lo que B4 necesitaba de todos
+modos). Lo que sí cambia: GCD se añade como **cuarta fuente de
+descubrimiento** (C0, `/ui/descubrir` — dar de alta una `Series`, no
+enriquecer una ya existente), con `services/gcd.py` nuevo, rate limit
+cortés (`gcd_rate_limit`, mismo criterio que Tebeosfera) y su fila en la
+tabla de fuentes de `LEGAL.md`.
+
+El mirror local de dumps sigue siendo la estrategia correcta si algún día
+se necesita GCD para el ENRICHER (sinopsis/portada por número, que sí
+están en los dumps completos aunque no en esta API de búsqueda) — ese
+punto 2 de la Decisión original sigue en pie para ese caso concreto.
+
 ---
 
 *Segundo ADR del repo. Recuperar los anteriores (PostgreSQL, routing del

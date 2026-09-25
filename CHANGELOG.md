@@ -3,6 +3,17 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.3.2] — 2026-09-25
+
+### Añadido
+
+- **Grand Comics Database (GCD) como cuarta fuente en `/ui/descubrir`.** Reabre parcialmente ADR-0002: su premisa de 2026-09-23 ("GCD no tiene API pública") ya no es cierta — verificado en vivo, GCD publica una API REST anónima en `/api/`, datos bajo CC BY-SA 4.0 (atribución + enlace de vuelta, ya cumplido por el enlace a la ficha original). No cambia el alcance del enricher (B4 sigue igual: esa API no trae sinopsis ni portada a nivel de serie). Nueva columna `series.gcd_id` (migración `0010`).
+- **Aviso visible cuando una fuente no participó en la búsqueda**, reportado ("sospecho que no está entrando en Comic Vine a buscar"): antes, sin `COMICVINE_API_KEY` configurada, Comic Vine se saltaba en silencio — indistinguible de "no hay resultados". Ahora `/ui/descubrir` muestra el motivo explícito.
+
+### Corregido
+
+- **GCD devolvía HTML en vez de JSON** (`Expecting value: line 5 column 1`), encontrado en la primera verificación en vivo del cliente nuevo: sin la cabecera `Accept: application/json`, Django REST Framework (lo que usa GCD) sirve su interfaz navegable HTML. Corregido añadiendo la cabecera; parseo envuelto en su propio manejo de errores, mismo criterio que Tebeosfera.
+
 ## [1.3.1] — 2026-09-25
 
 ### Añadido

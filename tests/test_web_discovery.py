@@ -76,7 +76,7 @@ class TestBuscar:
         ]
         with use_fake_session(FakeSession()) as client, \
              patch("zascarr.web.discovery.DiscoveryService.search",
-                   AsyncMock(return_value=resultados)):
+                   AsyncMock(return_value=(resultados, []))):
             r = client.get("/ui/descubrir/buscar", params={"q": "Batman"})
 
         assert r.status_code == 200
@@ -86,10 +86,18 @@ class TestBuscar:
     def test_sin_resultados_muestra_mensaje(self):
         with use_fake_session(FakeSession()) as client, \
              patch("zascarr.web.discovery.DiscoveryService.search",
-                   AsyncMock(return_value=[])):
+                   AsyncMock(return_value=([], []))):
             r = client.get("/ui/descubrir/buscar", params={"q": "xyz"})
 
         assert "Sin coincidencias" in r.text
+
+    def test_muestra_avisos_de_fuentes_no_configuradas_o_caidas(self):
+        with use_fake_session(FakeSession()) as client, \
+             patch("zascarr.web.discovery.DiscoveryService.search",
+                   AsyncMock(return_value=([], ["Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env para incluirlo en la búsqueda."]))):
+            r = client.get("/ui/descubrir/buscar", params={"q": "xyz"})
+
+        assert "Comic Vine no está configurado" in r.text
 
 
 class TestCrear:

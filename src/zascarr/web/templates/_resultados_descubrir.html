@@ -1,5 +1,8 @@
+{% if avisos %}
+<p class="caption">{{ avisos | join(" · ") }}</p>
+{% endif %}
 {% if not resultados %}
-<p class="no-results">Sin coincidencias en Comic Vine/AniList/Tebeosfera.</p>
+<p class="no-results">Sin coincidencias en Comic Vine/AniList/Tebeosfera/GCD.</p>
 {% else %}
 <ul class="series-list">
   {% for r in resultados %}

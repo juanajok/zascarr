@@ -99,6 +99,7 @@ Algunas fuentes de metadatos usadas por ZascArr tienen licencias propias:
 | **Whakoom** | CC-BY-SA para contenido textual; portadas  editoriales [web:133] | Atribución requerida si se redistribuye; portadas no incluidas |
 | **Comic Vine** | Términos de uso propios; API con rate limits | Uso conforme a sus términos; no redistribución masiva |
 | **AniList** | API pública con términos de uso | Uso conforme a sus términos |
+| **Grand Comics Database (GCD)** | CC BY-SA 4.0; API REST pública en `/api/`, anónima, con límite por hora no especificado | Atribución + enlace de vuelta a la ficha de GCD (cumplido: enlace directo en cada resultado de `/ui/descubrir`); sin redistribución masiva, solo búsqueda puntual bajo demanda del coleccionista |
 
 **ZascArr no redistribuye** contenido de estas fuentes. Todo metadato o portada se cachea localmente para el uso privado del usuario final.
 
