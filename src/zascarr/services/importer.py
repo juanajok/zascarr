@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.importer_triage import TriageResult, triage
-from zascarr.core.matcher import MatchResult, MatchStatus, SeriesMatcher
+from zascarr.core.matcher import MatchResult, MatchStatus, SeriesHit, SeriesMatcher
 from zascarr.models import File, FileFormat, ImportRun, Series
 from zascarr.utils.fs import safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
@@ -117,6 +117,22 @@ async def _triage_and_match(db: AsyncSession, path: Path) -> _Outcome:
 
     result = await matcher.decide(tr, extractor=extractor)
     return _Outcome(tr=tr, result=result)
+
+
+def serialize_candidates(candidates: list[SeriesHit]) -> list[dict]:
+    """Candidatos de MatchResult a JSON plano para metadata_ (B12): la
+    bandeja de Pendientes los lee para sugerir "¿es esta serie?" sin
+    tener que rebuscar a mano. Guardados en orden de score descendente."""
+    ordenados = sorted(candidates, key=lambda h: h.score, reverse=True)
+    return [
+        {
+            "series_id": str(h.series_id),
+            "title": h.title,
+            "start_year": h.start_year,
+            "score": h.score,
+        }
+        for h in ordenados
+    ]
 
 
 class Importer:
@@ -210,6 +226,7 @@ class Importer:
                 "match_status": result.status,
                 "match_score": result.score,
                 "notes": result.notes,
+                "candidates": serialize_candidates(result.candidates),
             },
         )
         self._db.add(file_rec)

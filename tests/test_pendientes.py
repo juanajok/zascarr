@@ -94,6 +94,39 @@ class TestPendientesIndex:
         assert r.status_code == 200
         assert "Nada pendiente" in r.text
 
+    def test_archivo_con_candidato_guardado_muestra_sugerencia(self):
+        """B12: el matcher guardó un candidato por debajo del umbral en
+        metadata_ — la tarjeta debe ofrecerlo como sugerencia de un clic,
+        no obligar a rebuscar a mano."""
+        sid = uuid4()
+        file = File(
+            id=uuid4(),
+            file_path="/lib/_Unsorted/la patrulla x omnigold 12.cbz",
+            file_name="la patrulla x omnigold 12.cbz",
+            file_format=FileFormat.CBZ,
+            metadata_={
+                "match_status": "unsorted",
+                "candidates": [
+                    {"series_id": str(sid), "title": "La Patrulla-X", "start_year": 1985, "score": 0.62},
+                ],
+            },
+        )
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([file])])) as client:
+            r = client.get("/ui/pendientes")
+        assert r.status_code == 200
+        assert "¿Es esta serie?" in r.text
+        assert "La Patrulla-X" in r.text
+        assert "62% de coincidencia" in r.text
+        assert f'value="{sid}"' in r.text
+
+    def test_archivo_sin_candidatos_no_muestra_sugerencia(self):
+        file = File(id=uuid4(), file_path="/lib/_Unsorted/algo.cbz", file_name="algo.cbz",
+                    file_format=FileFormat.CBZ, metadata_={"match_status": "unsorted"})
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([file])])) as client:
+            r = client.get("/ui/pendientes")
+        assert r.status_code == 200
+        assert "¿Es esta serie?" not in r.text
+
 
 class TestBuscarSerie:
 

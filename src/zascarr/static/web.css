@@ -355,6 +355,18 @@ button[type="submit"],
 }
 .detected { font-size: .82rem; color: var(--ink-faint); }
 
+/* B12: sugerencia de candidato con confirmación de un clic */
+.suggestion {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--ok) 12%, var(--paper));
+  border: 2.5px solid var(--ok);
+  border-radius: var(--radius-panel);
+}
+.suggestion-label { font-size: .78rem; font-weight: 700; color: var(--ok); }
+.suggestion-score { font-size: .78rem; color: var(--ink-faint); }
+button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-color: var(--ok); }
+
 .series-results ul.series-list {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column; gap: 6px;

@@ -16,6 +16,21 @@
     <div class="pending-body">
       <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
       <div class="detected">Detectado: {{ c.detected }}</div>
+      {% if c.suggestion %}
+      <div class="suggestion">
+        <span class="suggestion-label">¿Es esta serie?</span>
+        <span class="series-name">{{ c.suggestion.title }}{% if c.suggestion.start_year %} ({{ c.suggestion.start_year }}){% endif %}</span>
+        <span class="suggestion-score">{{ c.suggestion.score_pct }}% de coincidencia</span>
+        <form class="assign-form"
+              hx-post="/ui/pendientes/{{ c.file.id }}/asignar"
+              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
+          <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
+          <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
+                 value="{{ c.suggestion.issue_number }}">
+          <button type="submit" class="btn-sugerencia">Sí, es esta</button>
+        </form>
+      </div>
+      {% endif %}
       <input type="search" class="series-search" placeholder="Buscar serie…"
              name="q"
              hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
