@@ -28,6 +28,31 @@ from zascarr.web.routes import TEMPLATES_DIR
 logger = structlog.get_logger()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# Bug real, reportado: Prowlarr/Transmission/aMule fallaban con "no se pudo
+# conectar" aunque la URL y las credenciales fueran correctas, mientras
+# Comic Vine (un host externo real) funcionaba sin problema. Causa más
+# común y documentada en todo el ecosistema *arr para exactamente este
+# patrón "contenedor Docker -> servicio del mismo host": el servicio
+# escucha solo en 127.0.0.1, no en 0.0.0.0 — host.docker.internal llega
+# por la puerta de enlace del puente de Docker (confirmado en sandbox:
+# resuelve a 172.17.0.1), no por loopback, así que un servicio atado solo
+# a localhost es inalcanzable desde el contenedor aunque responda bien
+# desde el propio host. Se avisa solo cuando la excepción es de conexión
+# (rechazada/timeout/DNS) — un error HTTP real (401, 500...) significa que
+# SÍ se llegó al servicio, y ese aviso solo confundiría.
+_PISTA_CONEXION_RECHAZADA = (
+    " Si el servicio corre en esta misma máquina (fuera de Docker), "
+    "comprueba que escucha en 0.0.0.0 y no solo en 127.0.0.1/localhost: "
+    "un contenedor llega por la puerta de enlace de Docker, no por "
+    "loopback. Verifícalo con: ss -tlnp | grep <puerto>"
+)
+
+
+def _mensaje_conexion_fallida(exc: httpx.HTTPError) -> str:
+    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
+        return "No se pudo conectar (conexión rechazada, timeout o nombre sin resolver)." + _PISTA_CONEXION_RECHAZADA
+    return "No se pudo conectar (red o timeout)."
+
 router = APIRouter(prefix="/ui/ajustes", tags=["ui"])
 
 
@@ -190,7 +215,7 @@ async def _test_prowlarr(url: str, api_key: str) -> tuple[bool, str]:
         return False, f"Prowlarr respondió HTTP {r.status_code}."
     except httpx.HTTPError as exc:
         logger.warning("ajustes.test_failed", integracion="prowlarr", error=str(exc))
-        return False, "No se pudo conectar (red o timeout)."
+        return False, _mensaje_conexion_fallida(exc)
 
 
 async def _test_transmission(url: str, username: str, password: str) -> tuple[bool, str]:
@@ -218,7 +243,7 @@ async def _test_transmission(url: str, username: str, password: str) -> tuple[bo
         return False, "Transmission no confirmó la sesión."
     except httpx.HTTPError as exc:
         logger.warning("ajustes.test_failed", integracion="transmission", error=str(exc))
-        return False, "No se pudo conectar (red o timeout)."
+        return False, _mensaje_conexion_fallida(exc)
 
 
 async def _test_amule(url: str, password: str) -> tuple[bool, str]:
@@ -235,4 +260,4 @@ async def _test_amule(url: str, password: str) -> tuple[bool, str]:
         return False, "aMule no devolvió sesión — revisa la contraseña."
     except httpx.HTTPError as exc:
         logger.warning("ajustes.test_failed", integracion="amule", error=str(exc))
-        return False, "No se pudo conectar (red o timeout)."
+        return False, _mensaje_conexion_fallida(exc)

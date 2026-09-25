@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-1.4.0-brightgreen.svg)
+![Estado](https://img.shields.io/badge/estado-1.4.1-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -39,7 +39,7 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-✅ **v1.4.0.** Backend e interfaz web funcionales, verificados end-to-end
+✅ **v1.4.1.** Backend e interfaz web funcionales, verificados end-to-end
 contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
 wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
 actualización/rollback destructivo. Detalle de la verificación en
@@ -315,16 +315,32 @@ BACKUP_DIR=/var/backups/zascarr/postgres bash scripts/backup.sh
 
 | Tipo | Integración | Activación |
 |---|---|---|
-| Metadatos | [Comic Vine](https://comicvine.gamespot.com/api/) | API key en `COMICVINE_API_KEY` |
+| Metadatos | [Comic Vine](https://comicvine.gamespot.com/api/) | clave de API desde `/ui/ajustes` (o `COMICVINE_API_KEY` en `.env`) |
 | Metadatos | [AniList](https://anilist.co) | pública, sin clave |
 | Metadatos | [Tebeosfera](https://www.tebeosfera.com) | scraping, sin clave |
-| Descarga | [Prowlarr](https://prowlarr.com) | `PROWLARR_API_KEY` |
-| Descarga | [Transmission](https://transmissionbt.com) | usuario/contraseña |
-| Descarga (eD2K) | [aMule](https://www.amule.org) | contraseña |
+| Metadatos | [GCD](https://www.comics.org) | pública, sin clave |
+| Descarga | [Prowlarr](https://prowlarr.com) | URL + clave de API desde `/ui/ajustes` |
+| Descarga | [Transmission](https://transmissionbt.com) | URL + usuario/contraseña desde `/ui/ajustes` |
+| Descarga (eD2K) | [aMule](https://www.amule.org) | URL de amuleweb + contraseña desde `/ui/ajustes` |
 
 No hay ninguna fuente preconfigurada: activar una integración es siempre una
 decisión explícita del usuario. Los rate limits por fuente son conservadores y
 los fallos de scraping degradan a "sin resultado" en vez de tumbar el ciclo.
+Cada integración de descarga tiene un botón "Probar conexión" en `/ui/ajustes`
+antes de guardar.
+
+**Prowlarr/Transmission/aMule corren en la propia Raspberry Pi ("baremetal"),
+fuera de Docker** — el contenedor los alcanza vía `host.docker.internal`
+(la puerta de enlace del puente de Docker, ya configurada en
+`docker-compose.yml`), no por `127.0.0.1`. Si "Probar conexión" falla con
+"no se pudo conectar" aunque la URL/credenciales sean correctas, lo más
+habitual es que ese servicio esté escuchando solo en `127.0.0.1` — cámbialo
+a `0.0.0.0` en su propia configuración. Compruébalo con:
+```bash
+ss -tlnp | grep -E ':9696|:9091|:4711'   # Prowlarr / Transmission / aMule
+```
+Si ves `127.0.0.1:<puerto>` en vez de `0.0.0.0:<puerto>` o `*:<puerto>`, ahí
+está la causa.
 
 ## Desarrollo
 
