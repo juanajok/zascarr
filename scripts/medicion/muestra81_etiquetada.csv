@@ -53,7 +53,7 @@ ruta,cohorte,estrato,serie_real,numero_real,tipo_real,requiere_contexto,parser_s
 /mnt/Datos/Descargas/Tebeos/Tebeos/Death Note #082.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Death Note,82,grapa,False,Death Note,82,ok,0e87fb19674b43b7
 /mnt/Datos/Descargas/Tebeos/Tebeos/075.- Flash v2 067 - Er-Murazor &amp; Boo$Ter Gold.cbr,tebeos,D_grande,Flash,67,grapa,False,Flash,67,ok,033f2dcf5fd2d040
 /mnt/Datos/Descargas/Tebeos/Tebeos/JSA 81 (2006) (Lightray-DCP).cbr,tebeos,D_grande,JSA,81,grapa,False,JSA,81,ok,c2c57cb1cf61ee77
-/mnt/Datos/Descargas/Tebeos/Tebeos/78 Jim Starlin's Dreadstar (Malibu Comics)(02 Ed.Norma) [por Onslaught][CRG].cbr,tebeos,D_grande,Dreadstar,2,grapa,False,78 Jim Starlin's Dreadstar,,serie_mal_sin_numero,3105d99cda95a242
+/mnt/Datos/Descargas/Tebeos/Tebeos/78 Jim Starlin's Dreadstar (Malibu Comics)(02 Ed.Norma) [por Onslaught][CRG].cbr,tebeos,D_grande,Dreadstar,2,grapa,False,Jim Starlin's Dreadstar,,serie_mal_sin_numero,3105d99cda95a242
 /mnt/Datos/Descargas/Tebeos/Tebeos/The Wicked + The Divine 030.cbr,tebeos,D_grande,The Wicked + The Divine,30,grapa,False,The Wicked + The Divine,30,ok,2579a88f207a7427
 /mnt/Datos/Descargas/Tebeos/Tebeos/The Wicked + The Divine 020.cbr,tebeos,D_grande,The Wicked + The Divine,20,grapa,False,The Wicked + The Divine,20,ok,af38c34c3975f41b
 /mnt/Datos/Descargas/Tebeos/Tebeos/Death Note #065.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Death Note,65,grapa,False,Death Note,65,ok,af4d09174d75464b
@@ -63,19 +63,19 @@ ruta,cohorte,estrato,serie_real,numero_real,tipo_real,requiere_contexto,parser_s
 /mnt/Datos/Descargas/Tebeos/Tebeos/048.- Flash v2 042.cbr,tebeos,D_grande,Flash,42,grapa,False,Flash,42,ok,8da5e9c7d3a80612
 /mnt/Datos/Descargas/Tebeos/Tebeos/Transmetropolitan - #20 - Ciudad Solitaria 2 de 4.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Transmetropolitan,20,grapa,False,Transmetropolitan,20,ok,72fda8d7ca712d4e
 /mnt/Datos/Descargas/Tebeos/Tebeos/40 - Incorruptible #18.cbz,tebeos,D_grande,Incorruptible,18,grapa,False,Incorruptible,18,ok,4f3c11d0ecae0b3f
-/mnt/Datos/Descargas/Tebeos/Tebeos/74 Dreadstar (First Comics) 62 USA [Trad por Skullpirates y Howard el patero s.][8vo Aniv CRG].cbz,tebeos,D_grande,Dreadstar,62,grapa,False,74 Dreadstar,62,error_serie,e31dd9fc68e71dc9
+/mnt/Datos/Descargas/Tebeos/Tebeos/74 Dreadstar (First Comics) 62 USA [Trad por Skullpirates y Howard el patero s.][8vo Aniv CRG].cbz,tebeos,D_grande,Dreadstar,62,grapa,False,Dreadstar,62,ok,e31dd9fc68e71dc9
 /mnt/Datos/Descargas/Tebeos/Tebeos/076.- Flash v2 068 - Er-Murazor &amp; Boo&amp;Ter Gold.cbr,tebeos,D_grande,Flash,68,grapa,False,Flash,68,ok,309136248ac44c16
-/mnt/Datos/Descargas/Tebeos/Tebeos/42 Dreadstar (First Comics) 30 USA [Traducido porke yo lo valgo][CRG].cbr,tebeos,D_grande,Dreadstar,30,grapa,False,42 Dreadstar,30,error_serie,d7803a704953b991
+/mnt/Datos/Descargas/Tebeos/Tebeos/42 Dreadstar (First Comics) 30 USA [Traducido porke yo lo valgo][CRG].cbr,tebeos,D_grande,Dreadstar,30,grapa,False,Dreadstar,30,ok,d7803a704953b991
 /mnt/Datos/Descargas/Tebeos/Tebeos/11 Dreadstar Novela grafica (M.O. III) [Trad por Luindel y Howard el patero solitario][CRG].cbr,tebeos,D_grande,Dreadstar,,obra_unica,False,11 Dreadstar Novela grafica,,serie_mal_sin_numero,51eef62632e1e85f
 /mnt/Datos/Descargas/Tebeos/Tebeos/Death Note #084.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Death Note,84,grapa,False,Death Note,84,ok,5e24e6f46505cb0b
-/mnt/Datos/Descargas/Tebeos/Tebeos/65 Dreadstar (First Comics) 53 USA [Trad por Skullpirates y Howard el patero s.][8vo Aniv CRG].cbz,tebeos,D_grande,Dreadstar,53,grapa,False,65 Dreadstar,53,error_serie,bbe7179794881e45
+/mnt/Datos/Descargas/Tebeos/Tebeos/65 Dreadstar (First Comics) 53 USA [Trad por Skullpirates y Howard el patero s.][8vo Aniv CRG].cbz,tebeos,D_grande,Dreadstar,53,grapa,False,Dreadstar,53,ok,bbe7179794881e45
 "/mnt/Datos/Descargas/Tebeos/Tebeos/Hiroaki Samura - La Espada del Inmortal 14 (Spanish, CRG) por Umbriel.cbr",tebeos,D_grande,La Espada del Inmortal,14,tomo,True,Hiroaki Samura,14,error_serie,dac0866264d213c1
 /mnt/Datos/Descargas/Tebeos/Tebeos/The Wicked + The Divine 037.cbr,tebeos,D_grande,The Wicked + The Divine,37,grapa,False,The Wicked + The Divine,37,ok,0ca56c2efa6279b5
 /mnt/Datos/Descargas/Tebeos/Tebeos/Death Note #068.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Death Note,68,grapa,False,Death Note,68,ok,b3bca4e15b3353be
 /mnt/Datos/Descargas/Tebeos/Tebeos/224.- Flash v2 189 por Wild_CRG_.cbr,tebeos,D_grande,Flash,189,grapa,False,Flash,189,ok,25bd554625057a76
 /mnt/Datos/Descargas/Tebeos/Tebeos/Death Note #074.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Death Note,74,grapa,False,Death Note,74,ok,a9c63274e7d43b8d
 /mnt/Datos/Descargas/Tebeos/Tebeos/Death Note #058.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Death Note,58,grapa,False,Death Note,58,ok,d54e4b1d14b5a23b
-/mnt/Datos/Descargas/Tebeos/Tebeos/30 Dreadstar (Epic Comics)(18 Ed.Forum) [por Andtorres3][CRG].cbr,tebeos,D_grande,Dreadstar,18,grapa,False,30 Dreadstar,,serie_mal_sin_numero,d0e803b5a9415cd2
+/mnt/Datos/Descargas/Tebeos/Tebeos/30 Dreadstar (Epic Comics)(18 Ed.Forum) [por Andtorres3][CRG].cbr,tebeos,D_grande,Dreadstar,18,grapa,False,Dreadstar,,numero_perdido,d0e803b5a9415cd2
 /mnt/Datos/Descargas/Tebeos/Tebeos/Transmetropolitan - #29 - Regreso a los Origenes 7 de 8.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Transmetropolitan,29,grapa,False,Transmetropolitan,29,ok,e90d3191fdf2c4f4
 /mnt/Datos/Descargas/Tebeos/Tebeos/60 - Incorruptible #26.cbz,tebeos,D_grande,Incorruptible,26,grapa,False,Incorruptible,26,ok,f1bc87900acd313f
 /mnt/Datos/Descargas/Tebeos/Tebeos/Transmetropolitan - #42 - Sale el Sol 6 de 6.howtoarsenio.blogspot.com.cbr,tebeos,D_grande,Transmetropolitan,42,grapa,False,Transmetropolitan,42,ok,e2d7859891c70105

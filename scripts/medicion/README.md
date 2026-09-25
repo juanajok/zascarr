@@ -48,12 +48,14 @@ PYTHONPATH=../../src python3 evaluar_real.py
 PYTHONPATH=../../src python3 sonda_cbr.py 200
 ```
 
-## Resultado oficial (2026-09-25/26, 762 cómics reales, n=81 rutas → 62 de contenido único)
+## Resultado oficial (2026-09-26, 762 cómics reales, n=81 rutas → 62 de contenido único, cohorte activa)
 
 ```
 SOBRE CONTENIDO ÚNICO (n=62, la cifra que cuenta):
-  CLASIFICA SOLO ... 73%
-  ES VERAZ .......... 76%
+  CLASIFICA SOLO ... 83%   (antes de la cohorte: 73%)
+  ES VERAZ .......... 86%   (antes de la cohorte: 76%)
+
+Vía usada en la muestra: capa1_nombre 74, capa1_cohorte 5, capa0_comicinfo 2
 
 Consistencia entre gemelos: 19 pares por SHA256, 0 divergencias
   (RF-20, determinismo, verificado con datos reales — no solo en teoría)
@@ -62,6 +64,25 @@ Techo del parsing por nombre: 3 archivos de 62 (5%) cuya respuesta
 correcta NO está en el nombre del archivo — solo B14 (carpeta) los
 resuelve.
 ```
+
+**+10 puntos por `core/cohort.py`** (detección de prefijos de orden de
+lectura por evidencia de cohorte — ver `docs/BACKLOG.md`): un prefijo
+numérico suelto ("42 Dreadstar...", "65 Dreadstar...") es la MISMA
+forma que un título que empieza por cifra ("100 Balas...") — ninguna
+regla local del parser los distingue sin inventar. Los propios datos
+sí: "Dreadstar" aparece con ~70 prefijos distintos y el resto del
+nombre estable; "100 Balas" aparece siempre con el mismo "100". Solo 5
+de las 81 filas de la muestra usaron la vía cohorte (el resto de
+Dreadstar en la muestra ya caía por otras vías o no estaba en la
+muestra), y aun así el salto es de 10 puntos — la palanca es real en
+población, no solo en la muestra.
+
+Lo que queda sin resolver tras la cohorte es, en su mayoría, el
+techo ya documentado: abreviaturas de carpeta (`Avras Cap Torrezno`),
+autor delante de la obra (`Hiroaki Samura`) y ediciones cuyo nombre de
+línea editorial diverge del de la serie real (`Jim Starlin's
+Dreadstar` — la cohorte SÍ quitó el prefijo correctamente; lo que
+queda es una cuestión de alias/matcher, no de la cohorte).
 
 **La primera versión de este informe reportaba 74%/76% sobre 81
 *rutas*, no sobre contenido.** 19 de esas 81 rutas eran copias

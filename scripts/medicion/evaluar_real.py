@@ -28,11 +28,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from etiquetas import ETIQUETAS  # noqa: E402
 
+from zascarr.core.cohort import detectar_ordenes_de_lectura, quitar_prefijo_de_cohorte
 from zascarr.core.importer_triage import triage
 from zascarr.core.matcher import normalize_title
 from zascarr.utils.naming import parse_comic_filename
 
 PESO = {"A_singleton": 6, "B_pequena": 45, "D_grande": 711}
+RAIZ_BIBLIOTECA = Path("/mnt/Datos/Descargas/Tebeos")
 
 
 def sha256(path: Path) -> str:
@@ -85,6 +87,12 @@ def main() -> None:
             "Genera una muestra nueva antes de evaluar."
         )
 
+    # Cohortes calculadas sobre la POBLACIÓN COMPLETA, no solo la
+    # muestra — es lo que haría un ciclo real de Importer/LibraryAdopter
+    # (pistas sobre la foto fija de TODOS los archivos del ciclo).
+    todos_los_nombres = [p.name for p in RAIZ_BIBLIOTECA.rglob("*") if p.is_file()]
+    pistas = detectar_ordenes_de_lectura(todos_los_nombres)
+
     via = collections.Counter()
     filas = []
     for f in filas_in:
@@ -96,9 +104,11 @@ def main() -> None:
             serie, num = tr.comic_info.series, str(tr.comic_info.number)
             via["capa0_comicinfo"] += 1
         else:
-            r = parse_comic_filename(nombre)
+            pista = pistas.get(nombre)
+            nombre_a_parsear = quitar_prefijo_de_cohorte(nombre, pista) if pista else nombre
+            r = parse_comic_filename(nombre_a_parsear)
             serie, num = r.series, r.issue_number
-            via["capa1_nombre"] += 1
+            via["capa1_cohorte" if pista and nombre_a_parsear != nombre else "capa1_nombre"] += 1
 
         filas.append({
             "ruta": f["ruta"], "cohorte": f["cohorte"], "estrato": f["estrato"],
