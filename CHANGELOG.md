@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.7] — 2026-09-25
+
+### Añadido
+
+- **Alias local aprendido de asignaciones manuales (B13)**: si el coleccionista asigna a mano un archivo desde Pendientes a una serie, ZascArr recuerda el patrón (título que `naming.py` extrajo del nombre de archivo original) → esa serie, y deja de preguntar para el mismo patrón la próxima vez — `SeriesMatcher.decide()` consulta el alias ANTES del matcher fuzzy. Nueva tabla `local_aliases` (migración `0012`); alias estrictamente local a esta instalación, nunca una regla global (CLAUDE.md §5).
+
 ## [1.4.6] — 2026-09-25
 
 ### Añadido
