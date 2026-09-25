@@ -70,7 +70,8 @@ class TestBuscar:
             DiscoveryResult(
                 source=MetadataSource.COMIC_VINE, external_id="1234",
                 title="Batman", start_year=2011, description=None,
-                cover_url=None, tradition_guess=ComicTradition.AMERICAN,
+                cover_url=None, site_url="https://comicvine.gamespot.com/batman/4050-1234/",
+                tradition_guess=ComicTradition.AMERICAN,
             )
         ]
         with use_fake_session(FakeSession()) as client, \

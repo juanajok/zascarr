@@ -14,6 +14,9 @@
       <span class="series-name">
         {{ r.title }}{% if r.start_year %} ({{ r.start_year }}){% endif %}
         <span class="caption">{{ r.source.value }}</span>
+        {% if r.site_url %}
+        <a href="{{ r.site_url }}" target="_blank" rel="noopener noreferrer" title="Ver ficha original para confirmar">↗</a>
+        {% endif %}
       </span>
       <select name="tradition" aria-label="Tradición">
         {% for value, label in tradiciones %}

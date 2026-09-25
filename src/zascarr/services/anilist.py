@@ -58,6 +58,7 @@ class AniListResult:
     start_year: int | None = None
     chapters: int | None = None
     volumes: int | None = None
+    site_url: str | None = None
     raw: dict | None = None
 
 
@@ -119,5 +120,6 @@ def _parse_media(item: dict) -> AniListResult:
         start_year=(item.get("startDate") or {}).get("year"),
         chapters=item.get("chapters"),
         volumes=item.get("volumes"),
+        site_url=f"https://anilist.co/manga/{item['id']}",
         raw=item,
     )
