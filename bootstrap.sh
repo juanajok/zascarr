@@ -235,15 +235,6 @@ echo -e "${B}====================================${N}\n"
 instalar_docker_si_falta
 asegurar_usuario_servicio
 
-command -v python3 >/dev/null 2>&1 || {
-    info "Instalando Python 3..."
-    apt-get update -qq && apt-get install -y -qq python3 python3-pip || die \
-        "No pude instalar Python 3 automáticamente. Instálalo a mano: sudo apt-get install -y python3 python3-pip"
-}
-
-python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null || die \
-    "Necesito Python 3.11 o superior. Tu versión: $(python3 --version 2>&1). Actualízalo antes de continuar."
-
 info "Comprobando que el demonio de Docker está en marcha..."
 docker info >/dev/null 2>&1 || die \
     "El demonio de Docker no responde. Arranca el servicio con: sudo systemctl start docker"
@@ -416,46 +407,30 @@ until docker compose -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U comics_
 done
 echo ""; success "PostgreSQL listo"
 
-info "Corriendo migraciones Alembic..."
-# M6: leer DB_PASSWORD sin evaluar .env como shell (un "DB_PASSWORD=$(...)"
-# no debe ejecutarse). cut -d= -f2- conserva contraseñas que contengan "=".
-DB_PASSWORD="$(grep -E '^DB_PASSWORD=' "${ENV_FILE}" | head -n1 | cut -d= -f2-)"
-export DATABASE_URL="postgresql+asyncpg://comics_admin:${DB_PASSWORD}@127.0.0.1:5432/zascarr"
+info "Construyendo la imagen de ZascArr..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
-# -e . (no -e ".[dev]"): solo se necesita alembic + deps runtime para migrar;
-# pytest/ruff/mypy no tienen que instalarse en el host de producción (L8).
-# "command -v alembic", NUNCA "python3 -c 'import alembic'": estamos a punto
-# de hacer cd a SCRIPT_DIR, que tiene su propia carpeta alembic/ (las
-# migraciones) con el mismo nombre que el paquete instalado. "python3 -c"
-# añade el cwd a sys.path y "import alembic" resolvería esa carpeta local en
-# vez de la librería real — el check "pasaría" aunque pip install nunca se
-# hubiera ejecutado, y el "alembic upgrade head" de más abajo fallaría con
-# "orden no encontrada" en cualquier instalación de verdad desde cero.
-# --ignore-installed (bug real, reportado): Raspberry Pi OS trae paquetes
-# como typing_extensions instalados vía apt/dpkg, sin fichero RECORD de
-# pip. Sin este flag, pip intenta desinstalar esa versión antes de
-# actualizarla y aborta con "uninstall-no-record-file" — el instalador se
-# paraba ahí en cualquier Pi real. Con --ignore-installed, pip no lo toca
-# y simplemente instala la versión que necesita por delante.
-command -v alembic >/dev/null 2>&1 || pip install --break-system-packages --ignore-installed -e . -q || die \
-    "No pude instalar las dependencias del proyecto. Ejecuta a mano para ver el error:
-  cd ${SCRIPT_DIR} && pip install --break-system-packages --ignore-installed -e ."
-# "alembic", nunca "python3 -m alembic": estamos parados (cd de arriba)
-# dentro del propio directorio del repo, que tiene su propia carpeta
-# alembic/ (las migraciones) con el mismo nombre que el paquete instalado.
-# "python3 -m alembic" resuelve esa carpeta local en vez de la librería
-# real y falla con "cannot be directly executed" (ver Makefile).
-alembic upgrade head || die \
+# A8 (bug real, reportado): las migraciones corrían en el HOST, vía
+# "pip install --break-system-packages -e ." — origen de la clase de bugs
+# más cara de la sesión (conflicto typing_extensions de Debian/apt, M3;
+# más el propio riesgo de tocar el Python del sistema en una Pi real).
+# Ahora se construye la imagen explícitamente aquí, ANTES de migrar, y se
+# migra y se arranca con esa MISMA imagen — nunca se instala nada de
+# Python en el host, la única fuente de dependencias es la imagen Docker.
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
+    "No pude construir la imagen de ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} build zascarr"
+
+info "Corriendo migraciones Alembic (dentro del contenedor)..."
+# DATABASE_URL ya lo resuelve el propio docker-compose.yml desde .env
+# (mismo mecanismo que usa el servicio "zascarr" al arrancar) — apuntando
+# a "postgres:5432" por nombre de servicio en la red interna de Docker, no
+# a "127.0.0.1:5432"; no hace falta reconstruirlo a mano leyendo el .env.
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" run --rm zascarr \
+    alembic upgrade head || die \
     "Las migraciones de la base de datos fallaron. Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
 success "Migraciones aplicadas"
 
 info "Levantando ZascArr..."
-cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
-# --build: bug real (reportado) — sin esto, reejecutar bootstrap.sh tras un
-# autoactualizado (git pull) recreaba el contenedor con la imagen VIEJA ya
-# construida, así que un fix de código nunca llegaba a aplicarse aunque el
-# repo ya lo tuviera. "up" solo construye solo si la imagen no existe.
-docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d --build zascarr || die \
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d zascarr || die \
     "No pude arrancar ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck..."

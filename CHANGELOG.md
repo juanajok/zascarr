@@ -3,6 +3,14 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.2.9] — 2026-09-25
+
+### Cambiado
+
+- **Las migraciones de Alembic ya no corren en el host — corren dentro del contenedor.** `bootstrap.sh` hacía `pip install --break-system-packages --ignore-installed -e .` y `alembic upgrade head` directamente sobre el Python del sistema de la Pi — origen de la clase de bugs más cara de esta sesión (conflicto `typing_extensions` de Debian/apt, M3, v1.2.2). Ahora: `docker compose build zascarr` (explícito, antes de migrar) seguido de `docker compose run --rm zascarr alembic upgrade head` — nada de pip en el host, `DATABASE_URL` lo resuelve el propio `docker-compose.yml` desde `.env` igual que para el servicio real (por nombre `postgres`, no `127.0.0.1`, eliminando de paso el parseo manual de `DB_PASSWORD` del `.env`, M6). El chequeo de "Python 3.11 o superior" en el host **desaparece entero**: ya no hace falta ningún Python fuera del contenedor.
+
+  Verificado en Docker-en-Docker: instalación completa de punta a punta en un host **sin Python 3 instalado en ningún momento** (`command -v python3` confirmado ausente antes, durante y después del bootstrap) — migraciones (`0001` → `0009`) aplicadas dentro del contenedor, app arrancada y sana. Suite completa sin regresiones (262 tests).
+
 ## [1.2.8] — 2026-09-25
 
 ### Corregido
