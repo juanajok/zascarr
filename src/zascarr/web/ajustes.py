@@ -30,21 +30,32 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Bug real, reportado: Prowlarr/Transmission/aMule fallaban con "no se pudo
 # conectar" aunque la URL y las credenciales fueran correctas, mientras
-# Comic Vine (un host externo real) funcionaba sin problema. Causa más
-# común y documentada en todo el ecosistema *arr para exactamente este
-# patrón "contenedor Docker -> servicio del mismo host": el servicio
-# escucha solo en 127.0.0.1, no en 0.0.0.0 — host.docker.internal llega
-# por la puerta de enlace del puente de Docker (confirmado en sandbox:
-# resuelve a 172.17.0.1), no por loopback, así que un servicio atado solo
-# a localhost es inalcanzable desde el contenedor aunque responda bien
-# desde el propio host. Se avisa solo cuando la excepción es de conexión
-# (rechazada/timeout/DNS) — un error HTTP real (401, 500...) significa que
-# SÍ se llegó al servicio, y ese aviso solo confundiría.
+# Comic Vine (un host externo real) funcionaba sin problema.
+#
+# Primera hipótesis (descartada con datos reales del usuario): el servicio
+# escucha solo en 127.0.0.1, no en 0.0.0.0. `ss -tlnp` confirmó los tres
+# escuchando en 0.0.0.0/* — no era eso.
+#
+# Causa real, confirmada con los datos del usuario: un cortafuegos (ufw)
+# con política DROP por defecto y reglas de "solo LAN" (p.ej.
+# 192.168.1.0/24) para esos puertos — el puente de Docker
+# (host.docker.internal, la puerta de enlace del contenedor; confirmado
+# 172.17.0.1 tanto en sandbox como en la Pi real del usuario) no es una
+# de esas subredes "LAN" permitidas, así que ufw bloquea la conexión antes
+# de llegar al servicio, aunque el bind sea correcto. La pista cubre las
+# dos causas — se avisa solo cuando la excepción es de conexión
+# (rechazada/timeout/DNS): un error HTTP real (401, 500...) significa que
+# SÍ se llegó al servicio, y esta pista solo confundiría ahí.
 _PISTA_CONEXION_RECHAZADA = (
-    " Si el servicio corre en esta misma máquina (fuera de Docker), "
-    "comprueba que escucha en 0.0.0.0 y no solo en 127.0.0.1/localhost: "
-    "un contenedor llega por la puerta de enlace de Docker, no por "
-    "loopback. Verifícalo con: ss -tlnp | grep <puerto>"
+    " Dos causas habituales si el servicio corre en esta misma máquina "
+    "(fuera de Docker): (1) un cortafuegos (ufw/iptables) con reglas "
+    "limitadas a tu LAN que no incluyen la subred del puente de Docker "
+    "— compruébalo con: sudo ufw status, y si hace falta: "
+    "sudo ufw allow from <subred-docker> to any port <puerto> proto tcp; "
+    "(2) el servicio escucha solo en 127.0.0.1, no en 0.0.0.0 — "
+    "compruébalo con: ss -tlnp | grep <puerto>. Un contenedor llega por "
+    "la puerta de enlace del puente de Docker (host.docker.internal), "
+    "no por loopback ni como si fuera tu LAN."
 )
 
 

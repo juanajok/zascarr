@@ -107,11 +107,13 @@ class TestProbar:
         assert "✗" in r.text
         assert "rechazada" in r.text
 
-    def test_conexion_rechazada_sugiere_revisar_el_bind_del_servicio(self):
+    def test_conexion_rechazada_sugiere_ufw_y_bind_del_servicio(self):
         """Bug real, reportado: Prowlarr/Transmission/aMule fallaban con
         "no se pudo conectar" sin pista, mientras Comic Vine (host externo)
-        funcionaba — causa típica: el servicio escucha solo en 127.0.0.1,
-        inalcanzable desde el contenedor vía host.docker.internal."""
+        funcionaba. Primera hipótesis (bind en 127.0.0.1) descartada con
+        datos reales del usuario (ss -tlnp mostraba 0.0.0.0); causa real
+        confirmada: ufw con reglas "solo LAN" que no incluyen la subred
+        del puente de Docker. La pista cubre ambas causas."""
         import httpx as httpx_module
         with patch("httpx.AsyncClient.get", AsyncMock(side_effect=httpx_module.ConnectError("refused"))):
             client = TestClient(app)
@@ -119,6 +121,7 @@ class TestProbar:
                 "prowlarr_url": "http://host.docker.internal:9696", "prowlarr_api_key": "clave",
             })
         assert "✗" in r.text
+        assert "ufw" in r.text
         assert "0.0.0.0" in r.text
         assert "ss -tlnp" in r.text
 
