@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Mi biblioteca — ZascArr{% endblock %}
+{% block content %}
+<h1>Revisión de mi biblioteca</h1>
+<p class="subtitle">
+  Antes de meter tu colección en el catálogo, ZascArr mira qué hay en el disco y te enseña lo que
+  está repetido o lo que parece incompleto. <strong>Solo mira: no borra, no mueve y no renombra nada.</strong>
+</p>
+
+<form hx-post="/ui/auditoria/analizar" hx-target="#informe" hx-swap="innerHTML" hx-disabled-elt="find button">
+  <button type="submit" class="btn-primary">Revisar mi biblioteca</button>
+  <span class="audit-why">En una colección grande esto puede tardar un rato: hay que leer los archivos que se parecen.</span>
+</form>
+
+<div id="resultado-adopcion"></div>
+
+<div id="informe">
+  {% include "_auditoria_informe.html" %}
+</div>
+{% endblock %}

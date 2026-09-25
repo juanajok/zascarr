@@ -1,0 +1,16 @@
+{% if ya_hecha %}
+<p class="audit-ok">Tu biblioteca ya estaba adoptada: no hay nada nuevo que registrar.</p>
+{% else %}
+<div class="audit-block">
+  <h2>Biblioteca adoptada</h2>
+  <p class="audit-why">Ni un archivo se ha movido ni renombrado.</p>
+  <ul class="audit-resumen">
+    <li><strong>{{ report.files_scanned }}</strong> tebeos mirados</li>
+    <li><strong>{{ report.registered_count }}</strong> reconocidos y colocados en su serie</li>
+    <li><strong>{{ report.unsorted_count }}</strong> sin identificar — te esperan en
+      <a href="/ui/pendientes">Pendientes</a> para que los asignes tú</li>
+    <li><strong>{{ report.duplicate_count }}</strong> repetidos, registrados una sola vez</li>
+    {% if report.error_count %}<li><strong>{{ report.error_count }}</strong> dieron error al leerse</li>{% endif %}
+  </ul>
+</div>
+{% endif %}

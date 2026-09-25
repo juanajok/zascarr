@@ -377,6 +377,39 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 .series-name { font-size: .88rem; flex: 1; font-weight: 600; }
 .no-results { color: var(--ink-faint); font-size: .85rem; }
 
+/* ── 10bis. REVISIÓN DE BIBLIOTECA (B16) ─────────────────────────────────── */
+.audit-block {
+  border: 3px solid var(--ink);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  padding: 14px 16px;
+  margin: 20px 0;
+}
+.audit-block h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.audit-count {
+  display: inline-block; margin-left: 8px; padding: 1px 8px;
+  border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--yellow); color: var(--ink); font-size: .8rem;
+}
+.audit-why { font-size: .85rem; color: var(--ink-soft); margin: 0 0 10px; }
+.audit-item {
+  padding: 8px 0;
+  border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.audit-path {
+  font-size: .8rem; word-break: break-all;
+  color: var(--ink);
+}
+.audit-detail { font-size: .8rem; color: var(--ink-faint); margin-top: 2px; }
+.audit-resumen { margin: 6px 0 0; padding-left: 18px; font-size: .9rem; }
+.audit-ok {
+  border: 3px solid var(--ok);
+  background: color-mix(in srgb, var(--ok) 12%, var(--paper));
+  border-radius: var(--radius-panel);
+  padding: 12px 14px; margin: 20px 0; font-weight: 600;
+}
+.audit-adoptar { border-color: var(--ok); }
+
 /* ── 11. LISTA DE DESEOS (D1) ────────────────────────────────────────────── */
 .series-result-item {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;

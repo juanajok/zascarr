@@ -181,6 +181,17 @@ class TriageResult:
         )
 
 
+def sha256_streaming(path: Path) -> str:
+    """SHA256 sin cargar el fichero en RAM. Para cuando solo hace falta
+    el digest: el CBR del triaje (no se descomprime) y la auditoría de
+    biblioteca (B16), que recorre miles de archivos en una Pi."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _hash_and_buffer(path: Path) -> tuple[str, io.BytesIO]:
     """Lee el fichero UNA SOLA VEZ: calcula SHA256 y carga en BytesIO.
 
@@ -212,6 +223,20 @@ def triage(path: Path) -> TriageResult:
     if ext not in {".cbz", ".zip"}:
         # CBR requeriría rarfile+unrar (dependencia externa opcional).
         # Decisión: NO instalar unrar solo por ComicInfo. CBR → Capa 1.
+        #
+        # Bug real encontrado en vivo (2026-09-25, B16): este return
+        # salía SIN calcular el sha256, así que ningún .cbr tenía hash y
+        # la deduplicación de B3 no funcionaba para ellos — en una
+        # biblioteca española típica, que es casi toda CBR, eso significa
+        # que no funcionaba casi nunca, en silencio. Leer ComicInfo.xml
+        # sí exige descomprimir el RAR; hashear NO: son los bytes del
+        # fichero, da igual el formato. Se calcula en streaming (sin
+        # cargarlo en RAM como _hash_and_buffer, que solo tiene sentido
+        # cuando además hay que abrir el ZIP).
+        try:
+            result.sha256 = sha256_streaming(path)
+        except OSError as exc:
+            result.warnings.append(f"ilegible para hash: {exc}")
         result.warnings.append(f"formato {ext}: triaje solo por filename")
         return result
 
