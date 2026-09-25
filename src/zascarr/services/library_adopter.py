@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.core.matcher import MatchStatus
 from zascarr.models import File, FileFormat, ImportRun, Series
-from zascarr.services.importer import COMIC_EXTS, _triage_and_match
+from zascarr.services.importer import COMIC_EXTS, _triage_and_match, serialize_candidates
 
 logger = structlog.get_logger()
 
@@ -164,6 +164,7 @@ class LibraryAdopter:
                 "match_score": result.score,
                 "notes": result.notes,
                 "adopted": True,
+                "candidates": serialize_candidates(result.candidates),
             },
         )
         self._db.add(file_rec)

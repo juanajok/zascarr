@@ -16,8 +16,9 @@ from uuid import uuid4
 
 import pytest
 
+from zascarr.core.matcher import SeriesHit
 from zascarr.models import ComicTradition, File, ImportRun, Series
-from zascarr.services.importer import Importer, ImportReport, build_library_path
+from zascarr.services.importer import Importer, ImportReport, build_library_path, serialize_candidates
 
 
 def make_cbz(path: Path) -> None:
@@ -25,6 +26,32 @@ def make_cbz(path: Path) -> None:
     lo hashee y lo abra sin marcarlo como ilegible."""
     with zipfile.ZipFile(path, "w"):
         pass
+
+
+class TestSerializeCandidates:
+    """B12: candidatos de MatchResult a JSON plano para metadata_, la
+    bandeja de Pendientes los lee para sugerir "¿es esta serie?"."""
+
+    def test_ordena_por_score_descendente(self):
+        peor = SeriesHit(series_id=uuid4(), title="Thorgal", start_year=None, score=0.42)
+        mejor = SeriesHit(series_id=uuid4(), title="La Patrulla-X", start_year=1985, score=0.62)
+
+        resultado = serialize_candidates([peor, mejor])
+
+        assert [c["title"] for c in resultado] == ["La Patrulla-X", "Thorgal"]
+
+    def test_serializa_campos_esperados(self):
+        sid = uuid4()
+        hit = SeriesHit(series_id=sid, title="Batman", start_year=2011, score=0.62)
+
+        resultado = serialize_candidates([hit])
+
+        assert resultado == [{
+            "series_id": str(sid), "title": "Batman", "start_year": 2011, "score": 0.62,
+        }]
+
+    def test_lista_vacia(self):
+        assert serialize_candidates([]) == []
 
 
 class TestImportReport:

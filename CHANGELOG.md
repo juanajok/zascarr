@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.6] — 2026-09-25
+
+### Añadido
+
+- **Sugerencia de candidato con confirmación en Pendientes (B12)**: cuando el parser sí extrae título+número pero no hay serie que iguale con confianza suficiente (o hay empate ambiguo), `/ui/pendientes` ahora muestra el mejor candidato con su porcentaje de coincidencia y un botón "Sí, es esta" — un clic en vez de rebuscar a mano, reutilizando el mismo formulario de asignación ya existente (nunca autoasignación). `MatchResult.candidates` (ya existía en el matcher) se guarda en `File.metadata_` tanto en el importador de descargas como en `LibraryAdopter` (B11).
+
 ## [1.4.5] — 2026-09-25
 
 ### Añadido
