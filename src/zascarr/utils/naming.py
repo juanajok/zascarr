@@ -82,7 +82,14 @@ ISSUE_PATTERNS = [
 # Spiderman2099", "Traducido por X"): no son parte del título y además
 # tapaban el número, que quedaba a media cadena en vez de al final.
 CREDITS_PATTERN = re.compile(
-    r"\s+(?:traducido\s+por|escaneado\s+por|por|by)\s+.+$", re.IGNORECASE
+    r"\s+\(?(?:traducido\s+por|escaneado\s+por|por|by)\s+.+$", re.IGNORECASE
+)
+
+# Ediciones de aniversario de la escena ("Integral 20 aniversario", "8º
+# Aniversario"): el número es de la efeméride, no del tebeo. Sin esto,
+# "Iberia Inc. - Integral 20 aniversario" se registraba como el nº 20.
+ANIVERSARIO_PATTERN = re.compile(
+    r"\b(?:\d+|[IVXL]+)\s*(?:º|ª|°|o|mo|er|to)?\s*aniversario\b", re.IGNORECASE
 )
 
 # El punto como separador es habitual en los scans ("La.Mazmorra..
@@ -99,7 +106,7 @@ DOT_SEPARATOR_PATTERN = re.compile(r"(?<!\d)\.|\.(?!\d)")
 # de subtítulo de más abajo se queda con el nombre de la línea editorial
 # en vez de con la serie.
 IMPRINT_PREFIX_PATTERN = re.compile(
-    r"^(?:Marvel\s+Gold|Marvel\s+Deluxe|Biblioteca\s+Marvel|Panini\s+Cl[aá]sicos)"
+    r"^(?:Marvel\s+Gold|Marvel\s+Deluxe|Biblioteca\s+Marvel|Panini\s+Cl[aá]sicos|EVENTOS)"
     r"\s*-\s*",
     re.IGNORECASE,
 )
@@ -242,6 +249,8 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # extraer el número para no quedarse con el primero del rango.
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
 
+    working = ANIVERSARIO_PATTERN.sub(" ", working)
+
     # El ruido entre paréntesis se quita AQUÍ, antes de buscar el número.
     # Estaba después y tapaba una familia entera de casos: en "JSA 81
     # (2006) (Lightray-DCP)" el 81 no queda al final del nombre, así que
@@ -287,7 +296,11 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # sigue a un separador " - " (con espacios a los dos lados, a diferencia
     # de un guion pegado como en "Spider-Man") es el título del propio
     # número, no parte del nombre de la serie.
-    working = re.split(r"\s+-\s+", working, maxsplit=1)[0]
+    # El espacio tras el guion es opcional: la escena escribe tanto
+    # "Serie - Subtítulo" como "Serie -Subtítulo" ("La liga de los hombres
+    # extraordinarios -La Tempestad"). El espacio DELANTE sí se exige, que
+    # es lo que distingue el separador de un guion interno ("Spider-Man").
+    working = re.split(r"\s+-\s*", working, maxsplit=1)[0]
 
     series = working.strip()
     series = re.sub(r"[\.\-_]+", " ", series)

@@ -829,6 +829,62 @@ class TestRealWorldFilenames:
         assert result.series == expected_series
         assert result.issue_number == expected_num
 
+    def test_etiqueta_de_linea_editorial_no_es_el_titulo(self):
+        """"EVENTOS - La Era de Ultrón": igual que "Marvel Gold - X", lo
+        de delante del guion es la colección, no la obra."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename("EVENTOS - La Era de Ultrón(1).cbr").series == "La Era de Ultrón"
+
+    def test_credito_entre_parentesis_tambien_es_credito(self):
+        """"Daytripper (por Aruso) CRG 8º Aniversario": el crédito iba
+        entre paréntesis, así que no se reconocía y el título arrastraba
+        la firma del grupo entera."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename(
+            "Daytripper (por Aruso) CRG 8º Aniversario.cbr"
+        ).series == "Daytripper"
+
+    def test_edicion_de_aniversario_no_es_el_numero(self):
+        """"Integral 20 aniversario" es una efeméride de la editorial, no
+        el número 20 de la serie."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Iberia Inc. - Integral 20 aniversario (Dolmen) [por capdiajo & redvirux] [CRG].cbr"
+        )
+        assert result.series == "Iberia Inc"
+        assert result.issue_number == ""
+
+    def test_guion_sin_espacio_detras_tambien_separa_el_subtitulo(self):
+        """La escena escribe tanto "Serie - Sub" como "Serie -Sub". El
+        espacio DELANTE sigue siendo obligatorio: es lo que distingue el
+        separador de un guion interno ("Spider-Man")."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "La liga de los hombres extraordinarios -La Tempestad 02 por GBWilliams-Mastergel"
+            "[Infinity-Gisicom].cbr"
+        )
+        assert result.series == "La liga de los hombres extraordinarios"
+        assert result.issue_number == "2"
+        # El guion interno no se toca (ya cubierto arriba, se reafirma aquí
+        # porque este cambio es el que más cerca estuvo de romperlo).
+        assert parse_comic_filename("Spider-Man 001.cbz").series == "Spider Man"
+
+    @pytest.mark.parametrize("filename", [
+        # El sufijo "(1)" que deja el navegador al descargar dos veces —
+        # en la biblioteca real hay ~20 pares así. No debe convertirse en
+        # el número 1 del tebeo.
+        "Estudio en Esmeralda [traducido por Gb, Letho y Vander][Infinity Cómics](1).cb7",
+        "Arrowsmith (ECC) [Tildoras, CRG](1).cbr",
+    ])
+    def test_sufijo_de_copia_duplicada_no_es_un_numero(self, filename):
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename(filename).issue_number == ""
+
     def test_tomo_sigue_siendo_volumen_no_issue(self):
         """'Tomo N' (manga/BD con tomo Y numeración de issue separada) se
         queda como volumen, a diferencia de 'T01' (BD de tomo único donde
