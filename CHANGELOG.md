@@ -3,6 +3,23 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.5.2] — 2026-09-25
+
+### Corregido
+
+- **Sufijo de letra en mayúscula no se reconocía en ningún patrón de número.** Solo se aceptaba minúscula (`123a`), nunca `123A`/`019B`/`22B`. El caso real más grave: `Flash v2 019B Dc Bonus Book 09` no perdía solo la letra — como `019B` no matcheaba, el parser seguía buscando y se quedaba con `09` (de "Bonus Book 09"), dando el número de una sub-numeración distinta. Ahora todos los patrones aceptan mayúscula y minúscula.
+- **Rango escrito con palabra, no con guion, afirmaba un número suelto.** `Flash v2 210 a 211` y `Flash v2 170 al 173` se leían como `#210`/`#170`, cuando son un pack de dos y de cuatro números respectivamente. Mismo criterio que los rangos con guion (`210-211`): sin número, a Pendientes.
+- **Prefijo de orden de lectura sin punto no se reconocía.** `01 - Irredeemable #1` (sin el punto de `01.-`) dejaba la serie en `"01"` — el guion se confundía con un separador de subtítulo y se quedaba con el primer trozo. Con sufijo de letra a la vez (`049b.- Hawkworld...`) tampoco se reconocía. Ahora el punto es opcional y el sufijo de letra se acepta.
+
+### Añadido
+
+- **`&amp;` en el propio nombre de archivo se decodifica a `&`.** No es un artefacto del navegador: el fichero en disco se llama así literalmente en buena parte de la escena en español.
+- **Notación `[P{n}N{m}]` de partes de manga** (`GunSmith Cats[P2N9]...`): la parte va al volumen, el número de esa parte al número de grapa — sin esto la serie entera quedaba sin número.
+- **Posición dentro de un arco (`1 de 4`) ya no puede confundirse con el número de grapa** aunque el "#" real esté ausente en algún archivo futuro.
+- **Revisión de biblioteca (B16) ahora avisa de archivos que parecen tebeos pero no se tratan como tales**: `.rar`/`.7z` sueltos y dobles extensiones sin descomprimir (`....cbr.zip`), cada uno con el motivo. Nunca se amplía `COMIC_EXTS` para "solucionarlo" — un `.rar` cualquiera podría no ser un cómic, y abrir archivos dentro de archivos es justo la sorpresa que esta pantalla existe para evitar.
+
+Este lote sale de un documento de requisitos funcionales (`REQUISITOS_PARSER.md`, aportado por el coleccionista) con 20 RF numerados. El detalle de cobertura — qué RF quedó hecho, cuál necesita B14, y un punto de conflicto real con una decisión ya tomada del proyecto (Omnigold como número vs. como tomo de colección aparte) — está en `docs/BACKLOG.md`.
+
 ## [1.5.1] — 2026-09-25
 
 ### Corregido

@@ -179,6 +179,45 @@ class TestCarpetasVacias:
         assert report.carpetas_vacias == []
 
 
+class TestNoReconocidos:
+    """RF-02: archivos que parecen tebeos pero no se tratan como tales.
+    Nunca se amplía COMIC_EXTS para "arreglarlo" — se avisa en vez de
+    adivinar (un .rar cualquiera podría no ser un cómic)."""
+
+    @pytest.mark.asyncio
+    async def test_rar_suelto_se_reporta_con_motivo(self, auditor, tmp_path):
+        (tmp_path / "Manga").mkdir(parents=True)
+        (tmp_path / "Manga/One Piece Manga Volumen 76 (753-763).rar").write_bytes(b"x")
+
+        report = await auditor(tmp_path).run()
+
+        assert len(report.no_reconocidos) == 1
+        assert report.no_reconocidos[0].ruta.endswith(".rar")
+        assert "RAR" in report.no_reconocidos[0].motivo
+        # No se cuela como si fuera un tebeo de verdad:
+        assert report.files_scanned == 0
+
+    @pytest.mark.asyncio
+    async def test_doble_extension_se_reporta_con_motivo(self, auditor, tmp_path):
+        (tmp_path / "Tebeos").mkdir(parents=True)
+        (tmp_path / "Tebeos/Las guerras silenciosas.CRG.cbr.zip").write_bytes(b"x")
+
+        report = await auditor(tmp_path).run()
+
+        assert len(report.no_reconocidos) == 1
+        assert report.no_reconocidos[0].ruta.endswith(".cbr.zip")
+        assert "doble extensión" in report.no_reconocidos[0].motivo
+        assert report.files_scanned == 0
+
+    @pytest.mark.asyncio
+    async def test_cbz_normal_no_se_reporta_como_no_reconocido(self, auditor, tmp_path):
+        cbz(tmp_path / "Comics/Batman 01.cbz", b"x")
+
+        report = await auditor(tmp_path).run()
+
+        assert report.no_reconocidos == []
+
+
 class TestInforme:
 
     @pytest.mark.asyncio

@@ -8,7 +8,8 @@
 </p>
 
 {% set nada = not informe.mismo_contenido and not informe.misma_obra
-              and not informe.carpetas_repetidas and not informe.carpetas_vacias %}
+              and not informe.carpetas_repetidas and not informe.carpetas_vacias
+              and not informe.no_reconocidos %}
 {% if nada %}
 <p class="audit-ok">Tu biblioteca está limpia: ni repetidos ni carpetas vacías. Puedes adoptarla con tranquilidad.</p>
 {% endif %}
@@ -75,6 +76,21 @@
   <div class="audit-item">
     <div class="audit-path">{{ c.ruta }}</div>
     {% if c.subcarpetas %}<div class="audit-detail">Con {{ c.subcarpetas }} subcarpeta{{ 's' if c.subcarpetas != 1 }}, también vac{{ 'ías' if c.subcarpetas != 1 else 'ía' }}.</div>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if informe.no_reconocidos %}
+<section class="audit-block">
+  <h2>Archivos que ZascArr no reconoce <span class="audit-count">{{ informe.no_reconocidos|length }}</span></h2>
+  <p class="audit-why">Parecen tebeos pero el sistema no los trata como tales — no se importan, ni se
+    adoptan, ni cuentan en tu biblioteca hasta que los conviertas al formato que sí reconoce
+    (CBZ, CBR, CB7, PDF o EPUB).</p>
+  {% for n in informe.no_reconocidos %}
+  <div class="audit-item">
+    <div class="audit-path">{{ n.ruta }}</div>
+    <div class="audit-detail">{{ n.motivo }}</div>
   </div>
   {% endfor %}
 </section>

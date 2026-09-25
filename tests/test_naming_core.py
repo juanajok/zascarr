@@ -885,6 +885,99 @@ class TestRealWorldFilenames:
 
         assert parse_comic_filename(filename).issue_number == ""
 
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # El sufijo de letra en MAYÚSCULA no se reconocía en ningún
+        # patrón (solo minúscula) — el peor caso real: "019B" ni se veía
+        # como número, y el parser seguía buscando y encontraba OTRO
+        # número más adelante en el nombre ("09" de "Bonus Book 09"),
+        # dando el número de una sub-numeración distinta por error.
+        ("025.- Flash v2 #22b - manhunter 09 - por polar (c.r.g.).cbr", "Flash", "22b"),
+        ("018.- Flash v2 019B Dc Bonus Book 09 Por Frahumata & Kelo5000.cbr", "Flash", "19B"),
+        ("010.- Flash v2 012B Dc Bonus Book 02 Por Maxrabl & Sebasbender.cbr", "Flash", "12B"),
+    ])
+    def test_sufijo_de_letra_en_mayuscula(self, filename, expected_series, expected_num):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    @pytest.mark.parametrize("filename", [
+        # Rango escrito con palabra en vez de guion: sin esto, "210 a 211"
+        # afirmaba la grapa #210 suelta cuando en realidad es un pack de
+        # dos números — justo el tipo de dato falso que el proyecto
+        # prefiere evitar aunque cueste un Pendientes de más.
+        "239.- Flash v2 210 a 211.cbr",
+        "200.- Flash v2 170 al 173 - Que corra la sangre por KS.cbr",
+    ])
+    def test_rango_en_palabra_no_se_queda_con_el_primer_numero(self, filename):
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename(filename).issue_number == ""
+
+    def test_entidad_html_amp_se_decodifica(self):
+        """El propio nombre de archivo en disco lleva "&amp;" literal
+        (no es un artefacto del navegador) — sin decodificarlo, el título
+        queda roto a medias en vez de con un "&" limpio."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "WildC.A.T.S 01 (Planeta) [Cnavalon, Jrgandalf &amp; Tildoras, CRG].cbr"
+        )
+        assert "&amp;" not in result.series
+        assert result.issue_number == "1"
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # Orden de lectura SIN el punto ("01 - X", no "01.- X"): antes
+        # solo se reconocía la forma con punto, así que el guion se
+        # confundía con un separador de subtítulo y la serie se quedaba
+        # en el propio número de orden ("01").
+        ("01 - Irredeemable #1.cbz", "Irredeemable", "1"),
+        ("19 - Irredeemable Special #1.cbz", "Irredeemable Special", "1"),
+        # Con sufijo de letra Y punto a la vez ("049b.-"): el patrón
+        # exigía \d{1,3} puros antes del punto, así que ni el punto se
+        # reconocía y "049b" entero acababa siendo la serie.
+        ("049b.- Hawkworld v2 Annual 01 Por Kelo5000.cbr", "Hawkworld", "1"),
+    ])
+    def test_orden_de_lectura_sin_punto_o_con_sufijo_de_letra(
+        self, filename, expected_series, expected_num
+    ):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    @pytest.mark.parametrize("filename,expected_num,expected_vol", [
+        # "[P1N1]", "[P2N9]": notación parte+número de un grupo concreto
+        # (GunSmith Cats/Mukankakuna). Sin reconocerla, la serie entera
+        # quedaba sin número — invisible para el matcher pese a tener un
+        # esquema de numeración perfectamente regular.
+        ("GunSmith Cats[P1N1][4k][Mukankakuna][CRG].cbr", "1", 1),
+        ("GunSmith Cats[P2N9][4k][Mukankakuna][CRG].cbr", "9", 2),
+        ("GunSmith Cats[P3N1][4k][Mukankakuna][CRG].cbr", "1", 3),
+    ])
+    def test_notacion_parte_numero_entre_corchetes(self, filename, expected_num, expected_vol):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == "GunSmith Cats"
+        assert result.issue_number == expected_num
+        assert result.volume == expected_vol
+
+    def test_posicion_de_arco_no_reemplaza_al_numero_real(self):
+        """"#01 - ... 1 de 4": el "1 de 4" es la posición dentro del arco
+        publicado en fascículos, el número real de grapa es el que va
+        tras el "#"."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "Transmetropolitan - #01 - De Nuevo en la Calle 1 de 4."
+            "howtoarsenio.blogspot.com.cbr"
+        )
+        assert result.series == "Transmetropolitan"
+        assert result.issue_number == "1"
+
     def test_tomo_sigue_siendo_volumen_no_issue(self):
         """'Tomo N' (manga/BD con tomo Y numeración de issue separada) se
         queda como volumen, a diferencia de 'T01' (BD de tomo único donde

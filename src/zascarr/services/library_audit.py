@@ -14,6 +14,15 @@ Qué detecta, con el vocabulario del coleccionista:
                              (otra release, otra calidad, otro idioma)
   - carpeta repetida       → dos carpetas con el mismo conjunto de tebeos
   - carpeta vacía          → ni un tebeo en toda la rama
+  - no reconocido          → parece un tebeo pero el sistema no lo trata
+                             como tal (`.rar` suelto, doble extensión
+                             ".cbr.zip") — ver RF-02 de la especificación
+                             del parser. Nunca se amplía `COMIC_EXTS` para
+                             "solucionarlo": un `.rar` cualquiera podría no
+                             ser un tebeo, y abrir archivos dentro de
+                             archivos es justo la clase de sorpresa que
+                             esta pantalla existe para evitar. Se avisa
+                             en vez de adivinar.
 
 Coste en la Pi (restricción dura, CLAUDE.md §1): hashear 2000 CBR de
 ~150MB serían ~300GB de lectura. Dos decisiones evitan eso:
@@ -99,6 +108,21 @@ class CarpetaVacia:
 
 
 @dataclass
+class NoReconocido:
+    """Un archivo que, a ojo, es un tebeo — pero ZascArr no lo trata como
+    tal (RF-02). El motivo es siempre concreto, nunca "formato raro"."""
+    ruta: str
+    motivo: str
+
+
+# Contenedores comprimidos genéricos que a veces esconden un cómic sin
+# haberlo re-empaquetado a un formato reconocido. `.rar` es el caso real
+# más frecuente (packs de la escena que no llegaron a re-encapsularse
+# como .cbr); `.7z` aparece con menos frecuencia pero con el mismo motivo.
+CONTENEDORES_NO_SOPORTADOS = {".rar", ".7z"}
+
+
+@dataclass
 class AuditReport:
     started_at: datetime
     finished_at: datetime | None = None
@@ -109,6 +133,7 @@ class AuditReport:
     misma_obra: list[MismaObraOtraCopia] = field(default_factory=list)
     carpetas_repetidas: list[CarpetaRepetida] = field(default_factory=list)
     carpetas_vacias: list[CarpetaVacia] = field(default_factory=list)
+    no_reconocidos: list[NoReconocido] = field(default_factory=list)
 
     @property
     def bytes_recuperables(self) -> int:
@@ -117,7 +142,8 @@ class AuditReport:
     @property
     def hay_hallazgos(self) -> bool:
         return bool(self.mismo_contenido or self.misma_obra
-                    or self.carpetas_repetidas or self.carpetas_vacias)
+                    or self.carpetas_repetidas or self.carpetas_vacias
+                    or self.no_reconocidos)
 
 
 class LibraryAudit:
@@ -140,6 +166,7 @@ class LibraryAudit:
         self._detectar_misma_obra(archivos, report)
         self._detectar_carpetas_repetidas(archivos, report)
         self._detectar_carpetas_vacias(report)
+        self._detectar_no_reconocidos(report)
 
         report.finished_at = datetime.now(UTC)
         await self._persistir(report)
@@ -269,6 +296,35 @@ class LibraryAudit:
                 return True
         return False
 
+    def _detectar_no_reconocidos(self, report: AuditReport) -> None:
+        """RF-02: dos formas concretas de "parece un tebeo, no lo es para
+        ZascArr" — nunca un intento de adivinar formatos nuevos."""
+        hallados: list[NoReconocido] = []
+        for ext in CONTENEDORES_NO_SOPORTADOS:
+            for f in self._library.rglob(f"*{ext}"):
+                hallados.append(NoReconocido(
+                    ruta=str(f),
+                    motivo=f"formato no soportado ({ext.lstrip('.').upper()} sin descomprimir)",
+                ))
+
+        comic_exts_lower = {e.lower() for e in COMIC_EXTS}
+        for f in self._library.rglob("*"):
+            if not f.is_file():
+                continue
+            # Doble extensión: "Las guerras....cbr.zip" — el sufijo final
+            # (".zip") no es de cómic, pero el que queda debajo SÍ lo es.
+            # rglob("*.cbr") nunca lo encuentra porque el nombre no TERMINA
+            # en ".cbr" — por eso hace falta este barrido aparte.
+            suffixes = [s.lower() for s in f.suffixes]
+            if len(suffixes) >= 2 and suffixes[-1] not in comic_exts_lower \
+                    and suffixes[-2] in comic_exts_lower:
+                hallados.append(NoReconocido(
+                    ruta=str(f),
+                    motivo=f"doble extensión ({''.join(f.suffixes[-2:])}), sin descomprimir",
+                ))
+
+        report.no_reconocidos = sorted(hallados, key=lambda n: n.ruta)
+
     # ── Persistencia del informe (no del catálogo) ───────────────────
 
     async def _persistir(self, report: AuditReport) -> None:
@@ -292,7 +348,8 @@ class LibraryAudit:
                 "bytes_recuperables": report.bytes_recuperables,
                 "truncado": any(len(x) > tope for x in (
                     report.mismo_contenido, report.misma_obra,
-                    report.carpetas_repetidas, report.carpetas_vacias)),
+                    report.carpetas_repetidas, report.carpetas_vacias,
+                    report.no_reconocidos)),
                 "mismo_contenido": [
                     {"sha256": d.sha256, "size_bytes": d.size_bytes, "rutas": d.rutas}
                     for d in report.mismo_contenido[:tope]
@@ -308,6 +365,10 @@ class LibraryAudit:
                 "carpetas_vacias": [
                     {"ruta": c.ruta, "subcarpetas": c.subcarpetas}
                     for c in report.carpetas_vacias[:tope]
+                ],
+                "no_reconocidos": [
+                    {"ruta": n.ruta, "motivo": n.motivo}
+                    for n in report.no_reconocidos[:tope]
                 ],
             },
         ))

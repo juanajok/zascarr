@@ -33,7 +33,13 @@ NOISE_PATTERNS = [
 #           número es parte del título ("Delta 99 - 04" es el número 4 de
 #           la serie "Delta 99", no el 99 de "Delta").
 ISSUE_PATTERNS = [
-    (r"#\s*(\d+\.?\d*)", False),
+    # El sufijo de letra va en MAYÚSCULA O minúscula en todos los patrones
+    # ("#22b", "019B", "123a", "176b"): la escena no es consistente y antes
+    # solo se aceptaba minúscula. Con mayúscula, el patrón simplemente no
+    # matcheaba y el número se perdía entero — o peor, el parser seguía
+    # buscando y encontraba OTRO número más adelante en el nombre (bug real:
+    # "Flash v2 019B Dc Bonus Book 09" daba #9, no #19B).
+    (r"#\s*(\d+[a-zA-Z]?\.?\d*)", False),
     (r"c(\d{3,4})\b", False),                # One Piece c1054
     (r"\bT(\d{2})\b", False),                 # Astérix T01: BD de tomo único,
                                               # el tomo ES el número de cara
@@ -43,10 +49,10 @@ ISSUE_PATTERNS = [
     # española, que no estaba cubierta. El "║" no es un error de copia:
     # media biblioteca real viene de scans con nombres en CP437 releídos
     # como Latin-1 ("Espa±a", "Traducci≤n"), y ahí "º" aparece así.
-    (r"(?:Issue|No\.?|N[úu]m(?:ero)?\.?|[Nn][ºo°º║])\s*(\d{1,4}[a-z]?)\b", False),
+    (r"(?:Issue|No\.?|N[úu]m(?:ero)?\.?|[Nn][ºo°º║])\s*(\d{1,4}[a-zA-Z]?)\b", False),
     # El sufijo de letra es real y frecuente ("Superman Vol2 123a" son las
     # entregas partidas de Zinco); sin él, esos números se perdían enteros.
-    (r"\b(\d{3,4}[a-z]?)\b(?!\s*\))", False),
+    (r"\b(\d{3,4}[a-zA-Z]?)\b(?!\s*\))", False),
     # Ediciones de recopilación (CRG y similares): "Omnigold 5", "Integral
     # 01", "Edición Integral 01" — el número que traen no es una grapa
     # #NNN, es el tomo de la recopilación, pero a efectos de matching es
@@ -58,24 +64,24 @@ ISSUE_PATTERNS = [
     # del título ("Delta 99 - 04" es el 4 de la serie "Delta 99"). Va
     # antes que el patrón de subtítulo de abajo, que si no se quedaría
     # con el 99 y dejaría la serie en "Delta".
-    (r"\s\d{1,3}\s+-\s+(\d{1,3}[a-z]?)\b", True),
+    (r"\s\d{1,3}\s+-\s+(\d{1,3}[a-zA-Z]?)\b", True),
     # "Serie NN - Subtítulo": el idiom más común de la escena en español
     # ("AIDP 05 - La Llama Negra", "Astérix (DI) 01 - Astérix el galo",
     # "Gideon Falls 01 - El Granero Negro"). El número va ANTES del
     # separador de subtítulo, no al final del nombre, así que el patrón
     # de último recurso de abajo no lo veía: el número se quedaba pegado
     # al título ("Astérix 01") y ninguna serie igualaba nunca.
-    (r"\s(\d{1,3}[a-z]?)\s+-\s+", False),
+    (r"\s(\d{1,3}[a-zA-Z]?)\s+-\s+", False),
     # "Serie NN Subtítulo" sin separador ("XIII 01 El Dia del Sol Negro").
     # Se exige que detrás venga una PALABRA, no otra cifra: así "Top 10
     # 07" no confunde el 10 del título con el número, porque detrás del
     # 10 hay un 07 y no una letra.
-    (r"\s(\d{1,3}[a-z]?)\s+(?=[^\W\d_])", False),
+    (r"\s(\d{1,3}[a-zA-Z]?)\s+(?=[^\W\d_])", False),
     # Último recurso: un número suelto de 1-3 cifras pegado al final del
     # nombre (sin "#", sin "T", sin años de 4 cifras que ya cubre el
     # patrón de arriba con \b(\d{3,4})\b). Bug real: "La Patrulla-X
     # Original 1.cbr" no llevaba NINGÚN marcador delante del número.
-    (r"\s(\d{1,3}[a-z]?)\s*$", False),
+    (r"\s(\d{1,3}[a-zA-Z]?)\s*$", False),
 ]
 
 # Créditos del uploader al final del nombre ("por TheRockJR", "By
@@ -140,13 +146,39 @@ PUBLICATION_DATE_PATTERN = re.compile(r"\(((?:19|20)\d{2})-(?:0[1-9]|1[0-2])\)")
 # poder quitar su ")" dejaba huérfano el cierre ("La Patrulla X (122-143
 # usa)" → "La Patrulla X usa)"). El catch-all de paréntesis de más abajo
 # ya se lleva el "( )" que queda.
-NUMBER_RANGE_PATTERN = re.compile(r"\b\d{1,4}-\d{1,4}[a-z]?\b")
+NUMBER_RANGE_PATTERN = re.compile(r"\b\d{1,4}-\d{1,4}[a-zA-Z]?\b")
+
+# El mismo rango, pero escrito con palabra en vez de guion: "170 al 173",
+# "210 a 211". Bug real: sin esto, "Flash v2 210 a 211" se leía como el
+# número 210 suelto — afirmando una sola grapa donde el archivo es un
+# pack de dos. Va ANTES de la búsqueda de número, igual que el rango con
+# guion.
+NUMBER_RANGE_WORD_PATTERN = re.compile(r"\b\d{1,4}\s+al?\s+\d{1,4}\b", re.IGNORECASE)
+
+# "1 de 4", "3 de 8": posición dentro de un arco publicado en fascículos
+# (Transmetropolitan y similares), nunca el número de grapa. Sin esto no
+# causaba daño en los casos ya vistos (el "#01" real se encuentra antes
+# por prioridad de patrón), pero un archivo que tuviera SOLO "N de M" sin
+# "#" delante lo habría tomado como número — se quita para que eso nunca
+# pase, y de paso deja el título más limpio.
+ARC_POSITION_PATTERN = re.compile(r"\b\d{1,3}\s+de\s+\d{1,3}\b", re.IGNORECASE)
+
+# "[P1N1]", "[P2N9]": partes + número de un grupo concreto (GunSmith
+# Cats/Mukankakuna). Se captura ANTES de la limpieza genérica de
+# corchetes (más abajo), que si no se la comería sin dejar rastro.
+PART_NUMBER_PATTERN = re.compile(r"\[P(\d+)N(\d+)\]", re.IGNORECASE)
 
 # Prefijo de ORDEN DE LECTURA al principio del nombre ("069.- Flash v2
 # 62", "247.- Wonder Woman v2 214"): numera la colección/orden del
 # coleccionista, no la grapa. Sin esto se llevaba el patrón genérico de
 # 3 cifras y "Wonder Woman 214" se registraba como el número 247.
-SORT_PREFIX_PATTERN = re.compile(r"^\s*\d{1,3}\s*\.\s*-\s*")
+#
+# El punto es OPCIONAL ("01 - Irredeemable #1", sin punto, es el mismo
+# idiom que "069.- Flash..."), y el número admite sufijo de letra
+# ("049b.- Hawkworld..."). Sin el punto opcional, "01 - Irredeemable #1"
+# se leía entero como serie "01" — el guion sin más se confundía con el
+# separador de subtítulo, que se queda con el primer trozo ("01").
+SORT_PREFIX_PATTERN = re.compile(r"^\s*\d{1,3}[a-zA-Z]?\s*\.?\s*-\s*")
 ANNUAL_PATTERN = re.compile(r"\b(?:Annual|Anual|Especial)\b", re.IGNORECASE)
 FILE_EXT_PATTERN = re.compile(r"\.(cbz|cbr|cb7|pdf|epub)$", re.IGNORECASE)
 
@@ -206,6 +238,24 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # volumen/número a la vez que la limpieza de puntuación de más abajo.
     working = working.replace("_", " ")
 
+    # Entidad HTML literal en el propio nombre de archivo (no es que el
+    # navegador la deje sin decodificar: el fichero en disco se llama así,
+    # "&amp;" tal cual). Cosmético pero real — sin esto "Jrgandalf &amp;
+    # Tildoras" queda en el título de una serie mal cortada en vez de "&".
+    working = working.replace("&amp;", "&")
+
+    # Partes+número de un grupo concreto ("[P1N1]"): se captura ANTES de
+    # la limpieza genérica de corchetes de más abajo, que si no se la
+    # comería entera sin dejar rastro. RF-12: la parte va a volume, el
+    # número de esa parte a issue_number — igual que cualquier otro caso
+    # con volumen y número, sin inventar un campo compuesto nuevo.
+    part_num_match = PART_NUMBER_PATTERN.search(working)
+    if part_num_match:
+        parte, numero = part_num_match.groups()
+        result.volume = int(parte)
+        result.issue_number = numero.lstrip("0") or "0"
+        working = PART_NUMBER_PATTERN.sub("", working, count=1)
+
     # Tags de release entre corchetes ("[CRG]", "[MQ]", "[DI]", "[ML]"):
     # grupo/calidad/procedencia, nunca parte del título. A diferencia del
     # ruido entre paréntesis (NOISE_PATTERNS, más abajo, curado caso a
@@ -245,9 +295,15 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         if 1900 <= year <= 2099:
             result.year = year
 
-    # Rangos ("144-158"): un pack no tiene UN número. Se quitan antes de
-    # extraer el número para no quedarse con el primero del rango.
+    # Rangos ("144-158", y su forma en palabra "170 al 173"): un pack no
+    # tiene UN número. Se quitan antes de extraer el número para no
+    # quedarse con el primero del rango.
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
+    working = NUMBER_RANGE_WORD_PATTERN.sub(" ", working)
+
+    # "1 de 4": posición dentro de un arco en fascículos, nunca el número
+    # de grapa — ver docstring de ARC_POSITION_PATTERN.
+    working = ARC_POSITION_PATTERN.sub(" ", working)
 
     working = ANIVERSARIO_PATTERN.sub(" ", working)
 
@@ -271,14 +327,18 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         # no igualaría con nada. La condición de annual queda en el flag.
         working = ANNUAL_PATTERN.sub(" ", working)
 
-    for pattern in VOLUME_PATTERNS:
-        vol_match = re.search(pattern, working, re.IGNORECASE)
-        if vol_match:
-            result.volume = int(vol_match.group(1))
-            working = re.sub(pattern, "", working, flags=re.IGNORECASE)
-            break
+    if result.volume is None:
+        for pattern in VOLUME_PATTERNS:
+            vol_match = re.search(pattern, working, re.IGNORECASE)
+            if vol_match:
+                result.volume = int(vol_match.group(1))
+                working = re.sub(pattern, "", working, flags=re.IGNORECASE)
+                break
 
-    encontrado = _buscar_numero(working)
+    # Si "[P{n}N{m}]" ya resolvió el número (RF-12), no se vuelve a buscar
+    # — el resto del nombre ("[4k][Mukankakuna][CRG]") es solo metadata de
+    # release que la limpieza de corchetes de abajo ya se encarga de quitar.
+    encontrado = None if result.issue_number else _buscar_numero(working)
     if encontrado:
         issue_match, cortar_en_numero = encontrado
         raw = issue_match.group(1)
