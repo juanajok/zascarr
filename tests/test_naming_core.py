@@ -623,6 +623,79 @@ class TestRealWorldFilenames:
         assert result.series == "La Patrulla X"
         assert result.issue_number == ""
 
+    @pytest.mark.parametrize("filename,expected_num,expected_year", [
+        # Fecha de publicación de los scans digitales (DCP/Novus): el
+        # "(2004-08)" se registraba como el NÚMERO DE GRAPA 2004.
+        ("JSA (2004-08) 62 (digital) (OkC.O.M.P.U.T.O.-Novus-HD).cbz", "", 2004),
+        ("JSA (1999-08) 01 (digital) (DreamGirl-Novus-HD).cbz", "", 1999),
+    ])
+    def test_fecha_de_publicacion_no_es_el_numero_de_grapa(
+        self, filename, expected_num, expected_year
+    ):
+        """Bug real (biblioteca del coleccionista, 2026-09-25): un JSA
+        #2004 inventado a partir de la fecha. Peor que no clasificar,
+        porque la sugerencia de un clic (B12) lo daba por bueno y el
+        alias local (B13) lo aprendía."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.issue_number == expected_num
+        assert result.year == expected_year
+
+    def test_prefijo_de_orden_de_lectura_no_es_el_numero_de_grapa(self):
+        """'247.- Wonder Woman v2 214': el 247 numera la colección del
+        coleccionista, la grapa es la 214. Antes ganaba el 247 por ser
+        el primer número de 3 cifras del nombre."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("247.- Wonder Woman v2 214 Por Mr Miracle & Feddzor.cbr")
+        assert result.series == "Wonder Woman"
+        assert result.issue_number == "214"
+        assert result.volume == 2
+
+    @pytest.mark.parametrize("filename", [
+        "La Imposible Patrulla X (144-158) Contra Magneto (Actualizado) [CRG].cbr",
+        "Superman Vol2 049-051a [SC][HMERL].cbr",
+    ])
+    def test_un_rango_no_se_queda_con_el_primer_numero(self, filename):
+        """Un pack que cubre 144-158 no es el número 144: afirmar eso es
+        inventar una pertenencia que el archivo no dice. Sin número va a
+        Pendientes, que es la respuesta honesta."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename(filename).issue_number == ""
+
+    def test_rango_no_deja_huerfano_el_parentesis_de_cierre(self):
+        """Encontrado arreglando el caso de arriba: quitar "(122-143" sin
+        poder quitar el ")" dejaba "La Patrulla X usa) Omnigold..." como
+        título, que envenena matching y alias."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(
+            "La Patrulla X (122-143 usa) Omnigold nº 2 Días del futuro pasado [Actualizado] (crg).cbr"
+        )
+        assert ")" not in result.series
+        assert result.series == "La Patrulla X Omnigold nº 2 Días del futuro pasado"
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # El idiom más común de la escena en español: el número va antes
+        # del subtítulo, no al final. Se quedaba pegado al título
+        # ("Astérix 01"), así que ninguna serie igualaba jamás.
+        ("Astérix (DI) 01 - Astérix el galo [Raven Co.][CRG].cbr", "Astérix", "1"),
+        ("AIDP 05 - La Llama Negra [SC][por R.I.P.][CRG].cbr", "AIDP", "5"),
+        ("Gideon Falls 01 - El Granero Negro [SC][por jbabylon5][CRG].cbr", "Gideon Falls", "1"),
+        ("Fatale 04 - Reza Para que Llueva [por Aluci][CRG].cbr", "Fatale", "4"),
+        ("Parker 04 - Matadero [SC][por Jbabylon5][CRG].cbr", "Parker", "4"),
+    ])
+    def test_numero_antes_del_subtitulo_no_se_queda_pegado_al_titulo(
+        self, filename, expected_series, expected_num
+    ):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
     def test_tomo_sigue_siendo_volumen_no_issue(self):
         """'Tomo N' (manga/BD con tomo Y numeración de issue separada) se
         queda como volumen, a diferencia de 'T01' (BD de tomo único donde
