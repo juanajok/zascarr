@@ -629,23 +629,30 @@ class TestRealWorldFilenames:
         assert result.series == "La Patrulla X"
         assert result.issue_number == ""
 
-    @pytest.mark.parametrize("filename,expected_num,expected_year", [
+    @pytest.mark.parametrize("filename,expected_series,expected_num,expected_year", [
         # Fecha de publicación de los scans digitales (DCP/Novus): el
         # "(2004-08)" se registraba como el NÚMERO DE GRAPA 2004.
-        ("JSA (2004-08) 62 (digital) (OkC.O.M.P.U.T.O.-Novus-HD).cbz", "", 2004),
-        ("JSA (1999-08) 01 (digital) (DreamGirl-Novus-HD).cbz", "", 1999),
+        ("JSA (2004-08) 62 (digital) (OkC.O.M.P.U.T.O.-Novus-HD).cbz", "JSA", "62", 2004),
+        ("JSA (1999-08) 01 (digital) (DreamGirl-Novus-HD).cbz", "JSA", "1", 1999),
+        ("JSA 81 (2006) (Lightray-DCP).cbr", "JSA", "81", 2006),
     ])
     def test_fecha_de_publicacion_no_es_el_numero_de_grapa(
-        self, filename, expected_num, expected_year
+        self, filename, expected_series, expected_num, expected_year
     ):
         """Bug real (biblioteca del coleccionista, 2026-09-25): un JSA
         #2004 inventado a partir de la fecha. Peor que no clasificar,
         porque la sugerencia de un clic (B12) lo daba por bueno y el
-        alias local (B13) lo aprendía."""
+        alias local (B13) lo aprendía.
+
+        La primera corrección solo lograba que NO hubiera número; ahora
+        además se saca el correcto, porque el ruido entre paréntesis se
+        limpia antes de buscarlo y el 62 deja de estar a media cadena."""
         from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename(filename)
         assert result.issue_number == expected_num
+        assert result.issue_number != str(expected_year)  # la garantía de fondo
+        assert result.series == expected_series
         assert result.year == expected_year
 
     def test_prefijo_de_orden_de_lectura_no_es_el_numero_de_grapa(self):
@@ -681,7 +688,10 @@ class TestRealWorldFilenames:
             "La Patrulla X (122-143 usa) Omnigold nº 2 Días del futuro pasado [Actualizado] (crg).cbr"
         )
         assert ")" not in result.series
-        assert result.series == "La Patrulla X Omnigold nº 2 Días del futuro pasado"
+        # El "nº 2" ya se reconoce como número (numeración española), así
+        # que el título queda limpio en vez de arrastrar el subtítulo.
+        assert result.series == "La Patrulla X Omnigold"
+        assert result.issue_number == "2"
 
     @pytest.mark.parametrize("filename,expected_series,expected_num", [
         # El idiom más común de la escena en español: el número va antes
@@ -696,6 +706,123 @@ class TestRealWorldFilenames:
     def test_numero_antes_del_subtitulo_no_se_queda_pegado_al_titulo(
         self, filename, expected_series, expected_num
     ):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # Numeración española: no estaba cubierta en absoluto.
+        ("Patrulla-X, nº 03 (122) [enriquechiper CRG].cbr", "Patrulla X", "3"),
+        # Mojibake CP437 de "º" — medio catálogo de scans viene así.
+        ("WildCATS vol1 n║05 por Cnavalon.cbr", "WildCATS", "5"),
+    ])
+    def test_numero_con_notacion_espanola(self, filename, expected_series, expected_num):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    def test_numero_con_sufijo_de_letra(self):
+        """Las entregas partidas de Zinco ("123a", "123b") perdían el
+        número entero porque los patrones solo aceptaban cifras."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Superman Vol2 123a [SC][CRG].cbr")
+        assert result.series == "Superman"
+        assert result.issue_number == "123a"
+
+    def test_especial_no_forma_parte_del_nombre_de_la_serie(self):
+        """"Superman Vol2 Especial 2" es el especial nº 2 de Superman, no
+        una serie llamada "Superman Especial" que no iguala con nada."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Superman Vol2 Especial 2 [SC][CRG].cbz")
+        assert result.series == "Superman"
+        assert result.issue_number == "2"
+        assert result.is_annual
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        ("Promethea Vol1 11 por TheRockJR [CRG].cbr", "Promethea", "11"),
+        ("069.- Flash v2 62 By Spiderman2099.cbr", "Flash", "62"),
+    ])
+    def test_creditos_del_uploader_no_son_parte_del_titulo(
+        self, filename, expected_series, expected_num
+    ):
+        """Además de ensuciar el título, tapaban el número: lo dejaban a
+        media cadena, donde ningún patrón lo buscaba."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        ("La.Mazmorra..Integral.6.-.Sfar.&.Trondheim.&.Larcenet.[jbabylon5][CRG].cbr",
+         "La Mazmorra", "6"),
+        ("El.departamento.de.la.verdad.3.-.James.Tynion.IV.&.Martin.Simmonds.[jbabylon5][CRG].cbr",
+         "El departamento de la verdad", "3"),
+    ])
+    def test_puntos_como_separador_no_esconden_el_numero(
+        self, filename, expected_series, expected_num
+    ):
+        """Con los puntos sin convertir, ni "Integral 6" ni el corte de
+        subtítulo se reconocían y el título arrastraba a los autores."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    def test_punto_entre_cifras_sigue_siendo_un_decimal(self):
+        """El paso anterior no debe romper los números decimales, que el
+        modelo sí soporta (issue_number es VARCHAR por esto)."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        assert parse_comic_filename("Batman #1.5 - Interludio.cbz").issue_number == "1.5"
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        ("XIII 01 El Dia del Sol Negro.cbz", "XIII", "1"),
+        ("XIII 19 Ultimo asalto [por mikar][CRG].cbr", "XIII", "19"),
+    ])
+    def test_numero_seguido_de_subtitulo_sin_separador(
+        self, filename, expected_series, expected_num
+    ):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
+    def test_el_numero_del_titulo_no_se_confunde_con_el_de_la_grapa(self):
+        """La contrapartida del test anterior: en "Top 10 07" el 10 es
+        parte del nombre. La señal es que detrás del 10 hay otra cifra y
+        no una palabra."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Top 10 07.cbr")
+        assert result.series == "Top 10"
+        assert result.issue_number == "7"
+
+    def test_serie_numero_numero_conserva_el_numero_del_titulo(self):
+        """"Delta 99 - 04" es el número 4 de la serie "Delta 99". Sin
+        esta regla el patrón de subtítulo se quedaba con el 99 y dejaba
+        la serie en "Delta"."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Delta 99 - 04 [por JGM y Luzroja][CRG].cbr")
+        assert result.series == "Delta 99"
+        assert result.issue_number == "4"
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        ("100 Balas - Integral (Ed.Planeta) 02 [por capdiajo y ntellez][CRG].cbz", "100 Balas", "2"),
+        ("52 (Integral) 01 [SC][por Elessarsquall y Funkspider][CRGfunding-CRG].cbr", "52", "1"),
+    ])
+    def test_serie_que_empieza_por_cifra(self, filename, expected_series, expected_num):
+        """Peor de los casos posibles: "100 Balas ... 02" daba serie
+        "Balas" Y número 100 — las dos cosas mal a la vez."""
         from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename(filename)
