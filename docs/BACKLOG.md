@@ -79,6 +79,9 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B11 | ~~Como coleccionista que ya tiene su tebeoteca organizada en disco, quiero que ZascArr la reconozca sola en el primer arranque, sin tener que redescargar ni mover nada — como hace Sonarr al añadir una carpeta raíz con series que ya existen~~ | ~~`LibraryAdopter` (nuevo): escanea `library_path` recursivamente, reutiliza el mismo triage+matcher que `Importer` (extraído a `_triage_and_match`, compartido), pero **registra en BD sin mover ni renombrar**. Dispara sola en el primer arranque (background task en `main.py::lifespan`) si `library_path` tiene archivos y `series` está vacía, y solo UNA vez (marcador en `runtime_settings`)~~ | ✅ Hecho | L |
 | B12 | ~~Como coleccionista, cuando el parser SÍ extrae título+número pero no hay serie que iguale (o el score queda por debajo del umbral), quiero ver una sugerencia con la que confío en un clic, en vez de rebuscar a mano en Pendientes~~ | ~~`MatchResult.candidates` (ya existía) se serializa en `File.metadata_` (`Importer` y `LibraryAdopter`, mismo helper compartido); `/ui/pendientes` muestra el mejor candidato con su score y un botón "sí es esta serie" que reutiliza el formulario de asignación ya existente — confirmación explícita, nunca autoasignación~~ | ✅ Hecho | M |
 | B13 | ~~Como coleccionista, si asigno a mano varios archivos del mismo patrón ("La Patrulla X Omnigold N (...)") a la misma serie, quiero que ZascArr deje de preguntarme para ese patrón~~ | ~~Tabla `local_aliases` (patrón de nombre → series_id), aprendida en `ReviewService.assign_to_series` (toda asignación manual desde Pendientes es por definición una corrección) y consultada por `SeriesMatcher.decide()` ANTES del fuzzy. Alias local de esta instalación, nunca una regla global — CLAUDE.md §5~~ | ✅ Hecho | M |
+| B14 | Como coleccionista con la tebeoteca ya ordenada por carpetas, quiero que ZascArr use el NOMBRE DE LA CARPETA para saber de qué serie es cada archivo, porque es justo lo que yo ya le dije al ordenarla | La carpeta es la señal más fiable de esta biblioteca y hoy se tira entera: `Comics/JSA (1999)/JSA (2004-08) 62` da serie `JSA 62`, mientras la carpeta dice `JSA` + año `1999`. Medido sobre 44 rutas reales (2026-09-25): la carpeta arregla ~la mitad de los fallos que quedan tras el fix del parser de v1.4.8 (XIII, JSA, Promethea, Superman, La Mazmorra, Monstress, Flash, WildCATS, Patrulla-X). La carpeta debe ser un CANDIDATO más que se valida contra la BD, nunca un override ciego: en `Comics/Green Lantern - Saga de Geoff Johns/03 Green Lantern Corps - Recarga.cbr` la carpeta miente y el nombre de archivo acierta | P0 | M |
+| B15 | Como coleccionista, quiero que una carpeta que NO es una serie (un autor, una saga, un recopilatorio) no se trate como si lo fuera | Casos reales medidos: `Graphic Novels/Carlos Gimenez` (autor, ~30 obras unitarias), `Comics/Green Lantern - Saga de Geoff Johns` (lista de lectura editorial: mezcla Green Lantern, GL Corps y La noche más oscura, y el `01`/`03`/`18` es orden de lectura, no la grapa), `Comics/_Omnibus/Dinastia y Potencias de X` (crossover con doble numeración: `Crossover 01 - Dinastia de X 01` son DOS hechos, issue + posición en el arco). El modelo ya tiene `story_arc_issues.reading_order` para el tercero; los otros dos necesitan decisión de producto. Ninguno debe producir un issue fantasma | P1 | L |
+| B16 | Como coleccionista, quiero saber cuándo tengo el mismo tebeo en dos carpetas, en vez de que el sistema elija una en silencio | En la biblioteca real hay carpetas duplicadas enteras: `Comics/Superman (1987)` ≡ `Comics/Superman Vol2 (Ed.Zinco)(1987-96)` (~140 archivos), `Comics/Nuevos Mutantes (2019)` ≡ `Comics/Nuevos Mutantes Vol3 (Panini)(2020-23)` (30), `Graphic Novels/Carlos Gimenez` ≈ `Tebeos/Carlos Giménez`, los 12 `Crossover NN` en `_Omnibus` y en `Patrulla-X (Panini)`, y `La Tempestad 01-06` sueltos y dentro de `[Completo]`. El dedupe por SHA256 ya evita registrarlos dos veces, pero el coleccionista no se entera de cuál carpeta "ganó" ni puede decidir. Falta informe de adopción con los duplicados agrupados por carpeta de origen | P1 | M |
 
 **Notas de implementación:**
 
@@ -130,6 +133,30 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 - **La confirmación reutiliza el formulario de asignación ya existente**, no un endpoint nuevo: la tarjeta de `/ui/pendientes` pinta un bloque "¿Es esta serie?" con el mismo `hx-post .../asignar` que ya usaba la búsqueda manual, solo que con `series_id` precargado del candidato y `issue_number` precargado del propio `parse_comic_filename` del nombre de archivo (si lo detectó). El coleccionista sigue teniendo que pulsar "Sí, es esta" — cero autoasignación.
 - **Bug de CSS encontrado en vivo:** `.btn-sugerencia { --btn-bg: var(--ok) }` no se aplicaba — perdía la cascada contra `button[type="submit"] { --btn-bg: var(--yellow) }` por especificidad (un selector de atributo pesa más que una clase sola), así que el botón salía amarillo en vez de verde pese al orden de aparición en el CSS. Corregido subiendo la especificidad (`button[type="submit"].btn-sugerencia`), verificado visualmente en el navegador antes y después.
 - **Verificación en vivo (Postgres real):** serie y archivo pendiente con un candidato al 62% insertados a mano; la tarjeta mostró la sugerencia con el nombre, año, score y número precargado; un clic en "Sí, es esta" movió el archivo a la ruta canónica de biblioteca (`.../La Patrulla-X (1985)/La Patrulla-X #012.cbz`) y creó el `Issue` correspondiente — mismo camino que la asignación manual, sin código nuevo en `ReviewService`.
+
+**Medición contra la biblioteca real (2026-09-25, origen de B14-B16):**
+
+Se midió `parse_comic_filename` contra 44 rutas reales del disco del
+coleccionista (`/media/WDElements/Tebeos`, ~2000 archivos) en vez de
+contra fixtures. El resultado corrigió la hipótesis de partida, que era
+"sin catálogo, casi todo caerá a Pendientes":
+
+- **El fallo real no era quedarse corto, sino acertar en falso.** Tres
+  patrones producían `(serie, número)` confiados y equivocados —
+  fecha de publicación leída como grapa (`JSA (2004-08) 62` → #2004),
+  prefijo de orden de lectura leído como grapa (`247.- Wonder Woman v2
+  214` → #247) y rangos que se quedaban con el primero (`(144-158)` →
+  #144). Corregido en v1.4.8 con tests de regresión nombrados por
+  mecanismo.
+- **B12 y B13 amplificaban el daño**, y eso cambió la prioridad: la
+  sugerencia de un clic presentaba el número inventado como si fuera
+  bueno, y el alias local aprendía el patrón. Una heurística floja se
+  convertía en un dato persistente. Regla que queda de aquí: **antes de
+  añadir automatismo sobre una heurística, medir la heurística contra
+  datos reales** — el automatismo no crea el error, lo fija.
+- **La carpeta es la señal desaprovechada** (B14): en esta biblioteca el
+  coleccionista YA declaró la serie al ordenarla, y el parser trabaja
+  como si no existiera.
 
 **Notas de implementación (B13, 2026-09-25):**
 
