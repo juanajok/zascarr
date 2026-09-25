@@ -30,32 +30,35 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Bug real, reportado: Prowlarr/Transmission/aMule fallaban con "no se pudo
 # conectar" aunque la URL y las credenciales fueran correctas, mientras
-# Comic Vine (un host externo real) funcionaba sin problema.
+# Comic Vine (un host externo real) funcionaba sin problema. Tres causas
+# investigadas y descartadas/confirmadas en orden, con datos reales del
+# usuario en cada paso, no solo plausibilidad:
 #
-# Primera hipótesis (descartada con datos reales del usuario): el servicio
-# escucha solo en 127.0.0.1, no en 0.0.0.0. `ss -tlnp` confirmó los tres
-# escuchando en 0.0.0.0/* — no era eso.
-#
-# Causa real, confirmada con los datos del usuario: un cortafuegos (ufw)
-# con política DROP por defecto y reglas de "solo LAN" (p.ej.
-# 192.168.1.0/24) para esos puertos — el puente de Docker
-# (host.docker.internal, la puerta de enlace del contenedor; confirmado
-# 172.17.0.1 tanto en sandbox como en la Pi real del usuario) no es una
-# de esas subredes "LAN" permitidas, así que ufw bloquea la conexión antes
-# de llegar al servicio, aunque el bind sea correcto. La pista cubre las
-# dos causas — se avisa solo cuando la excepción es de conexión
-# (rechazada/timeout/DNS): un error HTTP real (401, 500...) significa que
-# SÍ se llegó al servicio, y esta pista solo confundiría ahí.
+# 1. Descartada: el servicio escucha solo en 127.0.0.1. `ss -tlnp`
+#    confirmó los tres en 0.0.0.0/*.
+# 2. Confirmada (parcial): ufw con reglas "solo LAN" para esos puertos —
+#    corregida por el usuario con `ufw allow`, pero el fallo persistió.
+# 3. Confirmada (causa real): `host.docker.internal` (docker-compose.yml)
+#    resolvía a la puerta de enlace del puente POR DEFECTO (docker0,
+#    172.17.0.1) en vez de a la de la red PERSONALIZADA que de verdad usa
+#    el contenedor (docker-compose siempre crea una propia — en este caso
+#    172.18.0.1). Confirmado comparando `docker exec ... getent hosts
+#    host.docker.internal` contra `docker inspect ... Networks.*.Gateway`:
+#    no coincidían. Corregido en docker-entrypoint.sh (autocorrige
+#    /etc/hosts en el arranque, sin cambios de código aquí) — este mensaje
+#    ahora cubre también ese caso por si alguien sigue en una versión
+#    anterior. Se avisa solo cuando la excepción es de conexión
+#    (rechazada/timeout/DNS): un error HTTP real (401, 500...) significa
+#    que SÍ se llegó al servicio, y esta pista solo confundiría ahí.
 _PISTA_CONEXION_RECHAZADA = (
-    " Dos causas habituales si el servicio corre en esta misma máquina "
-    "(fuera de Docker): (1) un cortafuegos (ufw/iptables) con reglas "
-    "limitadas a tu LAN que no incluyen la subred del puente de Docker "
-    "— compruébalo con: sudo ufw status, y si hace falta: "
-    "sudo ufw allow from <subred-docker> to any port <puerto> proto tcp; "
-    "(2) el servicio escucha solo en 127.0.0.1, no en 0.0.0.0 — "
-    "compruébalo con: ss -tlnp | grep <puerto>. Un contenedor llega por "
-    "la puerta de enlace del puente de Docker (host.docker.internal), "
-    "no por loopback ni como si fuera tu LAN."
+    " Tres causas habituales si el servicio corre en esta misma máquina "
+    "(fuera de Docker): (1) host.docker.internal resolviendo a la red "
+    "Docker equivocada — actualiza a la última versión de ZascArr, que lo "
+    "autocorrige; (2) un cortafuegos (ufw/iptables) con reglas limitadas "
+    "a tu LAN que no incluyen ninguna red de Docker — compruébalo con: "
+    "sudo ufw status, y si hace falta: sudo ufw allow from 172.16.0.0/12 "
+    "to any port <puerto> proto tcp; (3) el servicio escucha solo en "
+    "127.0.0.1, no en 0.0.0.0 — compruébalo con: ss -tlnp | grep <puerto>."
 )
 
 

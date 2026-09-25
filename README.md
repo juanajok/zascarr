@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-1.4.3-brightgreen.svg)
+![Estado](https://img.shields.io/badge/estado-1.4.4-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -39,7 +39,7 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-✅ **v1.4.3.** Backend e interfaz web funcionales, verificados end-to-end
+✅ **v1.4.4.** Backend e interfaz web funcionales, verificados end-to-end
 contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
 wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
 actualización/rollback destructivo. Detalle de la verificación en
@@ -330,34 +330,52 @@ Cada integración de descarga tiene un botón "Probar conexión" en `/ui/ajustes
 antes de guardar.
 
 **Prowlarr/Transmission/aMule corren en la propia Raspberry Pi ("baremetal"),
-fuera de Docker** — el contenedor los alcanza vía `host.docker.internal`
-(la puerta de enlace del puente de Docker, ya configurada en
-`docker-compose.yml`), no por `127.0.0.1` ni como si fuera tu LAN. Si
+fuera de Docker** — el contenedor los alcanza vía `host.docker.internal`. Si
 "Probar conexión" falla con "no se pudo conectar" aunque la URL/credenciales
-sean correctas, hay dos causas habituales — comprueba las dos:
+sean correctas, hay tres causas habituales — comprueba las tres:
 
-1. **Un cortafuegos (`ufw`/`iptables`) con reglas limitadas a tu LAN.** Si
+1. **`host.docker.internal` puede resolver a la red de Docker equivocada.**
+   Bug real de Docker, confirmado con datos reales: el valor mágico
+   `host-gateway` (usado en `docker-compose.yml`) a veces resuelve a la
+   puerta de enlace del puente **por defecto** (`docker0`) en vez de a la
+   de la red **personalizada** que de verdad usa el contenedor de ZascArr
+   (`docker-compose` siempre crea una propia) — dos redes Docker distintas,
+   con gateways distintos. Desde v1.4.4, el propio contenedor se
+   autocorrige esto en el arranque (`docker-entrypoint.sh`), así que si
+   vienes de una versión anterior, un `git pull` + reinstalación basta.
+   Puedes confirmarlo tú mismo:
+   ```bash
+   docker exec zascarr-orquestador getent hosts host.docker.internal
+   docker inspect zascarr-orquestador --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}'
+   ```
+   Las dos IPs deben coincidir. Si no coinciden y ya estás en v1.4.4+, revisa
+   `docker logs zascarr-orquestador` por si el arranque falló antes de
+   llegar a corregirlo.
+
+2. **Un cortafuegos (`ufw`/`iptables`) con reglas limitadas a tu LAN.** Si
    tienes reglas tipo "solo 192.168.1.0/24" para esos puertos (patrón
    habitual si ya proteges el resto de la suite *arr así), el puente de
    Docker no cuenta como LAN y la conexión se descarta antes de llegar al
-   servicio — **esta fue la causa real, confirmada**, en la primera
-   instalación que lo reportó. Compruébalo con:
+   servicio — **esta fue una de las causas reales, confirmada**, en la
+   primera instalación que lo reportó. Compruébalo con:
    ```bash
    sudo ufw status
-   ip addr show docker0 | grep inet   # subred real del puente
    ```
-   Y si hace falta, añade una regla para esa subred en cada puerto:
+   Y si hace falta, añade una regla que cubra cualquier red Docker del host
+   (más robusta que apuntar a una subred exacta, que puede cambiar si
+   Docker reasigna redes):
    ```bash
-   sudo ufw allow from 172.17.0.0/16 to any port 9696 proto tcp comment 'Prowlarr desde Docker'
-   sudo ufw allow from 172.17.0.0/16 to any port 9091 proto tcp comment 'Transmission desde Docker'
-   sudo ufw allow from 172.17.0.0/16 to any port 4711 proto tcp comment 'aMule desde Docker'
+   sudo ufw allow from 172.16.0.0/12 to any port 9696 proto tcp comment 'Prowlarr desde Docker'
+   sudo ufw allow from 172.16.0.0/12 to any port 9091 proto tcp comment 'Transmission desde Docker'
+   sudo ufw allow from 172.16.0.0/12 to any port 4711 proto tcp comment 'aMule desde Docker'
    sudo ufw reload
    ```
-   (usa la subred real que te dé `ip addr show docker0`, no asumas que es
-   `172.17.0.0/16` — puede variar según tu instalación de Docker).
+   (`172.16.0.0/12` cubre todo el rango que Docker usa para sus redes por
+   defecto — más robusto que una subred exacta tipo `172.17.0.0/16` o
+   `172.18.0.0/16`, que puede cambiar si Docker reasigna redes).
 
-2. **El servicio escucha solo en `127.0.0.1`, no en `0.0.0.0`.** Menos
-   habitual que lo anterior, pero compruébalo también:
+3. **El servicio escucha solo en `127.0.0.1`, no en `0.0.0.0`.** El menos
+   habitual de los tres, pero compruébalo también:
    ```bash
    ss -tlnp | grep -E ':9696|:9091|:4711'   # Prowlarr / Transmission / aMule
    ```
