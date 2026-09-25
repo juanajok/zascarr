@@ -159,6 +159,60 @@ que no hay una sola manera de ordenar una tebeoteca y refuerza B14/B15:
   `COMIC_EXTS` a `.zip` (metería cualquier zip de la biblioteca) ni
   abrir archivos dentro de archivos.
 
+**Cobertura de `REQUISITOS_PARSER.md` (2026-09-25, v1.5.2) — 20 RF, aportados
+por el coleccionista tras dos lotes de ejemplos reales:**
+
+El documento describe un contrato de salida más rico que el actual
+(`collection_number`, `subtitle`, `covered_range`, `is_pack`,
+`host_issue`, `reading_order`, `arc_position`, `confidence`/
+`explanation` como campos propios). No se ha adoptado ese contrato
+entero — se ha implementado el efecto CORRECTO de cada RF sobre
+`series`/`issue_number`/`volume`/`year` (los únicos campos que hoy
+consume el matcher), añadiendo campos nuevos solo donde salían gratis
+y sin ambigüedad (RF-12). Ampliar el contrato de verdad es una
+decisión de arquitectura aparte, no algo a colar dentro de un lote de
+fixes de regex.
+
+| RF | Estado | Nota |
+|---|---|---|
+| RF-01 | 🟡 Parcial | Mojibake `nº`/`n║` y `&amp;`→`&` hechos. La expansión "Avras→Aventuras" del ejemplo depende de alias/carpeta (B14), no es parseable del nombre solo. |
+| RF-02 | ✅ Hecho | `.rar`/`.7z` y doble extensión (`.cbr.zip`) reportados en `/ui/auditoria` con motivo — nunca parseados como cómic, nunca se amplía `COMIC_EXTS`. |
+| RF-03 | ✅ Hecho | Dominios (`blogspot.com`, `GetComics.INFO`, `comicrel.tk`) ya se descartaban al cortar el título antes del número; verificado explícitamente con los ejemplos del RF. |
+| RF-04 | ✅ Hecho | Créditos con y sin corchetes, con y sin preposición reconocida. El caso "crédito desnudo sin preposición" (`shadowdrago + lukarda` al final) no tiene marcador textual que lo distinga de un título real — queda sin resolver a propósito, mejor un título con ruido que descartar texto a ciegas. |
+| RF-05 | 🟡 Parcial | El prefijo nunca contamina el número (con y sin punto, con sufijo de letra). No se guarda en un campo `reading_order` propio — se descarta, como antes; añadirlo es un cambio de contrato, ver arriba. |
+| RF-06 | ⛔ No implementado | Mapeo "(Epic 01)"/"(Dreadstar 27 Ed.Forum)" a una serie/edición anfitriona — la serie real y su "host issue" son dos cosas relacionadas pero distintas que el modelo actual no tiene dónde guardar por separado. Baja frecuencia (una saga, Metamorphosis Odyssey/Dreadstar). Los archivos afectados van a Pendientes hoy — no se afirma nada falso. |
+| RF-07 | 🔴 **Conflicto con decisión ya tomada — ver nota abajo** | |
+| RF-08 | ✅ Hecho | Las 5 prohibiciones (fecha, orden de lectura, rango, número-abre-título, contador `(N)`) ya cumplidas desde v1.5.0/v1.5.1. |
+| RF-09 | ✅ Hecho | Rangos con guion Y con palabra (`al`/`a`) — el segundo era un hueco real, corregido en v1.5.2. `is_pack`/`covered_range` como campos propios no implementados (ver nota de contrato). |
+| RF-10 | ✅ Hecho, por otra vía | El contador `(N)` de descarga duplicada ya no se cuela como número (va dentro de un paréntesis, se limpia antes de buscar). No se guarda un flag `duplicate_download` — B16 ya detecta el duplicado real por SHA256, que es más fiable que adivinar por nombre (pilla también copias renombradas). |
+| RF-11 | ✅ Hecho | `The Wicked + The Divine - 1373 IC` / `- 455 AD` ya daban el número correcto antes de este documento (verificado, no requirió cambios). |
+| RF-12 | ✅ Hecho | `[P{n}N{m}]` → volumen=parte, número=n, tal cual pide el RF (sin combinarlo en un decimal, que fue mi primer instinto antes de leer el documento). |
+| RF-13 | ✅ Hecho | `N de M` nunca sustituye al número real; se descarta antes de la búsqueda para que tampoco pueda colarse en un archivo futuro que no tenga "#" delante. |
+| RF-14 | 🟡 Parcial | Sufijo de letra en mayúscula Y minúscula (hueco real, corregido). Sub-series con numeración propia (`Annual`, `Secret Files & Origins`, `Bonus Book`) NO se separan de la numeración madre — siguen compartiendo el campo `issue_number`; separarlas es el mismo cambio de contrato que RF-06/RF-07. `(Extras)` se limpia como ruido genérico (ya no se lee como número), sin marcarlo como variante propia. |
+| RF-15 | ✅ Hecho, ya de antes | `2.0`, `[v2]`, `CORREGIDO`, `Actualizado` ya se limpiaban como ruido/tags; no aportan ni contaminan el número. |
+| RF-16 | ✅ Satisfecho por diseño, sin cambio de código | "Hiroaki Samura - La Espada del Inmortal 01" sigue extrayendo `series="Hiroaki Samura"` (ambiguo, imposible de resolver solo con el nombre — ver sesión anterior). Pero el matcher NUNCA crea una serie nueva a partir de un string: solo asigna contra series YA EXISTENTES en el catálogo, así que "Hiroaki Samura" nunca aparecerá como serie real — el archivo va a Pendientes de forma segura. La garantía de RF-16 la da la arquitectura del matcher, no el parser. |
+| RF-17 | ✅ Hecho, ya de antes | Símbolos (`+`, `&`) dentro del título nunca se han tratado como separador; solo `" - "` (con espacio) lo es. Crossover de doble numeración va a Pendientes (no se fusionan series) desde v1.5.0. |
+| RF-18 | ⛔ No implementado | `confidence`/`explanation` como campos estructurados de salida. `ParsedComicName.confidence` existe pero es una heurística simple (v1.0), no la explicación legible que pide el RF. Cambio de contrato — ver nota arriba. |
+| RF-19 | ✅ Hecho | Es el principio que ha guiado TODO este trabajo desde v1.4.8 — "preferir Pendientes a afirmar un dato falso" ya estaba en CLAUDE.md antes de este documento. |
+| RF-20 | ✅ Cumplido | `parse_comic_filename` es una función pura, sin estado oculto; mismo input → mismo output siempre. |
+
+**🔴 RF-07 — conflicto real, no resuelto, decisión pendiente del PO:**
+El RF pide que `La Patrulla X Omnigold 5` dé `series="La Patrulla X"`,
+`collection_number=5`, **`issue_number` vacío** — porque el 5 es el
+tomo de la recopilación Omnigold, no la grapa #5 original, y afirmar
+lo segundo sería mentir. Pero `test_parse_filename_real_world_crg`
+(anterior a este documento, "casos reales reportados en producción")
+fija exactamente lo contrario: `series="La Patrulla X"`,
+**`issue_number="5"`** — precisamente para que el archivo SÍ clasifique
+solo en vez de ir a Pendientes. No he tocado ninguna de las dos
+posturas. Adoptar RF-07 tal cual mandaría a Pendientes TODOS los
+archivos de colecciones tipo Omnigold/Integral que hoy clasifican solos
+(varios en la biblioteca real) — un cambio de comportamiento real, no
+un matiz. Pendiente de que el coleccionista decida: ¿prefiere que
+Omnigold/Integral clasifiquen solos (con el número aproximado que hoy
+dan) o que vayan siempre a Pendientes hasta tener `collection_number`
+como campo propio?
+
 **Medición del ratio de acierto (2026-09-25, v1.5.0):**
 
 Banco de 41 rutas reales del disco del coleccionista, contra PostgreSQL
