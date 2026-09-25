@@ -1,0 +1,28 @@
+{% if not resultados %}
+<p class="no-results">Sin coincidencias en Comic Vine/AniList/Tebeosfera.</p>
+{% else %}
+<ul class="series-list">
+  {% for r in resultados %}
+  <li class="series-result-item">
+    <form hx-post="/ui/descubrir/crear" hx-target="this" hx-swap="outerHTML">
+      <input type="hidden" name="source" value="{{ r.source.value }}">
+      <input type="hidden" name="external_id" value="{{ r.external_id }}">
+      <input type="hidden" name="title" value="{{ r.title }}">
+      {% if r.start_year %}<input type="hidden" name="start_year" value="{{ r.start_year }}">{% endif %}
+      {% if r.description %}<input type="hidden" name="description" value="{{ r.description }}">{% endif %}
+      {% if r.cover_url %}<input type="hidden" name="cover_url" value="{{ r.cover_url }}">{% endif %}
+      <span class="series-name">
+        {{ r.title }}{% if r.start_year %} ({{ r.start_year }}){% endif %}
+        <span class="caption">{{ r.source.value }}</span>
+      </span>
+      <select name="tradition" aria-label="Tradición">
+        {% for value, label in tradiciones %}
+        <option value="{{ value }}" {% if value == r.tradition_guess.value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Crear serie</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

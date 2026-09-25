@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.3.0] — 2026-09-25
+
+### Añadido
+
+- **Descubrir y dar de alta series desde fuentes externas (C0)** — nueva pantalla `/ui/descubrir`, enlazada desde la navegación. Cierra un círculo vicioso real de producto, confirmado en una instalación nueva: con la tabla `series` vacía, Wishlist no tenía nada que buscar y el importador mandaba todo a `_Unsorted` aunque el nombre del archivo se extrajera perfecto — no eran bugs de ninguno de los dos, faltaba el paso de alta que los alimenta a ambos.
+
+  `DiscoveryService` reutiliza los mismos clientes que ya usa el enricher (Comic Vine, AniList, Tebeosfera) solo para buscar — nunca los toca para nada de descarga —, con búsqueda concurrente y tolerante a que una fuente falle. Al elegir un candidato se crea la `Series` local (tradición editable, año, portada, descripción, ID externo) sin duplicar si ya existía; "Añadir a deseados" reutiliza tal cual el endpoint de wishlist ya existente, con su aviso legal intacto — dar de alta una serie en sí mismo NO lo exige, porque catalogar metadatos no es una acción de riesgo.
+
+  Sin hotlinking en los resultados de búsqueda (solo texto hasta que la serie existe y el cascade de portadas ya existente entra en juego). Verificado en vivo contra Postgres real y una búsqueda real a Tebeosfera (sin API key): alta de una serie confirmada en la base de datos y visible de inmediato en la búsqueda local de Wishlist.
+
 ## [1.2.9] — 2026-09-25
 
 ### Cambiado

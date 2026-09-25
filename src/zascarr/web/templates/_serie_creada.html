@@ -1,0 +1,16 @@
+<li class="series-result-item series-result-creada">
+  <span class="series-name">
+    {{ series.title }}{% if series.start_year %} ({{ series.start_year }}){% endif %}
+    <span class="caption">{{ "ya estaba en tu biblioteca" if not creada else "creada" }}</span>
+  </span>
+  <a class="btn" href="/ui/series/{{ series.id }}">Ver ficha</a>
+  <button type="button"
+          hx-post="/ui/wishlist/anadir"
+          hx-vals='{"series_id": "{{ series.id }}"}'
+          hx-swap="none"
+          hx-disabled-elt="this"
+          hx-on::before-request="this.textContent='Añadiendo…'"
+          hx-on::after-request="this.textContent='Añadida a deseados'">
+    Añadir a deseados
+  </button>
+</li>
