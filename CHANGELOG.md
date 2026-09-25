@@ -3,6 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.6.0] — 2026-09-26
+
+### Añadido
+
+- **Orden de lectura descartado por evidencia de cohorte (`core/cohort.py`)**: un prefijo numérico suelto sin punto ni guion (`42 Dreadstar...`, `65 Dreadstar...`) es la MISMA forma que un título que empieza por cifra (`100 Balas...`) — ninguna regla local del parser puede distinguirlos sin inventar. Los propios datos del coleccionista sí: si el prefijo VARÍA entre ≥3 archivos con el resto del nombre estable, es orden de lectura suyo y se descarta; si es CONSTANTE en toda la cohorte, es parte del título y no se toca.
+
+  Nunca crea una serie (solo informa si un token es número), nunca alimenta el alias local de B13 en silencio (eso sigue siendo solo del humano), y es determinista por ciclo (la cohorte se calcula una vez, al principio de cada `scan_and_import`/`adopt`, sobre la foto fija de esa pasada). Cada acierto queda registrado en `File.metadata_["cohorte"]` con la explicación y la evidencia que lo respalda.
+
+### Corregido
+
+- **La cifra de acierto del parser estaba sobre rutas, no sobre contenido.** 19 de 81 rutas de la muestra de medición eran copias duplicadas por descarga (mismo SHA256, sufijo `(1)`) — contaban el mismo hallazgo dos veces. La cifra oficial pasa a medirse sobre contenido único (deduplicado por hash). El punto ponderado apenas se movió, pero la potencia estadística real de la muestra baja de 81 a 62, y ahora se reporta correctamente.
+
+### Medido
+
+- Con la cohorte activa, sobre la muestra oficial (contenido único, n=62): **73%→83% clasifica solo, 76%→86% veraz**. Detalle completo, con la metodología y sus dos correcciones, en `scripts/medicion/README.md`.
+
 ## [1.5.3] — 2026-09-25
 
 ### Cambiado

@@ -36,6 +36,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.core.cohort import PistaDeCohorte, detectar_ordenes_de_lectura
 from zascarr.core.matcher import MatchStatus
 from zascarr.models import File, FileFormat, ImportRun, Series
 from zascarr.services.importer import COMIC_EXTS, _triage_and_match, serialize_candidates
@@ -123,9 +124,14 @@ class LibraryAdopter:
                     files.append(f)
         report.files_scanned = len(files)
 
+        # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la
+        # foto fija de esta pasada — mismo contrato de determinismo que
+        # Importer.scan_and_import.
+        pistas = detectar_ordenes_de_lectura([f.name for f in files])
+
         for path in sorted(files):
             try:
-                await self._adopt_file(path, report)
+                await self._adopt_file(path, report, pistas.get(path.name))
             except Exception as exc:
                 logger.exception("library_adopter.file_failed", path=str(path))
                 report.errors.append(f"{path.name}: {exc}")
@@ -137,13 +143,25 @@ class LibraryAdopter:
         await RuntimeSettingsService(self._db).set_flag(_MARCADOR_HECHO, True)
         return report
 
-    async def _adopt_file(self, path: Path, report: AdoptionReport) -> None:
-        outcome = await _triage_and_match(self._db, path)
+    async def _adopt_file(
+        self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
+    ) -> None:
+        outcome = await _triage_and_match(self._db, path, pista)
         if outcome.duplicate_of:
             report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
             return
         tr, result = outcome.tr, outcome.result
         is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
+
+        metadata: dict = {
+            "match_status": result.status,
+            "match_score": result.score,
+            "notes": result.notes,
+            "adopted": True,
+            "candidates": serialize_candidates(result.candidates),
+        }
+        if outcome.cohorte_explicacion:
+            metadata["cohorte"] = outcome.cohorte_explicacion
 
         # Nunca se mueve: file_path es la ruta real donde el coleccionista
         # ya tenía el archivo, no un destino calculado (a diferencia de
@@ -159,13 +177,7 @@ class LibraryAdopter:
             width_px=tr.width_px,
             covered_issue_ids=[],
             metadata_source="comicinfo_xml" if tr.strong_candidate else None,
-            metadata_={
-                "match_status": result.status,
-                "match_score": result.score,
-                "notes": result.notes,
-                "adopted": True,
-                "candidates": serialize_candidates(result.candidates),
-            },
+            metadata_=metadata,
         )
         self._db.add(file_rec)
         await self._db.flush()

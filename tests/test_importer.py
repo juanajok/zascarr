@@ -152,7 +152,7 @@ class TestScanDedupePorInodo:
         importer = Importer(AsyncMock())
 
         vistos = []
-        async def fake_import_file(path, rep):
+        async def fake_import_file(path, rep, pista=None):
             vistos.append(path)
         importer._import_file = fake_import_file
 
@@ -160,6 +160,44 @@ class TestScanDedupePorInodo:
 
         assert len(vistos) == 1
         assert report.files_scanned == 1
+
+
+class TestScanPasaLaPistaDeCohorte:
+    """Integración con core/cohort.py: scan_and_import calcula las
+    pistas UNA VEZ sobre la foto fija del ciclo y se las pasa a
+    _import_file — ver test_cohort.py para la lógica de detección en
+    sí, aislada del filesystem."""
+
+    @pytest.mark.asyncio
+    async def test_pista_calculada_y_pasada_al_archivo_correcto(self, tmp_path, monkeypatch):
+        descargas = tmp_path / "downloads"
+        descargas.mkdir()
+        for n in (42, 65, 74):
+            make_cbz(descargas / f"{n} Dreadstar (First Comics) USA.cbr")
+        make_cbz(descargas / "100 Balas - Integral 02.cbz")  # prefijo constante: sin pista
+
+        monkeypatch.setattr(
+            "zascarr.services.importer.get_settings",
+            lambda: MagicMock(
+                library_path=tmp_path / "library",
+                transmission_download_dir=str(descargas),
+                amule_incoming_dir=str(tmp_path / "no-existe"),
+                downloads_path=tmp_path / "no-existe-tampoco",
+            ),
+        )
+
+        importer = Importer(AsyncMock())
+        recibidas: dict[str, object] = {}
+
+        async def fake_import_file(path, rep, pista=None):
+            recibidas[path.name] = pista
+        importer._import_file = fake_import_file
+
+        await importer.scan_and_import()
+
+        assert recibidas["42 Dreadstar (First Comics) USA.cbr"] is not None
+        assert recibidas["65 Dreadstar (First Comics) USA.cbr"].prefijo == "65"
+        assert recibidas["100 Balas - Integral 02.cbz"] is None
 
 
 class TestPersistRun:

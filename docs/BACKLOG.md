@@ -79,7 +79,8 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 | B11 | ~~Como coleccionista que ya tiene su tebeoteca organizada en disco, quiero que ZascArr la reconozca sola en el primer arranque, sin tener que redescargar ni mover nada — como hace Sonarr al añadir una carpeta raíz con series que ya existen~~ | ~~`LibraryAdopter` (nuevo): escanea `library_path` recursivamente, reutiliza el mismo triage+matcher que `Importer` (extraído a `_triage_and_match`, compartido), pero **registra en BD sin mover ni renombrar**. Dispara sola en el primer arranque (background task en `main.py::lifespan`) si `library_path` tiene archivos y `series` está vacía, y solo UNA vez (marcador en `runtime_settings`)~~ | ✅ Hecho | L |
 | B12 | ~~Como coleccionista, cuando el parser SÍ extrae título+número pero no hay serie que iguale (o el score queda por debajo del umbral), quiero ver una sugerencia con la que confío en un clic, en vez de rebuscar a mano en Pendientes~~ | ~~`MatchResult.candidates` (ya existía) se serializa en `File.metadata_` (`Importer` y `LibraryAdopter`, mismo helper compartido); `/ui/pendientes` muestra el mejor candidato con su score y un botón "sí es esta serie" que reutiliza el formulario de asignación ya existente — confirmación explícita, nunca autoasignación~~ | ✅ Hecho | M |
 | B13 | ~~Como coleccionista, si asigno a mano varios archivos del mismo patrón ("La Patrulla X Omnigold N (...)") a la misma serie, quiero que ZascArr deje de preguntarme para ese patrón~~ | ~~Tabla `local_aliases` (patrón de nombre → series_id), aprendida en `ReviewService.assign_to_series` (toda asignación manual desde Pendientes es por definición una corrección) y consultada por `SeriesMatcher.decide()` ANTES del fuzzy. Alias local de esta instalación, nunca una regla global — CLAUDE.md §5~~ | ✅ Hecho | M |
-| B14 | Como coleccionista con la tebeoteca ya ordenada por carpetas, quiero que ZascArr use el NOMBRE DE LA CARPETA para saber de qué serie es cada archivo, porque es justo lo que yo ya le dije al ordenarla | La carpeta es la señal más fiable de esta biblioteca y hoy se tira entera: `Comics/JSA (1999)/JSA (2004-08) 62` da serie `JSA 62`, mientras la carpeta dice `JSA` + año `1999`. Medido sobre 44 rutas reales (2026-09-25): la carpeta arregla ~la mitad de los fallos que quedan tras el fix del parser de v1.4.8 (XIII, JSA, Promethea, Superman, La Mazmorra, Monstress, Flash, WildCATS, Patrulla-X). La carpeta debe ser un CANDIDATO más que se valida contra la BD, nunca un override ciego: en `Comics/Green Lantern - Saga de Geoff Johns/03 Green Lantern Corps - Recarga.cbr` la carpeta miente y el nombre de archivo acierta | P0 | M |
+| B14 | Como coleccionista con la tebeoteca ya ordenada por carpetas, quiero que ZascArr use el NOMBRE DE LA CARPETA para saber de qué serie es cada archivo, porque es justo lo que yo ya le dije al ordenarla | La carpeta es la señal más fiable de esta biblioteca y hoy se tira entera: `Comics/JSA (1999)/JSA (2004-08) 62` da serie `JSA 62`, mientras la carpeta dice `JSA` + año `1999`. Medido sobre 44 rutas reales (2026-09-25): la carpeta arregla ~la mitad de los fallos que quedan tras el fix del parser de v1.4.8 (XIII, JSA, Promethea, Superman, La Mazmorra, Monstress, Flash, WildCATS, Patrulla-X). La carpeta debe ser un CANDIDATO más que se valida contra la BD, nunca un override ciego: en `Comics/Green Lantern - Saga de Geoff Johns/03 Green Lantern Corps - Recarga.cbr` la carpeta miente y el nombre de archivo acierta. **Sigue pendiente** (la biblioteca real que motivó B14 tiene una carpeta plana de 711 archivos sueltos, ver B21 — ahí B14 no ayuda porque no hay carpeta) | P0 | M |
+| B21 | ~~Como coleccionista, cuando dos archivos tienen la misma forma ("42 Dreadstar...", "100 Balas...") pero uno el número es orden de lectura mío y el otro es parte del título, quiero que ZascArr lo distinga sin que yo tenga que organizarlos en carpetas~~ | ~~`core/cohort.py` (nuevo): agrupa nombres por "firma" (sin ningún token numérico, sin créditos de traductor/corchetes) y decide por EVIDENCIA — si el prefijo VARÍA en ≥3 hermanos con el resto del nombre estable, es orden de lectura y se descarta; si es CONSTANTE en toda la cohorte, es parte del título y no se toca. Nunca crea una serie (solo informa el número), nunca alimenta B13 en silencio (solo el humano aprende un alias), determinista por ciclo (cohorte congelada al principio de `scan_and_import`/`adopt`). Medido: +10 puntos de acierto poblacional (73%→83% clasifica, 76%→86% veraz) sobre la muestra oficial de 62 archivos de contenido único~~ | ✅ Hecho | M |
 | B15 | Como coleccionista, quiero que una carpeta que NO es una serie (un autor, una saga, un recopilatorio) no se trate como si lo fuera, y que las ediciones tipo Omnigold/Integral no se queden en Pendientes para siempre | Casos reales medidos: `Graphic Novels/Carlos Gimenez` (autor, ~30 obras unitarias), `Comics/Green Lantern - Saga de Geoff Johns` (lista de lectura editorial), `Comics/_Omnibus/Dinastia y Potencias de X` (crossover con doble numeración — el modelo ya tiene `story_arc_issues.reading_order` para esto). **Prioridad subida a P0 el 2026-09-25**: tras la decisión de RF-07 (`collection_number`/`covered_range` separados de `issue_number`, nunca inventar una grapa a partir del tomo de una recopilación), los Omnigold/Integral/Edición-Integral pasaron a ir SIEMPRE a Pendientes (antes clasificaban solos con un número aproximado). Es un aumento de trabajo manual aceptado a propósito por ser lo honesto — B15 es la pieza que lo revierte: con `collection_number` como campo propio, esos Pendientes se re-procesan solos | P0 | L |
 | B16 | ~~Como coleccionista, quiero saber cuándo tengo el mismo tebeo en dos carpetas, en vez de que el sistema elija una en silencio~~ | ~~`LibraryAudit` (nuevo) + `/ui/auditoria`: informe de SOLO LECTURA que agrupa *mismo contenido* (SHA256), *misma obra en otra edición*, *carpetas repetidas* y *carpetas sin ningún tebeo*. No borra, no mueve y no sugiere qué borrar. La adopción (B11) deja de dispararse sola en el primer arranque y pasa a ser un botón explícito con el informe delante~~ | ✅ Hecho | M |
 
@@ -158,6 +159,50 @@ que no hay una sola manera de ordenar una tebeoteca y refuerza B14/B15:
   reporte como "parece un tebeo pero no lo reconozco", no ampliar
   `COMIC_EXTS` a `.zip` (metería cualquier zip de la biblioteca) ni
   abrir archivos dentro de archivos.
+
+**Notas de implementación (B21, 2026-09-26):**
+
+- **El origen fue una medición honesta, no una corazonada**: un banco
+  estratificado de 81 rutas reales (62 de contenido único tras
+  deduplicar por SHA256) mostró que 6 de 7 errores del estrato
+  dominante compartían la MISMA causa — un prefijo numérico suelto sin
+  punto ni guion ("42 Dreadstar...", "65 Dreadstar..."), estructuralmente
+  idéntico a un título que empieza por cifra ("100 Balas..."). Ninguna
+  regla local del parser puede distinguir esa forma sin inventar — es
+  el mismo problema que resolvió B13 para alias, pero a nivel de
+  patrón en vez de a nivel de serie concreta.
+- **Contratos de producto, fijados antes de escribir código** (decisión
+  explícita, no implícita en el diseño): (1) el módulo nunca crea una
+  serie, solo decide si un token es o no parte del título — la serie
+  la decide el matcher contra el catálogo real; (2) umbral explícito
+  (`UMBRAL_EVIDENCIA = 3`) y cada pista lleva su explicación legible,
+  guardada en `File.metadata_["cohorte"]` (alimenta B12); (3) no
+  aprende alias de B13 por su cuenta — eso solo lo hace el humano en
+  `ReviewService.assign_to_series`, y `core/cohort.py` no toca esa vía
+  en absoluto; (4) determinista por ciclo — la cohorte se calcula UNA
+  VEZ sobre la foto fija de `scan_and_import`/`adopt`, antes del bucle
+  por archivo, así que un archivo que llega a mitad de ciclo no puede
+  cambiar la clasificación de los anteriores.
+- **Bug real encontrado verificando contra la biblioteca real antes de
+  integrar**: la primera versión de `_firma()` convertía `[` y `]` en
+  espacios pero dejaba el CONTENIDO del corchete (el crédito del
+  traductor) como texto suelto. Como el crédito varía de archivo a
+  archivo dentro de la misma cohorte real ("Trad por Skullpirates" vs
+  "Traducido porke yo lo valgo"), fragmentaba una cohorte real de ~70
+  Dreadstar en decenas de grupos de 1-2, todos por debajo del umbral.
+  Corregido quitando el CONTENIDO entero de los corchetes (y los
+  créditos sueltos sin corchetes, reutilizando `CREDITS_PATTERN` de
+  naming.py) antes de calcular la firma.
+- **Verificación en vivo (Postgres real)**: 4 archivos sintéticos con
+  el patrón "NN Dreadstar (First Comics) NN USA [crédito distinto]"
+  contra una serie `Dreadstar` ya creada — los 4 se registraron contra
+  la serie correcta (antes habrían ido a Pendientes con 4 "series"
+  `"39 Dreadstar"`/`"42 Dreadstar"`/... distintas), cada uno con su
+  propio prefijo y la evidencia (4 archivos) en `metadata_["cohorte"]`.
+- **Medido sobre la muestra oficial de medición (contenido único, n=62,
+  cohorte calculada sobre la población completa de 762 archivos, tal
+  como correría un ciclo real)**: 73%→83% clasifica solo, 76%→86%
+  veraz. Detalle completo en `scripts/medicion/README.md`.
 
 **Cobertura de `REQUISITOS_PARSER.md` (2026-09-25, v1.5.2) — 20 RF, aportados
 por el coleccionista tras dos lotes de ejemplos reales:**

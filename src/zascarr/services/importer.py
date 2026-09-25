@@ -28,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.core.cohort import PistaDeCohorte, detectar_ordenes_de_lectura, quitar_prefijo_de_cohorte
 from zascarr.core.importer_triage import TriageResult, triage
 from zascarr.core.matcher import MatchResult, MatchStatus, SeriesHit, SeriesMatcher
 from zascarr.models import File, FileFormat, ImportRun, Series
@@ -95,9 +96,18 @@ class _Outcome:
     tr: TriageResult
     result: MatchResult | None = None  # None si es un duplicado
     duplicate_of: str | None = None
+    # Explicación de core/cohort.py (2026-09-26) SOLO si de verdad se usó
+    # para este archivo — no si se calculó una pista que resultó ser un
+    # no-op (formato ya cubierto por SORT_PREFIX_PATTERN). Se guarda en
+    # metadata_ para que quede constancia en el informe del ciclo y en
+    # la sugerencia de B12 ("¿es esta serie? — descartamos el 65 inicial
+    # por evidencia de 38 archivos con el mismo patrón").
+    cohorte_explicacion: str | None = None
 
 
-async def _triage_and_match(db: AsyncSession, path: Path) -> _Outcome:
+async def _triage_and_match(
+    db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None
+) -> _Outcome:
     tr: TriageResult = triage(path)
 
     if tr.sha256:
@@ -108,15 +118,24 @@ async def _triage_and_match(db: AsyncSession, path: Path) -> _Outcome:
             return _Outcome(tr=tr, result=None, duplicate_of=existing.file_name)
 
     matcher = SeriesMatcher(db)
+    aplicada = False
 
     def extractor(filename: str):
-        p = parse_comic_filename(filename)
+        nonlocal aplicada
+        nombre = filename
+        if pista is not None:
+            nombre = quitar_prefijo_de_cohorte(filename, pista)
+            aplicada = nombre != filename
+        p = parse_comic_filename(nombre)
         if p.series and p.issue_number:
             return p.series, p.issue_number, p.year
         return None
 
     result = await matcher.decide(tr, extractor=extractor)
-    return _Outcome(tr=tr, result=result)
+    outcome = _Outcome(tr=tr, result=result)
+    if aplicada:
+        outcome.cohorte_explicacion = pista.explicacion
+    return outcome
 
 
 def serialize_candidates(candidates: list[SeriesHit]) -> list[dict]:
@@ -173,9 +192,15 @@ class Importer:
                         files.append(f)
         report.files_scanned = len(files)
 
+        # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la
+        # foto fija de este ciclo, antes del bucle — contrato de
+        # determinismo (2026-09-26): un archivo que llega a mitad de ciclo
+        # no puede cambiar la cohorte ya calculada para los anteriores.
+        pistas = detectar_ordenes_de_lectura([f.name for f in files])
+
         for path in sorted(files):
             try:
-                await self._import_file(path, report)
+                await self._import_file(path, report, pistas.get(path.name))
             except Exception as exc:
                 logger.exception("importer.file_failed", path=str(path))
                 report.errors.append(f"{path.name}: {exc}")
@@ -184,8 +209,10 @@ class Importer:
         await self._persist_run(report)
         return report
 
-    async def _import_file(self, path: Path, report: ImportReport) -> None:
-        outcome = await _triage_and_match(self._db, path)
+    async def _import_file(
+        self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
+    ) -> None:
+        outcome = await _triage_and_match(self._db, path, pista)
         if outcome.duplicate_of:
             report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
             logger.info("importer.duplicate", path=str(path), hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None)
@@ -206,6 +233,15 @@ class Importer:
         # original hasta que la copia está completa (ver utils/fs.safe_move).
         final_dest = await safe_move_async(path, dest)
 
+        metadata: dict = {
+            "match_status": result.status,
+            "match_score": result.score,
+            "notes": result.notes,
+            "candidates": serialize_candidates(result.candidates),
+        }
+        if outcome.cohorte_explicacion:
+            metadata["cohorte"] = outcome.cohorte_explicacion
+
         file_rec = File(
             issue_id=str(result.issue_id) if result.issue_id else None,
             file_path=str(final_dest),
@@ -222,12 +258,7 @@ class Importer:
             # completarlo más tarde. Solo ComicInfo.xml, que trae metadatos
             # estructurados de la propia release, se marca como fuente.
             metadata_source="comicinfo_xml" if tr.strong_candidate else None,
-            metadata_={
-                "match_status": result.status,
-                "match_score": result.score,
-                "notes": result.notes,
-                "candidates": serialize_candidates(result.candidates),
-            },
+            metadata_=metadata,
         )
         self._db.add(file_rec)
         await self._db.flush()
