@@ -35,13 +35,29 @@ class ReviewService:
         self._library = get_settings().library_path
 
     async def pending_files(self, limit: int = 50) -> list[File]:
-        """Archivos en _Unsorted/ que nadie ha resuelto ni descartado."""
-        unsorted_prefix = str(self._library / "_Unsorted")
+        """Archivos sin match fiable que nadie ha resuelto ni descartado.
+
+        Bug real (reportado, B11): filtraba por vivir bajo `_Unsorted/`
+        en disco — un proxy que solo es cierto para el importer de
+        descargas (que SÍ mueve ahí lo que no reconoce). LibraryAdopter
+        (B11) registra los archivos sin match EN SU SITIO REAL, nunca
+        los mueve — con el filtro de ruta, quedaban invisibles en
+        Pendientes para siempre, aunque `issue_id` fuera NULL.
+
+        `issue_id IS NULL` por sí solo tampoco vale: una serie SÍ
+        identificada pero sin el número exacto (issue_id NULL, hueco del
+        enricher, D1) también lo cumple y esa NO es la bandeja de
+        Pendientes — se resuelve sola cuando el enricher encuentre el
+        número. La señal correcta es `match_status == 'unsorted'`
+        (guardado en `metadata_` por Importer/LibraryAdopter, el mismo
+        criterio con el que ambos deciden mover/registrar en _Unsorted o
+        no), no la ruta ni solo el issue_id.
+        """
         return list((await self.db.execute(
             select(File)
             .where(File.issue_id.is_(None))
             .where(File.review_dismissed.is_(False))
-            .where(File.file_path.startswith(unsorted_prefix))
+            .where(File.metadata_["match_status"].astext == "unsorted")
             .order_by(File.imported_at.desc())
             .limit(limit)
         )).scalars().all())

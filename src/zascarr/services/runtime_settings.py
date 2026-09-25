@@ -90,6 +90,23 @@ class RuntimeSettingsService:
         await self.db.flush()
         apply_overrides(values)
 
+    # ── Marcadores internos (B11 y similares) ───────────────────────────
+    # Misma fila JSONB, pero NUNCA pasan por `save()` ni su lista blanca:
+    # son estado interno de una sola vez ("¿ya se adoptó la biblioteca?"),
+    # no un ajuste editable desde /ui/ajustes. Se guardan bajo una clave
+    # con prefijo "_" para distinguirlos a simple vista de los campos de
+    # integración si alguien inspecciona la fila a mano.
+    async def get_flag(self, key: str) -> bool:
+        row = await self._row()
+        return bool((row.values or {}).get(key, False))
+
+    async def set_flag(self, key: str, value: bool) -> None:
+        row = await self._row()
+        values = dict(row.values or {})
+        values[key] = value
+        row.values = values
+        await self.db.flush()
+
 
 def apply_overrides(values: dict[str, Any]) -> None:
     """Muta el Settings ya cacheado — ver docstring del módulo."""

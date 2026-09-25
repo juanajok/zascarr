@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.5] — 2026-09-25
+
+### Añadido
+
+- **Adopción automática de una biblioteca ya organizada (B11)**: si `library_path` ya tiene tebeos en disco y la base de datos está vacía de series, ZascArr los reconoce solo en el primer arranque — sin redescargar ni mover nada, como Sonarr al añadir una carpeta raíz con series existentes. `LibraryAdopter` (nuevo) escanea recursivamente, reutiliza el mismo triage+matcher que el importador de descargas (`_triage_and_match`, extraído y compartido para no duplicar lógica de negocio) pero **registra en BD sin mover ni renombrar** — el archivo se queda exactamente donde el coleccionista lo tenía. Corre una sola vez (marcador interno en `runtime_settings`, fuera de los ajustes editables desde la UI).
+
+### Corregido
+
+- **Bug encontrado verificando B11 en vivo, no en el plan original: la bandeja de Pendientes (`/ui/pendientes`) nunca mostraba archivos adoptados sin match.** `ReviewService.pending_files()` filtraba por vivir bajo `_Unsorted/` en disco, un atajo que solo es cierto para el importador de descargas (que sí mueve ahí lo que no reconoce); un archivo adoptado en su sitio real quedaba invisible para siempre pese a no tener serie asignada. Corregido consultando `match_status == 'unsorted'` directamente en los metadatos del archivo en vez de su ruta.
+
 ## [1.4.4] — 2026-09-25
 
 ### Corregido

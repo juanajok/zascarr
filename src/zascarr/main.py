@@ -98,6 +98,36 @@ async def _orchestrator_loop(interval_minutes: int, limit: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
+async def _library_adoption_task() -> None:
+    """B11: adopta una biblioteca ya organizada en el primer arranque —
+    ver docstring de services/library_adopter.py para el porqué y el
+    disparo (biblioteca con contenido + catálogo vacío + no hecho ya
+    antes). Tarea de UNA sola vez, no un loop — se lanza junto a los
+    otros background_tasks pero termina sola; cancelarla al apagar
+    (como el resto) es un no-op si ya terminó."""
+    from zascarr.database import async_session_factory
+    from zascarr.services.library_adopter import LibraryAdopter
+
+    try:
+        async with async_session_factory() as session:
+            adopter = LibraryAdopter(session)
+            if not await adopter.should_run():
+                return
+            logger.info("library_adopter.starting")
+            report = await adopter.adopt()
+            await session.commit()
+        logger.info(
+            "library_adopter.done",
+            escaneados=report.files_scanned,
+            registrados=report.registered_count,
+            duplicados=report.duplicate_count,
+            sin_clasificar=report.unsorted_count,
+            errores=report.error_count,
+        )
+    except Exception:
+        logger.exception("library_adopter.failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
@@ -118,6 +148,7 @@ async def lifespan(app: FastAPI):
         await load_overrides_at_startup(session)
 
     background_tasks = [
+        asyncio.create_task(_library_adoption_task()),
         asyncio.create_task(_import_loop(settings.import_interval_minutes)),
         asyncio.create_task(
             _enrichment_loop(settings.enrich_interval_minutes, settings.enrich_batch_size)

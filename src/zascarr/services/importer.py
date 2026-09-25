@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.importer_triage import TriageResult, triage
-from zascarr.core.matcher import MatchStatus, SeriesMatcher
+from zascarr.core.matcher import MatchResult, MatchStatus, SeriesMatcher
 from zascarr.models import File, FileFormat, ImportRun, Series
 from zascarr.utils.fs import safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
@@ -84,6 +84,41 @@ class ImportReport:
         return len(self.errors)
 
 
+@dataclass
+class _Outcome:
+    """Resultado de _triage_and_match: o bien un duplicado (con el nombre
+    del File ya existente), o bien un MatchResult listo para decidir
+    destino. Compartido entre Importer (mueve a la biblioteca) y
+    LibraryAdopter (B11: registra en el sitio, nunca mueve) — es
+    exactamente el mismo pipeline de triaje/deduplicación/matching en
+    los dos casos; solo cambia qué se hace DESPUÉS del match."""
+    tr: TriageResult
+    result: MatchResult | None = None  # None si es un duplicado
+    duplicate_of: str | None = None
+
+
+async def _triage_and_match(db: AsyncSession, path: Path) -> _Outcome:
+    tr: TriageResult = triage(path)
+
+    if tr.sha256:
+        existing = (await db.execute(
+            select(File).where(File.sha256_hash == tr.sha256)
+        )).scalar_one_or_none()
+        if existing:
+            return _Outcome(tr=tr, result=None, duplicate_of=existing.file_name)
+
+    matcher = SeriesMatcher(db)
+
+    def extractor(filename: str):
+        p = parse_comic_filename(filename)
+        if p.series and p.issue_number:
+            return p.series, p.issue_number, p.year
+        return None
+
+    result = await matcher.decide(tr, extractor=extractor)
+    return _Outcome(tr=tr, result=result)
+
+
 class Importer:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -134,30 +169,12 @@ class Importer:
         return report
 
     async def _import_file(self, path: Path, report: ImportReport) -> None:
-        tr: TriageResult = triage(path)
-
-        # Deduplicación
-        if tr.sha256:
-            existing = (await self._db.execute(
-                select(File).where(File.sha256_hash == tr.sha256)
-            )).scalar_one_or_none()
-            if existing:
-                report.duplicates.append(
-                    f"{path.name} — duplicado de {existing.file_name}, descartado"
-                )
-                logger.info("importer.duplicate", path=str(path), hash=tr.sha256[:12])
-                return
-
-        # Matching
-        matcher = SeriesMatcher(self._db)
-
-        def extractor(filename: str):
-            p = parse_comic_filename(filename)
-            if p.series and p.issue_number:
-                return p.series, p.issue_number, p.year
-            return None
-
-        result = await matcher.decide(tr, extractor=extractor)
+        outcome = await _triage_and_match(self._db, path)
+        if outcome.duplicate_of:
+            report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
+            logger.info("importer.duplicate", path=str(path), hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None)
+            return
+        tr, result = outcome.tr, outcome.result
         is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
 
         # Determinar tradición y ruta destino

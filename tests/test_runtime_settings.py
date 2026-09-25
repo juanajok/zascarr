@@ -105,3 +105,34 @@ class TestApplyOverrides:
         valor_previo = get_settings().log_level
         apply_overrides({"log_level": "DEBUG"})
         assert get_settings().log_level == valor_previo
+
+
+class TestFlags:
+    """B11: marcadores internos (p.ej. "¿ya se adoptó la biblioteca?"),
+    misma fila JSONB pero fuera de la lista blanca de save()."""
+
+    @pytest.mark.asyncio
+    async def test_flag_no_puesta_es_falsa_por_defecto(self):
+        service = RuntimeSettingsService(db=FakeSession(existing_values={}))
+        assert await service.get_flag("_library_adoption_done") is False
+
+    @pytest.mark.asyncio
+    async def test_set_flag_y_get_flag(self):
+        session = FakeSession(existing_values={})
+        service = RuntimeSettingsService(db=session)
+
+        await service.set_flag("_library_adoption_done", True)
+
+        assert await service.get_flag("_library_adoption_done") is True
+
+    @pytest.mark.asyncio
+    async def test_set_flag_no_pisa_otras_claves_ya_guardadas(self):
+        session = FakeSession(existing_values={"prowlarr_url": "http://x:9696"})
+        service = RuntimeSettingsService(db=session)
+
+        await service.set_flag("_library_adoption_done", True)
+
+        assert session._row.values == {
+            "prowlarr_url": "http://x:9696",
+            "_library_adoption_done": True,
+        }
