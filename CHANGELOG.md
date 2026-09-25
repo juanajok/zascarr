@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.3] — 2026-09-25
+
+### Corregido
+
+- **Placeholders engañosos y sin explicación en las URL de Prowlarr/Transmission/aMule de `/ui/ajustes`**, reportado ("la url parece la de Docker, no la de la Pi"): el placeholder decía `http://127.0.0.1:9696`, que es literalmente incorrecto — desde dentro del contenedor, `127.0.0.1` es el propio contenedor, no la Pi. Corregido a `http://host.docker.internal:9696` (el valor real por defecto), con una nota corta bajo cada campo explicando por qué no es "la IP de la Pi" sino "cómo el contenedor dice la máquina que me aloja" — el coleccionista no tiene por qué saber qué es un contenedor para entender por qué el campo no parece una URL normal.
+
 ## [1.4.2] — 2026-09-25
 
 ### Corregido
