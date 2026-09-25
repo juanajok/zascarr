@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.4.1] — 2026-09-25
+
+### Añadido
+
+- **"Probar conexión" en `/ui/ajustes` explica el fallo de red más habitual**, reportado: Prowlarr/Transmission/aMule daban "no se pudo conectar" con URL y credenciales correctas, mientras Comic Vine (host externo real) funcionaba sin problema. Causa más común y documentada en todo el ecosistema *arr para este patrón exacto (contenedor Docker → servicio del mismo host): el servicio escucha solo en `127.0.0.1`, inalcanzable desde el contenedor vía `host.docker.internal` (llega por la puerta de enlace del puente de Docker, no por loopback — confirmado en sandbox: resuelve a `172.17.0.1`). Ahora, solo para fallos de conexión reales (no para un 401/500, que significa que SÍ se llegó al servicio), el mensaje sugiere comprobar el bind del servicio con `ss -tlnp`. Mismo aviso documentado en el README, junto a la tabla de integraciones.
+
 ## [1.4.0] — 2026-09-25
 
 ### Añadido
