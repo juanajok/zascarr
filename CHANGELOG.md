@@ -3,6 +3,27 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.5.0] — 2026-09-25
+
+### Añadido
+
+- **El reconocimiento automático de tebeos pasa de 13 a 28 de cada 41.** Medido sobre rutas reales de la tebeoteca del coleccionista, con el catálogo ya creado y contra PostgreSQL real — no sobre fixtures inventados. Ocho patrones nuevos, cada uno sacado de un fallo concreto del disco:
+
+  | Lo que hay en el disco | Antes | Ahora |
+  |---|---|---|
+  | `JSA 81 (2006) (Lightray-DCP)` | serie `JSA 81`, sin número | `JSA` #81 |
+  | `Patrulla-X, nº 03 (122)` | no entendía `nº` | `Patrulla X` #3 |
+  | `WildCATS vol1 n║05` | no entendía el mojibake `n║` | `WildCATS` #5 |
+  | `Superman Vol2 123a` | el sufijo de letra tumbaba el número | `Superman` #123a |
+  | `Superman Vol2 Especial 2` | serie `Superman Especial` | `Superman` #2 |
+  | `Promethea Vol1 11 por TheRockJR` | el crédito tapaba el número | `Promethea` #11 |
+  | `La.Mazmorra..Integral.6.-.Sfar.&…` | arrastraba a los autores | `La Mazmorra` #6 |
+  | `XIII 01 El Dia del Sol Negro` | el nombre entero como serie | `XIII` #1 |
+
+  Y dos casos donde acertaba *las dos cosas mal a la vez*: `Delta 99 - 04` daba la serie `Delta` con el número 99 (ahora `Delta 99` #4), y `100 Balas — Integral … 02` daba la serie `Balas` con el número 100 (ahora `100 Balas` #2).
+
+  Lo que sigue yendo a Pendientes es en su mayoría deliberado: packs con rango (`049-051a`), listas de lectura editoriales, crossovers con doble numeración y obras unitarias de carpetas de autor. Los `Tomo N` de las recopilaciones españolas esperan al campo propio de número de colección.
+
 ## [1.4.9] — 2026-09-25
 
 ### Añadido

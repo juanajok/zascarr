@@ -134,6 +134,38 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 - **Bug de CSS encontrado en vivo:** `.btn-sugerencia { --btn-bg: var(--ok) }` no se aplicaba — perdía la cascada contra `button[type="submit"] { --btn-bg: var(--yellow) }` por especificidad (un selector de atributo pesa más que una clase sola), así que el botón salía amarillo en vez de verde pese al orden de aparición en el CSS. Corregido subiendo la especificidad (`button[type="submit"].btn-sugerencia`), verificado visualmente en el navegador antes y después.
 - **Verificación en vivo (Postgres real):** serie y archivo pendiente con un candidato al 62% insertados a mano; la tarjeta mostró la sugerencia con el nombre, año, score y número precargado; un clic en "Sí, es esta" movió el archivo a la ruta canónica de biblioteca (`.../La Patrulla-X (1985)/La Patrulla-X #012.cbz`) y creó el `Issue` correspondiente — mismo camino que la asignación manual, sin código nuevo en `ReviewService`.
 
+**Medición del ratio de acierto (2026-09-25, v1.5.0):**
+
+Banco de 41 rutas reales del disco del coleccionista, contra PostgreSQL
+real y con el catálogo de series ya creado (el mejor caso posible hoy).
+Veredicto por caso: acierta / va a revisión / se equivoca.
+
+| | antes de v1.5.0 | después |
+|---|---|---|
+| Acierta | 13/41 | **28/41** |
+| A revisión | 27/41 | 12/41 |
+| Se equivoca | 1/41 | 1/41 |
+
+- **El único "error" resultó ser una expectativa mal puesta, no un fallo
+  del código:** `La Patrulla X Omnigold 5` se asigna a la serie
+  `Patrulla-X`, y la posición del proyecto (fijada en
+  `test_parse_filename_real_world_crg` desde antes) es que *Omnigold es
+  una edición, no una serie aparte*. Se deja como está.
+- **La causa dominante de los fallos NO era el matcher, era el parser:**
+  en 20 de los 27 casos que iban a revisión, el número estaba en el
+  nombre pero en una forma no reconocida (`nº`, el mojibake `n║`, `123a`,
+  `Especial N`, número seguido de subtítulo sin guion, separadores por
+  puntos, créditos del uploader tapando el número, ruido entre
+  paréntesis tras el número). Todos corregidos.
+- **Lo que queda pendiente está acotado y es honesto:** packs con rango,
+  listas de lectura editoriales, crossovers de doble numeración y obras
+  unitarias de carpetas de autor van a Pendientes A PROPÓSITO (B15). Los
+  `Tomo N` de las recopilaciones españolas esperan al campo de número de
+  colección que el propio PO acotó a B15.
+- El banco de medición vive fuera del repo (es un script de
+  scratchpad); lo que sí queda versionado es un test de regresión por
+  cada patrón, nombrado por el mecanismo del fallo.
+
 **Notas de implementación (B16, 2026-09-25):**
 
 - **Solo lectura, y se dice en la pantalla.** `LibraryAudit` no borra, no mueve, no renombra y no registra nada en el catálogo; `/ui/auditoria` tampoco ofrece borrar. Enseñar las rutas repetidas y dejar que el coleccionista actúe en su disco es deliberado: sugerir un borrado desde aquí sería justo la decisión irreversible que la historia existe para no tomar sola. Hay un test (`test_no_toca_ni_un_archivo_del_disco`) que compara mtimes antes y después.

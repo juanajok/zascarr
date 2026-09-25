@@ -24,35 +24,74 @@ NOISE_PATTERNS = [
                                 # (antes solo "20xx"; perdía años como 1989)
 ]
 
+# Cada entrada es (patrón, cortar_en_el_numero). El corte marca dónde
+# termina el título una vez encontrado el número:
+#   False → se corta al principio de la coincidencia (lo normal: "AIDP 05
+#           - La Llama Negra" deja "AIDP").
+#   True  → se corta en el número capturado, conservando lo que haya
+#           delante. Solo lo usa el caso "Serie NN - MM", donde el primer
+#           número es parte del título ("Delta 99 - 04" es el número 4 de
+#           la serie "Delta 99", no el 99 de "Delta").
 ISSUE_PATTERNS = [
-    r"#\s*(\d+\.?\d*)",
-    r"c(\d{3,4})\b",                    # One Piece c1054
-    r"\bT(\d{2})\b",                     # Astérix T01: BD de tomo único,
-                                          # el tomo ES el número de cara
-                                          # a catalogación (no un volumen
-                                          # de trade paperback americano).
-    r"\b(\d{3,4})\b(?!\s*\))",
-    r"(?:Issue|No\.?|N[úu]mero)\s*(\d+)",
+    (r"#\s*(\d+\.?\d*)", False),
+    (r"c(\d{3,4})\b", False),                # One Piece c1054
+    (r"\bT(\d{2})\b", False),                 # Astérix T01: BD de tomo único,
+                                              # el tomo ES el número de cara
+                                              # a catalogación (no un volumen
+                                              # de trade paperback americano).
+    # "nº 03", "n° 5", "núm. 7" y su mojibake "n║05" — la numeración
+    # española, que no estaba cubierta. El "║" no es un error de copia:
+    # media biblioteca real viene de scans con nombres en CP437 releídos
+    # como Latin-1 ("Espa±a", "Traducci≤n"), y ahí "º" aparece así.
+    (r"(?:Issue|No\.?|N[úu]m(?:ero)?\.?|[Nn][ºo°º║])\s*(\d{1,4}[a-z]?)\b", False),
+    # El sufijo de letra es real y frecuente ("Superman Vol2 123a" son las
+    # entregas partidas de Zinco); sin él, esos números se perdían enteros.
+    (r"\b(\d{3,4}[a-z]?)\b(?!\s*\))", False),
     # Ediciones de recopilación (CRG y similares): "Omnigold 5", "Integral
     # 01", "Edición Integral 01" — el número que traen no es una grapa
     # #NNN, es el tomo de la recopilación, pero a efectos de matching es
     # lo único que tenemos (naming.py solo pasa (título, número, año) al
     # matcher — no hay un campo "tomo de colección" separado todavía; ver
     # docs/BACKLOG.md, ampliación del parser pendiente en varias capas).
-    r"\b(?:Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b",
+    (r"\b(?:Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b", False),
+    # "Serie NN - MM": los dos son números y el de la IZQUIERDA es parte
+    # del título ("Delta 99 - 04" es el 4 de la serie "Delta 99"). Va
+    # antes que el patrón de subtítulo de abajo, que si no se quedaría
+    # con el 99 y dejaría la serie en "Delta".
+    (r"\s\d{1,3}\s+-\s+(\d{1,3}[a-z]?)\b", True),
     # "Serie NN - Subtítulo": el idiom más común de la escena en español
     # ("AIDP 05 - La Llama Negra", "Astérix (DI) 01 - Astérix el galo",
     # "Gideon Falls 01 - El Granero Negro"). El número va ANTES del
     # separador de subtítulo, no al final del nombre, así que el patrón
     # de último recurso de abajo no lo veía: el número se quedaba pegado
     # al título ("Astérix 01") y ninguna serie igualaba nunca.
-    r"\s(\d{1,3})\s+-\s+",
+    (r"\s(\d{1,3}[a-z]?)\s+-\s+", False),
+    # "Serie NN Subtítulo" sin separador ("XIII 01 El Dia del Sol Negro").
+    # Se exige que detrás venga una PALABRA, no otra cifra: así "Top 10
+    # 07" no confunde el 10 del título con el número, porque detrás del
+    # 10 hay un 07 y no una letra.
+    (r"\s(\d{1,3}[a-z]?)\s+(?=[^\W\d_])", False),
     # Último recurso: un número suelto de 1-3 cifras pegado al final del
     # nombre (sin "#", sin "T", sin años de 4 cifras que ya cubre el
     # patrón de arriba con \b(\d{3,4})\b). Bug real: "La Patrulla-X
     # Original 1.cbr" no llevaba NINGÚN marcador delante del número.
-    r"\s(\d{1,3})\s*$",
+    (r"\s(\d{1,3}[a-z]?)\s*$", False),
 ]
+
+# Créditos del uploader al final del nombre ("por TheRockJR", "By
+# Spiderman2099", "Traducido por X"): no son parte del título y además
+# tapaban el número, que quedaba a media cadena en vez de al final.
+CREDITS_PATTERN = re.compile(
+    r"\s+(?:traducido\s+por|escaneado\s+por|por|by)\s+.+$", re.IGNORECASE
+)
+
+# El punto como separador es habitual en los scans ("La.Mazmorra..
+# Integral.6.-.Sfar"). Se convierte en espacio ANTES de extraer el
+# número, no en la limpieza final: si no, ni "Integral 6" ni el corte de
+# subtítulo " - " se reconocían y el título se quedaba con los autores
+# pegados. No se toca el punto ENTRE CIFRAS, que es un número decimal
+# real ("#1.5", los paquetes decimales que el modelo sí soporta).
+DOT_SEPARATOR_PATTERN = re.compile(r"(?<!\d)\.|\.(?!\d)")
 
 # Líneas editoriales de reedición que anteponen su propio nombre al de la
 # serie real, con " - " como separador ("Marvel Gold - La Patrulla-X
@@ -118,6 +157,30 @@ class ParsedComicName:
     confidence: float = 0.0
 
 
+def _abre_el_titulo(working: str, m: re.Match) -> bool:
+    """¿El número encontrado es en realidad el principio del título?
+
+    "100 Balas", "1963", "52": series cuyo nombre EMPIEZA por una cifra.
+    Tomarla como número de grapa deja la serie en "Balas" y el número en
+    100 — serie equivocada y número equivocado a la vez, el peor de los
+    resultados. La señal es que no haya nada de título por delante y sí
+    palabras por detrás.
+    """
+    if working[: m.start(1)].strip():
+        return False  # hay título delante: es un número normal
+    return bool(re.search(r"[^\W\d_]", working[m.end(1):]))
+
+
+def _buscar_numero(working: str) -> tuple[re.Match, bool] | None:
+    """Primer patrón (por orden de fiabilidad) con una coincidencia que no
+    sea el principio del título. Devuelve (coincidencia, cortar_en_numero)."""
+    for pattern, cortar_en_numero in ISSUE_PATTERNS:
+        for m in re.finditer(pattern, working):
+            if not _abre_el_titulo(working, m):
+                return m, cortar_en_numero
+    return None
+
+
 def parse_comic_filename(filename: str) -> ParsedComicName:
     """Parsea un nombre de archivo de cómic y extrae metadatos."""
     result = ParsedComicName(original_filename=filename)
@@ -153,8 +216,13 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # sigue procesando el resto como si fuera el nombre completo.
     working = IMPRINT_PREFIX_PATTERN.sub("", working, count=1)
 
-    # Orden de lectura del coleccionista, no el número de la grapa.
+    # Orden de lectura del coleccionista, no el número de la grapa. Va
+    # ANTES de convertir los puntos en espacios, porque el patrón busca
+    # el punto literal de "069.- ".
     working = SORT_PREFIX_PATTERN.sub("", working, count=1)
+
+    working = DOT_SEPARATOR_PATTERN.sub(" ", working)
+    working = CREDITS_PATTERN.sub("", working, count=1)
 
     # Fecha de publicación antes que nada: "(2004-08)" es un año, y si se
     # deja pasar hasta la extracción de número se convierte en una grapa
@@ -174,8 +242,25 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # extraer el número para no quedarse con el primero del rango.
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
 
+    # El ruido entre paréntesis se quita AQUÍ, antes de buscar el número.
+    # Estaba después y tapaba una familia entera de casos: en "JSA 81
+    # (2006) (Lightray-DCP)" el 81 no queda al final del nombre, así que
+    # ningún patrón lo veía y la serie se quedaba en "JSA 81". El año ya
+    # se ha leído más arriba, así que borrar los paréntesis no pierde nada.
+    for noise in NOISE_PATTERNS:
+        working = re.sub(noise, "", working, flags=re.IGNORECASE)
+    # Catch-all: cualquier paréntesis que sobreviva a los patrones curados
+    # de arriba es casi siempre metadata de release que no anticipamos
+    # ("Batman (New 52) 012" — el reboot no es parte del título de la
+    # serie), nunca parte legítima de un título de cómic real.
+    working = re.sub(r"\([^)]*\)", "", working)
+
     if ANNUAL_PATTERN.search(working):
         result.is_annual = True
+        # Y se quita del título: "Superman Vol2 Especial 2" es el especial
+        # nº 2 de Superman, no una serie llamada "Superman Especial" que
+        # no igualaría con nada. La condición de annual queda en el flag.
+        working = ANNUAL_PATTERN.sub(" ", working)
 
     for pattern in VOLUME_PATTERNS:
         vol_match = re.search(pattern, working, re.IGNORECASE)
@@ -184,28 +269,19 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
             working = re.sub(pattern, "", working, flags=re.IGNORECASE)
             break
 
-    for pattern in ISSUE_PATTERNS:
-        issue_match = re.search(pattern, working)
-        if issue_match:
-            raw = issue_match.group(1)
-            result.issue_number = str(raw).lstrip("0") or "0"
-            # Cortar, no empalmar: empalmar los dos lados pegaba el título
-            # al subtítulo cuando el número va en medio ("Astérix (DI) 01 -
-            # Astérix el galo" → "Astérix (DI)" + "Astérix el galo"). Si el
-            # número iba al principio del nombre, cortar dejaría la serie
-            # vacía — solo en ese caso se empalma.
-            cortado = working[: issue_match.start()]
-            working = cortado if cortado.strip() else working[issue_match.end() :]
-            break
-
-    for noise in NOISE_PATTERNS:
-        working = re.sub(noise, "", working, flags=re.IGNORECASE)
-
-    # Catch-all: cualquier paréntesis que sobreviva a los patrones curados de
-    # arriba es casi siempre metadata de release que no anticipamos ("Batman
-    # (New 52) 012" — el reboot no es parte del título de la serie), nunca
-    # parte legítima de un título de cómic real.
-    working = re.sub(r"\([^)]*\)", "", working)
+    encontrado = _buscar_numero(working)
+    if encontrado:
+        issue_match, cortar_en_numero = encontrado
+        raw = issue_match.group(1)
+        result.issue_number = str(raw).lstrip("0") or "0"
+        # Cortar, no empalmar: empalmar los dos lados pegaba el título al
+        # subtítulo cuando el número va en medio ("Astérix (DI) 01 -
+        # Astérix el galo" → "Astérix (DI)" + "Astérix el galo"). Si el
+        # número iba al principio del nombre, cortar dejaría la serie
+        # vacía — solo en ese caso se empalma.
+        corte = issue_match.start(1) if cortar_en_numero else issue_match.start()
+        cortado = working[:corte]
+        working = cortado if cortado.strip() else working[issue_match.end():]
 
     # "Serie - Subtítulo" y "Serie #001 - Título del número": todo lo que
     # sigue a un separador " - " (con espacios a los dos lados, a diferencia
@@ -217,7 +293,11 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     series = re.sub(r"[\.\-_]+", " ", series)
     series = re.sub(r"\s+", " ", series)
     series = re.sub(r"\s*[-\u2013\u2014]\s*$", "", series)
-    series = series.strip(" -\u2013\u2014()")
+    # La coma y los dos puntos finales sobran igual que el guion: quedan
+    # de haber cortado por el n\u00famero ("Patrulla-X, n\u00ba 03" \u2192 "Patrulla X,").
+    # El matcher los ignora al normalizar, pero este texto es el que ve el
+    # coleccionista en Pendientes y el que aprende el alias local (B13).
+    series = series.strip(" -\u2013\u2014(),;:")
     result.series = series
     result.confidence = _confidence(result)
     return result
