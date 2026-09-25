@@ -134,6 +134,31 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 - **Bug de CSS encontrado en vivo:** `.btn-sugerencia { --btn-bg: var(--ok) }` no se aplicaba — perdía la cascada contra `button[type="submit"] { --btn-bg: var(--yellow) }` por especificidad (un selector de atributo pesa más que una clase sola), así que el botón salía amarillo en vez de verde pese al orden de aparición en el CSS. Corregido subiendo la especificidad (`button[type="submit"].btn-sugerencia`), verificado visualmente en el navegador antes y después.
 - **Verificación en vivo (Postgres real):** serie y archivo pendiente con un candidato al 62% insertados a mano; la tarjeta mostró la sugerencia con el nombre, año, score y número precargado; un clic en "Sí, es esta" movió el archivo a la ruta canónica de biblioteca (`.../La Patrulla-X (1985)/La Patrulla-X #012.cbz`) y creó el `Issue` correspondiente — mismo camino que la asignación manual, sin código nuevo en `ReviewService`.
 
+**Hallazgos del segundo lote de rutas reales (2026-09-25, v1.5.1):**
+
+Una segunda biblioteca del mismo coleccionista, organizada de forma
+COMPLETAMENTE distinta a la primera (jerárquica por género → editorial →
+autor → obra, hasta 5 niveles, en vez de plana por tradición). Confirma
+que no hay una sola manera de ordenar una tebeoteca y refuerza B14/B15:
+
+- **La carpeta padre casi nunca es la serie en esta estructura**:
+  `Cómic Español/Isaac Sanchez` (autor), `Cómic Europeo/Moebius-Giraud/
+  El Incal` (autor → obra), `Superhéroes/Marvel/Avengers` (franquicia),
+  `Otros Superhéroes/Arrowsmith (COMPLETO)(CRG)` (serie + tags de
+  release). B14 tendrá que subir por el árbol y limpiar la carpeta, no
+  quedarse con el `parent.name` a secas.
+- **Duplicación masiva con sufijo `(1)`**: ~20 pares "archivo" y
+  "archivo(1)", de descargar dos veces. B16 los agrupa por SHA256; se
+  verificó además que el `(1)` no se cuela como número de tebeo.
+- **Archivo invisible para todo el sistema**: `Las guerras silenciosas…
+  CRG.cbr.zip` (doble extensión). No está en `COMIC_EXTS`, así que ni el
+  importador, ni la adopción, ni la auditoría lo miran — el coleccionista
+  no tiene forma de enterarse de que ese tebeo no existe para ZascArr.
+  **Pendiente de decidir**: lo honesto es que la auditoría (B16) lo
+  reporte como "parece un tebeo pero no lo reconozco", no ampliar
+  `COMIC_EXTS` a `.zip` (metería cualquier zip de la biblioteca) ni
+  abrir archivos dentro de archivos.
+
 **Medición del ratio de acierto (2026-09-25, v1.5.0):**
 
 Banco de 41 rutas reales del disco del coleccionista, contra PostgreSQL

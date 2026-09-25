@@ -3,6 +3,17 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.5.1] — 2026-09-25
+
+### Corregido
+
+- **Cuatro patrones más, sacados de una segunda biblioteca real** (organizada por género/editorial/autor en vez de por tradición, lo que confirma que no hay una sola forma de ordenar una tebeoteca):
+  - `Iberia Inc. - Integral 20 aniversario` se registraba como el **número 20**. Es una efeméride de la editorial, no un número de tebeo.
+  - `EVENTOS - La Era de Ultrón` daba la serie `EVENTOS`: es una etiqueta de colección, como `Marvel Gold - X`.
+  - `Daytripper (por Aruso) CRG 8º Aniversario` daba la serie `Daytripper CRG 8º Aniversario`, porque el crédito del uploader iba entre paréntesis y no se reconocía como tal.
+  - `La liga de los hombres extraordinarios -La Tempestad 02` se quedaba con el subtítulo pegado: la escena también escribe el guion sin espacio detrás. El espacio *delante* sigue siendo obligatorio, que es lo que distingue el separador de un guion interno (`Spider-Man`).
+- Verificado de paso que el sufijo `(1)` que deja el navegador al descargar dos veces (hay ~20 pares así en esa biblioteca) **no se confunde con el número 1** del tebeo.
+
 ## [1.5.0] — 2026-09-25
 
 ### Añadido
