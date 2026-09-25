@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Descubrir series — ZascArr{% endblock %}
+{% block content %}
+<h1>Descubrir series</h1>
+<p class="subtitle">Busca un título en Comic Vine, AniList y Tebeosfera y dalo de alta en tu biblioteca — sin esto, Deseados y la clasificación automática no tienen con qué comparar.</p>
+
+<input type="search" class="series-search" placeholder="Título de la serie…"
+       name="q"
+       hx-get="/ui/descubrir/buscar"
+       hx-trigger="keyup changed delay:400ms"
+       hx-target="#resultados-descubrir"
+       hx-swap="innerHTML">
+<div id="resultados-descubrir" class="series-results"></div>
+{% endblock %}
