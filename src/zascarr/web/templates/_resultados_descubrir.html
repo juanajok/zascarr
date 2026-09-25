@@ -4,30 +4,44 @@
 {% if not resultados %}
 <p class="no-results">Sin coincidencias en Comic Vine/AniList/Tebeosfera/GCD.</p>
 {% else %}
-<ul class="series-list">
+<ul class="discovery-list">
   {% for r in resultados %}
-  <li class="series-result-item">
-    <form hx-post="/ui/descubrir/crear" hx-target="this" hx-swap="outerHTML">
-      <input type="hidden" name="source" value="{{ r.source.value }}">
-      <input type="hidden" name="external_id" value="{{ r.external_id }}">
-      <input type="hidden" name="title" value="{{ r.title }}">
-      {% if r.start_year %}<input type="hidden" name="start_year" value="{{ r.start_year }}">{% endif %}
-      {% if r.description %}<input type="hidden" name="description" value="{{ r.description }}">{% endif %}
-      {% if r.cover_url %}<input type="hidden" name="cover_url" value="{{ r.cover_url }}">{% endif %}
-      <span class="series-name">
+  <li class="discovery-card">
+    {% if r.cover_url %}
+    <img class="cover" alt=""
+         src="/ui/descubrir/portada?url={{ r.cover_url | urlencode }}&source={{ r.source.value }}"
+         onerror="this.classList.add('cover-missing')">
+    {% else %}
+    <img class="cover cover-missing" alt="">
+    {% endif %}
+    <div class="discovery-card-body">
+      <div class="discovery-card-title">
         {{ r.title }}{% if r.start_year %} ({{ r.start_year }}){% endif %}
         <span class="caption">{{ r.source.value }}</span>
         {% if r.site_url %}
         <a href="{{ r.site_url }}" target="_blank" rel="noopener noreferrer" title="Ver ficha original para confirmar">↗</a>
         {% endif %}
-      </span>
-      <select name="tradition" aria-label="Tradición">
-        {% for value, label in tradiciones %}
-        <option value="{{ value }}" {% if value == r.tradition_guess.value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      <button type="submit">Crear serie</button>
-    </form>
+      </div>
+      {% if r.description %}
+      <div class="discovery-card-desc">{{ r.description }}</div>
+      {% endif %}
+      <form hx-post="/ui/descubrir/crear" hx-target="closest .discovery-card" hx-swap="outerHTML">
+        <input type="hidden" name="source" value="{{ r.source.value }}">
+        <input type="hidden" name="external_id" value="{{ r.external_id }}">
+        <input type="hidden" name="title" value="{{ r.title }}">
+        {% if r.start_year %}<input type="hidden" name="start_year" value="{{ r.start_year }}">{% endif %}
+        {% if r.description %}<input type="hidden" name="description" value="{{ r.description }}">{% endif %}
+        {% if r.cover_url %}<input type="hidden" name="cover_url" value="{{ r.cover_url }}">{% endif %}
+        <div class="discovery-card-actions">
+          <select name="tradition" aria-label="Tradición">
+            {% for value, label in tradiciones %}
+            <option value="{{ value }}" {% if value == r.tradition_guess.value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Crear serie</button>
+        </div>
+      </form>
+    </div>
   </li>
   {% endfor %}
 </ul>

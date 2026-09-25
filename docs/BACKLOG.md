@@ -132,6 +132,12 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
   - **Bug real encontrado y corregido antes de dar por bueno el cliente**: sin la cabecera `Accept: application/json`, Django REST Framework (lo que usa GCD) devuelve su interfaz HTML navegable en vez de JSON — `r.json()` reventaba con `Expecting value: line 5 column 1`. Confirmado con `curl` real contra `comics.org/api/` reproduciendo el fallo antes de aplicar el fix. Parseo envuelto en su propio `try/except ValueError` además del de red, mismo criterio que Tebeosfera.
   - GCD indexa por país/idioma, no por tradición ZascArr: mapeo best-effort (`GCDResult.tradition_guess`) igual de editable que las otras tres fuentes — nunca una asignación definitiva.
 
+**Notas de implementación (ampliación de C0, 2026-09-25 — tarjetas con portada):**
+
+- **Portadas reales en los resultados de búsqueda**, pedido con una captura de referencia estilo Sonarr: nuevo proxy `/ui/descubrir/portada`, nunca hotlinking directo — valida el host contra una lista blanca por fuente (sin ella sería un proxy abierto de imágenes arbitrarias, SSRF real) y cachea en disco por hash de la URL (`utils/cover.py::fetch_and_cache_cover` reutilizado tal cual, sin código de descarga/resize nuevo). Tras crear la serie, la confirmación pasa a usar el cascade de portadas ya existente (`/ui/series/{id}/portada`) en vez de este proxy.
+- **Bug de entorno de prueba, no de la app** encontrado verificando en vivo: las portadas fallaban con `cover.resize_failed` porque `COVERS_CACHE_PATH` por defecto es `/config/covers`, una ruta que solo existe DENTRO del contenedor Docker real — al correr la app directamente en el sandbox (fuera de Docker) para verificar, hacía falta apuntar esa variable a una carpeta real. Documentado aquí para no repetir la confusión.
+- **Bug real encontrado de paso**: AniList deja `<br>` literal en la sinopsis pese a pedir `description(asHtml: false)` — visible en la propia captura que motivó este cambio. Limpiado en el origen (`services/anilist.py::_clean_description`), con test de regresión.
+
 **Notas de implementación (Fase 6 / UI web):**
 
 - **Decisión de arquitectura:** ver [`docs/adr/0001-ui-stack.md`](adr/0001-ui-stack.md) — Jinja2 servido por el propio FastAPI + HTMX vendorizado (no CDN), sin SPA ni build de Node. Primer ADR del repo; las decisiones previas (PostgreSQL, enrutado del enricher) no quedaron documentadas como ADR retroactivamente.
