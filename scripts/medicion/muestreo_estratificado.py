@@ -7,7 +7,7 @@ Uso:
 
 Salida:
     - Tabla de estratos por consola (población y muestra por estrato)
-    - muestra_parser.csv con las rutas seleccionadas y columnas vacías
+    - muestra_bruta.csv con las rutas seleccionadas y columnas vacías
       para que la persona etiquete la verdad de referencia ANTES de mirar
       qué dice el parser (evita sesgo de confirmación).
 """
@@ -57,7 +57,7 @@ def main() -> None:
     ap.add_argument("raiz", help="Raíz de la biblioteca")
     ap.add_argument("--n", type=int, default=60, help="Tamaño de muestra")
     ap.add_argument("--seed", type=int, default=42, help="Semilla (reproducible)")
-    ap.add_argument("--out", default="muestra_parser.csv")
+    ap.add_argument("--out", default="muestra_bruta.csv")
     args = ap.parse_args()
 
     raiz = Path(args.raiz)
