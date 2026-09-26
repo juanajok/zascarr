@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.12.0] — 2026-09-26
+
+### Añadido
+
+- **Un tebeo borrado a mano del disco deja de contar como "lo tienes" (B7).** El ciclo periódico del importador (`Importer.scan_and_import()`) revisa, además de las descargas nuevas, todos los ficheros ya en biblioteca: el que ya no existe en disco se marca `is_missing`/`missing_since` (nunca se borra la fila) y se revierte solo si vuelve a aparecer — sin volver a avisar en cada ciclo mientras siga igual de ausente. Guardarraíl explícito: si la carpeta de la biblioteca en sí parece inaccesible (disco de red desmontado, USB desconectado), no se marca nada ese ciclo — nunca confundir un problema de montaje con "he perdido toda la colección". Aviso en el mismo informe/log de siempre (`importer.cycle_done`), con un nuevo `disappeared_count` en el historial de ciclos, igual que los contadores ya existentes.
+
 ## [1.11.0] — 2026-09-26
 
 ### Añadido

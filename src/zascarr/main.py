@@ -32,7 +32,10 @@ async def _import_loop(interval_minutes: int) -> None:
             async with async_session_factory() as session:
                 report = await Importer(session).scan_and_import()
                 await session.commit()
-            if report.files_scanned:
+            # B7: la detección de desaparecidos revisa la biblioteca YA
+            # importada, no las descargas — puede haber algo que avisar
+            # aunque este ciclo no haya escaneado ningún fichero nuevo.
+            if report.files_scanned or report.disappeared_count or report.reappeared:
                 logger.info(
                     "importer.cycle_done",
                     escaneados=report.files_scanned,
@@ -40,6 +43,8 @@ async def _import_loop(interval_minutes: int) -> None:
                     duplicados=report.duplicate_count,
                     sin_clasificar=report.unsorted_count,
                     errores=report.error_count,
+                    desaparecidos=report.disappeared_count,
+                    reaparecidos=len(report.reappeared),
                 )
         except Exception:
             logger.exception("importer.cycle_failed")

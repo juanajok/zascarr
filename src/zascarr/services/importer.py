@@ -19,6 +19,7 @@ ciclo de las 03:00?" sin depender solo de los logs.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -67,6 +68,12 @@ class ImportReport:
     duplicates: list[str] = field(default_factory=list)
     unsorted: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # B7: ficheros que YA estaban en la biblioteca y dejaron de existir en
+    # disco desde el ciclo anterior (borrados a mano, fuera de ZascArr) —
+    # no llegadas nuevas, eso es `imported`. `reappeared` es la reversión:
+    # un fichero marcado desaparecido que ha vuelto a aparecer.
+    disappeared: list[str] = field(default_factory=list)
+    reappeared: list[str] = field(default_factory=list)
 
     @property
     def imported_count(self) -> int:
@@ -79,6 +86,10 @@ class ImportReport:
     @property
     def unsorted_count(self) -> int:
         return len(self.unsorted)
+
+    @property
+    def disappeared_count(self) -> int:
+        return len(self.disappeared)
 
     @property
     def error_count(self) -> int:
@@ -213,9 +224,56 @@ class Importer:
                 logger.exception("importer.file_failed", path=str(path))
                 report.errors.append(f"{path.name}: {exc}")
 
+        # B7: revisión de la biblioteca YA importada, no de lo nuevo que
+        # acaba de llegar — un paso independiente del bucle de arriba.
+        try:
+            report.disappeared, report.reappeared = await self._detectar_desaparecidos()
+        except Exception:
+            logger.exception("importer.deteccion_desaparecidos_fallida")
+
         report.finished_at = datetime.now(UTC)
         await self._persist_run(report)
         return report
+
+    async def _detectar_desaparecidos(self) -> tuple[list[str], list[str]]:
+        """B7: un tebeo borrado a mano del disco (fuera de ZascArr) deja
+        de contar como "lo tienes" sin que nadie tenga que avisar.
+
+        Guardarraíl crítico: si la carpeta de la biblioteca en sí parece
+        inaccesible (disco de red desmontado, USB desconectado), NO se
+        marca nada como desaparecido — confundir un problema de montaje
+        con "he perdido toda mi colección" sería mucho peor que no
+        detectar nada en este ciclo concreto. El siguiente ciclo, con el
+        disco ya montado, no encontrará nada que marcar.
+        """
+        if not self._library.exists() or not self._library.is_dir():
+            logger.warning(
+                "importer.biblioteca_inaccesible_omitiendo_desaparecidos", ruta=str(self._library)
+            )
+            return [], []
+
+        files = list((await self._db.execute(select(File))).scalars().all())
+        rutas = [f.file_path for f in files]
+        # Un único hop a un hilo para todo el lote, no uno por fichero —
+        # Path.exists() es síncrono (I/O bloqueante, CLAUDE.md §4).
+        ausentes = await asyncio.to_thread(lambda: {r for r in rutas if not Path(r).exists()})
+
+        desaparecidos: list[str] = []
+        reaparecidos: list[str] = []
+        for f in files:
+            ausente = f.file_path in ausentes
+            if ausente and not f.is_missing:
+                f.is_missing = True
+                f.missing_since = datetime.now(UTC)
+                desaparecidos.append(f.file_name)
+            elif not ausente and f.is_missing:
+                f.is_missing = False
+                f.missing_since = None
+                reaparecidos.append(f.file_name)
+
+        if desaparecidos or reaparecidos:
+            await self._db.flush()
+        return desaparecidos, reaparecidos
 
     async def _import_file(
         self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
@@ -289,11 +347,14 @@ class Importer:
             duplicate_count=report.duplicate_count,
             unsorted_count=report.unsorted_count,
             error_count=report.error_count,
+            disappeared_count=report.disappeared_count,
             details={
                 "imported": report.imported,
                 "duplicates": report.duplicates,
                 "unsorted": report.unsorted,
                 "errors": report.errors,
+                "disappeared": report.disappeared,
+                "reappeared": report.reappeared,
             },
         )
         self._db.add(run)
