@@ -113,62 +113,9 @@ class Orchestrator:
         return sent
 
     async def _process_item(self, item: Wishlist) -> bool:
-        query = await self._build_query(item)
-        if not query:
-            return False
-
-        item.status = WishlistStatus.SEARCHING
-        # D1/H2: marca el intento ya aquí, con o sin resultado — es lo que
-        # activa el cooldown de process_wishlist y evita quemar Prowlarr/
-        # foro en cada ciclo con un item condenado.
-        item.last_searched_at = datetime.now(UTC)
-        await self.db.flush()
-
-        settings = get_settings()
-
-        # D9: si ninguna fuente está siquiera activa, ni lo intentamos —
-        # se lo decimos al coleccionista en vez de dejarlo en "Buscando…"
-        # para siempre sin explicación.
-        foro_configurado = settings.forum_enabled and settings.forum_username and settings.forum_url
-        if not settings.prowlarr_enabled and not foro_configurado:
-            item.status = WishlistStatus.WANTED
-            item.last_error = MOTIVO_SIN_FUENTE
-            await self.db.flush()
-            return False
-
-        results: list[SearchResult] = []
-        motivo_prowlarr: str | None = None
-        if settings.prowlarr_enabled:
-            try:
-                results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
-            except Exception:
-                logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
-                motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
-
-        candidates = self._ranked_candidates(results, query) if results else []
-
+        candidates = await self._search_and_rank(item)
         if not candidates:
-            forum_result = await self._forum_fallback(query)
-            if forum_result:
-                candidates = [forum_result]
-
-        # Blindaje legal: opt-in por backend (deshabilitados por defecto,
-        # igual que forum_enabled ya lo estaba) — un candidato de un
-        # backend no activado ni se intenta enviar.
-        candidatos_crudos = candidates
-        candidates = [c for c in candidates if self._backend_enabled(_detect_backend(c.download_url), settings)]
-
-        if not candidates:
-            item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
-            # D9: distingue "no había nada" de "había algo pero el
-            # backend correspondiente está apagado" — la acción del
-            # coleccionista es distinta en cada caso.
-            if candidatos_crudos:
-                item.last_error = MOTIVO_CANDIDATO_RECHAZADO
-            else:
-                item.last_error = motivo_prowlarr or MOTIVO_SIN_RESULTADOS
-            await self.db.flush()
-            return False
+            return False  # ya se dejó constancia del motivo dentro de _search_and_rank
 
         # D1 (Mylar3): si el mejor candidato falla al enviarse, se prueba
         # el siguiente del pool rankeado antes de rendirse.
@@ -190,6 +137,129 @@ class Orchestrator:
         item.last_error = MOTIVO_CLIENTE_INACCESIBLE
         await self.db.flush()
         return False
+
+    async def _search_and_rank(self, item: Wishlist) -> list[SearchResult] | None:
+        """Busca y deja el pool ya rankeado y filtrado por backends
+        activos — compartido entre el ciclo automático (_process_item) y
+        la búsqueda manual de D10 (preview_candidates), que se detiene
+        aquí para que el coleccionista elija antes de enviar nada.
+
+        None: no se pudo construir una búsqueda (nada que hacer todavía).
+        []: se buscó de verdad y no quedó ningún candidato utilizable —
+        el motivo (D9) ya queda escrito en item.last_error.
+        """
+        query = await self._build_query(item)
+        if not query:
+            return None
+
+        item.status = WishlistStatus.SEARCHING
+        # D1/H2: marca el intento ya aquí, con o sin resultado — es lo que
+        # activa el cooldown de process_wishlist y evita quemar Prowlarr/
+        # foro en cada ciclo con un item condenado.
+        item.last_searched_at = datetime.now(UTC)
+        await self.db.flush()
+
+        settings = get_settings()
+
+        # D9: si ninguna fuente está siquiera activa, ni lo intentamos —
+        # se lo decimos al coleccionista en vez de dejarlo en "Buscando…"
+        # para siempre sin explicación.
+        foro_configurado = settings.forum_enabled and settings.forum_username and settings.forum_url
+        if not settings.prowlarr_enabled and not foro_configurado:
+            item.status = WishlistStatus.WANTED
+            item.last_error = MOTIVO_SIN_FUENTE
+            await self.db.flush()
+            return []
+
+        results: list[SearchResult] = []
+        motivo_prowlarr: str | None = None
+        if settings.prowlarr_enabled:
+            try:
+                results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
+            except Exception:
+                logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
+                motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
+
+        candidates = self._ranked_candidates(results, query) if results else []
+
+        if not candidates:
+            forum_result = await self._forum_fallback(query)
+            if forum_result:
+                candidates = [forum_result]
+
+        # Blindaje legal: opt-in por backend (deshabilitados por defecto,
+        # igual que forum_enabled ya lo estaba) — un candidato de un
+        # backend no activado ni se intenta enviar, ni se ofrece para
+        # elegir a mano en D10.
+        candidatos_crudos = candidates
+        candidates = [c for c in candidates if self._backend_enabled(_detect_backend(c.download_url), settings)]
+
+        if not candidates:
+            item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
+            # D9: distingue "no había nada" de "había algo pero el
+            # backend correspondiente está apagado" — la acción del
+            # coleccionista es distinta en cada caso.
+            if candidatos_crudos:
+                item.last_error = MOTIVO_CANDIDATO_RECHAZADO
+            else:
+                item.last_error = motivo_prowlarr or MOTIVO_SIN_RESULTADOS
+            await self.db.flush()
+            return []
+
+        return candidates
+
+    # ── D10: búsqueda manual con confirmación explícita ──────────────────────
+
+    async def preview_candidates(self, item: Wishlist) -> list[SearchResult] | None:
+        """"Buscar ahora": ejecuta la misma búsqueda que el ciclo
+        automático pero se detiene ANTES de enviar nada — el coleccionista
+        ve fuente/tamaño/formato de cada candidato y decide él (ver
+        send_manual_candidate). Cancelar tras esto no deja nada a medias:
+        no se ha tocado ni Transmission ni aMule todavía.
+
+        Bug real encontrado en el propio desarrollo: _search_and_rank deja
+        el item en SEARCHING mientras arma el pool, dando por hecho que
+        quien lo llama sigue enseguida con el envío (como sí hace
+        _process_item). Aquí NO se envía nada todavía — si se dejara en
+        SEARCHING y el coleccionista cancelase, el item quedaría invisible
+        para siempre al ciclo automático (que solo mira WANTED/FAILED).
+        Por eso se revierte a WANTED en cuanto hay candidatos que mostrar.
+        """
+        candidates = await self._search_and_rank(item)
+        if candidates:
+            item.status = WishlistStatus.WANTED
+            await self.db.flush()
+        return candidates
+
+    async def send_manual_candidate(self, item: Wishlist, candidate: SearchResult) -> bool:
+        """El coleccionista ya vio el candidato en preview_candidates y
+        decidió enviar justo ESTE — mismo envío que el ciclo automático
+        (_send), pero sin volver a rankear ni a filtrar: la elección
+        humana ya es la validación. El filtro de blindaje legal por
+        backend SÍ se respeta igual que en automático (opt-in real, no
+        solo de cara al ranking)."""
+        settings = get_settings()
+        backend = _detect_backend(candidate.download_url)
+        if not self._backend_enabled(backend, settings):
+            item.last_error = MOTIVO_CANDIDATO_RECHAZADO
+            await self.db.flush()
+            return False
+
+        ref = await self._send(backend, candidate)
+        if ref is None:
+            item.status = WishlistStatus.FAILED
+            item.last_error = MOTIVO_CLIENTE_INACCESIBLE
+            await self.db.flush()
+            return False
+
+        item.status = WishlistStatus.DOWNLOADING
+        item.download_backend = backend.value
+        item.download_ref = ref
+        item.last_error = None
+        item.last_searched_at = datetime.now(UTC)
+        await self.db.flush()
+        logger.info("orchestrator.download_started", title=candidate.title, backend=backend.value, manual=True)
+        return True
 
     async def _build_query(self, item: Wishlist) -> str | None:
         if item.search_query:
@@ -216,19 +286,34 @@ class Orchestrator:
         """Devuelve un identificador de la descarga (hash de Transmission, o
         el hash ed2k ya presente en la propia URL) para observabilidad en
         Wishlist.download_ref — no participa en detectar si terminó (ver
-        check_completions). None si el envío falló."""
-        if backend == DownloadBackend.TRANSMISSION:
-            added = await self._transmission.add_torrent(result.download_url)
-            if not added:
-                return None
-            return added.get("hashString") or added.get("name") or ""
-        if backend == DownloadBackend.AMULE:
-            if not await self._amule.login():
-                return None
-            if not await self._amule.add_ed2k_link(result.download_url):
-                return None
-            return _extract_ed2k_hash(result.download_url) or result.download_url
-        return None
+        check_completions). None si el envío falló.
+
+        Bug real encontrado verificando D10 en vivo: un Transmission/aMule
+        inalcanzable (conexión rechazada, timeout) no devolvía None — la
+        excepción de httpx se propagaba tal cual. En el ciclo automático
+        eso lo capturaba el `except` genérico de process_wishlist (como
+        "error inesperado", impreciso pero no roto); en la confirmación
+        manual de D10, al no haber ningún `except` en el router, se colaba
+        como un 500 crudo. Se captura aquí, en el único sitio que ambos
+        caminos comparten, para que las dos rutas den MOTIVO_CLIENTE_
+        INACCESIBLE en vez de un error sin explicar.
+        """
+        try:
+            if backend == DownloadBackend.TRANSMISSION:
+                added = await self._transmission.add_torrent(result.download_url)
+                if not added:
+                    return None
+                return added.get("hashString") or added.get("name") or ""
+            if backend == DownloadBackend.AMULE:
+                if not await self._amule.login():
+                    return None
+                if not await self._amule.add_ed2k_link(result.download_url):
+                    return None
+                return _extract_ed2k_hash(result.download_url) or result.download_url
+            return None
+        except Exception:
+            logger.exception("orchestrator.send_failed", backend=backend.value)
+            return None
 
     @staticmethod
     def _backend_enabled(backend: DownloadBackend, settings) -> bool:

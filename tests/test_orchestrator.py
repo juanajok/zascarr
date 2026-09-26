@@ -308,6 +308,112 @@ class TestMotivoNoAvanza:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 2c. Búsqueda manual con confirmación (D10) — ver, no enviar hasta elegir
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestBusquedaManual:
+
+    @pytest.mark.asyncio
+    async def test_preview_no_envia_nada_solo_muestra(self):
+        """El punto central de D10: ver candidatos no debe tocar
+        Transmission/aMule — solo enviar uno concreto lo hace."""
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._transmission = AsyncMock()
+
+        candidatos = await orch.preview_candidates(item)
+
+        assert candidatos is not None and len(candidatos) == 1
+        assert item.status == WishlistStatus.WANTED  # no queda "colgado" en SEARCHING
+        orch._transmission.add_torrent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_preview_sin_query_devuelve_none(self):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)  # sin series_id/issue_id/search_query
+        orch = Orchestrator(db=FakeSession())
+
+        assert await orch.preview_candidates(item) is None
+
+    @pytest.mark.asyncio
+    async def test_preview_sin_resultados_deja_el_motivo_de_d9(self):
+        item = Wishlist(id=uuid4(), search_query="Serie Rarísima", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = []
+
+        candidatos = await orch.preview_candidates(item)
+
+        assert candidatos == []
+        assert item.last_error == MOTIVO_SIN_RESULTADOS
+
+    @pytest.mark.asyncio
+    async def test_enviar_candidato_elegido_pasa_a_downloading(self):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "abc123"}
+        candidato = make_result(title="Batman #1.cbz", seeders=10)
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is True
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert item.download_ref == "abc123"
+        assert item.last_error is None
+
+    @pytest.mark.asyncio
+    async def test_enviar_candidato_con_backend_apagado_se_rechaza(self, monkeypatch):
+        settings = get_settings().model_copy(update={"transmission_enabled": False, "amule_enabled": False})
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        candidato = make_result(seeders=10)  # magnet:// -> Transmission, apagado
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.last_error == MOTIVO_CANDIDATO_RECHAZADO
+        orch._transmission.add_torrent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_enviar_candidato_si_falla_el_cliente_se_marca_failed(self):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+        candidato = make_result(seeders=10)
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_transmission_inalcanzable_no_revienta_da_motivo_claro(self):
+        """Bug real encontrado verificando D10 en vivo: Transmission
+        caído (conexión rechazada) lanzaba una excepción de httpx en vez
+        de fallar limpio — en la confirmación manual eso se colaba como
+        un 500 crudo al no haber try/except en el router. _send debe
+        traducirlo al mismo MOTIVO_CLIENTE_INACCESIBLE que un rechazo
+        "blando" (Transmission responde pero no acepta)."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.side_effect = ConnectionRefusedError("boom")
+        candidato = make_result(seeders=10)
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.FAILED
+        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 3. last_searched_at — marcado en cada intento (H2 aplicado aquí también)
 # ═══════════════════════════════════════════════════════════════════════════
 

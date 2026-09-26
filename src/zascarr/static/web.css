@@ -316,6 +316,33 @@ button[type="submit"],
   font-style: italic;
 }
 
+/* Convención estándar de htmx: oculto hasta que la petición está en
+   vuelo (htmx añade/quita .htmx-request ella sola, sin JS propio). */
+.htmx-indicator { opacity: 0; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+
+/* D10: panel de candidatos de "Buscar ahora" — lista simple, cada fila
+   con su formulario de confirmación explícita antes de descargar nada. */
+.candidatos-wishlist:not(:empty) {
+  margin-top: 8px;
+  padding: 10px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+}
+.candidatos-lista { list-style: none; margin: 0 0 8px; padding: 0; }
+.candidato-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.candidato-fila:last-child { border-bottom: none; }
+.candidato-titulo { font-weight: 700; flex: 1; }
+.candidato-detalle { color: var(--ink-soft); font-size: .85rem; white-space: nowrap; }
+.candidatos-vacio { color: var(--ink-soft); font-style: italic; margin: 4px 0; }
+
 /* ── 9. CAMPOS DE FORMULARIO ─────────────────────────────────────────────── */
 .series-search,
 .issue-input,
