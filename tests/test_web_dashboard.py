@@ -52,6 +52,21 @@ class FakeSession:
         return self._queue.pop(0)
 
 
+class CapturingSession(FakeSession):
+    """Como FakeSession, pero guarda cada statement compilado — para
+    verificar de verdad el WHERE que genera el código (B7: revisión de
+    PR, 2026-09-26, sobre contadores de "lo tienes" sin filtrar
+    is_missing), no solo lo que hace con una lista ya dada."""
+
+    def __init__(self, queue: list):
+        super().__init__(queue)
+        self.statements: list[str] = []
+
+    async def execute(self, statement):
+        self.statements.append(str(statement))
+        return await super().execute(statement)
+
+
 def _override_get_db(session):
     async def _get_db():
         yield session
@@ -121,3 +136,22 @@ class TestDashboard:
         assert "38" in r.text              # huecos pendientes
         assert "Series en la biblioteca" in r.text
         assert "Números pendientes" in r.text
+
+    def test_contadores_de_archivos_filtran_is_missing(self):
+        """B7 (revisión de PR, 2026-09-26): un File is_missing=True ya no
+        es "lo tienes" — series_con_archivos, issues_importados y las
+        últimas series actualizadas deben excluirlo, o borrar un tebeo a
+        mano seguiría contando en el dashboard."""
+        session = CapturingSession([
+            FakeResult(scalar=0), FakeResult(scalar=0), FakeResult(scalar=0), FakeResult(scalar=0),
+            FakeResult(rows=[]), FakeResult(rows=[]), FakeResult(scalars=[]),
+        ])
+        with use_fake_session(session) as client:
+            client.get("/ui/")
+
+        # series_con_archivos (índice 1), issues_importados (índice 3),
+        # y la subquery de últimas series (compilada dentro del SELECT
+        # final, índice 6) son las tres consultas que cruzan con File.
+        assert "is_missing" in session.statements[1]
+        assert "is_missing" in session.statements[3]
+        assert "is_missing" in session.statements[6]

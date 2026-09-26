@@ -40,6 +40,15 @@ logger = structlog.get_logger()
 
 COMIC_EXTS = {".cbz", ".cbr", ".cb7", ".pdf", ".epub"}
 
+# B7: umbral de "esto no son borrados a mano, esto es un disco desmontado"
+# (ver _detectar_desaparecidos). Las dos condiciones aplican a la vez: por
+# debajo de MINIMO archivos en biblioteca no merece la pena desconfiar
+# (pocas filas en juego, bajo impacto de un falso positivo); por encima,
+# más de la mitad desaparecida de golpe es mucho más probable un fallo de
+# montaje que un vaciado real a mano.
+UMBRAL_DESAPARICION_MASIVA_FRACCION = 0.5
+UMBRAL_DESAPARICION_MASIVA_MINIMO = 10
+
 TRADITION_MAP = {
     "american":       "Comics",
     "manga":          "Manga",
@@ -239,12 +248,24 @@ class Importer:
         """B7: un tebeo borrado a mano del disco (fuera de ZascArr) deja
         de contar como "lo tienes" sin que nadie tenga que avisar.
 
-        Guardarraíl crítico: si la carpeta de la biblioteca en sí parece
-        inaccesible (disco de red desmontado, USB desconectado), NO se
-        marca nada como desaparecido — confundir un problema de montaje
-        con "he perdido toda mi colección" sería mucho peor que no
-        detectar nada en este ciclo concreto. El siguiente ciclo, con el
-        disco ya montado, no encontrará nada que marcar.
+        Guardarraíles (endurecidos tras revisión de PR, 2026-09-26): dos
+        formas de confundir "disco desmontado" con "he perdido toda mi
+        colección", ninguna cubierta por el simple exists()/is_dir() de
+        más abajo.
+
+        1. **Punto de montaje vacío pero accesible**: un disco de red o
+           USB desmontado a menudo deja atrás el propio directorio de
+           montaje — sigue existiendo, sigue siendo un directorio, pero
+           está vacío. `exists()/is_dir()` no lo distingue de una
+           biblioteca real; comprobar que tiene contenido, sí.
+        2. **Desaparición masiva anómala**: aun con la carpeta accesible
+           y no vacía, un fallo de montaje parcial (p.ej. NFS que
+           resuelve el directorio pero no su contenido) puede hacer que
+           la mayoría de rutas den `exists() == False` de golpe. Eso es
+           mucho más probable un problema de infraestructura que "el
+           coleccionista borró medio armario a mano" — se aborta sin
+           tocar nada y se avisa, en vez de convertir esto en cientos de
+           cambios de estado silenciosos.
         """
         if not self._library.exists() or not self._library.is_dir():
             logger.warning(
@@ -253,10 +274,30 @@ class Importer:
             return [], []
 
         files = list((await self._db.execute(select(File))).scalars().all())
+        if not files:
+            return [], []
+
+        biblioteca_vacia = await asyncio.to_thread(lambda: not any(self._library.iterdir()))
+        if biblioteca_vacia:
+            logger.warning(
+                "importer.biblioteca_vacia_omitiendo_desaparecidos", ruta=str(self._library)
+            )
+            return [], []
+
         rutas = [f.file_path for f in files]
         # Un único hop a un hilo para todo el lote, no uno por fichero —
         # Path.exists() es síncrono (I/O bloqueante, CLAUDE.md §4).
         ausentes = await asyncio.to_thread(lambda: {r for r in rutas if not Path(r).exists()})
+
+        if (
+            len(files) >= UMBRAL_DESAPARICION_MASIVA_MINIMO
+            and len(ausentes) > len(files) * UMBRAL_DESAPARICION_MASIVA_FRACCION
+        ):
+            logger.error(
+                "importer.desaparicion_masiva_anomala_abortando",
+                ausentes=len(ausentes), total_files=len(files), ruta=str(self._library),
+            )
+            return [], []
 
         desaparecidos: list[str] = []
         reaparecidos: list[str] = []

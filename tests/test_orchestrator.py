@@ -80,6 +80,21 @@ class FakeSession:
         return self._queue.pop(0)
 
 
+class CapturingSession(FakeSession):
+    """Como FakeSession, pero guarda cada statement compilado — para
+    verificar de verdad el WHERE que genera el código, no solo lo que
+    hace con una lista de resultados ya dada (ver B7: revisión de PR,
+    2026-09-26, sobre `_is_fulfilled` sin filtrar `is_missing`)."""
+
+    def __init__(self, queue: list | None = None):
+        super().__init__(queue)
+        self.statements: list[str] = []
+
+    async def execute(self, statement):
+        self.statements.append(str(statement))
+        return await super().execute(statement)
+
+
 def make_series(title="Batman", tradition=ComicTradition.AMERICAN) -> Series:
     return Series(id=uuid4(), title=title, tradition=tradition)
 
@@ -518,6 +533,32 @@ class TestCheckCompletions:
 
         completed = await orch.check_completions()
         assert completed == 1
+
+    @pytest.mark.asyncio
+    async def test_por_issue_id_filtra_is_missing_en_el_where(self):
+        """B7 (revisión de PR, 2026-09-26): un File is_missing=True ya no
+        es "lo tengo" — sin este filtro, un tebeo borrado a mano tras
+        importarse bastaba para dar la wishlist por cumplida igual."""
+        issue_id = uuid4()
+        item = Wishlist(id=uuid4(), issue_id=issue_id, status=WishlistStatus.DOWNLOADING)
+        session = CapturingSession([FakeExecResult([item]), FakeExecResult([])])
+        orch = Orchestrator(db=session)
+
+        await orch.check_completions()
+
+        assert "is_missing" in session.statements[1]
+
+    @pytest.mark.asyncio
+    async def test_por_series_id_filtra_is_missing_en_el_where(self):
+        series_id = uuid4()
+        item = Wishlist(id=uuid4(), series_id=series_id, status=WishlistStatus.DOWNLOADING,
+                        added_at=datetime.now(timezone.utc) - timedelta(days=1))
+        session = CapturingSession([FakeExecResult([item]), FakeExecResult([])])
+        orch = Orchestrator(db=session)
+
+        await orch.check_completions()
+
+        assert "is_missing" in session.statements[1]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
