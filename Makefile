@@ -1,7 +1,7 @@
 COMPOSE = docker compose
 SA      = $(COMPOSE) exec zascarr
 
-.PHONY: help up down restart logs build migrate migrate-down migrate-status health shell db-shell test lint format backup
+.PHONY: help up down restart logs build migrate migrate-down migrate-status health shell db-shell test lint format backup uninstall uninstall-purge
 
 help:
 	@echo "  up / down / restart / logs / build"
@@ -9,6 +9,7 @@ help:
 	@echo "  health / shell / db-shell"
 	@echo "  test / lint / format"
 	@echo "  backup"
+	@echo "  uninstall / uninstall-purge (ver scripts/uninstall.sh --help)"
 
 up:
 	$(COMPOSE) up -d
@@ -67,3 +68,12 @@ format:
 # configurable en scripts/backup.sh) y aplica retención automática.
 backup:
 	@bash scripts/backup.sh
+
+# A4: borra contenedores/red/imagen de ZascArr; conserva biblioteca, datos
+# de la app (Postgres/Redis/portadas) y .env. --purge borra también los
+# datos de la app y el .env — la biblioteca nunca se toca, ni con --purge.
+uninstall:
+	@bash scripts/uninstall.sh
+
+uninstall-purge:
+	@bash scripts/uninstall.sh --purge
