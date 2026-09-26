@@ -110,9 +110,15 @@ IMPRINT_PREFIX_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Cada entrada es (patrón, etiqueta) — la etiqueta identifica qué tipo de
+# marcador matcheó, para poder usarla como `edition_kind` cuando ese
+# número resulta ser el ÚNICO identificador del archivo (ver más abajo,
+# "sin otro número real: el propio tomo/volumen es el identificador").
 VOLUME_PATTERNS = [
-    r"Vol\.?\s*(\d+)", r"Volume\s*(\d+)",
-    r"\bv(\d+)\b", r"Tomo\s*(\d+)",
+    (r"Vol\.?\s*(\d+)", "volumen"),
+    (r"Volume\s*(\d+)", "volumen"),
+    (r"\bv(\d+)\b", "volumen"),
+    (r"Tomo\s*(\d+)", "tomo"),
 ]
 
 YEAR_PATTERN = re.compile(r"\((\d{4})\)")
@@ -163,17 +169,24 @@ PART_NUMBER_PATTERN = re.compile(r"\[P(\d+)N(\d+)\]", re.IGNORECASE)
 
 # Ediciones de recopilación ("Omnigold 5", "Integral 01", "Edición
 # Integral 01"): el número que traen es el TOMO de la recopilación, no
-# la grapa #NNN original — son cosas distintas y afirmar la segunda a
-# partir de la primera es mentir (decisión del PO, 2026-09-25, tras
-# REQUISITOS_PARSER.md RF-07: "mejor Pendientes que un número falso").
-# El modelo no tiene hoy un campo `collection_number` separado (B15,
-# subida de prioridad) — mientras tanto se quita el número de en medio,
-# SIN capturarlo como issue_number, y se conserva la palabra de la
-# edición en el título: "La Patrulla X Omnigold" es un candidato mucho
-# más preciso en Pendientes que "La Patrulla X" a secas, aunque el
-# archivo siga sin poder clasificarse solo.
+# necesariamente la grapa #NNN original que cubre — son cosas distintas,
+# y afirmar la segunda a partir de la primera sería mentir
+# (REQUISITOS_PARSER.md RF-07, 2026-09-25: "mejor Pendientes que un
+# número falso").
+#
+# Decisión revisada (B15, 2026-09-26, con datos): el 25/09 se optó por
+# quitar el número SIN capturarlo, dejando el archivo en Pendientes para
+# siempre. Medido al día siguiente: eso mandaba a Pendientes TODOS los
+# Omnigold/Integral de la biblioteca sin necesidad — el modelo ya tenía
+# `Issue.format` (con valores `omnibus`/`trade_paperback`/etc, migración
+# 0001) para distinguir "grapa suelta" de "recopilación" sin tocar el
+# significado de `issue_number`. Ahora SÍ se captura como issue_number,
+# marcando `edition_kind` para que quien cree el Issue (ReviewService, la
+# única vía que crea Issues hoy) le ponga el `format` correcto en vez del
+# valor por defecto SINGLE_ISSUE — y para que el cálculo de huecos
+# (api/series.py) pueda excluirlo de contar como grapa suelta.
 EDITION_NUMBER_PATTERN = re.compile(
-    r"\b((?:Omnigold|Integral|Edici[oó]n\s+Integral))\s+\d{1,3}\b", re.IGNORECASE
+    r"\b(Omnigold|Integral|Edici[oó]n\s+Integral)\s+(\d{1,3})\b", re.IGNORECASE
 )
 
 # Prefijo de ORDEN DE LECTURA al principio del nombre ("069.- Flash v2
@@ -202,6 +215,13 @@ class ParsedComicName:
     extra_info: list[str] = field(default_factory=list)
     original_filename: str = ""
     confidence: float = 0.0
+    # B15 (2026-09-26): cuando issue_number viene de un marcador de
+    # edición/tomo ("omnigold", "integral", "tomo", "volumen") y no de un
+    # "#NNN" o numeración estándar, se deja constancia aquí. None significa
+    # grapa estándar (el caso normal). Nunca lo usa el matcher para decidir
+    # la serie — solo informa qué `Issue.format` corresponde al confirmar
+    # la asignación, y qué no debe contar como grapa suelta en los huecos.
+    edition_kind: str | None = None
 
 
 def _abre_el_titulo(working: str, m: re.Match) -> bool:
@@ -305,7 +325,11 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
 
     # Rangos ("144-158", y su forma en palabra "170 al 173"): un pack no
     # tiene UN número. Se quitan antes de extraer el número para no
-    # quedarse con el primero del rango.
+    # quedarse con el primero del rango. Se registra SI hubo rango
+    # (`era_pack`): más abajo decide si el volumen puede sustituir al
+    # número que falta, o si eso fabricaría una identidad falsa para un
+    # pack (ver ese bloque).
+    era_pack = bool(NUMBER_RANGE_PATTERN.search(working) or NUMBER_RANGE_WORD_PATTERN.search(working))
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
     working = NUMBER_RANGE_WORD_PATTERN.sub(" ", working)
 
@@ -313,11 +337,21 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # de grapa — ver docstring de ARC_POSITION_PATTERN.
     working = ARC_POSITION_PATTERN.sub(" ", working)
 
-    # "Omnigold 5" → "Omnigold": se quita el tomo de la edición, nunca se
-    # captura como grapa — ver docstring de EDITION_NUMBER_PATTERN.
-    working = EDITION_NUMBER_PATTERN.sub(r"\1", working)
-
+    # El número de aniversario ("20 aniversario") se quita ANTES de mirar
+    # si hay marcador de edición: si no, "Integral 20 aniversario" hace
+    # que EDITION_NUMBER_PATTERN capture el 20 de la efeméride como si
+    # fuera el tomo de la recopilación.
     working = ANIVERSARIO_PATTERN.sub(" ", working)
+
+    # "Omnigold 5" → captura issue_number="5" + edition_kind="omnigold",
+    # y el título se queda solo con "Omnigold" (el número no forma parte
+    # del nombre de la serie) — ver docstring de EDITION_NUMBER_PATTERN.
+    edicion_match = EDITION_NUMBER_PATTERN.search(working)
+    if edicion_match:
+        palabra, numero = edicion_match.groups()
+        result.issue_number = numero.lstrip("0") or "0"
+        result.edition_kind = "omnigold" if palabra.lower() == "omnigold" else "integral"
+        working = EDITION_NUMBER_PATTERN.sub(r"\1", working, count=1)
 
     # El ruido entre paréntesis se quita AQUÍ, antes de buscar el número.
     # Estaba después y tapaba una familia entera de casos: en "JSA 81
@@ -339,17 +373,20 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         # no igualaría con nada. La condición de annual queda en el flag.
         working = ANNUAL_PATTERN.sub(" ", working)
 
+    marcador_volumen: str | None = None
     if result.volume is None:
-        for pattern in VOLUME_PATTERNS:
+        for pattern, etiqueta in VOLUME_PATTERNS:
             vol_match = re.search(pattern, working, re.IGNORECASE)
             if vol_match:
                 result.volume = int(vol_match.group(1))
+                marcador_volumen = etiqueta
                 working = re.sub(pattern, "", working, flags=re.IGNORECASE)
                 break
 
-    # Si "[P{n}N{m}]" ya resolvió el número (RF-12), no se vuelve a buscar
-    # — el resto del nombre ("[4k][Mukankakuna][CRG]") es solo metadata de
-    # release que la limpieza de corchetes de abajo ya se encarga de quitar.
+    # Si "[P{n}N{m}]" o un marcador de edición ya resolvieron el número
+    # (RF-12 / Omnigold-Integral), no se vuelve a buscar — el resto del
+    # nombre es solo metadata de release que la limpieza de más abajo
+    # ya se encarga de quitar.
     encontrado = None if result.issue_number else _buscar_numero(working)
     if encontrado:
         issue_match, cortar_en_numero = encontrado
@@ -363,6 +400,29 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
         corte = issue_match.start(1) if cortar_en_numero else issue_match.start()
         cortado = working[:corte]
         working = cortado if cortado.strip() else working[issue_match.end():]
+    elif marcador_volumen is not None and result.volume is not None and not era_pack:
+        # Ningún otro número en el nombre: el propio tomo/volumen ES el
+        # identificador de este archivo (B15, 2026-09-26 — medido: 8/81
+        # archivos reales de la muestra oficial perdían el número así,
+        # "Nancy in Hell Tomo 1", "En un rayo de sol Vol.1/2" — se
+        # guardaba solo en `volume`, y el matcher exige TAMBIÉN un número
+        # para no mandar el archivo a Pendientes). Se marca `edition_kind`
+        # para que quien cree el Issue (ReviewService) le ponga el
+        # `format` correcto en vez de SINGLE_ISSUE por defecto, y para que
+        # el cálculo de huecos no lo cuente como grapa suelta.
+        #
+        # Si en cambio SÍ hay otro número ("Sleeper Vol2 05", "Caballero
+        # Luna Vol3 01"), `encontrado` no es None y esta rama no se toca
+        # — volume y issue_number quedan separados, como ya funcionaba.
+        #
+        # `not era_pack` es la guarda que faltaba en el primer intento: en
+        # "Superman Vol2 049-051a" el "Vol2" es el volumen DE LA SERIE
+        # (Zinco años 90), no el identificador de este archivo — el
+        # archivo es un pack de grapas 49-51 sin número único real. Usar
+        # el "2" del volumen ahí habría sido fabricar una identidad falsa
+        # para tapar el hueco, exactamente lo que este proyecto evita.
+        result.issue_number = str(result.volume)
+        result.edition_kind = marcador_volumen
 
     # "Serie - Subtítulo" y "Serie #001 - Título del número": todo lo que
     # sigue a un separador " - " (con espacios a los dos lados, a diferencia

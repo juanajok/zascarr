@@ -3,6 +3,14 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.7.0] — 2026-09-26
+
+### Cambiado
+
+- **Omnigold/Integral/Tomo/Vol dejan de ir siempre a Pendientes (B15, parcial).** v1.5.3 decidió, correctamente, dejar de inventar una grapa a partir del tomo de una recopilación (RF-07) — pero el coste fue que esos archivos se quedaban en Pendientes para siempre, sin ningún sitio donde guardar ese número. Ahora `naming.py` vuelve a capturarlo como `issue_number`, pero etiquetado con un nuevo `edition_kind` (`"omnigold"/"integral"/"tomo"/"volumen"`) que nunca usa el matcher para decidir la serie — solo informa qué `Issue.format` corresponde. Al confirmar la asignación manual en Pendientes, el `Issue` se crea con `format=OMNIBUS` (Omnigold/Integral) o `TRADE_PAPERBACK` (Tomo/Vol) en vez del `SINGLE_ISSUE` por defecto, usando el campo `Issue.format` que ya existía en el modelo — sin migración nueva, a diferencia de lo previsto originalmente con un `collection_number` propio.
+
+  La otra mitad de B15 ("una carpeta que NO es una serie no se trate como si lo fuera") sigue sin tocar — queda anotada en el backlog, más cerca de B14 (contexto de carpeta) que de esto.
+
 ## [1.6.0] — 2026-09-26
 
 ### Añadido

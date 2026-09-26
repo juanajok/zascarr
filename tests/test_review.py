@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 
-from zascarr.models import ComicTradition, File, FileFormat, Issue, LocalAlias, MetadataSource, Series
+from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, LocalAlias, MetadataSource, Series
 from zascarr.services.review import ReviewService
 
 
@@ -105,6 +105,87 @@ class TestAssignToSeries:
         assert Path(result.file_path).exists()
         assert "Batman #012" in result.file_name
         assert "Batman (2011)" in result.file_path
+        # B15: sin marcador de edición en el nombre, el Issue nuevo es una
+        # grapa estándar — nunca se asume otra cosa por defecto.
+        assert issues_created[0].format == IssueFormat.SINGLE_ISSUE
+
+    @pytest.mark.asyncio
+    async def test_issue_nuevo_de_un_omnigold_se_crea_como_omnibus(self, tmp_path):
+        """B15 (2026-09-26): el número que Pendientes ofrece para un
+        Omnigold/Integral no es una grapa suelta — el Issue creado debe
+        llevar Issue.format=OMNIBUS, no el SINGLE_ISSUE por defecto, para
+        que los huecos y la ficha de serie no lo cuenten como tal."""
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "la patrulla x omnigold 12.cbz"
+        orig.write_bytes(b"x")
+
+        series = make_series("La Patrulla-X", start_year=1985)
+        file = make_file(orig)
+
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        service = ReviewService(db=session)
+        service._library = library
+
+        await service.assign_to_series(file.id, series.id, "12")
+
+        issue = next(o for o in session.added if isinstance(o, Issue))
+        assert issue.format == IssueFormat.OMNIBUS
+
+    @pytest.mark.asyncio
+    async def test_issue_nuevo_de_un_tomo_se_crea_como_trade_paperback(self, tmp_path):
+        """B15: mismo mecanismo que el Omnigold, pero para Tomo/Vol sueltos
+        (manga/BD por tomos) — Issue.format=TRADE_PAPERBACK."""
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "Astro Boy Tomo 5.cbz"
+        orig.write_bytes(b"x")
+
+        series = make_series("Astro Boy")
+        file = make_file(orig)
+
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([]), FakeExecResult([])],
+        )
+        service = ReviewService(db=session)
+        service._library = library
+
+        await service.assign_to_series(file.id, series.id, "5")
+
+        issue = next(o for o in session.added if isinstance(o, Issue))
+        assert issue.format == IssueFormat.TRADE_PAPERBACK
+
+    @pytest.mark.asyncio
+    async def test_issue_existente_no_toca_el_format(self, tmp_path):
+        """Si el Issue ya existe (número reutilizado), assign_to_series no
+        debe tocar su format — solo se decide al CREAR uno nuevo."""
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "la patrulla x omnigold 12.cbz"
+        orig.write_bytes(b"x")
+
+        series = make_series("La Patrulla-X")
+        existing_issue = Issue(id=uuid4(), series_id=series.id, issue_number="12",
+                                format=IssueFormat.SINGLE_ISSUE)
+        file = make_file(orig)
+
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([existing_issue]), FakeExecResult([])],
+        )
+        service = ReviewService(db=session)
+        service._library = library
+
+        await service.assign_to_series(file.id, series.id, "12")
+
+        assert existing_issue.format == IssueFormat.SINGLE_ISSUE
 
     @pytest.mark.asyncio
     async def test_reutiliza_issue_existente_sin_duplicar(self, tmp_path):

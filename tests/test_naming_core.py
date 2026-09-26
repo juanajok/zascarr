@@ -577,7 +577,9 @@ class TestRealWorldFilenames:
         ("One Piece c1054.cbz",                 "One Piece", "1054"),
         ("Batman (New 52) 012 (2013).cbz",      "Batman",    "12"),
         ("Sandman.001.(1989).(Digital).cbz",    "Sandman",   "1"),
-        ("Berserk Vol.01.cbz",                  "Berserk",   None),  # manga: sin número
+        # "Berserk Vol.01" ya NO es "sin número" — ver B15 en
+        # TestEdicionesComoIdentificador más abajo: el propio tomo/volumen
+        # es el identificador cuando no hay otro número en el nombre.
         ("MF #001 - Safari Callejero.cbz",      "MF",        "1"),
         ("Asterix T01 - Asterix el Galo.cbz",   "Asterix",   "1"),
     ])
@@ -613,23 +615,31 @@ class TestRealWorldFilenames:
         assert result.series == expected_series
         assert result.issue_number == expected_num
 
-    @pytest.mark.parametrize("filename,expected_series", [
-        # Decisión del PO (2026-09-25, REQUISITOS_PARSER.md RF-07): el
-        # número que acompaña a Omnigold/Integral es el TOMO de la
-        # recopilación, no la grapa original — afirmar la segunda a partir
-        # del primero es mentir. Antes de esta decisión, estos DOS casos
-        # daban issue_number="5"/"1" y clasificaban solos; ahora van a
-        # Pendientes con un título más preciso (la palabra de la edición
-        # se conserva) en vez de un número inventado.
-        ("La Patrulla X Omnigold 5 (Decisiones) [CRG].cbr", "La Patrulla X Omnigold"),
-        ("The Boys - Edición Integral 01 [por The RockJR][CRG].cbr", "The Boys"),
+    @pytest.mark.parametrize("filename,expected_series,expected_num,expected_kind", [
+        # RF-07 (2026-09-25) decidió que el número de Omnigold/Integral
+        # NUNCA debía capturarse como issue_number, para no confundirlo
+        # con la grapa original — así que estos dos casos se quedaban
+        # sin número, con la serie más precisa pero sin poder clasificar
+        # solos. Medido al día siguiente (B15, 2026-09-26): eso mandaba a
+        # Pendientes TODOS los Omnigold/Integral de la biblioteca sin
+        # necesidad, porque el modelo ya tenía `Issue.format` (omnibus/
+        # trade_paperback/...) para distinguir "recopilación" de "grapa
+        # suelta" sin tocar `issue_number`. Se revierte: el número SÍ se
+        # captura, marcado con `edition_kind` para que quien cree el
+        # Issue (ReviewService) le ponga el `format` correcto.
+        ("La Patrulla X Omnigold 5 (Decisiones) [CRG].cbr", "La Patrulla X Omnigold", "5", "omnigold"),
+        ("The Boys - Edición Integral 01 [por The RockJR][CRG].cbr", "The Boys", "1", "integral"),
     ])
-    def test_omnigold_integral_no_inventa_numero_de_grapa(self, filename, expected_series):
+    def test_omnigold_integral_capturan_el_numero_con_edition_kind(
+        self, filename, expected_series, expected_num, expected_kind
+    ):
         from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename(filename)
         assert result.series == expected_series
-        assert result.issue_number == ""
+        assert result.issue_number == expected_num
+        assert result.edition_kind == expected_kind
+
 
     def test_sin_numero_real_no_inventa_uno(self):
         """'[ML] La Patrulla-X - Los Años Perdidos [MQ][DI] by The Murdock
@@ -786,19 +796,19 @@ class TestRealWorldFilenames:
         assert result.series == "El departamento de la verdad"
         assert result.issue_number == "3"
 
-    def test_puntos_como_separador_no_esconden_la_edicion(self):
-        """Mismo caso que arriba, pero con "Integral N": desde la decisión
-        de RF-07 (ver test_omnigold_integral_no_inventa_numero_de_grapa),
-        el "6" es el tomo de la recopilación, no una grapa — no debe
-        colarse como issue_number aunque los puntos lo tapen igual que
-        antes tapaban un número real."""
+    def test_puntos_como_separador_no_esconden_el_numero_de_edicion(self):
+        """Mismo caso que arriba, pero con "Integral N": el "6" es el
+        tomo de la recopilación (edition_kind="integral", no una grapa
+        estándar), y los puntos no deben esconderlo — igual que antes
+        tapaban un número real de grapa."""
         from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename(
             "La.Mazmorra..Integral.6.-.Sfar.&.Trondheim.&.Larcenet.[jbabylon5][CRG].cbr"
         )
         assert result.series == "La Mazmorra Integral"
-        assert result.issue_number == ""
+        assert result.issue_number == "6"
+        assert result.edition_kind == "integral"
 
     def test_punto_entre_cifras_sigue_siendo_un_decimal(self):
         """El paso anterior no debe romper los números decimales, que el
@@ -872,7 +882,11 @@ class TestRealWorldFilenames:
 
     def test_edicion_de_aniversario_no_es_el_numero(self):
         """"Integral 20 aniversario" es una efeméride de la editorial, no
-        el número 20 de la serie."""
+        el número 20 de la serie. Con B15 (naming.py ya captura el número
+        de Omnigold/Integral) el orden pasó a importar de verdad: si
+        ANIVERSARIO_PATTERN no corriera ANTES de buscar el marcador de
+        edición, "Integral 20 aniversario" capturaría el 20 como si fuera
+        el tomo de la recopilación."""
         from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename(
@@ -880,6 +894,7 @@ class TestRealWorldFilenames:
         )
         assert result.series == "Iberia Inc"
         assert result.issue_number == ""
+        assert result.edition_kind is None
 
     def test_guion_sin_espacio_detras_tambien_separa_el_subtitulo(self):
         """La escena escribe tanto "Serie - Sub" como "Serie -Sub". El
@@ -1002,13 +1017,71 @@ class TestRealWorldFilenames:
         assert result.series == "Transmetropolitan"
         assert result.issue_number == "1"
 
-    def test_tomo_sigue_siendo_volumen_no_issue(self):
-        """'Tomo N' (manga/BD con tomo Y numeración de issue separada) se
-        queda como volumen, a diferencia de 'T01' (BD de tomo único donde
-        el tomo ES el número): ver test_parse_filename de más arriba."""
+    def test_tomo_sin_otro_numero_es_el_identificador_del_archivo(self):
+        """Este test se llamaba "test_tomo_sigue_siendo_volumen_no_issue"
+        y afirmaba justo lo contrario, con un razonamiento que no se
+        sostenía ni en su propio ejemplo ("manga/BD con tomo Y numeración
+        de issue separada" — pero "Astro Boy Tomo 5" no tiene ningún otro
+        número en el nombre). B15 (2026-09-26), medido sobre la biblioteca
+        real: 8 de 81 archivos de la muestra oficial perdían así su único
+        número ("Nancy in Hell Tomo 1", "En un rayo de sol Vol.1/2", "Los
+        Inhumanos vol.3") — se guardaba en `volume` pero el matcher exige
+        TAMBIÉN un `issue_number` para no mandar el archivo a Pendientes
+        sin necesidad. Ahora el propio tomo/volumen hace de identificador
+        cuando es el ÚNICO número del nombre, marcado con `edition_kind`
+        para que no se confunda con una grapa estándar."""
         from zascarr.utils.naming import parse_comic_filename
 
         result = parse_comic_filename("Astro Boy Tomo 5.cbz")
         assert result.series == "Astro Boy"
         assert result.volume == 5
+        assert result.issue_number == "5"
+        assert result.edition_kind == "tomo"
+
+    @pytest.mark.parametrize("filename,expected_series,expected_num,expected_kind", [
+        # Casos reales de la biblioteca del coleccionista que motivaron
+        # el cambio de postura de arriba.
+        ("Nancy in Hell Tomo 1.cbr", "Nancy in Hell", "1", "tomo"),
+        ("En un rayo de sol Vol.1 - Tillie Walden [xavib].cbr", "En un rayo de sol", "1", "volumen"),
+        ("En un rayo de sol Vol.2 - Tillie Walden [xavib].cbr", "En un rayo de sol", "2", "volumen"),
+        ("Los Inhumanos vol.3 por Jiman(CRG).cbr", "Los Inhumanos", "3", "volumen"),
+        ("Berserk Vol.01.cbz", "Berserk", "1", "volumen"),
+    ])
+    def test_tomo_o_volumen_solo_da_series_e_issue_number(
+        self, filename, expected_series, expected_num, expected_kind
+    ):
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+        assert result.edition_kind == expected_kind
+
+    def test_volumen_con_otro_numero_real_no_se_toca(self):
+        """El caso que YA funcionaba y no debe romperse: cuando SÍ hay un
+        número de grapa además del volumen ("Vol2 05"), quedan separados
+        — volume=2, issue_number=5, sin edition_kind (es una grapa
+        estándar dentro de un volumen, no una edición de recopilación)."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Sleeper Vol2  05 [TM][por Kingpin y Wild][CRG].cbr")
+        assert result.series == "Sleeper"
+        assert result.volume == 2
+        assert result.issue_number == "5"
+        assert result.edition_kind is None
+
+    def test_volumen_de_la_serie_en_un_pack_no_sustituye_al_numero_que_falta(self):
+        """"Superman Vol2 049-051a": "Vol2" es el volumen DE LA SERIE
+        (Zinco, años 90), no el identificador de este archivo — es un
+        pack de grapas 49-51 sin número único real. Usar el "2" del
+        volumen aquí sería fabricar una identidad falsa para tapar el
+        hueco de un pack: exactamente lo que este proyecto evita. Bug
+        real encontrado implementando el test de arriba, antes de
+        comitear el cambio."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename("Superman Vol2 049-051a [SC][HMERL].cbr")
+        assert result.series == "Superman"
+        assert result.volume == 2
         assert result.issue_number == ""
+        assert result.edition_kind is None
