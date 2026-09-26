@@ -100,16 +100,26 @@ class TestIndex:
         item = make_wishlist_item(series)
         item.series = series
         item.issue = None
-        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([item])])) as client:
+        # Segunda query de la ruta (D9): is_acknowledged, tras la de items.
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([item]), _accepted()])) as client:
             r = client.get("/ui/wishlist")
         assert r.status_code == 200
         assert "Sandman" in r.text
+        assert "Aviso legal pendiente" not in r.text
 
     def test_pagina_vacia_muestra_mensaje(self):
-        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([])])) as client:
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([]), _accepted()])) as client:
             r = client.get("/ui/wishlist")
         assert r.status_code == 200
         assert "Nada en la lista de deseos" in r.text
+
+    def test_aviso_legal_pendiente_muestra_banner(self):
+        """D9: el aviso legal pendiente es un banner global de la página,
+        no un last_error inventado por fila (ver services/orchestrator.py)."""
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([]), FakeExecResult([])])) as client:
+            r = client.get("/ui/wishlist")
+        assert r.status_code == 200
+        assert "Aviso legal pendiente" in r.text
 
 
 class TestBuscarSerie:

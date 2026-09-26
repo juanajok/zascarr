@@ -49,6 +49,18 @@ logger = structlog.get_logger()
 COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
+# D9: causas distinguibles de "por qué esta búsqueda no avanza", en
+# español llano — nunca un detalle técnico (excepción, URL, cuerpo HTTP)
+# que el coleccionista no pueda accionar. El aviso legal pendiente NO
+# vive aquí: es un estado global (ver services/legal.py), lo muestra la
+# UI de wishlist con un banner propio en vez de escribirse en cada fila.
+MOTIVO_SIN_FUENTE = "Sin fuente de búsqueda activa — activa Prowlarr o el foro en Ajustes"
+MOTIVO_FUENTE_INACCESIBLE = "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
+MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
+MOTIVO_CANDIDATO_RECHAZADO = "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
+MOTIVO_CLIENTE_INACCESIBLE = "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
+MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
+
 
 class DownloadBackend(str, Enum):
     TRANSMISSION = "transmission"
@@ -96,6 +108,7 @@ class Orchestrator:
             except Exception:
                 logger.exception("orchestrator.item_failed", id=str(item.id))
                 item.status = WishlistStatus.FAILED
+                item.last_error = MOTIVO_ERROR_INESPERADO
                 await self.db.flush()
         return sent
 
@@ -112,10 +125,26 @@ class Orchestrator:
         await self.db.flush()
 
         settings = get_settings()
-        results = (
-            await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
-            if settings.prowlarr_enabled else []
-        )
+
+        # D9: si ninguna fuente está siquiera activa, ni lo intentamos —
+        # se lo decimos al coleccionista en vez de dejarlo en "Buscando…"
+        # para siempre sin explicación.
+        foro_configurado = settings.forum_enabled and settings.forum_username and settings.forum_url
+        if not settings.prowlarr_enabled and not foro_configurado:
+            item.status = WishlistStatus.WANTED
+            item.last_error = MOTIVO_SIN_FUENTE
+            await self.db.flush()
+            return False
+
+        results: list[SearchResult] = []
+        motivo_prowlarr: str | None = None
+        if settings.prowlarr_enabled:
+            try:
+                results = await self._prowlarr.search(query, categories=COMIC_CATEGORIES)
+            except Exception:
+                logger.exception("orchestrator.prowlarr_search_failed", id=str(item.id))
+                motivo_prowlarr = MOTIVO_FUENTE_INACCESIBLE
+
         candidates = self._ranked_candidates(results, query) if results else []
 
         if not candidates:
@@ -126,10 +155,18 @@ class Orchestrator:
         # Blindaje legal: opt-in por backend (deshabilitados por defecto,
         # igual que forum_enabled ya lo estaba) — un candidato de un
         # backend no activado ni se intenta enviar.
+        candidatos_crudos = candidates
         candidates = [c for c in candidates if self._backend_enabled(_detect_backend(c.download_url), settings)]
 
         if not candidates:
             item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
+            # D9: distingue "no había nada" de "había algo pero el
+            # backend correspondiente está apagado" — la acción del
+            # coleccionista es distinta en cada caso.
+            if candidatos_crudos:
+                item.last_error = MOTIVO_CANDIDATO_RECHAZADO
+            else:
+                item.last_error = motivo_prowlarr or MOTIVO_SIN_RESULTADOS
             await self.db.flush()
             return False
 
@@ -142,6 +179,7 @@ class Orchestrator:
                 item.status = WishlistStatus.DOWNLOADING
                 item.download_backend = backend.value
                 item.download_ref = ref
+                item.last_error = None  # D9: ya no aplica, se recuperó
                 await self.db.flush()
                 logger.info("orchestrator.download_started", title=candidate.title, backend=backend.value)
                 return True
@@ -149,6 +187,7 @@ class Orchestrator:
         # Hubo candidatos pero ninguno se pudo enviar (backend caído, etc.):
         # esto sí es un fallo real, distinto de "sin resultados todavía".
         item.status = WishlistStatus.FAILED
+        item.last_error = MOTIVO_CLIENTE_INACCESIBLE
         await self.db.flush()
         return False
 
