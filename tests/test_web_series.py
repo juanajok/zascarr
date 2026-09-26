@@ -36,13 +36,35 @@ class FakeExecResult:
     def scalars(self):
         return FakeScalarResult(self._rows)
 
+    def first(self):
+        return self._rows[0] if self._rows else None
+
 
 class FakeSession:
-    def __init__(self, queue: list):
+    def __init__(self, queue: list, series=None):
         self._queue = list(queue)
+        self._series = series
 
     async def execute(self, _statement):
         return self._queue.pop(0)
+
+    async def get(self, _model, _id):
+        return self._series
+
+
+class CapturingSession(FakeSession):
+    """Como FakeSession, pero guarda cada statement compilado — para
+    verificar de verdad el WHERE que genera el código (B7: revisión de
+    PR, 2026-09-26, sobre portada() eligiendo un File sin filtrar
+    is_missing)."""
+
+    def __init__(self, queue: list, series=None):
+        super().__init__(queue, series)
+        self.statements: list[str] = []
+
+    async def execute(self, statement):
+        self.statements.append(str(statement))
+        return await super().execute(statement)
 
 
 def override_get_db(session):
@@ -109,3 +131,25 @@ class TestFichaSerie:
             r = client.get(f"/ui/series/{series.id}")
         assert r.status_code == 200
         assert "no se puede calcular huecos" in r.text
+
+
+class TestPortada:
+    """B7 (revisión de PR, 2026-09-26): la cascada de portada elegía el
+    primer File por sort_order sin comprobar is_missing — podía intentar
+    (y fallar) extraer de un CBZ ya borrado en vez de probar el
+    siguiente número disponible."""
+
+    def test_consulta_de_candidato_filtra_is_missing(self, tmp_path, monkeypatch):
+        from zascarr.config import get_settings
+
+        series = make_series()
+        series.cover_url = None
+        settings = get_settings().model_copy(update={"covers_cache_path": tmp_path})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+
+        session = CapturingSession([FakeExecResult([])], series=series)
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 404
+        assert "is_missing" in session.statements[0]
