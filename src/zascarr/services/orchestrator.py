@@ -36,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -256,15 +256,53 @@ class Orchestrator:
         está DOWNLOADING/IMPORTED. Solo se envía desde un estado
         accionable — el mismo criterio que decide si se ofrece "Buscar
         ahora" en la UI (web/wishlist.py::_row, puede_buscar_ahora).
+
+        Segundo hallazgo, revisión de PR (2026-09-26): ese guardarraíl
+        por sí solo detiene un reenvío SECUENCIAL (tras completar el
+        primer envío), no dos peticiones CONCURRENTES — ambas pueden
+        leer WANTED/FAILED en su propia sesión antes de que ninguna
+        termine `_send()` (I/O de red, con `await` de por medio).
+        Firmado (D10) no es lo mismo que de un solo uso. Se reclama el
+        item con un UPDATE condicionado (WANTED/FAILED → SEARCHING)
+        ANTES de tocar la red: Postgres serializa los UPDATE contra la
+        misma fila (bloquea al segundo hasta que el primero confirma, y
+        entonces reevalúa el WHERE), así que como mucho una petición ve
+        su fila afectada — la otra ve 0 filas y no llega a enviar nada.
         """
         if item.status not in (WishlistStatus.WANTED, WishlistStatus.FAILED):
             item.last_error = MOTIVO_CANDIDATO_INVALIDO
             await self.db.flush()
             return False
 
+        reclamado = await self.db.execute(
+            update(Wishlist)
+            .where(Wishlist.id == item.id)
+            .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
+            .values(status=WishlistStatus.SEARCHING)
+        )
+        if reclamado.rowcount == 0:
+            # Perdió la carrera: otra petición concurrente ya reclamó
+            # este mismo item entre que se cargó y que llegamos aquí.
+            # Deliberadamente NO se escribe last_error aquí (verificado
+            # en vivo, 2026-09-26): esta escritura llegaría después de
+            # que la petición ganadora ya confirmara la suya (pasa por
+            # el mismo `await self._send()`, más lento), y un simple
+            # `flush()` sobre este objeto en memoria pisaría con
+            # "candidato inválido" el resultado real ya guardado —
+            # incluido un `last_error=None` de un envío que sí tuvo
+            # éxito. La fila que ve el perdedor se refresca aparte
+            # (`_get_row`, en el router) con el estado real y actual.
+            return False
+        item.status = WishlistStatus.SEARCHING
+
         settings = get_settings()
         backend = _detect_backend(candidate.download_url)
         if not self._backend_enabled(backend, settings):
+            # La reclamación deja el item en SEARCHING (transitorio) —
+            # si no se envía nada, hay que devolverlo a un estado
+            # accionable, o quedaría "colgado" igual que el bug ya
+            # corregido de preview_candidates.
+            item.status = WishlistStatus.FAILED
             item.last_error = MOTIVO_CANDIDATO_RECHAZADO
             await self.db.flush()
             return False
