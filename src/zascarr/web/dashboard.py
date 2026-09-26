@@ -41,9 +41,14 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)) -> HTM
     """Dashboard principal con métricas de la colección."""
     total_series = (await db.execute(select(func.count(Series.id)))).scalar() or 0
 
+    # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
+    # cuenta como "lo tienes" — sin este filtro, borrar un tebeo a mano
+    # del disco no bajaba ni el contador de completitud ni "series con
+    # archivos", contradiciendo lo que B7 promete en el badge de la fila.
     series_con_archivos = (await db.execute(
         select(func.count(func.distinct(Issue.series_id)))
         .join(File, File.issue_id == Issue.id)
+        .where(File.is_missing.is_(False))
     )).scalar() or 0
 
     total_issues = (await db.execute(
@@ -51,7 +56,9 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)) -> HTM
     )).scalar() or 0
 
     issues_importados = (await db.execute(
-        select(func.count(func.distinct(File.issue_id))).where(File.issue_id.isnot(None))
+        select(func.count(func.distinct(File.issue_id)))
+        .where(File.issue_id.isnot(None))
+        .where(File.is_missing.is_(False))
     )).scalar() or 0
 
     porcentaje = round((issues_importados / total_issues * 100) if total_issues else 0)
@@ -80,6 +87,7 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)) -> HTM
     last_import = (
         select(Issue.series_id.label("series_id"), func.max(File.imported_at).label("ultimo"))
         .join(File, File.issue_id == Issue.id)
+        .where(File.is_missing.is_(False))
         .group_by(Issue.series_id)
         .subquery()
     )
