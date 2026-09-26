@@ -361,6 +361,11 @@ class Wishlist(Base):
     # comprobando si ya existe un File enlazado, agnóstico de backend.
     download_ref:     Mapped[str|None]        = mapped_column(String(255))
     download_backend: Mapped[str|None]        = mapped_column(String(20))
+    # D9: por qué la última pasada del orquestador no avanzó (texto en
+    # español, para la UI) — nunca secretos ni cuerpos HTTP completos.
+    # Sin timestamp propio: se correlaciona con last_searched_at, ya
+    # marcado en el mismo punto donde se decide la causa.
+    last_error:       Mapped[str|None]        = mapped_column(Text)
     series: Mapped["Series|None"] = relationship()
     issue:  Mapped["Issue|None"]  = relationship()
 

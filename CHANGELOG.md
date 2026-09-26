@@ -3,6 +3,14 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.8.0] — 2026-09-26
+
+### Añadido
+
+- **Por qué una búsqueda de la wishlist no avanza (D9).** Hasta ahora, un item que se estancaba mostraba "Sin resultados" tanto si de verdad no había nada como si Prowlarr estaba caído, el cliente de descarga no respondía, o ningún backend estaba activo — un pozo de diagnóstico que obligaba a mirar `docker logs` para saber qué pasaba de verdad. Migración `0013`: `Wishlist.last_error` (texto en español, sin timestamp propio — se correlaciona con `last_searched_at`, ya existente), escrito por el orquestador distinguiendo: sin fuente activa, fuente inaccesible, sin resultados, candidato encontrado pero sin backend de descarga activo, cliente de descarga inaccesible, error inesperado. Visible junto al badge de estado en `/ui/wishlist`, y se limpia solo en cuanto una descarga arranca de verdad.
+
+  El aviso legal pendiente queda aparte, como un banner global de la página (es un estado del sistema, no de una fila) — evita escribir el mismo motivo en cada item de la wishlist en cada ciclo saltado.
+
 ## [1.7.0] — 2026-09-26
 
 ### Cambiado

@@ -20,7 +20,7 @@ from sqlalchemy.orm import selectinload
 
 from zascarr.database import get_db
 from zascarr.models import Issue, Wishlist, WishlistStatus
-from zascarr.services.legal import require_legal_acknowledgment
+from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.wishlist import WishlistService
 from zascarr.web.routes import TEMPLATES_DIR
 
@@ -54,6 +54,11 @@ def _row(item: Wishlist) -> dict:
         "titulo": titulo,
         "estado": _ESTADO_LABEL.get(item.status, item.status.value),
         "puede_reintentar": item.status == WishlistStatus.FAILED,
+        # D9: motivo concreto de por qué esta fila no avanza (o avanzó
+        # y ya no aplica) — escrito por el orquestador, nunca inventado
+        # aquí. "Sin resultados" en el badge de estado ya no es lo único
+        # que ve el coleccionista cuando algo se estanca.
+        "motivo": item.last_error,
     }
 
 
@@ -70,7 +75,13 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
         select(Wishlist).options(*_EAGER).order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
     )).scalars().all())
     rows = [_row(item) for item in items]
-    return templates.TemplateResponse(request, "wishlist.html", {"rows": rows})
+    # D9: el aviso legal pendiente es un estado GLOBAL del sistema (no de
+    # una fila concreta) — se muestra como banner aparte, no se escribe
+    # en Wishlist.last_error de cada item (ver services/orchestrator.py).
+    aviso_legal_pendiente = not await is_acknowledged(db)
+    return templates.TemplateResponse(
+        request, "wishlist.html", {"rows": rows, "aviso_legal_pendiente": aviso_legal_pendiente}
+    )
 
 
 @router.get("/buscar-serie", response_class=HTMLResponse)
