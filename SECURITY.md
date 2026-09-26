@@ -1,12 +1,16 @@
 # Política de seguridad
 
 ZascArr es una herramienta de **un solo operador**, pensada para correr en
-tu propia Raspberry Pi. No implementa usuarios, roles ni autenticación
-(Épica A6 del backlog, pendiente) — el aislamiento se apoya en no exponerla
-fuera de tu red.
+tu propia Raspberry Pi. No implementa usuarios ni roles — un único par de
+credenciales para toda la instalación, sin más ambición que esa (Épica
+**A6**, hecha).
 
 ## Postura por defecto
 
+- **Sin contraseña de fábrica** (`auth_mode="none"`): el aislamiento por
+  defecto sigue siendo no exponer el puerto, igual que antes de A6 — activar
+  una contraseña es una decisión tuya desde `/ui/ajustes` → Seguridad, nunca
+  algo que la instalación te obligue a configurar de entrada.
 - El contenedor solo publica `127.0.0.1:8000` en el host (`docker-compose.yml`).
   Sin acción explícita tuya, ZascArr **no es alcanzable** desde tu LAN ni
   desde internet.
@@ -16,15 +20,19 @@ fuera de tu red.
 
 ## Si quieres acceder desde fuera de la Pi
 
-**No publiques el puerto 8000 a tu LAN o a internet sin autenticación
-delante.** Pon un reverse proxy (Caddy, nginx, Traefik) con su propia
-autenticación (Basic Auth, OAuth, lo que prefieras) por delante de ZascArr.
-Sin eso, cualquiera con la URL puede leer tu biblioteca, activar
-integraciones de descarga y disparar búsquedas.
+Activa una contraseña en `/ui/ajustes` → Seguridad antes de publicar el
+puerto 8000 en tu LAN o en internet — "Solo contraseña" o "Usuario y
+contraseña", a elegir. La contraseña se guarda como hash PBKDF2-SHA256
+(nunca en claro) y protege tanto la interfaz web (cookie de sesión, 30
+días) como la API (HTTP Basic Auth, para `curl`/scripts). `/api/health`
+queda exenta a propósito, para que un healthcheck de Docker o de
+monitorización externa no necesite credenciales.
 
-Cerrar esto de forma nativa (login/contraseña en la propia app) es la
-historia **A6** del backlog (`docs/BACKLOG.md`), priorizada P1 y aún sin
-construir a fecha de este release.
+Sigue siendo buena práctica poner un reverse proxy (Caddy, nginx, Traefik)
+delante si expones ZascArr fuera de tu LAN — TLS de verdad es su trabajo,
+no el de esta contraseña —, pero ya no es la ÚNICA capa: sin activar nada
+aquí, cualquiera con la URL puede leer tu biblioteca, activar integraciones
+de descarga y disparar búsquedas.
 
 ## Reportar una vulnerabilidad
 

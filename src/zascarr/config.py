@@ -126,9 +126,28 @@ class Settings(BaseSettings):
     enrich_interval_minutes: int = 120
     enrich_batch_size: int = 20
 
+    # ── Autenticación (A6) ─────────────────────────────────────────
+    # Deshabilitada por defecto a propósito (SECURITY.md): la Pi solo
+    # publica 127.0.0.1, así que "sin contraseña" es el punto de partida
+    # seguro. "password" pide solo contraseña (sin usuario); "user_password"
+    # pide ambos. auth_password_hash nunca es la contraseña en claro —
+    # PBKDF2-SHA256 (services/auth.py), nunca se devuelve tal cual a la UI
+    # (mismo patrón que comicvine_api_key etc. en SECRET_FIELDS).
+    auth_mode: str = Field(default="none")
+    auth_username: str = Field(default="")
+    auth_password_hash: str = Field(default="")
+    # secret_key firma la cookie de sesión (HMAC, services/auth.py) — se
+    # autogenera y persiste en runtime_settings en el primer arranque
+    # (ensure_secret_key()) si llega vacía; nunca hardcodeada ni en .env.
+    secret_key: str = Field(default="")
+    # Reservado para enlaces absolutos futuros (webhooks de E4, informes
+    # exportables) cuando ZascArr vive tras un dominio propio — hoy no
+    # participa en el enrutado ni en la sesión, es solo un dato guardado.
+    base_url: str = Field(default="")
+
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "ZascArr"
-    app_version: str = "1.9.0"
+    app_version: str = "1.10.0"
     log_level: str = "INFO"
     log_json: bool = True
     debug: bool = False

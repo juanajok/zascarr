@@ -17,6 +17,11 @@
     <a href="/ui/auditoria">Mi biblioteca</a>
     <a href="/ui/ajustes">Ajustes</a>
     <a href="/estado">Estado</a>
+    {% if auth_activo() %}
+    <form method="post" action="/logout" class="nav-logout">
+      <button type="submit" class="btn-logout">Cerrar sesión</button>
+    </form>
+    {% endif %}
   </nav>
   <main class="content">
     {% block content %}{% endblock %}

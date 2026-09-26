@@ -16,7 +16,6 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -25,9 +24,9 @@ from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.discovery import DiscoveryService
 from zascarr.utils.cover import cached_image_response, fetch_and_cache_cover
 from zascarr.web.library import _TRADICION_LABEL
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 router = APIRouter(prefix="/ui/descubrir", tags=["ui"])
 
