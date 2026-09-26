@@ -314,13 +314,19 @@ class TestDetectarDesaparecidos:
         volver a aparecer en `disappeared` — ya se avisó la primera vez."""
         library = tmp_path / "library"
         library.mkdir()
+        # Otro tebeo SÍ presente — la biblioteca no está vacía, solo falta
+        # el borrado; sin esto el guardarraíl de "punto de montaje vacío"
+        # (más abajo) taparía la lógica real que este test quiere probar.
+        make_cbz(library / "Otro 001.cbz")
         borrado = library / "Batman 001.cbz"
 
+        f_otro = File(id=uuid4(), file_path=str(library / "Otro 001.cbz"), file_name="Otro 001.cbz",
+                     file_format="cbz", is_missing=False)
         f = File(id=uuid4(), file_path=str(borrado), file_name=borrado.name, file_format="cbz",
                 is_missing=True, missing_since=datetime.now(timezone.utc))
 
         importer = Importer.__new__(Importer)
-        importer._db = FakeSessionArchivos([f])
+        importer._db = FakeSessionArchivos([f_otro, f])
         importer._library = library
 
         desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
@@ -348,6 +354,83 @@ class TestDetectarDesaparecidos:
         assert reaparecidos == []
         assert f.is_missing is False
         assert session.consultada is False  # ni se llegó a mirar la BD
+
+    @pytest.mark.asyncio
+    async def test_punto_de_montaje_vacio_no_marca_nada(self, tmp_path):
+        """Guardarraíl (revisión de PR, 2026-09-26): un disco desmontado a
+        menudo deja atrás el propio directorio de montaje — existe, es un
+        directorio, pero está vacío. exists()/is_dir() no lo distingue de
+        una biblioteca real; comprobar contenido, sí."""
+        library = tmp_path / "library"
+        library.mkdir()  # existe y es un directorio... pero vacío de verdad
+        f = File(id=uuid4(), file_path=str(library / "Batman.cbz"), file_name="Batman.cbz",
+                file_format="cbz", is_missing=False)
+
+        importer = Importer.__new__(Importer)
+        importer._db = FakeSessionArchivos([f])
+        importer._library = library
+
+        desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
+
+        assert desaparecidos == []
+        assert reaparecidos == []
+        assert f.is_missing is False  # sin tocar, no se dio por perdido
+
+    @pytest.mark.asyncio
+    async def test_desaparicion_masiva_anomala_no_marca_nada(self, tmp_path):
+        """Guardarraíl (revisión de PR, 2026-09-26): con la carpeta
+        accesible y no vacía, que la MAYORÍA de rutas desaparezcan de
+        golpe en un solo ciclo es más probable un fallo de montaje
+        parcial que un vaciado real a mano — se aborta sin marcar nada."""
+        library = tmp_path / "library"
+        library.mkdir()
+        # Un único fichero real y accesible, para que la biblioteca no
+        # cuente como "vacía" (guardarraíl anterior) — el resto son
+        # rutas que nunca se crearon, simulando el fallo de montaje.
+        make_cbz(library / "Superviviente 001.cbz")
+        files = [
+            File(id=uuid4(), file_path=str(library / "Superviviente 001.cbz"),
+                 file_name="Superviviente 001.cbz", file_format="cbz", is_missing=False),
+        ] + [
+            File(id=uuid4(), file_path=str(library / f"Batman {n:03d}.cbz"),
+                 file_name=f"Batman {n:03d}.cbz", file_format="cbz", is_missing=False)
+            for n in range(12)
+        ]
+
+        importer = Importer.__new__(Importer)
+        importer._db = FakeSessionArchivos(files)
+        importer._library = library
+
+        desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
+
+        assert desaparecidos == []
+        assert reaparecidos == []
+        assert all(f.is_missing is False for f in files)  # nada tocado
+
+    @pytest.mark.asyncio
+    async def test_desaparicion_por_debajo_del_umbral_si_se_marca(self, tmp_path):
+        """El guardarraíl de desaparición masiva no debe tapar el caso
+        normal: unos pocos tebeos borrados a mano en una biblioteca
+        grande siguen marcándose como siempre."""
+        library = tmp_path / "library"
+        library.mkdir()
+        presentes = []
+        for n in range(18):
+            ruta = library / f"Presente {n:03d}.cbz"
+            make_cbz(ruta)
+            presentes.append(File(id=uuid4(), file_path=str(ruta), file_name=ruta.name,
+                                   file_format="cbz", is_missing=False))
+        borrado = File(id=uuid4(), file_path=str(library / "Borrado.cbz"), file_name="Borrado.cbz",
+                       file_format="cbz", is_missing=False)
+
+        importer = Importer.__new__(Importer)
+        importer._db = FakeSessionArchivos([*presentes, borrado])
+        importer._library = library
+
+        desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
+
+        assert desaparecidos == ["Borrado.cbz"]
+        assert borrado.is_missing is True
 
 
 class TestBuildLibraryPathSanitizado:

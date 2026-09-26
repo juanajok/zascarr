@@ -81,10 +81,15 @@ async def portada(series_id: UUID, request: Request, db: AsyncSession = Depends(
         data = await asyncio.to_thread(cache_path.read_bytes)
         return cached_image_response(request, data, "image/jpeg", _etag_for(cache_path))
 
+    # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
+    # está en disco — sin este filtro, la portada podía intentar (y
+    # fallar) extraer de un CBZ borrado en vez de probar el siguiente
+    # número disponible o caer al cover_url externo.
     row = (await db.execute(
         select(File.file_path)
         .join(Issue, File.issue_id == Issue.id)
         .where(Issue.series_id == series_id)
+        .where(File.is_missing.is_(False))
         .order_by(Issue.sort_order.asc().nulls_last())
         .limit(1)
     )).first()
