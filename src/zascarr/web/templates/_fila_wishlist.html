@@ -1,6 +1,9 @@
 <div class="wishlist-row" id="fila-{{ row.item.id }}">
   <span class="wishlist-title">{{ row.titulo }}</span>
   <span class="wishlist-badge estado-{{ row.item.status.value }}">{{ row.estado }}</span>
+  {% if row.motivo %}
+  <span class="wishlist-motivo" title="{{ row.motivo }}">{{ row.motivo }}</span>
+  {% endif %}
   {% if row.puede_reintentar %}
   <button type="button" class="btn-reintentar"
           hx-post="/ui/wishlist/{{ row.item.id }}/reintentar"
