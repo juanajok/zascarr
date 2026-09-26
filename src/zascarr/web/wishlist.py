@@ -21,6 +21,8 @@ from sqlalchemy.orm import selectinload
 from zascarr.database import get_db
 from zascarr.models import Issue, Wishlist, WishlistStatus
 from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
+from zascarr.services.orchestrator import Orchestrator
+from zascarr.services.prowlarr import SearchResult
 from zascarr.services.wishlist import WishlistService
 from zascarr.web.routes import TEMPLATES_DIR
 
@@ -54,6 +56,10 @@ def _row(item: Wishlist) -> dict:
         "titulo": titulo,
         "estado": _ESTADO_LABEL.get(item.status, item.status.value),
         "puede_reintentar": item.status == WishlistStatus.FAILED,
+        # D10: "Buscar ahora" solo tiene sentido en un estado accionable —
+        # una vez descargando/en biblioteca, esto no es la herramienta
+        # para tocarlo (no hay override manual de una descarga en curso).
+        "puede_buscar_ahora": item.status in (WishlistStatus.WANTED, WishlistStatus.FAILED),
         # D9: motivo concreto de por qué esta fila no avanza (o avanzó
         # y ya no aplica) — escrito por el orquestador, nunca inventado
         # aquí. "Sin resultados" en el badge de estado ya no es lo único
@@ -117,5 +123,67 @@ async def reintentar(item_id: UUID, request: Request, db: AsyncSession = Depends
         await WishlistService(db).retry(item_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    row = await _get_row(db, item_id)
+    return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})
+
+
+# ── D10: búsqueda manual con confirmación explícita ──────────────────────────
+# "Buscar ahora" muestra los candidatos reales (fuente/tamaño/formato) SIN
+# tocar Transmission/aMule; solo al confirmar UNO concreto se envía. Los
+# datos del candidato viajan de ida y vuelta en campos ocultos del propio
+# formulario — no hay estado de servidor nuevo (Redis/caché) que mantener
+# entre "verlo" y "confirmarlo": el propio navegador es quien lo recuerda,
+# coherente con "sin dependencias nuevas sin justificación" (CLAUDE.md §2).
+
+def _formato_de(titulo: str) -> str:
+    t = titulo.lower()
+    if ".cbz" in t:
+        return "CBZ"
+    if ".cbr" in t:
+        return "CBR"
+    return "?"
+
+
+@router.post("/{item_id}/buscar-ahora", response_class=HTMLResponse,
+             dependencies=[Depends(require_legal_acknowledgment)])
+async def buscar_ahora(item_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    item = await db.get(Wishlist, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item no encontrado")
+    resultado = await Orchestrator(db).preview_candidates(item)
+    no_se_pudo_buscar = resultado is None
+    sin_candidatos = resultado is not None and not resultado
+    filas = [{"c": c, "formato": _formato_de(c.title)} for c in (resultado or [])]
+    return templates.TemplateResponse(request, "_candidatos_wishlist.html", {
+        "item_id": item_id,
+        "candidatos": filas,
+        "no_se_pudo_buscar": no_se_pudo_buscar,
+        "sin_candidatos": sin_candidatos,
+        "motivo": item.last_error if sin_candidatos else None,
+    })
+
+
+@router.post("/{item_id}/cancelar-busqueda", response_class=HTMLResponse)
+async def cancelar_busqueda(item_id: UUID) -> HTMLResponse:
+    """D10: cancelar no deja nada a medias — no se tocó Transmission/aMule
+    al listar candidatos, así que "cancelar" es solo cerrar el panel."""
+    return HTMLResponse("")
+
+
+@router.post("/{item_id}/enviar-candidato", response_class=HTMLResponse,
+             dependencies=[Depends(require_legal_acknowledgment)])
+async def enviar_candidato(
+    item_id: UUID, request: Request, db: AsyncSession = Depends(get_db),
+    title: str = Form(...), indexer: str = Form(""), download_url: str = Form(...),
+    size_bytes: int = Form(0), seeders: int = Form(0), category: str = Form(""),
+) -> HTMLResponse:
+    item = await db.get(Wishlist, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item no encontrado")
+    candidato = SearchResult(
+        title=title, indexer=indexer, download_url=download_url,
+        size_bytes=size_bytes, seeders=seeders, category=category,
+    )
+    await Orchestrator(db).send_manual_candidate(item, candidato)
     row = await _get_row(db, item_id)
     return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})

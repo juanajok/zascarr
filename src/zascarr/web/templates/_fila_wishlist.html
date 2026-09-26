@@ -11,10 +11,22 @@
     Reintentar
   </button>
   {% endif %}
+  {% if row.puede_buscar_ahora %}
+  <button type="button" class="btn-buscar-ahora"
+          hx-post="/ui/wishlist/{{ row.item.id }}/buscar-ahora"
+          hx-target="#candidatos-{{ row.item.id }}" hx-swap="outerHTML"
+          hx-indicator="#buscando-{{ row.item.id }}">
+    Buscar ahora
+  </button>
+  <span class="htmx-indicator" id="buscando-{{ row.item.id }}">Buscando…</span>
+  {% endif %}
   <button type="button" class="btn-ignorar"
           hx-post="/ui/wishlist/{{ row.item.id }}/quitar"
           hx-target="#fila-{{ row.item.id }}" hx-swap="outerHTML"
           hx-confirm="¿Quitar de la lista de deseos?">
     Quitar
   </button>
+  {% if row.puede_buscar_ahora %}
+  <div class="candidatos-wishlist" id="candidatos-{{ row.item.id }}"></div>
+  {% endif %}
 </div>
