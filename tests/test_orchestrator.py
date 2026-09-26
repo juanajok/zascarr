@@ -18,6 +18,7 @@ from sqlalchemy import select
 from zascarr.config import get_settings
 from zascarr.models import ComicTradition, File, FileFormat, Issue, Series, Wishlist, WishlistStatus
 from zascarr.services.orchestrator import (
+    MOTIVO_CANDIDATO_INVALIDO,
     MOTIVO_CANDIDATO_RECHAZADO,
     MOTIVO_CLIENTE_INACCESIBLE,
     MOTIVO_ERROR_INESPERADO,
@@ -27,6 +28,8 @@ from zascarr.services.orchestrator import (
     DownloadBackend,
     Orchestrator,
     _extract_ed2k_hash,
+    crear_token_candidato,
+    verificar_token_candidato,
 )
 from zascarr.services.prowlarr import SearchResult
 
@@ -56,8 +59,13 @@ class FakeScalarResult:
 
 
 class FakeExecResult:
-    def __init__(self, rows):
+    def __init__(self, rows, rowcount=None):
         self._rows = rows
+        # Para UPDATE/DELETE (p.ej. la reclamación atómica de
+        # send_manual_candidate): filas afectadas, no filas devueltas.
+        # Por defecto sigue el tamaño de `rows` para no romper los
+        # exec results que ya existían pensados solo para SELECT.
+        self.rowcount = rowcount if rowcount is not None else len(rows)
 
     def scalars(self):
         return FakeScalarResult(self._rows)
@@ -67,6 +75,18 @@ class FakeExecResult:
 
     def first(self):
         return self._rows[0] if self._rows else None
+
+
+def claim_ganada() -> FakeExecResult:
+    """Resultado de la reclamación atómica de send_manual_candidate
+    cuando SÍ se gana la carrera (1 fila afectada)."""
+    return FakeExecResult([], rowcount=1)
+
+
+def claim_perdida() -> FakeExecResult:
+    """... cuando se pierde (otra petición concurrente ya reclamó el
+    item, 0 filas afectadas)."""
+    return FakeExecResult([], rowcount=0)
 
 
 class FakeSession:
@@ -351,7 +371,7 @@ class TestBusquedaManual:
     @pytest.mark.asyncio
     async def test_enviar_candidato_elegido_pasa_a_downloading(self):
         item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
-        orch = Orchestrator(db=FakeSession())
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
         orch._transmission = AsyncMock()
         orch._transmission.add_torrent.return_value = {"hashString": "abc123"}
         candidato = make_result(title="Batman #1.cbz", seeders=10)
@@ -368,7 +388,7 @@ class TestBusquedaManual:
         settings = get_settings().model_copy(update={"transmission_enabled": False, "amule_enabled": False})
         monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
         item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
-        orch = Orchestrator(db=FakeSession())
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
         orch._transmission = AsyncMock()
         candidato = make_result(seeders=10)  # magnet:// -> Transmission, apagado
 
@@ -381,7 +401,7 @@ class TestBusquedaManual:
     @pytest.mark.asyncio
     async def test_enviar_candidato_si_falla_el_cliente_se_marca_failed(self):
         item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
-        orch = Orchestrator(db=FakeSession())
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
         orch._transmission = AsyncMock()
         orch._transmission.add_torrent.return_value = None
         candidato = make_result(seeders=10)
@@ -401,7 +421,7 @@ class TestBusquedaManual:
         traducirlo al mismo MOTIVO_CLIENTE_INACCESIBLE que un rechazo
         "blando" (Transmission responde pero no acepta)."""
         item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
-        orch = Orchestrator(db=FakeSession())
+        orch = Orchestrator(db=FakeSession([claim_ganada()]))
         orch._transmission = AsyncMock()
         orch._transmission.add_torrent.side_effect = ConnectionRefusedError("boom")
         candidato = make_result(seeders=10)
@@ -411,6 +431,117 @@ class TestBusquedaManual:
         assert result is False
         assert item.status == WishlistStatus.FAILED
         assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_no_reenvia_si_el_item_ya_no_esta_en_estado_accionable(self):
+        """Hallazgo de revisión (2026-09-26): sin este guardarraíl, una
+        doble confirmación (doble clic, un token reenviado dentro de su
+        ventana de validez) podía encolar la misma descarga otra vez
+        sobre un item que ya está DOWNLOADING/IMPORTED."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        candidato = make_result(seeders=10)
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.DOWNLOADING  # sin tocar
+        assert item.last_error == MOTIVO_CANDIDATO_INVALIDO
+        orch._transmission.add_torrent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_pierde_la_reclamacion_atomica_no_envia_nada(self):
+        """Hallazgo de revisión de PR (2026-09-26): el guardarraíl de
+        estado por sí solo no basta contra dos peticiones CONCURRENTES
+        — ambas pueden leer WANTED en su propia sesión antes de que
+        ninguna termine de enviar. El objeto en memoria sigue diciendo
+        WANTED (nadie se lo ha refrescado), pero la reclamación atómica
+        (UPDATE condicionado) es quien de verdad decide: si otra
+        petición ya ganó la carrera, esta ni siquiera llega a mirar el
+        backend."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession([claim_perdida()]))
+        orch._transmission = AsyncMock()
+        candidato = make_result(seeders=10)
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.WANTED  # sin tocar, no se ganó la reclamación
+        orch._transmission.add_torrent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_perder_la_reclamacion_no_pisa_el_resultado_del_ganador(self):
+        """Verificado en vivo contra Postgres real (2026-09-26): antes de
+        este cambio, el perdedor escribía last_error="candidato
+        inválido" y hacía flush() incondicionalmente — como esa
+        escritura llega DESPUÉS de que el ganador ya confirmó la suya
+        (el ganador pasa por el `_send()` más lento), pisaba un
+        last_error=None de un envío que sí tuvo éxito. Ahora el
+        perdedor no toca last_error en absoluto."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED, last_error=None)
+        orch = Orchestrator(db=FakeSession([claim_perdida()]))
+        orch._transmission = AsyncMock()
+        candidato = make_result(seeders=10)
+
+        await orch.send_manual_candidate(item, candidato)
+
+        assert item.last_error is None  # sin tocar
+
+
+class TestTokenCandidato:
+    """D10 (hallazgo de revisión, 2026-09-26): el candidato viaja firmado
+    por el servidor, ligado al item y con caducidad — nunca reconstruido
+    a partir de campos sueltos que el formulario reenvíe."""
+
+    def test_token_valido_devuelve_el_mismo_candidato(self):
+        item_id = uuid4()
+        candidato = make_result(title="Batman #1.cbz", url="magnet:?xt=urn:btih:abc", seeders=10)
+
+        token = crear_token_candidato(item_id, candidato, "secreto")
+        recuperado = verificar_token_candidato(token, item_id, "secreto")
+
+        assert recuperado is not None
+        assert recuperado.title == "Batman #1.cbz"
+        assert recuperado.download_url == "magnet:?xt=urn:btih:abc"
+
+    def test_token_de_otro_item_no_vale(self):
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(uuid4(), candidato, "secreto")
+
+        assert verificar_token_candidato(token, uuid4(), "secreto") is None
+
+    def test_token_con_otro_secreto_no_vale(self):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+
+        assert verificar_token_candidato(token, item_id, "otro-secreto") is None
+
+    def test_token_manipulado_no_vale(self):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+        manipulado = token[:-1] + ("0" if token[-1] != "0" else "1")
+
+        assert verificar_token_candidato(manipulado, item_id, "secreto") is None
+
+    def test_token_caducado_no_vale(self, monkeypatch):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        monkeypatch.setattr("zascarr.services.orchestrator.TOKEN_CANDIDATO_TTL_SEGUNDOS", -1)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+
+        assert verificar_token_candidato(token, item_id, "secreto") is None
+
+    def test_token_vacio_o_secreto_vacio_no_vale(self):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+
+        assert verificar_token_candidato("", item_id, "secreto") is None
+        assert verificar_token_candidato(token, item_id, "") is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -101,12 +101,19 @@ def credenciales_validas(username: str, password: str, settings: Settings) -> bo
     return False
 
 
-def _sign(payload: str, secret: str) -> str:
+def sign_token(payload: str, secret: str) -> str:
+    """HMAC-SHA256 sobre una cadena cualquiera — primitiva genérica,
+    reutilizada tanto por la cookie de sesión de aquí como por el token
+    de candidato de D10 (services/orchestrator.py::crear_token_candidato).
+    Sin JWT ni dependencias nuevas (CLAUDE.md §2): un payload + una firma,
+    separados por un punto."""
     mac = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{mac}"
 
 
-def _verify(token: str, secret: str) -> str | None:
+def verify_token(token: str, secret: str) -> str | None:
+    """Devuelve el payload si la firma es válida, None si no — nunca
+    revienta con un token ausente/malformado."""
     try:
         payload, mac = token.rsplit(".", 1)
     except ValueError:
@@ -116,13 +123,13 @@ def _verify(token: str, secret: str) -> str | None:
 
 
 def crear_cookie_sesion(secret: str) -> str:
-    return _sign(str(int(time.time())), secret)
+    return sign_token(str(int(time.time())), secret)
 
 
 def sesion_valida(token: str | None, secret: str) -> bool:
     if not token or not secret:
         return False
-    payload = _verify(token, secret)
+    payload = verify_token(token, secret)
     if payload is None:
         return False
     try:
