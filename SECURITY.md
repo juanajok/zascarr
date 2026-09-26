@@ -34,6 +34,11 @@ no el de esta contraseña —, pero ya no es la ÚNICA capa: sin activar nada
 aquí, cualquiera con la URL puede leer tu biblioteca, activar integraciones
 de descarga y disparar búsquedas.
 
+## Deuda de seguridad conocida (A6)
+
+- **La sesión no se invalida al cambiar la contraseña.** La cookie se firma solo con `secret_key`, no con la contraseña, así que una cookie emitida antes de un cambio de contraseña sigue siendo válida hasta que caduca (30 días) o hasta que `secret_key` se regenere. Aceptable para una herramienta de un solo operador en su propia LAN, pero es una de esas sorpresas que alguien descubrirá algún día ("cambié la clave y seguía entrando desde otra pestaña") — que quede escrito. Si algún día importa, cerrar sesión en todas partes = regenerar `secret_key`.
+- **La cookie viaja sin `Secure`, decidido a propósito.** Con `secure=True` el navegador no enviaría la cookie por HTTP plano y el login en la LAN dejaría de funcionar, así que sin TLS activado rompería el caso de uso principal. Es la decisión correcta hoy, pero es deuda deliberada: cuando ZascArr viva tras un reverse proxy con TLS de verdad, ese flag debería activarse (o hacerse condicional a `base_url` empezando por `https://`). Entra de oficio con la futura historia de reverse proxy.
+
 ## Reportar una vulnerabilidad
 
 Abre un [security advisory privado](https://github.com/juanajok/zascarr/security/advisories/new)
