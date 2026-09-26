@@ -3,6 +3,18 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.10.0] — 2026-09-26
+
+### Añadido
+
+- **Contraseña opcional para cuando ZascArr se ve fuera de esta máquina (A6).** Desde `/ui/ajustes` → Seguridad: sin contraseña (por defecto, sin cambios de comportamiento), solo contraseña, o usuario y contraseña. Cookie de sesión firmada (HMAC-SHA256, 30 días) para la interfaz web; HTTP Basic Auth para `/api/*`, así que `curl`/scripts siguen funcionando. Contraseña siempre PBKDF2-SHA256 (260.000 iteraciones), nunca en claro. `/api/health`, `/legal` y los estáticos quedan exentos a propósito. Sin dependencias nuevas — todo con `hmac`/`hashlib` de la stdlib.
+
+  Guardarraíl explícito: activar un modo con contraseña sin poner ninguna (ni antes ni ahora) se rechaza en vez de guardarse — evita que el propio coleccionista se quede fuera de su instalación sin forma de deshacerlo.
+
+### Corregido
+
+- **Open redirect en `/login`.** El parámetro `next` (a dónde volver tras iniciar sesión) venía del query string sin validar — un enlace `/login?next=https://sitio-falso.example` habría redirigido tras un login correcto a un dominio ajeno. Ahora solo se acepta una ruta relativa de este mismo sitio.
+
 ## [1.9.0] — 2026-09-26
 
 ### Añadido

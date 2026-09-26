@@ -13,7 +13,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,9 +23,9 @@ from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.orchestrator import Orchestrator
 from zascarr.services.prowlarr import SearchResult
 from zascarr.services.wishlist import WishlistService
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 router = APIRouter(prefix="/ui/wishlist", tags=["ui"])
 

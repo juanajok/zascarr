@@ -14,7 +14,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
@@ -22,9 +21,9 @@ from zascarr.models import File
 from zascarr.services.review import ReviewService
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail
 from zascarr.utils.naming import parse_comic_filename
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 router = APIRouter(prefix="/ui/pendientes", tags=["ui"])
 

@@ -21,6 +21,7 @@ M1: nada de escritura sin lista blanca explícita).
 """
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from sqlalchemy import select
@@ -42,11 +43,24 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
         "transmission_password", "transmission_enabled",
     ),
     "amule": ("amule_url", "amule_password", "amule_enabled"),
+    # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo
+    # calcula (services/auth.py::hash_password) ANTES de llamar a save().
+    "seguridad": ("auth_mode", "auth_username", "auth_password_hash", "base_url"),
 }
 # Nunca se devuelven en claro tras guardarse (D11): la UI los muestra
 # como "configurado"/"no configurado", nunca con el valor real.
-SECRET_FIELDS = {"comicvine_api_key", "prowlarr_api_key", "transmission_password", "amule_password"}
-_ALL_FIELDS = {campo for campos in OVERRIDABLE_FIELDS.values() for campo in campos}
+SECRET_FIELDS = {
+    "comicvine_api_key", "prowlarr_api_key", "transmission_password",
+    "amule_password", "auth_password_hash",
+}
+# secret_key (A6) firma la cookie de sesión — nunca aparece en el
+# formulario de /ui/ajustes (no está en ningún grupo de OVERRIDABLE_
+# FIELDS de arriba), pero SÍ debe pasar por apply_overrides() como los
+# demás, así que se añade a la lista blanca por separado.
+_CAMPOS_INTERNOS = {"secret_key"}
+_ALL_FIELDS = (
+    {campo for campos in OVERRIDABLE_FIELDS.values() for campo in campos} | _CAMPOS_INTERNOS
+)
 
 _SETTINGS_ROW_ID = 1
 
@@ -106,6 +120,24 @@ class RuntimeSettingsService:
         values[key] = value
         row.values = values
         await self.db.flush()
+
+    async def ensure_secret_key(self) -> str:
+        """A6: llamado una vez desde el lifespan de main.py. Genera
+        secret_key (firma la cookie de sesión) solo si todavía no existe
+        — nunca la regenera en un arranque posterior, o toda sesión
+        activa se invalidaría de golpe en cada reinicio/deploy."""
+        row = await self._row()
+        values = dict(row.values or {})
+        clave = values.get("secret_key")
+        if clave:
+            apply_overrides({"secret_key": clave})
+            return clave
+        clave = secrets.token_hex(32)
+        values["secret_key"] = clave
+        row.values = values
+        await self.db.flush()
+        apply_overrides({"secret_key": clave})
+        return clave
 
 
 def apply_overrides(values: dict[str, Any]) -> None:

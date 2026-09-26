@@ -105,6 +105,35 @@
     <div id="prueba-amule"></div>
   </fieldset>
 
+  <fieldset class="ajustes-card">
+    <legend>Seguridad</legend>
+    <p class="ajustes-desc">Contraseña para cuando ZascArr se ve fuera de esta misma máquina. Sin activar, cualquiera que llegue a la URL entra directo — recomendado si publicas el puerto en tu LAN o detrás de un reverse proxy.</p>
+    <form hx-post="/ui/ajustes/guardar/seguridad" hx-target="#resultado-seguridad" hx-swap="innerHTML">
+      <label>Modo
+        <select name="auth_mode">
+          <option value="none" {% if auth_mode == "none" %}selected{% endif %}>Sin contraseña</option>
+          <option value="password" {% if auth_mode == "password" %}selected{% endif %}>Solo contraseña</option>
+          <option value="user_password" {% if auth_mode == "user_password" %}selected{% endif %}>Usuario y contraseña</option>
+        </select>
+      </label>
+      <label>Usuario (solo si eliges "Usuario y contraseña")
+        <input type="text" name="auth_username" value="{{ auth_username }}" autocomplete="off">
+      </label>
+      <label>Contraseña
+        <input type="password" name="auth_password" autocomplete="new-password"
+               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if auth_password_configurada else 'sin configurar' }}">
+      </label>
+      <label>URL externa (opcional)
+        <input type="text" name="base_url" value="{{ base_url }}" placeholder="https://zascarr.tudominio.com">
+      </label>
+      <p class="ajustes-hint">La URL externa no cambia nada del acceso ni de la sesión hoy — queda guardada para enlaces futuros (avisos al móvil, informes).</p>
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+    <div id="resultado-seguridad"></div>
+  </fieldset>
+
 </div>
 
 {% from "_legal_disclaimer.html" import legal_disclaimer %}

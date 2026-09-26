@@ -15,18 +15,18 @@ import hashlib
 
 import httpx
 import structlog
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.services.auth import hash_password
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 # Bug real, reportado: Prowlarr/Transmission/aMule fallaban con "no se pudo
 # conectar" aunque la URL y las credenciales fueran correctas, mientras
@@ -84,6 +84,10 @@ def _contexto() -> dict:
         "amule_url": s.amule_url,
         "amule_password_configurada": bool(s.amule_password),
         "amule_enabled": s.amule_enabled,
+        "auth_mode": s.auth_mode,
+        "auth_username": s.auth_username,
+        "auth_password_configurada": bool(s.auth_password_hash),
+        "base_url": s.base_url,
     }
 
 
@@ -146,6 +150,37 @@ async def guardar_amule(
         "amule_enabled": amule_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
+
+
+@router.post("/guardar/seguridad", response_class=HTMLResponse)
+async def guardar_seguridad(
+    request: Request, auth_mode: str = Form(...),
+    auth_username: str = Form(default=""), auth_password: str = Form(default=""),
+    base_url: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    if auth_mode not in ("none", "password", "user_password"):
+        raise HTTPException(status_code=400, detail="Modo de autenticación no reconocido")
+
+    settings = get_settings()
+    # A6: nunca dejar la app en un modo que nadie pueda desbloquear — si
+    # se activa contraseña y no hay ninguna (ni recién escrita ni ya
+    # guardada de antes), el coleccionista quedaría fuera de su propia
+    # instalación, sin poder ni siquiera volver a /ui/ajustes a arreglarlo.
+    if auth_mode in ("password", "user_password") and not auth_password and not settings.auth_password_hash:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Seguridad", "error": "Pon una contraseña antes de activar este modo — si no, no podrás volver a entrar.",
+        })
+    if auth_mode == "user_password" and not auth_username and not settings.auth_username:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Seguridad", "error": "Este modo necesita también un nombre de usuario.",
+        })
+
+    updates: dict = {"auth_mode": auth_mode, "auth_username": auth_username, "base_url": base_url.rstrip("/")}
+    if auth_password:
+        updates["auth_password_hash"] = hash_password(auth_password)
+    await RuntimeSettingsService(db).save(updates)
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Seguridad"})
 
 
 # ── Probar conexión: valores DEL FORMULARIO, con fallback al secreto ya
