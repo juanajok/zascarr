@@ -11,7 +11,24 @@ Ya no sirve la portada de /ui/ (antes un placeholder): esa la sirve
 from pathlib import Path
 
 from fastapi import APIRouter
+from fastapi.templating import Jinja2Templates
+
+from zascarr.config import get_settings
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 router = APIRouter(prefix="/ui", tags=["ui"])
+
+
+def crear_templates() -> Jinja2Templates:
+    """Cada router web crea su propia instancia de Jinja2Templates (11 y
+    contando) — cada una es un Environment independiente, así que un
+    global registrado en una no se ve en las demás. Esta fábrica evita
+    tener que repetir el registro a mano en cada fichero.
+
+    `auth_activo` (A6): `base.html` lo usa para mostrar u ocultar
+    "Cerrar sesión" en el nav sin que cada router tenga que acordarse de
+    meter `auth_mode` en su propio contexto de plantilla."""
+    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    templates.env.globals["auth_activo"] = lambda: get_settings().auth_mode != "none"
+    return templates

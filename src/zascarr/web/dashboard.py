@@ -23,16 +23,15 @@ from collections import defaultdict
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.api.series import compute_missing_issues
 from zascarr.database import get_db
 from zascarr.models import File, Issue, Series
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 

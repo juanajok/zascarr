@@ -59,6 +59,11 @@ class TestIndex:
         for nombre in ("Comic Vine", "Prowlarr", "Transmission", "aMule"):
             assert nombre in r.text
 
+    def test_incluye_la_seccion_de_seguridad_a6(self):
+        client = TestClient(app)
+        r = client.get("/ui/ajustes")
+        assert "Seguridad" in r.text
+
 
 class TestGuardar:
 
@@ -78,6 +83,59 @@ class TestGuardar:
         assert "guardado" in r.text.lower()
         assert get_settings().prowlarr_url == "http://prowlarr-test:9696"
         assert get_settings().prowlarr_enabled is True
+
+
+class TestGuardarSeguridad:
+    """A6: nunca dejar la app en un modo que nadie pueda desbloquear."""
+
+    def test_activar_password_sin_ninguna_contrasena_no_guarda(self, restaurar_settings):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            client = TestClient(app)
+            r = client.post("/ui/ajustes/guardar/seguridad", data={
+                "auth_mode": "password", "auth_password": "", "base_url": "",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert r.status_code == 200
+        assert "contraseña" in r.text.lower()
+        assert get_settings().auth_mode == "none"  # no se llegó a aplicar
+
+    def test_activar_user_password_sin_usuario_no_guarda(self, restaurar_settings):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            client = TestClient(app)
+            r = client.post("/ui/ajustes/guardar/seguridad", data={
+                "auth_mode": "user_password", "auth_username": "", "auth_password": "secreta123", "base_url": "",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert r.status_code == 200
+        assert "usuario" in r.text.lower()
+        assert get_settings().auth_mode == "none"
+
+    def test_activar_password_con_contrasena_la_guarda_hasheada(self, restaurar_settings):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            client = TestClient(app)
+            r = client.post("/ui/ajustes/guardar/seguridad", data={
+                "auth_mode": "password", "auth_password": "secreta123", "base_url": "",
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert r.status_code == 200
+        assert "guardado" in r.text.lower()
+        assert get_settings().auth_mode == "password"
+        assert get_settings().auth_password_hash  # nunca la contraseña en claro
+        assert "secreta123" not in get_settings().auth_password_hash
+
+    def test_modo_desconocido_da_400(self, restaurar_settings):
+        client = TestClient(app)
+        r = client.post("/ui/ajustes/guardar/seguridad", data={"auth_mode": "lo-que-sea"})
+        assert r.status_code == 400
 
 
 class TestProbar:

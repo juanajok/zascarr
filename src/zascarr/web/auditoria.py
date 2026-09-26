@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,9 +24,9 @@ from zascarr.database import get_db
 from zascarr.models import ImportRun
 from zascarr.services.library_adopter import LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 
 def _tamano(num_bytes: int | None) -> str:

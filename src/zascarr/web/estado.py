@@ -11,11 +11,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 router = APIRouter(tags=["ui"])
 

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iniciar sesión — ZascArr</title>
+<link rel="stylesheet" href="/static/web.css">
+</head>
+<body>
+  <main class="content login-content">
+    <h1>ZascArr</h1>
+    <p class="subtitle">Introduce tu contraseña para continuar.</p>
+    <form method="post" action="/login" class="login-form">
+      <input type="hidden" name="next" value="{{ next }}">
+      {% if pide_usuario %}
+      <label>Usuario
+        <input type="text" name="username" autocomplete="username" required autofocus>
+      </label>
+      {% endif %}
+      <label>Contraseña
+        <input type="password" name="password" autocomplete="current-password" required
+               {% if not pide_usuario %}autofocus{% endif %}>
+      </label>
+      {% if error %}
+      <p class="login-error">{{ error }}</p>
+      {% endif %}
+      <button type="submit">Entrar</button>
+    </form>
+  </main>
+</body>
+</html>
