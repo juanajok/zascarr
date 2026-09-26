@@ -29,16 +29,20 @@ item pedía — el import loop periódico ya existente es quien de verdad
 clasifica el archivo, este método solo refleja ese hecho en el estado de
 la wishlist.
 """
+import base64
+import json
+import time
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.models import File, Issue, Series, Wishlist, WishlistStatus
 from zascarr.services.amule import AMuleClient
+from zascarr.services.auth import sign_token, verify_token
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.prowlarr import ProwlarrClient, SearchResult
 from zascarr.services.transmission import TransmissionClient
@@ -60,6 +64,12 @@ MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
 MOTIVO_CANDIDATO_RECHAZADO = "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
 MOTIVO_CLIENTE_INACCESIBLE = "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
+MOTIVO_CANDIDATO_INVALIDO = "Ese candidato ya no es válido — vuelve a buscar y elige uno de la lista actual"
+
+# D10: cuánto dura la validez de un candidato mostrado en "Buscar ahora"
+# antes de que haya que volver a buscar — suficiente para que una persona
+# lo mire y decida, corto para acotar la ventana de un token reenviado.
+TOKEN_CANDIDATO_TTL_SEGUNDOS = 600
 
 
 class DownloadBackend(str, Enum):
@@ -237,10 +247,62 @@ class Orchestrator:
         (_send), pero sin volver a rankear ni a filtrar: la elección
         humana ya es la validación. El filtro de blindaje legal por
         backend SÍ se respeta igual que en automático (opt-in real, no
-        solo de cara al ranking)."""
+        solo de cara al ranking).
+
+        Hallazgo de revisión (2026-09-26): sin comprobar el ESTADO del
+        item, confirmar dos veces el mismo token dentro de su ventana de
+        validez (doble clic, pestaña duplicada, un reenvío deliberado)
+        podía encolar la misma descarga otra vez sobre un item que ya
+        está DOWNLOADING/IMPORTED. Solo se envía desde un estado
+        accionable — el mismo criterio que decide si se ofrece "Buscar
+        ahora" en la UI (web/wishlist.py::_row, puede_buscar_ahora).
+
+        Segundo hallazgo, revisión de PR (2026-09-26): ese guardarraíl
+        por sí solo detiene un reenvío SECUENCIAL (tras completar el
+        primer envío), no dos peticiones CONCURRENTES — ambas pueden
+        leer WANTED/FAILED en su propia sesión antes de que ninguna
+        termine `_send()` (I/O de red, con `await` de por medio).
+        Firmado (D10) no es lo mismo que de un solo uso. Se reclama el
+        item con un UPDATE condicionado (WANTED/FAILED → SEARCHING)
+        ANTES de tocar la red: Postgres serializa los UPDATE contra la
+        misma fila (bloquea al segundo hasta que el primero confirma, y
+        entonces reevalúa el WHERE), así que como mucho una petición ve
+        su fila afectada — la otra ve 0 filas y no llega a enviar nada.
+        """
+        if item.status not in (WishlistStatus.WANTED, WishlistStatus.FAILED):
+            item.last_error = MOTIVO_CANDIDATO_INVALIDO
+            await self.db.flush()
+            return False
+
+        reclamado = await self.db.execute(
+            update(Wishlist)
+            .where(Wishlist.id == item.id)
+            .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
+            .values(status=WishlistStatus.SEARCHING)
+        )
+        if reclamado.rowcount == 0:
+            # Perdió la carrera: otra petición concurrente ya reclamó
+            # este mismo item entre que se cargó y que llegamos aquí.
+            # Deliberadamente NO se escribe last_error aquí (verificado
+            # en vivo, 2026-09-26): esta escritura llegaría después de
+            # que la petición ganadora ya confirmara la suya (pasa por
+            # el mismo `await self._send()`, más lento), y un simple
+            # `flush()` sobre este objeto en memoria pisaría con
+            # "candidato inválido" el resultado real ya guardado —
+            # incluido un `last_error=None` de un envío que sí tuvo
+            # éxito. La fila que ve el perdedor se refresca aparte
+            # (`_get_row`, en el router) con el estado real y actual.
+            return False
+        item.status = WishlistStatus.SEARCHING
+
         settings = get_settings()
         backend = _detect_backend(candidate.download_url)
         if not self._backend_enabled(backend, settings):
+            # La reclamación deja el item en SEARCHING (transitorio) —
+            # si no se envía nada, hay que devolverlo a un estado
+            # accionable, o quedaría "colgado" igual que el bug ya
+            # corregido de preview_candidates.
+            item.status = WishlistStatus.FAILED
             item.last_error = MOTIVO_CANDIDATO_RECHAZADO
             await self.db.flush()
             return False
@@ -419,3 +481,65 @@ def _extract_ed2k_hash(url: str) -> str | None:
     URL, no hace falta preguntarle nada a aMule para tenerlo."""
     parts = url.split("|")
     return parts[4] if len(parts) >= 5 else None
+
+
+# ── D10: candidato firmado por el servidor, no reconstruido del formulario ───
+#
+# Hallazgo de revisión (2026-09-26): la primera versión de "Buscar ahora"
+# hacía que el formulario de "Descargar este" reenviase los campos del
+# candidato (título, indexer, download_url...) en claro, en campos ocultos.
+# web/wishlist.py::enviar_candidato los recogía y construía un SearchResult
+# directamente con lo que llegara — sin comprobar que esos datos vinieran
+# de verdad de una búsqueda hecha para ESE item. Un formulario manipulado a
+# mano (o interceptado) podía colar cualquier download_url para cualquier
+# item sin haber pasado nunca por preview_candidates().
+#
+# Ahora el servidor firma el candidato ENTERO junto con el item_id y una
+# caducidad corta (HMAC, la misma clave que firma la cookie de sesión —
+# services/auth.py::sign_token/verify_token). El formulario solo reenvía
+# ese token, nunca los datos sueltos: cualquier cambio en cualquier campo,
+# o usarlo para otro item, o usarlo pasada su caducidad, invalida la firma.
+
+def crear_token_candidato(item_id, candidate: SearchResult, secret: str) -> str:
+    payload = {
+        "item_id": str(item_id),
+        "title": candidate.title,
+        "indexer": candidate.indexer,
+        "download_url": candidate.download_url,
+        "size_bytes": candidate.size_bytes,
+        "seeders": candidate.seeders,
+        "category": candidate.category,
+        "exp": int(time.time()) + TOKEN_CANDIDATO_TTL_SEGUNDOS,
+    }
+    crudo_json = json.dumps(payload, separators=(",", ":")).encode()
+    crudo = base64.urlsafe_b64encode(crudo_json).decode()
+    return sign_token(crudo, secret)
+
+
+def verificar_token_candidato(token: str, item_id, secret: str) -> SearchResult | None:
+    """None si el token es inválido, de otro item, o ha caducado — nunca
+    revienta con un token ausente/manipulado."""
+    if not token or not secret:
+        return None
+    crudo = verify_token(token, secret)
+    if crudo is None:
+        return None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(crudo.encode()).decode())
+    except Exception:
+        return None
+    if payload.get("item_id") != str(item_id):
+        return None
+    if payload.get("exp", 0) < time.time():
+        return None
+    try:
+        return SearchResult(
+            title=payload["title"],
+            indexer=payload["indexer"],
+            download_url=payload["download_url"],
+            size_bytes=payload["size_bytes"],
+            seeders=payload["seeders"],
+            category=payload["category"],
+        )
+    except KeyError:
+        return None
