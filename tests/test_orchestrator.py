@@ -18,6 +18,7 @@ from sqlalchemy import select
 from zascarr.config import get_settings
 from zascarr.models import ComicTradition, File, FileFormat, Issue, Series, Wishlist, WishlistStatus
 from zascarr.services.orchestrator import (
+    MOTIVO_CANDIDATO_INVALIDO,
     MOTIVO_CANDIDATO_RECHAZADO,
     MOTIVO_CLIENTE_INACCESIBLE,
     MOTIVO_ERROR_INESPERADO,
@@ -27,6 +28,8 @@ from zascarr.services.orchestrator import (
     DownloadBackend,
     Orchestrator,
     _extract_ed2k_hash,
+    crear_token_candidato,
+    verificar_token_candidato,
 )
 from zascarr.services.prowlarr import SearchResult
 
@@ -411,6 +414,78 @@ class TestBusquedaManual:
         assert result is False
         assert item.status == WishlistStatus.FAILED
         assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_no_reenvia_si_el_item_ya_no_esta_en_estado_accionable(self):
+        """Hallazgo de revisión (2026-09-26): sin este guardarraíl, una
+        doble confirmación (doble clic, un token reenviado dentro de su
+        ventana de validez) podía encolar la misma descarga otra vez
+        sobre un item que ya está DOWNLOADING/IMPORTED."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        orch = Orchestrator(db=FakeSession())
+        orch._transmission = AsyncMock()
+        candidato = make_result(seeders=10)
+
+        result = await orch.send_manual_candidate(item, candidato)
+
+        assert result is False
+        assert item.status == WishlistStatus.DOWNLOADING  # sin tocar
+        assert item.last_error == MOTIVO_CANDIDATO_INVALIDO
+        orch._transmission.add_torrent.assert_not_called()
+
+
+class TestTokenCandidato:
+    """D10 (hallazgo de revisión, 2026-09-26): el candidato viaja firmado
+    por el servidor, ligado al item y con caducidad — nunca reconstruido
+    a partir de campos sueltos que el formulario reenvíe."""
+
+    def test_token_valido_devuelve_el_mismo_candidato(self):
+        item_id = uuid4()
+        candidato = make_result(title="Batman #1.cbz", url="magnet:?xt=urn:btih:abc", seeders=10)
+
+        token = crear_token_candidato(item_id, candidato, "secreto")
+        recuperado = verificar_token_candidato(token, item_id, "secreto")
+
+        assert recuperado is not None
+        assert recuperado.title == "Batman #1.cbz"
+        assert recuperado.download_url == "magnet:?xt=urn:btih:abc"
+
+    def test_token_de_otro_item_no_vale(self):
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(uuid4(), candidato, "secreto")
+
+        assert verificar_token_candidato(token, uuid4(), "secreto") is None
+
+    def test_token_con_otro_secreto_no_vale(self):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+
+        assert verificar_token_candidato(token, item_id, "otro-secreto") is None
+
+    def test_token_manipulado_no_vale(self):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+        manipulado = token[:-1] + ("0" if token[-1] != "0" else "1")
+
+        assert verificar_token_candidato(manipulado, item_id, "secreto") is None
+
+    def test_token_caducado_no_vale(self, monkeypatch):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        monkeypatch.setattr("zascarr.services.orchestrator.TOKEN_CANDIDATO_TTL_SEGUNDOS", -1)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+
+        assert verificar_token_candidato(token, item_id, "secreto") is None
+
+    def test_token_vacio_o_secreto_vacio_no_vale(self):
+        item_id = uuid4()
+        candidato = make_result(seeders=10)
+        token = crear_token_candidato(item_id, candidato, "secreto")
+
+        assert verificar_token_candidato("", item_id, "secreto") is None
+        assert verificar_token_candidato(token, item_id, "") is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
