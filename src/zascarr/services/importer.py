@@ -103,6 +103,12 @@ class _Outcome:
     # la sugerencia de B12 ("¿es esta serie? — descartamos el 65 inicial
     # por evidencia de 38 archivos con el mismo patrón").
     cohorte_explicacion: str | None = None
+    # B15 (2026-09-26): "omnigold"/"integral"/"tomo"/"volumen" cuando el
+    # número viene de un marcador de edición y no de una grapa estándar
+    # (naming.py::ParsedComicName.edition_kind). Se guarda en metadata_
+    # para que ReviewService.assign_to_series sepa qué Issue.format poner
+    # al confirmar la asignación, en vez de SINGLE_ISSUE por defecto.
+    edition_kind: str | None = None
 
 
 async def _triage_and_match(
@@ -119,20 +125,22 @@ async def _triage_and_match(
 
     matcher = SeriesMatcher(db)
     aplicada = False
+    edition_kind: str | None = None
 
     def extractor(filename: str):
-        nonlocal aplicada
+        nonlocal aplicada, edition_kind
         nombre = filename
         if pista is not None:
             nombre = quitar_prefijo_de_cohorte(filename, pista)
             aplicada = nombre != filename
         p = parse_comic_filename(nombre)
+        edition_kind = p.edition_kind
         if p.series and p.issue_number:
             return p.series, p.issue_number, p.year
         return None
 
     result = await matcher.decide(tr, extractor=extractor)
-    outcome = _Outcome(tr=tr, result=result)
+    outcome = _Outcome(tr=tr, result=result, edition_kind=edition_kind)
     if aplicada:
         outcome.cohorte_explicacion = pista.explicacion
     return outcome
@@ -241,6 +249,8 @@ class Importer:
         }
         if outcome.cohorte_explicacion:
             metadata["cohorte"] = outcome.cohorte_explicacion
+        if outcome.edition_kind:
+            metadata["edicion"] = outcome.edition_kind
 
         file_rec = File(
             issue_id=str(result.issue_id) if result.issue_id else None,

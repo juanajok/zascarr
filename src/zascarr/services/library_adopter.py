@@ -162,6 +162,8 @@ class LibraryAdopter:
         }
         if outcome.cohorte_explicacion:
             metadata["cohorte"] = outcome.cohorte_explicacion
+        if outcome.edition_kind:
+            metadata["edicion"] = outcome.edition_kind
 
         # Nunca se mueve: file_path es la ruta real donde el coleccionista
         # ya tenía el archivo, no un destino calculado (a diferencia de

@@ -30,10 +30,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
-from zascarr.models import File, Issue, LocalAlias, MetadataSource, Series
+from zascarr.models import File, Issue, IssueFormat, LocalAlias, MetadataSource, Series
 from zascarr.services.importer import build_library_path
 from zascarr.utils.fs import safe_move_async
 from zascarr.utils.naming import parse_comic_filename
+
+# B15 (2026-09-26): qué Issue.format corresponde a cada edition_kind que
+# puede salir de naming.py — nunca SINGLE_ISSUE por defecto para estos,
+# porque el número que llevan no es una grapa estándar (es el tomo de
+# una recopilación o edición). "omnigold"/"integral" agrupan varias
+# grapas originales (más cerca de un ómnibus); "tomo"/"volumen" a secas
+# son la unidad de publicación de una obra por tomos (manga/BD).
+_EDITION_KIND_A_FORMAT = {
+    "omnigold": IssueFormat.OMNIBUS,
+    "integral": IssueFormat.OMNIBUS,
+    "tomo": IssueFormat.TRADE_PAPERBACK,
+    "volumen": IssueFormat.TRADE_PAPERBACK,
+}
 
 
 class ReviewService:
@@ -107,10 +120,19 @@ class ReviewService:
             # portada, créditos incluidos) solo por proteger la asignación
             # serie+número que hizo el coleccionista. locked_fields protege
             # justo eso y deja que el resto se siga rellenando.
+            #
+            # B15 (2026-09-26): si el número que se está asignando viene de
+            # un marcador de edición (Omnigold/Integral/Tomo/Vol) en el
+            # nombre original, el Issue creado no es una grapa suelta —
+            # re-parseamos ese nombre (todavía no reescrito, ver abajo) para
+            # saberlo, en vez de fiarnos de metadata_ (que puede faltar en
+            # archivos registrados antes de que existiera edition_kind).
+            edition_kind = parse_comic_filename(file.file_name).edition_kind
             issue = Issue(
                 series_id=series.id,
                 issue_number=issue_number,
                 locked_fields=["series_id", "issue_number"],
+                format=_EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE),
             )
             self.db.add(issue)
             await self.db.flush()
