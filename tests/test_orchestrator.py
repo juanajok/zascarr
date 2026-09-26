@@ -17,7 +17,17 @@ from sqlalchemy import select
 
 from zascarr.config import get_settings
 from zascarr.models import ComicTradition, File, FileFormat, Issue, Series, Wishlist, WishlistStatus
-from zascarr.services.orchestrator import DownloadBackend, Orchestrator, _extract_ed2k_hash
+from zascarr.services.orchestrator import (
+    MOTIVO_CANDIDATO_RECHAZADO,
+    MOTIVO_CLIENTE_INACCESIBLE,
+    MOTIVO_ERROR_INESPERADO,
+    MOTIVO_FUENTE_INACCESIBLE,
+    MOTIVO_SIN_FUENTE,
+    MOTIVO_SIN_RESULTADOS,
+    DownloadBackend,
+    Orchestrator,
+    _extract_ed2k_hash,
+)
 from zascarr.services.prowlarr import SearchResult
 
 
@@ -173,6 +183,128 @@ class TestProcessItemRetryPool:
 
         assert result is False
         assert item.status == WishlistStatus.WANTED  # sin resultados no es un fallo
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 2b. last_error — D9: por qué esta fila no avanza, con causa distinguible
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestMotivoNoAvanza:
+
+    @pytest.mark.asyncio
+    async def test_sin_ninguna_fuente_activa_no_intenta_nada(self, monkeypatch):
+        """Si ni Prowlarr ni el foro están activos, ni se llama a
+        Prowlarr — se dice la causa exacta en vez de un "Buscando…"
+        eterno sin explicación."""
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": False, "forum_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+
+        result = await orch._process_item(item)
+
+        assert result is False
+        assert item.status == WishlistStatus.WANTED
+        assert item.last_error == MOTIVO_SIN_FUENTE
+        orch._prowlarr.search.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_prowlarr_inaccesible_se_distingue_de_sin_resultados(self):
+        """Un fallo real de conexión/API de Prowlarr no debe confundirse
+        con "no había nada" — son causas y acciones distintas."""
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.side_effect = ConnectionError("boom")
+
+        result = await orch._process_item(item)
+
+        assert result is False
+        assert item.status == WishlistStatus.WANTED
+        assert item.last_error == MOTIVO_FUENTE_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_sin_resultados_en_ninguna_fuente(self):
+        item = Wishlist(id=uuid4(), search_query="Serie Rarísima", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = []
+
+        await orch._process_item(item)
+
+        assert item.last_error == MOTIVO_SIN_RESULTADOS
+
+    @pytest.mark.asyncio
+    async def test_candidatos_encontrados_pero_backend_apagado(self, monkeypatch):
+        settings = get_settings().model_copy(update={
+            "prowlarr_enabled": True, "transmission_enabled": False, "amule_enabled": False,
+        })
+        monkeypatch.setattr("zascarr.services.orchestrator.get_settings", lambda: settings)
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=50)]
+
+        await orch._process_item(item)
+
+        assert item.last_error == MOTIVO_CANDIDATO_RECHAZADO
+
+    @pytest.mark.asyncio
+    async def test_ningun_cliente_de_descarga_disponible(self):
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = None
+
+        await orch._process_item(item)
+
+        assert item.status == WishlistStatus.FAILED
+        assert item.last_error == MOTIVO_CLIENTE_INACCESIBLE
+
+    @pytest.mark.asyncio
+    async def test_exito_limpia_el_motivo_anterior(self):
+        """Un last_error de un ciclo anterior no debe quedar pegado una
+        vez la descarga arranca de verdad."""
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.FAILED,
+                        last_error=MOTIVO_CLIENTE_INACCESIBLE)
+        orch = Orchestrator(db=FakeSession())
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(seeders=10)]
+        orch._transmission = AsyncMock()
+        orch._transmission.add_torrent.return_value = {"hashString": "abc"}
+
+        await orch._process_item(item)
+
+        assert item.status == WishlistStatus.DOWNLOADING
+        assert item.last_error is None
+
+    @pytest.mark.asyncio
+    async def test_error_inesperado_en_el_ciclo_se_registra(self):
+        """Un item que revienta con una excepción no prevista (no una de
+        las causas ya distinguidas) igualmente deja una explicación en
+        español, nunca solo un FAILED mudo."""
+        item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
+        session = FakeSession(queue=[
+            FakeExecResult(["acknowledged"]),  # is_acknowledged: sí aceptado
+            FakeExecResult([item]),            # items pendientes de la wishlist
+        ])
+        orch = Orchestrator(db=session)
+
+        async def _revienta(_item):
+            raise RuntimeError("boom")
+
+        orch._process_item = _revienta
+
+        sent = await orch.process_wishlist()
+
+        assert sent == 0
+        assert item.status == WishlistStatus.FAILED
+        assert item.last_error == MOTIVO_ERROR_INESPERADO
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -307,6 +307,15 @@ button[type="submit"],
   border-color: var(--ink);
 }
 
+/* D9: motivo concreto de por qué una fila de la wishlist no avanza —
+   texto discreto junto al badge de estado, no otro badge que compita
+   visualmente con él. */
+.wishlist-motivo {
+  font-size: .8rem;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
 /* ── 9. CAMPOS DE FORMULARIO ─────────────────────────────────────────────── */
 .series-search,
 .issue-input,
