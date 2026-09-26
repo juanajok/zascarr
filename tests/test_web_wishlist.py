@@ -11,12 +11,14 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
+from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, LegalAcknowledgment, Series, Wishlist, WishlistStatus
-from zascarr.services.orchestrator import Orchestrator
+from zascarr.services.orchestrator import Orchestrator, crear_token_candidato
 from zascarr.services.prowlarr import SearchResult
 
 
@@ -265,15 +267,27 @@ class TestCancelarBusqueda:
 
 
 class TestEnviarCandidato:
+    """D10: el token liga el candidato a ESTE item y caduca — hallazgo de
+    revisión (2026-09-26), ver services/orchestrator.py::crear_token_candidato.
+    Ya no se reconstruye el candidato a partir de campos sueltos del
+    formulario, así que estos tests fabrican el mismo token que emitiría
+    el servidor, y comprueban que manipularlo lo invalida."""
 
-    def _form(self, **overrides):
-        data = {
-            "title": "Batman #1.cbz", "indexer": "test",
-            "download_url": "magnet:?xt=urn:btih:abc",
-            "size_bytes": "52428800", "seeders": "12", "category": "comics",
-        }
-        data.update(overrides)
-        return data
+    SECRETO = "clave-de-prueba-tests"
+
+    def _candidato(self) -> SearchResult:
+        return SearchResult(
+            title="Batman #1.cbz", indexer="test", download_url="magnet:?xt=urn:btih:abc",
+            size_bytes=52428800, seeders=12, category="comics",
+        )
+
+    def _token(self, item_id) -> str:
+        return crear_token_candidato(item_id, self._candidato(), self.SECRETO)
+
+    @pytest.fixture(autouse=True)
+    def _con_secret_key(self, monkeypatch):
+        settings = get_settings().model_copy(update={"secret_key": self.SECRETO})
+        monkeypatch.setattr("zascarr.web.wishlist.get_settings", lambda: settings)
 
     def test_envia_el_candidato_elegido_y_devuelve_la_fila(self, monkeypatch):
         series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN)
@@ -288,7 +302,8 @@ class TestEnviarCandidato:
             exec_queue=[_accepted(), FakeExecResult([row_item])],
         )
         with use_fake_session(session) as client:
-            r = client.post(f"/ui/wishlist/{item.id}/enviar-candidato", data=self._form())
+            r = client.post(f"/ui/wishlist/{item.id}/enviar-candidato",
+                            data={"token": self._token(item.id)})
         assert r.status_code == 200
         assert "Batman" in r.text
         enviado.assert_awaited_once()
@@ -297,13 +312,72 @@ class TestEnviarCandidato:
         assert candidato_enviado.download_url == "magnet:?xt=urn:btih:abc"
 
     def test_item_inexistente_da_404(self):
+        item_id = uuid4()
         with use_fake_session(FakeSession(exec_queue=[_accepted()])) as client:
-            r = client.post(f"/ui/wishlist/{uuid4()}/enviar-candidato", data=self._form())
+            r = client.post(f"/ui/wishlist/{item_id}/enviar-candidato",
+                            data={"token": self._token(item_id)})
         assert r.status_code == 404
 
+    def test_token_de_otro_item_se_rechaza(self):
+        """El hallazgo central de la revisión: un token válido pero
+        emitido para OTRO item no debe servir para este — nunca se
+        reconstruye el candidato sin comprobar el item_id."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        otro_item_id = uuid4()
+        session = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/enviar-candidato",
+                            data={"token": self._token(otro_item_id)})
+        assert r.status_code == 400
+
+    def test_token_manipulado_se_rechaza(self):
+        """Cambiar un solo carácter del payload firmado (p. ej. la URL de
+        descarga) invalida la firma entera — no se puede colar una URL
+        distinta a la que de verdad se mostró."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        token = self._token(item.id)
+        manipulado = token[:-1] + ("0" if token[-1] != "0" else "1")
+        session = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/enviar-candidato",
+                            data={"token": manipulado})
+        assert r.status_code == 400
+
+    def test_token_de_otro_secreto_se_rechaza(self):
+        """Equivalente a un token caducado/de una instalación distinta:
+        firmado con una clave que no es la actual."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        token = crear_token_candidato(item.id, self._candidato(), "otra-clave-distinta")
+        session = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/enviar-candidato", data={"token": token})
+        assert r.status_code == 400
+
+    def test_doble_confirmacion_no_reenvia(self, monkeypatch):
+        """El item ya no está en un estado accionable (DOWNLOADING) tras
+        el primer envío — send_manual_candidate() debe rechazar un
+        segundo envío del mismo token dentro de su ventana de validez,
+        no solo el propio Orchestrator lo hace: aquí se comprueba que el
+        router deja pasar la llamada y es Orchestrator quien decide."""
+        item = Wishlist(id=uuid4(), status=WishlistStatus.DOWNLOADING)
+        row_item = make_wishlist_item(status=WishlistStatus.DOWNLOADING)
+        real = AsyncMock(wraps=None, return_value=False)
+        monkeypatch.setattr(Orchestrator, "send_manual_candidate", real)
+        session = FakeSession(
+            get_map={(Wishlist, item.id): item},
+            exec_queue=[_accepted(), FakeExecResult([row_item])],
+        )
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/enviar-candidato",
+                            data={"token": self._token(item.id)})
+        assert r.status_code == 200  # el router siempre responde con la fila...
+        real.assert_awaited_once()   # ...pero delega el rechazo real a Orchestrator
+
     def test_sin_aceptar_el_aviso_legal_da_403_con_hx_redirect(self):
+        item_id = uuid4()
         session = FakeSession(exec_queue=[FakeExecResult([])])  # sin acknowledgment
         with use_fake_session(session) as client:
-            r = client.post(f"/ui/wishlist/{uuid4()}/enviar-candidato", data=self._form())
+            r = client.post(f"/ui/wishlist/{item_id}/enviar-candidato",
+                            data={"token": self._token(item_id)})
         assert r.status_code == 403
         assert r.headers["hx-redirect"] == "/ui/legal"

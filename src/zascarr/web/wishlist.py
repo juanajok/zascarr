@@ -17,11 +17,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import Issue, Wishlist, WishlistStatus
 from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
-from zascarr.services.orchestrator import Orchestrator
-from zascarr.services.prowlarr import SearchResult
+from zascarr.services.orchestrator import (
+    Orchestrator,
+    crear_token_candidato,
+    verificar_token_candidato,
+)
 from zascarr.services.wishlist import WishlistService
 from zascarr.web.routes import crear_templates
 
@@ -128,11 +132,16 @@ async def reintentar(item_id: UUID, request: Request, db: AsyncSession = Depends
 
 # ── D10: búsqueda manual con confirmación explícita ──────────────────────────
 # "Buscar ahora" muestra los candidatos reales (fuente/tamaño/formato) SIN
-# tocar Transmission/aMule; solo al confirmar UNO concreto se envía. Los
-# datos del candidato viajan de ida y vuelta en campos ocultos del propio
-# formulario — no hay estado de servidor nuevo (Redis/caché) que mantener
-# entre "verlo" y "confirmarlo": el propio navegador es quien lo recuerda,
-# coherente con "sin dependencias nuevas sin justificación" (CLAUDE.md §2).
+# tocar Transmission/aMule; solo al confirmar UNO concreto se envía.
+#
+# Hallazgo de revisión (2026-09-26): la primera versión reenviaba los
+# campos del candidato en claro (título, download_url...) en campos
+# ocultos, y el servidor los recogía sin comprobar que vinieran de verdad
+# de una búsqueda hecha para este item — un formulario manipulado podía
+# colar cualquier URL. Ahora el formulario solo reenvía un token firmado
+# por el servidor (crear_token_candidato/verificar_token_candidato,
+# services/orchestrator.py) que liga el candidato al item_id y caduca a
+# los 10 minutos; los datos nunca vuelven a viajar sueltos.
 
 def _formato_de(titulo: str) -> str:
     t = titulo.lower()
@@ -152,7 +161,15 @@ async def buscar_ahora(item_id: UUID, request: Request, db: AsyncSession = Depen
     resultado = await Orchestrator(db).preview_candidates(item)
     no_se_pudo_buscar = resultado is None
     sin_candidatos = resultado is not None and not resultado
-    filas = [{"c": c, "formato": _formato_de(c.title)} for c in (resultado or [])]
+    secret = get_settings().secret_key
+    filas = [
+        {
+            "c": c,
+            "formato": _formato_de(c.title),
+            "token": crear_token_candidato(item_id, c, secret),
+        }
+        for c in (resultado or [])
+    ]
     return templates.TemplateResponse(request, "_candidatos_wishlist.html", {
         "item_id": item_id,
         "candidatos": filas,
@@ -173,16 +190,18 @@ async def cancelar_busqueda(item_id: UUID) -> HTMLResponse:
              dependencies=[Depends(require_legal_acknowledgment)])
 async def enviar_candidato(
     item_id: UUID, request: Request, db: AsyncSession = Depends(get_db),
-    title: str = Form(...), indexer: str = Form(""), download_url: str = Form(...),
-    size_bytes: int = Form(0), seeders: int = Form(0), category: str = Form(""),
+    token: str = Form(...),
 ) -> HTMLResponse:
     item = await db.get(Wishlist, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item no encontrado")
-    candidato = SearchResult(
-        title=title, indexer=indexer, download_url=download_url,
-        size_bytes=size_bytes, seeders=seeders, category=category,
-    )
+    candidato = verificar_token_candidato(token, item_id, get_settings().secret_key)
+    if candidato is None:
+        # Token inválido, de otro item, manipulado o caducado — nunca se
+        # reconstruye el candidato a partir de datos sueltos del formulario.
+        raise HTTPException(
+            status_code=400, detail="Candidato no válido o caducado — vuelve a buscar"
+        )
     await Orchestrator(db).send_manual_candidate(item, candidato)
     row = await _get_row(db, item_id)
     return templates.TemplateResponse(request, "_fila_wishlist.html", {"row": row})

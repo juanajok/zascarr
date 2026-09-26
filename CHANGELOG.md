@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.12.0] — 2026-09-26
+
+### Corregido
+
+- **"Buscar ahora" (D10) confiaba en el candidato que reenviara el propio formulario.** La confirmación de un candidato viajaba en campos ocultos (título, `download_url`, tamaño...) que el servidor recogía sin comprobar que vinieran de una búsqueda real hecha para ese item — un formulario manipulado a mano podía colar cualquier URL para cualquier item de la wishlist. Encontrado en una revisión de código externa, no en desarrollo. Corregido firmando el candidato entero junto al `item_id` y una caducidad de 10 minutos (HMAC-SHA256, mismas primitivas que ya firman la cookie de sesión de A6 — sin dependencias nuevas); el formulario solo reenvía ese token — firmado, no cifrado: el contenido es legible en base64 (no es secreto), pero cualquier alteración invalida la firma. Se añade además una reclamación atómica en BD (`UPDATE ... WHERE status IN (...)`) antes de tocar la red: el guardarraíl de estado por sí solo detenía un reenvío secuencial, pero no dos peticiones concurrentes que leyeran `WANTED`/`FAILED` antes de que ninguna terminara de enviar. Verificado en vivo contra Postgres real con token de otro item, token manipulado, y dos confirmaciones disparadas a la vez sobre el mismo item — solo una llega a llamar al backend de descarga, la otra pierde la reclamación sin tocar el resultado de la ganadora.
+
 ## [1.11.0] — 2026-09-26
 
 ### Añadido

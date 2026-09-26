@@ -137,8 +137,8 @@ class TestCookieSesion:
         monkeypatch.setattr("zascarr.services.auth.SESSION_MAX_AGE", 1)
         # Reconstruye el mismo payload pero con una emisión ya vieja.
         vieja = f"{int(time.time()) - 100}"
-        from zascarr.services.auth import _sign
-        token_viejo = _sign(vieja, "mi-secreto")
+        from zascarr.services.auth import sign_token
+        token_viejo = sign_token(vieja, "mi-secreto")
         assert sesion_valida(token_viejo, "mi-secreto") is False
 
 

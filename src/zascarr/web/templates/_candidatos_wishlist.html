@@ -15,12 +15,7 @@
       <form hx-post="/ui/wishlist/{{ item_id }}/enviar-candidato"
             hx-target="#fila-{{ item_id }}" hx-swap="outerHTML"
             hx-confirm="¿Descargar este candidato?">
-        <input type="hidden" name="title" value="{{ fila.c.title }}">
-        <input type="hidden" name="indexer" value="{{ fila.c.indexer }}">
-        <input type="hidden" name="download_url" value="{{ fila.c.download_url }}">
-        <input type="hidden" name="size_bytes" value="{{ fila.c.size_bytes }}">
-        <input type="hidden" name="seeders" value="{{ fila.c.seeders }}">
-        <input type="hidden" name="category" value="{{ fila.c.category }}">
+        <input type="hidden" name="token" value="{{ fila.token }}">
         <button type="submit" class="btn-descargar-candidato">Descargar este</button>
       </form>
     </li>
