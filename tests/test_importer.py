@@ -62,11 +62,13 @@ class TestImportReport:
         report.duplicates.extend(["b", "c"])
         report.unsorted.append("d")
         report.errors.extend(["e", "f", "g"])
+        report.disappeared.extend(["h", "i"])
 
         assert report.imported_count == 1
         assert report.duplicate_count == 2
         assert report.unsorted_count == 1
         assert report.error_count == 3
+        assert report.disappeared_count == 2
 
 
 class FakeDedupeSession:
@@ -230,9 +232,122 @@ class TestPersistRun:
         assert run.duplicate_count == 1
         assert run.unsorted_count == 0
         assert run.error_count == 0
+        assert run.disappeared_count == 0
         assert run.details["imported"] == report.imported
         assert run.details["duplicates"] == report.duplicates
+        assert run.details["disappeared"] == []
+        assert run.details["reappeared"] == []
         session.flush.assert_awaited_once()
+
+
+class FakeSessionArchivos:
+    """Una sola consulta esperada (SELECT File...), devuelve la lista de
+    File ya construida a mano — mismo patrón que FakeDedupeSession."""
+
+    def __init__(self, files):
+        self._files = files
+        self.flush = AsyncMock()
+        self.consultada = False
+
+    async def execute(self, _statement):
+        self.consultada = True
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = self._files
+        return result
+
+
+class TestDetectarDesaparecidos:
+    """B7: un tebeo borrado a mano del disco deja de contar como "lo
+    tienes" — Importer._detectar_desaparecidos(), aislado del resto del
+    ciclo de scan (ver TestScanPasaLaPistaDeCohorte para la integración
+    con scan_and_import)."""
+
+    @pytest.mark.asyncio
+    async def test_marca_desaparecido_un_fichero_borrado_del_disco(self, tmp_path):
+        library = tmp_path / "library"
+        library.mkdir()
+        existe = library / "Batman 001.cbz"
+        make_cbz(existe)
+        borrado = library / "Batman 002.cbz"  # nunca se crea: simula un borrado a mano
+
+        f_existe = File(id=uuid4(), file_path=str(existe), file_name=existe.name, file_format="cbz", is_missing=False)
+        f_borrado = File(id=uuid4(), file_path=str(borrado), file_name=borrado.name, file_format="cbz")
+
+        importer = Importer.__new__(Importer)
+        importer._db = FakeSessionArchivos([f_existe, f_borrado])
+        importer._library = library
+
+        desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
+
+        assert desaparecidos == [borrado.name]
+        assert reaparecidos == []
+        assert f_borrado.is_missing is True
+        assert f_borrado.missing_since is not None
+        assert f_existe.is_missing is False
+
+    @pytest.mark.asyncio
+    async def test_revierte_si_el_fichero_reaparece(self, tmp_path):
+        """Disco de red que estuvo desmontado, restaurado desde una
+        papelera, etc. — el File nunca se borró, solo se había marcado."""
+        library = tmp_path / "library"
+        library.mkdir()
+        ruta = library / "Batman 001.cbz"
+        make_cbz(ruta)
+
+        f = File(id=uuid4(), file_path=str(ruta), file_name=ruta.name, file_format="cbz",
+                is_missing=True, missing_since=datetime.now(timezone.utc))
+
+        importer = Importer.__new__(Importer)
+        importer._db = FakeSessionArchivos([f])
+        importer._library = library
+
+        desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
+
+        assert desaparecidos == []
+        assert reaparecidos == [ruta.name]
+        assert f.is_missing is False
+        assert f.missing_since is None
+
+    @pytest.mark.asyncio
+    async def test_ya_marcado_no_se_repite_en_el_informe(self, tmp_path):
+        """Un fichero que sigue ausente en el segundo ciclo no debe
+        volver a aparecer en `disappeared` — ya se avisó la primera vez."""
+        library = tmp_path / "library"
+        library.mkdir()
+        borrado = library / "Batman 001.cbz"
+
+        f = File(id=uuid4(), file_path=str(borrado), file_name=borrado.name, file_format="cbz",
+                is_missing=True, missing_since=datetime.now(timezone.utc))
+
+        importer = Importer.__new__(Importer)
+        importer._db = FakeSessionArchivos([f])
+        importer._library = library
+
+        desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
+
+        assert desaparecidos == []
+        assert reaparecidos == []
+        assert f.is_missing is True  # sigue marcado, pero no se repite el aviso
+
+    @pytest.mark.asyncio
+    async def test_biblioteca_inaccesible_no_marca_nada(self, tmp_path):
+        """Guardarraíl: un disco de red desmontado no debe confundirse
+        con "he perdido toda la colección" — se omite la detección
+        entera ese ciclo en vez de marcar cientos de falsos positivos."""
+        library = tmp_path / "no-existe"  # nunca se crea
+        f = File(id=uuid4(), file_path=str(library / "Batman.cbz"), file_name="Batman.cbz", file_format="cbz", is_missing=False)
+
+        importer = Importer.__new__(Importer)
+        session = FakeSessionArchivos([f])
+        importer._db = session
+        importer._library = library
+
+        desaparecidos, reaparecidos = await importer._detectar_desaparecidos()
+
+        assert desaparecidos == []
+        assert reaparecidos == []
+        assert f.is_missing is False
+        assert session.consultada is False  # ni se llegó a mirar la BD
 
 
 class TestBuildLibraryPathSanitizado:

@@ -340,6 +340,14 @@ class File(Base):
     # puede seguir sin issue_id (posible hueco del enricher) sin haber
     # sido nunca revisado ni descartado a mano.
     review_dismissed:    Mapped[bool]         = mapped_column(Boolean, default=False, server_default="false")
+    # B7: si el fichero desaparece del disco (borrado a mano fuera de
+    # ZascArr) deja de "contar como que lo tienes" sin que nadie tenga
+    # que avisar — Importer.scan_and_import() lo detecta en cada ciclo
+    # (ver Importer._detectar_desaparecidos). Se revierte solo si el
+    # fichero reaparece (disco de red que estuvo desmontado, etc.) — el
+    # File nunca se borra por esto, solo se marca.
+    is_missing:          Mapped[bool]         = mapped_column(Boolean, default=False, server_default="false")
+    missing_since:       Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     issue: Mapped["Issue|None"] = relationship(back_populates="files")
 
 
@@ -405,6 +413,9 @@ class ImportRun(Base):
     duplicate_count: Mapped[int]      = mapped_column(Integer, default=0)
     unsorted_count:  Mapped[int]      = mapped_column(Integer, default=0)
     error_count:     Mapped[int]      = mapped_column(Integer, default=0)
+    # B7: ficheros ya en biblioteca que dejaron de existir en disco desde
+    # el ciclo anterior — no cuenta llegadas nuevas (eso es imported_count).
+    disappeared_count: Mapped[int]    = mapped_column(Integer, default=0, server_default="0")
     # {"imported": [...], "duplicates": [...], "unsorted": [...], "errors": [...]}
     # — cada entrada es una línea legible, no un objeto estructurado: este
     # informe está pensado para mostrarse tal cual, no para consultarse campo
