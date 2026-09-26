@@ -162,6 +162,24 @@ h1, h2, h3 {
   color: var(--paper);
 }
 
+/* A6: "Cerrar sesión" es un <button> dentro de un <form> (POST, no un
+   enlace GET) pero debe verse como el resto de la navegación. */
+.nav-logout { margin: 0; margin-left: auto; }
+.topnav .btn-logout {
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  text-decoration: none;
+  font-size: .92rem;
+  font-weight: 700;
+  padding: 8px 14px;
+  border: 2px solid transparent;
+  border-radius: var(--radius-panel);
+  min-height: 40px;
+  cursor: pointer;
+}
+.topnav .btn-logout:hover { border-color: var(--ink); color: var(--ink); }
+
 /* ── 4. CONTENIDO ────────────────────────────────────────────────────────── */
 .content {
   max-width: 1240px;
@@ -745,6 +763,33 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 .ajustes-actions { display: flex; gap: 8px; margin-top: 4px; }
 .ajustes-ok { color: var(--ok); }
 .ajustes-error { color: var(--warn); }
+
+/* A6: /login vive fuera de base.html (accesible aunque el resto de la
+   app esté bloqueado) — mismos tokens/tarjeta que ajustes, layout
+   centrado de una sola columna. */
+.login-content {
+  max-width: 360px;
+  margin: 15vh auto 0;
+  text-align: center;
+}
+.login-form {
+  display: flex; flex-direction: column; gap: 12px;
+  text-align: left;
+  background: var(--paper-2); border: 3px solid var(--ink);
+  border-radius: var(--radius-panel); padding: 20px;
+  margin-top: 16px;
+}
+.login-form label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: .85rem; font-weight: 700;
+}
+.login-form input[type="text"],
+.login-form input[type="password"] {
+  font: inherit; padding: 8px 10px;
+  border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper); color: var(--ink);
+}
+.login-error { color: var(--warn); font-size: .85rem; margin: 0; }
 
 /* ── 16b. ESTADO (E1) — mismos tokens/tarjetas que el resto de la app,
    nunca una paleta propia (bug real reportado: la página vivía fuera de

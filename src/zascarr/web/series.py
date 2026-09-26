@@ -14,7 +14,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -29,9 +28,9 @@ from zascarr.utils.cover import (
     fetch_and_cache_cover,
     write_cover_cache,
 )
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 router = APIRouter(prefix="/ui/series", tags=["ui"])
 

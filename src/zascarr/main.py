@@ -155,9 +155,15 @@ async def lifespan(app: FastAPI):
     # anterior — sin esto, tras un reinicio real (deploy, reboot de la Pi)
     # los ajustes seguirían en la BD pero no se verían hasta el primer
     # guardado nuevo desde la UI.
-    from zascarr.services.runtime_settings import load_overrides_at_startup
+    from zascarr.services.runtime_settings import RuntimeSettingsService, load_overrides_at_startup
     async with async_session_factory() as session:
         await load_overrides_at_startup(session)
+        # A6: la cookie de sesión necesita una clave de firma estable —
+        # se genera y persiste UNA vez, la primera vez que hace falta,
+        # nunca hardcodeada ni dependiente de que alguien la ponga en
+        # .env a mano.
+        await RuntimeSettingsService(session).ensure_secret_key()
+        await session.commit()
 
     background_tasks = [
         asyncio.create_task(_library_audit_task()),
@@ -200,8 +206,10 @@ def create_app() -> FastAPI:
     from zascarr.api.legal import router as legal_router
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
+    from zascarr.services.auth import AuthMiddleware
     from zascarr.web.ajustes import router as ajustes_router
     from zascarr.web.auditoria import router as auditoria_router
+    from zascarr.web.auth import router as auth_router
     from zascarr.web.dashboard import router as dashboard_router
     from zascarr.web.discovery import router as discovery_router
     from zascarr.web.estado import router as estado_router
@@ -212,10 +220,16 @@ def create_app() -> FastAPI:
     from zascarr.web.series import router as series_ui_router
     from zascarr.web.wishlist import router as wishlist_ui_router
 
+    # A6: no-op mientras auth_mode="none" (por defecto) — se registra
+    # siempre para que activarla desde /ui/ajustes no requiera reiniciar
+    # el proceso con un middleware distinto.
+    app.add_middleware(AuthMiddleware)
+
     app.include_router(health_router, prefix="/api")
     app.include_router(legal_router)
     app.include_router(series_router, prefix="/api")
     app.include_router(wishlist_router, prefix="/api")
+    app.include_router(auth_router)
     app.include_router(ui_router)
     app.include_router(ajustes_router)
     app.include_router(auditoria_router)

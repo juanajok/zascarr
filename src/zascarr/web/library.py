@@ -16,15 +16,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
 from zascarr.services.series import SeriesService
-from zascarr.web.routes import TEMPLATES_DIR
+from zascarr.web.routes import crear_templates
 
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates = crear_templates()
 
 router = APIRouter(prefix="/ui/biblioteca", tags=["ui"])
 
