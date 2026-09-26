@@ -397,9 +397,15 @@ class Orchestrator:
         return completed
 
     async def _is_fulfilled(self, item: Wishlist) -> bool:
+        # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya
+        # no es "lo tengo" — sin este filtro, un archivo borrado a mano
+        # tras haberse importado bastaba para dar por cumplida la wishlist.
         if item.issue_id:
             row = (await self.db.execute(
-                select(File.id).where(File.issue_id == item.issue_id).limit(1)
+                select(File.id)
+                .where(File.issue_id == item.issue_id)
+                .where(File.is_missing.is_(False))
+                .limit(1)
             )).first()
             return row is not None
         if item.series_id:
@@ -408,6 +414,7 @@ class Orchestrator:
                 .join(Issue, File.issue_id == Issue.id)
                 .where(Issue.series_id == item.series_id)
                 .where(File.imported_at >= item.added_at)
+                .where(File.is_missing.is_(False))
                 .limit(1)
             )).first()
             return row is not None
