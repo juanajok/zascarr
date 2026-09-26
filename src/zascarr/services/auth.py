@@ -70,16 +70,33 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(actual, expected)
 
 
+# Hash de relleno, nunca de una contraseña real — sirve solo para que
+# verify_password() pague siempre el mismo coste de PBKDF2 (~260.000
+# iteraciones) aunque todavía no haya ningún auth_password_hash guardado.
+_HASH_DE_RELLENO = hash_password(secrets.token_hex(32))
+
+
 def credenciales_validas(username: str, password: str, settings: Settings) -> bool:
+    """Encontrado en revisión (timing side-channel): antes, `and` cortaba
+    en cuanto auth_password_hash/auth_username estaban vacíos o el
+    usuario no coincidía, así que verify_password() (PBKDF2, cara)
+    NUNCA se ejecutaba en esos casos — solo en un intento con usuario
+    correcto y contraseña incorrecta. Medir cuánto tarda la respuesta
+    habría bastado para distinguir "el modo no tiene contraseña puesta"
+    o "ese usuario no existe" de "contraseña incorrecta", sin necesidad
+    de ver el resultado. Ahora verify_password() se llama SIEMPRE que el
+    modo pueda requerirla (contra el hash real o, si no hay ninguno
+    guardado, contra uno de relleno) antes de combinar con el resto de
+    condiciones — el coste de PBKDF2 es el mismo se acierte o no."""
     if settings.auth_mode == "password":
-        return bool(settings.auth_password_hash) and verify_password(
-            password, settings.auth_password_hash
-        )
+        password_ok = verify_password(password, settings.auth_password_hash or _HASH_DE_RELLENO)
+        return bool(settings.auth_password_hash) and password_ok
     if settings.auth_mode == "user_password":
+        password_ok = verify_password(password, settings.auth_password_hash or _HASH_DE_RELLENO)
+        usuario_ok = hmac.compare_digest(username, settings.auth_username)
         return (
             bool(settings.auth_username) and bool(settings.auth_password_hash)
-            and hmac.compare_digest(username, settings.auth_username)
-            and verify_password(password, settings.auth_password_hash)
+            and usuario_ok and password_ok
         )
     return False
 

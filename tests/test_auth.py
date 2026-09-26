@@ -12,6 +12,7 @@ monkeypatcheado, mismo patrón que ya usa test_orchestrator.py.
 from __future__ import annotations
 
 import time
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -80,6 +81,35 @@ class TestCredencialesValidas:
         auth_password_hash también está vacío."""
         settings = get_settings().model_copy(update={"auth_mode": "password", "auth_password_hash": ""})
         assert credenciales_validas("", "", settings) is False
+
+    def test_verify_password_se_llama_siempre_sin_hash_configurado(self, monkeypatch):
+        """Hallazgo de revisión (timing side-channel): con un `and`
+        normal, auth_password_hash vacío cortaba ANTES de llamar a
+        verify_password() (PBKDF2, ~260.000 iteraciones) — una respuesta
+        instantánea delataba "este modo no tiene contraseña puesta" sin
+        falta ver el resultado. Ahora debe llamarse siempre, contra un
+        hash de relleno si hace falta, para que el coste sea el mismo
+        se acierte o no."""
+        espia = MagicMock(wraps=verify_password)
+        monkeypatch.setattr("zascarr.services.auth.verify_password", espia)
+        settings = get_settings().model_copy(update={"auth_mode": "password", "auth_password_hash": ""})
+
+        assert credenciales_validas("", "cualquiera", settings) is False
+        espia.assert_called_once()
+
+    def test_verify_password_se_llama_siempre_con_usuario_incorrecto(self, monkeypatch):
+        """Mismo hallazgo, en user_password: un usuario que no coincide
+        no debe evitar el coste de PBKDF2 — si no, medir el tiempo de
+        respuesta permitiría averiguar qué nombres de usuario existen."""
+        espia = MagicMock(wraps=verify_password)
+        monkeypatch.setattr("zascarr.services.auth.verify_password", espia)
+        settings = get_settings().model_copy(update={
+            "auth_mode": "user_password", "auth_username": "juanjo",
+            "auth_password_hash": hash_password("secreta"),
+        })
+
+        assert credenciales_validas("no-es-juanjo", "secreta", settings) is False
+        espia.assert_called_once()
 
 
 class TestCookieSesion:
