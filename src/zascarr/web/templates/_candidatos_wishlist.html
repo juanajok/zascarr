@@ -1,0 +1,35 @@
+<div class="candidatos-wishlist" id="candidatos-{{ item_id }}">
+  {% if no_se_pudo_buscar %}
+  <p class="candidatos-vacio">No se pudo construir la búsqueda para este elemento.</p>
+  {% elif sin_candidatos %}
+  <p class="candidatos-vacio">{{ motivo }}</p>
+  {% else %}
+  <ul class="candidatos-lista">
+    {% for fila in candidatos %}
+    <li class="candidato-fila">
+      <span class="candidato-titulo">{{ fila.c.title }}</span>
+      <span class="candidato-detalle">
+        {{ fila.c.indexer }} · {{ fila.formato }} · {{ fila.c.size_bytes | filesizeformat }}
+        {% if fila.c.seeders %}· {{ fila.c.seeders }} seeders{% endif %}
+      </span>
+      <form hx-post="/ui/wishlist/{{ item_id }}/enviar-candidato"
+            hx-target="#fila-{{ item_id }}" hx-swap="outerHTML"
+            hx-confirm="¿Descargar este candidato?">
+        <input type="hidden" name="title" value="{{ fila.c.title }}">
+        <input type="hidden" name="indexer" value="{{ fila.c.indexer }}">
+        <input type="hidden" name="download_url" value="{{ fila.c.download_url }}">
+        <input type="hidden" name="size_bytes" value="{{ fila.c.size_bytes }}">
+        <input type="hidden" name="seeders" value="{{ fila.c.seeders }}">
+        <input type="hidden" name="category" value="{{ fila.c.category }}">
+        <button type="submit" class="btn-descargar-candidato">Descargar este</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <button type="button" class="btn-cancelar-busqueda"
+          hx-post="/ui/wishlist/{{ item_id }}/cancelar-busqueda"
+          hx-target="#candidatos-{{ item_id }}" hx-swap="outerHTML">
+    Cancelar
+  </button>
+</div>

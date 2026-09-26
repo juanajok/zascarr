@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, LegalAcknowledgment, Series, Wishlist, WishlistStatus
+from zascarr.services.orchestrator import Orchestrator
+from zascarr.services.prowlarr import SearchResult
 
 
 def _accepted() -> "FakeExecResult":
@@ -197,3 +199,111 @@ class TestReintentar:
         with use_fake_session(FakeSession(exec_queue=[_accepted()])) as client:
             r = client.post(f"/ui/wishlist/{uuid4()}/reintentar")
         assert r.status_code == 404
+
+
+class TestBuscarAhora:
+    """D10: ver candidatos reales antes de enviar nada a descargar."""
+
+    def test_muestra_los_candidatos_encontrados(self, monkeypatch):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        monkeypatch.setattr(
+            Orchestrator, "preview_candidates",
+            AsyncMock(return_value=[SearchResult(
+                title="Batman #1.cbz", indexer="test", download_url="magnet:?xt=urn:btih:abc",
+                size_bytes=52_428_800, seeders=12, category="comics",
+            )]),
+        )
+        session = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
+        assert r.status_code == 200
+        assert "Batman #1.cbz" in r.text
+        assert "Descargar este" in r.text
+        assert "CBZ" in r.text
+
+    def test_sin_candidatos_muestra_el_motivo_de_d9(self, monkeypatch):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED,
+                        last_error="No se encontró nada en las fuentes activas")
+        monkeypatch.setattr(Orchestrator, "preview_candidates", AsyncMock(return_value=[]))
+        session = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
+        assert r.status_code == 200
+        assert "No se encontró nada en las fuentes activas" in r.text
+
+    def test_sin_query_construible_da_mensaje_generico(self, monkeypatch):
+        item = Wishlist(id=uuid4(), status=WishlistStatus.WANTED)
+        monkeypatch.setattr(Orchestrator, "preview_candidates", AsyncMock(return_value=None))
+        session = FakeSession(get_map={(Wishlist, item.id): item}, exec_queue=[_accepted()])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/buscar-ahora")
+        assert r.status_code == 200
+        assert "No se pudo construir la búsqueda" in r.text
+
+    def test_item_inexistente_da_404(self):
+        with use_fake_session(FakeSession(exec_queue=[_accepted()])) as client:
+            r = client.post(f"/ui/wishlist/{uuid4()}/buscar-ahora")
+        assert r.status_code == 404
+
+    def test_sin_aceptar_el_aviso_legal_da_403_con_hx_redirect(self):
+        session = FakeSession(exec_queue=[FakeExecResult([])])  # sin acknowledgment
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{uuid4()}/buscar-ahora")
+        assert r.status_code == 403
+        assert r.headers["hx-redirect"] == "/ui/legal"
+
+
+class TestCancelarBusqueda:
+
+    def test_devuelve_vacio_sin_tocar_la_bd(self):
+        """Cancelar tras ver candidatos no deja nada a medias: ni
+        siquiera hace falta tocar la sesión."""
+        with use_fake_session(FakeSession()) as client:
+            r = client.post(f"/ui/wishlist/{uuid4()}/cancelar-busqueda")
+        assert r.status_code == 200
+        assert r.text == ""
+
+
+class TestEnviarCandidato:
+
+    def _form(self, **overrides):
+        data = {
+            "title": "Batman #1.cbz", "indexer": "test",
+            "download_url": "magnet:?xt=urn:btih:abc",
+            "size_bytes": "52428800", "seeders": "12", "category": "comics",
+        }
+        data.update(overrides)
+        return data
+
+    def test_envia_el_candidato_elegido_y_devuelve_la_fila(self, monkeypatch):
+        series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN)
+        item = Wishlist(id=uuid4(), series_id=series.id, status=WishlistStatus.WANTED)
+        row_item = make_wishlist_item(series, status=WishlistStatus.DOWNLOADING)
+        row_item.series = series
+        row_item.issue = None
+        enviado = AsyncMock(return_value=True)
+        monkeypatch.setattr(Orchestrator, "send_manual_candidate", enviado)
+        session = FakeSession(
+            get_map={(Wishlist, item.id): item},
+            exec_queue=[_accepted(), FakeExecResult([row_item])],
+        )
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{item.id}/enviar-candidato", data=self._form())
+        assert r.status_code == 200
+        assert "Batman" in r.text
+        enviado.assert_awaited_once()
+        candidato_enviado = enviado.await_args.args[1]
+        assert candidato_enviado.title == "Batman #1.cbz"
+        assert candidato_enviado.download_url == "magnet:?xt=urn:btih:abc"
+
+    def test_item_inexistente_da_404(self):
+        with use_fake_session(FakeSession(exec_queue=[_accepted()])) as client:
+            r = client.post(f"/ui/wishlist/{uuid4()}/enviar-candidato", data=self._form())
+        assert r.status_code == 404
+
+    def test_sin_aceptar_el_aviso_legal_da_403_con_hx_redirect(self):
+        session = FakeSession(exec_queue=[FakeExecResult([])])  # sin acknowledgment
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/wishlist/{uuid4()}/enviar-candidato", data=self._form())
+        assert r.status_code == 403
+        assert r.headers["hx-redirect"] == "/ui/legal"

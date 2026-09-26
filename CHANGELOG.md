@@ -3,6 +3,17 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.9.0] — 2026-09-26
+
+### Añadido
+
+- **Búsqueda manual con confirmación explícita (D10).** Botón "Buscar ahora" en cada fila accionable de la wishlist: ejecuta la misma búsqueda que el ciclo automático (mismo ranking, mismo filtro de backends activos) pero se detiene antes de enviar nada — muestra fuente, formato, tamaño y seeders de cada candidato con un botón "Descargar este" por fila. Cancelar no toca Transmission/aMule; solo confirmar uno concreto lo hace. Con D1+D9+D10 juntas, el pipeline de descarga queda operable de punta a punta desde la UI: pedir, ver por qué no avanza, y decidir a mano cuando haga falta.
+
+### Corregido
+
+- **Un Transmission/aMule caído daba un 500 crudo al confirmar una descarga manual.** `Orchestrator._send` no capturaba errores de conexión — el ciclo automático lo enmascaraba (con un motivo impreciso, "error inesperado"), pero la confirmación manual nueva de D10 no tenía ningún `try/except` alrededor y el error de red se colaba tal cual hasta el navegador. Ahora ambos caminos dan `MOTIVO_CLIENTE_INACCESIBLE`, ninguno revienta.
+- **Un item en revisión manual podía quedar invisible para siempre al ciclo automático.** Buscar candidatos a mano dejaba el item en estado `SEARCHING` (transitorio, pensado para que quien busca envíe algo enseguida); si el coleccionista cancelaba o cerraba la pestaña sin confirmar, el item nunca volvía a `WANTED`/`FAILED` — los únicos estados que el ciclo automático revisa. Corregido revirtiendo a `WANTED` en cuanto hay candidatos que mostrar y todavía no se ha enviado nada.
+
 ## [1.8.0] — 2026-09-26
 
 ### Añadido
