@@ -3,6 +3,16 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.11.0] — 2026-09-26
+
+### Añadido
+
+- **Desinstalación limpia (A4).** `make uninstall` / `sudo bash scripts/uninstall.sh`: borra contenedores, red e imagen propia de ZascArr; conserva siempre `HOST_LIBRARY_DIR` (tu biblioteca) y tus carpetas de descargas — sin ninguna opción para desactivar esa garantía. Sin `--purge` también conserva los datos de la app (Postgres/Redis/portadas, `ZASCARR_DATA_DIR`) y el `.env`; `make uninstall-purge` los borra también, para quien quiera un reinicio completo de la app sin tocar su colección. Pide confirmación explícita antes de tocar nada y termina con un resumen claro de qué se borró y qué se quedó, con ruta exacta.
+
+### Corregido
+
+- **`--purge` no borraba de verdad los datos de Postgres.** Su directorio se crea con permisos `700` propiedad del usuario interno del contenedor (buena práctica de Postgres) — un `rm -rf` del usuario del host no puede tocarlo, y la primera versión del script silenciaba ese fallo y reportaba "borrado" sin haberlo estado. Encontrado verificando en vivo contra contenedores Docker reales (no solo revisando el script). Corregido borrando desde dentro de un contenedor con la misma imagen `postgres:15-alpine` que ya usa `docker-compose.yml`.
+
 ## [1.10.0] — 2026-09-26
 
 ### Añadido

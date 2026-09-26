@@ -7,7 +7,7 @@ coleccionistas **hispanohablantes** y diseñado para correr en una
 
 ![Licencia](https://img.shields.io/badge/licencia-GPL--3.0--only-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Estado](https://img.shields.io/badge/estado-1.10.0-brightgreen.svg)
+![Estado](https://img.shields.io/badge/estado-1.11.0-brightgreen.svg)
 
 > ⚠️ **Aviso legal (postura Sonarr-style).** ZascArr es una herramienta
 > **neutra** para gestionar tu biblioteca personal de tebeos: organiza,
@@ -40,7 +40,7 @@ y descarga por **eD2K** ([aMule](https://www.amule.org)) además de torrent.
 
 ## Estado del proyecto
 
-✅ **v1.10.0.** Backend e interfaz web funcionales, verificados end-to-end
+✅ **v1.11.0.** Backend e interfaz web funcionales, verificados end-to-end
 contra Docker + PostgreSQL reales (no solo la suite unitaria) — importador,
 wishlist/orquestador, portadas, puerta legal, backup y el ciclo completo de
 actualización/rollback destructivo. Detalle de la verificación en
@@ -309,6 +309,35 @@ retención):
 
 ```bash
 BACKUP_DIR=/var/backups/zascarr/postgres bash scripts/backup.sh
+```
+
+## Desinstalar ZascArr
+
+```bash
+cd /opt/zascarr/zascarr     # o la carpeta donde clonaste el repo
+sudo make uninstall
+```
+
+Por defecto borra **solo lo que es de Docker**: los contenedores, la red
+interna y la imagen que este repo construyó (las imágenes oficiales de
+Postgres/Redis, que pueden estar en uso por otra cosa en la misma máquina,
+nunca se tocan). Conserva el catálogo/wishlist/ajustes (Postgres, en
+`ZASCARR_DATA_DIR`) y tu `.env`, así que reinstalar después no te hace
+volver a responder el asistente ni a re-escanear la biblioteca desde cero.
+
+Pide confirmación explícita antes de tocar nada, y al final dice con
+nombre y ruta exacta qué se ha borrado y qué se ha quedado.
+
+**Tu biblioteca (`HOST_LIBRARY_DIR`) y tus carpetas de descargas nunca se
+tocan — con o sin ninguna opción.** No hay ningún interruptor para
+desactivar esta garantía; si algún día quieres borrarlo todo sin
+excepción, hazlo tú a mano.
+
+Si además quieres borrar el catálogo/wishlist/ajustes y el `.env` (un
+reinicio completo de la app, no de tu colección):
+
+```bash
+sudo make uninstall-purge
 ```
 
 ## Integraciones (todas opcionales y desactivadas por defecto)
