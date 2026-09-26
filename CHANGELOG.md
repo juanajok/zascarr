@@ -3,6 +3,12 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [1.14.0] — 2026-09-26
+
+### Corregido
+
+- **`--purge` (A4) no validaba las rutas que iba a borrar, y podía afirmar "borrado" sin comprobarlo.** Encontrado en revisión de código externa: `"${ZASCARR_DATA_DIR:?}"` solo protegía contra una variable vacía, no contra una ruta peligrosa — la raíz, una carpeta del sistema, o la propia biblioteca/descargas por una mala edición manual del `.env`. Además, ninguna versión anterior leía `ZASCARR_DATA_DIR`/`HOST_DOWNLOADS_DIR`/`HOST_AMULE_INCOMING_DIR` del `.env`: en una instalación real, `--purge` habría abortado con "parameter null or not set" en vez de borrar nada. Corregido resolviendo cada ruta relevante (`readlink -f`) y rechazando `/`, carpetas del sistema, y cualquier solapamiento con la biblioteca o las descargas ANTES de construir ningún `rm -rf`; el resumen ahora muestra las rutas resueltas, no la cadena cruda del `.env`. Tras el intento de purga se comprueba desde el host que cada subcarpeta de verdad desapareció — si algo sigue ahí, el resumen final dice "completada con avisos" en vez de "completada" a secas, y nombra qué falta.
+
 ## [1.13.0] — 2026-09-26
 
 ### Añadido
