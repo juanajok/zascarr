@@ -19,6 +19,7 @@ ciclo de las 03:00?" sin depender solo de los logs.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,6 +39,15 @@ from zascarr.utils.naming import parse_comic_filename
 logger = structlog.get_logger()
 
 COMIC_EXTS = {".cbz", ".cbr", ".cb7", ".pdf", ".epub"}
+
+# B7: umbral de "esto no son borrados a mano, esto es un disco desmontado"
+# (ver _detectar_desaparecidos). Las dos condiciones aplican a la vez: por
+# debajo de MINIMO archivos en biblioteca no merece la pena desconfiar
+# (pocas filas en juego, bajo impacto de un falso positivo); por encima,
+# más de la mitad desaparecida de golpe es mucho más probable un fallo de
+# montaje que un vaciado real a mano.
+UMBRAL_DESAPARICION_MASIVA_FRACCION = 0.5
+UMBRAL_DESAPARICION_MASIVA_MINIMO = 10
 
 TRADITION_MAP = {
     "american":       "Comics",
@@ -67,6 +77,12 @@ class ImportReport:
     duplicates: list[str] = field(default_factory=list)
     unsorted: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # B7: ficheros que YA estaban en la biblioteca y dejaron de existir en
+    # disco desde el ciclo anterior (borrados a mano, fuera de ZascArr) —
+    # no llegadas nuevas, eso es `imported`. `reappeared` es la reversión:
+    # un fichero marcado desaparecido que ha vuelto a aparecer.
+    disappeared: list[str] = field(default_factory=list)
+    reappeared: list[str] = field(default_factory=list)
 
     @property
     def imported_count(self) -> int:
@@ -79,6 +95,10 @@ class ImportReport:
     @property
     def unsorted_count(self) -> int:
         return len(self.unsorted)
+
+    @property
+    def disappeared_count(self) -> int:
+        return len(self.disappeared)
 
     @property
     def error_count(self) -> int:
@@ -213,9 +233,88 @@ class Importer:
                 logger.exception("importer.file_failed", path=str(path))
                 report.errors.append(f"{path.name}: {exc}")
 
+        # B7: revisión de la biblioteca YA importada, no de lo nuevo que
+        # acaba de llegar — un paso independiente del bucle de arriba.
+        try:
+            report.disappeared, report.reappeared = await self._detectar_desaparecidos()
+        except Exception:
+            logger.exception("importer.deteccion_desaparecidos_fallida")
+
         report.finished_at = datetime.now(UTC)
         await self._persist_run(report)
         return report
+
+    async def _detectar_desaparecidos(self) -> tuple[list[str], list[str]]:
+        """B7: un tebeo borrado a mano del disco (fuera de ZascArr) deja
+        de contar como "lo tienes" sin que nadie tenga que avisar.
+
+        Guardarraíles (endurecidos tras revisión de PR, 2026-09-26): dos
+        formas de confundir "disco desmontado" con "he perdido toda mi
+        colección", ninguna cubierta por el simple exists()/is_dir() de
+        más abajo.
+
+        1. **Punto de montaje vacío pero accesible**: un disco de red o
+           USB desmontado a menudo deja atrás el propio directorio de
+           montaje — sigue existiendo, sigue siendo un directorio, pero
+           está vacío. `exists()/is_dir()` no lo distingue de una
+           biblioteca real; comprobar que tiene contenido, sí.
+        2. **Desaparición masiva anómala**: aun con la carpeta accesible
+           y no vacía, un fallo de montaje parcial (p.ej. NFS que
+           resuelve el directorio pero no su contenido) puede hacer que
+           la mayoría de rutas den `exists() == False` de golpe. Eso es
+           mucho más probable un problema de infraestructura que "el
+           coleccionista borró medio armario a mano" — se aborta sin
+           tocar nada y se avisa, en vez de convertir esto en cientos de
+           cambios de estado silenciosos.
+        """
+        if not self._library.exists() or not self._library.is_dir():
+            logger.warning(
+                "importer.biblioteca_inaccesible_omitiendo_desaparecidos", ruta=str(self._library)
+            )
+            return [], []
+
+        files = list((await self._db.execute(select(File))).scalars().all())
+        if not files:
+            return [], []
+
+        biblioteca_vacia = await asyncio.to_thread(lambda: not any(self._library.iterdir()))
+        if biblioteca_vacia:
+            logger.warning(
+                "importer.biblioteca_vacia_omitiendo_desaparecidos", ruta=str(self._library)
+            )
+            return [], []
+
+        rutas = [f.file_path for f in files]
+        # Un único hop a un hilo para todo el lote, no uno por fichero —
+        # Path.exists() es síncrono (I/O bloqueante, CLAUDE.md §4).
+        ausentes = await asyncio.to_thread(lambda: {r for r in rutas if not Path(r).exists()})
+
+        if (
+            len(files) >= UMBRAL_DESAPARICION_MASIVA_MINIMO
+            and len(ausentes) > len(files) * UMBRAL_DESAPARICION_MASIVA_FRACCION
+        ):
+            logger.error(
+                "importer.desaparicion_masiva_anomala_abortando",
+                ausentes=len(ausentes), total_files=len(files), ruta=str(self._library),
+            )
+            return [], []
+
+        desaparecidos: list[str] = []
+        reaparecidos: list[str] = []
+        for f in files:
+            ausente = f.file_path in ausentes
+            if ausente and not f.is_missing:
+                f.is_missing = True
+                f.missing_since = datetime.now(UTC)
+                desaparecidos.append(f.file_name)
+            elif not ausente and f.is_missing:
+                f.is_missing = False
+                f.missing_since = None
+                reaparecidos.append(f.file_name)
+
+        if desaparecidos or reaparecidos:
+            await self._db.flush()
+        return desaparecidos, reaparecidos
 
     async def _import_file(
         self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
@@ -289,11 +388,14 @@ class Importer:
             duplicate_count=report.duplicate_count,
             unsorted_count=report.unsorted_count,
             error_count=report.error_count,
+            disappeared_count=report.disappeared_count,
             details={
                 "imported": report.imported,
                 "duplicates": report.duplicates,
                 "unsorted": report.unsorted,
                 "errors": report.errors,
+                "disappeared": report.disappeared,
+                "reappeared": report.reappeared,
             },
         )
         self._db.add(run)
