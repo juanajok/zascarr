@@ -62,6 +62,7 @@ CASOS = [
     ("7",   "single_issue", "007", "single_issue", True),   # y al revés
     ("1.5", "single_issue", "1.5", "single_issue", True),   # decimales (por esto es VARCHAR)
     ("12",  "single_issue", "12",  "omnibus",      False),  # formato distinto → no enlaza
+    ("12",  "omnibus",      "12",  None,           False),  # sin marcador: única fila ómnibus
     ("",    "single_issue", "0",   None,           False),  # fila sin número: no casa con '0'
 ]
 

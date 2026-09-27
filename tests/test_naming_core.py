@@ -28,6 +28,7 @@ from zascarr.core.importer_triage import (
     triage,
 )
 from zascarr.core.matcher import (
+    FORMATO_GRAPA,
     MatchStatus,
     SeriesHit,
     SeriesMatcher,
@@ -523,12 +524,23 @@ class TestSeriesMatcherFormatoEdicion:
     | `Omnigold 12`  | grapa y ómnibus       | enlaza el ómnibus   |
     | `Omnigold 12`  | dos ómnibus           | Pendientes          |
     | `Batman 12`    | solo una grapa        | enlaza la grapa     |
+    | `Batman 12`    | solo un ómnibus       | Pendientes          |
     | `Batman 12`    | grapa y ómnibus       | Pendientes          |
     | cualquiera     | ninguna               | hueco del enricher  |
 
-    Con marcador el formato esperado elige; sin marcador
-    (`formato_esperado=None`) solo se enlaza si no hay nada que desambiguar.
+    Con marcador el formato esperado elige. Sin marcador
+    (`formato_esperado=None`) no hay evidencia: solo se enlaza si hay UNA
+    única candidata Y es una grapa estándar — «solo hay una fila» no
+    demuestra que un nombre sin marcador sea ese tomo, y el camino manual
+    rechazaría ese mismo emparejamiento.
     """
+
+    def test_formato_grapa_coincide_con_el_enum(self):
+        """core/ repite el literal de SINGLE_ISSUE a propósito (no importa
+        models/); esta guarda evita que los dos valores se separen en silencio."""
+        from zascarr.models import IssueFormat
+
+        assert FORMATO_GRAPA == IssueFormat.SINGLE_ISSUE.value
 
     @pytest.mark.asyncio
     async def test_issue_con_formato_distinto_va_a_unsorted(self):
@@ -602,6 +614,23 @@ class TestSeriesMatcherFormatoEdicion:
 
         assert result.status == MatchStatus.DIRECT
         assert result.issue_id == UUID(session.issue_rows[0].id)
+
+    @pytest.mark.asyncio
+    async def test_sin_marcador_con_un_solo_omnibus_va_a_unsorted(self):
+        """`Batman 12` (sin marcador) donde lo único catalogado es un ómnibus
+        #12: NO se enlaza. Que solo haya una fila no demuestra que este
+        archivo sea ese tomo — podría ser la grapa #12, aún sin catalogar — y
+        el camino manual rechazaría ese mismo emparejamiento por formato."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "Batman", 2011, 1.0)],
+                                    issue_formats=["omnibus"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("Batman", "12"))
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+        assert any("compartido entre ediciones" in n for n in result.notes)
 
     @pytest.mark.asyncio
     async def test_marcador_con_dos_omnibus_va_a_unsorted(self):
