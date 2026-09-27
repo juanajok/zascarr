@@ -19,14 +19,16 @@ cruzan archivos con series pasan por Issue.
 """
 from __future__ import annotations
 
-from collections import defaultdict
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.api.series import compute_missing_issues
+from zascarr.api.series import (
+    UNIDAD_DE_GRAPA,
+    compute_missing_issues,
+    numeros_poseidos_por_serie,
+)
 from zascarr.database import get_db
 from zascarr.models import File, Issue, Series
 from zascarr.web.routes import crear_templates
@@ -63,24 +65,27 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)) -> HTM
 
     porcentaje = round((issues_importados / total_issues * 100) if total_issues else 0)
 
-    # Huecos pendientes: UNA consulta de sort_orders para todas las series
-    # (no una query por serie), luego se agrega en Python reusando la misma
-    # función de C2 (compute_missing_issues) que usa la ficha de serie.
+    # Huecos pendientes: UNA consulta para todas las series (no una query por
+    # serie), luego se agrega en Python reusando la misma función pura
+    # (compute_missing_issues) que usa la ficha de serie. La posesión sale del
+    # DISCO (archivo disponible) y del formato, NO de `sort_order` — que ningún
+    # código de main escribe y hacía que el contador sumara el catálogo entero.
+    # Solo entran las series cuyo `total_issues` está acreditado como recuento
+    # de grapas (ver `UNIDAD_DE_GRAPA`): sumar capítulos de AniList o "números"
+    # de Tebeosfera con grapas sería mezclar unidades.
     series_totales = (await db.execute(
-        select(Series.id, Series.total_issues).where(Series.total_issues.isnot(None))
+        select(Series.id, Series.total_issues, Series.metadata_source)
+        .where(Series.total_issues.isnot(None))
     )).all()
 
-    sort_orders_por_serie: dict = defaultdict(set)
-    rows = (await db.execute(
-        select(Issue.series_id, Issue.sort_order).where(Issue.sort_order.isnot(None))
-    )).all()
-    for series_id, sort_order in rows:
-        sort_orders_por_serie[series_id].add(float(sort_order))
+    poseidos_por_serie = await numeros_poseidos_por_serie(db)
 
     huecos_pendientes = 0
-    for series_id, total in series_totales:
+    for series_id, total, fuente in series_totales:
+        if fuente not in UNIDAD_DE_GRAPA:
+            continue
         huecos_pendientes += len(
-            compute_missing_issues(total, sort_orders_por_serie.get(series_id, set()))
+            compute_missing_issues(total, poseidos_por_serie.get(series_id, set()))
         )
 
     # Últimas series actualizadas: subconsulta con max(imported_at) por serie.
