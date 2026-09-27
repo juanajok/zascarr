@@ -58,6 +58,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 SIMILARITY_THRESHOLD = 0.35
 FUZZY_THRESHOLD = 0.60      # por debajo: ruido, aunque supere el WHERE
 
+# B15: valor con el que se persiste una grapa suelta (models.IssueFormat.
+# SINGLE_ISSUE). Se repite como literal a propósito: core/ no importa models/
+# en ningún sitio y no es el momento de romper esa frontera. Un test
+# (`test_formato_grapa_coincide_con_el_enum`) comprueba que siguen coincidiendo.
+FORMATO_GRAPA = "single_issue"
+
 _ARTICLE_WORDS = r"the|el|la|los|las|le|les|il|lo|die|der|das"
 # Artículo inicial: "The Sandman" → "Sandman". El (?:\s+|$) en vez de \s+
 # a secas cubre el caso patológico de un título que ES solo el artículo
@@ -220,21 +226,60 @@ class SeriesMatcher:
             return None
         return SeriesHit(UUID(str(row.id)), row.title, row.start_year, 1.0)
 
-    async def find_issue(self, series_id: UUID, number: str) -> UUID | None:
-        """issue_number es VARCHAR por los '1.5' y 'Annual 3': match textual
-        exacto tras recortar ceros a la izquierda ('007' ~ '7')."""
+    async def find_issue(self, series_id: UUID, number: str,
+                          formato_esperado: str | None = None) -> tuple[UUID | None, bool]:
+        """Issue de esa serie con ese número, y si hubo conflicto de ediciones.
+
+        issue_number es VARCHAR por los '1.5' y 'Annual 3': match textual
+        exacto tras recortar ceros a la izquierda ('007' ~ '7').
+
+        B15: un mismo número puede estar ocupado por ediciones distintas (la
+        grapa #12 y el Omnigold 12). Antes se cogía la primera fila a ciegas
+        (LIMIT 1); ahora se exige que el format COINCIDA con el esperado. Si
+        hay varias candidatas, o ninguna coincide con el formato esperado, se
+        devuelve (None, True) y el archivo va a revisión: es preferible
+        preguntar a enlazarlo a la edición equivocada.
+
+        Devuelve (issue_id, conflicto):
+          (id, False)   — exactamente una candidata con el formato esperado.
+          (None, False) — no hay ningún issue registrado para ese número
+                          (hueco del enricher, comportamiento de siempre).
+          (None, True)  — hay issues pero el formato no permite decidir.
+        """
+        # Normalización SIMÉTRICA a propósito: antes se recortaban ceros solo
+        # en la columna y el parámetro llegaba ya recortado, así que el #0
+        # nunca encontraba su fila — ltrim('0','0') es la cadena VACÍA y la
+        # comparación quedaba '' = '0'. Verificado contra Postgres real.
+        # `issue_number <> ''` cierra el caso degenerado de una fila sin
+        # número: si no, '' casaría con cualquier búsqueda de '0'.
         res = await self.db.execute(sa.text("""
-            SELECT id FROM issues
+            SELECT id, format FROM issues
             WHERE series_id = :sid
-              AND ltrim(issue_number, '0') = :num
-            LIMIT 1
-        """), {"sid": str(series_id), "num": number.lstrip("0") or "0"})
-        row = res.first()
-        return UUID(str(row.id)) if row else None
+              AND issue_number <> ''
+              AND ltrim(issue_number, '0') = ltrim(:num, '0')
+        """), {"sid": str(series_id), "num": number})
+        filas = res.fetchall()
+        if not filas:
+            return None, False
+        if formato_esperado is None:
+            # Sin marcador NO hay evidencia del formato: solo se enlaza si hay
+            # una única candidata Y además es una grapa estándar. Una única
+            # recopilación/tomo tampoco se enlaza — «solo hay una fila» no
+            # demuestra que este archivo sin marcador sea ese tomo; podría ser
+            # la grapa #12, todavía sin catalogar. Es el mismo emparejamiento
+            # que rechaza el camino manual, así que los dos caminos coinciden.
+            if len(filas) == 1 and filas[0].format == FORMATO_GRAPA:
+                return UUID(str(filas[0].id)), False
+            return None, True
+        coinciden = [f for f in filas if f.format == formato_esperado]
+        if len(coinciden) == 1:
+            return UUID(str(coinciden[0].id)), False
+        return None, True
 
     # ── Decisión ─────────────────────────────────────────────────────────────
 
-    async def decide(self, triage, extractor=None) -> MatchResult:
+    async def decide(self, triage, extractor=None,
+                     formato_esperado: str | None = None) -> MatchResult:
         """Punto de entrada.
 
         `extractor` es la inyección de naming.py:
@@ -265,7 +310,8 @@ class SeriesMatcher:
         alias_hit = await self.find_alias(title)
         if alias_hit:
             return await self._resolve(alias_hit, number, [alias_hit],
-                                        MatchStatus.DIRECT, ["alias local aprendido"])
+                                        MatchStatus.DIRECT, ["alias local aprendido"],
+                                        formato_esperado)
 
         hits = await self.find_series(title, year, volume)
         good = [h for h in hits if h.score >= FUZZY_THRESHOLD]
@@ -288,15 +334,26 @@ class SeriesMatcher:
 
         hit = good[0]
         status = MatchStatus.DIRECT if hit.score == 1.0 else MatchStatus.FUZZY
-        return await self._resolve(hit, number, good, status, [])
+        return await self._resolve(hit, number, good, status, [], formato_esperado)
 
     async def _resolve(self, hit: SeriesHit, number: str, candidates: list[SeriesHit],
-                        status: MatchStatus, extra_notes: list[str]) -> MatchResult:
+                        status: MatchStatus, extra_notes: list[str],
+                        formato_esperado: str | None = None) -> MatchResult:
         """Cola común de decide(): buscar el issue exacto y componer el
         MatchResult final, compartida entre el camino normal (fuzzy) y el
         alias local (B13) — ambos terminan igual, solo cambia cómo se
-        encontró la serie."""
-        issue_id = await self.find_issue(hit.series_id, number)
+        encontró la serie.
+
+        B15: si el número está compartido entre ediciones y el formato no
+        permite decidir, NO se enlaza ni se mueve: el archivo va a Pendientes."""
+        issue_id, conflicto = await self.find_issue(hit.series_id, number, formato_esperado)
+        if conflicto:
+            return MatchResult(
+                MatchStatus.UNSORTED,
+                candidates=candidates,
+                notes=[f"número '{number}' compartido entre ediciones en "
+                       f"'{hit.title}': no se enlaza sin poder verificar el formato"],
+            )
         notes = list(extra_notes)
         if not issue_id:
             notes.append(

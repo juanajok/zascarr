@@ -28,6 +28,7 @@ from zascarr.core.importer_triage import (
     triage,
 )
 from zascarr.core.matcher import (
+    FORMATO_GRAPA,
     MatchStatus,
     SeriesHit,
     SeriesMatcher,
@@ -346,11 +347,17 @@ def make_triage_result(series="Batman", number="12", year=None,
 
 def make_session_mock(series_hits: list[SeriesHit],
                       issue_id: UUID | None = uuid4(),
-                      alias_hit: SeriesHit | None = None) -> AsyncMock:
+                      alias_hit: SeriesHit | None = None,
+                      issue_formats: list[str] | None = None) -> AsyncMock:
     """Mock de AsyncSession que devuelve series_hits en find_series,
     issue_id en find_issue, y alias_hit en find_alias (B13 — None por
-    defecto: sin alias local aprendido, el camino normal de estos tests)."""
+    defecto: sin alias local aprendido, el camino normal de estos tests).
+
+    B15: `issue_formats` simula VARIAS filas de `issues` para el mismo número
+    (una por formato), y quedan accesibles en `session.issue_rows` para poder
+    afirmar cuál se enlazó. Por defecto, una sola fila con `issue_id`."""
     session = AsyncMock()
+    issue_rows: list[MagicMock] = []
 
     async def execute_side_effect(query, params=None):
         result_mock = MagicMock()
@@ -362,8 +369,13 @@ def make_session_mock(series_hits: list[SeriesHit],
         # "series" (de "series_id") también aparecería ahí y esta rama
         # nunca se alcanzaría. Hay que mirar la tabla real (FROM issues).
         if "FROM issues" in str(query):
-            row = MagicMock(id=str(issue_id)) if issue_id else None
-            result_mock.first = MagicMock(return_value=row)
+            issue_rows.clear()
+            if issue_formats is None:
+                if issue_id:
+                    issue_rows.append(MagicMock(id=str(issue_id), format="single_issue"))
+            else:
+                issue_rows.extend(MagicMock(id=str(uuid4()), format=f) for f in issue_formats)
+            result_mock.fetchall = MagicMock(return_value=list(issue_rows))
             return result_mock
         elif "local_aliases" in str(query):  # find_alias (B13)
             row = None
@@ -383,6 +395,7 @@ def make_session_mock(series_hits: list[SeriesHit],
             return result_mock
 
     session.execute = execute_side_effect
+    session.issue_rows = issue_rows  # B15: filas de `issues` generadas, para afirmar cuál se enlazó
     return session
 
 
@@ -499,6 +512,156 @@ class TestSeriesMatcherDecide:
 
         assert result.status == MatchStatus.DIRECT
         assert result.series_id == sid
+
+
+class TestSeriesMatcherFormatoEdicion:
+    """B15: el camino AUTOMÁTICO no enlaza a ciegas por número.
+
+    La regla depende de si el nombre trae marcador de edición explícito:
+
+    | Nombre         | Candidatas del número | Decisión            |
+    |----------------|-----------------------|---------------------|
+    | `Omnigold 12`  | grapa y ómnibus       | enlaza el ómnibus   |
+    | `Omnigold 12`  | dos ómnibus           | Pendientes          |
+    | `Batman 12`    | solo una grapa        | enlaza la grapa     |
+    | `Batman 12`    | solo un ómnibus       | Pendientes          |
+    | `Batman 12`    | grapa y ómnibus       | Pendientes          |
+    | cualquiera     | ninguna               | hueco del enricher  |
+
+    Con marcador el formato esperado elige. Sin marcador
+    (`formato_esperado=None`) no hay evidencia: solo se enlaza si hay UNA
+    única candidata Y es una grapa estándar — «solo hay una fila» no
+    demuestra que un nombre sin marcador sea ese tomo, y el camino manual
+    rechazaría ese mismo emparejamiento.
+    """
+
+    def test_formato_grapa_coincide_con_el_enum(self):
+        """core/ repite el literal de SINGLE_ISSUE a propósito (no importa
+        models/); esta guarda evita que los dos valores se separen en silencio."""
+        from zascarr.models import IssueFormat
+
+        assert FORMATO_GRAPA == IssueFormat.SINGLE_ISSUE.value
+
+    @pytest.mark.asyncio
+    async def test_issue_con_formato_distinto_va_a_unsorted(self):
+        """La grapa #12 existe y llega un Omnigold 12: no se enlaza."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "La Patrulla-X", 1985, 1.0)],
+                                    issue_formats=["single_issue"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla-X", "12"),
+                                      formato_esperado="omnibus")
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+        assert any("compartido entre ediciones" in n for n in result.notes)
+
+    @pytest.mark.asyncio
+    async def test_issue_con_formato_coincidente_se_enlaza(self):
+        """Si el formato SÍ coincide, el enlace es el de siempre."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "La Patrulla-X", 1985, 1.0)],
+                                    issue_formats=["omnibus"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla-X", "12"),
+                                      formato_esperado="omnibus")
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.issue_id == UUID(session.issue_rows[0].id)
+
+    @pytest.mark.asyncio
+    async def test_numero_compartido_desambigua_por_formato(self):
+        """Con grapa Y omnibús en el mismo número, el formato esperado elige
+        la fila correcta en vez de la primera que aparezca."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "La Patrulla-X", 1985, 1.0)],
+                                    issue_formats=["single_issue", "omnibus"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla-X", "12"),
+                                      formato_esperado="omnibus")
+
+        esperado = next(r.id for r in session.issue_rows if r.format == "omnibus")
+        assert result.status == MatchStatus.DIRECT
+        assert result.issue_id == UUID(esperado)
+
+    @pytest.mark.asyncio
+    async def test_sin_formato_conocido_no_elige_a_ciegas(self):
+        """Sin formato esperado y con dos filas para el mismo número, no se
+        coge la primera: a revisión."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "La Patrulla-X", 1985, 1.0)],
+                                    issue_formats=["single_issue", "omnibus"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla-X", "12"))
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+
+    @pytest.mark.asyncio
+    async def test_sin_marcador_con_una_sola_candidata_enlaza(self):
+        """`Batman 12` (sin marcador) con una única grapa: no hay nada que
+        desambiguar, así que se enlaza."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "Batman", 2011, 1.0)],
+                                    issue_formats=["single_issue"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("Batman", "12"))
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.issue_id == UUID(session.issue_rows[0].id)
+
+    @pytest.mark.asyncio
+    async def test_sin_marcador_con_un_solo_omnibus_va_a_unsorted(self):
+        """`Batman 12` (sin marcador) donde lo único catalogado es un ómnibus
+        #12: NO se enlaza. Que solo haya una fila no demuestra que este
+        archivo sea ese tomo — podría ser la grapa #12, aún sin catalogar — y
+        el camino manual rechazaría ese mismo emparejamiento por formato."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "Batman", 2011, 1.0)],
+                                    issue_formats=["omnibus"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("Batman", "12"))
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+        assert any("compartido entre ediciones" in n for n in result.notes)
+
+    @pytest.mark.asyncio
+    async def test_marcador_con_dos_omnibus_va_a_unsorted(self):
+        """`Omnigold 12` con DOS ómnibus sigue siendo ambiguo (volúmenes
+        distintos): el formato ya no desambigua, así que a revisión."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "La Patrulla-X", 1985, 1.0)],
+                                    issue_formats=["omnibus", "omnibus"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla-X", "12"),
+                                      formato_esperado="omnibus")
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+
+    @pytest.mark.asyncio
+    async def test_sin_issue_registrado_sigue_siendo_hueco_no_revision(self):
+        """B15: que el número NO exista en la serie no es un conflicto — es el
+        hueco del enricher de siempre, y no debe mandar el archivo a Pendientes."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "La Patrulla-X", 1985, 1.0)],
+                                    issue_id=None)
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla-X", "12"),
+                                      formato_esperado=None)
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.issue_id is None
+        assert any("hueco del enricher" in n for n in result.notes)
 
 
 class TestSeriesMatcherAlias:

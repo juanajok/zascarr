@@ -16,9 +16,15 @@ from uuid import uuid4
 
 import pytest
 
-from zascarr.core.matcher import SeriesHit
+from zascarr.core.matcher import MatchResult, MatchStatus, SeriesHit
 from zascarr.models import ComicTradition, File, ImportRun, Series
-from zascarr.services.importer import Importer, ImportReport, build_library_path, serialize_candidates
+from zascarr.services.importer import (
+    Importer,
+    ImportReport,
+    _triage_and_match,
+    build_library_path,
+    serialize_candidates,
+)
 
 
 def make_cbz(path: Path) -> None:
@@ -85,6 +91,51 @@ class FakeDedupeSession:
         result = MagicMock()
         result.scalar_one_or_none = MagicMock(return_value=self._existing)
         return result
+
+
+class TestFormatoEsperadoAlMatcher:
+    """B15: el importer deriva el formato esperado del marcador de edición del
+    nombre y se lo pasa al matcher — sin eso, el camino automático no podría
+    distinguir una grapa #12 de un Omnigold 12 con el mismo número."""
+
+    @pytest.mark.asyncio
+    async def test_omnigold_se_traduce_a_omnibus(self, tmp_path, monkeypatch):
+        capturado: dict = {}
+
+        async def decide_falso(self, triage, extractor=None, formato_esperado=None):
+            capturado["formato"] = formato_esperado
+            capturado["extraido"] = extractor(triage.path.name) if extractor else None
+            return MatchResult(MatchStatus.UNSORTED, notes=[])
+
+        monkeypatch.setattr("zascarr.core.matcher.SeriesMatcher.decide", decide_falso)
+
+        src = tmp_path / "la patrulla x omnigold 12.cbz"
+        make_cbz(src)
+        resultado = await _triage_and_match(FakeDedupeSession(None), src)
+
+        assert capturado["formato"] == "omnibus"          # OMNIBUS.value
+        assert capturado["extraido"][1] == "12"           # el número sigue saliendo
+        assert resultado.edition_kind == "omnigold"
+
+    @pytest.mark.asyncio
+    async def test_sin_marcador_no_hay_evidencia_de_formato(self, tmp_path, monkeypatch):
+        """Sin marcador el importer pasa `None`, NO `single_issue`: no es que el
+        archivo sea una grapa demostrada, es que no hay evidencia del formato —
+        y el matcher entonces solo enlaza si no hay nada que desambiguar."""
+        capturado: dict = {}
+
+        async def decide_falso(self, triage, extractor=None, formato_esperado=None):
+            capturado["formato"] = formato_esperado
+            return MatchResult(MatchStatus.UNSORTED, notes=[])
+
+        monkeypatch.setattr("zascarr.core.matcher.SeriesMatcher.decide", decide_falso)
+
+        src = tmp_path / "Batman 001.cbz"
+        make_cbz(src)
+        resultado = await _triage_and_match(FakeDedupeSession(None), src)
+
+        assert capturado["formato"] is None
+        assert resultado.edition_kind is None
 
 
 class TestImportFileDuplicado:

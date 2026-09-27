@@ -60,6 +60,19 @@ class IssueFormat(str, enum.Enum):
     MANGA_TANKOBON  = "manga_tankobon"
     DIGITAL         = "digital"
 
+
+# B15 (2026-09-26): qué Issue.format corresponde a cada marcador de edición que
+# naming.py extrae del nombre de archivo. Vive aquí (junto al enum) y no en un
+# servicio, porque lo comparten el camino manual (ReviewService.assign_to_series)
+# y el automático (SeriesMatcher), y ninguno de los dos puede importar del otro
+# sin ciclo. Todo lo que no sea un marcador de edición es una grapa suelta.
+EDITION_KIND_A_FORMAT: dict[str, IssueFormat] = {
+    "omnigold": IssueFormat.OMNIBUS,
+    "integral": IssueFormat.OMNIBUS,
+    "tomo": IssueFormat.TRADE_PAPERBACK,
+    "volumen": IssueFormat.TRADE_PAPERBACK,
+}
+
 class FileFormat(str, enum.Enum):
     CBZ  = "cbz"
     CBR  = "cbr"
