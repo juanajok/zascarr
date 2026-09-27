@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from zascarr.config import get_settings
 from zascarr.main import app
 from zascarr.services.auth import COOKIE_NAME, hash_password
+from zascarr.web.auth import _next_seguro
 
 
 @pytest.fixture
@@ -25,6 +26,28 @@ def restaurar_settings():
     yield
     for campo, valor in originales.items():
         setattr(s, campo, valor)
+
+
+class TestNextSeguro:
+    """A6 (revisión 2026-09-26): `next` solo acepta rutas relativas de este
+    sitio. El caso de la barra invertida ('/\\host') se normaliza a '//host'
+    en un navegador (WHATWG URL) y debe descartarse igual que un dominio
+    absoluto — la versión anterior lo dejaba pasar."""
+
+    def test_ruta_relativa_se_mantiene(self):
+        assert _next_seguro("/ui/") == "/ui/"
+
+    def test_doble_barra_se_descarta(self):
+        assert _next_seguro("//host.invalid") == "/"
+
+    def test_barra_invertida_se_descarta(self):
+        assert _next_seguro(r"/\host.invalid") == "/"
+
+    def test_backslash_inicial_se_descarta(self):
+        assert _next_seguro(r"\host.invalid") == "/"
+
+    def test_url_absoluta_se_descarta(self):
+        assert _next_seguro("https://host.invalid/x") == "/"
 
 
 class TestLoginForm:
@@ -56,6 +79,14 @@ class TestLoginForm:
         get_settings().auth_mode = "password"
         client = TestClient(app)
         r = client.get("/login", params={"next": "https://sitio-falso.example/robar"})
+        assert "sitio-falso.example" not in r.text
+
+    def test_next_barra_invertida_no_se_refleja_tal_cual(self, restaurar_settings):
+        """A6: '/\\host' se normaliza a '//host' en el navegador — también
+        debe descartarse, no reflejarse en el formulario."""
+        get_settings().auth_mode = "password"
+        client = TestClient(app)
+        r = client.get("/login", params={"next": r"/\sitio-falso.example"})
         assert "sitio-falso.example" not in r.text
 
 
@@ -93,6 +124,20 @@ class TestLoginSubmit:
 
         r = client.post("/login", data={
             "password": "secreta123", "next": "https://sitio-falso.example/robar",
+        })
+
+        assert r.status_code == 303
+        assert r.headers["location"] == "/"
+
+    def test_next_barra_invertida_en_submit_redirige_a_raiz(self, restaurar_settings):
+        """A6: el '/\\host' en el POST tampoco puede colar un destino externo."""
+        get_settings().auth_mode = "password"
+        get_settings().auth_password_hash = hash_password("secreta123")
+        get_settings().secret_key = "clave-de-prueba"
+        client = TestClient(app, follow_redirects=False)
+
+        r = client.post("/login", data={
+            "password": "secreta123", "next": r"/\sitio-falso.example",
         })
 
         assert r.status_code == 303

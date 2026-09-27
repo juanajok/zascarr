@@ -29,6 +29,13 @@ def _next_seguro(destino: str) -> str:
     `/login?next=https://sitio-falso.example` redirigiría tras un login
     correcto a un dominio ajeno (open redirect clásico). Solo se acepta
     una ruta relativa de este mismo sitio."""
+    # A6 (revisión 2026-09-26): el navegador, en una URL http(s), trata '\\'
+    # como '/', de modo que `/\\host.invalid` se normaliza a `//host.invalid`
+    # (protocol-relative) y apunta FUERA de este sitio. Ninguna ruta interna
+    # legítima lleva backslash, así que se rechaza cualquier destino que lo
+    # contenga — el caso '//' ya se cubría, el '/\\' no.
+    if "\\" in destino:
+        return "/"
     if destino.startswith("/") and not destino.startswith("//"):
         return destino
     return "/"
