@@ -67,11 +67,115 @@ docker compose version >/dev/null 2>&1 || die \
 # que ya falló a medias o que alguien ya empezó a desmontar a mano. Se
 # avisa y se sigue sin él (docker compose usa los valores por defecto del
 # propio docker-compose.yml, suficientes para parar los contenedores).
-LIBRARY_DIR=""
-if [[ -f "${ENV_FILE}" ]]; then
-    LIBRARY_DIR="$(grep -m1 '^HOST_LIBRARY_DIR=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
-else
-    warn "No encuentro ${ENV_FILE} — sigo sin él (los contenedores igualmente se pueden parar)."
+#
+# Bug real encontrado en esta misma revisión (2026-09-26): ninguna versión
+# anterior de este script leía ZASCARR_DATA_DIR/HOST_DOWNLOADS_DIR/
+# HOST_AMULE_INCOMING_DIR del .env — "${ZASCARR_DATA_DIR:?}" dependía por
+# completo de que ALGUIEN lo hubiera exportado a mano en la shell antes de
+# llamar al script; en una instalación real (solo el .env, nunca exportado)
+# --purge habría abortado con "parameter null or not set" en vez de borrar
+# nada.
+#
+# Segundo bug real, encontrado en revisión de PR (2026-09-26): la primera
+# versión de este endurecimiento seguía sin aplicarle a HOST_LIBRARY_DIR
+# el mismo valor por defecto que docker-compose.yml (/media/library) — con
+# un .env ausente o sin esa clave, RESOLVED_LIBRARY quedaba vacío y
+# se_solapan() se saltaba la protección de biblioteca en silencio, justo
+# el estado que este script dice admitir. Ahora las CUATRO rutas
+# (ZASCARR_DATA_DIR y las tres HOST_*) se resuelven con la MISMA
+# precedencia que usa "docker compose" al interpolar el compose file:
+# variable YA exportada en la shell (puede contradecir al .env, y sigue
+# ganando ella) > valor del .env > valor por defecto del propio
+# docker-compose.yml. Nunca una ruta a medio determinar.
+resolver_var_ruta() {
+    # $1 = nombre de la variable/clave (p.ej. HOST_LIBRARY_DIR)
+    # $2 = valor por defecto (el mismo que docker-compose.yml declara)
+    local nombre="$1" por_defecto="$2" valor=""
+    if [[ -n "${!nombre+x}" ]]; then
+        valor="${!nombre}"
+    fi
+    if [[ -z "${valor}" && -f "${ENV_FILE}" ]]; then
+        valor="$(grep -m1 "^${nombre}=" "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
+    fi
+    printf '%s' "${valor:-${por_defecto}}"
+}
+
+[[ -f "${ENV_FILE}" ]] || warn "No encuentro ${ENV_FILE} — sigo sin él (los contenedores igualmente se pueden parar)."
+
+LIBRARY_DIR="$(resolver_var_ruta HOST_LIBRARY_DIR /media/library)"
+DOWNLOADS_DIR="$(resolver_var_ruta HOST_DOWNLOADS_DIR /media/data/downloads)"
+AMULE_DIR="$(resolver_var_ruta HOST_AMULE_INCOMING_DIR /media/data/aMule/Incoming)"
+DATA_DIR="$(resolver_var_ruta ZASCARR_DATA_DIR /var/lib/zascarr)"
+
+# ── A4: validación de rutas antes de --purge (revisión de PR, 2026-09-26) ──
+# "${VAR:?}" solo protege contra una variable VACÍA, no contra una ruta
+# PELIGROSA — la raíz, una carpeta del sistema, o la propia biblioteca/
+# descargas por una mala edición manual del .env. Se resuelve la ruta REAL
+# (symlinks, "..", relativas) y se rechazan los casos obvios ANTES de
+# construir ningún "rm -rf", nunca confiando en que "eso no va a pasar".
+resolver_ruta() {
+    # readlink -f resuelve todo lo que pueda aunque el destino final no
+    # exista todavía (mismo idioma que _comun.sh ya usa para el symlink de
+    # .env) — hace falta para detectar solapamientos incluso contra una
+    # carpeta que el usuario nunca llegó a crear.
+    readlink -f -- "$1" 2>/dev/null || printf '%s' "$1"
+}
+
+RUTAS_SISTEMA_PROHIBIDAS=(/ /root /home /etc /var /usr /bin /sbin /boot /proc /sys /dev /lib /lib64 /opt /tmp)
+
+es_ruta_del_sistema() {
+    local candidata="$1" prohibida
+    for prohibida in "${RUTAS_SISTEMA_PROHIBIDAS[@]}"; do
+        [[ "${candidata}" == "${prohibida}" ]] && return 0
+    done
+    return 1
+}
+
+# ¿"$1" es la misma ruta que "$2", o una está dentro de la otra? Cualquiera
+# de los dos sentidos es peligroso: si ZASCARR_DATA_DIR quedara dentro de
+# la biblioteca, o la biblioteca dentro de ZASCARR_DATA_DIR, un "rm -rf" de
+# subcarpetas con nombre fijo (postgres/redis/covers/vpn-state) podría
+# coincidir con carpetas reales del coleccionista.
+se_solapan() {
+    local a="$1" b="$2"
+    [[ -z "${a}" || -z "${b}" ]] && return 1
+    [[ "${a}" == "${b}" ]] && return 0
+    [[ "${a}" == "${b}/"* ]] && return 0
+    [[ "${b}" == "${a}/"* ]] && return 0
+    return 1
+}
+
+RESOLVED_DATA="$(resolver_ruta "${DATA_DIR}")"
+RESOLVED_LIBRARY="$(resolver_ruta "${LIBRARY_DIR}")"
+RESOLVED_DOWNLOADS="$(resolver_ruta "${DOWNLOADS_DIR}")"
+RESOLVED_AMULE="$(resolver_ruta "${AMULE_DIR}")"
+
+if $PURGE; then
+    # Fallar cerrado, no abierto: con los valores por defecto de arriba
+    # ninguna de estas cuatro debería poder quedar vacía nunca — pero si
+    # algún cambio futuro rompiera esa garantía, mejor abortar aquí que
+    # seguir con se_solapan() saltándose la comprobación en silencio
+    # (se_solapan devuelve "no hay solape" ante una cadena vacía).
+    [[ -n "${RESOLVED_DATA}" ]] || die \
+        "No he podido determinar ZASCARR_DATA_DIR de forma inequívoca — me niego a hacer --purge sin saber qué voy a borrar."
+    [[ -n "${RESOLVED_LIBRARY}" ]] || die \
+        "No he podido determinar HOST_LIBRARY_DIR de forma inequívoca — me niego a hacer --purge sin poder comprobar que no se solapa con tu biblioteca."
+    [[ -n "${RESOLVED_DOWNLOADS}" ]] || die \
+        "No he podido determinar HOST_DOWNLOADS_DIR de forma inequívoca — me niego a hacer --purge sin poder comprobar que no se solapa con tus descargas."
+    [[ -n "${RESOLVED_AMULE}" ]] || die \
+        "No he podido determinar HOST_AMULE_INCOMING_DIR de forma inequívoca — me niego a hacer --purge sin poder comprobar que no se solapa con la carpeta de aMule."
+
+    es_ruta_del_sistema "${RESOLVED_DATA}" && die \
+        "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}', una carpeta del sistema — me niego a tocar ahí. Revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
+    if se_solapan "${RESOLVED_DATA}" "${RESOLVED_LIBRARY}"; then
+        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') se solapa con tu biblioteca ('${RESOLVED_LIBRARY}') — me niego a borrar ahí. Revisa HOST_LIBRARY_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+    fi
+    if se_solapan "${RESOLVED_DATA}" "${RESOLVED_DOWNLOADS}"; then
+        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') se solapa con tus descargas ('${RESOLVED_DOWNLOADS}') — me niego a borrar ahí. Revisa HOST_DOWNLOADS_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+    fi
+    if se_solapan "${RESOLVED_DATA}" "${RESOLVED_AMULE}"; then
+        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') se solapa con la carpeta de aMule ('${RESOLVED_AMULE}') — me niego a borrar ahí. Revisa HOST_AMULE_INCOMING_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+    fi
 fi
 
 # ── Qué va a pasar, ANTES de tocar nada ─────────────────────────────────────
@@ -80,17 +184,17 @@ echo "  - Parar y borrar los contenedores de ZascArr (zascarr-orquestador, zasca
 echo "  - Borrar la red interna y la imagen que este repo construyó."
 echo "    (las imágenes oficiales de postgres/redis NO se tocan)"
 if $PURGE; then
-    echo "  - Borrar también los datos de la app en ${ZASCARR_DATA_DIR} (catálogo, wishlist, ajustes, portadas)."
+    echo "  - Borrar también los datos de la app en ${RESOLVED_DATA} (catálogo, wishlist, ajustes, portadas)."
     if [[ -f "${ENV_FILE}" ]]; then
         echo "  - Borrar también ${ENV_FILE} (la próxima instalación repetirá el asistente)."
     fi
 else
-    echo "  - CONSERVAR ${ZASCARR_DATA_DIR} (catálogo, wishlist, ajustes, portadas)."
+    echo "  - CONSERVAR ${RESOLVED_DATA} (catálogo, wishlist, ajustes, portadas)."
     [[ -f "${ENV_FILE}" ]] && echo "  - CONSERVAR ${ENV_FILE}."
 fi
 echo ""
-if [[ -n "${LIBRARY_DIR}" ]]; then
-    echo "  Tu biblioteca (${LIBRARY_DIR}) NUNCA se toca, con o sin --purge."
+if [[ -n "${RESOLVED_LIBRARY}" ]]; then
+    echo "  Tu biblioteca (${RESOLVED_LIBRARY}) NUNCA se toca, con o sin --purge."
 else
     echo "  Tu biblioteca NUNCA se toca, con o sin --purge."
 fi
@@ -106,8 +210,10 @@ DOWN=(docker compose -f "${COMPOSE_FILE}")
     "No pude parar los contenedores. Revisa a mano: docker compose -f ${COMPOSE_FILE} ps"
 success "Contenedores, red e imagen borrados."
 
+PURGE_DATA_OK=true
+PURGE_ENV_OK=true
 if $PURGE; then
-    info "Borrando datos de la app en ${ZASCARR_DATA_DIR}..."
+    info "Borrando datos de la app en ${RESOLVED_DATA}..."
     # Bug real, encontrado verificando en vivo: Postgres crea su directorio
     # con permisos 700 propiedad del usuario del PROCESO DENTRO DEL
     # CONTENEDOR (buena práctica suya, no un descuido) — un "rm -rf" del
@@ -119,19 +225,45 @@ if $PURGE; then
     # instalación real) — root dentro del contenedor sí puede borrar sus
     # propios ficheros sea cual sea el usuario interno de cada servicio.
     # ${VAR:?} de guardia: nunca un "rm -rf $VAR/" con VAR vacío por
-    # accidente, mismo cuidado de A3 aplicado al lado de borrar.
-    if docker run --rm -v "${ZASCARR_DATA_DIR:?}:/purgar" postgres:15-alpine \
-        sh -c 'rm -rf /purgar/postgres /purgar/redis /purgar/covers /purgar/vpn-state'
-    then
-        success "Datos de la app borrados: ${ZASCARR_DATA_DIR}"
+    # accidente, sobre la ruta ya RESUELTA y VALIDADA arriba, no la cadena
+    # cruda del .env.
+    docker run --rm -v "${RESOLVED_DATA:?}:/purgar" postgres:15-alpine \
+        sh -c 'rm -rf /purgar/postgres /purgar/redis /purgar/covers /purgar/vpn-state' \
+        || true  # el veredicto real es la comprobación de abajo, no el código de salida
+
+    # Revisión de PR (2026-09-26): un código de salida 0 no demuestra que
+    # de verdad se borró — se comprueba cada subcarpeta desde el HOST tras
+    # el intento. Listar la entrada en ZASCARR_DATA_DIR no necesita
+    # permisos sobre EL CONTENIDO de "postgres" (propiedad de otro usuario
+    # dentro del contenedor), solo sobre su carpeta padre, de la que el
+    # usuario del host sí es dueño.
+    RESTOS=()
+    for sub in postgres redis covers vpn-state; do
+        # -e sigue symlinks: un enlace colgante (destino ya borrado) da
+        # -e falso aunque la propia entrada del enlace siga ahí. -L
+        # detecta la entrada exista o no su destino — revisión de PR
+        # (2026-09-26).
+        if [[ -e "${RESOLVED_DATA}/${sub}" || -L "${RESOLVED_DATA}/${sub}" ]]; then
+            RESTOS+=("${sub}")
+        fi
+    done
+    if [[ "${#RESTOS[@]}" -eq 0 ]]; then
+        success "Datos de la app borrados: ${RESOLVED_DATA}"
     else
-        warn "No pude borrar ${ZASCARR_DATA_DIR} automáticamente (revisa permisos). Bórralo a mano:
-    sudo rm -rf ${ZASCARR_DATA_DIR}/{postgres,redis,covers,vpn-state}"
+        PURGE_DATA_OK=false
+        warn "No se borró del todo ${RESOLVED_DATA} — sigue ahí: ${RESTOS[*]} (revisa permisos). Bórralo a mano:
+    sudo rm -rf ${RESOLVED_DATA}/{${RESTOS[*]// /,}}"
     fi
+
     if [[ -f "${ENV_FILE}" ]]; then
         info "Borrando ${ENV_FILE}..."
-        rm -f "${ENV_FILE}"
-        success ".env borrado."
+        rm -f "${ENV_FILE}" 2>/dev/null || true
+        if [[ -f "${ENV_FILE}" ]]; then
+            PURGE_ENV_OK=false
+            warn "No pude borrar ${ENV_FILE} (revisa permisos). Bórralo a mano: rm -f ${ENV_FILE}"
+        else
+            success ".env borrado."
+        fi
     fi
 fi
 
@@ -147,8 +279,19 @@ if command -v systemctl >/dev/null 2>&1; then
     done
 fi
 
+# Revisión de PR (2026-09-26): el titular final ya no da un "completada"
+# genérico si el --purge se quedó a medias — PURGE_DATA_OK/PURGE_ENV_OK
+# reflejan la comprobación real de arriba, no el código de salida a ciegas.
+PURGE_TOTAL_OK=true
+$PURGE && { $PURGE_DATA_OK || PURGE_TOTAL_OK=false; }
+$PURGE && { $PURGE_ENV_OK || PURGE_TOTAL_OK=false; }
+
 echo -e "\n${B}====================================${N}"
-echo -e "${G}${B}  Desinstalación completada${N}"
+if $PURGE_TOTAL_OK; then
+    echo -e "${G}${B}  Desinstalación completada${N}"
+else
+    echo -e "${Y}${B}  Desinstalación completada con avisos${N}"
+fi
 echo -e "${B}====================================${N}\n"
 echo "  Se ha quedado en el disco, intacto:"
 if [[ -n "${LIBRARY_DIR}" ]]; then
@@ -157,15 +300,26 @@ else
     echo "    - Tu biblioteca (la ruta que le hubieras dado)."
 fi
 if ! $PURGE; then
-    echo "    - Los datos de la app: ${ZASCARR_DATA_DIR}"
+    echo "    - Los datos de la app: ${RESOLVED_DATA}"
     [[ -f "${ENV_FILE}" ]] && echo "    - Tu configuración: ${ENV_FILE}"
     echo ""
     echo "  Para reinstalar sin perder nada de esto, clona el repo de nuevo en"
     echo "  ${ZASCARR_ROOT}/zascarr y ejecuta bootstrap.sh — reconocerá el .env que ya tienes."
-else
+elif $PURGE_TOTAL_OK; then
     echo ""
     echo "  Los datos de la app y la configuración se han borrado también."
+else
+    echo ""
+    echo "  Aviso: el purgado no terminó limpio, revisa los mensajes de arriba."
+    $PURGE_DATA_OK || echo "    - Quedan restos en ${RESOLVED_DATA} (detalle arriba)."
+    $PURGE_ENV_OK  || echo "    - ${ENV_FILE} sigue ahí."
 fi
 echo "  El código en ${REPO_DIR} sigue ahí; bórralo a mano si quieres:"
 echo "    rm -rf ${REPO_DIR}"
 echo ""
+
+# Revisión de PR (2026-09-26): un "make uninstall-purge" automatizado (CI,
+# un script de aprovisionamiento) solo puede fiarse del código de salida,
+# no del color del texto — si el resumen dice "con avisos", la shell tiene
+# que estar de acuerdo.
+$PURGE_TOTAL_OK || exit 1
