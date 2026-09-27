@@ -17,9 +17,10 @@ no vacíos, y casos reales de Omnigold/integral/tomo manga/pack entre series.
 **Referencias consultadas (URL, versión/commit):**
 - Kapowarr (Python, GPL-3.0) — [implementation details](https://casvt.github.io/Kapowarr/general_info/implementation_details/),
   [how to use](https://casvt.github.io/Kapowarr/general_info/how_to_use/); estudio 2026-09-27
-  (spec `docs/design/identidad-editorial-cobertura.md` §9).
+  (spec `docs/design/identidad-editorial-cobertura.md` §9). **Versión/commit: no fijado** — se
+  estudió la documentación en vivo, no un release concreto; pendiente de pinchar al cerrar.
 - Mylar3 (Python, GPL-3.0) — [repo](https://github.com/mylar3/mylar3); notas de
-  benchmarking ronda 2 del backlog (2026-09-22).
+  benchmarking ronda 2 del backlog (2026-09-22). **Versión/commit: no fijado** — pendiente.
 - Suwayomi: fuera del alcance de esta ficha (lectura/fuentes, no identidad de edición).
 
 **Cómo lo resuelve cada una:**
@@ -29,9 +30,11 @@ no vacíos, y casos reales de Omnigold/integral/tomo manga/pack entre series.
   varios issues» usa una asociación manual **archivo ↔ uno o varios issues** (`issues_files`,
   N:M). **No se ha encontrado** una relación bibliográfica confirmada entre el issue de un
   ómnibus y los issues de otro volumen (no se afirma que las marque poseídas).
-- Mylar3: usa el **ID de Comic Vine como clave** (lección ya registrada: se queda cojo sin esa
-  fuente). Anuncia pull-list, TPB/arcos y escritura de ComicInfo. **No se ha inspeccionado a
-  fondo** su esquema de archivo↔issues ni de cobertura entre volúmenes en esta ronda.
+- Mylar3: usa el **ID de Comic Vine como clave** (afirmación del benchmarking ronda 2 del
+  backlog, 2026-09-22: «a diferencia de Mylar3, que usa el ID de Comic Vine como clave y se
+  queda cojo sin él»). Anuncia pull-list, TPB/arcos y escritura de ComicInfo. **No se ha
+  inspeccionado a fondo** su esquema de archivo↔issues ni de cobertura entre volúmenes en esta
+  ronda — esa parte queda **pendiente de verificar**, no se da por sustentada.
 
 **Supuestos de su modelo que NO valen en ZascArr:**
 - Una sola fuente (Comic Vine) como identidad: ZascArr combina Comic Vine + Tebeosfera +
@@ -44,8 +47,9 @@ no vacíos, y casos reales de Omnigold/integral/tomo manga/pack entre series.
 - **Adaptar:** asociación **archivo ↔ issues N:M** para packs/«un CBZ con varios números» →
   relación física separada de la cobertura editorial (esquema aún sin decidir).
 - **Adaptar:** corrección manual antes de aceptar el match → refuerza Pendientes + confirmación.
-- **Descartar:** identidad acoplada al ID de una sola fuente (Mylar3) — ZascArr ya usa columnas
-  paralelas por proveedor (decisión de ronda 2).
+- **Descartar:** identidad acoplada al ID de una sola fuente (Mylar3, según el benchmarking
+  ronda 2 del backlog 2026-09-22) — ZascArr ya usa columnas paralelas por proveedor (misma
+  ronda). La cobertura entre volúmenes no se descarta: queda **pendiente de verificar**.
 - **Descartar (por ahora):** dar por resuelto tomo→grapas copiando `issues_files` — no aporta
   procedencia ni confirmación; es justo lo que `IssueCoverage` debe cubrir.
 
