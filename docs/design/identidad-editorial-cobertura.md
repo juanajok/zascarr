@@ -97,11 +97,14 @@ La cobertura guarda **IDs de publicaciones concretas**, no «5–7». Un rango s
 *proponer* varios enlaces, y el sistema comprueba que existen y corresponden a la edición
 correcta antes de confirmarlos.
 
-**Cruzar series: sí, excepcionalmente.** Una cobertura apunta por FK al `Issue` destino
-aunque pertenezca a otra serie; cruzar series exige **confirmación humana explícita**
-conservando el motivo. Un pack que contiene `Serie A #12` y `Serie B #3` son **dos enlaces
-explícitos**, no un rango ni una suposición de serie compartida. Un archivo pack **sin**
-publicación recopilatoria identificable **no inventa un `Issue`** para alojar esa relación.
+**Cruzar series: sí, excepcionalmente.** Cuando existe una **publicación recopilatoria
+identificada** (p. ej. una antología publicada), la cobertura apunta por FK al `Issue`
+destino aunque pertenezca a otra serie; cruzar series exige **confirmación humana
+explícita** conservando el motivo. Una antología que contiene `Serie A #12` y `Serie B #3`
+son **dos enlaces explícitos**, no un rango ni una suposición de serie compartida. Un
+**archivo pack** (ZIP/CBZ) **sin** publicación recopilatoria identificable **no inventa un
+`Issue`** para alojar esa relación: queda como archivo/pack, y sus posibles contenidos se
+resuelven con un mecanismo de cobertura física o propuestas aparte, todavía sin decidir.
 
 ### 3.4 Los ejemplos sobre el modelo
 
@@ -120,9 +123,14 @@ publicaciones destino se conserva: el destino no siempre es una grapa (`SINGLE_I
 - **B. Dos ediciones del mismo #12.** Grapa #12 (edición «grapas», `number_key=12`) y
   ómnibus #12 (edición «Omnigold», `number_key=12`) coexisten porque `edition_id` difiere;
   el ómnibus declara qué grapas cubre (p. ej. #7..#12) sin confundirse con la grapa #12.
-- **C. Pack que cruza series.** Un archivo con material de `Serie A #12` y `Serie B #3`
-  produce dos filas de `issue_coverages`, y por cruzar series exige **confirmación humana
-  explícita** conservando el motivo (§3.3).
+- **C. Cruce de series.** Dos casos distintos: (1) una **antología publicada e
+  identificada** (p. ej. un crossover en tomo) sí tiene su propio `Issue` y puede llevar
+  coberturas hacia `Serie A #12` y `Serie B #3` — dos enlaces explícitos, con confirmación
+  humana (§3.3); (2) un **ZIP/CBZ pack sin publicación identificable** no tiene `Issue`
+  recopilatorio al que apuntar, así que no genera filas de `issue_coverages`: queda como
+  archivo/pack, y sus contenidos se resuelven con un mecanismo de cobertura física —donde
+  `File.covered_issue_ids` es solo una pista, sin procedencia ni confirmación— o con
+  propuestas aparte, mecanismo todavía sin decidir.
 
 ### 3.5 Contrato mínimo (lógico, sin SQL de migración)
 
@@ -202,7 +210,7 @@ recuentos.
 - Una cobertura `confirmed` solo cuenta como contenido legible si el tomo tiene un `File`
   disponible.
 - Dos copias del tomo con una presente siguen contando.
-- Un pack entre series exige confirmación humana.
+- Una cobertura que cruza series exige confirmación humana.
 - Borrar/restaurar el archivo cambia la disponibilidad **sin** borrar la relación.
 - Una propuesta `rejected` no se vuelve a confirmar sola en el siguiente enriquecimiento.
 
