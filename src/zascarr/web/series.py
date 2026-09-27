@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from zascarr.api.series import _fetch_sort_orders, compute_missing_issues
+from zascarr.api.series import huecos_de_serie, numeros_poseidos
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import File, Issue, Series
@@ -36,7 +36,8 @@ router = APIRouter(prefix="/ui/series", tags=["ui"])
 
 
 @router.get("/{series_id}", response_class=HTMLResponse)
-async def detalle(series_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def detalle(series_id: UUID, request: Request,
+                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = (await db.execute(
         select(Series)
         .options(selectinload(Series.publisher), selectinload(Series.genres))
@@ -45,17 +46,18 @@ async def detalle(series_id: UUID, request: Request, db: AsyncSession = Depends(
     if not series:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
 
-    sort_orders = await _fetch_sort_orders(db, series_id)
-    present = sorted(int(n) if n.is_integer() else n for n in sort_orders)
-    missing = compute_missing_issues(series.total_issues, sort_orders)
+    poseidos = await numeros_poseidos(db, series.id)
+    huecos = await huecos_de_serie(db, series, poseidos)
 
     return templates.TemplateResponse(request, "series_detail.html", {
-        "series": series, "present": present, "missing": missing,
+        "series": series, "present": sorted(poseidos),
+        "missing": huecos.faltantes, "huecos": huecos,
     })
 
 
 @router.get("/{series_id}/portada")
-async def portada(series_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> Response:
+async def portada(series_id: UUID, request: Request,
+                  db: AsyncSession = Depends(get_db)) -> Response:
     """Cascada unificada de 3 niveles (C1):
 
     1. ¿Ya está cacheada en disco (venga de donde venga)? Servirla.
