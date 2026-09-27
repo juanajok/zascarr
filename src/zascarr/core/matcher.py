@@ -240,11 +240,18 @@ class SeriesMatcher:
                           (hueco del enricher, comportamiento de siempre).
           (None, True)  — hay issues pero el formato no permite decidir.
         """
+        # Normalización SIMÉTRICA a propósito: antes se recortaban ceros solo
+        # en la columna y el parámetro llegaba ya recortado, así que el #0
+        # nunca encontraba su fila — ltrim('0','0') es la cadena VACÍA y la
+        # comparación quedaba '' = '0'. Verificado contra Postgres real.
+        # `issue_number <> ''` cierra el caso degenerado de una fila sin
+        # número: si no, '' casaría con cualquier búsqueda de '0'.
         res = await self.db.execute(sa.text("""
             SELECT id, format FROM issues
             WHERE series_id = :sid
-              AND ltrim(issue_number, '0') = :num
-        """), {"sid": str(series_id), "num": number.lstrip("0") or "0"})
+              AND issue_number <> ''
+              AND ltrim(issue_number, '0') = ltrim(:num, '0')
+        """), {"sid": str(series_id), "num": number})
         filas = res.fetchall()
         if not filas:
             return None, False

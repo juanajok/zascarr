@@ -514,10 +514,21 @@ class TestSeriesMatcherDecide:
 
 
 class TestSeriesMatcherFormatoEdicion:
-    """B15 (2026-09-26): el camino AUTOMÁTICO no debe enlazar un archivo a
-    una fila `issues` cuyo `format` no coincida con el que implica el marcador
-    de edición del nombre (Omnigold/Tomo…). Si no puede verificarlo, lo deja
-    para revisión en vez de coger la primera fila con el mismo número."""
+    """B15: el camino AUTOMÁTICO no enlaza a ciegas por número.
+
+    La regla depende de si el nombre trae marcador de edición explícito:
+
+    | Nombre         | Candidatas del número | Decisión            |
+    |----------------|-----------------------|---------------------|
+    | `Omnigold 12`  | grapa y ómnibus       | enlaza el ómnibus   |
+    | `Omnigold 12`  | dos ómnibus           | Pendientes          |
+    | `Batman 12`    | solo una grapa        | enlaza la grapa     |
+    | `Batman 12`    | grapa y ómnibus       | Pendientes          |
+    | cualquiera     | ninguna               | hueco del enricher  |
+
+    Con marcador el formato esperado elige; sin marcador
+    (`formato_esperado=None`) solo se enlaza si no hay nada que desambiguar.
+    """
 
     @pytest.mark.asyncio
     async def test_issue_con_formato_distinto_va_a_unsorted(self):
@@ -579,6 +590,35 @@ class TestSeriesMatcherFormatoEdicion:
         assert result.issue_id is None
 
     @pytest.mark.asyncio
+    async def test_sin_marcador_con_una_sola_candidata_enlaza(self):
+        """`Batman 12` (sin marcador) con una única grapa: no hay nada que
+        desambiguar, así que se enlaza."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "Batman", 2011, 1.0)],
+                                    issue_formats=["single_issue"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("Batman", "12"))
+
+        assert result.status == MatchStatus.DIRECT
+        assert result.issue_id == UUID(session.issue_rows[0].id)
+
+    @pytest.mark.asyncio
+    async def test_marcador_con_dos_omnibus_va_a_unsorted(self):
+        """`Omnigold 12` con DOS ómnibus sigue siendo ambiguo (volúmenes
+        distintos): el formato ya no desambigua, así que a revisión."""
+        sid = uuid4()
+        session = make_session_mock([SeriesHit(sid, "La Patrulla-X", 1985, 1.0)],
+                                    issue_formats=["omnibus", "omnibus"])
+        matcher = SeriesMatcher(session)
+
+        result = await matcher.decide(make_triage_result("La Patrulla-X", "12"),
+                                      formato_esperado="omnibus")
+
+        assert result.status == MatchStatus.UNSORTED
+        assert result.issue_id is None
+
+    @pytest.mark.asyncio
     async def test_sin_issue_registrado_sigue_siendo_hueco_no_revision(self):
         """B15: que el número NO exista en la serie no es un conflicto — es el
         hueco del enricher de siempre, y no debe mandar el archivo a Pendientes."""
@@ -588,7 +628,7 @@ class TestSeriesMatcherFormatoEdicion:
         matcher = SeriesMatcher(session)
 
         result = await matcher.decide(make_triage_result("La Patrulla-X", "12"),
-                                      formato_esperado="single_issue")
+                                      formato_esperado=None)
 
         assert result.status == MatchStatus.DIRECT
         assert result.issue_id is None

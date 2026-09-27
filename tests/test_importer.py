@@ -118,7 +118,10 @@ class TestFormatoEsperadoAlMatcher:
         assert resultado.edition_kind == "omnigold"
 
     @pytest.mark.asyncio
-    async def test_sin_marcador_se_traduce_a_single_issue(self, tmp_path, monkeypatch):
+    async def test_sin_marcador_no_hay_evidencia_de_formato(self, tmp_path, monkeypatch):
+        """Sin marcador el importer pasa `None`, NO `single_issue`: no es que el
+        archivo sea una grapa demostrada, es que no hay evidencia del formato —
+        y el matcher entonces solo enlaza si no hay nada que desambiguar."""
         capturado: dict = {}
 
         async def decide_falso(self, triage, extractor=None, formato_esperado=None):
@@ -131,7 +134,7 @@ class TestFormatoEsperadoAlMatcher:
         make_cbz(src)
         resultado = await _triage_and_match(FakeDedupeSession(None), src)
 
-        assert capturado["formato"] == "single_issue"     # grapa por defecto
+        assert capturado["formato"] is None
         assert resultado.edition_kind is None
 
 
