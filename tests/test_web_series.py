@@ -8,7 +8,6 @@ que la página los renderiza).
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -38,6 +37,11 @@ class FakeExecResult:
 
     def first(self):
         return self._rows[0] if self._rows else None
+
+    def all(self):
+        """La consulta de números poseídos devuelve filas (número, formato,
+        archivo disponible), no escalares."""
+        return self._rows
 
 
 class FakeSession:
@@ -100,7 +104,7 @@ class TestFichaSerie:
         series = make_series(total_issues=3)
         session = FakeSession([
             FakeExecResult([series]),
-            FakeExecResult([1.0, 3.0]),
+            FakeExecResult([("1", "single_issue", True), ("3", "single_issue", True)]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -114,12 +118,24 @@ class TestFichaSerie:
         series = make_series(total_issues=2)
         session = FakeSession([
             FakeExecResult([series]),
-            FakeExecResult([1.5]),
+            FakeExecResult([("1.5", "single_issue", True)]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
         assert "Te faltan" in r.text
         assert "#1" in r.text  # el 1.5 no lo cubre
+
+    def test_omnibus_no_ocupa_el_hueco_de_la_grapa(self):
+        """El ómnibus está en el catálogo, pero la grapa #12 sigue faltando."""
+        series = make_series(total_issues=12)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([("12", "omnibus", True)]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert "Te faltan" in r.text
+        assert "#12" in r.text
 
     def test_sin_total_issues_no_calcula_huecos(self):
         series = make_series(total_issues=None)
