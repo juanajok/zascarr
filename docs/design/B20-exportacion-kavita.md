@@ -1,8 +1,8 @@
-# B20 (prerequisito): Exportación de colección → carpeta compatible con Kavita
+# B20: Exportación de colección → carpeta compatible con Kavita
 
 **Estado:** diseño fijado, pendiente de implementación
 **Origen:** análisis de la biblioteca real de TV del coleccionista (Sonarr, 2026-09-26) — la carpeta de serie es la unidad portable
-**Relación:** habilita B14 (la carpeta exportada es un árbol limpio donde el contexto de carpeta existe) y B22/B23 (el formato de exportación es el contrato de lectura)
+**Relación:** el **formato de exportación** es el contrato de lectura de B22/B23. Con B14 la relación es **conceptual, no de dependencia**: B20 crea carpetas de DESTINO para Kavita, mientras B14 analiza carpetas de ORIGEN durante la adopción — la exportación no aporta contexto a los ficheros planos originales.
 
 ## 1. Objetivo
 
@@ -75,7 +75,7 @@ Consecuencias:
 - **Duplicados (B6)**: se exporta solo la variante canónica; las marcadas duplicadas se omiten y se listan en el reporte del run.
 - **Piezas sueltas sin colección**: no exportables por este camino; ya tienen su pestaña.
 - **Colisión de nombre en destino** (ya existe un archivo distinto con ese nombre): se aborta ese archivo, se registra en el run, nunca se pisa.
-- **Espacio insuficiente** (solo modo `copy`): comprobación previa agregada; si no cabe, el run no empieza.
+- **Espacio insuficiente**: comprobación previa agregada sobre todo lo que se vaya a materializar como copia — **no solo** las copias forzadas por `EXDEV`, también las **copias privadas de CBZ en el mismo filesystem** cuando el parche está activo (§4), que no son gratis en disco. Si no cabe, el run no empieza.
 
 ## 7. Superficie
 
@@ -97,4 +97,6 @@ Consecuencias:
 - No lee de vuelta desde Kavita (la canónica manda; la lectura inversa es B22/B23).
 - No genera `poster.jpg`/`tvshow.nfo` estilo Kodi — Kavita extrae portada de la primera página del archivo (capa 0 que ya tenemos); los sidecars Kodi quedan para cuando alguien lo pida.
 - No parchea CBR (decisión con datos, sonda del 2026-09-25).
-- **No escribe nunca sobre la biblioteca canónica.** El parche de ComicInfo se aplica a una copia privada; con `hardlink` la exportación y el original comparten inodo, así que parchear "la exportación" sería parchear el original.
+- **ZascArr no escribe nunca sobre la biblioteca canónica durante la exportación.** El parche de ComicInfo se aplica a una copia privada; con `hardlink` la exportación y el original comparten inodo, así que parchear "la exportación" sería parchear el original.
+
+  **Matiz que acota esa garantía — el hardlink NO aísla el origen de terceros.** Que ZascArr no escriba no significa que el árbol exportado esté protegido: con `hardlink` el archivo exportado y el canónico son el **mismo inodo**, así que **cualquier herramienta que edite el destino en sitio** (Kavita, ComicTagger, un renombrador de metadatos) modifica también la biblioteca canónica. El manifiesto detecta la deriva *después* (§5), pero **no la previene**. Quien necesite aislamiento frente a lectores o etiquetadores que escriben debe elegir **`copy` para toda esa exportación**, no solo para los CBZ parcheados.
