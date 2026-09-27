@@ -32,7 +32,14 @@ from zascarr.config import get_settings
 from zascarr.core.cohort import PistaDeCohorte, detectar_ordenes_de_lectura, quitar_prefijo_de_cohorte
 from zascarr.core.importer_triage import TriageResult, triage
 from zascarr.core.matcher import MatchResult, MatchStatus, SeriesHit, SeriesMatcher
-from zascarr.models import File, FileFormat, ImportRun, Series
+from zascarr.models import (
+    EDITION_KIND_A_FORMAT,
+    File,
+    FileFormat,
+    ImportRun,
+    IssueFormat,
+    Series,
+)
 from zascarr.utils.fs import safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
 
@@ -144,22 +151,36 @@ async def _triage_and_match(
             return _Outcome(tr=tr, result=None, duplicate_of=existing.file_name)
 
     matcher = SeriesMatcher(db)
+
+    # El nombre se limpia de la pista de cohorte y se parsea UNA vez, antes de
+    # decide(): de ahí salen tanto (serie, número, año) como el marcador de
+    # edición. B15 necesita ese marcador ANTES de decidir — el matcher no debe
+    # enlazar un Tomo/Omnigold a una grapa que ocupe el mismo número. Antes se
+    # parseaba dentro del extractor y edition_kind solo se conocía al terminar
+    # decide(), demasiado tarde para influir en la decisión.
     aplicada = False
-    edition_kind: str | None = None
+    nombre = tr.path.name
+    if pista is not None:
+        nombre = quitar_prefijo_de_cohorte(tr.path.name, pista)
+        aplicada = nombre != tr.path.name
+    parsed = parse_comic_filename(nombre)
+    edition_kind = parsed.edition_kind
+    # B15: `None` significa "el nombre NO trae marcador de edición" — el matcher
+    # entonces no tiene evidencia del formato y solo enlazará si no hay nada que
+    # desambiguar (una única candidata). Un marcador explícito (Omnigold/Tomo…)
+    # sí es evidencia y permite elegir entre varias ediciones del mismo número.
+    formato_esperado = (
+        EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE).value
+        if edition_kind is not None
+        else None
+    )
 
     def extractor(filename: str):
-        nonlocal aplicada, edition_kind
-        nombre = filename
-        if pista is not None:
-            nombre = quitar_prefijo_de_cohorte(filename, pista)
-            aplicada = nombre != filename
-        p = parse_comic_filename(nombre)
-        edition_kind = p.edition_kind
-        if p.series and p.issue_number:
-            return p.series, p.issue_number, p.year
+        if parsed.series and parsed.issue_number:
+            return parsed.series, parsed.issue_number, parsed.year
         return None
 
-    result = await matcher.decide(tr, extractor=extractor)
+    result = await matcher.decide(tr, extractor=extractor, formato_esperado=formato_esperado)
     outcome = _Outcome(tr=tr, result=result, edition_kind=edition_kind)
     if aplicada:
         outcome.cohorte_explicacion = pista.explicacion
