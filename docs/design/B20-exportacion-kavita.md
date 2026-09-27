@@ -2,7 +2,7 @@
 
 **Estado:** diseño fijado, pendiente de implementación
 **Origen:** análisis de la biblioteca real de TV del coleccionista (Sonarr, 2026-09-26) — la carpeta de serie es la unidad portable
-**Relación:** el **formato de exportación** es el contrato de lectura de B22/B23. Con B14 la relación es **conceptual, no de dependencia**: B20 crea carpetas de DESTINO para Kavita, mientras B14 analiza carpetas de ORIGEN durante la adopción — la exportación no aporta contexto a los ficheros planos originales.
+**Relación:** el **formato de exportación** es el contrato de lectura de los futuros consumidores de la exportación. Con B14 la relación es **conceptual, no de dependencia**: B20 crea carpetas de DESTINO para Kavita, mientras B14 analiza carpetas de ORIGEN durante la adopción — la exportación no aporta contexto a los ficheros planos originales.
 
 ## 1. Objetivo
 
@@ -94,7 +94,7 @@ Consecuencias:
 
 ## 9. Lo que NO hace
 
-- No lee de vuelta desde Kavita (la canónica manda; la lectura inversa es B22/B23).
+- No lee de vuelta desde Kavita (la canónica manda; la lectura inversa es de los futuros consumidores de la exportación).
 - No genera `poster.jpg`/`tvshow.nfo` estilo Kodi — Kavita extrae portada de la primera página del archivo (capa 0 que ya tenemos); los sidecars Kodi quedan para cuando alguien lo pida.
 - No parchea CBR (decisión con datos, sonda del 2026-09-25).
 - **ZascArr no escribe nunca sobre la biblioteca canónica durante la exportación.** El parche de ComicInfo se aplica a una copia privada; con `hardlink` la exportación y el original comparten inodo, así que parchear "la exportación" sería parchear el original.
