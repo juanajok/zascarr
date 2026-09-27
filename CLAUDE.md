@@ -188,6 +188,7 @@ como marco permanente.
 | `docs/adr/0001-ui-stack.md` | Stack de UI y razonamiento |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
+| `docs/design/benchmark-referencias.md` | Procedimiento y ficha para comparar referencias antes de features P0/P1 (ver §13) |
 
 ## 12. Principios de arquitectura del propio código (confirmados por
 benchmarking ronda 2)
@@ -204,6 +205,23 @@ Decisiones ya validadas por comparación contra Kapowarr, Mylar3, Suwayomi
   cruzan series.
 - Calidad tri-estado legible para el coleccionista (lo mejor / equilibrado
   / lo que haya) mapeada internamente a `quality_tier`.
+
+## 13. Benchmarking de referencia antes de features P0/P1
+
+Antes de implementar una feature P0/P1 de comportamiento nuevo: fijar el problema local
+(historia + caso real + comportamiento actual + resultado deseado), consultar las
+referencias pertinentes (Sonarr/Radarr para ciclo de búsqueda/estados/importación;
+Kapowarr/Mylar3 para ediciones/ficheros/metadatos de cómic; Suwayomi para
+capítulos/fuentes/lectura) y registrar adoptar/adaptar/descartar con versión/commit y
+pruebas. **No inferir soporte de una función por su UI, ni ausencia por no encontrarla.**
+El procedimiento y la ficha viven en `docs/design/benchmark-referencias.md`; solo las
+decisiones arquitectónicas duraderas pasan a ADR. El esfuerzo es proporcional al riesgo:
+un arreglo evidente de texto o CSS no requiere investigación.
+
+**Barrera legal (separada del procedimiento):** inspirarse en un patrón no es copiar
+código. Kapowarr y Mylar3 son GPL-3.0; Suwayomi declara MPL-2.0 con componentes de
+terceros Apache-2.0. Antes de reutilizar una implementación, revisar el fichero concreto,
+sus avisos y obligaciones — no asumir «todas tienen la misma licencia».
 
 ---
 
