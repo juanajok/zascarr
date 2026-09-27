@@ -14,8 +14,21 @@ from uuid import uuid4
 
 import pytest
 
-from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, LocalAlias, MetadataSource, Series
-from zascarr.services.review import ReviewService
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    Issue,
+    IssueFormat,
+    LocalAlias,
+    MetadataSource,
+    Series,
+)
+from zascarr.services.review import (
+    MOTIVO_COLISION_EDICION,
+    ColisionDeEdicionError,
+    ReviewService,
+)
 
 
 class FakeScalarResult:
@@ -162,9 +175,11 @@ class TestAssignToSeries:
         assert issue.format == IssueFormat.TRADE_PAPERBACK
 
     @pytest.mark.asyncio
-    async def test_issue_existente_no_toca_el_format(self, tmp_path):
-        """Si el Issue ya existe (número reutilizado), assign_to_series no
-        debe tocar su format — solo se decide al CREAR uno nuevo."""
+    async def test_omnigold_sobre_grapa_existente_no_enlaza(self, tmp_path):
+        """B15 (revisión retrospectiva, 2026-09-26): si el número #12 ya existe
+        como GRAPA (SINGLE_ISSUE) y se intenta asignar un Omnigold 12, no se
+        puede reutilizar esa fila — enlazar el recopilatorio a la grapa (o
+        cambiarle el format) rompe el catálogo. Debe quedarse en Pendientes."""
         library = tmp_path / "library"
         unsorted = library / "_Unsorted"
         unsorted.mkdir(parents=True)
@@ -178,14 +193,46 @@ class TestAssignToSeries:
 
         session = FakeSession(
             get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([existing_issue])],
+        )
+        service = ReviewService(db=session)
+        service._library = library
+
+        with pytest.raises(ColisionDeEdicionError, match="número compartido entre ediciones"):
+            await service.assign_to_series(file.id, series.id, "12")
+
+        assert existing_issue.format == IssueFormat.SINGLE_ISSUE  # no se cambió
+        assert file.issue_id is None                              # no se enlazó
+        assert not any(isinstance(o, Issue) for o in session.added)  # no se creó otro
+        assert file.metadata_["review_motivo"] == MOTIVO_COLISION_EDICION
+        assert orig.exists()  # el archivo no se movió de _Unsorted
+
+    @pytest.mark.asyncio
+    async def test_omnigold_sobre_omnigold_existente_reutiliza(self, tmp_path):
+        """B15: mismo número y MISMO format (Omnigold sobre Omnigold 12) sí
+        reutiliza la fila — la colisión solo es entre ediciones distintas."""
+        library = tmp_path / "library"
+        unsorted = library / "_Unsorted"
+        unsorted.mkdir(parents=True)
+        orig = unsorted / "la patrulla x omnigold 12.cbz"
+        orig.write_bytes(b"x")
+
+        series = make_series("La Patrulla-X")
+        existing_issue = Issue(id=uuid4(), series_id=series.id, issue_number="12",
+                                format=IssueFormat.OMNIBUS)
+        file = make_file(orig)
+
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
             exec_queue=[FakeExecResult([existing_issue]), FakeExecResult([])],
         )
         service = ReviewService(db=session)
         service._library = library
 
-        await service.assign_to_series(file.id, series.id, "12")
+        result = await service.assign_to_series(file.id, series.id, "12")
 
-        assert existing_issue.format == IssueFormat.SINGLE_ISSUE
+        assert result.issue_id == existing_issue.id
+        assert not any(isinstance(o, Issue) for o in session.added)
 
     @pytest.mark.asyncio
     async def test_reutiliza_issue_existente_sin_duplicar(self, tmp_path):
@@ -196,7 +243,8 @@ class TestAssignToSeries:
         orig.write_bytes(b"x")
 
         series = make_series("Batman")
-        existing_issue = Issue(id=uuid4(), series_id=series.id, issue_number="12")
+        existing_issue = Issue(id=uuid4(), series_id=series.id, issue_number="12",
+                                format=IssueFormat.SINGLE_ISSUE)
         file = make_file(orig)
 
         session = FakeSession(
