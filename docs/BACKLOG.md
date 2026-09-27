@@ -24,6 +24,11 @@ Formato: ID · historia · criterio de aceptación clave · prioridad
 (P0 = indispensable para el release, P1 = primera mejora, P2 = parking) ·
 estimación (S < 2 días, M < 1 semana, L > 1 semana).
 
+**Proceso de diseño:** antes de implementar una historia P0/P1 de comportamiento nuevo,
+rellena la ficha de referencia en `docs/design/benchmark-referencias.md` (comparar las
+referencias pertinentes y registrar adoptar/adaptar/descartar con versión y pruebas; ver
+CLAUDE.md §13). Un arreglo evidente de texto o CSS no requiere ficha.
+
 ### Épica A — "Lo instalo yo solo"
 
 | ID | Historia | Aceptación | P | Est |
