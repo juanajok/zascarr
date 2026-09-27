@@ -124,7 +124,8 @@ class TestDashboard:
             FakeResult(scalar=40),    # total_issues
             FakeResult(scalar=38),    # issues_importados
             FakeResult(rows=[(series.id, 40)]),           # series_totales
-            FakeResult(rows=[(series.id, 1.0), (series.id, 2.0)]),  # sort_orders
+            FakeResult(rows=[(series.id, "1", "single_issue", True),
+                             (series.id, "2", "single_issue", True)]),  # números poseídos
             FakeResult(scalars=[series]),                 # ultimas_series
         ])
         with use_fake_session(session) as client:

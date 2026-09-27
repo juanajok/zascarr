@@ -9,7 +9,6 @@ sin que nada lo detecte.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -40,9 +39,14 @@ class FakeExecResult:
     def scalar(self):
         return self._rows
 
+    def all(self):
+        """La consulta de números poseídos devuelve filas (número, formato,
+        archivo disponible), no escalares."""
+        return self._rows
+
 
 class FakeSession:
-    """Cola de resultados: primero la serie, luego los sort_order."""
+    """Cola de resultados: primero la serie, luego los números poseídos."""
 
     def __init__(self, queue: list):
         self._queue = list(queue)
@@ -101,23 +105,47 @@ class TestMissingIssues:
         series = make_series(total_issues=5)
         session = FakeSession([
             FakeExecResult([series]),
-            FakeExecResult([1.0, 2.0, 3.0]),
+            FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True),
+                            ("3", "single_issue", True)]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/api/series/{series.id}/missing")
         assert r.json() == [4, 5]
 
     def test_regresion_annual_1_5_no_cubre_el_hueco_del_1(self):
-        """El bug original: int(1.5) == 1, así que un Annual con
-        sort_order=1.5 hacía creer que el issue 1 existía. No debe pasar."""
+        """El bug original (C2): un `1.5` (Annual/especial) no es el nº 1. Antes
+        se truncaba `sort_order` con int(); ahora la numeración exige un entero."""
         series = make_series(total_issues=3)
         session = FakeSession([
             FakeExecResult([series]),
-            FakeExecResult([1.5, 2.0, 3.0]),
+            FakeExecResult([("1.5", "single_issue", True), ("2", "single_issue", True),
+                            ("3", "single_issue", True)]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/api/series/{series.id}/missing")
         assert r.json() == [1]
+
+    def test_un_omnibus_no_cubre_la_grapa_del_mismo_numero(self):
+        """Un `OMNIBUS` #12 no ocupa el hueco de la grapa #12."""
+        series = make_series(total_issues=12)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([("12", "omnibus", True)]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/api/series/{series.id}/missing")
+        assert r.json() == list(range(1, 13))
+
+    def test_issue_sin_archivo_disponible_no_cuenta(self):
+        """Catalogado pero sin archivo (o con el único desaparecido) = hueco."""
+        series = make_series(total_issues=3)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([("1", "single_issue", False), ("2", "single_issue", True)]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/api/series/{series.id}/missing")
+        assert r.json() == [1, 3]
 
     def test_sin_ningun_issue_todo_es_hueco(self):
         series = make_series(total_issues=3)
@@ -133,7 +161,8 @@ class TestMissingIssues:
         series = make_series(total_issues=3)
         session = FakeSession([
             FakeExecResult([series]),
-            FakeExecResult([1.0, 2.0, 3.0]),
+            FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True),
+                            ("3", "single_issue", True)]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/api/series/{series.id}/missing")
