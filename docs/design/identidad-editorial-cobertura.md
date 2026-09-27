@@ -228,7 +228,36 @@ recuentos.
 - **Frontera `editions` ↔ `Imprint`/`Series.publisher_id`:** decidir si
   `editions.publisher_id` aporta algo que `Series.publisher_id`/`imprint_id` no cubren ya,
   para no doblar la verdad del sello editorial.
+- **Relación archivo ↔ publicaciones (N:M) para packs / «un CBZ con varios números»:** hoy
+  `File.issue_id` es 1:1 y `covered_issue_ids` es un array sin usar. El benchmarking de
+  Kapowarr (`issues_files`, N:M) apunta a una asociación **distinta** de `IssueCoverage`,
+  que no aporta procedencia ni confirmación — su esquema queda sin decidir (§9).
 - **El universo de grapas** (`Series.total_issues` + `metadata_source=comic_vine`, usado por
   la vista de huecos): al introducir ediciones, su sitio natural es la edición de grapas
   (`editions.numbering_unit='single_issue'`), no la serie. Es una consecuencia a decidir en
   la migración, no un cambio de esta spec.
+
+## 9. Benchmarking — Kapowarr (2026-09-27)
+
+Referencia externa ([implementation details](https://casvt.github.io/Kapowarr/general_info/implementation_details/),
+[how to use](https://casvt.github.io/Kapowarr/general_info/how_to_use/)); resumen del estudio,
+no instrucción para copiar:
+
+| Problema | Kapowarr | Implicación para ZascArr |
+|---|---|---|
+| Grapa #12 vs ómnibus #12 | Identidades bajo **volúmenes distintos** de Comic Vine, no un único espacio serie+número; cada volumen se clasifica (normal, TPB, ómnibus, one-shot, «volume as issue») y es corregible | Confirma `editions` como espacio de numeración |
+| Un CBZ contiene varios números de un volumen | Asociación manual **archivo ↔ uno o varios issues** (`issues_files`, N:M) | Confirma una relación archivo↔publicaciones **distinta** de la cobertura editorial |
+| Edición/archivo mal detectado | Propuesta de importación corregible por archivo o por conjunto; forzar el match o dejar sin asociar | Refuerza Pendientes + confirmación cuando la identidad no es fiable |
+| ¿Un ómnibus satisface las grapas originales? | El ómnibus es su propio volumen con su issue; **no hay relación bibliográfica confirmada** hacia issues de otro volumen (no se afirma que las marque poseídas) | `IssueCoverage` es una capacidad que Kapowarr **no** resuelve sola; no basta copiar `issues_files` |
+
+Distinción clave: «este **archivo** corresponde a los issues 1–10» (asociación
+archivo↔issues) **no** es «este **ómnibus publicado** reproduce las grapas 1–10 de otra
+edición» (afirmación editorial con ambas ediciones, procedencia y confirmación). Un enlace
+de archivo no aporta procedencia ni debe modificar silenciosamente los huecos de grapas.
+
+**Qué adoptar:** espacio de numeración por edición; vínculo flexible archivo↔issues;
+corrección manual antes de aceptar matches.
+**Qué mantener como diseño propio de ZascArr:** `IssueCoverage`
+(`proposed`/`confirmed`/`rejected` + evidencia trazable) y las dos preguntas separadas de
+§5. Importa más aquí porque el catálogo hispanohablante combina Comic Vine con Tebeosfera y
+AniList, que **no comparten** la noción de volumen, tomo o capítulo.
