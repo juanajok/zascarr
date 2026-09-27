@@ -24,7 +24,11 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.api.series import compute_missing_issues, numeros_poseidos_por_serie
+from zascarr.api.series import (
+    UNIDAD_DE_GRAPA,
+    compute_missing_issues,
+    numeros_poseidos_por_serie,
+)
 from zascarr.database import get_db
 from zascarr.models import File, Issue, Series
 from zascarr.web.routes import crear_templates
@@ -66,14 +70,20 @@ async def dashboard(request: Request, db: AsyncSession = Depends(get_db)) -> HTM
     # (compute_missing_issues) que usa la ficha de serie. La posesión sale del
     # DISCO (archivo disponible) y del formato, NO de `sort_order` — que ningún
     # código de main escribe y hacía que el contador sumara el catálogo entero.
+    # Solo entran las series cuyo `total_issues` está acreditado como recuento
+    # de grapas (ver `UNIDAD_DE_GRAPA`): sumar capítulos de AniList o "números"
+    # de Tebeosfera con grapas sería mezclar unidades.
     series_totales = (await db.execute(
-        select(Series.id, Series.total_issues).where(Series.total_issues.isnot(None))
+        select(Series.id, Series.total_issues, Series.metadata_source)
+        .where(Series.total_issues.isnot(None))
     )).all()
 
     poseidos_por_serie = await numeros_poseidos_por_serie(db)
 
     huecos_pendientes = 0
-    for series_id, total in series_totales:
+    for series_id, total, fuente in series_totales:
+        if fuente not in UNIDAD_DE_GRAPA:
+            continue
         huecos_pendientes += len(
             compute_missing_issues(total, poseidos_por_serie.get(series_id, set()))
         )

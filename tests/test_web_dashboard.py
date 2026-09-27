@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, Series
+from zascarr.models import ComicTradition, MetadataSource, Series
 
 
 class _FakeScalars:
@@ -116,14 +116,15 @@ class TestDashboard:
 
     def test_metricas_con_datos_reales(self):
         series = Series(id=uuid4(), title="Batman",
-                        tradition=ComicTradition.AMERICAN, start_year=2011)
+                        tradition=ComicTradition.AMERICAN, start_year=2011,
+                        metadata_source=MetadataSource.COMIC_VINE.value)
         # 40 números esperados, 2 presentes → 38 huecos y 95% si 38 importados.
         session = FakeSession([
             FakeResult(scalar=3),     # total_series
             FakeResult(scalar=2),     # series_con_archivos
             FakeResult(scalar=40),    # total_issues
             FakeResult(scalar=38),    # issues_importados
-            FakeResult(rows=[(series.id, 40)]),           # series_totales
+            FakeResult(rows=[(series.id, 40, "comic_vine")]),   # series_totales (id, total, fuente)
             FakeResult(rows=[(series.id, "1", "single_issue", True),
                              (series.id, "2", "single_issue", True)]),  # números poseídos
             FakeResult(scalars=[series]),                 # ultimas_series

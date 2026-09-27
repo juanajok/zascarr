@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, Series
+from zascarr.models import ComicTradition, MetadataSource, Series
 
 
 class FakeScalarResult:
@@ -88,9 +88,12 @@ def use_fake_session(session):
     return _Ctx()
 
 
-def make_series(total_issues=None) -> Series:
+def make_series(total_issues=None, metadata_source=MetadataSource.COMIC_VINE.value) -> Series:
+    """Comic Vine por defecto: es la única fuente cuyo `total_issues` está
+    acreditado como recuento de grapas (ver `_UNIDAD_DE_GRAPA`)."""
     return Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN,
-                  total_issues=total_issues, start_year=1977)
+                  total_issues=total_issues, start_year=1977,
+                  metadata_source=metadata_source)
 
 
 class TestFichaSerie:
