@@ -7,10 +7,10 @@ precede. **No es C6.**
 
 ## 1. El problema en una frase
 
-Una recopilación (tomo, ómnibus, integral) contiene **varias** grapas originales. Hoy el
-catálogo la guarda como un `Issue` con otro `format` y un único `issue_number`; nada dice
-«este tomo cubre las grapas 7..12». Hasta que eso exista, **un tomo no rellena huecos de
-grapa por inferencia** — regla que ya se aplica en la vista de huecos.
+Una recopilación (tomo, ómnibus, integral) contiene **varias** publicaciones originales. Hoy
+el catálogo la guarda como un `Issue` con otro `format` y un único `issue_number`; nada dice
+«este tomo cubre las publicaciones 7..12». Hasta que eso exista, **un tomo no rellena huecos
+de grapa por inferencia** — regla que ya se aplica en la vista de huecos.
 
 La raíz del problema es más honda: la identidad de una publicación está atada al **número**
 en un espacio común (`series_id`), de modo que «el tomo contiene la grapa» se confunde con
@@ -29,7 +29,9 @@ publicaciones distintas, y deben poder serlo sin trucos.
 - `File.covered_issue_ids` es `ARRAY(UUID) server_default "{}"`: solo se escribe **vacío**
   (`importer.py:384`, `library_adopter.py:180`) y **nadie lo lee** para semántica. Es una
   pista ligada a una copia física, sin procedencia ni confirmación; hoy, en la práctica, una
-  columna muerta. No es la verdad editorial por sí sola.
+  columna muerta. **Decisión:** se mantiene por ahora como dato heredado **del archivo
+  físico**, no como fuente autorizada de cobertura editorial; se audita cualquier valor
+  existente antes de migrarlo o retirarlo.
 - Ya existen `Publisher`, `Imprint` (`UNIQUE(publisher_id, name)`) y
   `Series.publisher_id`/`imprint_id`. Un `Imprint` es un **sello**; una *edición* (línea
   editorial con numeración propia: grapas originales, Omnigold, Integral, reedición…) es un
@@ -51,8 +53,8 @@ Separar **identidad de edición** del **número**, y la cobertura como **relaci�
 ### 3.1 `editions` — el espacio de numeración
 
 Campos mínimos: `id`, `series_id`, `name`, `kind`, `publisher_id` opcional, año opcional,
-identificador externo opcional y `numbering_unit` (`single_issue | volume | chapter |
-unknown`).
+identificador externo opcional, `source_ref` opcional y `numbering_unit`
+(`single_issue | volume | chapter | unknown`).
 
 **La edición es el espacio de numeración**: la grapa #12 y el Omnigold 12 tienen
 `edition_id` distintos. `kind=omnigold` no basta como clave, porque pueden existir dos
@@ -79,7 +81,7 @@ UUID/ID externo y pasa a revisión si hay ambigüedad. La normalización exacta 
 collection_issue_id  FK issues.id
 target_issue_id      FK issues.id
 status               proposed | confirmed | rejected
-source               (procedencia, ver §4)
+source               reutiliza MetadataSource (ver §4)
 source_ref           identificador o enlace de la evidencia, opcional
 evidence_note        texto breve, opcional
 confirmed_at         fecha, solo si confirmed
@@ -91,28 +93,57 @@ CHECK(collection_issue_id <> target_issue_id)
 Un índice por `target_issue_id, status` permite consultar rápido qué tomos contienen una
 grapa.
 
-La cobertura guarda **IDs de grapas concretas**, no «5–7». Un rango solo sirve para
+La cobertura guarda **IDs de publicaciones concretas**, no «5–7». Un rango solo sirve para
 *proponer* varios enlaces, y el sistema comprueba que existen y corresponden a la edición
-correcta antes de confirmarlos. Un pack que contiene `Serie A #12` y `Serie B #3` son **dos
-enlaces explícitos**, no un rango ni una suposición de serie compartida.
+correcta antes de confirmarlos.
 
-### 3.4 Los tres ejemplos sobre el modelo
+**Cruzar series: sí, excepcionalmente.** Una cobertura apunta por FK al `Issue` destino
+aunque pertenezca a otra serie; cruzar series exige **confirmación humana explícita**
+conservando el motivo. Un pack que contiene `Serie A #12` y `Serie B #3` son **dos enlaces
+explícitos**, no un rango ni una suposición de serie compartida. Un archivo pack **sin**
+publicación recopilatoria identificable **no inventa un `Issue`** para alojar esa relación.
 
-- **A. Tomo que cubre grapas de una misma serie** — `Berserk Deluxe 1` (tomo, edición
-  «Deluxe», `numbering_unit=volume`, `number_key=1`) con coberturas hacia las grapas #1..#3
-  (edición «grapas», `numbering_unit=single_issue`). Origen + confirmación, no inferencia.
-- **B. Dos ediciones del mismo #12** — grapa #12 (edición «grapas», `number_key=12`) y
+### 3.4 Los ejemplos sobre el modelo
+
+La cobertura es **publicación recopilatoria → publicaciones cubiertas**, y la unidad de las
+publicaciones destino se conserva: el destino no siempre es una grapa (`SINGLE_ISSUE`).
+
+- **A. Tomo que cubre grapas de una misma serie (ejemplo ilustrativo, no verificado contra
+  catálogo).** Un `Omnigold 2` (edición «Omnigold», `numbering_unit=volume`, `number_key=2`)
+  cubre las grapas #5..#7 (edición «grapas», `numbering_unit=single_issue`). Origen +
+  confirmación, no inferencia. Es el mismo caso ilustrativo de §5.
+- **A′. Tomo deluxe que cubre tomos ordinarios (real).** `Berserk Deluxe 1` recopila los
+  **volúmenes 1–3** (tomos), no grapas — Dark Horse lo indica así. Es la prueba de que el
+  destino de una cobertura no siempre es `SINGLE_ISSUE`: el modelo admite cualquier unidad
+  destino y la conserva (deluxe `numbering_unit=volume` → tomos ordinarios
+  `numbering_unit=volume`).
+- **B. Dos ediciones del mismo #12.** Grapa #12 (edición «grapas», `number_key=12`) y
   ómnibus #12 (edición «Omnigold», `number_key=12`) coexisten porque `edition_id` difiere;
   el ómnibus declara qué grapas cubre (p. ej. #7..#12) sin confundirse con la grapa #12.
-- **C. Pack que cruza series** — un archivo con material de `Serie A #12` y `Serie B #3`
-  produce dos filas de `issue_coverages` (o su representación equivalente), y por cruzar
-  series exige **confirmación humana explícita** conservando el motivo (§4).
+- **C. Pack que cruza series.** Un archivo con material de `Serie A #12` y `Serie B #3`
+  produce dos filas de `issue_coverages`, y por cruzar series exige **confirmación humana
+  explícita** conservando el motivo (§3.3).
+
+### 3.5 Contrato mínimo (lógico, sin SQL de migración)
+
+- `Edition(id, series_id, name, kind, numbering_unit, source_ref?)`: espacio de numeración.
+  Grapa #12 y Ómnibus #12 pertenecen a ediciones diferentes; `kind` por sí solo no
+  identifica la edición.
+- `Issue.edition_id`: FK nullable durante la transición; la identidad numerada futura se
+  valida **dentro de la edición**, no solo por `(series_id, issue_number, volume)`.
+- `IssueCoverage(collection_issue_id, target_issue_id, status, source, source_ref,
+  evidence_note, confirmed_at)`: par único de publicaciones, FKs reales y prohibición de
+  cubrirse a sí misma. `status` distingue `proposed`, `confirmed` y `rejected`. Una
+  propuesta nunca cuenta como contenido disponible.
+- Si varios catálogos respaldan o contradicen el mismo par, se preservan sus afirmaciones
+  por separado —en una tabla de evidencias cuando se implemente— en vez de sustituir
+  silenciosamente `source`.
 
 ## 4. Procedencia y confirmación
 
-- Toda cobertura tiene un **origen**. Reutilizar `MetadataSource` para no perder
-  granularidad (comic_vine ≠ tebeosfera), salvo que se decida el valor grueso
-  `manual | catalog | comicinfo | other` de la tabla §3.3 — decisión abierta (§8).
+- Toda cobertura tiene un **origen**, y `source` **reutiliza el enum `MetadataSource`**
+  existente (`comic_vine | gcd | anilist | tebeosfera | comicinfo_xml | manual`) para no
+  perder qué catálogo afirmó cada par. Si hiciera falta «otro», se añade al enum.
 - Si el origen no es fiable, la cobertura queda **`proposed`**: se puede mostrar, pero
   **no** cuenta como «lo tengo» ni rellena huecos. Una fuente externa puede crear una
   propuesta; **no puede** convertirla silenciosamente en `confirmed`.
@@ -122,15 +153,20 @@ enlaces explícitos**, no un rango ni una suposición de serie compartida.
 - Si varias fuentes aportan evidencia del mismo par, se amplía con una tabla
   `coverage_evidence` en vez de sobrescribir la procedencia de la primera.
 
-## 5. Qué cuenta como posesión
+## 5. Contratos de posesión
 
-La relación editorial y el archivo físico responden preguntas distintas:
+Dos contratos distintos, que nunca se confunden:
 
-| Pregunta | Regla |
-|---|---|
-| «¿Tengo la grapa #12 suelta?» | Existe un `File` disponible (`is_missing=false`) asociado a esa grapa. Un tomo no la convierte en grapa suelta. |
-| «¿Puedo leer el contenido de la grapa #12?» | La tengo suelta **o** existe una cobertura `confirmed` desde un tomo con al menos un `File` disponible. |
-| «¿Debo pedirla con C6?» | Depende de una política futura elegida por el coleccionista: *quiero la grapa suelta* frente a *me basta poder leerla*. Nunca se deduce de que ambos lleven «12». |
+1. **«Tengo la grapa suelta»** — requiere su **propio** `File` disponible
+   (`is_missing=false`) asociado a esa grapa. Una cobertura, por confirmada que esté, **no**
+   la convierte en grapa suelta ni altera por defecto el recuento de grapas sueltas de #13.
+2. **«Puedo leer su contenido»** — se cumple si tengo la grapa suelta **o** existe una
+   cobertura `confirmed` desde una recopilación con al menos un `File` disponible. Una
+   propuesta (`proposed`) no lo cumple.
+
+La pregunta de C6 («¿debo pedirla?») es una **política futura** elegida por el coleccionista
+(*quiero la grapa suelta* frente a *me basta poder leerla*), nunca una deducción de que
+ambos lleven «12».
 
 Ejemplo: un Omnigold 2 tiene confirmada la cobertura de las grapas #5, #6 y #7. Si su CBZ
 está disponible, siguen faltando esas **grapas sueltas**, pero sus **contenidos** están
@@ -172,7 +208,8 @@ recuentos.
 
 ## 8. Qué NO decide este documento / decisiones abiertas
 
-- **No define migración ni código** (van aparte, tras revisar esta spec).
+- **No define migración ni código** (van aparte, tras revisar esta spec). La aprobación de
+  este documento no equivale a haber validado esos cambios contra la biblioteca real.
 - **No cambia `GET /missing` ni empieza C6.** Antes faltará que su API exponga
   `computable`/`motivo`, que el universo de grapas esperadas esté acreditado y que el
   usuario elija si «Completar» significa conseguir grapas sueltas o contenido legible — la
@@ -180,14 +217,9 @@ recuentos.
 - **Normalización de `number_key`:** qué forma canónica toman `Annual 1`, `1.5`, `0`,
   `12 B`, `1/2`, y si los anuales/especiales viven en el mismo espacio de numeración que la
   serie principal o en un subespacio. El `numbering_unit` propuesto no los cubre.
-- **`source` de cobertura:** reutilizar `MetadataSource` (granular) o el valor grueso
-  `manual | catalog | comicinfo | other`. Se recomienda `MetadataSource` por la regla de «sin
-  magic strings» y para no perder procedencia.
 - **Frontera `editions` ↔ `Imprint`/`Series.publisher_id`:** decidir si
   `editions.publisher_id` aporta algo que `Series.publisher_id`/`imprint_id` no cubren ya,
   para no doblar la verdad del sello editorial.
-- **Destino de `File.covered_issue_ids`:** abandonarlo, mantenerlo para packs/archivos
-  físicos, o migrarlo hacia la tabla de cobertura. Hoy está vacío en la práctica.
 - **El universo de grapas** (`Series.total_issues` + `metadata_source=comic_vine`, usado por
   la vista de huecos): al introducir ediciones, su sitio natural es la edición de grapas
   (`editions.numbering_unit='single_issue'`), no la serie. Es una consecuencia a decidir en
