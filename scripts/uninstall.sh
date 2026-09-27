@@ -74,26 +74,38 @@ docker compose version >/dev/null 2>&1 || die \
 # completo de que ALGUIEN lo hubiera exportado a mano en la shell antes de
 # llamar al script; en una instalación real (solo el .env, nunca exportado)
 # --purge habría abortado con "parameter null or not set" en vez de borrar
-# nada. Se leen aquí igual que ya se leía HOST_LIBRARY_DIR (grep+cut, sin
-# tocar ni depender de la app Python), con los mismos valores por defecto
-# que ya usa docker-compose.yml si el .env no los trae.
-LIBRARY_DIR=""
-DOWNLOADS_DIR=""
-AMULE_DIR=""
-DATA_DIR="${ZASCARR_DATA_DIR:-}"
-if [[ -f "${ENV_FILE}" ]]; then
-    LIBRARY_DIR="$(grep -m1 '^HOST_LIBRARY_DIR=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
-    DOWNLOADS_DIR="$(grep -m1 '^HOST_DOWNLOADS_DIR=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
-    AMULE_DIR="$(grep -m1 '^HOST_AMULE_INCOMING_DIR=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
-    if [[ -z "${DATA_DIR}" ]]; then
-        DATA_DIR="$(grep -m1 '^ZASCARR_DATA_DIR=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
+# nada.
+#
+# Segundo bug real, encontrado en revisión de PR (2026-09-26): la primera
+# versión de este endurecimiento seguía sin aplicarle a HOST_LIBRARY_DIR
+# el mismo valor por defecto que docker-compose.yml (/media/library) — con
+# un .env ausente o sin esa clave, RESOLVED_LIBRARY quedaba vacío y
+# se_solapan() se saltaba la protección de biblioteca en silencio, justo
+# el estado que este script dice admitir. Ahora las CUATRO rutas
+# (ZASCARR_DATA_DIR y las tres HOST_*) se resuelven con la MISMA
+# precedencia que usa "docker compose" al interpolar el compose file:
+# variable YA exportada en la shell (puede contradecir al .env, y sigue
+# ganando ella) > valor del .env > valor por defecto del propio
+# docker-compose.yml. Nunca una ruta a medio determinar.
+resolver_var_ruta() {
+    # $1 = nombre de la variable/clave (p.ej. HOST_LIBRARY_DIR)
+    # $2 = valor por defecto (el mismo que docker-compose.yml declara)
+    local nombre="$1" por_defecto="$2" valor=""
+    if [[ -n "${!nombre+x}" ]]; then
+        valor="${!nombre}"
     fi
-else
-    warn "No encuentro ${ENV_FILE} — sigo sin él (los contenedores igualmente se pueden parar)."
-fi
-DOWNLOADS_DIR="${DOWNLOADS_DIR:-/media/data/downloads}"
-AMULE_DIR="${AMULE_DIR:-/media/data/aMule/Incoming}"
-DATA_DIR="${DATA_DIR:-/var/lib/zascarr}"
+    if [[ -z "${valor}" && -f "${ENV_FILE}" ]]; then
+        valor="$(grep -m1 "^${nombre}=" "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
+    fi
+    printf '%s' "${valor:-${por_defecto}}"
+}
+
+[[ -f "${ENV_FILE}" ]] || warn "No encuentro ${ENV_FILE} — sigo sin él (los contenedores igualmente se pueden parar)."
+
+LIBRARY_DIR="$(resolver_var_ruta HOST_LIBRARY_DIR /media/library)"
+DOWNLOADS_DIR="$(resolver_var_ruta HOST_DOWNLOADS_DIR /media/data/downloads)"
+AMULE_DIR="$(resolver_var_ruta HOST_AMULE_INCOMING_DIR /media/data/aMule/Incoming)"
+DATA_DIR="$(resolver_var_ruta ZASCARR_DATA_DIR /var/lib/zascarr)"
 
 # ── A4: validación de rutas antes de --purge (revisión de PR, 2026-09-26) ──
 # "${VAR:?}" solo protege contra una variable VACÍA, no contra una ruta
@@ -139,6 +151,20 @@ RESOLVED_DOWNLOADS="$(resolver_ruta "${DOWNLOADS_DIR}")"
 RESOLVED_AMULE="$(resolver_ruta "${AMULE_DIR}")"
 
 if $PURGE; then
+    # Fallar cerrado, no abierto: con los valores por defecto de arriba
+    # ninguna de estas cuatro debería poder quedar vacía nunca — pero si
+    # algún cambio futuro rompiera esa garantía, mejor abortar aquí que
+    # seguir con se_solapan() saltándose la comprobación en silencio
+    # (se_solapan devuelve "no hay solape" ante una cadena vacía).
+    [[ -n "${RESOLVED_DATA}" ]] || die \
+        "No he podido determinar ZASCARR_DATA_DIR de forma inequívoca — me niego a hacer --purge sin saber qué voy a borrar."
+    [[ -n "${RESOLVED_LIBRARY}" ]] || die \
+        "No he podido determinar HOST_LIBRARY_DIR de forma inequívoca — me niego a hacer --purge sin poder comprobar que no se solapa con tu biblioteca."
+    [[ -n "${RESOLVED_DOWNLOADS}" ]] || die \
+        "No he podido determinar HOST_DOWNLOADS_DIR de forma inequívoca — me niego a hacer --purge sin poder comprobar que no se solapa con tus descargas."
+    [[ -n "${RESOLVED_AMULE}" ]] || die \
+        "No he podido determinar HOST_AMULE_INCOMING_DIR de forma inequívoca — me niego a hacer --purge sin poder comprobar que no se solapa con la carpeta de aMule."
+
     es_ruta_del_sistema "${RESOLVED_DATA}" && die \
         "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}', una carpeta del sistema — me niego a tocar ahí. Revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
     if se_solapan "${RESOLVED_DATA}" "${RESOLVED_LIBRARY}"; then
@@ -213,7 +239,13 @@ if $PURGE; then
     # usuario del host sí es dueño.
     RESTOS=()
     for sub in postgres redis covers vpn-state; do
-        [[ -e "${RESOLVED_DATA}/${sub}" ]] && RESTOS+=("${sub}")
+        # -e sigue symlinks: un enlace colgante (destino ya borrado) da
+        # -e falso aunque la propia entrada del enlace siga ahí. -L
+        # detecta la entrada exista o no su destino — revisión de PR
+        # (2026-09-26).
+        if [[ -e "${RESOLVED_DATA}/${sub}" || -L "${RESOLVED_DATA}/${sub}" ]]; then
+            RESTOS+=("${sub}")
+        fi
     done
     if [[ "${#RESTOS[@]}" -eq 0 ]]; then
         success "Datos de la app borrados: ${RESOLVED_DATA}"
@@ -285,3 +317,9 @@ fi
 echo "  El código en ${REPO_DIR} sigue ahí; bórralo a mano si quieres:"
 echo "    rm -rf ${REPO_DIR}"
 echo ""
+
+# Revisión de PR (2026-09-26): un "make uninstall-purge" automatizado (CI,
+# un script de aprovisionamiento) solo puede fiarse del código de salida,
+# no del color del texto — si el resumen dice "con avisos", la shell tiene
+# que estar de acuerdo.
+$PURGE_TOTAL_OK || exit 1
