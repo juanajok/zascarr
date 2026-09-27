@@ -16,6 +16,9 @@
     <div class="pending-body">
       <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
       <div class="detected">Detectado: {{ c.detected }}</div>
+      {% if c.motivo %}
+      <div class="detected motivo">{{ c.motivo }}</div>
+      {% endif %}
       {% if c.suggestion %}
       <div class="suggestion">
         <span class="suggestion-label">¿Es esta serie?</span>
