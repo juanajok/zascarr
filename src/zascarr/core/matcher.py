@@ -58,6 +58,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 SIMILARITY_THRESHOLD = 0.35
 FUZZY_THRESHOLD = 0.60      # por debajo: ruido, aunque supere el WHERE
 
+# B15: valor con el que se persiste una grapa suelta (models.IssueFormat.
+# SINGLE_ISSUE). Se repite como literal a propósito: core/ no importa models/
+# en ningún sitio y no es el momento de romper esa frontera. Un test
+# (`test_formato_grapa_coincide_con_el_enum`) comprueba que siguen coincidiendo.
+FORMATO_GRAPA = "single_issue"
+
 _ARTICLE_WORDS = r"the|el|la|los|las|le|les|il|lo|die|der|das"
 # Artículo inicial: "The Sandman" → "Sandman". El (?:\s+|$) en vez de \s+
 # a secas cubre el caso patológico de un título que ES solo el artículo
@@ -256,8 +262,15 @@ class SeriesMatcher:
         if not filas:
             return None, False
         if formato_esperado is None:
-            # Sin formato conocido solo se acepta si no hay nada que desambiguar.
-            return (UUID(str(filas[0].id)), False) if len(filas) == 1 else (None, True)
+            # Sin marcador NO hay evidencia del formato: solo se enlaza si hay
+            # una única candidata Y además es una grapa estándar. Una única
+            # recopilación/tomo tampoco se enlaza — «solo hay una fila» no
+            # demuestra que este archivo sin marcador sea ese tomo; podría ser
+            # la grapa #12, todavía sin catalogar. Es el mismo emparejamiento
+            # que rechaza el camino manual, así que los dos caminos coinciden.
+            if len(filas) == 1 and filas[0].format == FORMATO_GRAPA:
+                return UUID(str(filas[0].id)), False
+            return None, True
         coinciden = [f for f in filas if f.format == formato_esperado]
         if len(coinciden) == 1:
             return UUID(str(coinciden[0].id)), False
