@@ -248,7 +248,7 @@ no instrucción para copiar:
 | Grapa #12 vs ómnibus #12 | Identidades bajo **volúmenes distintos** de Comic Vine, no un único espacio serie+número; cada volumen se clasifica (normal, TPB, ómnibus, one-shot, «volume as issue») y es corregible | Confirma `editions` como espacio de numeración |
 | Un CBZ contiene varios números de un volumen | Asociación manual **archivo ↔ uno o varios issues** (`issues_files`, N:M) | Confirma una relación archivo↔publicaciones **distinta** de la cobertura editorial |
 | Edición/archivo mal detectado | Propuesta de importación corregible por archivo o por conjunto; forzar el match o dejar sin asociar | Refuerza Pendientes + confirmación cuando la identidad no es fiable |
-| ¿Un ómnibus satisface las grapas originales? | El ómnibus es su propio volumen con su issue; **no hay relación bibliográfica confirmada** hacia issues de otro volumen (no se afirma que las marque poseídas) | `IssueCoverage` es una capacidad que Kapowarr **no** resuelve sola; no basta copiar `issues_files` |
+| ¿Un ómnibus satisface las grapas originales? | El ómnibus es su propio volumen con su issue; **no se ha encontrado** una relación bibliográfica confirmada hacia issues de otro volumen **en la documentación y el esquema examinados** (no se afirma que las marque poseídas) | `IssueCoverage` es una capacidad que Kapowarr **no** resuelve sola; no basta copiar `issues_files` |
 
 Distinción clave: «este **archivo** corresponde a los issues 1–10» (asociación
 archivo↔issues) **no** es «este **ómnibus publicado** reproduce las grapas 1–10 de otra
