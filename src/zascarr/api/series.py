@@ -9,10 +9,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from zascarr.database import get_db
-from zascarr.models import ComicTradition, File, Issue, IssueFormat, Series
+from zascarr.models import ComicTradition, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.series import SeriesService
 
 router = APIRouter(prefix="/series", tags=["series"])
+
+# Fuentes cuyo `total_issues` está ACREDITADO como recuento de GRAPAS, que es
+# la unidad de esta vista (`SINGLE_ISSUE` con número entero).
+#
+# Se dejan fuera a propósito:
+#   - AniList: cuenta CAPÍTULOS. `enricher.py::_find_anilist_match` mapea
+#     `chosen.chapters` a `count_of_issues`, y los ficheros de manga son
+#     TOMOS (`TRADE_PAPERBACK`). Restar tomos de capítulos daría una lista de
+#     huecos enorme y falsa — el mismo error que este cambio viene a evitar,
+#     solo que disfrazado de dato.
+#   - Tebeosfera: da "números" de una colección que puede ser de tomos o de
+#     álbumes; la unidad no está acreditada.
+#   - GCD: fuente declarada pero sin implementar todavía.
+# Acreditarlas exige reglas por tradición/fuente y datos que hoy no tenemos;
+# mientras tanto, decir "no se puede calcular" es más honesto que inventarlo.
+UNIDAD_DE_GRAPA = {MetadataSource.COMIC_VINE.value}
 
 
 # ── Schemas de escritura (M1: mass assignment prohibido) ───────────────────
@@ -196,16 +212,25 @@ async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
 
 async def huecos_de_serie(db: AsyncSession, series: Series,
                           poseidos: set[int] | None = None) -> Huecos:
-    """Huecos de una serie, diciendo si el cálculo es fiable.
+    """Huecos de una serie, diciendo — explícitamente — si el cálculo es fiable.
 
-    Sin `total_issues` no hay nada que restar: no se inventan huecos, se dice
-    que no se puede calcular (el total lo trae el enricher del catálogo).
+    Antes de restar hay que comprobar que las dos cantidades hablan de lo
+    MISMO: `total_issues` lo copia el enricher del catálogo y **no siempre
+    cuenta grapas** (AniList cuenta capítulos y sus ficheros son tomos). Si la
+    unidad no está acreditada, `computable=False` en vez de una resta inventada.
 
     `poseidos` permite reutilizar una consulta ya hecha (la ficha de serie
     necesita el conjunto igualmente, para pintar los números presentes).
     """
     if not series.total_issues:
         return Huecos([], False, "la serie no tiene un total de números conocido")
+    if series.metadata_source not in UNIDAD_DE_GRAPA:
+        return Huecos(
+            [], False,
+            "el total de la serie no consta como número de grapas "
+            f"({series.metadata_source or 'fuente desconocida'}), así que no se "
+            "puede comparar con los números que hay en disco",
+        )
     if poseidos is None:
         poseidos = await numeros_poseidos(db, series.id)
     return Huecos(compute_missing_issues(series.total_issues, poseidos), True, None)

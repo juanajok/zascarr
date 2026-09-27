@@ -29,7 +29,15 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from zascarr.api.series import huecos_de_serie, numeros_poseidos
-from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, Series
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    Issue,
+    IssueFormat,
+    MetadataSource,
+    Series,
+)
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -46,23 +54,50 @@ def _url_asyncpg(url: str) -> str:
     return url
 
 
+async def _exigir_bd_de_prueba(session) -> None:
+    """Se niega a ejecutarse si la base señalada no parece de pruebas.
+
+    Defensa en profundidad: aunque TODO este módulo trabaja dentro de una
+    transacción que se revierte, un `TEST_DATABASE_URL` apuntado por error a
+    una instalación real es un accidente demasiado caro como para no
+    comprobarlo antes de tocar nada.
+    """
+    nombre = (await session.execute(text("SELECT current_database()"))).scalar()
+    if not nombre or "test" not in nombre.lower():
+        raise RuntimeError(
+            f"TEST_DATABASE_URL apunta a la base de datos «{nombre}», que no lleva "
+            "'test' en el nombre. Este módulo está pensado para una base de pruebas "
+            "y se niega a ejecutarse contra algo que podría ser una instalación real."
+        )
+
+
 @pytest.fixture
 async def db():
+    """Sesión DENTRO de una transacción que SIEMPRE se revierte.
+
+    Nada de `DELETE FROM` sobre tablas compartidas: si alguien apunta
+    `TEST_DATABASE_URL` a una instalación real, un `DELETE` + `commit` le
+    borraría SUS datos. Aquí solo se crean filas con UUID de prueba y se
+    revierten al terminar cada test.
+    """
     engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
     sesion = async_sessionmaker(engine, expire_on_commit=False)
     async with sesion() as session:
-        # Una sentencia por execute: asyncpg no admite varias en un prepared
-        # statement. Orden por las FK (files → issues → series).
-        for tabla in ("files", "issues", "series"):
-            await session.execute(text(f"DELETE FROM {tabla}"))
-        await session.commit()
-        yield session
+        transaccion = await session.begin()
+        await _exigir_bd_de_prueba(session)
+        try:
+            yield session
+        finally:
+            await transaccion.rollback()
     await engine.dispose()
 
 
-async def crear_serie(db, total_issues=None, title="Serie de prueba") -> Series:
+async def crear_serie(db, total_issues=None, title="Serie de prueba",
+                      metadata_source=MetadataSource.COMIC_VINE.value) -> Series:
+    """Serie de prueba. `metadata_source` importa: marca si el `total_issues`
+    está acreditado como recuento de grapas (ver `_UNIDAD_DE_GRAPA`)."""
     s = Series(id=uuid4(), title=title, tradition=ComicTradition.AMERICAN,
-               total_issues=total_issues)
+               total_issues=total_issues, metadata_source=metadata_source)
     db.add(s)
     await db.flush()
     return s
@@ -181,3 +216,63 @@ class TestContratoDeHuecos:
         h = await huecos_de_serie(db, s)
 
         assert h.faltantes == [1, 2]
+
+
+class TestUnidadDeNumeracion:
+    """Bloqueo de revisión (2026-09-27): `total_issues` **no significa
+    universalmente «número de grapas»**. El enricher lo copia del catálogo, y
+    AniList cuenta CAPÍTULOS (`enricher.py::_find_anilist_match` mapea
+    `chosen.chapters`), mientras los ficheros de manga se registran como TOMOS
+    (`TRADE_PAPERBACK`). Restarlos daría una lista enorme y falsa: el mismo
+    error que este cambio viene a corregir, trasladado a otra tradición."""
+
+    @pytest.mark.asyncio
+    async def test_manga_de_anilist_con_tomos_no_compara_capitulos_con_tomos(self, db):
+        """Serie de manga completa en tomos: NO debe decir "faltan 120"."""
+        s = await crear_serie(db, total_issues=120, title="Berserk",
+                              metadata_source=MetadataSource.ANILIST.value)
+        for n in range(1, 6):
+            await crear_issue(db, s, str(n), formato=IssueFormat.TRADE_PAPERBACK,
+                              archivos=(False,))
+
+        h = await huecos_de_serie(db, s)
+
+        assert h.computable is False
+        assert h.faltantes == []
+        assert h.motivo and "grapas" in h.motivo
+
+    @pytest.mark.asyncio
+    async def test_fuente_sin_unidad_acreditada_no_inventa_huecos(self, db):
+        """Tebeosfera da "números" de una colección que puede ser de tomos o de
+        álbumes: la unidad no está acreditada, así que no se resta nada."""
+        s = await crear_serie(db, total_issues=10, title="Mortadelo",
+                              metadata_source=MetadataSource.TEBEOSFERA.value)
+        await crear_issue(db, s, "1", archivos=(False,))
+
+        h = await huecos_de_serie(db, s)
+
+        assert h.computable is False
+        assert h.faltantes == []
+
+    @pytest.mark.asyncio
+    async def test_sin_fuente_conocida_tampoco_se_supone_grapa(self, db):
+        """Sin `metadata_source` no hay nada acreditado: no se supone."""
+        s = await crear_serie(db, total_issues=5, metadata_source=None)
+        await crear_issue(db, s, "1", archivos=(False,))
+
+        h = await huecos_de_serie(db, s)
+
+        assert h.computable is False
+        assert h.faltantes == []
+
+    @pytest.mark.asyncio
+    async def test_comic_vine_si_es_unidad_de_grapa(self, db):
+        """La única acreditada hoy: Comic Vine cuenta números (grapas)."""
+        s = await crear_serie(db, total_issues=3,
+                              metadata_source=MetadataSource.COMIC_VINE.value)
+        await crear_issue(db, s, "1", archivos=(False,))
+
+        h = await huecos_de_serie(db, s)
+
+        assert h.computable is True
+        assert h.faltantes == [2, 3]
