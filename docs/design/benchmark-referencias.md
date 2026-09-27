@@ -51,7 +51,9 @@ Decisión final / ADR si cambia arquitectura:
 
 Ninguna historia P0/P1 de comportamiento nuevo se implementa sin esta ficha. Un arreglo
 evidente de texto o CSS no necesita una investigación de medio día: el esfuerzo de
-comparación debe ser proporcional al riesgo.
+comparación debe ser proporcional al riesgo. Si no existe referencia comparable, documentar
+dónde se buscó y continuar; un parche urgente de seguridad puede entrar primero, con
+revisión retrospectiva después.
 
 ## Referencias por dominio
 
@@ -84,6 +86,7 @@ Pi. No se infiere soporte de una función por su UI, ni ausencia por no encontra
 
 Inspirarse en un patrón no es copiar código. Kapowarr y Mylar3 publican GPL-3.0, mientras
 Suwayomi declara MPL-2.0 e identifica componentes de terceros bajo Apache-2.0. Antes de
-reutilizar una implementación hay que revisar el fichero concreto, sus avisos y sus
-obligaciones, no asumir que «todas tienen la misma licencia». El marco legal completo de
-ZascArr está en `src/zascarr/LEGAL.md`.
+reutilizar una implementación hay que revisar la licencia y los avisos del **fichero de
+origen** concreto, no asumir que «todas tienen la misma licencia». La licencia del propio
+ZascArr está en `LICENSE`; `src/zascarr/LEGAL.md` trata aparte el uso de contenido y las
+fuentes, no la reutilización de código de terceros.
