@@ -30,23 +30,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
-from zascarr.models import File, Issue, IssueFormat, LocalAlias, MetadataSource, Series
+from zascarr.models import (
+    EDITION_KIND_A_FORMAT,
+    File,
+    Issue,
+    IssueFormat,
+    LocalAlias,
+    MetadataSource,
+    Series,
+)
 from zascarr.services.importer import build_library_path
 from zascarr.utils.fs import safe_move_async
 from zascarr.utils.naming import parse_comic_filename
 
-# B15 (2026-09-26): qué Issue.format corresponde a cada edition_kind que
-# puede salir de naming.py — nunca SINGLE_ISSUE por defecto para estos,
-# porque el número que llevan no es una grapa estándar (es el tomo de
-# una recopilación o edición). "omnigold"/"integral" agrupan varias
-# grapas originales (más cerca de un ómnibus); "tomo"/"volumen" a secas
-# son la unidad de publicación de una obra por tomos (manga/BD).
-_EDITION_KIND_A_FORMAT = {
-    "omnigold": IssueFormat.OMNIBUS,
-    "integral": IssueFormat.OMNIBUS,
-    "tomo": IssueFormat.TRADE_PAPERBACK,
-    "volumen": IssueFormat.TRADE_PAPERBACK,
-}
+# B15 (2026-09-26): el mapa edition_kind → IssueFormat vive en models junto al
+# enum (lo comparten el camino manual y el automático; ver EDITION_KIND_A_FORMAT).
 
 # B15 (2026-09-26): motivo que se deja en el File cuando el número pedido ya
 # existe en la serie con OTRO Issue.format (grapa #12 vs Omnigold 12). Es la
@@ -137,7 +135,7 @@ class ReviewService:
         # original (todavía no reescrito abajo) y no metadata_, que puede
         # faltar en archivos registrados antes de que existiera edition_kind.
         edition_kind = parse_comic_filename(file.file_name).edition_kind
-        formato_esperado = _EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE)
+        formato_esperado = EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE)
 
         issue = (await self.db.execute(
             select(Issue)
