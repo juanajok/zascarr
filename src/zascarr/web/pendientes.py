@@ -18,7 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.models import File
-from zascarr.services.review import ReviewService
+from zascarr.services.review import (
+    MOTIVO_COLISION_EDICION,
+    ColisionDeEdicionError,
+    ReviewService,
+)
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.routes import crear_templates
@@ -60,7 +64,14 @@ def _suggestion(file: File) -> dict | None:
 async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     files = await ReviewService(db).pending_files()
     cards = [
-        {"file": f, "detected": _detected_label(f.file_name), "suggestion": _suggestion(f)}
+        {
+            "file": f,
+            "detected": _detected_label(f.file_name),
+            "suggestion": _suggestion(f),
+            # B15: motivo de por qué este archivo sigue en revisión (p.ej. un
+            # número compartido entre ediciones rechazado en una asignación).
+            "motivo": (f.metadata_ or {}).get("review_motivo"),
+        }
         for f in files
     ]
     return templates.TemplateResponse(request, "pendientes.html", {"cards": cards})
@@ -96,6 +107,14 @@ async def asignar(file_id: UUID, series_id: UUID = Form(...), issue_number: str 
                    db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     try:
         await ReviewService(db).assign_to_series(file_id, series_id, issue_number)
+    except ColisionDeEdicionError as exc:
+        # El motivo se deja en el File para que siga visible al recargar
+        # Pendientes; la sesión aún no ha commiteado (solo se mutó metadata_).
+        file = await db.get(File, file_id)
+        if file is not None:
+            file.metadata_ = {**(file.metadata_ or {}), "review_motivo": MOTIVO_COLISION_EDICION}
+            await db.commit()
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return HTMLResponse("")  # la tarjeta se reemplaza por nada: desaparece de la bandeja
