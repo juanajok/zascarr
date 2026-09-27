@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, File, FileFormat, Series
+from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, Series
 
 
 class FakeScalarResult:
@@ -48,6 +48,7 @@ class FakeSession:
         self._get_map = get_map or {}
         self._exec_queue = list(exec_queue or [])
         self.flush = AsyncMock()
+        self.commit = AsyncMock()
 
     async def get(self, model, id_):
         return self._get_map.get((model, id_))
@@ -107,7 +108,12 @@ class TestPendientesIndex:
             metadata_={
                 "match_status": "unsorted",
                 "candidates": [
-                    {"series_id": str(sid), "title": "La Patrulla-X", "start_year": 1985, "score": 0.62},
+                    {
+                        "series_id": str(sid),
+                        "title": "La Patrulla-X",
+                        "start_year": 1985,
+                        "score": 0.62,
+                    },
                 ],
             },
         )
@@ -131,7 +137,8 @@ class TestPendientesIndex:
 class TestBuscarSerie:
 
     def test_devuelve_resultados_como_fragmento(self):
-        series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN, start_year=2011)
+        series = Series(id=uuid4(), title="Batman",
+                        tradition=ComicTradition.AMERICAN, start_year=2011)
         with use_fake_session(FakeSession(exec_queue=[FakeExecResult([series])])) as client:
             r = client.get(f"/ui/pendientes/{uuid4()}/buscar-serie?q=bat")
         assert r.status_code == 200
@@ -181,6 +188,36 @@ class TestAsignar:
                             data={"series_id": str(series.id), "issue_number": "   "})
         assert r.status_code == 400
 
+    def test_colision_grapa_recopilacion_da_409_y_persiste_motivo(self, tmp_path):
+        """B15: asignar un Omnigold 12 sobre la grapa #12 existente NO enlaza ni
+        mueve el archivo — el endpoint devuelve 409 y deja el motivo en el File
+        para que siga visible al recargar Pendientes."""
+        file = File(
+            id=uuid4(),
+            file_path=str(tmp_path / "la patrulla x omnigold 12.cbz"),
+            file_name="la patrulla x omnigold 12.cbz",
+            file_format=FileFormat.CBZ,
+            metadata_={"match_status": "unsorted"},
+        )
+        series = Series(id=uuid4(), title="La Patrulla-X", tradition=ComicTradition.AMERICAN)
+        grapa = Issue(id=uuid4(), series_id=series.id, issue_number="12",
+                      format=IssueFormat.SINGLE_ISSUE)
+        session = FakeSession(
+            get_map={(File, file.id): file, (Series, series.id): series},
+            exec_queue=[FakeExecResult([grapa])],
+        )
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/pendientes/{file.id}/asignar",
+                            data={"series_id": str(series.id), "issue_number": "12"})
+        assert r.status_code == 409
+        assert "número compartido entre ediciones" in r.json()["detail"]
+        assert file.metadata_["review_motivo"] == "número compartido entre ediciones"
+        assert file.issue_id is None  # no se enlazó a la grapa
+        # Refuerzo barato: el router PIDIÓ persistir el motivo. NO demuestra
+        # que sobreviva a cerrar y reabrir una sesión de BD — eso exige
+        # Postgres real (pendiente, ver nota de B15 en BACKLOG).
+        session.commit.assert_awaited_once()
+
 
 class TestPortada:
 
@@ -188,13 +225,15 @@ class TestPortada:
         path = tmp_path / "comic.cbz"
         with zipfile.ZipFile(path, "w") as zf:
             # 1x1 JPEG válido mínimo (suficiente para que Pillow lo abra).
-            from PIL import Image
             import io
+
+            from PIL import Image
             buf = io.BytesIO()
             Image.new("RGB", (10, 10), color="red").save(buf, format="JPEG")
             zf.writestr("001.jpg", buf.getvalue())
 
-        file = File(id=uuid4(), file_path=str(path), file_name="comic.cbz", file_format=FileFormat.CBZ)
+        file = File(id=uuid4(), file_path=str(path),
+                    file_name="comic.cbz", file_format=FileFormat.CBZ)
         with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
             r = client.get(f"/ui/pendientes/{file.id}/portada")
         assert r.status_code == 200
@@ -203,7 +242,8 @@ class TestPortada:
     def test_archivo_sin_miniatura_da_404(self, tmp_path):
         path = tmp_path / "roto.cbz"
         path.write_bytes(b"no es un zip")
-        file = File(id=uuid4(), file_path=str(path), file_name="roto.cbz", file_format=FileFormat.CBZ)
+        file = File(id=uuid4(), file_path=str(path),
+                    file_name="roto.cbz", file_format=FileFormat.CBZ)
         with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
             r = client.get(f"/ui/pendientes/{file.id}/portada")
         assert r.status_code == 404
