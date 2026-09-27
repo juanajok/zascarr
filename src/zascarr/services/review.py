@@ -48,6 +48,26 @@ _EDITION_KIND_A_FORMAT = {
     "volumen": IssueFormat.TRADE_PAPERBACK,
 }
 
+# B15 (2026-09-26): motivo que se deja en el File cuando el número pedido ya
+# existe en la serie con OTRO Issue.format (grapa #12 vs Omnigold 12). Es la
+# señal de que hace falta decidir a mano cuál de las dos ediciones es esa.
+MOTIVO_COLISION_EDICION = "número compartido entre ediciones"
+
+
+class ColisionDeEdicionError(ValueError):
+    """Un Issue ya existe para la serie + número con distinto Issue.format.
+
+    Enlazar el archivo a esa fila (o cambiarle el format) reutilizaría una
+    grapa para una recopilación, o al revés — se deja en Pendientes."""
+    def __init__(self, issue_number: str, formato_existente: str, file_name: str):
+        self.issue_number = issue_number
+        self.formato_existente = formato_existente
+        super().__init__(
+            f"El número {issue_number} ya existe en esta serie como otra edición "
+            f"({formato_existente}) — {MOTIVO_COLISION_EDICION}. El archivo "
+            f"'{file_name}' se queda en Pendientes sin asignar."
+        )
+
 
 class ReviewService:
     def __init__(self, db: AsyncSession):
@@ -109,36 +129,50 @@ class ReviewService:
         if not series:
             raise ValueError("Serie no encontrada")
 
+        # B15 (2026-09-26): el Issue.format que correspondería a este archivo
+        # se decide ANTES de buscar el Issue, para poder compararlo con el que
+        # ya exista. Un mismo número puede ser dos ediciones distintas (la
+        # grapa #12 y el Omnigold 12): enlazar el recopilatorio a la grapa, o
+        # cambiarle el formato, rompe el catálogo. Se re-parsea el nombre
+        # original (todavía no reescrito abajo) y no metadata_, que puede
+        # faltar en archivos registrados antes de que existiera edition_kind.
+        edition_kind = parse_comic_filename(file.file_name).edition_kind
+        formato_esperado = _EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE)
+
         issue = (await self.db.execute(
             select(Issue)
             .where(Issue.series_id == series.id)
             .where(Issue.issue_number == issue_number)
         )).scalar_one_or_none()
+
+        if issue is not None and (issue.format or IssueFormat.SINGLE_ISSUE) != formato_esperado:
+            # Colisión de ediciones: mismo número, distinto Issue.format. No se
+            # enlaza silenciosamente ni se cambia el format existente; se deja
+            # el archivo en Pendientes con un motivo claro para la persona.
+            file.metadata_ = {**(file.metadata_ or {}),
+                              "review_motivo": MOTIVO_COLISION_EDICION}
+            raise ColisionDeEdicionError(
+                issue_number, (issue.format or IssueFormat.SINGLE_ISSUE).value, file.file_name
+            )
+
         if not issue:
             # H3 (peer review v2): antes se marcaba metadata_source='manual',
             # lo que bloqueaba TODO el issue para el enricher (sinopsis,
             # portada, créditos incluidos) solo por proteger la asignación
             # serie+número que hizo el coleccionista. locked_fields protege
             # justo eso y deja que el resto se siga rellenando.
-            #
-            # B15 (2026-09-26): si el número que se está asignando viene de
-            # un marcador de edición (Omnigold/Integral/Tomo/Vol) en el
-            # nombre original, el Issue creado no es una grapa suelta —
-            # re-parseamos ese nombre (todavía no reescrito, ver abajo) para
-            # saberlo, en vez de fiarnos de metadata_ (que puede faltar en
-            # archivos registrados antes de que existiera edition_kind).
-            edition_kind = parse_comic_filename(file.file_name).edition_kind
             issue = Issue(
                 series_id=series.id,
                 issue_number=issue_number,
                 locked_fields=["series_id", "issue_number"],
-                format=_EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE),
+                format=formato_esperado,
             )
             self.db.add(issue)
             await self.db.flush()
 
         orig = Path(file.file_path)
-        original_name = file.file_name  # capturado antes de reescribirlo abajo (B13: patrón de aprendizaje)
+        # capturado antes de reescribirlo abajo (B13: patrón de aprendizaje)
+        original_name = file.file_name
         dest = build_library_path(self._library, series, issue_number, orig.suffix)
         # A3: mover a destino verificado — nunca sobreescribe ni borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
