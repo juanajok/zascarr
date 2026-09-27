@@ -165,7 +165,15 @@ async def _triage_and_match(
         aplicada = nombre != tr.path.name
     parsed = parse_comic_filename(nombre)
     edition_kind = parsed.edition_kind
-    formato_esperado = EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE).value
+    # B15: `None` significa "el nombre NO trae marcador de edición" — el matcher
+    # entonces no tiene evidencia del formato y solo enlazará si no hay nada que
+    # desambiguar (una única candidata). Un marcador explícito (Omnigold/Tomo…)
+    # sí es evidencia y permite elegir entre varias ediciones del mismo número.
+    formato_esperado = (
+        EDITION_KIND_A_FORMAT.get(edition_kind, IssueFormat.SINGLE_ISSUE).value
+        if edition_kind is not None
+        else None
+    )
 
     def extractor(filename: str):
         if parsed.series and parsed.issue_number:
