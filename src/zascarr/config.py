@@ -158,6 +158,20 @@ class Settings(BaseSettings):
     # participa en el enrutado ni en la sesión, es solo un dato guardado.
     base_url: str = Field(default="")
 
+    # ── Avisos (E4) ───────────────────────────────────────────────
+    # Webhook de importación, apagado por defecto. Entrega de MEJOR
+    # ESFUERZO: un fallo (URL caída/lenta) no bloquea ni revierte la
+    # importación — se registra y no se reintenta (sin cola persistente).
+    webhook_enabled: bool = Field(default=False)
+    # generic | gotify | ntfy | telegram
+    webhook_type: str = Field(default="generic")
+    webhook_url: str = Field(default="")
+    # gotify: token; ntfy: bearer; telegram: token del bot.
+    webhook_token: str = Field(default="")
+    # Solo telegram.
+    webhook_chat_id: str = Field(default="")
+    webhook_timeout: float = Field(default=5.0)
+
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "ZascArr"
     app_version: str = "1.14.0"
