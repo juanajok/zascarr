@@ -111,6 +111,12 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
     más adelante. Invariante: **una sola función calcula el plan de cambios**, y
     tanto la vista previa (`--dryrun`) como la ejecución real lo **consumen** —
     nunca dos caminos que puedan divergir.
+13. **El plan caduca si el archivo cambia.** Entre el `dry-run` y la ejecución,
+    el CBZ puede haber cambiado (otro proceso, el usuario, un reescaneo). Antes
+    de sustituir se comprueba que el fichero es **el mismo** con el que se
+    calculó el plan (tamaño + `sha256`/mtime); si difiere, el plan se
+    **recalcula o se invalida** — nunca se aplica a un CBZ distinto del que se
+    previsualizó.
 
 **Mapa mínimo de campos (B6).** B6 no puede previsualizar «qué cambiará» sin
 saber **qué escribe**. Este es el mínimo que fija la ficha; el ampliado queda
@@ -121,13 +127,15 @@ fuera (ver «Fuera de B6»).
 | `Series` | `Series.title` | procedencia (punto 1) | no se escribe |
 | `Number` | `Issue.issue_number` | procedencia | no se escribe |
 | `Volume` | `Issue.volume` | procedencia | no se escribe (`volume` NULL) |
-| `Year` | `Series.start_year` | procedencia | no se escribe |
+| `Year` | **año de `Issue.release_date`** (fecha de publicación **del ejemplar**, no `Series.start_year`) | procedencia | `sin dato`; se conserva un `Year` manual existente |
 | `Publisher` | `Series.publisher.name` | procedencia | no se escribe |
 | `Summary` | `Issue.synopsis` | procedencia | no se escribe |
-| `LanguageISO` | idioma conocido de la serie/tradición; si no, se omite | procedencia | no se escribe |
+| `LanguageISO` | **no se genera**: no se infiere de la tradición (manga/tebeo/grapa no acredita el idioma del ejemplar); si el XML ya lo trae, es **preservación** | — | `sin dato`; se conserva el existente |
 
-Ninguno se **inventa**: sin dato, el campo no se escribe y el informe lo marca
-**`sin dato`** (no `cambiará`).
+Ninguno se **inventa**: sin dato, el campo no se escribe (o se conserva el
+existente) y el informe lo marca **`sin dato`** (no `cambiará`). La regla de
+`Year` y `LanguageISO` es deliberadamente conservadora: la fecha y el idioma de
+**este** ejemplar no se deducen de la serie ni de su tradición.
 
 **Invariantes de ZascArr:**
 - El original **no se borra ni se trunca** hasta que el reemplazo está
@@ -153,6 +161,15 @@ Ninguno se **inventa**: sin dato, el campo no se escribe y el informe lo marca
   `sha256` del CBZ intactos).
 - **Un solo plan:** el plan que emite el `dry-run` y el que aplica la ejecución
   real son **el mismo** (una sola función); no hay dos caminos que divergan.
+- **`Year`:** con `Issue.release_date` → se escribe **ese** año (no
+  `Series.start_year`); sin `release_date` → `sin dato` y un `Year` manual
+  existente queda **intacto**.
+- **`LanguageISO`:** **no** se genera desde la tradición (una serie `manga` sin
+  idioma explícito **no** produce `LanguageISO`); si el XML ya lo trae, se
+  **preserva**; si no, `sin dato`.
+- **Plan caduco:** si el CBZ cambia entre el `dry-run` y la ejecución
+  (tamaño/hash distintos), el plan se **recalcula o se invalida** y **no** se
+  sustituye con la decisión antigua.
 
 **Alcance — lo que NO se copia de ComicTagger:**
 - Su **GUI de escritorio** (ZascArr no tiene SPA ni escritorio).
