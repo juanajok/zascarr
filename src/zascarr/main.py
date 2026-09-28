@@ -17,6 +17,18 @@ logger = structlog.get_logger()
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+async def _ejecutar_ciclo_y_avisar(notifier, session_factory, importer_cls):
+    """Scan → commit → aviso (E4). El aviso va DESPUÉS del `commit` y solo con
+    archivos nuevos; si el `commit` falla (rollback), la excepción se propaga y
+    NO se avisa. El webhook es mejor esfuerzo: `notifier` nunca propaga."""
+    async with session_factory() as session:
+        report = await importer_cls(session).scan_and_import()
+        await session.commit()
+    if report.imported:
+        await notifier.notify_imported(report.imported)
+    return report
+
+
 async def _import_loop(interval_minutes: int) -> None:
     """Job periódico del importador (B1/B3): organiza /downloads solo.
 
@@ -27,12 +39,15 @@ async def _import_loop(interval_minutes: int) -> None:
     """
     from zascarr.database import async_session_factory
     from zascarr.services.importer import Importer
+    from zascarr.services.notifier import Notifier
+
+    notifier = Notifier()
 
     while True:
         try:
-            async with async_session_factory() as session:
-                report = await Importer(session).scan_and_import()
-                await session.commit()
+            report = await _ejecutar_ciclo_y_avisar(
+                notifier, async_session_factory, Importer,
+            )
             # B7: la detección de desaparecidos revisa la biblioteca YA
             # importada, no las descargas — puede haber algo que avisar
             # aunque este ciclo no haya escaneado ningún fichero nuevo.
