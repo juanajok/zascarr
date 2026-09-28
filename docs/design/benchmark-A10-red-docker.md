@@ -164,3 +164,49 @@ estado y debe decirlo en vez de interpretarlo mal.
 **Decisión final / ADR:** no requiere ADR (script de diagnóstico, no
 arquitectura). Entregable: `scripts/diagnostico-red.sh` (solo lectura) + el
 mensaje de «Probar conexión» apuntando a él en vez de a una subred adivinada.
+
+---
+
+## Endurecimiento tras la revisión de la PR #32 (2026-09-28)
+
+La primera implementación cumplía el criterio a medias: **seguía imprimiendo
+una regla o dando por cubierto algo que sus propios datos no sostenían**. Queda
+fijado como parte del contrato:
+
+20. **Sin recorrido comprobado no hay propuesta.** Si no se puede preguntar
+    dentro del contenedor a dónde resuelve `host.docker.internal`, no se imprime
+    ninguna regla: sin ese dato, la regla podría apuntar a una red que el
+    contenedor ni usa (se dice cómo comprobarlo y se sale con 2). Y si resuelve
+    a una dirección que **no es la puerta de enlace de ninguna de sus redes**,
+    el recorrido está roto y **tampoco** se propone regla — se explica la causa
+    conocida y cómo reiniciar; imprimir la regla «correcta» sería un comando
+    preciso que no arregla nada (se sale con 1).
+21. **La subred es la del recorrido comprobado, no la primera de la lista.**
+    Con varias redes se busca cuál tiene por puerta de enlace la dirección a la
+    que resuelve el contenedor y se usa **su** subred. Si ninguna coincide → 20;
+    si **varias comparten** esa puerta de enlace, no se puede saber a cuál
+    pertenece el tráfico → indeterminado y sin propuesta.
+22. **La decisión no depende del orden de las reglas, porque no se puede
+    leer.** `ufw(8)` avisa de que `ufw show added` «does not show the status of
+    the running firewall» y que «does not record command ordering, so an
+    equivalent ordering is used». Así que:
+    - **si ALGUNA regla deniega** este tráfico, no se propone un `allow` al
+      final (podría quedarle por detrás) **ni se dice que ya está cubierto**
+      (podría ganar la que deniega): se remite a `sudo ufw status numbered`;
+    - si alguna regla que **no se entiende** podría denegarlo, no se propone
+      nada;
+    - solo si **ninguna** regla lo toca se propone añadir una — que es la única
+      conclusión que no depende del orden: una regla al final solo se alcanza si
+      ninguna otra casa.
+    Además, si el número de reglas de `ufw status` y el de `ufw show added` no
+    coincide (reglas editadas a mano), no se puede decir qué está en vigor → se
+    sale con 2 sin proponer.
+23. **Protocolo y dirección de destino se interpretan, o la regla no acredita
+    nada.** La sintaxis de ufw distingue `proto` y `to DIRECCIÓN`: un
+    `ufw allow proto udp from … to any port 9696` **no** autoriza tráfico TCP, y
+    `ufw allow from … to 192.168.1.5 port 9696` **no** autoriza el tráfico que
+    va a la puerta de enlace de Docker. Un campo que no se sepa interpretar
+    (un nombre de aplicación, un protocolo raro) se marca como desconocido: un
+    `ALLOW` ilegible **no acredita cobertura** (y se avisa de que no se ha
+    contado), y un `DENY` ilegible **impide proponer**.
+
