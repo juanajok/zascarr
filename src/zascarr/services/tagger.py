@@ -18,6 +18,7 @@ Une la BD (qué queremos escribir) con el CBZ (qué hay) y aplica el contrato de
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import uuid
 from collections.abc import AsyncIterator
@@ -28,7 +29,7 @@ from pathlib import Path
 
 import structlog
 from sqlalchemy import select, text, tuple_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
 from zascarr.core.comicinfo_write import (
     Accion,
@@ -119,6 +120,9 @@ class InformeEtiquetado:
     reconciliados: int = 0
     #: Ficheros que ni se han abierto por estar ya revisados y sin cambios.
     ya_revisados: int = 0
+    #: Motivo por el que se cortó el lote (None si terminó). No es un contador:
+    #: si está puesto, el informe NO representa la biblioteca entera.
+    abortado: str | None = None
     resultados: list[ResultadoEtiquetado] = field(default_factory=list)
 
     def resumen(self) -> str:
@@ -154,35 +158,60 @@ def _clave_de(file_id) -> int:
     )
 
 
+def motor_de(db: AsyncSession) -> AsyncEngine:
+    """El motor con el que abrir la conexión dedicada del bloqueo.
+
+    Se toma de la propia sesión (`bind`), nunca del motor global: el bloqueo
+    tiene que vivir en la MISMA base de datos que las filas que se tocan."""
+    bind = db.bind
+    if not isinstance(bind, AsyncEngine):
+        raise TypeError(
+            "el bloqueo por fichero necesita una sesión ligada a un AsyncEngine")
+    return bind
+
+
 @asynccontextmanager
-async def bloqueo_de_fichero(db: AsyncSession, file_id) -> AsyncIterator[None]:
+async def bloqueo_de_fichero(
+    engine: AsyncEngine, file_id,
+) -> AsyncIterator[AsyncConnection]:
     """Serializa la escritura de **este** CBZ entre procesos e instancias.
 
     Un `flock` sobre el propio fichero no vale: el bloqueo va con el *inodo*, y
     `os.replace` instala uno nuevo. La carrera es real y silenciosa — A bloquea
     el inodo viejo, B se queda esperando ese mismo inodo, A reemplaza la ruta, C
     abre el inodo **nuevo** y entra sin esperar a nadie; cuando A suelta, B
-    adquiere el bloqueo del inodo viejo (ya huérfano) y B y C reconstruyen la
-    misma ruta a la vez, pudiendo además borrarse los temporales entre sí.
+    adquiere el bloqueo de un inodo ya huérfano y B y C reconstruyen la misma
+    ruta a la vez, pudiendo además borrarse los temporales entre sí.
 
-    La identidad aquí es el **`File.id`**, que no cambia al reemplazar el
-    fichero. Es un *advisory lock* de PostgreSQL: no deja ficheros de bloqueo en
-    la biblioteca del coleccionista, se suelta solo si el proceso muere (la
-    conexión se cierra), y se libera **antes** de la siguiente adquisición, así
-    que no hay espera circular entre dos ficheros.
+    La identidad es el **`File.id`**, que no cambia al reemplazar el fichero.
 
-    Nada de BD ocurre dentro del bloque salvo el propio bloqueo: la escritura en
-    la sesión se hace después de soltarlo, para que una transacción abortada no
-    deje el *advisory lock* colgado en una conexión del pool."""
+    Y es `pg_advisory_xact_lock`, **no** `pg_advisory_lock`, sobre una
+    **conexión dedicada con su propia transacción corta**:
+
+      - un bloqueo de sesión sobrevive al `ROLLBACK` y solo lo suelta un
+        `pg_advisory_unlock` explícito o el fin de la conexión; devolver una
+        conexión al pool normalmente la reinicia con `ROLLBACK`, que **no**
+        termina necesariamente esa sesión de PostgreSQL, así que un `unlock`
+        fallido podría dejar el bloqueo pegado a una conexión reutilizable;
+      - un bloqueo de **transacción** lo suelta el `COMMIT`/`ROLLBACK` de esa
+        transacción, pase lo que pase con el cuerpo, sin depender de que un
+        `unlock` llegue a ejecutarse en una transacción dañada;
+      - la conexión es **dedicada** para no meterlo en la transacción larga del
+        lote (donde se retendría hasta el commit final).
+
+    Si el proceso muere, la conexión se cierra y PostgreSQL lo suelta solo."""
     clave = _clave_de(file_id)
-    await db.execute(text("SELECT pg_advisory_lock(:clave)"), {"clave": clave})
-    try:
-        yield
-    finally:
+    async with engine.connect() as conn:
+        await conn.execute(
+            text("SELECT pg_advisory_xact_lock(:clave)"), {"clave": clave})
         try:
-            await db.execute(text("SELECT pg_advisory_unlock(:clave)"), {"clave": clave})
-        except Exception as exc:  # noqa: BLE001 — si falla, la conexión se cierra
-            logger.warning("tagger.desbloqueo_fallido", file_id=str(file_id), error=str(exc))
+            yield conn
+        finally:
+            # Terminar ESTA transacción es lo que suelta el bloqueo. Si hasta
+            # esto falla, la conexión queda inservible y el pool la descarta:
+            # PostgreSQL la cierra y suelta el bloqueo igual.
+            with contextlib.suppress(Exception):
+                await conn.rollback()
 
 
 @dataclass
@@ -382,12 +411,24 @@ class TaggerService:
         # Escritura real: bloqueo por fichero desde la lectura/plan hasta
         # después del reemplazo. Dos etiquetados del mismo tebeo no se
         # intercalan, ni siquiera entre procesos.
-        async with bloqueo_de_fichero(self.db, file.id):
+        async with bloqueo_de_fichero(motor_de(self.db), file.id):
             resultado = await self._escribir(
                 file, ctx, path, solo_rellenar, reconciliar_todo)
         # La sesión se toca DESPUÉS de soltar el bloqueo (ver `bloqueo_de_fichero`).
         await self.db.flush()
         return resultado
+
+    async def _sesion_utilizable(self) -> bool:
+        """Tras un fallo, ¿la sesión sigue sirviendo? (un `SELECT 1`).
+
+        Un `flush()` fallido deja la transacción abortada y SQLAlchemy exige un
+        `rollback()` completo antes de reutilizar la sesión. Se comprueba en vez
+        de suponerlo: de eso depende cortar el lote o poder seguir."""
+        try:
+            await self.db.execute(text("SELECT 1"))
+            return True
+        except Exception:  # noqa: BLE001 — cualquier cosa = no recuperable
+            return False
 
     async def _simular(
         self, file: File, ctx: _Contexto, path: Path,
@@ -532,9 +573,15 @@ class TaggerService:
                                              dry_run=dry_run,
                                              solo_rellenar=solo_rellenar,
                                              reconciliar_todo=reconciliar_todo)
-            except Exception as exc:  # noqa: BLE001 — un fallo nunca aborta el lote
+                sesion_rota = False
+            except Exception as exc:  # noqa: BLE001
                 logger.exception("tagger.fallo_inesperado", file_id=file.id)
                 r = ResultadoEtiquetado(file.id, file.file_name, ERROR, [], str(exc))
+                # Un error sin más se apunta y se sigue. Pero si la sesión ha
+                # quedado inservible, los siguientes fallarían todos por la
+                # misma razón: se corta y se dice, en vez de encadenar errores
+                # fingiendo que la pasada salió bien.
+                sesion_rota = not await self._sesion_utilizable()
             if r.bloqueados:
                 informe.bloqueados += 1
             informe.resultados.append(r)
@@ -550,6 +597,17 @@ class TaggerService:
                 setattr(informe, contador, getattr(informe, contador) + 1)
             else:
                 logger.warning("tagger.accion_desconocida", accion=r.accion, file_id=file.id)
+            if sesion_rota:
+                with contextlib.suppress(Exception):
+                    await self.db.rollback()
+                informe.abortado = (
+                    f"la sesión de BD no se recupera tras el fallo ({r.motivo}); "
+                    f"{informe.escritos} ficheros ya sustituidos en disco quedan "
+                    f"con la fila de `File` sin actualizar y se reconcilian solos "
+                    f"en la siguiente pasada")
+                logger.error("tagger.lote_abortado", escritos=informe.escritos,
+                             motivo=r.motivo)
+                break
             if r.gasta_cupo:
                 procesados += 1
                 if not sin_limite and procesados >= limit:

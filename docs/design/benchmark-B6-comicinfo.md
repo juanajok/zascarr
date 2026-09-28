@@ -215,11 +215,20 @@ un fallo, no pisarse entre escritores). Quedan fijadas como parte del contrato:
     reconstruyen la misma ruta a la vez**, pudiendo además borrarse los
     temporales entre sí. La identidad tiene que ser algo que no cambie al
     reemplazar el fichero: aquí es un ***advisory lock* de PostgreSQL por
-    `File.id`**, que además no deja ficheros de bloqueo en la biblioteca, se
-    suelta solo si el proceso muere (la conexión se cierra) y se libera **antes**
-    de la siguiente adquisición, así que dos ficheros no pueden quedar en espera
-    circular. El «plan caduca» (punto 13) cubre el cambio externo; el bloqueo
-    cubre la carrera entre dos ZascArr.
+    `File.id`**. Y tiene que ser `pg_advisory_xact_lock` (de **transacción**)
+    sobre una **conexión dedicada con su propia transacción corta**, no
+    `pg_advisory_lock` (de sesión): un bloqueo de sesión **sobrevive al
+    `ROLLBACK`** y solo lo suelta un `unlock` explícito o el fin de la conexión,
+    y devolver una conexión al *pool* la reinicia con `ROLLBACK` pero **no
+    termina necesariamente esa sesión de PostgreSQL** — así que un `unlock` que
+    falle (p. ej. porque la transacción quedó abortada) dejaría el bloqueo pegado
+    a una conexión reutilizable. El de transacción lo suelta el `COMMIT`/
+    `ROLLBACK` de esa transacción, pase lo que pase. La conexión es dedicada para
+    no meter el bloqueo en la transacción larga del lote (donde se retendría
+    hasta el commit final); así tampoco hay espera circular entre dos ficheros.
+    No deja ficheros de bloqueo en la biblioteca, y si el proceso muere la
+    conexión se cierra y PostgreSQL lo suelta solo. El «plan caduca» (punto 13)
+    cubre el cambio externo; el bloqueo cubre la carrera entre dos ZascArr.
 16. **`--limit` acota trabajo NUEVO, no vueltas sobre lo mismo.** Cada revisión
     deja una **marca persistente** en `File.metadata_` (resultado, `stat` del
     fichero, hash, y los valores deseados con los que se comparó). Un fichero
@@ -239,7 +248,22 @@ un fallo, no pisarse entre escritores). Quedan fijadas como parte del contrato:
     registra **por fichero**, sin abortar el lote. Lo mismo para un `File` cuya
     ruta ya no existe. Se marca como inválido para que no ocupe el cupo en cada
     pasada, y se vuelve a mirar en cuanto el fichero cambie.
-18. **Reconciliación por `stat` + `sha256`, nunca solo por tamaño.** «El
+18. **Un fallo de BD corta el lote, y lo dice.** Un error cualquiera de un
+    fichero se apunta como `error` y el lote sigue; pero si la sesión ha quedado
+    **inservible** (tras un `flush()` fallido, SQLAlchemy exige un `rollback()`
+    completo y ninguna operación posterior funciona), los ficheros siguientes
+    fallarían **todos** por la misma razón. En ese caso se revierte, se corta y
+    el informe lo declara —incluyendo cuántos ficheros ya se sustituyeron en
+    disco y que sus filas de `File` se reconcilian solas en la siguiente
+    pasada— en vez de encadenar errores fingiendo que la pasada salió bien. El
+    código de salida del comando administrativo es **distinto de cero**. (Se
+    evaluó aislar cada fichero con un `SAVEPOINT`; no sirve tal cual: la
+    mutación tiene que ocurrir **dentro** del savepoint, y aquí se hace antes
+    —en el camino que decide el plan—, así que la sesión queda envenenada igual
+    y haría falta reestructurar toda la escritura para cubrir un caso, el error
+    de BD por fila, que en este UPDATE no se da: los fallos reales son del motor
+    entero, y ésos no los salva ningún savepoint.)
+19. **Reconciliación por `stat` + `sha256`, nunca solo por tamaño.** «El
     reemplazo salió bien pero el commit falló» se detecta comparando el `stat`
     con la marca y, si no cuadra, recalculando el hash. Mirar **solo** el tamaño
     deja el hash obsoleto para siempre cuando el XML nuevo mide lo mismo — y

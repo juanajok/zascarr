@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
-from zascarr.cli.etiquetar import _imprimir_texto, _salida_json
+from zascarr.cli.etiquetar import _codigo_salida, _imprimir_texto, _salida_json
 from zascarr.core.comicinfo_write import Accion, CampoPlan
 from zascarr.services.tagger import (
     ESCRITO,
@@ -82,3 +82,19 @@ def test_file_id_del_orm_se_normaliza_a_texto():
     resultado = ResultadoEtiquetado(identificador, "a.cbz", ESCRITO)
     assert resultado.file_id == str(identificador)
     assert json.dumps({"file_id": resultado.file_id})
+
+
+def test_un_lote_abortado_no_es_un_exito(capsys):
+    """El código de salida tiene que decirlo: un cron no debe dar por buena una
+    pasada que se cortó a medias."""
+    informe = _informe()
+    assert _codigo_salida(informe) == 0
+
+    informe.abortado = "la sesión de BD no se recupera; 2 ficheros ya sustituidos"
+
+    assert _codigo_salida(informe) == 1
+    _imprimir_texto(informe, aplicar=True)
+    assert "LOTE ABORTADO" in capsys.readouterr().out
+
+    _salida_json(informe, aplicar=True)
+    assert json.loads(capsys.readouterr().out)["abortado"] == informe.abortado

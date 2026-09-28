@@ -25,6 +25,7 @@ from xml.etree import ElementTree
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from zascarr.models import File, FileFormat, Issue, Publisher, Series
@@ -68,7 +69,10 @@ async def db():
         try:
             yield session
         finally:
-            await transaccion.rollback()
+            # El servicio puede haber revertido la sesión por su cuenta (corta
+            # el lote si no se recupera): en ese caso ya no hay nada que revertir.
+            if transaccion.is_active:
+                await transaccion.rollback()
     await engine.dispose()
 
 
@@ -759,8 +763,7 @@ class TestBloqueoPorFichero:
 
         async def _escritor(engine, etiqueta):
             nonlocal activos, maximo
-            sesion = async_sessionmaker(engine, expire_on_commit=False)
-            async with sesion() as s, tagger_mod.bloqueo_de_fichero(s, clave):
+            async with tagger_mod.bloqueo_de_fichero(engine, clave):
                 activos += 1
                 maximo = max(maximo, activos)
                 try:
@@ -824,9 +827,9 @@ class TestBloqueoPorFichero:
         real_reescribir = zcbz.reescribir_con_xml
 
         @contextlib.asynccontextmanager
-        async def _espia(sesion, file_id):
+        async def _espia(engine, file_id):
             eventos.append(f"entra:{file_id}")
-            async with real_bloqueo(sesion, file_id):
+            async with real_bloqueo(engine, file_id):
                 eventos.append("dentro")
                 yield
             eventos.append("sale")
@@ -850,11 +853,147 @@ class TestBloqueoPorFichero:
         real_bloqueo = tagger_mod.bloqueo_de_fichero
 
         @contextlib.asynccontextmanager
-        async def _espia(sesion, file_id):
+        async def _espia(engine, file_id):
             eventos.append("bloquea")
-            async with real_bloqueo(sesion, file_id):
+            async with real_bloqueo(engine, file_id):
                 yield
 
         monkeypatch.setattr(tagger_mod, "bloqueo_de_fichero", _espia)
         await TaggerService(db).ejecutar(archivo, dry_run=True)
         assert eventos == []
+
+
+class TestVidaDelBloqueo:
+    """`pg_advisory_xact_lock` en una conexión dedicada: el bloqueo lo suelta el
+    fin de ESA transacción, no un `unlock` que puede no llegar a ejecutarse."""
+
+    async def _libre(self, engine, clave, timeout: float = 3.0) -> bool:
+        """¿Se puede volver a tomar la clave desde otra conexión?"""
+        async with engine.connect() as otra:
+            while timeout > 0:
+                tomado = await otra.execute(
+                    text("SELECT pg_try_advisory_xact_lock(:clave)"),
+                    {"clave": tagger_mod._clave_de(clave)})
+                if tomado.scalar():
+                    return True
+                await asyncio.sleep(0.05)
+                timeout -= 0.05
+        return False
+
+    @pytest.mark.asyncio
+    async def test_se_suelta_al_terminar_normalmente(self):
+        engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+        clave = uuid4()
+        try:
+            async with tagger_mod.bloqueo_de_fichero(engine, clave):
+                pass
+            assert await self._libre(engine, clave)
+        finally:
+            await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_se_suelta_aunque_la_transaccion_aborte(self):
+        """El caso que `pg_advisory_lock` no cubría: si la transacción acaba
+        abortada, un `unlock` explícito fallaría y el bloqueo de sesión podría
+        seguir pegado a una conexión reutilizable del pool."""
+        engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+        clave = uuid4()
+        try:
+            with pytest.raises(DBAPIError):
+                async with tagger_mod.bloqueo_de_fichero(engine, clave) as conn:
+                    await conn.execute(text("SELECT 1/0"))  # aborta la transacción
+
+            assert await self._libre(engine, clave)
+        finally:
+            await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_se_suelta_si_el_cuerpo_revienta(self):
+        engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+        clave = uuid4()
+        try:
+            with pytest.raises(RuntimeError):
+                async with tagger_mod.bloqueo_de_fichero(engine, clave):
+                    raise RuntimeError("boom")
+            assert await self._libre(engine, clave)
+        finally:
+            await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_no_reutiliza_la_conexion_de_la_sesion(self, db, tmp_path, monkeypatch):
+        """El bloqueo vive en su propia transacción corta, no en la del lote:
+        si no, se retendría hasta el commit final."""
+        archivo, _ = await _montar(db, tmp_path)
+        conexion_sesion = await (await db.connection()).get_raw_connection()
+        vistas = []
+        real = tagger_mod.bloqueo_de_fichero
+
+        @contextlib.asynccontextmanager
+        async def _espia(engine, file_id):
+            async with real(engine, file_id) as conn:
+                vistas.append(await conn.get_raw_connection())
+                yield conn
+
+        with monkeypatch.context() as m:
+            m.setattr(tagger_mod, "bloqueo_de_fichero", _espia)
+            await TaggerService(db).ejecutar(archivo, dry_run=False)
+
+        assert vistas and vistas[0] is not conexion_sesion
+
+
+class TestFalloDeBdEnElLote:
+    """Un fallo de BD a mitad de lote no puede dejar la sesión envenenada ni
+    anunciar que el lote siguió mientras los siguientes fallan en cadena."""
+
+    @pytest.mark.asyncio
+    async def test_un_error_de_bd_corta_el_lote_con_mensaje_claro(self, db, tmp_path, monkeypatch):
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        (tmp_path / "c").mkdir()
+        primero, _ = await _montar(db, tmp_path / "a")
+        envenenado, _ = await _montar(db, tmp_path / "b")
+        tercero, _ = await _montar(db, tmp_path / "c")
+        ids = [str(x.id) for x in (primero, envenenado, tercero)]
+
+        real = TaggerService._poner_marca
+
+        def _envenenar(self, file, ctx, st, sha, resultado):
+            real(self, file, ctx, st, sha, resultado)
+            if str(file.id) == str(envenenado.id):
+                # Error REAL de PostgreSQL: UNIQUE(files.file_path).
+                file.file_path = primero.file_path
+
+        monkeypatch.setattr(TaggerService, "_poner_marca", _envenenar)
+
+        informe = await TaggerService(db).run(limit=0, dry_run=False, file_ids=ids)
+
+        assert informe.abortado is not None          # se corta y se dice…
+        assert "se reconcilian" in informe.abortado   # …con qué queda pendiente
+        assert informe.errores == 1
+        # Y NO se sigue: no hay ficheros posteriores con error en cadena.
+        assert len(informe.resultados) == informe.escritos + 1
+
+    @pytest.mark.asyncio
+    async def test_un_error_que_no_toca_la_bd_no_corta_el_lote(self, db, tmp_path, monkeypatch):
+        """Un fallo de un fichero que deja la sesión sana se apunta y se sigue."""
+        (tmp_path / "a").mkdir()
+        (tmp_path / "b").mkdir()
+        roto, _ = await _montar(db, tmp_path / "a")
+        sano, ruta_sano = await _montar(db, tmp_path / "b")
+        ids = [str(roto.id), str(sano.id)]
+
+        real = TaggerService._poner_marca
+
+        def _revienta(self, file, ctx, st, sha, resultado):
+            if str(file.id) == str(roto.id):
+                raise ValueError("fallo tonto de un fichero")
+            real(self, file, ctx, st, sha, resultado)
+
+        monkeypatch.setattr(TaggerService, "_poner_marca", _revienta)
+
+        informe = await TaggerService(db).run(limit=0, dry_run=False, file_ids=ids)
+
+        assert informe.abortado is None
+        assert informe.errores == 1
+        assert informe.escritos == 1
+        assert leer_comicinfo(ruta_sano) is not None
