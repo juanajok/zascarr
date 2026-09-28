@@ -27,20 +27,60 @@
 
 # resolver_ruta RUTA
 #   Imprime la ruta canónica: symlinks resueltos, "." y ".." normalizados.
-#   Funciona aunque la carpeta todavía no exista (instalación nueva) — se
-#   canonicaliza lo que existe y se conserva el resto. Devuelve 1 con el
-#   motivo por stderr si no puede resolverla.
+#   Acepta un sufijo que todavía no exista (instalación nueva), pero **todos
+#   los componentes que ya están —symlinks incluidos— tienen que resolverse de
+#   verdad**. Devuelve 1 con el motivo por stderr si no puede.
 resolver_ruta() {
-    local ruta="$1" resuelta ancestro
+    local ruta="$1" absoluta prefijo componente destino
+    local resuelta ancestro
+    local -a partes=()
 
     if [[ -z "${ruta}" ]]; then
         echo "ruta vacía" >&2
         return 1
     fi
 
-    # -m: canonicaliza aunque falten componentes finales (una biblioteca
-    # nueva no existe todavía). SÍ resuelve los symlinks de los componentes
-    # que existen, y falla con un bucle de symlinks o sin permisos.
+    absoluta="${ruta}"
+    if [[ "${absoluta}" != /* ]]; then
+        # Ruta relativa: se resuelve contra el cwd. No hace falta más, porque
+        # esto solo se usa para INSPECCIONAR los componentes (el resultado
+        # canónico lo da `realpath` sobre la ruta original).
+        absoluta="${PWD:-/}/${absoluta}"
+    fi
+
+    # 1) Symlinks que no llevan a ninguna parte. `realpath -m` **no** sirve para
+    #    esto: está pensado justamente para canonicalizar rutas con componentes
+    #    ausentes o no disponibles, así que sigue un symlink roto y devuelve su
+    #    destino inexistente como si fuera una carpeta nueva perfectamente
+    #    válida. Hay que mirarlo sobre la ruta ORIGINAL, componente a
+    #    componente: `[[ -L ]]` dice si el componente ES un symlink (lstat, no
+    #    sigue) y `[[ -e ]]` si además se puede seguir (stat, sí sigue).
+    local IFS=/
+    read -r -a partes <<< "${absoluta}"
+    prefijo=""
+    for componente in "${partes[@]}"; do
+        [[ -n "${componente}" ]] || continue
+        prefijo="${prefijo}/${componente}"
+
+        if [[ -L "${prefijo}" && ! -e "${prefijo}" ]]; then
+            # Un solo mensaje para los dos casos: `-L` sin `-e` es un enlace que
+            # no se puede seguir, sea porque su destino no existe o porque da
+            # vueltas. Distinguirlos exigiría seguir la cadena a mano, y para
+            # el coleccionista la acción es la misma: arreglar el enlace.
+            destino="$(readlink -- "${prefijo}" 2>/dev/null || echo "?")"
+            echo "«${prefijo}» es un symlink roto (o en bucle): apunta a «${destino}» y no lleva a ninguna carpeta" >&2
+            return 1
+        fi
+
+        # Primer componente que no existe: de aquí en adelante es sufijo nuevo,
+        # y que no exista es legítimo (una biblioteca recién indicada). Todo lo
+        # ANTERIOR ya se ha comprobado.
+        if [[ ! -e "${prefijo}" ]]; then
+            break
+        fi
+    done
+
+    # 2) Canonicalización. -m: sigue aceptando el sufijo nuevo.
     if ! resuelta="$(realpath -m -- "${ruta}" 2>/dev/null)"; then
         echo "no puedo resolver «${ruta}»: ¿hay un symlink en bucle o te falta permiso en alguna carpeta por encima?" >&2
         return 1
@@ -50,9 +90,9 @@ resolver_ruta() {
         return 1
     fi
 
-    # El ancestro más profundo que YA existe tiene que ser una carpeta: si es
-    # un fichero, la ruta no se podrá crear después y es mejor decirlo aquí,
-    # con el nombre de la ruta, que dejar que reviente un `mkdir`.
+    # 3) El ancestro más profundo que YA existe tiene que ser una carpeta: si es
+    #    un fichero, la ruta no se podrá crear después y es mejor decirlo aquí,
+    #    con el nombre de la ruta, que dejar que reviente un `mkdir`.
     ancestro="${resuelta}"
     while [[ ! -e "${ancestro}" && "${ancestro}" != "/" ]]; do
         ancestro="$(dirname -- "${ancestro}")"

@@ -87,6 +87,50 @@ class TestResolverRuta:
         assert salida.returncode == 1
         assert "ruta vacía" in salida.stderr
 
+    def test_symlink_roto_como_ruta_final(self, tmp_path):
+        """`realpath -m` NO sirve para esto: está pensado para canonicalizar
+        rutas con componentes ausentes, así que sigue el enlace y devuelve su
+        destino inexistente como si fuera una carpeta nueva legítima."""
+        enlace = tmp_path / "enlace_roto"
+        enlace.symlink_to(tmp_path / "destino" / "que" / "no" / "existe")
+        salida = _bash(f'resolver_ruta "{enlace}"')
+        assert salida.returncode == 1
+        assert str(enlace) in salida.stderr
+        assert "symlink roto" in salida.stderr
+
+    def test_symlink_roto_como_componente_intermedio(self, tmp_path):
+        enlace = tmp_path / "enlace_intermedio"
+        enlace.symlink_to(tmp_path / "no_existe")
+        salida = _bash(f'resolver_ruta "{enlace}/sub"')
+        assert salida.returncode == 1
+        assert str(enlace) in salida.stderr
+        assert "symlink roto" in salida.stderr
+
+    def test_symlink_roto_con_sufijo_nuevo_detras(self, tmp_path):
+        enlace = tmp_path / "enlace_roto"
+        enlace.symlink_to(tmp_path / "no_existe")
+        salida = _bash(f'resolver_ruta "{enlace}/otra/mas"')
+        assert salida.returncode == 1
+        assert str(enlace) in salida.stderr
+
+    def test_symlink_en_bucle(self, tmp_path):
+        (tmp_path / "a").symlink_to(tmp_path / "b")
+        (tmp_path / "b").symlink_to(tmp_path / "a")
+        salida = _bash(f'resolver_ruta "{tmp_path / "a"}"')
+        assert salida.returncode == 1
+        assert "symlink roto" in salida.stderr
+
+    def test_un_symlink_valido_si_admite_un_sufijo_nuevo(self, tmp_path):
+        """La resolución puede permitir un sufijo nuevo, pero solo si TODO lo
+        que ya está —el symlink incluido— se resuelve de verdad."""
+        real = tmp_path / "tebeoteca"
+        real.mkdir()
+        enlace = tmp_path / "acceso"
+        enlace.symlink_to(real)
+        salida = _bash(f'resolver_ruta "{enlace}/nueva"')
+        assert salida.returncode == 0
+        assert salida.stdout.strip() == str(real / "nueva")
+
     def test_fichero_por_medio_falla_con_motivo(self, tmp_path):
         fichero = tmp_path / "no_soy_carpeta"
         fichero.write_text("hola")
@@ -200,6 +244,35 @@ class TestInforme:
         )
         assert "RC=2" in salida.stdout
         assert "es un fichero" in salida.stderr
+
+    @pytest.mark.parametrize("cual", ["biblioteca", "descargas", "amule"])
+    def test_symlink_roto_en_cualquier_ruta_devuelve_2(self, arbol, tmp_path, cual):
+        """Lo que promete el mensaje del instalador: un enlace roto corta la
+        comprobación (estado 2) nombrando el enlace, en vez de aceptarlo como
+        una carpeta nueva."""
+        enlace = tmp_path / "enlace_roto"
+        enlace.symlink_to(tmp_path / "destino" / "inexistente")
+        rutas = {
+            "biblioteca": arbol["biblioteca"],
+            "descargas": arbol["descargas"],
+            "amule": arbol["amule"],
+        }
+        rutas[cual] = enlace
+        salida = _bash(
+            f'comprobar_solapamiento "{rutas["biblioteca"]}" "{rutas["descargas"]}"'
+            f' "{rutas["amule"]}"\n'
+            'echo "RC=$?"\n'
+        )
+        assert "RC=2" in salida.stdout
+        assert str(enlace) in salida.stderr
+        assert "symlink roto" in salida.stderr
+
+    def test_symlink_roto_intermedio_devuelve_2(self, arbol, tmp_path):
+        enlace = tmp_path / "enlace_intermedio"
+        enlace.symlink_to(tmp_path / "no_existe")
+        salida = _comprobar(enlace / "sub", arbol["descargas"], arbol["amule"])
+        assert "RC=2" in salida.stdout
+        assert str(enlace) in salida.stderr
 
     def test_la_comprobacion_no_toca_nada(self, arbol):
         """A9 avisa, nunca cambia rutas, permisos ni montajes."""
