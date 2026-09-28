@@ -7,8 +7,8 @@
 <div class="ajustes-grid">
 
   <fieldset class="ajustes-card">
-    <legend>Fuentes de enriquecimiento</legend>
-    <p class="ajustes-desc">Activa o desactiva cada fuente de metadatos (en toda ZascArr, también en Descubrir). Desactivar no borra lo ya catalogado: solo deja de consultar esa API. Al reactivar, una serie ya intentada recientemente espera su plazo de reintento (30 días); no se resetea la caché.</p>
+    <legend>Fuentes de metadatos</legend>
+    <p class="ajustes-desc">Activa o desactiva cada fuente (en toda ZascArr, también en Descubrir). Desactivar no borra lo ya catalogado: solo deja de consultar esa API. Al reactivar, una serie ya intentada recientemente espera su plazo de reintento (30 días); no se resetea la caché.</p>
     <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
       <label class="legal-checkbox">
         <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>
@@ -21,6 +21,10 @@
       <label class="legal-checkbox">
         <input type="checkbox" name="tebeosfera_enabled" value="true" {% if tebeosfera_enabled %}checked{% endif %}>
         Tebeosfera (tebeo y BD)
+      </label>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="gcd_enabled" value="true" {% if gcd_enabled %}checked{% endif %}>
+        GCD — solo Descubrir (búsqueda y alta de serie; el enricher todavía no lo usa)
       </label>
       <div class="ajustes-actions">
         <button type="submit">Guardar</button>
