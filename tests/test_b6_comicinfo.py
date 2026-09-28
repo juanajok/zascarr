@@ -11,8 +11,10 @@ import pytest
 from zascarr.core.comicinfo_write import (
     Accion,
     CampoPlan,
+    ComicInfoInvalidoError,
     hay_cambios,
     leer_campos,
+    parsear,
     plan,
 )
 
@@ -158,10 +160,18 @@ class TestFusion:
     def test_lleva_declaracion_de_xml(self):
         assert self._fusionar(None, plan({}, DESEADOS)).startswith(b"<?xml")
 
-    def test_raiz_inesperada_no_se_preserva(self):
-        """Un XML que no es ComicInfo no se cuela como raíz del resultado."""
-        import xml.etree.ElementTree as ET
-
+    def test_raiz_inesperada_no_se_sustituye(self):
+        """Un XML con otra raíz NO se descarta para meter uno nuevo: es
+        inválido y no se toca (podría llevar datos dentro)."""
         campos = plan({}, DESEADOS)
-        nuevo = self._fusionar(b"<Otro><X>1</X></Otro>", campos)
-        assert ET.fromstring(nuevo).tag == "ComicInfo"
+        with pytest.raises(ComicInfoInvalidoError):
+            self._fusionar(b"<Otro><X>1</X></Otro>", campos)
+
+    def test_xml_ilegible_no_se_sustituye(self):
+        with pytest.raises(ComicInfoInvalidoError):
+            self._fusionar(b"<ComicInfo><Series>sin cerrar", plan({}, DESEADOS))
+
+    def test_parsear_exige_la_raiz_comicinfo(self):
+        assert parsear(b"<ComicInfo/>").tag == "ComicInfo"
+        with pytest.raises(ComicInfoInvalidoError):
+            parsear(b"<comicinfo/>")  # el lector del proyecto es case-sensitive

@@ -46,13 +46,14 @@ def _parser() -> argparse.ArgumentParser:
     modo.add_argument("--dryrun", action="store_true",
                       help="no escribe nada (es el comportamiento por defecto)")
     p.add_argument("--limit", type=int, default=20,
-                   help="cuántos CBZ revisar (por defecto 20)")
+                   help="cuántos CBZ sin revisar mirar (por defecto 20; 0 = todos)")
     p.add_argument("--file-id", action="append", dest="file_ids", metavar="UUID",
                    help="etiquetar solo estos ficheros (repetible; ignora --limit)")
     p.add_argument("--no-overwrite", action="store_true",
                    help="solo rellenar campos vacíos, nunca actualizar los existentes")
     p.add_argument("--reconciliar-todo", action="store_true",
-                   help="recalcular sha256/tamaño también en los que ya están al día")
+                   help="revisarlo todo otra vez, aunque ya esté revisado, y "
+                        "recalcular sha256/tamaño aunque el fichero no haya cambiado")
     p.add_argument("--json", action="store_true", help="informe legible por máquina")
     return p
 
@@ -86,6 +87,9 @@ def _imprimir_texto(informe: InformeEtiquetado, *, aplicar: bool) -> None:
         print()
 
     print(f"Resumen: {informe.resumen()}")
+    if informe.ya_revisados:
+        print(f"({informe.ya_revisados} ya revisados antes y sin cambios: no gastan cupo; "
+              f"repite el comando para seguir avanzando.)")
     if not aplicar and informe.previstos:
         print("Nada se ha escrito. Para aplicarlo: --apply")
 
@@ -100,6 +104,7 @@ def _salida_json(informe: InformeEtiquetado, *, aplicar: bool) -> None:
             "sin_espacio": informe.sin_espacio,
             "fallos_verificacion": informe.fallos_verificacion,
             "errores": informe.errores, "reconciliados": informe.reconciliados,
+            "ya_revisados": informe.ya_revisados,
         },
         "resultados": [
             {

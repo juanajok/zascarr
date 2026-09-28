@@ -14,6 +14,8 @@ Reglas (ficha, puntos 1, 12 y mapa mínimo):
     → `cambia` (overlay).
   - Distinto y procedencia desconocida → `conserva` (no se pisa lo manual).
   - `LanguageISO` **nunca** se genera (no se infiere de la tradición).
+  - Un `ComicInfo.xml` que no se puede leer (XML roto u otra raíz) **no se
+    toca**: `ComicInfoInvalidoError`, y el fichero se marca como inválido.
 """
 from __future__ import annotations
 
@@ -100,17 +102,38 @@ def hay_cambios(campos: list[CampoPlan]) -> bool:
     return any(c.accion is Accion.CAMBIA for c in campos)
 
 
+class ComicInfoInvalidoError(ValueError):
+    """Hay un `ComicInfo.xml` pero no se puede tratar como tal.
+
+    Ni se fusiona ni se sustituye: quien lo recibe marca el fichero como
+    **inválido** y no lo toca. Sustituir un XML que no entendemos sería perder
+    lo que hubiera dentro (ficha, «Invariantes de ZascArr»)."""
+
+
+def parsear(existente: bytes) -> ElementTree.Element:
+    """Parsea el XML existente exigiendo la raíz `<ComicInfo>`.
+
+    Un XML ilegible o con otra raíz lanza `ComicInfoInvalidoError` — nunca
+    devuelve un árbol vacío que pudiera acabar reemplazando al original."""
+    try:
+        root = ElementTree.fromstring(existente)
+    except ElementTree.ParseError as exc:
+        raise ComicInfoInvalidoError(f"XML ilegible: {exc}") from exc
+    if root.tag != "ComicInfo":
+        raise ComicInfoInvalidoError(f"raíz inesperada: <{root.tag}>")
+    return root
+
+
 def fusionar_xml(
     existente: bytes | None, campos: list[CampoPlan]
 ) -> bytes:
     """Devuelve el `ComicInfo.xml` resultante: parte del existente (preservando
-    **todos** los elementos desconocidos) y aplica solo los `cambia`."""
-    if existente:
-        root = ElementTree.fromstring(existente)
-        if root.tag != "ComicInfo":  # raíz inesperada: no la preservamos
-            root = ElementTree.Element("ComicInfo")
-    else:
-        root = ElementTree.Element("ComicInfo")
+    **todos** los elementos desconocidos) y aplica solo los `cambia`.
+
+    `existente=None` significa «no había entrada» y se crea desde cero; unos
+    bytes que no sean un `<ComicInfo>` legible son `ComicInfoInvalidoError`
+    (no se descarta nada en silencio)."""
+    root = parsear(existente) if existente else ElementTree.Element("ComicInfo")
 
     for campo in campos:
         if campo.accion is not Accion.CAMBIA or not campo.nuevo:
