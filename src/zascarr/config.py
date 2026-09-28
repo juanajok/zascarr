@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     comicvine_enabled: bool = Field(default=True)
     anilist_enabled: bool = Field(default=True)
     tebeosfera_enabled: bool = Field(default=True)
+    # GCD: hoy SOLO se usa en Descubrir (búsqueda y alta de serie). El
+    # enricher todavía no lo consulta — ampliarlo es otra historia (ver
+    # BACKLOG E7). Apagado = ninguna consulta a GCD en Descubrir.
+    gcd_enabled: bool = Field(default=True)
 
     # ── AniList API (manga/manhwa/manhua) ────────────────────────────
     # Sin API key: es pública. 1.5s es conservador a propósito — AniList
