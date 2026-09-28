@@ -13,10 +13,12 @@ justo lo que ya hace /ui/descubrir con las otras tres fuentes (ver
 DiscoveryResult.site_url).
 
 Alcance deliberado, solo para C0 (descubrir y dar de alta una Series):
-la API de búsqueda por nombre NO trae sinopsis ni portada a nivel de
-serie (solo editorial, idioma, formato físico, lista de números) — no
-sirve para el enricher (B4), que sigue cerrado con Comic Vine/AniList/
-Tebeosfera tal cual (ver ADR-0002).
+el endpoint de BÚSQUEDA por nombre no trae sinopsis ni portada a nivel de
+serie (solo editorial, idioma, formato físico, lista de números). La web
+de GCD sí muestra portada y datos ricos de la edición (p. ej. española);
+si la API expone una URL de imagen aprovechable por número es una
+evaluación pendiente (BACKLOG E7), no una conclusión. Hoy no sirve para
+el enricher (B4), cerrado con Comic Vine/AniList/Tebeosfera (ADR-0002).
 """
 from __future__ import annotations
 

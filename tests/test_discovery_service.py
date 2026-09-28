@@ -153,6 +153,30 @@ class TestSearch:
         fuentes = {r.source for r in resultados}
         assert fuentes == {MetadataSource.ANILIST, MetadataSource.TEBEOSFERA}
 
+    @pytest.mark.asyncio
+    async def test_gcd_desactivado_no_se_consulta_y_las_demas_si(self, monkeypatch):
+        """GCD es «solo Descubrir»: su interruptor también vive en Ajustes y
+        apagado significa cero consultas a GCD, con las demás funcionando."""
+        monkeypatch.setattr(
+            "zascarr.services.discovery.get_settings",
+            lambda: MagicMock(
+                comicvine_api_key="una-key", comicvine_enabled=True,
+                anilist_enabled=True, tebeosfera_enabled=True, gcd_enabled=False,
+            ),
+        )
+        anilist = [AniListResult(anilist_id=2, title_romaji="Naruto")]
+        gcd_client = _client_ctx([GCDResult(gcd_id=3, name="Batman")])
+
+        with patch("zascarr.services.discovery.ComicVineClient", _client_ctx([])), \
+             patch("zascarr.services.discovery.AniListClient", _client_ctx(anilist)), \
+             patch("zascarr.services.discovery.TebeosferaClient", _client_ctx([])), \
+             patch("zascarr.services.discovery.GCDClient", gcd_client):
+            service = DiscoveryService(db=FakeSession())
+            resultados, avisos = await service.search("algo")
+
+        gcd_client.return_value.search_series.assert_not_called()
+        assert {r.source for r in resultados} == {MetadataSource.ANILIST}
+
 
 class TestGetOrCreateSeries:
 
