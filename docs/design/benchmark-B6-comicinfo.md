@@ -105,6 +105,29 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
     insuficiente**, **fallo de verificación** y **saltados** (ya al día). Un
     error de etiquetado **nunca** se convierte en pérdida de un tebeo ni aborta
     el lote entero.
+12. **Dónde vive la simulación y una sola fuente del plan.** La simulación se
+    invoca **al menos desde un comando administrativo** (script ejecutable en la
+    Pi) que imprime el plan por campo; la UI podrá renderizar **el mismo** plan
+    más adelante. Invariante: **una sola función calcula el plan de cambios**, y
+    tanto la vista previa (`--dryrun`) como la ejecución real lo **consumen** —
+    nunca dos caminos que puedan divergir.
+
+**Mapa mínimo de campos (B6).** B6 no puede previsualizar «qué cambiará» sin
+saber **qué escribe**. Este es el mínimo que fija la ficha; el ampliado queda
+fuera (ver «Fuera de B6»).
+
+| Campo ComicInfo | Origen en ZascArr | Regla | Si falta el dato |
+|---|---|---|---|
+| `Series` | `Series.title` | procedencia (punto 1) | no se escribe |
+| `Number` | `Issue.issue_number` | procedencia | no se escribe |
+| `Volume` | `Issue.volume` | procedencia | no se escribe (`volume` NULL) |
+| `Year` | `Series.start_year` | procedencia | no se escribe |
+| `Publisher` | `Series.publisher.name` | procedencia | no se escribe |
+| `Summary` | `Issue.synopsis` | procedencia | no se escribe |
+| `LanguageISO` | idioma conocido de la serie/tradición; si no, se omite | procedencia | no se escribe |
+
+Ninguno se **inventa**: sin dato, el campo no se escribe y el informe lo marca
+**`sin dato`** (no `cambiará`).
 
 **Invariantes de ZascArr:**
 - El original **no se borra ni se trunca** hasta que el reemplazo está
@@ -128,6 +151,8 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
 - **`dry-run`:** con cambios pendientes, el informe lista los campos
   (`cambiará`/`se conserva`/`ya coincide`) y **no se escribe nada** (mtime y
   `sha256` del CBZ intactos).
+- **Un solo plan:** el plan que emite el `dry-run` y el que aplica la ejecución
+  real son **el mismo** (una sola función); no hay dos caminos que divergan.
 
 **Alcance — lo que NO se copia de ComicTagger:**
 - Su **GUI de escritorio** (ZascArr no tiene SPA ni escritorio).
@@ -139,9 +164,10 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
 
 **Fuera de B6 (otras historias, no se duplican aquí):** identificación asistida
 por **portada** como segunda señal (nunca autoasignación: si hay varias portadas
-o baja confianza → Pendientes); **plantillas de renombrado** (ya es **B9**);
-**mapa explícito de campos** ZascArr → ComicInfo (roles, idioma,
-editorial/*imprint* y qué campos no caben) — más adelante.
+o baja confianza → Pendientes); **plantillas de renombrado** (ya es **B9**); y
+el **mapa ampliado** de campos ZascArr → ComicInfo (roles de crédito,
+editorial/*imprint*, extensiones y qué campos no caben) — B6 fija solo el mapa
+**mínimo** de arriba.
 
 **Decisión final / ADR:** no requiere ADR propio (operación de fichero, no de
 arquitectura); la frontera con B20 (hardlink + parche) ya está en su spec.
