@@ -5,9 +5,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
 
@@ -254,6 +255,30 @@ def create_app() -> FastAPI:
         lambda: RedirectResponse("/ui/", status_code=307)
     )
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    @app.exception_handler(ProgrammingError)
+    async def _esquema_incompleto_handler(request: Request, exc: ProgrammingError):
+        """E6: una tabla ausente no debe ser un 500 crudo en /ui/*.
+
+        `undefined_table` (SQLSTATE 42P01) es la firma de "conecta pero el
+        esquema no está" (sin migrar o restauración a medias). Se degrada al
+        mismo diagnóstico que /api/health en vez de reventar."""
+        sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", None)
+        if sqlstate == "42P01":
+            if request.url.path.startswith("/api/"):
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "detail": "Esquema de base de datos incompleto o sin migrar — consulta /api/health",
+                    },
+                )
+            return HTMLResponse(
+                "<h1>Base de datos no lista</h1>"
+                "<p>El esquema está incompleto o no se ha migrado. "
+                '<a href="/estado">Consulta el estado del sistema</a>.</p>',
+                status_code=503,
+            )
+        raise exc
 
     return app
 

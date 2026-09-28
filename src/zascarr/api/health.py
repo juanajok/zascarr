@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 
@@ -46,6 +47,10 @@ _EXTERNAL_CHECK_TIMEOUT_S = 3.0
 # Si el fichero de estado no se refresca en este margen, se considera
 # "stale": el script del host probablemente ha muerto sin avisar.
 VPN_STALE_AFTER_S = 300  # 5 minutos (el timer corre cada minuto)
+
+# Tablas de dominio que deben existir si el esquema está íntegro (E6). Si una
+# falta tras haber migrado, es señal de restauración/rollback a medias.
+_DOMAIN_TABLES = ("series", "issues", "files", "wishlist")
 
 
 def _check_vpn() -> tuple[str, str]:
@@ -94,16 +99,83 @@ async def _check_reachable(coro) -> bool:
         return False
 
 
+def _alembic_head() -> str | None:
+    """Revisión head de Alembic, leída de `alembic/versions` (sin conectar a BD).
+
+    No se importa el paquete `alembic`: el directorio `alembic/` del propio repo
+    sombrea al paquete instalado (`import alembic.config` resolvería el directorio
+    local, que no tiene `config.py`). Head = la revisión que ninguna otra cita
+    como `down_revision`."""
+    versions_dir = Path(__file__).resolve().parents[3] / "alembic" / "versions"
+    if not versions_dir.is_dir():
+        # Fallback: cwd = raíz del repo (docker con el código montado en raíz).
+        versions_dir = Path("alembic") / "versions"
+    if not versions_dir.is_dir():
+        return None
+
+    revision_re = re.compile(r'^\s*revision\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+    down_re = re.compile(r'^\s*down_revision\s*=\s*["\']([^"\']+)["\']', re.MULTILINE)
+
+    revisiones: set[str] = set()
+    padres: set[str] = set()
+    for fichero in versions_dir.glob("*.py"):
+        texto = fichero.read_text(encoding="utf-8")
+        revisiones.update(revision_re.findall(texto))
+        padres.update(down_re.findall(texto))
+
+    cabezas = revisiones - padres
+    return next(iter(cabezas)) if len(cabezas) == 1 else None
+
+
+async def _database_status(db: AsyncSession) -> tuple[str, str]:
+    """Estado de la BD en cuatro valores (E6): unreachable | migration_required
+    | schema_incompatible | ok. Devuelve también un detalle en español."""
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        return "unreachable", f"No se puede conectar con PostgreSQL: {exc}"
+
+    head = _alembic_head()
+    try:
+        version_num = (
+            await db.execute(text("SELECT version_num FROM alembic_version"))
+        ).scalar_one_or_none()
+    except Exception:
+        version_num = None
+
+    if version_num is None:
+        return (
+            "migration_required",
+            "Conecta con PostgreSQL pero no hay esquema: ejecuta `alembic upgrade head`.",
+        )
+    if head and version_num != head:
+        return (
+            "migration_required",
+            f"Migración pendiente: la BD está en {version_num} y el código espera {head} "
+            "(`alembic upgrade head`).",
+        )
+
+    faltantes = []
+    for tabla in _DOMAIN_TABLES:
+        existe = (
+            await db.execute(text(f"SELECT to_regclass('{tabla}')"))
+        ).scalar_one_or_none()
+        if not existe:
+            faltantes.append(tabla)
+    if faltantes:
+        return (
+            "schema_incompatible",
+            f"Esquema incompleto: faltan {', '.join(faltantes)} (¿restauración o rollback a medias?).",
+        )
+    return "ok", "Conectada y migrada."
+
+
 @router.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
     settings = get_settings()
 
-    # ── PostgreSQL (crítico) ──
-    try:
-        await db.execute(text("SELECT 1"))
-        db_ok = True
-    except Exception:
-        db_ok = False
+    # ── PostgreSQL (crítico): cuatro estados, no un ok/error binario (E6) ──
+    db_status, db_detail = await _database_status(db)
 
     # ── Servicios baremetal (no críticos para health, pero informativos).
     # En paralelo y con timeout corto: nunca deben convertir un GET
@@ -116,7 +188,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     # ── VPN (vía fichero del host; nunca bloqueante) ──
     vpn_status, vpn_detail = _check_vpn()
 
-    core_ok = db_ok
+    core_ok = db_status == "ok"
     all_ok = core_ok and transmission_ok and amule_ok
     status_str = "healthy" if all_ok else ("degraded" if core_ok else "unhealthy")
 
@@ -125,12 +197,14 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     warnings = {}
     if vpn_status != "ok":
         warnings["vpn"] = vpn_detail
+    if db_status != "ok":
+        warnings["database"] = db_detail
 
     return {
         "status": status_str,
         "version": settings.app_version,
         "checks": {
-            "database":     "ok" if db_ok else "error",
+            "database":     db_status,
             "transmission": "ok" if transmission_ok else "unreachable",
             "amule":        "ok" if amule_ok else "unreachable",
             "vpn":          vpn_status,
