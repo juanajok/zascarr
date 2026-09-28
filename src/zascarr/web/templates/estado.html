@@ -45,7 +45,7 @@
 
   const CHECK_ACTION = {
     unreachable: "Comprueba que PostgreSQL está corriendo y que la URL de conexión es correcta.",
-    migration_required: "Ejecuta «alembic upgrade head» (o reinicia: se aplica al arrancar).",
+    migration_required: "Ejecuta «docker compose run --rm zascarr alembic upgrade head» (scripts/update.sh lo hace al actualizar).",
     schema_incompatible: "El esquema no coincide con el código: revisa la restauración o el rollback.",
   };
 

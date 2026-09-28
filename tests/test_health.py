@@ -136,3 +136,28 @@ class TestNo500PorEsquemaIncompleto:
         assert r.status_code == 503
         assert "Base de datos no lista" in r.text
         assert "/estado" in r.text
+
+
+class TestArranqueDegradado:
+
+    def test_bd_inaccesible_arranca_y_sirve_solo_diagnostico(self, monkeypatch):
+        """E6: si Postgres no conecta al arrancar, la app levanta igual pero
+        solo sirve diagnóstico — /api/health reporta `unreachable` y /ui/* falla
+        cerrado con 503, en vez de no arrancar y no servir nada."""
+        import zascarr.database as dbmod
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        bad_engine = create_async_engine(
+            "postgresql+asyncpg://nadie:nada@127.0.0.1:1/nada"
+        )
+        bad_sesion = async_sessionmaker(bad_engine, expire_on_commit=False)
+        monkeypatch.setattr(dbmod, "engine", bad_engine)
+        monkeypatch.setattr(dbmod, "async_session_factory", bad_sesion)
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            r_health = client.get("/api/health")
+            r_ui = client.get("/ui/")
+
+        assert r_health.status_code == 200
+        assert r_health.json()["checks"]["database"] == "unreachable"
+        assert r_ui.status_code == 503

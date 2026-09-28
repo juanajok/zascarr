@@ -29,7 +29,7 @@ import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from zascarr.config import Settings, get_settings
 
@@ -47,6 +47,10 @@ _PBKDF2_ITERATIONS = 260_000  # recomendación OWASP (2023) para PBKDF2-SHA256
 # no hay nada que proteger ahí).
 _RUTAS_EXENTAS = {"/login", "/api/health", "/legal", "/favicon.ico"}
 _PREFIJOS_EXENTOS = ("/static/",)
+
+# E6: en arranque degradado (BD inaccesible o sin migrar) solo se sirve
+# diagnóstico — estas rutas y los estáticos. Todo lo demás falla cerrado.
+_RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/login", "/legal"}
 
 
 def hash_password(password: str) -> str:
@@ -157,6 +161,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
     ningún cambio de comportamiento."""
 
     async def dispatch(self, request: Request, call_next):
+        # E6: arranque degradado — con configuración/credenciales desconocidas
+        # se falla cerrado y solo se sirve diagnóstico.
+        if getattr(request.app.state, "db_degraded", False):
+            path = request.url.path
+            if path in _RUTAS_DIAGNOSTICO or path.startswith(_PREFIJOS_EXENTOS):
+                return await call_next(request)
+            if path.startswith("/api/"):
+                return JSONResponse(
+                    status_code=503,
+                    content={"detail": "Base de datos no disponible — consulta /api/health"},
+                )
+            return HTMLResponse(
+                "<h1>Base de datos no lista</h1>"
+                "<p>El arranque no pudo conectar con PostgreSQL o el esquema no está migrado. "
+                '<a href="/estado">Consulta el estado del sistema</a>.</p>',
+                status_code=503,
+            )
+
         settings = get_settings()
         if settings.auth_mode == "none":
             return await call_next(request)
