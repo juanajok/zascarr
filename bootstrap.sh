@@ -506,3 +506,15 @@ echo "    docker compose -f ${COMPOSE_FILE} logs -f zascarr"
 echo ""
 curl -sf http://127.0.0.1:5000 >/dev/null 2>&1 || \
     warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${SCRIPT_DIR}/scripts/kavita.sh install"
+
+# ── A10: si esta máquina tiene ufw, comprobar que sus reglas no dejan fuera al
+# ── puente de Docker. El diagnóstico SOLO LEE (no ejecuta `ufw`) y propone el
+# ── comando con la subred real; nunca bloquea la instalación, que ya está
+# ── terminada en este punto.
+if command -v ufw >/dev/null 2>&1; then
+    if ! bash "${SCRIPT_DIR}/scripts/diagnostico-red.sh"; then
+        warn "Lo de arriba no es un fallo de la instalación: ZascArr funciona. Pero
+  si tienes ufw activo, puede no llegar a Prowlarr/Transmission/aMule hasta que
+  apliques la regla que te propone (no la he aplicado yo)."
+    fi
+fi
