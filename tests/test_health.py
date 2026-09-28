@@ -85,6 +85,9 @@ class TestHealthLatenciaAcotada:
             "zascarr.api.health._check_transmission", AsyncMock(return_value=True)
         ), patch(
             "zascarr.api.health._check_amule", AsyncMock(return_value=False)
+        ), patch(
+            "zascarr.api.health._database_status",
+            AsyncMock(return_value=("ok", "Conectada y migrada.")),
         ):
             with _fake_db_client() as client:
                 r = client.get("/api/health")
@@ -95,3 +98,66 @@ class TestHealthLatenciaAcotada:
         assert body["checks"]["transmission"] == "ok"
         assert body["checks"]["amule"] == "unreachable"
         assert body["status"] == "degraded"
+
+
+class TestAlembicHead:
+
+    def test_head_se_resuelve_desde_versions(self):
+        from zascarr.api.health import _alembic_head
+
+        head = _alembic_head()
+        assert head, "no se pudo resolver el head de alembic desde alembic/versions"
+
+
+class TestNo500PorEsquemaIncompleto:
+
+    def test_ui_devuelve_503_no_500_crudo_con_tabla_ausente(self):
+        """E6: una vista /ui/* con una tabla ausente degrada a un diagnóstico
+        (503 con enlace a /estado), no a un 500 crudo con traceback."""
+        from sqlalchemy.exc import ProgrammingError
+
+        class _Orig(Exception):
+            sqlstate = "42P01"  # undefined_table
+
+        class _SesionRota:
+            async def execute(self, _statement):
+                raise ProgrammingError("SELECT 1", {}, _Orig())
+
+        async def _get_db_rota():
+            yield _SesionRota()
+
+        app.dependency_overrides[get_db] = _get_db_rota
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            r = client.get("/ui/")
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert r.status_code == 503
+        assert "Base de datos no lista" in r.text
+        assert "/estado" in r.text
+
+
+class TestArranqueDegradado:
+
+    def test_bd_inaccesible_arranca_y_sirve_solo_diagnostico(self, monkeypatch):
+        """E6: si Postgres no conecta al arrancar, la app levanta igual pero
+        solo sirve diagnóstico — /api/health reporta `unreachable` y /ui/* falla
+        cerrado con 503, en vez de no arrancar y no servir nada."""
+        import zascarr.database as dbmod
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        bad_engine = create_async_engine(
+            "postgresql+asyncpg://nadie:nada@127.0.0.1:1/nada"
+        )
+        bad_sesion = async_sessionmaker(bad_engine, expire_on_commit=False)
+        monkeypatch.setattr(dbmod, "engine", bad_engine)
+        monkeypatch.setattr(dbmod, "async_session_factory", bad_sesion)
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            r_health = client.get("/api/health")
+            r_ui = client.get("/ui/")
+
+        assert r_health.status_code == 200
+        assert r_health.json()["checks"]["database"] == "unreachable"
+        assert r_ui.status_code == 503

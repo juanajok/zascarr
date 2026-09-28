@@ -5,9 +5,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import structlog
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
 
@@ -152,23 +153,38 @@ async def lifespan(app: FastAPI):
     from sqlalchemy import text
 
     from zascarr.database import async_session_factory, engine
-    async with engine.begin() as conn:
-        await conn.execute(text("SELECT 1"))
-    logger.info("zascarr.db_connected")
 
-    # D11: aplica los overrides de /ui/ajustes guardados en una ejecución
-    # anterior — sin esto, tras un reinicio real (deploy, reboot de la Pi)
-    # los ajustes seguirían en la BD pero no se verían hasta el primer
-    # guardado nuevo desde la UI.
-    from zascarr.services.runtime_settings import RuntimeSettingsService, load_overrides_at_startup
-    async with async_session_factory() as session:
-        await load_overrides_at_startup(session)
-        # A6: la cookie de sesión necesita una clave de firma estable —
-        # se genera y persiste UNA vez, la primera vez que hace falta,
-        # nunca hardcodeada ni dependiente de que alguien la ponga en
-        # .env a mano.
-        await RuntimeSettingsService(session).ensure_secret_key()
-        await session.commit()
+    # E6: arranque degradado. Si Postgres no conecta o el esquema no está, la
+    # app arranca igual pero SOLO sirve diagnóstico (lo aplica AuthMiddleware
+    # vía app.state.db_degraded). No se carga la configuración persistida
+    # (p. ej. auth_mode guardado en runtime_settings): con credenciales o
+    # configuración desconocidas se falla cerrado, no se abre una instalación
+    # cuya autenticación estaba activada en BD.
+    app.state.db_degraded = False
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+
+        # D11: aplica los overrides de /ui/ajustes guardados en una ejecución
+        # anterior — sin esto, tras un reinicio real (deploy, reboot de la Pi)
+        # los ajustes seguirían en la BD pero no se verían hasta el primer
+        # guardado nuevo desde la UI.
+        from zascarr.services.runtime_settings import (
+            RuntimeSettingsService,
+            load_overrides_at_startup,
+        )
+        async with async_session_factory() as session:
+            await load_overrides_at_startup(session)
+            # A6: la cookie de sesión necesita una clave de firma estable —
+            # se genera y persiste UNA vez, la primera vez que hace falta,
+            # nunca hardcodeada ni dependiente de que alguien la ponga en
+            # .env a mano.
+            await RuntimeSettingsService(session).ensure_secret_key()
+            await session.commit()
+        logger.info("zascarr.db_connected")
+    except Exception:
+        logger.exception("zascarr.db_unavailable_at_startup")
+        app.state.db_degraded = True
 
     background_tasks = [
         asyncio.create_task(_library_audit_task()),
@@ -183,6 +199,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # E6: al apagar (o al terminar un test que levantó la app degradada), se
+    # restablece la bandera para no contaminar el siguiente arranque.
+    app.state.db_degraded = False
     for task in background_tasks:
         task.cancel()
     for task in background_tasks:
@@ -254,6 +273,30 @@ def create_app() -> FastAPI:
         lambda: RedirectResponse("/ui/", status_code=307)
     )
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    @app.exception_handler(ProgrammingError)
+    async def _esquema_incompleto_handler(request: Request, exc: ProgrammingError):
+        """E6: una tabla ausente no debe ser un 500 crudo en /ui/*.
+
+        `undefined_table` (SQLSTATE 42P01) es la firma de "conecta pero el
+        esquema no está" (sin migrar o restauración a medias). Se degrada al
+        mismo diagnóstico que /api/health en vez de reventar."""
+        sqlstate = getattr(getattr(exc, "orig", None), "sqlstate", None)
+        if sqlstate == "42P01":
+            if request.url.path.startswith("/api/"):
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "detail": "Esquema de base de datos incompleto o sin migrar — consulta /api/health",
+                    },
+                )
+            return HTMLResponse(
+                "<h1>Base de datos no lista</h1>"
+                "<p>El esquema está incompleto o no se ha migrado. "
+                '<a href="/estado">Consulta el estado del sistema</a>.</p>',
+                status_code=503,
+            )
+        raise exc
 
     return app
 
