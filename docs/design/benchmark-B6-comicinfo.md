@@ -188,5 +188,85 @@ editorial/*imprint*, extensiones y qué campos no caben) — B6 fija solo el map
 
 **Decisión final / ADR:** no requiere ADR propio (operación de fichero, no de
 arquitectura); la frontera con B20 (hardlink + parche) ya está en su spec.
-**Esta ficha sigue siendo solo documental**: fija el contrato y los casos de
-prueba, no implementa aún la escritura.
+
+---
+
+## Endurecimiento tras la revisión de la PR #30 (2026-09-28)
+
+La primera implementación cumplía los puntos de arriba, pero la revisión
+encontró rutas que los tests no alcanzaban y que tocan **garantías centrales**
+(no perder datos, no dejar ficheros perpetuamente pendientes, reparar la BD tras
+un fallo, no pisarse entre escritores). Quedan fijadas como parte del contrato:
+
+14. **Un temporal, un escritor.** El temporal se crea con nombre **único** y de
+    forma **exclusiva** (`tempfile.mkstemp(dir=…, O_EXCL)`) en el mismo
+    directorio; nunca con un nombre fijo abierto en modo escritura, que
+    **truncaría** lo que hubiera en esa ruta (de otra ejecución o de una
+    anterior). Un temporal propio que quedara de un `kill -9` se limpia — pero
+    solo **con el bloqueo tomado**, momento en el que ninguna otra ejecución
+    puede estar escribiendo ese fichero.
+15. **Bloqueo por fichero, de la lectura al reemplazo, con identidad que
+    sobrevive al reemplazo.** La secuencia leer → planificar → reconstruir →
+    verificar → `os.replace` se serializa **por fichero**. Un `flock` sobre el
+    propio CBZ **no sirve**: el bloqueo va con el *inodo*, y `os.replace` instala
+    uno nuevo, así que quien llega después del reemplazo abre el inodo nuevo y
+    entra sin esperar al que todavía tiene el viejo; cuando el primero suelta, el
+    que esperaba adquiere el bloqueo de un inodo ya huérfano y **dos escritores
+    reconstruyen la misma ruta a la vez**, pudiendo además borrarse los
+    temporales entre sí. La identidad tiene que ser algo que no cambie al
+    reemplazar el fichero: aquí es un ***advisory lock* de PostgreSQL por
+    `File.id`**. Y tiene que ser `pg_advisory_xact_lock` (de **transacción**)
+    sobre una **conexión dedicada con su propia transacción corta**, no
+    `pg_advisory_lock` (de sesión): un bloqueo de sesión **sobrevive al
+    `ROLLBACK`** y solo lo suelta un `unlock` explícito o el fin de la conexión,
+    y devolver una conexión al *pool* la reinicia con `ROLLBACK` pero **no
+    termina necesariamente esa sesión de PostgreSQL** — así que un `unlock` que
+    falle (p. ej. porque la transacción quedó abortada) dejaría el bloqueo pegado
+    a una conexión reutilizable. El de transacción lo suelta el `COMMIT`/
+    `ROLLBACK` de esa transacción, pase lo que pase. La conexión es dedicada para
+    no meter el bloqueo en la transacción larga del lote (donde se retendría
+    hasta el commit final); así tampoco hay espera circular entre dos ficheros.
+    No deja ficheros de bloqueo en la biblioteca, y si el proceso muere la
+    conexión se cierra y PostgreSQL lo suelta solo. El «plan caduca» (punto 13)
+    cubre el cambio externo; el bloqueo cubre la carrera entre dos ZascArr.
+16. **`--limit` acota trabajo NUEVO, no vueltas sobre lo mismo.** Cada revisión
+    deja una **marca persistente** en `File.metadata_` (resultado, `stat` del
+    fichero, hash, y los valores deseados con los que se comparó). Un fichero
+    ya revisado y sin cambios **no gasta cupo** ni se vuelve a abrir. Sin esto,
+    una biblioteca de más de `limit` ficheros se quedaría mirando siempre los
+    mismos y **los últimos no recibirían nunca su turno**. La marca incluye los
+    datos de la BD, así que una corrección de metadatos **vuelve a poner el
+    fichero en la cola** (y el *overlay* la propaga). Los ficheros **ausentes**
+    tampoco gastan cupo: si no, unas cuantas rutas rotas dejarían fuera al
+    resto. **Matiz de uso:** las marcas solo se guardan al aplicar (`--apply`);
+    el `dry-run` —que es el modo por defecto— no escribe nada, tampoco en la BD,
+    así que repetir un `--dryrun --limit 20` vuelve a mostrar los mismos
+    pendientes. Para avanzar de verdad hay que aplicar.
+17. **Un `ComicInfo.xml` que no se entiende no se toca.** XML ilegible o con
+    raíz distinta de `<ComicInfo>` → `archivo inválido`: **no se fusiona ni se
+    sustituye** (sustituirlo sería perder lo que hubiera dentro) y el fallo se
+    registra **por fichero**, sin abortar el lote. Lo mismo para un `File` cuya
+    ruta ya no existe. Se marca como inválido para que no ocupe el cupo en cada
+    pasada, y se vuelve a mirar en cuanto el fichero cambie.
+18. **Un fallo de BD corta el lote, y lo dice.** Un error cualquiera de un
+    fichero se apunta como `error` y el lote sigue; pero si la sesión ha quedado
+    **inservible** (tras un `flush()` fallido, SQLAlchemy exige un `rollback()`
+    completo y ninguna operación posterior funciona), los ficheros siguientes
+    fallarían **todos** por la misma razón. En ese caso se revierte, se corta y
+    el informe lo declara —incluyendo cuántos ficheros ya se sustituyeron en
+    disco y que sus filas de `File` se reconcilian solas en la siguiente
+    pasada— en vez de encadenar errores fingiendo que la pasada salió bien. El
+    código de salida del comando administrativo es **distinto de cero**. (Se
+    evaluó aislar cada fichero con un `SAVEPOINT`; no sirve tal cual: la
+    mutación tiene que ocurrir **dentro** del savepoint, y aquí se hace antes
+    —en el camino que decide el plan—, así que la sesión queda envenenada igual
+    y haría falta reestructurar toda la escritura para cubrir un caso, el error
+    de BD por fila, que en este UPDATE no se da: los fallos reales son del motor
+    entero, y ésos no los salva ningún savepoint.)
+19. **Reconciliación por `stat` + `sha256`, nunca solo por tamaño.** «El
+    reemplazo salió bien pero el commit falló» se detecta comparando el `stat`
+    con la marca y, si no cuadra, recalculando el hash. Mirar **solo** el tamaño
+    deja el hash obsoleto para siempre cuando el XML nuevo mide lo mismo — y
+    hasta ahora eso exigía que alguien supiera usar `--reconciliar-todo`. La
+    pasada normal no paga un hash por fichero: paga un `stat`.
+
