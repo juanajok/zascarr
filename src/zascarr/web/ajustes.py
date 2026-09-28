@@ -121,7 +121,9 @@ async def guardar_fuentes(
         "anilist_enabled": anilist_enabled,
         "tebeosfera_enabled": tebeosfera_enabled,
     })
-    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Fuentes de enriquecimiento"})
+    return templates.TemplateResponse(
+        request, "_ajustes_guardado.html", {"nombre": "Fuentes de enriquecimiento"}
+    )
 
 
 @router.post("/guardar/prowlarr", response_class=HTMLResponse)
