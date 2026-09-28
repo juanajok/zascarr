@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     comicvine_base_url: str = "https://comicvine.gamespot.com/api"
     comicvine_rate_limit: float = 1.0
 
+    # ── Fuentes de enriquecimiento (on/off en caliente, B8) ─────────
+    # Activas por defecto. Apagar una desde /ui/ajustes no borra metadatos
+    # ya catalogados: solo deja de consultar esa API en el siguiente ciclo,
+    # y el intento omitido no se marca como búsqueda fallida (no consume el
+    # plazo de reintento de 30 días). Reutiliza el override runtime de D11.
+    comicvine_enabled: bool = Field(default=True)
+    anilist_enabled: bool = Field(default=True)
+    tebeosfera_enabled: bool = Field(default=True)
+
     # ── AniList API (manga/manhwa/manhua) ────────────────────────────
     # Sin API key: es pública. 1.5s es conservador a propósito — AniList
     # ha tenido temporadas en modo degradado (30 req/min en vez de 90).

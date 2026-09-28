@@ -37,6 +37,8 @@ from zascarr.models import RuntimeSetting
 # genérico de configuración.
 OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     "comic_vine": ("comicvine_api_key",),
+    # B8: fuentes de enriquecimiento on/off, independientes de la API key.
+    "fuentes": ("comicvine_enabled", "anilist_enabled", "tebeosfera_enabled"),
     "prowlarr": ("prowlarr_url", "prowlarr_api_key", "prowlarr_enabled"),
     "transmission": (
         "transmission_url", "transmission_username",

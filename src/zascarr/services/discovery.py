@@ -78,18 +78,24 @@ class DiscoveryService:
             return [], []
 
         avisos: list[str] = []
-        if not get_settings().comicvine_api_key:
+        settings = get_settings()
+        if settings.comicvine_enabled and not settings.comicvine_api_key:
             avisos.append(
                 "Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env "
                 "para incluirlo en la búsqueda."
             )
 
-        fuentes = (
-            ("Comic Vine", self._search_comic_vine(query, limit)),
-            ("AniList", self._search_anilist(query, limit)),
-            ("Tebeosfera", self._search_tebeosfera(query, limit)),
-            ("GCD", self._search_gcd(query, limit)),
-        )
+        # B8: «fuente apagada» vale en TODA ZascArr, también en Descubrir — una
+        # fuente desactivada no se instancia ni consulta, las demás sí.
+        fuentes = []
+        if settings.comicvine_enabled:
+            fuentes.append(("Comic Vine", self._search_comic_vine(query, limit)))
+        if settings.anilist_enabled:
+            fuentes.append(("AniList", self._search_anilist(query, limit)))
+        if settings.tebeosfera_enabled:
+            fuentes.append(("Tebeosfera", self._search_tebeosfera(query, limit)))
+        fuentes.append(("GCD", self._search_gcd(query, limit)))
+
         outcomes = await asyncio.gather(*(coro for _, coro in fuentes), return_exceptions=True)
 
         results: list[DiscoveryResult] = []
