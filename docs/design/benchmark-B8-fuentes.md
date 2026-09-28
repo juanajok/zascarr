@@ -42,12 +42,19 @@ enruta por `Series.tradition` sin ningún on/off.
 - Apagar no borra metadatos ya catalogados.
 - No marcar el intento omitido como `enrichment_attempted_at` (no consume el
   plazo de reintento de 30 días).
-- Reactivar → vuelve a ser elegible según la regla de reintento existente.
+- Reactivar → vuelve a ser elegible según la regla de reintento existente
+  (cooldown de 30 días). **No** resetea la caché negativa: una serie con un
+  intento negativo reciente sigue en cooldown aunque la fuente se reactivase;
+  la UI lo explica.
 
 **Casos de prueba antes de implementar:**
 - Fuente apagada → su cliente no se instancia ni se llama (cero tráfico) y la
   serie pendiente NO queda marcada como intentada.
-- Reactivar tras una caché negativa antigua → la serie vuelve a ser elegible.
+- Fuente apagada con muchas series pendientes NO acapara el lote (20 apagadas
+  + 1 activa → la activa tiene turno).
+- Reactivar respeta el cooldown (un intento negativo reciente sigue sin
+  re-seleccionarse); un intento NULL/antiguo vuelve a ser elegible.
+- Descubrir también respeta el flag (apagada = no se consulta; las demás sí).
 - `OVERRIDABLE_FIELDS` acepta los tres flags y `/ui/ajustes` los persiste.
 
 **Decisión final / ADR:** no requiere ADR (no cambia arquitectura; reutiliza D11).

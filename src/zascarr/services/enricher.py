@@ -156,7 +156,18 @@ class EnrichmentService:
     async def _enrich_series_batch(self, cv_client: ComicVineClient, anilist_client: AniListClient,
                                     tebeosfera_client: TebeosferaClient, limit: int,
                                     report: EnrichmentReport) -> None:
-        pending = (await self.db.execute(
+        # B8: excluir ANTES del LIMIT las tradiciones cuya fuente está
+        # desactivada (cliente None). Si no, p. ej. 20 mangas con AniList
+        # apagada acapararían el lote y dejarían sin turno a un tebeo activo.
+        desactivadas: list[ComicTradition] = []
+        if cv_client is None:
+            desactivadas.extend(_COMIC_VINE_TRADITIONS)
+        if anilist_client is None:
+            desactivadas.extend(_ANILIST_TRADITIONS)
+        if tebeosfera_client is None:
+            desactivadas.extend(_TEBEOSFERA_TRADITIONS)
+
+        stmt = (
             select(Series)
             .where(Series.comic_vine_id.is_(None))
             .where(Series.anilist_id.is_(None))
@@ -166,8 +177,10 @@ class EnrichmentService:
                 Series.enrichment_attempted_at.is_(None),
                 Series.enrichment_attempted_at < datetime.now(UTC) - ENRICHMENT_RETRY_AFTER,
             ))
-            .limit(limit)
-        )).scalars().all()
+        )
+        if desactivadas:
+            stmt = stmt.where(Series.tradition.not_in(desactivadas))
+        pending = (await self.db.execute(stmt.limit(limit))).scalars().all()
 
         for series in pending:
             source = self._source_for(series.tradition)

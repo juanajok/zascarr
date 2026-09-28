@@ -801,7 +801,9 @@ class TestFuentesDesactivadas:
 
     @pytest.mark.asyncio
     async def test_reactivar_vuelve_a_enriquecer(self):
-        """B8: tras apagar (que no marcó intento), reactivar la vuelve elegible."""
+        """B8: tras apagar (que no marcó intento), reactivar la vuelve elegible
+        CUANDO el intento era NULL. Un intento negativo reciente seguiría bajo
+        su cooldown de 30 días (contrato documentado; ver test_b8_pg)."""
         series = make_series("Berserk", tradition=ComicTradition.MANGA)
         await EnrichmentService(db=FakeSession([FakeExecResult([series])]))._enrich_series_batch(
             AsyncMock(), None, AsyncMock(), 10, EnrichmentReport())
