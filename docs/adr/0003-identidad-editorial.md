@@ -8,7 +8,10 @@
 B22 pedía medir la biblioteca real y cerrar, en un solo ADR, las cuatro
 decisiones del modelo de identidad editorial antes de tocar el esquema. No hay
 entorno local de BD, pero el coleccionista aportó el **listado real del disco**
-(`find` de `/media/WDElements/Tebeos`). Ese listado es más revelador para esta
+(`find` de `/media/WDElements/Tebeos`). Aportó además un **segundo listado**: la
+carpeta de **descargas** (no la tebeoteca), que confirma y amplía los mismos
+patrones con el caso Dreadstar (tres ediciones renumeradas) y ruido de descarga
+(`(1)` de redescarga, `.part`, doble extensión). Ese listado es más revelador para esta
 pregunta que el censo de columnas: las columnas de la BD que íbamos a medir
 (`volume IS NULL`, `covered_issue_ids`) las conocemos por código — `covered_issue_ids`
 se escribe siempre **vacío** en importación y adopción —, mientras que el
@@ -40,7 +43,13 @@ ordenar y desambiguar, no para sustituir al texto:
 **Evidencia (biblioteca real).** `Superman Vol2 123a/123b/123c` y
 `Animal Man (NuDC) 02a/02b/02c` (sufijos); `Superman Vol2 Especial 1–8` y
 `Flash v2 Annual 01–13` (especiales); `Patrulla-X, nº 03 (122)` (renumeración);
-`Superman Vol2 049-051a` y `Flash v2 164-169` (rangos).
+`Superman Vol2 049-051a` y `Flash v2 164-169` (rangos). De la carpeta de
+descargas se suman: **Dreadstar en tres ediciones renumeradas** (`Epic Comics
+01–26 Ed.Forum`, `First Comics 27–64 USA`, `Malibu/Norma 01–06`);
+`Transmetropolitan #01 … 1 de 4` («X de Y» = parte de un arco, no número de
+grapa); `GunSmith Cats [P1N1]…[P3N9]` (codificación parte/número);
+`M0N57R355 01 al 05` (rango en español); y ruido de descarga — sufijo `(1)` de
+redescarga, `.part`, doble extensión `.cbr.zip`.
 
 **Alternativa descartada.** Forzar todo a un `float` (el `sort_order` truncado ya
 documentado: `123a` → `123` colisiona con `123`), o inventar un `0` para «sin
@@ -62,7 +71,12 @@ una edición la publica un sello distinto del de la serie.
 (`Superman Vol2 NNN`) — un duplicado, no dos ediciones. El sello «Zinco» es
 atributo; la identidad editorial es «Superman Vol2». Frente a eso,
 `Patrulla-X (Panini)` (reimpresión `nº 03 (122)`), `La Patrulla X Omnigold` y
-`La Imposible Patrulla X` son **tres ediciones reales** de la misma serie.
+`La Imposible Patrulla X` son **tres ediciones reales** de la misma serie. El
+caso más limpio lo da **Dreadstar** en la carpeta de descargas: `Dreadstar
+(Epic Comics)(01 Ed.Forum)…(26)`, `Dreadstar (First Comics) 27 USA…64 USA` y
+`Jim Starlin's Dreadstar (Malibu Comics)(01 Ed.Norma)…(06)` — **tres ediciones
+de la misma serie**, cada una con su numeración y su sello en el nombre; el
+sello es dato, la edición es el espacio de numeración.
 
 **Alternativa descartada.** Modelar cada sello como una edición (dobla filas
 para el mismo contenido) o usar `kind` solo como identidad (falla cuando hay dos
