@@ -173,7 +173,7 @@
           <option value="telegram" {% if webhook_type == "telegram" %}selected{% endif %}>Telegram</option>
         </select>
       </label>
-      <label>URL
+      <label>URL (no se usa en Telegram)
         <input type="text" name="webhook_url" value="{{ webhook_url }}" placeholder="https://ntfy.sh/mi-tema">
       </label>
       <label>Token / clave (Gotify, ntfy o bot de Telegram)
@@ -183,6 +183,7 @@
       <label>Chat ID (solo Telegram)
         <input type="text" name="webhook_chat_id" value="{{ webhook_chat_id }}" placeholder="123456789">
       </label>
+      <p class="ajustes-hint">Telegram solo necesita el token del bot y el chat ID: ZascArr construye la URL de su API, así que el campo «URL» se ignora en ese caso.</p>
       <label class="legal-checkbox">
         <input type="checkbox" name="webhook_enabled" value="true" {% if webhook_enabled %}checked{% endif %}>
         Activar avisos de importación

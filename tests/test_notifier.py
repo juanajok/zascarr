@@ -74,7 +74,7 @@ class TestNotifier:
         assert b"a.cbz" in req.content
 
     @pytest.mark.asyncio
-    async def test_gotify_pone_token_en_query(self):
+    async def test_gotify_usa_cabecera_no_query(self):
         transport, calls = _receptor()
         async with httpx.AsyncClient(transport=transport) as client:
             await Notifier(
@@ -83,7 +83,10 @@ class TestNotifier:
             ).notify_imported(["a.cbz"])
         assert len(calls) == 1
         assert str(calls[0].url).startswith("https://example.test/hook/message")
-        assert "token=tok-secreto" in str(calls[0].url)
+        # El token va en cabecera, no en la URL (evita logs de acceso de
+        # Gotify o de un proxy intermedio).
+        assert calls[0].headers.get("X-Gotify-Key") == "tok-secreto"
+        assert "tok-secreto" not in str(calls[0].url)
 
     @pytest.mark.asyncio
     async def test_ntfy_usa_cabecera_title(self):
@@ -95,16 +98,32 @@ class TestNotifier:
         assert calls[0].headers.get("title", "").startswith("ZascArr")
 
     @pytest.mark.asyncio
-    async def test_telegram_usa_bot_y_chat_id(self):
+    async def test_telegram_sin_url_envia_con_token_y_chat_id(self):
+        """Telegram construye la URL con el token del bot: NO exige `webhook_url`
+        (antes se quedaba en silencio si esa casilla estaba vacía)."""
         transport, calls = _receptor()
         async with httpx.AsyncClient(transport=transport) as client:
             await Notifier(
-                settings=_cfg(webhook_type="telegram", webhook_token="BOT",
-                              webhook_chat_id="123"),
+                settings=_cfg(webhook_type="telegram", webhook_url="",
+                              webhook_token="BOT", webhook_chat_id="123"),
                 client=client,
             ).notify_imported(["a.cbz"])
+        assert len(calls) == 1
         assert "/botBOT/sendMessage" in str(calls[0].url)
         assert b"123" in calls[0].content
+
+    @pytest.mark.asyncio
+    async def test_telegram_sin_credenciales_no_envia_y_avisa(self):
+        transport, calls = _receptor()
+        async with httpx.AsyncClient(transport=transport) as client:
+            with capture_logs() as logs:
+                await Notifier(
+                    settings=_cfg(webhook_type="telegram", webhook_url="",
+                                  webhook_token="", webhook_chat_id=""),
+                    client=client,
+                ).notify_imported(["a.cbz"])
+        assert calls == []
+        assert any(log.get("event") == "notifier.misconfigured" for log in logs)
 
     @pytest.mark.asyncio
     async def test_fallo_no_propaga(self):
@@ -123,6 +142,38 @@ class TestNotifier:
                 ).notify_imported(["a.cbz"])
         assert any(log.get("event") == "notifier.send_failed" for log in logs)
         assert "tok-secreto" not in str(logs)
+
+    @pytest.mark.asyncio
+    async def test_http_401_cuenta_como_fallo(self):
+        """Un 4xx/5xx NO es un envío correcto: debe registrarse como fallo."""
+        transport, _ = _receptor(status=401)
+        async with httpx.AsyncClient(transport=transport) as client:
+            with capture_logs() as logs:
+                await Notifier(
+                    settings=_cfg(webhook_token="tok-secreto"), client=client
+                ).notify_imported(["a.cbz"])
+        assert any(log.get("event") == "notifier.send_failed" for log in logs)
+        assert "tok-secreto" not in str(logs)
+
+    @pytest.mark.asyncio
+    async def test_http_500_cuenta_como_fallo(self):
+        transport, _ = _receptor(status=500)
+        async with httpx.AsyncClient(transport=transport) as client:
+            with capture_logs() as logs:
+                await Notifier(settings=_cfg(), client=client).notify_imported(["a.cbz"])
+        assert any(log.get("event") == "notifier.send_failed" for log in logs)
+
+    @pytest.mark.asyncio
+    async def test_cliente_propio_tambien_comprueba_el_estado(self, monkeypatch):
+        """El camino sin cliente inyectado (producción) también debe hacer
+        `raise_for_status`: un 500 no puede pasar por bueno."""
+        transport, calls = _receptor(status=500)
+        real = httpx.AsyncClient
+        monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: real(transport=transport))
+        with capture_logs() as logs:
+            await Notifier(settings=_cfg()).notify_imported(["a.cbz"])
+        assert len(calls) == 1
+        assert any(log.get("event") == "notifier.send_failed" for log in logs)
 
 
 class _FakeSession:
