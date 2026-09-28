@@ -92,6 +92,11 @@ def _contexto() -> dict:
         "auth_username": s.auth_username,
         "auth_password_configurada": bool(s.auth_password_hash),
         "base_url": s.base_url,
+        "webhook_enabled": s.webhook_enabled,
+        "webhook_type": s.webhook_type,
+        "webhook_url": s.webhook_url,
+        "webhook_token_configurado": bool(s.webhook_token),
+        "webhook_chat_id": s.webhook_chat_id,
     }
 
 
@@ -107,6 +112,26 @@ async def guardar_comic_vine(
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({"comicvine_api_key": comicvine_api_key})
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Comic Vine"})
+
+
+@router.post("/guardar/avisos", response_class=HTMLResponse)
+async def guardar_avisos(
+    request: Request,
+    webhook_enabled: bool = Form(default=False),
+    webhook_type: str = Form(default="generic"),
+    webhook_url: str = Form(default=""),
+    webhook_token: str = Form(default=""),
+    webhook_chat_id: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    await RuntimeSettingsService(db).save({
+        "webhook_enabled": webhook_enabled,
+        "webhook_type": webhook_type,
+        "webhook_url": webhook_url.rstrip("/"),
+        "webhook_token": webhook_token,
+        "webhook_chat_id": webhook_chat_id,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Avisos"})
 
 
 @router.post("/guardar/fuentes", response_class=HTMLResponse)

@@ -161,6 +161,39 @@
     <div id="resultado-seguridad"></div>
   </fieldset>
 
+  <fieldset class="ajustes-card">
+    <legend>Avisos</legend>
+    <p class="ajustes-desc">Aviso al móvil cuando se completa una importación (Gotify, ntfy, Telegram o una URL genérica). Apagado por defecto. Entrega de mejor esfuerzo: si el destino está caído o lento, la importación no se ve afectada.</p>
+    <form hx-post="/ui/ajustes/guardar/avisos" hx-target="#resultado-avisos" hx-swap="innerHTML">
+      <label>Tipo
+        <select name="webhook_type">
+          <option value="generic" {% if webhook_type == "generic" %}selected{% endif %}>URL genérica (JSON)</option>
+          <option value="gotify" {% if webhook_type == "gotify" %}selected{% endif %}>Gotify</option>
+          <option value="ntfy" {% if webhook_type == "ntfy" %}selected{% endif %}>ntfy</option>
+          <option value="telegram" {% if webhook_type == "telegram" %}selected{% endif %}>Telegram</option>
+        </select>
+      </label>
+      <label>URL
+        <input type="text" name="webhook_url" value="{{ webhook_url }}" placeholder="https://ntfy.sh/mi-tema">
+      </label>
+      <label>Token / clave (Gotify, ntfy o bot de Telegram)
+        <input type="password" name="webhook_token" autocomplete="off"
+               placeholder="{{ 'ya configurado — deja en blanco para no cambiarlo' if webhook_token_configurado else 'sin configurar' }}">
+      </label>
+      <label>Chat ID (solo Telegram)
+        <input type="text" name="webhook_chat_id" value="{{ webhook_chat_id }}" placeholder="123456789">
+      </label>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="webhook_enabled" value="true" {% if webhook_enabled %}checked{% endif %}>
+        Activar avisos de importación
+      </label>
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+    <div id="resultado-avisos"></div>
+  </fieldset>
+
 </div>
 
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
