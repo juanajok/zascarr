@@ -24,7 +24,9 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
   **respeta** lo que ya existe y escribe `ComicInfo.xml` como **una sola**
   entrada. Distingue estrategias de **overlay** (la fuente manda) y **add
   missing** (solo rellenar vacíos) — **no son equivalentes** y la elección es
-  justo la decisión 1 de abajo. Versión/commit no fijado.
+  justo la decisión 1 de abajo. Aporta además **`--dryrun`/`--no-overwrite`** y
+  operaciones por lotes, que se adoptan como **previsualización por campo** y
+  **modo de prueba** (punto 10). Versión/commit no fijado.
 - **Mylar3** (GPL-3.0): anuncia escritura de ComicInfo tras enriquecer.
 - **Sonarr/Radarr**: escriben `.nfo` **al lado**, no reescriben el archivo de
   medios — no sirven de patrón para «modificar el contenedor».
@@ -91,6 +93,18 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
    desde una exportación se respeta (B20 ya decide `copy` si se va a parchear).
 9. **Nada bloqueante en el loop async.** `zipfile` + disco van a
    `asyncio.to_thread` (CLAUDE.md §4).
+10. **Previsualización por campo y modo de prueba (`dry-run`).** Antes de
+    reescribir un CBZ, se calcula y se muestra **campo a campo** qué haría la
+    política de precedencia: `cambiará`, `se conserva` (procedencia
+    desconocida) o `ya coincide`. Con `--dryrun` **no se escribe nada** y se
+    emite el mismo informe. Patrón tomado de ComicTagger (`--dryrun`,
+    `--no-overwrite`); es la forma de **probar la precedencia sin tocar la
+    colección**.
+11. **Informe por lote.** Un ciclo produce un resumen legible: **escritos**,
+    **omitidos por bloqueo manual**, **archivo inválido**, **espacio
+    insuficiente**, **fallo de verificación** y **saltados** (ya al día). Un
+    error de etiquetado **nunca** se convierte en pérdida de un tebeo ni aborta
+    el lote entero.
 
 **Invariantes de ZascArr:**
 - El original **no se borra ni se trunca** hasta que el reemplazo está
@@ -111,6 +125,23 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
   reetiquetado idempotente y el siguiente ciclo reconcilia el hash.
 - **`.cbr`** → no se toca.
 - **Campo en `locked_fields`** → no se sobrescribe.
+- **`dry-run`:** con cambios pendientes, el informe lista los campos
+  (`cambiará`/`se conserva`/`ya coincide`) y **no se escribe nada** (mtime y
+  `sha256` del CBZ intactos).
+
+**Alcance — lo que NO se copia de ComicTagger:**
+- Su **GUI de escritorio** (ZascArr no tiene SPA ni escritorio).
+- El **etiquetado automático agresivo**: aquí la identidad se valida y la
+  precedencia protege lo manual.
+- La **escritura de CBR**: B6 no parchea RAR (decisión de B20).
+- No se asume que todo lo que enumera su wiki antigua siga vigente (algunas
+  familias de etiquetas pasaron a complementos archivados).
+
+**Fuera de B6 (otras historias, no se duplican aquí):** identificación asistida
+por **portada** como segunda señal (nunca autoasignación: si hay varias portadas
+o baja confianza → Pendientes); **plantillas de renombrado** (ya es **B9**);
+**mapa explícito de campos** ZascArr → ComicInfo (roles, idioma,
+editorial/*imprint* y qué campos no caben) — más adelante.
 
 **Decisión final / ADR:** no requiere ADR propio (operación de fichero, no de
 arquitectura); la frontera con B20 (hardlink + parche) ya está en su spec.
