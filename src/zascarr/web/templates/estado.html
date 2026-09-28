@@ -32,14 +32,26 @@
   };
 
   const CHECK_TEXT = {
-    database:     { ok: "Conectada",  error: "Sin conexión" },
+    database: {
+      ok: "Conectada y migrada",
+      unreachable: "Sin conexión con PostgreSQL",
+      migration_required: "Conectada, migración pendiente",
+      schema_incompatible: "Conectada, esquema incompleto",
+    },
     transmission: { ok: "Conectado",  unreachable: "No disponible" },
     amule:        { ok: "Conectado",  unreachable: "No disponible" },
     vpn:          { ok: "Activa", warning: "Sin proteger", unknown: "Sin datos" },
   };
 
+  const CHECK_ACTION = {
+    unreachable: "Comprueba que PostgreSQL está corriendo y que la URL de conexión es correcta.",
+    migration_required: "Ejecuta «docker compose run --rm zascarr alembic upgrade head» (scripts/update.sh lo hace al actualizar).",
+    schema_incompatible: "El esquema no coincide con el código: revisa la restauración o el rollback.",
+  };
+
   const CHECK_LEVEL = {
     ok: "ok", error: "bad", unreachable: "bad",
+    migration_required: "bad", schema_incompatible: "bad",
     warning: "warn", unknown: "warn",
   };
 
@@ -64,6 +76,7 @@
       const raw = checks[key];
       const level = CHECK_LEVEL[raw] || "neutral";
       const text = (CHECK_TEXT[key] && CHECK_TEXT[key][raw]) || "Sin datos";
+      const action = (key === "database" && CHECK_ACTION[raw]) || "";
       if (level !== "ok") detailParts.push(CHECK_LABELS[key]);
 
       const row = document.createElement("div");
@@ -71,7 +84,8 @@
       row.innerHTML =
         '<div class="estado-dot estado-dot-sm estado-' + level + '"></div>' +
         '<div class="estado-check-name">' + CHECK_LABELS[key] + "</div>" +
-        '<div class="estado-check-status">' + text + "</div>";
+        '<div class="estado-check-status">' + text +
+          (action ? '<div class="caption">' + action + "</div>" : "") + "</div>";
       checksEl.appendChild(row);
     }
 
