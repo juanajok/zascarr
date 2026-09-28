@@ -24,7 +24,9 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
   **respeta** lo que ya existe y escribe `ComicInfo.xml` como **una sola**
   entrada. Distingue estrategias de **overlay** (la fuente manda) y **add
   missing** (solo rellenar vacíos) — **no son equivalentes** y la elección es
-  justo la decisión 1 de abajo. Versión/commit no fijado.
+  justo la decisión 1 de abajo. Aporta además **`--dryrun`/`--no-overwrite`** y
+  operaciones por lotes, que se adoptan como **previsualización por campo** y
+  **modo de prueba** (punto 10). Versión/commit no fijado.
 - **Mylar3** (GPL-3.0): anuncia escritura de ComicInfo tras enriquecer.
 - **Sonarr/Radarr**: escriben `.nfo` **al lado**, no reescriben el archivo de
   medios — no sirven de patrón para «modificar el contenedor».
@@ -91,6 +93,49 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
    desde una exportación se respeta (B20 ya decide `copy` si se va a parchear).
 9. **Nada bloqueante en el loop async.** `zipfile` + disco van a
    `asyncio.to_thread` (CLAUDE.md §4).
+10. **Previsualización por campo y modo de prueba (`dry-run`).** Antes de
+    reescribir un CBZ, se calcula y se muestra **campo a campo** qué haría la
+    política de precedencia: `cambiará`, `se conserva` (procedencia
+    desconocida) o `ya coincide`. Con `--dryrun` **no se escribe nada** y se
+    emite el mismo informe. Patrón tomado de ComicTagger (`--dryrun`,
+    `--no-overwrite`); es la forma de **probar la precedencia sin tocar la
+    colección**.
+11. **Informe por lote.** Un ciclo produce un resumen legible: **escritos**,
+    **omitidos por bloqueo manual**, **archivo inválido**, **espacio
+    insuficiente**, **fallo de verificación** y **saltados** (ya al día). Un
+    error de etiquetado **nunca** se convierte en pérdida de un tebeo ni aborta
+    el lote entero.
+12. **Dónde vive la simulación y una sola fuente del plan.** La simulación se
+    invoca **al menos desde un comando administrativo** (script ejecutable en la
+    Pi) que imprime el plan por campo; la UI podrá renderizar **el mismo** plan
+    más adelante. Invariante: **una sola función calcula el plan de cambios**, y
+    tanto la vista previa (`--dryrun`) como la ejecución real lo **consumen** —
+    nunca dos caminos que puedan divergir.
+13. **El plan caduca si el archivo cambia.** Entre el `dry-run` y la ejecución,
+    el CBZ puede haber cambiado (otro proceso, el usuario, un reescaneo). Antes
+    de sustituir se comprueba que el fichero es **el mismo** con el que se
+    calculó el plan (tamaño + `sha256`/mtime); si difiere, el plan se
+    **recalcula o se invalida** — nunca se aplica a un CBZ distinto del que se
+    previsualizó.
+
+**Mapa mínimo de campos (B6).** B6 no puede previsualizar «qué cambiará» sin
+saber **qué escribe**. Este es el mínimo que fija la ficha; el ampliado queda
+fuera (ver «Fuera de B6»).
+
+| Campo ComicInfo | Origen en ZascArr | Regla | Si falta el dato |
+|---|---|---|---|
+| `Series` | `Series.title` | procedencia (punto 1) | no se escribe |
+| `Number` | `Issue.issue_number` | procedencia | no se escribe |
+| `Volume` | `Issue.volume` | procedencia | no se escribe (`volume` NULL) |
+| `Year` | **año de `Issue.release_date`** (fecha de publicación **del ejemplar**, no `Series.start_year`) | procedencia | `sin dato`; se conserva un `Year` manual existente |
+| `Publisher` | `Series.publisher.name` | procedencia | no se escribe |
+| `Summary` | `Issue.synopsis` | procedencia | no se escribe |
+| `LanguageISO` | **no se genera**: no se infiere de la tradición (manga/tebeo/grapa no acredita el idioma del ejemplar); si el XML ya lo trae, es **preservación** | — | `sin dato`; se conserva el existente |
+
+Ninguno se **inventa**: sin dato, el campo no se escribe (o se conserva el
+existente) y el informe lo marca **`sin dato`** (no `cambiará`). La regla de
+`Year` y `LanguageISO` es deliberadamente conservadora: la fecha y el idioma de
+**este** ejemplar no se deducen de la serie ni de su tradición.
 
 **Invariantes de ZascArr:**
 - El original **no se borra ni se trunca** hasta que el reemplazo está
@@ -111,6 +156,35 @@ ZascArr conoce hoy del esquema: `Series`, `Number`, `Volume`, `Year`,
   reetiquetado idempotente y el siguiente ciclo reconcilia el hash.
 - **`.cbr`** → no se toca.
 - **Campo en `locked_fields`** → no se sobrescribe.
+- **`dry-run`:** con cambios pendientes, el informe lista los campos
+  (`cambiará`/`se conserva`/`ya coincide`) y **no se escribe nada** (mtime y
+  `sha256` del CBZ intactos).
+- **Un solo plan:** el plan que emite el `dry-run` y el que aplica la ejecución
+  real son **el mismo** (una sola función); no hay dos caminos que divergan.
+- **`Year`:** con `Issue.release_date` → se escribe **ese** año (no
+  `Series.start_year`); sin `release_date` → `sin dato` y un `Year` manual
+  existente queda **intacto**.
+- **`LanguageISO`:** **no** se genera desde la tradición (una serie `manga` sin
+  idioma explícito **no** produce `LanguageISO`); si el XML ya lo trae, se
+  **preserva**; si no, `sin dato`.
+- **Plan caduco:** si el CBZ cambia entre el `dry-run` y la ejecución
+  (tamaño/hash distintos), el plan se **recalcula o se invalida** y **no** se
+  sustituye con la decisión antigua.
+
+**Alcance — lo que NO se copia de ComicTagger:**
+- Su **GUI de escritorio** (ZascArr no tiene SPA ni escritorio).
+- El **etiquetado automático agresivo**: aquí la identidad se valida y la
+  precedencia protege lo manual.
+- La **escritura de CBR**: B6 no parchea RAR (decisión de B20).
+- No se asume que todo lo que enumera su wiki antigua siga vigente (algunas
+  familias de etiquetas pasaron a complementos archivados).
+
+**Fuera de B6 (otras historias, no se duplican aquí):** identificación asistida
+por **portada** como segunda señal (nunca autoasignación: si hay varias portadas
+o baja confianza → Pendientes); **plantillas de renombrado** (ya es **B9**); y
+el **mapa ampliado** de campos ZascArr → ComicInfo (roles de crédito,
+editorial/*imprint*, extensiones y qué campos no caben) — B6 fija solo el mapa
+**mínimo** de arriba.
 
 **Decisión final / ADR:** no requiere ADR propio (operación de fichero, no de
 arquitectura); la frontera con B20 (hardlink + parche) ya está en su spec.
