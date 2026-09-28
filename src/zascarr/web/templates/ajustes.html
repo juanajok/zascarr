@@ -8,7 +8,7 @@
 
   <fieldset class="ajustes-card">
     <legend>Fuentes de metadatos</legend>
-    <p class="ajustes-desc">Activa o desactiva cada fuente (en toda ZascArr, también en Descubrir). Desactivar no borra lo ya catalogado: solo deja de consultar esa API. Al reactivar, una serie ya intentada recientemente espera su plazo de reintento (30 días); no se resetea la caché.</p>
+    <p class="ajustes-desc">Activa o desactiva cada fuente (en toda ZascArr, también en Descubrir). Desactivar no borra lo ya catalogado: solo deja de consultar esa API. En las fuentes que enriquecen (Comic Vine, AniList, Tebeosfera), al reactivar una serie ya intentada recientemente espera su plazo de reintento (30 días); no se resetea la caché. GCD, por ahora, solo busca — no enriquece.</p>
     <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
       <label class="legal-checkbox">
         <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>
