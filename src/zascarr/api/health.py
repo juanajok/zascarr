@@ -26,12 +26,15 @@ import re
 import time
 from pathlib import Path
 
+import structlog
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+
+logger = structlog.get_logger()
 
 router = APIRouter(tags=["health"])
 
@@ -132,8 +135,11 @@ async def _database_status(db: AsyncSession) -> tuple[str, str]:
     | schema_incompatible | ok. Devuelve también un detalle en español."""
     try:
         await db.execute(text("SELECT 1"))
-    except Exception as exc:
-        return "unreachable", f"No se puede conectar con PostgreSQL: {exc}"
+    except Exception:
+        # El detalle de la excepción (DSN, SQL, credenciales) se queda en el
+        # servidor; /api/health es público y no debe exponerlo.
+        logger.exception("health.db_unreachable")
+        return "unreachable", "No se puede conectar con PostgreSQL."
 
     head = _alembic_head()
     try:
@@ -148,7 +154,12 @@ async def _database_status(db: AsyncSession) -> tuple[str, str]:
             "migration_required",
             "Conecta con PostgreSQL pero no hay esquema: ejecuta `alembic upgrade head`.",
         )
-    if head and version_num != head:
+    if head is None:
+        return (
+            "schema_incompatible",
+            "No se puede determinar el head de Alembic (¿falta alembic/versions o hay varios heads?).",
+        )
+    if version_num != head:
         return (
             "migration_required",
             f"Migración pendiente: la BD está en {version_num} y el código espera {head} "

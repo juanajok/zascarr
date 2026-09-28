@@ -111,3 +111,35 @@ class TestDatabaseStatusPg:
         finally:
             await engine.dispose()
         assert estado == "unreachable"
+
+    @pytest.mark.asyncio
+    async def test_head_desconocido_no_da_ok(self, db, monkeypatch):
+        """«No sé cuál es el head» debe ser diagnosticable, nunca `ok`."""
+        await _montar(db, "0014", _DOMAIN_TABLES)  # tablas y versión presentes
+        monkeypatch.setattr("zascarr.api.health._alembic_head", lambda: None)
+        estado, _ = await _database_status(db)
+        assert estado == "schema_incompatible"
+
+
+class TestArranqueDegradadoPg:
+
+    def test_bd_sin_esquema_arranca_y_sirve_solo_diagnostico(self, monkeypatch):
+        """E6: contra una BD real SIN migrar, la app arranca degradada y
+        /api/health reporta `migration_required`; /ui/* falla cerrado con 503."""
+        import zascarr.database as dbmod
+        from fastapi.testclient import TestClient
+
+        from zascarr.main import app
+
+        engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+        sesion = async_sessionmaker(engine, expire_on_commit=False)
+        monkeypatch.setattr(dbmod, "engine", engine)
+        monkeypatch.setattr(dbmod, "async_session_factory", sesion)
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            r_health = client.get("/api/health")
+            r_ui = client.get("/ui/")
+
+        assert r_health.status_code == 200
+        assert r_health.json()["checks"]["database"] == "migration_required"
+        assert r_ui.status_code == 503
