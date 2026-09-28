@@ -179,6 +179,16 @@ ZASCARR_DATA_DIR="${ZASCARR_DATA_DIR:-/var/lib/zascarr}"
 # Compose vive en el repo; se invoca con -f explícito para no depender del cwd.
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
+# A9: comprobación de rutas efectivas (biblioteca vs. cola de entrada). Vive en
+# scripts/ porque la usa el instalador en el HOST, antes de que exista nada: no
+# puede depender de que pip haya instalado el paquete de Python.
+RUTAS_SH="${SCRIPT_DIR}/scripts/_rutas.sh"
+if [[ ! -f "${RUTAS_SH}" ]]; then
+    die "No encuentro ${RUTAS_SH}. ¿Está el repo completo clonado?"
+fi
+# shellcheck source=scripts/_rutas.sh
+source "${RUTAS_SH}"
+
 [[ "${EUID}" -eq 0 ]] || die \
     "Este instalador necesita permisos de administrador. Ejecútalo así:
   sudo bash ${SCRIPT_DIR}/bootstrap.sh"
@@ -275,6 +285,43 @@ HOST_LIBRARY_DIR="${LIBRARY}"
 # tal cual, para las dos.
 HOST_DOWNLOADS_DIR="${DOWNLOADS_ROOT}"
 HOST_AMULE_INCOMING_DIR="${DOWNLOADS_ROOT}"
+
+# ── A9: ¿la biblioteca y la cola de entrada son la misma carpeta (o una
+# ── dentro de la otra)? Se compara la ruta EFECTIVA —symlinks resueltos—,
+# ── no el texto que se escribió, y NO se cambia nada: si hay solapamiento,
+# ── decide el coleccionista.
+info "Comprobando las rutas efectivas (siguiendo symlinks)..."
+ESTADO_RUTAS=0
+comprobar_solapamiento "${HOST_LIBRARY_DIR}" "${HOST_DOWNLOADS_DIR}" \
+    "${HOST_AMULE_INCOMING_DIR}" || ESTADO_RUTAS=$?
+if [[ "${ESTADO_RUTAS}" -eq 2 ]]; then
+    die "No he podido comprobar las rutas de arriba (el motivo está justo antes).
+  Suele ser un symlink roto o una carpeta sin permiso de lectura para root.
+  Arréglalo y vuelve a ejecutar el instalador — no he tocado ninguna de tus
+  carpetas."
+elif [[ "${ESTADO_RUTAS}" -eq 1 ]]; then
+    echo ""
+    warn "Se solapan. En .env se guarda lo que escribiste, y las dos carpetas
+  se montan tal cual en el contenedor, así que el importador mirará como
+  «cola de entrada» algo que ya es tu tebeoteca organizada. El dedupe por
+  SHA256 evita volver a importar el mismo fichero, pero la distinción entre
+  «ya organizado» y «por importar» deja de existir — y una importación
+  futura puede reorganizar lo que ya tenías ordenado."
+    echo ""
+    echo "  Lo normal es una de estas dos cosas:"
+    echo "    · la biblioteca está DENTRO de la carpeta de descargas"
+    echo "      (p.ej. biblioteca=/media/data/tebeos, descargas=/media/data);"
+    echo "    · o las dos apuntan a la misma carpeta por caminos distintos."
+    echo ""
+    echo "  No cambio ninguna ruta por ti: vuelve a ejecutarlo con otras si te has"
+    echo "  equivocado, o confirma aquí si de verdad quieres que compartan carpeta."
+    if ! pedir_confirmacion_solapamiento; then
+        die "Instalación detenida sin tocar tus carpetas (ni rutas, ni permisos,
+  ni montajes). Vuelve a ejecutar el instalador dando una biblioteca y unas
+  descargas que no se solapen."
+    fi
+    warn "Sigues adelante con las rutas solapadas, a propósito."
+fi
 
 set_env_var "HOST_LIBRARY_DIR" "${HOST_LIBRARY_DIR}"
 set_env_var "HOST_DOWNLOADS_DIR" "${HOST_DOWNLOADS_DIR}"
