@@ -51,12 +51,17 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo
     # calcula (services/auth.py::hash_password) ANTES de llamar a save().
     "seguridad": ("auth_mode", "auth_username", "auth_password_hash", "base_url"),
+    # E4: aviso de importación por webhook, apagado por defecto.
+    "avisos": (
+        "webhook_enabled", "webhook_type", "webhook_url",
+        "webhook_token", "webhook_chat_id",
+    ),
 }
 # Nunca se devuelven en claro tras guardarse (D11): la UI los muestra
 # como "configurado"/"no configurado", nunca con el valor real.
 SECRET_FIELDS = {
     "comicvine_api_key", "prowlarr_api_key", "transmission_password",
-    "amule_password", "auth_password_hash",
+    "amule_password", "auth_password_hash", "webhook_token",
 }
 # secret_key (A6) firma la cookie de sesión — nunca aparece en el
 # formulario de /ui/ajustes (no está en ningún grupo de OVERRIDABLE_
