@@ -88,6 +88,8 @@ def _imprimir_texto(informe: InformeEtiquetado, *, aplicar: bool) -> None:
                 print(f"  {r.nombre}: {campos}")
         print()
 
+    if informe.abortado:
+        print(f"LOTE ABORTADO: {informe.abortado}\n")
     print(f"Resumen: {informe.resumen()}")
     if informe.ya_revisados:
         print(f"({informe.ya_revisados} ya revisados antes y sin cambios: no gastan cupo; "
@@ -111,6 +113,7 @@ def _salida_json(informe: InformeEtiquetado, *, aplicar: bool) -> None:
             "errores": informe.errores, "reconciliados": informe.reconciliados,
             "ya_revisados": informe.ya_revisados,
         },
+        "abortado": informe.abortado,
         "resultados": [
             {
                 "file_id": r.file_id, "nombre": r.nombre, "accion": r.accion,
@@ -143,7 +146,13 @@ async def _ejecutar(args: argparse.Namespace) -> int:
         _salida_json(informe, aplicar=aplicar)
     else:
         _imprimir_texto(informe, aplicar=aplicar)
-    return 0
+    return _codigo_salida(informe)
+
+
+def _codigo_salida(informe: InformeEtiquetado) -> int:
+    """Un lote cortado **no es un éxito**: si no, un cron daría por buena una
+    pasada que dejó trabajo a medias y ficheros pendientes de reconciliación."""
+    return 1 if informe.abortado else 0
 
 
 def main(argv: list[str] | None = None) -> int:
