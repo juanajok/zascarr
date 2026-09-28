@@ -7,6 +7,29 @@
 <div class="ajustes-grid">
 
   <fieldset class="ajustes-card">
+    <legend>Fuentes de enriquecimiento</legend>
+    <p class="ajustes-desc">Activa o desactiva cada fuente de metadatos. Desactivar no borra lo ya catalogado: solo deja de consultar esa API en el siguiente ciclo.</p>
+    <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
+      <label class="legal-checkbox">
+        <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>
+        Comic Vine (grapa americana y británica)
+      </label>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="anilist_enabled" value="true" {% if anilist_enabled %}checked{% endif %}>
+        AniList (manga, manhwa y manhua)
+      </label>
+      <label class="legal-checkbox">
+        <input type="checkbox" name="tebeosfera_enabled" value="true" {% if tebeosfera_enabled %}checked{% endif %}>
+        Tebeosfera (tebeo y BD)
+      </label>
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+    <div id="resultado-fuentes"></div>
+  </fieldset>
+
+  <fieldset class="ajustes-card">
     <legend>Comic Vine</legend>
     <p class="ajustes-desc">Fuente de metadatos para grapa americana y británica.</p>
     <form hx-post="/ui/ajustes/guardar/comic-vine" hx-target="#resultado-comic-vine" hx-swap="innerHTML">

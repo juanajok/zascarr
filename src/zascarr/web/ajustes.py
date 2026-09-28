@@ -74,6 +74,9 @@ def _contexto() -> dict:
     s = get_settings()
     return {
         "comicvine_api_key_configurada": bool(s.comicvine_api_key),
+        "comicvine_enabled": s.comicvine_enabled,
+        "anilist_enabled": s.anilist_enabled,
+        "tebeosfera_enabled": s.tebeosfera_enabled,
         "prowlarr_url": s.prowlarr_url,
         "prowlarr_api_key_configurada": bool(s.prowlarr_api_key),
         "prowlarr_enabled": s.prowlarr_enabled,
@@ -103,6 +106,22 @@ async def guardar_comic_vine(
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({"comicvine_api_key": comicvine_api_key})
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Comic Vine"})
+
+
+@router.post("/guardar/fuentes", response_class=HTMLResponse)
+async def guardar_fuentes(
+    request: Request,
+    comicvine_enabled: bool = Form(default=False),
+    anilist_enabled: bool = Form(default=False),
+    tebeosfera_enabled: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    await RuntimeSettingsService(db).save({
+        "comicvine_enabled": comicvine_enabled,
+        "anilist_enabled": anilist_enabled,
+        "tebeosfera_enabled": tebeosfera_enabled,
+    })
+    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Fuentes de enriquecimiento"})
 
 
 @router.post("/guardar/prowlarr", response_class=HTMLResponse)

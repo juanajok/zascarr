@@ -778,3 +778,61 @@ class TestApplyCredits:
         issue_creators = [o for o in added if hasattr(o, "role")]
         assert len(issue_creators) == 1
         assert issue_creators[0].role == CreatorRole.WRITER
+
+
+class TestFuentesDesactivadas:
+
+    @pytest.mark.asyncio
+    async def test_fuente_desactivada_no_marca_intento_ni_llama(self):
+        """B8: fuente apagada → cero tráfico y NO se marca el intento (no
+        consume el plazo de reintento de 30 días)."""
+        series = make_series("Berserk", tradition=ComicTradition.MANGA)
+        session = FakeSession([FakeExecResult([series])])
+        service = EnrichmentService(db=session)
+        report = EnrichmentReport()
+
+        # anilist_client=None simula "fuente desactivada"
+        await service._enrich_series_batch(AsyncMock(), None, AsyncMock(), 10, report)
+
+        assert series.enrichment_attempted_at is None
+        assert series.anilist_id is None
+        assert report.series_enriched == []
+        assert report.series_no_match == []
+
+    @pytest.mark.asyncio
+    async def test_reactivar_vuelve_a_enriquecer(self):
+        """B8: tras apagar (que no marcó intento), reactivar la vuelve elegible."""
+        series = make_series("Berserk", tradition=ComicTradition.MANGA)
+        await EnrichmentService(db=FakeSession([FakeExecResult([series])]))._enrich_series_batch(
+            AsyncMock(), None, AsyncMock(), 10, EnrichmentReport())
+        assert series.enrichment_attempted_at is None
+
+        anilist = AsyncMock()
+        anilist.search_manga.return_value = [
+            AniListResult(anilist_id=42, title_romaji="Berserk", chapters=370),
+        ]
+        report = EnrichmentReport()
+        await EnrichmentService(db=FakeSession([FakeExecResult([series])]))._enrich_series_batch(
+            AsyncMock(), anilist, AsyncMock(), 10, report)
+        assert series.anilist_id == 42
+        assert report.series_enriched == ["Berserk"]
+
+    @pytest.mark.asyncio
+    async def test_enrich_pending_respeta_el_flag_aunque_haya_cliente_inyectado(self, monkeypatch):
+        """B8: con la fuente apagada, ni un cliente inyectado recibe tráfico —
+        manda el flag, no la inyección (que es solo para tests)."""
+        from zascarr.config import get_settings
+
+        series = make_series("Berserk", tradition=ComicTradition.MANGA)
+        anilist = AsyncMock()
+        service = EnrichmentService(
+            db=FakeSession([FakeExecResult([series]), FakeExecResult([])]),
+            cv_client=AsyncMock(), anilist_client=anilist, tebeosfera_client=AsyncMock(),
+        )
+        monkeypatch.setattr(get_settings(), "anilist_enabled", False)
+
+        report = await service.enrich_pending(limit=10)
+
+        assert not anilist.search_manga.called
+        assert series.enrichment_attempted_at is None
+        assert report.series_enriched == []
