@@ -59,22 +59,26 @@ El serializador de `Issue` expone `cover` con una URL real, p. ej. para el `#1`
 de la edición española:
 `https://files1.comics.org//img/gcd/covers_by_id/1812/w400/1812885.jpg`.
 
-**Resultado observado (negativo):** esa URL devuelve **HTTP 403**. Probado con
-UA propio, UA de navegador, cabecera `Referer: https://www.comics.org/` y la
-URL sin la doble barra (`https://files1.comics.org/img/...`). No es, hoy,
+**Resultado observado (negativo, acreditado con `GET`):** la URL devuelve
+**HTTP 403 tanto en `GET` como en `HEAD`** — no es un problema de método ni una
+redirección. La petición de lectura real (en *streaming*, sin guardar la imagen:
+`curl -o /dev/null`) registra `GET -> 403`, `Content-Type: text/html;
+charset=UTF-8` (no `image/*`). Probado también con UA propio, UA de navegador,
+cabecera `Referer: https://www.comics.org/` y la URL sin la doble barra. No es
 recuperable como imagen desde este entorno. Que el campo exista **no** implica
 que sea una fuente de imagen utilizable (era exactamente la hipótesis a
-verificar).
+verificar). **No se propone sortear restricciones de acceso.**
 
 Además, varios issues base de 236622 devuelven `cover=""` (vacío): ni siquiera
 siempre hay URL.
 
-**Uso/condiciones:** los datos de GCD son **CC BY-SA 4.0** (atribución + enlace
-de vuelta).
+**Uso/condiciones:** la licencia **CC BY-SA 4.0** cubre los **datos** de GCD
+(atribución + enlace de vuelta), **no** sus imágenes: GCD reserva los derechos
+de las portadas a sus titulares. Que los metadatos sean reutilizables **no**
+autoriza a tratar las portadas como material libre.
 
-**Decisión:** **no** usar `cover` de GCD como fuente de portada hasta resolver
-el 403 (cookies/otro host/proxy) y confirmar términos; hoy queda como
-**capacidad negativa**.
+**Decisión:** **no** usar `cover` de GCD como fuente de portada; hoy es una
+**capacidad negativa** acreditada para este entorno.
 
 ## 4. Huecos — nada que trasladar
 
@@ -94,8 +98,14 @@ acreditadas.
 |---|---|---|
 | **Serie / edición** | `language`, `country`, `publisher`, `publishing_format`, `binding` | ✅ aprovechable |
 | **Números** | `active_issues` (URLs) + `variant_of` por número; sin `issue_count`; descripciones no fiables | ⚠️ listar/distinguir, no contar |
-| **Portadas** | campo `cover` con URL, pero **403** al recuperarla | ❌ no usable hoy |
+| **Portadas** | campo `cover` con URL, pero **403** en `GET` y en `HEAD` | ❌ no usable hoy |
 | **Huecos** | sin recuento acreditado; metadatos de número vacíos | ❌ fuera de C6 |
+
+**Decisión global (acotada al resultado, no más amplia):** **no** usar GCD para
+**portadas ni huecos**, y **no** integrarlo ahora en el enricher existente; se
+**conserva como candidata separada** la identificación y el enriquecimiento de
+**edición** (campos de serie/edición, punto 1), que sí queda acreditado. Ningún
+recuento pasa a `Series.total_issues` ni habilita C6.
 
 ## Reproducible
 
@@ -103,5 +113,6 @@ acreditadas.
 GET /api/series/name/Absolute%20Batman/      -> 30 ediciones (es/es 224764; en/us 216143)
 GET /api/series/224764/  GET /api/series/236622/  GET /api/series/216143/
 GET /api/issue/<id>/                          -> number, variant_of, cover, ...
-HEAD https://files1.comics.org//img/gcd/covers_by_id/1812/w400/1812885.jpg  -> 403
+GET  https://files1.comics.org//img/gcd/covers_by_id/1812/w400/1812885.jpg -> 403 (text/html, no image/*)
+HEAD https://files1.comics.org//img/gcd/covers_by_id/1812/w400/1812885.jpg -> 403
 ```
