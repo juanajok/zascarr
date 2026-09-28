@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import os
 import zipfile
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 from xml.etree import ElementTree
@@ -24,9 +24,11 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from zascarr.models import File, FileFormat, Issue, Publisher, Series
+from zascarr.services import tagger as tagger_mod
 from zascarr.services.tagger import (
     CADUCADO,
     ESCRITO,
+    INVALIDO,
     PREVISTO,
     SALTADO,
     TaggerService,
@@ -342,8 +344,8 @@ class TestSimulacion:
         archivo, ruta = await _montar(db, tmp_path)
         original = TaggerService.planificar
 
-        async def _planificar_y_ensuciar(self, file, **kw):
-            campos = await original(self, file, **kw)
+        async def _planificar_y_ensuciar(self, file, ctx=None, **kw):
+            campos = await original(self, file, ctx, **kw)
             with zipfile.ZipFile(ruta, "a") as zf:  # alguien añadió una página
                 zf.writestr("p999.jpg", b"intruso")
             return campos
@@ -438,5 +440,244 @@ class TestInforme:
         informe = await TaggerService(db).run(
             dry_run=False, file_ids=[objetivo.id],
         )
-        assert [r.file_id for r in informe.resultados] == [objetivo.id]
+        assert [r.file_id for r in informe.resultados] == [str(objetivo.id)]
         assert leer_comicinfo(ruta_otro) is None
+
+
+class TestLimitNoSeAtasca:
+    """`--limit` acota trabajo NUEVO. Si volviera siempre sobre los mismos
+    ficheros, el resto de la biblioteca no recibiría nunca su turno."""
+
+    @pytest.mark.asyncio
+    async def test_veintiuno_con_dos_pasadas_de_veinte(self, db, tmp_path):
+        archivos = []
+        for i in range(21):
+            sub = tmp_path / f"f{i:02d}"
+            sub.mkdir()
+            archivos.append(await _montar(db, sub))
+        ids = [str(a.id) for a, _ in archivos]
+        servicio = TaggerService(db)
+
+        p1 = await servicio.run(limit=20, dry_run=False, file_ids=ids)
+
+        assert p1.escritos == 20
+        assert sum(1 for _, r in archivos if leer_comicinfo(r) is not None) == 20
+
+        p2 = await servicio.run(limit=20, dry_run=False, file_ids=ids)
+
+        assert p2.escritos == 1          # el que faltaba avanza…
+        assert p2.ya_revisados == 20     # …y los otros no gastan cupo
+        assert sum(1 for _, r in archivos if leer_comicinfo(r) is not None) == 21
+
+    @pytest.mark.asyncio
+    async def test_los_que_ya_estaban_al_dia_tambien_se_marcan(self, db, tmp_path):
+        archivo, _ = await _montar(db, tmp_path, xml=XML_MANUAL)
+        ids = [str(archivo.id)]
+        servicio = TaggerService(db)
+        await servicio.run(limit=20, dry_run=False, file_ids=ids)
+
+        p2 = await servicio.run(limit=20, dry_run=False, file_ids=ids)
+
+        assert p2.ya_revisados == 1
+        assert p2.escritos == 0
+        # Con `--file-id` se detalla aunque estuviera ya revisado (el
+        # coleccionista pregunta por ese fichero en concreto).
+        assert [r.motivo for r in p2.resultados] == [
+            "ya revisado (sin cambios desde la última pasada)"]
+
+    @pytest.mark.asyncio
+    async def test_un_cambio_en_la_bd_vuelve_a_pendiente(self, db, tmp_path):
+        """La marca guarda con qué datos se comparó: si la BD cambia, se
+        revisa otra vez (el overlay propaga la corrección)."""
+        archivo, ruta = await _montar(db, tmp_path)
+        ids = [str(archivo.id)]
+        servicio = TaggerService(db)
+        await servicio.run(limit=20, dry_run=False, file_ids=ids)
+
+        serie = (await db.execute(
+            select(Series).join(Issue, Issue.series_id == Series.id)
+            .where(Issue.id == archivo.issue_id)
+        )).scalar_one()
+        serie.title = "Thorgal (reedición)"
+
+        p2 = await servicio.run(limit=20, dry_run=False, file_ids=ids)
+
+        assert p2.ya_revisados == 0
+        assert p2.escritos == 1
+        root = ElementTree.fromstring(leer_comicinfo(ruta))
+        assert root.findtext("Series") == "Thorgal (reedición)"
+
+    @pytest.mark.asyncio
+    async def test_sin_limite_revisa_todo(self, db, tmp_path):
+        ids = []
+        for i in range(3):
+            sub = tmp_path / f"f{i}"
+            sub.mkdir()
+            a, _ = await _montar(db, sub)
+            ids.append(str(a.id))
+        informe = await TaggerService(db).run(limit=0, dry_run=False, file_ids=ids)
+        assert informe.escritos == 3
+
+
+class TestComicInfoInvalido:
+    """Un XML roto o ajeno no puede costar datos ni abortar el lote."""
+
+    @pytest.mark.asyncio
+    async def test_xml_ilegible_no_aborta_el_lote(self, db, tmp_path):
+        (tmp_path / "roto").mkdir()
+        (tmp_path / "bien").mkdir()
+        roto, ruta_roto = await _montar(
+            db, tmp_path / "roto", xml=b"<ComicInfo><Series>X</ComicInfo>")
+        bien, ruta_bien = await _montar(db, tmp_path / "bien")
+        antes = ruta_roto.read_bytes()
+
+        informe = await TaggerService(db).run(
+            limit=0, dry_run=False, file_ids=[str(roto.id), str(bien.id)])
+
+        assert informe.invalidos == 1
+        assert informe.escritos == 1                    # el siguiente SÍ se procesa
+        assert ruta_roto.read_bytes() == antes          # y el roto queda intacto
+        assert leer_comicinfo(ruta_bien) is not None
+
+    @pytest.mark.asyncio
+    async def test_raiz_ajena_no_se_sustituye(self, db, tmp_path):
+        xml = b"<ComicInfoRaro><Algo>importante</Algo></ComicInfoRaro>"
+        archivo, ruta = await _montar(db, tmp_path, xml=xml)
+
+        r = await TaggerService(db).ejecutar(archivo, dry_run=False)
+
+        assert r.accion == INVALIDO
+        assert leer_comicinfo(ruta) == xml
+
+    @pytest.mark.asyncio
+    async def test_dry_run_tambien_lo_reporta_sin_tocarlo(self, db, tmp_path):
+        xml = b"<ComicInfo><Series>X</ComicInfo>"
+        archivo, ruta = await _montar(db, tmp_path, xml=xml)
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert r.accion == INVALIDO
+        assert leer_comicinfo(ruta) == xml
+
+    @pytest.mark.asyncio
+    async def test_el_invalido_no_tapa_el_cupo_para_siempre(self, db, tmp_path):
+        (tmp_path / "roto").mkdir()
+        roto, _ = await _montar(db, tmp_path / "roto",
+                                xml=b"<ComicInfo><Series>X</ComicInfo>")
+        ids = [str(roto.id)]
+        servicio = TaggerService(db)
+
+        p1 = await servicio.run(limit=1, dry_run=False, file_ids=ids)
+        p2 = await servicio.run(limit=1, dry_run=False, file_ids=ids)
+
+        assert p1.invalidos == 1
+        assert p2.ya_revisados == 1     # ya se sabe que está roto: no re-ocupa el cupo
+        assert p2.invalidos == 0
+
+
+class TestReconciliacionMismoTamano:
+    """El tamaño no basta para saber si el fichero es el mismo: si el reemplazo
+    salió bien y el commit falló, un XML del mismo tamaño deja el hash obsoleto
+    y mirar solo `file_size_bytes` no lo delata nunca."""
+
+    @pytest.mark.asyncio
+    async def test_mismo_tamano_y_hash_distinto_se_corrige_solo(self, db, tmp_path):
+        archivo, ruta = await _montar(db, tmp_path)
+        servicio = TaggerService(db)
+        await servicio.ejecutar(archivo, dry_run=False)   # ya etiquetado
+        size = archivo.file_size_bytes
+
+        # Reemplazo correcto + commit fallido: la BD se queda con el hash viejo
+        # y sin marca de revisión. El tamaño, casualmente, es el mismo.
+        archivo.sha256_hash = "0" * 64
+        archivo.metadata_ = {}
+        assert archivo.file_size_bytes == ruta.stat().st_size
+
+        r = await servicio.ejecutar(archivo, dry_run=False)
+
+        assert r.accion == SALTADO        # el XML ya coincide: no se reescribe
+        assert r.reconciliado is True     # pero la BD se corrige sola
+        assert archivo.sha256_hash == _sha256(ruta)
+        assert archivo.file_size_bytes == size
+
+    @pytest.mark.asyncio
+    async def test_la_marca_fresca_evita_hashear(self, db, tmp_path, monkeypatch):
+        """El `stat` es lo que hace barata la pasada normal en la Pi."""
+        archivo, _ = await _montar(db, tmp_path)
+        servicio = TaggerService(db)
+        await servicio.ejecutar(archivo, dry_run=False)
+
+        hasheados: list = []
+        real = tagger_mod._sha256
+        monkeypatch.setattr(tagger_mod, "_sha256",
+                            lambda p: (hasheados.append(p), real(p))[1])
+
+        r = await servicio.ejecutar(archivo, dry_run=False)
+
+        assert r.accion == SALTADO and r.reconciliado is False
+        assert hasheados == []            # ni un SHA256: bastaba el stat
+
+    @pytest.mark.asyncio
+    async def test_stat_cambiado_fuerza_el_recalculo(self, db, tmp_path, monkeypatch):
+        """Si el fichero se tocó desde la última revisión, sí se rehashea."""
+        archivo, ruta = await _montar(db, tmp_path)
+        servicio = TaggerService(db)
+        await servicio.ejecutar(archivo, dry_run=False)
+        os.utime(ruta, ns=(0, 10**18))    # alguien lo tocó después
+
+        hasheados: list = []
+        real = tagger_mod._sha256
+        monkeypatch.setattr(tagger_mod, "_sha256",
+                            lambda p: (hasheados.append(p), real(p))[1])
+
+        r = await servicio.ejecutar(archivo, dry_run=False)
+
+        assert r.accion == SALTADO
+        assert hasheados == [ruta]
+
+
+class TestFicheroAusente:
+    """Un `File` cuya ruta ya no existe (borrado a mano, disco de red caído) no
+    puede abortar el lote: es exactamente lo que protege la colección."""
+
+    @pytest.mark.asyncio
+    async def test_no_aborta_el_lote(self, db, tmp_path):
+        (tmp_path / "seva").mkdir()
+        ido, ruta_ido = await _montar(db, tmp_path)
+        ruta_ido.unlink()
+        bien, ruta_bien = await _montar(db, tmp_path / "seva")
+
+        informe = await TaggerService(db).run(
+            limit=0, dry_run=False, file_ids=[str(ido.id), str(bien.id)])
+
+        assert informe.saltados == 1
+        assert informe.escritos == 1
+        assert leer_comicinfo(ruta_bien) is not None
+
+    @pytest.mark.asyncio
+    async def test_tampoco_en_simulacion(self, db, tmp_path):
+        ido, ruta_ido = await _montar(db, tmp_path)
+        ruta_ido.unlink()
+        informe = await TaggerService(db).run(
+            limit=0, dry_run=True, file_ids=[str(ido.id)])
+        assert informe.saltados == 1
+
+    @pytest.mark.asyncio
+    async def test_no_gastan_cupo(self, db, tmp_path):
+        """Si no, 25 rutas rotas dejarían fuera al resto de la biblioteca."""
+        (tmp_path / "seva").mkdir()
+        ids = []
+        for i in range(25):
+            sub = tmp_path / f"ido{i:02d}"
+            sub.mkdir()
+            ido, ruta = await _montar(db, sub)
+            ruta.unlink()
+            ido.imported_at = datetime(2020, 1, 1, tzinfo=UTC)  # van primero
+            ids.append(str(ido.id))
+        bien, ruta_bien = await _montar(db, tmp_path / "seva")
+        bien.imported_at = datetime(2021, 1, 1, tzinfo=UTC)
+        ids.append(str(bien.id))
+        await db.flush()
+
+        informe = await TaggerService(db).run(limit=1, dry_run=False, file_ids=ids)
+
+        assert informe.escritos == 1
+        assert leer_comicinfo(ruta_bien) is not None

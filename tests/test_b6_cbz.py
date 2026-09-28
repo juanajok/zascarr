@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import tempfile
+import threading
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
@@ -111,6 +113,72 @@ class TestReescritura:
         ruta = _cbz(tmp_path / "a.cbz")
         reescribir_con_xml(ruta, b"<ComicInfo><Series>X</Series></ComicInfo>")
         assert _sin_temporales(tmp_path)
+
+
+class TestTemporalYBloqueo:
+    """El temporal no puede ser un nombre fijo: dos ejecuciones del mismo CBZ se
+    pisarían, y `ZipFile(..., "w")` trunca lo que ya exista en esa ruta."""
+
+    def test_cada_escritura_usa_un_temporal_distinto(self, tmp_path, monkeypatch):
+        ruta = _cbz(tmp_path / "a.cbz")
+        nombres: list[str] = []
+        real = tempfile.mkstemp
+
+        def _espia(*args, **kwargs):
+            fd, nombre = real(*args, **kwargs)
+            nombres.append(nombre)
+            return fd, nombre
+
+        monkeypatch.setattr(zcbz.tempfile, "mkstemp", _espia)
+        reescribir_con_xml(ruta, b"<ComicInfo><Series>Uno</Series></ComicInfo>")
+        reescribir_con_xml(ruta, b"<ComicInfo><Series>Dos</Series></ComicInfo>")
+
+        assert len(nombres) == 2
+        assert nombres[0] != nombres[1]
+        assert all(Path(n).parent == tmp_path for n in nombres)  # mismo directorio
+
+    def test_el_temporal_se_crea_de_forma_exclusiva(self, tmp_path, monkeypatch):
+        """`mkstemp` (O_EXCL), nunca `ZipFile(..., "w")` sobre un nombre fijo."""
+        ruta = _cbz(tmp_path / "a.cbz")
+        modos: list[str] = []
+        real = tempfile.mkstemp
+
+        def _espia(*args, **kwargs):
+            modos.append("mkstemp")
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(zcbz.tempfile, "mkstemp", _espia)
+        reescribir_con_xml(ruta, b"<ComicInfo/>")
+        assert modos == ["mkstemp"]
+
+    def test_limpia_temporales_propios_de_una_ejecucion_muerta(self, tmp_path):
+        ruta = _cbz(tmp_path / "a.cbz")
+        basura = tmp_path / ".a.cbz.deadbeef.zascarr.tmp"
+        basura.write_bytes(b"resto de un kill -9")
+        ajeno = tmp_path / "no-tocar.tmp"
+        ajeno.write_bytes(b"de otra cosa")
+
+        reescribir_con_xml(ruta, b"<ComicInfo/>")
+
+        assert not basura.exists()
+        assert ajeno.read_bytes() == b"de otra cosa"
+
+    def test_el_bloqueo_serializa_dos_escrituras_del_mismo_cbz(self, tmp_path):
+        """Dos etiquetados del mismo tebeo no se intercalan: el segundo espera."""
+        ruta = _cbz(tmp_path / "a.cbz")
+        hechos: list[str] = []
+
+        def _segundo():
+            with zcbz.bloqueo_exclusivo(ruta):
+                hechos.append("entro")
+
+        with zcbz.bloqueo_exclusivo(ruta):
+            hilo = threading.Thread(target=_segundo)
+            hilo.start()
+            hilo.join(0.4)
+            assert hechos == []          # bloqueado mientras el primero trabaja
+        hilo.join(5)
+        assert hechos == ["entro"]       # en cuanto se suelta, entra
 
 
 class TestFallos:

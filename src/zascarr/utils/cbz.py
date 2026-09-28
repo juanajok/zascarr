@@ -3,22 +3,35 @@
 Ficha `docs/design/benchmark-B6-comicinfo.md`. Nada de escribir sobre el
 original in situ:
 
-  1. se calcula el **manifiesto de hashes** de las entradas no-XML del original;
-  2. se comprueba el **espacio libre** (el temporal ocupa ~el tamaño original);
-  3. se construye el CBZ nuevo en un temporal **del mismo directorio**;
-  4. se **verifica**: ZIP íntegro, manifiesto idéntico y **exactamente una**
+  1. se **bloquea** el fichero (`flock` exclusivo sobre el propio CBZ, sin
+     ficheros de bloqueo aparte) — dos etiquetados simultáneos del mismo tebeo
+     se serializan de la lectura al `os.replace`;
+  2. se calcula el **manifiesto de hashes** de las entradas no-XML del original;
+  3. se comprueba el **espacio libre** (el temporal ocupa ~el tamaño original);
+  4. se construye el CBZ nuevo en un temporal **único** creado con `mkstemp`
+     (`O_EXCL`, mismo directorio ⇒ mismo sistema de ficheros);
+  5. se **verifica**: ZIP íntegro, manifiesto idéntico y **exactamente una**
      entrada `ComicInfo.xml`;
-  5. `fsync` del temporal, `os.replace` (atómico) y `fsync` del directorio
+  6. `fsync` del temporal, `os.replace` (atómico) y `fsync` del directorio
      (durabilidad ≠ atomicidad).
 
 Un fallo en cualquier paso deja el **original intacto** y limpia el temporal.
+
+Sobre el temporal: **nunca** se abre un nombre fijo con `ZipFile(..., "w")`,
+porque eso trunca un fichero existente. `tempfile.mkstemp` lo crea de forma
+exclusiva en el mismo directorio, así que un temporal de otra ejecución (o uno
+que quedó de una anterior) no se pisa ni se reutiliza.
 """
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import hashlib
 import os
 import shutil
+import tempfile
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import structlog
@@ -31,6 +44,8 @@ _CHUNK = 64 * 1024
 #: Margen de seguridad sobre el tamaño del original (cabeceras del ZIP nuevo,
 #: metadatos del sistema de ficheros).
 MARGEN_BYTES = 1 * 1024 * 1024
+#: Sufijo de los temporales propios (`.{nombre}.<aleatorio>.zascarr.tmp`).
+SUFIJO_TMP = ".zascarr.tmp"
 
 
 class CbzError(Exception):
@@ -52,6 +67,66 @@ class VerificacionError(CbzError):
 def _es_comicinfo(nombre: str) -> bool:
     return os.path.basename(nombre).lower() == ENTRADA_XML.lower()
 
+
+def _prefijo_temporal(path: Path) -> str:
+    return f".{path.name}."
+
+
+# ── bloqueo por fichero ─────────────────────────────────────────────────────
+
+def abrir_bloqueado(path: Path) -> int:
+    """Abre el CBZ y toma un `flock` **exclusivo**. Devuelve el descriptor.
+
+    Se bloquea el propio fichero, no un `.lock` aparte: no deja basura en la
+    biblioteca del coleccionista. `flock` es por descriptor abierto, así que dos
+    hilos del mismo proceso también se serializan entre sí."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    except OSError:
+        os.close(fd)
+        raise
+    return fd
+
+
+def cerrar_bloqueado(fd: int) -> None:
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    except OSError:  # el descriptor ya no sirve: cerrarlo es lo que importa
+        logger.warning("cbz.desbloqueo_fallido", fd=fd)
+    finally:
+        os.close(fd)
+
+
+@contextlib.contextmanager
+def bloqueo_exclusivo(path: Path) -> Iterator[None]:
+    """Versión síncrona, para llamadas directas (tests, uso desde un hilo)."""
+    fd = abrir_bloqueado(path)
+    try:
+        yield
+    finally:
+        cerrar_bloqueado(fd)
+
+
+def _limpiar_temporales_viejos(path: Path) -> None:
+    """Borra temporales propios que quedaran de una ejecución interrumpida.
+
+    Solo es seguro hacerlo **con el bloqueo tomado**: ningún otro etiquetado
+    puede estar escribiendo este fichero, así que cualquier temporal con su
+    prefijo es basura. Sin esto, un `mkstemp` único por ejecución dejaría los
+    restos de un `kill -9` para siempre."""
+    prefijo, sufijo = _prefijo_temporal(path), SUFIJO_TMP
+    try:
+        with os.scandir(path.parent) as entradas:
+            for entrada in entradas:
+                if entrada.name.startswith(prefijo) and entrada.name.endswith(sufijo):
+                    with contextlib.suppress(OSError):
+                        os.unlink(entrada.path)
+    except OSError:
+        logger.warning("cbz.limpieza_temporales_fallida", dir=str(path.parent))
+
+
+# ── lectura ─────────────────────────────────────────────────────────────────
 
 def leer_comicinfo(path: Path) -> bytes | None:
     """Bytes del primer `ComicInfo.xml` del CBZ (case-insensitive), o None."""
@@ -76,10 +151,28 @@ def _manifiesto(zf: zipfile.ZipFile) -> dict[str, str]:
     return out
 
 
-def reescribir_con_xml(path: Path, xml: bytes) -> None:
+# ── escritura ───────────────────────────────────────────────────────────────
+
+def reescribir_con_xml(path: Path, xml: bytes, *, ya_bloqueado: bool = False) -> None:
     """Sustituye el CBZ por uno idéntico con `ComicInfo.xml` (una sola entrada,
-    en la raíz). Lanza `CbzError` sin tocar el original si algo no cuadra."""
+    en la raíz). Lanza `CbzError` sin tocar el original si algo no cuadra.
+
+    Toma el bloqueo exclusivo del fichero salvo que el llamante ya lo tenga
+    (`ya_bloqueado=True`), en cuyo caso debe haberlo tomado **antes** de leer el
+    XML y mantenerlo hasta que esto vuelva — es lo que serializa la secuencia
+    leer → plan → reemplazar contra otro etiquetado del mismo tebeo."""
     path = Path(path)
+    if ya_bloqueado:
+        _reescribir(path, xml)
+    else:
+        try:
+            with bloqueo_exclusivo(path):
+                _reescribir(path, xml)
+        except OSError as exc:  # no existe, sin permiso, disco desconectado…
+            raise CbzInvalidoError(f"CBZ ilegible: {exc}") from exc
+
+
+def _reescribir(path: Path, xml: bytes) -> None:
     try:
         with zipfile.ZipFile(path) as zf:
             manifiesto_original = _manifiesto(zf)
@@ -94,10 +187,17 @@ def reescribir_con_xml(path: Path, xml: bytes) -> None:
             f"~{original_size + MARGEN_BYTES}"
         )
 
-    temporal = path.with_name(f".{path.name}.zascarr.tmp")
+    _limpiar_temporales_viejos(path)
+
+    # mkstemp crea el fichero con O_EXCL: nombre único y sin truncar nada.
+    fd, nombre_temporal = tempfile.mkstemp(
+        dir=str(path.parent), prefix=_prefijo_temporal(path), suffix=SUFIJO_TMP,
+    )
+    temporal = Path(nombre_temporal)
     try:
-        with zipfile.ZipFile(path) as zin, \
-                zipfile.ZipFile(temporal, "w", zipfile.ZIP_DEFLATED) as zout:
+        with os.fdopen(fd, "wb") as fh, \
+                zipfile.ZipFile(fh, "w", zipfile.ZIP_DEFLATED) as zout, \
+                zipfile.ZipFile(path) as zin:
             for info in zin.infolist():
                 if info.is_dir() or _es_comicinfo(info.filename):
                     continue
@@ -108,21 +208,21 @@ def reescribir_con_xml(path: Path, xml: bytes) -> None:
         _verificar(temporal, manifiesto_original)
 
         # Durabilidad: el contenido del temporal a disco ANTES de renombrarlo.
-        fd = os.open(temporal, os.O_RDONLY)
+        dfd = os.open(temporal, os.O_RDONLY)
         try:
-            os.fsync(fd)
+            os.fsync(dfd)
         finally:
-            os.close(fd)
+            os.close(dfd)
 
         os.replace(temporal, path)
 
         # Persistir el renombrado (si el sistema de ficheros lo permite).
         try:
-            dfd = os.open(path.parent, os.O_RDONLY)
+            pfd = os.open(path.parent, os.O_RDONLY)
             try:
-                os.fsync(dfd)
+                os.fsync(pfd)
             finally:
-                os.close(dfd)
+                os.close(pfd)
         except OSError:
             logger.warning("cbz.fsync_dir_fallido", dir=str(path.parent))
     except CbzError:

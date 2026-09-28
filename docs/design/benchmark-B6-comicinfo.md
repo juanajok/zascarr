@@ -188,5 +188,49 @@ editorial/*imprint*, extensiones y qué campos no caben) — B6 fija solo el map
 
 **Decisión final / ADR:** no requiere ADR propio (operación de fichero, no de
 arquitectura); la frontera con B20 (hardlink + parche) ya está en su spec.
-**Esta ficha sigue siendo solo documental**: fija el contrato y los casos de
-prueba, no implementa aún la escritura.
+
+---
+
+## Endurecimiento tras la revisión de la PR #30 (2026-09-28)
+
+La primera implementación cumplía los puntos de arriba, pero la revisión
+encontró cuatro rutas que los tests no alcanzaban y que tocan **garantías
+centrales** (no perder datos, no dejar ficheros perpetuamente pendientes,
+reparar la BD tras un fallo). Quedan fijadas como parte del contrato:
+
+14. **Un temporal, un escritor.** El temporal se crea con nombre **único** y de
+    forma **exclusiva** (`tempfile.mkstemp(dir=…, O_EXCL)`) en el mismo
+    directorio; nunca con un nombre fijo abierto en modo escritura, que
+    **truncaría** lo que hubiera en esa ruta (de otra ejecución o de una
+    anterior). Un temporal propio que quedara de un `kill -9` se limpia — pero
+    solo **con el bloqueo tomado**, momento en el que ninguna otra ejecución
+    puede estar escribiendo ese fichero.
+15. **Bloqueo por fichero, de la lectura al reemplazo.** La secuencia leer →
+    planificar → reconstruir → verificar → `os.replace` se serializa con un
+    `flock` **exclusivo sobre el propio CBZ** (sin `.lock` aparte, que dejaría
+    basura en la biblioteca). Dos etiquetados del mismo tebeo no se intercalan:
+    el «plan caduca» (punto 13) cubre el cambio externo, el bloqueo cubre la
+    carrera entre dos ZascArr.
+16. **`--limit` acota trabajo NUEVO, no vueltas sobre lo mismo.** Cada revisión
+    deja una **marca persistente** en `File.metadata_` (resultado, `stat` del
+    fichero, hash, y los valores deseados con los que se comparó). Un fichero
+    ya revisado y sin cambios **no gasta cupo** ni se vuelve a abrir. Sin esto,
+    una biblioteca de más de `limit` ficheros se quedaría mirando siempre los
+    mismos y **los últimos no recibirían nunca su turno**. La marca incluye los
+    datos de la BD, así que una corrección de metadatos **vuelve a poner el
+    fichero en la cola** (y el *overlay* la propaga). Los ficheros **ausentes**
+    tampoco gastan cupo: si no, unas cuantas rutas rotas dejarían fuera al
+    resto.
+17. **Un `ComicInfo.xml` que no se entiende no se toca.** XML ilegible o con
+    raíz distinta de `<ComicInfo>` → `archivo inválido`: **no se fusiona ni se
+    sustituye** (sustituirlo sería perder lo que hubiera dentro) y el fallo se
+    registra **por fichero**, sin abortar el lote. Lo mismo para un `File` cuya
+    ruta ya no existe. Se marca como inválido para que no ocupe el cupo en cada
+    pasada, y se vuelve a mirar en cuanto el fichero cambie.
+18. **Reconciliación por `stat` + `sha256`, nunca solo por tamaño.** «El
+    reemplazo salió bien pero el commit falló» se detecta comparando el `stat`
+    con la marca y, si no cuadra, recalculando el hash. Mirar **solo** el tamaño
+    deja el hash obsoleto para siempre cuando el XML nuevo mide lo mismo — y
+    hasta ahora eso exigía que alguien supiera usar `--reconciliar-todo`. La
+    pasada normal no paga un hash por fichero: paga un `stat`.
+
