@@ -1,4 +1,4 @@
-# ADR 0003: Identidad editorial y cobertura — cierre de B22 (censo real + cuatro decisiones)
+# ADR 0003: Identidad editorial y cobertura — B22 (censo de nombres + cuatro decisiones)
 
 - Estado: **Propuesto** · 2026-09-27
 - Relacionado: ADR-0002 (enricher), BACKLOG §B22, `docs/design/identidad-editorial-cobertura.md`
@@ -145,12 +145,12 @@ spec).
 - **B20 sigue aparcado**: también mueve conceptos de edición y nombre, y
   aumentaría los contratos cambiando en paralelo.
 
-## Próximo paso: censo de BD (B22 sigue en curso)
+## Censo de BD: no aplicable hasta la primera instalación
 
-El censo de nombres no sustituye al censo de filas/colisiones de la BD que B22
-prometía. `scripts/medicion/censo_identidad.py` (PR #20) es el paso siguiente y
-obligatorio antes de revisar este ADR a fondo y decidir la migración: debe medir
-formatos, `volume=NULL`, duplicados reales, archivos sin `Issue` y cualquier
-`covered_issue_ids` existente. Sin acceso a BD ahora, B22 queda **en curso** y se
-registra «pendiente por falta de BD», no «hecho». Orden: #20 → censo local
-agregado → revisión final de ADR-0003 → decidir migración aditiva.
+No hay instalación ni BD todavía: el censo de nombres (tebeoteca y descargas) es
+toda la evidencia disponible hoy. El censo de filas/colisiones (formatos,
+`volume=NULL`, duplicados reales, archivos sin `Issue`, `covered_issue_ids`
+existentes) se ejecutará con `scripts/medicion/censo_identidad.py` (PR #20)
+cuando exista la primera instalación; hasta entonces **no es una tarea
+pendiente** y no bloquea el resto del desarrollo. Este ADR queda **Propuesto** y
+la migración editorial **sin autorizar** hasta revisar esos datos reales.
