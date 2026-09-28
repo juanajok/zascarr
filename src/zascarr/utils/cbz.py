@@ -3,9 +3,7 @@
 Ficha `docs/design/benchmark-B6-comicinfo.md`. Nada de escribir sobre el
 original in situ:
 
-  1. se **bloquea** el fichero (`flock` exclusivo sobre el propio CBZ, sin
-     ficheros de bloqueo aparte) — dos etiquetados simultáneos del mismo tebeo
-     se serializan de la lectura al `os.replace`;
+  1. (el llamante ya tiene el bloqueo por fichero tomado — ver el final);
   2. se calcula el **manifiesto de hashes** de las entradas no-XML del original;
   3. se comprueba el **espacio libre** (el temporal ocupa ~el tamaño original);
   4. se construye el CBZ nuevo en un temporal **único** creado con `mkstemp`
@@ -21,17 +19,24 @@ Sobre el temporal: **nunca** se abre un nombre fijo con `ZipFile(..., "w")`,
 porque eso trunca un fichero existente. `tempfile.mkstemp` lo crea de forma
 exclusiva en el mismo directorio, así que un temporal de otra ejecución (o uno
 que quedó de una anterior) no se pisa ni se reutiliza.
+
+**Serialización: la pone quien llama, no este módulo.** Un `flock` sobre el
+propio CBZ **no sirve**: el bloqueo va con el *inodo* y `os.replace` instala uno
+nuevo, así que quien llegue después del reemplazo abre el inodo nuevo y entra sin
+esperar al que todavía tiene el viejo (y encima podría borrarle el temporal). El
+bloqueo tiene que tener una identidad que **sobreviva al reemplazo**; en ZascArr
+es un *advisory lock* de PostgreSQL por `File.id`
+(`services/tagger.py::bloqueo_de_fichero`). Este módulo no bloquea, y
+`_limpiar_temporales_viejos` **exige** que el llamante lo tenga tomado.
 """
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import os
 import shutil
 import tempfile
 import zipfile
-from collections.abc import Iterator
 from pathlib import Path
 
 import structlog
@@ -72,48 +77,13 @@ def _prefijo_temporal(path: Path) -> str:
     return f".{path.name}."
 
 
-# ── bloqueo por fichero ─────────────────────────────────────────────────────
-
-def abrir_bloqueado(path: Path) -> int:
-    """Abre el CBZ y toma un `flock` **exclusivo**. Devuelve el descriptor.
-
-    Se bloquea el propio fichero, no un `.lock` aparte: no deja basura en la
-    biblioteca del coleccionista. `flock` es por descriptor abierto, así que dos
-    hilos del mismo proceso también se serializan entre sí."""
-    fd = os.open(path, os.O_RDONLY)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-    except OSError:
-        os.close(fd)
-        raise
-    return fd
-
-
-def cerrar_bloqueado(fd: int) -> None:
-    try:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-    except OSError:  # el descriptor ya no sirve: cerrarlo es lo que importa
-        logger.warning("cbz.desbloqueo_fallido", fd=fd)
-    finally:
-        os.close(fd)
-
-
-@contextlib.contextmanager
-def bloqueo_exclusivo(path: Path) -> Iterator[None]:
-    """Versión síncrona, para llamadas directas (tests, uso desde un hilo)."""
-    fd = abrir_bloqueado(path)
-    try:
-        yield
-    finally:
-        cerrar_bloqueado(fd)
-
-
 def _limpiar_temporales_viejos(path: Path) -> None:
     """Borra temporales propios que quedaran de una ejecución interrumpida.
 
-    Solo es seguro hacerlo **con el bloqueo tomado**: ningún otro etiquetado
-    puede estar escribiendo este fichero, así que cualquier temporal con su
-    prefijo es basura. Sin esto, un `mkstemp` único por ejecución dejaría los
+    Solo es seguro hacerlo **con el bloqueo por fichero tomado** (el que pone
+    `services/tagger.py::bloqueo_de_fichero`): en ese momento ningún otro
+    etiquetado puede estar escribiendo este CBZ, así que cualquier temporal con
+    su prefijo es basura. Sin esto, un `mkstemp` único por ejecución dejaría los
     restos de un `kill -9` para siempre."""
     prefijo, sufijo = _prefijo_temporal(path), SUFIJO_TMP
     try:
@@ -153,23 +123,19 @@ def _manifiesto(zf: zipfile.ZipFile) -> dict[str, str]:
 
 # ── escritura ───────────────────────────────────────────────────────────────
 
-def reescribir_con_xml(path: Path, xml: bytes, *, ya_bloqueado: bool = False) -> None:
+def reescribir_con_xml(path: Path, xml: bytes) -> None:
     """Sustituye el CBZ por uno idéntico con `ComicInfo.xml` (una sola entrada,
     en la raíz). Lanza `CbzError` sin tocar el original si algo no cuadra.
 
-    Toma el bloqueo exclusivo del fichero salvo que el llamante ya lo tenga
-    (`ya_bloqueado=True`), en cuyo caso debe haberlo tomado **antes** de leer el
-    XML y mantenerlo hasta que esto vuelva — es lo que serializa la secuencia
-    leer → plan → reemplazar contra otro etiquetado del mismo tebeo."""
+    **No toma ningún bloqueo**: quien llama tiene que haber serializado la
+    secuencia leer → plan → reemplazar (ver el docstring del módulo) y mantenerla
+    hasta que esto vuelva. Sin eso, dos etiquetados del mismo tebeo pueden
+    reconstruir la misma ruta a la vez."""
     path = Path(path)
-    if ya_bloqueado:
+    try:
         _reescribir(path, xml)
-    else:
-        try:
-            with bloqueo_exclusivo(path):
-                _reescribir(path, xml)
-        except OSError as exc:  # no existe, sin permiso, disco desconectado…
-            raise CbzInvalidoError(f"CBZ ilegible: {exc}") from exc
+    except OSError as exc:  # no existe, sin permiso, disco desconectado…
+        raise CbzInvalidoError(f"CBZ ilegible: {exc}") from exc
 
 
 def _reescribir(path: Path, xml: bytes) -> None:

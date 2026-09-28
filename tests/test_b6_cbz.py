@@ -1,5 +1,9 @@
 """B6 — reescritura segura del CBZ (`utils/cbz.py`).
 
+La serialización por fichero **no** vive aquí (un `flock` sobre el propio CBZ no
+sobrevive al `os.replace`): se prueba en `test_b6_tagger_pg.py`, contra el
+*advisory lock* de PostgreSQL y con tres ejecutores reales.
+
 Lo que se comprueba aquí es lo que protege la colección: el original no se
 sustituye hasta que el reemplazo está **verificado**, y cualquier fallo lo deja
 intacto y sin temporales sueltos.
@@ -9,7 +13,6 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
-import threading
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
@@ -162,23 +165,6 @@ class TestTemporalYBloqueo:
 
         assert not basura.exists()
         assert ajeno.read_bytes() == b"de otra cosa"
-
-    def test_el_bloqueo_serializa_dos_escrituras_del_mismo_cbz(self, tmp_path):
-        """Dos etiquetados del mismo tebeo no se intercalan: el segundo espera."""
-        ruta = _cbz(tmp_path / "a.cbz")
-        hechos: list[str] = []
-
-        def _segundo():
-            with zcbz.bloqueo_exclusivo(ruta):
-                hechos.append("entro")
-
-        with zcbz.bloqueo_exclusivo(ruta):
-            hilo = threading.Thread(target=_segundo)
-            hilo.start()
-            hilo.join(0.4)
-            assert hechos == []          # bloqueado mientras el primero trabaja
-        hilo.join(5)
-        assert hechos == ["entro"]       # en cuanto se suelta, entra
 
 
 class TestFallos:

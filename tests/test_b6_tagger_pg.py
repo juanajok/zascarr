@@ -11,8 +11,12 @@ patrón que `test_b8_pg.py` / `test_huecos_pg.py`.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import os
+import tempfile
+import threading
 import zipfile
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -33,6 +37,7 @@ from zascarr.services.tagger import (
     SALTADO,
     TaggerService,
 )
+from zascarr.utils import cbz as zcbz
 from zascarr.utils.cbz import leer_comicinfo
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -681,3 +686,175 @@ class TestFicheroAusente:
 
         assert informe.escritos == 1
         assert leer_comicinfo(ruta_bien) is not None
+
+
+class TestBloqueoPorFichero:
+    """El bloqueo tiene que sobrevivir al `os.replace`.
+
+    Un `flock` sobre el propio CBZ no sirve: va con el *inodo*, y el reemplazo
+    instala uno nuevo. La secuencia que lo rompe es la del revisor: A bloquea el
+    inodo viejo → B se queda esperando ese mismo inodo → A reemplaza la ruta → C
+    abre el inodo **nuevo** y entra sin esperar a nadie → cuando A suelta, B
+    adquiere el bloqueo del inodo viejo (ya huérfano) y B y C reconstruyen la
+    misma ruta a la vez, pudiendo borrarse los temporales entre sí.
+    """
+
+    def _motores(self):
+        return [create_async_engine(_url_asyncpg(TEST_DATABASE_URL)) for _ in range(3)]
+
+    @pytest.mark.asyncio
+    async def test_tres_escritores_alrededor_de_un_replace_real(
+        self, tmp_path, monkeypatch,
+    ):
+        ruta = _crear_cbz(tmp_path / "a.cbz")
+        clave = uuid4()
+
+        activos = 0
+        maximo = 0
+        creados: set[str] = set()
+        borrados_activos: list[str] = []
+
+        a_punto_de_reemplazar = threading.Event()   # A va a sustituir la ruta
+        b_listo = threading.Event()                 # B ya espera al inodo viejo
+        reemplazado = threading.Event()             # la ruta ya es el inodo nuevo
+        puede_terminar = threading.Event()          # A puede salir de la sección
+
+        real_verificar = zcbz._verificar
+        real_reescribir = zcbz.reescribir_con_xml
+        real_mkstemp = tempfile.mkstemp
+        real_limpia = zcbz._limpiar_temporales_viejos
+
+        def _mkstemp(*args, **kwargs):
+            fd, nombre = real_mkstemp(*args, **kwargs)
+            creados.add(nombre)
+            return fd, nombre
+
+        def _limpia(path):
+            # Antes de borrar, anota qué temporales existen: si alguno de los
+            # que ha creado un escritor vivo desaparece, es que este borrado se
+            # ha colado en su sección crítica.
+            antes = [p for p in path.parent.iterdir() if p.name.endswith(zcbz.SUFIJO_TMP)]
+            real_limpia(path)
+            for p in antes:
+                if not p.exists() and str(p) in creados:
+                    borrados_activos.append(str(p))
+
+        def _verificar_lento(*args, **kwargs):
+            real_verificar(*args, **kwargs)
+            a_punto_de_reemplazar.set()
+            b_listo.wait(timeout=5)                 # el hilo de A espera aquí
+
+        def _reescribir_con_pausa(*args, **kwargs):
+            real_reescribir(*args, **kwargs)
+            reemplazado.set()
+            puede_terminar.wait(timeout=5)          # ventana DESPUÉS del reemplazo
+
+        monkeypatch.setattr(zcbz, "tempfile", tempfile)
+        monkeypatch.setattr(zcbz.tempfile, "mkstemp", _mkstemp)
+        monkeypatch.setattr(zcbz, "_limpiar_temporales_viejos", _limpia)
+        monkeypatch.setattr(zcbz, "_verificar", _verificar_lento)
+        monkeypatch.setattr(zcbz, "reescribir_con_xml", _reescribir_con_pausa)
+
+        motores = self._motores()
+
+        async def _escritor(engine, etiqueta):
+            nonlocal activos, maximo
+            sesion = async_sessionmaker(engine, expire_on_commit=False)
+            async with sesion() as s, tagger_mod.bloqueo_de_fichero(s, clave):
+                activos += 1
+                maximo = max(maximo, activos)
+                try:
+                    await asyncio.to_thread(
+                        zcbz.reescribir_con_xml, ruta,
+                        f"<ComicInfo><Series>{etiqueta}</Series></ComicInfo>".encode())
+                finally:
+                    activos -= 1
+
+        try:
+            # A entra y se queda a punto de reemplazar.
+            tarea_a = asyncio.ensure_future(_escritor(motores[0], "A"))
+            while not a_punto_de_reemplazar.is_set():
+                await asyncio.sleep(0.01)
+
+            # B llega ANTES del reemplazo: abre el inodo viejo y espera.
+            tarea_b = asyncio.ensure_future(_escritor(motores[1], "B"))
+            await asyncio.sleep(0.2)
+            b_listo.set()
+
+            # A reemplaza la ruta y se queda dentro de la sección crítica.
+            while not reemplazado.is_set():
+                await asyncio.sleep(0.01)
+
+            # C llega DESPUÉS: es el que se colaba por el inodo nuevo.
+            tarea_c = asyncio.ensure_future(_escritor(motores[2], "C"))
+            await asyncio.sleep(0.4)
+
+            # Con el bloqueo por inodo, C ya estaría dentro (maximo == 2).
+            assert activos == 1, "dos escritores a la vez en el mismo CBZ"
+            assert borrados_activos == []
+
+            puede_terminar.set()
+            await asyncio.wait_for(asyncio.gather(tarea_a, tarea_b, tarea_c), timeout=10)
+        finally:
+            puede_terminar.set()
+            for motor in motores:
+                await motor.dispose()
+
+        assert maximo == 1
+        assert activos == 0
+        assert borrados_activos == []
+        with zipfile.ZipFile(ruta) as zf:
+            nombres = [i.filename for i in zf.infolist()]
+            assert zf.testzip() is None
+        assert nombres.count("ComicInfo.xml") == 1
+        assert all(p in nombres for p in PAGINAS)
+        assert not [p for p in tmp_path.iterdir() if p.name.endswith(zcbz.SUFIJO_TMP)]
+
+    @pytest.mark.asyncio
+    async def test_clave_estable_para_el_mismo_fichero(self):
+        identificador = uuid4()
+        assert tagger_mod._clave_de(identificador) == tagger_mod._clave_de(str(identificador))
+        assert tagger_mod._clave_de(identificador) != tagger_mod._clave_de(uuid4())
+
+    @pytest.mark.asyncio
+    async def test_el_servicio_escribe_bajo_el_bloqueo(self, db, tmp_path, monkeypatch):
+        archivo, ruta = await _montar(db, tmp_path)
+        eventos: list[str] = []
+        real_bloqueo = tagger_mod.bloqueo_de_fichero
+        real_reescribir = zcbz.reescribir_con_xml
+
+        @contextlib.asynccontextmanager
+        async def _espia(sesion, file_id):
+            eventos.append(f"entra:{file_id}")
+            async with real_bloqueo(sesion, file_id):
+                eventos.append("dentro")
+                yield
+            eventos.append("sale")
+
+        def _reescribir_espia(*args, **kwargs):
+            eventos.append("reemplaza")
+            return real_reescribir(*args, **kwargs)
+
+        monkeypatch.setattr(tagger_mod, "bloqueo_de_fichero", _espia)
+        monkeypatch.setattr(zcbz, "reescribir_con_xml", _reescribir_espia)
+
+        r = await TaggerService(db).ejecutar(archivo, dry_run=False)
+
+        assert r.accion == ESCRITO
+        assert eventos == [f"entra:{archivo.id}", "dentro", "reemplaza", "sale"]
+
+    @pytest.mark.asyncio
+    async def test_la_simulacion_no_toma_el_bloqueo(self, db, tmp_path, monkeypatch):
+        archivo, _ = await _montar(db, tmp_path)
+        eventos: list[str] = []
+        real_bloqueo = tagger_mod.bloqueo_de_fichero
+
+        @contextlib.asynccontextmanager
+        async def _espia(sesion, file_id):
+            eventos.append("bloquea")
+            async with real_bloqueo(sesion, file_id):
+                yield
+
+        monkeypatch.setattr(tagger_mod, "bloqueo_de_fichero", _espia)
+        await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert eventos == []
