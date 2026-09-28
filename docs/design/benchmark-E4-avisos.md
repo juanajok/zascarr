@@ -36,7 +36,13 @@ inicial ya no es automática desde B16).
 
 **Invariantes de ZascArr:**
 - Un webhook caído/lento **no bloquea ni revierte** la importación.
+- Un **4xx/5xx cuenta como fallo** (se registra con `send_failed`), no como
+  envío correcto — por eso se comprueba el estado tras el POST.
 - No exponer `webhook_token`/`webhook_url` en logs (pueden ser secretos).
+- Gotify: token en cabecera `X-Gotify-Key`, **nunca** en la URL (la URL acaba
+  en logs de acceso de Gotify o de un proxy aunque ZascArr no lo registre).
+- Telegram **no usa `webhook_url`**: construye la ruta con el token del bot y
+  exige token + chat_id.
 - No notificar la adopción inicial ni duplicados de un segundo escaneo.
 
 **Casos de prueba antes de implementar:**
@@ -44,7 +50,7 @@ inicial ya no es automática desde B16).
 - Ninguno si está desactivado.
 - Ningún duplicado en el siguiente ciclo (el dedupe ya lo garantiza).
 - Con un receptor HTTP falso: se envía un POST al destino correcto; un fallo
-  no propaga.
+  no propaga; un 401/500 sí se registra como fallo; Telegram funciona sin URL.
 
 **Decisión final / ADR:** no requiere ADR. **Decisión explícita: entrega de
 mejor esfuerzo** (sin reintentos ni cola) para mantener E4 en tamaño S.
