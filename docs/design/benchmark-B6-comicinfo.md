@@ -194,9 +194,9 @@ arquitectura); la frontera con B20 (hardlink + parche) ya está en su spec.
 ## Endurecimiento tras la revisión de la PR #30 (2026-09-28)
 
 La primera implementación cumplía los puntos de arriba, pero la revisión
-encontró cuatro rutas que los tests no alcanzaban y que tocan **garantías
-centrales** (no perder datos, no dejar ficheros perpetuamente pendientes,
-reparar la BD tras un fallo). Quedan fijadas como parte del contrato:
+encontró rutas que los tests no alcanzaban y que tocan **garantías centrales**
+(no perder datos, no dejar ficheros perpetuamente pendientes, reparar la BD tras
+un fallo, no pisarse entre escritores). Quedan fijadas como parte del contrato:
 
 14. **Un temporal, un escritor.** El temporal se crea con nombre **único** y de
     forma **exclusiva** (`tempfile.mkstemp(dir=…, O_EXCL)`) en el mismo
@@ -205,12 +205,21 @@ reparar la BD tras un fallo). Quedan fijadas como parte del contrato:
     anterior). Un temporal propio que quedara de un `kill -9` se limpia — pero
     solo **con el bloqueo tomado**, momento en el que ninguna otra ejecución
     puede estar escribiendo ese fichero.
-15. **Bloqueo por fichero, de la lectura al reemplazo.** La secuencia leer →
-    planificar → reconstruir → verificar → `os.replace` se serializa con un
-    `flock` **exclusivo sobre el propio CBZ** (sin `.lock` aparte, que dejaría
-    basura en la biblioteca). Dos etiquetados del mismo tebeo no se intercalan:
-    el «plan caduca» (punto 13) cubre el cambio externo, el bloqueo cubre la
-    carrera entre dos ZascArr.
+15. **Bloqueo por fichero, de la lectura al reemplazo, con identidad que
+    sobrevive al reemplazo.** La secuencia leer → planificar → reconstruir →
+    verificar → `os.replace` se serializa **por fichero**. Un `flock` sobre el
+    propio CBZ **no sirve**: el bloqueo va con el *inodo*, y `os.replace` instala
+    uno nuevo, así que quien llega después del reemplazo abre el inodo nuevo y
+    entra sin esperar al que todavía tiene el viejo; cuando el primero suelta, el
+    que esperaba adquiere el bloqueo de un inodo ya huérfano y **dos escritores
+    reconstruyen la misma ruta a la vez**, pudiendo además borrarse los
+    temporales entre sí. La identidad tiene que ser algo que no cambie al
+    reemplazar el fichero: aquí es un ***advisory lock* de PostgreSQL por
+    `File.id`**, que además no deja ficheros de bloqueo en la biblioteca, se
+    suelta solo si el proceso muere (la conexión se cierra) y se libera **antes**
+    de la siguiente adquisición, así que dos ficheros no pueden quedar en espera
+    circular. El «plan caduca» (punto 13) cubre el cambio externo; el bloqueo
+    cubre la carrera entre dos ZascArr.
 16. **`--limit` acota trabajo NUEVO, no vueltas sobre lo mismo.** Cada revisión
     deja una **marca persistente** en `File.metadata_` (resultado, `stat` del
     fichero, hash, y los valores deseados con los que se comparó). Un fichero
@@ -220,7 +229,10 @@ reparar la BD tras un fallo). Quedan fijadas como parte del contrato:
     datos de la BD, así que una corrección de metadatos **vuelve a poner el
     fichero en la cola** (y el *overlay* la propaga). Los ficheros **ausentes**
     tampoco gastan cupo: si no, unas cuantas rutas rotas dejarían fuera al
-    resto.
+    resto. **Matiz de uso:** las marcas solo se guardan al aplicar (`--apply`);
+    el `dry-run` —que es el modo por defecto— no escribe nada, tampoco en la BD,
+    así que repetir un `--dryrun --limit 20` vuelve a mostrar los mismos
+    pendientes. Para avanzar de verdad hay que aplicar.
 17. **Un `ComicInfo.xml` que no se entiende no se toca.** XML ilegible o con
     raíz distinta de `<ComicInfo>` → `archivo inválido`: **no se fusiona ni se
     sustituye** (sustituirlo sería perder lo que hubiera dentro) y el fallo se

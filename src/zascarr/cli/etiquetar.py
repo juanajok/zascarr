@@ -44,7 +44,9 @@ def _parser() -> argparse.ArgumentParser:
     modo.add_argument("--apply", action="store_true",
                       help="escribe de verdad (por defecto solo simula)")
     modo.add_argument("--dryrun", action="store_true",
-                      help="no escribe nada (es el comportamiento por defecto)")
+                      help="no escribe nada, ni en el CBZ ni en la BD (es el "
+                           "comportamiento por defecto): tampoco guarda marcas "
+                           "de revisión")
     p.add_argument("--limit", type=int, default=20,
                    help="cuántos CBZ sin revisar mirar (por defecto 20; 0 = todos)")
     p.add_argument("--file-id", action="append", dest="file_ids", metavar="UUID",
@@ -90,8 +92,11 @@ def _imprimir_texto(informe: InformeEtiquetado, *, aplicar: bool) -> None:
     if informe.ya_revisados:
         print(f"({informe.ya_revisados} ya revisados antes y sin cambios: no gastan cupo; "
               f"repite el comando para seguir avanzando.)")
-    if not aplicar and informe.previstos:
-        print("Nada se ha escrito. Para aplicarlo: --apply")
+    if not aplicar:
+        print("La simulación no guarda marcas de revisión: la próxima vez volverá "
+              "a mostrar los mismos pendientes.")
+        if informe.previstos:
+            print("Nada se ha escrito. Para aplicarlo: --apply")
 
 
 def _salida_json(informe: InformeEtiquetado, *, aplicar: bool) -> None:

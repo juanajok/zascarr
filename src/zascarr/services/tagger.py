@@ -5,8 +5,9 @@ Une la BD (qué queremos escribir) con el CBZ (qué hay) y aplica el contrato de
 
   - un **único** cálculo del plan alimenta la vista previa y la escritura real;
   - el plan **caduca** si el archivo cambia entre calcularlo y aplicarlo, y la
-    escritura se **serializa por fichero** (bloqueo exclusivo desde la lectura
-    hasta después del `os.replace`);
+    escritura se **serializa por fichero** con un *advisory lock* de PostgreSQL
+    por `File.id` (identidad que sobrevive al `os.replace`; un `flock` sobre el
+    propio CBZ no lo haría) desde la lectura hasta después del reemplazo;
   - los campos en `locked_fields` (H3) no se pisan, y el informe los cuenta;
   - tras `os.replace` se **recalculan** `sha256_hash`/`file_size_bytes`; si el
     commit falla, la siguiente pasada **reconcilia** aunque el tamaño no cambie;
@@ -18,12 +19,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.comicinfo_write import (
@@ -140,6 +144,45 @@ def _estado(path: Path) -> tuple[int, int]:
     """Huella barata del fichero para detectar que el plan caducó."""
     st = path.stat()
     return (st.st_size, st.st_mtime_ns)
+
+
+def _clave_de(file_id) -> int:
+    """Clave de 64 bits estable a partir del UUID del `File`."""
+    return int.from_bytes(
+        hashlib.blake2b(uuid.UUID(str(file_id)).bytes, digest_size=8).digest(),
+        "big", signed=True,
+    )
+
+
+@asynccontextmanager
+async def bloqueo_de_fichero(db: AsyncSession, file_id) -> AsyncIterator[None]:
+    """Serializa la escritura de **este** CBZ entre procesos e instancias.
+
+    Un `flock` sobre el propio fichero no vale: el bloqueo va con el *inodo*, y
+    `os.replace` instala uno nuevo. La carrera es real y silenciosa — A bloquea
+    el inodo viejo, B se queda esperando ese mismo inodo, A reemplaza la ruta, C
+    abre el inodo **nuevo** y entra sin esperar a nadie; cuando A suelta, B
+    adquiere el bloqueo del inodo viejo (ya huérfano) y B y C reconstruyen la
+    misma ruta a la vez, pudiendo además borrarse los temporales entre sí.
+
+    La identidad aquí es el **`File.id`**, que no cambia al reemplazar el
+    fichero. Es un *advisory lock* de PostgreSQL: no deja ficheros de bloqueo en
+    la biblioteca del coleccionista, se suelta solo si el proceso muere (la
+    conexión se cierra), y se libera **antes** de la siguiente adquisición, así
+    que no hay espera circular entre dos ficheros.
+
+    Nada de BD ocurre dentro del bloque salvo el propio bloqueo: la escritura en
+    la sesión se hace después de soltarlo, para que una transacción abortada no
+    deje el *advisory lock* colgado en una conexión del pool."""
+    clave = _clave_de(file_id)
+    await db.execute(text("SELECT pg_advisory_lock(:clave)"), {"clave": clave})
+    try:
+        yield
+    finally:
+        try:
+            await db.execute(text("SELECT pg_advisory_unlock(:clave)"), {"clave": clave})
+        except Exception as exc:  # noqa: BLE001 — si falla, la conexión se cierra
+            logger.warning("tagger.desbloqueo_fallido", file_id=str(file_id), error=str(exc))
 
 
 @dataclass
@@ -305,7 +348,6 @@ class TaggerService:
                     file.file_size_bytes = st.st_size
         if not simular:
             self._poner_marca(file, ctx, st, sha, SALTADO)
-            await self.db.flush()
         return reconciliado
 
     # ── ejecución ───────────────────────────────────────────────────────────
@@ -337,18 +379,15 @@ class TaggerService:
         if dry_run:
             return await self._simular(file, ctx, path, solo_rellenar, reconciliar_todo)
 
-        # Escritura real: bloqueo exclusivo desde la lectura/plan hasta después
-        # del reemplazo. Dos etiquetados del mismo tebeo no pueden intercalarse.
-        try:
-            fd = await asyncio.to_thread(zcbz.abrir_bloqueado, path)
-        except OSError as exc:  # desapareció entre la consulta y el bloqueo
-            return ResultadoEtiquetado(file.id, file.file_name, SALTADO,
-                                       motivo=f"archivo ausente: {exc}",
-                                       gasta_cupo=False)
-        try:
-            return await self._escribir(file, ctx, path, solo_rellenar, reconciliar_todo)
-        finally:
-            await asyncio.to_thread(zcbz.cerrar_bloqueado, fd)
+        # Escritura real: bloqueo por fichero desde la lectura/plan hasta
+        # después del reemplazo. Dos etiquetados del mismo tebeo no se
+        # intercalan, ni siquiera entre procesos.
+        async with bloqueo_de_fichero(self.db, file.id):
+            resultado = await self._escribir(
+                file, ctx, path, solo_rellenar, reconciliar_todo)
+        # La sesión se toca DESPUÉS de soltar el bloqueo (ver `bloqueo_de_fichero`).
+        await self.db.flush()
+        return resultado
 
     async def _simular(
         self, file: File, ctx: _Contexto, path: Path,
@@ -376,7 +415,6 @@ class TaggerService:
         except ComicInfoInvalidoError as exc:
             st = await asyncio.to_thread(path.stat)
             self._poner_marca(file, ctx, st, file.sha256_hash or "", INVALIDO)
-            await self.db.flush()
             return ResultadoEtiquetado(file.id, file.file_name, INVALIDO, [],
                                        f"ComicInfo.xml inválido: {exc}")
         if not hay_cambios(campos):
@@ -394,8 +432,7 @@ class TaggerService:
                                        "el archivo cambió entre el plan y la escritura")
 
         try:
-            await asyncio.to_thread(zcbz.reescribir_con_xml, path, nuevo,
-                                    ya_bloqueado=True)
+            await asyncio.to_thread(zcbz.reescribir_con_xml, path, nuevo)
         except SinEspacioError as exc:
             return ResultadoEtiquetado(file.id, file.file_name, SIN_ESPACIO, campos, str(exc))
         except VerificacionError as exc:
@@ -424,7 +461,6 @@ class TaggerService:
                 propio[c.tag] = c.nuevo
         file.metadata_ = {**(file.metadata_ or {}), "comicinfo_propio": propio}
         self._poner_marca(file, ctx, st, sha, ESCRITO)
-        await self.db.flush()
         return ResultadoEtiquetado(file.id, file.file_name, ESCRITO, campos)
 
     # ── lote ────────────────────────────────────────────────────────────────
@@ -491,10 +527,14 @@ class TaggerService:
                         file.id, file.file_name, SALTADO, [],
                         "ya revisado (sin cambios desde la última pasada)"))
                 continue
-            r = await self._ejecutar_con(file, ctx, Path(file.file_path),
-                                         dry_run=dry_run,
-                                         solo_rellenar=solo_rellenar,
-                                         reconciliar_todo=reconciliar_todo)
+            try:
+                r = await self._ejecutar_con(file, ctx, Path(file.file_path),
+                                             dry_run=dry_run,
+                                             solo_rellenar=solo_rellenar,
+                                             reconciliar_todo=reconciliar_todo)
+            except Exception as exc:  # noqa: BLE001 — un fallo nunca aborta el lote
+                logger.exception("tagger.fallo_inesperado", file_id=file.id)
+                r = ResultadoEtiquetado(file.id, file.file_name, ERROR, [], str(exc))
             if r.bloqueados:
                 informe.bloqueados += 1
             informe.resultados.append(r)
