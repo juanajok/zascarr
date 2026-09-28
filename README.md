@@ -161,6 +161,10 @@ sudo bash zascarr/bootstrap.sh
 
 - Crea el usuario de servicio `media` si no existe, y deja el código y los
   datos a su nombre — no al tuyo personal ni a `root`.
+- Comprueba, antes de tocar nada, que la carpeta de la biblioteca y las de
+  descargas **no sean la misma** ni una esté **dentro** de la otra, siguiendo
+  los symlinks. Si se solapan te enseña las rutas ya resueltas y espera a que
+  se lo confirmes: nunca cambia una ruta por su cuenta.
 - Crea la estructura de carpetas de la biblioteca (`Comics`, `Manga`, `BD`,
   `Tebeos`, …) **sin tocar tus archivos**.
 - Levanta PostgreSQL, Redis y ZascArr como contenedores Docker.
