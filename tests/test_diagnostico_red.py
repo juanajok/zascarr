@@ -29,10 +29,16 @@ case "$args" in
     *"ps -q zascarr"*) printf '%s\n' "${STUB_CONTENEDOR:-}"; exit 0 ;;
 esac
 if [[ "$args" == network\ inspect* ]]; then
+    # `otra-red` permite montar un contenedor con DOS redes.
+    if [[ "$args" == *"otra-red"* ]]; then
+        sub="${STUB_SUBRED_OTRA:-}"; int="${STUB_INTERFAZ_OTRA:-}"; id="${STUB_ID_OTRA:-}"
+    else
+        sub="${STUB_SUBRED:-}"; int="${STUB_INTERFAZ:-}"; id="${STUB_ID_RED:-}"
+    fi
     case "$args" in
-        *IPAM.Config*)     printf '%s\n' "${STUB_SUBRED:-}"; exit 0 ;;
-        *bridge.name*)     printf '%s\n' "${STUB_INTERFAZ:-}"; exit 0 ;;
-        *".Id"*)           printf '%s\n' "${STUB_ID_RED:-}"; exit 0 ;;
+        *IPAM.Config*) printf '%s\n' "${sub}"; exit 0 ;;
+        *bridge.name*) printf '%s\n' "${int}"; exit 0 ;;
+        *".Id"*)       printf '%s\n' "${id}"; exit 0 ;;
     esac
     exit 1
 fi
@@ -60,7 +66,15 @@ case "${1:-}" in
             printf '%s\n' "${STUB_UFW_ESTADO:-Status: active}"; exit 0
         fi
         printf '%s\n' "${STUB_UFW_ESTADO:-Status: active}"
-        printf '%s\n' "${STUB_UFW_REGLAS_STATUS:-}"
+        if [[ -n "${STUB_UFW_REGLAS_STATUS:-}" ]]; then
+            printf '%s\n' "${STUB_UFW_REGLAS_STATUS}"
+        else
+            # Una línea de tabla por regla añadida: así las dos fuentes cuadran
+            # (como en una Pi de verdad) salvo que la prueba diga lo contrario.
+            while read -r r; do
+                [[ "$r" == ufw\ * ]] && echo "9696 ALLOW 0.0.0.0/0"
+            done <<< "${STUB_UFW_ANADIDAS:-}"
+        fi
         ;;
     show)
         printf '%s\n' "${STUB_UFW_ANADIDAS:-}"
@@ -239,25 +253,109 @@ class TestSubredReal:
         assert "NO lleva 'on <interfaz>'" in texto(salida)
         assert "br-089a55cef040" in salida.stdout  # se enseña, pero no se usa en la regla
 
-    def test_un_deny_previo_cambia_la_propuesta(self, entorno):
-        """Una regla nueva va al final: si un DENY casa antes, no serviría."""
+    def test_un_deny_no_propone_comando(self, entorno):
+        """Con un DENY que casa, una regla nueva al final podría quedarle por
+        detrás. No se propone comando: se remite a inspección manual."""
         salida = entorno(
-            env_file_texto="PROWLARR_URL=http://host.docker.internal:9696\n",
+            args=["--puerto", "9696"],
             STUB_UFW_ANADIDAS="ufw deny from 172.16.0.0/12 to any port 9696 proto tcp",
         )
         assert salida.returncode == 1
-        assert "sudo ufw insert <número> allow from 172.18.0.0/16" in salida.stdout
         assert "DENIEGA" in texto(salida)
+        assert "ufw status numbered" in texto(salida)
+        assert "ufw allow from" not in salida.stdout
+        assert "ya hay una regla que cubre" not in texto(salida)
+
+    def test_deny_y_allow_juntos_no_se_dan_por_cubiertos(self, entorno):
+        """Cuál gana depende del ORDEN EFECTIVO, y `ufw show added` no lo
+        conserva (ufw(8)). Ante la duda, ni «cubre» ni propuesta."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS=(
+                "ufw deny from 172.18.0.0/16 to any port 9696 proto tcp\n"
+                "ufw allow from 172.18.0.0/16 to any port 9696 proto tcp"
+            ),
+        )
+        assert salida.returncode == 1
+        assert "DENIEGA" in texto(salida)
+        assert "ya hay una regla que cubre" not in texto(salida)
+        assert "ufw allow from" not in salida.stdout
+
+    def test_allow_y_deny_juntos_tampoco(self, entorno):
+        """El mismo caso con los dos en el otro orden: no se puede saber cuál
+        gana desde `show added`, así que tampoco se dice que cubre."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS=(
+                "ufw allow from 172.18.0.0/16 to any port 9696 proto tcp\n"
+                "ufw deny from 172.18.0.0/16 to any port 9696 proto tcp"
+            ),
+        )
+        assert salida.returncode == 1
+        assert "ya hay una regla que cubre" not in texto(salida)
+        assert "ufw allow from" not in salida.stdout
+
+    def test_una_regla_proto_udp_no_cubre_tcp(self, entorno):
+        """`proto udp` no autoriza este tráfico: no puede acreditar cobertura."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS="ufw allow proto udp from 172.18.0.0/16 to any port 9696",
+        )
+        assert salida.returncode == 1
+        assert "ya hay una regla que cubre" not in texto(salida)
+        assert "sudo ufw allow from 172.18.0.0/16 to any port 9696 proto tcp" in salida.stdout
+
+    def test_una_regla_dirigida_a_otra_direccion_no_cubre(self, entorno):
+        """`to 192.168.1.5 port 9696` no autoriza el tráfico que va a la puerta
+        de enlace de Docker."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS="ufw allow from 172.18.0.0/16 to 192.168.1.5 port 9696 proto tcp",
+        )
+        assert salida.returncode == 1
+        assert "ya hay una regla que cubre" not in texto(salida)
+        assert "sudo ufw allow from 172.18.0.0/16 to any port 9696 proto tcp" in salida.stdout
+
+    def test_una_regla_dirigida_a_la_puerta_de_enlace_si_cubre(self, entorno):
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS="ufw allow from 172.18.0.0/16 to 172.18.0.1 port 9696 proto tcp",
+        )
+        assert salida.returncode == 0
+        assert "ya hay una regla que cubre" in texto(salida)
+
+    def test_una_regla_que_no_se_entiende_impide_proponer_si_deniega(self, entorno):
+        """Un DENY con destino que no sé leer podría casar: no propongo nada."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS="ufw deny from 172.18.0.0/16 to any port OpenSSH",
+        )
+        assert salida.returncode == 2
+        assert "no puedo interpretar" in texto(salida)
+        assert "ufw allow from" not in salida.stdout
+
+    def test_una_regla_que_no_se_entiende_y_solo_permite_no_bloquea_el_diagnostico(self, entorno):
+        """Un ALLOW ilegible no acredita cobertura, pero tampoco puede tapar
+        nada: se propone la regla (y se avisa de que no se contó)."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS="ufw allow from 172.18.0.0/16 to any port OpenSSH",
+        )
+        assert salida.returncode == 1
+        assert "ya hay una regla que cubre" not in texto(salida)
+        assert "sudo ufw allow from 172.18.0.0/16 to any port 9696 proto tcp" in salida.stdout
+        assert "no he podido interpretar" in texto(salida)
 
 
 class TestRecorridoReal:
 
     def test_recorrido_bueno(self, entorno):
         salida = entorno(env_file_texto="", STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN)
-        assert "es la puerta de enlace de su red" in texto(salida)
+        assert "la puerta de enlace de 172.18.0.0/16" in texto(salida)
 
-    def test_recorrido_roto_avisa_con_los_dos_valores(self, entorno):
-        """Reproducción de la causa real del 2026-09-25 (docker0 vs red propia)."""
+    def test_recorrido_roto_no_propone_ninguna_regla(self, entorno):
+        """Causa real del 2026-09-25 (docker0 vs red propia): una regla para la
+        subred «correcta» NO arregla esto, así que no se imprime."""
         salida = entorno(
             env_file_texto="PROWLARR_URL=http://host.docker.internal:9696\n",
             STUB_RESUELTO="172.17.0.1",
@@ -266,11 +364,50 @@ class TestRecorridoReal:
         assert salida.returncode == 1
         assert "172.17.0.1" in salida.stdout
         assert "172.18.0.1" in salida.stdout
-        assert "ninguna regla de ufw para la subred correcta lo arregla" in texto(salida)
+        assert "ninguna de sus redes" in texto(salida)
+        assert "ufw allow" not in salida.stdout
+        assert "--force-recreate zascarr" in texto(salida)
 
-    def test_no_se_puede_comprobar_el_recorrido(self, entorno):
-        salida = entorno(env_file_texto="", STUB_RESUELTO=None, STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN)
-        assert "queda sin comprobar" in texto(salida)
+    def test_sin_poder_comprobar_el_recorrido_no_propone_nada(self, entorno):
+        salida = entorno(
+            env_file_texto="PROWLARR_URL=http://host.docker.internal:9696\n",
+            STUB_RESUELTO=None,
+            STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN,
+        )
+        assert salida.returncode == 2
+        assert "no sé por qué red sale el tráfico" in texto(salida)
+        assert "ufw allow" not in salida.stdout
+
+    def test_varias_redes_usa_la_del_recorrido_comprobado(self, entorno):
+        """Con dos redes, la subred es la de la puerta de enlace a la que
+        resuelve host.docker.internal, no la primera de la lista."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_REDES=(
+                "zascarr_zascarr-internal 172.18.0.5 172.18.0.1\n"
+                "otra-red 172.19.0.5 172.19.0.1"
+            ),
+            STUB_SUBRED_OTRA="172.19.0.0/16",
+            STUB_RESUELTO="172.19.0.1",
+        )
+        assert salida.returncode == 1
+        assert "sudo ufw allow from 172.19.0.0/16 to any port 9696 proto tcp" in salida.stdout
+        # La otra red sale en el listado, pero NO en la regla propuesta.
+        assert "allow from 172.18.0.0/16" not in salida.stdout
+
+    def test_varias_redes_con_la_misma_puerta_de_enlace_no_decide(self, entorno):
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_REDES=(
+                "zascarr_zascarr-internal 172.18.0.5 172.18.0.1\n"
+                "otra-red 172.18.0.6 172.18.0.1"
+            ),
+            STUB_SUBRED_OTRA="172.18.0.0/16",
+            STUB_RESUELTO="172.18.0.1",
+        )
+        assert salida.returncode == 2
+        assert "comparten la puerta de enlace" in texto(salida)
+        assert "ufw allow" not in salida.stdout
 
 
 class TestPuertos:
@@ -327,18 +464,19 @@ class TestCuandoNoSePuedeDeterminar:
     def test_sin_subred_declarada(self, entorno):
         salida = entorno(env_file_texto="", STUB_SUBRED="")
         assert salida.returncode == 2
-        assert "sin subred declarada" in texto(salida)
+        assert "no declara subred" in texto(salida)
         assert "ufw allow" not in salida.stdout
 
-    def test_reglas_activas_que_no_puedo_leer(self, entorno):
-        """Si `ufw show added` no me da las reglas, no propongo a ciegas."""
+    def test_fuentes_que_no_cuadran_no_permiten_decidir(self, entorno):
+        """`ufw status` y `ufw show added` tienen que decir lo mismo. Si no
+        (reglas editadas a mano), no sé qué está en vigor."""
         salida = entorno(
             env_file_texto="",
             STUB_UFW_REGLAS_STATUS="9696  ALLOW  192.168.1.0/24",
             STUB_UFW_ANADIDAS="",
         )
         assert salida.returncode == 2
-        assert "no puedo leerlas" in texto(salida)
+        assert "no coinciden" in texto(salida)
         assert "ufw allow from" not in salida.stdout
 
 
@@ -413,14 +551,22 @@ class TestUtilidades:
         assert salida.stdout.strip() == ("SI" if cubre else "NO")
 
     @pytest.mark.parametrize(("linea", "esperado"), [
+        # acción | interfaz | proto | origen | dirección destino | puertos
         ("ufw allow from 172.16.0.0/12 to any port 9696 proto tcp",
-         "allow||172.16.0.0/12|9696"),
-        ("ufw allow 9696/tcp", "allow||any|9696/tcp"),
-        ("ufw allow from 10.0.0.0/8 to 192.168.1.5 port 25", "allow||10.0.0.0/8|25"),
-        ("ufw deny proto tcp to any port 80", "deny||any|80"),
+         "allow||tcp|172.16.0.0/12|any|9696"),
+        ("ufw allow 9696/tcp", "allow|||any|any|9696/tcp"),
+        ("ufw allow from 10.0.0.0/8 to 192.168.1.5 port 25",
+         "allow|||10.0.0.0/8|192.168.1.5|25"),
+        ("ufw deny proto tcp to any port 80", "deny||tcp|any|any|80"),
         ("ufw allow in on eth0 from 192.168.1.0/24 to any port 9091",
-         "allow|eth0|192.168.1.0/24|9091"),
-        ("ufw limit 2222/tcp comment 'SSH port'", "limit||any|2222/tcp"),
+         "allow|eth0||192.168.1.0/24|any|9091"),
+        ("ufw limit 2222/tcp comment 'SSH port'", "limit|||any|any|2222/tcp"),
+        # Lo que no se entiende se marca "?", no se da por bueno.
+        ("ufw allow proto udp from 172.18.0.0/16 to any port 9696",
+         "allow||udp|172.18.0.0/16|any|9696"),
+        ("ufw allow smtp", "allow|||any|any|?"),
+        ("ufw allow to 10.0.0.0/8", "allow|||any|10.0.0.0/8|any"),
+        ("ufw allow from cualquier-cosa", "allow|||?|any|any"),
         ("ufw allow out on eth1 to 10.0.0.0/8", "FALLA"),          # saliente
         ("ufw route allow in on eth0 from 10.0.0.0/8", "FALLA"),    # route
         ("", "FALLA"),
