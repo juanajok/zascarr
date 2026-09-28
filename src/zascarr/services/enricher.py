@@ -39,6 +39,7 @@ import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.config import get_settings
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     ComicTradition,
@@ -135,11 +136,17 @@ class EnrichmentService:
 
     async def enrich_pending(self, limit: int = 20) -> EnrichmentReport:
         report = EnrichmentReport()
+        settings = get_settings()
         async with AsyncExitStack() as stack:
-            cv_client = self._injected_cv or await stack.enter_async_context(ComicVineClient())
-            anilist_client = self._injected_anilist or await stack.enter_async_context(AniListClient())
-            tebeosfera_client = (self._injected_tebeosfera
-                                or await stack.enter_async_context(TebeosferaClient()))
+            cv_client = self._injected_cv if settings.comicvine_enabled else None
+            if cv_client is None and settings.comicvine_enabled:
+                cv_client = await stack.enter_async_context(ComicVineClient())
+            anilist_client = self._injected_anilist if settings.anilist_enabled else None
+            if anilist_client is None and settings.anilist_enabled:
+                anilist_client = await stack.enter_async_context(AniListClient())
+            tebeosfera_client = self._injected_tebeosfera if settings.tebeosfera_enabled else None
+            if tebeosfera_client is None and settings.tebeosfera_enabled:
+                tebeosfera_client = await stack.enter_async_context(TebeosferaClient())
             await self._enrich_series_batch(cv_client, anilist_client, tebeosfera_client, limit, report)
             await self._enrich_issues_batch(cv_client, limit, report)
         return report
@@ -173,13 +180,22 @@ class EnrichmentService:
                 continue
 
             id_field, source_value, source_label = source
+            cliente = (
+                anilist_client if source_value == MetadataSource.ANILIST.value
+                else tebeosfera_client if source_value == MetadataSource.TEBEOSFERA.value
+                else cv_client
+            )
+            if cliente is None:
+                # B8: fuente desactivada → cero tráfico y no se marca el
+                # intento (no consume el plazo de reintento de 30 días).
+                continue
             try:
                 if source_value == MetadataSource.ANILIST.value:
-                    match = await self._find_anilist_match(anilist_client, series)
+                    match = await self._find_anilist_match(cliente, series)
                 elif source_value == MetadataSource.TEBEOSFERA.value:
-                    match = await self._find_tebeosfera_match(tebeosfera_client, series)
+                    match = await self._find_tebeosfera_match(cliente, series)
                 else:
-                    match = await self._find_cv_series_match(cv_client, series)
+                    match = await self._find_cv_series_match(cliente, series)
             except Exception:
                 # No se marca enrichment_attempted_at: un fallo de red es
                 # transitorio y debe poder reintentarse en el próximo ciclo,
@@ -295,6 +311,9 @@ class EnrichmentService:
 
     async def _enrich_issues_batch(self, client: ComicVineClient, limit: int,
                                     report: EnrichmentReport) -> None:
+        if client is None:
+            # B8: Comic Vine desactivada → los issues solo se enriquecen vía CV.
+            return
         rows = (await self.db.execute(
             select(Issue, Series)
             .join(Series, Issue.series_id == Series.id)
