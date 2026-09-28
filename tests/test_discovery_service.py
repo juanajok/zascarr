@@ -126,6 +126,33 @@ class TestSearch:
         assert resultados[0].source == MetadataSource.ANILIST
         assert any("Tebeosfera" in a for a in avisos)
 
+    @pytest.mark.asyncio
+    async def test_fuente_desactivada_no_se_consulta_y_las_demas_si(self, monkeypatch):
+        """B8: «fuente apagada» vale también en Descubrir — la desactivada no se
+        instancia ni consulta; las demás siguen devolviendo resultados."""
+        monkeypatch.setattr(
+            "zascarr.services.discovery.get_settings",
+            lambda: MagicMock(
+                comicvine_api_key="una-key", comicvine_enabled=False,
+                anilist_enabled=True, tebeosfera_enabled=True,
+            ),
+        )
+        anilist = [AniListResult(anilist_id=2, title_romaji="Naruto")]
+        tebeo = [TebeosferaResult(slug="thorgal_1981", title="Thorgal", kind="saga")]
+        cv_client = _client_ctx([CVResult(cv_id=1, name="Batman")])
+
+        with patch("zascarr.services.discovery.ComicVineClient", cv_client), \
+             patch("zascarr.services.discovery.AniListClient", _client_ctx(anilist)), \
+             patch("zascarr.services.discovery.TebeosferaClient", _client_ctx(tebeo)), \
+             patch("zascarr.services.discovery.GCDClient", _client_ctx([])):
+            service = DiscoveryService(db=FakeSession())
+            resultados, avisos = await service.search("algo")
+
+        # Comic Vine desactivada → su cliente nunca se instancia ni consulta.
+        cv_client.return_value.search_series.assert_not_called()
+        fuentes = {r.source for r in resultados}
+        assert fuentes == {MetadataSource.ANILIST, MetadataSource.TEBEOSFERA}
+
 
 class TestGetOrCreateSeries:
 
