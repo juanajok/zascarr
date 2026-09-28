@@ -17,13 +17,15 @@ pregunta que el censo de columnas: las columnas de la BD que íbamos a medir
 se escribe siempre **vacío** en importación y adopción —, mientras que el
 listado muestra la estructura editorial real que el censo de columnas no ve.
 
-**Hallazgo central del censo real:** la evidencia de cobertura **sí existe y es
-abundante, pero vive en el nombre de archivo, no en `covered_issue_ids`**. Un
-censo basado solo en la columna habría dicho "cero cobertura contrastable →
-posponer". El listado demuestra lo contrario: la cobertura se puede leer del
-nombre en rangos explícitos. Por tanto **no se pospone**: la migración aditiva
-está justificada, y la procedencia inicial de una cobertura será «rango en el
-nombre (heurística)» → `proposed`, pendiente de confirmación humana.
+**Hallazgo central del censo de nombres:** la evidencia de cobertura **sí
+existe y es abundante, pero vive en el nombre de archivo, no en
+`covered_issue_ids`**. Los rangos (`01-07`, `932-942`, `122-143`) son evidencia
+**candidata**: justifican no descartar el proyecto de cobertura y generar
+`proposed`, pero **no** prueban que el interior del archivo contenga exactamente
+esas publicaciones ni cuántas relaciones podrán confirmarse. Por eso la
+procedencia inicial será «rango en el nombre (heurística)» → `proposed`, nunca
+`confirmed` automático. **Esto no autoriza aún la migración**: es un censo de
+nombres, no el censo de filas/colisiones de la BD que B22 prometía.
 
 ## Decisión 1 — `number_key`: texto libre + clave canónica por edición; especiales y renumeraciones no se fuerzan
 
@@ -44,8 +46,9 @@ ordenar y desambiguar, no para sustituir al texto:
 `Animal Man (NuDC) 02a/02b/02c` (sufijos); `Superman Vol2 Especial 1–8` y
 `Flash v2 Annual 01–13` (especiales); `Patrulla-X, nº 03 (122)` (renumeración);
 `Superman Vol2 049-051a` y `Flash v2 164-169` (rangos). De la carpeta de
-descargas se suman: **Dreadstar en tres ediciones renumeradas** (`Epic Comics
-01–26 Ed.Forum`, `First Comics 27–64 USA`, `Malibu/Norma 01–06`);
+descargas se suman: **Dreadstar** (`Epic Comics 01–26` y `First Comics 27–64`
+continúan la numeración al cambiar de sello — frontera por verificar; `Malibu/
+Norma 01–06` reinicia en 01 — señal más fuerte de edición distinta);
 `Transmetropolitan #01 … 1 de 4` («X de Y» = parte de un arco, no número de
 grapa); `GunSmith Cats [P1N1]…[P3N9]` (codificación parte/número);
 `M0N57R355 01 al 05` (rango en español); y ruido de descarga — sufijo `(1)` de
@@ -72,11 +75,13 @@ una edición la publica un sello distinto del de la serie.
 atributo; la identidad editorial es «Superman Vol2». Frente a eso,
 `Patrulla-X (Panini)` (reimpresión `nº 03 (122)`), `La Patrulla X Omnigold` y
 `La Imposible Patrulla X` son **tres ediciones reales** de la misma serie. El
-caso más limpio lo da **Dreadstar** en la carpeta de descargas: `Dreadstar
-(Epic Comics)(01 Ed.Forum)…(26)`, `Dreadstar (First Comics) 27 USA…64 USA` y
-`Jim Starlin's Dreadstar (Malibu Comics)(01 Ed.Norma)…(06)` — **tres ediciones
-de la misma serie**, cada una con su numeración y su sello en el nombre; el
-sello es dato, la edición es el espacio de numeración.
+caso más instructivo lo da **Dreadstar** en la carpeta de descargas: `Dreadstar
+(Epic Comics)(01 Ed.Forum)…(26)` y `Dreadstar (First Comics) 27 USA…64 USA`
+**continúan la numeración** al cambiar de sello — candidatas cuya frontera hay
+que verificar (no demuestran por sí solos dos espacios de numeración);
+`Jim Starlin's Dreadstar (Malibu Comics)(01 Ed.Norma)…(06)` **reinicia en 01**,
+señal más fuerte de edición distinta. El sello es dato; la edición es el espacio
+de numeración, y su frontera se verifica, no se deduce del sello.
 
 **Alternativa descartada.** Modelar cada sello como una edición (dobla filas
 para el mismo contenido) o usar `kind` solo como identidad (falla cuando hay dos
@@ -110,10 +115,11 @@ capítulos (documentado en #13).
    estas grapas», con procedencia y confirmación.
 
 En esta biblioteca ambas se alimentan de la misma señal porque el archivo **es**
-la publicación recopilatoria (un tomo = un CBZ con N grapas dentro). No hay packs
-«sin Issue» que obliguen a inventar una publicación: los rangos aparecen ligados
-a una publicación identificable (el tomo/volumen). Si apareciera un pack sin
-publicación identificable, va a Pendientes sin `Issue` y no se le inventa uno.
+la publicación recopilatoria (un tomo = un CBZ con N grapas dentro). En los
+ejemplos revisados **no se identificaron de forma concluyente** packs sin
+publicación: un listado de disco no informa si `File.issue_id` es NULL en la BD.
+Si apareciera un pack sin publicación identificable, va a Pendientes sin `Issue`
+y no se le inventa uno.
 
 **Evidencia (biblioteca real).** `Tom Strong - Volumen 1 (01-07)`,
 `One Piece Manga Volumen 93 (932-942)`, `Superman Vol2 049-051a`,
@@ -127,9 +133,10 @@ spec).
 
 ## Consecuencias
 
-- **No se pospone la cobertura**: hay material real que la llena. La migración
-  aditiva (`editions`, `issues.edition_id`, `issue_coverages`) queda justificada
-  como siguiente entrega, en otra PR y con backup/rollback probados.
+- **No se descarta el proyecto de cobertura**: los rangos del nombre pueden ser
+  su primera procedencia como `proposed`. Pero la migración aditiva **no queda
+  autorizada aún**: el censo de nombres no sustituye al censo de filas y
+  colisiones de la BD (PR #20), que es el paso previo obligatorio.
 - **La procedencia inicial es el nombre de archivo** (rango), etiquetada
   `proposed`; una persona confirma o rechaza. Nunca `confirmed` automático.
 - **C6 sigue bloqueado** hasta que la API distinga «completa» de «no computable»
@@ -138,9 +145,12 @@ spec).
 - **B20 sigue aparcado**: también mueve conceptos de edición y nombre, y
   aumentaría los contratos cambiando en paralelo.
 
-## Decisión fuera de este ADR (registrada, no resuelta aquí)
+## Próximo paso: censo de BD (B22 sigue en curso)
 
-El censo por columnas (censo_identidad.py) queda como herramienta complementaria
-para cuando exista una BD real: medirá lo que el listado no puede (colisiones por
-`volume NULL`, `covered_issue_ids` no vacíos, formatos). Este ADR se apoya en el
-listado, que es la fuente disponible hoy y la más rica para identidad editorial.
+El censo de nombres no sustituye al censo de filas/colisiones de la BD que B22
+prometía. `scripts/medicion/censo_identidad.py` (PR #20) es el paso siguiente y
+obligatorio antes de revisar este ADR a fondo y decidir la migración: debe medir
+formatos, `volume=NULL`, duplicados reales, archivos sin `Issue` y cualquier
+`covered_issue_ids` existente. Sin acceso a BD ahora, B22 queda **en curso** y se
+registra «pendiente por falta de BD», no «hecho». Orden: #20 → censo local
+agregado → revisión final de ADR-0003 → decidir migración aditiva.
