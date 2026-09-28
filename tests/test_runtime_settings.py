@@ -98,6 +98,15 @@ class TestSave:
         assert get_settings().prowlarr_url == "http://prowlarr-nuevo:9696"
         assert get_settings().prowlarr_enabled is True
 
+    @pytest.mark.asyncio
+    async def test_gcd_enabled_persiste_y_se_aplica(self, restaurar_settings):
+        """GCD es «solo Descubrir», pero su interruptor vive en el mismo
+        grupo `fuentes` de D11: debe persistir y aplicar al instante."""
+        session = FakeSession(existing_values={})
+        await RuntimeSettingsService(db=session).save({"gcd_enabled": False})
+        assert session._row.values["gcd_enabled"] is False
+        assert get_settings().gcd_enabled is False
+
 
 class TestApplyOverrides:
 

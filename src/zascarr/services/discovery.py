@@ -94,7 +94,8 @@ class DiscoveryService:
             fuentes.append(("AniList", self._search_anilist(query, limit)))
         if settings.tebeosfera_enabled:
             fuentes.append(("Tebeosfera", self._search_tebeosfera(query, limit)))
-        fuentes.append(("GCD", self._search_gcd(query, limit)))
+        if settings.gcd_enabled:
+            fuentes.append(("GCD", self._search_gcd(query, limit)))
 
         outcomes = await asyncio.gather(*(coro for _, coro in fuentes), return_exceptions=True)
 
@@ -157,9 +158,10 @@ class DiscoveryService:
             DiscoveryResult(
                 source=MetadataSource.GCD, external_id=str(h.gcd_id),
                 title=h.name, start_year=h.year_began,
-                # La API de búsqueda de GCD no trae sinopsis ni portada a
-                # nivel de serie (solo datos bibliográficos) — ver
-                # docstring de services/gcd.py.
+                # El endpoint de BÚSQUEDA de GCD no devuelve sinopsis ni
+                # portada a nivel de serie. La web de GCD sí muestra una
+                # portada de serie; si la API expone una URL de imagen
+                # aprovechable está pendiente de evaluar (ver BACKLOG E7).
                 description=None, cover_url=None, site_url=h.site_url,
                 tradition_guess=ComicTradition(h.tradition_guess),
             )

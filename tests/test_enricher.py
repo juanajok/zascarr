@@ -358,6 +358,15 @@ class TestSourceRouting:
         service = EnrichmentService(db=MagicMock())
         assert service._source_for(ComicTradition.FUMETTI) is None
 
+    def test_gcd_no_participa_en_el_enricher(self):
+        """GCD hoy es «solo Descubrir»: el enrutado del enricher nunca lo
+        devuelve (ampliarlo es otra historia, BACKLOG E7)."""
+        service = EnrichmentService(db=MagicMock())
+        for tradition in ComicTradition:
+            source = service._source_for(tradition)
+            if source is not None:
+                assert source[1] != MetadataSource.GCD.value
+
     @pytest.mark.asyncio
     async def test_serie_sin_fuente_no_aparece_ni_como_match_ni_como_no_match(self):
         series = make_series("Corto Maltese", tradition=ComicTradition.FUMETTI)

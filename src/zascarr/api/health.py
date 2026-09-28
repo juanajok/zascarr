@@ -220,11 +220,13 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "amule":        "ok" if amule_ok else "unreachable",
             "vpn":          vpn_status,
         },
-        # B8: estado de cada fuente de enriquecimiento (on/off en Ajustes).
+        # B8: estado de cada fuente de metadatos (on/off en Ajustes).
+        # GCD hoy solo participa en Descubrir (el enricher no lo consulta).
         "fuentes": {
             "comic_vine": "enabled" if settings.comicvine_enabled else "disabled",
             "anilist":    "enabled" if settings.anilist_enabled else "disabled",
             "tebeosfera": "enabled" if settings.tebeosfera_enabled else "disabled",
+            "gcd":        "enabled" if settings.gcd_enabled else "disabled",
         },
         "warnings": warnings,
     }

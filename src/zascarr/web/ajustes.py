@@ -77,6 +77,7 @@ def _contexto() -> dict:
         "comicvine_enabled": s.comicvine_enabled,
         "anilist_enabled": s.anilist_enabled,
         "tebeosfera_enabled": s.tebeosfera_enabled,
+        "gcd_enabled": s.gcd_enabled,
         "prowlarr_url": s.prowlarr_url,
         "prowlarr_api_key_configurada": bool(s.prowlarr_api_key),
         "prowlarr_enabled": s.prowlarr_enabled,
@@ -114,15 +115,17 @@ async def guardar_fuentes(
     comicvine_enabled: bool = Form(default=False),
     anilist_enabled: bool = Form(default=False),
     tebeosfera_enabled: bool = Form(default=False),
+    gcd_enabled: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     await RuntimeSettingsService(db).save({
         "comicvine_enabled": comicvine_enabled,
         "anilist_enabled": anilist_enabled,
         "tebeosfera_enabled": tebeosfera_enabled,
+        "gcd_enabled": gcd_enabled,
     })
     return templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Fuentes de enriquecimiento"}
+        request, "_ajustes_guardado.html", {"nombre": "Fuentes de metadatos"}
     )
 
 
