@@ -1,0 +1,54 @@
+{# D8: el selector de política de búsqueda de la ficha de serie.
+
+   Es un partial porque el POST lo devuelve tal cual para que htmx sustituya
+   solo este bloque, sin recargar la página. Las opciones salen de
+   `politicas_ofrecidas` (lista blanca en web/series.py) — `todos` no se
+   ofrece a propósito y `futuros` va deshabilitado con su motivo. #}
+<div id="politica-serie" class="politica-serie">
+  <h2>Búsqueda automática</h2>
+  <p class="subtitle">
+    Qué números de esta serie busca ZascArr por su cuenta. Lo que añadas a mano
+    a la lista de deseos se sigue buscando siempre, elijas lo que elijas aquí.
+  </p>
+  <form class="politica-form">
+    <label for="wishlist_policy">Qué buscar</label>
+    <select id="wishlist_policy" name="wishlist_policy"
+            hx-post="/ui/series/{{ series.id }}/politica"
+            hx-target="#politica-serie" hx-swap="outerHTML">
+      {% for valor, etiqueta in politicas_ofrecidas.items() %}
+      <option value="{{ valor.value }}"
+              {% if politica_actual == valor %}selected{% endif %}>{{ etiqueta }}</option>
+      {% endfor %}
+      <option value="futuros" disabled title="{{ motivo_futuros }}">
+        Números que aún no han salido (deshabilitado)
+      </option>
+      {% if politica_actual.value in ("futuros", "todos") %}
+      {# Defensa: un valor reservado que llegara por otra vía (BD antigua) no
+         debe desaparecer del selector como si no estuviera puesto. #}
+      <option value="{{ politica_actual.value }}" selected disabled>
+        {{ politica_actual.value }} — reservado, todavía no hace nada
+      </option>
+      {% endif %}
+    </select>
+    <span class="htmx-indicator">Guardando…</span>
+  </form>
+
+  <p class="caption">
+    «Números que aún no han salido» está deshabilitado: {{ motivo_futuros }}.
+  </p>
+
+  <p class="politica-veredicto">
+    {% if querer.motivo %}
+      {{ querer.motivo }}
+    {% elif politica_actual.value == "ninguno" %}
+      Ahora mismo ZascArr no busca nada de esta serie por su cuenta.
+    {% elif querer.numeros %}
+      Se {% if querer.numeros|length == 1 %}buscará{% else %}buscarán{% endif %}:
+      {% for n in querer.numeros|sort %}<span class="issue-chip issue-missing">#{{ n }}</span>{% endfor %}
+    {% else %}
+      No falta ningún número — no hay nada que buscar.
+    {% endif %}
+  </p>
+
+  <p class="caption">El cambio se aplica en el próximo ciclo de búsqueda.</p>
+</div>

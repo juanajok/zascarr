@@ -126,6 +126,43 @@ class TestIndex:
         assert "Aviso legal pendiente" in r.text
 
 
+class CapturingSession(FakeSession):
+    """Como FakeSession, pero guarda cada SELECT compilado con sus literales —
+    para fijar el `WHERE` de verdad, no solo lo que el endpoint hace con una
+    lista de resultados ya dada."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.statements: list[str] = []
+
+    async def execute(self, statement):
+        from sqlalchemy.dialects import postgresql
+        self.statements.append(str(statement.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})))
+        return await super().execute(statement)
+
+
+class TestEstadosRetiradoD8:
+    """D8: `retirado` es un estado nuevo. La revisión de estados tiene que
+    cubrirlo en los tres sitios que los recorren: la etiqueta de la fila, el
+    listado (que no debe llenarse de filas retiradas) y los ciclos del
+    orquestador (ya cubiertos en test_orchestrator.py)."""
+
+    def test_la_etiqueta_del_estado_existe(self):
+        """Sin entrada en `_ESTADO_LABEL`, la UI enseñaría el valor crudo del
+        enum («retirado») sin explicar que no falló nada."""
+        from zascarr.web.wishlist import _ESTADO_LABEL
+        assert WishlistStatus.RETIRADO in _ESTADO_LABEL
+        assert "Retirado" in _ESTADO_LABEL[WishlistStatus.RETIRADO]
+
+    def test_el_listado_excluye_los_retirados(self):
+        session = CapturingSession(exec_queue=[FakeExecResult([]), _accepted()])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/wishlist")
+        assert r.status_code == 200
+        assert "status != 'retirado'" in session.statements[0], session.statements[0]
+
+
 class TestBuscarSerie:
 
     def test_devuelve_resultados_como_fragmento(self):

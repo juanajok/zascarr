@@ -8,13 +8,15 @@ que la página los renderiza).
 """
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, MetadataSource, Series
+from zascarr.models import ComicTradition, MetadataSource, Series, WishlistPolicy
 
 
 class FakeScalarResult:
@@ -48,6 +50,7 @@ class FakeSession:
     def __init__(self, queue: list, series=None):
         self._queue = list(queue)
         self._series = series
+        self.flush = AsyncMock()
 
     async def execute(self, _statement):
         return self._queue.pop(0)
@@ -150,6 +153,130 @@ class TestFichaSerie:
             r = client.get(f"/ui/series/{series.id}")
         assert r.status_code == 200
         assert "no se puede calcular huecos" in r.text
+
+
+class TestPoliticaBusquedaD8:
+    """D8: el selector de la ficha de serie.
+
+    La página no recalcula nada por su cuenta: el veredicto sale del mismo
+    predicado que genera (`Orchestrator.querer_de_serie`), y el POST valida el
+    valor contra una lista blanca — `todos` no se ofrece y `futuros` va
+    deshabilitado con su motivo, pero además el servidor los rechaza.
+    """
+
+    def test_ficha_pinta_el_selector_y_los_numeros_que_buscara(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]),   # la serie
+            FakeExecResult([]),         # poseídos (para pintar la ficha)
+            FakeExecResult([]),         # manuales vivos (predicado)
+            FakeExecResult([]),         # poseídos (predicado)
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert r.status_code == 200
+        assert "Búsqueda automática" in r.text
+        assert "Se buscarán" in r.text
+        assert "#1" in r.text and "#3" in r.text
+
+    def test_futuros_aparece_deshabilitado_con_su_motivo(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([]),
+            FakeExecResult([]), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert "Números que aún no han salido" in r.text
+        assert "deshabilitado" in r.text
+        assert "todavía no se puede aplicar" in r.text   # el motivo, visible
+
+    def test_todos_no_se_ofrece(self):
+        """Reservado hasta que D3 le dé significado: no es una opción que
+        parezca funcionar y no haga nada."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([]),
+            FakeExecResult([]), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert 'value="todos"' not in r.text
+
+    def test_sin_poder_calcular_lo_dice(self):
+        """No computable (AniList cuenta capítulos): se declara, no se inventa."""
+        series = make_series(total_issues=120, metadata_source=MetadataSource.ANILIST.value)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]),   # la serie
+            FakeExecResult([]),         # poseídos (para pintar)
+            FakeExecResult([]),         # manuales (predicado); huecos corta aquí
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert "grapas" in r.text
+
+    def test_manual_de_serie_vivo_lo_explica(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([]),
+            FakeExecResult([(None, None)]),   # un item manual de serie vivo
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert "no se generan números" in r.text
+
+    def test_cambiar_a_faltantes_por_la_ui(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.NONE
+        session = FakeSession([
+            FakeExecResult([series]),   # búsqueda de la serie en el POST
+            FakeExecResult([]),         # manuales (predicado)
+            FakeExecResult([]),         # poseídos (predicado)
+        ])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/politica",
+                            data={"wishlist_policy": "faltantes"})
+
+        assert r.status_code == 200
+        assert series.wishlist_policy == WishlistPolicy.MISSING
+        assert "Se buscarán" in r.text
+
+    @pytest.mark.parametrize("reservada", ["futuros", "todos"])
+    def test_la_ui_rechaza_los_valores_reservados(self, reservada):
+        """El `<select>` ya no los ofrece, pero un formulario manipulado
+        tampoco los puede fijar."""
+        series = make_series()
+        with use_fake_session(FakeSession([FakeExecResult([series])])) as client:
+            r = client.post(f"/ui/series/{series.id}/politica",
+                            data={"wishlist_policy": reservada})
+
+        assert r.status_code == 422
+        assert series.wishlist_policy != WishlistPolicy.FUTURE
+
+    def test_la_ui_rechaza_un_valor_inventado(self):
+        series = make_series()
+        with use_fake_session(FakeSession([FakeExecResult([series])])) as client:
+            r = client.post(f"/ui/series/{series.id}/politica",
+                            data={"wishlist_policy": "lo_que_sea"})
+
+        assert r.status_code == 422
+
+    def test_serie_inexistente_da_404(self):
+        with use_fake_session(FakeSession([FakeExecResult([])])) as client:
+            r = client.post(f"/ui/series/{uuid4()}/politica",
+                            data={"wishlist_policy": "faltantes"})
+
+        assert r.status_code == 404
 
 
 class TestPortada:
