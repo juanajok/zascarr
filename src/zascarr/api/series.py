@@ -25,22 +25,6 @@ from zascarr.services.series import (  # noqa: F401
 
 router = APIRouter(prefix="/series", tags=["series"])
 
-# Fuentes cuyo `total_issues` está ACREDITADO como recuento de GRAPAS, que es
-# la unidad de esta vista (`SINGLE_ISSUE` con número entero).
-#
-# Se dejan fuera a propósito:
-#   - AniList: cuenta CAPÍTULOS. `enricher.py::_find_anilist_match` mapea
-#     `chosen.chapters` a `count_of_issues`, y los ficheros de manga son
-#     TOMOS (`TRADE_PAPERBACK`). Restar tomos de capítulos daría una lista de
-#     huecos enorme y falsa — el mismo error que este cambio viene a evitar,
-#     solo que disfrazado de dato.
-#   - Tebeosfera: da "números" de una colección que puede ser de tomos o de
-#     álbumes; la unidad no está acreditada.
-#   - GCD: fuente declarada pero sin implementar todavía.
-# Acreditarlas exige reglas por tradición/fuente y datos que hoy no tenemos;
-# mientras tanto, decir "no se puede calcular" es más honesto que inventarlo.
-
-
 # ── Schemas de escritura (M1: mass assignment prohibido) ───────────────────
 # Solo se permite escribir los campos de cara al coleccionista. Los campos
 # internos o calculados (id, title_norm, comic_vine_id/anilist_id/
