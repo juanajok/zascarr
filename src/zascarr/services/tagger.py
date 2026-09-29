@@ -478,8 +478,13 @@ class TaggerService:
         # de la BD si ésta coincide con el disco (por tamaño); si no, se calcula
         # del disco justo antes de reemplazar. Cero hashes extra en el caso
         # normal.
+        #
+        # `comicinfo_propio` solo lo rellena el tagger: si ya tiene contenido,
+        # es un CBZ etiquetado ANTES de la migración 0016 y su original se
+        # perdió — no se inventa con el hash del fichero ya etiquetado (que
+        # además quedaría desfasado tras el siguiente reemplazo).
         original_para_guardar: str | None = None
-        if file.original_sha256 is None:
+        if file.original_sha256 is None and not (file.metadata_ or {}).get("comicinfo_propio"):
             if file.sha256_hash is not None and file.file_size_bytes == estado_antes[0]:
                 original_para_guardar = file.sha256_hash
             else:
