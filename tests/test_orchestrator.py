@@ -33,6 +33,7 @@ from zascarr.services.orchestrator import (
     MOTIVO_CLIENTE_INACCESIBLE,
     MOTIVO_ERROR_INESPERADO,
     MOTIVO_FUENTE_INACCESIBLE,
+    MOTIVO_NUMERO_DISTINTO,
     MOTIVO_POLITICA_FUTUROS,
     MOTIVO_SERIE_EN_CURSO,
     MOTIVO_SIN_FUENTE,
@@ -799,6 +800,35 @@ class TestFiltroPorNumeroD8:
         """RF-04/B5: "Asterix T01 - Asterix el Galo" → serie "Asterix", así que
         la igualdad no pierde este caso (era el motivo para usar contención)."""
         assert self._acepta("Asterix T01 - Asterix el Galo.cbz", 1, "Asterix")
+
+
+class TestMotivoNumeroDistintoD8:
+    """D9 + D8: cuando lo ÚNICO que vacía el pool es el filtro por número, el
+    motivo no puede decir «ningún cliente de descarga está activo» — eso sería
+    falso. La integración importa: los casos puros de `_candidato_es_del_numero`
+    no prueban que `_search_and_rank` escriba el motivo correcto."""
+
+    @pytest.mark.asyncio
+    async def test_solo_el_filtro_de_numero_vacio_el_pool(self):
+        serie = make_series(title="Batman")
+        item = Wishlist(id=uuid4(), series_id=serie.id, numero=4, status=WishlistStatus.WANTED)
+        session = FakeSession([
+            FakeExecResult([serie]),   # _build_query
+            FakeExecResult([serie]),   # título de la serie para el filtro
+            FakeExecResult([]),        # alias locales
+        ])
+        orch = Orchestrator(db=session)
+        orch._prowlarr = AsyncMock()
+        orch._prowlarr.search.return_value = [make_result(title="Batman 007.cbz", seeders=50)]
+        orch._transmission = AsyncMock()
+
+        result = await orch._search_and_rank(item)
+
+        assert result == []
+        assert item.status == WishlistStatus.WANTED
+        assert item.last_error == MOTIVO_NUMERO_DISTINTO
+        # El título del item pedía la serie genérica, no un número suelto.
+        orch._prowlarr.search.assert_awaited_once_with("Batman 4", categories=[7030, 7020])
 
 
 class TestFiltroPorNumeroConAliasD8:
