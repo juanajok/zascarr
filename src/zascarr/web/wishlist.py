@@ -40,6 +40,9 @@ _ESTADO_LABEL = {
     WishlistStatus.DOWNLOADED: "Descargando…",
     WishlistStatus.IMPORTED: "En tu biblioteca",
     WishlistStatus.FAILED: "Sin resultados",
+    # D8: lo retiró la política (dejó de querer ese número), no falló nada. Se
+    # etiqueta explícitamente en vez de dejar el valor crudo del enum.
+    WishlistStatus.RETIRADO: "Retirado",
 }
 
 # Carga anticipada de las relaciones que _row() necesita, para no disparar
@@ -81,7 +84,14 @@ async def _get_row(db: AsyncSession, item_id) -> dict:
 @router.get("", response_class=HTMLResponse)
 async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     items = list((await db.execute(
-        select(Wishlist).options(*_EAGER).order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
+        select(Wishlist)
+        # D8: los items que la política retiró no son deseos activos, pero
+        # tampoco se borran (dejan constancia). Se ocultan de la lista para que
+        # pasar una serie larga a «ninguno» no llene la pantalla de filas
+        # retiradas; siguen en la BD y en la API (`?status=retirado`).
+        .where(Wishlist.status != WishlistStatus.RETIRADO)
+        .options(*_EAGER)
+        .order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
     )).scalars().all())
     rows = [_row(item) for item in items]
     # D9: el aviso legal pendiente es un estado GLOBAL del sistema (no de

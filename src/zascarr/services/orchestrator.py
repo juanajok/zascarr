@@ -680,7 +680,10 @@ class Orchestrator:
         `motivo` lo dice, en vez de inventar una lista (misma regla que
         `huecos_de_serie` en #13).
         """
-        politica = series.wishlist_policy
+        # `None` solo puede aparecer en un objeto aún sin pasar por la BD (la
+        # columna es NOT NULL con `default`/`server_default`). Se trata como el
+        # valor por defecto para que el predicado sea total.
+        politica = series.wishlist_policy or WishlistPolicy.NONE
         if politica == WishlistPolicy.NONE:
             return Querer(frozenset(), True)
         if politica == WishlistPolicy.FUTURE:

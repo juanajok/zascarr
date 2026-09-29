@@ -2,13 +2,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from zascarr.database import get_db
-from zascarr.models import ComicTradition, Series
+from zascarr.models import ComicTradition, Series, WishlistPolicy
 
 # El cálculo de huecos vive en `services/` (lo usa también el orquestador, que
 # no puede depender de `api/`). Se reexportan aquí porque `web/series.py`,
@@ -57,6 +57,28 @@ class SeriesUpdate(BaseModel):
     status: str | None = Field(default=None, max_length=50)
     description: str | None = None
     cover_url: str | None = Field(default=None, max_length=500)
+    # D8: la política de búsqueda por serie. Va declarada aquí porque
+    # `extra="forbid"` rechazaría el campo si no estuviera — y con los dos
+    # valores reservados ya dentro del ENUM, un PATCH podría fijarlos sin pasar
+    # por la UI. Se rechazan en el servidor (422), no solo deshabilitados en el
+    # selector.
+    wishlist_policy: WishlistPolicy | None = None
+
+    @field_validator("wishlist_policy")
+    @classmethod
+    def _solo_politicas_aplicables(cls, valor: WishlistPolicy | None) -> WishlistPolicy | None:
+        """`futuros` y `todos` están reservados pero todavía no significan nada
+        aplicable (ver ficha D8): aceptarlos haría creer al coleccionista que se
+        busca algo. Falla con motivo legible en vez de un valor que no hace
+        nada."""
+        if valor in (WishlistPolicy.FUTURE, WishlistPolicy.ALL):
+            raise ValueError(
+                "«futuros» y «todos» todavía no se pueden aplicar: «futuros» "
+                "necesita que la fuente publique los números que aún no han "
+                "salido, y «todos» espera a una historia posterior. Usa "
+                "«ninguno» o «faltantes»."
+            )
+        return valor
 
 
 @router.get("")
