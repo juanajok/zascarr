@@ -41,7 +41,9 @@ Dos problemas relacionados:
 
 ## Datos reales y medición de partida
 
-Verificado en el código (`main` en `9326f5d`):
+Verificado en el código (`main` en `7f6f637`, que ya incluye D8 #34; los
+ficheros citados —`importer.py`, `tagger.py`, `library_adopter.py` y el modelo—
+no los tocó D8, así que lo de abajo sigue en pie):
 
 - `models.File.sha256_hash`: `String(64)`, `index=True`, **sin unicidad**;
   la migración 0001 crea `idx_files_hash`, también no único.
@@ -99,9 +101,9 @@ disco.
   `original_sha256`. No obliga a rehashear nada y sirve para CBR y demás
   formatos.
 - **Adoptar (arreglo 2): lectura robusta.** `select(...).order_by(...).limit(1)`
-  con `.first()`, orden determinista (`is_missing` primero los presentes, luego
-  `imported_at`), y un `logger.warning` si hay más de una coincidencia para
-  que los duplicados en la BD sean visibles.
+  con `.first()`, orden determinista (las presentes —`is_missing = false`—
+  primero, luego por `imported_at`), y un `logger.warning` si hay más de una
+  coincidencia para que los duplicados en la BD sean visibles.
 - **Adaptar (cuándo se fija `original_sha256`):** solo la **primera** vez que
   B6 reemplaza un CBZ y solo si aún es `NULL`. El valor sale de
   `file.sha256_hash` **si** `file_size_bytes` coincide con el `stat` actual; si
@@ -120,12 +122,27 @@ disco.
   original de esos ficheros ya se perdió y no se puede reconstruir. Se dice, no
   se inventa: esos ficheros solo los detecta la auditoría B16 como «misma obra,
   otra copia».
-- **Arreglo (hallazgo 4, confirmado):** la lectura del código confirma que un
-  fichero que reaparece se descarta como duplicado de una fila `is_missing`
-  (el dedupe no filtra `is_missing`). El arreglo es **reenlazar** la fila
-  existente (nueva ruta, `is_missing = false`, `missing_since = NULL`) en vez
-  de descartar el fichero, y anotarlo en el informe. La prueba de
-  caracterización pasa a ser regresión.
+- **Arreglo (hallazgo 4, confirmado): reenlazar** la fila existente en vez de
+  descartar el fichero, **solo cuando TODAS las coincidencias por hash están
+  `is_missing`** (el orden de lectura ya trae las presentes primero: si hay una
+  presente, es un duplicado real y se descarta). El reenlace conserva la fila
+  vieja (y su enlace a `Issue`/`Series`) y hace tres cosas que no pueden
+  omitirse:
+  1. **`imported_at = now()`.** D8 cierra un item con
+     `File.imported_at >= Wishlist.added_at`, y reactivar un `IMPORTED` reinicia
+     `added_at`. Si el reenlace conserva el `imported_at` viejo, el item
+     reactivado no se cierra nunca — el mismo bucle, movido de sitio. Se fija con
+     una prueba de extremo a extremo (ver caso 9).
+  2. **La fila describe el fichero nuevo:** se actualizan `file_path`,
+     `file_name`, `file_size_bytes` y `sha256_hash` con los del entrante, y
+     `is_missing = false` / `missing_since = NULL`. Si el entrante es el
+     **original** de una fila que estaba etiquetada, se vacían `comicinfo_estado`
+     y `comicinfo_propio` (describen un fichero que ya no existe).
+     `original_sha256` se conserva.
+  3. **Qué informa el ciclo:** cuenta como **importado**, con una línea del
+     informe que diga «recuperado» para distinguirlo — así el aviso E4 se
+     dispara igual que con una importación normal (el coleccionista ve que un
+     deseo se ha cumplido), sin esconder que no fue una importación nueva.
 
 ## Invariantes de ZascArr (no mentir, no borrar, confirmación, coste Pi)
 
@@ -163,6 +180,18 @@ disco.
    regresión y el arreglo de reenlazado la hace pasar.
 8. **Un CBR nunca cambia:** `original_sha256` permanece `NULL` porque B6 no lo
    toca.
+9. **Extremo a extremo con D8:** un item de política `IMPORTED` cuyo fichero
+   desaparece (`is_missing`) se reactiva a `WANTED` (D8), el fichero vuelve a
+   llegar, se reenlaza la fila y el item pasa a `IMPORTED`. Fija el reinicio de
+   `imported_at`: si el reenlace lo conservara viejo, `_is_fulfilled` no cerraría
+   el item y quedaría `WANTED` para siempre.
+10. **El reenlace describe el fichero nuevo:** `file_path`/`file_name`/
+    `file_size_bytes`/`sha256_hash` pasan a los del entrante; si era el original
+    de una fila etiquetada, `comicinfo_estado` y `comicinfo_propio` quedan vacíos;
+    `original_sha256` se conserva.
+11. **Solo se reenlaza si no hay ninguna presente:** con dos filas del mismo
+    hash, una `is_missing` y otra presente, el entrante se descarta como
+    duplicado (no se reenlaza nada).
 
 ## Orden de commits sugerido
 
@@ -175,13 +204,17 @@ disco.
    prueba 7.
 6. Notas en `docs/BACKLOG.md` (deuda registrada, con lo que **no** se arregla).
 
+La prueba 9 (extremo a extremo con D8) entra **en esta misma PR**: D8 ya está
+en `main` (merge de #34, `7f6f637`), así que no hay que esperar a otra fusión
+para escribirla. Los casos 10 y 11 entran junto al commit 5.
+
 ## Lo que no está verificado
 
 - **Cuántos ficheros están ya etiquetados** en una biblioteca real: sin base de
   datos real en este entorno.
 - **Comportamiento de otras herramientas** del ecosistema (ver «Referencias»).
 
-> **Validación del agente (2026-09-30):** se leyó `importer.py` entero,
+> **Validación del agente (2026-09-29):** se leyó `importer.py` entero,
 > `library_adopter.py`, `tagger.py` y el modelo `File`. Todo lo afirmado en
 > «Datos reales» es exacto, y el hallazgo 4 queda **confirmado**: el dedupe
 > (`importer.py::_triage_and_match`, ~línea 148) consulta
@@ -195,4 +228,4 @@ disco.
 
 No requiere ADR (cambio de esquema aditivo y de lectura, no de arquitectura).
 Entregable: migración 0016 + `TaggerService` + consulta de dedupe compartida +
-las ocho pruebas, en una PR separada de la ficha.
+las once pruebas, en una PR separada de la ficha.
