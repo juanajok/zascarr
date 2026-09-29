@@ -28,14 +28,23 @@ class FakeScalarResult:
 
 
 class FakeExecResult:
-    def __init__(self, rows):
+    def __init__(self, rows, rowcount=None):
         self._rows = rows
+        # Un `select(func.count())` pasa el número directamente (no una lista),
+        # así que `len()` no siempre está disponible.
+        por_defecto = len(rows) if hasattr(rows, "__len__") else 0
+        self.rowcount = rowcount if rowcount is not None else por_defecto
 
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
 
     def scalars(self):
         return FakeScalarResult(self._rows)
+
+    def scalar(self):
+        """Para `select(func.count())` (D8, cuántos retirados): se pasa el
+        número directamente, no una lista."""
+        return self._rows
 
     def first(self):
         return self._rows[0] if self._rows else None
@@ -99,6 +108,17 @@ def make_series(total_issues=None, metadata_source=MetadataSource.COMIC_VINE.val
                   metadata_source=metadata_source)
 
 
+def acuse() -> FakeExecResult:
+    """Fila del aviso legal aceptado — `_contexto_politica` lo consulta para no
+    prometer búsquedas que el ciclo no va a hacer."""
+    return FakeExecResult([object()])
+
+
+def retirados(n: int = 0) -> FakeExecResult:
+    """`select(func.count())` de items retirados (D8)."""
+    return FakeExecResult(n)
+
+
 class TestFichaSerie:
 
     def test_serie_inexistente_da_404(self):
@@ -111,6 +131,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1", "single_issue", True), ("3", "single_issue", True)]),
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -125,6 +146,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1.5", "single_issue", True)]),
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -137,6 +159,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("12", "omnibus", True)]),
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -148,6 +171,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([]),
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -159,12 +183,14 @@ class TestPoliticaBusquedaD8:
     """D8: el selector de la ficha de serie.
 
     La página no recalcula nada por su cuenta: el veredicto sale del mismo
-    predicado que genera (`Orchestrator.querer_de_serie`), y el POST valida el
-    valor contra una lista blanca — `todos` no se ofrece y `futuros` va
+    predicado que genera (`services/politica.querer_de_serie`), y el POST valida
+    el valor contra una lista blanca — `todos` no se ofrece y `futuros` va
     deshabilitado con su motivo, pero además el servidor los rechaza.
     """
 
-    def test_ficha_pinta_el_selector_y_los_numeros_que_buscara(self):
+    def test_ficha_resume_los_numeros_que_buscara(self):
+        """No lista un chip por número: resume el conteo y dice el tope por
+        ciclo, que es lo que condiciona cuándo entrarán."""
         series = make_series(total_issues=3)
         series.wishlist_policy = WishlistPolicy.MISSING
         session = FakeSession([
@@ -172,14 +198,29 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),         # poseídos (para pintar la ficha)
             FakeExecResult([]),         # manuales vivos (predicado)
             FakeExecResult([]),         # poseídos (predicado)
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
 
         assert r.status_code == 200
         assert "Búsqueda automática" in r.text
-        assert "Se buscarán" in r.text
-        assert "#1" in r.text and "#3" in r.text
+        assert "Faltan 3 números" in r.text
+        assert "25 por ciclo" in r.text
+
+    def test_una_serie_larga_no_inunda_la_seccion(self):
+        series = make_series(total_issues=200)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([]),
+            FakeExecResult([]), FakeExecResult([]),
+            acuse(), retirados(),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert "Faltan 200 números" in r.text
+        assert "politica-lista-corta" not in r.text
 
     def test_futuros_aparece_deshabilitado_con_su_motivo(self):
         series = make_series(total_issues=3)
@@ -187,6 +228,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -203,6 +245,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -217,6 +260,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]),   # la serie
             FakeExecResult([]),         # poseídos (para pintar)
             FakeExecResult([]),         # manuales (predicado); huecos corta aquí
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -229,11 +273,41 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([(None, None)]),   # un item manual de serie vivo
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
 
         assert "no se generan números" in r.text
+
+    def test_aviso_legal_pendiente_lo_dice(self):
+        """Sin acuse el ciclo no genera ni busca: prometer búsquedas sin decirlo
+        sería engañar."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([]),
+            FakeExecResult([]), FakeExecResult([]),
+            FakeExecResult([]),   # sin acuse
+            retirados(),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert "aviso legal está pendiente" in r.text
+
+    def test_muestra_cuantos_retirados_hay(self):
+        """El listado de deseos oculta los retirados: la ficha tiene que decir
+        cuántos hay para que no desaparezcan sin rastro."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.NONE
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([]), acuse(), retirados(4),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+
+        assert "4 números retirados" in r.text
 
     def test_cambiar_a_faltantes_por_la_ui(self):
         series = make_series(total_issues=3)
@@ -242,6 +316,8 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]),   # búsqueda de la serie en el POST
             FakeExecResult([]),         # manuales (predicado)
             FakeExecResult([]),         # poseídos (predicado)
+            FakeExecResult([], rowcount=0),   # retirada (no hay nada que retirar)
+            acuse(),
         ])
         with use_fake_session(session) as client:
             r = client.post(f"/ui/series/{series.id}/politica",
@@ -249,7 +325,26 @@ class TestPoliticaBusquedaD8:
 
         assert r.status_code == 200
         assert series.wishlist_policy == WishlistPolicy.MISSING
-        assert "Se buscarán" in r.text
+        assert "Faltan 3 números" in r.text
+
+    def test_pasar_a_ninguno_retira_al_momento(self):
+        """Efecto asimétrico (revisión de PR): la generación espera al ciclo,
+        pero la retirada se aplica al guardar — cuando el coleccionista pide
+        parar, no puede seguir buscándose hasta una hora."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]),                 # la serie
+            FakeExecResult([], rowcount=2),           # la retirada inmediata
+            acuse(),                                  # contexto (predicado NONE: sin consultas)
+        ])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/politica",
+                            data={"wishlist_policy": "ninguno"})
+
+        assert r.status_code == 200
+        assert series.wishlist_policy == WishlistPolicy.NONE
+        assert "2 números retirados" in r.text
 
     @pytest.mark.parametrize("reservada", ["futuros", "todos"])
     def test_la_ui_rechaza_los_valores_reservados(self, reservada):

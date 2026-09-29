@@ -499,6 +499,8 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
   background: var(--paper); color: var(--ink);
 }
 .politica-veredicto { margin: 12px 0 6px; }
+.politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.politica-aviso { color: var(--warn); }
 .issue-chip.issue-present {
   background: var(--ok); color: #fff; border-color: var(--ink);
 }

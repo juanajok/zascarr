@@ -14,15 +14,28 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from zascarr.api.series import huecos_de_serie, numeros_poseidos
 from zascarr.config import get_settings
 from zascarr.database import get_db
-from zascarr.models import File, Issue, Series, WishlistPolicy
-from zascarr.services.orchestrator import MOTIVO_POLITICA_FUTUROS, Orchestrator
+from zascarr.models import (
+    File,
+    Issue,
+    Series,
+    Wishlist,
+    WishlistOrigin,
+    WishlistPolicy,
+    WishlistStatus,
+)
+from zascarr.services.legal import is_acknowledged
+from zascarr.services.politica import (
+    MOTIVO_POLITICA_FUTUROS,
+    querer_de_serie,
+    retirar_de_serie,
+)
 from zascarr.utils.cover import (
     cached_image_response,
     extract_cover_thumbnail,
@@ -44,15 +57,38 @@ _POLITICAS_OFRECIDAS = {
 }
 
 
-async def _contexto_politica(db: AsyncSession, series: Series) -> dict:
-    """Lo que la ficha de serie enseña sobre D8, calculado con el MISMO
-    predicado que genera (`Orchestrator.querer_de_serie`) — si la página
-    recalculara por su cuenta, podría decir una cosa y hacerse otra."""
+async def _cuantos_retirados(db: AsyncSession, series: Series) -> int:
+    """D8: los items retirados se ocultan del listado de deseos, así que la
+    ficha de serie tiene que decir cuántos hay — si no, desaparecen sin rastro."""
+    return (await db.execute(
+        select(func.count())
+        .select_from(Wishlist)
+        .where(Wishlist.series_id == series.id)
+        .where(Wishlist.origen == WishlistOrigin.POLICY)
+        .where(Wishlist.status == WishlistStatus.RETIRADO)
+    )).scalar() or 0
+
+
+async def _contexto_politica(db: AsyncSession, series: Series,
+                             querer=None, retirados: int | None = None) -> dict:
+    """Lo que la ficha de serie enseña sobre D8.
+
+    Usa el MISMO predicado que genera (`services/politica.querer_de_serie`) — si
+    la página recalculara por su cuenta, podría decir una cosa y hacerse otra —
+    y `lote` para no prometer más búsquedas de las que caben en un ciclo.
+    """
+    if querer is None:
+        querer = await querer_de_serie(db, series)
     return {
-        "querer": await Orchestrator(db).querer_de_serie(series),
+        "querer": querer,
         "politica_actual": series.wishlist_policy or WishlistPolicy.NONE,
         "politicas_ofrecidas": _POLITICAS_OFRECIDAS,
         "motivo_futuros": MOTIVO_POLITICA_FUTUROS,
+        "lote": get_settings().orchestrator_politica_lote,
+        # D8 + blindaje legal: el ciclo no genera ni busca sin acuse, así que
+        # prometer búsquedas sin decirlo sería engañar.
+        "aviso_legal_pendiente": not await is_acknowledged(db),
+        "retirados": retirados if retirados is not None else await _cuantos_retirados(db, series),
     }
 
 
@@ -87,6 +123,13 @@ async def cambiar_politica(series_id: UUID, request: Request,
     se valida contra una lista blanca explícita, nunca se escribe el body tal
     cual. `futuros`/`todos` se rechazan aquí también, no solo ocultos en el
     `<select>` — un formulario manipulado no puede fijar un valor reservado.
+
+    Efecto **asimétrico** a propósito (revisión de PR): la generación espera al
+    siguiente ciclo, pero la retirada se aplica aquí mismo y solo para esta
+    serie. Cuando el coleccionista pide parar, no puede seguir buscándose hasta
+    una hora. Es el mismo `UPDATE` atómico del ciclo
+    (`services/politica.py::retirar_de_serie`), así que da igual quién llegue
+    antes.
     """
     series = (await db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
     if not series:
@@ -102,7 +145,10 @@ async def cambiar_politica(series_id: UUID, request: Request,
         )
     series.wishlist_policy = politica
     await db.flush()
-    contexto = await _contexto_politica(db, series)
+
+    querer = await querer_de_serie(db, series)
+    retirados = await retirar_de_serie(db, series, querer)
+    contexto = await _contexto_politica(db, series, querer=querer, retirados=retirados)
     return templates.TemplateResponse(
         request, "_politica_serie.html", {"series": series, **contexto}
     )
