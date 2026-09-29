@@ -1,0 +1,99 @@
+{# D8: el selector de política de búsqueda de la ficha de serie.
+
+   Es un partial porque el POST lo devuelve tal cual para que htmx sustituya
+   solo este bloque, sin recargar la página. Las opciones salen de
+   `politicas_ofrecidas` (lista blanca en web/series.py) — `todos` no se
+   ofrece a propósito y `futuros` va deshabilitado con su motivo.
+
+   El veredicto NO lista todos los números: una serie de 200 inundaría la
+   página. Resume el conteo y dice el tope por ciclo, que es lo que de verdad
+   condiciona cuándo entrarán. #}
+<div id="politica-serie" class="politica-serie">
+  <h2>Búsqueda automática</h2>
+  <p class="subtitle">
+    Qué números de esta serie busca ZascArr por su cuenta. Lo que añadas a mano
+    a la lista de deseos se sigue buscando siempre, elijas lo que elijas aquí.
+  </p>
+  <form class="politica-form">
+    <label for="wishlist_policy">Qué buscar</label>
+    <select id="wishlist_policy" name="wishlist_policy"
+            hx-post="/ui/series/{{ series.id }}/politica"
+            hx-target="#politica-serie" hx-swap="outerHTML">
+      {% for valor, etiqueta in politicas_ofrecidas.items() %}
+      <option value="{{ valor.value }}"
+              {% if politica_actual == valor %}selected{% endif %}>{{ etiqueta }}</option>
+      {% endfor %}
+      <option value="futuros" disabled title="{{ motivo_futuros }}">
+        Números que aún no han salido (deshabilitado)
+      </option>
+      {% if politica_actual.value in ("futuros", "todos") %}
+      {# Defensa: un valor reservado que llegara por otra vía (BD antigua) no
+         debe desaparecer del selector como si no estuviera puesto. #}
+      <option value="{{ politica_actual.value }}" selected disabled>
+        {{ politica_actual.value }} — reservado, todavía no hace nada
+      </option>
+      {% endif %}
+    </select>
+    <span class="htmx-indicator">Guardando…</span>
+  </form>
+
+  <p class="caption">
+    «Números que aún no han salido» está deshabilitado: {{ motivo_futuros }}.
+  </p>
+
+  <p class="politica-veredicto">
+    {% if querer.motivo %}
+      {{ querer.motivo }}
+    {% elif politica_actual.value == "ninguno" %}
+      Ahora mismo ZascArr no busca nada de esta serie por su cuenta.
+    {% elif querer.numeros %}
+      {% if querer.numeros|length == 1 %}
+        Falta 1 número.
+      {% else %}
+        Faltan {{ querer.numeros|length }} números.
+      {% endif %}
+      ZascArr genera hasta {{ lote }} por ciclo y los reparte entre todas las
+      series con política activa, así que pueden hacer falta varios ciclos.
+      {% if querer.numeros|length <= 12 %}
+      <span class="politica-lista-corta">
+        {% for n in querer.numeros|sort %}<span class="issue-chip issue-missing">#{{ n }}</span>{% endfor %}
+      </span>
+      {% endif %}
+    {% else %}
+      No falta ningún número — no hay nada que buscar.
+    {% endif %}
+  </p>
+
+  {% if aviso_legal_pendiente %}
+  <p class="caption politica-aviso">
+    El aviso legal está pendiente: hasta que lo aceptes, el ciclo no genera ni
+    busca nada de esto.
+  </p>
+  {% endif %}
+
+  {% if retirados_ahora %}
+  <p class="caption politica-retirados-ahora">
+    {% if retirados_ahora == 1 %}
+      Se ha retirado 1 número generado por la política.
+    {% else %}
+      Se han retirado {{ retirados_ahora }} números generados por la política.
+    {% endif %}
+  </p>
+  {% endif %}
+
+  {% if retirados %}
+  <p class="caption">
+    {% if retirados == 1 %}
+      1 número retirado por la política (ya no se busca).
+    {% else %}
+      {{ retirados }} números retirados por la política (ya no se buscan).
+    {% endif %}
+    Se conservan como registro, no se borran.
+  </p>
+  {% endif %}
+
+  <p class="caption">
+    Guardar aplica la retirada al momento (lo que sobra deja de buscarse). Los
+    números que falten entran en el próximo ciclo de búsqueda.
+  </p>
+</div>
