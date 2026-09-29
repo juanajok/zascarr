@@ -11,11 +11,12 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, MetadataSource, Series
+from zascarr.models import ComicTradition, MetadataSource, Series, WishlistPolicy
 
 
 class FakeScalarResult:
@@ -232,3 +233,48 @@ class TestMassAssignmentSeries:
         with use_fake_session(session) as client:
             r = client.patch(f"/api/series/{series.id}", json={"status": "completed"})
         assert r.status_code == 200
+
+
+class TestPoliticaBusquedaD8:
+    """D8: `wishlist_policy` está declarado en `SeriesUpdate` (con
+    `extra='forbid'` no colaría de otra forma) y los dos valores reservados se
+    rechazan EN EL SERVIDOR — con el ENUM ya poblado, un PATCH directo a la API
+    podría fijarlos sin pasar por el selector."""
+
+    def test_patch_a_faltantes_se_acepta(self):
+        series = make_series()
+        series.wishlist_policy = WishlistPolicy.NONE
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.patch(f"/api/series/{series.id}", json={"wishlist_policy": "faltantes"})
+        assert r.status_code == 200
+        assert series.wishlist_policy == WishlistPolicy.MISSING
+
+    def test_patch_a_ninguno_se_acepta(self):
+        series = make_series()
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.patch(f"/api/series/{series.id}", json={"wishlist_policy": "ninguno"})
+        assert r.status_code == 200
+        assert series.wishlist_policy == WishlistPolicy.NONE
+
+    @pytest.mark.parametrize("reservada", ["futuros", "todos"])
+    def test_los_valores_reservados_dan_422(self, reservada):
+        with use_fake_session(FakeSession([])) as client:
+            r = client.patch(f"/api/series/{uuid4()}", json={"wishlist_policy": reservada})
+        assert r.status_code == 422
+        assert "todavía no se pueden aplicar" in r.text
+
+    def test_un_valor_inexistente_da_422(self):
+        with use_fake_session(FakeSession([])) as client:
+            r = client.patch(f"/api/series/{uuid4()}", json={"wishlist_policy": "lo_que_sea"})
+        assert r.status_code == 422
+
+    def test_un_null_explicito_da_422(self):
+        """La columna es NOT NULL: un `null` no puede llegar al ORM y reventar
+        al escribir. Para no buscar nada está `ninguno`."""
+        with use_fake_session(FakeSession([])) as client:
+            r = client.patch(f"/api/series/{uuid4()}", json={"wishlist_policy": None})
+        assert r.status_code == 422
+        assert "no puede quedar vacía" in r.text

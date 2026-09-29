@@ -325,6 +325,13 @@ button[type="submit"],
   border-color: var(--ink);
 }
 
+/* D8: lo retiró la política, no falló nada — apagado, sin gritar. */
+.wishlist-badge.estado-retirado {
+  color: var(--ink-faint);
+  border-color: var(--ink-faint);
+  text-transform: none;
+}
+
 /* D9: motivo concreto de por qué una fila de la wishlist no avanza —
    texto discreto junto al badge de estado, no otro badge que compita
    visualmente con él. */
@@ -478,6 +485,23 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 
 /* ── 12. FICHA DE SERIE (C2) ─────────────────────────────────────────────── */
 .issue-grid { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0 20px; }
+
+/* D8: selector de política de búsqueda en la ficha de serie. */
+.politica-serie { margin-top: 28px; }
+.politica-form {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 10px 0 4px;
+}
+.politica-form label { font-size: .85rem; font-weight: 700; }
+.politica-form select {
+  font: inherit; padding: 7px 10px;
+  border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper); color: var(--ink);
+}
+.politica-veredicto { margin: 12px 0 6px; }
+.politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.politica-aviso { color: var(--warn); }
+.politica-retirados-ahora { color: var(--ok); font-weight: 700; }
 .issue-chip.issue-present {
   background: var(--ok); color: #fff; border-color: var(--ink);
 }

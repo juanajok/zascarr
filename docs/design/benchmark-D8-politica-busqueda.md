@@ -225,6 +225,18 @@ falta» o «nada». El backlog pide un campo `wishlist_policy` por serie
   `sa.Enum` genérico, que no tiene ese parámetro (nota del BACKLOG). Aquí los
   tipos se crean a mano y `add_column` no los recrea, pero la forma explícita
   evita que alguien lo rompa al refactorizar.
+- **Límite conocido — arranque en frío de los alias (D8 + B13):** un alias local
+  se aprende **solo** cuando el coleccionista asigna a mano un fichero desde
+  Pendientes, y ese fichero tiene que existir ya. Con una serie de Comic Vine en
+  inglés, `faltantes` activo y **ningún alias**, los releases en español se
+  descartan y el item no avanza: **no llega nunca el fichero que enseñaría el
+  alias**. La salida de los alias sirve cuando ya hay historial, no en la primera
+  búsqueda de una serie recién dada de alta. Mitigación incluida: el motivo del
+  item (D9) invita a lo que sí funciona —«si el release usa otro nombre para la
+  serie, importa un fichero y asígnalo una vez en Pendientes»—. Alternativa
+  futura, ya otra historia: un campo «otros nombres de esta serie» en su ficha.
+  Y el tamaño real de este límite lo decidirá la comparación contra la base de
+  datos real en la primera instalación, que hoy no se puede hacer.
 - **Un item manual a nivel de serie + `faltantes`:** mientras exista uno vivo,
   **no se genera por número** para esa serie (si no, se buscaría la serie
   genérica *y además* cada número, quemando el doble). Se dice en la UI.
@@ -263,3 +275,93 @@ falta» o «nada». El backlog pide un campo `wishlist_policy` por serie
 propio; el criterio de computabilidad ya está decidido en #13). Entregable:
 columna + migración `0015` + generación/filtro en `Orchestrator` + selector en
 la ficha de serie.
+
+---
+
+## Notas de implementación (2026-09-29, ampliadas tras la revisión de #34)
+
+Lo que el código decidió y no estaba cerrado en el diseño de arriba. Se anota
+aquí porque cambia el contrato, no porque sea un detalle.
+
+- **El predicado vive en `services/politica.py`** (`Querer`, `querer_de_serie`)
+  y es la fuente única: lo consumen la generación, la retirada **y la ficha de
+  serie**. No está en el orquestador a propósito — la ficha no debe instanciar
+  un `Orchestrator` (con sus clientes de Prowlarr/Transmission/aMule) solo para
+  preguntar si hay números que buscar. Devuelve `numeros` (lo que la política
+  quiere ahora), `computable` y `motivo`.
+- **La reactivación de la generación es SOLO `RETIRADO` e `IMPORTED`**
+  (`ESTADOS_REACTIVABLES`), no «todo lo que no esté en vuelo». Corregido tras la
+  revisión de #34: reiniciar un `FAILED` cada ciclo le borraba el `last_error`
+  (el motivo de D9 desaparece justo cuando el coleccionista lo necesita),
+  alternaba su estado entre `FAILED` y `WANTED` y **gastaba el lote** en items
+  que ya existían — con 25 fallidos, los números nuevos no llegaban a generarse.
+  Un `FAILED` ya lo reintenta `process_wishlist` tras el cooldown, y un
+  `DOWNLOADED` está esperando al importador (reiniciarlo volvería a buscar algo
+  que ya viene de camino). El `DO UPDATE` lleva `WHERE status IN
+  ('retirado','imported')`, así que dos ciclos solapados tampoco lo reinician.
+- **Un item manual de un NÚMERO concreto también ocupa ese número** (no solo el
+  manual de serie que recogía el diseño). El índice único parcial no cubre los
+  manuales, así que sin esta exclusión el coleccionista que ya pidió el nº 2 a
+  mano recibiría además el nº 2 generado: la misma duplicación que la regla del
+  item de serie, por otra puerta.
+- **`todos` está implementado en el predicado** (`1..total_issues` cuando es
+  computable, caso 6) pero **no se ofrece ni se acepta**: el selector no lo
+  pinta y `SeriesUpdate` lo rechaza con 422. Queda listo para cuando D3 decida
+  el criterio de cierre, que es lo único que falta para poder ofrecerlo.
+- **La retirada es asimétrica respecto a la generación.** Generar espera al
+  siguiente ciclo (es lo declarativo). Retirar se aplica **al guardar la
+  política**, solo para esa serie y con el mismo `UPDATE` atómico: cuando el
+  coleccionista pide parar, no puede seguir buscándose hasta una hora. La
+  sentencia se comparte (`services/politica.py::retirar_de_serie`), así que da
+  igual quién llegue antes.
+- **La retirada solo toca `WANTED`/`FAILED`.** `SEARCHING` queda fuera además de
+  `DOWNLOADING`: es transitorio (hay una búsqueda en vuelo) y marcarlo `retirado`
+  sería mentir (D9). Un item varado en `SEARCHING` por una caída del proceso es
+  un problema previo a D8 y no se resuelve aquí.
+- **La ficha de serie no lista un chip por número.** Resume («faltan 200; se
+  generan hasta 25 por ciclo, repartidos entre las series con política activa»),
+  y solo pinta los chips si son 12 o menos. Además dice si el aviso legal está
+  pendiente (sin acuse el ciclo no genera ni busca: prometer búsquedas sin
+  decirlo sería engañar) y cuántos números están retirados.
+- **Los items `retirado` se ocultan del listado de deseos** pero **no se
+  borran**: pasar una serie de 200 números a `ninguno` no puede llenar la
+  pantalla de filas muertas. Siguen en la BD y en la API (`?status=retirado`), y
+  la ficha de serie dice cuántos hay.
+- **Ventana conocida (generación ↔ dos ciclos solapados):** entre el `SELECT`
+  que mira qué falta y el `INSERT ... ON CONFLICT` no hay bloqueo, así que un
+  ciclo podría intentar crear una fila para un número que el otro acaba de
+  reclamar. La resuelve la BASE: índice único parcial (una sola fila por número)
+  y `DO UPDATE ... WHERE status IN ('retirado','imported')` (si la fila ya está
+  `WANTED`/`SEARCHING`/`DOWNLOADING`/`DOWNLOADED`/`FAILED`, no se toca).
+  Verificado con dos conexiones y `COMMIT` real en
+  `tests/test_politica_d8_pg.py::test_dos_ciclos_solapados_de_verdad_no_duplican`.
+- **Ventana conocida (guardar `ninguno` justo a mitad de ciclo):** si el
+  coleccionista guarda `ninguno` mientras el ciclo ya calculó sus planes con
+  `faltantes`, ese ciclo puede generar items que la pasada siguiente retira (la
+  retirada al guardar solo actúa sobre lo que había en ese momento, y la
+  generación en vuelo no lo ve). Se cura sola en menos de un ciclo (≤ 1 h por
+  defecto) y no deja estado incorrecto: los items acaban `retirado`.
+- **Imprecisión conocida del contador `generados`:** `_materializar` no devuelve
+  si el upsert cambió algo, así que un ciclo que pierde una carrera cuenta como
+  generado un item que no creó. Es solo ruido de log y del cupo por ciclo —sin
+  efecto en los datos— y no se corrige aquí.
+- **Pruebas:** el comportamiento completo contra PostgreSQL 15 está en
+  `tests/test_politica_d8_pg.py`; el `WHERE` de las dos sentencias, las ramas sin
+  BD y el flujo con `FakeSession` en `tests/test_orchestrator.py`; el selector y
+  el efecto inmediato de la retirada, en `tests/test_web_series.py`. La
+  migración con sembrado previo, en `tests/test_migracion_d8_pg.py`.
+- **Límites abiertos que dependen de medir con la biblioteca real** (primera
+  instalación; hoy no hay BD real en este entorno):
+  - **Arranque en frío de los alias (B13 + D8):** un alias solo se aprende cuando
+    ya existe un fichero que asignar a mano, así que la *primera* búsqueda de
+    una serie nueva (sobre todo si está catalogada en inglés y los releases son
+    en español) se queda sin candidatos. El motivo del item (D9) invita a lo que
+    sí funciona; un campo «otros nombres de esta serie» sería otra historia.
+  - **Hipótesis sin medir:** cuánto pesa ese desajuste inglés/español sobre una
+    biblioteca real. Es exactamente lo que decidirá si el arranque en frío es un
+    caso raro o el caso normal.
+  - **Rango `1..total_issues`:** `compute_missing_issues` (C2) asume numeración
+    que empieza en el #1. Una serie que arranca en el #0 pediría un #5 inexistente
+    y nunca pediría el #0. Es previo a D8 (vive en `huecos_de_serie`), pero D8 lo
+    hereda; medirlo con la biblioteca real dirá si hace falta una regla de
+    numeración por serie.
