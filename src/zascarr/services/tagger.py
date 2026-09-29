@@ -472,6 +472,24 @@ class TaggerService:
             return ResultadoEtiquetado(file.id, file.file_name, CADUCADO, campos,
                                        "el archivo cambió entre el plan y la escritura")
 
+        # Integridad (benchmark-integridad-hash-dedupe): el hash ORIGINAL
+        # (pre-reemplazo) se captura ANTES de reescribir — después los bytes ya
+        # son otros. Solo la primera vez (si ya está fijado, no se toca). Sale
+        # de la BD si ésta coincide con el disco (por tamaño); si no, se calcula
+        # del disco justo antes de reemplazar. Cero hashes extra en el caso
+        # normal.
+        #
+        # `comicinfo_propio` solo lo rellena el tagger: si ya tiene contenido,
+        # es un CBZ etiquetado ANTES de la migración 0016 y su original se
+        # perdió — no se inventa con el hash del fichero ya etiquetado (que
+        # además quedaría desfasado tras el siguiente reemplazo).
+        original_para_guardar: str | None = None
+        if file.original_sha256 is None and not (file.metadata_ or {}).get("comicinfo_propio"):
+            if file.sha256_hash is not None and file.file_size_bytes == estado_antes[0]:
+                original_para_guardar = file.sha256_hash
+            else:
+                original_para_guardar = await asyncio.to_thread(_sha256, path)
+
         try:
             await asyncio.to_thread(zcbz.reescribir_con_xml, path, nuevo)
         except SinEspacioError as exc:
@@ -484,18 +502,22 @@ class TaggerService:
         except (CbzError, OSError) as exc:
             return ResultadoEtiquetado(file.id, file.file_name, ERROR, campos, str(exc))
 
-        return await self._anotar_escritura(file, ctx, path, campos)
+        return await self._anotar_escritura(file, ctx, path, campos, original_para_guardar)
 
     async def _anotar_escritura(
         self, file: File, ctx: _Contexto, path: Path, campos: list[CampoPlan],
+        original_para_guardar: str | None = None,
     ) -> ResultadoEtiquetado:
         """El XML cambió los bytes: recalcular hash/tamaño, dejar rastro de
         autoría (`comicinfo_propio`, para poder aplicar overlay la próxima vez)
-        y anotar la revisión."""
+        y anotar la revisión. `original_para_guardar` es el hash pre-reemplazo:
+        se fija en `original_sha256` solo la primera vez."""
         st = await asyncio.to_thread(path.stat)
         sha = await asyncio.to_thread(_sha256, path)
         file.sha256_hash = sha
         file.file_size_bytes = st.st_size
+        if original_para_guardar is not None and file.original_sha256 is None:
+            file.original_sha256 = original_para_guardar
         propio = dict((file.metadata_ or {}).get("comicinfo_propio") or {})
         for c in campos:
             if c.accion is Accion.CAMBIA and c.nuevo:

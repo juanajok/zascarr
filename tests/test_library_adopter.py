@@ -24,6 +24,14 @@ def make_cbz(path: Path) -> None:
         pass
 
 
+class _Scalars:
+    def __init__(self, value):
+        self._value = value
+
+    def all(self):
+        return [] if self._value is None else [self._value]
+
+
 class FakeExecResult:
     def __init__(self, value=None):
         self._value = value
@@ -33,6 +41,11 @@ class FakeExecResult:
 
     def scalar_one_or_none(self):
         return self._value
+
+    def scalars(self):
+        # La consulta de dedupe devuelve una lista de coincidencias
+        # (`scalars().all()`), no un único `scalar_one_or_none()`.
+        return _Scalars(self._value)
 
 
 class FakeSession:

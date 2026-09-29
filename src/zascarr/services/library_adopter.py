@@ -39,7 +39,12 @@ from zascarr.config import get_settings
 from zascarr.core.cohort import PistaDeCohorte, detectar_ordenes_de_lectura
 from zascarr.core.matcher import MatchStatus
 from zascarr.models import File, FileFormat, ImportRun, Series
-from zascarr.services.importer import COMIC_EXTS, _triage_and_match, serialize_candidates
+from zascarr.services.importer import (
+    COMIC_EXTS,
+    _reenlazar_fila,
+    _triage_and_match,
+    serialize_candidates,
+)
 
 logger = structlog.get_logger()
 
@@ -147,6 +152,16 @@ class LibraryAdopter:
         self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
     ) -> None:
         outcome = await _triage_and_match(self._db, path, pista)
+        if outcome.recuperar is not None:
+            # El fichero ya está en su sitio (la adopción nunca mueve): reenlaza
+            # la fila desaparecida a ESTA ruta en vez de descartar. Si se
+            # descartara, la fila seguiría `is_missing` y un fichero que el
+            # coleccionista reorganizó quedaría sin registrar.
+            await _reenlazar_fila(outcome.recuperar, outcome.tr, path)
+            await self._db.flush()
+            report.registered.append(f"{path.name} — reenlazado (recuperado)")
+            logger.info("library_adopter.reenlazado", path=str(path))
+            return
         if outcome.duplicate_of:
             report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
             return
