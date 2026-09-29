@@ -70,12 +70,16 @@ async def _cuantos_retirados(db: AsyncSession, series: Series) -> int:
 
 
 async def _contexto_politica(db: AsyncSession, series: Series,
-                             querer=None, retirados: int | None = None) -> dict:
+                             querer=None, retirados_ahora: int | None = None) -> dict:
     """Lo que la ficha de serie enseña sobre D8.
 
     Usa el MISMO predicado que genera (`services/politica.querer_de_serie`) — si
     la página recalculara por su cuenta, podría decir una cosa y hacerse otra —
     y `lote` para no prometer más búsquedas de las que caben en un ciclo.
+
+    `retirados` es SIEMPRE el total de la serie (no lo que retiró este
+    guardado): lo que acaba de retirarse va aparte, en `retirados_ahora`, para
+    que la confirmación no se confunda con el acumulado.
     """
     if querer is None:
         querer = await querer_de_serie(db, series)
@@ -88,7 +92,8 @@ async def _contexto_politica(db: AsyncSession, series: Series,
         # D8 + blindaje legal: el ciclo no genera ni busca sin acuse, así que
         # prometer búsquedas sin decirlo sería engañar.
         "aviso_legal_pendiente": not await is_acknowledged(db),
-        "retirados": retirados if retirados is not None else await _cuantos_retirados(db, series),
+        "retirados": await _cuantos_retirados(db, series),
+        "retirados_ahora": retirados_ahora,
     }
 
 
@@ -147,8 +152,9 @@ async def cambiar_politica(series_id: UUID, request: Request,
     await db.flush()
 
     querer = await querer_de_serie(db, series)
-    retirados = await retirar_de_serie(db, series, querer)
-    contexto = await _contexto_politica(db, series, querer=querer, retirados=retirados)
+    retirados_ahora = await retirar_de_serie(db, series, querer)
+    contexto = await _contexto_politica(db, series, querer=querer,
+                                        retirados_ahora=retirados_ahora)
     return templates.TemplateResponse(
         request, "_politica_serie.html", {"series": series, **contexto}
     )
