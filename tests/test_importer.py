@@ -89,7 +89,10 @@ class FakeDedupeSession:
     async def execute(self, _statement):
         self.queries += 1
         result = MagicMock()
-        result.scalar_one_or_none = MagicMock(return_value=self._existing)
+        # La consulta de dedupe ahora devuelve una LISTA de coincidencias
+        # (`scalars().all()`), no un único `scalar_one_or_none()`.
+        result.scalars.return_value.all.return_value = (
+            [] if self._existing is None else [self._existing])
         return result
 
 

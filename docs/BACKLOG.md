@@ -1088,6 +1088,27 @@ exigía.
   incompatibilidades de tipo reales en `enricher.py`/`transmission.py` que
   requieren entender la intención del código, no un fix mecánico.
 
+## Deuda técnica registrada (integridad del hash de fichero, 2026-09-29)
+
+Ficha `benchmark-integridad-hash-dedupe`; PR de implementación de la batida de
+deuda. Mecanismo de cierre: columna `File.original_sha256` (migración 0016, hash
+del fichero **tal como se importó**, que B6 fija solo la primera vez que reescribe
+un CBZ), consulta de dedupe compartida (`or_` de `sha256_hash` y
+`original_sha256`, `.first()` con orden determinista, aviso por coincidencias
+múltiples en vez de `scalar_one_or_none()`), y **reenlazado** de la fila
+`is_missing` cuando el fichero reaparece (reinicia `imported_at`, actualiza
+ruta/nombre/tamaño/hash, vacía las marcas de ComicInfo si es el original, cuenta
+como importado con «recuperado»).
+
+**Lo que NO se arregla y queda dicho:**
+- Los ficheros **ya etiquetados antes de esta migración** no pueden reconstruir
+  su hash original: quedan con `original_sha256 = NULL` y solo los detecta la
+  auditoría B16 como «misma obra, otra copia». No se inventa.
+- El rango `1..total_issues` sigue asumiendo numeración que arranca en el #1
+  (una serie que empieza en el #0 pediría un número inexistente y nunca el #0):
+  previo a D8, vive en `huecos_de_serie`, y queda pendiente de medir con la
+  biblioteca real.
+
 ## Benchmarking competitivo (2026-09-21)
 
 Comparado contra tres proyectos del mismo espacio para no reinventar ni
