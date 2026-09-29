@@ -278,7 +278,8 @@ class TestPoliticaBusquedaD8:
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
 
-        assert "no se generan números" in r.text
+        assert "deseo de toda la serie" in r.text
+        assert "Quítalo de la lista de deseos" in r.text
 
     def test_aviso_legal_pendiente_lo_dice(self):
         """Sin acuse el ciclo no genera ni busca: prometer búsquedas sin decirlo

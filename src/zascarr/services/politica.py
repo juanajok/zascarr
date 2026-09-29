@@ -42,8 +42,14 @@ MOTIVO_POLITICA_FUTUROS = (
 #: mientras ese item siga vivo. Importa el caso en que el item manual aparece
 #: DESPUÉS: los generados pendientes se retiran igual que si cambiara la
 #: política, para no acabar con las dos búsquedas a la vez.
-MOTIVO_SERIE_EN_CURSO = (
-    "Ya hay un item de esta serie en curso: no se generan números para no buscarla dos veces"
+#:
+#: El motivo dice la CAUSA y la SALIDA, no un «en curso» que suena bien pero
+#: miente (D9): un item manual `FAILED` también cuenta como vivo —se reintenta
+#: cada pocas horas y no se cierra— y con esta redacción el coleccionista sabe
+#: que ahí está el freno y qué puede hacer.
+MOTIVO_DESEO_DE_SERIE = (
+    "Hay un deseo de toda la serie (pendiente o sin resultados). Quítalo de la lista "
+    "de deseos, o espera a que se cumpla, para que ZascArr genere los números que faltan"
 )
 
 #: D8: un item en estos estados ya no cuenta como "vivo" al decidir si hay un
@@ -113,7 +119,7 @@ async def querer_de_serie(db: AsyncSession, series: Series) -> Querer:
     # el item manual sea anterior o posterior a los generados: el predicado es
     # declarativo y la retirada usa este mismo resultado.
     if any(issue_id is None and numero is None for issue_id, numero in manuales):
-        return Querer(frozenset(), True, MOTIVO_SERIE_EN_CURSO)
+        return Querer(frozenset(), True, MOTIVO_DESEO_DE_SERIE)
 
     huecos = await huecos_de_serie(db, series)
     if not huecos.computable:
