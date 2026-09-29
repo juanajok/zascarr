@@ -23,10 +23,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import hashlib
 import hmac
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -40,10 +42,19 @@ COOKIE_NAME = "zascarr_session"
 # panel bancario — pedir la contraseña en cada visita sería fricción sin
 # beneficio real de seguridad aquí.
 SESSION_MAX_AGE = 30 * 24 * 3600
-# OWASP (2023) recomendaba 260.000; la cifra vigente para PBKDF2-HMAC-SHA256 es
-# 600.000. El hash guarda su número de iteraciones, así que subirlo no rompe los
-# hashes viejos: se regeneran al iniciar sesión.
-_PBKDF2_ITERATIONS = 600_000
+# Se queda en 260.000 hasta que el retraso progresivo y la caché de Basic estén
+# en su sitio (ficha de seguridad, paso 3): subir a 600.000 sin eso dejaría que
+# unas pocas peticiones paralelas agoten el ejecutor de PBKDF2. El hash guarda
+# sus iteraciones, así que el cambio posterior será retrocompatible.
+_PBKDF2_ITERATIONS = 260_000
+
+# Ejecutor PROPIO para PBKDF2, no el `to_thread` por defecto: el ejecutor
+# general lo comparten portadas, importador y etiquetado, y un PBKDF2 no debe
+# poder acapararlo ni competir con ese trabajo. Dos hilos bastan en una Pi
+# (es CPU-bound y no hay nada que ganar con más); el semáforo acota cuántas
+# verificaciones quedan en vuelo para que una ráfaga no encole sin límite.
+_PBKDF2_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pbkdf2")
+_pbkdf2_sem = asyncio.Semaphore(2)
 
 # Rutas alcanzables sin sesión ni Basic Auth incluso con auth_mode activo:
 # /login (si no, nadie podría autenticarse nunca — bucle de redirección),
@@ -68,8 +79,8 @@ async def verify_password(password: str, stored: str) -> bool:
     """Nunca revienta con un stored malformado/vacío — un hash aún sin
     configurar simplemente no valida ninguna contraseña.
 
-    El PBKDF2 corre en un hilo (`to_thread`): 600.000 iteraciones en el bucle de
-    eventos de la Pi congelarían las peticiones que vienen detrás."""
+    El PBKDF2 corre en el ejecutor propio (fuera del bucle de eventos de la Pi),
+    acotado por el semáforo para que una ráfaga no agote los hilos."""
     try:
         algo, iterations, salt_hex, digest_hex = stored.split("$")
         if algo != "pbkdf2_sha256":
@@ -78,15 +89,24 @@ async def verify_password(password: str, stored: str) -> bool:
         expected = bytes.fromhex(digest_hex)
     except (ValueError, AttributeError):
         return False
-    actual = await asyncio.to_thread(
-        hashlib.pbkdf2_hmac, "sha256", password.encode(), salt, int(iterations))
+    loop = asyncio.get_running_loop()
+    async with _pbkdf2_sem:
+        actual = await loop.run_in_executor(
+            _PBKDF2_EXECUTOR,
+            hashlib.pbkdf2_hmac, "sha256", password.encode(), salt, int(iterations))
     return hmac.compare_digest(actual, expected)
 
 
-# Hash de relleno, nunca de una contraseña real — sirve solo para que
-# verify_password() pague siempre el mismo coste de PBKDF2 (~260.000
-# iteraciones) aunque todavía no haya ningún auth_password_hash guardado.
-_HASH_DE_RELLENO = hash_password(secrets.token_hex(32))
+@functools.lru_cache(maxsize=1)
+def _hash_de_relleno() -> str:
+    """Hash de relleno, nunca de una contraseña real — sirve solo para que
+    `verify_password` pague siempre el mismo coste de PBKDF2 aunque todavía no
+    haya ningún `auth_password_hash` guardado.
+
+    Perezoso a propósito: calcularlo en la importación (600.000 o 260.000
+    iteraciones) penalizaba cada arranque y cada módulo de prueba que importa
+    `auth`. Con `lru_cache` se calcula una vez, la primera vez que se usa."""
+    return hash_password(secrets.token_hex(32))
 
 
 async def credenciales_validas(username: str, password: str, settings: Settings) -> bool:
@@ -106,11 +126,11 @@ async def credenciales_validas(username: str, password: str, settings: Settings)
     `str` no-ASCII y un nombre con tilde/ñ reventaría con TypeError."""
     if settings.auth_mode == "password":
         password_ok = await verify_password(
-            password, settings.auth_password_hash or _HASH_DE_RELLENO)
+            password, settings.auth_password_hash or _hash_de_relleno())
         return bool(settings.auth_password_hash) and password_ok
     if settings.auth_mode == "user_password":
         password_ok = await verify_password(
-            password, settings.auth_password_hash or _HASH_DE_RELLENO)
+            password, settings.auth_password_hash or _hash_de_relleno())
         usuario_ok = hmac.compare_digest(
             username.encode("utf-8"), settings.auth_username.encode("utf-8"))
         return (
