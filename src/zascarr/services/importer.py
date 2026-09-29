@@ -157,6 +157,30 @@ async def _coincidencias_de_hash(db: AsyncSession, sha256: str) -> list[File]:
     )).scalars().all())
 
 
+async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
+    """Actualiza la fila `is_missing` para que describa el fichero que YA está
+    en `dest` (quien llama decide si lo movió —Importer— o ya estaba ahí
+    —LibraryAdopter—).
+
+    Conserva el enlace a Issue/Series y `original_sha256`; reinicia `imported_at`
+    (D8 cierra por `File.imported_at >= Wishlist.added_at`, y reactivar un
+    `IMPORTED` reinicia `added_at`) y, si el fichero es el ORIGINAL de una fila
+    etiquetada, vacía `comicinfo_estado`/`comicinfo_propio` (describen un
+    fichero que ya no existe)."""
+    fila.file_path = str(dest)
+    fila.file_name = dest.name
+    fila.file_size_bytes = dest.stat().st_size
+    fila.sha256_hash = tr.sha256
+    fila.is_missing = False
+    fila.missing_since = None
+    fila.imported_at = datetime.now(UTC)
+    if fila.original_sha256 is not None and tr.sha256 == fila.original_sha256:
+        meta = dict(fila.metadata_ or {})
+        meta.pop("comicinfo_estado", None)
+        meta.pop("comicinfo_propio", None)
+        fila.metadata_ = meta
+
+
 async def _triage_and_match(
     db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None
 ) -> _Outcome:
@@ -469,21 +493,7 @@ class Importer:
         # A3: mismo mover verificado que una importación normal.
         final_dest = await safe_move_async(path, dest)
 
-        fila.file_path = str(final_dest)
-        fila.file_name = final_dest.name
-        fila.file_size_bytes = final_dest.stat().st_size
-        fila.sha256_hash = tr.sha256
-        fila.is_missing = False
-        fila.missing_since = None
-        fila.imported_at = datetime.now(UTC)
-        # Si el entrante es el ORIGINAL de una fila etiquetada (su hash coincide
-        # con `original_sha256`, no con `sha256_hash`), las marcas de ComicInfo
-        # ya no describen este fichero. `original_sha256` se conserva.
-        if fila.original_sha256 is not None and tr.sha256 == fila.original_sha256:
-            meta = dict(fila.metadata_ or {})
-            meta.pop("comicinfo_estado", None)
-            meta.pop("comicinfo_propio", None)
-            fila.metadata_ = meta
+        await _reenlazar_fila(fila, tr, final_dest)
         await self._db.flush()
 
         report.imported.append(

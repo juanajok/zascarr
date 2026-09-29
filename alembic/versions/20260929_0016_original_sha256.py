@@ -16,6 +16,12 @@ nullable y con índice **no único**:
   reconstruir su hash original — se deja NULL y se dice, no se inventa;
 - no único por el mismo motivo que `sha256_hash` (dos copias conocidas del mismo
   contenido deben poder representarse).
+
+Nombre del índice: `idx_files_original_sha256` (siguiendo a `idx_files_hash` de
+0001). El modelo declara `index=True`, que SQLAlchemy nombra
+`ix_files_original_sha256` en su metadata — es el mismo desajuste ya existente
+con `sha256_hash`/`idx_files_hash`; las migraciones son one-shot y no se
+reescriben, así que un autogenerate futuro podrá proponer renombrarlo.
 """
 import sqlalchemy as sa
 

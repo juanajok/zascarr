@@ -15,6 +15,7 @@ import os
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -22,13 +23,25 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from zascarr.core.importer_triage import TriageResult, sha256_streaming
-from zascarr.models import ComicTradition, File, FileFormat, Issue, Series
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    Issue,
+    IssueFormat,
+    MetadataSource,
+    Series,
+    Wishlist,
+    WishlistStatus,
+)
 from zascarr.services.importer import (
     Importer,
     ImportReport,
     _coincidencias_de_hash,
     _triage_and_match,
 )
+from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
+from zascarr.services.orchestrator import Orchestrator
 from zascarr.services.tagger import ESCRITO, TaggerService
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -76,7 +89,8 @@ def _crear_cbz(ruta: Path, xml: bytes | None = None) -> Path:
     return ruta
 
 
-async def _montar(db, tmp_path: Path, *, formato: FileFormat = FileFormat.CBZ) -> tuple[File, Path]:
+async def _montar(db, tmp_path: Path, *, formato: FileFormat = FileFormat.CBZ,
+                  xml: bytes | None = None, metadata: dict | None = None) -> tuple[File, Path]:
     """Serie + Issue + File con un CBZ real sin etiquetar (o un CBR que no se
     toca)."""
     serie = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN,
@@ -86,13 +100,13 @@ async def _montar(db, tmp_path: Path, *, formato: FileFormat = FileFormat.CBZ) -
     db.add(issue)
     ruta = tmp_path / f"fichero.{formato.value}"
     if formato is FileFormat.CBZ:
-        _crear_cbz(ruta)
+        _crear_cbz(ruta, xml)
     else:
         ruta.write_bytes(b"no es un zip")
     archivo = File(
         id=uuid4(), issue_id=issue.id, file_path=str(ruta), file_name=ruta.name,
         file_format=formato, file_size_bytes=ruta.stat().st_size,
-        sha256_hash=_sha256(ruta),
+        sha256_hash=_sha256(ruta), metadata_=metadata or {},
     )
     db.add(archivo)
     await db.flush()
@@ -239,6 +253,46 @@ class TestOriginalSha256Tagger:
 
         assert archivo.original_sha256 is None
 
+    @pytest.mark.asyncio
+    async def test_etiquetar_y_reimportar_el_original_es_duplicado(self, db, tmp_path):
+        """Caso 1, de extremo a extremo: etiquetar con `TaggerService` y luego
+        pasar el original intacto por `_triage_and_match` → duplicado (vía
+        `original_sha256`). Es la prueba que falla contra `main`."""
+        archivo, ruta = await _montar(db, tmp_path)
+        original = ruta.read_bytes()   # el original, antes de etiquetar
+        await TaggerService(db).ejecutar(archivo, dry_run=False)
+        assert archivo.original_sha256 == hashlib.sha256(original).hexdigest()
+
+        reentrante = tmp_path / "reentrante" / "original.cbz"
+        reentrante.parent.mkdir()
+        reentrante.write_bytes(original)
+
+        outcome = await _triage_and_match(db, reentrante)
+
+        assert outcome.duplicate_of == archivo.file_name
+        assert outcome.recuperar is None
+
+    @pytest.mark.asyncio
+    async def test_etiquetado_antes_de_la_0016_no_inventa_el_original(self, db, tmp_path):
+        """Una fila con rastro de escritura previa (`comicinfo_propio`) y
+        `original_sha256 NULL` —es decir, etiquetada antes de la migración— se
+        reescribe por overlay y SIGUE NULL: no se inventa el hash de un fichero
+        ya etiquetado."""
+        xml = b"<ComicInfo><Series>Thorgal</Series></ComicInfo>"
+        archivo, _ = await _montar(
+            db, tmp_path, xml=xml,
+            metadata={"comicinfo_propio": {"Series": "Thorgal"}})
+        serie = (await db.execute(
+            select(Series).join(Issue, Issue.series_id == Series.id)
+            .where(Issue.id == archivo.issue_id))).scalar_one()
+        serie.title = "Thorgal (reedición)"
+        await db.flush()
+
+        r = await TaggerService(db).ejecutar(archivo, dry_run=False)
+
+        assert r.accion == ESCRITO
+        assert archivo.original_sha256 is None
+
 
 class TestReenlazado:
     """Un fichero que reaparece se reenlaza a la fila `is_missing`."""
@@ -296,3 +350,94 @@ class TestReenlazado:
         assert len(report.imported) == 1
         assert "(recuperado)" in report.imported[0]
         assert not entrante.exists()   # se movió a la biblioteca
+
+
+class TestReenlazadoD8:
+    """Caso 9, de extremo a extremo: el reenlace reinicia `imported_at`, que es
+    lo que deja que D8 cierre el item reactivado."""
+
+    @pytest.mark.asyncio
+    async def test_reenlazado_cierra_el_item_reactivado(self, db, tmp_path):
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       total_issues=1, metadata_source=MetadataSource.COMIC_VINE.value)
+        db.add(serie)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1",
+                      format=IssueFormat.SINGLE_ISSUE)
+        db.add(issue)
+
+        entrante = tmp_path / "descargas" / "original.cbz"
+        entrante.parent.mkdir()
+        _crear_cbz(entrante)
+        hash_original = sha256_streaming(entrante)
+
+        fila = File(
+            id=uuid4(), issue_id=issue.id, file_path="/lib/ido.cbz", file_name="ido.cbz",
+            file_format=FileFormat.CBZ, sha256_hash="d" * 64,
+            original_sha256=hash_original, is_missing=True,
+            missing_since=datetime(2020, 1, 1, tzinfo=UTC),
+            imported_at=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+        db.add(fila)
+        # Item de política reactivado por D8: `added_at` nuevo.
+        item = Wishlist(id=uuid4(), series_id=serie.id, numero=1,
+                        status=WishlistStatus.WANTED, added_at=datetime.now(UTC))
+        db.add(item)
+        await db.flush()
+
+        orch = Orchestrator(db)
+        # Antes de reenlazar: el fichero es `is_missing` → no cumple.
+        assert await orch._is_fulfilled(item) is False
+
+        importer = Importer.__new__(Importer)
+        importer._db = db
+        importer._library = tmp_path / "lib"
+        await importer._reenlazar(
+            fila, entrante, TriageResult(path=entrante, sha256=hash_original),
+            ImportReport(started_at=datetime.now(UTC)))
+        await db.flush()
+
+        # Tras reenlazar: `imported_at` reiniciado → cumple. Con el `imported_at`
+        # viejo, esta misma aserción fallaría (el cierre de D8 nunca llegaría).
+        assert await orch._is_fulfilled(item) is True
+
+
+class TestAdoptadorReenlaza:
+    """Caso 6: el adoptador reenlaza en el sitio, sin mover, en vez de
+    descartar."""
+
+    @pytest.mark.asyncio
+    async def test_reenlaza_en_el_sitio_sin_mover(self, db, tmp_path, monkeypatch):
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       start_year=2011)
+        db.add(serie)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1")
+        db.add(issue)
+
+        # El coleccionista reorganizó: el fichero está en una ruta nueva, con el
+        # mismo contenido que la fila vieja (ya `is_missing`).
+        nuevo = tmp_path / "reorganizado" / "original.cbz"
+        nuevo.parent.mkdir()
+        _crear_cbz(nuevo)
+        sha = sha256_streaming(nuevo)
+
+        fila = File(
+            id=uuid4(), issue_id=issue.id, file_path="/lib/viejo.cbz",
+            file_name="viejo.cbz", file_format=FileFormat.CBZ, sha256_hash=sha,
+            is_missing=True, missing_since=datetime(2020, 1, 1, tzinfo=UTC),
+            imported_at=datetime(2020, 1, 1, tzinfo=UTC),
+        )
+        db.add(fila)
+        await db.flush()
+
+        monkeypatch.setattr("zascarr.services.library_adopter.get_settings",
+                            lambda: MagicMock(library_path=tmp_path))
+        adopter = LibraryAdopter(db=db)
+        report = AdoptionReport(started_at=datetime.now(UTC))
+
+        await adopter._adopt_file(nuevo, report)
+
+        assert fila.is_missing is False
+        assert fila.file_path == str(nuevo)
+        assert nuevo.exists()            # la adopción nunca mueve
+        assert report.duplicate_count == 0
+        assert any("reenlazado" in linea for linea in report.registered)
