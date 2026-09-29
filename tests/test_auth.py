@@ -12,7 +12,6 @@ monkeypatcheado, mismo patrón que ya usa test_orchestrator.py.
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -32,13 +31,15 @@ from zascarr.services.auth import (
 
 class TestHashPassword:
 
-    def test_verifica_la_contrasena_correcta(self):
+    @pytest.mark.asyncio
+    async def test_verifica_la_contrasena_correcta(self):
         stored = hash_password("correcta123")
-        assert verify_password("correcta123", stored) is True
+        assert await verify_password("correcta123", stored) is True
 
-    def test_rechaza_la_contrasena_incorrecta(self):
+    @pytest.mark.asyncio
+    async def test_rechaza_la_contrasena_incorrecta(self):
         stored = hash_password("correcta123")
-        assert verify_password("otra-cosa", stored) is False
+        assert await verify_password("otra-cosa", stored) is False
 
     def test_dos_hashes_de_la_misma_contrasena_son_distintos(self):
         """Sal aleatoria por hash — nunca el mismo valor almacenado dos
@@ -46,70 +47,99 @@ class TestHashPassword:
         directa y filtrar quién tiene la misma contraseña que otro)."""
         assert hash_password("igual") != hash_password("igual")
 
-    def test_stored_vacio_o_malformado_nunca_revienta(self):
-        assert verify_password("x", "") is False
-        assert verify_password("x", "no-tiene-el-formato-esperado") is False
-        assert verify_password("x", "otro_algo$1$aa$bb") is False
+    @pytest.mark.asyncio
+    async def test_stored_vacio_o_malformado_nunca_revienta(self):
+        assert await verify_password("x", "") is False
+        assert await verify_password("x", "no-tiene-el-formato-esperado") is False
+        assert await verify_password("x", "otro_algo$1$aa$bb") is False
 
 
 class TestCredencialesValidas:
 
-    def test_modo_none_nunca_valida_nada(self):
+    @pytest.mark.asyncio
+    async def test_modo_none_nunca_valida_nada(self):
         settings = get_settings().model_copy(update={"auth_mode": "none"})
-        assert credenciales_validas("", "", settings) is False
-        assert credenciales_validas("admin", "loquesea", settings) is False
+        assert await credenciales_validas("", "", settings) is False
+        assert await credenciales_validas("admin", "loquesea", settings) is False
 
-    def test_modo_password_ignora_el_usuario(self):
+    @pytest.mark.asyncio
+    async def test_modo_password_ignora_el_usuario(self):
         settings = get_settings().model_copy(update={
             "auth_mode": "password", "auth_password_hash": hash_password("secreta"),
         })
-        assert credenciales_validas("cualquiera", "secreta", settings) is True
-        assert credenciales_validas("", "secreta", settings) is True
-        assert credenciales_validas("cualquiera", "mala", settings) is False
+        assert await credenciales_validas("cualquiera", "secreta", settings) is True
+        assert await credenciales_validas("", "secreta", settings) is True
+        assert await credenciales_validas("cualquiera", "mala", settings) is False
 
-    def test_modo_user_password_exige_ambos(self):
+    @pytest.mark.asyncio
+    async def test_modo_user_password_exige_ambos(self):
         settings = get_settings().model_copy(update={
             "auth_mode": "user_password", "auth_username": "juanjo",
             "auth_password_hash": hash_password("secreta"),
         })
-        assert credenciales_validas("juanjo", "secreta", settings) is True
-        assert credenciales_validas("otro", "secreta", settings) is False
-        assert credenciales_validas("juanjo", "mala", settings) is False
+        assert await credenciales_validas("juanjo", "secreta", settings) is True
+        assert await credenciales_validas("otro", "secreta", settings) is False
+        assert await credenciales_validas("juanjo", "mala", settings) is False
 
-    def test_sin_hash_configurado_nunca_valida(self):
+    @pytest.mark.asyncio
+    async def test_nombre_de_usuario_no_ascii_no_revienta(self):
+        """Regresión: `hmac.compare_digest` con `str` no-ASCII lanzaba
+        `TypeError` y un nombre con tilde/ñ daba 500."""
+        settings = get_settings().model_copy(update={
+            "auth_mode": "user_password", "auth_username": "juánjo",
+            "auth_password_hash": hash_password("secreta"),
+        })
+        assert await credenciales_validas("juánjo", "secreta", settings) is True
+        assert await credenciales_validas("juánjo", "mala", settings) is False
+
+    @pytest.mark.asyncio
+    async def test_sin_hash_configurado_nunca_valida(self):
         """No debe poder 'colarse' con una contraseña vacía solo porque
         auth_password_hash también está vacío."""
         settings = get_settings().model_copy(update={"auth_mode": "password", "auth_password_hash": ""})
-        assert credenciales_validas("", "", settings) is False
+        assert await credenciales_validas("", "", settings) is False
 
-    def test_verify_password_se_llama_siempre_sin_hash_configurado(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_verify_password_se_llama_siempre_sin_hash_configurado(self, monkeypatch):
         """Hallazgo de revisión (timing side-channel): con un `and`
         normal, auth_password_hash vacío cortaba ANTES de llamar a
-        verify_password() (PBKDF2, ~260.000 iteraciones) — una respuesta
-        instantánea delataba "este modo no tiene contraseña puesta" sin
-        falta ver el resultado. Ahora debe llamarse siempre, contra un
-        hash de relleno si hace falta, para que el coste sea el mismo
-        se acierte o no."""
-        espia = MagicMock(wraps=verify_password)
+        verify_password() (PBKDF2) — una respuesta instantánea delataba
+        "este modo no tiene contraseña puesta" sin falta ver el resultado.
+        Ahora debe llamarse siempre, contra un hash de relleno si hace
+        falta, para que el coste sea el mismo se acierte o no."""
+        llamadas: list = []
+        real = verify_password
+
+        async def espia(password, stored):
+            llamadas.append(True)
+            return await real(password, stored)
+
         monkeypatch.setattr("zascarr.services.auth.verify_password", espia)
         settings = get_settings().model_copy(update={"auth_mode": "password", "auth_password_hash": ""})
 
-        assert credenciales_validas("", "cualquiera", settings) is False
-        espia.assert_called_once()
+        assert await credenciales_validas("", "cualquiera", settings) is False
+        assert len(llamadas) == 1
 
-    def test_verify_password_se_llama_siempre_con_usuario_incorrecto(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_verify_password_se_llama_siempre_con_usuario_incorrecto(self, monkeypatch):
         """Mismo hallazgo, en user_password: un usuario que no coincide
         no debe evitar el coste de PBKDF2 — si no, medir el tiempo de
         respuesta permitiría averiguar qué nombres de usuario existen."""
-        espia = MagicMock(wraps=verify_password)
+        llamadas: list = []
+        real = verify_password
+
+        async def espia(password, stored):
+            llamadas.append(True)
+            return await real(password, stored)
+
         monkeypatch.setattr("zascarr.services.auth.verify_password", espia)
         settings = get_settings().model_copy(update={
             "auth_mode": "user_password", "auth_username": "juanjo",
             "auth_password_hash": hash_password("secreta"),
         })
 
-        assert credenciales_validas("no-es-juanjo", "secreta", settings) is False
-        espia.assert_called_once()
+        assert await credenciales_validas("no-es-juanjo", "secreta", settings) is False
+        assert len(llamadas) == 1
 
 
 class TestCookieSesion:

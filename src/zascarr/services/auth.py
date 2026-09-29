@@ -21,11 +21,13 @@ nunca se devuelve a la UI, solo se sobreescribe.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import secrets
 import time
+from urllib.parse import quote
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -38,7 +40,10 @@ COOKIE_NAME = "zascarr_session"
 # panel bancario — pedir la contraseña en cada visita sería fricción sin
 # beneficio real de seguridad aquí.
 SESSION_MAX_AGE = 30 * 24 * 3600
-_PBKDF2_ITERATIONS = 260_000  # recomendación OWASP (2023) para PBKDF2-SHA256
+# OWASP (2023) recomendaba 260.000; la cifra vigente para PBKDF2-HMAC-SHA256 es
+# 600.000. El hash guarda su número de iteraciones, así que subirlo no rompe los
+# hashes viejos: se regeneran al iniciar sesión.
+_PBKDF2_ITERATIONS = 600_000
 
 # Rutas alcanzables sin sesión ni Basic Auth incluso con auth_mode activo:
 # /login (si no, nadie podría autenticarse nunca — bucle de redirección),
@@ -59,9 +64,12 @@ def hash_password(password: str) -> str:
     return f"pbkdf2_sha256${_PBKDF2_ITERATIONS}${salt.hex()}${digest.hex()}"
 
 
-def verify_password(password: str, stored: str) -> bool:
+async def verify_password(password: str, stored: str) -> bool:
     """Nunca revienta con un stored malformado/vacío — un hash aún sin
-    configurar simplemente no valida ninguna contraseña."""
+    configurar simplemente no valida ninguna contraseña.
+
+    El PBKDF2 corre en un hilo (`to_thread`): 600.000 iteraciones en el bucle de
+    eventos de la Pi congelarían las peticiones que vienen detrás."""
     try:
         algo, iterations, salt_hex, digest_hex = stored.split("$")
         if algo != "pbkdf2_sha256":
@@ -70,7 +78,8 @@ def verify_password(password: str, stored: str) -> bool:
         expected = bytes.fromhex(digest_hex)
     except (ValueError, AttributeError):
         return False
-    actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, int(iterations))
+    actual = await asyncio.to_thread(
+        hashlib.pbkdf2_hmac, "sha256", password.encode(), salt, int(iterations))
     return hmac.compare_digest(actual, expected)
 
 
@@ -80,7 +89,7 @@ def verify_password(password: str, stored: str) -> bool:
 _HASH_DE_RELLENO = hash_password(secrets.token_hex(32))
 
 
-def credenciales_validas(username: str, password: str, settings: Settings) -> bool:
+async def credenciales_validas(username: str, password: str, settings: Settings) -> bool:
     """Encontrado en revisión (timing side-channel): antes, `and` cortaba
     en cuanto auth_password_hash/auth_username estaban vacíos o el
     usuario no coincidía, así que verify_password() (PBKDF2, cara)
@@ -91,13 +100,19 @@ def credenciales_validas(username: str, password: str, settings: Settings) -> bo
     de ver el resultado. Ahora verify_password() se llama SIEMPRE que el
     modo pueda requerirla (contra el hash real o, si no hay ninguno
     guardado, contra uno de relleno) antes de combinar con el resto de
-    condiciones — el coste de PBKDF2 es el mismo se acierte o no."""
+    condiciones — el coste de PBKDF2 es el mismo se acierte o no.
+
+    El usuario se compara en bytes UTF-8: `hmac.compare_digest` no admite
+    `str` no-ASCII y un nombre con tilde/ñ reventaría con TypeError."""
     if settings.auth_mode == "password":
-        password_ok = verify_password(password, settings.auth_password_hash or _HASH_DE_RELLENO)
+        password_ok = await verify_password(
+            password, settings.auth_password_hash or _HASH_DE_RELLENO)
         return bool(settings.auth_password_hash) and password_ok
     if settings.auth_mode == "user_password":
-        password_ok = verify_password(password, settings.auth_password_hash or _HASH_DE_RELLENO)
-        usuario_ok = hmac.compare_digest(username, settings.auth_username)
+        password_ok = await verify_password(
+            password, settings.auth_password_hash or _HASH_DE_RELLENO)
+        usuario_ok = hmac.compare_digest(
+            username.encode("utf-8"), settings.auth_username.encode("utf-8"))
         return (
             bool(settings.auth_username) and bool(settings.auth_password_hash)
             and usuario_ok and password_ok
@@ -143,7 +158,7 @@ def sesion_valida(token: str | None, secret: str) -> bool:
     return (time.time() - emitida_en) < SESSION_MAX_AGE
 
 
-def _basic_auth_valido(request: Request, settings: Settings) -> bool:
+async def _basic_auth_valido(request: Request, settings: Settings) -> bool:
     cabecera = request.headers.get("authorization", "")
     if not cabecera.lower().startswith("basic "):
         return False
@@ -152,7 +167,7 @@ def _basic_auth_valido(request: Request, settings: Settings) -> bool:
         usuario, _, password = decoded.partition(":")
     except Exception:
         return False
-    return credenciales_validas(usuario, password, settings)
+    return await credenciales_validas(usuario, password, settings)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -189,7 +204,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if sesion_valida(request.cookies.get(COOKIE_NAME), settings.secret_key):
             return await call_next(request)
-        if _basic_auth_valido(request, settings):
+        if await _basic_auth_valido(request, settings):
             return await call_next(request)
 
         if path.startswith("/api/"):
@@ -197,4 +212,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         query = f"?{request.url.query}" if request.url.query else ""
         siguiente = f"{path}{query}"
-        return RedirectResponse(f"/login?next={siguiente}", status_code=303)
+        # `next` va como valor de query: sin codificar, un `&` de la query
+        # original se parsea como parámetro aparte y trunca el destino.
+        return RedirectResponse(f"/login?next={quote(siguiente, safe='')}", status_code=303)
