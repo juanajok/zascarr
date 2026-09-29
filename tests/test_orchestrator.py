@@ -731,3 +731,151 @@ class TestGateLegalYOptInP2P:
         assert result is False
         assert item.status == WishlistStatus.WANTED  # sin candidatos utilizables, no es un fallo
         orch._transmission.add_torrent.assert_not_called()
+
+
+class TestFiltroPorNumeroD8:
+    """D8: la búsqueda es de TEXTO, así que devolver algo no significa que sea el
+    número de ESA serie. `_ranked_candidates` puntúa pero **no descarta**, así que
+    el filtro tiene que ser aquí y el título tiene que contar."""
+
+    @staticmethod
+    def _candidato(titulo: str) -> SearchResult:
+        return SearchResult(titulo, "indexer", "magnet:?xt=urn:btih:abc", 100, 5, "comics")
+
+    def _acepta(self, titulo: str, numero: int, serie: str) -> bool:
+        return Orchestrator._candidato_es_del_numero(self._candidato(titulo), numero, serie)
+
+    def test_el_numero_correcto_de_la_serie_pasa(self):
+        assert self._acepta("Batman 004 (2019) (Digital).cbz", 4, "Batman")
+        assert self._acepta("Batman 4.cbz", 4, "Batman")   # 04 y 4 son el mismo
+
+    def test_otra_serie_con_el_mismo_numero_no_pasa(self):
+        """La contención aceptaba esto: "Batman" está dentro de "Batman Beyond"."""
+        assert not self._acepta("Batman Beyond 004 (2019).cbz", 4, "Batman")
+
+    def test_la_serie_corta_no_sirve_para_la_larga(self):
+        """Y en el otro sentido: "Batman" tampoco sirve para "Batman Beyond"."""
+        assert not self._acepta("Batman 004.cbz", 4, "Batman Beyond")
+
+    @pytest.mark.parametrize("titulo", ["Batman 1.5.cbz", "Batman 4-6.cbz", "Batman 12a.cbz"])
+    def test_numeros_que_no_son_enteros_no_pasan(self, titulo):
+        """Se rechazan de forma explícita, no por accidente de comparación."""
+        assert not self._acepta(titulo, 4, "Batman")
+
+    def test_un_titulo_que_normaliza_vacio_se_rechaza(self):
+        """El hueco que señaló la revisión: con `""` en cualquiera de los dos
+        lados, `"" in x` (o `== ""`) colaría cualquier cosa."""
+        assert not self._acepta("004", 4, "004")
+
+    def test_sin_serie_en_la_base_no_se_acepta_nada(self):
+        """Falla cerrado: preferimos que el número quede en Pendientes antes que
+        dar por bueno un candidato de otra serie."""
+        assert not self._acepta("Batman 004.cbz", 4, "")
+
+    def test_un_numero_mas_largo_no_pasa_por_el_corto(self):
+        """Comparar texto lo habría colado: "120" no es el 12."""
+        assert not self._acepta("Batman 120 (2019).cbz", 12, "Batman")
+
+    def test_el_subtitulo_tras_guion_lo_separa_el_parser(self):
+        """RF-04/B5: "Asterix T01 - Asterix el Galo" → serie "Asterix", así que
+        la igualdad no pierde este caso (era el motivo para usar contención)."""
+        assert self._acepta("Asterix T01 - Asterix el Galo.cbz", 1, "Asterix")
+
+
+class TestFiltroPorNumeroConAliasD8:
+    """B13: un release español puede llamar "La Patrulla-X" a una serie
+    catalogada como "X-Men". Con igualdad estricta ese candidato se descartaría
+    y el número no avanzaría nunca, justo para el público hispanohablante. Los
+    alias locales son los que el coleccionista ya confirmó: aceptarlos no afloja
+    el filtro."""
+
+    @staticmethod
+    def _candidato(titulo: str) -> SearchResult:
+        return SearchResult(titulo, "indexer", "magnet:?xt=urn:btih:abc", 100, 5, "comics")
+
+    def _acepta(self, titulo, numero, serie, alias=()):
+        return Orchestrator._candidato_es_del_numero(
+            self._candidato(titulo), numero, serie, set(alias))
+
+    def test_sin_alias_el_nombre_espanol_se_rechaza(self):
+        """Documenta el riesgo: así se comporta hoy sin alias."""
+        assert not self._acepta("La Patrulla-X 012 (1985).cbz", 12, "X-Men")
+
+    def test_con_alias_confirmado_si_se_acepta(self):
+        from zascarr.core.matcher import normalize_title as nt
+        assert self._acepta("La Patrulla-X 012 (1985).cbz", 12, "X-Men", {nt("La Patrulla-X")})
+
+    def test_el_alias_no_cuela_otro_numero(self):
+        from zascarr.core.matcher import normalize_title as nt
+        assert not self._acepta("La Patrulla-X 013 (1985).cbz", 12, "X-Men", {nt("La Patrulla-X")})
+
+    def test_sin_serie_pero_con_alias_sigue_aceptando(self):
+        """Los alias son de ESA serie, así que no hace falta el título."""
+        from zascarr.core.matcher import normalize_title as nt
+        assert self._acepta("La Patrulla-X 012.cbz", 12, "", {nt("La Patrulla-X")})
+
+    def test_sin_serie_y_sin_alias_sigue_fallando_cerrado(self):
+        assert not self._acepta("La Patrulla-X 012.cbz", 12, "")
+
+
+class TestMedicionD8ContraElBancoReal:
+    """Convierte en regresión la medición del docstring del filtro: los casos que
+    solo pasarían con contención **no son series distintas legítimas**, sino
+    sobre-captura del parser, y el filtro tiene que rechazarlos. Así los números
+    del docstring no se quedan viejos."""
+
+    @staticmethod
+    def _banco():
+        import csv
+        from pathlib import Path
+        ruta = (Path(__file__).resolve().parents[1]
+                / "scripts" / "medicion" / "muestra81_etiquetada.csv")
+        assert ruta.exists(), "el banco real de medición tiene que estar en el repo"
+        with ruta.open(encoding="utf-8") as f:
+            return list(csv.DictReader(f))
+
+    def test_la_sobre_captura_del_parser_se_rechaza(self):
+        """El rechazo tiene que ser POR TÍTULO. Si el parser leyera otro número
+        del candidato, la aserción pasaría por el motivo equivocado y no
+        probaría nada, así que se comprueba la precondición caso a caso."""
+        from zascarr.utils.naming import normalize_series_name as norm
+        from zascarr.utils.naming import parse_comic_filename
+        comprobados: list[str] = []
+        for fila in self._banco():
+            real, parseado = fila["serie_real"] or "", fila["parser_serie"] or ""
+            a, b = norm(parseado), norm(real)
+            if not a or not b or a == b:
+                continue
+            if not (a in b or b in a):    # solo la contención lo aceptaría
+                continue
+            candidato = SearchResult(f"{parseado} 4", "i", "magnet:x", 1, 1, "comics")
+            parsed = parse_comic_filename(candidato.title)
+            if parsed.issue_number != "4" or parsed.series != parseado:
+                continue      # este caso no puede demostrar el rechazo por título
+            comprobados.append(parseado)
+            assert not Orchestrator._candidato_es_del_numero(candidato, 4, real), \
+                f"«{parseado}» no debería valer para «{real}» (mismo número, distinto título)"
+        # Suelo alto a propósito: si el parser cambia y solo un caso sigue
+        # cumpliendo la precondición, la prueba pasaría casi vacía sin que nadie
+        # se enterara. Se exigen los tres que cumplen hoy y, por nombre, los dos
+        # de sobre-captura que justifican la decisión en el docstring.
+        assert len(comprobados) >= 3, \
+            f"solo {len(comprobados)} caso(s) demuestran el rechazo por título: {comprobados}"
+        assert any("taxus" in c.lower() for c in comprobados), comprobados
+        assert any("dreadstar" in c.lower() for c in comprobados), comprobados
+
+    def test_la_igualdad_es_la_mayoria_del_banco(self):
+        """La medición que justifica elegir igualdad: si esto baja mucho, la
+        decisión habría que revisarla con datos nuevos."""
+        from zascarr.utils.naming import normalize_series_name as norm
+        filas = [f for f in self._banco()
+                 if norm(f["serie_real"] or "") and norm(f["parser_serie"] or "")]
+        iguales = sum(1 for f in filas
+                      if norm(f["parser_serie"]) == norm(f["serie_real"]))
+        assert iguales >= int(len(filas) * 0.8), f"solo {iguales}/{len(filas)} con igualdad"
+
+    def test_un_omnibus_del_mismo_numero_no_es_la_grapa(self):
+        """El filtro descarta lo que el parser marca como edición (`edition_kind`):
+        un Omnigold 4 no es la grapa #4 (regla de C2/B15)."""
+        candidato = SearchResult("Batman Omnigold 4 (2019).cbz", "i", "magnet:x", 1, 1, "comics")
+        assert not Orchestrator._candidato_es_del_numero(candidato, 4, "Batman")

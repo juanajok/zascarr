@@ -40,13 +40,15 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import File, Issue, Series, Wishlist, WishlistStatus
+from zascarr.core.matcher import normalize_title
+from zascarr.models import File, Issue, LocalAlias, Series, Wishlist, WishlistStatus
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import sign_token, verify_token
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.prowlarr import ProwlarrClient, SearchResult
+from zascarr.services.series import numero_de_grapa
 from zascarr.services.transmission import TransmissionClient
-from zascarr.utils.naming import normalize_series_name
+from zascarr.utils.naming import normalize_series_name, parse_comic_filename
 
 logger = structlog.get_logger()
 
@@ -62,6 +64,16 @@ MOTIVO_SIN_FUENTE = "Sin fuente de búsqueda activa — activa Prowlarr o el for
 MOTIVO_FUENTE_INACCESIBLE = "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
 MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
 MOTIVO_CANDIDATO_RECHAZADO = "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
+#: D8: había resultados, pero ninguno declaraba el número pedido. NO es
+#: "ningún backend activo" — decir eso sería mentir (D9) sobre lo que pasó.
+#: Cubre los dos motivos de descarte (número distinto o serie distinta):
+#: decir "ninguno era el número" cuando el descarte fue por título sería
+#: engañoso, y D9 existe justo para no dar motivos que no son ciertos.
+MOTIVO_NUMERO_DISTINTO = (
+    "Se encontraron resultados, pero ninguno coincide con este número de esta serie. "
+    "Si el release usa otro nombre para la serie, importa un fichero y asígnalo una vez "
+    "en Pendientes: ZascArr aprenderá ese nombre para la próxima búsqueda"
+)
 MOTIVO_CLIENTE_INACCESIBLE = "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
 MOTIVO_CANDIDATO_INVALIDO = "Ese candidato ya no es válido — vuelve a buscar y elige uno de la lista actual"
@@ -197,6 +209,31 @@ class Orchestrator:
             if forum_result:
                 candidates = [forum_result]
 
+        # D8: la búsqueda es de TEXTO, así que devolver algo no significa que sea
+        # el número pedido. El filtro va ANTES de `candidatos_crudos` a
+        # propósito: si lo único que había era de otro número, el motivo no puede
+        # decir "ningún backend activo" (sería falso, y D9 existe justo para no
+        # dar ese tipo de motivo).
+        titulo_serie = ""
+        alias_serie: set[str] = set()
+        descartados_por_numero = 0
+        if item.numero is not None:
+            if item.series_id:
+                serie = (await self.db.execute(
+                    select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
+                titulo_serie = serie.title if serie else ""
+                # B13: los alias que el coleccionista ya confirmó a mano. Un
+                # release español puede llamar "La Patrulla-X" a una serie
+                # catalogada como "X-Men"; sin ellos, la igualdad estricta
+                # descartaría el candidato bueno.
+                alias_serie = set((await self.db.execute(
+                    select(LocalAlias.pattern_norm)
+                    .where(LocalAlias.series_id == item.series_id))).scalars().all())
+            antes = len(candidates)
+            candidates = [c for c in candidates
+                          if self._candidato_es_del_numero(c, item.numero, titulo_serie, alias_serie)]
+            descartados_por_numero = antes - len(candidates)
+
         # Blindaje legal: opt-in por backend (deshabilitados por defecto,
         # igual que forum_enabled ya lo estaba) — un candidato de un
         # backend no activado ni se intenta enviar, ni se ofrece para
@@ -211,6 +248,8 @@ class Orchestrator:
             # coleccionista es distinta en cada caso.
             if candidatos_crudos:
                 item.last_error = MOTIVO_CANDIDATO_RECHAZADO
+            elif descartados_por_numero:
+                item.last_error = MOTIVO_NUMERO_DISTINTO
             else:
                 item.last_error = motivo_prowlarr or MOTIVO_SIN_RESULTADOS
             await self.db.flush()
@@ -331,7 +370,14 @@ class Orchestrator:
             if not series:
                 return None
             q = series.title
-            if item.issue_id:
+            # D8: un item generado por la política lleva el número en
+            # `item.numero` y NO tiene `issue_id` (el número que no tienes no
+            # tiene fila `Issue`). Sin esto, los N items generados harían la
+            # MISMA consulta —solo el título— y podrían acabar enviando el mismo
+            # candidato N veces.
+            if item.numero is not None:
+                q += f" {item.numero}"
+            elif item.issue_id:
                 issue = (await self.db.execute(select(Issue).where(Issue.id == item.issue_id))).scalar_one_or_none()
                 if issue and issue.issue_number:
                     q += f" {issue.issue_number}"
@@ -405,6 +451,63 @@ class Orchestrator:
             logger.exception("orchestrator.forum_fallback_error")
         return None
 
+    @staticmethod
+    def _candidato_es_del_numero(candidate: SearchResult, numero: int,
+                                 titulo_serie: str = "",
+                                 alias_serie: set[str] | None = None) -> bool:
+        """D8: ¿este candidato es ESE número de ESA serie?
+
+        **Falla cerrado**: sin serie con la que comparar, no se acepta nada.
+        Preferimos dejar el número en Pendientes antes que dar por bueno un
+        candidato de otra serie.
+
+        El número se compara como entero y solo si el texto parseado es todo
+        dígitos: así "04" vale para el 4, y "1.5", "4-6" o "12a" se rechazan de
+        forma explícita en vez de por accidente (`lstrip("0")` funcionaba para el
+        0 porque ambos lados quedaban vacíos, pero era frágil).
+
+        El título se compara por **igualdad** del normalizado, no por contención:
+        la contención acepta series distintas que comparten prefijo —"Batman" en
+        "Batman Beyond", "Spider-Man" en "Spider-Man 2099", "Superman" en
+        "Superman Batman"— en los dos sentidos. Medido con el banco de rutas
+        reales (`scripts/medicion/muestra81_etiquetada.csv`, 81 rutas): igualdad
+        acierta 71 y los 5 casos que solo pasaban con contención **no eran
+        series distintas legítimas sino sobre-captura del parser** ("Taxus La
+        Historia completa" para "Taxus", "Jim Starlin's Dreadstar" para
+        "Dreadstar"). Un subtítulo tras " - " ("Asterix T01 - Asterix el Galo")
+        lo separa ya el parser (RF-04), así que la igualdad no lo pierde.
+
+        Esa holgura **ya existe y no se toca**: los alias locales de B13 que el
+        coleccionista confirmó a mano para esta serie. Un release español puede
+        llamar "La Patrulla-X" a una serie catalogada como "X-Men", y sin alias
+        la igualdad estricta descartaría el candidato bueno. Aceptarlos no
+        afloja el filtro porque no inventan nada: son lo que una persona ya dio
+        por bueno. **Límite conocido (arranque en frío):** un alias solo se
+        aprende cuando ya hay un fichero asignado a mano desde Pendientes, así
+        que la PRIMERA búsqueda de una serie recién dada de alta con nombre
+        inglés y releases en español se queda sin candidatos; el motivo del item
+        invita a importar uno y asignarlo, que es lo que enseña el alias."""
+        parsed = parse_comic_filename(candidate.title)
+        if parsed.edition_kind is not None:      # ómnibus/tomo: no es la grapa #N
+            return False
+        texto = (parsed.issue_number or "").strip()
+        if not texto.isdigit():
+            return False
+        if int(texto) != numero:
+            return False
+        norm_cand = normalize_series_name(parsed.series or "")
+        # Un normalizado vacío haría `"" in ...` o `== ""` y colaría cualquier
+        # cosa (un título como "004" normaliza a nada).
+        if not norm_cand:
+            return False
+        norm_serie = normalize_series_name(titulo_serie or "")
+        if norm_serie and norm_cand == norm_serie:
+            return True
+        # Alias locales (B13): es lo que una persona ya confirmó a mano para esta
+        # instalación, así que aceptarlos no afloja el filtro — no inventa nada.
+        # Sigue fallando cerrado: sin serie Y sin alias, no se acepta nada.
+        return normalize_title(parsed.series or "") in (alias_serie or set())
+
     def _ranked_candidates(self, results: list[SearchResult], query: str) -> list[SearchResult]:
         """Todo el pool rankeado, no solo el ganador — D1 prueba el
         siguiente si el primero falla al enviarse, en vez de rendirse.
@@ -462,6 +565,24 @@ class Orchestrator:
         # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya
         # no es "lo tengo" — sin este filtro, un archivo borrado a mano
         # tras haberse importado bastaba para dar por cumplida la wishlist.
+        if item.numero is not None:
+            # D8: item generado por número. Se empareja por NÚMERO —ligarlo solo
+            # a la serie haría que cualquier `File` nuevo de la serie cerrara
+            # TODOS los items generados a la vez— y con los mismos criterios que
+            # los huecos y que el cierre de serie: `numero_de_grapa` (un ómnibus
+            # #4 no es la grapa #4), `is_missing=false` (un fichero desaparecido
+            # no cierra nada) e `imported_at >= added_at` (un File anterior al
+            # item no lo cumple). Sin lo primero, un fichero borrado a mano
+            # cerraría el item como IMPORTED nada más generarse.
+            filas = (await self.db.execute(
+                select(Issue.issue_number, Issue.format)
+                .join(File, File.issue_id == Issue.id)
+                .where(Issue.series_id == item.series_id)
+                .where(File.is_missing.is_(False))
+                .where(File.imported_at >= item.added_at)
+            )).all()
+            return any(numero_de_grapa(numero, formato) == item.numero
+                       for numero, formato in filas)
         if item.issue_id:
             row = (await self.db.execute(
                 select(File.id)

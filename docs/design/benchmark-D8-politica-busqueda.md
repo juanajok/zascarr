@@ -225,6 +225,18 @@ falta» o «nada». El backlog pide un campo `wishlist_policy` por serie
   `sa.Enum` genérico, que no tiene ese parámetro (nota del BACKLOG). Aquí los
   tipos se crean a mano y `add_column` no los recrea, pero la forma explícita
   evita que alguien lo rompa al refactorizar.
+- **Límite conocido — arranque en frío de los alias (D8 + B13):** un alias local
+  se aprende **solo** cuando el coleccionista asigna a mano un fichero desde
+  Pendientes, y ese fichero tiene que existir ya. Con una serie de Comic Vine en
+  inglés, `faltantes` activo y **ningún alias**, los releases en español se
+  descartan y el item no avanza: **no llega nunca el fichero que enseñaría el
+  alias**. La salida de los alias sirve cuando ya hay historial, no en la primera
+  búsqueda de una serie recién dada de alta. Mitigación incluida: el motivo del
+  item (D9) invita a lo que sí funciona —«si el release usa otro nombre para la
+  serie, importa un fichero y asígnalo una vez en Pendientes»—. Alternativa
+  futura, ya otra historia: un campo «otros nombres de esta serie» en su ficha.
+  Y el tamaño real de este límite lo decidirá la comparación contra la base de
+  datos real en la primera instalación, que hoy no se puede hacer.
 - **Un item manual a nivel de serie + `faltantes`:** mientras exista uno vivo,
   **no se genera por número** para esa serie (si no, se buscaría la serie
   genérica *y además* cada número, quemando el doble). Se dice en la UI.

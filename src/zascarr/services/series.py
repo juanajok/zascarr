@@ -145,7 +145,7 @@ def compute_missing_issues(total_issues: int | None, numeros_poseidos: set[int])
     """Números 1..total_issues que la serie NO posee. Función pura.
 
     C2 (peer review): un Annual/especial no "cubre" el hueco de la grapa con
-    el mismo número — eso lo garantiza `_numero_de_grapa`, que exige
+    el mismo número — eso lo garantiza `numero_de_grapa`, que exige
     `format=SINGLE_ISSUE` y un número entero, en vez de comparar floats.
     """
     if not total_issues:
@@ -153,7 +153,7 @@ def compute_missing_issues(total_issues: int | None, numeros_poseidos: set[int])
     return [i for i in range(1, total_issues + 1) if i not in numeros_poseidos]
 
 
-def _numero_de_grapa(issue_number: str | None, formato) -> int | None:
+def numero_de_grapa(issue_number: str | None, formato) -> int | None:
     """Número entero si la fila ES una grapa numerada; `None` si no lo es.
 
     Solo una grapa (`SINGLE_ISSUE`) con número entero ocupa el hueco de la
@@ -181,7 +181,7 @@ async def numeros_poseidos_por_serie(db: AsyncSession) -> dict[UUID, set[int]]:
     for series_id, numero, formato, disponible in filas:
         if not disponible:
             continue
-        n = _numero_de_grapa(numero, formato)
+        n = numero_de_grapa(numero, formato)
         if n is not None:
             por_serie.setdefault(series_id, set()).add(n)
     return por_serie
@@ -210,7 +210,7 @@ async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
     for numero, formato, disponible in filas:
         if not disponible:
             continue
-        n = _numero_de_grapa(numero, formato)
+        n = numero_de_grapa(numero, formato)
         if n is not None:
             poseidos.add(n)
     return poseidos
