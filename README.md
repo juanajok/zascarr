@@ -365,7 +365,22 @@ antes de guardar.
 **Prowlarr/Transmission/aMule corren en la propia Raspberry Pi ("baremetal"),
 fuera de Docker** — el contenedor los alcanza vía `host.docker.internal`. Si
 "Probar conexión" falla con "no se pudo conectar" aunque la URL/credenciales
-sean correctas, hay tres causas habituales — comprueba las tres:
+sean correctas, hay tres causas habituales. Hay un comando que las comprueba
+las tres por ti y te dice qué hacer (solo lee, no cambia nada):
+
+```bash
+sudo bash scripts/diagnostico-red.sh
+```
+
+Lee de Docker la subred y la puerta de enlace **reales** de la red que usa el
+contenedor, mira a dónde resuelve `host.docker.internal` dentro del contenedor,
+revisa tus reglas de `ufw` y, si falta alguna, te imprime el comando exacto
+**para que lo pegues tú**. No ejecuta `ufw`. Si no puede determinar algo
+—falta `sudo`, el contenedor está parado, no reconoce la salida— lo dice y no
+propone nada: una regla que parece precisa pero apunta a la red equivocada es
+peor que no dar ninguna.
+
+Las tres causas, por si prefieres comprobarlas a mano:
 
 1. **`host.docker.internal` puede resolver a la red de Docker equivocada.**
    Bug real de Docker, confirmado con datos reales: el valor mágico
@@ -396,7 +411,9 @@ sean correctas, hay tres causas habituales — comprueba las tres:
    ```
    Y si hace falta, añade una regla que cubra cualquier red Docker del host
    (más robusta que apuntar a una subred exacta, que puede cambiar si
-   Docker reasigna redes):
+   Docker reasigna redes). El `diagnostico-red.sh` de arriba te da la misma
+   regla con **la subred que de verdad tiene tu contenedor**; si prefieres ir
+   a lo ancho, esto cubre todo el rango que usa Docker:
    ```bash
    sudo ufw allow from 172.16.0.0/12 to any port 9696 proto tcp comment 'Prowlarr desde Docker'
    sudo ufw allow from 172.16.0.0/12 to any port 9091 proto tcp comment 'Transmission desde Docker'

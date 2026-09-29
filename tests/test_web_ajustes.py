@@ -182,6 +182,10 @@ class TestProbar:
         assert "ufw" in r.text
         assert "0.0.0.0" in r.text
         assert "ss -tlnp" in r.text
+        # A10: la subred no se adivina desde el contenedor — se manda al
+        # diagnóstico, que la lee del propio Docker en el host.
+        assert "diagnostico-red.sh" in r.text
+        assert "172.16.0.0/12" not in r.text
 
     def test_error_http_normal_no_lleva_la_pista_de_bind(self):
         """Un 401/500 real significa que SÍ se llegó al servicio — la
