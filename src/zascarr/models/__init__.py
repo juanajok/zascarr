@@ -373,6 +373,13 @@ class File(Base):
     file_format:         Mapped[FileFormat]   = mapped_column(Enum(FileFormat, name="file_format", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
     file_size_bytes:     Mapped[int|None]     = mapped_column(BigInteger)
     sha256_hash:         Mapped[str|None]     = mapped_column(String(64), index=True)
+    # Integridad (ficha benchmark-integridad-hash-dedupe): hash del fichero
+    # TAL COMO SE IMPORTÓ, antes de la primera reescritura por B6 — escribir
+    # ComicInfo.xml cambia los bytes, así que `sha256_hash` deja de valer para
+    # reconocer el original cuando vuelve a llegar. El dedupe busca por
+    # `sha256_hash` O `original_sha256`; se fija la primera vez que B6 reemplaza
+    # un CBZ y nunca se sobrescribe. NULL = no reescrito aún (o era CBR/PDF).
+    original_sha256:     Mapped[str|None]     = mapped_column(String(64), index=True)
     source_tag:          Mapped[str|None]     = mapped_column(String(50))
     width_px:            Mapped[int|None]     = mapped_column(Integer)
     covered_issue_ids:   Mapped[list]         = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)

@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -37,6 +37,7 @@ from zascarr.models import (
     File,
     FileFormat,
     ImportRun,
+    Issue,
     IssueFormat,
     Series,
 )
@@ -121,8 +122,13 @@ class _Outcome:
     exactamente el mismo pipeline de triaje/deduplicación/matching en
     los dos casos; solo cambia qué se hace DESPUÉS del match."""
     tr: TriageResult
-    result: MatchResult | None = None  # None si es un duplicado
+    result: MatchResult | None = None  # None si es un duplicado o una recuperación
     duplicate_of: str | None = None
+    # Integridad (benchmark-integridad-hash-dedupe): cuando TODAS las
+    # coincidencias por hash están `is_missing`, el fichero que vuelve a llegar
+    # es el mismo contenido que una fila desaparecida — se reenlaza esa fila en
+    # vez de crear otra o descartar. Lleva la fila a reenlazar.
+    recuperar: File | None = None
     # Explicación de core/cohort.py (2026-09-26) SOLO si de verdad se usó
     # para este archivo — no si se calculó una pista que resultó ser un
     # no-op (formato ya cubierto por SORT_PREFIX_PATTERN). Se guarda en
@@ -138,17 +144,65 @@ class _Outcome:
     edition_kind: str | None = None
 
 
+async def _coincidencias_de_hash(db: AsyncSession, sha256: str) -> list[File]:
+    """Filas cuyo contenido coincide con `sha256`, por `sha256_hash` **o**
+    `original_sha256` (integridad). Orden determinista: las presentes
+    (`is_missing = false`) primero, luego por `imported_at` — así la primera
+    decide el caso: si está presente es un duplicado real, si está desaparecida
+    es que TODAS lo están (y hay que reenlazar)."""
+    return list((await db.execute(
+        select(File)
+        .where(or_(File.sha256_hash == sha256, File.original_sha256 == sha256))
+        .order_by(File.is_missing.asc(), File.imported_at.asc())
+    )).scalars().all())
+
+
+async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
+    """Actualiza la fila `is_missing` para que describa el fichero que YA está
+    en `dest` (quien llama decide si lo movió —Importer— o ya estaba ahí
+    —LibraryAdopter—).
+
+    Conserva el enlace a Issue/Series y `original_sha256`; reinicia `imported_at`
+    (D8 cierra por `File.imported_at >= Wishlist.added_at`, y reactivar un
+    `IMPORTED` reinicia `added_at`) y, si el fichero es el ORIGINAL de una fila
+    etiquetada, vacía `comicinfo_estado`/`comicinfo_propio` (describen un
+    fichero que ya no existe)."""
+    fila.file_path = str(dest)
+    fila.file_name = dest.name
+    fila.file_size_bytes = dest.stat().st_size
+    fila.sha256_hash = tr.sha256
+    fila.is_missing = False
+    fila.missing_since = None
+    fila.imported_at = datetime.now(UTC)
+    if fila.original_sha256 is not None and tr.sha256 == fila.original_sha256:
+        meta = dict(fila.metadata_ or {})
+        meta.pop("comicinfo_estado", None)
+        meta.pop("comicinfo_propio", None)
+        fila.metadata_ = meta
+
+
 async def _triage_and_match(
     db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None
 ) -> _Outcome:
     tr: TriageResult = triage(path)
 
     if tr.sha256:
-        existing = (await db.execute(
-            select(File).where(File.sha256_hash == tr.sha256)
-        )).scalar_one_or_none()
-        if existing:
-            return _Outcome(tr=tr, result=None, duplicate_of=existing.file_name)
+        coincidencias = await _coincidencias_de_hash(db, tr.sha256)
+        if coincidencias:
+            if len(coincidencias) > 1:
+                # Integridad: la columna no es única; dos filas con el mismo
+                # hash deben poder representarse, pero es raro y conviene que
+                # quede rastro (antes esto reventaba con MultipleResultsFound).
+                logger.warning(
+                    "importer.dedupe_coincidencias_multiples",
+                    hash=tr.sha256[:12], filas=len(coincidencias),
+                )
+            primero = coincidencias[0]
+            if not primero.is_missing:
+                return _Outcome(tr=tr, result=None, duplicate_of=primero.file_name)
+            # Todas las coincidencias están desaparecidas: recuperar la más
+            # antigua en vez de descartar o crear una fila nueva.
+            return _Outcome(tr=tr, result=None, recuperar=primero)
 
     matcher = SeriesMatcher(db)
 
@@ -341,6 +395,9 @@ class Importer:
         self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
     ) -> None:
         outcome = await _triage_and_match(self._db, path, pista)
+        if outcome.recuperar is not None:
+            await self._reenlazar(outcome.recuperar, path, outcome.tr, report)
+            return
         if outcome.duplicate_of:
             report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
             logger.info("importer.duplicate", path=str(path), hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None)
@@ -399,6 +456,49 @@ class Importer:
         else:
             report.imported.append(f"{path.name} → {final_dest.relative_to(self._library)}")
         logger.info("importer.imported", dest=str(final_dest), status=result.status)
+
+    async def _reenlazar(
+        self, fila: File, path: Path, tr: TriageResult, report: ImportReport
+    ) -> None:
+        """El fichero que vuelve a llegar es el mismo contenido que una fila
+        `is_missing`: reenlaza esa fila en vez de crear otra o descartar.
+
+        La fila conserva su enlace a Issue/Series y su `original_sha256`; se
+        actualizan ruta/nombre/tamaño/hash con los del entrante, se reinicia
+        `imported_at` (D8 cierra por `File.imported_at >= Wishlist.added_at`, y
+        reactivar un `IMPORTED` reinicia `added_at`) y, si el entrante es el
+        ORIGINAL de una fila que estaba etiquetada, se vacían las marcas de
+        ComicInfo (`comicinfo_estado`/`comicinfo_propio`), que describen un
+        fichero que ya no existe. Cuenta como importado, con «recuperado» para
+        distinguirlo (así E4 avisa igual que con una importación normal)."""
+        # El destino sale de la fila que YA existe (su Issue/Series), no de un
+        # re-match que podría apuntar a otra parte.
+        serie: Series | None = None
+        numero: str | None = None
+        if fila.issue_id:
+            fila_issue = (await self._db.execute(
+                select(Issue.issue_number, Series)
+                .join(Series, Issue.series_id == Series.id)
+                .where(Issue.id == fila.issue_id)
+            )).first()
+            if fila_issue:
+                numero, serie = fila_issue
+
+        if serie is None:
+            dest = self._library / "_Unsorted" / path.name
+        else:
+            dest = build_library_path(
+                self._library, serie, numero, path.suffix, fallback_name=path.name)
+
+        # A3: mismo mover verificado que una importación normal.
+        final_dest = await safe_move_async(path, dest)
+
+        await _reenlazar_fila(fila, tr, final_dest)
+        await self._db.flush()
+
+        report.imported.append(
+            f"{path.name} → {final_dest.relative_to(self._library)} (recuperado)")
+        logger.info("importer.recuperado", dest=str(final_dest))
 
     async def _persist_run(self, report: ImportReport) -> None:
         run = ImportRun(
