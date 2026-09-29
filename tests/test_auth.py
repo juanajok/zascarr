@@ -53,6 +53,28 @@ class TestHashPassword:
         assert await verify_password("x", "no-tiene-el-formato-esperado") is False
         assert await verify_password("x", "otro_algo$1$aa$bb") is False
 
+    @pytest.mark.asyncio
+    async def test_pbkdf2_corre_fuera_del_bucle_de_eventos(self, monkeypatch):
+        """Caso 6 de la ficha de seguridad: el PBKDF2 no corre en el hilo del
+        bucle de eventos (la Pi no puede congelarse con cada Basic)."""
+        import hashlib
+        import threading
+
+        stored = hash_password("secreta")   # real, en el hilo principal (no se registra)
+        hilos: list = []
+        real = hashlib.pbkdf2_hmac
+
+        def espia(*args, **kwargs):
+            hilos.append(threading.current_thread())
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr("zascarr.services.auth.hashlib.pbkdf2_hmac", espia)
+
+        assert await verify_password("secreta", stored) is True
+
+        assert hilos, "el PBKDF2 debería haberse ejecutado"
+        assert all(h is not threading.main_thread() for h in hilos)
+
 
 class TestCredencialesValidas:
 
@@ -278,3 +300,20 @@ class TestAuthMiddleware:
         r = client.get("/api/algo", auth=("cualquiera", "mala"))
 
         assert r.status_code == 401
+
+    def test_next_con_ampersand_se_codifica(self, monkeypatch):
+        """Caso 3 de la ficha de seguridad: un `&` en la query original no se
+        trunca al redirigir a /login (antes se parseaba como parámetro aparte)."""
+        from urllib.parse import parse_qs, urlsplit
+
+        settings = get_settings().model_copy(update={
+            "auth_mode": "password", "auth_password_hash": hash_password("x"), "secret_key": "s",
+        })
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        client = TestClient(_app_de_prueba(), follow_redirects=False)
+
+        r = client.get("/ui/algo?q=a&b=2")
+
+        assert r.status_code == 303
+        params = parse_qs(urlsplit(r.headers["location"]).query)
+        assert params["next"] == ["/ui/algo?q=a&b=2"]
