@@ -270,3 +270,11 @@ class TestPoliticaBusquedaD8:
         with use_fake_session(FakeSession([])) as client:
             r = client.patch(f"/api/series/{uuid4()}", json={"wishlist_policy": "lo_que_sea"})
         assert r.status_code == 422
+
+    def test_un_null_explicito_da_422(self):
+        """La columna es NOT NULL: un `null` no puede llegar al ORM y reventar
+        al escribir. Para no buscar nada está `ninguno`."""
+        with use_fake_session(FakeSession([])) as client:
+            r = client.patch(f"/api/series/{uuid4()}", json={"wishlist_policy": None})
+        assert r.status_code == 422
+        assert "no puede quedar vacía" in r.text
