@@ -12,14 +12,18 @@ correlacionados anidados.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import (
     Character,
+    File,
     Issue,
+    IssueFormat,
+    MetadataSource,
     Publisher,
     Series,
     StoryArc,
@@ -105,3 +109,119 @@ class SeriesService:
         return list((await self.db.execute(
             select(StoryArc).where(StoryArc.title.ilike(f"%{query}%")).order_by(StoryArc.title).limit(limit)
         )).scalars().all())
+
+
+UNIDAD_DE_GRAPA = {MetadataSource.COMIC_VINE.value}
+
+
+@dataclass(frozen=True)
+class Huecos:
+    """Huecos de una serie y si el cálculo merece confianza.
+
+    `computable=False` significa "no hay con qué calcularlo", NO "no falta
+    nada": la UI debe decirlo en vez de enseñar una lista inventada.
+    """
+    faltantes: list[int]
+    computable: bool
+    motivo: str | None = None
+
+
+def compute_missing_issues(total_issues: int | None, numeros_poseidos: set[int]) -> list[int]:
+    """Números 1..total_issues que la serie NO posee. Función pura.
+
+    C2 (peer review): un Annual/especial no "cubre" el hueco de la grapa con
+    el mismo número — eso lo garantiza `_numero_de_grapa`, que exige
+    `format=SINGLE_ISSUE` y un número entero, en vez de comparar floats.
+    """
+    if not total_issues:
+        return []
+    return [i for i in range(1, total_issues + 1) if i not in numeros_poseidos]
+
+
+def _numero_de_grapa(issue_number: str | None, formato) -> int | None:
+    """Número entero si la fila ES una grapa numerada; `None` si no lo es.
+
+    Solo una grapa (`SINGLE_ISSUE`) con número entero ocupa el hueco de la
+    grapa de ese número. Un ómnibus/tomo #12 **no** es la grapa #12, y un
+    `Annual 1` o un `1.5` tampoco tapan el hueco del nº 1 (regla de C2).
+    """
+    if formato != IssueFormat.SINGLE_ISSUE:
+        return None
+    if not issue_number or not issue_number.strip().isdigit():
+        return None
+    return int(issue_number.strip())
+
+
+async def numeros_poseidos_por_serie(db: AsyncSession) -> dict[UUID, set[int]]:
+    """Números de grapa poseídos, para TODAS las series, en una sola consulta.
+
+    Versión agregada de `numeros_poseidos` para el dashboard (no N+1).
+    """
+    filas = (await db.execute(
+        select(Issue.series_id, Issue.issue_number, Issue.format,
+               exists().where(File.issue_id == Issue.id,
+                              File.is_missing.is_(False)).label("disponible"))
+    )).all()
+    por_serie: dict[UUID, set[int]] = {}
+    for series_id, numero, formato, disponible in filas:
+        if not disponible:
+            continue
+        n = _numero_de_grapa(numero, formato)
+        if n is not None:
+            por_serie.setdefault(series_id, set()).add(n)
+    return por_serie
+
+
+async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
+    """Números de grapa que la serie POSEE de verdad, mirando el DISCO.
+
+    Por qué no `Issue.sort_order` (2026-09-27): **ningún código de `main`
+    escribe ese campo** — la única derivación que existió (`_derive_sort_order`)
+    se quedó en una rama abandonada. Medido con `scripts/medicion/censo_huecos.py`
+    sobre una muestra: 0/18 issues con `sort_order` y **52 huecos inventados**
+    en 5 series, porque `compute_missing_issues(N, ∅)` devuelve `[1..N]`.
+
+    Ahora la posesión sale de lo que hay en disco — un `File` con
+    `is_missing=false`, el mismo criterio que ya usan los demás consumidores
+    de "¿lo tengo?" (B7) — y del formato: solo una grapa cubre una grapa.
+    """
+    filas = (await db.execute(
+        select(Issue.issue_number, Issue.format,
+               exists().where(File.issue_id == Issue.id,
+                              File.is_missing.is_(False)).label("disponible"))
+        .where(Issue.series_id == series_id)
+    )).all()
+    poseidos: set[int] = set()
+    for numero, formato, disponible in filas:
+        if not disponible:
+            continue
+        n = _numero_de_grapa(numero, formato)
+        if n is not None:
+            poseidos.add(n)
+    return poseidos
+
+
+async def huecos_de_serie(db: AsyncSession, series: Series,
+                          poseidos: set[int] | None = None) -> Huecos:
+    """Huecos de una serie, diciendo — explícitamente — si el cálculo es fiable.
+
+    Antes de restar hay que comprobar que las dos cantidades hablan de lo
+    MISMO: `total_issues` lo copia el enricher del catálogo y **no siempre
+    cuenta grapas** (AniList cuenta capítulos y sus ficheros son tomos). Si la
+    unidad no está acreditada, `computable=False` en vez de una resta inventada.
+
+    `poseidos` permite reutilizar una consulta ya hecha (la ficha de serie
+    necesita el conjunto igualmente, para pintar los números presentes).
+    """
+    if not series.total_issues:
+        return Huecos([], False, "la serie no tiene un total de números conocido")
+    if series.metadata_source not in UNIDAD_DE_GRAPA:
+        return Huecos(
+            [], False,
+            "el total de la serie no consta como número de grapas "
+            f"({series.metadata_source or 'fuente desconocida'}), así que no se "
+            "puede comparar con los números que hay en disco",
+        )
+    if poseidos is None:
+        poseidos = await numeros_poseidos(db, series.id)
+    return Huecos(compute_missing_issues(series.total_issues, poseidos), True, None)
