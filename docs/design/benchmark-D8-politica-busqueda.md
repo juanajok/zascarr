@@ -197,8 +197,34 @@ falta» o «nada». El backlog pide un campo `wishlist_policy` por serie
   tope**, y repartiendo de forma justa entre series (no «la primera se lleva
   todo el cupo»).
 - **Idempotencia en la base de datos, no solo en Python:** un **índice único
-  parcial** sobre (serie, número) para items vivos. Dos ciclos solapados no
-  pueden duplicar por una comprobación que solo existe en el código.
+  parcial** sobre (serie, número) para los items de política con número. Dos
+  ciclos solapados no pueden duplicar por una comprobación que solo existe en el
+  código, y su ámbito **excluye los manuales**: si abarcara los manuales, quien
+  añada a mano un número ya generado recibiría un error de integridad crudo.
+- **El índice NO mira el estado, y por eso la generación REACTIVA en vez de
+  insertar.** Limitarlo a los estados vivos dejaría fuera de la garantía a las
+  filas `retirado`/`imported`/`failed`, que seguirían ocupando el hueco: pasar la
+  serie a `ninguno` y volver a `faltantes` daría error de integridad, y un número
+  importado cuyo fichero desapareció (`is_missing`) no se podría volver a querer.
+  La generación usa `INSERT ... ON CONFLICT (series_id, numero) WHERE
+  origen='politica' AND numero IS NOT NULL DO UPDATE` y **reinicia `status`,
+  `added_at`, `download_ref`, `download_backend` y `last_error`**. Reiniciar
+  `added_at` no es cosmético: el cierre compara `File.imported_at >=
+  Wishlist.added_at`, así que sin reiniciarlo el cierre se comportaría mal.
+  Queda **una sola fila por número**. Verificado contra PostgreSQL 15.
+- **El backfill real es el `server_default`, no un `UPDATE`.** `ADD COLUMN ...
+  NOT NULL DEFAULT 'manual'` ya rellena las filas existentes, así que un
+  `UPDATE ... WHERE origen IS NULL` no tocaría nada. La prueba de la migración
+  tiene que **sembrar filas antes de la 0015**, subirla y comprobar que quedan en
+  `manual` con `numero` nulo.
+- **`todos` y `futuros` se rechazan también en el servidor**, no solo
+  deshabilitados en el selector: con los valores ya en el tipo, un `PATCH` a la
+  API podría fijarlos. Validación explícita con 422 y motivo legible, y el campo
+  declarado en `SeriesUpdate` (que es `extra=forbid`).
+- **Estilo de la migración:** `postgresql.ENUM(..., create_type=False)` y no el
+  `sa.Enum` genérico, que no tiene ese parámetro (nota del BACKLOG). Aquí los
+  tipos se crean a mano y `add_column` no los recrea, pero la forma explícita
+  evita que alguien lo rompa al refactorizar.
 - **Un item manual a nivel de serie + `faltantes`:** mientras exista uno vivo,
   **no se genera por número** para esa serie (si no, se buscaría la serie
   genérica *y además* cada número, quemando el doble). Se dice en la UI.
