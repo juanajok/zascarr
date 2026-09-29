@@ -57,8 +57,14 @@ from zascarr.models import (
 from zascarr.services.amule import AMuleClient
 from zascarr.services.auth import sign_token, verify_token
 from zascarr.services.legal import is_acknowledged
+from zascarr.services.politica import (
+    ESTADOS_REACTIVABLES,
+    Querer,
+    querer_de_serie,
+    retirar_de_serie,
+)
 from zascarr.services.prowlarr import ProwlarrClient, SearchResult
-from zascarr.services.series import huecos_de_serie, numero_de_grapa
+from zascarr.services.series import numero_de_grapa
 from zascarr.services.transmission import TransmissionClient
 from zascarr.utils.naming import normalize_series_name, parse_comic_filename
 
@@ -94,62 +100,6 @@ MOTIVO_CANDIDATO_INVALIDO = "Ese candidato ya no es válido — vuelve a buscar 
 # antes de que haya que volver a buscar — suficiente para que una persona
 # lo mire y decida, corto para acotar la ventana de un token reenviado.
 TOKEN_CANDIDATO_TTL_SEGUNDOS = 600
-
-# ── D8: qué números quiere la política y qué se hace con ellos ───────────────
-#
-# La generación **y** la retirada consumen el MISMO predicado
-# (`querer_de_serie`): "números que esta política quiere ahora". Se materializa
-# lo que el predicado pide y no existe, y se retira lo de origen `politica` que
-# el predicado ya no pide. Con una sola fuente de verdad no pueden divergir ni
-# dejar items huérfanos: cualquier motivo para dejar de querer un número
-# (cambió la política, llegó el fichero, apareció un item manual de serie) entra
-# por el mismo sitio.
-
-#: D8: `futuros` está reservado en el tipo pero no sabe calcularse todavía. No
-#: es un fallo: se declara (D9) en vez de inventar una lista de números.
-MOTIVO_POLITICA_FUTUROS = (
-    "La política «futuros» todavía no se puede aplicar: haría falta que la fuente "
-    "publique los números que aún no han salido"
-)
-#: D8: un item manual a nivel de serie pide la serie genérica. Generar además
-#: cada número la buscaría dos veces, así que el predicado no quiere ninguno
-#: mientras ese item siga vivo. Importa el caso en que el item manual aparece
-#: DESPUÉS: los generados pendientes se retiran igual que si cambiara la
-#: política, para no acabar con las dos búsquedas a la vez.
-MOTIVO_SERIE_EN_CURSO = (
-    "Ya hay un item de esta serie en curso: no se generan números para no buscarla dos veces"
-)
-
-#: D8: un item en estos estados ya "empezó" — hay una búsqueda en vuelo
-#: (SEARCHING, transitorio) o una descarga en marcha (DOWNLOADING). Marcarlo
-#: `retirado` sería mentir (D9) sobre lo que de verdad está pasando, así que la
-#: retirada no los toca. Tampoco los reescribe la generación: reiniciarles
-#: `added_at` rompería el cierre (`File.imported_at >= Wishlist.added_at`).
-ESTADOS_EN_VUELO = (WishlistStatus.SEARCHING, WishlistStatus.DOWNLOADING)
-
-#: D8: un item que ya está donde tiene que estar para este ciclo — pendiente y
-#: vivo. La generación no lo reescribe (sería churn y resetearía `added_at`);
-#: solo reactiva lo `retirado`/`failed`/`imported`/`downloaded`.
-ESTADOS_YA_MATERIALIZADOS = (WishlistStatus.WANTED, *ESTADOS_EN_VUELO)
-
-#: D8: un item en estos estados ya no cuenta como "vivo" al decidir si hay un
-#: item manual de serie en curso o un número ya ocupado a mano. FAILED sí
-#: cuenta: sigue en la lista y se reintenta tras el cooldown.
-ESTADOS_TERMINADOS = (WishlistStatus.IMPORTED, WishlistStatus.RETIRADO)
-
-
-@dataclass(frozen=True)
-class Querer:
-    """D8: números que la política de UNA serie quiere **ahora**. Es el único
-    predicado de la feature — lo consumen la generación y la retirada.
-
-    `computable=False` significa "no hay con qué calcularlo" (misma semántica
-    que `Huecos`), nunca "no falta nada". `motivo` es el texto en español que
-    la UI enseña cuando no hay números que generar.
-    """
-    numeros: frozenset[int]
-    computable: bool
-    motivo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -618,10 +568,11 @@ class Orchestrator:
     # ── D8: generación y retirada, con un solo predicado ─────────────────────
     #
     # Son la misma operación vista desde dos lados: "deja la wishlist con
-    # exactamente los números que la política quiere". Por eso comparten
-    # `querer_de_serie` y se ejecutan en la misma pasada — separarlas dejaría
-    # ventanas en las que un item generado ya no lo quiere nadie y sigue
-    # buscándose.
+    # exactamente los números que la política quiere". El predicado
+    # (`querer_de_serie`) y la sentencia de retirada viven en
+    # `services/politica.py` — la ficha de serie los reutiliza sin instanciar
+    # este orquestador. Aquí queda el ciclo: qué series toca, el tope por
+    # vuelta, las rondas y la escritura de la generación.
 
     async def sync_policy_items(self, lote: int | None = None) -> SincronizacionPolitica:
         """Materializa lo que la política quiere y retira lo que ya no quiere.
@@ -642,7 +593,7 @@ class Orchestrator:
 
         if lote is None:
             lote = get_settings().orchestrator_politica_lote
-        planes = [(serie, await self.querer_de_serie(serie))
+        planes = [(serie, await querer_de_serie(self.db, serie))
                   for serie in await self._series_para_sincronizar()]
         retirados = await self._retirar_lo_que_ya_no_se_quiere(planes)
         generados = await self._generar_lo_que_falta(planes, lote)
@@ -671,110 +622,33 @@ class Orchestrator:
             .order_by(Series.sort_title)
         )).scalars().all())
 
-    async def querer_de_serie(self, series: Series) -> Querer:
-        """«Números que la política de ESTA serie quiere ahora» — el predicado
-        único de D8. Público a propósito: la ficha de serie de la UI tiene que
-        enseñar lo mismo que se va a generar, no recalcularlo por su cuenta.
-
-        Falla cerrado y declara: si no se puede calcular, `numeros` va vacío y
-        `motivo` lo dice, en vez de inventar una lista (misma regla que
-        `huecos_de_serie` en #13).
-        """
-        # `None` solo puede aparecer en un objeto aún sin pasar por la BD (la
-        # columna es NOT NULL con `default`/`server_default`). Se trata como el
-        # valor por defecto para que el predicado sea total.
-        politica = series.wishlist_policy or WishlistPolicy.NONE
-        if politica == WishlistPolicy.NONE:
-            return Querer(frozenset(), True)
-        if politica == WishlistPolicy.FUTURE:
-            return Querer(frozenset(), False, MOTIVO_POLITICA_FUTUROS)
-
-        # Items manuales de esta serie que siguen vivos (un FAILED sigue
-        # contando: está en la lista y se reintenta tras el cooldown).
-        manuales = (await self.db.execute(
-            select(Wishlist.issue_id, Wishlist.numero)
-            .where(Wishlist.series_id == series.id)
-            .where(Wishlist.origen == WishlistOrigin.MANUAL)
-            .where(Wishlist.status.not_in(ESTADOS_TERMINADOS))
-        )).all()
-
-        # Un item manual a NIVEL DE SERIE pide la serie genérica: generar además
-        # cada número la buscaría dos veces. Ojo al orden temporal — da igual
-        # que el item manual sea anterior o posterior a los generados: el
-        # predicado es declarativo y la retirada usa este mismo resultado.
-        if any(issue_id is None and numero is None for issue_id, numero in manuales):
-            return Querer(frozenset(), True, MOTIVO_SERIE_EN_CURSO)
-
-        huecos = await huecos_de_serie(self.db, series)
-        if not huecos.computable:
-            return Querer(frozenset(), False, huecos.motivo)
-
-        numeros = (frozenset(range(1, series.total_issues + 1))
-                   if politica == WishlistPolicy.ALL else frozenset(huecos.faltantes))
-
-        # Un item manual de un NÚMERO concreto ocupa ese número: generarlo
-        # también sería la misma duplicación. El índice único parcial no cubre
-        # los manuales (a propósito), así que la base no lo impide — hay que
-        # excluirlo aquí.
-        ocupados = {numero for _, numero in manuales if numero is not None}
-        ids_issue = [issue_id for issue_id, _ in manuales if issue_id is not None]
-        if ids_issue:
-            for numero_issue, formato in (await self.db.execute(
-                    select(Issue.issue_number, Issue.format)
-                    .where(Issue.id.in_(ids_issue)))).all():
-                if (n := numero_de_grapa(numero_issue, formato)) is not None:
-                    ocupados.add(n)
-        return Querer(numeros - ocupados, True)
-
-    @staticmethod
-    def _stmt_retirada(series_id, querer: Querer):
-        """El `UPDATE` atómico que retira lo de política que ya no se quiere.
-
-        Separado para poder fijar en un test el `WHERE` exacto: **solo**
-        `WANTED`/`FAILED` (lo que no ha empezado) y **solo** `origen='politica'`
-        (lo manual no se toca nunca).
-        """
-        stmt = (
-            update(Wishlist)
-            .where(Wishlist.series_id == series_id)
-            .where(Wishlist.origen == WishlistOrigin.POLICY)
-            .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
-            .values(status=WishlistStatus.RETIRADO, last_error=None)
-        )
-        if querer.numeros:
-            # Sin números que quiera, se retira todo lo pendiente de esa serie.
-            # Se evita `NOT IN ()` para no depender del renderizado de un IN
-            # vacío.
-            stmt = stmt.where(or_(
-                Wishlist.numero.is_(None),
-                Wishlist.numero.not_in(sorted(querer.numeros)),
-            ))
-        return stmt
-
     async def _retirar_lo_que_ya_no_se_quiere(
             self, planes: list[tuple[Series, Querer]]) -> int:
         """Marca `retirado` lo de origen `politica` que el predicado ya no pide.
 
         Un solo `UPDATE` por serie (**atómico**: una sentencia, sin leer y
-        reescribir en Python) y **solo** sobre lo que no ha empezado.
+        reescribir en Python) y **solo** sobre lo que no ha empezado. La
+        sentencia vive en `services/politica.py` porque la UI la reutiliza para
+        aplicar la retirada al guardar, sin esperar al ciclo.
         """
         retirados = 0
         for series, querer in planes:
-            resultado = await self.db.execute(self._stmt_retirada(series.id, querer))
-            retirados += resultado.rowcount or 0
+            retirados += await retirar_de_serie(self.db, series, querer)
         return retirados
 
     async def _generar_lo_que_falta(
             self, planes: list[tuple[Series, Querer]], lote: int) -> int:
-        """Crea (o reactiva) los items de política que el predicado pide y aún
-        no están materializados. Tope `lote` por ciclo, en rondas entre series.
+        """Crea o reactiva los items de política que el predicado pide y aún no
+        están donde tienen que estar. Tope `lote` por ciclo, en rondas entre
+        series.
 
         No basta con insertar: el índice único parcial no mira el estado, así
-        que un número ya existente como `retirado`/`failed`/`imported` seguiría
-        ocupando el hueco. `_materializar` usa `ON CONFLICT ... DO UPDATE` y
-        reinicia `status`, `added_at`, `download_ref`, `download_backend` y
-        `last_error` — reiniciar `added_at` no es cosmético, el cierre compara
-        `File.imported_at >= Wishlist.added_at`.
+        que un número ya existente como `retirado`/`imported` seguiría ocupando
+        el hueco y volver a quererlo daría error de integridad. Pero la
+        reactivación es **solo** para esos dos estados (`ESTADOS_REACTIVABLES`):
+        un `FAILED` ya lo reintenta `process_wishlist` —reiniciarlo borraría su
+        `last_error` (D9) y gastaría el lote— y un `DOWNLOADED` está esperando al
+        importador.
         """
         por_serie: list[tuple[Series, list[int]]] = []
         for series, querer in planes:
@@ -788,7 +662,10 @@ class Orchestrator:
             )).all())
             faltan = sorted(
                 numero for numero in querer.numeros
-                if existentes.get(numero) not in ESTADOS_YA_MATERIALIZADOS
+                # No existe → hay que crearlo. Existe en un estado reactivable
+                # (`retirado`/`imported`) → hay que reactivarlo. Cualquier otro
+                # estado se deja como está.
+                if numero not in existentes or existentes[numero] in ESTADOS_REACTIVABLES
             )
             if faltan:
                 por_serie.append((series, faltan))
@@ -816,8 +693,9 @@ class Orchestrator:
 
         Separado para poder fijar en un test dos cosas que no son obvias: que la
         inferencia del conflicto reproduce el `WHERE` del índice parcial
-        (`origen='politica' AND numero IS NOT NULL`) y que el `DO UPDATE` **no**
-        pisa un item en vuelo.
+        (`origen='politica' AND numero IS NOT NULL`) y que el `DO UPDATE` **solo**
+        toca un estado reactivable — así no pisa un item en vuelo ni reinicia un
+        `FAILED`.
         """
         return (
             pg_insert(Wishlist)
@@ -843,9 +721,10 @@ class Orchestrator:
                 },
                 # Defensa contra dos ciclos solapados: entre el SELECT de
                 # `_generar_lo_que_falta` y este INSERT, el otro ciclo puede
-                # haber reclamado la fila (SEARCHING) o enviado la descarga
-                # (DOWNLOADING). El upsert no puede pisar eso.
-                where=Wishlist.status.not_in(ESTADOS_EN_VUELO),
+                # haber puesto la fila en cualquier estado. Si ya no es
+                # reactivable, este upsert no la toca (ni la pisa ni la
+                # reinicia).
+                where=Wishlist.status.in_(ESTADOS_REACTIVABLES),
             )
         )
 

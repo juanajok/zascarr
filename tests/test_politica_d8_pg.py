@@ -22,6 +22,7 @@ Se saltan sin `TEST_DATABASE_URL`, mismo patrón que `test_huecos_pg.py`:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from uuid import uuid4
 
@@ -44,12 +45,11 @@ from zascarr.models import (
     WishlistStatus,
 )
 from zascarr.services.legal import current_legal_version
-from zascarr.services.orchestrator import (
-    ESTADOS_EN_VUELO,
+from zascarr.services.orchestrator import Orchestrator, SincronizacionPolitica
+from zascarr.services.politica import (
     MOTIVO_POLITICA_FUTUROS,
     MOTIVO_SERIE_EN_CURSO,
-    Orchestrator,
-    SincronizacionPolitica,
+    querer_de_serie,
 )
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -193,7 +193,7 @@ class TestGeneracionD8:
         await crear_issue(db, s, "1", formato=IssueFormat.TRADE_PAPERBACK, archivos=(False,))
 
         orch = Orchestrator(db)
-        querer = await orch.querer_de_serie(s)
+        querer = await querer_de_serie(db, s)
         resultado = await orch.sync_policy_items()
 
         assert querer.computable is False
@@ -209,7 +209,7 @@ class TestGeneracionD8:
         s = await crear_serie(db, total_issues=5, policy=WishlistPolicy.FUTURE)
 
         orch = Orchestrator(db)
-        querer = await orch.querer_de_serie(s)
+        querer = await querer_de_serie(db, s)
         resultado = await orch.sync_policy_items()
 
         assert resultado == SincronizacionPolitica(0, 0)
@@ -279,27 +279,80 @@ class TestGeneracionD8:
         assert nuevo > viejo, "added_at tiene que reiniciarse: el cierre compara con él"
         assert await numeros_de_politica(db, s) == [1, 2, 3]
 
+    @pytest.mark.parametrize("estado", [WishlistStatus.DOWNLOADING, WishlistStatus.DOWNLOADED])
     @pytest.mark.asyncio
-    async def test_lo_que_ya_empezo_no_se_reescribe(self, db):
-        """Un item DOWNLOADING del número que falta no se reinicia al generar."""
+    async def test_lo_que_ya_empezo_no_se_reinicia(self, db, estado):
+        """Ni una descarga en marcha ni una terminada y pendiente de importar se
+        reinician al generar."""
         await aceptar_aviso(db)
         s = await crear_serie(db, total_issues=1)
-        await crear_item(db, s, origen=WishlistOrigin.POLICY,
-                         status=WishlistStatus.DOWNLOADING, numero=1)
+        await crear_item(db, s, origen=WishlistOrigin.POLICY, status=estado, numero=1)
         antes = (await db.execute(
             select(Wishlist.added_at).where(Wishlist.series_id == s.id))).scalar_one()
 
         resultado = await Orchestrator(db).sync_policy_items()
 
         assert resultado.generados == 0
-        assert await estado_de(db, s, 1) == WishlistStatus.DOWNLOADING
+        assert await estado_de(db, s, 1) == estado
         assert (await db.execute(
             select(Wishlist.added_at).where(Wishlist.series_id == s.id))).scalar_one() == antes
 
     @pytest.mark.asyncio
-    async def test_dos_materializaciones_solapadas_no_duplican(self, db):
-        """Caso 18: la garantía es de la BASE (índice único parcial), no de la
-        comprobación en Python — dos ciclos que se cruzan no crean dos filas."""
+    async def test_un_failed_conserva_su_motivo_y_no_gasta_el_lote(self, db):
+        """El fallo que señaló la revisión: `FAILED` no se reactiva.
+
+        Reiniciarlo cada ciclo borraría su `last_error` —el motivo de D9
+        desaparece justo cuando el coleccionista lo necesita— y gastaría el
+        lote. `process_wishlist` ya lo reintenta tras el cooldown.
+        """
+        await aceptar_aviso(db)
+        s = await crear_serie(db, total_issues=4)
+        orch = Orchestrator(db)
+        assert (await orch.sync_policy_items(lote=3)).generados == 3   # 1, 2, 3
+        await db.execute(text(
+            "UPDATE wishlist SET status='failed', last_error='No se encontró nada' "
+            "WHERE series_id=:s"
+        ).bindparams(s=s.id))
+
+        resultado = await orch.sync_policy_items(lote=1)
+
+        # El lote entero se va al número que de verdad falta (el 4); los tres
+        # fallidos ni se tocan ni consumen cupo.
+        assert resultado.generados == 1
+        assert await numeros_de_politica(db, s) == [1, 2, 3, 4]
+        filas = list((await db.execute(
+            select(Wishlist.numero, Wishlist.status, Wishlist.last_error)
+            .where(Wishlist.series_id == s.id).order_by(Wishlist.numero))).all())
+        assert [st for _, st, _ in filas[:3]] == [WishlistStatus.FAILED] * 3
+        assert all(err == "No se encontró nada" for _, _, err in filas[:3])
+        assert filas[3][1] == WishlistStatus.WANTED
+
+    @pytest.mark.asyncio
+    async def test_un_imported_cuyo_fichero_desaparecio_se_reactiva(self, db):
+        """El número vuelve a ser hueco (no hay `File`): hay que pedirlo otra vez.
+        Es uno de los dos estados que la generación SÍ puede reactivar."""
+        await aceptar_aviso(db)
+        s = await crear_serie(db, total_issues=1)
+        await crear_item(db, s, origen=WishlistOrigin.POLICY,
+                         status=WishlistStatus.IMPORTED, numero=1)
+        await db.execute(text(
+            "UPDATE wishlist SET added_at = now() - interval '1 day' WHERE series_id=:s"
+        ).bindparams(s=s.id))
+        viejo = (await db.execute(
+            select(Wishlist.added_at).where(Wishlist.series_id == s.id))).scalar_one()
+
+        resultado = await Orchestrator(db).sync_policy_items()
+
+        assert resultado.generados == 1
+        assert await estado_de(db, s, 1) == WishlistStatus.WANTED
+        assert (await db.execute(
+            select(Wishlist.added_at).where(Wishlist.series_id == s.id))).scalar_one() > viejo
+
+    @pytest.mark.asyncio
+    async def test_materializar_dos_veces_el_mismo_numero_deja_una_sola_fila(self, db):
+        """Lo que prueba: que el `ON CONFLICT` es idempotente. **No** prueba que
+        dos ciclos solapados no dupliquen — eso es
+        `test_dos_ciclos_solapados_de_verdad_no_duplican`, con dos conexiones."""
         await aceptar_aviso(db)
         s = await crear_serie(db, total_issues=1)
         orch = Orchestrator(db)
@@ -379,7 +432,7 @@ class TestRetiradaD8:
         await añadir_manual_de_serie(db, s)
 
         orch = Orchestrator(db)
-        querer = await orch.querer_de_serie(s)
+        querer = await querer_de_serie(db, s)
         resultado = await orch.sync_policy_items()
 
         assert querer.numeros == frozenset()
@@ -436,7 +489,7 @@ class TestRetiradaD8:
         await crear_item(db, s, status=WishlistStatus.WANTED, issue_id=issue.id)
 
         orch = Orchestrator(db)
-        querer = await orch.querer_de_serie(s)
+        querer = await querer_de_serie(db, s)
         resultado = await orch.sync_policy_items()
 
         assert 2 not in querer.numeros
@@ -469,7 +522,7 @@ class TestPredicadoUnicoD8:
         await crear_issue(db, s, "2", formato=IssueFormat.OMNIBUS, archivos=(False,))
 
         orch = Orchestrator(db)
-        querer = await orch.querer_de_serie(s)
+        querer = await querer_de_serie(db, s)
         await orch.sync_policy_items()
 
         assert querer.numeros == frozenset({1, 2, 3, 4})
@@ -481,13 +534,58 @@ class TestPredicadoUnicoD8:
         await aceptar_aviso(db)
         s = await crear_serie(db, total_issues=3, policy=WishlistPolicy.NONE)
 
-        querer = await Orchestrator(db).querer_de_serie(s)
+        querer = await querer_de_serie(db, s)
 
         assert querer.numeros == frozenset()
         assert querer.computable is True
         assert querer.motivo is None
 
-    def test_los_estados_en_vuelo_son_los_que_no_se_tocan(self):
-        """Contrato explícito: si alguien añade un estado, tiene que decidir a
-        conciencia si la retirada puede pisarlo."""
-        assert set(ESTADOS_EN_VUELO) == {WishlistStatus.SEARCHING, WishlistStatus.DOWNLOADING}
+
+@pytest.mark.asyncio
+async def test_dos_ciclos_solapados_de_verdad_no_duplican():
+    """Caso 18, de verdad: dos conexiones, cada una con su transacción, intentan
+    materializar el mismo número a la vez.
+
+    La garantía es de la BASE (índice único parcial) y el `DO UPDATE` con
+    `WHERE status IN ('retirado','imported')` impide que la perdedora reinicie
+    la fila que la ganadora acaba de crear.
+
+    Se sale del fixture con rollback a propósito: hacen falta COMMIT de verdad
+    para que la segunda conexión vea (o choque con) la fila. Por eso limpia lo
+    suyo a mano, incluido el acuse legal, que si no contaminaría a los tests que
+    comprueban que sin acuse no se escribe nada.
+    """
+    motor = create_async_engine(_url_asyncpg(TEST_DATABASE_URL or ""))
+    sesion = async_sessionmaker(motor, expire_on_commit=False)
+    sid, ack_id = uuid4(), uuid4()
+
+    async def materializar():
+        async with sesion() as s:
+            serie = await s.get(Series, sid)
+            await Orchestrator(s)._materializar(serie, 1)
+            await s.commit()
+
+    try:
+        async with sesion() as s:
+            await _exigir_bd_de_prueba(s)
+            s.add(Series(id=sid, title="Solape D8", tradition=ComicTradition.AMERICAN,
+                         total_issues=1, metadata_source=MetadataSource.COMIC_VINE.value,
+                         wishlist_policy=WishlistPolicy.MISSING))
+            s.add(LegalAcknowledgment(id=ack_id, legal_version=current_legal_version()))
+            await s.commit()
+
+        await asyncio.gather(materializar(), materializar())
+
+        async with sesion() as s:
+            filas = list((await s.execute(
+                select(Wishlist.numero, Wishlist.status)
+                .where(Wishlist.series_id == sid))).all())
+        assert filas == [(1, WishlistStatus.WANTED)]
+    finally:
+        async with sesion() as s:
+            await s.execute(text("DELETE FROM wishlist WHERE series_id=:s").bindparams(s=sid))
+            await s.execute(text("DELETE FROM series WHERE id=:s").bindparams(s=sid))
+            await s.execute(text("DELETE FROM legal_acknowledgments WHERE id=:i")
+                            .bindparams(i=ack_id))
+            await s.commit()
+        await motor.dispose()
