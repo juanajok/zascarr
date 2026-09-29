@@ -49,7 +49,11 @@ if [[ "$args" == inspect* ]]; then
     exit 1
 fi
 if [[ "$args" == exec* ]]; then
-    printf '%s\n' "${STUB_RESUELTO:-}"; exit 0
+    case "$args" in
+        *runtime_settings*) printf '%s\n' "${STUB_CONFIG:-}"; exit 0 ;;
+        *gethostbyname*)    printf '%s\n' "${STUB_RESUELTO:-}"; exit 0 ;;
+    esac
+    exit 1
 fi
 echo "doble de docker sin caso: $args" >&2
 exit 1
@@ -83,9 +87,21 @@ esac
 exit 0
 """
 
+def config_activa(prowlarr="http://host.docker.internal:9696",
+                  transmission="http://host.docker.internal:9091",
+                  amule="http://host.docker.internal:4711") -> str:
+    """Lo que la app dice estar usando (precedencia de D11)."""
+    return "\n".join([
+        f"prowlarr_url={prowlarr}",
+        f"transmission_url={transmission}",
+        f"amule_url={amule}",
+    ])
+
+
 # Un escenario coherente por defecto: el contenedor está en 172.18.0.0/16 y
 # host.docker.internal resuelve a su puerta de enlace real.
 BASE = {
+    "STUB_CONFIG": config_activa(),
     "STUB_CONTENEDOR": "abc123def456",
     "STUB_REDES": "zascarr_zascarr-internal 172.18.0.5 172.18.0.1",
     "STUB_SUBRED": "172.18.0.0/16",
@@ -115,13 +131,16 @@ def entorno(tmp_path: Path):
     registro = tmp_path / "llamadas.txt"
     registro.write_text("")
 
-    def ejecutar(*, env_file_texto: str = "", args: list[str] | None = None, **stubs):
+    def ejecutar(*, env_file_texto: str = "", args: list[str] | None = None,
+                 config: str | None = None, **stubs):
         env_file.write_text(env_file_texto)
         entorno_vars = dict(os.environ)
         entorno_vars["PATH"] = f"{bin_dir}:{entorno_vars['PATH']}"
         entorno_vars["ENV_FILE"] = str(env_file)
         entorno_vars["STUB_UFW_REGISTRO"] = str(registro)
         entorno_vars["STUB_DOCKER_REGISTRO"] = str(registro)
+        if config is not None:
+            stubs["STUB_CONFIG"] = config
         for clave, valor in {**BASE, **stubs}.items():
             if valor is None:
                 entorno_vars.pop(clave, None)
@@ -414,7 +433,7 @@ class TestPuertos:
 
     def test_url_a_otra_maquina_no_propone_regla(self, entorno):
         salida = entorno(
-            env_file_texto="PROWLARR_URL=http://192.168.1.50:9696\n",
+            config=config_activa(prowlarr="http://192.168.1.50:9696"),
             STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN,
         )
         assert "otra máquina" in texto(salida)
@@ -423,12 +442,58 @@ class TestPuertos:
     def test_url_a_127_0_0_1_es_un_error_de_configuracion(self, entorno):
         """Dentro del contenedor, 127.0.0.1 es el contenedor: ufw no lo arregla."""
         salida = entorno(
-            env_file_texto="PROWLARR_URL=http://127.0.0.1:9696\n",
+            config=config_activa(prowlarr="http://127.0.0.1:9696"),
             STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN,
         )
         assert "NO PUEDE FUNCIONAR" in texto(salida)
         assert "cámbialo por http://host.docker.internal:9696 en /ui/ajustes" in texto(salida)
         assert "9696 proto tcp" not in salida.stdout
+
+    def test_el_override_de_ajustes_manda_sobre_el_env(self, entorno):
+        """Ajustes (D11) sobrescribe las URLs en caliente: el `.env` puede estar
+        viejo y una regla calculada sobre él apuntaría al puerto equivocado."""
+        salida = entorno(
+            env_file_texto="PROWLARR_URL=http://host.docker.internal:9696\n",
+            config=config_activa(prowlarr="http://192.168.1.50:9697"),
+            STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN,
+        )
+        # El .env decía 9696 en esta misma Pi; la app usa 9697 en otra máquina.
+        assert "9696 proto tcp" not in salida.stdout
+        assert "9697 proto tcp" not in salida.stdout
+        assert "otra máquina" in texto(salida)
+
+    def test_override_a_127_0_0_1_explica_el_error_y_no_toca_ufw(self, entorno):
+        salida = entorno(
+            env_file_texto="AMULE_URL=http://host.docker.internal:4711\n",
+            config=config_activa(amule="http://127.0.0.1:4711"),
+            STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN,
+        )
+        assert "NO PUEDE FUNCIONAR" in texto(salida)
+        assert "4711 proto tcp" not in salida.stdout
+        assert "host.docker.internal:4711" in texto(salida)
+
+    def test_sin_configuracion_activa_no_analiza_el_env(self, entorno):
+        """Si no se puede leer lo que la app usa, el `.env` NO es un sustituto:
+        puede estar desfasado. Se piden los puertos a mano."""
+        salida = entorno(
+            env_file_texto="PROWLARR_URL=http://host.docker.internal:9696\n",
+            STUB_CONFIG="",
+            STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN,
+        )
+        assert salida.returncode == 2
+        assert "No analizo el .env" in texto(salida)
+        assert "ufw allow from" not in salida.stdout
+
+    def test_sin_configuracion_activa_pero_con_puertos_a_mano_sigue(self, entorno):
+        salida = entorno(
+            env_file_texto="PROWLARR_URL=http://host.docker.internal:9696\n",
+            STUB_CONFIG="",
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN,
+        )
+        assert salida.returncode == 1
+        assert "sudo ufw allow from 172.18.0.0/16 to any port 9696 proto tcp" in salida.stdout
+        assert "solo con los\n  puertos" in salida.stdout or "solo con los" in texto(salida)
 
     def test_puerto_a_mano(self, entorno):
         salida = entorno(args=["--puerto", "8080"], STUB_UFW_ANADIDAS=REGLAS_SOLO_LAN)
@@ -476,7 +541,39 @@ class TestCuandoNoSePuedeDeterminar:
             STUB_UFW_ANADIDAS="",
         )
         assert salida.returncode == 2
-        assert "no coinciden" in texto(salida)
+        assert "no puedo decirte qué reglas están en vigor" in texto(salida)
+        assert "ufw allow from" not in salida.stdout
+
+    def test_ipv6_duplica_las_lineas_de_status_y_no_es_indeterminado(self, entorno):
+        """Con IPv6 habilitado, cada orden aparece como dos reglas activas (la
+        IPv4 y la IPv6). Eso es normal y no puede convertir A10 en un falso
+        «no puedo determinarlo»."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS="ufw allow from 192.168.1.0/24 to any port 22 proto tcp\n"
+                              "ufw allow from 192.168.1.0/24 to any port 9091 proto tcp",
+            STUB_UFW_REGLAS_STATUS=(
+                "22/tcp                     ALLOW       Anywhere\n"
+                "22/tcp                     ALLOW       Anywhere (v6)\n"
+                "9091                       ALLOW       192.168.1.0/24\n"
+                "9091                       ALLOW       192.168.1.0/24 (v6)"
+            ),
+        )
+        assert salida.returncode == 1          # decide, no se declara indeterminado
+        assert "IPv6" in texto(salida)          # y lo dice
+        assert "sudo ufw allow from 172.18.0.0/16 to any port 9696 proto tcp" in salida.stdout
+
+    def test_menos_reglas_activas_que_ordenadas_no_decide(self, entorno):
+        """Si `status` tiene MENOS reglas que `show added`, hay órdenes que ya
+        no están en vigor: no sé qué está activo."""
+        salida = entorno(
+            args=["--puerto", "9696"],
+            STUB_UFW_ANADIDAS="ufw allow from 192.168.1.0/24 to any port 22 proto tcp\n"
+                              "ufw allow from 192.168.1.0/24 to any port 9091 proto tcp",
+            STUB_UFW_REGLAS_STATUS="22/tcp ALLOW Anywhere",
+        )
+        assert salida.returncode == 2
+        assert "no puedo decirte qué reglas están en vigor" in texto(salida)
         assert "ufw allow from" not in salida.stdout
 
 

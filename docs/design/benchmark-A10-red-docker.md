@@ -199,9 +199,24 @@ fijado como parte del contrato:
       conclusión que no depende del orden: una regla al final solo se alcanza si
       ninguna otra casa.
     Además, si el número de reglas de `ufw status` y el de `ufw show added` no
-    coincide (reglas editadas a mano), no se puede decir qué está en vigor → se
-    sale con 2 sin proponer.
-23. **Protocolo y dirección de destino se interpretan, o la regla no acredita
+    cuadra, no se puede decir qué está en vigor → se sale con 2 sin proponer.
+    **Con la horquilla de IPv6:** con IPv6 habilitado (lo está por defecto) una
+    misma orden aparece como **dos** reglas activas —la IPv4 y la IPv6—, así que
+    `status` puede tener hasta el doble de líneas que `show added` sin que nada
+    vaya mal. Se acepta esa horquilla `[N, 2N]` y se avisa de ella; comparar por
+    igualdad estricta habría convertido A10 en un falso «no puedo determinarlo»
+    en instalaciones perfectamente válidas.
+23. **Los puertos salen de la configuración ACTIVA, no del `.env`.**
+    `prowlarr_url`, `transmission_url` y `amule_url` están en la lista blanca de
+    **D11**, así que Ajustes las sobrescribe en caliente (fila
+    `runtime_settings` de PostgreSQL) y el `.env` puede estar desfasado: una
+    regla calculada sobre el valor viejo apuntaría **al host o al puerto
+    equivocados**. El diagnóstico le pide al propio contenedor que aplique los
+    overrides como los aplica al arrancar (mismo código: `get_overrides()` +
+    `apply_overrides()`), así que mira **lo mismo que usa la app**. Si no se
+    puede leer esa configuración, **no se analiza el `.env` en su lugar**: o se
+    le dan los puertos con `--puerto`, o se declara indeterminado.
+24. **Protocolo y dirección de destino se interpretan, o la regla no acredita
     nada.** La sintaxis de ufw distingue `proto` y `to DIRECCIÓN`: un
     `ufw allow proto udp from … to any port 9696` **no** autoriza tráfico TCP, y
     `ufw allow from … to 192.168.1.5 port 9696` **no** autoriza el tráfico que
