@@ -275,3 +275,47 @@ falta» o «nada». El backlog pide un campo `wishlist_policy` por serie
 propio; el criterio de computabilidad ya está decidido en #13). Entregable:
 columna + migración `0015` + generación/filtro en `Orchestrator` + selector en
 la ficha de serie.
+
+---
+
+## Notas de implementación (2026-09-29)
+
+Lo que el código decidió y no estaba cerrado en el diseño de arriba. Se anota
+aquí porque cambia el contrato, no porque sea un detalle.
+
+- **El predicado es `Orchestrator.querer_de_serie` (`Querer`) y es público.**
+  Devuelve `numeros` (lo que la política quiere ahora), `computable` y `motivo`.
+  Lo consumen la generación, la retirada **y la ficha de serie**, que pinta el
+  veredicto con el mismo resultado en vez de recalcularlo. Así «lo que la
+  página dice» y «lo que el ciclo hace» no pueden divergir.
+- **Un item manual de un NÚMERO concreto también ocupa ese número** (no solo el
+  manual de serie que recogía el diseño). El índice único parcial no cubre los
+  manuales, así que sin esta exclusión el coleccionista que ya pidió el nº 2 a
+  mano recibiría además el nº 2 generado: la misma duplicación que la regla del
+  item de serie, por otra puerta.
+- **`todos` está implementado en el predicado** (`1..total_issues` cuando es
+  computable, caso 6) pero **no se ofrece ni se acepta**: el selector no lo
+  pinta y `SeriesUpdate` lo rechaza con 422. Queda listo para cuando D3 decida
+  el criterio de cierre, que es lo único que falta para poder ofrecerlo.
+- **La retirada no toca `SEARCHING`.** El diseño hablaba de no tocar
+  `DOWNLOADING`; `SEARCHING` es transitorio (hay una búsqueda en vuelo) y
+  marcarlo `retirado` sería mentir (D9) sobre lo que está pasando. Un item
+  varado en `SEARCHING` por una caída del proceso es un problema previo a D8
+  (`process_wishlist` solo mira `WANTED`/`FAILED`) y no se resuelve aquí.
+- **Ventana conocida (generación ↔ dos ciclos solapados):** entre el `SELECT`
+  que mira qué falta y el `INSERT ... ON CONFLICT`, otro ciclo puede reclamar
+  la fila (`SEARCHING`) o enviar la descarga (`DOWNLOADING`). El `DO UPDATE`
+  lleva `WHERE status NOT IN ('searching','downloading')` para no pisarlo. No
+  hay bloqueo entre ambos `SELECT`/`INSERT`, así que un ciclo podría crear una
+  fila para un número que el otro acaba de empezar a descargar; lo acota el
+  índice único (una sola fila por número) y el ciclo siguiente lo reconcilia.
+- **Los items `retirado` se ocultan del listado de deseos** pero **no se
+  borran**: pasar una serie de 200 números a `ninguno` no puede llenar la
+  pantalla de filas muertas. Siguen en la BD y en la API (`?status=retirado`).
+- **Pruebas:** el comportamiento completo contra PostgreSQL 15 está en
+  `tests/test_politica_d8_pg.py` (20 casos); el `WHERE` de las dos sentencias,
+  las ramas sin BD y el flujo con `FakeSession` en `tests/test_orchestrator.py`.
+  La migración con sembrado previo, en `tests/test_migracion_d8_pg.py`.
+- **Límite no medido (se mantiene el del diseño):** cuánto pesa el arranque en
+  frío de los alias sobre una biblioteca real sigue sin poder medirse aquí — no
+  hay base de datos real en este entorno. Lo decidirá la primera instalación.
