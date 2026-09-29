@@ -87,6 +87,32 @@ class WishlistStatus(str, enum.Enum):
     DOWNLOADED  = "downloaded"
     IMPORTED    = "imported"
     FAILED      = "failed"
+    #: D8: un deseo que la política generó y que ya no se quiere (p.ej. el
+    #: coleccionista pasó la serie a `ninguno`). NO se borra — deja constancia
+    #: de que existió y de que se dejó de buscar a propósito. Distinto de
+    #: FAILED: aquí no falló nada.
+    RETIRADO    = "retirado"
+
+
+class WishlistPolicy(str, enum.Enum):
+    """D8: qué números de una serie busca ZascArr **por su cuenta**.
+
+    No silencia nunca un item añadido a mano: gobierna lo que se **genera**.
+    """
+    NONE    = "ninguno"      # por defecto, y lo que deja la migración 0015
+    MISSING = "faltantes"    # los que faltan, según `huecos_de_serie`
+    FUTURE  = "futuros"      # reservado: NO computable todavía (ver ficha D8)
+    ALL     = "todos"        # reservado: no se ofrece hasta que D3 lo defina
+
+
+class WishlistOrigin(str, enum.Enum):
+    """D8: de dónde salió el item.
+
+    `manual` = lo pidió el coleccionista (nunca se toca solo).
+    `politica` = lo generó ZascArr a partir de `Series.wishlist_policy`.
+    """
+    MANUAL  = "manual"
+    POLICY  = "politica"
 
 class ReadingStatus(str, enum.Enum):
     UNREAD    = "unread"
@@ -254,6 +280,13 @@ class Series(Base):
     enrichment_attempted_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     # H3 (peer review v2): ver Creator.locked_fields.
     locked_fields:   Mapped[list]     = mapped_column(ARRAY(String), default=list)
+    # D8: qué números de esta serie busca ZascArr por su cuenta. `ninguno` por
+    # defecto y para las series ya existentes (migración 0015): sin opt-in
+    # explícito no se genera ni se busca nada nuevo.
+    wishlist_policy: Mapped[WishlistPolicy] = mapped_column(
+        Enum(WishlistPolicy, name="wishlist_policy",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=WishlistPolicy.NONE, server_default=WishlistPolicy.NONE.value)
     created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     publisher: Mapped["Publisher|None"]  = relationship(back_populates="series")
@@ -382,6 +415,20 @@ class Wishlist(Base):
     # comprobando si ya existe un File enlazado, agnóstico de backend.
     download_ref:     Mapped[str|None]        = mapped_column(String(255))
     download_backend: Mapped[str|None]        = mapped_column(String(20))
+    # D8: de dónde salió este item. `manual` para todo lo que ya existía
+    # (migración 0015): la retirada de items de política NUNCA puede tocar lo
+    # que pidió el coleccionista.
+    origen: Mapped[WishlistOrigin] = mapped_column(
+        Enum(WishlistOrigin, name="wishlist_origen",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=WishlistOrigin.MANUAL,
+        server_default=WishlistOrigin.MANUAL.value)
+    # D8: número pedido, cuando el item lo pide por número. Es INTEGER a
+    # propósito: así `04` y `4` son el mismo valor por construcción (el matcher
+    # ya tuvo un bug de ceros: el issue #0 no encontraba nunca su fila), y el
+    # índice único parcial puede ser una comparación de enteros. NULL = item de
+    # serie o manual sin número.
+    numero: Mapped[int|None] = mapped_column(Integer)
     # D9: por qué la última pasada del orquestador no avanzó (texto en
     # español, para la UI) — nunca secretos ni cuerpos HTTP completos.
     # Sin timestamp propio: se correlaciona con last_searched_at, ya
