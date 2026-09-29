@@ -63,7 +63,7 @@ async def login_submit(
 ) -> HTMLResponse:
     next = _next_seguro(next)
     settings = get_settings()
-    if not credenciales_validas(username, password, settings):
+    if not await credenciales_validas(username, password, settings):
         return templates.TemplateResponse(request, "login.html", {
             "next": next,
             "pide_usuario": settings.auth_mode == "user_password",
