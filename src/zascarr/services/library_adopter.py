@@ -150,6 +150,13 @@ class LibraryAdopter:
         if outcome.duplicate_of:
             report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
             return
+        if outcome.recuperar is not None:
+            # En la adopción no hay filas previas (tabla vacía en el primer
+            # arranque), pero por robustez: una fila desaparecida del mismo
+            # contenido tampoco se readopta como nueva.
+            report.duplicates.append(
+                f"{path.name} — duplicado de una fila desaparecida, descartado")
+            return
         tr, result = outcome.tr, outcome.result
         is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
 
