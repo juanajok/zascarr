@@ -132,6 +132,12 @@ class Settings(BaseSettings):
     # pero mucho más corto: la disponibilidad en un indexer/foro cambia en
     # horas, no en meses).
     orchestrator_retry_cooldown_hours: int = 6
+    # D8: cuántos items puede MATERIALIZAR la política en un ciclo. La
+    # generación es declarativa (todo lo que la política quiere y no existe),
+    # así que sin tope una serie de 200 números crearía 200 filas de golpe. Se
+    # reparte en rondas entre series para que ninguna acapare el lote — ver
+    # Orchestrator._generar_lo_que_falta.
+    orchestrator_politica_lote: int = 25
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el

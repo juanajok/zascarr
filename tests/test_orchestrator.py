@@ -8,7 +8,7 @@ Transmission/aMule ni Prowlarr reales.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -16,17 +16,31 @@ import pytest
 from sqlalchemy import select
 
 from zascarr.config import get_settings
-from zascarr.models import ComicTradition, File, FileFormat, Issue, Series, Wishlist, WishlistStatus
+from zascarr.models import (
+    ComicTradition,
+    File,
+    FileFormat,
+    Issue,
+    MetadataSource,
+    Series,
+    Wishlist,
+    WishlistPolicy,
+    WishlistStatus,
+)
 from zascarr.services.orchestrator import (
     MOTIVO_CANDIDATO_INVALIDO,
     MOTIVO_CANDIDATO_RECHAZADO,
     MOTIVO_CLIENTE_INACCESIBLE,
     MOTIVO_ERROR_INESPERADO,
     MOTIVO_FUENTE_INACCESIBLE,
+    MOTIVO_POLITICA_FUTUROS,
+    MOTIVO_SERIE_EN_CURSO,
     MOTIVO_SIN_FUENTE,
     MOTIVO_SIN_RESULTADOS,
     DownloadBackend,
     Orchestrator,
+    Querer,
+    SincronizacionPolitica,
     _extract_ed2k_hash,
     crear_token_candidato,
     verificar_token_candidato,
@@ -69,6 +83,11 @@ class FakeExecResult:
 
     def scalars(self):
         return FakeScalarResult(self._rows)
+
+    def all(self):
+        # Las consultas de D8 (números poseídos, items existentes, manuales) leen
+        # filas de varias columnas, no una sola entidad: `.all()` directo.
+        return self._rows
 
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
@@ -879,3 +898,158 @@ class TestMedicionD8ContraElBancoReal:
         un Omnigold 4 no es la grapa #4 (regla de C2/B15)."""
         candidato = SearchResult("Batman Omnigold 4 (2019).cbz", "i", "magnet:x", 1, 1, "comics")
         assert not Orchestrator._candidato_es_del_numero(candidato, 4, "Batman")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# D8 — generación y retirada con un solo predicado
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# La prueba de comportamiento completa vive en `tests/test_politica_d8_pg.py`
+# (Postgres real). Aquí queda lo que corre siempre en CI: el `WHERE` exacto de
+# las dos sentencias que no pueden equivocarse y las ramas que ni tocan la BD.
+
+def _sql(statement) -> str:
+    from sqlalchemy.dialects import postgresql
+    return str(statement.compile(dialect=postgresql.dialect(),
+                                 compile_kwargs={"literal_binds": True}))
+
+
+class TestSentenciasD8:
+    """El `WHERE` es la regla. Se fija compilado, no en prosa."""
+
+    def test_la_retirada_solo_toca_lo_que_no_empezo(self):
+        sql = _sql(Orchestrator._stmt_retirada(uuid4(), Querer(frozenset({1, 3}), True)))
+
+        assert "status IN ('wanted', 'failed')" in sql
+        assert "origen = 'politica'" in sql
+        assert "status='retirado'" in sql
+        # Lo que ya empezó no se retira: marcarlo sería mentir (D9).
+        assert "searching" not in sql
+        assert "downloading" not in sql
+        assert "numero NOT IN (1, 3)" in sql
+
+    def test_sin_numeros_queridos_se_retira_todo_lo_pendiente(self):
+        """El caso «pasar a `ninguno`»: sin lista de números no hay `NOT IN` que
+        valga, se retira todo lo pendiente de esa serie."""
+        sql = _sql(Orchestrator._stmt_retirada(uuid4(), Querer(frozenset(), True)))
+
+        assert "status IN ('wanted', 'failed')" in sql
+        assert "numero" not in sql          # ninguna condición de número
+        assert "searching" not in sql and "downloading" not in sql
+
+    def test_la_generacion_reactiva_y_no_pisa_lo_en_vuelo(self):
+        """Dos cosas no obvias del upsert: la inferencia del conflicto tiene que
+        reproducir el `WHERE` del índice parcial y el `DO UPDATE` no puede
+        reiniciar un item que ya está buscándose o descargando."""
+        sql = _sql(Orchestrator._stmt_materializar(uuid4(), 4, datetime.now(UTC)))
+
+        assert ("ON CONFLICT (series_id, numero) "
+                "WHERE origen = 'politica' AND numero IS NOT NULL") in sql
+        assert "DO UPDATE SET" in sql
+        assert "download_ref = NULL" in sql
+        assert "status NOT IN ('searching', 'downloading')" in sql
+
+
+class TestQuererDeSerieD8:
+    """Las ramas que no llegan a la BD: son las que más fácil se rompen al
+    tocar el orden de las comprobaciones."""
+
+    @pytest.mark.asyncio
+    async def test_ninguno_no_quiere_nada_y_no_es_un_fallo(self):
+        serie = make_series()
+        serie.wishlist_policy = WishlistPolicy.NONE
+
+        querer = await Orchestrator(db=FakeSession()).querer_de_serie(serie)
+
+        assert querer == Querer(frozenset(), True)
+        assert querer.motivo is None
+
+    @pytest.mark.asyncio
+    async def test_futuros_se_declara_no_computable(self):
+        serie = make_series()
+        serie.wishlist_policy = WishlistPolicy.FUTURE
+
+        querer = await Orchestrator(db=FakeSession()).querer_de_serie(serie)
+
+        assert querer == Querer(frozenset(), False, MOTIVO_POLITICA_FUTUROS)
+
+    @pytest.mark.asyncio
+    async def test_un_manual_de_serie_vivo_no_quiere_ningun_numero(self):
+        serie = make_series()
+        serie.wishlist_policy = WishlistPolicy.MISSING
+        # (issue_id, numero) del manual de serie: los dos nulos.
+        session = FakeSession([FakeExecResult([(None, None)])])
+
+        querer = await Orchestrator(db=session).querer_de_serie(serie)
+
+        assert querer.numeros == frozenset()
+        assert querer.motivo == MOTIVO_SERIE_EN_CURSO
+        assert querer.computable is True
+
+
+class TestSincronizacionD8:
+    """El flujo completo con FakeSession: generación acotada y retirada atómica."""
+
+    @staticmethod
+    def _serie(total=2, policy=WishlistPolicy.MISSING) -> Series:
+        return Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                      total_issues=total, metadata_source=MetadataSource.COMIC_VINE.value,
+                      wishlist_policy=policy)
+
+    @pytest.mark.asyncio
+    async def test_genera_los_huecos_y_retira_cero(self):
+        serie = self._serie(total=2)
+        session = FakeSession([
+            FakeExecResult([object()]),   # is_acknowledged
+            FakeExecResult([serie]),      # series con política
+            FakeExecResult([]),           # items manuales vivos: ninguno
+            FakeExecResult([]),           # números poseídos: ninguno
+            FakeExecResult([], rowcount=0),   # retirada
+            FakeExecResult([]),           # items de política ya existentes: ninguno
+            FakeExecResult([]),           # insert 1
+            FakeExecResult([]),           # insert 2
+        ])
+
+        resultado = await Orchestrator(db=session).sync_policy_items(lote=10)
+
+        assert resultado == SincronizacionPolitica(2, 0)
+
+    @pytest.mark.asyncio
+    async def test_el_tope_no_deja_materializar_de_mas(self):
+        serie = self._serie(total=5)
+        session = FakeSession([
+            FakeExecResult([object()]),
+            FakeExecResult([serie]),
+            FakeExecResult([]),
+            FakeExecResult([]),
+            FakeExecResult([], rowcount=0),
+            FakeExecResult([]),
+            FakeExecResult([]),           # solo hay sitio para UN insert
+        ])
+
+        resultado = await Orchestrator(db=session).sync_policy_items(lote=1)
+
+        assert resultado == SincronizacionPolitica(1, 0)
+        assert len(session._queue) == 0, "el tope tiene que cortar antes de agotar la cola"
+
+    @pytest.mark.asyncio
+    async def test_una_serie_a_ninguno_retira_sin_generar(self):
+        serie = self._serie(total=3, policy=WishlistPolicy.NONE)
+        session = FakeSession([
+            FakeExecResult([object()]),
+            FakeExecResult([serie]),
+            FakeExecResult([], rowcount=2),   # la retirada
+        ])
+
+        resultado = await Orchestrator(db=session).sync_policy_items()
+
+        assert resultado == SincronizacionPolitica(0, 2)
+
+    @pytest.mark.asyncio
+    async def test_sin_acuse_no_se_toca_la_base(self):
+        session = FakeSession([FakeExecResult([])])   # is_acknowledged: nada
+
+        resultado = await Orchestrator(db=session).sync_policy_items()
+
+        assert resultado == SincronizacionPolitica(0, 0)
+        assert len(session._queue) == 0, "sin acuse no se consulta siquiera la política"
