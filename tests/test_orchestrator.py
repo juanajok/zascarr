@@ -34,17 +34,22 @@ from zascarr.services.orchestrator import (
     MOTIVO_ERROR_INESPERADO,
     MOTIVO_FUENTE_INACCESIBLE,
     MOTIVO_NUMERO_DISTINTO,
-    MOTIVO_POLITICA_FUTUROS,
-    MOTIVO_SERIE_EN_CURSO,
     MOTIVO_SIN_FUENTE,
     MOTIVO_SIN_RESULTADOS,
     DownloadBackend,
     Orchestrator,
-    Querer,
     SincronizacionPolitica,
     _extract_ed2k_hash,
     crear_token_candidato,
     verificar_token_candidato,
+)
+from zascarr.services.politica import (
+    ESTADOS_REACTIVABLES,
+    MOTIVO_POLITICA_FUTUROS,
+    MOTIVO_SERIE_EN_CURSO,
+    Querer,
+    querer_de_serie,
+    stmt_retirada,
 )
 from zascarr.services.prowlarr import SearchResult
 
@@ -948,7 +953,7 @@ class TestSentenciasD8:
     """El `WHERE` es la regla. Se fija compilado, no en prosa."""
 
     def test_la_retirada_solo_toca_lo_que_no_empezo(self):
-        sql = _sql(Orchestrator._stmt_retirada(uuid4(), Querer(frozenset({1, 3}), True)))
+        sql = _sql(stmt_retirada(uuid4(), Querer(frozenset({1, 3}), True)))
 
         assert "status IN ('wanted', 'failed')" in sql
         assert "origen = 'politica'" in sql
@@ -961,23 +966,32 @@ class TestSentenciasD8:
     def test_sin_numeros_queridos_se_retira_todo_lo_pendiente(self):
         """El caso «pasar a `ninguno`»: sin lista de números no hay `NOT IN` que
         valga, se retira todo lo pendiente de esa serie."""
-        sql = _sql(Orchestrator._stmt_retirada(uuid4(), Querer(frozenset(), True)))
+        sql = _sql(stmt_retirada(uuid4(), Querer(frozenset(), True)))
 
         assert "status IN ('wanted', 'failed')" in sql
         assert "numero" not in sql          # ninguna condición de número
         assert "searching" not in sql and "downloading" not in sql
 
-    def test_la_generacion_reactiva_y_no_pisa_lo_en_vuelo(self):
-        """Dos cosas no obvias del upsert: la inferencia del conflicto tiene que
-        reproducir el `WHERE` del índice parcial y el `DO UPDATE` no puede
-        reiniciar un item que ya está buscándose o descargando."""
+    def test_la_generacion_solo_reactiva_retirado_e_imported(self):
+        """El `DO UPDATE` es la red bajo el filtro de Python. Lo que fija aquí:
+        que la inferencia del conflicto reproduce el `WHERE` del índice parcial
+        y que la reactivación se limita a `retirado`/`imported` — así no reinicia
+        un `FAILED` (le borraría el `last_error` de D9) ni un `DOWNLOADED` (la
+        descarga ya viene de camino)."""
         sql = _sql(Orchestrator._stmt_materializar(uuid4(), 4, datetime.now(UTC)))
 
         assert ("ON CONFLICT (series_id, numero) "
                 "WHERE origen = 'politica' AND numero IS NOT NULL") in sql
         assert "DO UPDATE SET" in sql
         assert "download_ref = NULL" in sql
-        assert "status NOT IN ('searching', 'downloading')" in sql
+        assert "status IN ('retirado', 'imported')" in sql
+        for no_reactivable in ("wanted", "searching", "downloading", "downloaded", "failed"):
+            assert no_reactivable not in sql.split("WHERE")[-1], no_reactivable
+
+    def test_los_estados_reactivables_son_solo_dos(self):
+        """Contrato explícito: si alguien añade un estado, tiene que decidir a
+        conciencia si la generación puede reiniciarlo."""
+        assert set(ESTADOS_REACTIVABLES) == {WishlistStatus.RETIRADO, WishlistStatus.IMPORTED}
 
 
 class TestQuererDeSerieD8:
@@ -989,7 +1003,7 @@ class TestQuererDeSerieD8:
         serie = make_series()
         serie.wishlist_policy = WishlistPolicy.NONE
 
-        querer = await Orchestrator(db=FakeSession()).querer_de_serie(serie)
+        querer = await querer_de_serie(FakeSession(), serie)
 
         assert querer == Querer(frozenset(), True)
         assert querer.motivo is None
@@ -999,7 +1013,7 @@ class TestQuererDeSerieD8:
         serie = make_series()
         serie.wishlist_policy = WishlistPolicy.FUTURE
 
-        querer = await Orchestrator(db=FakeSession()).querer_de_serie(serie)
+        querer = await querer_de_serie(FakeSession(), serie)
 
         assert querer == Querer(frozenset(), False, MOTIVO_POLITICA_FUTUROS)
 
@@ -1010,7 +1024,7 @@ class TestQuererDeSerieD8:
         # (issue_id, numero) del manual de serie: los dos nulos.
         session = FakeSession([FakeExecResult([(None, None)])])
 
-        querer = await Orchestrator(db=session).querer_de_serie(serie)
+        querer = await querer_de_serie(session, serie)
 
         assert querer.numeros == frozenset()
         assert querer.motivo == MOTIVO_SERIE_EN_CURSO
