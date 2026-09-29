@@ -109,11 +109,21 @@ async def _orchestrator_loop(interval_minutes: int, limit: int) -> None:
         try:
             async with async_session_factory() as session:
                 orchestrator = Orchestrator(session)
+                # D8: primero se decide qué números quiere la política (y se
+                # retira lo que ya no), y solo después se busca — así los items
+                # recién generados entran en el mismo ciclo.
+                politica = await orchestrator.sync_policy_items()
                 sent = await orchestrator.process_wishlist(limit=limit)
                 imported = await orchestrator.check_completions(limit=limit)
                 await session.commit()
-            if sent or imported:
-                logger.info("orchestrator.cycle_done", enviados=sent, importados=imported)
+            if politica.generados or politica.retirados or sent or imported:
+                logger.info(
+                    "orchestrator.cycle_done",
+                    generados=politica.generados,
+                    retirados=politica.retirados,
+                    enviados=sent,
+                    importados=imported,
+                )
         except Exception:
             logger.exception("orchestrator.cycle_failed")
         await asyncio.sleep(interval_minutes * 60)
