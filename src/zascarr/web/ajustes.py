@@ -50,15 +50,23 @@ templates = crear_templates()
 #    anterior. Se avisa solo cuando la excepción es de conexión
 #    (rechazada/timeout/DNS): un error HTTP real (401, 500...) significa
 #    que SÍ se llegó al servicio, y esta pista solo confundiría ahí.
+# A10: la subred de Docker NO se adivina aquí. Desde dentro del contenedor no
+# se puede leer el cortafuegos del host ni con qué subred se creó su red, y una
+# regla que parece precisa pero apunta a otra red es peor que no dar ninguna
+# (caso real del 2026-09-25: la regla era correcta y aun así no arregló nada,
+# porque era de OTRA red de Docker). El comando exacto lo da el diagnóstico,
+# que sí corre en el host y lee la subred real.
 _PISTA_CONEXION_RECHAZADA = (
     " Tres causas habituales si el servicio corre en esta misma máquina "
     "(fuera de Docker): (1) host.docker.internal resolviendo a la red "
     "Docker equivocada — actualiza a la última versión de ZascArr, que lo "
     "autocorrige; (2) un cortafuegos (ufw/iptables) con reglas limitadas "
-    "a tu LAN que no incluyen ninguna red de Docker — compruébalo con: "
-    "sudo ufw status, y si hace falta: sudo ufw allow from 172.16.0.0/12 "
-    "to any port <puerto> proto tcp; (3) el servicio escucha solo en "
-    "127.0.0.1, no en 0.0.0.0 — compruébalo con: ss -tlnp | grep <puerto>."
+    "a tu LAN que no incluyen ninguna red de Docker — la subred exacta no "
+    "se puede saber desde aquí: ejecútalo TÚ en la Pi (fuera del "
+    "contenedor) con: sudo bash scripts/diagnostico-red.sh ; lee la subred "
+    "del propio Docker y te propone el comando, sin aplicarlo; "
+    "(3) el servicio escucha solo en 127.0.0.1, no en 0.0.0.0 — "
+    "compruébalo con: ss -tlnp | grep <puerto>."
 )
 
 
