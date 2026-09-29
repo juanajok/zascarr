@@ -66,11 +66,20 @@ class SeriesUpdate(BaseModel):
 
     @field_validator("wishlist_policy")
     @classmethod
-    def _solo_politicas_aplicables(cls, valor: WishlistPolicy | None) -> WishlistPolicy | None:
+    def _solo_politicas_aplicables(cls, valor: WishlistPolicy | None) -> WishlistPolicy:
         """`futuros` y `todos` están reservados pero todavía no significan nada
         aplicable (ver ficha D8): aceptarlos haría creer al coleccionista que se
         busca algo. Falla con motivo legible en vez de un valor que no hace
-        nada."""
+        nada.
+
+        Un `null` explícito también se rechaza: la columna es NOT NULL, y
+        dejarla a NULL reventaría al escribir; para no buscar nada está
+        `ninguno`."""
+        if valor is None:
+            raise ValueError(
+                "La política de búsqueda no puede quedar vacía: usa «ninguno» si "
+                "no quieres que ZascArr busque nada de esta serie por su cuenta."
+            )
         if valor in (WishlistPolicy.FUTURE, WishlistPolicy.ALL):
             raise ValueError(
                 "«futuros» y «todos» todavía no se pueden aplicar: «futuros» "
