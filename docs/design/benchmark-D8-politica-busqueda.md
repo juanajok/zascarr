@@ -38,80 +38,107 @@ falta» o «nada». El backlog pide un campo `wishlist_policy` por serie
 
 **Referencias consultadas (URL, versión/commit):**
 
-- **Sonarr — «Monitor»**: es la referencia del modelo. Monitoriza a nivel de
-  **serie** con una elección que se traduce en «qué episodios pasan a
-  *wanted*», y admite combinarla con la monitorización por temporada/episodio.
-  La clave para ZascArr: **el monitor no busca, decide qué se quiere**; el ciclo
-  de búsqueda es un paso aparte sobre lo querido.
-- **Kapowarr / Mylar3** (GPL-3.0), gestores de cómic: ambos tienen un concepto
-  de «lo que quiero» por serie; Kapowarr trabaja sobre el catálogo de ComicVine
-  (que sí le da la lista de números y sus fechas) y Mylar3 sobre su `wanted`
-  list. **No he podido verificar los nombres exactos de sus opciones ni su
-  comportamiento ante datos ausentes**: la búsqueda web no está disponible en
-  este entorno y las consultas de documentación que intenté no devolvieron el
-  detalle. Queda dicho aquí en vez de afirmarlo de memoria (procedimiento §3:
-  «no lo encontré» no es «no existe»).
-- **El propio proyecto** es la referencia que más pesa aquí, porque la
-  diferencia con Sonarr es de **datos disponibles**, no de diseño:
-  `docs/BACKLOG.md` (nota «Huecos fiables», #13) fija el criterio de
-  computabilidad, y la nota de fronteras (#14) prohíbe deducir cobertura
-  editorial del número.
+- **Sonarr** — [`MonitoringOptions.cs` @develop](https://github.com/Sonarr/Sonarr/blob/develop/src/NzbDrone.Core/Tv/MonitoringOptions.cs)
+  (enum: `all`, `future`, `missing`, `existing`, `recent`, `pilot`,
+  `firstSeason`, `lastSeason`, `monitorSpecials`, `unmonitorSpecials`, `none`,
+  más `unknown`, `latestSeason` obsoleto y `skip` interno),
+  [`EpisodeMonitoredService.cs` @develop](https://github.com/Sonarr/Sonarr/blob/develop/src/NzbDrone.Core/Tv/EpisodeMonitoredService.cs)
+  y la [wiki de la biblioteca](https://wiki.servarr.com/sonarr/library)
+  ([fuente markdown](https://github.com/Servarr/Wiki/blob/master/sonarr/library.md),
+  editada 2026-06-07; **la página no declara versión**, se ha cruzado con
+  `develop` y con la última release v4.0.20.3014).
+- **Kapowarr** (GPL-3.0), commit **`c191dda6617929c81292483a8cc07f631111dae2`**:
+  `backend/internals/db.py:397,425` (`volumes.monitored`,
+  `volumes.monitor_new_issues`, `issues.monitored`),
+  `backend/base/definitions.py:446` (`MonitorScheme = all | missing | none`),
+  `backend/implementations/volumes.py:617` (`apply_monitor_scheme`) y
+  `~1547-1562`, [docs](https://casvt.github.io/Kapowarr/general_info/how_to_use/#monitoring).
+- **Mylar3** (GPL-3.0), commit **`cdc94a44425b6f3f9cdb9b6e5f9d88ae2fee3316`**:
+  `mylar/__init__.py:806` (estados por número), `mylar/updater.py:311-321` y
+  `mylar/config.py:83-84` (`AUTOWANT_UPCOMING` / `AUTOWANT_ALL`),
+  `mylar/helpers.py:1510-1545` (Continuing/Ended),
+  [wiki de metadatos](https://github.com/mylar3/mylar3/wiki/Where-Mylar-gets-the-metadata-from).
 
 **Cómo lo resuelve cada una:**
 
-- **Sonarr:** monitor por serie (`All`, `Future`, `Missing`, `Existing`, `First
-  Season`, `Last Season`, `Pilot`, `None`, y combinaciones con temporadas) y
-  **genera los *wanted* a partir del catálogo**, que le da la lista completa de
-  episodios con fechas de emisión. «Future» = aún no emitido, y **solo es
-  calculable porque la fuente publica el calendario**.
-- **Kapowarr/Mylar3:** mismo patrón (catálogo → lista de números → qué se
-  quiere), con ComicVine/otras fuentes como origen de la lista.
+- **Sonarr** materializa el enum de **serie** sobre los episodios y deriva de ahí
+  `Season.Monitored`. `missing` = **`!HasFile`** (con fichero o sin él, aireado o
+  no); `future` = **`!AirDateUtc.HasValue || AirDateUtc >= UtcNow`** — es decir,
+  **si la fecha es desconocida la cuenta como futura y la monitoriza**. Un
+  segundo eje independiente, «Monitor New Items» (`all`/`none`), decide qué pasa
+  con las temporadas que aparezcan después. Al conseguir el episodio **no se
+  desmonitoriza**: pasa de Wanted a Cutoff Unmet si no llega al corte.
+- **Kapowarr** tiene **dos ejes**: un *scheme* (`all`/`missing`/`none`) que es una
+  **acción de un solo uso** («applied once, on save», y por defecto «Don't apply»)
+  y `monitor_new_issues` por volumen, que sí es **persistente**. `missing` es «sin
+  fichero» y se aplica **solo a los números que ya existen** en su BD. **No tiene
+  `future`**: un número futuro sin fichero es «missing». Su fuente es ComicVine
+  (`issue_number`, `cover_date`/`store_date`, `count_of_issues`), y los números
+  ausentes de una respuesta se borran **solo si** `len(fetched) == issue_count`.
+- **Mylar3** **no tiene monitor por serie**: lo querido son los estados por
+  número (`Wanted`/`Skipped`/`Snatched`/`Downloaded`/…), `comics.Status` =
+  Active/Paused, y los números nuevos entran como `Wanted` si
+  `AUTOWANT_UPCOMING` (por defecto **sí**) o todos si `AUTOWANT_ALL`. Su
+  «futuro» sale de la lista de números de la fuente; la wiki admite que ComicVine
+  publica los datos **días después** de la salida.
 
 **Supuestos de su modelo que NO valen en ZascArr:**
 
-- **Que existe una lista completa de números por serie.** Aquí `Issue` solo
-  tiene filas de lo que ya tienes: la lista de lo ausente hay que **calcularla**,
-  y solo se puede cuando la unidad está acreditada (los tomos de un manga no
-  son grapas).
+- **Que existe una lista completa de números por serie.** Aquí `Issue` solo tiene
+  filas de lo que ya tienes: la lista de lo ausente hay que **calcularla**, y solo
+  cuando la unidad está acreditada (los tomos de un manga no son grapas).
 - **Que la fuente da fechas de lo que aún no ha salido.** No las pedimos: el
-  enricher solo toca filas `Issue` existentes, y no hay ninguna para números
-  futuros. **«Futuros» no es calculable hoy** y no se va a adivinar.
-- **Que «monitorizar» es un booleano por serie.** Aquí convive con una lista de
-  deseados hecha a mano, que es una petición **explícita** del coleccionista y no
-  puede quedar silenciada por un ajuste.
-- **Que la fuente devuelve lo que se pide.** La búsqueda es de **texto** contra
-  Prowlarr/foro; no se puede «pedir el número 7» y garantizar que lo devuelto
-  sea el 7. La política decide **qué consultas se lanzan**, no qué llega.
+  enricher solo toca filas `Issue` existentes y no hay ninguna para números
+  futuros. Sonarr puede permitirse contar una fecha desconocida como futura
+  porque **su fuente publica el calendario**; aquí eso sería inventar.
+- **Que el esquema se aplica una vez.** El de Kapowarr es una acción puntual;
+  aquí hace falta una política **declarativa**, que se recalcula cada ciclo y por
+  eso responde sola a «¿y los números que aparezcan después?».
+- **Que «missing» es una consulta a la tabla de números.** En Kapowarr/Mylar3 la
+  fuente les da la lista y `missing` es un `LEFT JOIN`; en ZascArr **no hay filas
+  que consultar** para lo ausente.
+- **Que la búsqueda es por número contra un catálogo.** Aquí es **texto** contra
+  Prowlarr/foro: no se puede «pedir el 7» y garantizar que vuelva el 7.
+- **Que la numeración es entera.** Sonarr razona con rangos de episodios; aquí hay
+  Annuals, `.5` y crossovers (por eso `issue_number` es `VARCHAR` +
+  `sort_order FLOAT`, decisión ya validada en CLAUDE.md §12).
 
 **Adoptar / adaptar / descartar, con motivo:**
 
-- **Adoptar:** el modelo de Sonarr — **la política decide qué se quiere y el
-  ciclo de búsqueda es un paso aparte** —, con los cuatro valores que fija el
-  backlog.
-- **Adoptar:** materializar los deseados como filas `Wishlist` (necesario para
-  seguir la descarga y cerrarla con `check_completions`), y **de forma
-  idempotente**: no se crea otro item para un número que ya tiene uno vivo.
-- **Adaptar (`faltantes`):** se apoya en `huecos_de_serie()`, **reutilizando su
-  veredicto de computabilidad** en vez de calcular por cuenta propia. Si
-  `computable=False`, **no se genera nada** y se dice por qué (mismo criterio que
-  #13 y que la frontera #14). Es literalmente lo que pedía la revisión: no
-  restar tomos como si fueran grapas.
+- **Adoptar:** el modelo de Sonarr — **la política decide qué se quiere y el ciclo
+  de búsqueda es un paso aparte** —, con los cuatro valores que fija el backlog.
+- **Adoptar:** **declarativa y recalculada en cada ciclo**, en vez del esquema
+  *one-shot* de Kapowarr: es lo que contesta por sí solo al caso «aparecen números
+  nuevos» (si te haces con el 4, `faltantes` deja de pedirlo sin que nadie toque la
+  política).
+- **Adaptar (`faltantes`):** se apoya en `huecos_de_serie()` y **reutiliza su
+  veredicto de computabilidad** en vez de calcular por su cuenta. Si
+  `computable=False` —manga: AniList cuenta capítulos y sus ficheros son tomos—,
+  **no se genera nada** y se dice por qué (mismo criterio que #13 y que la frontera
+  #14). Es lo que pedía la revisión: no restar tomos como si fueran grapas. La
+  propia investigación lo refuerza: `missing` depende de que la fuente tenga el
+  número, y en volúmenes españoles ComicVine a menudo no lo tiene.
 - **Adaptar (`todos`):** todos los números `1..total_issues` **cuando es
   computable**, incluidos los que ya tienes (el caso de uso es querer otra
-  copia/edición). Tiene coste: N búsquedas; lo acotan el `limit` por ciclo y el
-  cooldown que ya existen.
-- **Descartar (`futuros` por ahora):** **no computable**, y se declara. La
-  alternativa que se me ocurrió —«lo posterior al último número que tengo»— **se
-  descarta a propósito**: no es «futuro», es «siguiente», y buscaría números que
-  pueden ser de otra edición. Lo que haría falta para calcularlo de verdad:
-  pedir a la fuente la lista de números de la serie con sus fechas (hoy no se
-  pide) o que existan `Issue` con `release_date` futura (hoy no existen).
-- **Descartar:** que un item **añadido a mano** quede silenciado por la
-  política. Un item explícito es una orden del coleccionista; `ninguno` gobierna
-  lo que ZascArr **genera**, no lo que él pide. (El backlog describe la política
-  como «leída antes de generar candidatos», y eso es exactamente esto.)
+  copia/edición, que es donde engancharía D3). Tiene coste —N búsquedas—; lo acotan
+  el `limit` por ciclo y el cooldown que ya existen.
+- **Descartar (`futuros` por ahora):** **no computable**, y se declara. Sonarr y
+  Mylar3 pueden calcularlo porque su fuente publica números y fechas que aún no han
+  salido (Mylar usa incluso el *pull list* semanal); **aquí no se pide eso**. La
+  lectura alternativa que se me ocurrió —«lo posterior al último número que
+  tengo»— **se descarta a propósito**: no es «futuro», es «siguiente», y buscaría
+  números que pueden ser de otra edición. Lo que haría falta para calcularlo de
+  verdad: pedir a la fuente la lista de números de la serie con sus fechas (hoy no
+  se pide) o que existan `Issue` con `release_date` futura (hoy no existen).
+- **Descartar:** que un item **añadido a mano** quede silenciado por la política.
+  Un item explícito es una orden del coleccionista; `ninguno` gobierna lo que
+  ZascArr **genera**. (El backlog la describe como «leída antes de generar
+  candidatos», que es exactamente esto.)
 - **Descartar:** buscar contra un catálogo para «resolver» un número. Eso es
   identidad/cobertura editorial (**B22**), no D8.
+- **Descartar:** copiar `existing`/`recent` de Sonarr (90 días no significa nada
+  con cadencia mensual/irregular) ni sus presets `pilot`/`firstSeason`/`lastSeason`
+  (la jerarquía serie→temporada no traduce a grapa/tomo).
 
 **Invariantes de ZascArr (no mentir, no borrar, confirmación, coste Pi):**
 
@@ -141,6 +168,12 @@ falta» o «nada». El backlog pide un campo `wishlist_policy` por serie
 8. Un item vivo (WANTED/SEARCHING/DOWNLOADING) para ese número **no** se duplica; uno `DOWNLOADED`/`FAILED` sí se reutiliza en vez de crear otro.
 9. `process_wishlist` no genera ni busca si no hay acuse legal.
 10. La UI de serie muestra la política, los números que faltan y el motivo cuando no es computable.
+11. **Números que aparecen después:** con `faltantes`, si el ciclo siguiente ya
+    tiene el número (importado a mano), **deja de generar** ese item sin tocar la
+    política — la política es declarativa, no una acción de una sola vez.
+12. **Numeración no entera:** un `Annual 1` o un `1.5` no entran en el rango
+    `1..total_issues` y no se generan para ellos (misma regla de C2 que en los
+    huecos).
 
 **Decisión final / ADR:** no requiere ADR (feature de producto sobre esquema
 propio; el criterio de computabilidad ya está decidido en #13). Entregable:
