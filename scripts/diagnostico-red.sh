@@ -6,6 +6,12 @@
 # SOLO LEE. No ejecuta `ufw`, no cambia reglas, rutas ni montajes: imprime lo
 # que ha encontrado y los comandos que puedes pegar TÚ.
 #
+# De dónde salen los puertos: de la **configuración ACTIVA** de la app, leída
+# dentro del contenedor con la misma precedencia que D11 (el `.env` lo puede
+# sobrescribir Ajustes en caliente, así que el `.env` NO sirve para esto). Si no
+# se puede leer, el diagnóstico no analiza ninguna URL: o se le dan los puertos
+# con `--puerto`, o se declara indeterminado.
+#
 # Regla de oro (es el criterio de A10): **mejor «no puedo determinarlo» que un
 # comando preciso pero equivocado.** De ahí que:
 #   - si no se puede comprobar el recorrido real, o está roto, NO se propone
@@ -65,15 +71,14 @@ done
 
 # ── utilidades ──────────────────────────────────────────────────────────────
 
-# leer_env CLAVE → valor de .env (la última aparición, como docker compose)
-leer_env() {
-    local clave="$1" valor=""
-    [[ -f "${ENV_FILE}" ]] || return 1
-    valor="$(grep -E "^${clave}=" "${ENV_FILE}" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
-    valor="${valor%\"}"; valor="${valor#\"}"
-    valor="${valor%\'}"; valor="${valor#\'}"
-    [[ -n "${valor}" ]] || return 1
-    printf '%s' "${valor}"
+# config_valor CLAVE → valor de la configuración ACTIVA (vacío si no la hay).
+#
+# NO se lee `.env` a propósito: `prowlarr_url`, `transmission_url` y `amule_url`
+# están en la lista blanca de D11, así que Ajustes los sobrescribe en caliente
+# (fila `runtime_settings` de PostgreSQL) y el `.env` puede estar desfasado. Una
+# regla calculada sobre el valor viejo apuntaría al host o al puerto equivocados.
+config_valor() {
+    printf '%s\n' "${CONFIG_ACTIVA}" | grep -E "^$1=" | tail -1 | cut -d= -f2- || true
 }
 
 # url_partes URL → "host puerto" (puerto vacío si no lo trae)
@@ -447,6 +452,48 @@ fi
 
 ok "host.docker.internal -> ${RESUELTO} (la puerta de enlace de ${SUBRED})"
 
+# ── la configuración ACTIVA de la app (precedencia de D11) ──────────────────
+#
+# Se le pide al propio contenedor que aplique los overrides como los aplica al
+# arrancar: `.env` primero (ya está en su entorno) y encima la fila
+# `runtime_settings`. Así el diagnóstico mira lo MISMO que usa la app, y no el
+# `.env` — que Ajustes puede haber dejado atrás.
+info "Leyendo la configuración activa (Ajustes puede sobrescribir el .env)..."
+CONFIG_ACTIVA="$(docker exec "${CONTENEDOR}" python3 -c '
+import asyncio
+from zascarr.config import get_settings
+from zascarr.database import async_session_factory
+from zascarr.services.runtime_settings import RuntimeSettingsService, apply_overrides
+
+async def main():
+    async with async_session_factory() as db:
+        apply_overrides(await RuntimeSettingsService(db).get_overrides())
+    s = get_settings()
+    for clave in ("prowlarr_url", "transmission_url", "amule_url"):
+        print(clave + "=" + str(getattr(s, clave)))
+
+asyncio.run(main())
+' 2>/dev/null || true)"
+
+if [[ -z "${CONFIG_ACTIVA}" ]]; then
+    if [[ "${#PUERTOS_MANUALES[@]}" -eq 0 ]]; then
+        mal "No he podido leer la configuración ACTIVA de la app dentro del contenedor,
+  así que no sé qué URLs está usando de verdad.
+
+  No analizo el .env en su lugar: Ajustes puede haberlo sobrescrito (D11), y una
+  regla calculada sobre el valor viejo apuntaría al host o al puerto equivocados.
+
+  Dale los puertos a mano y sigo:
+    sudo bash ${SCRIPT_DIR}/diagnostico-red.sh --puerto 9696 --puerto 9091 --puerto 4711
+
+  (O comprueba por qué no responde: docker compose -f ${COMPOSE_FILE} logs zascarr)"
+        echo ""
+        exit 2
+    fi
+    warn "No he podido leer la configuración activa de la app; sigo solo con los
+  puertos que me has dado."
+fi
+
 # ── los puertos que importan ────────────────────────────────────────────────
 ETIQUETAS=(); PUERTOS=(); ORIGENES=()
 
@@ -455,14 +502,16 @@ if [[ "${#PUERTOS_MANUALES[@]}" -gt 0 ]]; then
         ETIQUETAS+=("(a mano)"); PUERTOS+=("${p}"); ORIGENES+=("host.docker.internal")
     done
 else
-    # Manda la URL configurada: si apunta a otra máquina, la regla de ufw de
-    # ESTA Pi no pinta nada y no se propone.
-    for par in "Prowlarr:PROWLARR_URL:9696" "Transmission:TRANSMISSION_URL:9091" "aMule:AMULE_URL:4711"; do
+    # Manda la URL ACTIVA: si apunta a otra máquina, la regla de ufw de ESTA Pi
+    # no pinta nada y no se propone.
+    for par in "Prowlarr:prowlarr_url:9696" "Transmission:transmission_url:9091" "aMule:amule_url:4711"; do
         etiqueta="${par%%:*}"; resto="${par#*:}"; clave="${resto%%:*}"; defecto="${resto##*:}"
-        url="$(leer_env "${clave}" || true)"
+        url="$(config_valor "${clave}")"
         if [[ -z "${url}" ]]; then
             url="http://host.docker.internal:${defecto}"
-            etiqueta="${etiqueta} (por defecto)"
+            etiqueta="${etiqueta} (sin configurar, por defecto)"
+        else
+            etiqueta="${etiqueta} (configurado en Ajustes)"
         fi
         read -r host puerto <<< "$(url_partes "${url}")"
         if [[ -z "${puerto}" ]]; then
@@ -506,14 +555,23 @@ REGLAS_ACTIVAS="$(ufw_c status 2>/dev/null | awk \
 REGLAS_TEXTO="$(ufw_c show added 2>/dev/null || true)"
 REGLAS_UTILES="$(printf '%s\n' "${REGLAS_TEXTO}" | grep -c '^ufw ' || true)"
 
-if [[ "${REGLAS_ACTIVAS}" -ne "${REGLAS_UTILES}" ]]; then
+# Con IPv6 habilitado (lo está por defecto), una misma orden puede aparecer como
+# DOS reglas activas —la IPv4 y la IPv6—, así que `status` puede tener hasta el
+# doble de líneas que `show added` sin que nada vaya mal. Se acepta esa
+# horquilla; fuera de ella, las dos fuentes no cuentan lo mismo y no se decide.
+if (( REGLAS_ACTIVAS < REGLAS_UTILES || REGLAS_ACTIVAS > 2 * REGLAS_UTILES )); then
     mal "ufw dice tener ${REGLAS_ACTIVAS} reglas activas y \`ufw show added\` me da
-  ${REGLAS_UTILES}. Las dos fuentes no coinciden (¿reglas editadas a mano?), así que
-  no puedo decirte qué reglas están en vigor. Míralas tú con:
+  ${REGLAS_UTILES}. Con IPv6 habilitado es normal que haya hasta el doble (cada orden
+  vale para IPv4 y para IPv6), pero esta diferencia no la explica eso, así que no
+  puedo decirte qué reglas están en vigor. Míralas tú con:
 
     sudo ufw status numbered"
     echo ""
     exit 2
+fi
+if [[ "${REGLAS_ACTIVAS}" -ne "${REGLAS_UTILES}" ]]; then
+    warn "ufw muestra ${REGLAS_ACTIVAS} reglas activas para ${REGLAS_UTILES} órdenes: con IPv6
+  habilitado es lo normal (cada orden vale para IPv4 y para IPv6)."
 fi
 
 # Se clasifican TODAS las reglas y luego se decide. La decisión es conservadora
