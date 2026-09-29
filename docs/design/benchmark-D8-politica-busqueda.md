@@ -278,16 +278,27 @@ la ficha de serie.
 
 ---
 
-## Notas de implementación (2026-09-29)
+## Notas de implementación (2026-09-29, ampliadas tras la revisión de #34)
 
 Lo que el código decidió y no estaba cerrado en el diseño de arriba. Se anota
 aquí porque cambia el contrato, no porque sea un detalle.
 
-- **El predicado es `Orchestrator.querer_de_serie` (`Querer`) y es público.**
-  Devuelve `numeros` (lo que la política quiere ahora), `computable` y `motivo`.
-  Lo consumen la generación, la retirada **y la ficha de serie**, que pinta el
-  veredicto con el mismo resultado en vez de recalcularlo. Así «lo que la
-  página dice» y «lo que el ciclo hace» no pueden divergir.
+- **El predicado vive en `services/politica.py`** (`Querer`, `querer_de_serie`)
+  y es la fuente única: lo consumen la generación, la retirada **y la ficha de
+  serie**. No está en el orquestador a propósito — la ficha no debe instanciar
+  un `Orchestrator` (con sus clientes de Prowlarr/Transmission/aMule) solo para
+  preguntar si hay números que buscar. Devuelve `numeros` (lo que la política
+  quiere ahora), `computable` y `motivo`.
+- **La reactivación de la generación es SOLO `RETIRADO` e `IMPORTED`**
+  (`ESTADOS_REACTIVABLES`), no «todo lo que no esté en vuelo». Corregido tras la
+  revisión de #34: reiniciar un `FAILED` cada ciclo le borraba el `last_error`
+  (el motivo de D9 desaparece justo cuando el coleccionista lo necesita),
+  alternaba su estado entre `FAILED` y `WANTED` y **gastaba el lote** en items
+  que ya existían — con 25 fallidos, los números nuevos no llegaban a generarse.
+  Un `FAILED` ya lo reintenta `process_wishlist` tras el cooldown, y un
+  `DOWNLOADED` está esperando al importador (reiniciarlo volvería a buscar algo
+  que ya viene de camino). El `DO UPDATE` lleva `WHERE status IN
+  ('retirado','imported')`, así que dos ciclos solapados tampoco lo reinician.
 - **Un item manual de un NÚMERO concreto también ocupa ese número** (no solo el
   manual de serie que recogía el diseño). El índice único parcial no cubre los
   manuales, así que sin esta exclusión el coleccionista que ya pidió el nº 2 a
@@ -297,25 +308,38 @@ aquí porque cambia el contrato, no porque sea un detalle.
   computable, caso 6) pero **no se ofrece ni se acepta**: el selector no lo
   pinta y `SeriesUpdate` lo rechaza con 422. Queda listo para cuando D3 decida
   el criterio de cierre, que es lo único que falta para poder ofrecerlo.
-- **La retirada no toca `SEARCHING`.** El diseño hablaba de no tocar
-  `DOWNLOADING`; `SEARCHING` es transitorio (hay una búsqueda en vuelo) y
-  marcarlo `retirado` sería mentir (D9) sobre lo que está pasando. Un item
-  varado en `SEARCHING` por una caída del proceso es un problema previo a D8
-  (`process_wishlist` solo mira `WANTED`/`FAILED`) y no se resuelve aquí.
-- **Ventana conocida (generación ↔ dos ciclos solapados):** entre el `SELECT`
-  que mira qué falta y el `INSERT ... ON CONFLICT`, otro ciclo puede reclamar
-  la fila (`SEARCHING`) o enviar la descarga (`DOWNLOADING`). El `DO UPDATE`
-  lleva `WHERE status NOT IN ('searching','downloading')` para no pisarlo. No
-  hay bloqueo entre ambos `SELECT`/`INSERT`, así que un ciclo podría crear una
-  fila para un número que el otro acaba de empezar a descargar; lo acota el
-  índice único (una sola fila por número) y el ciclo siguiente lo reconcilia.
+- **La retirada es asimétrica respecto a la generación.** Generar espera al
+  siguiente ciclo (es lo declarativo). Retirar se aplica **al guardar la
+  política**, solo para esa serie y con el mismo `UPDATE` atómico: cuando el
+  coleccionista pide parar, no puede seguir buscándose hasta una hora. La
+  sentencia se comparte (`services/politica.py::retirar_de_serie`), así que da
+  igual quién llegue antes.
+- **La retirada solo toca `WANTED`/`FAILED`.** `SEARCHING` queda fuera además de
+  `DOWNLOADING`: es transitorio (hay una búsqueda en vuelo) y marcarlo `retirado`
+  sería mentir (D9). Un item varado en `SEARCHING` por una caída del proceso es
+  un problema previo a D8 y no se resuelve aquí.
+- **La ficha de serie no lista un chip por número.** Resume («faltan 200; se
+  generan hasta 25 por ciclo, repartidos entre las series con política activa»),
+  y solo pinta los chips si son 12 o menos. Además dice si el aviso legal está
+  pendiente (sin acuse el ciclo no genera ni busca: prometer búsquedas sin
+  decirlo sería engañar) y cuántos números están retirados.
 - **Los items `retirado` se ocultan del listado de deseos** pero **no se
   borran**: pasar una serie de 200 números a `ninguno` no puede llenar la
-  pantalla de filas muertas. Siguen en la BD y en la API (`?status=retirado`).
+  pantalla de filas muertas. Siguen en la BD y en la API (`?status=retirado`), y
+  la ficha de serie dice cuántos hay.
+- **Ventana conocida (generación ↔ dos ciclos solapados):** entre el `SELECT`
+  que mira qué falta y el `INSERT ... ON CONFLICT` no hay bloqueo, así que un
+  ciclo podría intentar crear una fila para un número que el otro acaba de
+  reclamar. La resuelve la BASE: índice único parcial (una sola fila por número)
+  y `DO UPDATE ... WHERE status IN ('retirado','imported')` (si la fila ya está
+  `WANTED`/`SEARCHING`/`DOWNLOADING`/`DOWNLOADED`/`FAILED`, no se toca).
+  Verificado con dos conexiones y `COMMIT` real en
+  `tests/test_politica_d8_pg.py::test_dos_ciclos_solapados_de_verdad_no_duplican`.
 - **Pruebas:** el comportamiento completo contra PostgreSQL 15 está en
-  `tests/test_politica_d8_pg.py` (20 casos); el `WHERE` de las dos sentencias,
-  las ramas sin BD y el flujo con `FakeSession` en `tests/test_orchestrator.py`.
-  La migración con sembrado previo, en `tests/test_migracion_d8_pg.py`.
+  `tests/test_politica_d8_pg.py`; el `WHERE` de las dos sentencias, las ramas sin
+  BD y el flujo con `FakeSession` en `tests/test_orchestrator.py`; el selector y
+  el efecto inmediato de la retirada, en `tests/test_web_series.py`. La
+  migración con sembrado previo, en `tests/test_migracion_d8_pg.py`.
 - **Límite no medido (se mantiene el del diseño):** cuánto pesa el arranque en
   frío de los alias sobre una biblioteca real sigue sin poder medirse aquí — no
   hay base de datos real en este entorno. Lo decidirá la primera instalación.
