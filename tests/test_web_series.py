@@ -317,7 +317,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),         # manuales (predicado)
             FakeExecResult([]),         # poseídos (predicado)
             FakeExecResult([], rowcount=0),   # retirada (no hay nada que retirar)
-            acuse(),
+            acuse(), retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.post(f"/ui/series/{series.id}/politica",
@@ -337,6 +337,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]),                 # la serie
             FakeExecResult([], rowcount=2),           # la retirada inmediata
             acuse(),                                  # contexto (predicado NONE: sin consultas)
+            retirados(5),                             # total acumulado de la serie
         ])
         with use_fake_session(session) as client:
             r = client.post(f"/ui/series/{series.id}/politica",
@@ -344,7 +345,10 @@ class TestPoliticaBusquedaD8:
 
         assert r.status_code == 200
         assert series.wishlist_policy == WishlistPolicy.NONE
-        assert "2 números retirados" in r.text
+        # Lo retirado AHORA y el acumulado se dicen por separado: confundirlos
+        # mostraría «2» cuando en la serie ya había 3 más.
+        assert "Se han retirado 2 números" in r.text
+        assert "5 números retirados" in r.text
 
     @pytest.mark.parametrize("reservada", ["futuros", "todos"])
     def test_la_ui_rechaza_los_valores_reservados(self, reservada):

@@ -71,6 +71,16 @@
   </p>
   {% endif %}
 
+  {% if retirados_ahora %}
+  <p class="caption politica-retirados-ahora">
+    {% if retirados_ahora == 1 %}
+      Se ha retirado 1 número generado por la política.
+    {% else %}
+      Se han retirado {{ retirados_ahora }} números generados por la política.
+    {% endif %}
+  </p>
+  {% endif %}
+
   {% if retirados %}
   <p class="caption">
     {% if retirados == 1 %}

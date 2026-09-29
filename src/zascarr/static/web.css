@@ -501,6 +501,7 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 .politica-veredicto { margin: 12px 0 6px; }
 .politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .politica-aviso { color: var(--warn); }
+.politica-retirados-ahora { color: var(--ok); font-weight: 700; }
 .issue-chip.issue-present {
   background: var(--ok); color: #fff; border-color: var(--ink);
 }
