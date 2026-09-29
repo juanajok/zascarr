@@ -47,8 +47,8 @@ from zascarr.models import (
 from zascarr.services.legal import current_legal_version
 from zascarr.services.orchestrator import Orchestrator, SincronizacionPolitica
 from zascarr.services.politica import (
+    MOTIVO_DESEO_DE_SERIE,
     MOTIVO_POLITICA_FUTUROS,
-    MOTIVO_SERIE_EN_CURSO,
     querer_de_serie,
 )
 
@@ -436,7 +436,7 @@ class TestRetiradaD8:
         resultado = await orch.sync_policy_items()
 
         assert querer.numeros == frozenset()
-        assert querer.motivo == MOTIVO_SERIE_EN_CURSO
+        assert querer.motivo == MOTIVO_DESEO_DE_SERIE
         assert resultado.generados == 0
         assert await politica_de(db, s) == []
 

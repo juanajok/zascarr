@@ -335,11 +335,33 @@ aquí porque cambia el contrato, no porque sea un detalle.
   `WANTED`/`SEARCHING`/`DOWNLOADING`/`DOWNLOADED`/`FAILED`, no se toca).
   Verificado con dos conexiones y `COMMIT` real en
   `tests/test_politica_d8_pg.py::test_dos_ciclos_solapados_de_verdad_no_duplican`.
+- **Ventana conocida (guardar `ninguno` justo a mitad de ciclo):** si el
+  coleccionista guarda `ninguno` mientras el ciclo ya calculó sus planes con
+  `faltantes`, ese ciclo puede generar items que la pasada siguiente retira (la
+  retirada al guardar solo actúa sobre lo que había en ese momento, y la
+  generación en vuelo no lo ve). Se cura sola en menos de un ciclo (≤ 1 h por
+  defecto) y no deja estado incorrecto: los items acaban `retirado`.
+- **Imprecisión conocida del contador `generados`:** `_materializar` no devuelve
+  si el upsert cambió algo, así que un ciclo que pierde una carrera cuenta como
+  generado un item que no creó. Es solo ruido de log y del cupo por ciclo —sin
+  efecto en los datos— y no se corrige aquí.
 - **Pruebas:** el comportamiento completo contra PostgreSQL 15 está en
   `tests/test_politica_d8_pg.py`; el `WHERE` de las dos sentencias, las ramas sin
   BD y el flujo con `FakeSession` en `tests/test_orchestrator.py`; el selector y
   el efecto inmediato de la retirada, en `tests/test_web_series.py`. La
   migración con sembrado previo, en `tests/test_migracion_d8_pg.py`.
-- **Límite no medido (se mantiene el del diseño):** cuánto pesa el arranque en
-  frío de los alias sobre una biblioteca real sigue sin poder medirse aquí — no
-  hay base de datos real en este entorno. Lo decidirá la primera instalación.
+- **Límites abiertos que dependen de medir con la biblioteca real** (primera
+  instalación; hoy no hay BD real en este entorno):
+  - **Arranque en frío de los alias (B13 + D8):** un alias solo se aprende cuando
+    ya existe un fichero que asignar a mano, así que la *primera* búsqueda de
+    una serie nueva (sobre todo si está catalogada en inglés y los releases son
+    en español) se queda sin candidatos. El motivo del item (D9) invita a lo que
+    sí funciona; un campo «otros nombres de esta serie» sería otra historia.
+  - **Hipótesis sin medir:** cuánto pesa ese desajuste inglés/español sobre una
+    biblioteca real. Es exactamente lo que decidirá si el arranque en frío es un
+    caso raro o el caso normal.
+  - **Rango `1..total_issues`:** `compute_missing_issues` (C2) asume numeración
+    que empieza en el #1. Una serie que arranca en el #0 pediría un #5 inexistente
+    y nunca pediría el #0. Es previo a D8 (vive en `huecos_de_serie`), pero D8 lo
+    hereda; medirlo con la biblioteca real dirá si hace falta una regla de
+    numeración por serie.

@@ -45,8 +45,8 @@ from zascarr.services.orchestrator import (
 )
 from zascarr.services.politica import (
     ESTADOS_REACTIVABLES,
+    MOTIVO_DESEO_DE_SERIE,
     MOTIVO_POLITICA_FUTUROS,
-    MOTIVO_SERIE_EN_CURSO,
     Querer,
     querer_de_serie,
     stmt_retirada,
@@ -1027,7 +1027,7 @@ class TestQuererDeSerieD8:
         querer = await querer_de_serie(session, serie)
 
         assert querer.numeros == frozenset()
-        assert querer.motivo == MOTIVO_SERIE_EN_CURSO
+        assert querer.motivo == MOTIVO_DESEO_DE_SERIE
         assert querer.computable is True
 
 
