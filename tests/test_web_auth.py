@@ -28,6 +28,54 @@ def restaurar_settings():
         setattr(s, campo, valor)
 
 
+class _FakeSession:
+    """Sesión mínima: /login ahora depende de get_db por el rehasheo. La fila es
+    real (`RuntimeSetting`) para poder inspeccionar lo guardado."""
+
+    def __init__(self):
+        from zascarr.models import RuntimeSetting
+        self.fila = RuntimeSetting(id=1, values={})
+
+    async def execute(self, _statement):
+        from unittest.mock import MagicMock
+        result = MagicMock()
+        result.scalar_one_or_none = MagicMock(return_value=self.fila)
+        return result
+
+    def add(self, obj):
+        self.fila = obj
+
+    async def flush(self):
+        return None
+
+
+@pytest.fixture
+def db_fake():
+    return _FakeSession()
+
+
+@pytest.fixture(autouse=True)
+def _db_falsa(db_fake):
+    from zascarr.database import get_db
+
+    async def _get_db():
+        yield db_fake
+
+    app.dependency_overrides[get_db] = _get_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
+
+
+def _hash_con_iteraciones(password: str, iterations: int) -> str:
+    """Hash PBKDF2 con un número de iteraciones concreto — simula uno guardado
+    antes de subir el contador (el que dispara el rehasheo al iniciar sesión)."""
+    import hashlib
+    import secrets
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, iterations)
+    return f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}"
+
+
 class TestNextSeguro:
     """A6 (revisión 2026-09-26): `next` solo acepta rutas relativas de este
     sitio. El caso de la barra invertida ('/\\host') se normaliza a '//host'
@@ -152,3 +200,85 @@ class TestLogout:
         assert r.status_code == 303
         assert r.headers["location"] == "/login"
         assert client.cookies.get(COOKIE_NAME) is None
+
+
+class TestRehasheoYSesion:
+    """`auth_session_version` (ficha de seguridad): la cookie lleva la versión
+    firmada; el rehasheo por iteraciones NO la toca, cambiar la contraseña sí."""
+
+    @pytest.fixture
+    def _settings_password(self, restaurar_settings):
+        get_settings().auth_mode = "password"
+        get_settings().secret_key = "clave-de-prueba"
+        get_settings().auth_session_version = 0
+        yield
+
+    @pytest.mark.asyncio
+    async def test_el_rehasheo_no_invalida_la_sesion(self, _settings_password, db_fake):
+        from zascarr.services.auth import necesita_rehash, sesion_valida, verify_password
+
+        viejo = _hash_con_iteraciones("secreta123", 1000)
+        get_settings().auth_password_hash = viejo
+        client = TestClient(app, follow_redirects=False)
+
+        r = client.post("/login", data={"password": "secreta123", "next": "/ui/"})
+
+        assert r.status_code == 303
+        # El hash se rehizo con las iteraciones actuales...
+        nuevo = db_fake.fila.values["auth_password_hash"]
+        assert nuevo != viejo
+        assert necesita_rehash(nuevo) is False
+        assert await verify_password("secreta123", nuevo) is True
+        # ...y la versión NO cambia: la cookie emitida sigue siendo válida.
+        assert get_settings().auth_session_version == 0
+        assert sesion_valida(r.cookies[COOKIE_NAME], "clave-de-prueba", 0) is True
+
+    def test_hash_ya_al_dia_no_se_toca(self, _settings_password, db_fake):
+        get_settings().auth_password_hash = hash_password("secreta123")
+        client = TestClient(app, follow_redirects=False)
+
+        r = client.post("/login", data={"password": "secreta123", "next": "/ui/"})
+
+        assert r.status_code == 303
+        assert "auth_password_hash" not in db_fake.fila.values
+
+    @pytest.mark.asyncio
+    async def test_dos_logins_simultaneos_que_rehashean_no_se_pisan(self, _settings_password):
+        """Si el rehasheo subiera la versión, dos logins a la vez se invalidarían
+        el uno al otro. Ahora ambos escriben un hash válido de la MISMA
+        contraseña y la versión se queda igual."""
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        from zascarr.database import get_db
+        from zascarr.services.auth import necesita_rehash, sesion_valida, verify_password
+
+        viejo = _hash_con_iteraciones("secreta123", 1000)
+        get_settings().auth_password_hash = viejo
+
+        sesion = _FakeSession()
+
+        async def _get_db():
+            yield sesion
+
+        app.dependency_overrides[get_db] = _get_db
+        barrera = threading.Barrier(2)
+
+        def _login():
+            client = TestClient(app, follow_redirects=False)
+            barrera.wait(timeout=5)
+            return client.post("/login", data={"password": "secreta123", "next": "/ui/"})
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                resultados = list(pool.map(lambda _: _login(), range(2)))
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+        assert all(r.status_code == 303 for r in resultados)
+        assert get_settings().auth_session_version == 0
+        nuevo = sesion.fila.values["auth_password_hash"]
+        assert necesita_rehash(nuevo) is False
+        assert await verify_password("secreta123", nuevo) is True
+        for r in resultados:
+            assert sesion_valida(r.cookies[COOKIE_NAME], "clave-de-prueba", 0) is True

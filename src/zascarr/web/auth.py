@@ -6,16 +6,21 @@ explícitamente), igual que /legal.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.database import get_db
 from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
     crear_cookie_sesion,
     credenciales_validas,
+    hash_password_async,
+    necesita_rehash,
 )
+from zascarr.services.runtime_settings import RuntimeSettingsService
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
@@ -60,6 +65,7 @@ async def login_form(request: Request, next: str = "/") -> HTMLResponse:
 async def login_submit(
     request: Request, next: str = Form(default="/"),
     username: str = Form(default=""), password: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     next = _next_seguro(next)
     settings = get_settings()
@@ -70,9 +76,18 @@ async def login_submit(
             "error": "Usuario o contraseña incorrectos.",
         }, status_code=401)
 
+    # Rehasheo oportunista (p. ej. tras subir las iteraciones de PBKDF2): aquí es
+    # donde hay contraseña en claro y ya validada. Se calcula en el ejecutor
+    # propio (no bloquea el bucle de eventos) y NO toca `auth_session_version`:
+    # subir iteraciones no debe cerrar las sesiones abiertas.
+    if necesita_rehash(settings.auth_password_hash):
+        nuevo_hash = await hash_password_async(password)
+        await RuntimeSettingsService(db).save({"auth_password_hash": nuevo_hash})
+
     respuesta = RedirectResponse(next, status_code=303)
     respuesta.set_cookie(
-        COOKIE_NAME, crear_cookie_sesion(settings.secret_key),
+        COOKIE_NAME,
+        crear_cookie_sesion(settings.secret_key, settings.auth_session_version),
         max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
     )
     return respuesta

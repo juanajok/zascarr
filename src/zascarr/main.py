@@ -196,8 +196,13 @@ async def lifespan(app: FastAPI):
         # guardado nuevo desde la UI.
         from zascarr.services.runtime_settings import (
             RuntimeSettingsService,
+            capturar_valores_base,
             load_overrides_at_startup,
         )
+        # Seguridad: guarda el `BASE_URL` del `.env` antes de que los overrides
+        # de la BD lo puedan pisar, para poder restaurarlo si Ajustes lo deja
+        # vacío (vía de recuperación si el middleware da 403).
+        capturar_valores_base()
         async with async_session_factory() as session:
             await load_overrides_at_startup(session)
             # A6: la cookie de sesión necesita una clave de firma estable —

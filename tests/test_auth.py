@@ -170,31 +170,44 @@ class TestCredencialesValidas:
 class TestCookieSesion:
 
     def test_cookie_recien_creada_es_valida(self):
-        token = crear_cookie_sesion("mi-secreto")
-        assert sesion_valida(token, "mi-secreto") is True
+        token = crear_cookie_sesion("mi-secreto", 0)
+        assert sesion_valida(token, "mi-secreto", 0) is True
 
     def test_cookie_firmada_con_otro_secreto_no_vale(self):
-        token = crear_cookie_sesion("mi-secreto")
-        assert sesion_valida(token, "otro-secreto-distinto") is False
+        token = crear_cookie_sesion("mi-secreto", 0)
+        assert sesion_valida(token, "otro-secreto-distinto", 0) is False
 
     def test_cookie_manipulada_no_vale(self):
-        token = crear_cookie_sesion("mi-secreto")
+        token = crear_cookie_sesion("mi-secreto", 0)
         payload, _, mac = token.rpartition(".")
-        manipulada = f"{int(payload) + 999999}.{mac}"
-        assert sesion_valida(manipulada, "mi-secreto") is False
+        ts, _, version = payload.partition(".")
+        manipulada = f"{int(ts) + 999999}.{version}.{mac}"
+        assert sesion_valida(manipulada, "mi-secreto", 0) is False
 
     def test_cookie_ausente_o_vacia_no_vale(self):
-        assert sesion_valida(None, "mi-secreto") is False
-        assert sesion_valida("", "mi-secreto") is False
+        assert sesion_valida(None, "mi-secreto", 0) is False
+        assert sesion_valida("", "mi-secreto", 0) is False
+
+    def test_cookie_de_version_anterior_no_vale(self):
+        """`auth_session_version`: cambiar la contraseña sube la versión y las
+        cookies emitidas antes dejan de valer."""
+        token = crear_cookie_sesion("mi-secreto", version=0)
+        assert sesion_valida(token, "mi-secreto", 0) is True
+        assert sesion_valida(token, "mi-secreto", 1) is False
+
+    def test_cookie_del_formato_viejo_sin_version_no_vale(self):
+        """Las cookies emitidas antes de este cambio (payload = solo timestamp)
+        caducan: el usuario vuelve a iniciar sesión una vez."""
+        from zascarr.services.auth import sign_token
+        token_viejo = sign_token(str(int(time.time())), "mi-secreto")
+        assert sesion_valida(token_viejo, "mi-secreto", 0) is False
 
     def test_cookie_expirada_no_vale(self, monkeypatch):
-        token = crear_cookie_sesion("mi-secreto")
         monkeypatch.setattr("zascarr.services.auth.SESSION_MAX_AGE", 1)
         # Reconstruye el mismo payload pero con una emisión ya vieja.
-        vieja = f"{int(time.time()) - 100}"
         from zascarr.services.auth import sign_token
-        token_viejo = sign_token(vieja, "mi-secreto")
-        assert sesion_valida(token_viejo, "mi-secreto") is False
+        token_viejo = sign_token(f"{int(time.time()) - 100}.0", "mi-secreto")
+        assert sesion_valida(token_viejo, "mi-secreto", 0) is False
 
 
 def _app_de_prueba() -> FastAPI:
@@ -459,6 +472,26 @@ class TestOrigenHost:
             headers={"Origin": "https://zascarr.example", "Sec-Fetch-Site": "same-origin"})
         # Pasa el middleware (no 403); el 303 es el redirect de auth, no el CSRF.
         assert r.status_code == 303
+
+    def test_el_403_es_text_plain_con_nosniff(self, monkeypatch):
+        """Sin `media_type` Starlette no fija `Content-Type` y el navegador podría
+        adivinar el tipo de un texto que refleja datos de la petición."""
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://mal.example"})
+
+        assert r.status_code == 403
+        assert r.headers["content-type"].startswith("text/plain")
+        assert r.headers["x-content-type-options"] == "nosniff"
+
+    def test_el_403_escapa_el_origen_reflejado(self, monkeypatch):
+        """HTMX intercambia el cuerpo como innerHTML aunque sea text/plain: un
+        `Origin` con etiquetas no debe colarse como marcado."""
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://x/<script>alert(1)</script>"})
+
+        assert r.status_code == 403
+        assert "<script>" not in r.text
+        assert "&lt;script&gt;" in r.text
 
 
 class TestAppRealConHtmx:

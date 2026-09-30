@@ -171,6 +171,13 @@ class Settings(BaseSettings):
     # comas en el `.env` — por ejemplo `ALLOWED_HOSTS=raspberrypi.local,pi` para
     # quien entra por el nombre de la Pi sin usar proxy.
     allowed_hosts: str = Field(default="")
+    # Contador interno (misma fila JSONB que `secret_key`, fuera de la lista de
+    # ajustes editables) que sube al CAMBIAR la contraseña, el usuario o el modo
+    # de autenticación. Va firmado dentro de la cookie de sesión: las cookies
+    # emitidas antes del cambio dejan de valer, así cambiar la contraseña cierra
+    # de verdad las sesiones abiertas. El rehasheo por subida de iteraciones NO
+    # lo toca (no debe cerrar sesiones).
+    auth_session_version: int = Field(default=0)
 
     # ── Avisos (E4) ───────────────────────────────────────────────
     # Webhook de importación, apagado por defecto. Entrega de MEJOR

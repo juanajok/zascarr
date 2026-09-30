@@ -26,6 +26,7 @@ import base64
 import functools
 import hashlib
 import hmac
+import html
 import ipaddress
 import secrets
 import time
@@ -222,19 +223,34 @@ def _peticion_cross_site(request: Request, settings: Settings) -> bool:
     return request.url.path.startswith("/ui/")
 
 
+def _respuesta_403(detalle: str, request: Request) -> Response:
+    """403 con `Content-Type` explícito y `nosniff`.
+
+    El texto lleva datos que envía el cliente (`Origin`, `Referer`, `Host`), así
+    que se fija el tipo — sin `media_type`, Starlette no pone `Content-Type` y el
+    navegador puede intentar adivinarlo — y se prohíbe el sniffing. Los valores
+    van escapados con `html.escape` porque HTMX intercambia el cuerpo como
+    `innerHTML` aunque sea `text/plain`."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=403, content={"detail": detalle})
+    return Response(
+        detalle, status_code=403,
+        media_type="text/plain; charset=utf-8",
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
 def _respuesta_origen_rechazado(request: Request) -> Response:
     """403 en español, con el origen recibido y la salida concreta — nunca un
     código crudo. La vía de recuperación es `BASE_URL` en el `.env` (o Ajustes),
     para que quien esté detrás de un proxy que no conserve `Host` pueda salir."""
     origen = request.headers.get("origin") or request.headers.get("referer") or "ninguno"
     detalle = (
-        f"Origen no permitido: la petición viene de «{origen}» y este servidor "
-        "solo acepta peticiones desde sí mismo. Si accedes tras un proxy inverso, "
-        "define BASE_URL en el .env (o en Ajustes) con tu dominio."
+        f"Origen no permitido: la petición viene de «{html.escape(origen)}» y este "
+        "servidor solo acepta peticiones desde sí mismo. Si accedes tras un proxy "
+        "inverso, define BASE_URL en el .env (o en Ajustes) con tu dominio."
     )
-    if request.url.path.startswith("/api/"):
-        return JSONResponse(status_code=403, content={"detail": detalle})
-    return Response(detalle, status_code=403)
+    return _respuesta_403(detalle, request)
 
 
 def _respuesta_host_rechazado(request: Request) -> Response:
@@ -245,20 +261,38 @@ def _respuesta_host_rechazado(request: Request) -> Response:
     falta una URL completa como con `base_url`)."""
     host = request.headers.get("host", "")
     detalle = (
-        f"Host no permitido: «{host}». Este servidor solo acepta peticiones "
-        "dirigidas a localhost, a una IP de su red, al dominio de BASE_URL o a "
-        "un nombre de ALLOWED_HOSTS. Si entras por el nombre del equipo (por "
-        "ejemplo «raspberrypi.local»), añádelo a ALLOWED_HOSTS en el .env."
+        f"Host no permitido: «{html.escape(host)}». Este servidor solo acepta "
+        "peticiones dirigidas a localhost, a una IP de su red, al dominio de "
+        "BASE_URL o a un nombre de ALLOWED_HOSTS. Si entras por el nombre del "
+        "equipo (por ejemplo «raspberrypi.local»), añádelo a ALLOWED_HOSTS en el .env."
     )
-    if request.url.path.startswith("/api/"):
-        return JSONResponse(status_code=403, content={"detail": detalle})
-    return Response(detalle, status_code=403)
+    return _respuesta_403(detalle, request)
 
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, _PBKDF2_ITERATIONS)
     return f"pbkdf2_sha256${_PBKDF2_ITERATIONS}${salt.hex()}${digest.hex()}"
+
+
+async def hash_password_async(password: str) -> str:
+    """`hash_password` es CPU-bound (PBKDF2): corre en el ejecutor propio para no
+    bloquear el bucle de eventos — mismo criterio que `verify_password`."""
+    loop = asyncio.get_running_loop()
+    async with _pbkdf2_sem:
+        return await loop.run_in_executor(_ejecutor_pbkdf2(), hash_password, password)
+
+
+def necesita_rehash(stored: str) -> bool:
+    """True si el hash guardado se calculó con MENOS iteraciones que las actuales
+    (p. ej. uno de antes de subir el contador). Se rehashea al iniciar sesión,
+    cuando ya se tiene la contraseña en claro — y SIN tocar
+    `auth_session_version`: subir iteraciones no debe cerrar sesiones."""
+    try:
+        _, iterations, _, _ = stored.split("$")
+        return int(iterations) < _PBKDF2_ITERATIONS
+    except (ValueError, AttributeError):
+        return False
 
 
 async def verify_password(password: str, stored: str) -> bool:
@@ -347,19 +381,29 @@ def verify_token(token: str, secret: str) -> str | None:
     return payload if hmac.compare_digest(mac, expected) else None
 
 
-def crear_cookie_sesion(secret: str) -> str:
-    return sign_token(str(int(time.time())), secret)
+def crear_cookie_sesion(secret: str, version: int = 0) -> str:
+    """Payload `emitida_en.version`, firmado con `secret`.
+
+    La versión ata la cookie al estado de las credenciales: al cambiarlas sube y
+    las cookies emitidas antes dejan de valer. Una cookie del formato viejo (solo
+    el timestamp, sin versión) tampoco vale — fuerza un inicio de sesión nuevo."""
+    return sign_token(f"{int(time.time())}.{version}", secret)
 
 
-def sesion_valida(token: str | None, secret: str) -> bool:
+def sesion_valida(token: str | None, secret: str, version_actual: int = 0) -> bool:
     if not token or not secret:
         return False
     payload = verify_token(token, secret)
     if payload is None:
         return False
     try:
-        emitida_en = int(payload)
+        emitida_en_str, _, version_str = payload.partition(".")
+        emitida_en = int(emitida_en_str)
+        version = int(version_str)
     except ValueError:
+        # Formato viejo (sin versión) o corrupto.
+        return False
+    if version != version_actual:
         return False
     return (time.time() - emitida_en) < SESSION_MAX_AGE
 
@@ -421,7 +465,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if path in _RUTAS_EXENTAS or path.startswith(_PREFIJOS_EXENTOS):
             return await call_next(request)
 
-        if sesion_valida(request.cookies.get(COOKIE_NAME), settings.secret_key):
+        if sesion_valida(request.cookies.get(COOKIE_NAME), settings.secret_key,
+                         settings.auth_session_version):
             return await call_next(request)
         if await _basic_auth_valido(request, settings):
             return await call_next(request)
