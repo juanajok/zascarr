@@ -131,12 +131,15 @@ _valor_del_env() {
     printf '%s' "${valor}"
 }
 
-# Deja el resultado en VALOR_VAR y el origen en ORIGEN_VAR: "compose"
-# (autoridad: es lo que ve la app) o "env" (lector de reserva, incierto). La
-# diferencia importa para la red de seguridad de más abajo: con la autoridad, una
-# ruta que no existe significa «no había nada»; con la reserva, «no sé qué hay
-# ahí». Se usan globales y NO `$( )` porque una sustitución de comando corre en
-# un subshell y perdería ORIGEN_VAR.
+# Deja el resultado en VALOR_VAR y el origen en ORIGEN_VAR:
+#   - "compose": lo dijo Compose (autoridad, es lo que ve la app);
+#   - "defecto": no está en el `.env` ni en el entorno, así que se usa el valor
+#     por defecto del compose — con Compose respondiendo, es igual de fiable;
+#   - "env": lo leyó el lector de reserva con Compose caído (incierto).
+# La diferencia importa para la red de seguridad de más abajo: con autoridad o
+# defecto, una ruta que no existe significa «no había nada»; con la reserva, «no
+# sé qué hay ahí». Se usan globales y NO `$( )` porque una sustitución de comando
+# corre en un subshell y perdería ORIGEN_VAR.
 ORIGEN_VAR=""
 VALOR_VAR=""
 resolver_var_ruta() {
@@ -149,7 +152,16 @@ resolver_var_ruta() {
         ORIGEN_VAR="compose"
     else
         valor="$(_valor_del_env "${nombre}" || true)"
-        ORIGEN_VAR="env"
+        if [[ -n "${valor}" ]]; then
+            ORIGEN_VAR="env"
+        elif [[ -n "$(_entorno_compose)" ]]; then
+            # Ni en el .env ni en el entorno: se cae al valor por defecto del
+            # compose. Si Compose respondió, ese defecto es tan fiable como su
+            # respuesta — no es el caso incierto de la reserva.
+            ORIGEN_VAR="defecto"
+        else
+            ORIGEN_VAR="env"
+        fi
     fi
     VALOR_VAR="${valor:-${por_defecto}}"
 }
@@ -233,20 +245,19 @@ if $PURGE; then
 
     # Red de seguridad independiente del lector: si la ruta resuelta no es una
     # carpeta que exista, NO se purga nada. Distingue el ORIGEN del valor:
-    #   - resuelto por Compose (autoridad, es lo que ve la app): que no exista
-    #     significa «no había nada que purgar» → se avisa y se sigue con el
-    #     resto de la desinstalación (idempotencia: si ya lo borraste a mano, el
+    #   - "compose" o "defecto" (autoridad): que no exista significa «no había
+    #     nada que purgar» → se avisa y se sigue con el resto de la
+    #     desinstalación (idempotencia: si ya lo borraste a mano, el
     #     desinstalador tiene que poder terminar).
-    #   - resuelto por el lector de reserva (incierto): aquí sí se falla
+    #   - "env" (lector de reserva, con Compose caído): aquí sí se falla
     #     cerrado, porque no se sabe qué hay en esa ruta.
     PURGE_SIN_DATOS=false
     if [[ ! -d "${RESOLVED_DATA}" ]]; then
-        if [[ "${ORIGEN_DATA}" == "compose" ]]; then
-            warn "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') no existe: no había nada que purgar."
-            PURGE_SIN_DATOS=true
-        else
+        if [[ "${ORIGEN_DATA}" == "env" ]]; then
             die "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}' (leído del .env, sin poder confirmarlo con Docker), que no es una carpeta existente — me niego a hacer --purge. Revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
         fi
+        warn "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') no existe: no había nada que purgar."
+        PURGE_SIN_DATOS=true
     fi
 
     # `motivo_solapamiento` (de _rutas.sh): misma ruta, mismo inodo por bind
