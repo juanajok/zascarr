@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
-from zascarr.services.auth import hash_password
+from zascarr.services.auth import hash_password_async
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.web.routes import crear_templates
 
@@ -234,8 +234,18 @@ async def guardar_seguridad(
         })
 
     updates: dict = {"auth_mode": auth_mode, "auth_username": auth_username, "base_url": base_url.rstrip("/")}
+    # Cambiar contraseña, usuario o modo sube la versión de sesión: las cookies
+    # emitidas antes dejan de valer (antes, cambiar la contraseña no cerraba las
+    # sesiones abiertas). El rehasheo por iteraciones NO sube la versión.
+    cambia_credenciales = (
+        auth_mode != settings.auth_mode
+        or auth_username != settings.auth_username
+        or bool(auth_password)
+    )
     if auth_password:
-        updates["auth_password_hash"] = hash_password(auth_password)
+        updates["auth_password_hash"] = await hash_password_async(auth_password)
+    if cambia_credenciales:
+        updates["auth_session_version"] = settings.auth_session_version + 1
     await RuntimeSettingsService(db).save(updates)
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Seguridad"})
 

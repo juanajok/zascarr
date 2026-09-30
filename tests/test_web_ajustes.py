@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.main import app
+from zascarr.services.auth import hash_password
 
 
 class FakeSession:
@@ -136,6 +137,59 @@ class TestGuardarSeguridad:
         client = TestClient(app)
         r = client.post("/ui/ajustes/guardar/seguridad", data={"auth_mode": "lo-que-sea"})
         assert r.status_code == 400
+
+    # ── auth_session_version (ficha de seguridad) ─────────────────────
+    def _post_seguridad(self, **campos):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            client = TestClient(app)
+            return client.post("/ui/ajustes/guardar/seguridad", data={
+                "auth_mode": "password", "auth_username": "", "auth_password": "",
+                "base_url": "", **campos,
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+    def _estado_previo(self, *, auth_mode="none", auth_username="", version=3):
+        # `auth_mode="none"` para que el middleware deje pasar el POST (con
+        # contraseña activa redirige a /login y el TestClient seguiría el 303).
+        get_settings().auth_mode = auth_mode
+        get_settings().auth_username = auth_username
+        get_settings().auth_password_hash = hash_password("vieja")
+        get_settings().auth_session_version = version
+
+    def test_cambiar_la_contrasena_sube_la_version_de_sesion(self, restaurar_settings):
+        """Antes, cambiar la contraseña no cerraba las sesiones abiertas."""
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="none", auth_password="nueva")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+
+    def test_cambiar_el_usuario_sube_la_version(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="none", auth_username="juanjo")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+
+    def test_cambiar_el_modo_sube_la_version(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="password", auth_password="nueva")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+
+    def test_guardar_sin_cambios_no_sube_la_version(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="none")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 3
 
 
 class TestProbar:

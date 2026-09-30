@@ -177,6 +177,22 @@ Verificado en el código (`main` en `7f6f637`):
   (`apply_overrides` lo omite): si un guardado previo de Ajustes dejó
   `base_url=""`, la vía de recuperación del `.env` seguiría funcionando.
 
+**Segunda revisión (2026-09-29):**
+
+- Borrar `base_url` desde Ajustes **no se aplicaba hasta reiniciar**: `apply_overrides`
+  lo saltaba y dejaba el valor anterior en memoria (y Ajustes decía «guardado y
+  aplicado, sin reiniciar»). Ahora se **restaura la copia del `.env`** tomada al
+  arrancar (`capturar_valores_base()` en el `lifespan`), no se ignora.
+- Los 403 llevan `Content-Type: text/plain; charset=utf-8` y
+  `X-Content-Type-Options: nosniff`, y los valores reflejados van escapados con
+  `html.escape` (HTMX intercambia el cuerpo como `innerHTML` aunque sea
+  `text/plain`).
+- **El 403 se ve con HTMX:** verificado en el `htmx.min.js` vendorizado (v4.0.0,
+  `noSwap:[204,304]`) — los 4xx **sí** se intercambian en el `hx-target`, y no hay
+  ningún `hx-status` que lo desactive, así que el texto llega a
+  `#resultado-seguridad`. No se pudo comprobar en un navegador real desde este
+  entorno.
+
 ### 2. Autenticación en pasos
 
 - **Paso 1 — `to_thread` y bytes UTF-8.** `verify_password` (PBKDF2) corre en
@@ -204,6 +220,29 @@ Verificado en el código (`main` en `7f6f637`):
 - **Corregir `next`:** codificar `next` en el redirect del middleware
   (`urllib.parse.quote`), manteniendo la guarda anti open-redirect de
   `_next_seguro` que ya existe.
+
+**Implementado (2026-09-29) — `auth_session_version`:**
+
+- Vive como `secret_key`: campo interno de `runtime_settings`
+  (`_CAMPOS_INTERNOS`), **sin migración**; por defecto 0 y se aplica al arrancar
+  con `load_overrides_at_startup`.
+- **Sube** al cambiar la contraseña (se escribe una nueva), el nombre de usuario
+  o el modo de autenticación. **No sube** en el rehasheo por iteraciones ni al
+  guardar sin cambios.
+- La cookie pasa a ser `sign_token(f"{emitida_en}.{version}", secret)`; una
+  cookie del formato anterior (solo el timestamp) ya no vale — cierre de sesión
+  único, anotado en el CHANGELOG.
+- El rehasheo (260.000 → las iteraciones actuales) se hace **solo en `/login`**,
+  tras validar la contraseña, con `hash_password_async` en el ejecutor propio.
+  `guardar_seguridad` también hashea con el ejecutor, no en el bucle de eventos.
+- Pruebas: el rehasheo no invalida la sesión; cambiar contraseña/usuario/modo sí;
+  dos logins simultáneos que rehashean no se pisan (la versión no se toca, el
+  hash final valida la misma contraseña).
+
+**Pendiente de la ficha:** subir a `600_000` (va en el último commit, cuando
+retraso/caché/tope estén), el retraso progresivo, la caché de Basic y el tope de
+espera con 429 (los rechazos por el tope **no** cuentan como intento fallido).
+Falta medir el tiempo real de PBKDF2 en la Pi.
 
 ### 3. Comprobación real de dependencias (respuesta al check rojo)
 

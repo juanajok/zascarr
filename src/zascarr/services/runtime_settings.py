@@ -63,17 +63,32 @@ SECRET_FIELDS = {
     "comicvine_api_key", "prowlarr_api_key", "transmission_password",
     "amule_password", "auth_password_hash", "webhook_token",
 }
-# Campos donde un valor vacío guardado en la BD significa "no lo he fijado
-# desde la UI": se deja el valor del `.env`/por defecto. `base_url` es el caso
-# que importa — es la vía de recuperación si el middleware de seguridad da 403
-# y Ajustes es inalcanzable, así que un `base_url=""` en la BD no puede pisar el
-# `BASE_URL` del `.env`.
-_VACIOS_QUE_NO_PISAN = {"base_url"}
+# Campos donde un valor vacío guardado en la BD significa "vuelve al valor del
+# `.env`" en vez de "pisa con vacío". `base_url` es el caso que importa — es la
+# vía de recuperación si el middleware de seguridad da 403 y Ajustes es
+# inalcanzable, así que un `base_url=""` en la BD no puede pisar el `BASE_URL`
+# del `.env`; y borrarlo desde Ajustes debe aplicar de verdad (volver a `.env`),
+# no dejar el valor anterior en memoria.
+_VACIOS_QUE_VUELVEN_AL_ENV = {"base_url"}
+# Valor del `.env` (antes de cualquier override) de esos campos, tomado al
+# arrancar. Se rellena en `capturar_valores_base()`.
+_VALORES_BASE: dict[str, Any] = {}
+
+
+def capturar_valores_base() -> None:
+    """Guarda el valor del `.env` de los campos de `_VACIOS_QUE_VUELVEN_AL_ENV`
+    ANTES de aplicar overrides — se llama desde el `lifespan` justo antes de
+    `load_overrides_at_startup()`. Si no se capturó (tests, o una llamada suelta
+    a `apply_overrides`), se captura de forma perezosa en la primera
+    aplicación."""
+    settings = get_settings()
+    for campo in _VACIOS_QUE_VUELVEN_AL_ENV:
+        _VALORES_BASE.setdefault(campo, getattr(settings, campo, ""))
 # secret_key (A6) firma la cookie de sesión — nunca aparece en el
 # formulario de /ui/ajustes (no está en ningún grupo de OVERRIDABLE_
 # FIELDS de arriba), pero SÍ debe pasar por apply_overrides() como los
 # demás, así que se añade a la lista blanca por separado.
-_CAMPOS_INTERNOS = {"secret_key"}
+_CAMPOS_INTERNOS = {"secret_key", "auth_session_version"}
 _ALL_FIELDS = (
     {campo for campos in OVERRIDABLE_FIELDS.values() for campo in campos} | _CAMPOS_INTERNOS
 )
@@ -159,16 +174,20 @@ class RuntimeSettingsService:
 def apply_overrides(values: dict[str, Any]) -> None:
     """Muta el Settings ya cacheado — ver docstring del módulo.
 
-    `base_url` con valor vacío en la BD **no pisa** el del `.env`: es la vía de
-    recuperación cuando el middleware de seguridad da 403 y Ajustes es
-    inalcanzable. Si un guardado previo dejó `base_url=""` en la BD, el
-    `BASE_URL` del `.env` sigue valiendo."""
+    Un valor vacío en la BD para un campo de `_VACIOS_QUE_VUELVEN_AL_ENV`
+    **restaura el valor del `.env`** en vez de pisarlo con vacío: así borrar
+    `base_url` desde Ajustes se aplica de verdad (vuelve al `.env`), y no puede
+    dejar bloqueado a quien depende del `BASE_URL` del `.env` para recuperar el
+    acceso."""
     settings = get_settings()
     for key, value in values.items():
         if key not in _ALL_FIELDS:
             continue
-        if key in _VACIOS_QUE_NO_PISAN and value == "":
-            continue
+        if key in _VACIOS_QUE_VUELVEN_AL_ENV:
+            _VALORES_BASE.setdefault(key, getattr(settings, key, ""))
+            if value == "":
+                setattr(settings, key, _VALORES_BASE[key])
+                continue
         setattr(settings, key, value)
 
 

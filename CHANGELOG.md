@@ -5,6 +5,21 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Seguridad
+
+- **La cookie de sesión lleva ahora firmada una `auth_session_version`.** Sube al
+  cambiar la contraseña, el nombre de usuario o el modo de autenticación, así
+  que **cambiar la contraseña cierra de verdad las sesiones abiertas** (antes
+  una cookie emitida seguía valiendo hasta 30 días). El rehasheo automático al
+  subir las iteraciones de PBKDF2 **no** invalida sesiones.
+- **Al actualizar tendrás que iniciar sesión una vez**: las cookies del formato
+  anterior (sin versión) dejan de valer. Es un cierre de sesión, no una pérdida
+  de datos.
+- **PBKDF2 ya no bloquea la aplicación**: corre en un ejecutor propio (2 hilos,
+  acotado), y el nombre de usuario se compara en bytes UTF-8 (un nombre con
+  tilde o `ñ` daba error). Se rehashea la contraseña al iniciar sesión si venía
+  de un contador de iteraciones anterior.
+
 ### Cambiado (rompe scripts que llamen a la UI sin `Origin`)
 
 - **Los `POST`/`PUT`/`PATCH`/`DELETE` a `/ui/*` sin cabecera `Origin` (ni

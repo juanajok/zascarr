@@ -39,12 +39,18 @@ def restaurar_settings():
     """Los tests que llaman a save()/apply_overrides() mutan el Settings
     real (get_settings() está @lru_cache, es el mismo objeto siempre).
     Se restauran los campos overridables al valor de antes del test."""
-    from zascarr.services.runtime_settings import _ALL_FIELDS
+    from zascarr.services.runtime_settings import _ALL_FIELDS, _VALORES_BASE
     s = get_settings()
     originales = {campo: getattr(s, campo) for campo in _ALL_FIELDS}
+    # El "valor del .env" capturado es estado de módulo: se vacía para que cada
+    # test capture el suyo y no herede el de otro.
+    base_previos = dict(_VALORES_BASE)
+    _VALORES_BASE.clear()
     yield
     for campo, valor in originales.items():
         setattr(s, campo, valor)
+    _VALORES_BASE.clear()
+    _VALORES_BASE.update(base_previos)
 
 
 class TestGetOverrides:
@@ -150,7 +156,8 @@ class TestFlags:
 class TestBaseUrlRecuperacion:
     """El `base_url` vacío en la BD no puede pisar el `BASE_URL` del `.env`: es la
     vía de recuperación si el middleware de seguridad da 403 y Ajustes es
-    inalcanzable."""
+    inalcanzable. Y borrarlo desde Ajustes debe aplicar de verdad (volver al
+    `.env`), no quedarse el valor anterior en memoria."""
 
     def test_base_url_vacio_en_bd_no_pisa_el_del_env(self, restaurar_settings):
         get_settings().base_url = "https://env.example"
@@ -165,3 +172,15 @@ class TestBaseUrlRecuperacion:
         apply_overrides({"base_url": "https://ajustes.example"})
 
         assert get_settings().base_url == "https://ajustes.example"
+
+    def test_borrar_base_url_desde_ajustes_vuelve_al_env(self, restaurar_settings):
+        """.env = A, override = B, override vacío → vuelve a A (sin reiniciar)."""
+        from zascarr.services.runtime_settings import capturar_valores_base
+        get_settings().base_url = "https://env.example"
+        capturar_valores_base()   # lo que hace el lifespan antes de los overrides
+
+        apply_overrides({"base_url": "https://ajustes.example"})
+        assert get_settings().base_url == "https://ajustes.example"
+
+        apply_overrides({"base_url": ""})
+        assert get_settings().base_url == "https://env.example"
