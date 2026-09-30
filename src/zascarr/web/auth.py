@@ -69,6 +69,13 @@ async def login_submit(
 ) -> HTMLResponse:
     next = _next_seguro(next)
     settings = get_settings()
+    # Lecturas ANTES de cualquier await: la cookie se sella con la versión con la
+    # que se VALIDÓ. Si no, cambiar la contraseña justo durante el rehasheo (que
+    # tarda cientos de ms) dejaría viva una sesión abierta con la contraseña
+    # vieja, ya con la versión nueva.
+    version_validada = settings.auth_session_version
+    hash_validado = settings.auth_password_hash
+
     if not await credenciales_validas(username, password, settings):
         return templates.TemplateResponse(request, "login.html", {
             "next": next,
@@ -79,15 +86,18 @@ async def login_submit(
     # Rehasheo oportunista (p. ej. tras subir las iteraciones de PBKDF2): aquí es
     # donde hay contraseña en claro y ya validada. Se calcula en el ejecutor
     # propio (no bloquea el bucle de eventos) y NO toca `auth_session_version`:
-    # subir iteraciones no debe cerrar las sesiones abiertas.
-    if necesita_rehash(settings.auth_password_hash):
+    # subir iteraciones no debe cerrar las sesiones abiertas. Solo se escribe si
+    # el hash guardado sigue siendo el que se validó — si el dueño cambió la
+    # contraseña en el hueco, no se revierte su cambio.
+    if necesita_rehash(hash_validado) and settings.auth_password_hash == hash_validado:
         nuevo_hash = await hash_password_async(password)
-        await RuntimeSettingsService(db).save({"auth_password_hash": nuevo_hash})
+        if settings.auth_password_hash == hash_validado:
+            await RuntimeSettingsService(db).save({"auth_password_hash": nuevo_hash})
 
     respuesta = RedirectResponse(next, status_code=303)
     respuesta.set_cookie(
         COOKIE_NAME,
-        crear_cookie_sesion(settings.secret_key, settings.auth_session_version),
+        crear_cookie_sesion(settings.secret_key, version_validada),
         max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
     )
     return respuesta

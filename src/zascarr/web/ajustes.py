@@ -21,7 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
-from zascarr.services.auth import hash_password_async
+from zascarr.services.auth import (
+    COOKIE_NAME,
+    SESSION_MAX_AGE,
+    crear_cookie_sesion,
+    hash_password_async,
+)
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.web.routes import crear_templates
 
@@ -247,7 +252,19 @@ async def guardar_seguridad(
     if cambia_credenciales:
         updates["auth_session_version"] = settings.auth_session_version + 1
     await RuntimeSettingsService(db).save(updates)
-    return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Seguridad"})
+
+    respuesta = templates.TemplateResponse(
+        request, "_ajustes_guardado.html", {"nombre": "Seguridad"})
+    if cambia_credenciales:
+        # Re-emite la cookie con la versión nueva: quien cambia la contraseña
+        # conserva SU sesión (las demás se cierran). Sin esto, su siguiente clic
+        # le llevaría a /login sin explicación.
+        cookie = crear_cookie_sesion(settings.secret_key, settings.auth_session_version)
+        respuesta.set_cookie(
+            COOKIE_NAME, cookie,
+            max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
+        )
+    return respuesta
 
 
 # ── Probar conexión: valores DEL FORMULARIO, con fallback al secreto ya

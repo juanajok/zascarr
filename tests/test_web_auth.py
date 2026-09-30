@@ -282,3 +282,43 @@ class TestRehasheoYSesion:
         assert await verify_password("secreta123", nuevo) is True
         for r in resultados:
             assert sesion_valida(r.cookies[COOKIE_NAME], "clave-de-prueba", 0) is True
+
+    @pytest.mark.asyncio
+    async def test_cambio_de_contrasena_durante_el_rehasheo_no_resucita_la_sesion(
+            self, _settings_password, db_fake, monkeypatch):
+        """Carrera entre validar y emitir la cookie: si el dueño cambia la
+        contraseña mientras se rehashea, la cookie NO debe sellarse con la versión
+        nueva (esta sesión validó con la vieja) y el rehasheo no debe revertir el
+        cambio."""
+        from zascarr.services.auth import hash_password, hash_password_async, sesion_valida
+
+        viejo = _hash_con_iteraciones("vieja", 1000)
+        nuevo = hash_password("nueva")
+        get_settings().auth_password_hash = viejo
+        get_settings().auth_session_version = 0
+
+        real = hash_password_async
+
+        async def espia(password):
+            # El dueño guarda una contraseña nueva justo en el hueco del rehasheo.
+            db_fake.fila.values = {
+                **db_fake.fila.values,
+                "auth_password_hash": nuevo, "auth_session_version": 1,
+            }
+            get_settings().auth_password_hash = nuevo
+            get_settings().auth_session_version = 1
+            return await real(password)
+
+        monkeypatch.setattr("zascarr.web.auth.hash_password_async", espia)
+        client = TestClient(app, follow_redirects=False)
+
+        r = client.post("/login", data={"password": "vieja", "next": "/ui/"})
+
+        assert r.status_code == 303
+        # La cookie se selló con la versión con la que se VALIDÓ (0): no vale con
+        # la versión vigente (1), así que esa sesión no resucita.
+        cookie = r.cookies[COOKIE_NAME]
+        assert sesion_valida(cookie, "clave-de-prueba", 0) is True
+        assert sesion_valida(cookie, "clave-de-prueba", 1) is False
+        # El hash nuevo del dueño sobrevive: el rehasheo no lo pisó.
+        assert db_fake.fila.values["auth_password_hash"] == nuevo

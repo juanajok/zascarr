@@ -191,6 +191,30 @@ class TestGuardarSeguridad:
         assert r.status_code == 200
         assert get_settings().auth_session_version == 3
 
+    def test_cambiar_la_contrasena_reemite_la_cookie_con_la_version_nueva(self, restaurar_settings):
+        """Quien cambia la contraseña conserva SU sesión; sin re-emitir la cookie,
+        su siguiente clic le llevaría a /login sin explicación."""
+        from zascarr.services.auth import COOKIE_NAME, sesion_valida
+        self._estado_previo(auth_mode="none")
+        get_settings().secret_key = "clave-de-prueba"
+
+        r = self._post_seguridad(auth_mode="none", auth_password="nueva")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+        cookie = r.cookies[COOKIE_NAME]
+        assert sesion_valida(cookie, "clave-de-prueba", 4) is True
+
+    def test_guardar_sin_cambios_no_reemite_cookie(self, restaurar_settings):
+        from zascarr.services.auth import COOKIE_NAME
+        self._estado_previo(auth_mode="none")
+        get_settings().secret_key = "clave-de-prueba"
+
+        r = self._post_seguridad(auth_mode="none")
+
+        assert r.status_code == 200
+        assert COOKIE_NAME not in r.cookies
+
 
 class TestProbar:
 
