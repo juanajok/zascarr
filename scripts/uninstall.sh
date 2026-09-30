@@ -30,6 +30,10 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_comun.sh"
+# A9: `resolver_ruta` (con detección de symlinks rotos y comprobación
+# fichero/carpeta) y `motivo_solapamiento` (misma ruta, mismo inodo por bind
+# mount, anidamiento por componentes). No se reimplementan aquí.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_rutas.sh"
 
 PURGE=false
 for arg in "$@"; do
@@ -80,22 +84,58 @@ docker compose version >/dev/null 2>&1 || die \
 # versión de este endurecimiento seguía sin aplicarle a HOST_LIBRARY_DIR
 # el mismo valor por defecto que docker-compose.yml (/media/library) — con
 # un .env ausente o sin esa clave, RESOLVED_LIBRARY quedaba vacío y
-# se_solapan() se saltaba la protección de biblioteca en silencio, justo
-# el estado que este script dice admitir. Ahora las CUATRO rutas
+# la comprobación de solapamiento se saltaba la protección de biblioteca en
+# silencio, justo el estado que este script dice admitir. Ahora las CUATRO rutas
 # (ZASCARR_DATA_DIR y las tres HOST_*) se resuelven con la MISMA
 # precedencia que usa "docker compose" al interpolar el compose file:
 # variable YA exportada en la shell (puede contradecir al .env, y sigue
 # ganando ella) > valor del .env > valor por defecto del propio
 # docker-compose.yml. Nunca una ruta a medio determinar.
+#
+# En vez de reimplementar el parser de Compose (comillas, comentario en línea,
+# `export`, CRLF… cada uno daba una ruta distinta a la que ve la app), se le
+# pregunta a Compose: `config --environment` imprime el entorno ya resuelto, con
+# la misma precedencia que la interpolación. El lector propio queda de RESERVA
+# para cuando Compose no pueda responder (un .env a medias o Docker caído).
+_ENTORNO_COMPOSE=""
+
+_entorno_compose() {
+    if [[ -z "${_ENTORNO_COMPOSE}" ]]; then
+        _ENTORNO_COMPOSE="$("${COMPOSE[@]}" config --environment 2>/dev/null || true)"
+    fi
+    printf '%s' "${_ENTORNO_COMPOSE}"
+}
+
+# Reserva: interpreta el .env a mano para los cuatro casos que Compose sí
+# resuelve — comillas envolventes, comentario en línea (solo sin comillas),
+# `export` y finales CRLF.
+_valor_del_env() {
+    local nombre="$1" linea valor
+    [[ -f "${ENV_FILE}" ]] || return 1
+    linea="$(grep -m1 -E "^[[:space:]]*(export[[:space:]]+)?${nombre}=" "${ENV_FILE}" || true)"
+    [[ -n "${linea}" ]] || return 1
+    valor="${linea#*"${nombre}"=}"
+    valor="${valor%$'\r'}"                    # CRLF
+    if [[ "${valor}" == \"* ]]; then
+        valor="${valor#\"}"; valor="${valor%%\"*}"
+    elif [[ "${valor}" == \'* ]]; then
+        valor="${valor#\'}"; valor="${valor%%\'*}"
+    else
+        valor="${valor%%#*}"                  # comentario en línea
+    fi
+    valor="${valor#"${valor%%[![:space:]]*}"}"   # sin espacios a la izquierda
+    valor="${valor%"${valor##*[![:space:]]}"}"   # sin espacios a la derecha
+    printf '%s' "${valor}"
+}
+
 resolver_var_ruta() {
     # $1 = nombre de la variable/clave (p.ej. HOST_LIBRARY_DIR)
     # $2 = valor por defecto (el mismo que docker-compose.yml declara)
     local nombre="$1" por_defecto="$2" valor=""
-    if [[ -n "${!nombre+x}" ]]; then
-        valor="${!nombre}"
-    fi
-    if [[ -z "${valor}" && -f "${ENV_FILE}" ]]; then
-        valor="$(grep -m1 "^${nombre}=" "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
+    valor="$(printf '%s\n' "$(_entorno_compose)" \
+        | grep -m1 "^${nombre}=" | cut -d= -f2- || true)"
+    if [[ -z "${valor}" ]]; then
+        valor="$(_valor_del_env "${nombre}" || true)"
     fi
     printf '%s' "${valor:-${por_defecto}}"
 }
@@ -113,13 +153,11 @@ DATA_DIR="$(resolver_var_ruta ZASCARR_DATA_DIR /var/lib/zascarr)"
 # descargas por una mala edición manual del .env. Se resuelve la ruta REAL
 # (symlinks, "..", relativas) y se rechazan los casos obvios ANTES de
 # construir ningún "rm -rf", nunca confiando en que "eso no va a pasar".
-resolver_ruta() {
-    # readlink -f resuelve todo lo que pueda aunque el destino final no
-    # exista todavía (mismo idioma que _comun.sh ya usa para el symlink de
-    # .env) — hace falta para detectar solapamientos incluso contra una
-    # carpeta que el usuario nunca llegó a crear.
-    readlink -f -- "$1" 2>/dev/null || printf '%s' "$1"
-}
+#
+# La resolución y el solapamiento vienen de `_rutas.sh` (A9): detecta symlinks
+# rotos componente a componente, comprueba que el ancestro existente sea carpeta,
+# y ve el mismo inodo por bind mount además del anidamiento por componentes. La
+# versión local anterior (`readlink -f` + prefijo de texto) no veía nada de eso.
 
 RUTAS_SISTEMA_PROHIBIDAS=(/ /root /home /etc /var /usr /bin /sbin /boot /proc /sys /dev /lib /lib64 /opt /tmp)
 
@@ -131,31 +169,22 @@ es_ruta_del_sistema() {
     return 1
 }
 
-# ¿"$1" es la misma ruta que "$2", o una está dentro de la otra? Cualquiera
-# de los dos sentidos es peligroso: si ZASCARR_DATA_DIR quedara dentro de
-# la biblioteca, o la biblioteca dentro de ZASCARR_DATA_DIR, un "rm -rf" de
-# subcarpetas con nombre fijo (postgres/redis/covers/vpn-state) podría
-# coincidir con carpetas reales del coleccionista.
-se_solapan() {
-    local a="$1" b="$2"
-    [[ -z "${a}" || -z "${b}" ]] && return 1
-    [[ "${a}" == "${b}" ]] && return 0
-    [[ "${a}" == "${b}/"* ]] && return 0
-    [[ "${b}" == "${a}/"* ]] && return 0
-    return 1
-}
-
-RESOLVED_DATA="$(resolver_ruta "${DATA_DIR}")"
-RESOLVED_LIBRARY="$(resolver_ruta "${LIBRARY_DIR}")"
-RESOLVED_DOWNLOADS="$(resolver_ruta "${DOWNLOADS_DIR}")"
-RESOLVED_AMULE="$(resolver_ruta "${AMULE_DIR}")"
+# `resolver_ruta` (de _rutas.sh) devuelve 1 con el motivo por stderr si no puede
+# resolver: aquí se falla cerrado, no se sigue con una ruta a medias.
+RESOLVED_DATA="$(resolver_ruta "${DATA_DIR}")" || die \
+    "No pude resolver ZASCARR_DATA_DIR ('${DATA_DIR}') — me niego a seguir sin saber qué voy a borrar."
+RESOLVED_LIBRARY="$(resolver_ruta "${LIBRARY_DIR}")" || die \
+    "No pude resolver HOST_LIBRARY_DIR ('${LIBRARY_DIR}') — me niego a seguir sin poder comprobar que no se solapa con tu biblioteca."
+RESOLVED_DOWNLOADS="$(resolver_ruta "${DOWNLOADS_DIR}")" || die \
+    "No pude resolver HOST_DOWNLOADS_DIR ('${DOWNLOADS_DIR}') — me niego a seguir sin poder comprobar que no se solapa con tus descargas."
+RESOLVED_AMULE="$(resolver_ruta "${AMULE_DIR}")" || die \
+    "No pude resolver HOST_AMULE_INCOMING_DIR ('${AMULE_DIR}') — me niego a seguir sin poder comprobar que no se solapa con la carpeta de aMule."
 
 if $PURGE; then
     # Fallar cerrado, no abierto: con los valores por defecto de arriba
     # ninguna de estas cuatro debería poder quedar vacía nunca — pero si
     # algún cambio futuro rompiera esa garantía, mejor abortar aquí que
-    # seguir con se_solapan() saltándose la comprobación en silencio
-    # (se_solapan devuelve "no hay solape" ante una cadena vacía).
+    # seguir con una comprobación de solapamiento sobre cadenas vacías.
     [[ -n "${RESOLVED_DATA}" ]] || die \
         "No he podido determinar ZASCARR_DATA_DIR de forma inequívoca — me niego a hacer --purge sin saber qué voy a borrar."
     [[ -n "${RESOLVED_LIBRARY}" ]] || die \
@@ -167,14 +196,26 @@ if $PURGE; then
 
     es_ruta_del_sistema "${RESOLVED_DATA}" && die \
         "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}', una carpeta del sistema — me niego a tocar ahí. Revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
-    if se_solapan "${RESOLVED_DATA}" "${RESOLVED_LIBRARY}"; then
-        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') se solapa con tu biblioteca ('${RESOLVED_LIBRARY}') — me niego a borrar ahí. Revisa HOST_LIBRARY_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+
+    # Red de seguridad independiente del lector: si la ruta resuelta no es una
+    # carpeta que exista, NO se purga nada. Es lo que convierte cualquier
+    # desajuste de interpretación del .env (comillas, comentario, export, CRLF,
+    # o uno que no se haya previsto) en un aviso claro en vez de un «borrado»
+    # en vacío. Si ya lo borraste a mano, tampoco hay nada que purgar.
+    if [[ ! -d "${RESOLVED_DATA}" ]]; then
+        die "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}', que no es una carpeta existente — me niego a hacer --purge. Si ya borraste esos datos a mano, no hay nada que purgar; si no, revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
     fi
-    if se_solapan "${RESOLVED_DATA}" "${RESOLVED_DOWNLOADS}"; then
-        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') se solapa con tus descargas ('${RESOLVED_DOWNLOADS}') — me niego a borrar ahí. Revisa HOST_DOWNLOADS_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+
+    # `motivo_solapamiento` (de _rutas.sh): misma ruta, mismo inodo por bind
+    # mount, o anidamiento por componentes.
+    if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_LIBRARY}")"; then
+        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y tu biblioteca ('${RESOLVED_LIBRARY}'): ${motivo} — me niego a borrar ahí. Revisa HOST_LIBRARY_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
     fi
-    if se_solapan "${RESOLVED_DATA}" "${RESOLVED_AMULE}"; then
-        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') se solapa con la carpeta de aMule ('${RESOLVED_AMULE}') — me niego a borrar ahí. Revisa HOST_AMULE_INCOMING_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+    if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_DOWNLOADS}")"; then
+        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y tus descargas ('${RESOLVED_DOWNLOADS}'): ${motivo} — me niego a borrar ahí. Revisa HOST_DOWNLOADS_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+    fi
+    if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_AMULE}")"; then
+        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y la carpeta de aMule ('${RESOLVED_AMULE}'): ${motivo} — me niego a borrar ahí. Revisa HOST_AMULE_INCOMING_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
     fi
 fi
 
@@ -227,7 +268,13 @@ if $PURGE; then
     # ${VAR:?} de guardia: nunca un "rm -rf $VAR/" con VAR vacío por
     # accidente, sobre la ruta ya RESUELTA y VALIDADA arriba, no la cadena
     # cruda del .env.
-    docker run --rm -v "${RESOLVED_DATA:?}:/purgar" postgres:15-alpine \
+    #
+    # La imagen sale del propio docker-compose.yml, no hardcodeada: si el
+    # compose salta de versión de Postgres, el desinstalador purga con la misma
+    # (y sigue estando en caché). El literal queda solo como reserva.
+    IMAGEN_PG="$(awk '/^  postgres:/{f=1; next} f && /image:/{print $2; exit}' "${COMPOSE_FILE}" || true)"
+    [[ -n "${IMAGEN_PG}" ]] || IMAGEN_PG="postgres:15-alpine"
+    docker run --rm -v "${RESOLVED_DATA:?}:/purgar" "${IMAGEN_PG}" \
         sh -c 'rm -rf /purgar/postgres /purgar/redis /purgar/covers /purgar/vpn-state' \
         || true  # el veredicto real es la comprobación de abajo, no el código de salida
 
