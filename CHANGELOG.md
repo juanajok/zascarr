@@ -19,6 +19,17 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   todos los POST incluido el de Ajustes: define `BASE_URL` en el `.env` (o en
   Ajustes) con tu dominio público — el propio `403` te lo dice en español.
 
+### Cambiado (rompe a quien entra por el nombre del equipo)
+
+- **Con `auth_mode="none"`, el middleware valida el `Host` en TODAS las
+  peticiones, no solo en las que cambian estado.** Un ataque de DNS rebinding
+  permite *leer* respuestas (biblioteca, wishlist, ajustes), no solo
+  escribirlas. Se aceptan `localhost`, cualquier IP literal (IPv4 o IPv6) y el
+  host de `BASE_URL`; **un nombre como `raspberrypi.local` o `pi` tiene que
+  estar en `ALLOWED_HOSTS`** — lista separada por comas en el `.env`, por
+  ejemplo `ALLOWED_HOSTS=raspberrypi.local,pi` — o recibirás `403` en todo,
+  lecturas incluidas. El `403` lo dice con el nombre recibido y esta salida.
+
 ## [1.14.0] — 2026-09-26
 
 ### Corregido

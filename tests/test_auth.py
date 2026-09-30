@@ -406,6 +406,60 @@ class TestOrigenHost:
         assert r.status_code == 403
         assert "BASE_URL" in r.text and "proxy" in r.text
 
+    def test_host_ipv6_loopback_se_permite(self, monkeypatch):
+        """`[::1]:8000` no se puede parsear con split(':')."""
+        r = self._cliente(monkeypatch, base_url="http://[::1]:8000").post(
+            "/ui/algo", headers={"Origin": "http://[::1]:8000"})
+        assert r.status_code == 200
+
+    def test_host_ipv6_link_local_se_permite(self, monkeypatch):
+        r = self._cliente(monkeypatch, base_url="http://[fe80::1]:8000").post(
+            "/ui/algo", headers={"Origin": "http://[fe80::1]:8000"})
+        assert r.status_code == 200
+
+    def test_origin_con_puerto_invalido_da_403_no_500(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "http://x:99999"})
+        assert r.status_code == 403
+
+    def test_host_en_allowed_hosts_se_permite(self, monkeypatch):
+        """Quien entra por el nombre de su equipo no debe recibir 403."""
+        settings = get_settings().model_copy(update={
+            "auth_mode": "none", "secret_key": "s",
+            "allowed_hosts": "raspberrypi.local,pi",
+        })
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        client = TestClient(_app_de_prueba(), base_url="http://raspberrypi.local:8000")
+
+        r = client.post("/ui/algo", headers={"Origin": "http://raspberrypi.local:8000"})
+
+        assert r.status_code == 200
+
+    def test_get_con_host_ajeno_se_rechaza(self, monkeypatch):
+        """Rebinding de LECTURA: un GET con Host ajeno también se rechaza (si no,
+        un atacante podría leer biblioteca/wishlist/ajustes)."""
+        r = self._cliente(monkeypatch, base_url="http://atacante.example").get("/ui/algo")
+        assert r.status_code == 403
+
+    def test_el_403_de_host_dice_allowed_hosts(self, monkeypatch):
+        r = self._cliente(monkeypatch, base_url="http://atacante.example").get("/ui/algo")
+        assert r.status_code == 403
+        assert "ALLOWED_HOSTS" in r.text
+
+    def test_same_origin_cubre_el_proxy_con_tls(self, monkeypatch):
+        """Caddy conserva Host pero la app ve http; el navegador manda
+        `Sec-Fetch-Site: same-origin` (que no puede falsificar una página) y eso
+        evita el 403 con `auth_mode=password` (sin comprobación de Host)."""
+        settings = get_settings().model_copy(update={"auth_mode": "password", "secret_key": "s"})
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        client = TestClient(_app_de_prueba(), base_url="http://zascarr.example",
+                            follow_redirects=False)
+        r = client.post(
+            "/ui/algo",
+            headers={"Origin": "https://zascarr.example", "Sec-Fetch-Site": "same-origin"})
+        # Pasa el middleware (no 403); el 303 es el redirect de auth, no el CSRF.
+        assert r.status_code == 303
+
 
 class TestAppRealConHtmx:
     """La UI real (zascarr.main.app) con las cabeceras de HTMX no debe caer en el

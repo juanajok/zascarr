@@ -160,9 +160,17 @@ class Settings(BaseSettings):
     # (ensure_secret_key()) si llega vacía; nunca hardcodeada ni en .env.
     secret_key: str = Field(default="")
     # Reservado para enlaces absolutos futuros (webhooks de E4, informes
-    # exportables) cuando ZascArr vive tras un dominio propio — hoy no
-    # participa en el enrutado ni en la sesión, es solo un dato guardado.
+    # exportables) cuando ZascArr vive tras un dominio propio. Además, el
+    # middleware de seguridad lo usa para validar el `Origin`/`Host` de los
+    # formularios (proxy inverso que no conserve `Host`). Se puede fijar aquí
+    # (`BASE_URL` en el `.env`) para recuperar el acceso si Ajustes ya da 403.
     base_url: str = Field(default="")
+    # Seguridad: nombres de host extra que el middleware acepta en su
+    # comprobación de `Host` (anclaje anti-DNS-rebinding), además de
+    # `localhost`, las IP literales y el host de `base_url`. Lista separada por
+    # comas en el `.env` — por ejemplo `ALLOWED_HOSTS=raspberrypi.local,pi` para
+    # quien entra por el nombre de la Pi sin usar proxy.
+    allowed_hosts: str = Field(default="")
 
     # ── Avisos (E4) ───────────────────────────────────────────────
     # Webhook de importación, apagado por defecto. Entrega de MEJOR

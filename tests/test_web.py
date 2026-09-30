@@ -13,7 +13,10 @@ from fastapi.testclient import TestClient
 
 from zascarr.main import app
 
-client = TestClient(app)
+# Cliente a nivel de módulo (fuera del alcance del conftest, que solo parchea
+# TestClient durante cada test): se le dan el Host y el Origin que el
+# middleware de seguridad espera, igual que hace el conftest por defecto.
+client = TestClient(app, base_url="http://localhost", headers={"Origin": "http://localhost"})
 
 
 class TestStaticAssets:
