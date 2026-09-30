@@ -3,8 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+  # Sin `branches: [main]`: un PR apilado (base = otra rama, como la ficha de un
+  # lote) también tiene que correr la suite, no solo los que van contra `main`.
   pull_request:
-    branches: [main]
 
 jobs:
   test:
