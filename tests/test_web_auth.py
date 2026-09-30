@@ -9,6 +9,8 @@ que está exento (services/auth.py).
 """
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -246,9 +248,11 @@ class TestRehasheoYSesion:
     async def test_dos_logins_simultaneos_que_rehashean_no_se_pisan(self, _settings_password):
         """Si el rehasheo subiera la versión, dos logins a la vez se invalidarían
         el uno al otro. Ahora ambos escriben un hash válido de la MISMA
-        contraseña y la versión se queda igual."""
-        import threading
-        from concurrent.futures import ThreadPoolExecutor
+        contraseña y la versión se queda igual.
+
+        Se hacen en el MISMO bucle de eventos (dos corrutinas), que es lo que de
+        verdad ocurre en la app: un solo bucle."""
+        import httpx
 
         from zascarr.database import get_db
         from zascarr.services.auth import necesita_rehash, sesion_valida, verify_password
@@ -262,16 +266,16 @@ class TestRehasheoYSesion:
             yield sesion
 
         app.dependency_overrides[get_db] = _get_db
-        barrera = threading.Barrier(2)
-
-        def _login():
-            client = TestClient(app, follow_redirects=False)
-            barrera.wait(timeout=5)
-            return client.post("/login", data={"password": "secreta123", "next": "/ui/"})
-
+        transporte = httpx.ASGITransport(app=app)
+        cabeceras = {"Origin": "http://localhost"}
         try:
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                resultados = list(pool.map(lambda _: _login(), range(2)))
+            async with httpx.AsyncClient(
+                    transport=transporte, base_url="http://localhost",
+                    headers=cabeceras, follow_redirects=False) as cliente:
+                resultados = await asyncio.gather(
+                    cliente.post("/login", data={"password": "secreta123", "next": "/ui/"}),
+                    cliente.post("/login", data={"password": "secreta123", "next": "/ui/"}),
+                )
         finally:
             app.dependency_overrides.pop(get_db, None)
 

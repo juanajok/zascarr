@@ -16,14 +16,21 @@ def pytest_configure(config):
 
 @pytest.fixture(autouse=True)
 def _limpiar_estado_auth():
-    """El retraso progresivo y la caché de Basic son estado de módulo: se limpian
-    entre tests para que no se filtren (ni ralenticen la suite)."""
-    from zascarr.services.auth import limpiar_cache_basic, limpiar_fallos
+    """El retraso progresivo, la caché de Basic y las primitivas de concurrencia
+    (candado/semáforo) son estado de módulo: se limpian entre tests para que no
+    se filtren, ni ralenticen la suite, ni queden atados a un bucle cerrado."""
+    from zascarr.services.auth import (
+        limpiar_cache_basic,
+        limpiar_fallos,
+        reiniciar_estado_concurrencia,
+    )
     limpiar_fallos()
     limpiar_cache_basic()
+    reiniciar_estado_concurrencia()
     yield
     limpiar_fallos()
     limpiar_cache_basic()
+    reiniciar_estado_concurrencia()
 
 
 @pytest.fixture(autouse=True)

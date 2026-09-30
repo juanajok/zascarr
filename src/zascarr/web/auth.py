@@ -19,7 +19,6 @@ from zascarr.services.auth import (
     crear_cookie_sesion,
     hash_password_async,
     intentar_credenciales,
-    ip_de_peticion,
     necesita_rehash,
 )
 from zascarr.services.runtime_settings import RuntimeSettingsService
@@ -79,8 +78,7 @@ async def login_submit(
     hash_validado = settings.auth_password_hash
 
     try:
-        ok = await intentar_credenciales(
-            ip_de_peticion(request, settings), username, password, settings)
+        ok = await intentar_credenciales(username, password, settings)
     except ColaDeVerificacionLlenaError:
         # 429 del tope de cola: NO cuenta como intento fallido en el retraso.
         return templates.TemplateResponse(request, "login.html", {

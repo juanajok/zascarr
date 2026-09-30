@@ -238,6 +238,21 @@ async def guardar_seguridad(
         return templates.TemplateResponse(request, "_ajustes_guardado.html", {
             "nombre": "Seguridad", "error": "Este modo necesita también un nombre de usuario.",
         })
+    # Longitud mínima (OWASP): sin segundo factor, una contraseña corta cae rápido
+    # con el retraso progresivo. 15 sería lo recomendado; 12 es el mínimo duro y
+    # por debajo de 15 se avisa.
+    if auth_password and len(auth_password) < 12:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Seguridad",
+            "error": "La contraseña debe tener al menos 12 caracteres. Mejor una frase "
+                     "larga que recuerdes (por ejemplo, tres o cuatro palabras).",
+        })
+    aviso = None
+    if auth_password and len(auth_password) < 15:
+        aviso = (
+            "Contraseña corta: menos de 15 caracteres se considera débil sin un "
+            "segundo factor. Una frase más larga es más segura."
+        )
 
     updates: dict = {"auth_mode": auth_mode, "auth_username": auth_username, "base_url": base_url.rstrip("/")}
     # Cambiar contraseña, usuario o modo sube la versión de sesión: las cookies
@@ -259,7 +274,7 @@ async def guardar_seguridad(
         limpiar_cache_basic()
 
     respuesta = templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Seguridad"})
+        request, "_ajustes_guardado.html", {"nombre": "Seguridad", "aviso": aviso})
     if cambia_credenciales:
         # Re-emite la cookie con la versión nueva: quien cambia la contraseña
         # conserva SU sesión (las demás se cierran). Sin esto, su siguiente clic
