@@ -32,12 +32,15 @@ Orden por gravedad:
 - Reproducido en local (sin Docker): valor leído `["/var/lib/zascarr"]`,
   resuelto `["/var/lib/zascarr"]`, restos `NO`.
 
-Y no es un caso exótico: **`docker compose` sí quita las comillas** (verificado
-con `docker compose config`: `ZASCARR_DATA_DIR="/var/lib/zz"` → `/var/lib/zz`).
-O sea, el `.env` funciona para la app y engaña al desinstalador. `bootstrap.sh`
-escribe sin comillas (`set_env_var`), así que el caso llega por **edición manual**
-— el mismo escenario que motivó A4, y coherente con M7 (valores con espacios y
-`&`, que invitan a entrecomillar).
+Y no es un caso exótico: **`docker compose config` interpreta el `.env` de
+verdad**. Verificado en local con las cuatro formas a la vez — comillas
+(`A="/ruta/a"`), comentario en línea (`B=/ruta/b # nota`), `export D=/ruta/d` y
+final CRLF (`E=/ruta/e\r\n`) — y las cinco salen resueltas como `/ruta/…`, sin
+comillas, sin comentario, sin `export` y sin `\r`. O sea, el `.env` funciona para
+la app y engaña al desinstalador. `bootstrap.sh` escribe sin comillas
+(`set_env_var`), así que el caso llega por **edición manual** — el mismo
+escenario que motivó A4, y coherente con M7 (valores con espacios y `&`, que
+invitan a entrecomillar).
 
 ### Segundo problema: lógica propia más débil que la compartida
 
@@ -59,17 +62,50 @@ ya lo cubre (y es lo que usa `bootstrap.sh`).
 un salto de versión en el compose dejaría al desinstalador purgando con una
 imagen distinta (o inexistente en caché).
 
+### Más casos que las comillas (ampliación de la revisión)
+
+Las comillas no son el único desajuste: `docker compose` también
+
+- quita un **comentario en línea** de un valor sin comillas
+  (`ZASCARR_DATA_DIR=/var/lib/x # datos` → `/var/lib/x`),
+- acepta `export VAR=…`,
+- y con finales de línea **CRLF** deja un `\r` al final del valor.
+
+Cada uno reproduciría el mismo «borrado» en vacío.
+
 ### Resultado deseado
 
-1. Un **único lector de `.env`** que interprete como `docker compose` (quitar
-   comillas simples/dobles envolventes; no tocar el resto). Compartido, no
-   copiado.
-2. **Reutilizar `_rutas.sh`** (`resolver_ruta`, `motivo_solapamiento`) en vez de
+1. **Las rutas resueltas salen de `docker compose config`**, que es exactamente
+   lo que ve la app. Es la fuente autoritativa y cubre de golpe las comillas,
+   `export`, el comentario en línea y el CRLF — sin reimplementar el parser de
+   Compose. El lector propio queda como **reserva** para cuando
+   `docker compose config` no pueda responder (un `.env` a medias, Docker
+   caído), y entonces interpreta al menos esos cuatro casos, **con una prueba por
+   cada uno**:
+   - comillas simples o dobles envolventes: `VAR="/ruta"` → `/ruta`;
+   - comentario en línea sin comillas: `VAR=/ruta # nota` → `/ruta`;
+   - `export VAR=…` → `VAR`;
+   - finales CRLF: quitar el `\r` final.
+2. **Red de seguridad independiente del lector:** si la ruta resuelta **no
+   existe como directorio**, `--purge` se **niega** y explica por qué (hoy sigue
+   adelante y «borra» en vacío). Cubre cualquier desajuste de interpretación que
+   no se haya previsto.
+3. **Reutilizar `_rutas.sh`** (`resolver_ruta`, `motivo_solapamiento`) en vez de
    las versiones locales; y `comprobar_requisitos` de `_comun.sh`.
-3. **Comprobar que el directorio existe antes de purgar** y distinguir tres
-   estados: «no había nada» / «se borró» / «no se pudo borrar (quedan restos)».
-   Nunca «borrado» sin comprobarlo.
-4. Leer la imagen de Postgres del propio `docker-compose.yml`.
+4. Distinguir tres estados al purgar: «no había nada» / «se borró» / «no se pudo
+   borrar (quedan restos)». Nunca «borrado» sin comprobarlo.
+5. Leer la imagen de Postgres del propio `docker-compose.yml`.
+
+### Cómo se prueban (método fijado)
+
+`uninstall.sh` no tiene hoy ninguna prueba; el fallo de las comillas solo está
+reproducido en aislamiento (el `grep|cut` + `readlink -f` + la comprobación de
+restos), no contra el script. Se estrena con el patrón que ya fija
+`tests/test_diagnostico_red.py` para scripts que hablan con Docker: **dobles de
+`docker` en el `PATH`** y un **árbol sintético** (`ZASCARR_ROOT` y
+`ZASCARR_DATA_DIR` en un directorio temporal). El script se ejecuta de verdad,
+pero **nunca ve el Docker real ni las rutas reales**: no hay `docker compose
+down` de verdad ni ningún `rm` sobre algo que importe.
 
 ---
 
@@ -114,6 +150,12 @@ tecleo, y no filtrar datos a un tercero.
    excepción; **nunca** la URL ni el token.
 5. Opción **«enviar solo el recuento»** (sin nombres de fichero) para temas
    públicos.
+6. **(Opcional)** Persistir el **último resultado de envío** (cuándo y cómo fue:
+   ok, o la causa del fallo) y mostrarlo en `/estado`, junto a los demás
+   semáforos. Hoy «mejor esfuerzo» deja solo una línea de log que nadie mira; es
+   pequeño y encaja con el botón de prueba. `/estado` ya es una página de
+   semáforos que sondea `/api/health`, así que el dato tendría que salir por
+   ahí.
 
 ---
 
@@ -142,22 +184,59 @@ Y divergen de verdad:
 | `X-Men` | `x men` (puntuación → espacio) | `xmen` (puntuación borrada) |
 
 Además, los alias se guardan con `normalize_title`
-(`models/__init__.py:539`, `LocalAlias.pattern_norm`), así que **las dos
-mitades del mismo filtro comparan en espacios distintos**: la igualdad directa
-con `normalize_series_name` y la de alias con `normalize_title`.
+(`models/__init__.py:539`, `LocalAlias.pattern_norm`).
+
+**Corrección de la revisión (dirección del problema).** No son «espacios
+distintos» en sentido estricto: cada mitad aplica **su** función a **los dos**
+extremos, así que cada comparación es coherente consigo misma. El defecto real
+es que la comparación **directa es más estricta** que la de alias y produce
+**falsos negativos**: un release sin tildes se descarta aunque el catálogo las
+tenga. Medido:
+
+| Par | `normalize_series_name` (directa) | `normalize_title` (alias) |
+|---|---|---|
+| `Astérix` / `Asterix` | **distintas** | iguales |
+| `Filemón` / `Filemon` | **distintas** | iguales |
+| `X-Men` / `X Men` | **distintas** | iguales |
+| `Batman` / `The Batman` | iguales | iguales |
+
+Es decir: un tebeo español con tilde en el catálogo («Astérix», «Filemón») y un
+release sin ella («Asterix», «Filemon») **no coincide hoy** por la vía directa.
+Solo entra si hay un alias local, o sea después de que el coleccionista lo haya
+corregido a mano una vez.
+
+**La dirección del fallo es la segura**: el coste de un falso negativo es que el
+item se queda en Pendientes (se revisa a mano), mientras que un falso positivo
+importaría algo que no es. Se dice explícitamente para no «arreglarlo» en la
+dirección contraria.
 
 ### Resultado deseado
 
-- Una sola normalización para comparar en el filtro de D8: la de los alias
-  (`normalize_title`), que es la que ya está persistida en `local_aliases`.
+- **Plegado de acentos simétrico**: la comparación directa debe aplicar el mismo
+  plegado (NFKD sin diacríticos) a los dos extremos, que es lo que arregla el
+  falso negativo hispano. **No** se adopta `normalize_title` en bloque: además
+  de los acentos quita **artículos**, y eso sí puede fundir títulos distintos.
+- **El artículo se decide de forma explícita**, no como efecto colateral:
+  - **Artículo inicial** (`The Batman` / `Batman`): **ya se funde hoy con los
+    dos** normalizadores (medido arriba), así que la decisión es **mantenerlo**
+    y dejarlo escrito; no es un cambio de comportamiento.
+  - **Artículo pospuesto** (`Sandman, The`) y la lista ampliada
+    (`die/der/das/il/lo`), que solo quita `normalize_title`: **decisión
+    explícita**. La propuesta es **no** añadirlos en este cambio — el objetivo es
+    el plegado de acentos, y meter el artículo pospuesto amplía el alcance sin
+    una necesidad medida.
 - `normalize_series_name` sigue teniendo sentido donde la comparación es *fuzzy*
   contra títulos de release (`orchestrator.py:542,560`), que es un problema
   distinto; si se queda, que sea **a propósito y documentado**.
-- Prueba de **paridad** sobre el mismo corpus que `test_title_norm.py`
-  (`The Sandman`, `Sandman, The`, `S.H.I.E.L.D.`, `Nausicaä`, `Die
-  Fantastischen Vier`, …): los casos que deben colapsar, colapsan; los que no,
-  quedan listados como divergencia esperada. Es lo que evita que vuelvan a
-  separarse sin que nadie se entere.
+- **La regresión contra el banco real tiene que pasar antes y después**:
+  `TestMedicionD8ContraElBancoReal` (`tests/test_orchestrator.py:875`, sobre
+  `scripts/medicion/muestra81_etiquetada.csv`) exige que el filtro siga
+  rechazando la sobre-captura del parser y que la igualdad siga siendo la
+  mayoría del banco (≥80 %). Si el plegado de acentos mueve esos números, se
+  revisa con datos, no se ajusta la prueba.
+- **Dos casos nuevos, obligatorios**: «Astérix»/«Asterix» **debe coincidir**, y
+  «Batman»/«The Batman» **debe quedar documentado** (hoy coinciden con los dos
+  normalizadores; la prueba lo fija para que no cambie por accidente).
 
 ---
 
@@ -165,10 +244,14 @@ con `normalize_series_name` y la de alias con `normalize_title`.
 
 - **Internas (son la referencia principal aquí):** `_rutas.sh` (A9) y
   `_comun.sh`; `bootstrap.sh` (A1/A3/M7); `docker-compose.yml`;
-  `docs/design/benchmark-E4-avisos.md`; `test_title_norm.py` (el patrón de
-  prueba de paridad que se quiere imitar).
-- **Docker Compose**: semántica de `.env` (las comillas se quitan) —
-  **verificado en local** con `docker compose config`, no citado de memoria.
+  `docs/design/benchmark-E4-avisos.md`; `tests/test_diagnostico_red.py` (el
+  patrón de pruebas con dobles de `docker` que se quiere imitar);
+  `TestMedicionD8ContraElBancoReal` y el banco
+  `scripts/medicion/muestra81_etiquetada.csv` (la regresión que debe seguir
+  verde); `test_title_norm.py` (paridad Python/SQL de `normalize_title`).
+- **Docker Compose**: semántica de `.env` (comillas, comentario en línea,
+  `export`, CRLF) — **verificado en local** con `docker compose config`, no
+  citado de memoria.
 - **ntfy** (`docs.ntfy.sh/publish`): los temas públicos son legibles por
   cualquiera — es lo que convierte «nombres de fichero en el cuerpo» en fuga.
 - **No se han consultado Sonarr/Radarr/Kapowarr/Mylar3 para este lote.** No
@@ -199,31 +282,41 @@ con `normalize_series_name` y la de alias con `normalize_title`.
 
 1. `.env` con `ZASCARR_DATA_DIR="/var/lib/zascarr"` y `covers/` presente →
    `--purge` lo borra de verdad (o dice que no pudo); **nunca** «borrado» en vacío.
-2. `.env` entrecomillado y el directorio **ausente** → «no había nada que
-   borrar», no «borrado».
-3. `ZASCARR_DATA_DIR` que es un **symlink roto** → se detecta y se aborta
+2. Un caso por cada forma del `.env` que hoy se interpreta mal: comillas
+   (`"/ruta"`), comentario en línea (`/ruta # nota`), `export VAR=…` y finales
+   CRLF. Los cuatro deben resolver a la MISMA ruta que resuelve
+   `docker compose config`.
+3. `.env` entrecomillado y el directorio **ausente** → se **niega** a purgar y
+   explica por qué (red de seguridad), no «borrado».
+4. `ZASCARR_DATA_DIR` que es un **symlink roto** → se detecta y se aborta
    (hoy `readlink -f` no lo ve).
-4. `ZASCARR_DATA_DIR` y biblioteca con el **mismo inodo** por bind mount →
+5. `ZASCARR_DATA_DIR` y biblioteca con el **mismo inodo** por bind mount →
    se aborta el `--purge` (hoy `se_solapan` no lo ve).
-5. `webhook_url` con esquema no `http(s)` o sin host → rechazado en Ajustes con
+6. `webhook_url` con esquema no `http(s)` o sin host → rechazado en Ajustes con
    mensaje.
-6. `webhook_type` desconocido → rechazado al guardar (hoy cae en `generic`).
-7. «Enviar aviso de prueba» → manda un mensaje de prueba y muestra éxito o la
+7. `webhook_type` desconocido → rechazado al guardar (hoy cae en `generic`).
+8. «Enviar aviso de prueba» → manda un mensaje de prueba y muestra éxito o la
    causa del fallo.
-8. Un fallo de envío registra la causa (código HTTP o clase de excepción) y
+9. Un fallo de envío registra la causa (código HTTP o clase de excepción) y
    **no** la URL ni el token.
-9. Modo «solo recuento» → el cuerpo no lleva ningún nombre de fichero.
-10. Paridad `normalize_series_name`/`normalize_title` sobre el corpus de
-    `test_title_norm.py`: iguales donde debe, y divergencias esperadas listadas.
+10. Modo «solo recuento» → el cuerpo no lleva ningún nombre de fichero.
+11. **(Opcional)** El último resultado de envío aparece en `/estado`.
+12. **«Astérix»/«Asterix» debe coincidir** en el filtro de D8 (hoy no).
+13. **«Batman»/«The Batman» documentado**: hoy coinciden con los dos
+    normalizadores; la prueba lo fija explícitamente.
+14. `TestMedicionD8ContraElBancoReal` **pasa antes y después** del cambio de
+    normalización (no se toca la prueba para que pase).
 
 ## Orden de commits sugerido
 
-1. `uninstall.sh`: lector único de `.env` + reutilizar `_rutas.sh` + distinguir
-   los tres estados + imagen del compose (con sus pruebas, que hoy no existen
-   para este script).
+1. `uninstall.sh`: `docker compose config` como fuente de rutas (lector propio
+   como reserva, con un caso por forma) + red de seguridad si el directorio no
+   existe + reutilizar `_rutas.sh` + los tres estados + imagen del compose; con
+   las pruebas siguiendo el patrón de `test_diagnostico_red.py`.
 2. E4: validación de tipo/URL + botón de prueba + causa en el log + modo
-   recuento.
-3. M2: unificar la normalización del filtro D8 + prueba de paridad.
+   recuento (+ el último resultado en `/estado`, si entra).
+3. M2: plegado de acentos simétrico en el filtro D8 (artículo decidido y
+   escrito) + los dos casos nuevos + la regresión del banco real en verde.
 
 Cada uno es un cambio de dominio distinto: pueden ser commits (o PR) separados.
 
@@ -231,16 +324,25 @@ Cada uno es un cambio de dominio distinto: pueden ser commits (o PR) separados.
 
 - No se ha ejecutado `uninstall.sh` de verdad (borra contenedores e imágenes);
   el fallo de las comillas está **reproducido en aislamiento** (el `grep|cut` +
-  `readlink -f` + comprobación de restos), no con `docker`.
+  `readlink -f` + comprobación de restos), no con `docker`. Las cuatro formas del
+  `.env` sí están verificadas contra `docker compose config`, pero **no** que el
+  lector de reserva las interprete igual: eso lo fija la implementación, con una
+  prueba por forma.
+- No se ha probado el comportamiento de `docker compose config` con un `.env` a
+  medias (que es justo el caso en que entra el lector de reserva).
 - No se ha probado ningún webhook real (ni ntfy ni Gotify) desde este entorno.
-- La prueba de paridad de normalizadores no existe todavía; esta ficha solo fija
-  qué debe comprobar.
-- No se ha medido cuántas series reales cambiarían de resultado al unificar la
-  normalización del filtro D8. Antes de tocar el filtro conviene contarlo contra
-  una instalación real (`scripts/medicion/` es el sitio).
+- No se ha medido cuántas series reales cambiarían de resultado con el plegado de
+  acentos en el filtro D8. Antes de tocar el filtro conviene contarlo contra el
+  banco de `scripts/medicion/` (que es lo que hace la regresión existente).
+- La decisión sobre el artículo pospuesto (`Sandman, The`) y la lista ampliada
+  (`die/der/das/il/lo`) queda **propuesta**, no medida: no hay datos de cuántos
+  títulos reales cambiarían de resultado por ella.
 
 ## Decisión
 
 **Adoptar** los tres arreglos, en ese orden, cada uno con sus pruebas primero.
 **Descartar** seguir con `readlink -f`/`se_solapan` locales, el `else` silencioso
-de tipos de webhook y la convivencia de los dos normalizadores en el filtro.
+de tipos de webhook y el plegado de acentos hecho a mano sin regresión contra el
+banco real. **Descartar también** adoptar `normalize_title` en bloque para la
+comparación directa: el arreglo es el plegado de acentos simétrico, con el
+artículo decidido explícitamente.
