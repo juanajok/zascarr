@@ -62,13 +62,16 @@ falta `BASE_URL` para ese caso. Con `auth_mode="none"` la comprobación de
 manda `same-origin`.
 
 **Retraso progresivo:** los intentos fallidos de contraseña se castigan con un
-retraso creciente (con tope), nunca con un bloqueo: una credencial correcta
-siempre acaba entrando. El contador es de la **cuenta**, no de la IP de origen
-(OWASP): rotar direcciones no lo esquiva, y los intentos se **serializan** con
-un candado para que una ráfaga en paralelo no lo salte. Si hay demasiados
-intentos en vuelo se responde `429` en vez de encolar. Requiere además una
-**contraseña de al menos 12 caracteres** (15 recomendado sin segundo factor):
-sin eso, el retraso no basta.
+retraso creciente (con tope de 8 s). El retraso **no bloquea por sí mismo** —
+una credencial correcta entra tras la espera —, pero **no es una promesa de
+disponibilidad**: quien mantenga ocupadas las tres plazas de intento en vuelo
+puede dejar los **nuevos inicios de sesión en `429`** de forma sostenida. Quien
+ya tiene la sesión abierta o Basic en caché no se ve afectado. Si eso ocurre, la
+salida es **cortar el ataque en el cortafuegos o el proxy**, no esperar. El
+contador es de la **cuenta**, no de la IP de origen (OWASP): rotar direcciones
+no lo esquiva, y los intentos se **serializan** con un candado para que una
+ráfaga en paralelo no lo salte. Requiere además una **contraseña de al menos 12
+caracteres** (15 recomendado sin segundo factor): sin eso, el retraso no basta.
 
 ## Deuda de seguridad conocida (A6)
 
@@ -111,9 +114,11 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   permite leer, no solo escribir — aceptando `localhost`, IP literal, el host de
   `base_url` y los nombres de `ALLOWED_HOSTS`.
 - **Fuerza bruta**: los fallos de contraseña se castigan con un **retraso
-  progresivo por cuenta** (con tope, nunca bloqueo: una credencial correcta
-  siempre entra) y los intentos se **serializan** para que una ráfaga en
-  paralelo no lo salte. Un **tope de cola** responde `429` con `Retry-After` en
+  progresivo por cuenta** (con tope de 8 s) y los intentos se **serializan**
+  para que una ráfaga en paralelo no lo salte. El retraso no bloquea por sí
+  mismo, pero mantener ocupadas las plazas en vuelo puede dejar nuevos inicios
+  de sesión en `429` (ver «Retraso progresivo» arriba: se corta en el
+  cortafuegos/proxy). Un **tope de cola** responde `429` con `Retry-After` en
   vez de encolar sin límite (esos rechazos no cuentan como fallo), y una **caché
   de aciertos de Basic** con TTL corto y tamaño acotado se vacía al cambiar la
   contraseña. Se exige además una **longitud mínima de 12 caracteres**.

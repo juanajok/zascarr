@@ -31,8 +31,11 @@ jobs:
           cache: "pip"
       - run: pip install -e ".[dev]"
       - run: ruff check src/
-      # Reglas de seguridad de bandit (S), también informativas.
+      # Reglas de seguridad de bandit (S), también informativas. `if: always()`
+      # porque el paso anterior ya falla hoy por errores preexistentes y, sin
+      # esto, GitHub saltaría este paso.
       - run: ruff check --select S src/
+        if: always()
 
   pip-audit:
     name: pip-audit (informativo, no bloquea)

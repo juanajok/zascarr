@@ -21,14 +21,18 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   tilde o `ñ` daba error). Se rehashea la contraseña al iniciar sesión si venía
   de un contador de iteraciones anterior.
 - **Los intentos fallidos de contraseña se retrasan de forma progresiva**, con
-  tope: tras varios fallos, el siguiente intento tarda más (hasta 8 s), pero
-  **nunca bloquea** — una credencial correcta siempre acaba entrando. La espera
-  no congela el resto de la aplicación. El contador es de la **cuenta**, no de
-  la IP (OWASP): rotar direcciones no lo esquiva, y los intentos se
-  **serializan** con un candado para que una ráfaga en paralelo no lo salte.
-- **Si hay demasiados intentos a la vez**, se responde `429` (con `Retry-After`)
-  en vez de encolar sin límite. Un rechazo por este motivo **no cuenta como
-  intento fallido**: no penaliza a quien espera.
+  tope (hasta 8 s). El retraso **no bloquea por sí mismo**: una credencial
+  correcta entra tras la espera, y la espera no congela el resto de la
+  aplicación. El contador es de la **cuenta**, no de la IP (OWASP): rotar
+  direcciones no lo esquiva, y los intentos se **serializan** con un candado
+  para que una ráfaga en paralelo no lo salte.
+- **Si hay demasiados intentos a la vez** (más de tres en vuelo), se responde
+  `429` con `Retry-After` en vez de encolar sin límite. Un rechazo por este
+  motivo **no cuenta como intento fallido**. Aviso honesto: quien mantenga
+  ocupadas esas plazas puede dejar los **nuevos inicios de sesión en 429** de
+  forma sostenida — quien ya tiene la sesión abierta o Basic en caché no se ve
+  afectado, y la salida práctica es cortar el ataque en el cortafuegos o el
+  proxy, no esperar a que cese solo.
 - **Basic Auth cachea los aciertos** (60 s, tamaño acotado): un script con
   credenciales válidas no repite PBKDF2 en cada petición. Un fallo nunca se
   cachea, y cambiar la contraseña vacía la caché.

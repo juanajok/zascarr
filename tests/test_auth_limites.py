@@ -253,9 +253,11 @@ class TestTopeDeCola:
             auth_mod._pbkdf2_sem.release()
 
     @pytest.mark.asyncio
-    async def test_muchos_timeouts_no_fugan_permisos(self, monkeypatch, settings_password):
-        """`asyncio.wait_for(sem.acquire(), ...)`: tras muchos timeouts, los dos
-        huecos vuelven a estar disponibles (si no, todo login daría 429)."""
+    async def test_equilibrio_tras_muchos_timeouts(self, monkeypatch, settings_password):
+        """Tras muchos timeouts, los dos huecos del semáforo vuelven a estar
+        disponibles. Cubre la cancelación normal de `asyncio.wait_for`; NO
+        reproduce la carrera de que el permiso se adquiera justo al vencer el
+        tiempo (queda como regresión, no como cierre de esa posibilidad)."""
         monkeypatch.setattr("zascarr.services.auth._ESPERA_MAX_COLA", 0.01)
         limpiar_fallos()
         await auth_mod._pbkdf2_sem.acquire()

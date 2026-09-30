@@ -204,7 +204,9 @@ Verificado en el código (`main` en `7f6f637`):
   límite — OWASP) y producen un retraso creciente (con tope) antes de responder,
   en vez de bloquear. Un bloqueo duro dejaría fuera también al dueño; un retraso
   castiga el martilleo sin impedir un login correcto posterior. Los intentos se
-  **serializan** para que una ráfaga en paralelo no lo esquive.
+  **serializan** para que una ráfaga en paralelo no lo esquive. Ojo: con la cola
+  acotada, un ataque sostenido sí puede dejar nuevos logins en 429 (ver
+  implementación).
 - **Paso 3 — subir a 600.000 y rehashear solo en `/login`.** `hash_password` pasa
   a `600_000`; `verify_password` sigue leyendo las iteraciones del hash
   almacenado (compatibilidad). El rehasheo (260.000 → 600.000) se hace **solo en
@@ -246,15 +248,21 @@ Verificado en el código (`main` en `7f6f637`):
   ZascArr tiene una sola cuenta, así que el contador es global. Se aplica antes
   de validar en `/login` y en Basic Auth (`intentar_credenciales`), con
   `asyncio.sleep` — no bloquea el bucle, y una credencial correcta entra tras la
-  espera y limpia el contador. Esto elimina `X-Forwarded-For`/`TRUSTED_PROXY` de
-  este mecanismo (y el ajuste se retiró: ya no tenía otro uso).
+  espera y limpia el contador. No es un bloqueo duro, pero tampoco garantiza
+  disponibilidad bajo ataque sostenido (ver «cola acotada» abajo). Esto elimina
+  `X-Forwarded-For`/`TRUSTED_PROXY` de este mecanismo (y el ajuste se retiró: ya
+  no tenía otro uso).
 - **Serialización:** un candado (`asyncio.Lock`) cubre el ciclo
   espera→valida→anota, para que una ráfaga en paralelo no lea el contador a la
   vez y esquive el retraso (antes el límite real pasaba a ser el ejecutor).
 - **Cola acotada:** como mucho `_INTENTOS_MAX_EN_COLA` (3) intentos en vuelo;
   el resto recibe **429** con `Retry-After` sin encolarse. Ese rechazo **no
   cuenta como fallo**. El dueño con sesión abierta o con Basic en caché no pasa
-  por aquí.
+  por aquí. **Límite honesto:** quien mantenga ocupadas las tres plazas puede
+  dejar los nuevos inicios de sesión en 429 de forma sostenida (cada plaza
+  espera hasta 8 s + la verificación). El retraso no bloquea por sí mismo, pero
+  esto no es una promesa de disponibilidad: la salida es cortar el ataque en el
+  cortafuegos o el proxy.
 - **Tope del semáforo de PBKDF2:** se adquiere con `asyncio.wait_for` (2 s); si
   no hay hueco, `ColaDeVerificacionLlenaError` → 429. Hay prueba de equilibrio:
   tras muchos timeouts, los dos huecos siguen disponibles.
