@@ -232,6 +232,10 @@ async def lifespan(app: FastAPI):
     for task in background_tasks:
         with contextlib.suppress(asyncio.CancelledError):
             await task
+    # Seguridad: apaga el ejecutor propio de PBKDF2 (no deja hilos ni tareas
+    # encoladas colgando al parar la app).
+    from zascarr.services.auth import apagar_ejecutor_pbkdf2
+    apagar_ejecutor_pbkdf2()
     logger.info("zascarr.shutting_down")
     await engine.dispose()
 

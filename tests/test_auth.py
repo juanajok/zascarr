@@ -74,6 +74,9 @@ class TestHashPassword:
 
         assert hilos, "el PBKDF2 debería haberse ejecutado"
         assert all(h is not threading.main_thread() for h in hilos)
+        # El nombre del hilo prueba que se usó el ejecutor PROPIO, no el
+        # `to_thread` por defecto (que correría en el ejecutor general).
+        assert all(h.name.startswith("pbkdf2") for h in hilos)
 
 
 class TestCredencialesValidas:
@@ -202,8 +205,16 @@ def _app_de_prueba() -> FastAPI:
     def _algo():
         return {"ok": True}
 
+    @app.post("/ui/algo")
+    def _algo_post():
+        return {"ok": True}
+
     @app.get("/api/algo")
     def _api_algo():
+        return {"ok": True}
+
+    @app.post("/api/algo")
+    def _api_algo_post():
         return {"ok": True}
 
     @app.get("/api/health")
@@ -317,3 +328,102 @@ class TestAuthMiddleware:
         assert r.status_code == 303
         params = parse_qs(urlsplit(r.headers["location"]).query)
         assert params["next"] == ["/ui/algo?q=a&b=2"]
+
+
+@pytest.mark.sin_origen
+class TestOrigenHost:
+    """CSRF / Origen / Host (ficha de seguridad). Marcado `sin_origen` para
+    controlar Host/Origin a mano en vez de heredar el localhost del conftest."""
+
+    @staticmethod
+    def _cliente(monkeypatch, *, base_url="http://127.0.0.1:8000", settings_base_url=""):
+        settings = get_settings().model_copy(update={
+            "auth_mode": "none", "secret_key": "s", "base_url": settings_base_url,
+        })
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        return TestClient(_app_de_prueba(), base_url=base_url)
+
+    def test_get_no_se_comprueba(self, monkeypatch):
+        r = self._cliente(monkeypatch).get("/ui/algo")
+        assert r.status_code == 200
+
+    def test_post_ui_sin_origin_se_bloquea(self, monkeypatch):
+        r = self._cliente(monkeypatch).post("/ui/algo")
+        assert r.status_code == 403
+
+    def test_post_api_sin_origin_se_permite(self, monkeypatch):
+        r = self._cliente(monkeypatch).post("/api/algo")
+        assert r.status_code == 200
+
+    def test_origin_del_mismo_host_se_acepta(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "http://127.0.0.1:8000"})
+        assert r.status_code == 200
+
+    def test_origin_ajeno_se_rechaza(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://mal.example"})
+        assert r.status_code == 403
+
+    def test_origin_null_se_rechaza(self, monkeypatch):
+        r = self._cliente(monkeypatch).post("/ui/algo", headers={"Origin": "null"})
+        assert r.status_code == 403
+
+    def test_sec_fetch_site_cross_site_se_rechaza(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo",
+            headers={"Origin": "http://127.0.0.1:8000", "Sec-Fetch-Site": "cross-site"})
+        assert r.status_code == 403
+
+    def test_origin_igual_a_base_url_con_host_distinto_se_acepta(self, monkeypatch):
+        """Proxy inverso: nginx cambia Host, Origin es el dominio público."""
+        r = self._cliente(
+            monkeypatch,
+            base_url="http://127.0.0.1:8000",
+            settings_base_url="https://comics.example").post(
+            "/ui/algo", headers={"Origin": "https://comics.example"})
+        assert r.status_code == 200
+
+    def test_host_con_ip_literal_se_permite(self, monkeypatch):
+        r = self._cliente(monkeypatch, base_url="http://192.168.1.50:8000").post(
+            "/ui/algo", headers={"Origin": "http://192.168.1.50:8000"})
+        assert r.status_code == 200
+
+    def test_host_con_nombre_ajeno_se_rechaza(self, monkeypatch):
+        """DNS rebinding: un nombre de dominio que resuelve a la IP local."""
+        r = self._cliente(monkeypatch, base_url="http://atacante.example").post(
+            "/ui/algo", headers={"Origin": "http://atacante.example"})
+        assert r.status_code == 403
+
+    def test_referer_con_sufijo_enganoso_no_pasa(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Referer": "https://example.org.attacker.com/x"})
+        assert r.status_code == 403
+
+    def test_el_403_dice_la_salida_en_espanol(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://mal.example"})
+        assert r.status_code == 403
+        assert "BASE_URL" in r.text and "proxy" in r.text
+
+
+class TestAppRealConHtmx:
+    """La UI real (zascarr.main.app) con las cabeceras de HTMX no debe caer en el
+    403 del middleware. No marcado `sin_origen`: usa el localhost del conftest."""
+
+    def _cliente(self):
+        from zascarr.main import app as app_real
+        return TestClient(app_real, follow_redirects=False)
+
+    def test_post_htmx_con_origen_del_mismo_host_no_es_403(self):
+        # /login es un POST de estado y no toca la BD con auth_mode=none.
+        r = self._cliente().post(
+            "/login", data={"next": "/", "username": "", "password": ""},
+            headers={"HX-Request": "true", "Origin": "http://localhost"})
+        assert r.status_code != 403
+
+    def test_post_desde_ip_de_la_lan_no_es_403(self):
+        r = self._cliente().post(
+            "/login", data={"next": "/", "username": "", "password": ""},
+            headers={"Host": "192.168.1.50:8000", "Origin": "http://192.168.1.50:8000"})
+        assert r.status_code != 403

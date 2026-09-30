@@ -34,6 +34,17 @@ no el de esta contraseña —, pero ya no es la ÚNICA capa: sin activar nada
 aquí, cualquiera con la URL puede leer tu biblioteca, activar integraciones
 de descarga y disparar búsquedas.
 
+**Condición para el proxy inverso:** ZascArr rechaza las peticiones que
+cambian estado (`POST`/`PUT`/`PATCH`/`DELETE`) cuyo `Origin`/`Referer` no
+coincida con su propio `Host` ni con `base_url` — es la defensa CSRF, porque
+con `auth_mode="none"` no hay cookie que valga. Un proxy que **no conserve
+`Host`** (nginx lo cambia por defecto) hace que `Origin` sea tu dominio
+público y `Host` el interno, y sin nada más recibirías **403 en todos los
+POST**, incluido el de Ajustes. Define `BASE_URL` en el `.env` (o en
+Ajustes) con tu dominio público — es una de las vías pensadas para recuperar
+el acceso sin depender de la interfaz. El 403 explica en español el origen
+recibido y esta misma salida.
+
 ## Deuda de seguridad conocida (A6)
 
 - **La sesión no se invalida al cambiar la contraseña.** La cookie se firma solo con `secret_key`, no con la contraseña, así que una cookie emitida antes de un cambio de contraseña sigue siendo válida hasta que caduca (30 días) o hasta que `secret_key` se regenere. Aceptable para una herramienta de un solo operador en su propia LAN, pero es una de esas sorpresas que alguien descubrirá algún día ("cambié la clave y seguía entrando desde otra pestaña") — que quede escrito. Si algún día importa, cerrar sesión en todas partes = regenerar `secret_key`.
@@ -59,5 +70,13 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   para el Markdown del propio `LEGAL.md`, ya controlado.
 - **CORS**: sin middleware CORS — UI y API viven en el mismo origen, cero
   peticiones cross-origin legítimas.
+- **CSRF / Origen / Host**: las peticiones que cambian estado se rechazan con
+  `403` si `Sec-Fetch-Site: cross-site`, si `Origin: null`, o si `Origin`/
+  `Referer` no coinciden (esquema+host+puerto normalizados) con el `Host` de la
+  petición ni con `base_url`. En `/ui/*` se bloquea además cuando no hay ni
+  `Origin` ni `Referer` (un navegador siempre manda `Origin` en un POST); en
+  `/api/*` se permite su ausencia, para scripts con `curl`/Basic. Con
+  `auth_mode="none"` se comprueba también el `Host` (localhost, IP literal o
+  `base_url`), lo que cubre DNS rebinding.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.

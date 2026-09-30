@@ -140,6 +140,16 @@ Verificado en el código (`main` en `7f6f637`):
 - **Ajustar el texto de Ajustes:** hoy dice que `base_url` «no cambia nada»; pasa
   a explicar que participa en la validación de `Origin`/`Host` para quien expone
   ZascArr tras un proxy.
+- **Riesgo de bloqueo (detectado en revisión):** quien esté detrás de un proxy
+  inverso que no conserve `Host` (nginx lo cambia por defecto) y no haya
+  rellenado `base_url` verá `403` en todos los POST — incluido el de Ajustes
+  donde se rellena `base_url`, así que no puede arreglarlo desde la interfaz.
+  Dos medidas: (a) el `403` se explica en español, con el origen recibido y la
+  salida concreta («si accedes tras un proxy, define BASE_URL en el .env»); y
+  (b) `BASE_URL` se lee del `.env` (ya lo hace pydantic-settings), como vía de
+  recuperación sin interfaz. Nota: el `403` lleva el origen recibido tal cual —
+  es una cabecera que manda el cliente, no un secreto, y verla es lo que permite
+  diagnosticar; no se registra en logs por defecto.
 
 ### 2. Autenticación en pasos
 

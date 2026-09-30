@@ -3,6 +3,22 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [No publicado]
+
+### Cambiado (rompe scripts que llamen a la UI sin `Origin`)
+
+- **Los `POST`/`PUT`/`PATCH`/`DELETE` a `/ui/*` sin cabecera `Origin` (ni
+  `Referer`) ahora reciben `403`.** Es la defensa CSRF del middleware: un
+  navegador siempre manda `Origin` en un POST, así que la UI no se ve afectada,
+  pero un script que llame a un endpoint de la UI sin `Origin` dejará de
+  funcionar. **`/api/*` sin `Origin` sigue permitido** (pensado para
+  `curl`/Basic Auth). Además se rechazan `Origin: null`, `Sec-Fetch-Site:
+  cross-site`, y un `Origin`/`Referer` que no coincida con el `Host` ni con
+  `base_url`. Si accedes detrás de un proxy inverso que no conserva `Host`
+  (nginx lo cambia por defecto) y no has definido `BASE_URL`, verás `403` en
+  todos los POST incluido el de Ajustes: define `BASE_URL` en el `.env` (o en
+  Ajustes) con tu dominio público — el propio `403` te lo dice en español.
+
 ## [1.14.0] — 2026-09-26
 
 ### Corregido
