@@ -10,7 +10,8 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - **La cookie de sesión lleva ahora firmada una `auth_session_version`.** Sube al
   cambiar la contraseña, el nombre de usuario o el modo de autenticación, así
   que **cambiar la contraseña cierra de verdad las sesiones abiertas** (antes
-  una cookie emitida seguía valiendo hasta 30 días). El rehasheo automático al
+  una cookie emitida seguía valiendo hasta 30 días). Quien cambia la contraseña
+  conserva su propia sesión; se cierran las demás. El rehasheo automático al
   subir las iteraciones de PBKDF2 **no** invalida sesiones.
 - **Al actualizar tendrás que iniciar sesión una vez**: las cookies del formato
   anterior (sin versión) dejan de valer. Es un cierre de sesión, no una pérdida
