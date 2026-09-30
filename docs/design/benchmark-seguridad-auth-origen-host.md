@@ -272,8 +272,14 @@ Verificado en el código (`main` en `7f6f637`):
 - **Longitud mínima de contraseña:** 12 caracteres (< 12 no se guarda; 12-14
   avisa). OWASP recomienda 15 sin segundo factor.
 
-**Pendiente de la ficha:** subir a `600_000` (último commit) y medir el tiempo
-real de PBKDF2 en la Pi — si ronda un segundo, se deja en 260.000.
+**Pendiente de la ficha (cambio aparte, sin migración):** subir de `260_000` a
+`600_000` iteraciones. El hash guarda su contador, así que los hashes viejos
+siguen validando y se regeneran al iniciar sesión — no hay migración ni cierre
+de sesiones. **Se decide con la medición real en la Pi** (5 veces en reposo y 1
+durante una importación): mediana < ~0,8 s → `600_000`; ~1 s o más (o entre 0,8
+y 1) → se queda `260_000`, porque con la cola de tres intentos cada verificación
+lenta alarga lo que un atacante puede mantener las plazas ocupadas. Queda
+registrado aquí con fecha y modelo de Pi cuando se mida.
 
 ### 3. Comprobación real de dependencias (respuesta al check rojo)
 
