@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.main import app
+from zascarr.services.auth import hash_password
 
 
 class FakeSession:
@@ -107,7 +108,7 @@ class TestGuardarSeguridad:
         try:
             client = TestClient(app)
             r = client.post("/ui/ajustes/guardar/seguridad", data={
-                "auth_mode": "user_password", "auth_username": "", "auth_password": "secreta123", "base_url": "",
+                "auth_mode": "user_password", "auth_username": "", "auth_password": "contrasena-larga", "base_url": "",
             })
         finally:
             app.dependency_overrides.pop(get_db, None)
@@ -121,7 +122,7 @@ class TestGuardarSeguridad:
         try:
             client = TestClient(app)
             r = client.post("/ui/ajustes/guardar/seguridad", data={
-                "auth_mode": "password", "auth_password": "secreta123", "base_url": "",
+                "auth_mode": "password", "auth_password": "contrasena-larga", "base_url": "",
             })
         finally:
             app.dependency_overrides.pop(get_db, None)
@@ -130,12 +131,108 @@ class TestGuardarSeguridad:
         assert "guardado" in r.text.lower()
         assert get_settings().auth_mode == "password"
         assert get_settings().auth_password_hash  # nunca la contraseña en claro
-        assert "secreta123" not in get_settings().auth_password_hash
+        assert "contrasena-larga" not in get_settings().auth_password_hash
 
     def test_modo_desconocido_da_400(self, restaurar_settings):
         client = TestClient(app)
         r = client.post("/ui/ajustes/guardar/seguridad", data={"auth_mode": "lo-que-sea"})
         assert r.status_code == 400
+
+    # ── auth_session_version (ficha de seguridad) ─────────────────────
+    def _post_seguridad(self, **campos):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            client = TestClient(app)
+            return client.post("/ui/ajustes/guardar/seguridad", data={
+                "auth_mode": "password", "auth_username": "", "auth_password": "",
+                "base_url": "", **campos,
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+    def _estado_previo(self, *, auth_mode="none", auth_username="", version=3):
+        # `auth_mode="none"` para que el middleware deje pasar el POST (con
+        # contraseña activa redirige a /login y el TestClient seguiría el 303).
+        get_settings().auth_mode = auth_mode
+        get_settings().auth_username = auth_username
+        get_settings().auth_password_hash = hash_password("contrasena-vieja")
+        get_settings().auth_session_version = version
+
+    def test_cambiar_la_contrasena_sube_la_version_de_sesion(self, restaurar_settings):
+        """Antes, cambiar la contraseña no cerraba las sesiones abiertas."""
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="none", auth_password="contrasena-nueva")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+
+    def test_cambiar_el_usuario_sube_la_version(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="none", auth_username="juanjo")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+
+    def test_cambiar_el_modo_sube_la_version(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="password", auth_password="contrasena-nueva")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+
+    def test_guardar_sin_cambios_no_sube_la_version(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="none")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 3
+
+    def test_cambiar_la_contrasena_reemite_la_cookie_con_la_version_nueva(self, restaurar_settings):
+        """Quien cambia la contraseña conserva SU sesión; sin re-emitir la cookie,
+        su siguiente clic le llevaría a /login sin explicación."""
+        from zascarr.services.auth import COOKIE_NAME, sesion_valida
+        self._estado_previo(auth_mode="none")
+        get_settings().secret_key = "clave-de-prueba"
+
+        r = self._post_seguridad(auth_mode="none", auth_password="contrasena-nueva")
+
+        assert r.status_code == 200
+        assert get_settings().auth_session_version == 4
+        cookie = r.cookies[COOKIE_NAME]
+        assert sesion_valida(cookie, "clave-de-prueba", 4) is True
+
+    def test_guardar_sin_cambios_no_reemite_cookie(self, restaurar_settings):
+        from zascarr.services.auth import COOKIE_NAME
+        self._estado_previo(auth_mode="none")
+        get_settings().secret_key = "clave-de-prueba"
+
+        r = self._post_seguridad(auth_mode="none")
+
+        assert r.status_code == 200
+        assert COOKIE_NAME not in r.cookies
+
+    # ── Longitud mínima de contraseña (OWASP) ─────────────────────────
+    def test_contrasena_corta_no_se_guarda(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="password", auth_password="corta")
+
+        assert r.status_code == 200
+        assert "12 caracteres" in r.text
+        assert get_settings().auth_mode == "none"   # no se llegó a aplicar
+
+    def test_contrasena_de_12_a_14_se_guarda_con_aviso(self, restaurar_settings):
+        self._estado_previo(auth_mode="none")
+
+        r = self._post_seguridad(auth_mode="password", auth_password="docecaracter")
+
+        assert r.status_code == 200
+        assert "guardado" in r.text.lower()
+        assert "15 caracteres" in r.text            # aviso de contraseña corta
 
 
 class TestProbar:

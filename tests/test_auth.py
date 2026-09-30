@@ -12,7 +12,6 @@ monkeypatcheado, mismo patrón que ya usa test_orchestrator.py.
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -32,13 +31,15 @@ from zascarr.services.auth import (
 
 class TestHashPassword:
 
-    def test_verifica_la_contrasena_correcta(self):
+    @pytest.mark.asyncio
+    async def test_verifica_la_contrasena_correcta(self):
         stored = hash_password("correcta123")
-        assert verify_password("correcta123", stored) is True
+        assert await verify_password("correcta123", stored) is True
 
-    def test_rechaza_la_contrasena_incorrecta(self):
+    @pytest.mark.asyncio
+    async def test_rechaza_la_contrasena_incorrecta(self):
         stored = hash_password("correcta123")
-        assert verify_password("otra-cosa", stored) is False
+        assert await verify_password("otra-cosa", stored) is False
 
     def test_dos_hashes_de_la_misma_contrasena_son_distintos(self):
         """Sal aleatoria por hash — nunca el mismo valor almacenado dos
@@ -46,100 +47,167 @@ class TestHashPassword:
         directa y filtrar quién tiene la misma contraseña que otro)."""
         assert hash_password("igual") != hash_password("igual")
 
-    def test_stored_vacio_o_malformado_nunca_revienta(self):
-        assert verify_password("x", "") is False
-        assert verify_password("x", "no-tiene-el-formato-esperado") is False
-        assert verify_password("x", "otro_algo$1$aa$bb") is False
+    @pytest.mark.asyncio
+    async def test_stored_vacio_o_malformado_nunca_revienta(self):
+        assert await verify_password("x", "") is False
+        assert await verify_password("x", "no-tiene-el-formato-esperado") is False
+        assert await verify_password("x", "otro_algo$1$aa$bb") is False
+
+    @pytest.mark.asyncio
+    async def test_pbkdf2_corre_fuera_del_bucle_de_eventos(self, monkeypatch):
+        """Caso 6 de la ficha de seguridad: el PBKDF2 no corre en el hilo del
+        bucle de eventos (la Pi no puede congelarse con cada Basic)."""
+        import hashlib
+        import threading
+
+        stored = hash_password("secreta")   # real, en el hilo principal (no se registra)
+        hilos: list = []
+        real = hashlib.pbkdf2_hmac
+
+        def espia(*args, **kwargs):
+            hilos.append(threading.current_thread())
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr("zascarr.services.auth.hashlib.pbkdf2_hmac", espia)
+
+        assert await verify_password("secreta", stored) is True
+
+        assert hilos, "el PBKDF2 debería haberse ejecutado"
+        assert all(h is not threading.main_thread() for h in hilos)
+        # El nombre del hilo prueba que se usó el ejecutor PROPIO, no el
+        # `to_thread` por defecto (que correría en el ejecutor general).
+        assert all(h.name.startswith("pbkdf2") for h in hilos)
 
 
 class TestCredencialesValidas:
 
-    def test_modo_none_nunca_valida_nada(self):
+    @pytest.mark.asyncio
+    async def test_modo_none_nunca_valida_nada(self):
         settings = get_settings().model_copy(update={"auth_mode": "none"})
-        assert credenciales_validas("", "", settings) is False
-        assert credenciales_validas("admin", "loquesea", settings) is False
+        assert await credenciales_validas("", "", settings) is False
+        assert await credenciales_validas("admin", "loquesea", settings) is False
 
-    def test_modo_password_ignora_el_usuario(self):
+    @pytest.mark.asyncio
+    async def test_modo_password_ignora_el_usuario(self):
         settings = get_settings().model_copy(update={
             "auth_mode": "password", "auth_password_hash": hash_password("secreta"),
         })
-        assert credenciales_validas("cualquiera", "secreta", settings) is True
-        assert credenciales_validas("", "secreta", settings) is True
-        assert credenciales_validas("cualquiera", "mala", settings) is False
+        assert await credenciales_validas("cualquiera", "secreta", settings) is True
+        assert await credenciales_validas("", "secreta", settings) is True
+        assert await credenciales_validas("cualquiera", "mala", settings) is False
 
-    def test_modo_user_password_exige_ambos(self):
+    @pytest.mark.asyncio
+    async def test_modo_user_password_exige_ambos(self):
         settings = get_settings().model_copy(update={
             "auth_mode": "user_password", "auth_username": "juanjo",
             "auth_password_hash": hash_password("secreta"),
         })
-        assert credenciales_validas("juanjo", "secreta", settings) is True
-        assert credenciales_validas("otro", "secreta", settings) is False
-        assert credenciales_validas("juanjo", "mala", settings) is False
+        assert await credenciales_validas("juanjo", "secreta", settings) is True
+        assert await credenciales_validas("otro", "secreta", settings) is False
+        assert await credenciales_validas("juanjo", "mala", settings) is False
 
-    def test_sin_hash_configurado_nunca_valida(self):
+    @pytest.mark.asyncio
+    async def test_nombre_de_usuario_no_ascii_no_revienta(self):
+        """Regresión: `hmac.compare_digest` con `str` no-ASCII lanzaba
+        `TypeError` y un nombre con tilde/ñ daba 500."""
+        settings = get_settings().model_copy(update={
+            "auth_mode": "user_password", "auth_username": "juánjo",
+            "auth_password_hash": hash_password("secreta"),
+        })
+        assert await credenciales_validas("juánjo", "secreta", settings) is True
+        assert await credenciales_validas("juánjo", "mala", settings) is False
+
+    @pytest.mark.asyncio
+    async def test_sin_hash_configurado_nunca_valida(self):
         """No debe poder 'colarse' con una contraseña vacía solo porque
         auth_password_hash también está vacío."""
         settings = get_settings().model_copy(update={"auth_mode": "password", "auth_password_hash": ""})
-        assert credenciales_validas("", "", settings) is False
+        assert await credenciales_validas("", "", settings) is False
 
-    def test_verify_password_se_llama_siempre_sin_hash_configurado(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_verify_password_se_llama_siempre_sin_hash_configurado(self, monkeypatch):
         """Hallazgo de revisión (timing side-channel): con un `and`
         normal, auth_password_hash vacío cortaba ANTES de llamar a
-        verify_password() (PBKDF2, ~260.000 iteraciones) — una respuesta
-        instantánea delataba "este modo no tiene contraseña puesta" sin
-        falta ver el resultado. Ahora debe llamarse siempre, contra un
-        hash de relleno si hace falta, para que el coste sea el mismo
-        se acierte o no."""
-        espia = MagicMock(wraps=verify_password)
+        verify_password() (PBKDF2) — una respuesta instantánea delataba
+        "este modo no tiene contraseña puesta" sin falta ver el resultado.
+        Ahora debe llamarse siempre, contra un hash de relleno si hace
+        falta, para que el coste sea el mismo se acierte o no."""
+        llamadas: list = []
+        real = verify_password
+
+        async def espia(password, stored):
+            llamadas.append(True)
+            return await real(password, stored)
+
         monkeypatch.setattr("zascarr.services.auth.verify_password", espia)
         settings = get_settings().model_copy(update={"auth_mode": "password", "auth_password_hash": ""})
 
-        assert credenciales_validas("", "cualquiera", settings) is False
-        espia.assert_called_once()
+        assert await credenciales_validas("", "cualquiera", settings) is False
+        assert len(llamadas) == 1
 
-    def test_verify_password_se_llama_siempre_con_usuario_incorrecto(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_verify_password_se_llama_siempre_con_usuario_incorrecto(self, monkeypatch):
         """Mismo hallazgo, en user_password: un usuario que no coincide
         no debe evitar el coste de PBKDF2 — si no, medir el tiempo de
         respuesta permitiría averiguar qué nombres de usuario existen."""
-        espia = MagicMock(wraps=verify_password)
+        llamadas: list = []
+        real = verify_password
+
+        async def espia(password, stored):
+            llamadas.append(True)
+            return await real(password, stored)
+
         monkeypatch.setattr("zascarr.services.auth.verify_password", espia)
         settings = get_settings().model_copy(update={
             "auth_mode": "user_password", "auth_username": "juanjo",
             "auth_password_hash": hash_password("secreta"),
         })
 
-        assert credenciales_validas("no-es-juanjo", "secreta", settings) is False
-        espia.assert_called_once()
+        assert await credenciales_validas("no-es-juanjo", "secreta", settings) is False
+        assert len(llamadas) == 1
 
 
 class TestCookieSesion:
 
     def test_cookie_recien_creada_es_valida(self):
-        token = crear_cookie_sesion("mi-secreto")
-        assert sesion_valida(token, "mi-secreto") is True
+        token = crear_cookie_sesion("mi-secreto", 0)
+        assert sesion_valida(token, "mi-secreto", 0) is True
 
     def test_cookie_firmada_con_otro_secreto_no_vale(self):
-        token = crear_cookie_sesion("mi-secreto")
-        assert sesion_valida(token, "otro-secreto-distinto") is False
+        token = crear_cookie_sesion("mi-secreto", 0)
+        assert sesion_valida(token, "otro-secreto-distinto", 0) is False
 
     def test_cookie_manipulada_no_vale(self):
-        token = crear_cookie_sesion("mi-secreto")
+        token = crear_cookie_sesion("mi-secreto", 0)
         payload, _, mac = token.rpartition(".")
-        manipulada = f"{int(payload) + 999999}.{mac}"
-        assert sesion_valida(manipulada, "mi-secreto") is False
+        ts, _, version = payload.partition(".")
+        manipulada = f"{int(ts) + 999999}.{version}.{mac}"
+        assert sesion_valida(manipulada, "mi-secreto", 0) is False
 
     def test_cookie_ausente_o_vacia_no_vale(self):
-        assert sesion_valida(None, "mi-secreto") is False
-        assert sesion_valida("", "mi-secreto") is False
+        assert sesion_valida(None, "mi-secreto", 0) is False
+        assert sesion_valida("", "mi-secreto", 0) is False
+
+    def test_cookie_de_version_anterior_no_vale(self):
+        """`auth_session_version`: cambiar la contraseña sube la versión y las
+        cookies emitidas antes dejan de valer."""
+        token = crear_cookie_sesion("mi-secreto", version=0)
+        assert sesion_valida(token, "mi-secreto", 0) is True
+        assert sesion_valida(token, "mi-secreto", 1) is False
+
+    def test_cookie_del_formato_viejo_sin_version_no_vale(self):
+        """Las cookies emitidas antes de este cambio (payload = solo timestamp)
+        caducan: el usuario vuelve a iniciar sesión una vez."""
+        from zascarr.services.auth import sign_token
+        token_viejo = sign_token(str(int(time.time())), "mi-secreto")
+        assert sesion_valida(token_viejo, "mi-secreto", 0) is False
 
     def test_cookie_expirada_no_vale(self, monkeypatch):
-        token = crear_cookie_sesion("mi-secreto")
         monkeypatch.setattr("zascarr.services.auth.SESSION_MAX_AGE", 1)
         # Reconstruye el mismo payload pero con una emisión ya vieja.
-        vieja = f"{int(time.time()) - 100}"
         from zascarr.services.auth import sign_token
-        token_viejo = sign_token(vieja, "mi-secreto")
-        assert sesion_valida(token_viejo, "mi-secreto") is False
+        token_viejo = sign_token(f"{int(time.time()) - 100}.0", "mi-secreto")
+        assert sesion_valida(token_viejo, "mi-secreto", 0) is False
 
 
 def _app_de_prueba() -> FastAPI:
@@ -150,8 +218,16 @@ def _app_de_prueba() -> FastAPI:
     def _algo():
         return {"ok": True}
 
+    @app.post("/ui/algo")
+    def _algo_post():
+        return {"ok": True}
+
     @app.get("/api/algo")
     def _api_algo():
+        return {"ok": True}
+
+    @app.post("/api/algo")
+    def _api_algo_post():
         return {"ok": True}
 
     @app.get("/api/health")
@@ -248,3 +324,193 @@ class TestAuthMiddleware:
         r = client.get("/api/algo", auth=("cualquiera", "mala"))
 
         assert r.status_code == 401
+
+    def test_next_con_ampersand_se_codifica(self, monkeypatch):
+        """Caso 3 de la ficha de seguridad: un `&` en la query original no se
+        trunca al redirigir a /login (antes se parseaba como parámetro aparte)."""
+        from urllib.parse import parse_qs, urlsplit
+
+        settings = get_settings().model_copy(update={
+            "auth_mode": "password", "auth_password_hash": hash_password("x"), "secret_key": "s",
+        })
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        client = TestClient(_app_de_prueba(), follow_redirects=False)
+
+        r = client.get("/ui/algo?q=a&b=2")
+
+        assert r.status_code == 303
+        params = parse_qs(urlsplit(r.headers["location"]).query)
+        assert params["next"] == ["/ui/algo?q=a&b=2"]
+
+
+@pytest.mark.sin_origen
+class TestOrigenHost:
+    """CSRF / Origen / Host (ficha de seguridad). Marcado `sin_origen` para
+    controlar Host/Origin a mano en vez de heredar el localhost del conftest."""
+
+    @staticmethod
+    def _cliente(monkeypatch, *, base_url="http://127.0.0.1:8000", settings_base_url=""):
+        settings = get_settings().model_copy(update={
+            "auth_mode": "none", "secret_key": "s", "base_url": settings_base_url,
+        })
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        return TestClient(_app_de_prueba(), base_url=base_url)
+
+    def test_get_no_se_comprueba(self, monkeypatch):
+        r = self._cliente(monkeypatch).get("/ui/algo")
+        assert r.status_code == 200
+
+    def test_post_ui_sin_origin_se_bloquea(self, monkeypatch):
+        r = self._cliente(monkeypatch).post("/ui/algo")
+        assert r.status_code == 403
+
+    def test_post_api_sin_origin_se_permite(self, monkeypatch):
+        r = self._cliente(monkeypatch).post("/api/algo")
+        assert r.status_code == 200
+
+    def test_origin_del_mismo_host_se_acepta(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "http://127.0.0.1:8000"})
+        assert r.status_code == 200
+
+    def test_origin_ajeno_se_rechaza(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://mal.example"})
+        assert r.status_code == 403
+
+    def test_origin_null_se_rechaza(self, monkeypatch):
+        r = self._cliente(monkeypatch).post("/ui/algo", headers={"Origin": "null"})
+        assert r.status_code == 403
+
+    def test_sec_fetch_site_cross_site_se_rechaza(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo",
+            headers={"Origin": "http://127.0.0.1:8000", "Sec-Fetch-Site": "cross-site"})
+        assert r.status_code == 403
+
+    def test_origin_igual_a_base_url_con_host_distinto_se_acepta(self, monkeypatch):
+        """Proxy inverso: nginx cambia Host, Origin es el dominio público."""
+        r = self._cliente(
+            monkeypatch,
+            base_url="http://127.0.0.1:8000",
+            settings_base_url="https://comics.example").post(
+            "/ui/algo", headers={"Origin": "https://comics.example"})
+        assert r.status_code == 200
+
+    def test_host_con_ip_literal_se_permite(self, monkeypatch):
+        r = self._cliente(monkeypatch, base_url="http://192.168.1.50:8000").post(
+            "/ui/algo", headers={"Origin": "http://192.168.1.50:8000"})
+        assert r.status_code == 200
+
+    def test_host_con_nombre_ajeno_se_rechaza(self, monkeypatch):
+        """DNS rebinding: un nombre de dominio que resuelve a la IP local."""
+        r = self._cliente(monkeypatch, base_url="http://atacante.example").post(
+            "/ui/algo", headers={"Origin": "http://atacante.example"})
+        assert r.status_code == 403
+
+    def test_referer_con_sufijo_enganoso_no_pasa(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Referer": "https://example.org.attacker.com/x"})
+        assert r.status_code == 403
+
+    def test_el_403_dice_la_salida_en_espanol(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://mal.example"})
+        assert r.status_code == 403
+        assert "BASE_URL" in r.text and "proxy" in r.text
+
+    def test_host_ipv6_loopback_se_permite(self, monkeypatch):
+        """`[::1]:8000` no se puede parsear con split(':')."""
+        r = self._cliente(monkeypatch, base_url="http://[::1]:8000").post(
+            "/ui/algo", headers={"Origin": "http://[::1]:8000"})
+        assert r.status_code == 200
+
+    def test_host_ipv6_link_local_se_permite(self, monkeypatch):
+        r = self._cliente(monkeypatch, base_url="http://[fe80::1]:8000").post(
+            "/ui/algo", headers={"Origin": "http://[fe80::1]:8000"})
+        assert r.status_code == 200
+
+    def test_origin_con_puerto_invalido_da_403_no_500(self, monkeypatch):
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "http://x:99999"})
+        assert r.status_code == 403
+
+    def test_host_en_allowed_hosts_se_permite(self, monkeypatch):
+        """Quien entra por el nombre de su equipo no debe recibir 403."""
+        settings = get_settings().model_copy(update={
+            "auth_mode": "none", "secret_key": "s",
+            "allowed_hosts": "raspberrypi.local,pi",
+        })
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        client = TestClient(_app_de_prueba(), base_url="http://raspberrypi.local:8000")
+
+        r = client.post("/ui/algo", headers={"Origin": "http://raspberrypi.local:8000"})
+
+        assert r.status_code == 200
+
+    def test_get_con_host_ajeno_se_rechaza(self, monkeypatch):
+        """Rebinding de LECTURA: un GET con Host ajeno también se rechaza (si no,
+        un atacante podría leer biblioteca/wishlist/ajustes)."""
+        r = self._cliente(monkeypatch, base_url="http://atacante.example").get("/ui/algo")
+        assert r.status_code == 403
+
+    def test_el_403_de_host_dice_allowed_hosts(self, monkeypatch):
+        r = self._cliente(monkeypatch, base_url="http://atacante.example").get("/ui/algo")
+        assert r.status_code == 403
+        assert "ALLOWED_HOSTS" in r.text
+
+    def test_same_origin_cubre_el_proxy_con_tls(self, monkeypatch):
+        """Caddy conserva Host pero la app ve http; el navegador manda
+        `Sec-Fetch-Site: same-origin` (que no puede falsificar una página) y eso
+        evita el 403 con `auth_mode=password` (sin comprobación de Host)."""
+        settings = get_settings().model_copy(update={"auth_mode": "password", "secret_key": "s"})
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        client = TestClient(_app_de_prueba(), base_url="http://zascarr.example",
+                            follow_redirects=False)
+        r = client.post(
+            "/ui/algo",
+            headers={"Origin": "https://zascarr.example", "Sec-Fetch-Site": "same-origin"})
+        # Pasa el middleware (no 403); el 303 es el redirect de auth, no el CSRF.
+        assert r.status_code == 303
+
+    def test_el_403_es_text_plain_con_nosniff(self, monkeypatch):
+        """Sin `media_type` Starlette no fija `Content-Type` y el navegador podría
+        adivinar el tipo de un texto que refleja datos de la petición."""
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://mal.example"})
+
+        assert r.status_code == 403
+        assert r.headers["content-type"].startswith("text/plain")
+        assert r.headers["x-content-type-options"] == "nosniff"
+
+    def test_el_403_escapa_el_origen_reflejado(self, monkeypatch):
+        """HTMX intercambia el cuerpo como innerHTML aunque sea text/plain: un
+        `Origin` con etiquetas no debe colarse como marcado."""
+        r = self._cliente(monkeypatch).post(
+            "/ui/algo", headers={"Origin": "https://x/<script>alert(1)</script>"})
+
+        assert r.status_code == 403
+        assert "<script>" not in r.text
+        assert "&lt;script&gt;" in r.text
+
+
+class TestAppRealConHtmx:
+    """La UI real (zascarr.main.app) con las cabeceras de HTMX no debe caer en el
+    403 del middleware. No marcado `sin_origen`: usa el localhost del conftest."""
+
+    def _cliente(self):
+        from zascarr.main import app as app_real
+        return TestClient(app_real, follow_redirects=False)
+
+    def test_post_htmx_con_origen_del_mismo_host_no_es_403(self):
+        # /login es un POST de estado y no toca la BD con auth_mode=none.
+        r = self._cliente().post(
+            "/login", data={"next": "/", "username": "", "password": ""},
+            headers={"HX-Request": "true", "Origin": "http://localhost"})
+        assert r.status_code != 403
+
+    def test_post_desde_ip_de_la_lan_no_es_403(self):
+        r = self._cliente().post(
+            "/login", data={"next": "/", "username": "", "password": ""},
+            headers={"Host": "192.168.1.50:8000", "Origin": "http://192.168.1.50:8000"})
+        assert r.status_code != 403

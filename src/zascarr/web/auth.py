@@ -6,16 +6,22 @@ explícitamente), igual que /legal.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.database import get_db
 from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
+    ColaDeVerificacionLlenaError,
     crear_cookie_sesion,
-    credenciales_validas,
+    hash_password_async,
+    intentar_credenciales,
+    necesita_rehash,
 )
+from zascarr.services.runtime_settings import RuntimeSettingsService
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
@@ -60,19 +66,48 @@ async def login_form(request: Request, next: str = "/") -> HTMLResponse:
 async def login_submit(
     request: Request, next: str = Form(default="/"),
     username: str = Form(default=""), password: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     next = _next_seguro(next)
     settings = get_settings()
-    if not credenciales_validas(username, password, settings):
+    # Lecturas ANTES de cualquier await: la cookie se sella con la versión con la
+    # que se VALIDÓ. Si no, cambiar la contraseña justo durante el rehasheo (que
+    # tarda cientos de ms) dejaría viva una sesión abierta con la contraseña
+    # vieja, ya con la versión nueva.
+    version_validada = settings.auth_session_version
+    hash_validado = settings.auth_password_hash
+
+    try:
+        ok = await intentar_credenciales(username, password, settings)
+    except ColaDeVerificacionLlenaError:
+        # 429 del tope de cola: NO cuenta como intento fallido en el retraso.
+        return templates.TemplateResponse(request, "login.html", {
+            "next": next,
+            "pide_usuario": settings.auth_mode == "user_password",
+            "error": "Demasiados intentos a la vez. Espera unos segundos y vuelve a probar.",
+        }, status_code=429)
+    if not ok:
         return templates.TemplateResponse(request, "login.html", {
             "next": next,
             "pide_usuario": settings.auth_mode == "user_password",
             "error": "Usuario o contraseña incorrectos.",
         }, status_code=401)
 
+    # Rehasheo oportunista (p. ej. tras subir las iteraciones de PBKDF2): aquí es
+    # donde hay contraseña en claro y ya validada. Se calcula en el ejecutor
+    # propio (no bloquea el bucle de eventos) y NO toca `auth_session_version`:
+    # subir iteraciones no debe cerrar las sesiones abiertas. Solo se escribe si
+    # el hash guardado sigue siendo el que se validó — si el dueño cambió la
+    # contraseña en el hueco, no se revierte su cambio.
+    if necesita_rehash(hash_validado) and settings.auth_password_hash == hash_validado:
+        nuevo_hash = await hash_password_async(password)
+        if settings.auth_password_hash == hash_validado:
+            await RuntimeSettingsService(db).save({"auth_password_hash": nuevo_hash})
+
     respuesta = RedirectResponse(next, status_code=303)
     respuesta.set_cookie(
-        COOKIE_NAME, crear_cookie_sesion(settings.secret_key),
+        COOKIE_NAME,
+        crear_cookie_sesion(settings.secret_key, version_validada),
         max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
     )
     return respuesta

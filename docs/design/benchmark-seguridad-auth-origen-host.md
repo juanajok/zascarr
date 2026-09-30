@@ -140,6 +140,58 @@ Verificado en el código (`main` en `7f6f637`):
 - **Ajustar el texto de Ajustes:** hoy dice que `base_url` «no cambia nada»; pasa
   a explicar que participa en la validación de `Origin`/`Host` para quien expone
   ZascArr tras un proxy.
+- **Riesgo de bloqueo (detectado en revisión):** quien esté detrás de un proxy
+  inverso que no conserve `Host` (nginx lo cambia por defecto) y no haya
+  rellenado `base_url` verá `403` en todos los POST — incluido el de Ajustes
+  donde se rellena `base_url`, así que no puede arreglarlo desde la interfaz.
+  Dos medidas: (a) el `403` se explica en español, con el origen recibido y la
+  salida concreta («si accedes tras un proxy, define BASE_URL en el .env»); y
+  (b) `BASE_URL` se lee del `.env` (ya lo hace pydantic-settings), como vía de
+  recuperación sin interfaz. Nota: el `403` lleva el origen recibido tal cual —
+  es una cabecera que manda el cliente, no un secreto, y verla es lo que permite
+  diagnosticar; no se registra en logs por defecto.
+
+**Correcciones tras la revisión de la implementación (2026-09-29):**
+
+- **`ALLOWED_HOSTS`** (lista separada por comas en el `.env`): sin ella, quien
+  entra por el nombre del equipo (`raspberrypi.local`, `pi`) recibía 403 en
+  todo con `auth_mode="none"`. Ahora esos nombres se declaran sin necesidad de
+  una URL completa, y el 403 del `Host` (mensaje aparte del de origen) dice el
+  nombre recibido y cómo permitirlo.
+- **El `Host` se valida en TODOS los métodos**, no solo en los que cambian
+  estado: un DNS rebinding permite **leer** (biblioteca, wishlist, ajustes), no
+  solo escribir. El healthcheck no necesita excepción porque va por
+  `localhost`/`127.0.0.1` (IP literal).
+- **IPv6:** el hostname se extrae con `urlsplit("//" + host).hostname`, no con
+  `split(":")` — `[::1]:8000` daba `"["` y se rechazaba.
+- **Puerto inválido:** `http://x:99999` hacía que `urlsplit(...).port` lanzara
+  `ValueError` fuera del `try` → 500. Ahora se captura y el `Origin` se
+  rechaza con 403.
+- **`Sec-Fetch-Site: same-origin`** se acepta como señal positiva (la calcula
+  el navegador, una página no puede falsificarla): cubre el proxy con TLS que
+  conserva `Host` pero la app ve por `http` (`Origin` `https://…` vs URL
+  `http://…`). Con `auth_mode="none"` la comprobación de `Host` sigue
+  aplicándose aparte, porque en un rebinding el navegador también manda
+  `same-origin`.
+- **`base_url` vacío en la BD no pisa el `BASE_URL` del `.env`**
+  (`apply_overrides` lo omite): si un guardado previo de Ajustes dejó
+  `base_url=""`, la vía de recuperación del `.env` seguiría funcionando.
+
+**Segunda revisión (2026-09-29):**
+
+- Borrar `base_url` desde Ajustes **no se aplicaba hasta reiniciar**: `apply_overrides`
+  lo saltaba y dejaba el valor anterior en memoria (y Ajustes decía «guardado y
+  aplicado, sin reiniciar»). Ahora se **restaura la copia del `.env`** tomada al
+  arrancar (`capturar_valores_base()` en el `lifespan`), no se ignora.
+- Los 403 llevan `Content-Type: text/plain; charset=utf-8` y
+  `X-Content-Type-Options: nosniff`, y los valores reflejados van escapados con
+  `html.escape` (HTMX intercambia el cuerpo como `innerHTML` aunque sea
+  `text/plain`).
+- **El 403 se ve con HTMX:** verificado en el `htmx.min.js` vendorizado (v4.0.0,
+  `noSwap:[204,304]`) — los 4xx **sí** se intercambian en el `hx-target`, y no hay
+  ningún `hx-status` que lo desactive, así que el texto llega a
+  `#resultado-seguridad`. No se pudo comprobar en un navegador real desde este
+  entorno.
 
 ### 2. Autenticación en pasos
 
@@ -147,13 +199,14 @@ Verificado en el código (`main` en `7f6f637`):
   `asyncio.to_thread`; `credenciales_validas`/`_basic_auth_valido` pasan a ser
   corrutinas que lo llaman así. El nombre de usuario se compara en bytes:
   `hmac.compare_digest(username.encode(), settings.auth_username.encode())`.
-- **Paso 2 — retraso progresivo, no bloqueo duro.** Los fallos se cuentan por IP
-  **en memoria** y producen un retraso creciente (con tope) antes de responder,
-  en vez de bloquear. Detrás de un proxy inverso o del NAT de Docker todas las
-  peticiones comparten IP, y un bloqueo duro dejaría fuera también al dueño; un
-  retraso castiga el martilleo sin impedir un login correcto posterior.
-  `X-Forwarded-For` solo se usa si se configura explícitamente un proxy de
-  confianza.
+- **Paso 2 — retraso progresivo, no bloqueo duro.** Los fallos se cuentan **por
+  cuenta** (no por IP: contar por IP se esquiva rotando direcciones y crece sin
+  límite — OWASP) y producen un retraso creciente (con tope) antes de responder,
+  en vez de bloquear. Un bloqueo duro dejaría fuera también al dueño; un retraso
+  castiga el martilleo sin impedir un login correcto posterior. Los intentos se
+  **serializan** para que una ráfaga en paralelo no lo esquive. Ojo: con la cola
+  acotada, un ataque sostenido sí puede dejar nuevos logins en 429 (ver
+  implementación).
 - **Paso 3 — subir a 600.000 y rehashear solo en `/login`.** `hash_password` pasa
   a `600_000`; `verify_password` sigue leyendo las iteraciones del hash
   almacenado (compatibilidad). El rehasheo (260.000 → 600.000) se hace **solo en
@@ -169,6 +222,65 @@ Verificado en el código (`main` en `7f6f637`):
   (`urllib.parse.quote`), manteniendo la guarda anti open-redirect de
   `_next_seguro` que ya existe.
 
+**Implementado (2026-09-29) — `auth_session_version`:**
+
+- Vive como `secret_key`: campo interno de `runtime_settings`
+  (`_CAMPOS_INTERNOS`), **sin migración**; por defecto 0 y se aplica al arrancar
+  con `load_overrides_at_startup`.
+- **Sube** al cambiar la contraseña (se escribe una nueva), el nombre de usuario
+  o el modo de autenticación. **No sube** en el rehasheo por iteraciones ni al
+  guardar sin cambios.
+- La cookie pasa a ser `sign_token(f"{emitida_en}.{version}", secret)`; una
+  cookie del formato anterior (solo el timestamp) ya no vale — cierre de sesión
+  único, anotado en el CHANGELOG.
+- El rehasheo (260.000 → las iteraciones actuales) se hace **solo en `/login`**,
+  tras validar la contraseña, con `hash_password_async` en el ejecutor propio.
+  `guardar_seguridad` también hashea con el ejecutor, no en el bucle de eventos.
+- Pruebas: el rehasheo no invalida la sesión; cambiar contraseña/usuario/modo sí;
+  dos logins simultáneos que rehashean no se pisan (la versión no se toca, el
+  hash final valida la misma contraseña).
+
+**Implementado (2026-09-29) — retraso, caché y tope:**
+
+- **Retraso progresivo por CUENTA** (no por IP), en memoria:
+  `min(0.5 · 2^(n-1), 8) s`, ventana de 15 min. OWASP recomienda contar por
+  cuenta: contar por IP se esquiva rotando direcciones y crece sin límite.
+  ZascArr tiene una sola cuenta, así que el contador es global. Se aplica antes
+  de validar en `/login` y en Basic Auth (`intentar_credenciales`), con
+  `asyncio.sleep` — no bloquea el bucle, y una credencial correcta entra tras la
+  espera y limpia el contador. No es un bloqueo duro, pero tampoco garantiza
+  disponibilidad bajo ataque sostenido (ver «cola acotada» abajo). Esto elimina
+  `X-Forwarded-For`/`TRUSTED_PROXY` de este mecanismo (y el ajuste se retiró: ya
+  no tenía otro uso).
+- **Serialización:** un candado (`asyncio.Lock`) cubre el ciclo
+  espera→valida→anota, para que una ráfaga en paralelo no lea el contador a la
+  vez y esquive el retraso (antes el límite real pasaba a ser el ejecutor).
+- **Cola acotada:** como mucho `_INTENTOS_MAX_EN_COLA` (3) intentos en vuelo;
+  el resto recibe **429** con `Retry-After` sin encolarse. Ese rechazo **no
+  cuenta como fallo**. El dueño con sesión abierta o con Basic en caché no pasa
+  por aquí. **Límite honesto:** quien mantenga ocupadas las tres plazas puede
+  dejar los nuevos inicios de sesión en 429 de forma sostenida (cada plaza
+  espera hasta 8 s + la verificación). El retraso no bloquea por sí mismo, pero
+  esto no es una promesa de disponibilidad: la salida es cortar el ataque en el
+  cortafuegos o el proxy.
+- **Tope del semáforo de PBKDF2:** se adquiere con `asyncio.wait_for` (2 s); si
+  no hay hueco, `ColaDeVerificacionLlenaError` → 429. Hay prueba de equilibrio:
+  tras muchos timeouts, los dos huecos siguen disponibles.
+- **Caché de aciertos de Basic:** clave `HMAC(secret, versión + cabecera)`, TTL
+  60 s, máximo 256 entradas (se purga y, si hace falta, se vacía). Solo aciertos;
+  un fallo nunca se cachea; cambiar las credenciales la vacía.
+- **Longitud mínima de contraseña:** 12 caracteres (< 12 no se guarda; 12-14
+  avisa). OWASP recomienda 15 sin segundo factor.
+
+**Pendiente de la ficha (cambio aparte, sin migración):** subir de `260_000` a
+`600_000` iteraciones. El hash guarda su contador, así que los hashes viejos
+siguen validando y se regeneran al iniciar sesión — no hay migración ni cierre
+de sesiones. **Se decide con la medición real en la Pi** (5 veces en reposo y 1
+durante una importación): mediana < ~0,8 s → `600_000`; ~1 s o más (o entre 0,8
+y 1) → se queda `260_000`, porque con la cola de tres intentos cada verificación
+lenta alarga lo que un atacante puede mantener las plazas ocupadas. Queda
+registrado aquí con fecha y modelo de Pi cuando se mida.
+
 ### 3. Comprobación real de dependencias (respuesta al check rojo)
 
 - **Adoptar:** `pip-audit` como paso de CI (informativo, `continue-on-error`,
@@ -176,7 +288,9 @@ Verificado en el código (`main` en `7f6f637`):
   Da una señal real de CVEs en dependencias, que hoy no existe: el repositorio
   no tiene ningún análisis de seguridad (`code-scanning/alerts` → «no analysis
   found») y NFR-17 (`pip-audit`/`trivy`) está registrado como `NOT RUN`.
-- **Opcional:** reglas `S` de ruff (`--select S`) en modo informativo.
+  **Implementado:** job `pip-audit` en `.github/workflows/ci.yml` (informativo),
+  y reglas `S` de ruff como paso extra del job de lint. NFR-17 pasa a
+  ejecutarse en CI (sigue sin `trivy` de imagen).
 - **Descartar por ahora:** `trivy` (escaneo de imagen) y arreglar el escáner de
   IA de GitHub. El escáner de IA falla por «The requested model is not
   supported» (HTTP 400) — fallo de servicio, no señal. Silenciarlo/desactivarlo

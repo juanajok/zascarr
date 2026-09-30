@@ -3,6 +3,71 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [No publicado]
+
+### Seguridad
+
+- **La cookie de sesión lleva ahora firmada una `auth_session_version`.** Sube al
+  cambiar la contraseña, el nombre de usuario o el modo de autenticación, así
+  que **cambiar la contraseña cierra de verdad las sesiones abiertas** (antes
+  una cookie emitida seguía valiendo hasta 30 días). Quien cambia la contraseña
+  conserva su propia sesión; se cierran las demás. El rehasheo automático al
+  subir las iteraciones de PBKDF2 **no** invalida sesiones.
+- **Al actualizar tendrás que iniciar sesión una vez**: las cookies del formato
+  anterior (sin versión) dejan de valer. Es un cierre de sesión, no una pérdida
+  de datos.
+- **PBKDF2 ya no bloquea la aplicación**: corre en un ejecutor propio (2 hilos,
+  acotado), y el nombre de usuario se compara en bytes UTF-8 (un nombre con
+  tilde o `ñ` daba error). Se rehashea la contraseña al iniciar sesión si venía
+  de un contador de iteraciones anterior. Las iteraciones se quedan en **260.000
+  por ahora**: subirlas a 600.000 es un cambio aparte, sin migración (el hash
+  guarda su contador), que se decide con la medición real en la Raspberry Pi
+  (OWASP pide menos de un segundo por hash).
+- **Los intentos fallidos de contraseña se retrasan de forma progresiva**, con
+  tope (hasta 8 s). El retraso **no bloquea por sí mismo**: una credencial
+  correcta entra tras la espera, y la espera no congela el resto de la
+  aplicación. El contador es de la **cuenta**, no de la IP (OWASP): rotar
+  direcciones no lo esquiva, y los intentos se **serializan** con un candado
+  para que una ráfaga en paralelo no lo salte.
+- **Si hay demasiados intentos a la vez** (más de tres en vuelo), se responde
+  `429` con `Retry-After` en vez de encolar sin límite. Un rechazo por este
+  motivo **no cuenta como intento fallido**. Aviso honesto: quien mantenga
+  ocupadas esas plazas puede dejar los **nuevos inicios de sesión en 429** de
+  forma sostenida — quien ya tiene la sesión abierta o Basic en caché no se ve
+  afectado, y la salida práctica es cortar el ataque en el cortafuegos o el
+  proxy, no esperar a que cese solo.
+- **Basic Auth cachea los aciertos** (60 s, tamaño acotado): un script con
+  credenciales válidas no repite PBKDF2 en cada petición. Un fallo nunca se
+  cachea, y cambiar la contraseña vacía la caché.
+- **La contraseña debe tener al menos 12 caracteres** (OWASP recomienda 15 sin
+  segundo factor): por debajo de 12 no se guarda, y entre 12 y 14 se avisa. Un
+  mensaje en español lo explica al guardar en Ajustes.
+
+### Cambiado (rompe scripts que llamen a la UI sin `Origin`)
+
+- **Los `POST`/`PUT`/`PATCH`/`DELETE` a `/ui/*` sin cabecera `Origin` (ni
+  `Referer`) ahora reciben `403`.** Es la defensa CSRF del middleware: un
+  navegador siempre manda `Origin` en un POST, así que la UI no se ve afectada,
+  pero un script que llame a un endpoint de la UI sin `Origin` dejará de
+  funcionar. **`/api/*` sin `Origin` sigue permitido** (pensado para
+  `curl`/Basic Auth). Además se rechazan `Origin: null`, `Sec-Fetch-Site:
+  cross-site`, y un `Origin`/`Referer` que no coincida con el `Host` ni con
+  `base_url`. Si accedes detrás de un proxy inverso que no conserva `Host`
+  (nginx lo cambia por defecto) y no has definido `BASE_URL`, verás `403` en
+  todos los POST incluido el de Ajustes: define `BASE_URL` en el `.env` (o en
+  Ajustes) con tu dominio público — el propio `403` te lo dice en español.
+
+### Cambiado (rompe a quien entra por el nombre del equipo)
+
+- **Con `auth_mode="none"`, el middleware valida el `Host` en TODAS las
+  peticiones, no solo en las que cambian estado.** Un ataque de DNS rebinding
+  permite *leer* respuestas (biblioteca, wishlist, ajustes), no solo
+  escribirlas. Se aceptan `localhost`, cualquier IP literal (IPv4 o IPv6) y el
+  host de `BASE_URL`; **un nombre como `raspberrypi.local` o `pi` tiene que
+  estar en `ALLOWED_HOSTS`** — lista separada por comas en el `.env`, por
+  ejemplo `ALLOWED_HOSTS=raspberrypi.local,pi` — o recibirás `403` en todo,
+  lecturas incluidas. El `403` lo dice con el nombre recibido y esta salida.
+
 ## [1.14.0] — 2026-09-26
 
 ### Corregido

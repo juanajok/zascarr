@@ -34,9 +34,47 @@ no el de esta contraseña —, pero ya no es la ÚNICA capa: sin activar nada
 aquí, cualquiera con la URL puede leer tu biblioteca, activar integraciones
 de descarga y disparar búsquedas.
 
+**Condición para el proxy inverso:** ZascArr rechaza las peticiones que
+cambian estado (`POST`/`PUT`/`PATCH`/`DELETE`) cuyo `Origin`/`Referer` no
+coincida con su propio `Host` ni con `base_url` — es la defensa CSRF, porque
+con `auth_mode="none"` no hay cookie que valga. Un proxy que **no conserve
+`Host`** (nginx lo cambia por defecto) hace que `Origin` sea tu dominio
+público y `Host` el interno, y sin nada más recibirías **403 en todos los
+POST**, incluido el de Ajustes. Define `BASE_URL` en el `.env` (o en
+Ajustes) con tu dominio público — es una de las vías pensadas para recuperar
+el acceso sin depender de la interfaz. El 403 explica en español el origen
+recibido y esta misma salida.
+
+**Si entras por el nombre del equipo** (`raspberrypi.local`, `pi`, …) con
+`auth_mode="none"`, añádelo a `ALLOWED_HOSTS` (lista separada por comas en el
+`.env`): con la contraseña desactivada el middleware valida el `Host` en
+**todas** las peticiones — también los `GET` —, porque un DNS rebinding
+permitiría *leer* tu biblioteca o tus ajustes, no solo escribirlos. Se aceptan
+siempre `localhost`, cualquier IP literal (IPv4 o IPv6) y el host de
+`base_url`.
+
+**Proxy con TLS que sí conserva `Host`:** si tu Caddy/nginx termina el TLS y
+reenvía a ZascArr por HTTP interno, el navegador manda `Sec-Fetch-Site:
+same-origin` (una cabecera que calcula el navegador y una página no puede
+falsificar) y el middleware la acepta como señal positiva, así que no hace
+falta `BASE_URL` para ese caso. Con `auth_mode="none"` la comprobación de
+`Host` sigue aplicándose de todos modos — en un rebinding el navegador también
+manda `same-origin`.
+
+**Retraso progresivo:** los intentos fallidos de contraseña se castigan con un
+retraso creciente (con tope de 8 s). El retraso **no bloquea por sí mismo** —
+una credencial correcta entra tras la espera —, pero **no es una promesa de
+disponibilidad**: quien mantenga ocupadas las tres plazas de intento en vuelo
+puede dejar los **nuevos inicios de sesión en `429`** de forma sostenida. Quien
+ya tiene la sesión abierta o Basic en caché no se ve afectado. Si eso ocurre, la
+salida es **cortar el ataque en el cortafuegos o el proxy**, no esperar. El
+contador es de la **cuenta**, no de la IP de origen (OWASP): rotar direcciones
+no lo esquiva, y los intentos se **serializan** con un candado para que una
+ráfaga en paralelo no lo salte. Requiere además una **contraseña de al menos 12
+caracteres** (15 recomendado sin segundo factor): sin eso, el retraso no basta.
+
 ## Deuda de seguridad conocida (A6)
 
-- **La sesión no se invalida al cambiar la contraseña.** La cookie se firma solo con `secret_key`, no con la contraseña, así que una cookie emitida antes de un cambio de contraseña sigue siendo válida hasta que caduca (30 días) o hasta que `secret_key` se regenere. Aceptable para una herramienta de un solo operador en su propia LAN, pero es una de esas sorpresas que alguien descubrirá algún día ("cambié la clave y seguía entrando desde otra pestaña") — que quede escrito. Si algún día importa, cerrar sesión en todas partes = regenerar `secret_key`.
 - **La cookie viaja sin `Secure`, decidido a propósito.** Con `secure=True` el navegador no enviaría la cookie por HTTP plano y el login en la LAN dejaría de funcionar, así que sin TLS activado rompería el caso de uso principal. Es la decisión correcta hoy, pero es deuda deliberada: cuando ZascArr viva tras un reverse proxy con TLS de verdad, ese flag debería activarse (o hacerse condicional a `base_url` empezando por `https://`). Entra de oficio con la futura historia de reverse proxy.
 
 ## Reportar una vulnerabilidad
@@ -59,5 +97,30 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   para el Markdown del propio `LEGAL.md`, ya controlado.
 - **CORS**: sin middleware CORS — UI y API viven en el mismo origen, cero
   peticiones cross-origin legítimas.
+- **La sesión se cierra al cambiar las credenciales.** La cookie lleva, firmado,
+  un `auth_session_version` que sube al cambiar la contraseña, el usuario o el
+  modo de autenticación: las cookies emitidas antes dejan de valer y hay que
+  volver a entrar. El rehasheo por subida de iteraciones **no** sube la versión
+  (no debe cerrar sesiones a quien ya está dentro). Las cookies del formato
+  anterior (sin versión) caducan al actualizar — un único inicio de sesión.
+- **CSRF / Origen / Host**: las peticiones que cambian estado se rechazan con
+  `403` si `Sec-Fetch-Site: cross-site`, si `Origin: null`, o si `Origin`/
+  `Referer` no coinciden (esquema+host+puerto normalizados) con el `Host` de la
+  petición ni con `base_url`. En `/ui/*` se bloquea además cuando no hay ni
+  `Origin` ni `Referer` (un navegador siempre manda `Origin` en un POST); en
+  `/api/*` se permite su ausencia, para scripts con `curl`/Basic. `Sec-Fetch-Site:
+  same-origin` se acepta como señal positiva (cubre el proxy con TLS). Con
+  `auth_mode="none"` se valida el `Host` en **todos** los métodos — un rebinding
+  permite leer, no solo escribir — aceptando `localhost`, IP literal, el host de
+  `base_url` y los nombres de `ALLOWED_HOSTS`.
+- **Fuerza bruta**: los fallos de contraseña se castigan con un **retraso
+  progresivo por cuenta** (con tope de 8 s) y los intentos se **serializan**
+  para que una ráfaga en paralelo no lo salte. El retraso no bloquea por sí
+  mismo, pero mantener ocupadas las plazas en vuelo puede dejar nuevos inicios
+  de sesión en `429` (ver «Retraso progresivo» arriba: se corta en el
+  cortafuegos/proxy). Un **tope de cola** responde `429` con `Retry-After` en
+  vez de encolar sin límite (esos rechazos no cuentan como fallo), y una **caché
+  de aciertos de Basic** con TTL corto y tamaño acotado se vacía al cambiar la
+  contraseña. Se exige además una **longitud mínima de 12 caracteres**.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.
