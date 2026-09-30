@@ -48,6 +48,10 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -e ".[dev]"
+      # El setuptools del runner (79.0.1) arrastra PYSEC-2026-3447, que es solo de
+      # build (bypass de MANIFEST.in al construir un sdist en macOS/APFS) y no
+      # aplica a ZascArr; se sube para que la señal de pip-audit siga siendo útil.
+      - run: pip install --upgrade "setuptools>=83"
       # Se instala SOLO en CI: no es dependencia de la aplicación (Ni RAM ni
       # superficie en la Pi). Señal real de CVEs en dependencias; antes no había
       # ningún análisis de este tipo (NFR-17).
