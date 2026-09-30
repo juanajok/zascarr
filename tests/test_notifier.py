@@ -371,3 +371,37 @@ class TestCicloYAviso:
             _importer(_report(duplicates=["a.cbz — duplicado de x, descartado"])),
         )
         assert notifier.notify_imported.await_count == 1
+
+
+class TestLoggingDeHttpx:
+    """`httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en
+    Telegram esa URL lleva el token del bot."""
+
+    @pytest.mark.asyncio
+    async def test_el_logger_de_httpx_esta_en_warning(self):
+        import logging
+
+        from zascarr import main  # noqa: F401 — importar aplica la configuración
+
+        assert logging.getLogger("httpx").level == logging.WARNING
+        assert logging.getLogger("httpcore").level == logging.WARNING
+
+    @pytest.mark.asyncio
+    async def test_con_el_logger_raiz_en_info_el_token_no_aparece(self, caplog):
+        """El escenario que lo rompería (`--log-config`, un manejador raíz): raíz
+        a INFO. El logger de `httpx` sigue en WARNING, así que su registro de la
+        URL —con el token dentro— no se emite."""
+        import logging
+
+        token = "123456789:AA-token-distintivo-de-prueba"
+        transport, calls = _receptor(status=200)
+        async with httpx.AsyncClient(transport=transport) as client:
+            with caplog.at_level(logging.INFO):     # raíz, NO el logger de httpx
+                await Notifier(
+                    settings=_cfg(webhook_type="telegram", webhook_url="",
+                                  webhook_token=token, webhook_chat_id="1"),
+                    client=client,
+                ).notify_imported(["a.cbz"])
+        assert len(calls) == 1
+        assert token not in caplog.text
+        assert "AA-token-distintivo" not in caplog.text

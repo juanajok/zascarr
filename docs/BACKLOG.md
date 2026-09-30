@@ -1134,6 +1134,25 @@ como importado con «recuperado»).
   previo a D8, vive en `huecos_de_serie`, y queda pendiente de medir con la
   biblioteca real.
 
+## Deuda técnica registrada (observabilidad del logging, 2026-09-30)
+
+Encontrado al implementar E4 (el aviso de importación): el módulo de avisos
+construye URLs que **llevan el secreto dentro** (en Telegram, el token del bot:
+`/bot<token>/sendMessage`; en ntfy, el tema hace de contraseña), y `httpx`
+registra cada petición a nivel **INFO con la URL completa**.
+
+- **`log_level` y `log_json` son ajustes SIN EFECTO.** Se declaran en
+  `config.py` pero **no hay ninguna configuración de `logging`** en el proyecto
+  (ni `basicConfig`, ni `dictConfig`, ni `getLogger`): un `LOG_LEVEL=DEBUG` en el
+  `.env` no cambia nada. Hoy eso evita la fuga (no se emite el registro de
+  `httpx`), pero es por accidente, no por diseño.
+- **Mitigado en E4:** `httpx` y `httpcore` se fijan a `WARNING` al importar
+  `main.py`, con prueba que lo fija (raíz en INFO durante un envío de Telegram, y
+  el token no aparece).
+- **Pendiente (no bloquea):** decidir si `log_level`/`log_json` se cablean de
+  verdad (configurar `logging`/structlog con ellos) o se retiran. Mientras tanto,
+  la documentación no debería prometer que cambian el nivel de log.
+
 ## Benchmarking competitivo (2026-09-21)
 
 Comparado contra tres proyectos del mismo espacio para no reinventar ni
