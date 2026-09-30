@@ -153,7 +153,7 @@
       <label>URL externa (opcional)
         <input type="text" name="base_url" value="{{ base_url }}" placeholder="https://zascarr.tudominio.com">
       </label>
-      <p class="ajustes-hint">La URL externa no cambia nada del acceso ni de la sesión hoy — queda guardada para enlaces futuros (avisos al móvil, informes).</p>
+      <p class="ajustes-hint">Si accedes tras un proxy inverso que no conserva el <code>Host</code> (nginx lo cambia por defecto), pon aquí tu dominio público: ZascArr lo usa para validar el origen de los formularios y evitar el 403. También se puede fijar con <code>BASE_URL</code> en el <code>.env</code> — útil si no puedes entrar a Ajustes porque ya te da 403. Sin proxy, puede quedarse vacía.</p>
       <div class="ajustes-actions">
         <button type="submit">Guardar</button>
       </div>
