@@ -199,13 +199,12 @@ Verificado en el código (`main` en `7f6f637`):
   `asyncio.to_thread`; `credenciales_validas`/`_basic_auth_valido` pasan a ser
   corrutinas que lo llaman así. El nombre de usuario se compara en bytes:
   `hmac.compare_digest(username.encode(), settings.auth_username.encode())`.
-- **Paso 2 — retraso progresivo, no bloqueo duro.** Los fallos se cuentan por IP
-  **en memoria** y producen un retraso creciente (con tope) antes de responder,
-  en vez de bloquear. Detrás de un proxy inverso o del NAT de Docker todas las
-  peticiones comparten IP, y un bloqueo duro dejaría fuera también al dueño; un
-  retraso castiga el martilleo sin impedir un login correcto posterior.
-  `X-Forwarded-For` solo se usa si se configura explícitamente un proxy de
-  confianza.
+- **Paso 2 — retraso progresivo, no bloqueo duro.** Los fallos se cuentan **por
+  cuenta** (no por IP: contar por IP se esquiva rotando direcciones y crece sin
+  límite — OWASP) y producen un retraso creciente (con tope) antes de responder,
+  en vez de bloquear. Un bloqueo duro dejaría fuera también al dueño; un retraso
+  castiga el martilleo sin impedir un login correcto posterior. Los intentos se
+  **serializan** para que una ráfaga en paralelo no lo esquive.
 - **Paso 3 — subir a 600.000 y rehashear solo en `/login`.** `hash_password` pasa
   a `600_000`; `verify_password` sigue leyendo las iteraciones del hash
   almacenado (compatibilidad). El rehasheo (260.000 → 600.000) se hace **solo en
@@ -241,23 +240,32 @@ Verificado en el código (`main` en `7f6f637`):
 
 **Implementado (2026-09-29) — retraso, caché y tope:**
 
-- **Retraso progresivo por IP** en memoria: `min(0.5 · 2^(n-1), 8) s`, ventana de
-  15 min. Se aplica antes de validar en `/login` y en Basic Auth
-  (`intentar_credenciales`), con `asyncio.sleep` — no bloquea el bucle. **No es
-  un bloqueo**: una credencial correcta entra tras la espera y limpia el contador.
-- **IP del cliente:** `X-Forwarded-For` solo con `TRUSTED_PROXY=true`;
-  apagado por defecto, la cabecera se ignora (se puede falsear). Sin proxy de
-  confianza todo comparte IP: el atacante solo puede añadir el retraso máximo.
-- **Tope de cola:** el semáforo de PBKDF2 se adquiere con `asyncio.wait_for`
-  (2 s); si no hay hueco, `ColaDeVerificacionLlenaError` → **429** con
-  `Retry-After`. Ese rechazo **no cuenta como fallo** (no se llama a
-  `_anotar_fallo`).
+- **Retraso progresivo por CUENTA** (no por IP), en memoria:
+  `min(0.5 · 2^(n-1), 8) s`, ventana de 15 min. OWASP recomienda contar por
+  cuenta: contar por IP se esquiva rotando direcciones y crece sin límite.
+  ZascArr tiene una sola cuenta, así que el contador es global. Se aplica antes
+  de validar en `/login` y en Basic Auth (`intentar_credenciales`), con
+  `asyncio.sleep` — no bloquea el bucle, y una credencial correcta entra tras la
+  espera y limpia el contador. Esto elimina `X-Forwarded-For`/`TRUSTED_PROXY` de
+  este mecanismo (y el ajuste se retiró: ya no tenía otro uso).
+- **Serialización:** un candado (`asyncio.Lock`) cubre el ciclo
+  espera→valida→anota, para que una ráfaga en paralelo no lea el contador a la
+  vez y esquive el retraso (antes el límite real pasaba a ser el ejecutor).
+- **Cola acotada:** como mucho `_INTENTOS_MAX_EN_COLA` (3) intentos en vuelo;
+  el resto recibe **429** con `Retry-After` sin encolarse. Ese rechazo **no
+  cuenta como fallo**. El dueño con sesión abierta o con Basic en caché no pasa
+  por aquí.
+- **Tope del semáforo de PBKDF2:** se adquiere con `asyncio.wait_for` (2 s); si
+  no hay hueco, `ColaDeVerificacionLlenaError` → 429. Hay prueba de equilibrio:
+  tras muchos timeouts, los dos huecos siguen disponibles.
 - **Caché de aciertos de Basic:** clave `HMAC(secret, versión + cabecera)`, TTL
   60 s, máximo 256 entradas (se purga y, si hace falta, se vacía). Solo aciertos;
   un fallo nunca se cachea; cambiar las credenciales la vacía.
+- **Longitud mínima de contraseña:** 12 caracteres (< 12 no se guarda; 12-14
+  avisa). OWASP recomienda 15 sin segundo factor.
 
 **Pendiente de la ficha:** subir a `600_000` (último commit) y medir el tiempo
-real de PBKDF2 en la Pi.
+real de PBKDF2 en la Pi — si ronda un segundo, se deja en 260.000.
 
 ### 3. Comprobación real de dependencias (respuesta al check rojo)
 
@@ -266,7 +274,9 @@ real de PBKDF2 en la Pi.
   Da una señal real de CVEs en dependencias, que hoy no existe: el repositorio
   no tiene ningún análisis de seguridad (`code-scanning/alerts` → «no analysis
   found») y NFR-17 (`pip-audit`/`trivy`) está registrado como `NOT RUN`.
-- **Opcional:** reglas `S` de ruff (`--select S`) en modo informativo.
+  **Implementado:** job `pip-audit` en `.github/workflows/ci.yml` (informativo),
+  y reglas `S` de ruff como paso extra del job de lint. NFR-17 pasa a
+  ejecutarse en CI (sigue sin `trivy` de imagen).
 - **Descartar por ahora:** `trivy` (escaneo de imagen) y arreglar el escáner de
   IA de GitHub. El escáner de IA falla por «The requested model is not
   supported» (HTTP 400) — fallo de servicio, no señal. Silenciarlo/desactivarlo

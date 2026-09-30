@@ -61,13 +61,14 @@ falta `BASE_URL` para ese caso. Con `auth_mode="none"` la comprobación de
 `Host` sigue aplicándose de todos modos — en un rebinding el navegador también
 manda `same-origin`.
 
-**Retraso progresivo por IP:** los intentos fallidos de contraseña se castigan
-con un retraso creciente (con tope), nunca con un bloqueo: una credencial
-correcta siempre acaba entrando. Si estás detrás de un proxy de confianza,
-activa `TRUSTED_PROXY=true` en el `.env` para que use `X-Forwarded-For`; sin
-esa variable la cabecera se ignora a propósito (se puede falsear). Con todas
-las peticiones compartiendo IP, un atacante solo puede añadir el retraso máximo
-— no bloquea al dueño.
+**Retraso progresivo:** los intentos fallidos de contraseña se castigan con un
+retraso creciente (con tope), nunca con un bloqueo: una credencial correcta
+siempre acaba entrando. El contador es de la **cuenta**, no de la IP de origen
+(OWASP): rotar direcciones no lo esquiva, y los intentos se **serializan** con
+un candado para que una ráfaga en paralelo no lo salte. Si hay demasiados
+intentos en vuelo se responde `429` en vez de encolar. Requiere además una
+**contraseña de al menos 12 caracteres** (15 recomendado sin segundo factor):
+sin eso, el retraso no basta.
 
 ## Deuda de seguridad conocida (A6)
 
@@ -110,10 +111,11 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   permite leer, no solo escribir — aceptando `localhost`, IP literal, el host de
   `base_url` y los nombres de `ALLOWED_HOSTS`.
 - **Fuerza bruta**: los fallos de contraseña se castigan con un **retraso
-  progresivo por IP** (con tope, nunca bloqueo: una credencial correcta siempre
-  entra), un **tope de cola** que responde `429` con `Retry-After` en vez de
-  encolar sin límite (esos rechazos no cuentan como fallo), y una **caché de
-  aciertos de Basic** con TTL corto y tamaño acotado que se vacía al cambiar la
-  contraseña.
+  progresivo por cuenta** (con tope, nunca bloqueo: una credencial correcta
+  siempre entra) y los intentos se **serializan** para que una ráfaga en
+  paralelo no lo salte. Un **tope de cola** responde `429` con `Retry-After` en
+  vez de encolar sin límite (esos rechazos no cuentan como fallo), y una **caché
+  de aciertos de Basic** con TTL corto y tamaño acotado se vacía al cambiar la
+  contraseña. Se exige además una **longitud mínima de 12 caracteres**.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.

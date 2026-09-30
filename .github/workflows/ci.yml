@@ -31,6 +31,25 @@ jobs:
           cache: "pip"
       - run: pip install -e ".[dev]"
       - run: ruff check src/
+      # Reglas de seguridad de bandit (S), también informativas.
+      - run: ruff check --select S src/
+
+  pip-audit:
+    name: pip-audit (informativo, no bloquea)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -e ".[dev]"
+      # Se instala SOLO en CI: no es dependencia de la aplicación (Ni RAM ni
+      # superficie en la Pi). Señal real de CVEs en dependencias; antes no había
+      # ningún análisis de este tipo (NFR-17).
+      - run: pip install pip-audit
+      - run: pip-audit
 
   docker-build:
     name: Build de la imagen Docker

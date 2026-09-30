@@ -323,80 +323,103 @@ def necesita_rehash(stored: str) -> bool:
 
 
 # ── Retraso progresivo por IP (ficha de seguridad, paso 2) ───────────────────
-# Retraso creciente, NO bloqueo duro: detrás de un proxy o del NAT de Docker
-# todas las peticiones pueden compartir IP, y un bloqueo dejaría fuera también
-# al dueño. Una credencial correcta siempre acaba entrando (tras la espera).
+# Retraso creciente, NO bloqueo duro: una credencial correcta siempre acaba
+# entrando (tras la espera). El contador es de la CUENTA, no de la IP (OWASP):
+# ZascArr tiene una sola cuenta, así que es global. Contar por IP se esquivaría
+# rotando direcciones y crecería sin límite; contar por cuenta no.
 
 _FALLOS_MAX = 8            # a partir de aquí el retraso es el tope
 _RETRASO_BASE = 0.5        # segundos tras el primer fallo
 _RETRASO_MAX = 8.0         # tope del retraso
 _VENTANA_FALLOS = 15 * 60  # los fallos caducan a los 15 minutos
 
-_fallos: dict[str, tuple[int, float]] = {}
+_fallos_contador = 0
+_fallos_ultimo = 0.0
 _fallos_lock = threading.Lock()
 
-
-def ip_de_peticion(request: Request, settings: Settings) -> str:
-    """IP del cliente para el retraso progresivo.
-
-    `X-Forwarded-For` SOLO si hay un proxy de confianza configurado
-    (`TRUSTED_PROXY`): sin él la cabecera se ignora, porque cualquiera puede
-    falsearla y esquivar el retraso (o cargarlo sobre otra IP)."""
-    if settings.trusted_proxy:
-        xff = request.headers.get("x-forwarded-for", "")
-        if xff:
-            return xff.split(",")[0].strip()
-    return request.client.host if request.client else "desconocida"
+# Candado que SERIALIZA las verificaciones: sin él, una ráfaga de intentos en
+# paralelo lee el contador a la vez, ninguno espera y todos van a PBKDF2 (el
+# límite real pasaría a ser el ejecutor, no el retraso). El candado hace que
+# cada intento pague de verdad su retraso.
+_INTENTOS_MAX_EN_COLA = 3   # intentos en vuelo (el que verifica + los que esperan)
+_intentos_en_vuelo = 0
+_cerrojo_verificacion: asyncio.Lock | None = None
 
 
-def _retraso_actual(ip: str) -> float:
+def _cerrojo() -> asyncio.Lock:
+    """Candado del bucle actual, creado de forma perezosa: las primitivas de
+    asyncio se atan al bucle la primera vez que tienen que esperar, y los tests
+    usan un bucle nuevo por test."""
+    global _cerrojo_verificacion
+    if _cerrojo_verificacion is None:
+        _cerrojo_verificacion = asyncio.Lock()
+    return _cerrojo_verificacion
+
+
+def reiniciar_estado_concurrencia() -> None:
+    """Recrea candado y semáforo en el próximo uso. Lo llama el conftest entre
+    tests; en la app real (un solo bucle) no hace falta."""
+    global _cerrojo_verificacion, _pbkdf2_sem
+    _cerrojo_verificacion = None
+    _pbkdf2_sem = asyncio.Semaphore(2)
+
+
+def _retraso_actual() -> float:
     with _fallos_lock:
-        n, ts = _fallos.get(ip, (0, 0.0))
-        if not n or time.time() - ts > _VENTANA_FALLOS:
+        if not _fallos_contador or time.time() - _fallos_ultimo > _VENTANA_FALLOS:
             return 0.0
-        return min(_RETRASO_BASE * (2 ** (min(n, _FALLOS_MAX) - 1)), _RETRASO_MAX)
+        return min(
+            _RETRASO_BASE * (2 ** (min(_fallos_contador, _FALLOS_MAX) - 1)), _RETRASO_MAX)
 
 
-def _anotar_fallo(ip: str) -> None:
+def _anotar_fallo() -> None:
+    global _fallos_contador, _fallos_ultimo
     with _fallos_lock:
-        n, ts = _fallos.get(ip, (0, 0.0))
-        if time.time() - ts > _VENTANA_FALLOS:
-            n = 0
-        _fallos[ip] = (n + 1, time.time())
+        if time.time() - _fallos_ultimo > _VENTANA_FALLOS:
+            _fallos_contador = 0
+        _fallos_contador += 1
+        _fallos_ultimo = time.time()
 
 
-def limpiar_fallos(ip: str | None = None) -> None:
-    """Borra el contador de fallos de una IP (o de todas, para los tests — el
-    estado es de módulo)."""
+def limpiar_fallos() -> None:
+    """Borra el contador de fallos (estado de módulo; lo usan los tests)."""
+    global _fallos_contador, _fallos_ultimo
     with _fallos_lock:
-        if ip is None:
-            _fallos.clear()
-        else:
-            _fallos.pop(ip, None)
+        _fallos_contador = 0
+        _fallos_ultimo = 0.0
 
 
-async def esperar_retraso(ip: str) -> None:
+async def esperar_retraso() -> None:
     """Espera el retraso progresivo con `asyncio.sleep` — NO bloquea el bucle de
     eventos (otras peticiones siguen atendidas durante la espera)."""
-    retraso = _retraso_actual(ip)
+    retraso = _retraso_actual()
     if retraso > 0:
         await asyncio.sleep(retraso)
 
 
-async def intentar_credenciales(ip: str, username: str, password: str,
-                                settings: Settings) -> bool:
-    """Valida credenciales con el retraso progresivo por IP y registra el
-    resultado.
+async def intentar_credenciales(username: str, password: str, settings: Settings) -> bool:
+    """Valida credenciales con el retraso progresivo de la cuenta, **serializado**
+    por un candado, y registra el resultado.
 
-    Un rechazo por `ColaDeVerificacionLlenaError` (429) NO se cuenta como fallo: el
-    dueño no debe penalizarse a sí mismo por una ráfaga."""
-    await esperar_retraso(ip)
-    ok = await credenciales_validas(username, password, settings)
-    if ok:
-        limpiar_fallos(ip)
-    else:
-        _anotar_fallo(ip)
-    return ok
+    Acota la cola: si ya hay `_INTENTOS_MAX_EN_COLA` intentos en vuelo, lanza
+    `ColaDeVerificacionLlenaError` (429) en vez de encolar más — el dueño no
+    queda detrás de una cola larga. Ese rechazo NO se cuenta como fallo, y quien
+    ya tiene sesión o Basic en caché no pasa por aquí."""
+    global _intentos_en_vuelo
+    if _intentos_en_vuelo >= _INTENTOS_MAX_EN_COLA:
+        raise ColaDeVerificacionLlenaError
+    _intentos_en_vuelo += 1
+    try:
+        async with _cerrojo():
+            await esperar_retraso()
+            ok = await credenciales_validas(username, password, settings)
+            if ok:
+                limpiar_fallos()
+            else:
+                _anotar_fallo()
+            return ok
+    finally:
+        _intentos_en_vuelo -= 1
 
 
 # Caché de ACIERTOS de Basic Auth: una credencial válida no repite PBKDF2 en
@@ -564,7 +587,7 @@ async def _basic_auth_valido(request: Request, settings: Settings) -> bool:
         usuario, _, password = decoded.partition(":")
     except Exception:
         return False
-    ok = await intentar_credenciales(ip_de_peticion(request, settings), usuario, password, settings)
+    ok = await intentar_credenciales(usuario, password, settings)
     if ok:
         _guardar_cache_basic(settings.secret_key, cabecera, settings.auth_session_version)
     return ok

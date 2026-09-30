@@ -1,13 +1,14 @@
 """tests/test_auth_limites.py
 
-Retraso progresivo por IP, caché de aciertos de Basic y tope de cola (ficha de
-seguridad, paso 2). El retraso y la caché son estado de módulo: el conftest lo
-limpia entre tests.
+Retraso progresivo por cuenta, serialización de intentos, caché de aciertos de
+Basic y tope de cola (ficha de seguridad, paso 2). El retraso y la caché son
+estado de módulo: el conftest lo limpia entre tests.
 """
 from __future__ import annotations
 
 import asyncio
 import base64
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,7 +22,6 @@ from zascarr.services.auth import (
     ColaDeVerificacionLlenaError,
     hash_password,
     intentar_credenciales,
-    ip_de_peticion,
     limpiar_cache_basic,
     limpiar_fallos,
 )
@@ -104,40 +104,47 @@ def _app_minima():
     return mini
 
 
-# ── Retraso progresivo ───────────────────────────────────────────────────────
+# ── Retraso progresivo (contador de la cuenta, no de la IP) ──────────────────
 
 class TestRetrasoProgresivo:
 
     def test_crece_y_tiene_tope(self, retraso_rapido):
         limpiar_fallos()
-        ip = "10.0.0.1"
-        assert auth_mod._retraso_actual(ip) == 0.0
-        auth_mod._anotar_fallo(ip)
-        assert auth_mod._retraso_actual(ip) == pytest.approx(0.05)
-        auth_mod._anotar_fallo(ip)
-        assert auth_mod._retraso_actual(ip) == pytest.approx(0.1)
+        assert auth_mod._retraso_actual() == 0.0
+        auth_mod._anotar_fallo()
+        assert auth_mod._retraso_actual() == pytest.approx(0.05)
+        auth_mod._anotar_fallo()
+        assert auth_mod._retraso_actual() == pytest.approx(0.1)
         for _ in range(20):
-            auth_mod._anotar_fallo(ip)
-        assert auth_mod._retraso_actual(ip) == pytest.approx(0.2)   # tope
+            auth_mod._anotar_fallo()
+        assert auth_mod._retraso_actual() == pytest.approx(0.2)   # tope
+
+    def test_el_contador_es_la_cuenta_no_la_ip(self):
+        """OWASP: el contador va por cuenta, no por IP de origen — rotar
+        direcciones no lo esquiva (y no hay diccionario que crezca sin límite)."""
+        import inspect
+        firma = inspect.signature(intentar_credenciales)
+        assert list(firma.parameters) == ["username", "password", "settings"]
+        assert not hasattr(auth_mod, "ip_de_peticion")
 
     def test_los_fallos_caducan(self, monkeypatch):
         limpiar_fallos()
         monkeypatch.setattr("zascarr.services.auth._VENTANA_FALLOS", 0)
-        auth_mod._anotar_fallo("10.0.0.9")
-        assert auth_mod._retraso_actual("10.0.0.9") == 0.0
+        auth_mod._anotar_fallo()
+        assert auth_mod._retraso_actual() == 0.0
 
     @pytest.mark.asyncio
     async def test_la_espera_no_bloquea_el_bucle(self, retraso_rapido):
         """`asyncio.sleep`, no `time.sleep`: otras peticiones siguen atendidas."""
         limpiar_fallos()
-        auth_mod._anotar_fallo("10.0.0.2")
+        auth_mod._anotar_fallo()
         corrio = []
 
         async def otra():
             corrio.append(True)
 
         tarea = asyncio.create_task(otra())
-        await auth_mod.esperar_retraso("10.0.0.2")
+        await auth_mod.esperar_retraso()
         assert corrio == [True]
         await tarea
 
@@ -145,12 +152,11 @@ class TestRetrasoProgresivo:
     async def test_tras_los_fallos_la_credencial_correcta_entra(
             self, settings_password, retraso_rapido):
         limpiar_fallos()
-        ip = "10.0.0.3"
         for _ in range(3):
-            assert await intentar_credenciales(ip, "", "mala", settings_password) is False
+            assert await intentar_credenciales("", "mala", settings_password) is False
         # La correcta entra (tras el retraso) y limpia el contador.
-        assert await intentar_credenciales(ip, "", "secreta", settings_password) is True
-        assert auth_mod._retraso_actual(ip) == 0.0
+        assert await intentar_credenciales("", "secreta", settings_password) is True
+        assert auth_mod._retraso_actual() == 0.0
 
     def test_login_correcto_tras_fallos_entra(self, settings_password, retraso_rapido):
         client = TestClient(app, follow_redirects=False)
@@ -162,7 +168,73 @@ class TestRetrasoProgresivo:
         assert r.status_code == 303
 
 
-# ── Tope de cola (429) ───────────────────────────────────────────────────────
+# ── Ráfaga en paralelo ───────────────────────────────────────────────────────
+
+class TestRafagaParalela:
+
+    @pytest.mark.asyncio
+    async def test_diez_intentos_en_paralelo_se_serializan(self, settings_password, monkeypatch):
+        """Sin candado, los diez leían el contador a la vez, ninguno esperaba y
+        los diez iban a PBKDF2 (el límite real pasaba a ser el ejecutor)."""
+        monkeypatch.setattr("zascarr.services.auth._RETRASO_BASE", 0.02)
+        monkeypatch.setattr("zascarr.services.auth._RETRASO_MAX", 0.2)
+        monkeypatch.setattr("zascarr.services.auth._INTENTOS_MAX_EN_COLA", 100)
+        limpiar_fallos()
+        a_la_vez = 0
+        maximo = 0
+
+        async def lenta(*_args, **_kwargs):
+            nonlocal a_la_vez, maximo
+            a_la_vez += 1
+            maximo = max(maximo, a_la_vez)
+            try:
+                await asyncio.sleep(0.01)   # simula el coste de verificar
+                return False
+            finally:
+                a_la_vez -= 1
+
+        monkeypatch.setattr("zascarr.services.auth.credenciales_validas", lenta)
+
+        inicio = time.monotonic()
+        resultados = await asyncio.gather(*[
+            intentar_credenciales("", "mala", settings_password) for _ in range(10)
+        ])
+        total = time.monotonic() - inicio
+
+        assert resultados == [False] * 10
+        assert maximo == 1                     # nunca dos verificaciones a la vez
+        assert total >= 1.2                    # paga la suma de los retrasos
+
+    @pytest.mark.asyncio
+    async def test_la_cola_acotada_rechaza_sin_encolar_mas(self, settings_password, monkeypatch):
+        monkeypatch.setattr("zascarr.services.auth._INTENTOS_MAX_EN_COLA", 3)
+        monkeypatch.setattr("zascarr.services.auth._RETRASO_BASE", 0.1)
+        limpiar_fallos()
+        en_vuelo = 0
+        maximo = 0
+
+        async def lenta(*_args, **_kwargs):
+            nonlocal en_vuelo, maximo
+            en_vuelo += 1
+            maximo = max(maximo, en_vuelo)
+            try:
+                await asyncio.sleep(0.5)
+                return False
+            finally:
+                en_vuelo -= 1
+
+        monkeypatch.setattr("zascarr.services.auth.credenciales_validas", lenta)
+
+        resultados = await asyncio.gather(*[
+            intentar_credenciales("", "mala", settings_password) for _ in range(10)
+        ], return_exceptions=True)
+
+        rechazos = [r for r in resultados if isinstance(r, ColaDeVerificacionLlenaError)]
+        assert maximo <= 3                     # nunca más de los que caben
+        assert len(rechazos) >= 5              # el resto no se encola: 429
+
+
+# ── Tope de cola (429) y equilibrio del semáforo ─────────────────────────────
 
 class TestTopeDeCola:
 
@@ -181,18 +253,40 @@ class TestTopeDeCola:
             auth_mod._pbkdf2_sem.release()
 
     @pytest.mark.asyncio
+    async def test_muchos_timeouts_no_fugan_permisos(self, monkeypatch, settings_password):
+        """`asyncio.wait_for(sem.acquire(), ...)`: tras muchos timeouts, los dos
+        huecos vuelven a estar disponibles (si no, todo login daría 429)."""
+        monkeypatch.setattr("zascarr.services.auth._ESPERA_MAX_COLA", 0.01)
+        limpiar_fallos()
+        await auth_mod._pbkdf2_sem.acquire()
+        await auth_mod._pbkdf2_sem.acquire()
+        try:
+            for _ in range(20):
+                with pytest.raises(ColaDeVerificacionLlenaError):
+                    await auth_mod.verify_password(
+                        "secreta", settings_password.auth_password_hash)
+        finally:
+            auth_mod._pbkdf2_sem.release()
+            auth_mod._pbkdf2_sem.release()
+
+        # Los dos huecos siguen ahí.
+        await asyncio.wait_for(auth_mod._pbkdf2_sem.acquire(), timeout=0.1)
+        await asyncio.wait_for(auth_mod._pbkdf2_sem.acquire(), timeout=0.1)
+        auth_mod._pbkdf2_sem.release()
+        auth_mod._pbkdf2_sem.release()
+
+    @pytest.mark.asyncio
     async def test_el_429_no_cuenta_como_fallo(self, monkeypatch, settings_password):
         async def _sin_hueco(*_args, **_kwargs):
             raise ColaDeVerificacionLlenaError
 
         monkeypatch.setattr("zascarr.services.auth._en_ejecutor_pbkdf2", _sin_hueco)
         limpiar_fallos()
-        ip = "10.0.0.4"
 
         with pytest.raises(ColaDeVerificacionLlenaError):
-            await intentar_credenciales(ip, "", "secreta", settings_password)
+            await intentar_credenciales("", "secreta", settings_password)
 
-        assert auth_mod._retraso_actual(ip) == 0.0
+        assert auth_mod._retraso_actual() == 0.0
 
     def test_login_con_cola_llena_da_429(self, monkeypatch, settings_password):
         async def _sin_hueco(*_args, **_kwargs):
@@ -271,48 +365,3 @@ class TestCacheBasic:
         assert client.get("/api/algo", headers=cab).status_code == 200
 
         assert len(llamadas) == 1   # la segunda salió de la caché
-
-
-# ── Cliente detrás de proxy ──────────────────────────────────────────────────
-
-def _peticion_falsa(host: str, xff: str | None = None):
-    from starlette.requests import Request
-    headers = []
-    if xff is not None:
-        headers.append((b"x-forwarded-for", xff.encode()))
-    scope = {
-        "type": "http", "method": "GET", "path": "/login", "headers": headers,
-        "client": (host, 12345), "query_string": b"", "scheme": "http",
-        "server": ("localhost", 8000),
-    }
-    return Request(scope)
-
-
-class TestIpDetrasDeProxy:
-
-    def test_sin_proxy_de_confianza_se_ignora_x_forwarded_for(self, restaurar_settings):
-        s = get_settings()
-        s.trusted_proxy = False
-        peticion = _peticion_falsa("1.2.3.4", "9.9.9.9")
-        assert ip_de_peticion(peticion, s) == "1.2.3.4"
-
-    def test_con_proxy_de_confianza_se_usa_x_forwarded_for(self, restaurar_settings):
-        s = get_settings()
-        s.trusted_proxy = True
-        peticion = _peticion_falsa("1.2.3.4", "9.9.9.9, 8.8.8.8")
-        assert ip_de_peticion(peticion, s) == "9.9.9.9"
-
-    @pytest.mark.asyncio
-    async def test_el_atacante_no_penaliza_al_dueno_mas_alla_del_retraso(
-            self, settings_password, retraso_rapido):
-        """Sin proxy de confianza todos comparten IP: el atacante solo puede
-        añadir retraso (progresivo y con tope), nunca bloquear. El dueño entra
-        tras la espera máxima."""
-        limpiar_fallos()
-        ip = "10.0.0.5"
-        for _ in range(50):
-            auth_mod._anotar_fallo(ip)
-
-        assert auth_mod._retraso_actual(ip) == pytest.approx(auth_mod._RETRASO_MAX)
-        assert await intentar_credenciales(ip, "", "secreta", settings_password) is True
-        assert auth_mod._retraso_actual(ip) == 0.0

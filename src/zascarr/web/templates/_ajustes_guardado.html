@@ -2,4 +2,5 @@
 <p class="ajustes-error">{{ error }}</p>
 {% else %}
 <p class="caption">{{ nombre }}: guardado y aplicado — ya activo, sin reiniciar.</p>
+{% if aviso %}<p class="ajustes-hint">{{ aviso }}</p>{% endif %}
 {% endif %}
