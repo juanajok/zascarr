@@ -26,10 +26,11 @@ import base64
 import functools
 import hashlib
 import hmac
+import ipaddress
 import secrets
 import time
 from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -53,8 +54,33 @@ _PBKDF2_ITERATIONS = 260_000
 # poder acapararlo ni competir con ese trabajo. Dos hilos bastan en una Pi
 # (es CPU-bound y no hay nada que ganar con más); el semáforo acota cuántas
 # verificaciones quedan en vuelo para que una ráfaga no encole sin límite.
-_PBKDF2_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pbkdf2")
+#
+# Perezoso y recreable: el `lifespan` lo apaga al parar la app, y tras un
+# apagado (o en un test que levanta otra vez la app) la siguiente verificación
+# vuelve a crearlo en vez de fallar con «cannot schedule new futures after
+# shutdown».
+_PBKDF2_EXECUTOR: ThreadPoolExecutor | None = None
 _pbkdf2_sem = asyncio.Semaphore(2)
+
+
+def _ejecutor_pbkdf2() -> ThreadPoolExecutor:
+    global _PBKDF2_EXECUTOR
+    if _PBKDF2_EXECUTOR is None:
+        _PBKDF2_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pbkdf2")
+    return _PBKDF2_EXECUTOR
+
+
+def apagar_ejecutor_pbkdf2() -> None:
+    """Apaga el ejecutor propio de PBKDF2 al parar la app.
+
+    `wait=False` para no bloquear el shutdown por un PBKDF2 en curso;
+    `cancel_futures=True` para no dejar tareas encoladas. Se llama desde el
+    `lifespan` de `main.py`; el ejecutor se recrea solo si vuelve a hacer
+    falta."""
+    global _PBKDF2_EXECUTOR
+    if _PBKDF2_EXECUTOR is not None:
+        _PBKDF2_EXECUTOR.shutdown(wait=False, cancel_futures=True)
+        _PBKDF2_EXECUTOR = None
 
 # Rutas alcanzables sin sesión ni Basic Auth incluso con auth_mode activo:
 # /login (si no, nadie podría autenticarse nunca — bucle de redirección),
@@ -67,6 +93,112 @@ _PREFIJOS_EXENTOS = ("/static/",)
 # E6: en arranque degradado (BD inaccesible o sin migrar) solo se sirve
 # diagnóstico — estas rutas y los estáticos. Todo lo demás falla cerrado.
 _RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/login", "/legal"}
+
+
+# ── CSRF / Origen / Host (ficha benchmark-seguridad-auth-origen-host) ─────────
+
+_METODOS_DE_ESTADO = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _norm(url: str) -> tuple[str, str, str] | None:
+    """(esquema, host, puerto) normalizado de una URL, o None si no es http/https
+    o no tiene hostname. El puerto se normaliza al de por defecto si no viene."""
+    try:
+        partes = urlsplit(url)
+    except ValueError:
+        return None
+    if partes.scheme not in ("http", "https") or not partes.hostname:
+        return None
+    puerto = partes.port or (443 if partes.scheme == "https" else 80)
+    return (partes.scheme, partes.hostname.lower(), str(puerto))
+
+
+def _origen_permitido(origen: str, request: Request, settings: Settings) -> bool:
+    """¿La cabecera Origin/Referer `origen` es este mismo sitio (Host de la
+    petición o `base_url`), comparando esquema+host+puerto normalizados?
+
+    `base_url` cubre el proxy inverso: nginx cambia `Host` por defecto, así que
+    `Origin` es el dominio público y `Host` el interno — sin este caso toda la
+    UI daría 403."""
+    norm = _norm(origen)
+    if norm is None:
+        return False
+    permitidos: set[tuple[str, str, str]] = set()
+    propio = _norm(str(request.url))
+    if propio:
+        permitidos.add(propio)
+    if settings.base_url:
+        base = _norm(settings.base_url)
+        if base:
+            permitidos.add(base)
+    return norm in permitidos
+
+
+def _es_ip_literal(hostname: str) -> bool:
+    try:
+        ipaddress.ip_address(hostname)
+        return True
+    except ValueError:
+        return False
+
+
+def _host_no_permitido(request: Request, settings: Settings) -> bool:
+    """True si el `Host` no es `localhost`, ni una IP literal, ni `base_url`.
+
+    Solo se comprueba con `auth_mode = none` (con contraseña no hay cookie que
+    defender por esta vía y comprobarlo añade riesgo de bloqueo). Un ataque de
+    DNS rebinding necesita un NOMBRE DE DOMINIO que resuelva a la IP local; dejar
+    pasar las IP literales no lo habilita — el navegador pide el dominio, no la
+    IP."""
+    host = request.headers.get("host", "")
+    hostname = host.split(":", 1)[0].strip("[]").lower()
+    if hostname == "localhost" or _es_ip_literal(hostname):
+        return False
+    if settings.base_url:
+        base = _norm(settings.base_url)
+        if base and base[1] == hostname:
+            return False
+    return True
+
+
+def _peticion_cross_site(request: Request, settings: Settings) -> bool:
+    """True si una petición que cambia estado es cross-site y debe rechazarse.
+
+    `Sec-Fetch-Site` como señal principal (OWASP) y `Origin`/`Referer` de
+    respaldo — obligatorio, porque los navegadores no mandan `Sec-Fetch-*` sobre
+    HTTP plano hacia una IP de LAN. `Origin: null` (sandbox/redirección) se
+    rechaza, y un `Referer` tipo `example.org.attacker.com` no pasa: la
+    comparación es de origen normalizado completo, no de sufijo."""
+    fetch_site = (request.headers.get("sec-fetch-site") or "").lower()
+    if fetch_site == "cross-site":
+        return True
+
+    origen = request.headers.get("origin")
+    if origen is not None:
+        return origen == "null" or not _origen_permitido(origen, request, settings)
+
+    referer = request.headers.get("referer")
+    if referer is not None:
+        return not _origen_permitido(referer, request, settings)
+
+    # Sin Origin ni Referer: en /ui/* se bloquea (un navegador manda Origin en un
+    # POST); en /api/* se permite (scripts con curl/Basic).
+    return request.url.path.startswith("/ui/")
+
+
+def _respuesta_origen_rechazado(request: Request) -> Response:
+    """403 en español, con el origen recibido y la salida concreta — nunca un
+    código crudo. La vía de recuperación es `BASE_URL` en el `.env` (o Ajustes),
+    para que quien esté detrás de un proxy que no conserve `Host` pueda salir."""
+    origen = request.headers.get("origin") or request.headers.get("referer") or "ninguno"
+    detalle = (
+        f"Origen no permitido: la petición viene de «{origen}» y este servidor "
+        "solo acepta peticiones desde sí mismo. Si accedes tras un proxy inverso, "
+        "define BASE_URL en el .env (o en Ajustes) con tu dominio."
+    )
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=403, content={"detail": detalle})
+    return Response(detalle, status_code=403)
 
 
 def hash_password(password: str) -> str:
@@ -92,7 +224,7 @@ async def verify_password(password: str, stored: str) -> bool:
     loop = asyncio.get_running_loop()
     async with _pbkdf2_sem:
         actual = await loop.run_in_executor(
-            _PBKDF2_EXECUTOR,
+            _ejecutor_pbkdf2(),
             hashlib.pbkdf2_hmac, "sha256", password.encode(), salt, int(iterations))
     return hmac.compare_digest(actual, expected)
 
@@ -191,9 +323,9 @@ async def _basic_auth_valido(request: Request, settings: Settings) -> bool:
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """No-op en cuanto `auth_mode == "none"` (el valor por defecto) — la
-    suite de tests existente, que nunca configura autenticación, no ve
-    ningún cambio de comportamiento."""
+    """Dos trabajos: (1) la comprobación de Origen/Host para los métodos que
+    cambian estado, que corre SIEMPRE (también con `auth_mode="none"`); y (2) la
+    autenticación por cookie/Basic, que es no-op con `auth_mode="none"`."""
 
     async def dispatch(self, request: Request, call_next):
         # E6: arranque degradado — con configuración/credenciales desconocidas
@@ -215,7 +347,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
         settings = get_settings()
+
+        # CSRF/Origen: corre ANTES de cualquier short-circuit de auth, porque
+        # /login (exenta) también es un POST de estado y no debe aceptarse
+        # cross-site. Vale para todos los auth_mode.
+        if request.method in _METODOS_DE_ESTADO and _peticion_cross_site(request, settings):
+            return _respuesta_origen_rechazado(request)
+
         if settings.auth_mode == "none":
+            # DNS rebinding: sin contraseña no hay cookie que defender, así que
+            # el Host debe ser localhost/IP literal/base_url.
+            if request.method in _METODOS_DE_ESTADO and _host_no_permitido(request, settings):
+                return _respuesta_origen_rechazado(request)
             return await call_next(request)
 
         path = request.url.path
