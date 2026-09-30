@@ -166,11 +166,39 @@ async def guardar_avisos(
 
 
 @router.post("/probar/avisos", response_class=HTMLResponse)
-async def probar_avisos(request: Request) -> HTMLResponse:
-    """Envía un aviso de prueba con la MISMA función que el envío real, y
-    devuelve la causa si falla (código HTTP o clase de excepción; nunca la URL ni
-    el token)."""
-    resultado = await Notifier().aviso_de_prueba()
+async def probar_avisos(
+    request: Request,
+    webhook_type: str = Form(default="generic"),
+    webhook_url: str = Form(default=""),
+    webhook_token: str = Form(default=""),
+    webhook_chat_id: str = Form(default=""),
+) -> HTMLResponse:
+    """Prueba el aviso con lo que hay EN EL FORMULARIO, guardado o no.
+
+    Misma convención que el resto de «Probar conexión» (D11): si el secreto llega
+    vacío se usa el guardado como reserva, porque la UI nunca lo rellena. Si no,
+    quien cambia la URL y pulsa «Enviar aviso de prueba» sin guardar probaría la
+    configuración vieja y vería un resultado engañoso.
+    """
+    settings = get_settings()
+    if webhook_type not in TIPOS_CONOCIDOS:
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False, "mensaje": f"Tipo de aviso no reconocido: «{webhook_type}».",
+        })
+    url = webhook_url.rstrip("/") or settings.webhook_url
+    if webhook_type != "telegram" and url and not url_valida(url):
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False,
+            "mensaje": ("La URL del aviso tiene que empezar por http:// o "
+                        "https:// y llevar un host."),
+        })
+    de_prueba = settings.model_copy(update={
+        "webhook_type": webhook_type,
+        "webhook_url": url,
+        "webhook_token": webhook_token or settings.webhook_token,
+        "webhook_chat_id": webhook_chat_id or settings.webhook_chat_id,
+    })
+    resultado = await Notifier(settings=de_prueba).aviso_de_prueba()
     return templates.TemplateResponse(request, "_ajustes_prueba.html", {
         "ok": resultado.ok,
         "mensaje": "Aviso enviado." if resultado.ok else f"No se pudo enviar: {resultado.motivo}.",

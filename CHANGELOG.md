@@ -5,6 +5,21 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Cambiado (avisos de importación, E4)
+
+- **El aviso ya no incluye los nombres de los ficheros por defecto**: lleva solo
+  el recuento. Incluirlos es una casilla explícita en Ajustes. En un tema público
+  de ntfy.sh (o cualquier destino compartido) esos nombres los lee cualquiera y
+  revelan qué se está descargando.
+- **Un tipo de aviso desconocido ya no se envía como «URL genérica»**: se
+  registra el nombre y no se manda nada, y en Ajustes se rechaza al guardar. Un
+  tipo guardado antes de este cambio deja de convertirse en otra cosa en
+  silencio.
+- **La URL del aviso se valida**: tiene que ser `http`/`https` y llevar host.
+- **Nuevo botón «Enviar aviso de prueba»** en Ajustes → Avisos. Prueba lo que hay
+  en el formulario (guardado o no) y, si falla, dice la causa: el código HTTP o
+  la clase del error, nunca la URL ni el token.
+
 ### Seguridad
 
 - **La cookie de sesión lleva ahora firmada una `auth_session_version`.** Sube al

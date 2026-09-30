@@ -349,12 +349,78 @@ class TestAvisos:
             raise _httpx.ConnectError(f"https://api.telegram.org/bot{token}/sendMessage")
 
         monkeypatch.setattr("zascarr.services.notifier.Notifier._post", _falla)
-        r = TestClient(app).post("/ui/ajustes/probar/avisos")
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "telegram", "webhook_url": "", "webhook_chat_id": "42",
+        })
 
         assert r.status_code == 200
         assert "ConnectError" in r.text
         assert token not in r.text
         assert "AA-token-distintivo" not in r.text
+
+    def test_probar_avisos_usa_la_url_del_formulario(self, restaurar_settings, monkeypatch):
+        """Si no, quien cambia la URL y prueba sin guardar probaría la vieja."""
+        import httpx as _httpx
+        get_settings().webhook_type = "generic"
+        get_settings().webhook_url = "https://guardada.test/vieja"
+        capturadas = []
+
+        def handler(peticion):
+            capturadas.append(peticion)
+            return _httpx.Response(200)
+
+        real = _httpx.AsyncClient
+        monkeypatch.setattr(
+            "zascarr.services.notifier.httpx.AsyncClient",
+            lambda *a, **k: real(transport=_httpx.MockTransport(handler)),
+        )
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "generic", "webhook_url": "https://formulario.test/nueva",
+        })
+
+        assert r.status_code == 200
+        assert "enviado" in r.text.lower()
+        assert [str(c.url) for c in capturadas] == ["https://formulario.test/nueva"]
+
+    def test_probar_avisos_usa_el_secreto_guardado_si_el_campo_llega_vacio(
+            self, restaurar_settings, monkeypatch):
+        """Convención D11: la UI nunca rellena el secreto, así que el guardado
+        hace de reserva."""
+        import httpx as _httpx
+        get_settings().webhook_type = "ntfy"
+        get_settings().webhook_url = "https://ntfy.test/tema"
+        get_settings().webhook_token = "token-guardado"
+        cabeceras = []
+
+        def handler(peticion):
+            cabeceras.append(peticion.headers.get("authorization"))
+            return _httpx.Response(200)
+
+        real = _httpx.AsyncClient
+        monkeypatch.setattr(
+            "zascarr.services.notifier.httpx.AsyncClient",
+            lambda *a, **k: real(transport=_httpx.MockTransport(handler)),
+        )
+        TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "ntfy", "webhook_url": "https://ntfy.test/tema",
+            "webhook_token": "",
+        })
+
+        assert cabeceras == ["Bearer token-guardado"]
+
+    def test_probar_avisos_rechaza_tipo_desconocido(self, restaurar_settings):
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "ntfyy", "webhook_url": "https://x.test/y",
+        })
+        assert r.status_code == 200
+        assert "no reconocido" in r.text
+
+    def test_probar_avisos_rechaza_url_no_http(self, restaurar_settings):
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "generic", "webhook_url": "file:///etc/passwd",
+        })
+        assert r.status_code == 200
+        assert "http://" in r.text
 
     def test_probar_avisos_exito(self, restaurar_settings, monkeypatch):
         from zascarr.services.notifier import ResultadoEnvio
@@ -363,7 +429,9 @@ class TestAvisos:
             return ResultadoEnvio(ok=True)
 
         monkeypatch.setattr("zascarr.services.notifier.Notifier.aviso_de_prueba", _ok)
-        r = TestClient(app).post("/ui/ajustes/probar/avisos")
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "generic", "webhook_url": "https://x.test/y",
+        })
 
         assert r.status_code == 200
         assert "enviado" in r.text.lower()
