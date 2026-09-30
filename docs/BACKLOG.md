@@ -523,6 +523,31 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 - **11 routers web repetían `Jinja2Templates(directory=str(TEMPLATES_DIR))` cada uno con su propio `Environment`** — necesario centralizarlo en una fábrica (`web/routes.py::crear_templates()`) para que `base.html` pudiera preguntar `auth_activo()` (mostrar/ocultar "Cerrar sesión" en el nav) sin tener que colar `auth_mode` en el contexto de cada una de las decenas de `TemplateResponse(...)` ya existentes en el código. Cambio mecánico de una línea por fichero, mismo comportamiento.
 - **Verificado en vivo**: Postgres real, `/ui/ajustes` → Seguridad activa "Solo contraseña" al instante (sin reiniciar); visitar cualquier ruta protegida redirige a `/login` en la misma petición; contraseña incorrecta rechazada con mensaje en español; contraseña correcta pone la cookie y devuelve a la página que la pidió; "Cerrar sesión" borra la cookie; `curl -u usuario:clave` valida contra `/api/*` (401 sin credenciales o con credenciales malas, 200 con las correctas); `/api/health` sigue respondiendo sin credenciales.
 
+**Notas de implementación (lote de seguridad sobre A6, 2026-09-30):**
+
+- **Deuda de A6 cerrada: la sesión SÍ se invalida al cambiar la contraseña.** La
+  cookie lleva ahora firmada una `auth_session_version` (campo interno de
+  `runtime_settings`, sin migración) que sube al cambiar contraseña, usuario o
+  modo. Las cookies emitidas antes dejan de valer; el rehasheo por iteraciones
+  **no** sube la versión (no cierra sesiones a quien ya está dentro).
+- **Fuerza bruta:** los fallos se cuentan **por cuenta** (no por IP — OWASP),
+  con retraso progresivo (tope 8 s) **serializado** por un candado, cola acotada
+  (3 en vuelo → 429, que no cuenta como fallo) y caché de aciertos de Basic.
+  Longitud mínima de contraseña: 12 caracteres. Límite honesto: un ataque
+  sostenido puede dejar nuevos logins en 429; se corta en el cortafuegos/proxy.
+- **CSRF / Origen / Host:** middleware que rechaza con 403 el `Origin`/`Referer`
+  que no cuadre, `Origin: null`, `Sec-Fetch-Site: cross-site` y (con
+  `auth_mode="none"`) un `Host` ajeno — en todos los métodos. `BASE_URL` y
+  `ALLOWED_HOSTS` dan salida tras un proxy.
+- **Iteraciones de PBKDF2:** siguen en **260.000** (la nota de A6 de arriba decía
+  «la recomendación OWASP 2023»; OWASP pide ahora 600.000). Subir a 600.000 es
+  un cambio aparte, sin migración, pendiente de medir el coste real en la Pi.
+- **`pip-audit` en CI** (informativo): primera señal real de dependencias.
+  Primer resultado: `setuptools` 79.0.1 (`PYSEC-2026-3447`, arreglado en 83.0.0),
+  **solo de build y específico de macOS/APFS** (bypass de `MANIFEST.in` al
+  construir un sdist) — ZascArr no publica en PyPI y construye en Linux, así que
+  no es explotable aquí; se sube el suelo de build igualmente.
+
 **Notas de implementación (E1/A1/E2/D4):**
 
 - **E1 (dashboard):** `src/zascarr/static/dashboard.html`, servido en `GET /` (antes esa ruta no existía; la API vivía solo bajo `/api/*`). Página única sin build tooling, sondea `/api/health` cada 10s. Verificado visualmente en el navegador en los 4 estados (todo bien / atención / error / sin conexión) y en viewport móvil. Al mostrar el array `warnings` del healthcheck (VPN sin proteger, etc.) como un aviso visible, esta misma pieza cierra también **D4**.

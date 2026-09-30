@@ -291,6 +291,14 @@ registrado aquí con fecha y modelo de Pi cuando se mida.
   **Implementado:** job `pip-audit` en `.github/workflows/ci.yml` (informativo),
   y reglas `S` de ruff como paso extra del job de lint. NFR-17 pasa a
   ejecutarse en CI (sigue sin `trivy` de imagen).
+- **Primer resultado de `pip-audit` (2026-09-30):** 2 entradas de `setuptools`
+  79.0.1 → `PYSEC-2026-3447`, arreglado en 83.0.0. Clasificación: **solo build y
+  específico de macOS/APFS** (bypass de `MANIFEST.in` al construir un sdist por
+  colisión de normalización Unicode NFC/NFD) — ZascArr no publica en PyPI,
+  construye en Linux (`python:3.11-slim-bookworm`) y no usa setuptools en
+  runtime. **No explotable aquí.** Acción: suelo de build a `setuptools>=83.0`
+  en `pyproject.toml`, y el job de CI actualiza setuptools antes de auditar para
+  que la señal siga siendo útil.
 - **Descartar por ahora:** `trivy` (escaneo de imagen) y arreglar el escáner de
   IA de GitHub. El escáner de IA falla por «The requested model is not
   supported» (HTTP 400) — fallo de servicio, no señal. Silenciarlo/desactivarlo
