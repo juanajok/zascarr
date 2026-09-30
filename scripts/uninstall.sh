@@ -120,32 +120,50 @@ _valor_del_env() {
         valor="${valor#\"}"; valor="${valor%%\"*}"
     elif [[ "${valor}" == \'* ]]; then
         valor="${valor#\'}"; valor="${valor%%\'*}"
-    else
-        valor="${valor%%#*}"                  # comentario en línea
+    elif [[ "${valor}" == *[[:space:]]#* ]]; then
+        # Comentario en línea SOLO si el '#' va precedido de espacio, como hace
+        # Compose: un '#' pegado al valor (`/media/Comics#1`) es parte de la
+        # ruta, y truncarlo apuntaría a otra carpeta distinta.
+        valor="${valor%%[[:space:]]#*}"
     fi
     valor="${valor#"${valor%%[![:space:]]*}"}"   # sin espacios a la izquierda
     valor="${valor%"${valor##*[![:space:]]}"}"   # sin espacios a la derecha
     printf '%s' "${valor}"
 }
 
+# Deja el resultado en VALOR_VAR y el origen en ORIGEN_VAR: "compose"
+# (autoridad: es lo que ve la app) o "env" (lector de reserva, incierto). La
+# diferencia importa para la red de seguridad de más abajo: con la autoridad, una
+# ruta que no existe significa «no había nada»; con la reserva, «no sé qué hay
+# ahí». Se usan globales y NO `$( )` porque una sustitución de comando corre en
+# un subshell y perdería ORIGEN_VAR.
+ORIGEN_VAR=""
+VALOR_VAR=""
 resolver_var_ruta() {
     # $1 = nombre de la variable/clave (p.ej. HOST_LIBRARY_DIR)
     # $2 = valor por defecto (el mismo que docker-compose.yml declara)
     local nombre="$1" por_defecto="$2" valor=""
     valor="$(printf '%s\n' "$(_entorno_compose)" \
         | grep -m1 "^${nombre}=" | cut -d= -f2- || true)"
-    if [[ -z "${valor}" ]]; then
+    if [[ -n "${valor}" ]]; then
+        ORIGEN_VAR="compose"
+    else
         valor="$(_valor_del_env "${nombre}" || true)"
+        ORIGEN_VAR="env"
     fi
-    printf '%s' "${valor:-${por_defecto}}"
+    VALOR_VAR="${valor:-${por_defecto}}"
 }
 
 [[ -f "${ENV_FILE}" ]] || warn "No encuentro ${ENV_FILE} — sigo sin él (los contenedores igualmente se pueden parar)."
 
-LIBRARY_DIR="$(resolver_var_ruta HOST_LIBRARY_DIR /media/library)"
-DOWNLOADS_DIR="$(resolver_var_ruta HOST_DOWNLOADS_DIR /media/data/downloads)"
-AMULE_DIR="$(resolver_var_ruta HOST_AMULE_INCOMING_DIR /media/data/aMule/Incoming)"
-DATA_DIR="$(resolver_var_ruta ZASCARR_DATA_DIR /var/lib/zascarr)"
+resolver_var_ruta HOST_LIBRARY_DIR /media/library
+LIBRARY_DIR="${VALOR_VAR}"; ORIGEN_LIBRARY="${ORIGEN_VAR}"
+resolver_var_ruta HOST_DOWNLOADS_DIR /media/data/downloads
+DOWNLOADS_DIR="${VALOR_VAR}"; ORIGEN_DOWNLOADS="${ORIGEN_VAR}"
+resolver_var_ruta HOST_AMULE_INCOMING_DIR /media/data/aMule/Incoming
+AMULE_DIR="${VALOR_VAR}"; ORIGEN_AMULE="${ORIGEN_VAR}"
+resolver_var_ruta ZASCARR_DATA_DIR /var/lib/zascarr
+DATA_DIR="${VALOR_VAR}"; ORIGEN_DATA="${ORIGEN_VAR}"
 
 # ── A4: validación de rutas antes de --purge (revisión de PR, 2026-09-26) ──
 # "${VAR:?}" solo protege contra una variable VACÍA, no contra una ruta
@@ -170,15 +188,31 @@ es_ruta_del_sistema() {
 }
 
 # `resolver_ruta` (de _rutas.sh) devuelve 1 con el motivo por stderr si no puede
-# resolver: aquí se falla cerrado, no se sigue con una ruta a medias.
-RESOLVED_DATA="$(resolver_ruta "${DATA_DIR}")" || die \
-    "No pude resolver ZASCARR_DATA_DIR ('${DATA_DIR}') — me niego a seguir sin saber qué voy a borrar."
-RESOLVED_LIBRARY="$(resolver_ruta "${LIBRARY_DIR}")" || die \
-    "No pude resolver HOST_LIBRARY_DIR ('${LIBRARY_DIR}') — me niego a seguir sin poder comprobar que no se solapa con tu biblioteca."
-RESOLVED_DOWNLOADS="$(resolver_ruta "${DOWNLOADS_DIR}")" || die \
-    "No pude resolver HOST_DOWNLOADS_DIR ('${DOWNLOADS_DIR}') — me niego a seguir sin poder comprobar que no se solapa con tus descargas."
-RESOLVED_AMULE="$(resolver_ruta "${AMULE_DIR}")" || die \
-    "No pude resolver HOST_AMULE_INCOMING_DIR ('${AMULE_DIR}') — me niego a seguir sin poder comprobar que no se solapa con la carpeta de aMule."
+# resolver. Fuera de --purge eso NO es motivo para abortar: el script se
+# documenta como tolerante (un .env ausente, una instalación a medias) y parar
+# los contenedores no necesita la ruta resuelta — se avisa y se sigue mostrando
+# la cadena cruda. Dentro de --purge sí se falla cerrado: ahí la ruta es lo que
+# se va a borrar.
+resolver_para_mostrar() {
+    # $1 = etiqueta, $2 = valor crudo → deja la resuelta en RESUELTA
+    local etiqueta="$1" valor="$2" salida
+    # `2>&1` a propósito: en éxito `resolver_ruta` imprime la ruta por stdout y
+    # en fallo el motivo por stderr, así que la misma variable sirve para las dos.
+    if salida="$(resolver_ruta "${valor}" 2>&1)"; then
+        RESUELTA="${salida}"
+        return 0
+    fi
+    if $PURGE; then
+        die "No pude resolver ${etiqueta} ('${valor}'): ${salida} — me niego a hacer --purge sin saber qué voy a tocar."
+    fi
+    warn "No pude resolver ${etiqueta} ('${valor}'): ${salida} — sigo sin resolverla (solo la muestro)."
+    RESUELTA="${valor}"
+}
+
+resolver_para_mostrar "ZASCARR_DATA_DIR" "${DATA_DIR}"; RESOLVED_DATA="${RESUELTA}"
+resolver_para_mostrar "HOST_LIBRARY_DIR" "${LIBRARY_DIR}"; RESOLVED_LIBRARY="${RESUELTA}"
+resolver_para_mostrar "HOST_DOWNLOADS_DIR" "${DOWNLOADS_DIR}"; RESOLVED_DOWNLOADS="${RESUELTA}"
+resolver_para_mostrar "HOST_AMULE_INCOMING_DIR" "${AMULE_DIR}"; RESOLVED_AMULE="${RESUELTA}"
 
 if $PURGE; then
     # Fallar cerrado, no abierto: con los valores por defecto de arriba
@@ -198,25 +232,38 @@ if $PURGE; then
         "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}', una carpeta del sistema — me niego a tocar ahí. Revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
 
     # Red de seguridad independiente del lector: si la ruta resuelta no es una
-    # carpeta que exista, NO se purga nada. Es lo que convierte cualquier
-    # desajuste de interpretación del .env (comillas, comentario, export, CRLF,
-    # o uno que no se haya previsto) en un aviso claro en vez de un «borrado»
-    # en vacío. Si ya lo borraste a mano, tampoco hay nada que purgar.
+    # carpeta que exista, NO se purga nada. Distingue el ORIGEN del valor:
+    #   - resuelto por Compose (autoridad, es lo que ve la app): que no exista
+    #     significa «no había nada que purgar» → se avisa y se sigue con el
+    #     resto de la desinstalación (idempotencia: si ya lo borraste a mano, el
+    #     desinstalador tiene que poder terminar).
+    #   - resuelto por el lector de reserva (incierto): aquí sí se falla
+    #     cerrado, porque no se sabe qué hay en esa ruta.
+    PURGE_SIN_DATOS=false
     if [[ ! -d "${RESOLVED_DATA}" ]]; then
-        die "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}', que no es una carpeta existente — me niego a hacer --purge. Si ya borraste esos datos a mano, no hay nada que purgar; si no, revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
+        if [[ "${ORIGEN_DATA}" == "compose" ]]; then
+            warn "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') no existe: no había nada que purgar."
+            PURGE_SIN_DATOS=true
+        else
+            die "ZASCARR_DATA_DIR resuelve a '${RESOLVED_DATA}' (leído del .env, sin poder confirmarlo con Docker), que no es una carpeta existente — me niego a hacer --purge. Revisa ZASCARR_DATA_DIR en ${ENV_FILE}."
+        fi
     fi
 
     # `motivo_solapamiento` (de _rutas.sh): misma ruta, mismo inodo por bind
     # mount, o anidamiento por componentes.
-    if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_LIBRARY}")"; then
-        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y tu biblioteca ('${RESOLVED_LIBRARY}'): ${motivo} — me niego a borrar ahí. Revisa HOST_LIBRARY_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+    if ! $PURGE_SIN_DATOS; then
+        if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_LIBRARY}")"; then
+            die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y tu biblioteca ('${RESOLVED_LIBRARY}'): ${motivo} — me niego a borrar ahí. Revisa HOST_LIBRARY_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+        fi
+        if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_DOWNLOADS}")"; then
+            die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y tus descargas ('${RESOLVED_DOWNLOADS}'): ${motivo} — me niego a borrar ahí. Revisa HOST_DOWNLOADS_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+        fi
+        if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_AMULE}")"; then
+            die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y la carpeta de aMule ('${RESOLVED_AMULE}'): ${motivo} — me niego a borrar ahí. Revisa HOST_AMULE_INCOMING_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
+        fi
     fi
-    if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_DOWNLOADS}")"; then
-        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y tus descargas ('${RESOLVED_DOWNLOADS}'): ${motivo} — me niego a borrar ahí. Revisa HOST_DOWNLOADS_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
-    fi
-    if motivo="$(motivo_solapamiento "${RESOLVED_DATA}" "${RESOLVED_AMULE}")"; then
-        die "ZASCARR_DATA_DIR ('${RESOLVED_DATA}') y la carpeta de aMule ('${RESOLVED_AMULE}'): ${motivo} — me niego a borrar ahí. Revisa HOST_AMULE_INCOMING_DIR/ZASCARR_DATA_DIR en ${ENV_FILE}."
-    fi
+else
+    PURGE_SIN_DATOS=false
 fi
 
 # ── Qué va a pasar, ANTES de tocar nada ─────────────────────────────────────
@@ -225,7 +272,11 @@ echo "  - Parar y borrar los contenedores de ZascArr (zascarr-orquestador, zasca
 echo "  - Borrar la red interna y la imagen que este repo construyó."
 echo "    (las imágenes oficiales de postgres/redis NO se tocan)"
 if $PURGE; then
-    echo "  - Borrar también los datos de la app en ${RESOLVED_DATA} (catálogo, wishlist, ajustes, portadas)."
+    if $PURGE_SIN_DATOS; then
+        echo "  - No hay datos de la app que borrar en ${RESOLVED_DATA} (no existe)."
+    else
+        echo "  - Borrar también los datos de la app en ${RESOLVED_DATA} (catálogo, wishlist, ajustes, portadas)."
+    fi
     if [[ -f "${ENV_FILE}" ]]; then
         echo "  - Borrar también ${ENV_FILE} (la próxima instalación repetirá el asistente)."
     fi
@@ -253,7 +304,13 @@ success "Contenedores, red e imagen borrados."
 
 PURGE_DATA_OK=true
 PURGE_ENV_OK=true
-if $PURGE; then
+if $PURGE && $PURGE_SIN_DATOS; then
+    # Primer estado de la ficha: la autoridad (Compose) dice dónde están los
+    # datos y esa carpeta no existe → no había nada que purgar. Se sigue con el
+    # resto (el .env), en vez de dejar la desinstalación a medias.
+    info "No había datos de la app que borrar en ${RESOLVED_DATA}."
+fi
+if $PURGE && ! $PURGE_SIN_DATOS; then
     info "Borrando datos de la app en ${RESOLVED_DATA}..."
     # Bug real, encontrado verificando en vivo: Postgres crea su directorio
     # con permisos 700 propiedad del usuario del PROCESO DENTRO DEL
@@ -269,11 +326,15 @@ if $PURGE; then
     # accidente, sobre la ruta ya RESUELTA y VALIDADA arriba, no la cadena
     # cruda del .env.
     #
-    # La imagen sale del propio docker-compose.yml, no hardcodeada: si el
-    # compose salta de versión de Postgres, el desinstalador purga con la misma
-    # (y sigue estando en caché). El literal queda solo como reserva.
-    IMAGEN_PG="$(awk '/^  postgres:/{f=1; next} f && /image:/{print $2; exit}' "${COMPOSE_FILE}" || true)"
-    [[ -n "${IMAGEN_PG}" ]] || IMAGEN_PG="postgres:15-alpine"
+    # La imagen sale de Compose (`config --images`), no del texto del YAML: así
+    # se resuelve aunque esté entrecomillada o venga de `${POSTGRES_IMAGE:-…}`
+    # (un `docker run` con la cadena sin interpolar fallaría sin activar la
+    # reserva, porque no estaría vacía). Se descarta cualquier valor con '$'.
+    IMAGEN_PG="$("${COMPOSE[@]}" config --images 2>/dev/null | grep -m1 -i 'postgres' || true)"
+    IMAGEN_PG="${IMAGEN_PG%\"}"; IMAGEN_PG="${IMAGEN_PG#\"}"
+    if [[ -z "${IMAGEN_PG}" || "${IMAGEN_PG}" == *'$'* ]]; then
+        IMAGEN_PG="postgres:15-alpine"   # reserva explícita
+    fi
     docker run --rm -v "${RESOLVED_DATA:?}:/purgar" "${IMAGEN_PG}" \
         sh -c 'rm -rf /purgar/postgres /purgar/redis /purgar/covers /purgar/vpn-state' \
         || true  # el veredicto real es la comprobación de abajo, no el código de salida
@@ -301,7 +362,11 @@ if $PURGE; then
         warn "No se borró del todo ${RESOLVED_DATA} — sigue ahí: ${RESTOS[*]} (revisa permisos). Bórralo a mano:
     sudo rm -rf ${RESOLVED_DATA}/{${RESTOS[*]// /,}}"
     fi
+fi
 
+# El .env se borra con --purge siempre, haya o no datos que purgar: si no,
+# una ejecución sobre una instalación ya a medias no podría terminar nunca.
+if $PURGE; then
     if [[ -f "${ENV_FILE}" ]]; then
         info "Borrando ${ENV_FILE}..."
         rm -f "${ENV_FILE}" 2>/dev/null || true
