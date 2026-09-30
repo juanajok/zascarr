@@ -31,6 +31,10 @@ SCRIPT = REPO / "scripts" / "uninstall.sh"
 DOCKER_STUB = r"""#!/usr/bin/env bash
 args="$*"
 [[ -n "${STUB_REGISTRO:-}" ]] && echo "docker $args" >> "${STUB_REGISTRO}"
+if [[ "$args" == *"config --images"* ]]; then
+    printf '%s\n' "${STUB_IMAGENES:-postgres:15-alpine}"
+    exit 0
+fi
 if [[ "$args" == *"config --environment"* ]]; then
     if [[ "${STUB_CONFIG_FALLA:-}" == "si" ]]; then exit 1; fi
     printf '%s\n' "${STUB_ENV:-}"
@@ -108,6 +112,8 @@ def entorno(tmp_path: Path):
         entorno_vars["STUB_REGISTRO"] = str(registro)
         entorno_vars["STUB_IMAGEN_REGISTRO"] = str(imagenes)
         entorno_vars["STUB_ENV"] = env_compose if env_compose is not None else _env_compose(datos)
+        entorno_vars["STUB_IMAGENES"] = stubs.pop(
+            "STUB_IMAGENES", "postgres:15-alpine\nredis:7-alpine\nzascarr-zascarr\n")
         for clave, valor in stubs.items():
             if valor is None:
                 entorno_vars.pop(clave, None)
@@ -175,34 +181,73 @@ class TestPurgaResuelveComoCompose:
         for sub in ("postgres", "redis", "covers", "vpn-state"):
             assert not (datos / sub).exists(), f"{sub} debería haberse borrado ({forma})"
 
-    def test_la_imagen_de_purga_sale_del_compose(self, entorno):
-        entorno(env_compose=_env_compose(entorno.datos), args=["--purge"])
+    def test_almohadilla_pegada_al_valor_no_es_comentario(self, entorno, tmp_path):
+        """Compose solo trata `#` como comentario si va precedido de espacio: una
+        ruta como `/media/Comics#1` no se trunca. Truncarla apuntaría a otra
+        carpeta (que puede existir) y la red de seguridad no saltaría."""
+        con_almohadilla = tmp_path / "Comics#1"
+        for sub in ("postgres", "redis", "covers", "vpn-state"):
+            (con_almohadilla / sub).mkdir(parents=True, exist_ok=True)
+        sin_cola = tmp_path / "Comics"
+        sin_cola.mkdir(exist_ok=True)   # existe: si se truncara, purgaría aquí
 
+        salida = entorno(
+            env_file_texto=f"ZASCARR_DATA_DIR={con_almohadilla}\n",
+            env_compose="",
+            STUB_CONFIG_FALLA="si",
+            args=["--purge"],
+        )
+
+        assert salida.returncode == 0, salida.stderr
+        for sub in ("postgres", "redis", "covers", "vpn-state"):
+            assert not (con_almohadilla / sub).exists(), f"{sub}: debería borrarse en Comics#1"
+        assert sin_cola.exists(), "no debería haberse tocado la carpeta truncada"
+
+    def test_la_imagen_de_purga_sale_de_compose(self, entorno):
+        """`config --images` resuelve el nombre real (entrecomillado o con
+        `${VAR}` en el YAML); el valor del doble es distintivo para probar que
+        la imagen viene de ahí y no de un literal del script."""
+        salida = entorno(
+            env_compose=_env_compose(entorno.datos), args=["--purge"],
+            STUB_IMAGENES="postgres:99-de-prueba\nredis:7-alpine\n",
+        )
+
+        assert salida.returncode == 0, salida.stderr
         imagenes = entorno.imagenes.read_text().split()
-        assert imagenes, "no se llamó a `docker run`"
-        esperada = None
-        for linea in (REPO / "docker-compose.yml").read_text().splitlines():
-            if linea.strip().startswith("image:") and "postgres" in linea:
-                esperada = linea.split()[1]
-                break
-        assert esperada, "el compose no declara imagen de postgres"
-        assert imagenes[0] == esperada
+        assert imagenes == ["postgres:99-de-prueba"], imagenes
 
 
 class TestSeNiegaCuandoNoDebe:
 
-    def test_directorio_inexistente_se_niega(self, entorno, tmp_path):
-        """Red de seguridad: si la ruta resuelta no es una carpeta, no se purga
-        (cubre cualquier desajuste de interpretación del `.env`)."""
+    def test_datos_ausentes_con_compose_termina_bien(self, entorno, tmp_path):
+        """Idempotencia: si la AUTORIDAD (Compose) dice dónde están los datos y
+        esa carpeta ya no existe (la borraste a mano, o una ejecución anterior lo
+        hizo), no había nada que purgar. Se avisa y se sigue con el resto — el
+        `.env` incluido — en vez de dejar la desinstalación a medias."""
+        inexistente = tmp_path / "no-existe"
+        salida = entorno(env_compose=_env_compose(inexistente), args=["--purge"])
+
+        assert salida.returncode == 0, texto(salida)
+        assert "no había nada que purgar" in texto(salida)
+        assert ".env borrado" in texto(salida)
+        assert "no existe" in texto(salida)
+        assert entorno.registro.read_text().count("down") >= 1
+
+    def test_datos_ausentes_con_el_lector_de_reserva_se_niega(self, entorno, tmp_path):
+        """Con el lector de reserva (Compose caído) no se sabe qué hay en esa
+        ruta: ahí sí se falla cerrado."""
         inexistente = tmp_path / "no-existe"
         salida = entorno(
-            env_compose=_env_compose(inexistente),
+            env_file_texto=f"ZASCARR_DATA_DIR={inexistente}\n",
+            env_compose="",
+            STUB_CONFIG_FALLA="si",
             args=["--purge"],
         )
 
         assert salida.returncode != 0
         assert "no es una carpeta existente" in texto(salida)
         assert "borrados" not in texto(salida)
+        assert ".env borrado" not in texto(salida)
 
     def test_symlink_roto_en_la_ruta_se_detecta(self, entorno, tmp_path):
         """`resolver_ruta` de `_rutas.sh` detecta el symlink roto; el
@@ -218,9 +263,11 @@ class TestSeNiegaCuandoNoDebe:
         assert "symlink roto" in texto(salida)
         assert "borrados" not in texto(salida)
 
-    def test_mismo_inodo_por_bind_mount_se_detecta(self, entorno, tmp_path):
-        """`motivo_solapamiento` compara (st_dev, st_ino): dos rutas distintas que
-        son la misma carpeta. El prefijo de texto anterior no lo veía."""
+    def test_misma_carpeta_por_otra_ruta_se_detecta(self, entorno, tmp_path):
+        """Dos rutas de texto distinto que son la misma carpeta: `resolver_ruta`
+        las unifica por `realpath` y `motivo_solapamiento` lo ve. (La rama de
+        `(st_dev, st_ino)` —bind mount de verdad— se cubre en
+        `tests/test_bootstrap_rutas.py`, que simula `stat`.)"""
         alias = tmp_path / "alias-biblioteca"
         alias.symlink_to(entorno.datos)
 
@@ -233,6 +280,23 @@ class TestSeNiegaCuandoNoDebe:
         assert "me niego a borrar ahí" in texto(salida)
         for sub in ("postgres", "redis", "covers", "vpn-state"):
             assert (entorno.datos / sub).exists(), "no debería haber borrado nada"
+
+    def test_sin_purge_sigue_con_enlace_roto_en_la_biblioteca(self, entorno, tmp_path):
+        """Fuera de `--purge` un fallo de resolución NO puede abortar: parar los
+        contenedores no necesita la ruta resuelta. Se avisa y se sigue."""
+        rota = tmp_path / "biblioteca"
+        rota.rmdir()   # el fixture la crea como carpeta real
+        rota.symlink_to(tmp_path / "no-existe")
+
+        salida = entorno(
+            env_compose=_env_compose(entorno.datos, biblioteca=rota), args=[],
+        )
+
+        assert salida.returncode == 0, texto(salida)
+        assert "No pude resolver HOST_LIBRARY_DIR" in texto(salida)
+        assert "Contenedores, red e imagen borrados" in texto(salida)
+        assert entorno.registro.read_text().count("down") >= 1
+        assert (entorno.datos / "postgres").exists(), "sin --purge no se toca nada"
 
     def test_sin_confirmacion_no_toca_nada(self, entorno):
         salida = entorno(
