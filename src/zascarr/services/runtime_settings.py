@@ -54,7 +54,7 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
     # E4: aviso de importación por webhook, apagado por defecto.
     "avisos": (
         "webhook_enabled", "webhook_type", "webhook_url",
-        "webhook_token", "webhook_chat_id",
+        "webhook_token", "webhook_chat_id", "webhook_incluir_nombres",
     ),
 }
 # Nunca se devuelven en claro tras guardarse (D11): la UI los muestra

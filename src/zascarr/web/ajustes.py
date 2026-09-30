@@ -28,6 +28,7 @@ from zascarr.services.auth import (
     hash_password_async,
     limpiar_cache_basic,
 )
+from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.web.routes import crear_templates
 
@@ -111,6 +112,7 @@ def _contexto() -> dict:
         "webhook_url": s.webhook_url,
         "webhook_token_configurado": bool(s.webhook_token),
         "webhook_chat_id": s.webhook_chat_id,
+        "webhook_incluir_nombres": s.webhook_incluir_nombres,
     }
 
 
@@ -136,16 +138,43 @@ async def guardar_avisos(
     webhook_url: str = Form(default=""),
     webhook_token: str = Form(default=""),
     webhook_chat_id: str = Form(default=""),
+    webhook_incluir_nombres: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
+    # Validación en el guardado: el tipo tiene que ser uno conocido y la URL, si
+    # se usa, http(s) con host. Un tipo raro ya no cae en «generic» en silencio.
+    if webhook_type not in TIPOS_CONOCIDOS:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Avisos",
+            "error": f"Tipo de aviso no reconocido: «{webhook_type}». Elige uno de la lista.",
+        })
+    url_limpia = webhook_url.rstrip("/")
+    if webhook_type != "telegram" and url_limpia and not url_valida(url_limpia):
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Avisos",
+            "error": "La URL del aviso tiene que empezar por http:// o https:// y llevar un host.",
+        })
     await RuntimeSettingsService(db).save({
         "webhook_enabled": webhook_enabled,
         "webhook_type": webhook_type,
-        "webhook_url": webhook_url.rstrip("/"),
+        "webhook_url": url_limpia,
         "webhook_token": webhook_token,
         "webhook_chat_id": webhook_chat_id,
+        "webhook_incluir_nombres": webhook_incluir_nombres,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Avisos"})
+
+
+@router.post("/probar/avisos", response_class=HTMLResponse)
+async def probar_avisos(request: Request) -> HTMLResponse:
+    """Envía un aviso de prueba con la MISMA función que el envío real, y
+    devuelve la causa si falla (código HTTP o clase de excepción; nunca la URL ni
+    el token)."""
+    resultado = await Notifier().aviso_de_prueba()
+    return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+        "ok": resultado.ok,
+        "mensaje": "Aviso enviado." if resultado.ok else f"No se pudo enviar: {resultado.motivo}.",
+    })
 
 
 @router.post("/guardar/fuentes", response_class=HTMLResponse)

@@ -62,16 +62,29 @@ class TestNotifier:
         assert calls == []
 
     @pytest.mark.asyncio
-    async def test_generic_envia_json_con_titulo_y_mensaje(self):
+    async def test_generic_envia_json_con_titulo_y_recuento(self):
+        """Por defecto NO van los nombres de fichero: en un tema público de ntfy
+        los lee cualquiera. El cuerpo lleva el recuento."""
         transport, calls = _receptor()
         async with httpx.AsyncClient(transport=transport) as client:
-            await Notifier(settings=_cfg(), client=client).notify_imported(
+            resultado = await Notifier(settings=_cfg(), client=client).notify_imported(
                 ["a.cbz → A/a.cbz"]
             )
         assert len(calls) == 1
         req = calls[0]
         assert str(req.url) == "https://example.test/hook"
-        assert b"a.cbz" in req.content
+        assert b"a.cbz" not in req.content
+        assert b"1 tebeo" in req.content
+        assert resultado.ok is True
+
+    @pytest.mark.asyncio
+    async def test_generic_con_nombres_es_explicito(self):
+        transport, calls = _receptor()
+        async with httpx.AsyncClient(transport=transport) as client:
+            await Notifier(
+                settings=_cfg(webhook_incluir_nombres=True), client=client,
+            ).notify_imported(["a.cbz → A/a.cbz"])
+        assert b"a.cbz" in calls[0].content
 
     @pytest.mark.asyncio
     async def test_gotify_usa_cabecera_no_query(self):
@@ -174,6 +187,103 @@ class TestNotifier:
             await Notifier(settings=_cfg()).notify_imported(["a.cbz"])
         assert len(calls) == 1
         assert any(log.get("event") == "notifier.send_failed" for log in logs)
+
+
+class TestCausaYValidacion:
+    """La causa que se DEVUELVE (no solo se registra) es lo que necesita el botón
+    de prueba de Ajustes. Y nunca sale de `str(exc)`: puede llevar la URL con el
+    token dentro."""
+
+    @pytest.mark.asyncio
+    async def test_tipo_desconocido_no_envia_y_dice_cual(self):
+        """Un tipo guardado ANTES de este cambio no se convierte en «generic» en
+        silencio: se registra el nombre y no se envía."""
+        transport, calls = _receptor()
+        async with httpx.AsyncClient(transport=transport) as client:
+            with capture_logs() as logs:
+                resultado = await Notifier(
+                    settings=_cfg(webhook_type="ntfyy"), client=client,
+                ).notify_imported(["a.cbz"])
+        assert calls == []
+        assert resultado.ok is False
+        assert "ntfyy" in (resultado.motivo or "")
+        assert any("ntfyy" in str(log) for log in logs)
+
+    @pytest.mark.asyncio
+    async def test_la_causa_del_http_es_el_codigo(self):
+        transport, _ = _receptor(status=401)
+        async with httpx.AsyncClient(transport=transport) as client:
+            resultado = await Notifier(settings=_cfg(), client=client).notify_imported(
+                ["a.cbz"]
+            )
+        assert resultado.ok is False
+        assert resultado.motivo == "HTTP 401"
+
+    @pytest.mark.asyncio
+    async def test_la_causa_de_la_excepcion_es_la_clase_no_str(self):
+        """`str(exc)` puede llevar la URL (y con ella el token): la causa es la
+        CLASE de la excepción."""
+        transport, _ = _receptor(
+            exc=httpx.ConnectError("https://api.telegram.org/botTOKEN-SECRETO/x")
+        )
+        async with httpx.AsyncClient(transport=transport) as client:
+            resultado = await Notifier(
+                settings=_cfg(webhook_type="telegram", webhook_url="",
+                              webhook_token="TOKEN-SECRETO", webhook_chat_id="1"),
+                client=client,
+            ).notify_imported(["a.cbz"])
+        assert resultado.ok is False
+        assert resultado.motivo == "ConnectError"
+        assert "TOKEN-SECRETO" not in (resultado.motivo or "")
+
+    @pytest.mark.asyncio
+    async def test_el_token_de_telegram_no_sale_en_el_resultado_ni_en_el_log(self):
+        """Token distintivo, con forma real (`<id>:<secreto>`), y un fallo que en
+        crudo lo llevaría dentro."""
+        token = "123456789:AA-token-distintivo-de-prueba"
+        transport, _ = _receptor(
+            exc=httpx.ConnectError(f"https://api.telegram.org/bot{token}/sendMessage")
+        )
+        async with httpx.AsyncClient(transport=transport) as client:
+            with capture_logs() as logs:
+                resultado = await Notifier(
+                    settings=_cfg(webhook_type="telegram", webhook_url="",
+                                  webhook_token=token, webhook_chat_id="42"),
+                    client=client,
+                ).notify_imported(["a.cbz"])
+        assert resultado.ok is False
+        assert token not in str(resultado)
+        assert token not in str(logs)
+        assert "AA-token-distintivo" not in str(logs)
+
+    @pytest.mark.asyncio
+    async def test_aviso_de_prueba_usa_el_mismo_camino(self):
+        transport, calls = _receptor()
+        async with httpx.AsyncClient(transport=transport) as client:
+            resultado = await Notifier(settings=_cfg(), client=client).aviso_de_prueba()
+        assert resultado.ok is True
+        assert len(calls) == 1
+        assert b"prueba" in calls[0].content
+
+    @pytest.mark.asyncio
+    async def test_aviso_de_prueba_devuelve_la_causa(self):
+        transport, calls = _receptor(status=500)
+        async with httpx.AsyncClient(transport=transport) as client:
+            resultado = await Notifier(settings=_cfg(), client=client).aviso_de_prueba()
+        assert resultado.ok is False
+        assert resultado.motivo == "HTTP 500"
+
+    @pytest.mark.parametrize("url,esperado", [
+        ("https://ntfy.sh/mi-tema", True),
+        ("http://192.168.1.5:8080/x", True),
+        ("file:///etc/passwd", False),
+        ("ftp://host/x", False),
+        ("https://", False),
+        ("no-es-una-url", False),
+    ])
+    def test_url_valida(self, url, esperado):
+        from zascarr.services.notifier import url_valida
+        assert url_valida(url) is esperado
 
 
 class _FakeSession:
