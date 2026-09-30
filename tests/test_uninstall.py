@@ -216,6 +216,25 @@ class TestPurgaResuelveComoCompose:
         imagenes = entorno.imagenes.read_text().split()
         assert imagenes == ["postgres:99-de-prueba"], imagenes
 
+    @pytest.mark.skipif(
+        Path("/var/lib/zascarr").exists(),
+        reason="el valor por defecto del compose existe en esta máquina y el doble de "
+               "docker borraría dentro; en CI no existe y el caso se cubre",
+    )
+    def test_valor_por_defecto_con_compose_responsiendo_no_se_niega(self, entorno):
+        """Si la variable no está ni en el `.env` ni en el entorno y Compose SÍ
+        respondió, el valor es el del compose: que no exista es «no había nada»,
+        no el caso incierto de la reserva. Se salta si `/var/lib/zascarr` existe
+        (el doble de docker haría `rm -rf` dentro de la carpeta real)."""
+        salida = entorno(
+            env_compose="HOST_LIBRARY_DIR=/tmp/x\nHOST_DOWNLOADS_DIR=/tmp/y\n",
+            args=["--purge"],
+        )
+
+        assert salida.returncode == 0, texto(salida)
+        assert "no había nada que purgar" in texto(salida)
+        assert ".env borrado" in texto(salida)
+
 
 class TestSeNiegaCuandoNoDebe:
 
