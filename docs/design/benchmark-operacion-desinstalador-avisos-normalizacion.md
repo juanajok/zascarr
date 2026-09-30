@@ -107,6 +107,22 @@ restos), no contra el script. Se estrena con el patrón que ya fija
 pero **nunca ve el Docker real ni las rutas reales**: no hay `docker compose
 down` de verdad ni ningún `rm` sobre algo que importe.
 
+### Implementado (2026-09-30)
+
+- **Las rutas salen de `docker compose config --environment`** (lo que ve la app)
+  y del **lector propio** solo como reserva, con las cuatro formas. La red de
+  seguridad **distingue el origen**: si lo resolvió Compose y la carpeta no
+  existe, es «no había nada que purgar» y la desinstalación **sigue** (el `.env`
+  incluido) — si no, cualquier ejecución sobre una instalación ya a medias
+  quedaría a medias para siempre. Si lo resolvió el lector de reserva, se niega.
+- **Fuera de `--purge` un fallo de resolución solo avisa y sigue**: parar los
+  contenedores no necesita la ruta resuelta, y el script se documenta como
+  tolerante. El `die` queda para `--purge`.
+- **El `#` solo es comentario si va precedido de espacio** (como en Compose):
+  `/media/Comics#1` no se trunca a `/media/Comics`.
+- **La imagen de purga sale de `docker compose config --images`**, no del texto
+  del YAML: así se resuelve aunque esté entrecomillada o venga de `${VAR}`.
+
 ---
 
 ## 2. Aviso de importación (E4)
@@ -328,6 +344,15 @@ Cada uno es un cambio de dominio distinto: pueden ser commits (o PR) separados.
   `.env` sí están verificadas contra `docker compose config`, pero **no** que el
   lector de reserva las interprete igual: eso lo fija la implementación, con una
   prueba por forma.
+- **Que Compose resuelva las cuatro formas está verificado a mano** con
+  `docker compose config --environment`; las pruebas del script usan un **doble**
+  que devuelve el valor ya resuelto, así que prueban el script, no a Compose. La
+  afirmación sobre Compose descansa en esa comprobación manual (y en que
+  `config --environment` es, por definición, lo que ve la app).
+- **`config --environment` requiere una versión reciente de Compose.** Si el flag
+  no existe en la instalación, el fallo se traga (`|| true`) y entra el lector de
+  reserva: es el comportamiento correcto, pero conviene saberlo. Las pruebas
+  cubren ese camino (`STUB_CONFIG_FALLA`).
 - No se ha probado el comportamiento de `docker compose config` con un `.env` a
   medias (que es justo el caso en que entra el lector de reserva).
 - No se ha probado ningún webhook real (ni ntfy ni Gotify) desde este entorno.
