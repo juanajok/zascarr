@@ -19,7 +19,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - **PBKDF2 ya no bloquea la aplicación**: corre en un ejecutor propio (2 hilos,
   acotado), y el nombre de usuario se compara en bytes UTF-8 (un nombre con
   tilde o `ñ` daba error). Se rehashea la contraseña al iniciar sesión si venía
-  de un contador de iteraciones anterior.
+  de un contador de iteraciones anterior. Las iteraciones se quedan en **260.000
+  por ahora**: subirlas a 600.000 es un cambio aparte, sin migración (el hash
+  guarda su contador), que se decide con la medición real en la Raspberry Pi
+  (OWASP pide menos de un segundo por hash).
 - **Los intentos fallidos de contraseña se retrasan de forma progresiva**, con
   tope (hasta 8 s). El retraso **no bloquea por sí mismo**: una credencial
   correcta entra tras la espera, y la espera no congela el resto de la
