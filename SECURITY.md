@@ -45,6 +45,22 @@ Ajustes) con tu dominio público — es una de las vías pensadas para recuperar
 el acceso sin depender de la interfaz. El 403 explica en español el origen
 recibido y esta misma salida.
 
+**Si entras por el nombre del equipo** (`raspberrypi.local`, `pi`, …) con
+`auth_mode="none"`, añádelo a `ALLOWED_HOSTS` (lista separada por comas en el
+`.env`): con la contraseña desactivada el middleware valida el `Host` en
+**todas** las peticiones — también los `GET` —, porque un DNS rebinding
+permitiría *leer* tu biblioteca o tus ajustes, no solo escribirlos. Se aceptan
+siempre `localhost`, cualquier IP literal (IPv4 o IPv6) y el host de
+`base_url`.
+
+**Proxy con TLS que sí conserva `Host`:** si tu Caddy/nginx termina el TLS y
+reenvía a ZascArr por HTTP interno, el navegador manda `Sec-Fetch-Site:
+same-origin` (una cabecera que calcula el navegador y una página no puede
+falsificar) y el middleware la acepta como señal positiva, así que no hace
+falta `BASE_URL` para ese caso. Con `auth_mode="none"` la comprobación de
+`Host` sigue aplicándose de todos modos — en un rebinding el navegador también
+manda `same-origin`.
+
 ## Deuda de seguridad conocida (A6)
 
 - **La sesión no se invalida al cambiar la contraseña.** La cookie se firma solo con `secret_key`, no con la contraseña, así que una cookie emitida antes de un cambio de contraseña sigue siendo válida hasta que caduca (30 días) o hasta que `secret_key` se regenere. Aceptable para una herramienta de un solo operador en su propia LAN, pero es una de esas sorpresas que alguien descubrirá algún día ("cambié la clave y seguía entrando desde otra pestaña") — que quede escrito. Si algún día importa, cerrar sesión en todas partes = regenerar `secret_key`.
@@ -75,8 +91,10 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   `Referer` no coinciden (esquema+host+puerto normalizados) con el `Host` de la
   petición ni con `base_url`. En `/ui/*` se bloquea además cuando no hay ni
   `Origin` ni `Referer` (un navegador siempre manda `Origin` en un POST); en
-  `/api/*` se permite su ausencia, para scripts con `curl`/Basic. Con
-  `auth_mode="none"` se comprueba también el `Host` (localhost, IP literal o
-  `base_url`), lo que cubre DNS rebinding.
+  `/api/*` se permite su ausencia, para scripts con `curl`/Basic. `Sec-Fetch-Site:
+  same-origin` se acepta como señal positiva (cubre el proxy con TLS). Con
+  `auth_mode="none"` se valida el `Host` en **todos** los métodos — un rebinding
+  permite leer, no solo escribir — aceptando `localhost`, IP literal, el host de
+  `base_url` y los nombres de `ALLOWED_HOSTS`.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.

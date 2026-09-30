@@ -101,16 +101,21 @@ _METODOS_DE_ESTADO = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def _norm(url: str) -> tuple[str, str, str] | None:
-    """(esquema, host, puerto) normalizado de una URL, o None si no es http/https
-    o no tiene hostname. El puerto se normaliza al de por defecto si no viene."""
+    """(esquema, host, puerto) normalizado de una URL, o None si no es http/https,
+    no tiene hostname, o trae un puerto inválido (`http://x:99999`,
+    `http://x:abc`). Nunca revienta: un `Origin` malformado se rechaza, no da
+    500."""
     try:
         partes = urlsplit(url)
+        if partes.scheme not in ("http", "https"):
+            return None
+        hostname = partes.hostname
+        puerto = partes.port or (443 if partes.scheme == "https" else 80)
     except ValueError:
         return None
-    if partes.scheme not in ("http", "https") or not partes.hostname:
+    if not hostname:
         return None
-    puerto = partes.port or (443 if partes.scheme == "https" else 80)
-    return (partes.scheme, partes.hostname.lower(), str(puerto))
+    return (partes.scheme, hostname.lower(), str(puerto))
 
 
 def _origen_permitido(origen: str, request: Request, settings: Settings) -> bool:
@@ -134,6 +139,16 @@ def _origen_permitido(origen: str, request: Request, settings: Settings) -> bool
     return norm in permitidos
 
 
+def _host_de_peticion(request: Request) -> str | None:
+    """Hostname del `Host` (sin puerto ni corchetes de IPv6), o None si es
+    malformado. `urlsplit("//" + host)` maneja bien `[::1]:8000` y `pi:8000`."""
+    host = request.headers.get("host", "")
+    try:
+        return urlsplit(f"//{host}").hostname
+    except ValueError:
+        return None
+
+
 def _es_ip_literal(hostname: str) -> bool:
     try:
         ipaddress.ip_address(hostname)
@@ -142,23 +157,37 @@ def _es_ip_literal(hostname: str) -> bool:
         return False
 
 
-def _host_no_permitido(request: Request, settings: Settings) -> bool:
-    """True si el `Host` no es `localhost`, ni una IP literal, ni `base_url`.
+def _hosts_permitidos_extra(settings: Settings) -> set[str]:
+    """Nombres de `ALLOWED_HOSTS` (lista separada por comas) en minúsculas."""
+    return {
+        h.strip().lower()
+        for h in (settings.allowed_hosts or "").split(",")
+        if h.strip()
+    }
 
-    Solo se comprueba con `auth_mode = none` (con contraseña no hay cookie que
-    defender por esta vía y comprobarlo añade riesgo de bloqueo). Un ataque de
-    DNS rebinding necesita un NOMBRE DE DOMINIO que resuelva a la IP local; dejar
-    pasar las IP literales no lo habilita — el navegador pide el dominio, no la
-    IP."""
-    host = request.headers.get("host", "")
-    hostname = host.split(":", 1)[0].strip("[]").lower()
+
+def _host_no_permitido(request: Request, settings: Settings) -> bool:
+    """True si el `Host` no es `localhost`, ni una IP literal (IPv4 o IPv6), ni
+    el host de `base_url`, ni uno de `ALLOWED_HOSTS`.
+
+    Solo se comprueba con `auth_mode = none`: un ataque de DNS rebinding hace
+    que el navegador trate al atacante como mismo origen y pueda **leer**
+    respuestas (biblioteca, wishlist, ajustes), así que la comprobación vale
+    para TODOS los métodos, no solo los que cambian estado. Un rebinding
+    necesita un NOMBRE DE DOMINIO que resuelva a la IP local; por eso las IP
+    literales se dejan pasar — el navegador pide el dominio, no la IP — y los
+    nombres que el dueño conoce se declaran en `ALLOWED_HOSTS`."""
+    hostname = _host_de_peticion(request)
+    if hostname is None:
+        return True
+    hostname = hostname.lower()
     if hostname == "localhost" or _es_ip_literal(hostname):
         return False
     if settings.base_url:
         base = _norm(settings.base_url)
         if base and base[1] == hostname:
             return False
-    return True
+    return hostname not in _hosts_permitidos_extra(settings)
 
 
 def _peticion_cross_site(request: Request, settings: Settings) -> bool:
@@ -172,6 +201,13 @@ def _peticion_cross_site(request: Request, settings: Settings) -> bool:
     fetch_site = (request.headers.get("sec-fetch-site") or "").lower()
     if fetch_site == "cross-site":
         return True
+    if fetch_site == "same-origin":
+        # Señal positiva que calcula el navegador y una página no puede
+        # falsificar: cubre el proxy con TLS que conserva `Host` pero la app ve
+        # por http (Origin `https://…` vs URL `http://…`). En DNS rebinding
+        # también llega `same-origin`, así que la comprobación de `Host` sigue
+        # aplicándose aparte con `auth_mode=none`.
+        return False
 
     origen = request.headers.get("origin")
     if origen is not None:
@@ -195,6 +231,24 @@ def _respuesta_origen_rechazado(request: Request) -> Response:
         f"Origen no permitido: la petición viene de «{origen}» y este servidor "
         "solo acepta peticiones desde sí mismo. Si accedes tras un proxy inverso, "
         "define BASE_URL en el .env (o en Ajustes) con tu dominio."
+    )
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=403, content={"detail": detalle})
+    return Response(detalle, status_code=403)
+
+
+def _respuesta_host_rechazado(request: Request) -> Response:
+    """403 específico del `Host`, con el nombre recibido y cómo permitirlo.
+
+    Va aparte del de origen porque la salida es distinta: aquí el problema es
+    que el `Host` no está en la lista, y la solución es `ALLOWED_HOSTS` (no hace
+    falta una URL completa como con `base_url`)."""
+    host = request.headers.get("host", "")
+    detalle = (
+        f"Host no permitido: «{host}». Este servidor solo acepta peticiones "
+        "dirigidas a localhost, a una IP de su red, al dominio de BASE_URL o a "
+        "un nombre de ALLOWED_HOSTS. Si entras por el nombre del equipo (por "
+        "ejemplo «raspberrypi.local»), añádelo a ALLOWED_HOSTS en el .env."
     )
     if request.url.path.startswith("/api/"):
         return JSONResponse(status_code=403, content={"detail": detalle})
@@ -355,10 +409,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return _respuesta_origen_rechazado(request)
 
         if settings.auth_mode == "none":
-            # DNS rebinding: sin contraseña no hay cookie que defender, así que
-            # el Host debe ser localhost/IP literal/base_url.
-            if request.method in _METODOS_DE_ESTADO and _host_no_permitido(request, settings):
-                return _respuesta_origen_rechazado(request)
+            # DNS rebinding: sin contraseña no hay cookie que defender, y un
+            # rebinding permite LEER respuestas (GET incluidos), así que el Host
+            # se valida en TODOS los métodos. El healthcheck va por localhost /
+            # 127.0.0.1 (IP literal) y pasa.
+            if _host_no_permitido(request, settings):
+                return _respuesta_host_rechazado(request)
             return await call_next(request)
 
         path = request.url.path

@@ -63,6 +63,12 @@ SECRET_FIELDS = {
     "comicvine_api_key", "prowlarr_api_key", "transmission_password",
     "amule_password", "auth_password_hash", "webhook_token",
 }
+# Campos donde un valor vacío guardado en la BD significa "no lo he fijado
+# desde la UI": se deja el valor del `.env`/por defecto. `base_url` es el caso
+# que importa — es la vía de recuperación si el middleware de seguridad da 403
+# y Ajustes es inalcanzable, así que un `base_url=""` en la BD no puede pisar el
+# `BASE_URL` del `.env`.
+_VACIOS_QUE_NO_PISAN = {"base_url"}
 # secret_key (A6) firma la cookie de sesión — nunca aparece en el
 # formulario de /ui/ajustes (no está en ningún grupo de OVERRIDABLE_
 # FIELDS de arriba), pero SÍ debe pasar por apply_overrides() como los
@@ -151,11 +157,19 @@ class RuntimeSettingsService:
 
 
 def apply_overrides(values: dict[str, Any]) -> None:
-    """Muta el Settings ya cacheado — ver docstring del módulo."""
+    """Muta el Settings ya cacheado — ver docstring del módulo.
+
+    `base_url` con valor vacío en la BD **no pisa** el del `.env`: es la vía de
+    recuperación cuando el middleware de seguridad da 403 y Ajustes es
+    inalcanzable. Si un guardado previo dejó `base_url=""` en la BD, el
+    `BASE_URL` del `.env` sigue valiendo."""
     settings = get_settings()
     for key, value in values.items():
-        if key in _ALL_FIELDS:
-            setattr(settings, key, value)
+        if key not in _ALL_FIELDS:
+            continue
+        if key in _VACIOS_QUE_NO_PISAN and value == "":
+            continue
+        setattr(settings, key, value)
 
 
 async def load_overrides_at_startup(db: AsyncSession) -> None:

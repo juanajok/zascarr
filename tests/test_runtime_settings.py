@@ -145,3 +145,23 @@ class TestFlags:
             "prowlarr_url": "http://x:9696",
             "_library_adoption_done": True,
         }
+
+
+class TestBaseUrlRecuperacion:
+    """El `base_url` vacío en la BD no puede pisar el `BASE_URL` del `.env`: es la
+    vía de recuperación si el middleware de seguridad da 403 y Ajustes es
+    inalcanzable."""
+
+    def test_base_url_vacio_en_bd_no_pisa_el_del_env(self, restaurar_settings):
+        get_settings().base_url = "https://env.example"
+
+        apply_overrides({"base_url": ""})
+
+        assert get_settings().base_url == "https://env.example"
+
+    def test_base_url_no_vacio_en_bd_si_pisa_el_del_env(self, restaurar_settings):
+        get_settings().base_url = "https://env.example"
+
+        apply_overrides({"base_url": "https://ajustes.example"})
+
+        assert get_settings().base_url == "https://ajustes.example"

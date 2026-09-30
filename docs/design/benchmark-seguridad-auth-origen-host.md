@@ -151,6 +151,32 @@ Verificado en el código (`main` en `7f6f637`):
   es una cabecera que manda el cliente, no un secreto, y verla es lo que permite
   diagnosticar; no se registra en logs por defecto.
 
+**Correcciones tras la revisión de la implementación (2026-09-29):**
+
+- **`ALLOWED_HOSTS`** (lista separada por comas en el `.env`): sin ella, quien
+  entra por el nombre del equipo (`raspberrypi.local`, `pi`) recibía 403 en
+  todo con `auth_mode="none"`. Ahora esos nombres se declaran sin necesidad de
+  una URL completa, y el 403 del `Host` (mensaje aparte del de origen) dice el
+  nombre recibido y cómo permitirlo.
+- **El `Host` se valida en TODOS los métodos**, no solo en los que cambian
+  estado: un DNS rebinding permite **leer** (biblioteca, wishlist, ajustes), no
+  solo escribir. El healthcheck no necesita excepción porque va por
+  `localhost`/`127.0.0.1` (IP literal).
+- **IPv6:** el hostname se extrae con `urlsplit("//" + host).hostname`, no con
+  `split(":")` — `[::1]:8000` daba `"["` y se rechazaba.
+- **Puerto inválido:** `http://x:99999` hacía que `urlsplit(...).port` lanzara
+  `ValueError` fuera del `try` → 500. Ahora se captura y el `Origin` se
+  rechaza con 403.
+- **`Sec-Fetch-Site: same-origin`** se acepta como señal positiva (la calcula
+  el navegador, una página no puede falsificarla): cubre el proxy con TLS que
+  conserva `Host` pero la app ve por `http` (`Origin` `https://…` vs URL
+  `http://…`). Con `auth_mode="none"` la comprobación de `Host` sigue
+  aplicándose aparte, porque en un rebinding el navegador también manda
+  `same-origin`.
+- **`base_url` vacío en la BD no pisa el `BASE_URL` del `.env`**
+  (`apply_overrides` lo omite): si un guardado previo de Ajustes dejó
+  `base_url=""`, la vía de recuperación del `.env` seguiría funcionando.
+
 ### 2. Autenticación en pasos
 
 - **Paso 1 — `to_thread` y bytes UTF-8.** `verify_password` (PBKDF2) corre en
