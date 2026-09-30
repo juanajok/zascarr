@@ -254,6 +254,23 @@ dirección contraria.
   «Batman»/«The Batman» **debe quedar documentado** (hoy coinciden con los dos
   normalizadores; la prueba lo fija para que no cambie por accidente).
 
+### Implementado (2026-09-30)
+
+- El plegado de acentos se aplica **dentro de `normalize_series_name`** (NFKD sin
+  diacríticos), así que es simétrico por construcción: la comparación directa del
+  filtro y el *ranking* fuzzy usan la misma función.
+- **Artículo decidido de forma explícita y sin cambios:** se sigue quitando solo
+  el **inicial** (`the|a|an|el|la|los|las|le|les`); el pospuesto (`Sandman,
+  The`) y la lista ampliada (`die/der/das/il/lo`) se quedan fuera de este cambio,
+  con prueba que lo fija.
+- **Medición con el banco real** (`muestra81_etiquetada.csv`, 81 filas): la
+  igualdad se queda en **71/81 = 87,7 % antes y después**. El banco no tiene
+  ningún caso con el acento en un lado y no en el otro, así que **no mueve los
+  números** — el efecto se fija con los casos nuevos, que sí fallan contra
+  `main` (3 de ellos).
+- **Precio aceptado y escrito** en el docstring de la normalización: plegar `ñ` a
+  `n` une «año»/«ano», «caña»/«cana».
+
 ---
 
 ## Referencias consultadas

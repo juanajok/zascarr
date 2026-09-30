@@ -935,6 +935,48 @@ class TestMedicionD8ContraElBancoReal:
         assert not Orchestrator._candidato_es_del_numero(candidato, 4, "Batman")
 
 
+class TestPlegadoDeAcentosD8:
+    """M2: el filtro de D8 compara con **plegado de acentos simétrico**.
+
+    Antes, un release sin tildes no encontraba el título del catálogo con tildes:
+    un falso negativo (el item se quedaba en Pendientes hasta que el
+    coleccionista lo corregía a mano y se aprendía el alias). Es la dirección
+    segura del fallo, pero se arregla.
+    """
+
+    def test_asterix_y_filemon_sin_tilde_encuentran_el_catalogo(self):
+        from zascarr.utils.naming import normalize_series_name as norm
+        assert norm("Astérix") == norm("Asterix") == "asterix"
+        assert norm("Filemón") == norm("Filemon") == "filemon"
+
+    def test_dona_urraca_con_enie(self):
+        from zascarr.utils.naming import normalize_series_name as norm
+        assert norm("Doña Urraca") == norm("Dona Urraca") == "dona urraca"
+
+    def test_el_filtro_acepta_el_release_sin_tildes(self):
+        """El caso real, de punta a punta del predicado."""
+        candidato = SearchResult("Asterix 4 (1961).cbz", "i", "magnet:x", 1, 1, "comics")
+        assert Orchestrator._candidato_es_del_numero(candidato, 4, "Astérix")
+        otro = SearchResult("Dona Urraca 4.cbz", "i", "magnet:x", 1, 1, "comics")
+        assert Orchestrator._candidato_es_del_numero(otro, 4, "Doña Urraca")
+
+    def test_el_articulo_inicial_sigue_colapsando(self):
+        """Decisión explícita documentada: «Batman» y «The Batman» **ya**
+        colapsaban con este normalizador (quita el artículo INICIAL), y se
+        mantiene. No es un cambio de comportamiento."""
+        from zascarr.utils.naming import normalize_series_name as norm
+        assert norm("The Batman") == norm("Batman") == "batman"
+
+    def test_el_articulo_pospuesto_no_se_toca(self):
+        """Decisión explícita: NO se trae el artículo pospuesto de
+        `normalize_title` («Sandman, The») ni su lista ampliada
+        (`die/der/das/il/lo`): ampliaría el alcance del filtro sin necesidad
+        medida. El arreglo es el plegado de acentos, no cambiar los artículos."""
+        from zascarr.utils.naming import normalize_series_name as norm
+        assert norm("Sandman, The") == "sandman the"
+        assert norm("Die Fantastischen Vier") == "die fantastischen vier"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # D8 — generación y retirada con un solo predicado
 # ═══════════════════════════════════════════════════════════════════════════
