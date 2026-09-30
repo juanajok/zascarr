@@ -20,6 +20,20 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   acotado), y el nombre de usuario se compara en bytes UTF-8 (un nombre con
   tilde o `ñ` daba error). Se rehashea la contraseña al iniciar sesión si venía
   de un contador de iteraciones anterior.
+- **Los intentos fallidos de contraseña se retrasan de forma progresiva**, con
+  tope: tras varios fallos desde la misma IP, el siguiente intento tarda más
+  (hasta 8 s), pero **nunca bloquea** — una credencial correcta siempre acaba
+  entrando. La espera no congela el resto de la aplicación. Sin
+  `TRUSTED_PROXY=true` en el `.env`, todas las peticiones se atribuyen a la IP
+  directa (la cabecera `X-Forwarded-For` se ignora a propósito, porque se puede
+  falsear); detrás de un proxy de confianza, actívalo para que el retraso se
+  cuente por IP real.
+- **Si hay demasiadas verificaciones de contraseña a la vez**, se responde `429`
+  (con `Retry-After`) en vez de encolar sin límite. Un rechazo por este motivo
+  **no cuenta como intento fallido**: no penaliza a quien espera.
+- **Basic Auth cachea los aciertos** (60 s, tamaño acotado): un script con
+  credenciales válidas no repite PBKDF2 en cada petición. Un fallo nunca se
+  cachea, y cambiar la contraseña vacía la caché.
 
 ### Cambiado (rompe scripts que llamen a la UI sin `Origin`)
 

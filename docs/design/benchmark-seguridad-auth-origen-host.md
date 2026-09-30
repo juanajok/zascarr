@@ -239,10 +239,25 @@ Verificado en el código (`main` en `7f6f637`):
   dos logins simultáneos que rehashean no se pisan (la versión no se toca, el
   hash final valida la misma contraseña).
 
-**Pendiente de la ficha:** subir a `600_000` (va en el último commit, cuando
-retraso/caché/tope estén), el retraso progresivo, la caché de Basic y el tope de
-espera con 429 (los rechazos por el tope **no** cuentan como intento fallido).
-Falta medir el tiempo real de PBKDF2 en la Pi.
+**Implementado (2026-09-29) — retraso, caché y tope:**
+
+- **Retraso progresivo por IP** en memoria: `min(0.5 · 2^(n-1), 8) s`, ventana de
+  15 min. Se aplica antes de validar en `/login` y en Basic Auth
+  (`intentar_credenciales`), con `asyncio.sleep` — no bloquea el bucle. **No es
+  un bloqueo**: una credencial correcta entra tras la espera y limpia el contador.
+- **IP del cliente:** `X-Forwarded-For` solo con `TRUSTED_PROXY=true`;
+  apagado por defecto, la cabecera se ignora (se puede falsear). Sin proxy de
+  confianza todo comparte IP: el atacante solo puede añadir el retraso máximo.
+- **Tope de cola:** el semáforo de PBKDF2 se adquiere con `asyncio.wait_for`
+  (2 s); si no hay hueco, `ColaDeVerificacionLlenaError` → **429** con
+  `Retry-After`. Ese rechazo **no cuenta como fallo** (no se llama a
+  `_anotar_fallo`).
+- **Caché de aciertos de Basic:** clave `HMAC(secret, versión + cabecera)`, TTL
+  60 s, máximo 256 entradas (se purga y, si hace falta, se vacía). Solo aciertos;
+  un fallo nunca se cachea; cambiar las credenciales la vacía.
+
+**Pendiente de la ficha:** subir a `600_000` (último commit) y medir el tiempo
+real de PBKDF2 en la Pi.
 
 ### 3. Comprobación real de dependencias (respuesta al check rojo)
 

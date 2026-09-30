@@ -61,6 +61,14 @@ falta `BASE_URL` para ese caso. Con `auth_mode="none"` la comprobación de
 `Host` sigue aplicándose de todos modos — en un rebinding el navegador también
 manda `same-origin`.
 
+**Retraso progresivo por IP:** los intentos fallidos de contraseña se castigan
+con un retraso creciente (con tope), nunca con un bloqueo: una credencial
+correcta siempre acaba entrando. Si estás detrás de un proxy de confianza,
+activa `TRUSTED_PROXY=true` en el `.env` para que use `X-Forwarded-For`; sin
+esa variable la cabecera se ignora a propósito (se puede falsear). Con todas
+las peticiones compartiendo IP, un atacante solo puede añadir el retraso máximo
+— no bloquea al dueño.
+
 ## Deuda de seguridad conocida (A6)
 
 - **La cookie viaja sin `Secure`, decidido a propósito.** Con `secure=True` el navegador no enviaría la cookie por HTTP plano y el login en la LAN dejaría de funcionar, así que sin TLS activado rompería el caso de uso principal. Es la decisión correcta hoy, pero es deuda deliberada: cuando ZascArr viva tras un reverse proxy con TLS de verdad, ese flag debería activarse (o hacerse condicional a `base_url` empezando por `https://`). Entra de oficio con la futura historia de reverse proxy.
@@ -101,5 +109,11 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   `auth_mode="none"` se valida el `Host` en **todos** los métodos — un rebinding
   permite leer, no solo escribir — aceptando `localhost`, IP literal, el host de
   `base_url` y los nombres de `ALLOWED_HOSTS`.
+- **Fuerza bruta**: los fallos de contraseña se castigan con un **retraso
+  progresivo por IP** (con tope, nunca bloqueo: una credencial correcta siempre
+  entra), un **tope de cola** que responde `429` con `Retry-After` en vez de
+  encolar sin límite (esos rechazos no cuentan como fallo), y una **caché de
+  aciertos de Basic** con TTL corto y tamaño acotado que se vacía al cambiar la
+  contraseña.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.

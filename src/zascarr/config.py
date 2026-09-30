@@ -171,6 +171,11 @@ class Settings(BaseSettings):
     # comas en el `.env` — por ejemplo `ALLOWED_HOSTS=raspberrypi.local,pi` para
     # quien entra por el nombre de la Pi sin usar proxy.
     allowed_hosts: str = Field(default="")
+    # Seguridad: si ZascArr vive detrás de un proxy inverso DE CONFIANZA, el
+    # retraso progresivo por IP usa `X-Forwarded-For`. Apagado por defecto: sin
+    # esto esa cabecera se ignora a propósito, porque cualquiera puede
+    # falsearla y esquivar (o cargar sobre otro) el retraso.
+    trusted_proxy: bool = Field(default=False)
     # Contador interno (misma fila JSONB que `secret_key`, fuera de la lista de
     # ajustes editables) que sube al CAMBIAR la contraseña, el usuario o el modo
     # de autenticación. Va firmado dentro de la cookie de sesión: las cookies

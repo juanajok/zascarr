@@ -15,6 +15,18 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def _limpiar_estado_auth():
+    """El retraso progresivo y la caché de Basic son estado de módulo: se limpian
+    entre tests para que no se filtren (ni ralenticen la suite)."""
+    from zascarr.services.auth import limpiar_cache_basic, limpiar_fallos
+    limpiar_fallos()
+    limpiar_cache_basic()
+    yield
+    limpiar_fallos()
+    limpiar_cache_basic()
+
+
+@pytest.fixture(autouse=True)
 def _testclient_en_localhost(monkeypatch, request):
     """Por defecto, `TestClient` usa `base_url="http://localhost"` y envía
     `Origin: http://localhost`: así `Host` y `Origin` pasan la comprobación de
