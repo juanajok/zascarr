@@ -29,6 +29,7 @@ import hmac
 import html
 import ipaddress
 import secrets
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote, urlsplit
@@ -82,6 +83,34 @@ def apagar_ejecutor_pbkdf2() -> None:
     if _PBKDF2_EXECUTOR is not None:
         _PBKDF2_EXECUTOR.shutdown(wait=False, cancel_futures=True)
         _PBKDF2_EXECUTOR = None
+
+
+# Tope de espera por un hueco de PBKDF2 antes de responder 429: con el semáforo
+# lleno, es mejor rechazar de inmediato que encolar sin límite y que el dueño
+# espere detrás de una ráfaga.
+_ESPERA_MAX_COLA = 2.0
+
+
+class ColaDeVerificacionLlenaError(Exception):
+    """No hubo hueco para verificar la contraseña dentro del tope de espera.
+
+    Se traduce en un 429. Un rechazo por este motivo NO cuenta como intento
+    fallido en el retraso progresivo (el dueño no se penaliza a sí mismo)."""
+
+
+async def _en_ejecutor_pbkdf2(func, *args):
+    """Ejecuta `func` (CPU-bound) en el ejecutor propio, con el semáforo acotado
+    por un tope de espera: si no hay hueco a tiempo, lanza
+    `ColaDeVerificacionLlenaError` en vez de encolar sin límite."""
+    loop = asyncio.get_running_loop()
+    try:
+        await asyncio.wait_for(_pbkdf2_sem.acquire(), timeout=_ESPERA_MAX_COLA)
+    except TimeoutError:
+        raise ColaDeVerificacionLlenaError from None
+    try:
+        return await loop.run_in_executor(_ejecutor_pbkdf2(), func, *args)
+    finally:
+        _pbkdf2_sem.release()
 
 # Rutas alcanzables sin sesión ni Basic Auth incluso con auth_mode activo:
 # /login (si no, nadie podría autenticarse nunca — bucle de redirección),
@@ -278,9 +307,7 @@ def hash_password(password: str) -> str:
 async def hash_password_async(password: str) -> str:
     """`hash_password` es CPU-bound (PBKDF2): corre en el ejecutor propio para no
     bloquear el bucle de eventos — mismo criterio que `verify_password`."""
-    loop = asyncio.get_running_loop()
-    async with _pbkdf2_sem:
-        return await loop.run_in_executor(_ejecutor_pbkdf2(), hash_password, password)
+    return await _en_ejecutor_pbkdf2(hash_password, password)
 
 
 def necesita_rehash(stored: str) -> bool:
@@ -293,6 +320,127 @@ def necesita_rehash(stored: str) -> bool:
         return int(iterations) < _PBKDF2_ITERATIONS
     except (ValueError, AttributeError):
         return False
+
+
+# ── Retraso progresivo por IP (ficha de seguridad, paso 2) ───────────────────
+# Retraso creciente, NO bloqueo duro: detrás de un proxy o del NAT de Docker
+# todas las peticiones pueden compartir IP, y un bloqueo dejaría fuera también
+# al dueño. Una credencial correcta siempre acaba entrando (tras la espera).
+
+_FALLOS_MAX = 8            # a partir de aquí el retraso es el tope
+_RETRASO_BASE = 0.5        # segundos tras el primer fallo
+_RETRASO_MAX = 8.0         # tope del retraso
+_VENTANA_FALLOS = 15 * 60  # los fallos caducan a los 15 minutos
+
+_fallos: dict[str, tuple[int, float]] = {}
+_fallos_lock = threading.Lock()
+
+
+def ip_de_peticion(request: Request, settings: Settings) -> str:
+    """IP del cliente para el retraso progresivo.
+
+    `X-Forwarded-For` SOLO si hay un proxy de confianza configurado
+    (`TRUSTED_PROXY`): sin él la cabecera se ignora, porque cualquiera puede
+    falsearla y esquivar el retraso (o cargarlo sobre otra IP)."""
+    if settings.trusted_proxy:
+        xff = request.headers.get("x-forwarded-for", "")
+        if xff:
+            return xff.split(",")[0].strip()
+    return request.client.host if request.client else "desconocida"
+
+
+def _retraso_actual(ip: str) -> float:
+    with _fallos_lock:
+        n, ts = _fallos.get(ip, (0, 0.0))
+        if not n or time.time() - ts > _VENTANA_FALLOS:
+            return 0.0
+        return min(_RETRASO_BASE * (2 ** (min(n, _FALLOS_MAX) - 1)), _RETRASO_MAX)
+
+
+def _anotar_fallo(ip: str) -> None:
+    with _fallos_lock:
+        n, ts = _fallos.get(ip, (0, 0.0))
+        if time.time() - ts > _VENTANA_FALLOS:
+            n = 0
+        _fallos[ip] = (n + 1, time.time())
+
+
+def limpiar_fallos(ip: str | None = None) -> None:
+    """Borra el contador de fallos de una IP (o de todas, para los tests — el
+    estado es de módulo)."""
+    with _fallos_lock:
+        if ip is None:
+            _fallos.clear()
+        else:
+            _fallos.pop(ip, None)
+
+
+async def esperar_retraso(ip: str) -> None:
+    """Espera el retraso progresivo con `asyncio.sleep` — NO bloquea el bucle de
+    eventos (otras peticiones siguen atendidas durante la espera)."""
+    retraso = _retraso_actual(ip)
+    if retraso > 0:
+        await asyncio.sleep(retraso)
+
+
+async def intentar_credenciales(ip: str, username: str, password: str,
+                                settings: Settings) -> bool:
+    """Valida credenciales con el retraso progresivo por IP y registra el
+    resultado.
+
+    Un rechazo por `ColaDeVerificacionLlenaError` (429) NO se cuenta como fallo: el
+    dueño no debe penalizarse a sí mismo por una ráfaga."""
+    await esperar_retraso(ip)
+    ok = await credenciales_validas(username, password, settings)
+    if ok:
+        limpiar_fallos(ip)
+    else:
+        _anotar_fallo(ip)
+    return ok
+
+
+# Caché de ACIERTOS de Basic Auth: una credencial válida no repite PBKDF2 en
+# cada petición. Clave = HMAC(secret, versión + cabecera), TTL corto y tamaño
+# acotado; NUNCA se cachea un fallo. Cambiar la contraseña sube la versión, así
+# que las entradas viejas quedan inalcanzables (y se vacía explícitamente).
+_CACHE_BASIC_MAX = 256
+_CACHE_BASIC_TTL = 60.0
+_cache_basic: dict[str, float] = {}
+_cache_basic_lock = threading.Lock()
+
+
+def _clave_cache_basic(secret: str, cabecera: str, version: int) -> str:
+    return hmac.new(
+        secret.encode(), f"{version}:{cabecera}".encode(), hashlib.sha256).hexdigest()
+
+
+def _acierto_cache_basic(secret: str, cabecera: str, version: int) -> bool:
+    clave = _clave_cache_basic(secret, cabecera, version)
+    with _cache_basic_lock:
+        expira = _cache_basic.get(clave)
+        if expira is None:
+            return False
+        if expira < time.time():
+            _cache_basic.pop(clave, None)
+            return False
+        return True
+
+
+def _guardar_cache_basic(secret: str, cabecera: str, version: int) -> None:
+    clave = _clave_cache_basic(secret, cabecera, version)
+    with _cache_basic_lock:
+        if len(_cache_basic) >= _CACHE_BASIC_MAX:
+            ahora = time.time()
+            for k in [k for k, v in _cache_basic.items() if v < ahora]:
+                del _cache_basic[k]
+            if len(_cache_basic) >= _CACHE_BASIC_MAX:
+                _cache_basic.clear()   # acotado de verdad: nunca crece sin límite
+        _cache_basic[clave] = time.time() + _CACHE_BASIC_TTL
+
+
+def limpiar_cache_basic() -> None:
+    with _cache_basic_lock:
+        _cache_basic.clear()
 
 
 async def verify_password(password: str, stored: str) -> bool:
@@ -309,13 +457,9 @@ async def verify_password(password: str, stored: str) -> bool:
         expected = bytes.fromhex(digest_hex)
     except (ValueError, AttributeError):
         return False
-    loop = asyncio.get_running_loop()
-    async with _pbkdf2_sem:
-        actual = await loop.run_in_executor(
-            _ejecutor_pbkdf2(),
-            hashlib.pbkdf2_hmac, "sha256", password.encode(), salt, int(iterations))
+    actual = await _en_ejecutor_pbkdf2(
+        hashlib.pbkdf2_hmac, "sha256", password.encode(), salt, int(iterations))
     return hmac.compare_digest(actual, expected)
-
 
 @functools.lru_cache(maxsize=1)
 def _hash_de_relleno() -> str:
@@ -412,12 +556,34 @@ async def _basic_auth_valido(request: Request, settings: Settings) -> bool:
     cabecera = request.headers.get("authorization", "")
     if not cabecera.lower().startswith("basic "):
         return False
+    # Caché de aciertos: una credencial válida no repite PBKDF2 en cada request.
+    if _acierto_cache_basic(settings.secret_key, cabecera, settings.auth_session_version):
+        return True
     try:
         decoded = base64.b64decode(cabecera[6:]).decode("utf-8")
         usuario, _, password = decoded.partition(":")
     except Exception:
         return False
-    return await credenciales_validas(usuario, password, settings)
+    ok = await intentar_credenciales(ip_de_peticion(request, settings), usuario, password, settings)
+    if ok:
+        _guardar_cache_basic(settings.secret_key, cabecera, settings.auth_session_version)
+    return ok
+
+
+def _respuesta_cola_llena(request: Request) -> Response:
+    """429 cuando no hay hueco para verificar la contraseña a tiempo."""
+    detalle = (
+        "Demasiadas verificaciones de contraseña a la vez. Espera unos segundos "
+        "y vuelve a intentarlo."
+    )
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(status_code=429, content={"detail": detalle},
+                            headers={"Retry-After": "5"})
+    return Response(
+        detalle, status_code=429,
+        media_type="text/plain; charset=utf-8",
+        headers={"X-Content-Type-Options": "nosniff", "Retry-After": "5"},
+    )
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -468,8 +634,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if sesion_valida(request.cookies.get(COOKIE_NAME), settings.secret_key,
                          settings.auth_session_version):
             return await call_next(request)
-        if await _basic_auth_valido(request, settings):
-            return await call_next(request)
+        try:
+            if await _basic_auth_valido(request, settings):
+                return await call_next(request)
+        except ColaDeVerificacionLlenaError:
+            return _respuesta_cola_llena(request)
 
         if path.startswith("/api/"):
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ZascArr"'})

@@ -15,9 +15,11 @@ from zascarr.database import get_db
 from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
+    ColaDeVerificacionLlenaError,
     crear_cookie_sesion,
-    credenciales_validas,
     hash_password_async,
+    intentar_credenciales,
+    ip_de_peticion,
     necesita_rehash,
 )
 from zascarr.services.runtime_settings import RuntimeSettingsService
@@ -76,7 +78,17 @@ async def login_submit(
     version_validada = settings.auth_session_version
     hash_validado = settings.auth_password_hash
 
-    if not await credenciales_validas(username, password, settings):
+    try:
+        ok = await intentar_credenciales(
+            ip_de_peticion(request, settings), username, password, settings)
+    except ColaDeVerificacionLlenaError:
+        # 429 del tope de cola: NO cuenta como intento fallido en el retraso.
+        return templates.TemplateResponse(request, "login.html", {
+            "next": next,
+            "pide_usuario": settings.auth_mode == "user_password",
+            "error": "Demasiados intentos a la vez. Espera unos segundos y vuelve a probar.",
+        }, status_code=429)
+    if not ok:
         return templates.TemplateResponse(request, "login.html", {
             "next": next,
             "pide_usuario": settings.auth_mode == "user_password",

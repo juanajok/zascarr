@@ -26,6 +26,7 @@ from zascarr.services.auth import (
     SESSION_MAX_AGE,
     crear_cookie_sesion,
     hash_password_async,
+    limpiar_cache_basic,
 )
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.web.routes import crear_templates
@@ -252,6 +253,10 @@ async def guardar_seguridad(
     if cambia_credenciales:
         updates["auth_session_version"] = settings.auth_session_version + 1
     await RuntimeSettingsService(db).save(updates)
+    if cambia_credenciales:
+        # La caché de aciertos de Basic Auth queda inservible al cambiar las
+        # credenciales: sus entradas viejas no deben seguir dando acceso.
+        limpiar_cache_basic()
 
     respuesta = templates.TemplateResponse(
         request, "_ajustes_guardado.html", {"nombre": "Seguridad"})
