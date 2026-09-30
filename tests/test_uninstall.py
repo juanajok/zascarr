@@ -68,7 +68,9 @@ if [[ "${1:-}" == "run" ]]; then
                 rm -rf "${host}/postgres" "${host}/redis" "${host}/covers" "${host}/vpn-state"
                 ;;
             *)
-                [[ -n "${STUB_REGISTRO:-}" ]] && echo "purga fuera de la raiz: ${host}" >> "${STUB_REGISTRO}"
+                if [[ -n "${STUB_REGISTRO:-}" ]]; then
+                    echo "purga fuera de la raiz: ${host}" >> "${STUB_REGISTRO}"
+                fi
                 ;;
         esac
     fi
@@ -227,25 +229,28 @@ class TestPurgaResuelveComoCompose:
         imagenes = entorno.imagenes.read_text().split()
         assert imagenes == ["postgres:99-de-prueba"], imagenes
 
-    def test_valor_por_defecto_con_compose_responsiendo_no_se_niega(self, entorno):
+    def test_valor_por_defecto_con_compose_responsiendo_no_se_niega(self, entorno, tmp_path):
         """Si la variable no está ni en el `.env` ni en el entorno y Compose SÍ
         respondió, el valor es el del compose: **no** es el caso incierto de la
-        reserva, así que el script nunca se niega.
+        reserva, así que el script no se niega y la desinstalación termina.
 
-        Independiente del estado de la máquina: si el valor por defecto existe se
-        purga (el doble no borra fuera del árbol sintético) y si no, se avisa de
-        que no había nada; lo que se comprueba es que **no** se niega. La rama de
-        «no había nada» con datos ausentes la cubre, de forma determinista,
-        `test_datos_ausentes_con_compose_termina_bien`.
+        El valor por defecto se apunta a un directorio temporal que NO existe
+        (`ZASCARR_DATA_DIR_POR_DEFECTO`), así que la prueba es determinista y no
+        depende de si `/var/lib/zascarr` existe en la máquina: antes exigía
+        `returncode == 0` y en una máquina con datos reales ahí el script veía
+        «restos» que el doble no había borrado y terminaba en 1.
         """
+        inexistente = tmp_path / "datos-por-defecto"
         salida = entorno(
             env_compose="HOST_LIBRARY_DIR=/tmp/x\nHOST_DOWNLOADS_DIR=/tmp/y\n",
             args=["--purge"],
+            ZASCARR_DATA_DIR_POR_DEFECTO=str(inexistente),
         )
 
         assert salida.returncode == 0, texto(salida)
-        assert "me niego a hacer --purge" not in texto(salida)
+        assert "no había nada que purgar" in texto(salida)
         assert ".env borrado" in texto(salida)
+        assert "me niego a hacer --purge" not in texto(salida)
 
 
 class TestSeNiegaCuandoNoDebe:
