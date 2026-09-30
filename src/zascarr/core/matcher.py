@@ -84,6 +84,11 @@ def normalize_title(title: str) -> str:
     - Acentos eliminados (NFKD): los filenames de la escena son ASCII-seguros
       incluso para tebeos españoles ('Nausicaa' sin tilde por compatibilidad
       SMB). La DB puede tener tildes, pero la normalización las quita a ambos.
+      **Precio aceptado a sabiendas:** plegar `ñ` a `n` une palabras distintas
+      («año» y «ano», «caña» y «cana»). Para COMPARAR títulos compensa —un
+      release sin tildes tiene que encontrar «Astérix» o «Doña Urraca»— y la
+      colisión está acotada: el filtro sigue exigiendo el mismo número y, si hay
+      alias, el mismo patrón.
     - Abreviaciones: "S.H.I.E.L.D." → "shield" (no "s h i e l d").
       El paso _ABBREV elimina puntos entre letras antes de la limpieza general.
     - 'The Sandman' y 'Sandman, The' colapsan al mismo valor: el artículo
