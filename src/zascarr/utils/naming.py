@@ -13,6 +13,7 @@ de la escena que debe resolver.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 NOISE_PATTERNS = [
@@ -449,7 +450,29 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
 
 
 def normalize_series_name(name: str) -> str:
-    """Para comparación fuzzy: sin artículos, sin puntuación, lowercase."""
+    """Para comparación: **sin acentos**, sin artículo inicial, sin puntuación,
+    lowercase.
+
+    El **plegado de acentos es simétrico** (se aplica al mismo tiempo a los dos
+    extremos de la comparación) y es lo que arregla el falso negativo hispano: un
+    release sin tildes («Asterix», «Filemon», «Dona Urraca») tiene que encontrar
+    el título del catálogo («Astérix», «Filemón», «Doña Urraca»). **Precio
+    aceptado:** plegar `ñ` a `n` une palabras distintas («año»/«ano»).
+
+    **Artículo:** solo se quita el **inicial** (`the|a|an|el|la|los|las|le|les`),
+    que es el comportamiento de siempre — «Batman» y «The Batman» ya colapsaban
+    aquí, y sigue siendo la decisión. NO se quita el pospuesto («Sandman, The»)
+    ni se amplía la lista (`die/der/das/il/lo`): eso es cosa de
+    `core.matcher.normalize_title`, y traerlo aquí ampliaría el alcance del filtro
+    de D8 sin una necesidad medida.
+
+    Los dos normalizadores siguen existiendo a propósito: este compara títulos de
+    release (fuzzy, para puntuar), y `normalize_title` compara contra el catálogo
+    (con artículos pospuestos y abreviaciones). Lo que **no** puede pasar es que
+    la mitad del filtro de D8 use uno y la otra mitad el otro.
+    """
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(c for c in name if not unicodedata.combining(c))
     name = name.lower()
     name = re.sub(r"^(the|a|an|el|la|los|las|le|les)\s+", "", name)
     name = re.sub(r"[^\w\s]", "", name)
