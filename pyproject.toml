@@ -32,7 +32,9 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=68.0"]
+# >=83.0 por PYSEC-2026-3447 (bypass de MANIFEST.in al construir un sdist en
+# macOS/APFS; arreglado en 83.0.0). Solo afecta al build, no al runtime.
+requires = ["setuptools>=83.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
