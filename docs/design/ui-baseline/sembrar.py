@@ -1,3 +1,4 @@
+# ruff: noqa: E501, UP031
 """Siembra datos SINTÉTICOS para la línea base de la UI (V0). Se ejecuta DENTRO de la imagen:
 
     docker compose run --rm -T zascarr python - < docs/design/ui-baseline/sembrar.py

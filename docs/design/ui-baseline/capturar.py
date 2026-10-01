@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E501, UP031
 """Línea base de la UI (V0): capturas reproducibles con Chrome headless por CDP.
 
 Herramienta de desarrollo, FUERA del paquete: no entra en la imagen ni en `pyproject.toml`.
