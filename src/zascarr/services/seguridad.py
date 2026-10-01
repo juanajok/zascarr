@@ -76,11 +76,14 @@ def url_publica_valida(url: str) -> bool:
 
 
 async def fijar_seguridad(
-    db: AsyncSession, *, modo: str, usuario: str, password: str, base_url: str,
+    db: AsyncSession, *, modo: str, usuario: str, password: str, base_url: str | None,
 ) -> ResultadoSeguridad:
     """Guarda modo, usuario, contraseña (hasheada) y `base_url`.
 
-    `password` vacío = conservar la que ya hay. Nunca deja la app en un modo que
+    `password` vacío = conservar la que ya hay. `base_url=None` = no tocar la que
+    haya (el formulario de Ajustes pasa siempre una cadena, y vacía significa «vuelve
+    al valor del `.env`»; el instalador no debe pisar lo que se puso en Ajustes).
+    Nunca deja la app en un modo que
     nadie pueda desbloquear (A6): activar contraseña sin ninguna —ni recién
     escrita ni ya guardada— se rechaza en vez de dejar al coleccionista fuera de
     su propia instalación.
@@ -98,7 +101,9 @@ async def fijar_seguridad(
     if error:
         return ResultadoSeguridad(error=error)
 
-    cambios: dict = {"auth_mode": modo, "auth_username": usuario, "base_url": base_url.rstrip("/")}
+    cambios: dict = {"auth_mode": modo, "auth_username": usuario}
+    if base_url is not None:
+        cambios["base_url"] = base_url.rstrip("/")
     # Cambiar contraseña, usuario o modo sube la versión de sesión: las cookies
     # emitidas antes dejan de valer. El rehasheo por iteraciones NO la sube.
     cambia = (
