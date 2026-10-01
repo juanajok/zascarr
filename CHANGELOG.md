@@ -3,7 +3,25 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
-## [No publicado]
+## [1.15.0] — 2026-10-01
+
+Versión grande: seguridad de acceso, integridad de ficheros, política de búsqueda
+por serie y escritura de `ComicInfo.xml`. Esta lista es lo que conviene saber
+**antes** de actualizar; el detalle viene después.
+
+### Antes de actualizar
+
+- **Tendrás que iniciar sesión una vez** si usas contraseña: las cookies del
+  formato anterior dejan de valer (no se pierde ningún dato).
+- **Dos migraciones nuevas** (`0015` política de búsqueda, `0016`
+  `original_sha256`). `scripts/update.sh` las aplica solo; si actualizas a mano,
+  ejecuta `alembic upgrade head`. Ambas son aditivas y no reescriben datos.
+- **Si entras por un nombre de equipo** (`raspberrypi.local`, `pi`…), añádelo a
+  `ALLOWED_HOSTS` en el `.env`, o recibirás `403` en todo.
+- **Si accedes detrás de un proxy inverso**, define `BASE_URL`; sin ella los
+  `POST` (incluido guardar en Ajustes) darán `403`.
+- **Un script que llame a `/ui/*` sin cabecera `Origin`** deja de funcionar
+  (`/api/*` no cambia).
 
 ### Cambiado (arranque degradado)
 
@@ -93,6 +111,56 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   estar en `ALLOWED_HOSTS`** — lista separada por comas en el `.env`, por
   ejemplo `ALLOWED_HOSTS=raspberrypi.local,pi` — o recibirás `403` en todo,
   lecturas incluidas. El `403` lo dice con el nombre recibido y esta salida.
+
+### Añadido
+
+- **Política de búsqueda por serie (D8).** Cada serie decide si ZascArr busca
+  por su cuenta los números que le faltan (`faltantes`) o nada (`ninguno`, el
+  valor por defecto: nada cambia hasta que lo actives). Cambiar la política
+  reactiva o retira los elementos que ella generó, **sin tocar lo que pediste a
+  mano**. Migración `0015`: `Series.wishlist_policy`,
+  `Wishlist.origen`/`numero` y el estado `retirado`.
+- **Escritura segura de `ComicInfo.xml` dentro del CBZ (B6).** Comando
+  administrativo (`scripts/etiquetar.sh`) con **vista previa (dry-run)**: ejecuta
+  exactamente el mismo plan que enseña. Respeta lo que hayas editado a mano
+  (solo sobrescribe lo que ZascArr escribió antes) y reescribe el CBZ de forma
+  atómica.
+- **Fuentes de metadatos activables desde Ajustes (B8).** Comic Vine, AniList,
+  Tebeosfera y GCD (este último solo en «Descubrir»). Apagada = **cero
+  peticiones**, y no gasta el plazo de reintento de la serie.
+- **Aviso al móvil al completar una importación (E4)**: webhook genérico,
+  Gotify, ntfy o Telegram, **apagado por defecto**, de mejor esfuerzo (un fallo
+  del aviso nunca revierte la importación).
+- **`/api/health` distingue cuatro estados de base de datos (E6)**:
+  `unreachable`, `migration_required`, `schema_incompatible` y `ok`, con texto y
+  acción en español en `/estado`. Una tabla ausente en `/ui/*` degrada a `503`
+  con enlace a `/estado`, no a un traceback.
+- **El instalador avisa si biblioteca y descargas se solapan (A9)** y hay un
+  **diagnóstico de la red Docker/UFW (A10)** de solo lectura
+  (`scripts/diagnostico-red.sh`) que nunca aplica nada.
+
+### Corregido
+
+- **Huecos de una serie: salen del disco y del formato (C2).** La vista decía
+  que faltaba todo porque restaba un campo (`Issue.sort_order`) que ningún código
+  escribía. Ahora cuenta los números que de verdad están en disco y solo compara
+  contra un total expresado en grapas; si no se puede calcular, lo dice en vez
+  de inventar una resta.
+- **Una recopilación ya no se enlaza a una grapa del mismo número (B15).**
+  En la asignación manual se rechaza (queda en Pendientes con el motivo) y el
+  importador automático solo enlaza cuando la evidencia alcanza.
+- **El mismo tebeo etiquetado ya no se reimporta como duplicado (integridad).**
+  `File.original_sha256` (migración `0016`) guarda el hash del fichero tal como
+  llegó; el dedupe lo compara también, ya no revienta con dos filas del mismo
+  hash, y un fichero que reaparece tras haber desaparecido se reenlaza en vez de
+  duplicarse.
+- **El desinstalador resuelve las rutas como `docker compose`.** Con
+  `ZASCARR_DATA_DIR="/var/lib/zascarr"` (entre comillas) en el `.env` decía
+  «datos borrados» sin borrar nada. Ahora usa lo que ve Compose y es idempotente.
+- **«Astérix» y «Asterix» coinciden (M2).** La comparación de nombres de la
+  política de búsqueda plegaba los acentos solo de un lado.
+- **`/login` descarta un `next` con barra invertida** (variante de redirección
+  abierta).
 
 ## [1.14.0] — 2026-09-26
 
