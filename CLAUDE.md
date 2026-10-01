@@ -114,6 +114,13 @@ como marco permanente.
    usuario (rutas, credenciales), sanitiza antes.
 5. Endpoints mutables usan `Form(...)` con campos explícitos en UI HTMX;
    `Cache-Control` y `X-Legal-Redirect` documentados en `api/legal.py`.
+6. **La UI escucha en localhost por defecto** (`127.0.0.1` en la app; Postgres y
+   Redis no se publican a la red en ningún caso). Abrir a la LAN es una decisión
+   **explícita** del operador y exige contraseña; el exterior, proxy inverso con
+   TLS y `BASE_URL`/`ALLOWED_HOSTS`. No se copia el valor por defecto de
+   Sonarr/Radarr: es una elección del producto, no una herencia. Decisión
+   completa en **ADR 0004** (`docs/adr/0004-exposicion-de-red.md`); la elección
+   guiada en el instalador es **A11**.
 
 ## 6. UX
 
@@ -185,7 +192,7 @@ como marco permanente.
 | Doc | Rol |
 |---|---|
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
-| `docs/adr/0001-ui-stack.md` | Stack de UI y razonamiento |
+| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red) |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
 | `docs/design/benchmark-referencias.md` | Procedimiento y ficha para comparar referencias antes de features P0/P1 (ver §13) |
