@@ -470,6 +470,12 @@ def normalize_series_name(name: str) -> str:
     release (fuzzy, para puntuar), y `normalize_title` compara contra el catálogo
     (con artículos pospuestos y abreviaciones). Lo que **no** puede pasar es que
     la mitad del filtro de D8 use uno y la otra mitad el otro.
+
+    **Límite conocido, fuera del alfabeto latino:** `unicodedata.combining` no
+    distingue un diacrítico latino de una marca de kana, así que el dakuten y el
+    handakuten también se caen: `が` y `か` (o `ガ` y `カ`) normalizan igual. Los
+    releases que maneja el proyecto son casi siempre latinos, así que se acepta y
+    se documenta (hay prueba) en vez de complicar el plegado.
     """
     name = unicodedata.normalize("NFKD", name)
     name = "".join(c for c in name if not unicodedata.combining(c))

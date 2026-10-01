@@ -976,6 +976,36 @@ class TestPlegadoDeAcentosD8:
         assert norm("Sandman, The") == "sandman the"
         assert norm("Die Fantastischen Vier") == "die fantastischen vier"
 
+    def test_el_ranking_puntua_igual_en_las_dos_direcciones(self):
+        """El plegado también afecta a la puntuación fuzzy (`_score`), y es
+        simétrico solo si el título del RELEASE se normaliza con la misma función
+        que la consulta. Si no, un release con tildes puntuaría peor que antes —
+        justo lo contrario de lo que se busca."""
+        from zascarr.utils.naming import normalize_series_name as norm
+        con_tilde = SearchResult("Astérix 4.cbz", "i", "magnet:x", 1, 1, "comics")
+        sin_tilde = SearchResult("Asterix 4.cbz", "i", "magnet:x", 1, 1, "comics")
+        ajeno = SearchResult("Thor 4.cbz", "i", "magnet:x", 1, 1, "comics")
+
+        consulta_sin = norm("Asterix")
+        consulta_con = norm("Astérix")
+        assert consulta_sin == consulta_con      # la consulta ya pliega igual
+        # Release con tildes contra consulta sin ellas, y al revés: lo mismo.
+        assert (Orchestrator._score(con_tilde, consulta_sin)
+                == Orchestrator._score(sin_tilde, consulta_con))
+        # Y no es «igual de malo»: es el acierto pleno de título (el ajeno puntúa
+        # menos), o sea que el plegado suma y no resta.
+        assert (Orchestrator._score(con_tilde, consulta_sin)
+                > Orchestrator._score(ajeno, consulta_con))
+
+    def test_limite_conocido_fuera_del_alfabeto_latino(self):
+        """Documentado, no deseado: `unicodedata.combining` también se lleva el
+        dakuten y el handakuten de la kana, así que `が` y `か` normalizan igual.
+        Los releases del proyecto son casi siempre latinos, así que se acepta; la
+        prueba lo fija para que el día que se soporte kana se vea aquí."""
+        from zascarr.utils.naming import normalize_series_name as norm
+        assert norm("が") == norm("か")
+        assert norm("ガ") == norm("カ")
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # D8 — generación y retirada con un solo predicado
