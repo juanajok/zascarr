@@ -168,13 +168,19 @@ resolver_var_ruta() {
 
 [[ -f "${ENV_FILE}" ]] || warn "No encuentro ${ENV_FILE} — sigo sin él (los contenedores igualmente se pueden parar)."
 
-resolver_var_ruta HOST_LIBRARY_DIR /media/library
+# Los valores por defecto son los mismos que declara `docker-compose.yml`. Se
+# pueden apuntar a otro sitio con `*_POR_DEFECTO` (solo lo usan las pruebas, para
+# no depender de que `/var/lib/zascarr` o `/media/library` existan o no en la
+# máquina donde corren). En una instalación real no se define ninguna.
+resolver_var_ruta HOST_LIBRARY_DIR "${HOST_LIBRARY_DIR_POR_DEFECTO:-/media/library}"
 LIBRARY_DIR="${VALOR_VAR}"; ORIGEN_LIBRARY="${ORIGEN_VAR}"
-resolver_var_ruta HOST_DOWNLOADS_DIR /media/data/downloads
+resolver_var_ruta HOST_DOWNLOADS_DIR \
+    "${HOST_DOWNLOADS_DIR_POR_DEFECTO:-/media/data/downloads}"
 DOWNLOADS_DIR="${VALOR_VAR}"; ORIGEN_DOWNLOADS="${ORIGEN_VAR}"
-resolver_var_ruta HOST_AMULE_INCOMING_DIR /media/data/aMule/Incoming
+resolver_var_ruta HOST_AMULE_INCOMING_DIR \
+    "${HOST_AMULE_INCOMING_DIR_POR_DEFECTO:-/media/data/aMule/Incoming}"
 AMULE_DIR="${VALOR_VAR}"; ORIGEN_AMULE="${ORIGEN_VAR}"
-resolver_var_ruta ZASCARR_DATA_DIR /var/lib/zascarr
+resolver_var_ruta ZASCARR_DATA_DIR "${ZASCARR_DATA_DIR_POR_DEFECTO:-/var/lib/zascarr}"
 DATA_DIR="${VALOR_VAR}"; ORIGEN_DATA="${ORIGEN_VAR}"
 
 # ── A4: validación de rutas antes de --purge (revisión de PR, 2026-09-26) ──
