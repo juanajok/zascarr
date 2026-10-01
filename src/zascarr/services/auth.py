@@ -45,11 +45,14 @@ COOKIE_NAME = "zascarr_session"
 # panel bancario — pedir la contraseña en cada visita sería fricción sin
 # beneficio real de seguridad aquí.
 SESSION_MAX_AGE = 30 * 24 * 3600
-# Se queda en 260.000 hasta que el retraso progresivo y la caché de Basic estén
-# en su sitio (ficha de seguridad, paso 3): subir a 600.000 sin eso dejaría que
-# unas pocas peticiones paralelas agoten el ejecutor de PBKDF2. El hash guarda
-# sus iteraciones, así que el cambio posterior será retrocompatible.
-_PBKDF2_ITERATIONS = 260_000
+# 600.000, decidido por MEDICIÓN en una Raspberry Pi 5 real (2026-10-01), no solo
+# por la recomendación de OWASP: mediana individual 0,172 s y mediana de dos
+# verificaciones simultáneas 0,175 s — muy por debajo del umbral de 0,8 s. Se pudo
+# subir cuando el retraso progresivo y la caché de Basic ya estaban en su sitio
+# (ficha de seguridad, paso 3): sin ellos, unas pocas peticiones paralelas
+# agotarían el ejecutor de PBKDF2. El hash guarda sus iteraciones, así que los
+# antiguos siguen validando y se regeneran al iniciar sesión.
+_PBKDF2_ITERATIONS = 600_000
 
 # Ejecutor PROPIO para PBKDF2, no el `to_thread` por defecto: el ejecutor
 # general lo comparten portadas, importador y etiquetado, y un PBKDF2 no debe

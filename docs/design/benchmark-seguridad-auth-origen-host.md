@@ -28,8 +28,9 @@ Revisión de deuda técnica (2026-09-29), dos hallazgos P0:
 
 Verificado en el código (`main` en `7f6f637`):
 
-- `services/auth.py:41` — `_PBKDF2_ITERATIONS = 260_000`; el comentario la
-  atribuye a OWASP 2023.
+- `services/auth.py` — `_PBKDF2_ITERATIONS = 260_000` en `main` cuando se
+  escribió esta ficha (hoy **600.000**, por la medición del paso 3); el
+  comentario la atribuía a OWASP 2023.
 - `services/auth.py:100` — en modo `user_password`:
   `usuario_ok = hmac.compare_digest(username, settings.auth_username)`. Si
   `username` lleva tilde o ñ, `compare_digest` lanza `TypeError` (solo admite
@@ -272,14 +273,32 @@ Verificado en el código (`main` en `7f6f637`):
 - **Longitud mínima de contraseña:** 12 caracteres (< 12 no se guarda; 12-14
   avisa). OWASP recomienda 15 sin segundo factor.
 
-**Pendiente de la ficha (cambio aparte, sin migración):** subir de `260_000` a
-`600_000` iteraciones. El hash guarda su contador, así que los hashes viejos
-siguen validando y se regeneran al iniciar sesión — no hay migración ni cierre
-de sesiones. **Se decide con la medición real en la Pi** (5 veces en reposo y 1
-durante una importación): mediana < ~0,8 s → `600_000`; ~1 s o más (o entre 0,8
-y 1) → se queda `260_000`, porque con la cola de tres intentos cada verificación
-lenta alarga lo que un atacante puede mantener las plazas ocupadas. Queda
-registrado aquí con fecha y modelo de Pi cuando se mida.
+**Medición PBKDF2, 2026-10-01 (cierra el paso 3):**
+
+```
+Raspberry Pi 5 Model B Rev 1.1 · Raspberry Pi OS, kernel 6.18.50+rpt-rpi-2712,
+ARM64 · Python 3.13.5
+
+Mediana individual .......................... 0,172 s
+Mediana de dos verificaciones simultáneas ... 0,175 s
+Umbral de decisión ........................... 0,8 s
+Decisión ..................................... 600.000 iteraciones
+```
+
+La mediana concurrente queda **muy por debajo** del umbral y deja unos 0,625 s de
+margen; incluso la primera muestra individual, más lenta (0,203 s), entra
+holgada. El calentamiento de la primera iteración es normal y la mediana evita
+que condicione la decisión. OWASP pide que el coste del hash se mantenga **por
+debajo de un segundo** y avisa del coste de CPU de pasarlo; este resultado está
+lejos de ese límite.
+
+**Hecho:** `_PBKDF2_ITERATIONS` pasa a `600_000`, sin migración —el hash guarda su
+contador, así que los hashes viejos siguen validando y se regeneran al iniciar
+sesión—. No se esperó a la medida «durante una importación»: es útil como
+referencia, pero con 0,175 s de mediana concurrente en reposo el margen es
+suficiente. Todo lo demás del paso 3 se mantiene: ejecutor propio de dos hilos,
+tope de solicitudes concurrentes, `429` que no penaliza el contador, retraso
+progresivo serializado, caché de aciertos de Basic y rehasheo oportunista.
 
 ### 3. Comprobación real de dependencias (respuesta al check rojo)
 

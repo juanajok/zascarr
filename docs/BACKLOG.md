@@ -514,7 +514,7 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 
 **Notas de implementación (A6, 2026-09-26):**
 
-- **Sin dependencias nuevas.** Ni `itsdangerous` (cookies firmadas de Starlette) ni `passlib`/`bcrypt` (hash de contraseña) — `hmac`+`hashlib` de la stdlib bastan para las dos cosas (HMAC-SHA256 para firmar la cookie, PBKDF2-SHA256 con 260.000 iteraciones para la contraseña, la recomendación OWASP 2023). Coherente con CLAUDE.md §2: cada dependencia es RAM y superficie de vulnerabilidad en la Pi.
+- **Sin dependencias nuevas.** Ni `itsdangerous` (cookies firmadas de Starlette) ni `passlib`/`bcrypt` (hash de contraseña) — `hmac`+`hashlib` de la stdlib bastan para las dos cosas (HMAC-SHA256 para firmar la cookie, PBKDF2-SHA256 para la contraseña, 260.000 iteraciones entonces y **600.000 desde el 2026-10-01**, por medición en la Pi; ver la nota de más abajo). Coherente con CLAUDE.md §2: cada dependencia es RAM y superficie de vulnerabilidad en la Pi.
 - **Dos caminos de acceso, mismas credenciales**: cookie de sesión (30 días, `HttpOnly`, `SameSite=Lax`) para la UI HTMX/Jinja2, HTTP Basic Auth por cabecera para `/api/*` (así `curl`/scripts siguen funcionando sin sesión de navegador). `AuthMiddleware` (Starlette, global) decide cuál aplica según el prefijo de la ruta.
 - **`secret_key` se autogenera y persiste sola** (`RuntimeSettingsService.ensure_secret_key()`, llamado una vez en el lifespan de `main.py`) — nunca hardcodeada, nunca hace falta ponerla en `.env` a mano. Solo se genera si no existe ya; regenerarla en cada arranque habría invalidado toda sesión activa en cada reinicio/deploy.
 - **`base_url` implementado de forma deliberadamente mínima**: es un dato guardado, sin ningún efecto en el enrutado ni en la sesión hoy. La lectura original del backlog ("que funcione tras un reverse proxy") se resolvió por el lado de la autenticación en sí (cookie + Basic Auth funcionan igual detrás de cualquier proxy que reenvíe la cabecera `Authorization`/las cookies sin tocarlas, que es el comportamiento por defecto de Caddy/nginx/Traefik) — intentar que `base_url` reescribiera las URLs absolutas hardcodeadas en plantillas y `RedirectResponse` habría sido una historia bastante más grande (`root_path` de FastAPI/Starlette, auditar cada redirect del código), fuera de la estimación M de A6. Queda reservado para cuando haga falta un enlace absoluto real (webhooks de E4).
@@ -539,9 +539,11 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   que no cuadre, `Origin: null`, `Sec-Fetch-Site: cross-site` y (con
   `auth_mode="none"`) un `Host` ajeno — en todos los métodos. `BASE_URL` y
   `ALLOWED_HOSTS` dan salida tras un proxy.
-- **Iteraciones de PBKDF2:** siguen en **260.000** (la nota de A6 de arriba decía
-  «la recomendación OWASP 2023»; OWASP pide ahora 600.000). Subir a 600.000 es
-  un cambio aparte, sin migración, pendiente de medir el coste real en la Pi.
+- **Iteraciones de PBKDF2: 600.000 desde el 2026-10-01**, decidido por medición
+  en una Raspberry Pi 5 real (mediana individual 0,172 s; mediana de dos
+  verificaciones simultáneas 0,175 s; umbral de decisión 0,8 s). Sin migración: el
+  hash guarda su contador y los antiguos se regeneran al iniciar sesión. Detalle
+  en la ficha `benchmark-seguridad-auth-origen-host`.
 - **`pip-audit` en CI** (informativo): primera señal real de dependencias.
   Primer resultado: `setuptools` 79.0.1 (`PYSEC-2026-3447`, arreglado en 83.0.0),
   **solo de build y específico de macOS/APFS** (bypass de `MANIFEST.in` al
