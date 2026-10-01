@@ -889,6 +889,292 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 
 **Regla de la épica:** ninguna historia de la U cambia la lógica de negocio. Reutilizan los servicios existentes (`ReviewService`, `Orchestrator`, `RuntimeSettingsService`, `LibraryAudit`); si una necesita lógica nueva, se registra aparte.
 
+### Épica V — "La UI nueva llega a casa" (migración a la maqueta)
+
+**Origen:** la maqueta `zascarr_maqueta_ui.html` (propuesta de UI del 2026-10-01, derivada de la revisión de UX que originó la Épica U). Esta épica es el **plan de migración** desde la UI actual (Jinja2 + HTMX + `web.css`) hasta esa propuesta, **sin big-bang**: cada historia es una PR que deja `main` desplegable y reversible.
+
+**Punto de partida verificado** (listado del repo en `main`): 11 routers en `src/zascarr/web/` (`ajustes`, `auditoria`, `auth`, `dashboard`, `discovery`, `estado`, `legal`, `library`, `pendientes`, `series`, `wishlist`, más la fábrica `routes.py`) y **28 plantillas** en `web/templates/` (15 parciales HTMX y 13 páginas, `base.html` incluida). Los pesos relativos dan la medida del trabajo: `ajustes.html` (≈12,5 KB) es de largo la mayor; `auditoria`+`_auditoria_informe` (≈6 KB), `estado` (≈4,7 KB), `dashboard` (≈3 KB) y `pendientes` (≈2,5 KB) son medianas; `wishlist` y `base` son pequeñas. **No se ha leído el contenido** de esas plantillas para redactar la épica: V0 empieza por inventariarlo, y cualquier cifra o clase CSS concreta de las fichas debe confirmarse ahí.
+
+**Restricciones que condicionan el diseño** (del propio repo): ADR-0001 (Jinja2 servido por FastAPI + HTMX vendorizado, sin SPA ni build de Node), `web.css` declara «sin JS nuevo» y «sin CDN», `AuthMiddleware` (A6) protege todo `/ui/*`, `crear_templates()` centraliza el entorno Jinja2 (lección de A6: no tocar decenas de `TemplateResponse`), y el patrón de pruebas es `FakeSession` + Postgres real cuando hay SQL.
+
+#### Decisiones de la épica (a ratificar en el ADR 0005 de V0)
+
+1. **Migración incremental por capas, sin interruptor de «UI vieja/nueva».** Dos UIs en paralelo duplicarían plantillas y pruebas en una app de un solo operador. Como las 13 páginas heredan de `base.html`, **primero cambian los cimientos** (tokens → componentes → shell) y **después, pantalla a pantalla**, el contenido. Cada PR mejora o deja igual; la vuelta atrás es `git revert` de esa PR o `scripts/rollback.sh`.
+2. **Las URL no cambian.** `/ui/pendientes`, `/ui/wishlist`, `/ui/auditoria`… siguen igual; solo cambian las etiquetas («Por revisar», «Duplicados»). Evita romper marcadores, tests y enlaces del README.
+3. **Cero JavaScript propio.** Todo lo que la maqueta resuelve con JS se traduce a HTMX o CSS (tabla siguiente). Si algo no es traducible, se retira de la UI o se difiere; no se introduce JS.
+4. **Cero lógica de negocio nueva en las plantillas.** La lógica de presentación (agrupar, mapear estados, derivar pasos) vive en funciones **puras** en `services/` con pruebas, no en Jinja.
+5. **Sin migración de BD.** Ninguna historia de la épica añade tablas ni columnas. Si una necesita persistir algo (p. ej. silenciar un aviso), usa las banderas de `runtime_settings` (`get_flag`/`set_flag`). Si una decisión exige esquema (p. ej. un `UNIQUE` en `wishlist`), se saca de esta épica y se trata aparte.
+6. **Puerta de validación (G1).** U10 (probar con 3–5 coleccionistas) debe haberse hecho **antes de fusionar V5 y V6**: son los dos rediseños con más riesgo de haber acertado el problema pero no la solución.
+
+#### De la maqueta a la implementación (qué se traduce y qué no)
+
+| En la maqueta (JS) | En producción (sin JS propio) | Observación |
+|---|---|---|
+| Contadores del menú (`14`, `6`, punto de atención) | Fragmento HTMX `/ui/_nav/estado` cargado con `hx-trigger="load, every 30s"` | La base no consulta la BD; con BD degradada (E6) el fragmento devuelve vacío, no 500 |
+| Selección múltiple y barra de acciones | `<form>` con casillas + `hx-post` a `/ui/pendientes/seleccion` que devuelve la barra con el recuento | El servidor es la fuente de verdad del recuento |
+| «Seleccionar grupo / todo» | `hx-post` que re-renderiza la lista con las casillas marcadas | Sin estado en el navegador |
+| Diálogo de confirmación | Paso 2 server-side: `previsualizar` devuelve el fragmento de confirmación; `confirmar` ejecuta | La lista que ves es la que se ejecuta |
+| «Deshacer» tras **ignorar** | Enlace `hx-post` a `recuperar` en la fila + pestaña «Ignorados» | Posible: `review_dismissed` es un indicador |
+| «Deshacer» tras **asignar** | **No se ofrece** | Asignar mueve el fichero (`safe_move`) y crea el `Issue`; deshacerlo exige una operación inversa que hoy no existe. La salvaguarda es la confirmación previa. **La maqueta lo simula y no es fiel en esto** |
+| Conmutador manual claro/oscuro | **Se difiere** | `web.css` ya respeta `prefers-color-scheme`; un conmutador exige JS y persistencia |
+| Pestañas, objetivos de Ajustes | Enlaces/`hx-get` con parámetro (`?objetivo=`) | Estado en la URL: se puede enlazar y recargar |
+| Barra de progreso de la revisión | Sondeo `hx-trigger="every 2s"` a un endpoint de progreso | **Requiere backend nuevo** (V11b) |
+| Barra inferior móvil | Mismo HTML del menú, distinta maquetación por `@media` | Una sola fuente de navegación |
+| Notificaciones temporales (toast) | Fragmento de aviso con desvanecimiento por animación CSS | El estado definitivo siempre es visible en la propia página |
+
+| ID | Historia | Aceptación clave | P | Est |
+|---|---|---|---|---|
+| V0 | Como equipo, quiero un inventario de la UI actual y un ADR de migración, para migrar sabiendo qué se toca | Inventario plantilla→componentes, capturas base, lista de contratos HTMX a conservar, ADR 0005 | P0 | S |
+| V1 | Como coleccionista, quiero textos legibles en cualquier pantalla, para no forzar la vista (cimiento visual) | Tokens con contraste ≥ 4,5:1, alias que no rompen plantillas, tamaño mínimo y objetivo táctil, prueba automática | P0 | M |
+| V2 | Como desarrollador, quiero una biblioteca de componentes CSS y macros Jinja, para que todas las pantallas se vean y se comporten igual | Botones, chips de estado, tarjetas, grupos, estado vacío, progreso, aviso; macros con pruebas | P0 | M |
+| V3 | Como coleccionista, quiero un menú claro y agrupado que funcione en móvil, para saber dónde estoy y dónde ir | Menú lateral + barra inferior, contadores por fragmento, `aria-current`, títulos coherentes | P0 | M |
+| V4 | Como coleccionista recién instalado, quiero un Inicio que me guíe, para no ver ceros contradictorios | Servicio `PrimerosPasos` puro; checklist derivado del estado; una acción principal | P0 | M |
+| V5 | Como coleccionista, quiero «Por revisar» compacto y agrupado, para revisar 14 archivos sin repetir el ritual | Lista compacta, nombre íntegro, sugerencia visible, agrupación, selección por HTMX | P0 | L |
+| V6 | Como coleccionista, quiero asignar varios archivos de una vez con confirmación, para clasificar en minutos | Previsualizar/confirmar, éxito parcial por archivo, commit por archivo, alias con opción, sin «deshacer» engañoso | P0 | L |
+| V7 | Como coleccionista, quiero ignorar con vuelta atrás, para no temer equivocarme | Pestaña «Ignorados», recuperar, enlace «Deshacer» en la fila | P1 | S |
+| V8 | Como coleccionista, quiero Deseados con estados honestos y duplicados agrupados | Función pura estado→(texto, paso), agrupado, aviso al duplicar, enlaces a la causa | P1 | M |
+| V9 | Como coleccionista, quiero Estado que diga la verdad en llano | Semáforo = peor caso, textos «qué / por qué / qué hacer», detalle técnico plegado, silenciar VPN | P1 | M |
+| V10 | Como coleccionista, quiero Ajustes por objetivos, para configurar sin leer jerga | `?objetivo=`, partes avanzadas plegadas, «probar conexión» con causa y paso, D11/A6 intactos | P1 | L |
+| V11 | Como coleccionista, quiero Duplicados con resumen y orden por ahorro, para saber por dónde empezar | Presentación sobre el informe existente; progreso real como subhistoria V11b | P2 | M |
+| V12 | Como coleccionista, quiero que Biblioteca, Descubrir, ficha de serie, login y aviso legal encajen con el resto | Restyle con los componentes de V2, sin rediseñar el flujo | P1 | M |
+| V13 | Como coleccionista en móvil o tablet, quiero que todo funcione en pantalla pequeña | Verificación a 360/390/414/768 px, objetivos táctiles, foco y avisos tras cada intercambio HTMX | P1 | M |
+| V14 | Como equipo, quiero cerrar la migración sin restos, para no arrastrar CSS ni plantillas huérfanas | Limpieza, docs, capturas nuevas, CHANGELOG/BACKLOG, comprobación de clases CSS sin uso | P2 | S |
+
+#### Fichas detalladas de la Épica V
+
+**V0 — Inventario y ADR 0005 de migración (P0, S)**
+
+- **Historia.** Como equipo, quiero un inventario de la UI actual y una decisión escrita de cómo migrarla, para que ninguna historia posterior dependa de supuestos no comprobados.
+- **Alcance.** Documentación y capturas; **no cambia código de la aplicación**.
+- **Criterios de aceptación.**
+  1. `docs/design/ui-migracion.md` con una fila por plantilla (28): ruta que la sirve, plantilla padre, parciales HTMX que usa, endpoints `hx-*` que dispara y clases de `web.css` que emplea. Se obtiene **leyendo** las plantillas, no de memoria.
+  2. **Contratos HTMX a conservar**: por cada endpoint de `/ui/*` que devuelve un fragmento, su URL, método, campos del formulario y el fragmento esperado. Es la lista de lo que no se puede romper.
+  3. Capturas de **la UI actual** (las siete existentes y las que falten: Biblioteca, Descubrir, ficha de serie, login, aviso legal) en `docs/design/ui-baseline/`, con la versión de ZascArr.
+  4. La maqueta se commitea como `docs/design/maqueta-ui.html`, con la nota explícita de que **simula** deshacer-tras-asignar y el conmutador de tema (ver la tabla de traducción).
+  5. ADR 0005 en `docs/adr/` con las seis decisiones de la épica, estado «Propuesto» hasta que se apruebe.
+  6. Se decide el destino de la página estática `/` (el panel de E1, que sondea `/api/health`) frente a `/ui/`: unificar o mantener, y qué ve quien entra por `/`.
+- **Pruebas.** No aplica. Revisión humana del inventario contra `grep` de `hx-` y de clases.
+- **Riesgos.** Que el inventario descubra clases o parciales compartidos que obliguen a reordenar V2/V3.
+
+**V1 — Tokens, contraste y tamaños en `web.css` (P0, M)**
+
+- **Historia.** Como coleccionista, quiero que cualquier texto de ZascArr se lea sin esfuerzo, para no perder información en una tablet o con poca luz.
+- **Contexto medido.** `--ink-faint` da 3,05:1 sobre `--paper` y 2,82:1 sobre `--paper-2` (WCAG AA pide 4,5:1 para texto normal [web:967]); `--cyan` 2,84:1 y `--ok` 3,83:1 como texto; en oscuro `--ink-faint` roza el límite (4,47 y 4,14:1). La maqueta usa valores ya calculados: `--faint` #63636b (5,37:1), `--cyan-t` #0a6a96, `--ok-t` #1f6b43, `--warn-t` #a8321f, `--amber-t` #7a5a00, y en oscuro #9c9aa0, #5cc4f0, #5fd096, #f58a80, #ffd23f.
+- **Criterios de aceptación.**
+  1. Se **separan** colores de relleno y colores de texto: `--cyan`/`--ok`/`--warn` siguen para bordes y fondos; se añaden `--cyan-t`/`--ok-t`/`--warn-t`/`--amber-t`/`--mag-t` para texto, con valores para claro y oscuro.
+  2. `--ink-faint` **conserva su nombre** (alias) y cambia de valor, para no tocar plantillas. Un `grep` documentado lista los usos de `color: var(--cyan|ok|warn)` sobre texto y se migran a las variantes `-t`.
+  3. Todo texto normal ≥ 4,5:1 y texto grande ≥ 3:1 en ambos temas; bordes de campos e iconos de estado ≥ 3:1.
+  4. Tamaño mínimo de texto informativo **14 px** (decisión de producto, validada con U10; WCAG no fija un mínimo). Las reglas `.72rem`–`.8rem` de la hoja se suben.
+  5. Los controles interactivos tienen una altura mínima de 40 px y las casillas 24 px (mínimo de WCAG 2.2 AA).
+  6. El estado no se transmite solo por color.
+  7. **Prueba automática** sin navegador (`tests/test_web_css_contraste.py`): lee las variables de `web.css`, calcula la razón de contraste de los pares declarados (texto×fondo) en ambos temas y falla por debajo del umbral.
+- **Fuera de alcance.** Cambiar la paleta o la tipografía de cartel.
+- **Dependencias.** Ninguna. Es la primera por ser barata y no destructiva.
+- **Verificación.** Capturas antes/después de las siete pantallas; revisión en navegador real contra Postgres real (práctica del repo).
+
+**V2 — Componentes CSS y macros Jinja (P0, M)**
+
+- **Historia.** Como desarrollador, quiero componentes reutilizables, para que Pendientes, Deseados, Estado y Duplicados compartan botones, chips y tarjetas en vez de reinventarlos.
+- **Criterios de aceptación.**
+  1. Componentes en `web.css` con los nombres de la maqueta: `.btn` (+`.primary`, `.ghost`, `.sm`), `.chip` (+`.ok`, `.warn`, `.amber`, `.info`), `.card`, `.group`/`.ghead`, `.caption`, `.progress`, `.empty`, `.hero-state`, `.toast`.
+  2. Los nombres de clase actuales **siguen funcionando** durante la migración (alias o reglas compartidas); se retiran en V14, no antes.
+  3. `templates/_componentes.html` con macros `chip(estado, texto)`, `estado_vacio(titulo, texto, accion)`, `grupo(titulo, recuento)` y `aviso(tipo, texto)`.
+  4. `crear_templates()` registra las macros disponibles para todas las plantillas sin tocar los `TemplateResponse`.
+  5. Los chips mapean **un estado → un aspecto**, definido una sola vez (tabla estado→clase en un módulo, no en cada plantilla).
+  6. Accesibilidad: el foco visible se conserva; `:focus-visible` con contraste ≥ 3:1; `prefers-reduced-motion` desactiva transiciones.
+  7. Los fragmentos que cambian tras una acción HTMX van en una región `aria-live="polite"`.
+- **Pruebas.** Cada macro se renderiza con sus variantes y se comprueba el HTML (clase, texto, atributos ARIA).
+- **Dependencias.** V1.
+
+**V3 — Shell nueva: menú agrupado, barra inferior y contadores (P0, M)**
+
+- **Historia.** Como coleccionista, quiero un menú con nombres claros y agrupado por tarea que se adapte al móvil, para saber siempre dónde estoy.
+- **Criterios de aceptación.**
+  1. `base.html` se reescribe con menú lateral en escritorio y barra inferior en pantallas estrechas, **con el mismo marcado** (la diferencia es CSS por `@media`).
+  2. Grupos: Mi colección (Inicio, Por revisar, Biblioteca, Duplicados), Añadir (Descubrir, Deseados), Sistema (Estado, Ajustes). Etiquetas según U7; **las URL no cambian**.
+  3. Enlace «Saltar al contenido», `aria-current="page"` en la entrada activa y un `<h1>` por página.
+  4. Los contadores (pendientes, deseados, punto de atención de Estado) se cargan con un fragmento `GET /ui/_nav/estado` vía `hx-trigger="load, every 30s"`. La plantilla base **no consulta la BD**.
+  5. Con la BD degradada (E6) o ante cualquier fallo, el fragmento devuelve vacío y la página sigue funcionando; nunca 500.
+  6. El fragmento queda protegido por `AuthMiddleware` como el resto de `/ui/*` (A6) y no filtra datos si no hay sesión.
+  7. El título de cada página coincide con su entrada de menú (U7); lo comprueba un test que recorre las rutas.
+  8. «Cerrar sesión» y el aviso legal conservan su comportamiento actual.
+- **Pruebas.** Todas las páginas incluyen exactamente un `aria-current`; el fragmento con BD vacía, con datos y con BD degradada; auth con y sin sesión.
+- **Riesgos.** `every 30s` en una Pi: el fragmento debe ser dos `COUNT` baratos o leer un caché de proceso. Medir antes de fusionar.
+- **Dependencias.** V1, V2.
+
+**V4 — Inicio con primeros pasos y contadores honestos (P0, M)**
+
+- **Historia.** Como coleccionista recién instalado, quiero que el Inicio me diga qué hacer primero, para llegar a ver mi colección ordenada sin saber nada de la arquitectura.
+- **Criterios de aceptación.**
+  1. Nuevo `services/primeros_pasos.py` con una función **pura** que recibe un resumen (nº de ficheros registrados, nº sin clasificar, nº de series, fuentes activas, aviso legal aceptado) y devuelve la lista de pasos con su estado (`hecho`, `siguiente`, `opcional`, `bloqueado`) y el paso principal.
+  2. Si no hay catálogo, **no se muestra** el porcentaje de completitud ni «0 %»; se explica cuándo aparecerá.
+  3. Los números salen de **un único servicio** compartido con el resto de pantallas; no se recalculan en la plantilla.
+  4. La cifra «tebeos encontrados» procede del último informe de la revisión (B16) o, si nunca se ha ejecutado, del recuento de ficheros registrados, y la etiqueta lo dice. No se afirma que se haya escaneado el disco si no ha ocurrido.
+  5. Una sola acción principal visible; los pasos opcionales están marcados como tales.
+  6. Un único buscador, con su propósito escrito.
+  7. Si hay archivos por revisar, el paso lo cuenta con el número real y enlaza a Por revisar.
+- **Pruebas.** Matriz de la función pura (vacío; sin series con pendientes; todo configurado; sin aviso legal; BD degradada); la plantilla con cada estado.
+- **Riesgos.** Definir mal el origen de las cifras vuelve a producir contradicciones. La regla es una sola fuente de verdad.
+- **Dependencias.** V2, V3.
+
+**V5 — «Por revisar» compacto, agrupado y con selección por HTMX (P0, L)**
+
+- **Historia.** Como coleccionista con decenas de archivos sin clasificar, quiero verlos agrupados, con el nombre completo y la sugerencia a la vista, para resolver el grupo entero de un vistazo.
+- **Criterios de aceptación.**
+  1. Nueva función pura `agrupar_pendientes(archivos)` en `services/`: agrupa por la clave de título normalizada y, si existe, la edición (`edition_kind`) que ya produce `naming.py`; lo que no encaja va a «Otros». Determinista y con orden estable. Es **ayuda visual**: no decide la serie.
+  2. La plantilla muestra nombre **íntegro** (sin truncar), lo detectado y la sugerencia de B12 con su puntuación y el botón «Sí, es esta»; el hueco de portada no se reserva si no hay miniatura.
+  3. Casillas en un `<form>`; cada cambio dispara `hx-post` a `/ui/pendientes/seleccion` y el servidor devuelve la barra de acciones con el recuento. Sin JavaScript propio.
+  4. «Seleccionar grupo» y «Seleccionar todo» son peticiones que devuelven la lista re-renderizada con las casillas marcadas.
+  5. La barra de acciones queda fija en pantalla y respeta la barra inferior móvil.
+  6. Lo que el usuario ve (grupos y casillas) **no altera** el catálogo hasta la confirmación de V6.
+  7. Estado vacío («¡Todo clasificado!») con enlace de vuelta al Inicio.
+  8. Se conservan las rutas y los campos HTMX actuales de búsqueda y asignación individual (contratos de V0) hasta que V6 los sustituya.
+- **Pruebas.** `agrupar_pendientes` con los 14 nombres reales de `_Unsorted` (grupos esperados y «Otros»); el endpoint de selección con 0, 1 y N; plantilla con y sin sugerencia; accesibilidad de las casillas (`aria-label` con el nombre del archivo).
+- **Fuera de alcance.** Asignar (V6), ignorar/recuperar (V7), mejorar el parser (B14).
+- **Ficha §13.** Requerida (comportamiento nuevo P0): contrastar la asignación manual de Kapowarr y Mylar3 leyendo su código.
+- **Puerta G1.** No se fusiona antes de tener los resultados de U10.
+- **Dependencias.** V2, V3; B2, B12.
+
+**V6 — Asignación por lotes con previsualización y confirmación (P0, L)**
+
+- **Historia.** Como coleccionista, quiero asignar a una serie los archivos seleccionados con una sola confirmación que me enseñe exactamente qué va a pasar, para clasificar en minutos sin miedo a equivocarme.
+- **Criterios de aceptación.**
+  1. Dos pasos en el servidor: `POST /ui/pendientes/asignar/previsualizar` devuelve el fragmento de confirmación (lista de archivos → serie destino, patrón que se recordará) y `POST /ui/pendientes/asignar/confirmar` ejecuta. **La lista que se muestra es la que se ejecuta**: el segundo paso recibe los identificadores, no recalcula la selección.
+  2. La ejecución reutiliza `ReviewService.assign_to_series` **archivo a archivo**, conservando `ColisionDeEdicion` (409 en español) y las defensas de B15.
+  3. **Éxito parcial:** un fallo en un archivo no detiene el lote; el resultado lista por archivo «asignado» o «no asignado: motivo», y los fallidos siguen en Por revisar.
+  4. **Una transacción corta por archivo** (`assign_to_series` mueve ficheros con la sesión abierta, deuda P1 registrada): se hace commit tras cada archivo, no un único commit al final del lote.
+  5. **Alias (B13):** la previsualización muestra el patrón que se aprenderá. Se añade a `assign_to_series` un parámetro `aprender_alias` (por defecto `True`, para no cambiar el comportamiento existente) y una casilla en la confirmación. Un alias incorrecto se fija, por eso se muestra antes de aprender.
+  6. **No existe «deshacer» tras asignar** y la interfaz no lo promete: asignar mueve ficheros y crea el `Issue`. El texto de la confirmación dice que los archivos se moverán a la carpeta de la serie.
+  7. Idempotencia: confirmar dos veces el mismo lote no duplica movimientos (los archivos ya asignados dejan de estar pendientes y se informan como tales).
+  8. El resultado final muestra un resumen y enlaza a la serie.
+- **Pruebas.** Éxito total; éxito parcial con colisión de edición; doble confirmación; lote vacío; commit por archivo (un fallo en el 3.º no revierte el 1.º y el 2.º); alias activado y desactivado; regresión de la asignación individual.
+- **Verificación.** Con Postgres real y ficheros reales en un directorio de prueba: lote de 4 que cambia de carpeta y cuyos `Issue` se crean con el `format` esperado.
+- **Riesgos.** Es la historia con más superficie sobre datos del usuario. Requiere revisión específica de la transacción por archivo y de la idempotencia antes de fusionar.
+- **Puerta G1 y ficha §13**, como V5.
+- **Dependencias.** V5; B13, B15.
+
+**V7 — Ignorar con vuelta atrás y pestaña «Ignorados» (P1, S)**
+
+- **Historia.** Como coleccionista, quiero poder recuperar un archivo que ignoré por error, para no temer a «Ignorar».
+- **Criterios de aceptación.**
+  1. «Ignorar» tiene menor peso visual que la acción principal y no está pegado a ella.
+  2. Al ignorar, la fila se sustituye por una línea «Ignorado · Deshacer» que revierte con `hx-post` a `recuperar`. Es reversible porque `files.review_dismissed` ya existe (sin migración).
+  3. Pestaña «Ignorados» con contador y botón «Recuperar» por archivo.
+  4. Acciones sobre varios archivos (ignorar la selección) con el mismo mecanismo.
+  5. Recuperar vuelve a poner el archivo en Por revisar con su sugerencia intacta.
+- **Pruebas.** Ignorar → recuperar restaura estado y metadatos; idempotencia de ambos endpoints; contadores coherentes con V3.
+- **Dependencias.** V5.
+
+**V8 — Deseados: estados honestos, agrupados y sin duplicados silenciosos (P1, M)**
+
+- **Historia.** Como coleccionista, quiero ver en qué punto está cada petición y qué hacer si no avanza, para confiar en «marcar y olvidarme».
+- **Criterios de aceptación.**
+  1. Función pura `estado_visible(item)` que, a partir de `WishlistStatus`, `last_error` (D9) y `last_searched_at`, devuelve un único estado de presentación (`en cola`, `buscando ahora`, `sin resultados`, `descargando`, `en tu biblioteca`, `falló`) más el **siguiente paso** con su enlace. «Buscando» y «sin resultados» **no pueden coexistir**.
+  2. Cada motivo de D9 enlaza a su solución (sin fuentes → Ajustes/objetivo «que se descarguen solos»; cliente inaccesible → Ajustes y diagnóstico de red A10).
+  3. Las filas de una misma serie se agrupan con un recuento y son expandibles.
+  4. Al añadir algo ya presente, el servidor lo **dice** y no crea otra fila. Se resuelve en el servicio; **no** se añade restricción `UNIQUE` (eso exige migración y queda fuera de la épica; se registra como decisión pendiente).
+  5. «Buscar ahora» (D10) y su token firmado se conservan sin cambios; el aviso de uso responsable pasa a un bloque plegable manteniendo el gate legal.
+  6. Antes de implementar, se comprueba en la BD real si las cinco filas «BPRD» son duplicados o números distintos, y la decisión de agrupar se ajusta a ello.
+- **Pruebas.** Tabla estado×motivo→texto y enlace; alta repetida; agrupación; regresión de D10 y del gate legal.
+- **Dependencias.** V2, V3; D1, D9, D10, A10.
+
+**V9 — Estado: semáforo honesto y mensajes en llano (P1, M)**
+
+- **Historia.** Como coleccionista, quiero que Estado me diga si debo preocuparme y qué hacer, sin términos internos.
+- **Criterios de aceptación.**
+  1. El semáforo global es el **peor** de los parciales («Todo bien» solo si todos lo están; «Atención» con cualquier aviso).
+  2. Un catálogo por comprobación (`estado_textos`) con tres campos: qué pasa, por qué importa, qué hacer. La ruta o el detalle técnico va en «Detalle técnico» plegado.
+  3. «Sin datos» de VPN se distingue de «sin protección»: el primero no afirma riesgo; el segundo sí.
+  4. «No uso VPN: silenciar» guarda una bandera en `runtime_settings` (`get_flag`/`set_flag`, sin migración); silenciar no oculta el estado real, solo el aviso, y se puede revertir.
+  5. Se conservan los estados de la BD de E6 (`unreachable`, `migration_required`, `schema_incompatible`, `ok`) con su texto y acción.
+  6. Se aplica la decisión de V0 sobre la página estática `/`: o redirige a `/ui/estado` o comparte el mismo cálculo; **nunca dos semáforos distintos**.
+  7. La página se actualiza por sondeo HTMX en vez de JavaScript propio.
+- **Pruebas.** Matriz de combinaciones de estados → semáforo y textos; bandera de silencio; BD degradada.
+- **Dependencias.** V2, V3; E1, E6, D4.
+
+**V10 — Ajustes guiados por objetivos (P1, L)**
+
+- **Historia.** Como coleccionista que no sabe qué es Prowlarr, quiero que Ajustes me pregunte qué quiero conectar, para configurar sin leer párrafos técnicos.
+- **Criterios de aceptación.**
+  1. `GET /ui/ajustes?objetivo=` (sin parámetro, la pantalla de objetivos): «Portadas y datos», «Que se descarguen solos», «Avisos en el móvil», «Proteger con contraseña». El estado vive en la URL (enlazable y recargable).
+  2. `ajustes.html` (la plantilla mayor) se divide en un parcial por objetivo; los **endpoints de guardar y de probar de D11 no cambian** de URL ni de campos (contratos de V0).
+  3. Direcciones, puertos y `host.docker.internal` van en una sección «Avanzado» plegada.
+  4. «Probar conexión» devuelve causa y siguiente paso en español, reutilizando D9/A10, sin excepciones ni URL en crudo; los textos tienen `aria-live`.
+  5. Cada tarjeta dice en una línea para qué sirve y si es opcional.
+  6. Se conservan: guardar aplica al instante, los secretos nunca se devuelven en claro, el campo de secreto vacío significa «no cambiar», y activar contraseña sin credencial se rechaza (A6).
+  7. El objetivo «Proteger con contraseña» incorpora la pregunta de exposición de red (A11/ADR 0004) **solo como texto informativo** hasta que A11 se implemente; no cambia la publicación de puertos.
+- **Pruebas.** Cada objetivo expone los campos correctos; el modo avanzado conserva todos; regresión de secretos y del guardarraíl de A6; la prueba de conexión con y sin éxito.
+- **Riesgos.** Es la plantilla más grande y donde viven los secretos: se migra por partes y con regresión específica.
+- **Dependencias.** V2, V3; D11, A6, A10, D9.
+
+**V11 — Duplicados con resumen y orden por ahorro (P2, M)**
+
+- **Historia.** Como coleccionista con duplicados, quiero un resumen y que se ordene lo que más espacio recupera, para saber por dónde empezar.
+- **Criterios de aceptación.**
+  1. **V11a (presentación):** resumen superior calculado a partir del informe existente (GB recuperables, nº de grupos por tipo, fecha de la última revisión); grupos ordenados por ahorro con selector de orden; rutas legibles (nombre destacado, carpeta secundaria). La etiqueta del menú pasa a «Duplicados»; la URL `/ui/auditoria` no cambia.
+  2. **Invariante de B16 intacta:** solo lectura. Sin botón de borrar ni mover; el orden por ahorro es información, no una recomendación de acción. El test de «mtimes antes y después» se mantiene.
+  3. **V11b (progreso real, opcional):** el escaneo informa de «archivos leídos / total» a través de un endpoint sondeado con `hx-trigger="every 2s"`. **Requiere backend nuevo** en `LibraryAudit` (estado de progreso en memoria del proceso); se estima y se aprueba aparte antes de empezar.
+- **Pruebas.** Resumen con informe vacío, con grupos de distinto tamaño y con orden; no se toca el disco.
+- **Dependencias.** V2, V3; B16.
+
+**V12 — Pantallas no maquetadas: Biblioteca, Descubrir, ficha de serie, login y aviso legal (P1, M)**
+
+- **Historia.** Como coleccionista, quiero que las pantallas que la maqueta no cubre se vean y se comporten igual que el resto, para no sentir que hay dos aplicaciones.
+- **Alcance.** **Restyle con los componentes de V2, sin rediseñar flujos.** Las plantillas implicadas: `biblioteca.html` y `_rejilla_biblioteca.html`, `descubrir.html` y sus parciales de resultados, `series_detail.html` y `_politica_serie.html`, `login.html`, `legal_wizard.html`, `legal_full.html`.
+- **Criterios de aceptación.**
+  1. Usan botones, chips, tarjetas y estados vacíos de V2; ninguna conserva estilos locales que contradigan los tokens de V1.
+  2. Cumplen contraste, tamaño mínimo y objetivos táctiles (V1).
+  3. Se conservan todos los contratos HTMX (búsqueda por personaje y saga, alta de serie, política D8 por serie).
+  4. `login.html` y las pantallas legales funcionan sin menú lateral cuando el modo de autenticación lo exige.
+  5. Un «rediseño de verdad» de Biblioteca y Descubrir (rejilla, filtros, ficha) se registra como épica aparte, con su propia validación.
+- **Pruebas.** Regresión de los tests existentes de cada router; capturas antes/después.
+- **Dependencias.** V1, V2, V3.
+
+**V13 — Responsive y verificación en dispositivos (P1, M)**
+
+- **Historia.** Como coleccionista que usa el móvil o la tablet en el sofá, quiero que todo funcione en pantalla pequeña, para revisar y aprobar sin ampliar.
+- **Criterios de aceptación.**
+  1. Verificado a 360, 390 y 414 px y en tablet (768 px), en vertical y horizontal, y en el **Chromium de la propia Pi**.
+  2. Sin desbordamiento horizontal en ninguna pantalla; Por revisar en una columna.
+  3. Objetivos táctiles ≥ 24×24 px (WCAG 2.2 AA) y los botones principales con tamaño cómodo.
+  4. **Tras cada intercambio HTMX** el foco no se pierde y el resultado se anuncia (`aria-live`); navegación completa solo con teclado.
+  5. Respeta `prefers-reduced-motion` y `prefers-color-scheme`.
+  6. Lista de comprobación manual en `docs/design/` y un guion opcional con Playwright **fuera del paquete** (no entra en la imagen de la Pi ni en `pyproject.toml`).
+- **Pruebas.** Lista manual firmada por pantalla y ancho; el guion opcional mide desbordes y tamaños.
+- **Dependencias.** V3 a V12.
+
+**V14 — Cierre: limpieza, documentación y trazabilidad (P2, S)**
+
+- **Historia.** Como equipo, quiero cerrar la migración sin restos, para no arrastrar CSS ni plantillas muertas.
+- **Criterios de aceptación.**
+  1. Se retiran los alias de clases antiguas de V2 y las reglas sin uso, y se comprueba que ninguna plantilla las referencia (script de comprobación de clases).
+  2. Se eliminan plantillas y parciales huérfanos.
+  3. Capturas nuevas en `docs/design/ui-actual/` y en el README; CHANGELOG, BACKLOG y la ficha de la Épica U actualizados.
+  4. Se registra lo que quedó fuera: conmutador manual de tema, deshacer-tras-asignar, progreso de V11b, rediseño de Biblioteca/Descubrir.
+  5. Presupuesto de peso: tamaño de `web.css` y de cada página sin crecimiento injustificado, medido en la Pi.
+  6. El ADR 0005 pasa a «Aceptado».
+- **Dependencias.** Todas.
+
+#### Plan de entrega
+
+| Fase | Historias | Resultado visible | Riesgo |
+|---|---|---|---|
+| 0 · Cimientos | V0, V1, V2 | Textos legibles en toda la app y piezas reutilizables | Bajo: no cambia flujos |
+| 1 · Estructura | V3, V4 | Menú nuevo en todas las pantallas e Inicio guiado | Medio: toca `base.html` |
+| 2 · Valor principal | V5, V6, V7 | Por revisar rediseñado, en lotes y reversible al ignorar | **Alto**: asigna y mueve ficheros |
+| 3 · Resto de pantallas | V8, V9, V10, V11 | Deseados, Estado, Ajustes y Duplicados nuevos | Medio; V10 es la mayor |
+| 4 · Cobertura y cierre | V12, V13, V14 | Coherencia total, móvil verificado, sin restos | Bajo |
+
+**Orden de fusión recomendado:** V0 → V1 → V2 → V3 → V4 → (G1: U10) → V5 → V7 → V6 → V8 → V9 → V10 → V11 → V12 → V13 → V14. V7 se adelanta a V6 para que el usuario pueda ignorar con red de seguridad antes de poder asignar en bloque.
+
+**Definición de hecho de cada historia de la épica** (además de la del proyecto): PR única; sin migración; sin JavaScript propio; contratos HTMX de V0 conservados; pruebas del cambio más la regresión de las existentes; verificación en navegador real contra Postgres real, con capturas antes/después en la PR; CHANGELOG y nota de implementación en el BACKLOG; y comprobada la vuelta atrás con `git revert` de la PR.
+
+**Riesgos de la épica.**
+- **Sensación de «UI a medias» entre fases.** Se mitiga porque V1–V3 cambian la apariencia global primero, y cada fase deja pantallas coherentes entre sí.
+- **Romper un contrato HTMX sin darse cuenta.** Por eso V0 lo lista y cada historia conserva sus rutas y campos hasta sustituirlos.
+- **Confundir la maqueta con el producto.** La maqueta simula dos cosas que aquí **no** se implementan (deshacer tras asignar y el conmutador de tema); la tabla de traducción lo deja escrito.
+- **Estimaciones no verificadas.** Los tamaños (S/M/L) se han puesto sin leer las plantillas; V0 debe revisarlos.
+
 ## Deuda técnica registrada (peer review v2, hallazgos medios)
 
 Sin arreglar todavía — nombrados aquí a propósito para que no vuelvan a caer
