@@ -5,6 +5,42 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Añadido
+
+- **El instalador te pregunta si quieres usar ZascArr desde otros dispositivos (A11).**
+  Una cuarta pregunta, **que por defecto no abre nada** (`Intro` = solo esta
+  máquina): «solo esta máquina», «mi red local» o «detrás de un proxy inverso con
+  HTTPS». Las dos que abren **te piden una contraseña antes de abrir el puerto**
+  (mínimo 12 caracteres; se fija después de migrar y antes de levantar la
+  aplicación, así que no hay ni un instante abierto y sin ella). Si no se
+  consigue —contraseña rechazada, sin terminal, cualquier duda—, **no se abre
+  nada** y el instalador te lo dice. La contraseña no se escribe en el `.env` ni
+  viaja por argumentos. Volver a ejecutar el instalador permite cambiar de opción
+  (`Intro` mantiene la que ya tenías) y **cierra las transiciones de una
+  instalación existente**: si la aplicación ya estaba publicada fuera de localhost
+  la **para** antes de nada que pueda fallar (escribir `127.0.0.1` en el `.env` no
+  cierra un puerto ya abierto) —y lo hace con cualquier instalación existente, también
+  si solo escucha en localhost tras un proxy, avisando de la interrupción—; si no
+  puede comprobar el estado de Docker, **se detiene** en vez de dar por cerrado; la **recrea** al final para que una contraseña nueva
+  valga de inmediato (con `up -d` seguía aceptando la antigua); y deja **una sola**
+  dirección pública (la del `.env`; la que se hubiera guardado en Ajustes se retira,
+  incluidas las antiguas con `http://` o subruta; el proxy que ya tuvieras configurado
+  sigue siendo cosa tuya) y
+  cuenta la configuración **efectiva**, no lo que escribió en el `.env`. La dirección
+  del proxy admitida es `https://dominio[:puerto]`, sin ruta. La regla de cortafuegos
+  que sugiere usa la subred real de la máquina, no una deducida.
+- **`/api/health` y `/estado` avisan si ZascArr está abierto y sin contraseña**: con
+  el puerto publicado fuera de localhost, o con una dirección pública configurada.
+  Solo avisa: no cambia el estado global. `/api/health` añade un bloque `seguridad`
+  (`exposicion`, `contrasena`, `atencion`) separado de la salud técnica.
+- **Variable `ZASCARR_BIND_ADDRESS`** (`127.0.0.1` por defecto) para el puerto de la
+  interfaz. PostgreSQL y Redis **no** se parametrizan: siguen solo en localhost.
+
+### Cambiado
+
+- La regla de contraseña (mínimo 12, aviso por debajo de 15) pasa de Ajustes a un
+  servicio compartido con el instalador. Sin cambios de comportamiento en Ajustes.
+
 ### Corregido
 
 - **`BASE_URL` y `ALLOWED_HOSTS` puestos en el `.env` ahora llegan a la aplicación.**

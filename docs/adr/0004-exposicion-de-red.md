@@ -52,13 +52,21 @@ abierta por defecto.
   escrito para que no sorprenda.
 - La decisión **no** impide exponer: se documenta como opción consciente, y A6 ya
   cubre la autenticación y el proxy inverso.
-- **Pendiente (A11):** ofrecer esa elección de forma **explícita** en el
-  instalador o en Ajustes, en vez de dejar que el operador edite el
-  `docker-compose.yml` a mano. Las dos opciones que abren exigen contraseña.
+- **Hecho (A11, 2026-10-01):** la elección se ofrece de forma explícita en el
+  **instalador** (`bootstrap.sh`, con las funciones de `scripts/_exposicion.sh`),
+  no en Ajustes: el puerto publicado es propiedad de Docker en el host y la
+  aplicación no puede abrir ni cerrar el suyo. Las dos opciones que abren **exigen
+  contraseña, que se fija antes de publicar el puerto**; si no se consigue, no se
+  abre nada. Al reinstalar, una aplicación ya publicada se para antes de nada que
+  pueda fallar y se recrea al final (si no, conservaría la contraseña antigua en
+  memoria), y la `BASE_URL` efectiva —la de Ajustes manda sobre la del `.env`— se
+  reconcilia y se comprueba. Detalle y verificación en
+  `docs/design/benchmark-A11-exposicion.md`.
 
 ## Referencias
 
-- `docker-compose.yml` — los tres `ports` con `127.0.0.1`.
+- `docker-compose.yml` — Postgres y Redis fijos en `127.0.0.1`; el de la aplicación
+  vale `${ZASCARR_BIND_ADDRESS:-127.0.0.1}` (A11).
 - ADR 0001 (`docs/adr/0001-ui-stack.md`) — mismo patrón de decisión.
 - A6 y A11 en `docs/BACKLOG.md` — autenticación/reverse proxy y la elección
   explícita pendiente.

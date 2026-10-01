@@ -171,6 +171,10 @@ class Settings(BaseSettings):
     # comas en el `.env` — por ejemplo `ALLOWED_HOSTS=raspberrypi.local,pi` para
     # quien entra por el nombre de la Pi sin usar proxy.
     allowed_hosts: str = Field(default="")
+    # A11: dirección en la que el HOST publica el puerto de la interfaz (la fija el
+    # instalador en el `.env` y la usa docker-compose). La app NO puede cambiarla;
+    # solo la lee para saber si está expuesta y avisar si no hay contraseña.
+    zascarr_bind_address: str = Field(default="127.0.0.1")
     # Contador interno (misma fila JSONB que `secret_key`, fuera de la lista de
     # ajustes editables) que sube al CAMBIAR la contraseña, el usuario o el modo
     # de autenticación. Va firmado dentro de la cookie de sesión: las cookies

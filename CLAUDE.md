@@ -120,7 +120,8 @@ como marco permanente.
    TLS y `BASE_URL`/`ALLOWED_HOSTS`. No se copia el valor por defecto de
    Sonarr/Radarr: es una elección del producto, no una herencia. Decisión
    completa en **ADR 0004** (`docs/adr/0004-exposicion-de-red.md`); la elección
-   guiada en el instalador es **A11**.
+   guiada está en el instalador (**A11**, `scripts/_exposicion.sh`): las dos opciones
+   que abren fijan la contraseña **antes** de publicar el puerto.
 
 ## 6. UX
 
