@@ -225,16 +225,25 @@ async def lifespan(app: FastAPI):
         logger.exception("zascarr.db_unavailable_at_startup")
         app.state.db_degraded = True
 
-    background_tasks = [
-        asyncio.create_task(_library_audit_task()),
-        asyncio.create_task(_import_loop(settings.import_interval_minutes)),
-        asyncio.create_task(
-            _enrichment_loop(settings.enrich_interval_minutes, settings.enrich_batch_size)
-        ),
-        asyncio.create_task(
-            _orchestrator_loop(settings.scan_interval_minutes, settings.max_concurrent_downloads)
-        ),
-    ]
+    if app.state.db_degraded:
+        # E6: «solo diagnóstico» también para el fondo. Sin BD, los cuatro ciclos
+        # (auditoría, importación, enriquecimiento, orquestación) fallarían cada
+        # intervalo sin poder hacer nada útil, y llenarían el log. No se arrancan.
+        # Al reiniciar con la BD arreglada arrancan solos: no hay nada persistido
+        # que desbloquear (la bandera es de este proceso).
+        logger.warning("background_tasks_skipped_db_degraded", db_degraded=True)
+        background_tasks = []
+    else:
+        background_tasks = [
+            asyncio.create_task(_library_audit_task()),
+            asyncio.create_task(_import_loop(settings.import_interval_minutes)),
+            asyncio.create_task(
+                _enrichment_loop(settings.enrich_interval_minutes, settings.enrich_batch_size)
+            ),
+            asyncio.create_task(_orchestrator_loop(
+                settings.scan_interval_minutes, settings.max_concurrent_downloads
+            )),
+        ]
 
     yield
 
