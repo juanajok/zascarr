@@ -3,7 +3,11 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
-## [No publicado]
+## [1.15.1] — 2026-10-01
+
+Dos arreglos de la primera prueba con una biblioteca real (160 GB en una unidad de
+red). **No hay migraciones ni nada que hacer al actualizar**: ni cambios de datos
+ni de configuración, ni hace falta volver a iniciar sesión.
 
 ### Corregido
 
