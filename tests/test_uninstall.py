@@ -60,7 +60,19 @@ if [[ "${1:-}" == "run" ]]; then
     done
     [[ -n "${STUB_IMAGEN_REGISTRO:-}" ]] && echo "${imagen}" >> "${STUB_IMAGEN_REGISTRO}"
     if [[ "${STUB_PURGA:-si}" == "si" && -n "${host}" ]]; then
-        rm -rf "${host}/postgres" "${host}/redis" "${host}/covers" "${host}/vpn-state"
+        # NUNCA se borra fuera del árbol sintético: así una prueba que caiga en
+        # un valor por defecto real (`/var/lib/zascarr`, por ejemplo) no toca
+        # nada de la máquina. Se registra el intento, que es lo que interesa.
+        case "${host}" in
+            "${STUB_RAIZ:?}"/*)
+                rm -rf "${host}/postgres" "${host}/redis" "${host}/covers" "${host}/vpn-state"
+                ;;
+            *)
+                if [[ -n "${STUB_REGISTRO:-}" ]]; then
+                    echo "purga fuera de la raiz: ${host}" >> "${STUB_REGISTRO}"
+                fi
+                ;;
+        esac
     fi
     exit 0
 fi
@@ -110,6 +122,7 @@ def entorno(tmp_path: Path):
         entorno_vars["ENV_FILE"] = str(env_file)
         entorno_vars["ZASCARR_ROOT"] = str(tmp_path)
         entorno_vars["STUB_REGISTRO"] = str(registro)
+        entorno_vars["STUB_RAIZ"] = str(tmp_path)
         entorno_vars["STUB_IMAGEN_REGISTRO"] = str(imagenes)
         entorno_vars["STUB_ENV"] = env_compose if env_compose is not None else _env_compose(datos)
         entorno_vars["STUB_IMAGENES"] = stubs.pop(
@@ -216,24 +229,28 @@ class TestPurgaResuelveComoCompose:
         imagenes = entorno.imagenes.read_text().split()
         assert imagenes == ["postgres:99-de-prueba"], imagenes
 
-    @pytest.mark.skipif(
-        Path("/var/lib/zascarr").exists(),
-        reason="el valor por defecto del compose existe en esta máquina y el doble de "
-               "docker borraría dentro; en CI no existe y el caso se cubre",
-    )
-    def test_valor_por_defecto_con_compose_responsiendo_no_se_niega(self, entorno):
+    def test_valor_por_defecto_con_compose_responsiendo_no_se_niega(self, entorno, tmp_path):
         """Si la variable no está ni en el `.env` ni en el entorno y Compose SÍ
-        respondió, el valor es el del compose: que no exista es «no había nada»,
-        no el caso incierto de la reserva. Se salta si `/var/lib/zascarr` existe
-        (el doble de docker haría `rm -rf` dentro de la carpeta real)."""
+        respondió, el valor es el del compose: **no** es el caso incierto de la
+        reserva, así que el script no se niega y la desinstalación termina.
+
+        El valor por defecto se apunta a un directorio temporal que NO existe
+        (`ZASCARR_DATA_DIR_POR_DEFECTO`), así que la prueba es determinista y no
+        depende de si `/var/lib/zascarr` existe en la máquina: antes exigía
+        `returncode == 0` y en una máquina con datos reales ahí el script veía
+        «restos» que el doble no había borrado y terminaba en 1.
+        """
+        inexistente = tmp_path / "datos-por-defecto"
         salida = entorno(
             env_compose="HOST_LIBRARY_DIR=/tmp/x\nHOST_DOWNLOADS_DIR=/tmp/y\n",
             args=["--purge"],
+            ZASCARR_DATA_DIR_POR_DEFECTO=str(inexistente),
         )
 
         assert salida.returncode == 0, texto(salida)
         assert "no había nada que purgar" in texto(salida)
         assert ".env borrado" in texto(salida)
+        assert "me niego a hacer --purge" not in texto(salida)
 
 
 class TestSeNiegaCuandoNoDebe:
