@@ -22,6 +22,20 @@ pytestmark = pytest.mark.skipif(
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "scripts" / "uninstall.sh"
 
+# Repo SINTÉTICO: estos tests copian los ficheros que necesita el script a un
+# árbol temporal y ejecutan ESE. `_comun.sh` calcula `REPO_DIR` desde su propia
+# ubicación, así que cualquier `.env` que el script enlace cae dentro del
+# temporal — **nunca** el `.env` del checkout de quien ejecuta la suite, que
+# puede ser un fichero real y legítimo. Es más fuerte que copiar y restaurar: si
+# un test falla, se interrumpe o lo mata el sistema, el daño se queda en el
+# temporal de pytest.
+FICHEROS_DEL_SCRIPT = (
+    "docker-compose.yml",
+    "scripts/_comun.sh",
+    "scripts/_rutas.sh",
+    "scripts/uninstall.sh",
+)
+
 # El doble de docker responde por forma del argumento:
 #   - `config --environment` imprime el entorno ya resuelto (STUB_ENV), o falla
 #     si se pide (para probar el lector de reserva);
@@ -93,12 +107,23 @@ def _env_compose(datos: Path, *, biblioteca: Path | None = None,
 
 @pytest.fixture
 def entorno(tmp_path: Path):
-    """PATH con el doble de docker, árbol sintético, `.env` propio y registro."""
+    """PATH con el doble de docker, árbol sintético, `.env` propio y registro.
+
+    El script se ejecuta desde un **repo sintético** (`repo`), no desde el
+    checkout: así nada de lo que haga puede tocar ficheros reales.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     docker = bin_dir / "docker"
     docker.write_text(DOCKER_STUB)
     docker.chmod(0o755)
+
+    repo = tmp_path / "repo"
+    for relativo in FICHEROS_DEL_SCRIPT:
+        destino = repo / relativo
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes((REPO / relativo).read_bytes())
+    script = repo / "scripts" / "uninstall.sh"
 
     datos = tmp_path / "datos"
     for sub in ("postgres", "redis", "covers", "vpn-state"):
@@ -138,7 +163,7 @@ def entorno(tmp_path: Path):
         # los tests que disparan fallos los que más la necesitan.
         try:
             return subprocess.run(
-                ["bash", str(SCRIPT), *(args or [])],
+                ["bash", str(script), *(args or [])],
                 input=confirmacion, capture_output=True, text=True,
                 env=entorno_vars, timeout=60, check=False,
             )
@@ -146,11 +171,12 @@ def entorno(tmp_path: Path):
             # `limpiar=False` deja ver lo que hizo el SCRIPT, en vez de lo que
             # repara la prueba (lo usa `TestNoEnsuciarElRepo`).
             if limpiar:
-                quitar_env_de_prueba(tmp_path)
+                quitar_env_de_prueba(repo, tmp_path)
 
     ejecutar.datos = datos          # type: ignore[attr-defined]
     ejecutar.registro = registro    # type: ignore[attr-defined]
     ejecutar.imagenes = imagenes    # type: ignore[attr-defined]
+    ejecutar.repo = repo            # type: ignore[attr-defined]
     return ejecutar
 
 
@@ -160,21 +186,22 @@ def texto(salida: subprocess.CompletedProcess) -> str:
     return " ".join((salida.stdout + salida.stderr).split())
 
 
-def quitar_env_de_prueba(tmp_path: Path) -> None:
-    """Red de seguridad: si el script vuelve a enlazar `REPO/.env` al `ENV_FILE`
-    temporal, se quita antes de que pytest borre el temporal (dejaría un **enlace
-    roto en la raíz del repo**, y `get_settings()` lee `.env` desde el cwd).
+def quitar_env_de_prueba(repo: Path, tmp_path: Path) -> None:
+    """Red de seguridad dentro del **repo sintético**: si el script enlaza
+    `repo/.env` al `ENV_FILE` temporal, se quita antes de que pytest borre el
+    temporal (dejaría un enlace roto). Nunca toca el checkout real: opera sobre el
+    repo temporal que le pasa la fixture.
 
     Desde el arreglo de `_comun.sh` esto no debería hacer falta —con `ENV_FILE`
-    explícito el script **no toca** el checkout—, pero se queda como defensa para
-    el caso de un `ENV_FILE` no explícito.
+    explícito el script no crea el enlace—, pero se queda como defensa para el
+    caso de un `ENV_FILE` no explícito.
 
     La pertenencia se comprueba por **ruta resuelta**, no por prefijo de texto:
     `/tmp/pytest-1/foo` es prefijo de `/tmp/pytest-1/foobar`, y `startswith`
-    confundiría el temporal de otra prueba con el de esta. Un `.env` de verdad
-    (el que crea `bootstrap.sh`) tampoco se toca.
+    confundiría el temporal de otra prueba con el de esta. Un `.env` que no sea
+    del temporal tampoco se toca.
     """
-    enlace = REPO / ".env"
+    enlace = repo / ".env"
     if not enlace.is_symlink():
         return
     try:
@@ -392,33 +419,29 @@ class TestNoEnsuciarElRepo:
 
     `_comun.sh` enlazaba `REPO/.env` al `ENV_FILE` que ve el script. Con un
     `ENV_FILE` temporal, al desaparecer el temporal quedaba un **enlace roto en la
-    raíz del repo**, y `get_settings()` lee `.env` desde el cwd. El arreglo de
-    raíz es que el script **no cree el enlace** cuando `ENV_FILE` viene explícito;
-    la limpieza se queda como red de seguridad.
+    raíz del repo**, y `get_settings()` lee `.env` desde el cwd.
+
+    Todo lo de aquí trabaja sobre el **repo sintético** de la fixture
+    (`entorno.repo`), nunca sobre el checkout: nada de borrar ni restaurar el
+    `.env` de quien ejecuta la suite, que puede ser un fichero real.
     """
 
     def test_con_env_explicito_el_script_no_crea_el_symlink(self, entorno):
-        """El arreglo de raíz: si `ENV_FILE` lo pone quien llama, el checkout no
-        se toca. Se ejecuta **sin la limpieza** de la fixture, para observar lo
-        que hace el script y no lo que repara la prueba."""
-        enlace = REPO / ".env"
-        enlace.unlink(missing_ok=True)
-        try:
-            entorno(env_compose=_env_compose(entorno.datos), args=["--purge"],
-                    confirmacion="si\n", limpiar=False)
-            creado = enlace.is_symlink()
-        finally:
-            enlace.unlink(missing_ok=True)
+        """El arreglo de raíz: si `ENV_FILE` lo pone quien llama, el script no
+        crea el enlace. Se ejecuta **sin la limpieza** de la fixture, para observar
+        lo que hace el script y no lo que repara la prueba."""
+        entorno(env_compose=_env_compose(entorno.datos), args=["--purge"],
+                confirmacion="si\n", limpiar=False)
 
-        assert not creado, (
-            "el script creó `REPO/.env` teniendo un ENV_FILE explícito"
+        assert not (entorno.repo / ".env").is_symlink(), (
+            "el script creó el `.env` del repo teniendo un ENV_FILE explícito"
         )
 
     def test_no_queda_un_env_apuntando_al_temporal(self, entorno, tmp_path):
         entorno(env_compose=_env_compose(entorno.datos), args=["--purge"],
                 confirmacion="si\n")
 
-        enlace = REPO / ".env"
+        enlace = entorno.repo / ".env"
         if enlace.is_symlink():
             assert not Path(os.path.realpath(enlace)).is_relative_to(
                 tmp_path.resolve()
@@ -428,11 +451,10 @@ class TestNoEnsuciarElRepo:
                                                        monkeypatch):
         """`try/finally`: si `subprocess.run` lanza (timeout, fallo al arrancar el
         proceso, interrupción), la limpieza tiene que correr igual."""
-        enlace = REPO / ".env"
-        enlace.unlink(missing_ok=True)
+        enlace = entorno.repo / ".env"
 
         def falso(*_args, **_kwargs):
-            # Lo que hace el script: enlaza REPO/.env al ENV_FILE temporal.
+            # Lo que hace el script: enlaza el `.env` del repo al ENV_FILE temporal.
             enlace.symlink_to(tmp_path / ".env")
             raise subprocess.TimeoutExpired(cmd="bash", timeout=60)
 
@@ -441,42 +463,53 @@ class TestNoEnsuciarElRepo:
             entorno(env_compose=_env_compose(entorno.datos), args=[])
 
         assert not enlace.is_symlink(), (
-            "el `finally` no limpió tras la excepción: el repo queda sucio"
+            "el `finally` no limpió tras la excepción"
         )
 
-    def test_no_toca_un_env_que_no_es_del_temporal(self, tmp_path):
-        """Un `.env` de verdad (ajeno al temporal de la prueba) no se toca."""
-        enlace = REPO / ".env"
+    def test_no_toca_un_env_que_no_es_del_temporal(self, entorno, tmp_path):
+        """Un `.env` ajeno al temporal de la prueba no se toca (aquí, dentro del
+        repo sintético: el checkout real no se roza)."""
+        enlace = entorno.repo / ".env"
         ajeno = tmp_path.parent / "zascarr-env-ajeno"
         ajeno.write_text("X=1")
-        previo = os.readlink(enlace) if enlace.is_symlink() else None
-        enlace.unlink(missing_ok=True)
         try:
             enlace.symlink_to(ajeno)
-            quitar_env_de_prueba(tmp_path)
+            quitar_env_de_prueba(entorno.repo, tmp_path)
             assert enlace.is_symlink(), "no debía borrar un `.env` ajeno"
         finally:
-            enlace.unlink(missing_ok=True)
-            if previo is not None:
-                enlace.symlink_to(previo)
             ajeno.unlink(missing_ok=True)
 
-    def test_un_temporal_con_prefijo_parecido_no_cuenta_como_propio(self, tmp_path):
+    def test_un_temporal_con_prefijo_parecido_no_cuenta_como_propio(self, entorno,
+                                                                    tmp_path):
         """`/tmp/pytest-1/foo` es prefijo de `/tmp/pytest-1/foobar`, pero no es
         su carpeta: la pertenencia se decide por ruta, no por texto."""
-        enlace = REPO / ".env"
+        enlace = entorno.repo / ".env"
         gemelo = tmp_path.parent / f"{tmp_path.name}-gemelo"
         gemelo.mkdir(exist_ok=True)
-        previo = os.readlink(enlace) if enlace.is_symlink() else None
-        enlace.unlink(missing_ok=True)
         try:
             enlace.symlink_to(gemelo / ".env")
-            quitar_env_de_prueba(tmp_path)
+            quitar_env_de_prueba(entorno.repo, tmp_path)
             assert enlace.is_symlink(), (
                 "borró un enlace cuyo destino solo COMPARTE PREFIJO con el temporal"
             )
         finally:
-            enlace.unlink(missing_ok=True)
-            if previo is not None:
-                enlace.symlink_to(previo)
             gemelo.rmdir()
+
+    def test_el_checkout_no_se_toca(self, entorno):
+        """El invariante de verdad, comprobado de forma explícita: pase lo que
+        pase dentro de una prueba, el `.env` del checkout (si existe) queda igual.
+
+        No se borra ni se restaura nada: solo se compara el estado antes y después.
+        """
+        real = REPO / ".env"
+        antes = os.readlink(real) if real.is_symlink() else (
+            real.read_bytes() if real.is_file() else None
+        )
+
+        entorno(env_compose=_env_compose(entorno.datos), args=["--purge"],
+                confirmacion="si\n")
+
+        despues = os.readlink(real) if real.is_symlink() else (
+            real.read_bytes() if real.is_file() else None
+        )
+        assert despues == antes, "la prueba modificó el `.env` del checkout"
