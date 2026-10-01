@@ -131,6 +131,29 @@ vacío y sin procedencia) y «dar por resuelto» tomo→grapas copiando `issues_
 sin confirmación (Kapowarr no resuelve esa afirmación bibliográfica, §9 de la
 spec).
 
+**Benchmark cerrado (§13, 2026-10-01) — refuerza esta decisión.** Con las
+referencias **fijadas por commit** (Kapowarr `c191dda`, v1.3.2; Mylar3 `cdc94a4`,
+v0.8.3) y leídas **en su código**, no en su interfaz:
+
+- **Ninguna de las dos modela cobertura editorial.** Kapowarr no tiene ninguna
+  relación entre el issue de un ómnibus y los issues de la edición original: un
+  TPB/ómnibus es **otro volumen con un único issue**.
+- **Mylar3 sí tiene un campo** (`comics.Collects`), y es el contraejemplo que
+  justifica la procedencia y la confirmación: se **raspa** del HTML de la
+  descripción de Comic Vine, **solo existe** si la descripción cumple una
+  condición estrecha (empezar por «trade paperback» y contener «collecting»), y
+  sus únicos consumidores son **pintarlo en la ficha y escribirlo en
+  `series.json`** — no alimenta huecos, estados ni búsquedas.
+- El **N:M archivo↔issues** de Kapowarr (`issues_files`, con `forced`) sí se
+  adopta/adapta para la relación **física**; eso no autoriza a derivar de ahí la
+  relación **bibliográfica**.
+- Se descartan además dos mecanismos suyos por innecesarios aquí: codificar
+  sufijos y especiales en un `float` (Kapowarr) y desambiguar dos números por
+  **año** (Mylar3) en vez de por edición.
+
+Ficha completa, con lo que **no** se pudo verificar: 
+`docs/design/benchmark-identidad-editorial.md`.
+
 ## Consecuencias
 
 - **No se descarta el proyecto de cobertura**: los rangos del nombre pueden ser
@@ -148,9 +171,29 @@ spec).
 ## Próximo paso: censo de BD (B22 sigue en curso)
 
 El censo de nombres no sustituye al censo de filas/colisiones de la BD que B22
-prometía. `scripts/medicion/censo_identidad.py` (PR #20) es el paso siguiente y
-obligatorio antes de revisar este ADR a fondo y decidir la migración: debe medir
-formatos, `volume=NULL`, duplicados reales, archivos sin `Issue` y cualquier
-`covered_issue_ids` existente. Sin acceso a BD ahora, B22 queda **en curso** y se
-registra «pendiente por falta de BD», no «hecho». Orden: #20 → censo local
-agregado → revisión final de ADR-0003 → decidir migración aditiva.
+prometía. `scripts/medicion/censo_identidad.py` (PR #20) está **escrito y
+listo**: es solo lectura (transacción `READ ONLY`), seudonimiza por defecto y
+solo falta correrlo contra la instalación real, que es lo único que este entorno
+no tiene. Ejecutado contra la BD de pruebas (vacía) termina sin errores; el
+README de `scripts/medicion/` documenta la salida compartible y la `--local`:
+
+```bash
+DATABASE_URL=postgresql://usuario:clave@host:5432/zascarr \
+    python3 scripts/medicion/censo_identidad.py
+```
+
+**Qué decide cada resultado**, para que esa ejecución cierre B22 en un solo paso:
+
+| Lo que salga | Qué implica |
+|---|---|
+| `colisiones_null` > 0 | Hay duplicados ambiguos que el `UNIQUE(series_id, issue_number, volume)` **no** detiene (`volume` NULL repetido). Refuerza la decisión 1 y hace prioritario un `number_key` canónico por edición. |
+| `otras_ediciones_posibles` > 0 | El mismo número con volúmenes distintos **ya existe**: la decisión 2 (edición ≠ imprint) deja de ser hipotética. |
+| `covered_issue_ids` no vacíos = 0 | Confirma que la cobertura no está en la BD —el código lo dice: se escribe siempre vacía en importación y adopción— y que la única procedencia disponible hoy es el nombre → `proposed`, nunca `confirmed` automático. |
+| Recopilaciones con archivo disponible y sin cobertura | Es el universo real del problema. Si es **pequeño**, la revisión manual es viable y el proyecto de cobertura sigue adelante; si es **enorme**, un `proposed` masivo no aporta nada y se pospone. |
+| Nada contrastable (pocas recopilaciones, ningún rango, ninguna fuente con evidencia) | **Criterio de parada de B22:** recomendar «posponer» es un resultado válido. Este ADR se cerraría como «modelo decidido, migración pospuesta». |
+
+Con el censo en la mano la revisión final es corta: **aceptar las cuatro
+decisiones** —no dependen del censo para sostenerse: son un contrato, no una
+medida— y decidir **una** cosa, si la migración aditiva de cobertura se autoriza
+ahora o se pospone. Orden: censo local agregado → revisión final de ADR-0003 →
+decidir migración.
