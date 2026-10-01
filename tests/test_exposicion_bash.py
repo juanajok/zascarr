@@ -34,7 +34,8 @@ def _bash(cuerpo: str, stdin: str | None = None):
 
 class TestExposicionABind:
 
-    @pytest.mark.parametrize("opcion,bind", [("1", "127.0.0.1"), ("2", "0.0.0.0"), ("3", "127.0.0.1")])
+    @pytest.mark.parametrize(
+        "opcion,bind", [("1", "127.0.0.1"), ("2", "0.0.0.0"), ("3", "127.0.0.1")])
     def test_traduccion(self, opcion, bind):
         r = _bash(f"exposicion_a_bind {opcion}")
         assert r.returncode == 0 and r.stdout.strip() == bind
@@ -153,12 +154,14 @@ class TestPedirContrasenaAcceso:
             'echo "LONGITUD=${#CONTRASENA_ACCESO}"',
             stdin=entrada,
         )
-        datos = dict(x.split("=", 1) for x in r.stdout.splitlines() if x.startswith(("RC=", "LONGITUD=")))
+        datos = dict(
+            x.split("=", 1) for x in r.stdout.splitlines() if x.startswith(("RC=", "LONGITUD=")))
         return datos, r
 
     def test_contrasena_valida_y_confirmada(self):
-        datos, _ = self._pedir("una frase larga que nadie adivina\nuna frase larga que nadie adivina\n")
-        assert datos["RC"] == "0" and datos["LONGITUD"] == str(len("una frase larga que nadie adivina"))
+        frase = "una frase larga que nadie adivina"
+        datos, _ = self._pedir(f"{frase}\n{frase}\n")
+        assert datos["RC"] == "0" and datos["LONGITUD"] == str(len(frase))
 
     def test_corta_se_reintenta(self):
         datos, r = self._pedir("corta\nuna frase larga de verdad\nuna frase larga de verdad\n")
@@ -244,7 +247,8 @@ def docker_doble(tmp_path):
         'echo "$*" >> "$DOBLE_LOG"\n'
         'case "$*" in\n'
         '  *"cli.seguridad estado"*) cat > /dev/null; exit "${DOBLE_ESTADO_RC:-3}" ;;\n'
-        '  *"cli.seguridad fijar-contrasena"*) cat > "$DOBLE_STDIN"; exit "${DOBLE_FIJAR_RC:-0}" ;;\n'
+        '  *"cli.seguridad fijar-contrasena"*)\n'
+        '    cat > "$DOBLE_STDIN"; exit "${DOBLE_FIJAR_RC:-0}" ;;\n'
         'esac\n'
         'exit 99\n'
     )
@@ -312,7 +316,8 @@ class TestAsegurarContrasenaDeAcceso:
         assert rc.startswith("RC=0") and recibido is None
 
     def test_ya_hay_pero_se_quiere_cambiar(self, docker_doble):
-        rc, _, recibido, _ = _asegurar(docker_doble, estado_rc="0", entrada=f"n\n{FRASE}\n{FRASE}\n")
+        rc, _, recibido, _ = _asegurar(
+            docker_doble, estado_rc="0", entrada=f"n\n{FRASE}\n{FRASE}\n")
         assert rc.startswith("RC=0") and recibido == FRASE + "\n"
 
     def test_sin_contrasena_y_sin_terminal_no_abre(self, docker_doble):
@@ -346,23 +351,23 @@ class TestOrdenEnBootstrap:
         return texto.splitlines()
 
     def _indice(self, fragmento: str) -> int:
-        lineas = [i for i, l in enumerate(self._lineas()) if fragmento in l and not l.lstrip().startswith("#")]
+        lineas = [i for i, linea in enumerate(self._lineas())
+                  if fragmento in linea and not linea.lstrip().startswith("#")]
         assert lineas, f"no encuentro {fragmento!r} en bootstrap.sh"
         return lineas[0]
 
     def test_migra_luego_fija_la_contrasena_luego_escribe_la_direccion_luego_levanta_la_app(self):
         migrar = self._indice("alembic upgrade head")
-        contrasena = self._indice("asegurar_contrasena_de_acceso; then") if any(
-            "asegurar_contrasena_de_acceso; then" in l for l in self._lineas()
-        ) else self._indice("! asegurar_contrasena_de_acceso")
+        contrasena = self._indice("! asegurar_contrasena_de_acceso")
         escribir = self._indice('set_env_var "ZASCARR_BIND_ADDRESS"')
         levantar = self._indice("up -d zascarr")
         assert migrar < contrasena < escribir < levantar
 
     def test_la_direccion_de_publicacion_no_se_escribe_antes_de_la_contrasena(self):
         """Hay una sola escritura de ZASCARR_BIND_ADDRESS y es posterior al paso de contraseña."""
-        escrituras = [i for i, l in enumerate(self._lineas())
-                      if 'set_env_var "ZASCARR_BIND_ADDRESS"' in l and not l.lstrip().startswith("#")]
+        escrituras = [i for i, linea in enumerate(self._lineas())
+                      if 'set_env_var "ZASCARR_BIND_ADDRESS"' in linea
+                      and not linea.lstrip().startswith("#")]
         assert len(escrituras) == 1
 
     def test_si_no_se_consigue_contrasena_se_vuelve_a_solo_esta_maquina(self):

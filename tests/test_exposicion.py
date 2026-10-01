@@ -43,11 +43,13 @@ def _ajustes(bind="127.0.0.1", base_url="", modo="none", hash_="") -> SimpleName
 
 class TestExposicionEfectiva:
 
-    @pytest.mark.parametrize("bind", ["127.0.0.1", "localhost", "::1", "[::1]", " 127.0.0.1 ", "LOCALHOST"])
+    @pytest.mark.parametrize(
+        "bind", ["127.0.0.1", "localhost", "::1", "[::1]", " 127.0.0.1 ", "LOCALHOST"])
     def test_bind_local_es_local(self, bind):
         assert exposicion_efectiva(_ajustes(bind=bind)) == EXPOSICION_LOCAL
 
-    @pytest.mark.parametrize("bind", ["0.0.0.0", "192.168.1.50", "::", "10.0.0.7", "raspberrypi.local"])
+    @pytest.mark.parametrize(
+        "bind", ["0.0.0.0", "192.168.1.50", "::", "10.0.0.7", "raspberrypi.local"])
     def test_cualquier_otro_bind_es_red(self, bind):
         assert exposicion_efectiva(_ajustes(bind=bind)) == EXPOSICION_RED
 
@@ -180,7 +182,8 @@ class TestComposePublicaElPuerto:
         """Ningún puerto del compose queda en `0.0.0.0` ni sin dirección explícita."""
         for servicio, puertos in self._puertos().items():
             for p in puertos:
-                assert p.startswith(("127.0.0.1:", "${ZASCARR_BIND_ADDRESS:-127.0.0.1}:")), (servicio, p)
+                permitido = ("127.0.0.1:", "${ZASCARR_BIND_ADDRESS:-127.0.0.1}:")
+                assert p.startswith(permitido), (servicio, p)
 
 
 class TestMinimoDeContrasenaIgualEnBash:
