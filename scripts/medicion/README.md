@@ -119,3 +119,43 @@ Las etiquetas de `etiquetas.py` las escribió el mismo agente que escribió
 el parser. Se mitigó etiquetando antes de ejecutar nada, pero **conviene
 que el coleccionista revise por encima** `muestra81_etiquetada.csv`: si
 una etiqueta está mal, la cifra está mal.
+
+## Los censos del catálogo (no miden el parser)
+
+`censo_huecos.py` y `censo_identidad.py` no forman parte del ratio: miden el
+**catálogo** para decidir historias que dependían de datos reales. Los dos son
+**solo lectura** —la conexión corre dentro de una transacción `READ ONLY`, así
+que Postgres rechaza cualquier escritura aunque el script se equivocara— y no
+vuelcan el catálogo.
+
+### `censo_identidad.py` — B22 (identidad editorial)
+
+```bash
+DATABASE_URL=postgresql://usuario:clave@host:5432/zascarr \
+    python3 scripts/medicion/censo_identidad.py            # COMPARTIBLE
+DATABASE_URL=... python3 scripts/medicion/censo_identidad.py --local  # SOLO LOCAL
+```
+
+Responde, en orden: issues por `format`, tradición y fuente; grupos con el mismo
+`series_id + issue_number` —separando **colisión efectiva** (mismo número con
+`volume` NULL repetido, que el `UNIQUE` no detiene) de **otra edición posible**
+(volúmenes distintos)—; issues **sin** número (contados aparte: «dos obras sin
+número» no es una colisión del mismo número); `volume IS NULL`;
+`File.covered_issue_ids` no vacíos; y una muestra estratificada.
+
+Por defecto **seudonimiza** (hash SHA-256 truncado de títulos y rutas). Un hash
+truncado **no** es anonimización fuerte —se puede comprobar contra un diccionario
+de títulos conocidos—, así que se llama seudonimización, y por eso la salida por
+defecto es la que se puede pegar en un issue. `--local` enseña los nombres y
+rutas originales, y es **solo para etiquetar a mano**: no pegar esa salida.
+
+### `censo_huecos.py` — «Huecos fiables» (B7/C2)
+
+```bash
+DATABASE_URL=... python3 scripts/medicion/censo_huecos.py
+```
+
+Cuantifica cuánto de la vista de huecos era un artefacto de un campo sin poblar
+(`Issue.sort_order`, que ningún código de `main` escribe) frente al criterio
+nuevo. Fue el instrumento del cierre de `compute_missing_issues` (2026-09-27).
+
