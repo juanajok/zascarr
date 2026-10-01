@@ -132,11 +132,15 @@ def entorno(tmp_path: Path):
                 entorno_vars.pop(clave, None)
             else:
                 entorno_vars[clave] = valor
-        return subprocess.run(
+        resultado = subprocess.run(
             ["bash", str(SCRIPT), *(args or [])],
             input=confirmacion, capture_output=True, text=True,
             env=entorno_vars, timeout=60, check=False,
         )
+        # `_comun.sh` deja `REPO_DIR/.env` apuntando al ENV_FILE temporal: se
+        # quita antes de que pytest borre el temporal y quede un enlace roto.
+        quitar_env_de_prueba(tmp_path)
+        return resultado
 
     ejecutar.datos = datos          # type: ignore[attr-defined]
     ejecutar.registro = registro    # type: ignore[attr-defined]
@@ -148,6 +152,23 @@ def texto(salida: subprocess.CompletedProcess) -> str:
     """Salida con espacios colapsados, **stdout y stderr juntos**: los mensajes
     van partidos en varias líneas y los de `die` salen por stderr."""
     return " ".join((salida.stdout + salida.stderr).split())
+
+
+def quitar_env_de_prueba(tmp_path: Path) -> None:
+    """`_comun.sh` enlaza `REPO_DIR/.env` al `ENV_FILE` que ve el script. Con un
+    `ENV_FILE` temporal eso deja un **enlace roto en la raíz del repo** en cuanto
+    pytest borra el temporal — y `get_settings()` lee `.env` desde el cwd, así que
+    puede ensuciar otros tests. Se quita, pero **solo si apunta al temporal de
+    esta prueba**: un `.env` de verdad (el que crea bootstrap.sh) no se toca."""
+    enlace = REPO / ".env"
+    if not enlace.is_symlink():
+        return
+    try:
+        destino = os.readlink(enlace)
+    except OSError:
+        return
+    if destino.startswith(str(tmp_path)):
+        enlace.unlink()
 
 
 class TestPurgaResuelveComoCompose:
@@ -350,3 +371,21 @@ class TestSeNiegaCuandoNoDebe:
         assert salida.returncode == 0, salida.stderr
         assert "CONSERVAR" in texto(salida)
         assert (entorno.datos / "postgres").exists()
+
+
+class TestNoEnsuciarElRepo:
+    """Regresión del mecanismo: `_comun.sh` enlaza `REPO/.env` al `ENV_FILE` que
+    ve el script. Con un `ENV_FILE` temporal, al desaparecer el temporal queda un
+    **enlace roto en la raíz del repo**, y `get_settings()` lee `.env` desde el
+    cwd — con la suite de Postgres en marcha eso tumbaba decenas de tests."""
+
+    def test_no_queda_un_env_apuntando_al_temporal(self, entorno, tmp_path):
+        entorno(env_compose=_env_compose(entorno.datos), args=["--purge"],
+                confirmacion="si\n")
+
+        enlace = REPO / ".env"
+        if enlace.is_symlink():
+            assert not os.readlink(enlace).startswith(str(tmp_path)), (
+                "quedó un `.env` en la raíz del repo apuntando al temporal de la "
+                "prueba: en cuanto pytest lo borre será un enlace roto"
+            )
