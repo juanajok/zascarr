@@ -95,7 +95,10 @@ class TestFijarSeguridad:
     @pytest.mark.asyncio
     async def test_activar_password_sin_ninguna_se_rechaza(self, ajustes):
         _, guardado, _ = ajustes
-        r = await fijar_seguridad(MagicMock(), modo="password", usuario="", password="", base_url="")
+        r = await fijar_seguridad(
+            MagicMock(), modo="password", usuario="", password="",
+            base_url="",
+        )
         assert r.error == seguridad.MENSAJE_SIN_CONTRASENA
         assert guardado == []
 
@@ -103,7 +106,10 @@ class TestFijarSeguridad:
     async def test_activar_password_con_una_ya_guardada_no_exige_reescribirla(self, ajustes):
         actuales, guardado, _ = ajustes
         actuales.auth_password_hash = "pbkdf2…"
-        r = await fijar_seguridad(MagicMock(), modo="password", usuario="", password="", base_url="")
+        r = await fijar_seguridad(
+            MagicMock(), modo="password", usuario="", password="",
+            base_url="",
+        )
         assert r.error is None
         assert "auth_password_hash" not in guardado[0]
 
@@ -116,12 +122,15 @@ class TestFijarSeguridad:
     @pytest.mark.asyncio
     async def test_contrasena_corta_se_rechaza_y_no_guarda_nada(self, ajustes):
         _, guardado, _ = ajustes
-        r = await fijar_seguridad(MagicMock(), modo="password", usuario="", password="corta", base_url="")
+        r = await fijar_seguridad(
+            MagicMock(), modo="password", usuario="", password="corta",
+            base_url="",
+        )
         assert r.error == seguridad.MENSAJE_CORTA
         assert guardado == []
 
     @pytest.mark.asyncio
-    async def test_guardar_una_contrasena_nueva_hashea_sube_version_y_limpia_la_cache(self, ajustes):
+    async def test_contrasena_nueva_hashea_sube_version_y_limpia_la_cache(self, ajustes):
         _, guardado, limpiar = ajustes
         r = await fijar_seguridad(
             MagicMock(), modo="password", usuario="", password="x" * 15, base_url="")
@@ -153,6 +162,18 @@ class TestFijarSeguridad:
         limpiar.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_base_url_none_no_la_toca(self, ajustes):
+        """El instalador no debe pisar la `base_url` que el coleccionista puso en
+        Ajustes (cadena vacía significaría «vuelve al .env»)."""
+        _, guardado, _ = ajustes
+        await fijar_seguridad(
+            MagicMock(), modo="password", usuario="", password="x" * 15,
+            base_url=None,
+        )
+        assert "base_url" not in guardado[0]
+
+    @pytest.mark.asyncio
     async def test_modo_desconocido_es_un_error_de_programacion(self, ajustes):
         with pytest.raises(ValueError):
-            await fijar_seguridad(MagicMock(), modo="lo-que-sea", usuario="", password="", base_url="")
+            await fijar_seguridad(
+                MagicMock(), modo="lo-que-sea", usuario="", password="", base_url="")
