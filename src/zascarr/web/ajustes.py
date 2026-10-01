@@ -25,11 +25,10 @@ from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
     crear_cookie_sesion,
-    hash_password_async,
-    limpiar_cache_basic,
 )
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
+from zascarr.services.seguridad import MODOS, fijar_seguridad
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -279,63 +278,26 @@ async def guardar_seguridad(
     base_url: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    if auth_mode not in ("none", "password", "user_password"):
+    if auth_mode not in MODOS:
         raise HTTPException(status_code=400, detail="Modo de autenticación no reconocido")
 
-    settings = get_settings()
-    # A6: nunca dejar la app en un modo que nadie pueda desbloquear — si
-    # se activa contraseña y no hay ninguna (ni recién escrita ni ya
-    # guardada de antes), el coleccionista quedaría fuera de su propia
-    # instalación, sin poder ni siquiera volver a /ui/ajustes a arreglarlo.
-    if auth_mode in ("password", "user_password") and not auth_password and not settings.auth_password_hash:
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Seguridad", "error": "Pon una contraseña antes de activar este modo — si no, no podrás volver a entrar.",
-        })
-    if auth_mode == "user_password" and not auth_username and not settings.auth_username:
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Seguridad", "error": "Este modo necesita también un nombre de usuario.",
-        })
-    # Longitud mínima (OWASP): sin segundo factor, una contraseña corta cae rápido
-    # con el retraso progresivo. 15 sería lo recomendado; 12 es el mínimo duro y
-    # por debajo de 15 se avisa.
-    if auth_password and len(auth_password) < 12:
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
-            "nombre": "Seguridad",
-            "error": "La contraseña debe tener al menos 12 caracteres. Mejor una frase "
-                     "larga que recuerdes (por ejemplo, tres o cuatro palabras).",
-        })
-    aviso = None
-    if auth_password and len(auth_password) < 15:
-        aviso = (
-            "Contraseña corta: menos de 15 caracteres se considera débil sin un "
-            "segundo factor. Una frase más larga es más segura."
-        )
-
-    updates: dict = {"auth_mode": auth_mode, "auth_username": auth_username, "base_url": base_url.rstrip("/")}
-    # Cambiar contraseña, usuario o modo sube la versión de sesión: las cookies
-    # emitidas antes dejan de valer (antes, cambiar la contraseña no cerraba las
-    # sesiones abiertas). El rehasheo por iteraciones NO sube la versión.
-    cambia_credenciales = (
-        auth_mode != settings.auth_mode
-        or auth_username != settings.auth_username
-        or bool(auth_password)
+    # La regla (longitud, no dejar la app sin forma de entrar, versión de sesión)
+    # vive en services/seguridad.py y la comparte el instalador (A11).
+    resultado = await fijar_seguridad(
+        db, modo=auth_mode, usuario=auth_username, password=auth_password, base_url=base_url,
     )
-    if auth_password:
-        updates["auth_password_hash"] = await hash_password_async(auth_password)
-    if cambia_credenciales:
-        updates["auth_session_version"] = settings.auth_session_version + 1
-    await RuntimeSettingsService(db).save(updates)
-    if cambia_credenciales:
-        # La caché de aciertos de Basic Auth queda inservible al cambiar las
-        # credenciales: sus entradas viejas no deben seguir dando acceso.
-        limpiar_cache_basic()
+    if resultado.error:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Seguridad", "error": resultado.error,
+        })
 
     respuesta = templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Seguridad", "aviso": aviso})
-    if cambia_credenciales:
+        request, "_ajustes_guardado.html", {"nombre": "Seguridad", "aviso": resultado.aviso})
+    if resultado.cambia_credenciales:
         # Re-emite la cookie con la versión nueva: quien cambia la contraseña
         # conserva SU sesión (las demás se cierran). Sin esto, su siguiente clic
         # le llevaría a /login sin explicación.
+        settings = get_settings()
         cookie = crear_cookie_sesion(settings.secret_key, settings.auth_session_version)
         respuesta.set_cookie(
             COOKIE_NAME, cookie,
