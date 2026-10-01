@@ -723,6 +723,172 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   rama "todos los candidatos fallaron" de `_process_item`, mostrada en
   la fila de la wishlist.
 
+### Épica U — "La interfaz me guía" (usabilidad)
+
+**Origen:** revisión heurística de UX del 2026-10-01 sobre siete capturas de la UI (dashboard, Descubrir, Pendientes, Deseados, Revisión de mi biblioteca, Ajustes y Estado), con los 14 archivos reales de `_Unsorted` y 5 filas «BPRD» en Deseados. **Alcance honesto:** es una evaluación heurística sobre capturas estáticas, **no** una prueba con usuarios; no cubre estados de carga, errores reales ni móvil. Por eso U10 (validar con coleccionistas) va **antes** de dar por buenos los rediseños de U1 y U2. Marco: heurísticas de Nielsen (visibilidad del estado, lenguaje del usuario, control y libertad, prevención y recuperación de errores) y WCAG 2.2 AA.
+
+**Medido, no opinado** (script sobre los tokens de `static/web.css`, razón de contraste WCAG): `--ink-faint` (#8b8b92) sobre `--paper` (#f6f3ec) da **3,05:1**, sobre `--paper-2` **2,82:1** y sobre `--caption-bg` **3,05:1**; WCAG 2.2 AA exige **4,5:1** para texto normal. `--cyan` sobre `--paper` da 2,84:1 y `--ok` 3,83:1. En modo oscuro `--ink-faint` da 4,47:1 sobre `--paper` (a 0,03 del umbral) y 4,14:1 sobre `--paper-2`. `--ink-soft` pasa con 7,94:1. Varios tamaños de la hoja están entre `.72rem` y `.8rem` (11,5–12,8 px). Qué textos usan realmente esos tokens **hay que verificarlo en las plantillas**: el cálculo prueba el par de colores, no su uso.
+
+| ID | Historia | Aceptación clave | P | Est |
+|---|---|---|---|---|
+| U1 | Como coleccionista con decenas de archivos sin clasificar, quiero revisar Pendientes de forma compacta, con el nombre completo, la sugerencia a la vista y acciones por lotes, para resolver 14 archivos sin repetir 14 veces el mismo ritual | Tarjeta/fila compacta con nombre íntegro; selección múltiple; «asignar a esta serie» sobre la selección; «Ignorar» reversible; nada se asigna sin confirmación explícita | P0 | L |
+| U2 | Como coleccionista recién instalado, quiero que el panel de inicio me diga qué hacer primero en vez de enseñarme ceros contradictorios | Checklist de 3 pasos derivado del estado real; **una** acción principal; sin «0 %» ni «5 series» cuando no hay catálogo; un solo buscador | P0 | M |
+| U3 | Como coleccionista, quiero que Deseados distinga «buscando» de «sin resultados», agrupe duplicados y me diga qué hacer cuando no encuentra nada | Estados mutuamente excluyentes; aviso al añadir algo ya deseado; enlace a la causa (Ajustes/Fuentes) según el motivo de D9 | P1 | M |
+| U4 | Como coleccionista con la vista cansada o en un móvil al sol, quiero textos legibles, para no tener que adivinar qué pone | Todo texto con ≥ 4,5:1 (3:1 solo texto grande); tamaño mínimo de texto informativo definido; prueba automática de contraste sobre `web.css` | P1 | S |
+| U5 | Como coleccionista que no sabe qué es Prowlarr, quiero un asistente que me pregunte qué quiero conectar y esconda lo avanzado, para configurar sin leer párrafos técnicos | Entrada «¿Qué quieres conectar?»; modo básico/avanzado; «Probar conexión» guía al siguiente paso; `host.docker.internal` solo en avanzado | P1 | M |
+| U6 | Como coleccionista, quiero que Estado diga la verdad en mi idioma, para saber si debo preocuparme | Semáforo global = peor de los parciales; avisos sin rutas internas; cada aviso con causa y acción | P1 | S |
+| U7 | Como coleccionista, quiero una navegación con nombres inequívocos, para no confundir «Biblioteca» con «Mi biblioteca» | Un término por concepto; agrupación de las 8 entradas; glosario de vocabulario en `CLAUDE.md` | P2 | S |
+| U8 | Como coleccionista con duplicados, quiero que la revisión de mi biblioteca me resuma y priorice, para atacar primero lo que más espacio recupera | Resumen arriba (GB recuperables, nº de grupos); orden por ahorro; progreso del escaneo; **sigue sin borrar ni sugerir borrar** | P2 | M |
+| U9 | Como coleccionista que usa el móvil o la tablet en el sofá, quiero que la UI funcione en pantalla pequeña, para revisar Pendientes sin ampliar | Probado a 360–414 px y tablet; 1 columna; objetivos táctiles suficientes; sin desbordes | P1 | M |
+| U10 | Como equipo, quiero validar Pendientes y el panel de inicio con 3–5 coleccionistas reales antes de implementarlos, para no rediseñar sobre una hipótesis | Guion de tareas, métricas y decisión adoptar/adaptar/descartar registrada en una ficha §13 | P1 | S |
+
+#### Fichas detalladas de la Épica U
+
+**U1 — Pendientes compacto, con sugerencia a la vista y acciones por lotes (P0, L)**
+
+- **Historia.** Como coleccionista que acaba de importar su colección, quiero revisar los archivos sin clasificar en una vista compacta que me muestre el nombre completo, lo que el sistema detectó y su mejor sugerencia, y que me deje resolver varios a la vez, para clasificar 14 archivos en minutos y no en una tarde.
+- **Problema (evidencia).** En la captura de `/ui/pendientes` cada tarjeta mide unos 340 px de alto y casi toda es un hueco vacío donde iría la portada (CBR no tiene miniatura, ver B2); el título sale truncado («La Imposible Patrulla X (144-1…»); los 14 archivos repiten el mismo campo de búsqueda y el mismo «Ignorar». Con los nombres reales hay claros patrones («La Patrulla X Omnigold N», «Marvel Gold - La Patrulla-X Original N») que el humano reconoce de un vistazo.
+- **Criterios de aceptación.**
+  1. Dado un archivo sin portada, cuando se lista, entonces la tarjeta **no reserva** el hueco de la miniatura: ocupa solo lo necesario y muestra el **nombre completo** (con salto de línea o `title`/expandible, nunca recortado sin remedio).
+  2. Dada una sugerencia del matcher (B12), cuando existe, entonces se ve **sin interacción previa**, con serie, año, puntuación y número precargado, y un botón «Sí, es esta».
+  3. Dados varios archivos seleccionados, cuando el usuario elige una serie, entonces se asignan **todos** con una sola confirmación que muestra la lista de lo que va a pasar («3 archivos → La Patrulla-X»). **Nunca** se asigna a una serie por inferencia automática (B12).
+  4. Dado un archivo ignorado, cuando el usuario se equivoca, entonces existe **Deshacer** inmediato y una vista «Ignorados» desde la que recuperarlo (`files.review_dismissed` ya existe: **sin migración**).
+  5. «Ignorar» tiene un peso visual claramente **menor** que la acción principal y no está pegado a ella.
+  6. La asignación por lotes reutiliza `ReviewService.assign_to_series` tal cual, archivo a archivo: conserva las defensas de B15 (`ColisionDeEdicion`, 409 en español) y el aprendizaje de alias de B13. Si un archivo del lote falla, **los demás se procesan** y el resultado lo dice por archivo.
+  7. Agrupar sugiere, no decide: la agrupación por patrón de nombre es **ayuda visual**; asignar sigue siendo una decisión del usuario.
+- **Fuera de alcance.** Autoasignación, crear series desde Pendientes (es C0/Descubrir), ampliar el parser (B14/RF-06).
+- **Pruebas.** Unitarias sobre la plantilla (nombre íntegro, sin hueco sin portada); API del lote con éxito parcial; regresión de «Ignorar → Deshacer»; verificación en navegador con los 14 archivos reales de `_Unsorted`.
+- **Dependencias y riesgos.** B2, B12, B13, B15. Riesgo: un lote que aprende un alias incorrecto lo fija (lección del propio backlog: «el automatismo no crea el error, lo fija»), así que el aprendizaje de alias en lote debe mostrar qué patrón se va a recordar antes de confirmar.
+
+**U2 — Panel de inicio con primeros pasos y contadores honestos (P0, M)**
+
+- **Historia.** Como coleccionista recién instalado, quiero que la pantalla de inicio me diga qué hacer primero y no me enseñe cifras contradictorias, para llegar a ver mi colección organizada sin saber nada de la arquitectura.
+- **Problema (evidencia).** El panel muestra «5 series en la biblioteca», «0 % completitud estimada» y «0 números pendientes» y debajo «Aún no hay series importadas». Hay dos buscadores casi idénticos («Descubre tu próxima serie» y el de Deseados). Un 0 % en un sistema recién instalado desmotiva y no es una medida válida (el propio backlog advierte que el porcentaje mezcla formatos y fuentes).
+- **Criterios de aceptación.**
+  1. Si no hay catálogo, los contadores de completitud **no se pintan** (ni 0 %): se sustituyen por el estado vacío.
+  2. El estado vacío muestra un **checklist de pasos derivados del estado real** (no marcados a mano): (1) dar de alta una serie, (2) revisar los N archivos pendientes, (3) conectar una fuente de descarga, (4) aceptar el aviso legal si hay descargas. Cada paso se tacha solo cuando la condición se cumple.
+  3. Hay **una** acción principal visible (el siguiente paso pendiente) y las demás son secundarias.
+  4. Un único buscador en la pantalla, con la etiqueta de lo que hace («Buscar para dar de alta» o «Buscar para añadir a deseados», no ambas).
+  5. Si hay archivos en Pendientes, el panel lo dice con el número real y enlaza a ellos.
+  6. Los números que se muestren cuentan lo mismo que el resto de pantallas (una sola fuente de verdad en el servicio, no un cálculo paralelo en la plantilla).
+- **Fuera de alcance.** Rediseñar el cálculo de huecos (C6/B22) o arreglar la mezcla de formatos del porcentaje global.
+- **Pruebas.** Servicio con BD vacía, con series sin archivos, con pendientes y con todo configurado; cada paso del checklist por separado.
+- **Dependencias.** C1, E1, B2, D11. Se valida con U10 antes de pulir el diseño.
+
+**U3 — Deseados con estados honestos y duplicados controlados (P1, M)**
+
+- **Historia.** Como coleccionista, quiero que la lista de deseos me diga con claridad si se está buscando, si no hay nada o si algo falla, y que no me deje acumular filas idénticas, para confiar en que «marcar y olvidarme» funciona.
+- **Problema (evidencia).** Cinco filas «BPRD» y una «The DC Universe by Mike Mignola» aparecen con el badge «BUSCANDO…» y el texto «No se encontró nada en las fuentes activas»: dos mensajes incompatibles a la vez. No hay indicación de duplicado ni de qué hacer. (No se ha podido ver si son números distintos de una misma serie o añadidos repetidos; la ficha debe empezar comprobándolo en la BD.)
+- **Criterios de aceptación.**
+  1. Estados mutuamente excluyentes y legibles: «En cola», «Buscando ahora», «Sin resultados (último intento: fecha)», «Descargando», «En tu biblioteca», «Falló: causa». «Buscando» no coexiste con «sin resultados».
+  2. Cada motivo de D9 trae su **siguiente paso** con enlace (p. ej. «No hay ninguna fuente activa» → `/ui/ajustes`; «Cliente de descarga inaccesible» → Ajustes + diagnóstico de red A10).
+  3. Al añadir algo ya presente, el sistema lo **dice** («Ya lo tienes en deseados») en vez de crear otra fila. La wishlist no tiene `UNIQUE` hoy: decidir en la ficha si se resuelve en el servicio o con una restricción, siguiendo la regla del backlog de «reconciliación amable, no excepción cruda».
+  4. Las filas de una misma serie se **agrupan** con un recuento y se pueden expandir.
+  5. «Buscar ahora» (D10) sigue gateado por el aviso legal y conserva el token firmado.
+- **Fuera de alcance.** Cambiar la lógica de búsqueda del orquestador.
+- **Pruebas.** Matriz estado × motivo → texto y enlace; alta repetida; agrupación con y sin duplicados.
+- **Dependencias.** D1, D9, D10, A10.
+
+**U4 — Legibilidad: contraste y tamaño mínimos (P1, S)**
+
+- **Historia.** Como coleccionista que usa la UI en una tablet con reflejos o con poca vista, quiero que todo texto sea legible, para no perderme la información secundaria.
+- **Problema (medido).** Ver la cabecera de la épica: `--ink-faint` no llega a 4,5:1 en modo claro (3,05 y 2,82:1) y roza el límite en oscuro (4,47 y 4,14:1); `--cyan` (2,84:1) y `--ok` (3,83:1) fallan como texto sobre `--paper`. La hoja usa tamaños de `.72rem` a `.8rem` (≈ 11,5–12,8 px) en varios sitios.
+- **Criterios de aceptación.**
+  1. Todo texto normal cumple **≥ 4,5:1** y el texto grande **≥ 3:1** en **ambos** temas, calculado sobre el fondo real en que se pinta. Los elementos de interfaz no textuales relevantes (bordes de campos, iconos de estado) cumplen **≥ 3:1**.
+  2. Se define un **tamaño mínimo** para el texto informativo (propuesta del equipo: 14 px; WCAG no fija un tamaño mínimo, es una decisión de producto, a validar con U10).
+  3. El estado nunca se transmite **solo por color** (los semáforos llevan texto).
+  4. Hay una prueba automática (sin navegador) que lee las variables de `web.css` y falla si un par texto/fondo declarado baja del umbral.
+- **Fuera de alcance.** Rediseño de la paleta; solo se ajustan los tonos que fallan, conservando la identidad.
+- **Pruebas.** El test de contraste descrito; revisión manual con las capturas actuales como línea base.
+- **Dependencias.** Ninguna. Es barata y desbloquea el resto.
+
+**U5 — Ajustes guiados con modo básico y avanzado (P1, M)**
+
+- **Historia.** Como coleccionista que no sabe qué es Prowlarr ni `host.docker.internal`, quiero que Ajustes me pregunte qué quiero conectar y me lleve de la mano, para configurar mis fuentes sin leer párrafos técnicos.
+- **Problema (evidencia).** `/ui/ajustes` es una cuadrícula de siete tarjetas con párrafos largos en letra pequeña (fuentes, Comic Vine, Prowlarr, Transmission, aMule, Seguridad, Avisos) y todas al mismo nivel; las URL por defecto con `host.docker.internal` aparecen en primer plano.
+- **Criterios de aceptación.**
+  1. Entrada de inicio con objetivos en lenguaje del usuario («Quiero enriquecer mis tebeos», «Quiero que se descarguen solos», «Quiero un aviso al móvil», «Quiero protegerlo con contraseña»), cada uno abre solo lo necesario.
+  2. Lo técnico (URLs, puertos, `host.docker.internal`, tokens) vive en una sección **Avanzado** plegada por defecto.
+  3. «Probar conexión» devuelve una causa y un paso siguiente en español (reutiliza D9/A10), sin excepciones ni URLs en crudo.
+  4. Cada tarjeta dice **en una línea** para qué sirve y si es opcional.
+  5. Se mantiene el comportamiento de D11: guardar aplica al instante, los secretos nunca se devuelven en claro, y activar contraseña sin credencial sigue rechazándose (A6).
+- **Fuera de alcance.** Cambiar el mecanismo de overrides en caliente.
+- **Pruebas.** Cada objetivo abre los campos correctos; el modo avanzado conserva todos los campos; regresión de secretos y del guardarraíl de A6.
+- **Dependencias.** D11, A6, A10, D9.
+
+**U6 — Estado que dice la verdad, en llano (P1, S)**
+
+- **Historia.** Como coleccionista, quiero que la pantalla de Estado me diga si debo preocuparme y qué hacer, sin términos internos, para fiarme de ella.
+- **Problema (evidencia).** Aparece «Todo bien» en verde junto a un aviso «fichero /run/vpn-state/wg0.json ausente — el host aún no ha escrito el estado (o el timer no corre)» y una fila «VPN: Sin datos». El semáforo global contradice los parciales y el aviso usa una ruta interna.
+- **Criterios de aceptación.**
+  1. El semáforo global es el **peor** de los parciales: con «VPN: sin datos» no puede decir «Todo bien»; muestra «Atención».
+  2. Cada aviso tiene tres partes: qué pasa, por qué importa y qué hacer, sin rutas internas en el texto principal (la ruta puede ir en un detalle plegado «Ver detalle técnico»).
+  3. «Sin datos» se distingue de «sin protección»: el primero no implica riesgo, el segundo sí; los textos lo dicen.
+  4. Se conserva la distinción de E6 (`unreachable` / `migration_required` / `schema_incompatible` / `ok`).
+- **Fuera de alcance.** Cambiar cómo se calcula el healthcheck.
+- **Pruebas.** Tabla de combinaciones de estados → semáforo y texto.
+- **Dependencias.** E1, E6, D4.
+
+**U7 — Navegación y vocabulario coherentes (P2, S)**
+
+- **Historia.** Como coleccionista, quiero que cada nombre del menú signifique una sola cosa, para encontrar lo que busco sin probar a ciegas.
+- **Problema (evidencia).** Hay ocho entradas planas; «Biblioteca» y «Mi biblioteca» suenan igual y la segunda es en realidad la auditoría (la página se titula «Revisión de mi biblioteca»). «Deseados», «Pendientes» y «Descubrir» no explican su relación.
+- **Criterios de aceptación.**
+  1. Un término por concepto en toda la UI y la documentación; «Mi biblioteca» pasa a un nombre que diga lo que hace (p. ej. «Revisión»).
+  2. Las entradas se agrupan por tarea (Mi colección · Añadir · Sistema) o se justifica por escrito por qué siguen planas.
+  3. El título de cada página coincide con su entrada de menú.
+  4. Glosario de vocabulario de producto en `CLAUDE.md`.
+- **Pruebas.** Test de plantillas: el título de cada ruta coincide con su enlace de menú.
+- **Dependencias.** Ninguna.
+
+**U8 — Revisión de biblioteca con resumen y prioridad (P2, M)**
+
+- **Historia.** Como coleccionista con duplicados, quiero que la revisión de mi biblioteca me dé un resumen y ordene lo que más espacio recupera, para saber por dónde empezar.
+- **Problema (evidencia).** La pantalla muestra 1.542 tebeos, 432 comparados a fondo, 6 carpetas repetidas y **200** duplicados exactos que liberarían 7,5 GB, pero en una lista larga sin resumen ni orden por ahorro, y el aviso «puede tardar un rato» no va acompañado de progreso.
+- **Criterios de aceptación.**
+  1. Un **resumen arriba**: GB recuperables, nº de grupos por tipo y fecha de la última revisión.
+  2. Los grupos se ordenan por ahorro (mayor primero) y se pueden filtrar por tipo.
+  3. Mientras se revisa hay un **progreso real** (archivos leídos / total), no solo un aviso.
+  4. **Invariante de B16 intacta:** solo lectura. No hay botón de borrar ni de mover, ni se sugiere qué borrar; solo se ordena por ahorro, que es información, no una recomendación de acción.
+  5. Las rutas largas se muestran legibles (nombre destacado, carpeta secundaria) y se pueden copiar.
+- **Pruebas.** Servicio con grupos de distinto tamaño; test de que no se toca el disco (el de mtimes de B16 se mantiene).
+- **Dependencias.** B16.
+
+**U9 — UI utilizable en móvil y tablet (P1, M)**
+
+- **Historia.** Como coleccionista que usa el móvil o la tablet en el sofá, quiero que la UI se adapte a pantalla pequeña, para revisar y aprobar sin ampliar ni desplazarme de lado.
+- **Problema.** La visión del producto («desde el móvil o el sofá», C1) no está comprobada: todas las capturas son de escritorio ancho, con una columna central estrecha y mucho espacio lateral vacío.
+- **Criterios de aceptación.**
+  1. Probado a 360, 390 y 414 px de ancho y en tablet (768 px), en vertical y horizontal.
+  2. Pendientes y Biblioteca en **una columna** en móvil, sin desbordes horizontales.
+  3. Los objetivos táctiles cumplen el mínimo de WCAG 2.2 AA (24×24 px CSS) y, como objetivo de diseño del equipo, un tamaño cómodo mayor para los botones principales.
+  4. El menú se pliega a un patrón móvil legible.
+  5. Navegador de referencia incluido el Chromium de la propia Pi.
+- **Pruebas.** Capturas por ancho como regresión visual manual; test de plantillas con `<meta viewport>` y sin anchos fijos en los componentes críticos.
+- **Dependencias.** U1 (la parte más afectada), U4.
+
+**U10 — Validar con coleccionistas antes de rediseñar (P1, S)**
+
+- **Historia.** Como equipo, quiero observar a 3–5 coleccionistas reales resolviendo tareas en Pendientes y en el primer arranque, para decidir con datos qué rediseñar.
+- **Por qué.** Este análisis es una revisión de expertos sobre capturas; encuentra problemas probables, no mide su gravedad real. El propio backlog ya aprendió que «antes de añadir automatismo sobre una heurística hay que medirla contra datos reales».
+- **Criterios de aceptación.**
+  1. Guion de tareas: «clasifica estos 14 archivos», «encuentra por qué no se descarga X», «di si tu sistema está bien».
+  2. Métricas: tiempo por tarea, errores, abandonos y qué dicen en voz alta; muestra pequeña, sin pretensión estadística.
+  3. Participantes con el perfil de «El Coleccionista» (no técnico, miles de CBZ/CBR), no desarrolladores.
+  4. Resultado registrado como ficha §13 en `docs/design/` con decisión adoptar/adaptar/descartar por cada hallazgo de U1–U9 y su versión de la UI evaluada.
+  5. Se hace **antes** de implementar U1 y U2 y no bloquea U4 y U6, que son correcciones objetivas.
+- **Dependencias.** Ninguna.
+
+#### Orden de ataque sugerido
+
+1. **U4** (contraste, S) y **U6** (Estado, S): correcciones objetivas, baratas y sin riesgo de producto.
+2. **U10** en paralelo: validar antes de invertir en U1 y U2.
+3. **U1** y **U2** (P0): la mayor fricción y la primera impresión.
+4. **U3**, **U5**, **U9** (P1).
+5. **U7** y **U8** (P2).
+
+**Regla de la épica:** ninguna historia de la U cambia la lógica de negocio. Reutilizan los servicios existentes (`ReviewService`, `Orchestrator`, `RuntimeSettingsService`, `LibraryAudit`); si una necesita lógica nueva, se registra aparte.
+
 ## Deuda técnica registrada (peer review v2, hallazgos medios)
 
 Sin arreglar todavía — nombrados aquí a propósito para que no vuelvan a caer
