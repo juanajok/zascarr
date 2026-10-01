@@ -20,6 +20,25 @@ pytestmark = pytest.mark.skipif(
 )
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "diagnostico-red.sh"
+REPO = SCRIPT.parents[1]
+
+
+def quitar_env_de_prueba(tmp_path: Path) -> None:
+    """`_comun.sh` enlaza `REPO/.env` al `ENV_FILE` que ve el script. Con un
+    `ENV_FILE` temporal eso deja un **enlace roto en la raíz del repo** en cuanto
+    pytest borra el temporal — y `get_settings()` lee `.env` desde el cwd, así que
+    puede ensuciar otros tests (los de Postgres, por ejemplo). Se quita, pero
+    **solo si apunta al temporal de esta prueba**: un `.env` de verdad no se
+    toca."""
+    enlace = REPO / ".env"
+    if not enlace.is_symlink():
+        return
+    try:
+        destino = os.readlink(enlace)
+    except OSError:
+        return
+    if destino.startswith(str(tmp_path)):
+        enlace.unlink()
 
 DOCKER_STUB = r"""#!/usr/bin/env bash
 # Doble de docker: responde por forma del argumento, no por coincidencia exacta.
@@ -146,10 +165,15 @@ def entorno(tmp_path: Path):
                 entorno_vars.pop(clave, None)
             else:
                 entorno_vars[clave] = valor
-        return subprocess.run(
+        resultado = subprocess.run(
             ["bash", str(SCRIPT), *(args or [])],
             capture_output=True, text=True, env=entorno_vars, timeout=60, check=False,
         )
+        # `_comun.sh` deja `REPO_DIR/.env` apuntando al ENV_FILE temporal: se
+        # quita antes de que pytest borre el temporal y quede un enlace roto en
+        # la raíz del repo (que `get_settings()` leería desde el cwd).
+        quitar_env_de_prueba(tmp_path)
+        return resultado
 
     ejecutar.registro = registro  # type: ignore[attr-defined]
     return ejecutar
