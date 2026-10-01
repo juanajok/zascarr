@@ -16,56 +16,75 @@ htmx 4 y `/estado`. Inventario asociado: `docs/design/ui-migracion.md`.
 | Tema | claro (todas las pantallas) y **oscuro** (panel, Pendientes, Estado, Ajustes y login, en escritorio), con `prefers-color-scheme` emulado |
 | Captura | página completa (hasta 6.000 px de alto); los pasos del caso 409 son del *viewport* |
 | Datos | **sintéticos** (`sembrar.py`): 3 series inventadas, 6 pendientes, 5 deseados, un duplicado exacto en disco. Nada procede de la biblioteca de nadie. |
+| Entorno | stack de Compose **aislado** (`zascarr-uibase`, app en `127.0.0.1:18000`), ver «Aislamiento» |
 | Fuentes tipográficas | las del sistema que hace la captura (Impact no está instalada: la tipografía de cartel cae a la sustituta) |
 
-Aislamiento: Postgres y Redis propios en contenedores con el *compose* del repo; **fuentes externas de
-metadatos desactivadas** en Ajustes antes de arrancar la app (`sembrar.py`), integraciones de
-descarga desactivadas (por defecto) y sus URL apuntadas a `127.0.0.1:1` para que ni siquiera se
-intente tocar un Transmission o un aMule del equipo. El aviso legal se acepta **a mano** durante la
-captura (con un `POST` real), como lo haría un usuario.
+## Aislamiento: el ensayo NO puede tocar una instalación real
+
+El `docker-compose.yml` del proyecto fija `container_name` (`zascarr-db`, `zascarr-cache`,
+`zascarr-orquestador`) y publica los puertos 5432, 6379 y 8000. **Esos nombres son globales en el
+daemon de Docker**: un *worktree* y unas carpetas de datos distintas no bastan, y un
+`docker stop zascarr-db` o un `docker restart zascarr-orquestador` actuaría sobre la instalación real
+si existe. Por eso el ensayo **no usa ninguno de esos nombres**:
+
+| | Producción (compose del proyecto) | Ensayo (`compose.ensayo.yml`) |
+|---|---|---|
+| Proyecto de Compose | `zascarr` | `zascarr-uibase` (también red e imagen) |
+| Contenedores | `zascarr-db`, `zascarr-cache`, `zascarr-orquestador` | `zascarr-uibase-db`, `-cache`, `-app` |
+| Puertos publicados | 5432, 6379, 8000 | **ninguno** para Postgres y Redis; **`127.0.0.1:18000`** para la app |
+| Datos | `ZASCARR_DATA_DIR` y las carpetas `HOST_*` reales | carpeta **nueva** de ensayo, marcada con `.ui-baseline` |
+
+`ensayo.sh` lo impone, no lo recomienda: antes de arrancar **resuelve el Compose combinado** y aborta si
+algún `container_name` es global o no empieza por `zascarr-uibase-`, si algún puerto publicado no es
+`127.0.0.1:18000`, si algún montaje cae fuera de la carpeta de ensayo o si la red es global; rechaza
+carpetas de datos relativas, dentro del repositorio, bajo `/var/lib/zascarr`, `/opt/zascarr`, `/media`,
+`/srv` o `/home/media`, o que existan, no estén vacías y no tengan la marca `.ui-baseline`; y rechaza
+arrancar si el puerto 18000 está ocupado o si ya hay un stack de ensayo. **Todas las operaciones sobre
+contenedores se hacen con `ensayo.sh dc …`** (que repite esas comprobaciones); el procedimiento no
+contiene ningún `docker stop|start|restart <nombre>` global.
+
+Las dos herramientas que escriben o hacen `POST` se protegen además por su cuenta:
+
+- `sembrar.py` **se niega a escribir** salvo que se cumplan las tres cosas: `ZASCARR_UI_BASELINE=ensayo`
+  en el entorno del contenedor (lo pone `compose.ensayo.yml`), la marca `/media/library/.ui-baseline`
+  (la crea `ensayo.sh`) y una **base de datos vacía** (0 series y 0 ficheros).
+- `capturar.py` solo acepta un destino local, **rechaza el puerto 8000** y, en la fase con `POST`
+  (`principal`), comprueba antes que el servidor contiene los datos sintéticos de `sembrar.py`.
+
+Dentro del ensayo: **fuentes externas de metadatos desactivadas** en Ajustes antes de arrancar la app,
+integraciones de descarga desactivadas (por defecto) y sus URL apuntadas a `127.0.0.1:1` (el
+contenedor, no el equipo) para que ni se intente tocar un Transmission o un aMule. El aviso legal se
+acepta **a mano** durante la captura (con un `POST` real), como lo haría un usuario.
+
+Comprobado antes de publicarlo: los siete rechazos de carpeta de datos, los dos de `sembrar.py` (base
+no vacía; sin marca de entorno) y los dos de `capturar.py` (puerto 8000; destino no local); y el
+procedimiento completo se **repitió con este stack** (no con el anterior): resultados HTTP y cuerpo del
+409 idénticos, y 31 de las 37 capturas idénticas píxel a píxel. De las otras 6, cinco difieren solo en
+la hora de «Última comprobación» de `/estado` y una —`pendientes--movil`— en el orden de las tarjetas
+(se sembraron todas en una misma transacción, con la misma `imported_at`: probablemente el orden por
+`imported_at` es indeterminado entre empates). **Las capturas publicadas son las de esa repetición.**
 
 ## Cómo repetirlo
 
-Desde un *worktree* limpio en el commit inventariado (no toca tu `.env` ni tus datos):
+Desde un *worktree* limpio con esta rama (o con `docs/design/ui-baseline/` copiada sobre el commit
+`ab49c76`); **no toca tu `.env` ni tus datos** y puede convivir con una instalación real:
 
 ```bash
-git worktree add --detach /tmp/ui-base ab49c76 && cd /tmp/ui-base
-B=/tmp/ui-base-datos; mkdir -p $B/data/{postgres,redis,covers,vpn-state} $B/lib $B/dl
-cat > $B/.env <<EOT
-DB_PASSWORD=linea_base_local_no_usar
-ZASCARR_DATA_DIR=$B/data
-HOST_LIBRARY_DIR=$B/lib
-HOST_DOWNLOADS_DIR=$B/dl
-HOST_AMULE_INCOMING_DIR=$B/dl
-PUID=$(id -u)
-PGID=$(id -g)
-TZ=Europe/Madrid
-APP_LOCALE=es
-FORUM_ENABLED=false
-TRANSMISSION_URL=http://127.0.0.1:1
-AMULE_URL=http://127.0.0.1:1
-PROWLARR_URL=http://127.0.0.1:1
-EOT
-DC="docker compose --env-file $B/.env"
-$DC build zascarr && $DC up -d postgres redis
-$DC run --rm -T zascarr alembic upgrade head
-$DC run --rm -T zascarr python - < docs/design/ui-baseline/sembrar.py    # siembra + desactiva fuentes
-$DC up -d zascarr
-```
-
-(El *worktree* debe tener también `docs/design/ui-baseline/` de esta rama: cópialo o usa la rama.)
-
-```bash
-S=docs/design/ui-baseline; U=http://127.0.0.1:8000; OUT=/tmp/ui-base-capturas
-python3 $S/capturar.py principal $U $OUT          # pantallas, aviso legal y caso 409
-docker stop zascarr-db                             # BD caída con la app EN MARCHA
+git worktree add --detach /tmp/ui-base <esta-rama> && cd /tmp/ui-base
+export UI_BASE_DATOS=/tmp/ui-base-datos          # carpeta NUEVA (se comprueba)
+S=docs/design/ui-baseline; U=http://127.0.0.1:18000; OUT=/tmp/ui-base-capturas
+$S/ensayo.sh preparar                              # comprueba el aislamiento, levanta y siembra
+python3 $S/capturar.py principal $U $OUT           # pantallas, aviso legal y caso 409
+$S/ensayo.sh dc stop postgres                      # BD caída con la app EN MARCHA
 python3 $S/capturar.py bd-caida-en-marcha $U $OUT
-docker restart zascarr-orquestador                 # arranque con la BD caída (E6)
+$S/ensayo.sh dc restart zascarr                    # arranque con la BD caída (E6)
 python3 $S/capturar.py bd-caida-arranque $U $OUT
-docker start zascarr-db && $DC up -d --force-recreate zascarr
-printf '%s\n' "una contraseña de prueba" | $DC run --rm -T zascarr python -m zascarr.cli.seguridad fijar-contrasena
-$DC up -d --force-recreate zascarr
+$S/ensayo.sh dc start postgres && $S/ensayo.sh dc up -d --force-recreate zascarr
+printf '%s\n' "una contraseña de prueba" | $S/ensayo.sh dc run --rm -T zascarr \
+    python -m zascarr.cli.seguridad fijar-contrasena
+$S/ensayo.sh dc up -d --force-recreate zascarr
 python3 $S/capturar.py login $U $OUT
+$S/ensayo.sh bajar                                 # al terminar (los datos se quedan en UI_BASE_DATOS)
 ```
 
 `capturar.py` solo necesita `google-chrome` y el paquete `websockets` del Python del sistema; **no es
@@ -100,10 +119,15 @@ cualquier `4xx`/`5xx` de las rutas `hx-*` que no devuelvan un fragmento. **No se
 | BD caída, app **ya en marcha** | `200`, la página y su sondeo funcionan; «Error · Base de datos, Transmission, aMule, VPN» | `200` | **`500`** con el cuerpo `Internal Server Error` (texto plano) |
 | BD caída, app **arrancada así** (E6) | `200`, igual | `200` | **`503`** «Base de datos no lista … Consulta el estado del sistema» |
 
-Consecuencia para V3 (fragmento de contadores del menú): **no basta con el caso E6**. Con la BD caída
-y la app en marcha un `/ui/*` responde un `500` de texto plano, y htmx 4 **intercambia** los cuerpos
-de error: el fragmento debe devolver siempre `204`/vacío ante cualquier fallo, no solo en modo
-degradado (ver los criterios de V3).
+**Alcance de lo medido:** el `500` se observó **en `/ui/` (el panel)**; no se probaron las demás rutas
+`/ui/*`. Que las demás se comporten igual es una **deducción** (el único manejador de excepciones de
+BD de `main.py` cubre `ProgrammingError` con SQLSTATE `42P01`, no una conexión perdida) y **no está
+medida**.
+
+Consecuencia para V3 (fragmento de contadores del menú), como **requisito futuro** y no como medición:
+no basta con el caso E6; con htmx 4 **intercambiando** los cuerpos de error, el fragmento debe devolver
+`204`/vacío ante cualquier fallo, no solo en modo degradado. Se registra además como **defecto
+operativo independiente** (`docs/BACKLOG.md`, «V0: la BD cae con la app en marcha»).
 
 ### 3. Otras observaciones
 

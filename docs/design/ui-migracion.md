@@ -31,10 +31,13 @@ coincidía o faltaba, ordenado por impacto en el plan:
    `/legal`. **Consecuencia para V3/V9:** cualquier fragmento de menú o de estado que se añada
    (`/ui/_nav/estado`) cae bajo `/ui/*`, que en modo degradado devuelve un **503 HTML**; con htmx 4
    (ver punto 5) ese HTML acabaría pintado en el menú. **Medido en la línea base:** con la BD caída y
-   la app **ya en marcha**, `/ui/` responde un **`500` de texto plano** (`Internal Server Error`), y
-   solo con la BD caída **desde el arranque** responde el `503` descrito; `/estado` y `/api/health`
-   responden `200` en ambos casos. Por tanto el fragmento debe contemplar **cualquier** fallo, no
-   solo el modo degradado de E6. Hay que decidir explícitamente cómo se
+   la app **ya en marcha**, **`/ui/` (el panel)** responde un **`500` de texto plano**
+   (`Internal Server Error`), y solo con la BD caída **desde el arranque** responde el `503` descrito;
+   `/estado` y `/api/health` responden `200` en ambos casos. **No se midieron las demás rutas
+   `/ui/*`**: que respondan igual es una deducción (el único manejador de BD de `main.py` cubre
+   `ProgrammingError` `42P01`, no una conexión perdida). Como requisito, el fragmento debe contemplar
+   **cualquier** fallo, no solo el modo degradado de E6. Defecto operativo registrado aparte en el
+   BACKLOG. Hay que decidir explícitamente cómo se
    comporta el fragmento con la BD caída, y la decisión «las URL no cambian» **incluye** que `/estado`
    se queda en `/estado`.
 2. **La página estática `/` ya no existe.** `main.py` registra `GET /` como redirección 307 a `/ui/`
@@ -299,7 +302,7 @@ acciones de riesgo** y tiene su propio flujo `/ui/legal`).
 
 | Historia | Antes | Ahora | Por qué |
 |---|---|---|---|
-| V0 | S | S | En curso: inventario terminado, línea base de capturas pendiente. |
+| V0 | S | S | Inventario y línea base terminados; pendiente de aprobar la PR #60. |
 | V1 | M | **M** (confirmada) | 31 de 52 `font-size` están por debajo de 14 px (`.875rem`), 11 `color: var(--cyan\|ok\|warn)` sobre texto y 18 usos de `--ink-faint` → trabajo acotado y mecánico; la prueba de contraste es nueva. **Corregir `.badge.hot` oscuro** (§2.17). |
 | V2 | M | **M** | Mayormente crear componentes (§3), no renombrar. Las macros se registran en `crear_templates()`. |
 | V3 | M | **M, con riesgo** | Cambiar `base.html` rompe 2 pruebas fijadas a propósito; el fragmento de contadores necesita decidir su comportamiento con la BD caída (§2.1) y no existe `aria-current`. |

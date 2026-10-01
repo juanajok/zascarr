@@ -5,7 +5,7 @@
 Herramienta de desarrollo, FUERA del paquete: no entra en la imagen ni en `pyproject.toml`.
 Necesita `google-chrome` y el paquete `websockets` del Python del sistema (nada más).
 
-    python3 capturar.py FASE URL_BASE DIRECTORIO_DE_SALIDA
+    python3 capturar.py FASE URL_BASE DIRECTORIO_DE_SALIDA   # URL_BASE = http://127.0.0.1:18000
 
 Fases (cada una se ejecuta con el estado del entorno que su nombre indica, ver README.md):
     principal   BD disponible, sin contraseña: pantallas, aviso legal y caso 409
@@ -116,6 +116,23 @@ class Navegador:
     async def cerrar(self) -> None:
         await self.ws.close()
         self.proc.terminate()
+
+
+async def comprobar_entorno(nav: Navegador, base: str, fase: str) -> None:
+    """Rechaza un destino que no parezca el entorno de ensayo (esta herramienta hace POST)."""
+    from urllib.parse import urlsplit
+    u = urlsplit(base)
+    if u.hostname not in ("127.0.0.1", "localhost"):
+        sys.exit(f"capturar.py: solo acepta un destino local, no {u.hostname!r}.")
+    if (u.port or 80) == 8000:
+        sys.exit("capturar.py: el puerto 8000 es el de una instalación real; el entorno de "
+                 "ensayo usa el 18000 (ver ensayo.sh).")
+    if fase == "principal":
+        # Fase con POST: además, el contenido debe ser el sintético que siembra sembrar.py.
+        await nav.ir(base + "/ui/biblioteca", espera=0.3)
+        if not await nav.js("document.body.innerText.includes('Los Guardianes del Alba')"):
+            sys.exit("capturar.py: ese servidor no contiene los datos sintéticos de ensayo; "
+                     "no hago ningún POST contra él.")
 
 
 def post_form(base: str, ruta: str, campos: dict) -> int:
@@ -259,6 +276,7 @@ async def main() -> None:
         datos["navegador"] = nav.version.get("Browser")
         datos["user_agent"] = nav.version.get("User-Agent")
         datos["zoom"] = "100 % (factor de escala del dispositivo 1)"
+        await comprobar_entorno(nav, base, fase)
         if fase == "principal":
             await fase_principal(nav, base, salida, datos)
         elif fase.startswith("bd-caida"):
