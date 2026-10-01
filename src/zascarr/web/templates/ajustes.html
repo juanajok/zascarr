@@ -185,13 +185,21 @@
       </label>
       <p class="ajustes-hint">Telegram solo necesita el token del bot y el chat ID: ZascArr construye la URL de su API, así que el campo «URL» se ignora en ese caso.</p>
       <label class="legal-checkbox">
+        <input type="checkbox" name="webhook_incluir_nombres" value="true" {% if webhook_incluir_nombres %}checked{% endif %}>
+        Incluir los nombres de los ficheros en el aviso
+      </label>
+      <p class="ajustes-hint">Sin marcar, el aviso solo lleva el recuento. Los nombres se pueden leer en un tema público de ntfy (o en cualquier destino compartido), así que márcalo solo si el destino es privado.</p>
+      <label class="legal-checkbox">
         <input type="checkbox" name="webhook_enabled" value="true" {% if webhook_enabled %}checked{% endif %}>
         Activar avisos de importación
       </label>
       <div class="ajustes-actions">
         <button type="submit">Guardar</button>
+        <button type="button" hx-post="/ui/ajustes/probar/avisos" hx-include="closest form"
+                hx-target="#prueba-avisos" hx-swap="innerHTML">Enviar aviso de prueba</button>
       </div>
     </form>
+    <div id="prueba-avisos"></div>
     <div id="resultado-avisos"></div>
   </fieldset>
 

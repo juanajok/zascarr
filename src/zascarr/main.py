@@ -1,6 +1,7 @@
 """ZascArr — Entry point FastAPI."""
 import asyncio
 import contextlib
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -13,6 +14,14 @@ from sqlalchemy.exc import ProgrammingError
 from zascarr.config import get_settings
 
 logger = structlog.get_logger()
+
+# `httpx` registra cada petición a nivel INFO con la URL COMPLETA, y en Telegram
+# esa URL lleva el token del bot (en ntfy, el tema hace de contraseña). La app no
+# configura `logging`, así que hoy no se ven — pero cualquier manejador raíz o
+# `--log-config` los sacaría. Se dejan explícitamente en WARNING para que no
+# dependa de la configuración de fuera.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 STATIC_DIR = Path(__file__).parent / "static"
 

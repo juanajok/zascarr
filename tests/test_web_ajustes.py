@@ -295,3 +295,154 @@ class TestProbar:
             })
         assert "✗" in r.text
         assert "0.0.0.0" not in r.text
+
+
+class TestAvisos:
+    """E4: validación al guardar, botón de prueba con la causa y sin secretos."""
+
+    def _post_guardar(self, **campos):
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            client = TestClient(app)
+            return client.post("/ui/ajustes/guardar/avisos", data={
+                "webhook_type": "generic", "webhook_url": "https://ntfy.sh/mi-tema",
+                "webhook_enabled": "true", **campos,
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+    def test_tipo_desconocido_se_rechaza_al_guardar(self, restaurar_settings):
+        r = self._post_guardar(webhook_type="ntfyy")
+        assert r.status_code == 200
+        assert "no reconocido" in r.text
+        assert "ntfyy" in r.text
+
+    def test_url_no_http_se_rechaza(self, restaurar_settings):
+        r = self._post_guardar(webhook_url="file:///etc/passwd")
+        assert "http://" in r.text
+
+    def test_url_sin_host_se_rechaza(self, restaurar_settings):
+        r = self._post_guardar(webhook_url="https://")
+        assert "http://" in r.text
+
+    def test_guardar_valido_aplica_y_guarda_el_recuento(self, restaurar_settings):
+        r = self._post_guardar(webhook_incluir_nombres="true")
+        assert "guardado" in r.text.lower()
+        assert get_settings().webhook_url == "https://ntfy.sh/mi-tema"
+        assert get_settings().webhook_incluir_nombres is True
+
+    def test_sin_marcar_no_incluye_nombres(self, restaurar_settings):
+        r = self._post_guardar()
+        assert "guardado" in r.text.lower()
+        assert get_settings().webhook_incluir_nombres is False
+
+    def test_probar_avisos_muestra_la_causa_sin_el_token(self, restaurar_settings, monkeypatch):
+        import httpx as _httpx
+        token = "123456789:AA-token-distintivo-de-prueba"
+        get_settings().webhook_type = "telegram"
+        get_settings().webhook_url = ""
+        get_settings().webhook_token = token
+        get_settings().webhook_chat_id = "42"
+
+        async def _falla(self, titulo, cuerpo):
+            # En crudo, el error llevaría la URL con el token dentro.
+            raise _httpx.ConnectError(f"https://api.telegram.org/bot{token}/sendMessage")
+
+        monkeypatch.setattr("zascarr.services.notifier.Notifier._post", _falla)
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "telegram", "webhook_url": "", "webhook_chat_id": "42",
+        })
+
+        assert r.status_code == 200
+        assert "ConnectError" in r.text
+        assert token not in r.text
+        assert "AA-token-distintivo" not in r.text
+
+    def test_probar_avisos_usa_la_url_del_formulario(self, restaurar_settings, monkeypatch):
+        """Si no, quien cambia la URL y prueba sin guardar probaría la vieja."""
+        import httpx as _httpx
+        get_settings().webhook_type = "generic"
+        get_settings().webhook_url = "https://guardada.test/vieja"
+        capturadas = []
+
+        def handler(peticion):
+            capturadas.append(peticion)
+            return _httpx.Response(200)
+
+        real = _httpx.AsyncClient
+        monkeypatch.setattr(
+            "zascarr.services.notifier.httpx.AsyncClient",
+            lambda *a, **k: real(transport=_httpx.MockTransport(handler)),
+        )
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "generic", "webhook_url": "https://formulario.test/nueva",
+        })
+
+        assert r.status_code == 200
+        assert "enviado" in r.text.lower()
+        assert [str(c.url) for c in capturadas] == ["https://formulario.test/nueva"]
+
+    def test_probar_avisos_usa_el_secreto_guardado_si_el_campo_llega_vacio(
+            self, restaurar_settings, monkeypatch):
+        """Convención D11: la UI nunca rellena el secreto, así que el guardado
+        hace de reserva."""
+        import httpx as _httpx
+        get_settings().webhook_type = "ntfy"
+        get_settings().webhook_url = "https://ntfy.test/tema"
+        get_settings().webhook_token = "token-guardado"
+        cabeceras = []
+
+        def handler(peticion):
+            cabeceras.append(peticion.headers.get("authorization"))
+            return _httpx.Response(200)
+
+        real = _httpx.AsyncClient
+        monkeypatch.setattr(
+            "zascarr.services.notifier.httpx.AsyncClient",
+            lambda *a, **k: real(transport=_httpx.MockTransport(handler)),
+        )
+        TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "ntfy", "webhook_url": "https://ntfy.test/tema",
+            "webhook_token": "",
+        })
+
+        assert cabeceras == ["Bearer token-guardado"]
+
+    def test_probar_avisos_rechaza_tipo_desconocido(self, restaurar_settings):
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "ntfyy", "webhook_url": "https://x.test/y",
+        })
+        assert r.status_code == 200
+        assert "no reconocido" in r.text
+
+    def test_probar_avisos_rechaza_url_no_http(self, restaurar_settings):
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "generic", "webhook_url": "file:///etc/passwd",
+        })
+        assert r.status_code == 200
+        assert "http://" in r.text
+
+    def test_probar_avisos_exito(self, restaurar_settings, monkeypatch):
+        from zascarr.services.notifier import ResultadoEnvio
+
+        async def _ok(self):
+            return ResultadoEnvio(ok=True)
+
+        monkeypatch.setattr("zascarr.services.notifier.Notifier.aviso_de_prueba", _ok)
+        r = TestClient(app).post("/ui/ajustes/probar/avisos", data={
+            "webhook_type": "generic", "webhook_url": "https://x.test/y",
+        })
+
+        assert r.status_code == 200
+        assert "enviado" in r.text.lower()
+
+    @pytest.mark.sin_origen
+    def test_probar_avisos_cross_site_se_rechaza(self, restaurar_settings, monkeypatch):
+        """La ruta de prueba es un POST a /ui/*: se rechaza como los demás."""
+        settings = get_settings().model_copy(update={"auth_mode": "none", "secret_key": "s"})
+        monkeypatch.setattr("zascarr.services.auth.get_settings", lambda: settings)
+        client = TestClient(app, base_url="http://127.0.0.1:8000")
+
+        r = client.post("/ui/ajustes/probar/avisos", headers={"Origin": "https://mal.example"})
+
+        assert r.status_code == 403

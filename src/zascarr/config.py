@@ -192,6 +192,10 @@ class Settings(BaseSettings):
     # Solo telegram.
     webhook_chat_id: str = Field(default="")
     webhook_timeout: float = Field(default=5.0)
+    # ¿Incluir los NOMBRES de fichero en el cuerpo del aviso? Apagado por
+    # defecto: en un tema público de ntfy.sh los lee cualquiera y revelan qué se
+    # está descargando. Incluirlos es una decisión explícita.
+    webhook_incluir_nombres: bool = Field(default=False)
 
     # ── App ────────────────────────────────────────────────────────
     app_name: str = "ZascArr"
