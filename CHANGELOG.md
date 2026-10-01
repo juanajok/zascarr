@@ -3,6 +3,21 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [No publicado]
+
+### Corregido
+
+- **`BASE_URL` y `ALLOWED_HOSTS` puestos en el `.env` ahora llegan a la aplicación.**
+  Desde la 1.15.0 el changelog y `SECURITY.md` indican «añade `raspberrypi.local` a
+  `ALLOWED_HOSTS` en el `.env`», pero el contenedor no lee el `.env` y el compose no
+  pasaba esas dos variables: ponerlas no tenía ningún efecto. Era un callejón sin
+  salida real, porque `ALLOWED_HOSTS` **no se puede cambiar desde Ajustes**: quien
+  entraba por un nombre de equipo sin contraseña recibía `403` en todo y solo podía
+  arreglarlo editando `docker-compose.yml` a mano. Si ya las habías puesto en el
+  `.env`, empiezan a valer al volver a levantar el contenedor
+  (`docker compose up -d`). Una prueba nueva compara `.env.example`, el compose y
+  `Settings` para que no vuelva a pasar con otra variable.
+
 ## [1.15.1] — 2026-10-01
 
 Dos arreglos de la primera prueba con una biblioteca real (160 GB en una unidad de
