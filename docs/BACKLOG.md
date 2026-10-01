@@ -1024,7 +1024,7 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   6. El fragmento queda protegido por `AuthMiddleware` como el resto de `/ui/*` (A6) y no filtra datos si no hay sesión.
   7. El título de cada página coincide con su entrada de menú (U7); lo comprueba un test que recorre las rutas.
   8. «Cerrar sesión» y el aviso legal conservan su comportamiento actual.
-  9. **Fragmento con la BD degradada (E6):** hoy el middleware responde un **503 HTML** a cualquier `/ui/*` que no sea de diagnóstico, y **htmx 4.0.0 intercambia por defecto todo salvo 204/304**: sin tratamiento, ese HTML se pintaría dentro del menú. El fragmento debe declararse **junto a `_RUTAS_DIAGNOSTICO`** y, con la BD caída, responder **204** (que htmx no intercambia) o un fragmento vacío con 200 — se elige y se **verifica en el navegador**; nunca un 5xx con cuerpo HTML. **Medido en la línea base:** con la BD caída y la app **ya en marcha**, `/ui/*` responde un **`500` de texto plano**, no el `503` de E6 (que solo ocurre si la app arrancó sin BD); el fragmento debe cubrir **cualquier** excepción, no solo el modo degradado.
+  9. **Fragmento con la BD degradada (E6):** hoy el middleware responde un **503 HTML** a cualquier `/ui/*` que no sea de diagnóstico, y **htmx 4.0.0 intercambia por defecto todo salvo 204/304**: sin tratamiento, ese HTML se pintaría dentro del menú. El fragmento debe declararse **junto a `_RUTAS_DIAGNOSTICO`** y, con la BD caída, responder **204** (que htmx no intercambia) o un fragmento vacío con 200 — se elige y se **verifica en el navegador**; nunca un 5xx con cuerpo HTML. **Medido en la línea base:** con la BD caída y la app **ya en marcha**, **`/ui/` (el panel)** responde un **`500` de texto plano**, no el `503` de E6 (que solo ocurre si la app arrancó sin BD); las demás rutas `/ui/*` **no se midieron** (se deduce que igual) y el fragmento debe cubrir, como requisito, **cualquier** excepción, no solo el modo degradado. Defecto operativo registrado aparte (sección «V0: la BD cae con la app en marcha»), no parte de esta historia.
   10. **Tratamiento HTMX del fragmento:** `hx-trigger="load, every 30s"` con `hx-swap="innerHTML"` sobre un contenedor propio; un fallo de red o un `4xx`/`5xx` no puede dejar el menú sin enlaces (los contadores son un añadido, la navegación está en el marcado de `base.html`).
   11. **Se actualizan las pruebas que fijan el menú actual** (no se esquivan): `tests/test_web_dashboard.py` (l. 109–110: `'<nav class="topnav">'` y `'href="/estado">Estado</a>'`) y `tests/test_web_discovery.py` (l. 62). La ficha deja constancia de que cambian a propósito y por qué.
   12. `/estado` **sigue en `/estado`** y su entrada de menú apunta ahí.
@@ -1719,6 +1719,28 @@ impedirlas con una restricción. SQLAlchemy documenta que los métodos de result
 que exigen **una sola fila** lanzan `MultipleResultsFound` si hay más de una
 («Using the ORM Result methods», *SQLAlchemy Core exceptions*).
 >>>>>>> 2453d3b (BACKLOG: registra la deuda de B15 manual y consolida dos notas obsoletas)
+
+
+## Deuda técnica registrada (V0: la BD cae con la app en marcha, 2026-10-01)
+
+Encontrado al tomar la línea base de la UI (`docs/design/ui-baseline/README.md` §2). **Defecto operativo,
+independiente de la Épica V** (no se arregla dentro de ninguna historia de UI):
+
+- **Síntoma medido:** con la BD caída **después** de arrancar la app, `GET /ui/` (el panel) responde un
+  **`500` de texto plano** (`Internal Server Error`). Con la BD caída **desde el arranque** (E6) responde,
+  en cambio, el `503` en español «Base de datos no lista … consulta el estado del sistema». `/estado` y
+  `/api/health` responden `200` en ambos casos y siguen diagnosticando bien.
+- **Alcance:** solo se midió `/ui/`. Las demás rutas `/ui/*` y `/api/*` **no se probaron**; que fallen igual
+  es una deducción: el único manejador de excepciones de BD de `main.py` cubre `ProgrammingError` con
+  SQLSTATE `42P01` (esquema ausente), no una conexión perdida.
+- **Esperado:** el mismo diagnóstico que E6 (503, en español, enlace a `/estado`; en `/api/*`, JSON 503),
+  no un 500 crudo. **Primero medir** qué rutas fallan y con qué excepción, y recién entonces decidir si es
+  un manejador por tipo de excepción de conexión o un tratamiento en el `AuthMiddleware`.
+- **Por qué importa más con la UI nueva:** htmx 4 intercambia los cuerpos de error, así que cualquier
+  fragmento que se cargue solo (menú, estado) pintaría ese texto en pantalla (V3).
+- **Prueba de regresión pedida:** parar la BD con la app en marcha y comprobar el cuerpo y el código de
+  `/ui/`, `/ui/pendientes` y una ruta de `/api/`, con nombre del mecanismo (p. ej.
+  `test_bd_caida_tras_arrancar_no_devuelve_500_crudo`).
 
 ## Benchmarking competitivo (2026-09-21)
 

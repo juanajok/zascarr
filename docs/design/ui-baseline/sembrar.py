@@ -1,7 +1,12 @@
 # ruff: noqa: E501, UP031
-"""Siembra datos SINTÉTICOS para la línea base de la UI (V0). Se ejecuta DENTRO de la imagen:
+"""Siembra datos SINTÉTICOS para la línea base de la UI (V0). Se ejecuta DENTRO de la imagen,
+siempre a través de `ensayo.sh preparar` (no a mano):
 
-    docker compose run --rm -T zascarr python - < docs/design/ui-baseline/sembrar.py
+    ./ensayo.sh preparar     # comprueba el aislamiento y luego ejecuta este script
+
+ESCRIBE en la base de datos y en /media/library, así que se NIEGA a hacerlo salvo que se cumplan
+las tres condiciones de `comprobar_ensayo` (marca del stack de ensayo, marca en la biblioteca y base
+de datos vacía). Sin ellas no toca nada.
 
 Nada de aquí procede de la biblioteca de nadie: títulos inventados y portadas generadas con
 Pillow. Desactiva las fuentes externas de metadatos en Ajustes ANTES de que arranque la app
@@ -12,11 +17,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import os
+import sys
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from PIL import Image, ImageDraw
+from sqlalchemy import func, select
 
 from zascarr.database import async_session_factory, engine
 from zascarr.models import (
@@ -56,7 +64,25 @@ def crear_cbz(ruta: Path, titulo: str, color: tuple[int, int, int]) -> tuple[int
     return len(datos), hashlib.sha256(datos).hexdigest()
 
 
+async def comprobar_ensayo() -> None:
+    """Aborta (sin escribir nada) si el destino no es, con seguridad, el stack de ensayo."""
+    problemas = []
+    if os.environ.get("ZASCARR_UI_BASELINE") != "ensayo":
+        problemas.append("falta ZASCARR_UI_BASELINE=ensayo (lo pone compose.ensayo.yml)")
+    if not (BIBLIOTECA / ".ui-baseline").exists():
+        problemas.append(f"falta la marca {BIBLIOTECA}/.ui-baseline (la crea ensayo.sh)")
+    async with async_session_factory() as db:
+        series = (await db.execute(select(func.count(Series.id)))).scalar() or 0
+        ficheros = (await db.execute(select(func.count(File.id)))).scalar() or 0
+    if series or ficheros:
+        problemas.append(f"la base de datos NO está vacía ({series} series, {ficheros} ficheros)")
+    if problemas:
+        await engine.dispose()
+        sys.exit("sembrar.py se niega a escribir:\n  - " + "\n  - ".join(problemas))
+
+
 async def main() -> None:
+    await comprobar_ensayo()
     async with async_session_factory() as db:
         # Aislamiento: nada de red hacia fuentes externas.
         await RuntimeSettingsService(db).save({

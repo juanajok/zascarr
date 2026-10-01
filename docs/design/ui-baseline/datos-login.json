@@ -1,7 +1,7 @@
 {
   "fase": "login",
-  "base": "http://127.0.0.1:8000",
-  "fecha": "2026-10-01 23:14:56 CEST",
+  "base": "http://127.0.0.1:18000",
+  "fecha": "2026-10-01 23:52:19 CEST",
   "navegador": "Chrome/154.0.8037.92",
   "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
   "zoom": "100 % (factor de escala del dispositivo 1)"
