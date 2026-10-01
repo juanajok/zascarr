@@ -162,7 +162,8 @@ class TestEfectiva:
     def test_por_defecto(self, entorno, capsys):
         self._ajustar(entorno)
         assert cli.main(["efectiva"]) == cli.OK
-        assert self._salida(capsys) == {"exposicion": "local", "contrasena": "no", "base_url": ""}
+        assert self._salida(capsys) == {
+            "exposicion": "local", "contrasena": "no", "base_url": "", "base_url_publica": "no"}
 
     def test_abierto_a_la_red_con_contrasena(self, entorno, capsys):
         self._ajustar(entorno, zascarr_bind_address="0.0.0.0", auth_mode="password",
@@ -178,6 +179,20 @@ class TestEfectiva:
         cli.main(["efectiva"])
         datos = self._salida(capsys)
         assert datos["exposicion"] == "proxy" and datos["base_url"] == "https://vieja.ejemplo.org"
+
+    @pytest.mark.parametrize("url", [
+        "http://vieja.ejemplo.org", "https://vieja.ejemplo.org/zascarr", "http://192.168.1.50:8000"])
+    def test_una_url_historica_cuenta_como_publica_aunque_el_validador_nuevo_no_la_acepte(
+            self, entorno, capsys, url):
+        self._ajustar(entorno, base_url=url)
+        cli.main(["efectiva"])
+        assert self._salida(capsys)["base_url_publica"] == "si"
+
+    @pytest.mark.parametrize("url", ["", "http://localhost:8000", "http://127.0.0.1:8000/x"])
+    def test_una_local_no_es_publica(self, entorno, capsys, url):
+        self._ajustar(entorno, base_url=url)
+        cli.main(["efectiva"])
+        assert self._salida(capsys)["base_url_publica"] == "no"
 
     def test_no_imprime_el_hash_ni_nada_de_la_contrasena(self, entorno, capsys):
         self._ajustar(entorno, auth_mode="password", auth_password_hash="pbkdf2_sha256$600000$s$h")

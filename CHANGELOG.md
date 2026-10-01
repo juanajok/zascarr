@@ -19,9 +19,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   (`Intro` mantiene la que ya tenías) y **cierra las transiciones de una
   instalación existente**: si la aplicación ya estaba publicada fuera de localhost
   la **para** antes de nada que pueda fallar (escribir `127.0.0.1` en el `.env` no
-  cierra un puerto ya abierto); la **recrea** al final para que una contraseña nueva
+  cierra un puerto ya abierto) —y lo hace con cualquier instalación existente, también
+  si solo escucha en localhost tras un proxy, avisando de la interrupción—; si no
+  puede comprobar el estado de Docker, **se detiene** en vez de dar por cerrado; la **recrea** al final para que una contraseña nueva
   valga de inmediato (con `up -d` seguía aceptando la antigua); y deja **una sola**
-  dirección pública (la del `.env`; la que se hubiera guardado en Ajustes se retira) y
+  dirección pública (la del `.env`; la que se hubiera guardado en Ajustes se retira,
+  incluidas las antiguas con `http://` o subruta; el proxy que ya tuvieras configurado
+  sigue siendo cosa tuya) y
   cuenta la configuración **efectiva**, no lo que escribió en el `.env`. La dirección
   del proxy admitida es `https://dominio[:puerto]`, sin ruta. La regla de cortafuegos
   que sugiere usa la subred real de la máquina, no una deducida.

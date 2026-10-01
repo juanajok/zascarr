@@ -276,11 +276,18 @@ def docker_doble(tmp_path):
         '    elif [ -n "$base" ] && [[ "$base" != *localhost* ]]; then nivel=proxy\n'
         '    else nivel=local; fi\n'
         '    echo "exposicion=$nivel"; echo "contrasena=${DOBLE_CONTRASENA:-no}"\n'
-        '    echo "base_url=$base"; exit "${DOBLE_EFECTIVA_RC:-0}" ;;\n'
+        '    echo "base_url=$base"\n'
+        '    if [ -n "$base" ] && [[ "$base" =~ ^[a-z]+://([^/:]+) ]] \\\n'
+        '       && [[ "${BASH_REMATCH[1]}" != localhost ]] \\\n'
+        '       && [[ "${BASH_REMATCH[1]}" != 127.0.0.1 ]]; then\n'
+        '      echo "base_url_publica=si"; else echo "base_url_publica=no"; fi\n'
+        '    exit "${DOBLE_EFECTIVA_RC:-0}" ;;\n'
         '  *"cli.seguridad retirar-base-url"*)\n'
         '    cat > /dev/null; : > "$DOBLE_DB_BASE_URL"; exit "${DOBLE_RETIRAR_RC:-0}" ;;\n'
-        '  *"port zascarr-orquestador"*)\n'
-        '    printf "%s" "${DOBLE_PORT:-}"; exit "${DOBLE_PORT_RC:-0}" ;;\n'
+        # `docker ps -a …`: ¿existe el contenedor? (DOBLE_PS vacío = no existe)
+        '  *"ps -a"*) printf "%s" "${DOBLE_PS-zascarr-orquestador}"; exit "${DOBLE_PS_RC:-0}" ;;\n'
+        # `docker inspect …`: una línea `host=<IP>` por publicación configurada
+        '  *"inspect "*) printf "%b" "${DOBLE_INSPECT:-}"; exit "${DOBLE_INSPECT_RC:-0}" ;;\n'
         'esac\n'
         'exit 99\n'
     )
@@ -405,12 +412,36 @@ class TestOrdenEnBootstrap:
         levantar = self._indice("up -d --force-recreate zascarr")
         assert migrar < contrasena < escribir < levantar
 
-    def test_un_contenedor_ya_abierto_se_para_antes_de_lo_que_pueda_fallar(self):
+    def test_un_contenedor_existente_se_para_antes_de_lo_que_pueda_fallar(self):
         """Escribir 127.0.0.1 en el .env no cierra el puerto de un contenedor ya creado."""
+        comprobar = self._indice("estado_de_publicacion)")
         parar = self._indice("stop zascarr")
-        comprobar = self._indice("contenedor_abierto_a_la_red; then")
         assert comprobar < parar < self._indice("up -d postgres redis")
         assert parar < self._indice("alembic upgrade head")
+        assert parar < self._indice("! asegurar_contrasena_de_acceso")
+
+    def _bloque_de_parada(self) -> str:
+        texto = "\n".join(self._lineas())
+        i = texto.index('case "${ESTADO_APP}" in')
+        return texto[i:texto.index("esac", i)]
+
+    def test_se_para_tambien_con_la_app_solo_en_localhost_tras_un_proxy(self):
+        """El puerto en localhost NO significa «inaccesible»: el proxy la sigue sirviendo.
+        Si algo fallase antes de recrearla, la instalación antigua seguiría atendiendo."""
+        bloque = self._bloque_de_parada()
+        ramas = bloque.split(";;")
+        con_parada = [r for r in ramas if "stop zascarr" in r]
+        assert len(con_parada) == 1
+        assert "local|abierta)" in con_parada[0]
+
+    def test_si_no_se_puede_comprobar_se_aborta_en_vez_de_dar_por_cerrado(self):
+        bloque = self._bloque_de_parada()
+        rama = [r for r in bloque.split(";;") if r.strip()][-1]
+        assert rama.lstrip().startswith("*)") and "die " in rama
+        assert "stop zascarr" not in rama
+
+    def test_la_parada_avisa_de_que_hay_una_interrupcion(self):
+        assert "sin servicio" in self._bloque_de_parada()
 
     def test_la_aplicacion_se_recrea_siempre(self):
         """`up -d` no recrea si Compose no ve cambios: la app seguiría con la contraseña
@@ -566,32 +597,45 @@ class TestVerificarExposicionEfectiva:
         assert self._verificar(docker_doble, DOBLE_EFECTIVA_RC="1") == "RC=1"
 
 
-class TestContenedorAbiertoALaRed:
-    """Mira lo que Docker publicó de verdad, no lo que dice el `.env`."""
+class TestEstadoDePublicacion:
+    """Cuatro estados, no un booleano: «Docker falló» NO equivale a «está cerrado»."""
 
-    def _abierto(self, docker_doble, salida: str, rc: str = "0"):
-        r = _con_doble(docker_doble, 'contenedor_abierto_a_la_red; echo "RC=$?"',
-                       env={"DOBLE_PORT": salida, "DOBLE_PORT_RC": rc})
-        return [x for x in r.stdout.splitlines() if x.startswith("RC=")][-1] == "RC=0"
+    def _estado(self, docker_doble, *, ps="zascarr-orquestador", inspect="", ps_rc="0",
+                inspect_rc="0"):
+        r = _con_doble(docker_doble, "estado_de_publicacion", env={
+            "DOBLE_PS": ps, "DOBLE_PS_RC": ps_rc,
+            "DOBLE_INSPECT": inspect, "DOBLE_INSPECT_RC": inspect_rc})
+        return r.stdout.strip()
 
-    def test_todas_las_interfaces(self, docker_doble):
-        assert self._abierto(docker_doble, "0.0.0.0:8000\n[::]:8000\n")
+    @pytest.mark.parametrize("inspect", [
+        "host=<0.0.0.0>\\n", "host=<192.168.1.50>\\n", "host=<>\\n",
+        "host=<::>\\n", "host=<127.0.0.1>\\nhost=<::>\\n",
+        "host=<::1>\\nhost=<0.0.0.0>\\n"])
+    def test_publicada_fuera_de_localhost(self, docker_doble, inspect):
+        """Incluye la publicación mixta IPv4/IPv6 y el HostIp vacío (= todas)."""
+        assert self._estado(docker_doble, inspect=inspect) == "abierta"
 
-    def test_una_ip_de_la_lan(self, docker_doble):
-        assert self._abierto(docker_doble, "192.168.1.50:8000\n")
+    @pytest.mark.parametrize("inspect", [
+        "host=<127.0.0.1>\\n", "host=<::1>\\n", "host=<127.0.0.1>\\nhost=<::1>\\n"])
+    def test_solo_localhost(self, docker_doble, inspect):
+        assert self._estado(docker_doble, inspect=inspect) == "local"
 
-    def test_solo_localhost_no(self, docker_doble):
-        assert not self._abierto(docker_doble, "127.0.0.1:8000\n")
+    def test_ausencia_comprobada(self, docker_doble):
+        """Docker respondió bien y el contenedor no está."""
+        assert self._estado(docker_doble, ps="") == "ausente"
 
-    def test_localhost_ipv6_no(self, docker_doble):
-        assert not self._abierto(docker_doble, "[::1]:8000\n")
+    def test_un_fallo_al_consultar_si_existe_es_indeterminado_no_ausente(self, docker_doble):
+        assert self._estado(docker_doble, ps="", ps_rc="1") == "indeterminada"
 
-    def test_una_publicacion_mixta_cuenta_como_abierta(self, docker_doble):
-        assert self._abierto(docker_doble, "127.0.0.1:8000\n0.0.0.0:8000\n")
+    def test_existe_pero_falla_la_consulta_de_sus_puertos_es_indeterminado(self, docker_doble):
+        """El caso del revisor: contenedor existente + error al leer = NO «cerrado»."""
+        assert self._estado(docker_doble, inspect="", inspect_rc="1") == "indeterminada"
 
-    def test_sin_contenedor_no(self, docker_doble):
-        """`docker port` falla si el contenedor no existe: no hay nada abierto."""
-        assert not self._abierto(docker_doble, "", rc="1")
+    def test_existe_pero_no_se_lee_ninguna_publicacion_es_indeterminado(self, docker_doble):
+        assert self._estado(docker_doble, inspect="") == "indeterminada"
+
+    def test_una_salida_ilegible_no_se_toma_por_cerrada(self, docker_doble):
+        assert self._estado(docker_doble, inspect="basura\\n") == "indeterminada"
 
 
 class TestSubredReal:
@@ -669,3 +713,37 @@ class TestExposicionAOpcion:
         ("local", "1"), ("red", "2"), ("proxy", "3"), ("", "1"), ("raro", "1")])
     def test_mapeo(self, nivel, opcion):
         assert _bash(f'exposicion_a_opcion "{nivel}"').stdout.strip() == opcion
+
+
+class TestUrlHistoricaSeLimpia:
+    """No se usa el validador de ENTRADAS NUEVAS para decidir qué configuración antigua
+    limpiar: la app trata como pública cualquier cosa que no sea esta máquina."""
+
+    @pytest.mark.parametrize("vieja", [
+        "http://tebeos.ejemplo.org",            # sin HTTPS
+        "https://tebeos.ejemplo.org/zascarr",   # con subruta
+        "https://tebeos.ejemplo.org:8443/x/",   # puerto y subruta
+        "http://192.168.1.50:8000",             # IP de la LAN
+    ])
+    @pytest.mark.parametrize("opcion", ["1", "2"])
+    def test_se_retira_al_cerrar_o_abrir_a_la_red(self, docker_doble, vieja, opcion):
+        _estado(docker_doble, env_url=vieja, db_url=vieja)
+        datos, _ = _efectiva_tras(docker_doble, opcion, DOBLE_BIND="127.0.0.1")
+        assert datos["URL"] == ""
+        assert docker_doble["env_base_url"].read_text() == ""
+        assert docker_doble["db_base_url"].read_text() == ""
+
+    def test_solo_en_ajustes_y_con_subruta(self, docker_doble):
+        _estado(docker_doble, env_url="", db_url="https://escondida.ejemplo.org/app")
+        datos, r = _efectiva_tras(docker_doble, "1")
+        assert datos["URL"] == "" and "Retiro la dirección pública anterior" in r.stderr
+
+    def test_una_local_historica_no_se_toca(self, docker_doble):
+        _estado(docker_doble, db_url="http://localhost:8000/zascarr")
+        datos, _ = _efectiva_tras(docker_doble, "1")
+        assert datos["URL"] == "http://localhost:8000/zascarr"
+
+    def test_una_url_historica_con_el_proxy_nuevo_se_sustituye(self, docker_doble):
+        _estado(docker_doble, env_url="http://vieja.ejemplo.org/x", db_url="http://vieja.ejemplo.org/x")
+        datos, _ = _efectiva_tras(docker_doble, "3", "https://nueva.ejemplo.org")
+        assert datos["URL"] == "https://nueva.ejemplo.org"

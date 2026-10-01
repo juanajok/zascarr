@@ -69,13 +69,19 @@ sobre la autenticación en el primer arranque. «No lo he leído» no es «no ex
    nombre DNS válido (o IPv4 real: `https://999.1.1.1` se rechaza). Python y Bash
    usan la misma regla y una prueba de paridad impide que diverjan.
 4. **La contraseña se fija ANTES de publicar el puerto, y también al reinstalar.**
-   Orden en el instalador: **parar la app si ya estaba publicada fuera de localhost** →
+   Orden en el instalador: **parar la app si ya existe** (publique donde publique) →
    Postgres → migraciones → fijar contraseña → reconciliar `BASE_URL` → escribir la
    dirección → comprobar la configuración **efectiva** → `up -d --force-recreate zascarr`.
    Tres razones, las tres de la revisión de la PR #59: **(a)** escribir `127.0.0.1` en
    el `.env` **no cierra** el puerto de un contenedor ya creado, y cualquier fallo
-   posterior (migración, build) lo dejaría abierto: se mira lo que Docker publicó de
-   verdad (`docker port`) y se para antes de nada que pueda fallar; **(b)** `up -d` no
+   posterior (migración, build) lo dejaría abierto. Se para **siempre** que haya
+   contenedor, y no solo si publica fuera de localhost, porque con un proxy el puerto
+   ya está en localhost y la app sigue siendo accesible con sus ajustes antiguos: la
+   parada avisa de la interrupción. Y la consulta distingue **cuatro estados**
+   (`ausente`, `local`, `abierta`, `indeterminada`) en vez de un booleano: un fallo
+   de Docker al consultar **no** equivale a «cerrado», y el instalador **aborta** con
+   un diagnóstico en vez de seguir (`docker ps -a` + `docker inspect`, que además ven
+   un contenedor parado cuyo `HostIp` reabriría el puerto al arrancar); **(b)** `up -d` no
    recrea un contenedor si Compose no ve cambios, y la app carga la contraseña al
    arrancar: **verificado en vivo, tras cambiarla seguía aceptando la antigua y
    rechazando la nueva**; con `--force-recreate`, solo vale la nueva; **(c)** no basta
@@ -104,6 +110,11 @@ sobre la autenticación en el primer arranque. «No lo he leído» no es «no ex
    deja **una sola fuente de verdad**: la del `.env`, y retira de Ajustes la dirección
    pública que ya no se usa (`retirar-base-url`); el resumen final cuenta la
    configuración **efectiva** (`efectiva`), no lo que se escribió en el `.env`.
+   Qué se limpia lo decide el criterio **de la app** (`base_url_publica`, laxo:
+   `http://`, subrutas…), **no** el validador estricto de entradas nuevas: una
+   dirección histórica que hoy no se aceptaría seguiría siendo pública para la app.
+   Ojo: retirarla de ZascArr **no desactiva el proxy** que el operador ya hubiera
+   configurado; ese proxy sigue existiendo y apuntando al puerto 8000.
 9. **Salud técnica y aviso de seguridad van separados.** `/api/health` conserva
    `status=healthy` (observacional, igual que la VPN) y añade un bloque
    `seguridad: {exposicion, contrasena, atencion}`; una futura interfaz podrá pintar
@@ -128,8 +139,12 @@ sobre la autenticación en el primer arranque. «No lo he leído» no es «no ex
   sobre Postgres real: localhost→proxy, proxy→localhost, proxy A→proxy B **con un
   override previo en Ajustes**, y pública **solo en Ajustes**→cerrar; en todas, la
   configuración efectiva es la esperada y no queda un override fantasma.
-- Contenedor ya abierto → se para antes de migrar; se comprueba por `docker port`
-  (`0.0.0.0`, IP de la LAN, mixto = abierto; `127.0.0.1`/`[::1]`/sin contenedor = no).
+- Contenedor existente → se para antes de migrar, **también con la app solo en
+  localhost tras un proxy**. Estados de la consulta: `abierta` (`0.0.0.0`, IP de la LAN,
+  `HostIp` vacío, mixto IPv4/IPv6), `local`, `ausente` (comprobado), `indeterminada`
+  (Docker falla al listar o al leer puertos, salida ilegible → el instalador aborta).
+- Dirección histórica (`http://…`, con subruta, IP de la LAN) en `.env` o en Ajustes → se
+  limpia al reinstalar aunque el validador nuevo no la aceptaría.
 - Cambio de contraseña con la app en marcha → tras `--force-recreate` la nueva entra y
   la antigua no.
 - Los espacios de los extremos de la contraseña llegan intactos al comando (`IFS= read -rsp`).
@@ -170,6 +185,8 @@ Tras la revisión, en vivo y con la imagen reconstruida:
 | localhost → proxy | efectiva `proxy`, `.env` y Ajustes coinciden |
 | proxy → localhost | efectiva `local`, sin dirección pública fantasma |
 | proxy A (override en Ajustes) → proxy B | efectiva `b.ejemplo.org` (sin retirar el override seguía `a`) |
-| pública solo en Ajustes → cerrar | detectada como `proxy`, retirada, efectiva `local` |
+| pública solo en Ajustes → quitar la dirección | detectada como `proxy`, retirada, efectiva `local` |
+| Dirección histórica `http://…` / con subruta / IP de la LAN | detectada como pública y retirada (antes la ignoraba el validador nuevo) |
+| Estado de publicación (Docker real) | sin contenedor `ausente`; `127.0.0.1` `local`; `0.0.0.0` `abierta` (también parado); Docker inaccesible `indeterminada` |
 | Contenedor ya abierto (`0.0.0.0`) | detectado, parado; la IP de la LAN deja de responder |
 | Cambio de contraseña con la app en marcha | sin recrear: acepta la vieja; con `--force-recreate`: solo la nueva |

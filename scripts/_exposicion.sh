@@ -305,24 +305,44 @@ resumen_exposicion() {
     esac
 }
 
-# contenedor_abierto_a_la_red
-#   ¿El contenedor de la aplicación que YA corre está publicando la interfaz fuera de
-#   localhost? Se mira lo que Docker publicó de verdad (`docker port`), no lo que dice
-#   el `.env`: escribir `127.0.0.1` en el `.env` NO cierra el puerto de un contenedor
-#   ya creado, y alguien pudo abrirlo a mano. Devuelve 0 si está abierto.
-contenedor_abierto_a_la_red() {
-    local salida linea host
-    salida="$(docker port zascarr-orquestador 8000/tcp 2>/dev/null)" || return 1
+# estado_de_publicacion
+#   Imprime UNA palabra sobre el contenedor de la aplicación que ya exista:
+#     ausente        no hay contenedor (comprobado: Docker respondió y no está)
+#     local          existe y solo publica en localhost
+#     abierta        existe y publica fuera de localhost (0.0.0.0, una IP, [::]…)
+#     indeterminada  no se ha podido comprobar (Docker no responde, salida ilegible)
+#   Se mira lo que Docker tiene configurado de verdad (`docker inspect`), no el `.env`:
+#   escribir `127.0.0.1` ahí NO cierra el puerto de un contenedor ya creado. Y un fallo
+#   al consultar NO es «cerrado»: el llamador decide, no se reduce a un booleano.
+estado_de_publicacion() {
+    local existe lineas linea host abierta=0 vistas=0
+    existe="$(docker ps -a --filter 'name=^/zascarr-orquestador$' --format '{{.Names}}' 2>/dev/null)" || {
+        echo indeterminada; return 0
+    }
+    if [[ -z "${existe}" ]]; then
+        echo ausente; return 0
+    fi
+    lineas="$(docker inspect --format \
+        '{{range $p,$b := .HostConfig.PortBindings}}{{range $b}}host=<{{.HostIp}}>{{"\n"}}{{end}}{{end}}' \
+        zascarr-orquestador 2>/dev/null)" || { echo indeterminada; return 0; }
     while IFS= read -r linea; do
-        [[ -z "${linea}" ]] && continue
-        host="${linea%:*}"
-        host="${host//[\[\]]/}"
-        case "${host}" in
+        [[ "${linea}" =~ ^host=\<(.*)\>$ ]] || continue
+        vistas=$((vistas+1))
+        host="${BASH_REMATCH[1]//[\[\]]/}"
+        case "${host,,}" in
             127.0.0.1|::1|localhost) ;;
-            *) return 0 ;;
+            *) abierta=1 ;;   # incluido el vacío: Docker lo trata como todas las interfaces
         esac
-    done <<< "${salida}"
-    return 1
+    done <<< "${lineas}"
+    if [[ "${abierta}" == 1 ]]; then
+        echo abierta
+    elif [[ "${vistas}" -gt 0 ]]; then
+        echo local
+    else
+        # Existe pero no se ve ninguna publicación: puede no tener ninguna o no haberse
+        # leído bien. Sin dato no se afirma que esté cerrado.
+        echo indeterminada
+    fi
 }
 
 # leer_efectiva
@@ -336,15 +356,17 @@ leer_efectiva() {
     EFECTIVA_EXPOSICION=""
     EFECTIVA_CONTRASENA=""
     EFECTIVA_BASE_URL=""
+    EFECTIVA_BASE_URL_PUBLICA=""
     salida="$(cli_seguridad efectiva </dev/null 2>/dev/null)" || return 1
     while IFS= read -r linea; do
         case "${linea}" in
             exposicion=*) EFECTIVA_EXPOSICION="${linea#exposicion=}" ;;
             contrasena=*) EFECTIVA_CONTRASENA="${linea#contrasena=}" ;;
             base_url=*)   EFECTIVA_BASE_URL="${linea#base_url=}" ;;
+            base_url_publica=*) EFECTIVA_BASE_URL_PUBLICA="${linea#base_url_publica=}" ;;
         esac
     done <<< "${salida}"
-    [[ -n "${EFECTIVA_EXPOSICION}" && -n "${EFECTIVA_CONTRASENA}" ]]
+    [[ -n "${EFECTIVA_EXPOSICION}" && -n "${EFECTIVA_CONTRASENA}" && -n "${EFECTIVA_BASE_URL_PUBLICA}" ]]
 }
 
 # ajustar_base_url OPCION URL
@@ -363,7 +385,10 @@ ajustar_base_url() {
         return 0
     fi
     leer_efectiva || return 1
-    if [[ "$(exposicion_actual 127.0.0.1 "${EFECTIVA_BASE_URL}")" == "3" ]]; then
+    # Se decide con el criterio de la APP (`base_url_publica`): una dirección histórica
+    # como `http://…` o con subruta no la acepta el validador de entradas nuevas, pero
+    # la app la trata como pública y hay que limpiarla igual.
+    if [[ "${EFECTIVA_BASE_URL_PUBLICA}" == "si" ]]; then
         echo "Retiro la dirección pública anterior (${EFECTIVA_BASE_URL}): ya no la usas." >&2
         set_env_var "BASE_URL" ""
         cli_seguridad retirar-base-url </dev/null >/dev/null 2>&1 || return 1
