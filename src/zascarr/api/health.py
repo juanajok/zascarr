@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
-from zascarr.services.seguridad import aviso_de_exposicion
+from zascarr.services.seguridad import aviso_de_exposicion, estado_de_seguridad
 
 logger = structlog.get_logger()
 
@@ -234,5 +234,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "tebeosfera": "enabled" if settings.tebeosfera_enabled else "disabled",
             "gcd":        "enabled" if settings.gcd_enabled else "disabled",
         },
+        # A11: seguridad aparte de la salud técnica (ver estado_de_seguridad).
+        "seguridad": estado_de_seguridad(settings),
         "warnings": warnings,
     }

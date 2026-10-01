@@ -96,6 +96,24 @@ def aviso_de_exposicion(settings=None) -> str | None:
     return AVISO_EXPUESTA_SIN_CONTRASENA[nivel]
 
 
+def estado_de_seguridad(settings=None) -> dict:
+    """Estado de seguridad estructurado, SEPARADO de la salud técnica.
+
+    `status` de `/api/health` sigue diciendo si el servicio funciona; esto dice si
+    conviene prestarle atención. Una interfaz abierta y sin contraseña no es un
+    servicio caído, pero tampoco algo que deba pasar desapercibido: quien pinte el
+    estado puede mostrar «Atención» sin confundirlo con «inaccesible».
+    """
+    s = settings or get_settings()
+    nivel = exposicion_efectiva(s)
+    contrasena = hay_contrasena(s)
+    return {
+        "exposicion": nivel,
+        "contrasena": contrasena,
+        "atencion": nivel != EXPOSICION_LOCAL and not contrasena,
+    }
+
+
 @dataclass
 class ResultadoSeguridad:
     #: Mensaje para el coleccionista si NO se guardó nada.
@@ -118,20 +136,42 @@ def validar_contrasena(password: str) -> tuple[str | None, str | None]:
     return None, None
 
 
-# `https://host[:puerto][/ruta]` con un host ASCII (un dominio internacionalizado va
-# en punycode, que es lo que el navegador envía en `Origin`) o una IP entre
-# corchetes. Sin espacios. `urlsplit` NO sirve de validador: acepta `https://a b.org`.
-_URL_PUBLICA = re.compile(r"https://([A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])(:[0-9]+)?(/\S*)?")
+# `https://host[:puerto]`, y NADA más: sin ruta (ZascArr no está probado bajo un
+# prefijo, así que aceptarlo prometería algo sin demostrar), sin usuario, sin IPv6.
+_URL_PUBLICA = re.compile(r"https://([^/:@\s]+)(?::([0-9]{1,5}))?")
+_ETIQUETA_DNS = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
+_OCTETO = re.compile(r"0|[1-9][0-9]{0,2}")
 
 
 def url_publica_valida(url: str) -> bool:
-    """La URL pública de un proxy inverso con TLS: solo `https://` con un host válido.
+    """La URL pública de un proxy inverso con TLS: `https://dominio[:puerto]`.
 
-    Solo `https`: con `http` el proxy no estaría haciendo de frontera segura.
+    - Solo `https`: con `http` el proxy no estaría haciendo de frontera segura.
+    - Sin ruta: no hay soporte probado para colgar ZascArr de un prefijo.
+    - Puerto en 1–65535. Host ASCII (un dominio internacionalizado va en punycode,
+      que es lo que el navegador envía en `Origin`).
+    - Si el último tramo es numérico el host tiene que ser una IPv4 de verdad
+      (cuatro octetos 0–255): `999.1.1.1` o `1.2.3` no son dominios ni direcciones.
+    - Sin direcciones IPv6 entre corchetes (no se validan; un dominio las cubre).
+
     `scripts/_exposicion.sh::url_publica_valida` aplica la MISMA regla en el
     instalador; `tests/test_exposicion_bash.py` las compara con los mismos casos.
     """
-    return _URL_PUBLICA.fullmatch(url) is not None
+    m = _URL_PUBLICA.fullmatch(url)
+    if not m:
+        return False
+    host, puerto = m.groups()
+    if puerto is not None and not 1 <= int(puerto) <= 65535:
+        return False
+    if len(host) > 253:
+        return False
+    etiquetas = host.split(".")
+    if not all(_ETIQUETA_DNS.fullmatch(e) for e in etiquetas):
+        return False
+    if etiquetas[-1].isdigit():
+        return len(etiquetas) == 4 and all(
+            _OCTETO.fullmatch(e) and int(e) <= 255 for e in etiquetas)
+    return True
 
 
 async def fijar_seguridad(

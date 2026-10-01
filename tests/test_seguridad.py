@@ -51,23 +51,57 @@ class TestValidarContrasena:
 
 
 class TestUrlPublicaValida:
-    """La URL pública de un proxy inverso con TLS: solo `https://` con host."""
+    """La URL pública de un proxy inverso con TLS: `https://dominio[:puerto]`, sin más."""
 
     @pytest.mark.parametrize("url", [
         "https://tebeos.ejemplo.org",
         "https://tebeos.ejemplo.org:8443",
-        "https://ejemplo.org/zascarr",
+        "https://localhost",
+        "https://xn--ndalo-ysa.es",            # punycode: lo que el navegador envía en Origin
         "https://192.168.1.50",
+        "https://a.org:1", "https://a.org:65535",
     ])
     def test_acepta(self, url):
         assert url_publica_valida(url)
 
     @pytest.mark.parametrize("url", [
-        "", "tebeos.ejemplo.org", "http://tebeos.ejemplo.org",
+        "", "  ", "tebeos.ejemplo.org", "http://tebeos.ejemplo.org",
         "https://", "https:///ruta", "ftp://ejemplo.org", "javascript:alert(1)",
-        "https://[::1", "  ",
+        "https://a b.org", "https://u@a.org", "https://a.org?x=1",
     ])
-    def test_rechaza(self, url):
+    def test_rechaza_lo_que_no_es_una_url_https(self, url):
+        assert not url_publica_valida(url)
+
+    @pytest.mark.parametrize("url", [
+        "https://ejemplo.org/zascarr", "https://ejemplo.org/",
+    ])
+    def test_rechaza_rutas_porque_no_hay_soporte_probado_bajo_un_prefijo(self, url):
+        assert not url_publica_valida(url)
+
+    @pytest.mark.parametrize("url", [
+        "https://a.org:0", "https://a.org:65536", "https://a.org:99999", "https://a.org:",
+        "https://a.org:123456",
+    ])
+    def test_rechaza_puertos_fuera_de_rango(self, url):
+        assert not url_publica_valida(url)
+
+    @pytest.mark.parametrize("url", [
+        "https://999.1.1.1", "https://1.2.3", "https://1.2.3.4.5", "https://01.2.3.4",
+        "https://256.0.0.1",
+    ])
+    def test_un_host_numerico_tiene_que_ser_una_ipv4_de_verdad(self, url):
+        assert not url_publica_valida(url)
+
+    @pytest.mark.parametrize("url", ["https://[::1]", "https://[2001:db8::1]:8443", "https://[::1"])
+    def test_no_admite_ipv6_literal(self, url):
+        """No se valida: un dominio cubre el caso. Mejor rechazarlo que aceptarlo a ciegas."""
+        assert not url_publica_valida(url)
+
+    @pytest.mark.parametrize("url", [
+        "https://a..org", "https://.a.org", "https://a.org.", "https://-a.org", "https://a-.org",
+        "https://" + "a" * 64 + ".org", "https://" + ".".join(["abcdefghi"] * 30) + ".org",
+    ])
+    def test_rechaza_nombres_de_host_mal_formados(self, url):
         assert not url_publica_valida(url)
 
 

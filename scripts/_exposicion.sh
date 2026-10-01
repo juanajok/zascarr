@@ -58,12 +58,36 @@ exposicion_actual() {
 }
 
 # url_publica_valida URL
-#   `https://host[:puerto][/ruta]`, sin espacios. Solo https: con http el proxy no
-#   haría de frontera segura. Misma regla que `url_publica_valida` en
-#   src/zascarr/services/seguridad.py (una prueba compara las dos con los mismos casos).
+#   `https://dominio[:puerto]` y NADA más: sin ruta (ZascArr no está probado bajo un
+#   prefijo), puerto 1–65535, IPv4 solo si es una de verdad, sin IPv6. Solo https: con
+#   http el proxy no haría de frontera segura. Misma regla que `url_publica_valida`
+#   en src/zascarr/services/seguridad.py (una prueba compara las dos con los mismos casos).
 url_publica_valida() {
-    local url="${1:-}"
-    [[ "${url}" =~ ^https://([A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])(:[0-9]+)?(/[^[:space:]]*)?$ ]]
+    local url="${1:-}" host puerto etiqueta ultima
+    local -a etiquetas
+    [[ "${url}" =~ ^https://([^/:@[:space:]]+)(:([0-9]{1,5}))?$ ]] || return 1
+    host="${BASH_REMATCH[1]}"
+    puerto="${BASH_REMATCH[3]}"
+    if [[ -n "${puerto}" ]] && (( 10#${puerto} < 1 || 10#${puerto} > 65535 )); then
+        return 1
+    fi
+    (( ${#host} <= 253 )) || return 1
+    # `read -ra` se come un punto final y los vacíos del medio: se descartan antes.
+    [[ "${host}" == .* || "${host}" == *. || "${host}" == *..* ]] && return 1
+    IFS=. read -ra etiquetas <<< "${host}"
+    for etiqueta in "${etiquetas[@]}"; do
+        [[ "${etiqueta}" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] || return 1
+    done
+    ultima="${etiquetas[${#etiquetas[@]}-1]}"
+    if [[ "${ultima}" =~ ^[0-9]+$ ]]; then
+        # Parece una IPv4: tiene que serlo de verdad (4 octetos 0–255, sin ceros a la izquierda).
+        (( ${#etiquetas[@]} == 4 )) || return 1
+        for etiqueta in "${etiquetas[@]}"; do
+            [[ "${etiqueta}" =~ ^(0|[1-9][0-9]{0,2})$ ]] || return 1
+            (( etiqueta <= 255 )) || return 1
+        done
+    fi
+    return 0
 }
 
 # contrasena_suficiente CONTRASENA
@@ -101,6 +125,11 @@ preguntar_exposicion() {
     echo "  1) Solo desde esta máquina (recomendado)"
     echo "  2) Desde mi red local — te pediré una contraseña"
     echo "  3) Detrás de un proxy inverso con dominio y HTTPS — te pediré el dominio y una contraseña"
+    if [[ "${defecto}" == "1" ]]; then
+        echo "  (Intro lo deja solo en esta máquina.)"
+    else
+        echo "  (Ahora mismo está: $(exposicion_descripcion "${defecto}"). Intro lo mantiene.)"
+    fi
     read -rp "Elige 1, 2 o 3 [${defecto}]: " ans || true
     ans="${ans:-${defecto}}"
 
@@ -140,13 +169,13 @@ pedir_contrasena_acceso() {
     local intento a b
     CONTRASENA_ACCESO=""
     for intento in 1 2 3; do
-        read -rsp "Contraseña de acceso (mínimo ${LONGITUD_MINIMA_CONTRASENA} caracteres; mejor una frase larga): " a || true
+        IFS= read -rsp "Contraseña de acceso (mínimo ${LONGITUD_MINIMA_CONTRASENA} caracteres; mejor una frase larga): " a || true
         echo ""
         if ! contrasena_suficiente "${a}"; then
             echo "  Es demasiado corta: mínimo ${LONGITUD_MINIMA_CONTRASENA} caracteres." >&2
             continue
         fi
-        read -rsp "Repítela: " b || true
+        IFS= read -rsp "Repítela: " b || true
         echo ""
         if [[ "${a}" != "${b}" ]]; then
             echo "  No coinciden. Vuelve a intentarlo." >&2
@@ -223,10 +252,26 @@ asegurar_contrasena_de_acceso() {
     return 0
 }
 
+# subred_de_la_red
+#   La subred REAL de la interfaz por la que sale este equipo (`ip route`), no una
+#   deducción a partir de la IP: sin conocer la máscara, `192.168.1.50` podría estar
+#   en un /16, un /23 o un /24. Vacío si no se puede saber — y entonces no se propone
+#   ningún comando (mismo criterio que A10: una regla aparentemente precisa pero
+#   equivocada es peor que decir «no puedo determinarlo»).
+subred_de_la_red() {
+    command -v ip >/dev/null 2>&1 || return 0
+    local dev subred
+    dev="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)"
+    [[ -n "${dev}" ]] || return 0
+    subred="$(ip -4 route show dev "${dev}" scope link 2>/dev/null | awk '{print $1}' | head -1)"
+    [[ "${subred}" =~ ^[0-9]+(\.[0-9]+){3}/[0-9]+$ ]] && echo "${subred}"
+    return 0
+}
+
 # resumen_exposicion OPCION URL_PUBLICA
 #   Qué decirle al coleccionista al terminar, según lo que se haya dejado.
 resumen_exposicion() {
-    local opcion="${1:-1}" url="${2:-}" ip puerto_ufw=""
+    local opcion="${1:-1}" url="${2:-}" ip subred
     case "${opcion}" in
         2)
             ip="$(ip_de_la_red)"
@@ -234,12 +279,14 @@ resumen_exposicion() {
             echo "  Te pedirá la contraseña que acabas de fijar."
             echo "  Importante: NO reenvíes el puerto 8000 en tu router hacia internet."
             if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then
-                puerto_ufw="1"
-            fi
-            if [[ -n "${puerto_ufw}" && -n "${ip}" ]]; then
-                echo "  Tienes ufw activo: puede bloquear la entrada. Si no llegas desde el móvil,"
-                echo "  permite tu red (ajusta la subred a la tuya; yo no toco el cortafuegos):"
-                echo "    sudo ufw allow from ${ip%.*}.0/24 to any port 8000 proto tcp"
+                subred="$(subred_de_la_red)"
+                echo "  Tienes ufw activo: puede bloquear la entrada desde el móvil."
+                if [[ -n "${subred}" ]]; then
+                    echo "  Si no llegas, permite tu red (yo no toco el cortafuegos):"
+                    echo "    sudo ufw allow from ${subred} to any port 8000 proto tcp"
+                else
+                    echo "  No he podido saber tu subred; permite el puerto 8000 desde ella (yo no toco el cortafuegos)."
+                fi
             fi
             ;;
         3)
@@ -255,5 +302,90 @@ resumen_exposicion() {
             echo "  Solo se puede entrar desde esta máquina. Para usarlo desde el móvil o la"
             echo "  tablet, vuelve a ejecutar este instalador y elige la opción 2."
             ;;
+    esac
+}
+
+# contenedor_abierto_a_la_red
+#   ¿El contenedor de la aplicación que YA corre está publicando la interfaz fuera de
+#   localhost? Se mira lo que Docker publicó de verdad (`docker port`), no lo que dice
+#   el `.env`: escribir `127.0.0.1` en el `.env` NO cierra el puerto de un contenedor
+#   ya creado, y alguien pudo abrirlo a mano. Devuelve 0 si está abierto.
+contenedor_abierto_a_la_red() {
+    local salida linea host
+    salida="$(docker port zascarr-orquestador 8000/tcp 2>/dev/null)" || return 1
+    while IFS= read -r linea; do
+        [[ -z "${linea}" ]] && continue
+        host="${linea%:*}"
+        host="${host//[\[\]]/}"
+        case "${host}" in
+            127.0.0.1|::1|localhost) ;;
+            *) return 0 ;;
+        esac
+    done <<< "${salida}"
+    return 1
+}
+
+# leer_efectiva
+#   Deja en EFECTIVA_EXPOSICION (local|red|proxy), EFECTIVA_CONTRASENA (si|no) y
+#   EFECTIVA_BASE_URL lo que la aplicación aplicaría DE VERDAD al arrancar: el `.env`
+#   más lo guardado en Ajustes. Una dirección pública guardada antes en Ajustes manda
+#   sobre el `.env`; mirar solo el `.env` daría una imagen falsa. Devuelve 1 si no se
+#   pudo leer.
+leer_efectiva() {
+    local salida linea
+    EFECTIVA_EXPOSICION=""
+    EFECTIVA_CONTRASENA=""
+    EFECTIVA_BASE_URL=""
+    salida="$(cli_seguridad efectiva </dev/null 2>/dev/null)" || return 1
+    while IFS= read -r linea; do
+        case "${linea}" in
+            exposicion=*) EFECTIVA_EXPOSICION="${linea#exposicion=}" ;;
+            contrasena=*) EFECTIVA_CONTRASENA="${linea#contrasena=}" ;;
+            base_url=*)   EFECTIVA_BASE_URL="${linea#base_url=}" ;;
+        esac
+    done <<< "${salida}"
+    [[ -n "${EFECTIVA_EXPOSICION}" && -n "${EFECTIVA_CONTRASENA}" ]]
+}
+
+# ajustar_base_url OPCION URL
+#   Deja la BASE_URL EFECTIVA coherente con la opción elegida. Necesita `set_env_var`
+#   (la define bootstrap.sh). El `.env` y Ajustes pueden contradecirse —la de Ajustes
+#   manda—, así que el instalador siempre deja UNA sola fuente de verdad: la del `.env`.
+#     3) escribe la URL nueva en el `.env` y RETIRA la de Ajustes (proxy A -> proxy B).
+#   1|2) si hay una dirección pública efectiva (en el `.env` o en Ajustes) la retira de
+#        los dos sitios, para no dejar un proxy fantasma (proxy -> solo esta máquina).
+#   Devuelve 1 si no pudo comprobar o retirar algo.
+ajustar_base_url() {
+    local opcion="${1:-1}" url="${2:-}"
+    if [[ "${opcion}" == "3" ]]; then
+        set_env_var "BASE_URL" "${url}"
+        cli_seguridad retirar-base-url </dev/null >/dev/null 2>&1 || return 1
+        return 0
+    fi
+    leer_efectiva || return 1
+    if [[ "$(exposicion_actual 127.0.0.1 "${EFECTIVA_BASE_URL}")" == "3" ]]; then
+        echo "Retiro la dirección pública anterior (${EFECTIVA_BASE_URL}): ya no la usas." >&2
+        set_env_var "BASE_URL" ""
+        cli_seguridad retirar-base-url </dev/null >/dev/null 2>&1 || return 1
+    fi
+    return 0
+}
+
+# verificar_exposicion_efectiva
+#   0 si lo EFECTIVO es seguro: solo esta máquina, o hay contraseña. 1 si no lo es o si
+#   no se pudo comprobar. Es la última comprobación antes de arrancar: no sustituye al
+#   orden de los pasos, lo respalda mirando el resultado real.
+verificar_exposicion_efectiva() {
+    leer_efectiva || return 1
+    [[ "${EFECTIVA_EXPOSICION}" == "local" || "${EFECTIVA_CONTRASENA}" == "si" ]]
+}
+
+# exposicion_a_opcion NIVEL
+#   local|red|proxy (lo que informa `leer_efectiva`) -> 1|2|3, la numeración del menú.
+exposicion_a_opcion() {
+    case "${1:-}" in
+        red)   echo 2 ;;
+        proxy) echo 3 ;;
+        *)     echo 1 ;;
     esac
 }

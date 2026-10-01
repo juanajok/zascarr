@@ -60,28 +60,55 @@ sobre la autenticación en el primer arranque. «No lo he leído» no es «no ex
    |---|---|---|---|
    | 1. Solo esta máquina (defecto) | `127.0.0.1` | — | opcional (A6) |
    | 2. Mi red local | `0.0.0.0` | — | **obligatoria** |
-   | 3. Detrás de un proxy inverso | `127.0.0.1` | `https://dominio` | **obligatoria** |
+   | 3. Detrás de un proxy inverso | `127.0.0.1` | `https://dominio[:puerto]` | **obligatoria** |
 
    En la 3 el puerto sigue en localhost porque lo expuesto es el proxy; el instalador
-   pide el dominio, exige `https://` y enseña un ejemplo de Caddy. **No instala ni
-   configura el proxy ni el TLS.**
-4. **La contraseña se fija ANTES de publicar el puerto.** Orden en el instalador:
-   Postgres → migraciones → fijar contraseña → `up -d zascarr`. Así no existe ni un
-   instante con el puerto abierto y sin contraseña (el modal de Sonarr deja una
-   ventana: gana el primero que llega).
+   pide el dominio y enseña un ejemplo de Caddy. **No instala ni configura el proxy ni
+   el TLS.** La dirección admitida es **solo `https://host[:puerto]`**: sin ruta
+   (ZascArr no está probado bajo un prefijo), puerto 1–65535, sin IPv6 ni credenciales,
+   nombre DNS válido (o IPv4 real: `https://999.1.1.1` se rechaza). Python y Bash
+   usan la misma regla y una prueba de paridad impide que diverjan.
+4. **La contraseña se fija ANTES de publicar el puerto, y también al reinstalar.**
+   Orden en el instalador: **parar la app si ya estaba publicada fuera de localhost** →
+   Postgres → migraciones → fijar contraseña → reconciliar `BASE_URL` → escribir la
+   dirección → comprobar la configuración **efectiva** → `up -d --force-recreate zascarr`.
+   Tres razones, las tres de la revisión de la PR #59: **(a)** escribir `127.0.0.1` en
+   el `.env` **no cierra** el puerto de un contenedor ya creado, y cualquier fallo
+   posterior (migración, build) lo dejaría abierto: se mira lo que Docker publicó de
+   verdad (`docker port`) y se para antes de nada que pueda fallar; **(b)** `up -d` no
+   recrea un contenedor si Compose no ve cambios, y la app carga la contraseña al
+   arrancar: **verificado en vivo, tras cambiarla seguía aceptando la antigua y
+   rechazando la nueva**; con `--force-recreate`, solo vale la nueva; **(c)** no basta
+   con que el orden textual del script sea correcto: se prueba además con transiciones
+   (ver «Casos de prueba»). El modal de Sonarr deja una ventana abierta (gana el
+   primero que llega); aquí no existe.
 5. **La contraseña nunca viaja por argumentos ni por el entorno**: se lee oculta en el
    instalador y entra por **stdin** a un comando dentro de la imagen
    (`python -m zascarr.cli.seguridad`), que usa el **mismo servicio** que Ajustes. Una
    única regla de longitud (mínimo 12, aviso por debajo de 15); el instalador la
    comprueba antes de empezar solo para no fallar tarde, y una prueba impide que las
    dos constantes diverjan.
-6. **Sin terminal interactiva** (`curl … | sudo bash`) **no se pregunta**: queda en la
-   opción 1 y se explica cómo abrir después. Nunca se abre sin poder pedir contraseña.
+6. **Sin terminal interactiva** (`curl … | sudo bash`) **no se pregunta**: se mantiene
+   la opción que ya hubiera (leída del `.env` y de la `BASE_URL` efectiva) y, si no hay
+   ninguna, la 1. Nunca se abre sin poder pedir contraseña: si lo que había era una
+   opción abierta y no hay terminal para exigirla, solo continúa abierta si **ya hay una
+   contraseña**; si no, vuelve a «solo esta máquina».
 7. **`0.0.0.0`, no una IP concreta**: una IP de DHCP que cambia rompería el arranque
    del contenedor. A cambio, el instalador **no puede garantizar** que el router no
    reenvíe el puerto; lo dice en el aviso final. El cortafuegos del equipo (`ufw`) es
    asunto aparte (A10): el instalador solo imprime la regla sugerida, **no la aplica**.
-8. **Encaje con A1 («3 preguntas, nada más»):** se añade una cuarta pregunta, pero
+   La subred de esa regla **se lee del sistema** (`ip route`), no se deduce de la IP:
+   `192.168.1.149` no está siempre en un `/24`. Si no se puede saber, no se propone
+   ninguna regla y se dice.
+8. **`BASE_URL` tiene dos dueños** (el `.env` y Ajustes; manda Ajustes). El instalador
+   deja **una sola fuente de verdad**: la del `.env`, y retira de Ajustes la dirección
+   pública que ya no se usa (`retirar-base-url`); el resumen final cuenta la
+   configuración **efectiva** (`efectiva`), no lo que se escribió en el `.env`.
+9. **Salud técnica y aviso de seguridad van separados.** `/api/health` conserva
+   `status=healthy` (observacional, igual que la VPN) y añade un bloque
+   `seguridad: {exposicion, contrasena, atencion}`; una futura interfaz podrá pintar
+   «Atención» sin confundirlo con un servicio caído.
+10. **Encaje con A1 («3 preguntas, nada más»):** se añade una cuarta pregunta, pero
    **con valor por defecto seguro** (Intro = solo esta máquina). Las preguntas de
    contraseña y dominio solo aparecen si se opta por abrir.
 
@@ -97,6 +124,16 @@ sobre la autenticación en el primer arranque. «No lo he leído» no es «no ex
 - Funciones del instalador (en `scripts/_exposicion.sh`, sin efectos): traducción
   opción → variables, validación de la URL pública (solo `https://`, con host), y la
   longitud mínima igual a la de Python.
+- **Transiciones** (no solo fotos fijas), sobre un `docker` de pega con estado y, en vivo,
+  sobre Postgres real: localhost→proxy, proxy→localhost, proxy A→proxy B **con un
+  override previo en Ajustes**, y pública **solo en Ajustes**→cerrar; en todas, la
+  configuración efectiva es la esperada y no queda un override fantasma.
+- Contenedor ya abierto → se para antes de migrar; se comprueba por `docker port`
+  (`0.0.0.0`, IP de la LAN, mixto = abierto; `127.0.0.1`/`[::1]`/sin contenedor = no).
+- Cambio de contraseña con la app en marcha → tras `--force-recreate` la nueva entra y
+  la antigua no.
+- Los espacios de los extremos de la contraseña llegan intactos al comando (`IFS= read -rsp`).
+- Subred: la que da el sistema (`/23` incluido); sin ruta, no se inventa ni se propone regla.
 - En vivo contra Postgres real: el comando fija la contraseña, `estado` responde que
   hay una, y con el puerto en `0.0.0.0` una petición sin credenciales recibe el login,
   no la interfaz.
@@ -109,7 +146,7 @@ sobre la autenticación en el primer arranque. «No lo he leído» no es «no ex
 - No hay forma de cambiar la exposición desde la interfaz: por diseño, la app no
   controla su propio puerto.
 
-## Resultado de la verificación (2026-10-01)
+## Resultado de la verificación (2026-10-01, ampliado tras la revisión de la PR #59)
 
 Todo lo de «Casos de prueba» se escribió antes y pasa. Además, en vivo contra Docker y
 Postgres reales (no contra dobles):
@@ -125,3 +162,14 @@ La verificación en vivo encontró **dos fallos que las pruebas unitarias no ve�
 `docker compose run -T` consume la entrada estándar aunque el comando no la use (la
 contraseña llegaba vacía), y la validación de URL de Python era más laxa que la de Bash
 (`https://a b.org`). Ver las notas de A11 en `docs/BACKLOG.md`.
+
+Tras la revisión, en vivo y con la imagen reconstruida:
+
+| Escenario | Resultado |
+|---|---|
+| localhost → proxy | efectiva `proxy`, `.env` y Ajustes coinciden |
+| proxy → localhost | efectiva `local`, sin dirección pública fantasma |
+| proxy A (override en Ajustes) → proxy B | efectiva `b.ejemplo.org` (sin retirar el override seguía `a`) |
+| pública solo en Ajustes → cerrar | detectada como `proxy`, retirada, efectiva `local` |
+| Contenedor ya abierto (`0.0.0.0`) | detectado, parado; la IP de la LAN deja de responder |
+| Cambio de contraseña con la app en marcha | sin recrear: acepta la vieja; con `--force-recreate`: solo la nueva |

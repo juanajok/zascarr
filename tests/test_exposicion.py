@@ -28,6 +28,7 @@ from zascarr.services.seguridad import (
     EXPOSICION_PROXY,
     EXPOSICION_RED,
     aviso_de_exposicion,
+    estado_de_seguridad,
     exposicion_efectiva,
     hay_contrasena,
 )
@@ -106,6 +107,26 @@ class TestAvisoDeExposicion:
         assert aviso_de_exposicion(ajustes) is None
 
 
+class TestEstadoDeSeguridad:
+    """La seguridad va APARTE de la salud técnica: abierto y sin contraseña no es un
+    servicio caído, pero quien pinte el estado debe poder mostrar «Atención»."""
+
+    def test_por_defecto_no_requiere_atencion(self):
+        assert estado_de_seguridad(_ajustes()) == {
+            "exposicion": "local", "contrasena": False, "atencion": False}
+
+    def test_abierto_sin_contrasena_requiere_atencion(self):
+        est = estado_de_seguridad(_ajustes(bind="0.0.0.0"))
+        assert est["atencion"] is True and est["exposicion"] == "red"
+
+    def test_abierto_con_contrasena_no_requiere_atencion(self):
+        est = estado_de_seguridad(_ajustes(bind="0.0.0.0", modo="password", hash_="pbkdf2…"))
+        assert est == {"exposicion": "red", "contrasena": True, "atencion": False}
+
+    def test_local_con_contrasena_tampoco(self):
+        assert not estado_de_seguridad(_ajustes(modo="password", hash_="pbkdf2…"))["atencion"]
+
+
 class FakeSession:
     async def execute(self, _statement):
         return None
@@ -142,6 +163,16 @@ class TestHealthAvisaDeExposicion:
     def test_abierta_a_la_red_sin_contrasena_avisa(self, monkeypatch):
         body = _salud(monkeypatch, bind="0.0.0.0").json()
         assert "red local" in body["warnings"]["exposicion"]
+
+    def test_la_salud_trae_la_seguridad_aparte_del_estado_tecnico(self, monkeypatch):
+        """Contrato para la futura UI: `seguridad.atencion` es independiente de `status`."""
+        body = _salud(monkeypatch, bind="0.0.0.0").json()
+        assert body["status"] == "healthy"
+        assert body["seguridad"] == {"exposicion": "red", "contrasena": False, "atencion": True}
+
+    def test_el_bloque_de_seguridad_existe_tambien_en_el_caso_por_defecto(self, monkeypatch):
+        body = _salud(monkeypatch).json()
+        assert body["seguridad"]["atencion"] is False
 
     def test_el_aviso_no_cambia_el_estado_global(self, monkeypatch):
         """Observacional, no bloqueante (CLAUDE.md §3.2): igual que una VPN caída."""
