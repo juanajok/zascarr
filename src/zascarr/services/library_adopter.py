@@ -27,6 +27,7 @@ de `OVERRIDABLE_FIELDS` — nunca editable desde /ui/ajustes).
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,6 +46,7 @@ from zascarr.services.importer import (
     _triage_and_match,
     serialize_candidates,
 )
+from zascarr.utils.fs import listar_comics
 
 logger = structlog.get_logger()
 
@@ -98,9 +100,10 @@ class LibraryAdopter:
         total_series = (await self._db.execute(select(func.count(Series.id)))).scalar() or 0
         if total_series > 0:
             return False
-        if not self._library.exists():
+        # E/S de disco (en red, cada llamada es una ida y vuelta): a un hilo.
+        if not await asyncio.to_thread(self._library.exists):
             return False
-        return self._primer_comic() is not None
+        return await asyncio.to_thread(self._primer_comic) is not None
 
     def _primer_comic(self) -> Path | None:
         for ext in COMIC_EXTS:
@@ -115,18 +118,8 @@ class LibraryAdopter:
 
         report = AdoptionReport(started_at=datetime.now(UTC))
 
-        files: list[Path] = []
-        seen: set[tuple[int, int]] = set()
-        for ext in COMIC_EXTS:
-            for f in self._library.rglob(f"*{ext}"):
-                try:
-                    st = f.stat()
-                except OSError:
-                    continue
-                clave = (st.st_dev, st.st_ino)
-                if clave not in seen:
-                    seen.add(clave)
-                    files.append(f)
+        # Dedupe por inodo y recorrido en un hilo: ver `listar_comics`.
+        files = await asyncio.to_thread(listar_comics, [self._library], COMIC_EXTS)
         report.files_scanned = len(files)
 
         # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la
@@ -188,7 +181,7 @@ class LibraryAdopter:
             file_path=str(path),
             file_name=path.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
-            file_size_bytes=path.stat().st_size,
+            file_size_bytes=(await asyncio.to_thread(path.stat)).st_size,
             sha256_hash=tr.sha256,
             source_tag=tr.source_tag,
             width_px=tr.width_px,
