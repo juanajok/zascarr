@@ -5,6 +5,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Cambiado (arranque degradado)
+
+- **Con la base de datos no disponible no se arrancan los trabajos de fondo**
+  (auditoría, importación, enriquecimiento y orquestación). Antes la interfaz se
+  degradaba pero los ciclos seguían intentándolo cada intervalo, fallando y
+  llenando el log. El arranque queda, literalmente, en modo diagnóstico; al
+  reiniciar con la base arreglada vuelven solos.
+
 ### Cambiado (avisos de importación, E4)
 
 - **El aviso ya no incluye los nombres de los ficheros por defecto**: lleva solo
