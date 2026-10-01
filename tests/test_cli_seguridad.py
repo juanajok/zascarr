@@ -146,6 +146,65 @@ class TestFijarContrasena:
         assert "base_url" not in guardado[0]
 
 
+class TestEfectiva:
+    """El instalador cuenta lo que va a pasar DE VERDAD, no lo que escribió en el .env."""
+
+    def _ajustar(self, entorno, **campos):
+        actuales, _, _ = entorno
+        base = {"zascarr_bind_address": "127.0.0.1", "base_url": "", "auth_mode": "none",
+                "auth_password_hash": ""}
+        for clave, valor in {**base, **campos}.items():
+            setattr(actuales, clave, valor)
+
+    def _salida(self, capsys) -> dict:
+        return dict(linea.split("=", 1) for linea in capsys.readouterr().out.splitlines())
+
+    def test_por_defecto(self, entorno, capsys):
+        self._ajustar(entorno)
+        assert cli.main(["efectiva"]) == cli.OK
+        assert self._salida(capsys) == {"exposicion": "local", "contrasena": "no", "base_url": ""}
+
+    def test_abierto_a_la_red_con_contrasena(self, entorno, capsys):
+        self._ajustar(entorno, zascarr_bind_address="0.0.0.0", auth_mode="password",
+                      auth_password_hash="pbkdf2…")
+        cli.main(["efectiva"])
+        datos = self._salida(capsys)
+        assert datos["exposicion"] == "red" and datos["contrasena"] == "si"
+
+    def test_una_base_url_publica_guardada_en_ajustes_cuenta_como_proxy(self, entorno, capsys):
+        """El caso del revisor: la de Ajustes manda sobre el .env, y `efectiva` ve la
+        resultante (la que ya cargó `load_overrides_at_startup`)."""
+        self._ajustar(entorno, base_url="https://vieja.ejemplo.org")
+        cli.main(["efectiva"])
+        datos = self._salida(capsys)
+        assert datos["exposicion"] == "proxy" and datos["base_url"] == "https://vieja.ejemplo.org"
+
+    def test_no_imprime_el_hash_ni_nada_de_la_contrasena(self, entorno, capsys):
+        self._ajustar(entorno, auth_mode="password", auth_password_hash="pbkdf2_sha256$600000$s$h")
+        cli.main(["efectiva"])
+        assert "pbkdf2" not in capsys.readouterr().out
+
+    def test_una_base_url_con_saltos_de_linea_no_inyecta_claves(self, entorno, capsys):
+        """El instalador parsea `clave=valor` línea a línea: un valor no puede fabricar otra."""
+        self._ajustar(entorno, base_url="https://a.org\ncontrasena=si")
+        cli.main(["efectiva"])
+        assert self._salida(capsys)["contrasena"] == "no"
+
+
+class TestRetirarBaseUrl:
+
+    def test_guarda_vacia_para_que_mande_el_env(self, entorno, capsys):
+        _, db, guardado = entorno
+        assert cli.main(["retirar-base-url"]) == cli.OK
+        assert guardado == [{"base_url": ""}]
+        db.commit.assert_awaited_once()
+
+    def test_no_toca_la_contrasena(self, entorno):
+        _, _, guardado = entorno
+        cli.main(["retirar-base-url"])
+        assert set(guardado[0]) == {"base_url"}
+
+
 class TestRobustez:
 
     def test_la_contrasena_no_se_acepta_como_argumento(self, entorno):

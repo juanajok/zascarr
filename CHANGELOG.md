@@ -15,10 +15,20 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   aplicación, así que no hay ni un instante abierto y sin ella). Si no se
   consigue —contraseña rechazada, sin terminal, cualquier duda—, **no se abre
   nada** y el instalador te lo dice. La contraseña no se escribe en el `.env` ni
-  viaja por argumentos. Volver a ejecutar el instalador permite cambiar de opción.
+  viaja por argumentos. Volver a ejecutar el instalador permite cambiar de opción
+  (`Intro` mantiene la que ya tenías) y **cierra las transiciones de una
+  instalación existente**: si la aplicación ya estaba publicada fuera de localhost
+  la **para** antes de nada que pueda fallar (escribir `127.0.0.1` en el `.env` no
+  cierra un puerto ya abierto); la **recrea** al final para que una contraseña nueva
+  valga de inmediato (con `up -d` seguía aceptando la antigua); y deja **una sola**
+  dirección pública (la del `.env`; la que se hubiera guardado en Ajustes se retira) y
+  cuenta la configuración **efectiva**, no lo que escribió en el `.env`. La dirección
+  del proxy admitida es `https://dominio[:puerto]`, sin ruta. La regla de cortafuegos
+  que sugiere usa la subred real de la máquina, no una deducida.
 - **`/api/health` y `/estado` avisan si ZascArr está abierto y sin contraseña**: con
   el puerto publicado fuera de localhost, o con una dirección pública configurada.
-  Solo avisa: no cambia el estado global.
+  Solo avisa: no cambia el estado global. `/api/health` añade un bloque `seguridad`
+  (`exposicion`, `contrasena`, `atencion`) separado de la salud técnica.
 - **Variable `ZASCARR_BIND_ADDRESS`** (`127.0.0.1` por defecto) para el puerto de la
   interfaz. PostgreSQL y Redis **no** se parametrizan: siguen solo en localhost.
 

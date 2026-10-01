@@ -472,6 +472,18 @@ fi
 ln -sf "${ENV_FILE}" "${SCRIPT_DIR}/.env" || \
     warn "No pude crear el enlace ${SCRIPT_DIR}/.env -> ${ENV_FILE}. Un 'docker compose' sin --env-file ejecutado desde ${SCRIPT_DIR} no verá tu configuración."
 
+# ── A11: si la aplicación YA corre publicada fuera de localhost, se para ahora y no se
+# ── vuelve a levantar hasta haber comprobado la contraseña. Escribir 127.0.0.1 en el
+# ── .env NO cierra el puerto de un contenedor ya creado, y cualquier fallo de más
+# ── abajo (migración, build…) dejaría abierta la instalación anterior.
+if contenedor_abierto_a_la_red; then
+    warn "La aplicación ya está publicada fuera de esta máquina. La paro hasta comprobar la
+  contraseña; volverá a arrancar (cerrada o abierta, según lo que elijas) al final."
+    docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop zascarr || die \
+        "No pude parar ZascArr, que está abierto a la red. Páralo a mano antes de seguir:
+  docker compose -f ${COMPOSE_FILE} stop zascarr"
+fi
+
 info "Levantando PostgreSQL y Redis..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d postgres redis || die \
@@ -512,28 +524,45 @@ success "Migraciones aplicadas"
 # ── ANTES de levantar la aplicación— para que no haya ni un instante con el puerto
 # ── abierto y sin ella. Ante cualquier duda (no se pudo comprobar, contraseña
 # ── rechazada, sin terminal) no se abre nada: nunca se abre por error.
+volver_a_solo_esta_maquina() {
+    EXPOSICION_OPCION=1
+    ZASCARR_BIND_ADDRESS="127.0.0.1"
+    BASE_URL_PUBLICA=""
+}
+
 if [[ "${EXPOSICION_OPCION}" != "1" ]]; then
     if ! asegurar_contrasena_de_acceso; then
         warn "No he abierto ZascArr a la red. Sigue accesible solo desde esta máquina.
   Para abrirlo, vuelve a ejecutar el instalador y fija una contraseña (mínimo
   ${LONGITUD_MINIMA_CONTRASENA} caracteres), o ponla antes en http://127.0.0.1:8000 → Ajustes → Seguridad."
-        EXPOSICION_OPCION=1
-        ZASCARR_BIND_ADDRESS="127.0.0.1"
-        BASE_URL_PUBLICA=""
+        volver_a_solo_esta_maquina
     fi
 fi
-set_env_var "ZASCARR_BIND_ADDRESS" "${ZASCARR_BIND_ADDRESS}"
-if [[ "${EXPOSICION_OPCION}" == "3" ]]; then
-    set_env_var "BASE_URL" "${BASE_URL_PUBLICA}"
-elif [[ "${EXPOSICION_OPCION}" == "1" && "$(exposicion_actual 127.0.0.1 "${EXPOSICION_ACTUAL_URL}")" == "3" ]]; then
-    # Tenía una dirección pública de una instalación anterior y ahora elige «solo
-    # esta máquina»: se retira, para que /api/health no hable de un proxy que ya no está.
-    info "Quito la dirección pública anterior (${EXPOSICION_ACTUAL_URL}) del .env."
-    set_env_var "BASE_URL" ""
+
+# La BASE_URL puede estar en el .env Y guardada en Ajustes (esta manda): se deja UNA
+# sola fuente de verdad, la del .env, y se retira la pública que ya no se usa.
+if ! ajustar_base_url "${EXPOSICION_OPCION}" "${BASE_URL_PUBLICA}"; then
+    warn "No he podido dejar coherente la dirección pública (la del .env y la de Ajustes)."
+    volver_a_solo_esta_maquina
+    ajustar_base_url 1 "" || die \
+        "No puedo comprobar la dirección pública que usaría ZascArr, así que no lo arranco.
+  Revisa la base de datos (docker compose -f ${COMPOSE_FILE} logs postgres) y vuelve a ejecutar el instalador."
 fi
+set_env_var "ZASCARR_BIND_ADDRESS" "${ZASCARR_BIND_ADDRESS}"
+
+# Última comprobación, sobre lo EFECTIVO (el .env más Ajustes) y no sobre lo que se
+# acaba de escribir: no sustituye al orden de arriba, lo respalda mirando el resultado.
+verificar_exposicion_efectiva || die \
+    "La configuración efectiva dejaría ZascArr abierto sin contraseña (o no he podido
+  comprobarla), así que NO lo arranco. No he abierto nada. Revisa Ajustes → Seguridad
+  y vuelve a ejecutar el instalador."
 
 info "Levantando ZascArr..."
-docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d zascarr || die \
+# --force-recreate: la aplicación carga los ajustes (contraseña incluida) AL ARRANCAR.
+# Si el instalador acaba de cambiarlos en la base de datos y Compose no ve ningún cambio
+# de configuración, `up -d` deja el contenedor en marcha con la contraseña ANTIGUA en
+# memoria (verificado en vivo: aceptaba la vieja y rechazaba la nueva).
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d --force-recreate zascarr || die \
     "No pude arrancar ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck..."
@@ -553,7 +582,14 @@ echo -e "\n${B}====================================${N}"
 echo -e "${G}${B}  Bootstrap completado${N}"
 echo -e "${B}====================================${N}\n"
 echo "  ZascArr:      http://127.0.0.1:8000  (E1: estado del sistema, en español)"
-resumen_exposicion "${EXPOSICION_OPCION}" "${BASE_URL_PUBLICA}"
+RESUMEN_OPCION="${EXPOSICION_OPCION}"
+RESUMEN_URL="${BASE_URL_PUBLICA}"
+if leer_efectiva; then
+    RESUMEN_OPCION="$(exposicion_a_opcion "${EFECTIVA_EXPOSICION}")"
+    RESUMEN_URL="${EFECTIVA_BASE_URL}"
+    echo "  Configuración efectiva: exposición=${EFECTIVA_EXPOSICION}, contraseña=${EFECTIVA_CONTRASENA}"
+fi
+resumen_exposicion "${RESUMEN_OPCION}" "${RESUMEN_URL}"
 echo "  API (para curiosos): http://127.0.0.1:8000/api/docs"
 echo "  Kavita:           http://127.0.0.1:5000  (si está instalado)"
 echo "  Prowlarr:         http://127.0.0.1:9696  (si está instalado)"

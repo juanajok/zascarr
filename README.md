@@ -112,16 +112,22 @@ aceptar lo que va entre corchetes) y una cuarta que **por defecto no abre nada**
 1. ¿Dónde están tus tebeos ya organizados?
 2. ¿Dónde caen tus descargas (Transmission/aMule)?
 3. ¿Idioma de la interfaz? (`es`/`en`)
-4. ¿Quieres usarlo desde otros dispositivos (móvil, tablet)? `Intro` = solo
-   desde esta máquina. Si eliges abrirlo a tu red local (o detrás de un proxy
-   con HTTPS), **te pide una contraseña antes de abrir nada**.
+4. ¿Quieres usarlo desde otros dispositivos (móvil, tablet)? En una instalación
+   nueva, `Intro` = solo desde esta máquina. Si eliges abrirlo a tu red local (o
+   detrás de un proxy con HTTPS), **te pide una contraseña antes de abrir nada**.
+   El proxy lo pones tú: la dirección tiene que ser `https://dominio` (con puerto
+   opcional, sin ruta).
 
 Al terminar, ZascArr ya está funcionando. Ábrelo en:
 
 **http://127.0.0.1:8000** — el panel de estado, en español.
 
 ¿Cambias de idea sobre el móvil? Vuelve a ejecutar el instalador y elige otra
-opción; no pierdes nada.
+opción; no pierdes nada. Al volver a ejecutarlo, `Intro` **mantiene la opción que
+ya tenías** (que puede ser abrirlo a la red: te lo dice antes de preguntar) y, si
+no hay terminal para preguntar, también se mantiene lo que había. El instalador
+recrea la aplicación para que la contraseña nueva valga de inmediato, y si la
+encuentra ya abierta a la red la **para** hasta comprobar la contraseña.
 
 Puedes volver a ejecutar `sudo bash /opt/zascarr/zascarr/bootstrap.sh`
 cuando quieras: es idempotente (no duplica nada) y nunca toca los archivos

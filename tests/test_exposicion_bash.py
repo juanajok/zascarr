@@ -71,10 +71,16 @@ class TestExposicionActual:
 
 
 CASOS_URL = [
-    "https://tebeos.ejemplo.org", "https://tebeos.ejemplo.org:8443", "https://ejemplo.org/zascarr",
-    "https://192.168.1.50", "",
-    "tebeos.ejemplo.org", "http://tebeos.ejemplo.org", "https://", "https:///ruta",
-    "ftp://ejemplo.org", "javascript:alert(1)", "https://[::1", "  ", "https://a b.org",
+    "https://tebeos.ejemplo.org", "https://tebeos.ejemplo.org:8443", "https://localhost",
+    "https://192.168.1.50", "https://xn--ndalo-ysa.es", "https://a.org:1", "https://a.org:65535",
+    "", "  ", "tebeos.ejemplo.org", "http://tebeos.ejemplo.org", "https://", "https:///ruta",
+    "ftp://ejemplo.org", "javascript:alert(1)", "https://a b.org", "https://u@a.org",
+    "https://ejemplo.org/zascarr", "https://ejemplo.org/", "https://a.org?x=1",
+    "https://a.org:0", "https://a.org:65536", "https://a.org:99999", "https://a.org:",
+    "https://999.1.1.1", "https://1.2.3", "https://1.2.3.4.5", "https://01.2.3.4",
+    "https://256.0.0.1", "https://[::1]", "https://[2001:db8::1]:8443", "https://[::1",
+    "https://a..org", "https://.a.org", "https://a.org.", "https://-a.org", "https://a-.org",
+    "https://" + "a" * 64 + ".org", "https://" + ".".join(["abcdefghi"] * 30) + ".org",
 ]
 
 
@@ -131,6 +137,16 @@ class TestPreguntarExposicion:
         datos, r = self._preguntar(respuesta + "\n")
         assert datos["OPCION"] == "1" and datos["BIND"] == "127.0.0.1"
 
+    def test_en_una_instalacion_nueva_el_prompt_dice_que_intro_deja_solo_esta_maquina(self):
+        _, r = self._preguntar("\n")
+        assert "Intro lo deja solo en esta máquina" in r.stdout
+
+    def test_al_reejecutar_el_prompt_dice_que_intro_mantiene_lo_actual(self):
+        """Intro acepta la opción ACTUAL, que puede ser abrir a la red: el menú lo dice."""
+        _, r = self._preguntar("\n", defecto="2")
+        assert "Ahora mismo está: abierto a tu red local" in r.stdout
+        assert "Intro lo mantiene" in r.stdout
+
     def test_la_opcion_por_defecto_la_marca_quien_llama(self):
         datos, _ = self._preguntar("\n", defecto="2")
         assert datos["OPCION"] == "2"
@@ -186,12 +202,13 @@ class TestPedirContrasenaAcceso:
         _, r = self._pedir(f"{secreta}\n{secreta}\n")
         assert secreta not in r.stdout + r.stderr
 
-    def test_los_espacios_son_parte_de_la_contrasena(self):
-        """`read -r` con IFS vacío conservaría los extremos; con el IFS por defecto se
-        recortarían. Esta prueba fija lo que hace hoy para que no cambie sin querer:
-        la app recibe lo MISMO que se confirmó."""
-        datos, _ = self._pedir("  frase con espacios  \n  frase con espacios  \n")
+    def test_los_espacios_de_los_extremos_son_parte_de_la_contrasena(self):
+        """`read -r` sin `IFS=` recorta los espacios de los extremos: la contraseña que se
+        confirmó y la que llega a la app serían distintas."""
+        contrasena = "  frase con espacios  "
+        datos, _ = self._pedir(f"{contrasena}\n{contrasena}\n")
         assert datos["RC"] == "0"
+        assert datos["LONGITUD"] == str(len(contrasena))
 
 
 class TestIpDeLaRed:
@@ -249,12 +266,28 @@ def docker_doble(tmp_path):
         '  *"cli.seguridad estado"*) cat > /dev/null; exit "${DOBLE_ESTADO_RC:-3}" ;;\n'
         '  *"cli.seguridad fijar-contrasena"*)\n'
         '    cat > "$DOBLE_STDIN"; exit "${DOBLE_FIJAR_RC:-0}" ;;\n'
+        # `efectiva`: la BASE_URL efectiva es la de Ajustes si hay, y si no la del .env
+        # (la misma precedencia que la app); la exposición se deduce de ella y del bind.
+        '  *"cli.seguridad efectiva"*)\n'
+        '    cat > /dev/null\n'
+        '    base="$(cat "$DOBLE_DB_BASE_URL" 2>/dev/null)"\n'
+        '    [ -z "$base" ] && base="$(cat "$DOBLE_ENV_BASE_URL" 2>/dev/null)"\n'
+        '    if [ "${DOBLE_BIND:-127.0.0.1}" != "127.0.0.1" ]; then nivel=red\n'
+        '    elif [ -n "$base" ] && [[ "$base" != *localhost* ]]; then nivel=proxy\n'
+        '    else nivel=local; fi\n'
+        '    echo "exposicion=$nivel"; echo "contrasena=${DOBLE_CONTRASENA:-no}"\n'
+        '    echo "base_url=$base"; exit "${DOBLE_EFECTIVA_RC:-0}" ;;\n'
+        '  *"cli.seguridad retirar-base-url"*)\n'
+        '    cat > /dev/null; : > "$DOBLE_DB_BASE_URL"; exit "${DOBLE_RETIRAR_RC:-0}" ;;\n'
+        '  *"port zascarr-orquestador"*)\n'
+        '    printf "%s" "${DOBLE_PORT:-}"; exit "${DOBLE_PORT_RC:-0}" ;;\n'
         'esac\n'
         'exit 99\n'
     )
     doble.chmod(0o755)
     return {
         "bin": bin_, "log": tmp_path / "docker.log", "stdin": tmp_path / "docker.stdin",
+        "env_base_url": tmp_path / "env_base_url", "db_base_url": tmp_path / "db_base_url",
         "tmp": tmp_path,
     }
 
@@ -267,6 +300,8 @@ def _asegurar(docker_doble, *, entrada="", interactivo="1", estado_rc="3", fijar
         "PATH": f"{docker_doble['bin']}:{os.environ['PATH']}",
         "DOBLE_LOG": str(docker_doble["log"]), "DOBLE_STDIN": str(docker_doble["stdin"]),
         "DOBLE_ESTADO_RC": estado_rc, "DOBLE_FIJAR_RC": fijar_rc,
+        "DOBLE_ENV_BASE_URL": str(docker_doble["env_base_url"]),
+        "DOBLE_DB_BASE_URL": str(docker_doble["db_base_url"]),
     }
     guion = (
         f'set -uo pipefail\nsource "{SH}"\n'
@@ -301,6 +336,13 @@ class TestAsegurarContrasenaDeAcceso:
         rc, _, recibido, r = _asegurar(docker_doble, entrada=f"{FRASE}\n{FRASE}\n")
         assert rc.startswith("RC=0"), r.stderr
         assert recibido == FRASE + "\n"
+
+    def test_los_espacios_de_los_extremos_llegan_tal_cual_a_la_app(self, docker_doble):
+        """Lo que se confirmó es EXACTAMENTE lo que recibe el comando (no solo «hay éxito»)."""
+        contrasena = "  una frase larga con espacios  "
+        rc, _, recibido, _ = _asegurar(docker_doble, entrada=f"{contrasena}\n{contrasena}\n")
+        assert rc.startswith("RC=0")
+        assert recibido == contrasena + "\n"
 
     def test_la_contrasena_nunca_va_en_los_argumentos_de_docker(self, docker_doble):
         _, registro, _, r = _asegurar(docker_doble, entrada=f"{FRASE}\n{FRASE}\n")
@@ -360,8 +402,28 @@ class TestOrdenEnBootstrap:
         migrar = self._indice("alembic upgrade head")
         contrasena = self._indice("! asegurar_contrasena_de_acceso")
         escribir = self._indice('set_env_var "ZASCARR_BIND_ADDRESS"')
-        levantar = self._indice("up -d zascarr")
+        levantar = self._indice("up -d --force-recreate zascarr")
         assert migrar < contrasena < escribir < levantar
+
+    def test_un_contenedor_ya_abierto_se_para_antes_de_lo_que_pueda_fallar(self):
+        """Escribir 127.0.0.1 en el .env no cierra el puerto de un contenedor ya creado."""
+        parar = self._indice("stop zascarr")
+        comprobar = self._indice("contenedor_abierto_a_la_red; then")
+        assert comprobar < parar < self._indice("up -d postgres redis")
+        assert parar < self._indice("alembic upgrade head")
+
+    def test_la_aplicacion_se_recrea_siempre(self):
+        """`up -d` no recrea si Compose no ve cambios: la app seguiría con la contraseña
+        ANTIGUA en memoria (verificado en vivo)."""
+        assert "--force-recreate zascarr" in "\n".join(self._lineas())
+
+    def test_se_reconcilia_la_base_url_y_se_verifica_lo_efectivo_antes_de_arrancar(self):
+        contrasena = self._indice("! asegurar_contrasena_de_acceso")
+        base_url = self._indice("! ajustar_base_url")
+        escribir = self._indice('set_env_var "ZASCARR_BIND_ADDRESS"')
+        verificar = self._indice("verificar_exposicion_efectiva ||")
+        levantar = self._indice("up -d --force-recreate zascarr")
+        assert contrasena < base_url < escribir < verificar < levantar
 
     def test_la_direccion_de_publicacion_no_se_escribe_antes_de_la_contrasena(self):
         """Hay una sola escritura de ZASCARR_BIND_ADDRESS y es posterior al paso de contraseña."""
@@ -372,7 +434,238 @@ class TestOrdenEnBootstrap:
 
     def test_si_no_se_consigue_contrasena_se_vuelve_a_solo_esta_maquina(self):
         texto = "\n".join(self._lineas())
-        i = texto.index("! asegurar_contrasena_de_acceso")
-        bloque = texto[i:i + 700]
-        assert 'ZASCARR_BIND_ADDRESS="127.0.0.1"' in bloque
-        assert "EXPOSICION_OPCION=1" in bloque
+        i = texto.index("volver_a_solo_esta_maquina() {")
+        funcion = texto[i:texto.index("}", i)]
+        assert 'ZASCARR_BIND_ADDRESS="127.0.0.1"' in funcion
+        assert "EXPOSICION_OPCION=1" in funcion
+        j = texto.index("! asegurar_contrasena_de_acceso")
+        assert "volver_a_solo_esta_maquina" in texto[j:j + 600]
+
+
+def _con_doble(docker_doble, cuerpo: str, *, env: dict | None = None):
+    """Ejecuta `cuerpo` con el `docker` de pega, un `set_env_var` que escribe en un fichero
+    y el estado (`.env` y Ajustes) en ficheros: así se prueban TRANSICIONES, no fotos fijas."""
+    import os
+
+    entorno = {
+        **os.environ,
+        "PATH": f"{docker_doble['bin']}:{os.environ['PATH']}",
+        "DOBLE_LOG": str(docker_doble["log"]), "DOBLE_STDIN": str(docker_doble["stdin"]),
+        "DOBLE_ENV_BASE_URL": str(docker_doble["env_base_url"]),
+        "DOBLE_DB_BASE_URL": str(docker_doble["db_base_url"]),
+        **(env or {}),
+    }
+    guion = (
+        f'set -uo pipefail\nsource "{SH}"\n'
+        'COMPOSE_FILE=/x/docker-compose.yml; ENV_FILE=/x/.env\n'
+        'set_env_var() { [[ "$1" == BASE_URL ]] && '
+        'printf "%s" "$2" > "$DOBLE_ENV_BASE_URL"; return 0; }\n'
+        f'{cuerpo}'
+    )
+    return subprocess.run(["bash", "-c", guion], capture_output=True, text=True,
+                          env=entorno, timeout=30, check=False)
+
+
+def _estado(docker_doble, *, env_url: str = "", db_url: str = ""):
+    docker_doble["env_base_url"].write_text(env_url)
+    docker_doble["db_base_url"].write_text(db_url)
+
+
+def _efectiva_tras(docker_doble, opcion: str, url: str = "", **env):
+    """Aplica `ajustar_base_url` y devuelve (rc, efectiva) leyendo lo que ve la app."""
+    r = _con_doble(
+        docker_doble,
+        f'ajustar_base_url {opcion} "{url}"; rc=$?\n'
+        'leer_efectiva\n'
+        'echo "RC=$rc EXP=$EFECTIVA_EXPOSICION URL=$EFECTIVA_BASE_URL"',
+        env=env,
+    )
+    linea = [x for x in r.stdout.splitlines() if x.startswith("RC=")][-1]
+    return dict(p.split("=", 1) for p in linea.split(" ")), r
+
+
+class TestTransicionesDeLaBaseUrl:
+    """La BASE_URL puede estar en el `.env` Y guardada en Ajustes, y la de Ajustes manda.
+    El instalador deja UNA fuente de verdad y cuenta lo EFECTIVO."""
+
+    def test_solo_esta_maquina_a_proxy(self, docker_doble):
+        _estado(docker_doble)
+        datos, _ = _efectiva_tras(docker_doble, "3", "https://tebeos.ejemplo.org")
+        assert datos == {"RC": "0", "EXP": "proxy", "URL": "https://tebeos.ejemplo.org"}
+
+    def test_proxy_a_solo_esta_maquina_no_deja_un_proxy_fantasma(self, docker_doble):
+        _estado(docker_doble, env_url="https://tebeos.ejemplo.org")
+        datos, _ = _efectiva_tras(docker_doble, "1")
+        assert datos == {"RC": "0", "EXP": "local", "URL": ""}
+        assert docker_doble["env_base_url"].read_text() == ""
+
+    def test_proxy_a_a_proxy_b_con_un_override_previo_en_ajustes(self, docker_doble):
+        """El caso del revisor: Ajustes guarda A, el instalador configura B. Sin retirar el
+        override, la app seguiría usando A."""
+        _estado(docker_doble, env_url="https://a.ejemplo.org", db_url="https://a.ejemplo.org")
+        datos, _ = _efectiva_tras(docker_doble, "3", "https://b.ejemplo.org")
+        assert datos["URL"] == "https://b.ejemplo.org"
+        assert docker_doble["db_base_url"].read_text() == ""
+
+    def test_una_publica_solo_en_ajustes_se_retira_al_cerrar(self, docker_doble):
+        """El `.env` está limpio pero Ajustes guardó una pública: seguía expuesto «a escondidas»."""
+        _estado(docker_doble, env_url="", db_url="https://escondida.ejemplo.org")
+        datos, r = _efectiva_tras(docker_doble, "1")
+        assert datos["EXP"] == "local" and datos["URL"] == ""
+        assert "Retiro la dirección pública anterior" in r.stderr
+
+    def test_la_opcion_2_tambien_retira_una_publica_antigua(self, docker_doble):
+        _estado(docker_doble, env_url="https://a.ejemplo.org", db_url="https://a.ejemplo.org")
+        datos, _ = _efectiva_tras(docker_doble, "2", DOBLE_BIND="0.0.0.0")
+        assert datos["URL"] == "" and datos["EXP"] == "red"
+
+    def test_una_url_local_guardada_en_ajustes_no_se_toca(self, docker_doble):
+        """No es pública: no es asunto del instalador."""
+        _estado(docker_doble, db_url="http://localhost:8000")
+        datos, _ = _efectiva_tras(docker_doble, "1")
+        assert datos["URL"] == "http://localhost:8000"
+        assert docker_doble["db_base_url"].read_text() == "http://localhost:8000"
+
+    def test_si_no_se_puede_leer_la_efectiva_falla_y_no_toca_nada(self, docker_doble):
+        _estado(docker_doble, env_url="https://a.ejemplo.org")
+        datos, _ = _efectiva_tras(docker_doble, "1", DOBLE_EFECTIVA_RC="1")
+        assert datos["RC"] == "1"
+        assert docker_doble["env_base_url"].read_text() == "https://a.ejemplo.org"
+
+    def test_si_no_se_puede_retirar_el_override_falla(self, docker_doble):
+        _estado(docker_doble, db_url="https://a.ejemplo.org")
+        datos, _ = _efectiva_tras(docker_doble, "3", "https://b.ejemplo.org", DOBLE_RETIRAR_RC="1")
+        assert datos["RC"] == "1"
+
+
+class TestVerificarExposicionEfectiva:
+
+    def _verificar(self, docker_doble, **env):
+        r = _con_doble(docker_doble, 'verificar_exposicion_efectiva; echo "RC=$?"', env=env)
+        return [x for x in r.stdout.splitlines() if x.startswith("RC=")][-1]
+
+    def test_solo_esta_maquina_es_seguro_sin_contrasena(self, docker_doble):
+        _estado(docker_doble)
+        assert self._verificar(docker_doble) == "RC=0"
+
+    def test_abierto_a_la_red_sin_contrasena_no(self, docker_doble):
+        _estado(docker_doble)
+        assert self._verificar(docker_doble, DOBLE_BIND="0.0.0.0") == "RC=1"
+
+    def test_abierto_a_la_red_con_contrasena_si(self, docker_doble):
+        _estado(docker_doble)
+        assert self._verificar(docker_doble, DOBLE_BIND="0.0.0.0", DOBLE_CONTRASENA="si") == "RC=0"
+
+    def test_una_publica_efectiva_sin_contrasena_no(self, docker_doble):
+        """Aunque el `.env` diga localhost: manda lo que guardó Ajustes."""
+        _estado(docker_doble, db_url="https://a.ejemplo.org")
+        assert self._verificar(docker_doble) == "RC=1"
+
+    def test_si_no_se_puede_comprobar_no_se_da_por_seguro(self, docker_doble):
+        _estado(docker_doble)
+        assert self._verificar(docker_doble, DOBLE_EFECTIVA_RC="1") == "RC=1"
+
+
+class TestContenedorAbiertoALaRed:
+    """Mira lo que Docker publicó de verdad, no lo que dice el `.env`."""
+
+    def _abierto(self, docker_doble, salida: str, rc: str = "0"):
+        r = _con_doble(docker_doble, 'contenedor_abierto_a_la_red; echo "RC=$?"',
+                       env={"DOBLE_PORT": salida, "DOBLE_PORT_RC": rc})
+        return [x for x in r.stdout.splitlines() if x.startswith("RC=")][-1] == "RC=0"
+
+    def test_todas_las_interfaces(self, docker_doble):
+        assert self._abierto(docker_doble, "0.0.0.0:8000\n[::]:8000\n")
+
+    def test_una_ip_de_la_lan(self, docker_doble):
+        assert self._abierto(docker_doble, "192.168.1.50:8000\n")
+
+    def test_solo_localhost_no(self, docker_doble):
+        assert not self._abierto(docker_doble, "127.0.0.1:8000\n")
+
+    def test_localhost_ipv6_no(self, docker_doble):
+        assert not self._abierto(docker_doble, "[::1]:8000\n")
+
+    def test_una_publicacion_mixta_cuenta_como_abierta(self, docker_doble):
+        assert self._abierto(docker_doble, "127.0.0.1:8000\n0.0.0.0:8000\n")
+
+    def test_sin_contenedor_no(self, docker_doble):
+        """`docker port` falla si el contenedor no existe: no hay nada abierto."""
+        assert not self._abierto(docker_doble, "", rc="1")
+
+
+class TestSubredReal:
+
+    def _con_ip(self, tmp_path, ruta_get: str, ruta_show: str):
+        bin_ = tmp_path / "binip"
+        bin_.mkdir()
+        doble = bin_ / "ip"
+        doble.write_text(
+            '#!/usr/bin/env bash\n'
+            'case "$*" in\n'
+            f'  *"route get"*) echo "{ruta_get}" ;;\n'
+            f'  *"route show"*) echo "{ruta_show}" ;;\n'
+            'esac\n'
+        )
+        doble.chmod(0o755)
+        return bin_
+
+    def _subred(self, bin_):
+        import os
+
+        r = subprocess.run(
+            ["bash", "-c", f'source "{SH}"; subred_de_la_red'], capture_output=True, text=True,
+            env={**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}"}, timeout=30, check=False)
+        return r.stdout.strip()
+
+    def test_da_la_subred_que_dice_el_sistema_no_una_deducida(self, tmp_path):
+        """192.168.1.149 NO está siempre en un /24: aquí el sistema dice /23."""
+        bin_ = self._con_ip(
+            tmp_path, "1.1.1.1 via 192.168.0.1 dev eth0 src 192.168.1.149 uid 1000",
+            "192.168.0.0/23 proto kernel src 192.168.1.149")
+        assert self._subred(bin_) == "192.168.0.0/23"
+
+    def test_si_no_hay_ruta_no_inventa_nada(self, tmp_path):
+        assert self._subred(self._con_ip(tmp_path, "", "")) == ""
+
+    def test_una_salida_rara_no_se_toma_por_subred(self, tmp_path):
+        bin_ = self._con_ip(tmp_path, "1.1.1.1 dev eth0", "no es una subred")
+        assert self._subred(bin_) == ""
+
+
+class TestResumenDeRedYUfw:
+
+    def _resumen(self, tmp_path, subred: str):
+        import os
+
+        bin_ = tmp_path / "binufw"
+        bin_.mkdir()
+        (bin_ / "ufw").write_text('#!/usr/bin/env bash\necho "Status: active"\n')
+        (bin_ / "ufw").chmod(0o755)
+        guion = (
+            f'source "{SH}"\n'
+            'ip_de_la_red() { echo 192.168.1.149; }\n'
+            f'subred_de_la_red() {{ echo "{subred}"; }}\n'
+            'resumen_exposicion 2 ""'
+        )
+        r = subprocess.run(["bash", "-c", guion], capture_output=True, text=True, timeout=30,
+                           env={**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}"}, check=False)
+        return r.stdout
+
+    def test_con_subred_conocida_propone_el_comando_con_esa_subred(self, tmp_path):
+        salida = self._resumen(tmp_path, "192.168.0.0/23")
+        assert "sudo ufw allow from 192.168.0.0/23 to any port 8000" in salida
+        assert "/24" not in salida
+
+    def test_sin_subred_no_propone_ningun_comando(self, tmp_path):
+        salida = self._resumen(tmp_path, "")
+        assert "sudo ufw allow" not in salida
+        assert "No he podido saber tu subred" in salida
+
+
+class TestExposicionAOpcion:
+
+    @pytest.mark.parametrize("nivel,opcion", [
+        ("local", "1"), ("red", "2"), ("proxy", "3"), ("", "1"), ("raro", "1")])
+    def test_mapeo(self, nivel, opcion):
+        assert _bash(f'exposicion_a_opcion "{nivel}"').stdout.strip() == opcion

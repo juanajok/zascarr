@@ -24,7 +24,9 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 y, en la pregunta «¿Quieres usarlo desde otros dispositivos?», elige «mi red
 local» o «detrás de un proxy». Te pide la contraseña **antes** de abrir el
 puerto —se fija después de migrar y antes de levantar la aplicación— y, si no
-la consigue, **no abre nada**. Detalle de la decisión en
+la consigue, **no abre nada**. Si ZascArr ya estaba abierto a la red, el instalador
+lo **para** hasta comprobarlo, y lo **recrea** al final para que una contraseña nueva
+valga de inmediato. Detalle de la decisión en
 [`docs/adr/0004-exposicion-de-red.md`](docs/adr/0004-exposicion-de-red.md) y
 [`docs/design/benchmark-A11-exposicion.md`](docs/design/benchmark-A11-exposicion.md).
 

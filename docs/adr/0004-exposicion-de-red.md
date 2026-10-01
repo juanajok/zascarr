@@ -57,7 +57,10 @@ abierta por defecto.
   no en Ajustes: el puerto publicado es propiedad de Docker en el host y la
   aplicación no puede abrir ni cerrar el suyo. Las dos opciones que abren **exigen
   contraseña, que se fija antes de publicar el puerto**; si no se consigue, no se
-  abre nada. Detalle y verificación en
+  abre nada. Al reinstalar, una aplicación ya publicada se para antes de nada que
+  pueda fallar y se recrea al final (si no, conservaría la contraseña antigua en
+  memoria), y la `BASE_URL` efectiva —la de Ajustes manda sobre la del `.env`— se
+  reconcilia y se comprueba. Detalle y verificación en
   `docs/design/benchmark-A11-exposicion.md`.
 
 ## Referencias
