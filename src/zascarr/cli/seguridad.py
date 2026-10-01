@@ -43,7 +43,12 @@ from zascarr.services.runtime_settings import (
     capturar_valores_base,
     load_overrides_at_startup,
 )
-from zascarr.services.seguridad import estado_de_seguridad, fijar_seguridad, hay_contrasena
+from zascarr.services.seguridad import (
+    base_url_es_publica,
+    estado_de_seguridad,
+    fijar_seguridad,
+    hay_contrasena,
+)
 
 OK = 0
 ERROR = 1
@@ -68,7 +73,7 @@ async def fijar_contrasena(db, linea: str) -> tuple[int, str, str | None]:
 
 
 def efectiva() -> str:
-    """Tres líneas `clave=valor` con la configuración EFECTIVA. El instalador la
+    """Cuatro líneas `clave=valor` con la configuración EFECTIVA. El instalador la
     lee para comprobar —y contarle al coleccionista— lo que de verdad va a pasar,
     no lo que él escribió en el `.env`: una dirección pública guardada antes en
     Ajustes manda sobre el `.env` y puede dejar el servicio más expuesto de lo que
@@ -80,6 +85,10 @@ def efectiva() -> str:
         f"exposicion={est['exposicion']}",
         f"contrasena={'si' if est['contrasena'] else 'no'}",
         f"base_url={base_url}",
+        # Con el MISMO criterio que la app (laxo: `http://`, subrutas…), para que el
+        # instalador limpie también una dirección histórica que el validador estricto
+        # de entradas nuevas no aceptaría.
+        f"base_url_publica={'si' if base_url_es_publica(base_url) else 'no'}",
     ])
 
 

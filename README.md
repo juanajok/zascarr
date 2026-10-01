@@ -127,7 +127,8 @@ opción; no pierdes nada. Al volver a ejecutarlo, `Intro` **mantiene la opción 
 ya tenías** (que puede ser abrirlo a la red: te lo dice antes de preguntar) y, si
 no hay terminal para preguntar, también se mantiene lo que había. El instalador
 recrea la aplicación para que la contraseña nueva valga de inmediato, y si la
-encuentra ya abierta a la red la **para** hasta comprobar la contraseña.
+encuentra la aplicación ya instalada la **para** (unos minutos sin servicio) hasta
+comprobar la contraseña, también si estaba detrás de un proxy.
 
 Puedes volver a ejecutar `sudo bash /opt/zascarr/zascarr/bootstrap.sh`
 cuando quieras: es idempotente (no duplica nada) y nunca toca los archivos

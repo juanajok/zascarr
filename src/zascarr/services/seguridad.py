@@ -60,6 +60,17 @@ AVISO_EXPUESTA_SIN_CONTRASENA = {
 }
 
 
+def base_url_es_publica(base_url: str | None) -> bool:
+    """¿Esa `BASE_URL` apunta a algo que no es esta máquina?
+
+    Deliberadamente LAXA: acepta `http://`, subrutas y lo que `urlsplit` entienda. Sirve
+    para decidir qué hay que LIMPIAR de una configuración histórica; el validador
+    estricto (`url_publica_valida`) es solo para lo que se acepta de nuevo.
+    """
+    host = (urlsplit(base_url).hostname or "").lower() if base_url else ""
+    return bool(host) and host not in _LOCALES
+
+
 def exposicion_efectiva(settings=None) -> str:
     """Hasta dónde puede llegar la interfaz, según cómo se publicó (A11).
 
@@ -74,8 +85,7 @@ def exposicion_efectiva(settings=None) -> str:
     bind = (s.zascarr_bind_address or "").strip().strip("[]").lower()
     if bind not in _LOCALES:
         return EXPOSICION_RED
-    host = (urlsplit(s.base_url).hostname or "").lower() if s.base_url else ""
-    if host and host not in _LOCALES:
+    if base_url_es_publica(s.base_url):
         return EXPOSICION_PROXY
     return EXPOSICION_LOCAL
 

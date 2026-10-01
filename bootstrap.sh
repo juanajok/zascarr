@@ -472,17 +472,31 @@ fi
 ln -sf "${ENV_FILE}" "${SCRIPT_DIR}/.env" || \
     warn "No pude crear el enlace ${SCRIPT_DIR}/.env -> ${ENV_FILE}. Un 'docker compose' sin --env-file ejecutado desde ${SCRIPT_DIR} no verá tu configuración."
 
-# ── A11: si la aplicación YA corre publicada fuera de localhost, se para ahora y no se
-# ── vuelve a levantar hasta haber comprobado la contraseña. Escribir 127.0.0.1 en el
-# ── .env NO cierra el puerto de un contenedor ya creado, y cualquier fallo de más
-# ── abajo (migración, build…) dejaría abierta la instalación anterior.
-if contenedor_abierto_a_la_red; then
-    warn "La aplicación ya está publicada fuera de esta máquina. La paro hasta comprobar la
-  contraseña; volverá a arrancar (cerrada o abierta, según lo que elijas) al final."
-    docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop zascarr || die \
-        "No pude parar ZascArr, que está abierto a la red. Páralo a mano antes de seguir:
+# ── A11: si ya hay una aplicación, se PARA ahora —publique donde publique, también tras
+# ── un proxy— y no se vuelve a levantar hasta haber comprobado la contraseña. Escribir
+# ── 127.0.0.1 en el .env NO cierra el puerto de un contenedor ya creado, y con proxy el
+# ── puerto ya está en localhost pero la aplicación sigue siendo accesible: si algo
+# ── fallase entre cambiar su seguridad y recrearla (migración, build, contraseña…), la
+# ── instalación anterior seguiría atendiendo con sus ajustes antiguos.
+ESTADO_APP="$(estado_de_publicacion)"
+case "${ESTADO_APP}" in
+    ausente) ;;
+    local|abierta)
+        if [[ "${ESTADO_APP}" == "abierta" ]]; then
+            warn "La aplicación ya está publicada fuera de esta máquina."
+        fi
+        warn "Paro ZascArr mientras reviso su seguridad (unos minutos sin servicio). Volverá
+  a arrancar al final, cerrada o abierta según lo que elijas."
+        docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop zascarr || die \
+            "No pude parar ZascArr. Páralo a mano antes de seguir:
   docker compose -f ${COMPOSE_FILE} stop zascarr"
-fi
+        ;;
+    *)
+        die "No he podido comprobar si ZascArr ya está funcionando (¿Docker no responde?).
+  No sigo: si estuviera abierto a la red, no podría garantizar que lo dejo protegido.
+  Comprueba Docker con 'docker ps' y vuelve a ejecutar el instalador."
+        ;;
+esac
 
 info "Levantando PostgreSQL y Redis..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
