@@ -94,6 +94,11 @@ services:
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
       - COVERS_CACHE_PATH=/config/covers
       - TZ=${TZ:-Europe/Madrid}
+      # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
+      # contenedor (que no monta el .env). ALLOWED_HOSTS no tiene otra vía: no está
+      # en Ajustes, y sin él quien entra por un nombre de equipo recibe 403 en todo.
+      - BASE_URL=${BASE_URL:-}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
       # UID/GID reales del usuario de servicio del host (ZASCARR_USER,
       # resuelto por bootstrap.sh) — sin esto el contenedor corre fijo
       # como UID 1000 y no puede borrar los originales tras importarlos
