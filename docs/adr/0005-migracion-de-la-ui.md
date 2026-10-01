@@ -50,7 +50,7 @@ contratos HTMX sin que ninguna prueba lo vea.
    registrar los movimientos para reconciliarlos tras un fallo), **esa dependencia se separa** en su
    propia historia y PR previa, con migración y ficha, y la historia de UI espera. **No se rebaja
    la garantía para que la historia quepa sin migración**, ni se mete esquema en una PR de interfaz.
-   Consecuencia ya aplicada: «Unir duplicadas» (Deseados no tiene unicidad) queda **fuera de la
+   Consecuencia ya aplicada: «Unir duplicadas» (los items manuales de Deseados no tienen unicidad a propósito, D8) queda **fuera de la
    migración**; V8 solo agrupa visualmente.
 6. **Puerta de validación (G1).** U10 —probar con 3–5 coleccionistas— se hace **antes** de fusionar
    los dos rediseños de mayor riesgo (V5 y V6b): se puede acertar el problema y no la solución.
@@ -65,7 +65,10 @@ contratos HTMX sin que ninguna prueba lo vea.
    ofrece recuperarlo. La asignación en lote exige **auditar antes el patrón mover + sesión viva**
    (`CLAUDE.md` §3.1.2), por lo que V6 se divide en servicio (V6a) y UI (V6b).
 9. **Lo que no se ha verificado, no se da por hecho.** El comportamiento de htmx 4.0.0 ante un `4xx`
-   (cambia por defecto todo salvo 204/304) se verifica en navegador **antes de V6b**.
+   **se verificó en la línea base de V0** (Chrome 154, datos sintéticos): intercambia el cuerpo del
+   error y deja el JSON en crudo donde estaba la tarjeta (`docs/design/ui-baseline/README.md`).
+   Consecuencia de diseño: ninguna ruta `hx-*` nueva devuelve un error como cuerpo JSON; los
+   fragmentos de estado devuelven `204`/vacío ante **cualquier** fallo.
 
 ## Alternativas descartadas
 

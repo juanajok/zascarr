@@ -12,11 +12,13 @@
 - Las tablas de **rutas** y de **plantillas** de abajo se han **generado** recorriendo el AST de los
   routers y las plantillas (decoradores `@router.get|post`, `Form(...)`, `TemplateResponse(...)`,
   atributos `hx-*`), no transcritas a mano. Los contrastes de color se han **calculado** (fórmula WCAG).
-- **No se ha ejecutado la aplicación** ni se ha mirado el navegador: lo que depende de comportamiento
-  en ejecución (cómo trata htmx 4 una respuesta 4xx, p. ej.) se marca **«sin verificar»** con el
-  procedimiento para verificarlo.
-- **Pendiente de V0 (no hecho):** las **capturas de la UI actual** (`docs/design/ui-baseline/`,
-  criterio 3). Exigen ejecutar la app contra Postgres con datos; se hacen aparte.
+- **Lo que depende de la ejecución se comprobó después, en la línea base** (`docs/design/ui-baseline/`):
+  la aplicación se levantó con Postgres propio y datos sintéticos, y se midió en Chrome 154 cómo trata
+  htmx 4 un `409` y qué hace `/estado` con la BD caída. Las secciones 2.1 y 2.5 llevan **esos
+  resultados**, no suposiciones. Lo que **sigue sin verificar** se marca como tal.
+- **Línea base de capturas (criterio 3 de V0): hecha** — 37 capturas y 4 ficheros de datos
+  reproducibles con los comandos de `docs/design/ui-baseline/README.md`. Límites allí: un navegador, un
+  equipo, datos sintéticos, no sustituye la verificación en la Pi (V13).
 
 ## 2. Lo que el inventario corrige de la Épica V
 
@@ -28,7 +30,11 @@ coincidía o faltaba, ordenado por impacto en el plan:
    incluso con la base de datos caída (arranque degradado, E6), igual que `/api/health`, `/login` y
    `/legal`. **Consecuencia para V3/V9:** cualquier fragmento de menú o de estado que se añada
    (`/ui/_nav/estado`) cae bajo `/ui/*`, que en modo degradado devuelve un **503 HTML**; con htmx 4
-   (ver punto 5) ese HTML podría acabar pintado en el menú. Hay que decidir explícitamente cómo se
+   (ver punto 5) ese HTML acabaría pintado en el menú. **Medido en la línea base:** con la BD caída y
+   la app **ya en marcha**, `/ui/` responde un **`500` de texto plano** (`Internal Server Error`), y
+   solo con la BD caída **desde el arranque** responde el `503` descrito; `/estado` y `/api/health`
+   responden `200` en ambos casos. Por tanto el fragmento debe contemplar **cualquier** fallo, no
+   solo el modo degradado de E6. Hay que decidir explícitamente cómo se
    comporta el fragmento con la BD caída, y la decisión «las URL no cambian» **incluye** que `/estado`
    se queda en `/estado`.
 2. **La página estática `/` ya no existe.** `main.py` registra `GET /` como redirección 307 a `/ui/`
@@ -46,11 +52,14 @@ coincidía o faltaba, ordenado por impacto en el plan:
    ordena (Inicio / Biblioteca / Duplicados), pero eso **mueve** qué ruta cuelga de cada etiqueta.
 5. **htmx 4.0.0 está vendorizado** (`static/vendor/README.md`), y su configuración por defecto tiene
    `noSwap:[204,304]` (leído en `htmx.min.js`): **todo estado distinto de 204/304 se intercambia**,
-   incluidos 4xx y 5xx. Hoy `asignar` responde `409`/`400` con un cuerpo JSON de FastAPI. **Hipótesis
-   sin verificar:** en la UI actual un `409` (colisión de ediciones, B15) pinta ese JSON dentro de la
-   tarjeta (`hx-swap="outerHTML"`). Verificación: asignar en el navegador un archivo cuyo número
-   colisione y mirar la tarjeta. **Debe verificarse antes de V6b** (la línea base de V0 incluye ese caso), porque el «éxito parcial por
-   archivo» depende de ello.
+   incluidos 4xx y 5xx. Hoy `asignar` responde `409`/`400` con un cuerpo JSON de FastAPI.
+   **Verificado en la línea base (Chrome 154, htmx 4.0.0):** al asignar un ómnibus a una serie cuyo
+   nº 12 es una grapa, el servidor responde `409` + `{"detail": "…"}` y **htmx intercambia ese
+   cuerpo: la tarjeta desaparece y en su lugar queda el JSON en crudo**, como texto suelto en la
+   rejilla. El estado real es correcto (el archivo no se movió, queda pendiente con su motivo en la
+   BD); lo que falla es **lo que ve el coleccionista**, que puede creer que ha perdido el archivo. Es un
+   defecto **ya existente en producción**, no se corrige en V0 (`ui-baseline/README.md` §1), y
+   condiciona V6b: el lote **no** puede depender de `HTTPException`.
 6. **Pendientes tiene tope y no tiene recuento**: `ReviewService.pending_files(limit=50)`; no hay
    consulta de recuento. La maqueta enseña «14» y un contador en el menú: con >50 pendientes el
    número sería falso. Hace falta un `contar_pendientes()` (servicio puro con prueba).
@@ -266,7 +275,7 @@ router por `#hash`, «Ver anotaciones UX».
 comparados», «7,5 GB recuperables», «200 duplicados», los estados de Estado (VPN «no lo sabemos»),
 «ZascArr v1.15.0», «5 peticiones iguales» de BPRD.
 
-**Botones que no tienen backend hoy:** «Unir duplicadas» (Deseados no tiene unicidad ni operación de
+**Botones que no tienen backend hoy:** «Unir duplicadas» (en Deseados los items **manuales** no tienen unicidad a propósito (el índice único parcial `uq_wishlist_politica_numero`, migración 0015, cubre solo `origen = 'politica'` con número; decisión de D8 por la lección de Kapowarr: un `UNIQUE` en una tabla gestionada desde la UI exige una reconciliación amable), ni hay operación de
 unir), «Silenciar aviso de VPN» (haría falta un indicador en `runtime_settings`), «Copiar comando»
 (**el portapapeles exige JS**: sin JS se muestra el comando en un bloque seleccionable con
 `user-select: all`), «Recuperar» ignorados, la pestaña «Ignorados», el recuento del menú, el orden
