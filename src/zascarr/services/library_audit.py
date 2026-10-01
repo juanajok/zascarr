@@ -31,9 +31,8 @@ Coste en la Pi (restricción dura, CLAUDE.md §1): hashear 2000 CBR de
      los tamaños únicos no se leen jamás. En una biblioteca sana eso
      deja fuera casi todo.
   2. El hash va en streaming (`sha256_streaming`, compartido con el
-     triage), no con el `_hash_and_buffer` de ese módulo — ese carga el
-     CBZ entero en RAM porque además necesita abrir el ZIP; aquí solo
-     hace falta el digest.
+     triage): la memoria no depende del tamaño del fichero. (Hasta
+     2026-10-01 el triage cargaba el CBZ entero en RAM; ya no.)
 """
 from __future__ import annotations
 

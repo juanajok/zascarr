@@ -15,6 +15,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   fichero, al **adoptar** la biblioteca y al **importar** (el hash de cada fichero
   se calculaba sin soltar el hilo). Ahora ese trabajo de disco va a un hilo aparte
   y la interfaz sigue respondiendo. Sin cambios de comportamiento ni de datos.
+- **Importar o adoptar un `.cbz` muy grande ya no tumba el contenedor.** Encontrado
+  en el mismo ensayo: la biblioteca real tiene `.cbz` de más de 400 MB (el mayor,
+  un integral de 1,2 GB) y el análisis de cada fichero cargaba el `.cbz` **entero
+  en memoria** para leerlo una sola vez. Con el límite de 512 MB por contenedor el
+  sistema operativo mataba el proceso (código 137) al llegar a ellos, y en una
+  Raspberry Pi esa memoria se comparte con Transmission, aMule, Prowlarr y Kavita.
+  Ahora el hash se calcula leyendo por trozos y el `.cbz` se abre desde su ruta:
+  el mismo fichero de 1,2 GB se analiza con unos 22 MB de memoria. El resultado
+  del análisis (hash, `ComicInfo.xml`, portada) no cambia.
 
 ## [1.15.0] — 2026-10-01
 

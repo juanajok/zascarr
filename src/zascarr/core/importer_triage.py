@@ -28,9 +28,11 @@ no resuelve entidades externas (no hay XXE), pero NO uses lxml con
 resolve_entities=True aquí. Si se migra a defusedxml, mejor.
 
 Correcciones respecto al diseño original:
-  - Un solo open() de disco: SHA256 en streaming al BytesIO, ZipFile sobre
-    el buffer. Evita la doble lectura completa del fichero en disco (crítico
-    para una Pi con HDD y CBZs de 200MB).
+  - SHA256 en streaming y ZipFile abierto desde la ruta: la memoria no depende
+    del tamaño del fichero. El diseño original cargaba el CBZ entero en un
+    BytesIO para leer el disco una sola vez; con integrales de más de 1 GB
+    (biblioteca real, 2026-10-01) y 512 MB por contenedor eso mataba el proceso.
+    El ZipFile solo lee el directorio central y las entradas que se piden.
   - guess_source_tag busca solo en el último bloque de paréntesis del
     filename, no en el stem completo (evita falsos positivos en títulos
     como "Digital Conan Vol.01").
@@ -192,27 +194,6 @@ def sha256_streaming(path: Path) -> str:
     return h.hexdigest()
 
 
-def _hash_and_buffer(path: Path) -> tuple[str, io.BytesIO]:
-    """Lee el fichero UNA SOLA VEZ: calcula SHA256 y carga en BytesIO.
-
-    En una Pi con HDD, leer un CBZ de 200MB dos veces (una para el hash y otra
-    para el ZipFile) cuesta varios segundos por archivo. Con este approach, una
-    sola lectura secuencial llena el buffer y el hash simultáneamente.
-
-    Coste: el CBZ completo en RAM. Aceptable para el rango habitual (30-200MB).
-    Para ómnibus de 500MB en una Pi de 4GB habría que perfilar, pero el caso
-    del tebeo en grapa no da problemas.
-    """
-    h = hashlib.sha256()
-    buf = io.BytesIO()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):  # chunks de 1MB
-            h.update(chunk)
-            buf.write(chunk)
-    buf.seek(0)
-    return h.hexdigest(), buf
-
-
 def triage(path: Path) -> TriageResult:
     """Punto de entrada del importer. Excepciones internas: ninguna sale."""
     result = TriageResult(path=path)
@@ -231,8 +212,7 @@ def triage(path: Path) -> TriageResult:
         # que no funcionaba casi nunca, en silencio. Leer ComicInfo.xml
         # sí exige descomprimir el RAR; hashear NO: son los bytes del
         # fichero, da igual el formato. Se calcula en streaming (sin
-        # cargarlo en RAM como _hash_and_buffer, que solo tiene sentido
-        # cuando además hay que abrir el ZIP).
+        # cargarlo en RAM).
         try:
             result.sha256 = sha256_streaming(path)
         except OSError as exc:
@@ -240,9 +220,16 @@ def triage(path: Path) -> TriageResult:
         result.warnings.append(f"formato {ext}: triaje solo por filename")
         return result
 
+    # Hash en streaming y zip abierto DESDE LA RUTA: la memoria no depende del
+    # tamaño del fichero. Antes se cargaba el CBZ entero en un BytesIO para leer
+    # el disco una sola vez; con integrales de 1,2 GB (biblioteca real, ensayo
+    # 2026-10-01) y un contenedor de 512 MB, el kernel mataba el proceso. El
+    # ZipFile solo lee el directorio central y las pocas entradas que se piden
+    # (ComicInfo.xml y la primera página), un coste de lectura despreciable
+    # frente a la pasada completa del hash.
     try:
-        sha256, buf = _hash_and_buffer(path)
-        zf = zipfile.ZipFile(buf)
+        sha256 = sha256_streaming(path)
+        zf = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as exc:
         # sha256 se deja sin asignar a propósito: el hash de basura binaria
         # de un zip roto no sirve para dedupe (dos descargas incompletas
