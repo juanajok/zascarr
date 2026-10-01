@@ -28,6 +28,7 @@ from zascarr.services.auth import (
     hash_password_async,
     limpiar_cache_basic,
 )
+from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.web.routes import crear_templates
 
@@ -111,6 +112,7 @@ def _contexto() -> dict:
         "webhook_url": s.webhook_url,
         "webhook_token_configurado": bool(s.webhook_token),
         "webhook_chat_id": s.webhook_chat_id,
+        "webhook_incluir_nombres": s.webhook_incluir_nombres,
     }
 
 
@@ -136,16 +138,71 @@ async def guardar_avisos(
     webhook_url: str = Form(default=""),
     webhook_token: str = Form(default=""),
     webhook_chat_id: str = Form(default=""),
+    webhook_incluir_nombres: bool = Form(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
+    # Validación en el guardado: el tipo tiene que ser uno conocido y la URL, si
+    # se usa, http(s) con host. Un tipo raro ya no cae en «generic» en silencio.
+    if webhook_type not in TIPOS_CONOCIDOS:
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Avisos",
+            "error": f"Tipo de aviso no reconocido: «{webhook_type}». Elige uno de la lista.",
+        })
+    url_limpia = webhook_url.rstrip("/")
+    if webhook_type != "telegram" and url_limpia and not url_valida(url_limpia):
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Avisos",
+            "error": "La URL del aviso tiene que empezar por http:// o https:// y llevar un host.",
+        })
     await RuntimeSettingsService(db).save({
         "webhook_enabled": webhook_enabled,
         "webhook_type": webhook_type,
-        "webhook_url": webhook_url.rstrip("/"),
+        "webhook_url": url_limpia,
         "webhook_token": webhook_token,
         "webhook_chat_id": webhook_chat_id,
+        "webhook_incluir_nombres": webhook_incluir_nombres,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "Avisos"})
+
+
+@router.post("/probar/avisos", response_class=HTMLResponse)
+async def probar_avisos(
+    request: Request,
+    webhook_type: str = Form(default="generic"),
+    webhook_url: str = Form(default=""),
+    webhook_token: str = Form(default=""),
+    webhook_chat_id: str = Form(default=""),
+) -> HTMLResponse:
+    """Prueba el aviso con lo que hay EN EL FORMULARIO, guardado o no.
+
+    Misma convención que el resto de «Probar conexión» (D11): si el secreto llega
+    vacío se usa el guardado como reserva, porque la UI nunca lo rellena. Si no,
+    quien cambia la URL y pulsa «Enviar aviso de prueba» sin guardar probaría la
+    configuración vieja y vería un resultado engañoso.
+    """
+    settings = get_settings()
+    if webhook_type not in TIPOS_CONOCIDOS:
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False, "mensaje": f"Tipo de aviso no reconocido: «{webhook_type}».",
+        })
+    url = webhook_url.rstrip("/") or settings.webhook_url
+    if webhook_type != "telegram" and url and not url_valida(url):
+        return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+            "ok": False,
+            "mensaje": ("La URL del aviso tiene que empezar por http:// o "
+                        "https:// y llevar un host."),
+        })
+    de_prueba = settings.model_copy(update={
+        "webhook_type": webhook_type,
+        "webhook_url": url,
+        "webhook_token": webhook_token or settings.webhook_token,
+        "webhook_chat_id": webhook_chat_id or settings.webhook_chat_id,
+    })
+    resultado = await Notifier(settings=de_prueba).aviso_de_prueba()
+    return templates.TemplateResponse(request, "_ajustes_prueba.html", {
+        "ok": resultado.ok,
+        "mensaje": "Aviso enviado." if resultado.ok else f"No se pudo enviar: {resultado.motivo}.",
+    })
 
 
 @router.post("/guardar/fuentes", response_class=HTMLResponse)
