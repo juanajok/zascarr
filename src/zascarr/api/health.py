@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.services.seguridad import aviso_de_exposicion
 
 logger = structlog.get_logger()
 
@@ -210,6 +211,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         warnings["vpn"] = vpn_detail
     if db_status != "ok":
         warnings["database"] = db_detail
+    # A11: puerto abierto (o dirección pública) y ninguna contraseña. Solo avisa:
+    # nunca bloquea ni cambia el estado, igual que la VPN.
+    exposicion = aviso_de_exposicion(settings)
+    if exposicion:
+        warnings["exposicion"] = exposicion
 
     return {
         "status": status_str,

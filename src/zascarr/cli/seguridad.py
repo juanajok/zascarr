@@ -32,19 +32,12 @@ import sys
 from zascarr.config import get_settings
 from zascarr.database import async_session_factory, engine
 from zascarr.services.runtime_settings import capturar_valores_base, load_overrides_at_startup
-from zascarr.services.seguridad import fijar_seguridad
+from zascarr.services.seguridad import fijar_seguridad, hay_contrasena
 
 OK = 0
 ERROR = 1
 RECHAZADA = 2
 SIN_CONTRASENA = 3
-
-
-def hay_contrasena() -> bool:
-    """Contraseña efectiva: modo con contraseña y hash guardado. Mismo criterio
-    que usa el middleware para decidir si exige credenciales."""
-    s = get_settings()
-    return s.auth_mode in ("password", "user_password") and bool(s.auth_password_hash)
 
 
 async def fijar_contrasena(db, linea: str) -> tuple[int, str, str | None]:

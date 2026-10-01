@@ -8,6 +8,7 @@ El router y el comando son ahora finos y comparten `fijar_seguridad`.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -40,6 +41,61 @@ MENSAJE_SIN_CONTRASENA = (
 MENSAJE_SIN_USUARIO = "Este modo necesita también un nombre de usuario."
 
 
+#: Nombres de host que cuentan como «esta máquina» (para bind y para BASE_URL).
+_LOCALES = {"127.0.0.1", "localhost", "::1"}
+
+EXPOSICION_LOCAL = "local"
+EXPOSICION_RED = "red"
+EXPOSICION_PROXY = "proxy"
+
+AVISO_EXPUESTA_SIN_CONTRASENA = {
+    EXPOSICION_RED: (
+        "ZascArr está abierto a tu red local y no tiene contraseña: cualquier "
+        "dispositivo de la red puede usarlo. Pon una en Ajustes → Seguridad."
+    ),
+    EXPOSICION_PROXY: (
+        "Hay una dirección pública configurada para ZascArr y no tiene contraseña: "
+        "cualquiera que llegue a ella puede usarlo. Pon una en Ajustes → Seguridad."
+    ),
+}
+
+
+def exposicion_efectiva(settings=None) -> str:
+    """Hasta dónde puede llegar la interfaz, según cómo se publicó (A11).
+
+    - `red`: el equipo publica el puerto fuera de localhost (`0.0.0.0` u otra IP).
+    - `proxy`: el puerto sigue en localhost pero hay una `BASE_URL` que no es local,
+      es decir, un proxy inverso la expone.
+    - `local`: solo esta máquina.
+
+    La app no controla su puerto: esto solo refleja lo que el instalador escribió.
+    """
+    s = settings or get_settings()
+    bind = (s.zascarr_bind_address or "").strip().strip("[]").lower()
+    if bind not in _LOCALES:
+        return EXPOSICION_RED
+    host = (urlsplit(s.base_url).hostname or "").lower() if s.base_url else ""
+    if host and host not in _LOCALES:
+        return EXPOSICION_PROXY
+    return EXPOSICION_LOCAL
+
+
+def hay_contrasena(settings=None) -> bool:
+    """Contraseña efectiva: modo con contraseña y hash guardado. Es el mismo
+    criterio con el que el middleware decide si exige credenciales."""
+    s = settings or get_settings()
+    return s.auth_mode in ("password", "user_password") and bool(s.auth_password_hash)
+
+
+def aviso_de_exposicion(settings=None) -> str | None:
+    """Texto para `/api/health` si la interfaz está abierta y sin contraseña."""
+    s = settings or get_settings()
+    nivel = exposicion_efectiva(s)
+    if nivel == EXPOSICION_LOCAL or hay_contrasena(s):
+        return None
+    return AVISO_EXPUESTA_SIN_CONTRASENA[nivel]
+
+
 @dataclass
 class ResultadoSeguridad:
     #: Mensaje para el coleccionista si NO se guardó nada.
@@ -62,17 +118,20 @@ def validar_contrasena(password: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+# `https://host[:puerto][/ruta]` con un host ASCII (un dominio internacionalizado va
+# en punycode, que es lo que el navegador envía en `Origin`) o una IP entre
+# corchetes. Sin espacios. `urlsplit` NO sirve de validador: acepta `https://a b.org`.
+_URL_PUBLICA = re.compile(r"https://([A-Za-z0-9._-]+|\[[0-9A-Fa-f:]+\])(:[0-9]+)?(/\S*)?")
+
+
 def url_publica_valida(url: str) -> bool:
-    """`https://host[:puerto][/ruta]` — la URL pública de un proxy inverso con TLS.
+    """La URL pública de un proxy inverso con TLS: solo `https://` con un host válido.
 
     Solo `https`: con `http` el proxy no estaría haciendo de frontera segura.
-    `scripts/_exposicion.sh::url_publica_valida` aplica la misma regla en el instalador.
+    `scripts/_exposicion.sh::url_publica_valida` aplica la MISMA regla en el
+    instalador; `tests/test_exposicion_bash.py` las compara con los mismos casos.
     """
-    try:
-        partes = urlsplit(url)
-    except ValueError:
-        return False
-    return partes.scheme == "https" and bool(partes.hostname)
+    return _URL_PUBLICA.fullmatch(url) is not None
 
 
 async def fijar_seguridad(
