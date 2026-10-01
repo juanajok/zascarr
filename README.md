@@ -107,15 +107,21 @@ Instala git y Docker si te faltan, crea un usuario de servicio `media`
 (igual que Sonarr/Radarr/Prowlarr si ya los tienes — código en `/opt`,
 nunca mezclado con tu usuario personal), descarga ZascArr en
 `/opt/zascarr/zascarr`, y te hace **3 preguntas** (pulsa `Intro` para
-aceptar lo que va entre corchetes):
+aceptar lo que va entre corchetes) y una cuarta que **por defecto no abre nada**:
 
 1. ¿Dónde están tus tebeos ya organizados?
 2. ¿Dónde caen tus descargas (Transmission/aMule)?
 3. ¿Idioma de la interfaz? (`es`/`en`)
+4. ¿Quieres usarlo desde otros dispositivos (móvil, tablet)? `Intro` = solo
+   desde esta máquina. Si eliges abrirlo a tu red local (o detrás de un proxy
+   con HTTPS), **te pide una contraseña antes de abrir nada**.
 
 Al terminar, ZascArr ya está funcionando. Ábrelo en:
 
 **http://127.0.0.1:8000** — el panel de estado, en español.
+
+¿Cambias de idea sobre el móvil? Vuelve a ejecutar el instalador y elige otra
+opción; no pierdes nada.
 
 Puedes volver a ejecutar `sudo bash /opt/zascarr/zascarr/bootstrap.sh`
 cuando quieras: es idempotente (no duplica nada) y nunca toca los archivos

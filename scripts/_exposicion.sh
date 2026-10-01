@@ -157,3 +157,103 @@ pedir_contrasena_acceso() {
     done
     return 1
 }
+
+# exposicion_descripcion OPCION
+#   Frase para el instalador cuando no puede preguntar (sin terminal).
+exposicion_descripcion() {
+    case "${1:-}" in
+        2) echo "abierto a tu red local" ;;
+        3) echo "detrás de un proxy inverso" ;;
+        *) echo "solo esta máquina" ;;
+    esac
+}
+
+# cli_seguridad ARGS...
+#   Ejecuta `python -m zascarr.cli.seguridad` DENTRO de la imagen (en el host no
+#   hay Python). `run` no publica puertos, así que no abre nada. Necesita
+#   COMPOSE_FILE y ENV_FILE, que define bootstrap.sh.
+cli_seguridad() {
+    docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" run --rm -T zascarr \
+        python -m zascarr.cli.seguridad "$@"
+}
+
+# asegurar_contrasena_de_acceso
+#   Garantiza que hay una contraseña ANTES de abrir el puerto. Devuelve 0 si la
+#   hay (ya estaba, o se acaba de fijar) y 1 en cualquier otro caso — incluida la
+#   duda —, y entonces quien llama NO abre nada. Interactivo solo si
+#   EXPOSICION_INTERACTIVA=1 (bootstrap.sh lo pone según haya terminal).
+#
+#   Orden: se llama DESPUÉS de migrar y ANTES de levantar la aplicación, así que
+#   no hay ni un instante con el puerto abierto y sin contraseña.
+asegurar_contrasena_de_acceso() {
+    local rc=0 mantener
+    CONTRASENA_ACCESO=""    # siempre definida: bootstrap.sh corre con `set -u`
+    # `docker compose run -T` lee la entrada estándar aunque el comando no la use: sin
+    # `</dev/null` se llevaría las líneas de la contraseña que llegan después.
+    cli_seguridad estado </dev/null >/dev/null 2>&1 || rc=$?
+    case "${rc}" in
+        0)
+            if [[ "${EXPOSICION_INTERACTIVA:-0}" != "1" ]]; then
+                return 0
+            fi
+            read -rp "Ya hay una contraseña de acceso. ¿La mantengo? [S/n]: " mantener || true
+            case "${mantener,,}" in
+                n|no) ;;
+                *) return 0 ;;
+            esac
+            ;;
+        3) ;;
+        *)
+            echo "No he podido comprobar si ya hay una contraseña (código ${rc})." >&2
+            return 1
+            ;;
+    esac
+
+    if [[ "${EXPOSICION_INTERACTIVA:-0}" != "1" ]]; then
+        echo "Abrir a la red exige una contraseña y sin terminal no puedo pedírtela." >&2
+        return 1
+    fi
+    pedir_contrasena_acceso || return 1
+    # Por stdin: nunca por argumentos ni por el entorno (quedaría en `ps`).
+    if ! printf '%s\n' "${CONTRASENA_ACCESO}" | cli_seguridad fijar-contrasena; then
+        CONTRASENA_ACCESO=""
+        return 1
+    fi
+    CONTRASENA_ACCESO=""
+    return 0
+}
+
+# resumen_exposicion OPCION URL_PUBLICA
+#   Qué decirle al coleccionista al terminar, según lo que se haya dejado.
+resumen_exposicion() {
+    local opcion="${1:-1}" url="${2:-}" ip puerto_ufw=""
+    case "${opcion}" in
+        2)
+            ip="$(ip_de_la_red)"
+            echo "  Desde otros dispositivos de tu red:  http://${ip:-<la IP de este equipo>}:8000"
+            echo "  Te pedirá la contraseña que acabas de fijar."
+            echo "  Importante: NO reenvíes el puerto 8000 en tu router hacia internet."
+            if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then
+                puerto_ufw="1"
+            fi
+            if [[ -n "${puerto_ufw}" && -n "${ip}" ]]; then
+                echo "  Tienes ufw activo: puede bloquear la entrada. Si no llegas desde el móvil,"
+                echo "  permite tu red (ajusta la subred a la tuya; yo no toco el cortafuegos):"
+                echo "    sudo ufw allow from ${ip%.*}.0/24 to any port 8000 proto tcp"
+            fi
+            ;;
+        3)
+            echo "  Dirección pública:  ${url}"
+            echo "  ZascArr sigue escuchando solo en 127.0.0.1:8000: lo que se expone es tu proxy."
+            echo "  El proxy y el HTTPS los pones tú. Ejemplo con Caddy (en esta misma máquina):"
+            echo ""
+            echo "    ${url#https://} {"
+            echo "        reverse_proxy 127.0.0.1:8000"
+            echo "    }"
+            ;;
+        *)
+            echo "  Solo se puede entrar desde esta máquina. Para usarlo desde el móvil o la"
+            echo "  tablet, vuelve a ejecutar este instalador y elige la opción 2."
+            ;;
+    esac
+}

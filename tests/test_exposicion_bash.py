@@ -198,3 +198,176 @@ class TestIpDeLaRed:
         assert r.returncode == 0
         salida = r.stdout.strip()
         assert salida == "" or all(p.isdigit() for p in salida.split("."))
+
+
+class TestDescripcionYResumen:
+
+    @pytest.mark.parametrize("opcion,texto", [
+        ("1", "solo esta máquina"), ("2", "red local"), ("3", "proxy"), ("", "solo esta máquina"),
+    ])
+    def test_descripcion(self, opcion, texto):
+        assert texto in _bash(f'exposicion_descripcion "{opcion}"').stdout
+
+    def test_resumen_de_solo_esta_maquina_explica_como_abrir(self):
+        salida = _bash('resumen_exposicion 1 ""').stdout
+        assert "opción 2" in salida and "http://" not in salida
+
+    def test_resumen_de_red_da_la_direccion_y_avisa_del_router(self):
+        salida = _bash('ip_de_la_red() { echo 192.168.1.50; }\nresumen_exposicion 2 ""').stdout
+        assert "http://192.168.1.50:8000" in salida
+        assert "router" in salida
+
+    def test_resumen_de_red_sin_ip_no_inventa_una(self):
+        salida = _bash('ip_de_la_red() { :; }\nresumen_exposicion 2 ""').stdout
+        assert "<la IP de este equipo>" in salida
+
+    def test_resumen_de_proxy_deja_claro_que_el_proxy_lo_pone_el_operador(self):
+        salida = _bash('resumen_exposicion 3 "https://tebeos.ejemplo.org"').stdout
+        assert "tebeos.ejemplo.org {" in salida
+        assert "reverse_proxy 127.0.0.1:8000" in salida
+        assert "los pones tú" in salida
+
+
+@pytest.fixture
+def docker_doble(tmp_path):
+    """Un `docker` de pega en el PATH: registra los argumentos y lo que llega por
+    stdin a `fijar-contrasena`, y devuelve los códigos que pida cada prueba.
+
+    Como el `docker compose run -T` real, **consume la entrada estándar** también en
+    `estado` (hallazgo de la verificación en vivo: sin esto, `estado` se tragaba la
+    contraseña que el instalador acababa de recibir)."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    doble = bin_ / "docker"
+    doble.write_text(
+        '#!/usr/bin/env bash\n'
+        'echo "$*" >> "$DOBLE_LOG"\n'
+        'case "$*" in\n'
+        '  *"cli.seguridad estado"*) cat > /dev/null; exit "${DOBLE_ESTADO_RC:-3}" ;;\n'
+        '  *"cli.seguridad fijar-contrasena"*) cat > "$DOBLE_STDIN"; exit "${DOBLE_FIJAR_RC:-0}" ;;\n'
+        'esac\n'
+        'exit 99\n'
+    )
+    doble.chmod(0o755)
+    return {
+        "bin": bin_, "log": tmp_path / "docker.log", "stdin": tmp_path / "docker.stdin",
+        "tmp": tmp_path,
+    }
+
+
+def _asegurar(docker_doble, *, entrada="", interactivo="1", estado_rc="3", fijar_rc="0"):
+    import os
+
+    entorno = {
+        **os.environ,
+        "PATH": f"{docker_doble['bin']}:{os.environ['PATH']}",
+        "DOBLE_LOG": str(docker_doble["log"]), "DOBLE_STDIN": str(docker_doble["stdin"]),
+        "DOBLE_ESTADO_RC": estado_rc, "DOBLE_FIJAR_RC": fijar_rc,
+    }
+    guion = (
+        f'set -uo pipefail\nsource "{SH}"\n'
+        'COMPOSE_FILE=/x/docker-compose.yml; ENV_FILE=/x/.env\n'
+        f'EXPOSICION_INTERACTIVA={interactivo}\n'
+        'asegurar_contrasena_de_acceso; rc=$?\n'
+        'echo "RC=$rc LONG=${#CONTRASENA_ACCESO}"'
+    )
+    r = subprocess.run(["bash", "-c", guion], capture_output=True, text=True, input=entrada,
+                       env=entorno, timeout=30, check=False)
+    registro = docker_doble["log"].read_text() if docker_doble["log"].exists() else ""
+    recibido = docker_doble["stdin"].read_text() if docker_doble["stdin"].exists() else None
+    rc = [x for x in r.stdout.splitlines() if x.startswith("RC=")][-1]
+    return rc, registro, recibido, r
+
+
+FRASE = "una frase larga que nadie adivina"
+
+
+class TestAsegurarContrasenaDeAcceso:
+
+    def test_sin_contrasena_la_pide_y_la_fija_por_stdin(self, docker_doble):
+        rc, registro, recibido, _ = _asegurar(docker_doble, entrada=f"{FRASE}\n{FRASE}\n")
+        assert rc == "RC=0 LONG=0"                      # y no se queda en memoria
+        assert recibido == FRASE + "\n"
+        assert "fijar-contrasena" in registro
+
+    def test_estado_no_se_traga_la_entrada_del_instalador(self, docker_doble):
+        """`docker compose run -T` lee stdin aunque el comando no la use. La
+        comprobación de `estado` va con `</dev/null`, o se llevaría las líneas de
+        la contraseña y los `read` siguientes recibirían vacío."""
+        rc, _, recibido, r = _asegurar(docker_doble, entrada=f"{FRASE}\n{FRASE}\n")
+        assert rc.startswith("RC=0"), r.stderr
+        assert recibido == FRASE + "\n"
+
+    def test_la_contrasena_nunca_va_en_los_argumentos_de_docker(self, docker_doble):
+        _, registro, _, r = _asegurar(docker_doble, entrada=f"{FRASE}\n{FRASE}\n")
+        assert FRASE not in registro and FRASE not in r.stdout + r.stderr
+
+    def test_ya_hay_y_sin_terminal_se_acepta_sin_tocar_nada(self, docker_doble):
+        rc, registro, recibido, _ = _asegurar(docker_doble, interactivo="0", estado_rc="0")
+        assert rc.startswith("RC=0") and recibido is None
+        assert "fijar-contrasena" not in registro
+
+    def test_ya_hay_e_intro_la_mantiene(self, docker_doble):
+        rc, registro, recibido, _ = _asegurar(docker_doble, estado_rc="0", entrada="\n")
+        assert rc.startswith("RC=0") and recibido is None
+
+    def test_ya_hay_pero_se_quiere_cambiar(self, docker_doble):
+        rc, _, recibido, _ = _asegurar(docker_doble, estado_rc="0", entrada=f"n\n{FRASE}\n{FRASE}\n")
+        assert rc.startswith("RC=0") and recibido == FRASE + "\n"
+
+    def test_sin_contrasena_y_sin_terminal_no_abre(self, docker_doble):
+        rc, registro, recibido, r = _asegurar(docker_doble, interactivo="0", estado_rc="3")
+        assert rc.startswith("RC=1") and recibido is None
+        assert "no puedo pedírtela" in r.stderr
+
+    def test_si_no_se_puede_comprobar_no_abre(self, docker_doble):
+        """Ante la duda (base de datos caída, imagen sin construir…), cerrado."""
+        rc, _, recibido, r = _asegurar(docker_doble, estado_rc="1")
+        assert rc.startswith("RC=1") and recibido is None
+        assert "No he podido comprobar" in r.stderr
+
+    def test_tres_contrasenas_cortas_no_abren_ni_llaman_a_fijar(self, docker_doble):
+        rc, registro, recibido, _ = _asegurar(docker_doble, entrada="a\nb\nc\n")
+        assert rc.startswith("RC=1")
+        assert "fijar-contrasena" not in registro
+
+    def test_si_la_app_rechaza_la_contrasena_no_abre(self, docker_doble):
+        rc, _, _, _ = _asegurar(docker_doble, entrada=f"{FRASE}\n{FRASE}\n", fijar_rc="2")
+        assert rc == "RC=1 LONG=0"
+
+
+class TestOrdenEnBootstrap:
+    """La invariante de seguridad de A11, comprobada sobre el propio instalador:
+    la contraseña existe ANTES de que el puerto pueda abrirse."""
+
+    @staticmethod
+    def _lineas():
+        texto = (Path(__file__).resolve().parents[1] / "bootstrap.sh").read_text(encoding="utf-8")
+        return texto.splitlines()
+
+    def _indice(self, fragmento: str) -> int:
+        lineas = [i for i, l in enumerate(self._lineas()) if fragmento in l and not l.lstrip().startswith("#")]
+        assert lineas, f"no encuentro {fragmento!r} en bootstrap.sh"
+        return lineas[0]
+
+    def test_migra_luego_fija_la_contrasena_luego_escribe_la_direccion_luego_levanta_la_app(self):
+        migrar = self._indice("alembic upgrade head")
+        contrasena = self._indice("asegurar_contrasena_de_acceso; then") if any(
+            "asegurar_contrasena_de_acceso; then" in l for l in self._lineas()
+        ) else self._indice("! asegurar_contrasena_de_acceso")
+        escribir = self._indice('set_env_var "ZASCARR_BIND_ADDRESS"')
+        levantar = self._indice("up -d zascarr")
+        assert migrar < contrasena < escribir < levantar
+
+    def test_la_direccion_de_publicacion_no_se_escribe_antes_de_la_contrasena(self):
+        """Hay una sola escritura de ZASCARR_BIND_ADDRESS y es posterior al paso de contraseña."""
+        escrituras = [i for i, l in enumerate(self._lineas())
+                      if 'set_env_var "ZASCARR_BIND_ADDRESS"' in l and not l.lstrip().startswith("#")]
+        assert len(escrituras) == 1
+
+    def test_si_no_se_consigue_contrasena_se_vuelve_a_solo_esta_maquina(self):
+        texto = "\n".join(self._lineas())
+        i = texto.index("! asegurar_contrasena_de_acceso")
+        bloque = texto[i:i + 700]
+        assert 'ZASCARR_BIND_ADDRESS="127.0.0.1"' in bloque
+        assert "EXPOSICION_OPCION=1" in bloque

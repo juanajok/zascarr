@@ -108,3 +108,20 @@ sobre la autenticación en el primer arranque. «No lo he leído» no es «no ex
 - No se detecta si el router reenvía el puerto a internet.
 - No hay forma de cambiar la exposición desde la interfaz: por diseño, la app no
   controla su propio puerto.
+
+## Resultado de la verificación (2026-10-01)
+
+Todo lo de «Casos de prueba» se escribió antes y pasa. Además, en vivo contra Docker y
+Postgres reales (no contra dobles):
+
+| Configuración | Escuchan | Desde la IP de la LAN |
+|---|---|---|
+| Por defecto | `127.0.0.1:8000`, `:5432`, `:6379` | sin conexión |
+| `ZASCARR_BIND_ADDRESS=0.0.0.0` + contraseña | `0.0.0.0:8000` (solo la app); Postgres y Redis siguen en `127.0.0.1` | `/ui/` y `/ui/biblioteca` → `303` a `/login` |
+| Abierto y **sin** contraseña | igual | `/api/health` trae `warnings.exposicion` |
+| `BASE_URL` pública y sin contraseña | `127.0.0.1` | aviso de «dirección pública» |
+
+La verificación en vivo encontró **dos fallos que las pruebas unitarias no veían**:
+`docker compose run -T` consume la entrada estándar aunque el comando no la use (la
+contraseña llegaba vacía), y la validación de URL de Python era más laxa que la de Bash
+(`https://a b.org`). Ver las notas de A11 en `docs/BACKLOG.md`.
