@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="es" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZascArr · Maqueta de UI propuesta</title>
+<style>
+/* ===== TOKENS: misma identidad "papel y tinta", con pares de color que cumplen WCAG AA ===== */
+:root{
+  --paper:#f6f3ec; --paper-2:#efeadf; --card:#fffdf8; --ink:#17171a; --ink-soft:#4a4a50; --faint:#63636b;
+  --yellow:#f2c500; --on-yellow:#17171a; --caption:#fdf3d0;
+  --cyan:#0d9bd6; --magenta:#d81a75;
+  --cyan-t:#0a6a96; --ok-t:#1f6b43; --warn-t:#a8321f; --mag-t:#b0125f; --amber-t:#7a5a00;
+  --ok-bg:#e1f2e8; --warn-bg:#fbe4df; --amber-bg:#fdf0c4; --info-bg:#dff1fa;
+  --line:var(--ink); --shadow:4px 4px 0 var(--ink); --shadow-sm:3px 3px 0 var(--ink);
+  --display:Impact,"Arial Black","Arial Narrow Bold",Haettenschweiler,sans-serif;
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+  --side:244px;
+}
+@media (prefers-color-scheme:dark){
+  :root[data-theme="auto"]{
+    --paper:#131316; --paper-2:#1b1b20; --card:#202026; --ink:#f0ede4; --ink-soft:#b7b4ab; --faint:#9c9aa0;
+    --yellow:#ffd23f; --caption:#2b2617; --cyan:#38b6e8; --magenta:#f04d97;
+    --cyan-t:#5cc4f0; --ok-t:#5fd096; --warn-t:#f58a80; --mag-t:#f46aa7; --amber-t:#ffd23f;
+    --ok-bg:#16301f; --warn-bg:#3a1b17; --amber-bg:#35290c; --info-bg:#10293a;
+    --shadow:4px 4px 0 rgba(0,0,0,.6); --shadow-sm:3px 3px 0 rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#131316; --paper-2:#1b1b20; --card:#202026; --ink:#f0ede4; --ink-soft:#b7b4ab; --faint:#9c9aa0;
+  --yellow:#ffd23f; --caption:#2b2617; --cyan:#38b6e8; --magenta:#f04d97;
+  --cyan-t:#5cc4f0; --ok-t:#5fd096; --warn-t:#f58a80; --mag-t:#f46aa7; --amber-t:#ffd23f;
+  --ok-bg:#16301f; --warn-bg:#3a1b17; --amber-bg:#35290c; --info-bg:#10293a;
+  --shadow:4px 4px 0 rgba(0,0,0,.6); --shadow-sm:3px 3px 0 rgba(0,0,0,.6);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--body);-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(var(--ink) .55px,transparent .55px);background-size:7px 7px;opacity:.045;z-index:0}
+a{color:inherit} button,input,select{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--display);font-weight:400;letter-spacing:.02em;text-transform:uppercase;line-height:1.1;margin:0}
+h1{font-size:clamp(30px,4vw,44px)} h2{font-size:22px} h3{font-size:17px}
+p{margin:0}
+:focus-visible{outline:3px solid var(--cyan-t);outline-offset:2px;border-radius:3px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.skip{position:absolute;left:8px;top:-60px;background:var(--yellow);color:var(--on-yellow);padding:10px 14px;border:3px solid var(--ink);z-index:100;font-weight:700}
+.skip:focus{top:8px}
+
+/* ===== LAYOUT ===== */
+.app{display:grid;grid-template-columns:var(--side) 1fr;min-height:100vh;position:relative;z-index:1}
+.side{position:sticky;top:0;height:100vh;overflow:auto;border-right:3px solid var(--ink);background:var(--paper);padding:18px 14px;display:flex;flex-direction:column;gap:6px}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 14px;font-family:var(--display);font-size:22px;letter-spacing:.06em;text-decoration:none}
+.logo{width:34px;height:34px;background:var(--yellow);border:3px solid var(--ink);box-shadow:var(--shadow-sm);display:grid;place-items:center;transform:rotate(-4deg);color:var(--on-yellow);font-size:18px}
+.grp{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:14px 10px 4px;font-weight:700}
+.nav a{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:2px solid transparent;border-radius:4px;text-decoration:none;color:var(--ink-soft);font-weight:600}
+.nav a:hover{border-color:var(--ink);color:var(--ink)}
+.nav a[aria-current="page"]{background:var(--yellow);color:var(--on-yellow);border-color:var(--ink);box-shadow:var(--shadow-sm)}
+.nav .ico{width:22px;text-align:center;font-size:17px}
+.badge{margin-left:auto;min-width:26px;text-align:center;font-size:13px;font-weight:800;padding:1px 8px;border:2px solid var(--ink);border-radius:999px;background:var(--card);color:var(--ink)}
+.badge.hot{background:var(--magenta);color:#fff;border-color:var(--ink)}
+.dot{margin-left:auto;width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);background:var(--yellow)}
+.side-foot{margin-top:auto;display:grid;gap:8px;padding-top:14px;border-top:2px dashed var(--faint)}
+.main{padding:clamp(18px,3vw,40px);max-width:1180px;width:100%}
+.view{display:none}.view.on{display:block;animation:in .18s ease-out}
+@keyframes in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.view.on{animation:none}*{scroll-behavior:auto!important}}
+
+/* ===== COMPONENTES ===== */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:8px 18px;border:3px solid var(--ink);border-radius:4px;background:var(--card);cursor:pointer;font-weight:700;text-decoration:none;box-shadow:var(--shadow-sm);transition:transform .08s,box-shadow .08s}
+.btn:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--ink)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn.primary{background:var(--yellow);color:var(--on-yellow)}
+.btn.ghost{background:transparent;box-shadow:none;border-color:transparent;color:var(--ink-soft);text-decoration:underline;text-underline-offset:3px}
+.btn.ghost:hover{border-color:var(--ink);transform:none;box-shadow:none;color:var(--ink)}
+.btn.sm{min-height:40px;padding:4px 12px;font-size:15px}
+.btn[disabled]{opacity:.5;cursor:not-allowed;box-shadow:none}
+.card{background:var(--card);border:3px solid var(--ink);border-radius:4px;box-shadow:var(--shadow);padding:20px}
+.caption{background:var(--caption);border:3px solid var(--ink);padding:12px 16px;font-weight:600;box-shadow:var(--shadow-sm);transform:rotate(-.35deg);display:inline-block;max-width:70ch}
+.lead{color:var(--ink-soft);max-width:68ch;margin-top:8px}
+.head{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;margin-bottom:22px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:700;padding:2px 10px;border:2px solid var(--ink);border-radius:999px;background:var(--card);white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok-t)} .chip.warn{background:var(--warn-bg);color:var(--warn-t)}
+.chip.amber{background:var(--amber-bg);color:var(--amber-t)} .chip.info{background:var(--info-bg);color:var(--cyan-t)}
+.muted{color:var(--faint);font-size:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+input[type=text],input[type=search],select{min-height:44px;padding:8px 12px;border:3px solid var(--ink);border-radius:4px;background:var(--card);width:100%}
+input[type=checkbox]{width:22px;height:22px;accent-color:var(--magenta);flex:none;cursor:pointer}
+.grid2{display:grid;grid-template-columns:1.6fr 1fr;gap:22px}
+.stat{display:flex;align-items:baseline;gap:8px;padding:10px 0;border-bottom:2px dashed var(--faint)}
+.stat:last-child{border:0}
+.stat b{font-family:var(--display);font-size:30px;font-weight:400}
+.stat span{color:var(--ink-soft)}
+
+/* ===== INICIO: pasos ===== */
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:14px;counter-reset:s}
+.step{display:grid;grid-template-columns:48px 1fr auto;gap:14px;align-items:center;padding:16px;border:3px solid var(--ink);border-radius:4px;background:var(--card);counter-increment:s}
+.step::before{content:counter(s);width:44px;height:44px;border:3px solid var(--ink);border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-size:20px;background:var(--paper-2)}
+.step.done::before{content:"✓";background:var(--ok-bg);color:var(--ok-t)}
+.step.next{box-shadow:var(--shadow);background:var(--caption)}
+.step.next::before{background:var(--yellow);color:var(--on-yellow)}
+.step.locked{opacity:.78}
+.step h3{margin-bottom:2px;text-transform:none;font-family:var(--body);font-weight:800;font-size:17px;letter-spacing:0}
+.progress{height:14px;border:3px solid var(--ink);border-radius:999px;background:var(--paper-2);overflow:hidden;margin:10px 0 18px}
+.progress i{display:block;height:100%;background:var(--yellow);border-right:3px solid var(--ink)}
+.searchbox{display:flex;gap:10px;flex-wrap:wrap}.searchbox input{flex:1 1 260px}
+
+/* ===== PENDIENTES ===== */
+.tabs{display:flex;gap:6px;border-bottom:3px solid var(--ink);margin-bottom:16px}
+.tab{background:transparent;border:3px solid transparent;border-bottom:0;padding:10px 16px;font-weight:700;cursor:pointer;border-radius:4px 4px 0 0;color:var(--ink-soft);min-height:44px}
+.tab[aria-selected="true"]{background:var(--yellow);color:var(--on-yellow);border-color:var(--ink);margin-bottom:-3px}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:14px}
+.toolbar label.sel{display:flex;gap:10px;align-items:center;font-weight:700;min-height:44px;cursor:pointer}
+.group{border:3px solid var(--ink);border-radius:4px;background:var(--card);margin-bottom:18px;box-shadow:var(--shadow)}
+.ghead{display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:12px 16px;background:var(--paper-2);border-bottom:3px solid var(--ink)}
+.ghead h3{flex:1 1 220px}
+.item{display:grid;grid-template-columns:26px 52px 1fr auto;gap:14px;align-items:start;padding:14px 16px;border-bottom:2px dashed var(--faint)}
+.item:last-child{border:0}
+.item.sel{background:var(--info-bg)}
+.cover{width:52px;height:72px;border:3px solid var(--ink);background:var(--paper-2) radial-gradient(var(--ink) .8px,transparent .8px) 0 0/6px 6px;display:grid;place-items:end center;font-size:12px;font-weight:800;padding-bottom:3px;color:var(--ink);position:relative}
+.cover span{background:var(--yellow);color:var(--on-yellow);padding:0 5px;border:2px solid var(--ink)}
+.fname{font-weight:700;overflow-wrap:anywhere}
+.detect{color:var(--ink-soft);font-size:15px;margin-top:2px}
+.sugg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;font-size:15px}
+.score{font-weight:800;color:var(--ok-t)}
+.actions{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.bar{position:sticky;bottom:16px;z-index:20;margin-top:20px;background:var(--ink);color:var(--paper);border:3px solid var(--ink);border-radius:6px;padding:12px 16px;display:none;flex-wrap:wrap;gap:12px;align-items:center;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.bar.on{display:flex}
+.bar strong{font-family:var(--display);font-weight:400;font-size:20px;letter-spacing:.03em}
+.bar .combo{flex:1 1 240px;min-width:200px}
+.bar input{background:var(--paper);color:var(--ink);border-color:var(--yellow)}
+.bar .btn{box-shadow:none}.bar .btn.ghost{color:var(--paper)}.bar .btn.ghost:hover{color:#fff;border-color:var(--paper)}
+.empty{text-align:center;padding:36px 16px;border:3px dashed var(--faint);border-radius:4px;color:var(--ink-soft)}
+.empty h3{margin-bottom:6px;color:var(--ink)}
+
+/* ===== DESEADOS / ESTADO / AJUSTES / REVISIÓN ===== */
+.wrow{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:14px 16px;border-bottom:2px dashed var(--faint)}
+.wrow:last-child{border:0}
+.nextstep{margin-top:6px;font-size:15px;color:var(--ink-soft)}
+.nextstep a{color:var(--cyan-t);font-weight:700}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 18px}
+.hero-state{display:flex;gap:18px;align-items:center;padding:20px;border:3px solid var(--ink);border-radius:4px;box-shadow:var(--shadow);margin-bottom:18px}
+.hero-state.amber{background:var(--amber-bg)} .hero-state .big{font-size:44px;line-height:1}
+.srow{border:3px solid var(--ink);border-radius:4px;background:var(--card);margin-bottom:12px;overflow:hidden}
+.srow>.top{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.srow>.top .name{font-weight:800}.srow>.top .chip{margin-left:auto}
+.srow .why{padding:0 16px 14px;display:grid;gap:6px;color:var(--ink-soft)}
+.srow .why b{color:var(--ink)}
+details{border-top:2px dashed var(--faint)}
+details>summary{cursor:pointer;padding:12px 16px;font-weight:700;min-height:44px;list-style:none;display:flex;align-items:center;gap:8px}
+details>summary::before{content:"▸";transition:transform .15s}details[open]>summary::before{transform:rotate(90deg)}
+details .inner{padding:0 16px 16px;display:grid;gap:12px}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;background:var(--paper-2);padding:2px 6px;border-radius:3px;border:1px solid var(--faint);overflow-wrap:anywhere}
+.goals{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:18px 0}
+.goal{text-align:left;border:3px solid var(--ink);border-radius:4px;background:var(--card);padding:16px;cursor:pointer;display:grid;gap:6px;box-shadow:var(--shadow-sm);min-height:120px}
+.goal .e{font-size:28px}.goal b{font-size:17px}.goal span{color:var(--ink-soft);font-size:15px}
+.goal[aria-pressed="true"]{background:var(--yellow);color:var(--on-yellow);box-shadow:var(--shadow)}
+.goal[aria-pressed="true"] span{color:var(--on-yellow)}
+.field{display:grid;gap:6px;margin-bottom:14px}.field label{font-weight:700}
+.result{margin-top:12px;padding:10px 14px;border:3px solid var(--ink);border-radius:4px;display:none;font-weight:600}
+.result.ok{display:block;background:var(--ok-bg);color:var(--ok-t)}
+.sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px}
+.sum{border:3px solid var(--ink);background:var(--card);padding:14px 16px;box-shadow:var(--shadow-sm)}
+.sum b{display:block;font-family:var(--display);font-weight:400;font-size:34px;line-height:1.1}
+.sum.hl{background:var(--yellow);color:var(--on-yellow)}
+.dup{padding:14px 16px;border-bottom:2px dashed var(--faint);display:grid;gap:4px}
+.dup:last-child{border:0}.dup .p{font-size:15px;color:var(--ink-soft);overflow-wrap:anywhere}
+.dup .p b{color:var(--ink)}
+
+/* ===== TOAST + DIALOG ===== */
+.toasts{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:grid;gap:8px;z-index:60;width:min(560px,92vw)}
+.toast{background:var(--ink);color:var(--paper);border:3px solid var(--yellow);border-radius:6px;padding:12px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.toast .btn{min-height:36px;box-shadow:none;padding:2px 12px;background:var(--yellow);color:var(--on-yellow)}
+dialog{border:3px solid var(--ink);border-radius:6px;background:var(--card);color:var(--ink);box-shadow:var(--shadow);padding:0;max-width:min(560px,94vw);width:100%}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog .dh{padding:16px 20px;border-bottom:3px solid var(--ink);background:var(--yellow);color:var(--on-yellow)}
+dialog .db{padding:18px 20px;display:grid;gap:12px}
+dialog ul{margin:0;padding-left:20px;max-height:200px;overflow:auto}
+dialog .df{padding:14px 20px;border-top:3px solid var(--ink);display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;background:var(--paper-2)}
+
+/* ===== ANOTACIONES (U1–U9) ===== */
+.note{display:none;position:relative;margin:10px 0;padding:8px 12px 8px 12px;border:2px dashed var(--magenta);background:var(--card);border-radius:4px;font-size:14px;color:var(--ink)}
+.note b{color:var(--mag-t)}
+body.notes .note{display:block}
+.mobilebar{display:none}
+.topm{display:none}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width:980px){.grid2{grid-template-columns:1fr}}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .side{display:none}
+  .topm{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:3px solid var(--ink);background:var(--paper);position:sticky;top:0;z-index:30}
+  .mobilebar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;bottom:0;left:0;right:0;z-index:40;background:var(--paper);border-top:3px solid var(--ink)}
+  .mobilebar a{display:grid;justify-items:center;gap:2px;padding:8px 2px;text-decoration:none;font-size:13px;font-weight:700;color:var(--ink-soft);min-height:56px;position:relative}
+  .mobilebar a[aria-current="page"]{background:var(--yellow);color:var(--on-yellow)}
+  .mobilebar .ico{font-size:20px}
+  .mobilebar .badge{position:absolute;top:2px;right:14%;margin:0;min-width:22px;font-size:12px;padding:0 5px}
+  .main{padding-bottom:96px}
+  .bar{bottom:72px}
+  .toasts{bottom:88px}
+  .item{grid-template-columns:26px 1fr;grid-template-areas:"c b" "c a"}
+  .item .cover{display:none}
+  .item>.actions{flex-direction:row;align-items:center;justify-content:flex-start;flex-wrap:wrap}
+  .step{grid-template-columns:44px 1fr}.step .btn{grid-column:1/-1}
+  .wrow{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Saltar al contenido</a>
+
+<div class="topm">
+  <a class="brand" href="#inicio" style="padding:0"><span class="logo" aria-hidden="true">Z</span>ZASCARR</a>
+  <button class="btn sm" id="mTheme" type="button" aria-label="Cambiar tema claro/oscuro">◐</button>
+</div>
+
+<div class="app">
+  <aside class="side" aria-label="Navegación principal">
+    <a class="brand" href="#inicio"><span class="logo" aria-hidden="true">Z</span>ZASCARR</a>
+    <nav class="nav">
+      <div class="grp">Mi colección</div>
+      <a href="#inicio" data-v="inicio"><span class="ico" aria-hidden="true">⌂</span>Inicio</a>
+      <a href="#pendientes" data-v="pendientes"><span class="ico" aria-hidden="true">✎</span>Por revisar<span class="badge hot" id="navPend">14</span></a>
+      <a href="#biblioteca" data-v="biblioteca"><span class="ico" aria-hidden="true">▤</span>Biblioteca</a>
+      <a href="#revision" data-v="revision"><span class="ico" aria-hidden="true">⚖</span>Duplicados</a>
+      <div class="grp">Añadir</div>
+      <a href="#descubrir" data-v="descubrir"><span class="ico" aria-hidden="true">⌕</span>Descubrir</a>
+      <a href="#deseados" data-v="deseados"><span class="ico" aria-hidden="true">★</span>Deseados<span class="badge">6</span></a>
+      <div class="grp">Sistema</div>
+      <a href="#estado" data-v="estado"><span class="ico" aria-hidden="true">♥</span>Estado<span class="dot" title="Atención"></span></a>
+      <a href="#ajustes" data-v="ajustes"><span class="ico" aria-hidden="true">⚙</span>Ajustes</a>
+    </nav>
+    <div class="side-foot">
+      <button class="btn sm" id="tNotes" type="button" aria-pressed="false">✎ Ver anotaciones UX</button>
+      <button class="btn sm" id="tTheme" type="button">◐ Tema claro / oscuro</button>
+      <button class="btn ghost sm" type="button">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <main class="main" id="main" tabindex="-1">
+
+  <!-- ============ INICIO ============ -->
+  <section class="view" id="v-inicio" aria-labelledby="h-inicio">
+    <div class="head"><div>
+      <h1 id="h-inicio">Tu tebeoteca, paso a paso</h1>
+      <p class="lead">Ya hemos encontrado <b>1.542 tebeos</b> en tu disco. Te faltan pocos pasos para verlos ordenados, con portada y con lo que te falta de cada serie.</p>
+    </div></div>
+    <div class="note"><b>U2 · Primeros pasos.</b> El checklist se deriva del estado real (series, pendientes, fuentes, aviso legal): nada se marca a mano. Una sola acción principal. Se sustituyen «5 series · 0 % completitud · 0 pendientes» por información verdadera.</div>
+    <div class="grid2">
+      <div>
+        <div class="row" style="justify-content:space-between"><strong>Paso 2 de 4</strong><span class="muted">Puedes saltarte el 3 y el 4 y seguir organizando</span></div>
+        <div class="progress" role="progressbar" aria-valuenow="1" aria-valuemin="0" aria-valuemax="4" aria-label="Progreso de primeros pasos"><i style="width:30%"></i></div>
+        <ol class="steps">
+          <li class="step done"><div><h3>Hemos leído tu biblioteca</h3><p class="muted">1.542 tebeos encontrados · 432 comparados a fondo · sin tocar nada</p></div><a class="btn sm" href="#revision">Ver duplicados</a></li>
+          <li class="step next"><div><h3>Revisa 14 tebeos que no hemos sabido clasificar</h3><p class="muted">La mayoría son «La Patrulla-X». Puedes asignarlos de golpe en pocos clics.</p></div><a class="btn primary" href="#pendientes">Revisar ahora →</a></li>
+          <li class="step"><div><h3>Elige las series que quieres seguir <span class="chip info">opcional</span></h3><p class="muted">Búscalas por título y las damos de alta con portada y datos.</p></div><a class="btn" href="#descubrir">Buscar series</a></li>
+          <li class="step locked"><div><h3>Conecta cómo descargar <span class="chip">opcional</span></h3><p class="muted">Solo si quieres que ZascArr busque y descargue lo que te falta.</p></div><a class="btn" href="#ajustes">Configurar</a></li>
+        </ol>
+      </div>
+      <aside>
+        <div class="card">
+          <h2>Tu colección ahora</h2>
+          <div class="stat"><b>1.542</b><span>tebeos en tu disco</span></div>
+          <div class="stat"><b>14</b><span>por clasificar</span></div>
+          <div class="stat"><b>0</b><span>series dadas de alta</span></div>
+          <p class="muted" style="margin-top:10px">El porcentaje de colección completa aparecerá cuando haya series con datos suficientes para calcularlo.</p>
+        </div>
+        <div class="note"><b>U2.</b> Sin «0 %» cuando no hay catálogo: una métrica inválida desmotiva y se contradice con el estado vacío.</div>
+        <div class="card" style="margin-top:18px">
+          <h3 style="margin-bottom:10px">Buscar una serie</h3>
+          <form class="searchbox" onsubmit="event.preventDefault();location.hash='#descubrir'">
+            <label class="sr" for="q1">Título de la serie</label>
+            <input id="q1" type="search" placeholder="Ej. Thorgal, Watchmen, Akira…">
+            <button class="btn primary" type="submit">Buscar</button>
+          </form>
+          <p class="muted" style="margin-top:8px">Un solo buscador: lo damos de alta y, si quieres, lo añadimos a deseados.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ POR REVISAR ============ -->
+  <section class="view" id="v-pendientes" aria-labelledby="h-pend">
+    <div class="head"><div>
+      <h1 id="h-pend">Por revisar</h1>
+      <p class="lead">Archivos que no hemos sabido clasificar solos. <b>No movemos nada hasta que tú lo confirmes.</b></p>
+    </div></div>
+    <div class="note"><b>U1 · Pendientes compacto.</b> Nombre completo (nunca truncado), sin hueco de portada cuando no hay miniatura, sugerencia visible sin clic, agrupado por patrón de nombre (ayuda visual: asignar sigue siendo decisión tuya), selección múltiple y «Ignorar» reversible.</div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="tabPend" aria-selected="true" data-tab="pend">Por revisar <span class="chip" id="cPend">14</span></button>
+      <button class="tab" role="tab" id="tabIgn" aria-selected="false" data-tab="ign">Ignorados <span class="chip" id="cIgn">0</span></button>
+    </div>
+    <div class="toolbar" id="toolbar">
+      <label class="sel"><input type="checkbox" id="selAll"> Seleccionar todo</label>
+      <label class="sel"><input type="checkbox" id="grpOn" checked> Agrupar por patrón de nombre</label>
+      <span class="muted" id="selInfo">Datos de ejemplo basados en tus 14 archivos reales</span>
+    </div>
+    <div id="list" aria-live="polite"></div>
+    <div class="bar" id="bar" role="region" aria-label="Acciones sobre la selección">
+      <strong id="barN">0 seleccionados</strong>
+      <div class="combo"><label class="sr" for="serie">Serie de destino</label><input id="serie" type="text" list="series" placeholder="Escribe la serie de destino…" autocomplete="off"></div>
+      <datalist id="series"><option value="La Patrulla-X (1985)"><option value="La Imposible Patrulla X (1963)"><option value="Los Nuevos Mutantes (1983)"><option value="The Boys (2006)"></datalist>
+      <button class="btn primary" id="doAssign" type="button">Asignar…</button>
+      <button class="btn ghost" id="doIgnore" type="button">Ignorar</button>
+      <button class="btn ghost" id="doClear" type="button">Cancelar</button>
+    </div>
+  </section>
+
+  <!-- ============ DESEADOS ============ -->
+  <section class="view" id="v-deseados" aria-labelledby="h-des">
+    <div class="head"><div>
+      <h1 id="h-des">Deseados</h1>
+      <p class="lead">Lo que quieres que ZascArr busque por ti. Cada petición dice en qué punto está y qué hacer.</p>
+    </div></div>
+    <div class="note"><b>U3 · Estados honestos.</b> «Buscando» y «sin resultados» no pueden coexistir. Cada motivo trae su siguiente paso con enlace. Las filas repetidas se agrupan y se avisa al añadir algo que ya está.</div>
+    <div class="card" style="margin-bottom:18px">
+      <form class="searchbox" onsubmit="event.preventDefault();toast('Ya tienes «BPRD» en deseados. No hemos creado otra fila.')">
+        <label class="sr" for="q2">Añadir una serie a deseados</label>
+        <input id="q2" type="search" placeholder="Añadir una serie… (prueba «BPRD»)" value="">
+        <button class="btn primary" type="submit">Añadir</button>
+      </form>
+    </div>
+    <div class="legend" aria-label="Leyenda de estados">
+      <span class="chip">⏳ En cola</span><span class="chip info">🔎 Buscando ahora</span><span class="chip amber">∅ Sin resultados</span><span class="chip info">⬇ Descargando</span><span class="chip ok">✓ En tu biblioteca</span><span class="chip warn">! Falló</span>
+    </div>
+    <div class="group">
+      <div class="ghead"><h3>BPRD</h3><span class="chip amber">5 peticiones iguales</span><button class="btn sm" type="button" onclick="toast('Maqueta: aquí se unirían las 5 filas en una sola.')">Unir duplicadas</button></div>
+      <div class="wrow"><div><div class="row"><b>BPRD</b><span class="chip amber">∅ Sin resultados</span><span class="muted">último intento hoy 17:12</span></div>
+        <p class="nextstep">No hay ninguna fuente de búsqueda activa. <a href="#ajustes">Conectar una fuente →</a></p></div><button class="btn sm" type="button" disabled>Buscar ahora</button></div>
+      <details><summary>Ver las otras 4 peticiones iguales</summary><div class="inner"><p class="muted">Se mostrarían aquí con el mismo estado. Hasta unirlas, «Buscar ahora» sólo se ofrece en la primera.</p></div></details>
+    </div>
+    <div class="group">
+      <div class="ghead"><h3>The DC Universe by Mike Mignola</h3><span class="chip amber">1 petición</span></div>
+      <div class="wrow"><div><div class="row"><b>The DC Universe by Mike Mignola</b><span class="chip amber">∅ Sin resultados</span></div>
+        <p class="nextstep">No hay ninguna fuente de búsqueda activa. <a href="#ajustes">Conectar una fuente →</a></p></div><button class="btn sm" type="button" disabled>Buscar ahora</button></div>
+    </div>
+    <details class="card" style="padding:0"><summary>Aviso de uso responsable</summary><div class="inner"><p>Añadir una serie aquí puede lanzar búsquedas y descargas con las integraciones que actives. Eres responsable de comprobar que tienes derecho a acceder al contenido que solicitas. <a href="#">Aviso legal</a></p></div></details>
+  </section>
+
+  <!-- ============ ESTADO ============ -->
+  <section class="view" id="v-estado" aria-labelledby="h-est">
+    <div class="head"><div><h1 id="h-est">Estado del sistema</h1><p class="lead">Una lectura honesta: si algo necesita tu atención, lo dice aquí y te explica qué hacer.</p></div></div>
+    <div class="note"><b>U6 · Semáforo honesto.</b> El estado global es el peor de los parciales. Cada aviso: qué pasa, por qué importa, qué hacer. Las rutas internas van en «Detalle técnico».</div>
+    <div class="hero-state amber" role="status">
+      <div class="big" aria-hidden="true">⚠</div>
+      <div><h2>Atención: una cosa necesita tu revisión</h2><p class="lead" style="margin-top:4px">Todo lo demás funciona. Actualizado a las 17:16.</p></div>
+    </div>
+    <div class="srow"><div class="top"><span aria-hidden="true">🗄</span><span class="name">Base de datos</span><span class="chip ok">✓ Conectada y migrada</span></div></div>
+    <div class="srow"><div class="top"><span aria-hidden="true">⬇</span><span class="name">Transmission</span><span class="chip ok">✓ Conectado</span></div></div>
+    <div class="srow"><div class="top"><span aria-hidden="true">⇄</span><span class="name">aMule</span><span class="chip ok">✓ Conectado</span></div></div>
+    <div class="srow">
+      <div class="top"><span aria-hidden="true">🛡</span><span class="name">VPN</span><span class="chip amber">? No lo sabemos todavía</span></div>
+      <div class="why">
+        <p><b>Qué pasa:</b> ZascArr no recibe información sobre tu VPN, así que no puede confirmar que estés protegido.</p>
+        <p><b>Por qué importa:</b> si descargas sin VPN, tu dirección IP queda visible en las redes P2P.</p>
+        <p><b>Qué hacer:</b> si usas VPN, activa el temporizador que informa a ZascArr. Si no la usas, puedes silenciar este aviso.</p>
+        <div class="row"><button class="btn sm primary" type="button" onclick="toast('Comando copiado (maqueta).')">Copiar comando</button><button class="btn sm" type="button" onclick="toast('Aviso silenciado (maqueta).')">No uso VPN: silenciar</button></div>
+      </div>
+      <details><summary>Detalle técnico</summary><div class="inner"><p class="muted">Fichero ausente: <code>/run/vpn-state/wg0.json</code>. El host aún no ha escrito el estado o el temporizador no corre.</p></div></details>
+    </div>
+    <p class="muted">ZascArr v1.15.0</p>
+  </section>
+
+  <!-- ============ AJUSTES ============ -->
+  <section class="view" id="v-ajustes" aria-labelledby="h-aj">
+    <div class="head"><div><h1 id="h-aj">¿Qué quieres conectar?</h1><p class="lead">Elige un objetivo y te pedimos solo lo necesario. Lo técnico está en «Avanzado».</p></div></div>
+    <div class="note"><b>U5 · Ajustes guiados.</b> Objetivos en lenguaje del usuario en lugar de siete tarjetas técnicas. «Probar conexión» responde con causa y siguiente paso. Mantiene D11 (guardar aplica al instante; secretos nunca en claro) y el guardarraíl de A6.</div>
+    <div class="goals" role="group" aria-label="Objetivos">
+      <button class="goal" type="button" data-g="meta" aria-pressed="false"><span class="e" aria-hidden="true">🖼</span><b>Portadas y datos de mis tebeos</b><span>Comic Vine, AniList, Tebeosfera…</span></button>
+      <button class="goal" type="button" data-g="desc" aria-pressed="true"><span class="e" aria-hidden="true">⬇</span><b>Que se descarguen solos</b><span>Buscador + cliente de descarga</span></button>
+      <button class="goal" type="button" data-g="aviso" aria-pressed="false"><span class="e" aria-hidden="true">🔔</span><b>Avisos en el móvil</b><span>Gotify, ntfy, Telegram…</span></button>
+      <button class="goal" type="button" data-g="seg" aria-pressed="false"><span class="e" aria-hidden="true">🔒</span><b>Proteger con contraseña</b><span>Recomendado si lo abres a tu red</span></button>
+    </div>
+    <div class="card" id="goalPanel"></div>
+  </section>
+
+  <!-- ============ DUPLICADOS ============ -->
+  <section class="view" id="v-revision" aria-labelledby="h-rev">
+    <div class="head"><div><h1 id="h-rev">Duplicados</h1><p class="lead">Solo mira: <b>no borra, no mueve y no renombra nada.</b> Tú decides qué hacer en tu disco.</p></div><button class="btn primary" type="button" id="reScan">Volver a revisar</button></div>
+    <div class="note"><b>U8 · Resumen y prioridad.</b> Resumen arriba, grupos ordenados por espacio recuperable, progreso real al escanear. Se mantiene la invariante de B16: solo lectura, sin botón de borrar. «Mi biblioteca» pasa a llamarse «Duplicados» (U7).</div>
+    <div id="scanProg" class="card" style="display:none;margin-bottom:18px"><b>Leyendo archivos…</b> <span id="scanTxt">0 de 432</span><div class="progress" role="progressbar" aria-label="Progreso de la revisión"><i id="scanBar" style="width:0%"></i></div></div>
+    <div class="sumgrid">
+      <div class="sum hl"><b>7,5 GB</b>recuperables si borras las copias</div>
+      <div class="sum"><b>200</b>tebeos duplicados exactos</div>
+      <div class="sum"><b>6</b>carpetas repetidas</div>
+      <div class="sum"><b>1.542</b>tebeos revisados</div>
+    </div>
+    <div class="row" style="margin-bottom:14px"><span class="muted">Ordenado por:</span><button class="chip" type="button" aria-pressed="true">Mayor ahorro</button><button class="chip" type="button">Nombre</button></div>
+    <div class="group">
+      <div class="ghead"><h3>El mismo tebeo, dos veces</h3><span class="chip">200 grupos</span></div>
+      <div class="dup"><b>Todo Sexo y Chapuza [DEBOLSILLO] [CRG].cbr</b><span class="p">En <b>Graphic Novels / Carlos Gimenez</b></span><span class="p">y en <b>Tebeos / Carlos Giménez</b></span><span class="chip amber" style="width:max-content">430 MB cada uno</span></div>
+      <div class="dup"><b>Todo 36-39. Malos tiempos [DEBOLSILLO] [CRG].cbr</b><span class="p">En <b>Graphic Novels / Carlos Gimenez</b></span><span class="p">y en <b>Tebeos / Carlos Giménez</b></span><span class="chip amber" style="width:max-content">317 MB cada uno</span></div>
+    </div>
+    <div class="group">
+      <div class="ghead"><h3>Carpetas repetidas</h3><span class="chip">6 grupos</span></div>
+      <div class="dup"><b>Superman (1987) ⇄ Superman Vol2 (Ed.Zinco)(1987-96)</b><span class="p">137 tebeos en común · son exactamente iguales</span></div>
+      <div class="dup"><b>Nuevos Mutantes (2019) ⇄ Nuevos Mutantes Vol3 (Panini)(2020-23)</b><span class="p">30 tebeos en común · son exactamente iguales</span></div>
+    </div>
+  </section>
+
+  <!-- ============ PLACEHOLDERS ============ -->
+  <section class="view" id="v-biblioteca"><div class="head"><h1>Biblioteca</h1></div><div class="empty"><h3>Fuera del alcance de esta maqueta</h3><p>Aquí iría la rejilla de series con portada, filtros por tradición y editorial.</p></div></section>
+  <section class="view" id="v-descubrir"><div class="head"><h1>Descubrir</h1></div><div class="empty"><h3>Fuera del alcance de esta maqueta</h3><p>Buscador único en Comic Vine, AniList, Tebeosfera y GCD, con alta en un clic.</p></div></section>
+
+  </main>
+</div>
+
+<nav class="mobilebar" aria-label="Navegación móvil">
+  <a href="#inicio" data-v="inicio"><span class="ico" aria-hidden="true">⌂</span>Inicio</a>
+  <a href="#pendientes" data-v="pendientes"><span class="ico" aria-hidden="true">✎</span>Revisar<span class="badge hot" id="navPendM">14</span></a>
+  <a href="#deseados" data-v="deseados"><span class="ico" aria-hidden="true">★</span>Deseados</a>
+  <a href="#estado" data-v="estado"><span class="ico" aria-hidden="true">♥</span>Estado</a>
+  <a href="#ajustes" data-v="ajustes"><span class="ico" aria-hidden="true">⚙</span>Ajustes</a>
+</nav>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<dialog id="dlg" aria-labelledby="dlgT">
+  <div class="dh"><h2 id="dlgT">Confirmar asignación</h2></div>
+  <div class="db">
+    <p id="dlgP"></p>
+    <ul id="dlgL"></ul>
+    <label class="row" style="gap:10px;align-items:flex-start"><input type="checkbox" id="dlgAlias" checked><span>Recordar el patrón <code id="dlgPat">la patrulla x omnigold</code> para clasificar solos los próximos archivos parecidos. <span class="muted">Puedes quitarlo cuando quieras en Ajustes.</span></span></label>
+    <div class="note"><b>U1 · Alias en lote.</b> El aprendizaje de alias (B13) muestra qué patrón se va a recordar <i>antes</i> de confirmar, porque un alias incorrecto se fija. La asignación reutiliza <code>assign_to_series</code> archivo a archivo, con sus defensas de B15.</div>
+  </div>
+  <div class="df"><button class="btn" id="dlgNo" type="button">Cancelar</button><button class="btn primary" id="dlgYes" type="button">Sí, asignar</button></div>
+</dialog>
+
+<script>
+(function(){
+  var $=function(s,r){return (r||document).querySelector(s)}, $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+
+  /* ---------- Datos de ejemplo: los 14 nombres reales de _Unsorted ---------- */
+  var DATA=[
+    {id:1,g:'La Patrulla X · Omnigold',n:'La Patrulla X Omnigold 5 (Decisiones) [CRG].cbr',d:'Omnigold · tomo 5 · «Decisiones»',s:'La Patrulla-X (1985)',p:88},
+    {id:2,g:'La Patrulla X · Omnigold',n:'La Patrulla X Omnigold 6 (El Juicio de Magneto) [CRG].cbr',d:'Omnigold · tomo 6 · «El Juicio de Magneto»',s:'La Patrulla-X (1985)',p:88},
+    {id:3,g:'La Patrulla X · Omnigold',n:'La Patrulla X Omnigold 7 (La Masacre Mutante) [MQ][DI][CRG].cbr',d:'Omnigold · tomo 7 · «La Masacre Mutante»',s:'La Patrulla-X (1985)',p:88},
+    {id:4,g:'La Patrulla X · Omnigold',n:'La Patrulla X (122-143 usa) Omnigold nº 2 Días del futuro pasado [Actualizado] (crg).cbr',d:'Omnigold · tomo 2 · números USA 122-143',s:'La Patrulla-X (1985)',p:81},
+    {id:5,g:'La Imposible Patrulla X',n:'La Imposible Patrulla X (144-158) Contra Magneto (Actualizado) [CRG].cbr',d:'Pack · números 144-158 · «Contra Magneto»',s:'La Imposible Patrulla X (1963)',p:74},
+    {id:6,g:'La Imposible Patrulla X',n:'La Imposible Patrulla X (159-175) Desde las cenizas (Actualizado) [CRG].cbr',d:'Pack · números 159-175 · «Desde las cenizas»',s:'La Imposible Patrulla X (1963)',p:74},
+    {id:7,g:'La Imposible Patrulla X',n:'La Imposible Patrulla X (94-121 usa) Nueva genesis (Actualizado 2.0) [CRG].cbr',d:'Pack · números USA 94-121 · «Nueva génesis»',s:'La Imposible Patrulla X (1963)',p:74},
+    {id:8,g:'Marvel Gold · La Patrulla-X Original',n:'Marvel Gold - La Patrulla-X Original 1 .cbr',d:'Marvel Gold · tomo 1',s:'La Patrulla-X (1985)',p:62},
+    {id:9,g:'Marvel Gold · La Patrulla-X Original',n:'Marvel Gold - La Patrulla-X Original 2 .cbr',d:'Marvel Gold · tomo 2',s:'La Patrulla-X (1985)',p:62},
+    {id:10,g:'Marvel Gold · La Patrulla-X Original',n:'Marvel Gold - La Patrulla-X Original 3 .cbr',d:'Marvel Gold · tomo 3',s:'La Patrulla-X (1985)',p:62},
+    {id:11,g:'Otros',n:'LA PATRULLA X por Whedon y Cassaday (by Bruixot) [MQ][DI].cbr',d:'Serie detectada: LA PATRULLA X · sin número',s:'La Patrulla-X (1985)',p:55},
+    {id:12,g:'Otros',n:'OG Los Nuevos Mutantes (La masacre mutante ) by The Murdock [CRG].cbr',d:'Los Nuevos Mutantes · «La masacre mutante»',s:'Los Nuevos Mutantes (1983)',p:58},
+    {id:13,g:'Otros',n:'The Boys - Edicion Integral 01 [por The RockJR][CRG].cbr',d:'The Boys · Edición Integral · tomo 01',s:'The Boys (2006)',p:70},
+    {id:14,g:'Otros',n:'[ML] La Patrulla-X - Los Años Perdidos [MQ][DI] by The Murdock [CRG].cbr',d:'La Patrulla-X · «Los Años Perdidos»',s:'La Patrulla-X (1985)',p:60}
+  ];
+  DATA.forEach(function(x){x.st='pend';x.sel=false});
+  var grouped=true, tab='pend', lastAction=null;
+
+  function esc(t){return String(t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+  function counts(){
+    var p=DATA.filter(function(x){return x.st==='pend'}).length, i=DATA.filter(function(x){return x.st==='ign'}).length;
+    $('#cPend').textContent=p; $('#cIgn').textContent=i; $('#navPend').textContent=p; $('#navPendM').textContent=p;
+    $('#navPend').style.display=p?'':'none'; $('#navPendM').style.display=p?'':'none';
+  }
+  function itemHTML(x){
+    return '<div class="item'+(x.sel?' sel':'')+'" data-id="'+x.id+'">'+
+      '<input type="checkbox" '+(x.sel?'checked':'')+' aria-label="Seleccionar '+esc(x.n)+'" data-sel="'+x.id+'">'+
+      '<div class="cover" aria-hidden="true"><span>CBR</span></div>'+
+      '<div><div class="fname">'+esc(x.n)+'</div><div class="detect">Detectado: '+esc(x.d)+'</div>'+
+      (x.st==='pend'?'<div class="sugg"><span>Sugerencia: <b>'+esc(x.s)+'</b></span><span class="score">'+x.p+'%</span><button class="btn sm" type="button" data-yes="'+x.id+'">Sí, es esta</button></div>':'')+'</div>'+
+      '<div class="actions">'+(x.st==='pend'?'<button class="btn ghost sm" type="button" data-ign="'+x.id+'">Ignorar</button>':'<button class="btn sm" type="button" data-rec="'+x.id+'">Recuperar</button>')+'</div></div>';
+  }
+  function render(){
+    var st=tab==='pend'?'pend':'ign', items=DATA.filter(function(x){return x.st===st}), out='';
+    if(!items.length){
+      out=tab==='pend'?'<div class="empty"><h3>¡Todo clasificado!</h3><p>No queda nada por revisar. Los tebeos asignados ya están en su serie.</p><p style="margin-top:12px"><a class="btn primary" href="#inicio">Volver al inicio</a></p></div>':'<div class="empty"><h3>No has ignorado nada</h3><p>Lo que ignores aparecerá aquí y podrás recuperarlo cuando quieras.</p></div>';
+    } else if(grouped&&tab==='pend'){
+      var order=[]; items.forEach(function(x){if(order.indexOf(x.g)<0)order.push(x.g)});
+      order.forEach(function(g){
+        var gi=items.filter(function(x){return x.g===g}), all=gi.every(function(x){return x.sel});
+        out+='<div class="group"><div class="ghead"><input type="checkbox" '+(all?'checked':'')+' aria-label="Seleccionar el grupo '+esc(g)+'" data-grp="'+esc(g)+'"><h3>'+esc(g)+'</h3><span class="chip">'+gi.length+' archivos</span>'+
+          (g!=='Otros'?'<button class="btn sm" type="button" data-grpsel="'+esc(g)+'">Seleccionar el grupo</button>':'')+'</div>'+gi.map(itemHTML).join('')+'</div>';
+      });
+    } else { out='<div class="group">'+items.map(itemHTML).join('')+'</div>'; }
+    $('#list').innerHTML=out; counts(); bar();
+    $('#toolbar').style.display=(tab==='pend'&&items.length)?'':'none';
+  }
+  function selected(){return DATA.filter(function(x){return x.sel&&x.st==='pend'})}
+  function bar(){
+    var n=selected().length; $('#bar').classList.toggle('on',n>0);
+    $('#barN').textContent=n+(n===1?' seleccionado':' seleccionados');
+    $('#selAll').checked=n>0&&n===DATA.filter(function(x){return x.st==='pend'}).length;
+  }
+  function toast(msg,undo){
+    var t=document.createElement('div'); t.className='toast'; t.innerHTML='<span>'+esc(msg)+'</span>';
+    if(undo){var b=document.createElement('button'); b.className='btn'; b.type='button'; b.textContent='Deshacer'; b.onclick=function(){undo();t.remove()}; t.appendChild(b)}
+    $('#toasts').appendChild(t); setTimeout(function(){t.remove()},undo?9000:4500);
+  }
+  window.toast=toast;
+
+  $('#list').addEventListener('click',function(e){
+    var t=e.target, id;
+    if((id=t.getAttribute('data-ign'))){ var it=DATA.filter(function(x){return x.id==id})[0]; it.st='ign'; it.sel=false; render();
+      toast('«'+it.n.slice(0,42)+'…» ignorado.',function(){it.st='pend';render()}); }
+    else if((id=t.getAttribute('data-rec'))){ DATA.filter(function(x){return x.id==id})[0].st='pend'; render(); toast('Recuperado: vuelve a «Por revisar».'); }
+    else if((id=t.getAttribute('data-yes'))){ var it2=DATA.filter(function(x){return x.id==id})[0]; DATA.forEach(function(x){x.sel=false}); it2.sel=true; confirmAssign(it2.s); }
+    else if((id=t.getAttribute('data-grpsel'))){ DATA.forEach(function(x){if(x.st==='pend')x.sel=(x.g===id)}); render(); $('#serie').value=DATA.filter(function(x){return x.g===id})[0].s; }
+  });
+  $('#list').addEventListener('change',function(e){
+    var t=e.target, id;
+    if((id=t.getAttribute('data-sel'))){ DATA.filter(function(x){return x.id==id})[0].sel=t.checked; render(); }
+    else if(t.hasAttribute('data-grp')){ var g=t.getAttribute('data-grp'); DATA.forEach(function(x){if(x.g===g&&x.st==='pend')x.sel=t.checked}); render(); }
+  });
+  $('#selAll').addEventListener('change',function(e){DATA.forEach(function(x){if(x.st==='pend')x.sel=e.target.checked}); render()});
+  $('#grpOn').addEventListener('change',function(e){grouped=e.target.checked; render()});
+  $$('.tab').forEach(function(b){b.addEventListener('click',function(){tab=b.getAttribute('data-tab'); $$('.tab').forEach(function(x){x.setAttribute('aria-selected',x===b)}); render()})});
+  $('#doClear').onclick=function(){DATA.forEach(function(x){x.sel=false});render()};
+  $('#doIgnore').onclick=function(){
+    var s=selected(); s.forEach(function(x){x.st='ign';x.sel=false}); render();
+    toast(s.length+' archivos ignorados.',function(){s.forEach(function(x){x.st='pend'});render()});
+  };
+  $('#doAssign').onclick=function(){
+    var v=$('#serie').value.trim();
+    if(!v){ $('#serie').focus(); toast('Escribe primero la serie de destino.'); return; }
+    confirmAssign(v);
+  };
+  function confirmAssign(serie){
+    var s=selected(); if(!s.length) return;
+    $('#dlgP').innerHTML='Vas a asignar <b>'+s.length+(s.length===1?' archivo':' archivos')+'</b> a <b>'+esc(serie)+'</b>. Hasta que confirmes no se mueve nada.';
+    $('#dlgL').innerHTML=s.map(function(x){return '<li>'+esc(x.n)+'</li>'}).join('');
+    $('#dlgPat').textContent=s[0].g.toLowerCase().replace(' · ',' ');
+    var d=$('#dlg'); if(d.showModal) d.showModal(); else d.setAttribute('open','');
+    d._serie=serie;
+  }
+  $('#dlgNo').onclick=function(){$('#dlg').close()};
+  $('#dlgYes').onclick=function(){
+    var d=$('#dlg'), s=selected(); d.close();
+    s.forEach(function(x){x.st='done';x.sel=false}); render();
+    toast(s.length+' archivos asignados a '+d._serie+'.',function(){s.forEach(function(x){x.st='pend'});render()});
+  };
+
+  /* ---------- Ajustes ---------- */
+  var PANELS={
+    desc:'<h2>Que se descarguen solos</h2><p class="lead">Necesitas dos piezas: algo que <b>busque</b> y algo que <b>descargue</b>.</p>'+
+      '<div class="row" style="margin:16px 0"><span class="chip warn">1 · Buscador: sin conectar</span><span class="chip ok">2 · Descargas: Transmission conectado</span></div>'+
+      '<div class="field"><label for="k1">Clave del buscador (Prowlarr)</label><input id="k1" type="text" placeholder="Pégala aquí" autocomplete="off"></div>'+
+      '<div class="row"><button class="btn primary" type="button" id="probar">Guardar y probar conexión</button></div>'+
+      '<div class="result" id="res" role="status">✓ Funciona: tu buscador responde y tiene 3 fuentes activas. Ya puedes usar «Buscar ahora» en Deseados.</div>'+
+      '<details style="margin-top:18px"><summary>Avanzado: direcciones y puertos</summary><div class="inner">'+
+      '<div class="field"><label for="u1">URL de Prowlarr</label><input id="u1" type="text" value="http://host.docker.internal:9696"></div>'+
+      '<div class="field"><label for="u2">URL de Transmission</label><input id="u2" type="text" value="http://host.docker.internal:9091"></div>'+
+      '<p class="muted">En una Raspberry Pi con Docker, <code>host.docker.internal</code> significa «esta misma máquina». No uses <code>127.0.0.1</code> aquí.</p></div></details>',
+    meta:'<h2>Portadas y datos de mis tebeos</h2><p class="lead">Activa las fuentes que quieras. Desactivar una no borra lo ya catalogado.</p>'+
+      '<div class="field"><label><input type="checkbox" checked> Comic Vine <span class="muted">(grapa americana y británica)</span></label></div>'+
+      '<div class="field"><label><input type="checkbox" checked> AniList <span class="muted">(manga, manhwa y manhua)</span></label></div>'+
+      '<div class="field"><label><input type="checkbox" checked> Tebeosfera <span class="muted">(tebeo y BD)</span></label></div>'+
+      '<details><summary>Avanzado: clave de Comic Vine</summary><div class="inner"><div class="field"><label for="k2">Clave de API</label><input id="k2" type="text" placeholder="ya configurada · déjalo en blanco para no cambiarla"></div></div></details>'+
+      '<div class="row" style="margin-top:14px"><button class="btn primary" type="button" onclick="toast(\'Guardado. Se aplica al instante.\')">Guardar</button></div>',
+    aviso:'<h2>Avisos en el móvil</h2><p class="lead">Te avisamos cuando se importe algo. Si el destino falla, la importación no se ve afectada.</p>'+
+      '<div class="field"><label for="tp">¿Qué usas?</label><select id="tp"><option>ntfy</option><option>Gotify</option><option>Telegram</option><option>Otra URL (JSON)</option></select></div>'+
+      '<div class="field"><label for="tm">Tema o dirección</label><input id="tm" type="text" placeholder="https://ntfy.sh/mi-tema"></div>'+
+      '<div class="row"><button class="btn primary" type="button" onclick="toast(\'Aviso de prueba enviado (maqueta).\')">Enviar aviso de prueba</button></div>',
+    seg:'<h2>Proteger con contraseña</h2><p class="lead">Si ZascArr se ve fuera de este equipo, ponle contraseña. <b>Ahora mismo solo se ve desde esta máquina.</b></p>'+
+      '<div class="field"><label for="md">Quién puede entrar</label><select id="md"><option>Solo esta máquina (recomendado)</option><option>Mi red local, con contraseña</option><option>Desde internet, tras un proxy con TLS</option></select></div>'+
+      '<div class="field"><label for="pw">Contraseña <span class="muted">(mínimo 12 caracteres)</span></label><input id="pw" type="text" placeholder="Elige una contraseña larga" autocomplete="new-password"></div>'+
+      '<div class="note"><b>A11 · ADR 0004.</b> Esta pregunta materializa la elección explícita de exposición de red: por defecto «solo esta máquina»; las dos opciones que abren exigen contraseña.</div>'
+  };
+  function goal(g){
+    $$('.goal').forEach(function(b){b.setAttribute('aria-pressed',b.getAttribute('data-g')===g)});
+    $('#goalPanel').innerHTML=PANELS[g];
+    var pr=$('#probar'); if(pr) pr.onclick=function(){$('#res').className='result ok'};
+  }
+  $$('.goal').forEach(function(b){b.addEventListener('click',function(){goal(b.getAttribute('data-g'))})});
+  goal('desc');
+
+  /* ---------- Revisión: progreso ---------- */
+  $('#reScan').onclick=function(){
+    var n=0,box=$('#scanProg'); box.style.display='block'; $('#reScan').disabled=true;
+    var iv=setInterval(function(){ n+=18; if(n>=432){n=432;clearInterval(iv);$('#reScan').disabled=false;setTimeout(function(){box.style.display='none';toast('Revisión terminada. Nada se ha tocado en tu disco.')},500)}
+      $('#scanTxt').textContent=n+' de 432'; $('#scanBar').style.width=Math.round(n/432*100)+'%'; },90);
+  };
+
+  /* ---------- Router, tema, anotaciones ---------- */
+  function route(){
+    var v=(location.hash||'#inicio').slice(1); if(!$('#v-'+v)) v='inicio';
+    $$('.view').forEach(function(s){s.classList.toggle('on',s.id==='v-'+v)});
+    $$('[data-v]').forEach(function(a){ if(a.getAttribute('data-v')===v) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current')});
+    if(v==='pendientes') render();
+    window.scrollTo(0,0);
+  }
+  window.addEventListener('hashchange',route); route();
+  function theme(){ var h=document.documentElement, cur=h.getAttribute('data-theme');
+    var dark=(cur==='dark')||(cur==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches); h.setAttribute('data-theme',dark?'light':'dark'); }
+  $('#tTheme').onclick=theme; $('#mTheme').onclick=theme;
+  $('#tNotes').onclick=function(){ var on=document.body.classList.toggle('notes'); this.setAttribute('aria-pressed',on); this.textContent=on?'✎ Ocultar anotaciones UX':'✎ Ver anotaciones UX' };
+  render();
+})();
+</script>
+</body>
+</html>
