@@ -49,7 +49,7 @@ coincidía o faltaba, ordenado por impacto en el plan:
    incluidos 4xx y 5xx. Hoy `asignar` responde `409`/`400` con un cuerpo JSON de FastAPI. **Hipótesis
    sin verificar:** en la UI actual un `409` (colisión de ediciones, B15) pinta ese JSON dentro de la
    tarjeta (`hx-swap="outerHTML"`). Verificación: asignar en el navegador un archivo cuyo número
-   colisione y mirar la tarjeta. **Debe verificarse antes de V6**, porque el «éxito parcial por
+   colisione y mirar la tarjeta. **Debe verificarse antes de V6b** (la línea base de V0 incluye ese caso), porque el «éxito parcial por
    archivo» depende de ello.
 6. **Pendientes tiene tope y no tiene recuento**: `ReviewService.pending_files(limit=50)`; no hay
    consulta de recuento. La maqueta enseña «14» y un contador en el menú: con >50 pendientes el
@@ -68,7 +68,7 @@ coincidía o faltaba, ordenado por impacto en el plan:
 9. **El patrón mover + `flush` con la sesión viva sigue sin auditar**: `assign_to_series` llama a
    `safe_move_async` y solo hace `flush` (el `commit` lo hace la dependencia al final de la
    petición: `get_db` hace `commit` al salir y `rollback` si hay excepción). `CLAUDE.md` §3.1.2 lo deja explícitamente «pendiente de auditar». **Un lote
-   multiplica el riesgo** (N movimientos con una sesión): el «commit por archivo» de V6 exige hacer esa
+   multiplica el riesgo** (N movimientos con una sesión): el «commit por archivo» de V6a exige hacer esa
    auditoría **antes**, no durante.
 10. **Ignorar no es reversible hoy**: `ReviewService.dismiss` pone `File.review_dismissed = True` y
     **no existe** método de recuperar ni consulta de ignorados. La columna sí existe, así que V7 es
@@ -89,7 +89,9 @@ coincidía o faltaba, ordenado por impacto en el plan:
 13. **El «un solo buscador» de la maqueta junta dos contratos distintos**: `/ui/wishlist/buscar-serie`
     (busca en **tu** base de datos; lo usan el panel y Deseados) y `/ui/descubrir/buscar` (busca en
     **fuentes externas** y da de alta con `/ui/descubrir/crear`). Unificarlos es una decisión de
-    producto (¿qué ve el coleccionista primero: lo suyo o lo externo?), no un cambio de plantilla.
+    producto. **Decidido (2026-10-01):** el Inicio tiene una entrada principal «Buscar una serie» que lleva
+    a **Descubrir**; **no se unifican** todavía la búsqueda local y la externa; Deseados conserva su
+    búsqueda local, claramente etiquetada.
 14. **El panel (`/ui/`) lleva la lógica en el router**: cinco consultas y el cálculo de huecos dentro
     de `web/dashboard.py`. V4 («`PrimerosPasos` servicio puro») implica **extraer** esa lógica a
     `services/` antes de poder reutilizarla — coherente con `CLAUDE.md` §3.1.1, pero es trabajo que
@@ -151,6 +153,9 @@ Observaciones del mapa:
   herencia; hay que tocarla aparte (V12 la lista, pero sus tokens dependen de V1).
 - Las páginas que **no** dispararon ningún `hx-*` son `estado.html` (usa `fetch`), `series_detail.html`
   (solo incluye `_politica_serie.html`, que sí lo hace), `legal_*` y `login.html`.
+- **Herencia:** 11 de las 13 «páginas» heredan de `base.html`; las otras dos son la propia `base.html`
+  (la raíz) y `login.html` (autónoma). La afirmación «las 13 páginas heredan de `base.html`» de la épica
+  era inexacta y está corregida.
 - `base.html` incluye el aviso legal del pie (`_legal_disclaimer.html`) y el menú; **el menú no tiene
   clase de «página actual»** (no hay `aria-current`) ni contadores.
 - Familias de clases en `web.css` (856 líneas, 52 declaraciones de `font-size`): `topnav`, `pending-*`,
@@ -285,7 +290,7 @@ acciones de riesgo** y tiene su propio flujo `/ui/legal`).
 
 | Historia | Antes | Ahora | Por qué |
 |---|---|---|---|
-| V0 | S | S | Hecho salvo capturas. |
+| V0 | S | S | En curso: inventario terminado, línea base de capturas pendiente. |
 | V1 | M | **M** (confirmada) | 31 de 52 `font-size` están por debajo de 14 px (`.875rem`), 11 `color: var(--cyan\|ok\|warn)` sobre texto y 18 usos de `--ink-faint` → trabajo acotado y mecánico; la prueba de contraste es nueva. **Corregir `.badge.hot` oscuro** (§2.17). |
 | V2 | M | **M** | Mayormente crear componentes (§3), no renombrar. Las macros se registran en `crear_templates()`. |
 | V3 | M | **M, con riesgo** | Cambiar `base.html` rompe 2 pruebas fijadas a propósito; el fragmento de contadores necesita decidir su comportamiento con la BD caída (§2.1) y no existe `aria-current`. |
@@ -293,7 +298,7 @@ acciones de riesgo** y tiene su propio flujo `/ui/legal`).
 | V5 | L | **L** | Falta `contar_pendientes()`, el tope de 50 y la función pura de agrupado por patrón (§2.6, §2.8). |
 | V6 | L | **XL → dividir** | **V6a** (servicio): lote con `commit` por archivo, número por fila, alias opcional (cambia B13) y la **auditoría previa de mover + sesión viva** (§2.7–2.9). **V6b** (UI): previsualizar/confirmar y éxito parcial, **tras verificar el comportamiento htmx de los 4xx** (§2.5). |
 | V7 | S | **S→M** | La columna existe, pero no hay servicio ni rutas de recuperar ni lista de ignorados (§2.10). |
-| V8 | M | **M** | «Unir duplicadas» es operación nueva sobre una tabla sin unicidad: **sacar de la épica** (decisión 5: sin migración) o limitar a ocultar/avisar. |
+| V8 | M | **M** | «Unir duplicadas» **queda fuera de la migración** (decisión de producto 7b): V8 agrupa visualmente y muestra número, edición y estado; no borra ni fusiona filas. |
 | V9 | M | **M→L** | Hay que sustituir ~100 líneas de JS (§2.3) por HTMX **sin depender de la BD** (`/estado` es diagnóstico), añadir el bloque `seguridad` (§2.12) y «silenciar VPN» (indicador nuevo). «Copiar comando» sin JS: bloque seleccionable. |
 | V10 | L | **L** | 12 endpoints de D11 intactos; **no** copiar el selector de exposición de la maqueta (§2.11); conservar `base_url`. |
 | V11 | M | **M** | Comprobar qué trae ya el informe (tamaños) antes de prometer el orden por ahorro; V11b (progreso) sigue siendo backend. |
@@ -301,8 +306,9 @@ acciones de riesgo** y tiene su propio flujo `/ui/legal`).
 | V13 | M | **M** | Sin cambios. |
 | V14 | S | **S** | Sin cambios. |
 
-Por tanto: **sin cambio de orden de fusión**, pero con dos matices: V6 se divide (V6a antes de la puerta
-G1) y la verificación de htmx 4 con errores 4xx pasa a ser **precondición de V6b**.
+Por tanto: el orden de fusión cambia solo en que **V6 se divide** (V6a —servicio y auditoría— antes de la
+puerta G1; V6b —interfaz— después) y la verificación de htmx 4 con errores 4xx pasa a ser
+**precondición de V6b**. Si la auditoría de V6a exige esquema, esa dependencia se separa (decisión 5).
 
 ## 7. Contrastes calculados (WCAG 2.x, razón de luminancia relativa)
 

@@ -917,12 +917,14 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 
 #### Decisiones de la épica (a ratificar en el ADR 0005 de V0)
 
-1. **Migración incremental por capas, sin interruptor de «UI vieja/nueva».** Dos UIs en paralelo duplicarían plantillas y pruebas en una app de un solo operador. Como las 13 páginas heredan de `base.html`, **primero cambian los cimientos** (tokens → componentes → shell) y **después, pantalla a pantalla**, el contenido. Cada PR mejora o deja igual; la vuelta atrás es `git revert` de esa PR o `scripts/rollback.sh`.
+1. **Migración incremental por capas, sin interruptor de «UI vieja/nueva».** Dos UIs en paralelo duplicarían plantillas y pruebas en una app de un solo operador. Como **11 de las 13 «páginas» heredan de `base.html`** (las otras dos son la propia `base.html` y `login.html`, **autónoma**, que se trata aparte en V12), **primero cambian los cimientos** (tokens → componentes → shell) y **después, pantalla a pantalla**, el contenido. Cada PR mejora o deja igual; la vuelta atrás es `git revert` de esa PR o `scripts/rollback.sh`.
 2. **Las URL no cambian.** `/ui/pendientes`, `/ui/wishlist`, `/ui/auditoria`… siguen igual; solo cambian las etiquetas («Por revisar», «Duplicados») y qué etiqueta cuelga de qué ruta. Evita romper marcadores, tests y enlaces del README. **`/estado` se queda en `/estado`** (no es `/ui/estado`: es una ruta de diagnóstico que se sirve con la BD caída, E6) y `/` sigue redirigiendo a `/ui/`.
 3. **No se añade JavaScript propio nuevo.** Todo lo que la maqueta resuelve con JS se traduce a HTMX o CSS (tabla siguiente). Si algo no es traducible, se retira de la UI o se difiere; no se introduce JS. **El JS propio que ya existe** (el sondeo de `estado.html`, ~100 líneas, y el `onerror` de la portada en `pendientes.html`) **se retira cuando su pantalla se migra** (V9 y V5). *(La redacción original decía «cero JS propio» como si ya lo fuera.)*
 4. **Cero lógica de negocio nueva en las plantillas.** La lógica de presentación (agrupar, mapear estados, derivar pasos) vive en funciones **puras** en `services/` con pruebas, no en Jinja.
-5. **Sin migración de BD.** Ninguna historia de la épica añade tablas ni columnas. Si una necesita persistir algo (p. ej. silenciar un aviso), usa las banderas de `runtime_settings` (`get_flag`/`set_flag`). Si una decisión exige esquema (p. ej. un `UNIQUE` en `wishlist`), se saca de esta épica y se trata aparte.
-6. **Puerta de validación (G1).** U10 (probar con 3–5 coleccionistas) debe haberse hecho **antes de fusionar V5 y V6**: son los dos rediseños con más riesgo de haber acertado el problema pero no la solución.
+5. **Sin migración de BD dentro de las historias de UI.** Ninguna historia de la épica añade tablas ni columnas. Si una necesita persistir algo trivial (p. ej. silenciar un aviso), usa las banderas de `runtime_settings` (`get_flag`/`set_flag`). **Si una garantía de integridad exige esquema** —p. ej. que la auditoría de V6a concluya que hace falta registrar los movimientos para reconciliarlos tras un fallo, o un `UNIQUE` en `wishlist`— **esa dependencia se separa** en su propia historia y PR previa, con su migración, su ficha y su definición de hecho, **y la historia de UI espera a ella**. Lo que no se hace es rebajar la garantía de integridad para que la historia «quepa» sin migración, ni meter esquema dentro de una PR de interfaz.
+6. **Puerta de validación (G1).** U10 (probar con 3–5 coleccionistas) debe haberse hecho **antes de fusionar V5 y V6b**: son los dos rediseños con más riesgo de haber acertado el problema pero no la solución.
+
+7. **Decisiones de producto cerradas (2026-10-01).** **(a) Un solo buscador:** el Inicio tiene **una** entrada principal «Buscar una serie» que lleva a **Descubrir**; **no se unifican** todavía la búsqueda en tu biblioteca y la externa. **Deseados conserva su búsqueda local**, claramente etiquetada («Añadir de las series que ya tienes»). **(b) Unir duplicadas:** **fuera de esta migración**. V8 agrupa **visualmente** por serie y muestra número, edición y estado para distinguir las peticiones; **no borra ni fusiona filas** automáticamente. **(c) Archivos sin número en un lote:** V6b permite **dejarlos pendientes y explica por qué**; **nunca** se rellena un `1` ni se convierte un rango (`144-158`) en un número para satisfacer el formulario.
 
 #### De la maqueta a la implementación (qué se traduce y qué no)
 
@@ -941,12 +943,12 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 | Notificaciones temporales (toast) | Fragmento de aviso con desvanecimiento por animación CSS | El estado definitivo siempre es visible en la propia página |
 | «Copiar comando» (Estado/VPN) | Comando en un bloque `<code>` con `user-select: all` | El portapapeles exige JS: se muestra seleccionable y no se copia solo |
 | Selector «Quién puede entrar» (Ajustes → contraseña) | **No se ofrece**: Ajustes **informa** de la exposición efectiva (`seguridad` de `/api/health`) y dice «vuelve a ejecutar el instalador» | La app no puede cambiar su puerto (ADR 0004 / A11). **La maqueta lo simula y contradice la decisión** |
-| «Unir duplicadas» (Deseados) | **Fuera de la épica** tal cual | `wishlist` no tiene unicidad: unir exige borrar filas o esquema nuevo (decisión 5) |
+| «Unir duplicadas» (Deseados) | **Fuera de la migración** (decisión 7b): V8 solo **agrupa visualmente** | `wishlist` no tiene unicidad: unir exige borrar filas o esquema nuevo (decisión 5) |
 | «Silenciar aviso de VPN» | Indicador en `runtime_settings` (`get_flag`/`set_flag`) | Backend nuevo, sin migración |
 
 | ID | Historia | Aceptación clave | P | Est |
 |---|---|---|---|---|
-| V0 | Como equipo, quiero un inventario de la UI actual y un ADR de migración, para migrar sabiendo qué se toca | Inventario plantilla→componentes, capturas base, lista de contratos HTMX a conservar, ADR 0005 | P0 | S |
+| V0 | Como equipo, quiero un inventario de la UI actual y un ADR de migración, para migrar sabiendo qué se toca | Inventario plantilla→componentes, **línea base reproducible de capturas**, lista de contratos HTMX a conservar, ADR 0005 *(en curso: inventario terminado, capturas pendientes)* | P0 | S |
 | V1 | Como coleccionista, quiero textos legibles en cualquier pantalla, para no forzar la vista (cimiento visual) | Tokens con contraste ≥ 4,5:1, alias que no rompen plantillas, tamaño mínimo y objetivo táctil, prueba automática | P0 | M |
 | V2 | Como desarrollador, quiero una biblioteca de componentes CSS y macros Jinja, para que todas las pantallas se vean y se comporten igual | Botones, chips de estado, tarjetas, grupos, estado vacío, progreso, aviso; macros con pruebas | P0 | M |
 | V3 | Como coleccionista, quiero un menú claro y agrupado que funcione en móvil, para saber dónde estoy y dónde ir | Menú lateral + barra inferior, contadores por fragmento, `aria-current`, títulos coherentes | P0 | M |
@@ -967,17 +969,18 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 **V0 — Inventario y ADR 0005 de migración (P0, S)**
 
 - **Historia.** Como equipo, quiero un inventario de la UI actual y una decisión escrita de cómo migrarla, para que ninguna historia posterior dependa de supuestos no comprobados.
+- **Estado (2026-10-01): en curso — inventario terminado, capturas pendientes.** No se da por hecha hasta que la línea base (criterio 3) esté en la PR.
 - **Alcance.** Documentación y capturas; **no cambia código de la aplicación**.
 - **Criterios de aceptación.**
   1. `docs/design/ui-migracion.md` con una fila por plantilla (28): ruta que la sirve, plantilla padre, parciales HTMX que usa, endpoints `hx-*` que dispara y clases de `web.css` que emplea. Se obtiene **leyendo** las plantillas, no de memoria.
   2. **Contratos HTMX a conservar**: por cada endpoint de `/ui/*` que devuelve un fragmento, su URL, método, campos del formulario y el fragmento esperado. Es la lista de lo que no se puede romper.
-  3. Capturas de **la UI actual** (las siete existentes y las que falten: Biblioteca, Descubrir, ficha de serie, login, aviso legal) en `docs/design/ui-baseline/`, con la versión de ZascArr.
+  3. **Línea base reproducible** de la UI actual en `docs/design/ui-baseline/`, sobre el commit inventariado y **sin modificar la UI**: entorno aislado con Postgres y datos de prueba (descargas y avisos externos desactivados); pantallas principales, ficha de serie, login y aviso legal, en escritorio y móvil, **indicando viewport, tema, zoom, navegador y commit**; un caso de **asignación con colisión (409)** que registre el cuerpo recibido, el intercambio HTMX y lo que queda visible en la tarjeta; y `/estado` con la BD disponible y caída, sin perder su función de diagnóstico. Incluye el procedimiento para repetirla.
   4. La maqueta se commitea como `docs/design/maqueta-ui.html`, con la nota explícita de que **simula** deshacer-tras-asignar y el conmutador de tema (ver la tabla de traducción).
   5. ADR 0005 en `docs/adr/` con las seis decisiones de la épica, estado «Propuesto» hasta que se apruebe.
-  6. Se decide el destino de la página estática `/` (el panel de E1, que sondea `/api/health`) frente a `/ui/`: unificar o mantener, y qué ve quien entra por `/`.
+  6. **Resultado comprobado (no decisión pendiente):** la página estática de `/` ya no existe; `GET /` redirige con 307 a `/ui/` (`main.py`). No hay nada que unificar. Las dos pantallas existentes son `/ui/` (métricas) y `/estado` (salud, que **se conserva en `/estado`** y se sirve con la BD caída).
 - **Pruebas.** No aplica. Revisión humana del inventario contra `grep` de `hx-` y de clases.
 - **Riesgos.** Que el inventario descubra clases o parciales compartidos que obliguen a reordenar V2/V3.
-- **Notas de implementación de V0 (2026-10-01):** hecho, **salvo las capturas** (criterio 3, pendiente: exige ejecutar la app contra Postgres con datos). El inventario se hizo leyendo el código en `main` (`ab49c76`); las tablas de rutas y plantillas se **generaron del AST** de los routers y de las plantillas, no a mano. Entregables: `docs/design/ui-migracion.md` (28 plantillas, 48 rutas, contratos, maqueta frente a realidad, estimaciones), `docs/design/maqueta-ui.html` (copia sin modificar, con la lista de lo que **simula** en el inventario) y `docs/adr/0005-migracion-de-la-ui.md` (**Propuesto**). Lo que corrige de la épica: **(1)** Estado vive en `/estado`, no `/ui/estado`, y debe servirse con la BD caída; **(2)** la «página estática `/`» ya no existe (`/` redirige 307 a `/ui/`): **el criterio 6 queda resuelto sin unificar nada**; **(3)** `estado.html` ya lleva ~100 líneas de JS y `pendientes.html` un `onerror`: «cero JS propio» pasa a «sin JS propio nuevo»; **(4)** el menú actual no coincide con las pantallas (la rejilla `/ui/biblioteca` no está en el menú); **(5)** htmx 4.0.0 intercambia por defecto todo salvo 204/304: **hipótesis sin verificar** de que un `409` de `asignar` pinta JSON en la tarjeta, a comprobar antes de V6b; **(6)** Pendientes tiene tope de 50 y ningún recuento; **(7)** asignar exige número por archivo y la maqueta no lo pide; **(8)** el alias se aprende siempre (B13) y la casilla de la maqueta lo haría opcional; **(9)** mover + `flush` con la sesión viva sigue sin auditar (`CLAUDE.md` §3.1.2) y un lote lo multiplica; **(10)** ignorar no tiene inverso; **(11)** la maqueta ofrece en Ajustes un selector de exposición de red que **contradice A11/ADR 0004** (Ajustes informa, no cambia puertos); **(12)** `seguridad.atencion` de `/api/health` es la señal para el Estado nuevo; **(13)** «un solo buscador» junta dos contratos (lo tuyo y fuentes externas); **(14)** el panel lleva su lógica en el router; **(15)** «hemos leído tu biblioteca» es la adopción, una acción explícita. Verificado por cálculo: las cifras de contraste de V1 son correctas, y **la propia maqueta falla en un par** (insignia `.badge.hot` en oscuro, 3,38:1).
+- **Notas de implementación de V0 (2026-10-01):** inventario terminado; **la línea base de capturas (criterio 3) está pendiente** (exige ejecutar la app contra Postgres con datos). El inventario se hizo leyendo el código en `main` (`ab49c76`); las tablas de rutas y plantillas se **generaron del AST** de los routers y de las plantillas, no a mano. Entregables: `docs/design/ui-migracion.md` (28 plantillas, 48 rutas, contratos, maqueta frente a realidad, estimaciones), `docs/design/maqueta-ui.html` (copia sin modificar, con la lista de lo que **simula** en el inventario) y `docs/adr/0005-migracion-de-la-ui.md` (**Propuesto**). Lo que corrige de la épica: **(1)** Estado vive en `/estado`, no `/ui/estado`, y debe servirse con la BD caída; **(2)** la «página estática `/`» ya no existe (`/` redirige 307 a `/ui/`): **el criterio 6 queda resuelto sin unificar nada**; **(3)** `estado.html` ya lleva ~100 líneas de JS y `pendientes.html` un `onerror`: «cero JS propio» pasa a «sin JS propio nuevo»; **(4)** el menú actual no coincide con las pantallas (la rejilla `/ui/biblioteca` no está en el menú); **(5)** htmx 4.0.0 intercambia por defecto todo salvo 204/304: **hipótesis sin verificar** de que un `409` de `asignar` pinta JSON en la tarjeta, a comprobar antes de V6b; **(6)** Pendientes tiene tope de 50 y ningún recuento; **(7)** asignar exige número por archivo y la maqueta no lo pide; **(8)** el alias se aprende siempre (B13) y la casilla de la maqueta lo haría opcional; **(9)** mover + `flush` con la sesión viva sigue sin auditar (`CLAUDE.md` §3.1.2) y un lote lo multiplica; **(10)** ignorar no tiene inverso; **(11)** la maqueta ofrece en Ajustes un selector de exposición de red que **contradice A11/ADR 0004** (Ajustes informa, no cambia puertos); **(12)** `seguridad.atencion` de `/api/health` es la señal para el Estado nuevo; **(13)** «un solo buscador» junta dos contratos (lo tuyo y fuentes externas); **(14)** el panel lleva su lógica en el router; **(15)** «hemos leído tu biblioteca» es la adopción, una acción explícita. Verificado por cálculo: las cifras de contraste de V1 son correctas, y **la propia maqueta falla en un par** (insignia `.badge.hot` en oscuro, 3,38:1).
 
 **V1 — Tokens, contraste y tamaños en `web.css` (P0, M)**
 
@@ -1021,11 +1024,15 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   6. El fragmento queda protegido por `AuthMiddleware` como el resto de `/ui/*` (A6) y no filtra datos si no hay sesión.
   7. El título de cada página coincide con su entrada de menú (U7); lo comprueba un test que recorre las rutas.
   8. «Cerrar sesión» y el aviso legal conservan su comportamiento actual.
+  9. **Fragmento con la BD degradada (E6):** hoy el middleware responde un **503 HTML** a cualquier `/ui/*` que no sea de diagnóstico, y **htmx 4.0.0 intercambia por defecto todo salvo 204/304**: sin tratamiento, ese HTML se pintaría dentro del menú. El fragmento debe declararse **junto a `_RUTAS_DIAGNOSTICO`** y, con la BD caída, responder **204** (que htmx no intercambia) o un fragmento vacío con 200 — se elige y se **verifica en el navegador**; nunca un 5xx con cuerpo HTML.
+  10. **Tratamiento HTMX del fragmento:** `hx-trigger="load, every 30s"` con `hx-swap="innerHTML"` sobre un contenedor propio; un fallo de red o un `4xx`/`5xx` no puede dejar el menú sin enlaces (los contadores son un añadido, la navegación está en el marcado de `base.html`).
+  11. **Se actualizan las pruebas que fijan el menú actual** (no se esquivan): `tests/test_web_dashboard.py` (l. 109–110: `'<nav class="topnav">'` y `'href="/estado">Estado</a>'`) y `tests/test_web_discovery.py` (l. 62). La ficha deja constancia de que cambian a propósito y por qué.
+  12. `/estado` **sigue en `/estado`** y su entrada de menú apunta ahí.
 - **Pruebas.** Todas las páginas incluyen exactamente un `aria-current`; el fragmento con BD vacía, con datos y con BD degradada; auth con y sin sesión.
 - **Riesgos.** `every 30s` en una Pi: el fragmento debe ser dos `COUNT` baratos o leer un caché de proceso. Medir antes de fusionar.
 - **Dependencias.** V1, V2.
 
-**V4 — Inicio con primeros pasos y contadores honestos (P0, M)**
+**V4 — Inicio con primeros pasos y contadores honestos (P0, L)**
 
 - **Historia.** Como coleccionista recién instalado, quiero que el Inicio me diga qué hacer primero, para llegar a ver mi colección ordenada sin saber nada de la arquitectura.
 - **Criterios de aceptación.**
@@ -1034,8 +1041,10 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   3. Los números salen de **un único servicio** compartido con el resto de pantallas; no se recalculan en la plantilla.
   4. La cifra «tebeos encontrados» procede del último informe de la revisión (B16) o, si nunca se ha ejecutado, del recuento de ficheros registrados, y la etiqueta lo dice. No se afirma que se haya escaneado el disco si no ha ocurrido.
   5. Una sola acción principal visible; los pasos opcionales están marcados como tales.
-  6. Un único buscador, con su propósito escrito.
-  7. Si hay archivos por revisar, el paso lo cuenta con el número real y enlaza a Por revisar.
+  6. **Una única entrada principal «Buscar una serie» que lleva a Descubrir** (decisión de producto 7a): el formulario hace `GET /ui/descubrir?q=…` y Descubrir **prellena la caja y lanza la búsqueda al cargar** (cambio mínimo y probado en `web/discovery.py`). **No** se unifica con la búsqueda local; su propósito va escrito en la pantalla.
+  7. Si hay archivos por revisar, el paso lo cuenta con el número real (`contar_pendientes()`, que no depende del tope de 50 de `pending_files`) y enlaza a Por revisar.
+  8. **Antes** de reutilizarlas, las cinco consultas de `web/dashboard.py` (series, series con archivos, números importados, huecos, últimas series) se **extraen a un servicio** compartido sin cambiar ninguna cifra (los tests de `test_web_dashboard.py` y `test_dashboard.py` siguen en verde). La plantilla no recalcula nada.
+  9. El paso «Hemos leído tu biblioteca» se deriva de `LibraryAdopter.should_run()` (la adopción es una **acción explícita**, B11) y del último informe de duplicados guardado en `ImportRun` (`details.kind == "audit"`); sin informe no se afirma «432 comparados».
 - **Pruebas.** Matriz de la función pura (vacío; sin series con pendientes; todo configurado; sin aviso legal; BD degradada); la plantilla con cada estado.
 - **Riesgos.** Definir mal el origen de las cifras vuelve a producir contradicciones. La regla es una sola fuente de verdad.
 - **Dependencias.** V2, V3.
@@ -1049,39 +1058,62 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   3. Casillas en un `<form>`; cada cambio dispara `hx-post` a `/ui/pendientes/seleccion` y el servidor devuelve la barra de acciones con el recuento. Sin JavaScript propio.
   4. «Seleccionar grupo» y «Seleccionar todo» son peticiones que devuelven la lista re-renderizada con las casillas marcadas.
   5. La barra de acciones queda fija en pantalla y respeta la barra inferior móvil.
-  6. Lo que el usuario ve (grupos y casillas) **no altera** el catálogo hasta la confirmación de V6.
+  6. Lo que el usuario ve (grupos y casillas) **no altera** el catálogo hasta la confirmación de V6b.
   7. Estado vacío («¡Todo clasificado!») con enlace de vuelta al Inicio.
-  8. Se conservan las rutas y los campos HTMX actuales de búsqueda y asignación individual (contratos de V0) hasta que V6 los sustituya.
+  8. Se conservan las rutas y los campos HTMX actuales de búsqueda y asignación individual (contratos de V0) hasta que V6b los sustituya.
 - **Pruebas.** `agrupar_pendientes` con los 14 nombres reales de `_Unsorted` (grupos esperados y «Otros»); el endpoint de selección con 0, 1 y N; plantilla con y sin sugerencia; accesibilidad de las casillas (`aria-label` con el nombre del archivo).
-- **Fuera de alcance.** Asignar (V6), ignorar/recuperar (V7), mejorar el parser (B14).
+- **Fuera de alcance.** Asignar (V6a/V6b), ignorar/recuperar (V7), mejorar el parser (B14).
 - **Ficha §13.** Requerida (comportamiento nuevo P0): contrastar la asignación manual de Kapowarr y Mylar3 leyendo su código.
 - **Puerta G1.** No se fusiona antes de tener los resultados de U10.
 - **Dependencias.** V2, V3; B2, B12.
 
-**V6 — Asignación por lotes con previsualización y confirmación (P0, L)**
+**V6 — Asignación por lotes: dividida en V6a (servicio) y V6b (interfaz)**
 
-- **Historia.** Como coleccionista, quiero asignar a una serie los archivos seleccionados con una sola confirmación que me enseñe exactamente qué va a pasar, para clasificar en minutos sin miedo a equivocarme.
+Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio de **servicio** que mueve ficheros del usuario con un cambio de **pantalla**. V6a no cambia nada visible y puede fusionarse antes de la puerta G1; V6b no se empieza hasta que V6a esté fusionada y verificada.
+
+**V6a — Servicio de asignación por lotes y auditoría de mover + sesión (P0, L)**
+
+- **Historia.** Como equipo, quiero un servicio que asigne varios archivos con aislamiento por archivo y una auditoría hecha del riesgo de mover ficheros con la sesión de BD viva, para que la interfaz de lotes no multiplique un riesgo que hoy solo está anotado.
+- **Estado de partida (leído en V0).** `ReviewService.assign_to_series` llama a `safe_move_async` y solo hace `flush`; el `commit` lo hace `get_db` al salir de la petición (y hace `rollback` si hay excepción). Entre el movimiento y el `commit` hay una ventana en la que un fallo deja el **fichero movido y la BD revertida**. `CLAUDE.md` §3.1.2 lo marca «pendiente de auditar». `_learn_alias` se ejecuta **siempre** y guarda `normalize_title(parsed.series)` **del archivo**.
 - **Criterios de aceptación.**
-  1. Dos pasos en el servidor: `POST /ui/pendientes/asignar/previsualizar` devuelve el fragmento de confirmación (lista de archivos → serie destino, patrón que se recordará) y `POST /ui/pendientes/asignar/confirmar` ejecuta. **La lista que se muestra es la que se ejecuta**: el segundo paso recibe los identificadores, no recalcula la selección.
-  2. La ejecución reutiliza `ReviewService.assign_to_series` **archivo a archivo**, conservando `ColisionDeEdicion` (409 en español) y las defensas de B15.
-  3. **Éxito parcial:** un fallo en un archivo no detiene el lote; el resultado lista por archivo «asignado» o «no asignado: motivo», y los fallidos siguen en Por revisar.
-  4. **Una transacción corta por archivo** (`assign_to_series` mueve ficheros con la sesión abierta, deuda P1 registrada): se hace commit tras cada archivo, no un único commit al final del lote.
-  5. **Alias (B13):** la previsualización muestra el patrón que se aprenderá. Se añade a `assign_to_series` un parámetro `aprender_alias` (por defecto `True`, para no cambiar el comportamiento existente) y una casilla en la confirmación. Un alias incorrecto se fija, por eso se muestra antes de aprender.
-  6. **No existe «deshacer» tras asignar** y la interfaz no lo promete: asignar mueve ficheros y crea el `Issue`. El texto de la confirmación dice que los archivos se moverán a la carpeta de la serie.
-  7. Idempotencia: confirmar dos veces el mismo lote no duplica movimientos (los archivos ya asignados dejan de estar pendientes y se informan como tales).
-  8. El resultado final muestra un resumen y enlaza a la serie.
-- **Pruebas.** Éxito total; éxito parcial con colisión de edición; doble confirmación; lote vacío; commit por archivo (un fallo en el 3.º no revierte el 1.º y el 2.º); alias activado y desactivado; regresión de la asignación individual.
-- **Verificación.** Con Postgres real y ficheros reales en un directorio de prueba: lote de 4 que cambia de carpeta y cuyos `Issue` se crean con el `format` esperado.
-- **Riesgos.** Es la historia con más superficie sobre datos del usuario. Requiere revisión específica de la transacción por archivo y de la idempotencia antes de fusionar.
-- **Puerta G1 y ficha §13**, como V5.
-- **Dependencias.** V5; B13, B15.
+  1. **Auditoría documentada antes de escribir el lote** (`docs/design/`): enumera cada punto de fallo entre `safe_move_async` y el `commit` (excepción tras mover, caída del proceso, `rollback` del `get_db`), qué estado deja en disco y en BD, y cómo se **reconcilia** (p. ej. mover de vuelta, o reintentar con idempotencia). **Si la reconciliación exige persistir algo, esa dependencia se separa en su propia historia con migración** (decisión 5 de la épica): V6a no se fusiona rebajando la garantía.
+  2. **Número por archivo**: la unidad del lote es `(file_id, series_id, issue_number | None)`. Una función pura `numero_sugerido(nombre)` prefilla lo que `parse_comic_filename` detectó y devuelve **`None`** cuando no hay número **o es un rango/paquete** (`144-158`, `(94-121 usa)`); **nunca** inventa un `1` ni toma un extremo del rango. Un archivo sin número se devuelve como **`sin_numero`** y **queda pendiente** (no es un error del lote).
+  3. **Alias real por archivo**: parámetro `aprender_alias` (por defecto `True`, para no cambiar B13). El patrón que se aprende es el de **cada archivo** (`normalize_title(parsed.series)`), no un «grupo»; una función pura `patrones_a_aprender(archivos)` los lista **sin duplicados** para la previsualización. Con `aprender_alias=False` no se escribe ningún `LocalAlias`.
+  4. **Límites del lote**: tope máximo de archivos por lote (constante, empezando en 50 = el tope actual de Pendientes); por encima se **rechaza con un mensaje**, no se trunca en silencio. Se **mide** con ficheros reales (p. ej. 10 CBZ de ~100 MB en el disco de destino, también un CIFS) y se fija en la ficha §13 el umbral a partir del cual la ejecución dejaría de caber en una petición; si no cabe, el diseño pasa a tarea en segundo plano **como historia aparte**, no se improvisa.
+  5. **Aislamiento y `commit` corto por archivo**: un fallo en el 3.º no revierte el 1.º ni el 2.º; ningún `shutil.move` cruza una transacción abierta sin haberlo auditado (criterio 1).
+  6. **Resultado por archivo** con un conjunto cerrado (`asignado`, `ya_asignado`, `sin_numero`, `colision_edicion`, `no_encontrado`, `error`) y un motivo en español; **no se lanza `HTTPException`** desde el servicio.
+  7. **Idempotencia**: repetir el mismo lote no duplica movimientos ni `Issue`; lo ya asignado se informa como `ya_asignado`.
+  8. La asignación individual (`assign_to_series`, `POST /ui/pendientes/{id}/asignar`) **conserva su firma y su contrato**; los tests de B13 y B15 pasan sin tocarlos.
+- **Pruebas.** Éxito total; parcial con colisión de edición (B15) y con archivo sin número; rango sin número sugerido (con los nombres reales de `_Unsorted`); límite de lote; doble ejecución; un fallo en el 3.º con el 1.º y el 2.º intactos; alias activado y desactivado (con y sin duplicados de patrón); regresión de la individual. **Postgres real y ficheros reales** para las fronteras de `commit`.
+- **Verificación.** En un directorio de prueba: lote de 4 que cambia de carpeta y cuyos `Issue` se crean con el `format` esperado; forzar el fallo del criterio 1 y comprobar la reconciliación.
+- **Ficha §13.** Requerida: contrastar la asignación manual de Kapowarr y Mylar3 (versión/commit y pruebas).
+- **Dependencias.** B13, B15, A3 (`safe_move`). **No** depende de V5.
 
-**V7 — Ignorar con vuelta atrás y pestaña «Ignorados» (P1, S)**
+**V6b — Asignación en lote en la interfaz (P0, L)**
+
+- **Historia.** Como coleccionista, quiero asignar a una serie los archivos seleccionados con una sola confirmación que me enseñe exactamente qué va a pasar y qué se queda pendiente, para clasificar en minutos sin miedo a equivocarme.
+- **Precondición (verificación en navegador, antes de escribir código).** Reproducir en la **UI actual** una colisión de ediciones (`409` de `asignar`) y registrar **el cuerpo recibido, el intercambio de htmx 4 y lo que queda visible en la tarjeta** (hipótesis de V0: pinta el JSON de FastAPI). La línea base de V0 incluye este caso; V6b no empieza sin ese resultado.
+- **Criterios de aceptación.**
+  1. Dos pasos en el servidor: `POST /ui/pendientes/asignar/previsualizar` devuelve el fragmento de confirmación y `POST /ui/pendientes/asignar/confirmar` ejecuta. **La lista que se muestra es la que se ejecuta**: el segundo paso recibe los identificadores y los números, no recalcula la selección.
+  2. **Número por archivo, visible y editable** en la previsualización, prellenado con `numero_sugerido` (V6a). **Los archivos sin número no se asignan**: se muestran como **«se queda pendiente — no hemos podido saber el número (es un paquete 144-158 / no lleva número)»** y el coleccionista puede escribirlo o dejarlo. **Nunca** se rellena `1` ni se convierte un rango en un número para satisfacer el formulario.
+  3. **Respuestas 4xx/5xx:** por cómo htmx 4 intercambia cuerpos de error, el lote **no depende de `HTTPException`**: devuelve **200 con un fragmento de resultado por archivo** (`asignado` / `no asignado: motivo` / `se queda pendiente: motivo`). Los fallos de validación del propio formulario (identificadores inexistentes) también devuelven fragmentos legibles. Una prueba comprueba que ninguna ruta del lote devuelve un cuerpo JSON.
+  4. **Éxito parcial** visible: los no asignados siguen en Por revisar; el resumen final cuenta asignados, pendientes y fallidos y enlaza a la serie.
+  5. **Alias (B13):** la previsualización muestra los patrones que se aprenderán (`patrones_a_aprender`) con una casilla `aprender_alias`; un alias incorrecto se fija, por eso se muestra antes.
+  6. **No existe «deshacer» tras asignar** y la interfaz no lo promete: el texto de la confirmación dice que los archivos **se moverán** a la carpeta de la serie. Hasta confirmar no se mueve nada.
+  7. Confirmar dos veces el mismo lote no duplica nada (V6a, criterio 7) y se informa.
+  8. Se conservan las rutas y campos de la asignación individual (contratos de V0).
+  9. Sin JavaScript propio nuevo.
+- **Pruebas.** Plantillas con éxito total, parcial, archivo sin número (rango y ausente) y lote por encima del límite; ninguna ruta del lote responde JSON; doble confirmación; regresión de la individual y de V5.
+- **Verificación.** Navegador real contra Postgres real y ficheros reales, con capturas antes/después **incluido el caso 409**.
+- **Puerta G1.** No se fusiona antes de tener los resultados de U10.
+- **Dependencias.** V5, **V6a**; B13, B15.
+
+**V7 — Ignorar con vuelta atrás y pestaña «Ignorados» (P1, M)**
 
 - **Historia.** Como coleccionista, quiero poder recuperar un archivo que ignoré por error, para no temer a «Ignorar».
 - **Criterios de aceptación.**
   1. «Ignorar» tiene menor peso visual que la acción principal y no está pegado a ella.
-  2. Al ignorar, la fila se sustituye por una línea «Ignorado · Deshacer» que revierte con `hx-post` a `recuperar`. Es reversible porque `files.review_dismissed` ya existe (sin migración).
+  2. Al ignorar, la fila se sustituye por una línea «Ignorado · Deshacer» que revierte con `hx-post` a `recuperar`. Es reversible porque `files.review_dismissed` ya existe (sin migración), **pero hoy no hay operación inversa ni consulta de ignorados**: V7 añade `ReviewService.recuperar()` y `ignorados()` con pruebas, no solo presentación.
   3. Pestaña «Ignorados» con contador y botón «Recuperar» por archivo.
   4. Acciones sobre varios archivos (ignorar la selección) con el mismo mecanismo.
   5. Recuperar vuelve a poner el archivo en Por revisar con su sugerencia intacta.
@@ -1094,14 +1126,14 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 - **Criterios de aceptación.**
   1. Función pura `estado_visible(item)` que, a partir de `WishlistStatus`, `last_error` (D9) y `last_searched_at`, devuelve un único estado de presentación (`en cola`, `buscando ahora`, `sin resultados`, `descargando`, `en tu biblioteca`, `falló`) más el **siguiente paso** con su enlace. «Buscando» y «sin resultados» **no pueden coexistir**.
   2. Cada motivo de D9 enlaza a su solución (sin fuentes → Ajustes/objetivo «que se descarguen solos»; cliente inaccesible → Ajustes y diagnóstico de red A10).
-  3. Las filas de una misma serie se agrupan con un recuento y son expandibles.
-  4. Al añadir algo ya presente, el servidor lo **dice** y no crea otra fila. Se resuelve en el servicio; **no** se añade restricción `UNIQUE` (eso exige migración y queda fuera de la épica; se registra como decisión pendiente).
+  3. Las filas de una misma serie se **agrupan visualmente** con un recuento y son expandibles.
+  4. **Agrupar es solo visual** (decisión de producto 7b): cada petición sigue siendo su fila, con **número, edición (`Issue.format`) y estado** visibles para poder distinguirlas. **No hay «Unir duplicadas»**; no se borra ni se fusiona ninguna fila automáticamente. Al añadir algo ya presente (misma serie y mismo `issue_id`, incluido ninguno), el servidor lo **dice** y enlaza a la existente en vez de crear otra; se resuelve en el servicio, **sin** restricción `UNIQUE` (exige migración: dependencia separada si se quiere, decisión 5).
   5. «Buscar ahora» (D10) y su token firmado se conservan sin cambios; el aviso de uso responsable pasa a un bloque plegable manteniendo el gate legal.
   6. Antes de implementar, se comprueba en la BD real si las cinco filas «BPRD» son duplicados o números distintos, y la decisión de agrupar se ajusta a ello.
 - **Pruebas.** Tabla estado×motivo→texto y enlace; alta repetida; agrupación; regresión de D10 y del gate legal.
 - **Dependencias.** V2, V3; D1, D9, D10, A10.
 
-**V9 — Estado: semáforo honesto y mensajes en llano (P1, M)**
+**V9 — Estado: semáforo honesto y mensajes en llano (P1, L)**
 
 - **Historia.** Como coleccionista, quiero que Estado me diga si debo preocuparme y qué hacer, sin términos internos.
 - **Criterios de aceptación.**
@@ -1110,8 +1142,10 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   3. «Sin datos» de VPN se distingue de «sin protección»: el primero no afirma riesgo; el segundo sí.
   4. «No uso VPN: silenciar» guarda una bandera en `runtime_settings` (`get_flag`/`set_flag`, sin migración); silenciar no oculta el estado real, solo el aviso, y se puede revertir.
   5. Se conservan los estados de la BD de E6 (`unreachable`, `migration_required`, `schema_incompatible`, `ok`) con su texto y acción.
-  6. Se aplica la decisión de V0 sobre la página estática `/`: o redirige a `/ui/estado` o comparte el mismo cálculo; **nunca dos semáforos distintos**.
-  7. La página se actualiza por sondeo HTMX en vez de JavaScript propio.
+  6. **`/estado` se conserva en `/estado` como diagnóstico independiente de la BD** (V0): se sirve con la BD caída, y su fragmento de sondeo **no usa `get_db`** y está declarado junto a `_RUTAS_DIAGNOSTICO`. `/` ya redirige a `/ui/` (no hay página estática): **no existe un segundo semáforo** que unificar, y se mantiene así.
+  7. La página se actualiza por **sondeo HTMX** y se **retira el JavaScript inline** de `estado.html` (~100 líneas con `fetch("/api/health")`). La pantalla funciona igual con la BD caída (prueba con `db_degraded`).
+  8. **Seguridad aparte de la salud técnica (A11):** `/api/health` trae `seguridad.atencion` (abierto sin contraseña). Se pinta como «Atención» con su texto («qué pasa / por qué importa / qué hacer»: poner contraseña, o volver a ejecutar el instalador y elegir «solo esta máquina») **sin cambiar `status`** (observacional, como la VPN).
+  9. «Copiar comando» no se implementa con JS: el comando va en un bloque seleccionable (`user-select: all`).
 - **Pruebas.** Matriz de combinaciones de estados → semáforo y textos; bandera de silencio; BD degradada.
 - **Dependencias.** V2, V3; E1, E6, D4.
 
@@ -1125,7 +1159,8 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   4. «Probar conexión» devuelve causa y siguiente paso en español, reutilizando D9/A10, sin excepciones ni URL en crudo; los textos tienen `aria-live`.
   5. Cada tarjeta dice en una línea para qué sirve y si es opcional.
   6. Se conservan: guardar aplica al instante, los secretos nunca se devuelven en claro, el campo de secreto vacío significa «no cambiar», y activar contraseña sin credencial se rechaza (A6).
-  7. El objetivo «Proteger con contraseña» incorpora la pregunta de exposición de red (A11/ADR 0004) **solo como texto informativo** hasta que A11 se implemente; no cambia la publicación de puertos.
+  7. El objetivo «Proteger con contraseña» **muestra la exposición efectiva** (`seguridad.exposicion`: solo esta máquina / red local / proxy; y si hay contraseña) como **texto informativo**, con la acción «para cambiarlo, vuelve a ejecutar el instalador». **No ofrece ningún selector** de quién puede entrar ni cambia la publicación de puertos: A11 ya está implementada y el puerto es de Docker en el host (ADR 0004). El campo `base_url` (proxy que cambia `Host`) **se conserva** con su explicación actual, y la contraseña es `type="password"`.
+  8. **Ningún bloque actual desaparece al repartirlos en objetivos:** los 7 de hoy (Fuentes de metadatos —**con GCD**, que la maqueta no lista—, Comic Vine, Prowlarr, Transmission, aMule, Seguridad y Avisos) quedan asignados a un objetivo o a «Avanzado», y una prueba comprueba que cada `name=` de formulario sigue existiendo.
 - **Pruebas.** Cada objetivo expone los campos correctos; el modo avanzado conserva todos; regresión de secretos y del guardarraíl de A6; la prueba de conexión con y sin éxito.
 - **Riesgos.** Es la plantilla más grande y donde viven los secretos: se migra por partes y con regresión específica.
 - **Dependencias.** V2, V3; D11, A6, A10, D9.
@@ -1184,13 +1219,13 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 |---|---|---|---|
 | 0 · Cimientos | V0, V1, V2 | Textos legibles en toda la app y piezas reutilizables | Bajo: no cambia flujos |
 | 1 · Estructura | V3, V4 | Menú nuevo en todas las pantallas e Inicio guiado | Medio: toca `base.html` |
-| 2 · Valor principal | V5, V6, V7 | Por revisar rediseñado, en lotes y reversible al ignorar | **Alto**: asigna y mueve ficheros |
+| 2 · Valor principal | V5, V6a, V7, V6b | Por revisar rediseñado, reversible al ignorar y asignación en lotes | **Alto**: asigna y mueve ficheros (V6a lo audita antes) |
 | 3 · Resto de pantallas | V8, V9, V10, V11 | Deseados, Estado, Ajustes y Duplicados nuevos | Medio; V10 es la mayor |
 | 4 · Cobertura y cierre | V12, V13, V14 | Coherencia total, móvil verificado, sin restos | Bajo |
 
-**Orden de fusión recomendado:** V0 → V1 → V2 → V3 → V4 → (G1: U10) → V5 → V7 → V6 → V8 → V9 → V10 → V11 → V12 → V13 → V14. V7 se adelanta a V6 para que el usuario pueda ignorar con red de seguridad antes de poder asignar en bloque. **Tras V0, V6 se divide**: V6a (servicio y auditoría de mover + sesión viva) no cambia nada visible y puede ir antes de la puerta G1; V6b (UI) va después y solo cuando esté **verificado el comportamiento de htmx 4 con respuestas 4xx**.
+**Orden de fusión recomendado:** V0 → V1 → V2 → V3 → V4 → **V6a** → (G1: U10) → V5 → V7 → **V6b** → V8 → V9 → V10 → V11 → V12 → V13 → V14. V7 se adelanta a V6b para que el usuario pueda ignorar con red de seguridad antes de poder asignar en bloque. **Tras V0, V6 se divide**: V6a (servicio y auditoría de mover + sesión viva) no cambia nada visible y puede ir antes de la puerta G1; V6b (UI) va después y solo cuando esté **verificado el comportamiento de htmx 4 con respuestas 4xx**.
 
-**Definición de hecho de cada historia de la épica** (además de la del proyecto): PR única; sin migración; sin JavaScript propio; contratos HTMX de V0 conservados; pruebas del cambio más la regresión de las existentes; verificación en navegador real contra Postgres real, con capturas antes/después en la PR; CHANGELOG y nota de implementación en el BACKLOG; y comprobada la vuelta atrás con `git revert` de la PR.
+**Definición de hecho de cada historia de la épica** (además de la del proyecto): PR única; sin migración dentro de la PR (si hace falta esquema, va en una historia previa aparte: decisión 5); **sin JavaScript propio nuevo, y retirada del existente cuando su pantalla se migre**; contratos HTMX de V0 conservados; pruebas del cambio más la regresión de las existentes; verificación en navegador real contra Postgres real, con capturas antes/después en la PR; CHANGELOG y nota de implementación en el BACKLOG; y comprobada la vuelta atrás con `git revert` de la PR.
 
 **Riesgos de la épica.**
 - **Sensación de «UI a medias» entre fases.** Se mitiga porque V1–V3 cambian la apariencia global primero, y cada fase deja pantallas coherentes entre sí.
