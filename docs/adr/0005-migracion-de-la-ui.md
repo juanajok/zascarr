@@ -44,11 +44,16 @@ contratos HTMX sin que ninguna prueba lo vea.
 4. **Cero lógica de negocio nueva en las plantillas.** Agrupar, mapear estados o derivar pasos vive
    en funciones **puras** de `services/` con pruebas. Si una pantalla hoy lleva lógica en su
    router (el panel `/ui/`), se **extrae primero**.
-5. **Sin migración de base de datos en la épica.** Si una historia necesita persistir algo, usa los
-   indicadores de `runtime_settings` (`get_flag`/`set_flag`); si exige esquema, **sale de la épica**.
-   Consecuencia ya aplicada: «Unir duplicadas» (Deseados no tiene unicidad) no entra tal cual.
+5. **Sin migración de base de datos dentro de las historias de UI.** Si una historia necesita
+   persistir algo trivial, usa los indicadores de `runtime_settings` (`get_flag`/`set_flag`). **Si una
+   garantía de integridad exige esquema** (p. ej. que la auditoría de V6a concluya que hay que
+   registrar los movimientos para reconciliarlos tras un fallo), **esa dependencia se separa** en su
+   propia historia y PR previa, con migración y ficha, y la historia de UI espera. **No se rebaja
+   la garantía para que la historia quepa sin migración**, ni se mete esquema en una PR de interfaz.
+   Consecuencia ya aplicada: «Unir duplicadas» (Deseados no tiene unicidad) queda **fuera de la
+   migración**; V8 solo agrupa visualmente.
 6. **Puerta de validación (G1).** U10 —probar con 3–5 coleccionistas— se hace **antes** de fusionar
-   los dos rediseños de mayor riesgo (V5 y V6): se puede acertar el problema y no la solución.
+   los dos rediseños de mayor riesgo (V5 y V6b): se puede acertar el problema y no la solución.
 7. **La UI informa de lo que no puede cambiar (A11).** Ajustes **muestra** la exposición efectiva
    (`seguridad.exposicion`, `contrasena`, `atencion`) y explica cómo cambiarla (**volver a ejecutar el
    instalador**); **no ofrece** un selector de quién puede entrar, porque el puerto publicado es de
@@ -70,13 +75,19 @@ contratos HTMX sin que ninguna prueba lo vea.
   pruebas, y la vuelta atrás deja de ser un `git revert`.
 - **Copiar la maqueta tal cual como plantillas** — arrastraría sus simulaciones (deshacer tras
   asignar), datos fijos y el selector de exposición contrario al ADR 0004.
+- **Un buscador único que fusione la búsqueda local y la externa** — decisión de producto
+  cerrada: el Inicio lleva a Descubrir con una entrada principal; Deseados conserva su búsqueda
+  local, etiquetada. No se unifican todavía.
 - **Cambiar las URL para que coincidan con las etiquetas nuevas** — rompe marcadores, pruebas y los
   enlaces del README, a cambio de nada que el coleccionista vea.
 
 ## Consecuencias
 
 - Las historias V1–V14 se pueden fusionar de una en una y revertir de una en una; el orden de
-  fusión de la épica no cambia, salvo que **V6 se divide** y V6a pasa antes de la puerta G1.
+  fusión de la épica cambia solo en que **V6 se divide**: V6a (servicio y auditoría, sin cambio visible)
+  puede ir antes de la puerta G1 y V6b (interfaz) después.
+- **Asignar sin número no existe**: V6b deja los archivos sin número (o con rango) **pendientes y
+  explica por qué**; nunca rellena `1` ni convierte un rango en un número.
 - V3 **rompe a propósito** dos pruebas que fijan el menú actual (`<nav class="topnav">` y el enlace
   `/estado`); su ficha debe decir que se actualizan.
 - Aparece trabajo que la épica no listaba: extraer las consultas del panel a un servicio (V4), un
