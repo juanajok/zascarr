@@ -15,6 +15,10 @@ es la implementación de esa regla para todo lo que mueve ficheros:
     biblioteca en otro), copia y verifica ANTES de borrar el original.
   - `safe_move_async`: el mismo `safe_move` en un hilo aparte, para llamarlo
     desde handlers async sin congelar el event loop (CLAUDE.md §4).
+  - `listar_comics`: el recorrido de carpetas que comparten el importador y el
+    adoptador. Es **síncrono a propósito** y se llama con `asyncio.to_thread`:
+    sobre una biblioteca en red (SMB) cada `stat` es una ida y vuelta, y hacerlo
+    en el bucle de eventos congelaba la app durante todo el recorrido.
 """
 from __future__ import annotations
 
@@ -166,3 +170,33 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
 async def safe_move_async(src: str | Path, dest: str | Path) -> Path:
     """`safe_move` fuera del event loop (I/O de disco potencialmente grande)."""
     return await asyncio.to_thread(safe_move, src, dest)
+
+
+def listar_comics(dirs, extensiones) -> list[Path]:
+    """Cómics bajo `dirs`, sin repetir el mismo fichero.
+
+    Deduplica por `(st_dev, st_ino)`, no por ruta: HOST_DOWNLOADS_DIR y
+    HOST_AMULE_INCOMING_DIR pueden apuntar al mismo disco (bootstrap.sh los deja
+    iguales cuando se da una sola carpeta), y entonces el mismo fichero aparece
+    bajo dos rutas distintas dentro del contenedor — dos bind-mounts del mismo
+    inodo, que `Path.resolve()` no detecta. Una carpeta que no existe se salta.
+
+    Bloquea (E/S de disco): llamarla siempre con `asyncio.to_thread` desde
+    código async (CLAUDE.md §4).
+    """
+    vistos: set[tuple[int, int]] = set()
+    archivos: list[Path] = []
+    for d in dirs:
+        if not d.exists():
+            continue
+        for ext in extensiones:
+            for f in d.rglob(f"*{ext}"):
+                try:
+                    st = f.stat()
+                except OSError:
+                    continue
+                clave = (st.st_dev, st.st_ino)
+                if clave not in vistos:
+                    vistos.add(clave)
+                    archivos.append(f)
+    return archivos

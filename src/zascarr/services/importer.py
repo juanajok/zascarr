@@ -41,7 +41,7 @@ from zascarr.models import (
     IssueFormat,
     Series,
 )
-from zascarr.utils.fs import safe_move_async, sanitize_segment
+from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -181,10 +181,18 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
         fila.metadata_ = meta
 
 
+async def _triage_sin_bloquear(path: Path) -> TriageResult:
+    """`triage` lee el fichero ENTERO para hashearlo: es lo más caro de adoptar
+    o importar y se hace una vez por fichero. Sobre una biblioteca en red, hacerlo
+    en el bucle de eventos congelaba la app (ensayo con 160 GB en SMB, 2026-10-01);
+    en un hilo, la interfaz sigue respondiendo (CLAUDE.md §4)."""
+    return await asyncio.to_thread(triage, path)
+
+
 async def _triage_and_match(
     db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None
 ) -> _Outcome:
-    tr: TriageResult = triage(path)
+    tr: TriageResult = await _triage_sin_bloquear(path)
 
     if tr.sha256:
         coincidencias = await _coincidencias_de_hash(db, tr.sha256)
@@ -271,28 +279,9 @@ class Importer:
     async def scan_and_import(self) -> ImportReport:
         report = ImportReport(started_at=datetime.now(UTC))
 
-        files = []
-        # (st_dev, st_ino), no la ruta resuelta: HOST_DOWNLOADS_DIR y
-        # HOST_AMULE_INCOMING_DIR pueden apuntar al mismo disco (caso normal,
-        # no la excepción — bootstrap.sh los deja iguales cuando el usuario
-        # da una sola carpeta de descargas), y entonces el mismo archivo
-        # aparece bajo /media/downloads Y /media/incoming: dos bind-mounts
-        # distintos del mismo inodo. Path.resolve() no lo detecta (son rutas
-        # de verdad distintas dentro del contenedor); el inodo sí.
-        seen: set[tuple[int, int]] = set()
-        for d in self._scan_dirs:
-            if not d.exists():
-                continue
-            for ext in COMIC_EXTS:
-                for f in d.rglob(f"*{ext}"):
-                    try:
-                        st = f.stat()
-                    except OSError:
-                        continue
-                    clave = (st.st_dev, st.st_ino)
-                    if clave not in seen:
-                        seen.add(clave)
-                        files.append(f)
+        # Dedupe por (st_dev, st_ino), no por ruta: ver `listar_comics`. El
+        # recorrido va en un hilo — bloquea en E/S (CLAUDE.md §4).
+        files = await asyncio.to_thread(listar_comics, self._scan_dirs, COMIC_EXTS)
         report.files_scanned = len(files)
 
         # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la

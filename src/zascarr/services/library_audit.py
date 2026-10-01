@@ -37,6 +37,7 @@ Coste en la Pi (restricción dura, CLAUDE.md §1): hashear 2000 CBR de
 """
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -155,10 +156,23 @@ class LibraryAudit:
 
     async def run(self) -> AuditReport:
         report = AuditReport(started_at=datetime.now(UTC))
-        if not self._library.exists():
+        # TODO el análisis es E/S de disco síncrona (listar, `stat`, hash en
+        # streaming): en una biblioteca en red (160 GB en SMB, 2026-10-01) corría
+        # en el bucle de eventos y dejaba la app sin responder durante minutos,
+        # con el contenedor en `unhealthy`. Un solo salto a un hilo para todo el
+        # análisis; solo persistir toca la BD y se queda en el bucle.
+        if not await asyncio.to_thread(self._library.exists):
             report.finished_at = datetime.now(UTC)
             return report
 
+        await asyncio.to_thread(self._analizar, report)
+
+        report.finished_at = datetime.now(UTC)
+        await self._persistir(report)
+        return report
+
+    def _analizar(self, report: AuditReport) -> None:
+        """Parte síncrona de `run`: sin BD, así que es segura en un hilo."""
         archivos = self._listar_comics()
         report.files_scanned = len(archivos)
 
@@ -167,10 +181,6 @@ class LibraryAudit:
         self._detectar_carpetas_repetidas(archivos, report)
         self._detectar_carpetas_vacias(report)
         self._detectar_no_reconocidos(report)
-
-        report.finished_at = datetime.now(UTC)
-        await self._persistir(report)
-        return report
 
     # ── Recolección ──────────────────────────────────────────────────
 

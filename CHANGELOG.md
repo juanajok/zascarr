@@ -3,6 +3,19 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
+## [No publicado]
+
+### Corregido
+
+- **La aplicación ya no se queda sin responder mientras analiza una biblioteca
+  grande.** Encontrado en el primer ensayo con una biblioteca real (160 GB en una
+  unidad de red SMB): la auditoría inicial recorría y hasheaba los ficheros en el
+  mismo hilo que atiende la web, así que durante minutos `/api/health` no
+  contestaba y el contenedor pasaba a `unhealthy`. Lo mismo ocurría, fichero a
+  fichero, al **adoptar** la biblioteca y al **importar** (el hash de cada fichero
+  se calculaba sin soltar el hilo). Ahora ese trabajo de disco va a un hilo aparte
+  y la interfaz sigue respondiendo. Sin cambios de comportamiento ni de datos.
+
 ## [1.15.0] — 2026-10-01
 
 Versión grande: seguridad de acceso, integridad de ficheros, política de búsqueda
