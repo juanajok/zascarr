@@ -26,7 +26,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
 COMPOSE_FILE="${REPO_DIR}/docker-compose.yml"
-ENV_FILE="${ZASCARR_ROOT}/.env"
+# El `.env` puede venir **explícito** en el entorno (las pruebas, o un
+# administrador que apunta a otro fichero): entonces es de quien llama y este
+# script no toca el `.env` del checkout más abajo. Sin él, la convención de
+# siempre: el `.env` vive en ZASCARR_ROOT.
+ENV_FILE_EXPLICITO=0
+if [[ -n "${ENV_FILE:-}" ]]; then
+    ENV_FILE_EXPLICITO=1
+else
+    ENV_FILE="${ZASCARR_ROOT}/.env"
+fi
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/zascarr/postgres}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
@@ -51,7 +60,14 @@ COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 # si el symlink se perdió (está en .gitignore, no lo repone un git reset):
 # así el contrato ".env vive en ZASCARR_ROOT, se ve desde REPO_DIR" se
 # mantiene desde un único sitio, no repartido por cada script.
-if [[ -f "${ENV_FILE}" ]] && [[ "$(readlink -f "${REPO_DIR}/.env" 2>/dev/null)" != "$(readlink -f "${ENV_FILE}")" ]]; then
+#
+# NO se hace si el `.env` vino explícito: en una prueba el destino es un
+# temporal que desaparece (dejaría un enlace ROTO en el checkout, y
+# `get_settings()` lee `.env` desde el cwd), y un administrador que pasa su
+# propio `ENV_FILE` no espera que le cambien la raíz del repo.
+if (( ENV_FILE_EXPLICITO == 1 )); then
+    :
+elif [[ -f "${ENV_FILE}" ]] && [[ "$(readlink -f "${REPO_DIR}/.env" 2>/dev/null)" != "$(readlink -f "${ENV_FILE}")" ]]; then
     ln -sf "${ENV_FILE}" "${REPO_DIR}/.env" 2>/dev/null || true
 fi
 
