@@ -1153,6 +1153,23 @@ registra cada petición a nivel **INFO con la URL completa**.
   verdad (configurar `logging`/structlog con ellos) o se retiran. Mientras tanto,
   la documentación no debería prometer que cambian el nivel de log.
 
+## Deuda técnica registrada (E6: trabajos de fondo con la BD degradada, 2026-10-01)
+
+`lifespan` levantaba la app degradada (E6: `/api/health` responde y `/ui/*` falla
+cerrado con 503) pero **arrancaba igualmente los cuatro ciclos de fondo**
+(auditoría de biblioteca, importación, enriquecimiento y orquestación): cada
+intervalo intentaban usar una BD inaccesible, fallaban y llenaban el log sin
+poder hacer nada útil. La interfaz se degradaba; los trabajos no.
+
+- **Arreglado:** con `app.state.db_degraded` **no se crean las tareas** y se
+  registra **una vez** `background_tasks_skipped_db_degraded`. Así «solo
+  diagnóstico» es literal. Al reiniciar con la BD arreglada arrancan solas: la
+  bandera es de este proceso, no hay estado persistido que desbloquear.
+- Regresión: `tests/test_e6_degradado.py` — el caso degradado **no necesita
+  Postgres** (apunta a un puerto muerto, la conexión se rechaza al instante), y la
+  contraprueba (con la BD disponible el aviso **no** aparece) se salta sin
+  `TEST_DATABASE_URL`.
+
 ## Benchmarking competitivo (2026-09-21)
 
 Comparado contra tres proyectos del mismo espacio para no reinventar ni
