@@ -11,18 +11,38 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
   defecto sigue siendo no exponer el puerto, igual que antes de A6 — activar
   una contraseña es una decisión tuya desde `/ui/ajustes` → Seguridad, nunca
   algo que la instalación te obligue a configurar de entrada.
-- El contenedor solo publica `127.0.0.1:8000` en el host (`docker-compose.yml`).
-  Sin acción explícita tuya, ZascArr **no es alcanzable** desde tu LAN ni
-  desde internet.
+- El contenedor solo publica `127.0.0.1:8000` en el host por defecto
+  (`ZASCARR_BIND_ADDRESS` en el `.env`, ver abajo). Sin acción explícita tuya,
+  ZascArr **no es alcanzable** desde tu LAN ni desde internet.
 - PostgreSQL y Redis publican en `127.0.0.1`, nunca en `0.0.0.0`.
 - Las integraciones P2P (Prowlarr, Transmission, aMule, foro) nacen
   **desactivadas** y piden activación explícita.
 
 ## Si quieres acceder desde fuera de la Pi
 
-Activa una contraseña en `/ui/ajustes` → Seguridad antes de publicar el
-puerto 8000 en tu LAN o en internet — "Solo contraseña" o "Usuario y
-contraseña", a elegir. La contraseña se guarda como hash PBKDF2-SHA256
+**La vía recomendada es el instalador** (A11): vuelve a ejecutar `bootstrap.sh`
+y, en la pregunta «¿Quieres usarlo desde otros dispositivos?», elige «mi red
+local» o «detrás de un proxy». Te pide la contraseña **antes** de abrir el
+puerto —se fija después de migrar y antes de levantar la aplicación— y, si no
+la consigue, **no abre nada**. Si ZascArr ya estaba instalado (abierto a la red o detrás de un proxy), el instalador
+lo **para** hasta comprobarlo, y lo **recrea** al final para que una contraseña nueva
+valga de inmediato. Detalle de la decisión en
+[`docs/adr/0004-exposicion-de-red.md`](docs/adr/0004-exposicion-de-red.md) y
+[`docs/design/benchmark-A11-exposicion.md`](docs/design/benchmark-A11-exposicion.md).
+
+- **Mi red local** pone `ZASCARR_BIND_ADDRESS=0.0.0.0` en el `.env`: se publica el
+  puerto de la **aplicación**; PostgreSQL y Redis siguen en `127.0.0.1` siempre.
+  **No reenvíes el puerto 8000 en tu router hacia internet**: el instalador no
+  puede comprobarlo.
+- **Proxy inverso** deja el puerto en localhost (lo expuesto es el proxy), guarda
+  `BASE_URL=https://…` y te enseña un ejemplo de Caddy. El proxy y el HTTPS los
+  pones tú.
+- Si se abre y **no hay contraseña** (por ejemplo, la quitas luego desde Ajustes),
+  `/api/health` y `/estado` te lo avisan.
+
+También puedes hacerlo a mano. Activa una contraseña en `/ui/ajustes` →
+Seguridad antes de publicar el puerto 8000 en tu LAN o en internet — "Solo
+contraseña" o "Usuario y contraseña", a elegir. La contraseña se guarda como hash PBKDF2-SHA256
 (nunca en claro) y protege tanto la interfaz web (cookie de sesión, 30
 días) como la API (HTTP Basic Auth, para `curl`/scripts). `/api/health`
 queda exenta a propósito, para que un healthcheck de Docker o de

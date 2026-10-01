@@ -74,7 +74,11 @@ services:
     networks:
       - zascarr-internal
     ports:
-      - "127.0.0.1:8000:8000"
+      # A11: dirección en la que el HOST publica la interfaz. Por defecto solo esta
+      # máquina (ADR 0004); `bootstrap.sh` la cambia a 0.0.0.0 si eliges «mi red
+      # local», y solo tras fijar una contraseña. Postgres y Redis NO se
+      # parametrizan: nunca deben ser alcanzables desde la red.
+      - "${ZASCARR_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/zascarr
       - REDIS_URL=redis://redis:6379/0
@@ -97,6 +101,9 @@ services:
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
       # contenedor (que no monta el .env). ALLOWED_HOSTS no tiene otra vía: no está
       # en Ajustes, y sin él quien entra por un nombre de equipo recibe 403 en todo.
+      # La app no puede cambiar su puerto: solo lo lee para avisar si está abierto
+      # sin contraseña (/api/health).
+      - ZASCARR_BIND_ADDRESS=${ZASCARR_BIND_ADDRESS:-127.0.0.1}
       - BASE_URL=${BASE_URL:-}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-}
       # UID/GID reales del usuario de servicio del host (ZASCARR_USER,
