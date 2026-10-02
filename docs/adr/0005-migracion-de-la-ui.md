@@ -2,7 +2,7 @@
 
 ## Estado
 
-**Propuesto** — 2026-10-01. Pasa a «Aceptado» cuando lo apruebe quien mantiene el proyecto.
+**Aceptado** — 2026-10-02 (propuesto el 2026-10-01 en la PR #60, fusionada en `a81aae1`).
 Se cierra con la historia V0 de la Épica V (`docs/BACKLOG.md`); el inventario en que se apoya
 está en `docs/design/ui-migracion.md`.
 

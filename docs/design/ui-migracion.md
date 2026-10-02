@@ -302,7 +302,7 @@ acciones de riesgo** y tiene su propio flujo `/ui/legal`).
 
 | Historia | Antes | Ahora | Por qué |
 |---|---|---|---|
-| V0 | S | S | Inventario y línea base terminados; pendiente de aprobar la PR #60. |
+| V0 | S | S | Hecho (PR #60, `a81aae1`). |
 | V1 | M | **M** (confirmada) | 31 de 52 `font-size` están por debajo de 14 px (`.875rem`), 11 `color: var(--cyan\|ok\|warn)` sobre texto y 18 usos de `--ink-faint` → trabajo acotado y mecánico; la prueba de contraste es nueva. **Corregir `.badge.hot` oscuro** (§2.17). |
 | V2 | M | **M** | Mayormente crear componentes (§3), no renombrar. Las macros se registran en `crear_templates()`. |
 | V3 | M | **M, con riesgo** | Cambiar `base.html` rompe 2 pruebas fijadas a propósito; el fragmento de contadores necesita decidir su comportamiento con la BD caída (§2.1) y no existe `aria-current`. |
