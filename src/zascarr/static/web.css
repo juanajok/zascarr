@@ -20,13 +20,37 @@
   --paper-2:    #efeadf;
   --ink:        #17171a;
   --ink-soft:   #4a4a50;
-  --ink-faint:  #8b8b92;
+  /* V1: `--ink-faint` CONSERVA su nombre (las plantillas y reglas que lo usan no se tocan)
+     pero cambia de valor: antes daba 3,05:1 sobre --paper y 2,82:1 sobre --paper-2. */
+  --ink-faint:  #63636b;
   --cyan:       #0d9bd6;
   --magenta:    #d81a75;
   --yellow:     #f2c500;
   --caption-bg: #fdf3d0;
   --ok:         #2e8b57;
   --warn:       #c0392b;
+
+  /* V1: RELLENO frente a TEXTO. --cyan/--ok/--warn/--magenta/--yellow siguen siendo
+     colores de relleno, borde y trama (identidad CMYK); como TEXTO se usan las variantes
+     `-t`, que cumplen 4,5:1 sobre --paper y --paper-2. Una prueba (test_web_css_contraste)
+     impide usar un relleno como color de texto. */
+  --cyan-t:     #0a6a96;
+  --ok-t:       #1f6b43;
+  --warn-t:     #a8321f;
+  --amber-t:    #7a5a00;
+  --mag-t:      #b0125f;
+
+  /* V1: pares texto/fondo para elementos con relleno sólido. El texto va SIEMPRE con su
+     par: blanco sobre el verde claro del tema oscuro no llega (2,3:1). */
+  --on-yellow:      #17171a;
+  --ok-solid:       #1f6b43;
+  --on-ok-solid:    #ffffff;
+  --warn-solid:     #a8321f;
+  --on-warn-solid:  #ffffff;
+  /* Insignia «caliente» (la `.badge.hot` de la maqueta, para V3). El par de la maqueta en
+     oscuro (blanco sobre #f04d97) daba 3,38:1: aquí cambia el color del texto, no el matiz. */
+  --hot:            #b0125f;
+  --on-hot:         #ffffff;
 
   --radius-panel: 4px;
   --radius-pill:  999px;
@@ -46,13 +70,24 @@
     --paper-2:    #1b1b20;
     --ink:        #f0ede4;
     --ink-soft:   #b7b4ab;
-    --ink-faint:  #7d7c80;
+    --ink-faint:  #9c9aa0;
     --caption-bg: #2b2617;
     --cyan:       #38b6e8;
     --magenta:    #f04d97;
     --yellow:     #ffd23f;
     --ok:         #4cbf83;
     --warn:       #f07167;
+    --cyan-t:     #5cc4f0;
+    --ok-t:       #5fd096;
+    --warn-t:     #f58a80;
+    --amber-t:    #ffd23f;
+    --mag-t:      #f46aa7;
+    --ok-solid:       #5fd096;
+    --on-ok-solid:    #0f2a1b;
+    --warn-solid:     #f58a80;
+    --on-warn-solid:  #2a0f0c;
+    --hot:            #f46aa7;
+    --on-hot:         #1a0610;
     --shadow-ink:    4px 4px 0 rgba(0,0,0,.55);
     --shadow-ink-sm: 3px 3px 0 rgba(0,0,0,.55);
   }
@@ -87,6 +122,14 @@ img { max-width: 100%; display: block; }
 a { color: inherit; }
 button, input, select, textarea { font: inherit; }
 
+/* V1: casillas y radios a 24 px (mínimo de WCAG 2.2 AA para el objetivo), y marcador de
+   posición con contraste de texto: el gris por defecto del navegador queda por debajo de
+   4,5:1 sobre --paper. */
+input[type="checkbox"], input[type="radio"] {
+  width: 24px; height: 24px; accent-color: var(--mag-t);
+}
+::placeholder { color: var(--ink-faint); opacity: 1; }
+
 h1, h2, h3 {
   font-family: var(--font-display);
   font-weight: 400;
@@ -98,7 +141,7 @@ h1, h2, h3 {
 
 /* Foco visible, siempre */
 :focus-visible {
-  outline: 3px solid var(--cyan);
+  outline: 3px solid var(--cyan-t);
   outline-offset: 2px;
   border-radius: 2px;
 }
@@ -239,6 +282,8 @@ button[type="submit"]:active,
 button[type="submit"],
 .btn-primary {
   --btn-bg: var(--yellow);
+  /* V1: en oscuro --ink es CLARO: sobre el amarillo daba 1,2:1. El par fijo es --on-yellow. */
+  color: var(--on-yellow);
 }
 
 .btn-ignorar {
@@ -247,15 +292,15 @@ button[type="submit"],
   box-shadow: none;
 }
 .btn-ignorar:hover {
-  border-color: var(--warn);
-  color: var(--warn);
+  border-color: var(--warn-t);
+  color: var(--warn-t);
   transform: none;
   box-shadow: none;
 }
 
 .btn-reintentar {
-  color: var(--cyan);
-  border-color: var(--cyan);
+  color: var(--cyan-t);
+  border-color: var(--cyan-t);
   box-shadow: none;
 }
 
@@ -285,7 +330,7 @@ button[type="submit"],
   box-shadow: var(--shadow-ink-sm);
   padding: 6px 14px;
   font-weight: 700;
-  font-size: .8rem;
+  font-size: .875rem;
   letter-spacing: .12em;
   text-transform: uppercase;
   transform: rotate(-1.2deg);
@@ -294,7 +339,7 @@ button[type="submit"],
 /* ── 8. PEGATINAS / BADGES ───────────────────────────────────────────────── */
 .wishlist-badge,
 .issue-chip {
-  font-size: .75rem;
+  font-size: .875rem;
   font-weight: 800;
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -314,14 +359,14 @@ button[type="submit"],
 }
 
 .wishlist-badge.estado-imported {
-  background: var(--ok);
-  color: #fff;
+  background: var(--ok-solid);
+  color: var(--on-ok-solid);
   border-color: var(--ink);
 }
 
 .wishlist-badge.estado-failed {
-  background: var(--warn);
-  color: #fff;
+  background: var(--warn-solid);
+  color: var(--on-warn-solid);
   border-color: var(--ink);
 }
 
@@ -336,7 +381,7 @@ button[type="submit"],
    texto discreto junto al badge de estado, no otro badge que compita
    visualmente con él. */
 .wishlist-motivo {
-  font-size: .8rem;
+  font-size: .875rem;
   color: var(--ink-soft);
   font-style: italic;
 }
@@ -365,7 +410,7 @@ button[type="submit"],
 }
 .candidato-fila:last-child { border-bottom: none; }
 .candidato-titulo { font-weight: 700; flex: 1; }
-.candidato-detalle { color: var(--ink-soft); font-size: .85rem; white-space: nowrap; }
+.candidato-detalle { color: var(--ink-soft); font-size: .875rem; white-space: nowrap; }
 .candidatos-vacio { color: var(--ink-soft); font-style: italic; margin: 4px 0; }
 
 /* ── 9. CAMPOS DE FORMULARIO ─────────────────────────────────────────────── */
@@ -379,6 +424,7 @@ button[type="submit"],
   background: var(--paper);
   color: var(--ink);
   padding: 9px 12px;
+  min-height: 40px;
   font-size: .9rem;
 }
 
@@ -411,10 +457,10 @@ button[type="submit"],
 .pending-card .cover.cover-missing { visibility: hidden; }
 .pending-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .filename {
-  font-size: .82rem;
+  font-size: .875rem;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.detected { font-size: .82rem; color: var(--ink-faint); }
+.detected { font-size: .875rem; color: var(--ink-faint); }
 
 /* B12: sugerencia de candidato con confirmación de un clic */
 .suggestion {
@@ -424,9 +470,11 @@ button[type="submit"],
   border: 2.5px solid var(--ok);
   border-radius: var(--radius-panel);
 }
-.suggestion-label { font-size: .78rem; font-weight: 700; color: var(--ok); }
-.suggestion-score { font-size: .78rem; color: var(--ink-faint); }
-button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-color: var(--ok); }
+.suggestion-label { font-size: .875rem; font-weight: 700; color: var(--ok-t); }
+.suggestion-score { font-size: .875rem; color: var(--ink-faint); }
+button[type="submit"].btn-sugerencia {
+  --btn-bg: var(--ok-solid); color: var(--on-ok-solid); border-color: var(--ok-solid);
+}
 
 .series-results ul.series-list {
   list-style: none; margin: 0; padding: 0;
@@ -436,7 +484,7 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
 .series-name { font-size: .88rem; flex: 1; font-weight: 600; }
-.no-results { color: var(--ink-faint); font-size: .85rem; }
+.no-results { color: var(--ink-faint); font-size: .875rem; }
 
 /* ── 10bis. REVISIÓN DE BIBLIOTECA (B16) ─────────────────────────────────── */
 .audit-block {
@@ -450,18 +498,18 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 .audit-count {
   display: inline-block; margin-left: 8px; padding: 1px 8px;
   border: 2px solid var(--ink); border-radius: var(--radius-panel);
-  background: var(--yellow); color: var(--ink); font-size: .8rem;
+  background: var(--yellow); color: var(--on-yellow); font-size: .875rem;
 }
-.audit-why { font-size: .85rem; color: var(--ink-soft); margin: 0 0 10px; }
+.audit-why { font-size: .875rem; color: var(--ink-soft); margin: 0 0 10px; }
 .audit-item {
   padding: 8px 0;
   border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent);
 }
 .audit-path {
-  font-size: .8rem; word-break: break-all;
+  font-size: .875rem; word-break: break-all;
   color: var(--ink);
 }
-.audit-detail { font-size: .8rem; color: var(--ink-faint); margin-top: 2px; }
+.audit-detail { font-size: .875rem; color: var(--ink-faint); margin-top: 2px; }
 .audit-resumen { margin: 6px 0 0; padding-left: 18px; font-size: .9rem; }
 .audit-ok {
   border: 3px solid var(--ok);
@@ -492,29 +540,33 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin: 10px 0 4px;
 }
-.politica-form label { font-size: .85rem; font-weight: 700; }
+.politica-form label { font-size: .875rem; font-weight: 700; }
 .politica-form select {
-  font: inherit; padding: 7px 10px;
+  font: inherit; padding: 7px 10px; min-height: 40px;
   border: 2px solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); color: var(--ink);
 }
 .politica-veredicto { margin: 12px 0 6px; }
 .politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.politica-aviso { color: var(--warn); }
-.politica-retirados-ahora { color: var(--ok); font-weight: 700; }
+.politica-aviso { color: var(--warn-t); }
+.politica-retirados-ahora { color: var(--ok-t); font-weight: 700; }
 .issue-chip.issue-present {
-  background: var(--ok); color: #fff; border-color: var(--ink);
+  background: var(--ok-solid); color: var(--on-ok-solid); border-color: var(--ink);
 }
+/* V1: el estado no se transmite solo por color — «lo tienes» lleva ✓ y «te falta» borde
+   discontinuo, aunque los dos colores se confundan. */
+.issue-chip.issue-present::before { content: "✓ "; }
 .issue-chip.issue-missing {
   background: var(--paper); color: var(--ink-faint);
+  border-style: dashed;
 }
 
 /* ── 13. BIBLIOTECA (C1) ─────────────────────────────────────────────────── */
 .back-link {
-  display: inline-block; margin-bottom: 14px;
+  display: inline-flex; align-items: center; min-height: 40px; margin-bottom: 14px;
   color: var(--ink-soft); text-decoration: none; font-size: .9rem; font-weight: 700;
 }
-.back-link:hover { color: var(--cyan); }
+.back-link:hover { color: var(--cyan-t); }
 
 .series-header { display: flex; gap: 22px; margin-bottom: 24px; flex-wrap: wrap; }
 .series-cover {
@@ -533,9 +585,9 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 }
 .filter-search-box .series-results:not(:empty) { padding: 6px; }
 .filter-search-box .series-list a {
-  display: block; padding: 6px 8px; color: var(--ink); text-decoration: none; font-size: .85rem;
+  display: flex; align-items: center; min-height: 40px; padding: 6px 8px; color: var(--ink); text-decoration: none; font-size: .875rem;
 }
-.filter-search-box .series-list a:hover { background: var(--yellow); }
+.filter-search-box .series-list a:hover { background: var(--yellow); color: var(--on-yellow); }
 
 .library-grid {
   display: grid;
@@ -556,12 +608,13 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
   font-size: .88rem; font-weight: 700;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.library-card-meta { font-size: .78rem; color: var(--ink-faint); }
+.library-card-meta { font-size: .875rem; color: var(--ink-faint); }
 
 .pagination { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 22px; }
 .page-link {
+  display: inline-flex; align-items: center; min-height: 40px;
   padding: 6px 12px; border: 2.5px solid var(--ink); border-radius: var(--radius-panel);
-  color: var(--ink); text-decoration: none; font-size: .85rem; font-weight: 700;
+  color: var(--ink); text-decoration: none; font-size: .875rem; font-weight: 700;
 }
 .page-link.page-current {
   background: var(--ink); color: var(--paper);
@@ -569,7 +622,7 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 
 /* ── 14. BLINDAJE LEGAL ──────────────────────────────────────────────────── */
 .site-footer { margin-top: 40px; border-top: 3px solid var(--ink); padding: 16px 20px; }
-.legal-notice { font-size: .82rem; color: var(--ink-faint); }
+.legal-notice { font-size: .875rem; color: var(--ink-faint); }
 .legal-notice a { color: inherit; text-decoration: underline; }
 .legal-notice-footer { text-align: center; margin: 0; }
 .legal-notice-warn {
@@ -624,14 +677,14 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 }
 .metric-label {
   display: block;
-  font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  font-size: .875rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--ink-faint); margin-top: 5px;
 }
 .metric-delta, .metric-detail {
-  display: block; font-size: .78rem; color: var(--ink-soft); margin-top: 4px;
+  display: block; font-size: .875rem; color: var(--ink-soft); margin-top: 4px;
 }
-.metric-delta { color: var(--ok); font-weight: 700; }
-.metric-warning .metric-value { color: var(--warn); }
+.metric-delta { color: var(--ok-t); font-weight: 700; }
+.metric-warning .metric-value { color: var(--warn-t); }
 
 .section-header {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -639,10 +692,10 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 }
 .section-header h2 { font-size: clamp(19px, 2.4vw, 26px); margin: 0; }
 .view-all {
-  font-size: .85rem; font-weight: 700; text-decoration: none;
+  font-size: .875rem; font-weight: 700; text-decoration: none;
   border-bottom: 3px solid var(--yellow);
 }
-.view-all:hover { background: var(--yellow); }
+.view-all:hover { background: var(--yellow); color: var(--on-yellow); }
 
 .series-grid {
   display: grid;
@@ -666,12 +719,12 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
               var(--paper-2);
 }
 .series-title {
-  display: block; font-size: .86rem; font-weight: 700;
+  display: block; font-size: .875rem; font-weight: 700;
   color: var(--ink); text-align: center; margin-top: 6px; padding: 0 8px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .series-year {
-  display: block; font-size: .75rem; color: var(--ink-faint); text-align: center;
+  display: block; font-size: .875rem; color: var(--ink-faint); text-align: center;
   margin: 2px 0 10px;
 }
 
@@ -699,7 +752,7 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 /* ── 16. RESPONSIVE ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .topnav { gap: 4px; padding: 10px 12px; }
-  .topnav a { font-size: .84rem; padding: 7px 10px; }
+  .topnav a { font-size: .875rem; padding: 7px 10px; }
   .topnav a.brand { font-size: 1.05rem; }
   .topnav a.brand::before { width: 18px; height: 18px; }
 
@@ -740,7 +793,7 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 }
 .discovery-card-title { font-weight: 700; font-size: 1.02rem; }
 .discovery-card-desc {
-  font-size: .82rem; color: var(--ink-soft);
+  font-size: .875rem; color: var(--ink-soft);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -764,29 +817,29 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
   font-family: var(--font-display); text-transform: uppercase;
   letter-spacing: .02em; padding: 0 6px;
 }
-.ajustes-desc { color: var(--ink-soft); font-size: .82rem; margin: 0 0 12px; }
+.ajustes-desc { color: var(--ink-soft); font-size: .875rem; margin: 0 0 12px; }
 .ajustes-hint {
-  color: var(--ink-faint); font-size: .76rem; line-height: 1.4;
+  color: var(--ink-faint); font-size: .875rem; line-height: 1.4;
   margin: -4px 0 0;
 }
 .ajustes-hint code {
   background: var(--paper); border: 1px solid var(--ink-faint);
-  border-radius: 3px; padding: 0 4px; font-size: .95em;
+  border-radius: 3px; padding: 0 4px; font-size: 1em;
 }
 .ajustes-card form { display: flex; flex-direction: column; gap: 10px; }
 .ajustes-card label {
   display: flex; flex-direction: column; gap: 4px;
-  font-size: .85rem; font-weight: 700;
+  font-size: .875rem; font-weight: 700;
 }
 .ajustes-card input[type="text"],
 .ajustes-card input[type="password"] {
-  font: inherit; padding: 8px 10px;
+  font: inherit; padding: 8px 10px; min-height: 40px;
   border: 2px solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); color: var(--ink);
 }
 .ajustes-actions { display: flex; gap: 8px; margin-top: 4px; }
-.ajustes-ok { color: var(--ok); }
-.ajustes-error { color: var(--warn); }
+.ajustes-ok { color: var(--ok-t); }
+.ajustes-error { color: var(--warn-t); }
 
 /* A6: /login vive fuera de base.html (accesible aunque el resto de la
    app esté bloqueado) — mismos tokens/tarjeta que ajustes, layout
@@ -805,15 +858,15 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 }
 .login-form label {
   display: flex; flex-direction: column; gap: 4px;
-  font-size: .85rem; font-weight: 700;
+  font-size: .875rem; font-weight: 700;
 }
 .login-form input[type="text"],
 .login-form input[type="password"] {
-  font: inherit; padding: 8px 10px;
+  font: inherit; padding: 8px 10px; min-height: 40px;
   border: 2px solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); color: var(--ink);
 }
-.login-error { color: var(--warn); font-size: .85rem; margin: 0; }
+.login-error { color: var(--warn-t); font-size: .875rem; margin: 0; }
 
 /* ── 16b. ESTADO (E1) — mismos tokens/tarjetas que el resto de la app,
    nunca una paleta propia (bug real reportado: la página vivía fuera de
@@ -831,7 +884,7 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 .estado-check-name { flex: 1; font-weight: 700; }
 .estado-check-status { color: var(--ink-soft); font-size: .9rem; }
 
-.estado-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.estado-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; border: 2px solid var(--ink); }
 .estado-dot-sm { width: 12px; height: 12px; }
 .estado-dot.estado-ok { background: var(--ok); }
 .estado-dot.estado-warn { background: var(--yellow); }
@@ -839,7 +892,7 @@ button[type="submit"].btn-sugerencia { --btn-bg: var(--ok); color: #fff; border-
 .estado-dot.estado-neutral { background: var(--ink-faint); }
 
 .estado-summary-label { font-size: 1.15rem; font-weight: 700; }
-.estado-summary-detail { color: var(--ink-soft); font-size: .85rem; margin-top: 2px; }
+.estado-summary-detail { color: var(--ink-soft); font-size: .875rem; margin-top: 2px; }
 
 .estado-warnings { display: none; margin-bottom: 18px; }
 .estado-warnings.visible { display: block; }
