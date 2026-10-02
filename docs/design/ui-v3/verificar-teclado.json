@@ -1,0 +1,118 @@
+{
+  "caso": "teclado",
+  "base": "http://127.0.0.1:18000",
+  "navegador": "Chrome/154.0.8037.92",
+  "orden_de_tabulacion": [
+    {
+      "tag": "A",
+      "clase": "skip",
+      "href": "#main",
+      "texto": "Saltar al contenido",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "brand",
+      "href": "/ui/",
+      "texto": "ZascArr",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace",
+      "href": "/ui/",
+      "texto": "⌂Inicio",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace",
+      "href": "/ui/pendientes",
+      "texto": "✎Por revisarRevisar6 por revis",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace nav-secundaria",
+      "href": "/ui/biblioteca",
+      "texto": "▤Biblioteca",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace nav-secundaria",
+      "href": "/ui/auditoria",
+      "texto": "⚖Duplicados",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace nav-secundaria",
+      "href": "/ui/descubrir",
+      "texto": "⌕Descubrir",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace",
+      "href": "/ui/wishlist",
+      "texto": "★Deseados5 deseados",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace",
+      "href": "/estado",
+      "texto": "♥Estado",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "nav-enlace nav-secundaria",
+      "href": "/ui/ajustes",
+      "texto": "⚙Ajustes",
+      "contorno": "solid 3px",
+      "visible": true
+    },
+    {
+      "tag": "INPUT",
+      "clase": "series-search",
+      "href": null,
+      "texto": "",
+      "contorno": "none 3px",
+      "visible": true
+    },
+    {
+      "tag": "A",
+      "clase": "",
+      "href": "/legal",
+      "texto": "Aviso legal",
+      "contorno": "solid 3px",
+      "visible": true
+    }
+  ],
+  "tras_el_salto": {
+    "id": "main",
+    "tag": "MAIN",
+    "hash": "#main"
+  },
+  "mas_con_teclado": {
+    "antes": false,
+    "tras_enter": true,
+    "tras_otro_enter": false,
+    "tras_espacio": true,
+    "tab_con_el_panel_abierto": {
+      "href": "/ui/biblioteca",
+      "dentro": true
+    }
+  }
+}

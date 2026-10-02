@@ -8,27 +8,26 @@
 <script src="/static/vendor/htmx.min.js" defer></script>
 </head>
 <body>
-  <nav class="topnav">
-    <a href="/ui/" class="brand">ZascArr</a>
-    <a href="/ui/">Biblioteca</a>
-    <a href="/ui/descubrir">Descubrir</a>
-    <a href="/ui/pendientes">Pendientes</a>
-    <a href="/ui/wishlist">Deseados</a>
-    <a href="/ui/auditoria">Mi biblioteca</a>
-    <a href="/ui/ajustes">Ajustes</a>
-    <a href="/estado">Estado</a>
-    {% if auth_activo() %}
-    <form method="post" action="/logout" class="nav-logout">
-      <button type="submit" class="btn-logout">Cerrar sesión</button>
-    </form>
-    {% endif %}
-  </nav>
-  <main class="content">
-    {% block content %}{% endblock %}
-  </main>
-  <footer class="site-footer">
-    {% from "_legal_disclaimer.html" import legal_disclaimer %}
-    {{ legal_disclaimer("footer") }}
-  </footer>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <div class="app">
+    <div class="side">
+      <a href="/ui/" class="brand">ZascArr</a>
+      {{ ui.menu(request.url.path) }}
+      {% if auth_activo() %}
+      <div class="side-foot">
+        <form method="post" action="/logout" class="nav-logout">
+          <button type="submit" class="btn-logout">Cerrar sesión</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+    <main class="content" id="main" tabindex="-1">
+      {% block content %}{% endblock %}
+      <footer class="site-footer">
+        {% from "_legal_disclaimer.html" import legal_disclaimer %}
+        {{ legal_disclaimer("footer") }}
+      </footer>
+    </main>
+  </div>
 </body>
 </html>

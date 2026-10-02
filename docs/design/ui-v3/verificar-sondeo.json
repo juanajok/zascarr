@@ -1,0 +1,67 @@
+{
+  "caso": "sondeo",
+  "base": "http://127.0.0.1:18000",
+  "navegador": "Chrome/154.0.8037.92",
+  "al_cargar": {
+    "peticiones": 1,
+    "menu": {
+      "href_en_dom": [
+        "/ui/",
+        "/ui/pendientes",
+        "/ui/biblioteca",
+        "/ui/auditoria",
+        "/ui/descubrir",
+        "/ui/wishlist",
+        "/estado",
+        "/ui/ajustes"
+      ],
+      "enlaces_visibles": [
+        "/ui/",
+        "/ui/pendientes",
+        "/ui/biblioteca",
+        "/ui/auditoria",
+        "/ui/descubrir",
+        "/ui/wishlist",
+        "/estado",
+        "/ui/ajustes"
+      ],
+      "actuales_en_dom": [
+        "/ui/descubrir",
+        "/ui/descubrir"
+      ],
+      "actuales_visibles": [
+        "/ui/descubrir"
+      ],
+      "pendientes": {
+        "texto": "6 por revisar",
+        "oculto": false
+      },
+      "deseados": {
+        "texto": "5 deseados",
+        "oculto": false
+      },
+      "estado": {
+        "oculto": true
+      },
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "ruta": "/ui/descubrir",
+      "barra_inferior": {
+        "abajo": false,
+        "top": 77,
+        "alto": 518
+      }
+    }
+  },
+  "tras_35_s": {
+    "peticiones": 2,
+    "respuestas": [
+      {
+        "estado": 200
+      },
+      {
+        "estado": 200
+      }
+    ]
+  }
+}

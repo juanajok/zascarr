@@ -1,0 +1,1235 @@
+{
+  "caso": "menu",
+  "base": "http://127.0.0.1:18000",
+  "navegador": "Chrome/154.0.8037.92",
+  "por_vista": {
+    "escritorio": {
+      "inicio": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/"
+        ],
+        "actuales_visibles": [
+          "/ui/"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/ui/",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      },
+      "revisar": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/pendientes"
+        ],
+        "actuales_visibles": [
+          "/ui/pendientes"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/ui/pendientes",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      },
+      "biblioteca": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/biblioteca",
+          "/ui/biblioteca"
+        ],
+        "actuales_visibles": [
+          "/ui/biblioteca"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/ui/biblioteca",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      },
+      "duplicados": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/auditoria",
+          "/ui/auditoria"
+        ],
+        "actuales_visibles": [
+          "/ui/auditoria"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/ui/auditoria",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      },
+      "descubrir": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/descubrir",
+          "/ui/descubrir"
+        ],
+        "actuales_visibles": [
+          "/ui/descubrir"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/ui/descubrir",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      },
+      "deseados": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/wishlist"
+        ],
+        "actuales_visibles": [
+          "/ui/wishlist"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/ui/wishlist",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      },
+      "estado": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/estado"
+        ],
+        "actuales_visibles": [
+          "/estado"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/estado",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      },
+      "ajustes": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/ajustes",
+          "/ui/ajustes"
+        ],
+        "actuales_visibles": [
+          "/ui/ajustes"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 1280,
+        "clientWidth": 1280,
+        "ruta": "/ui/ajustes",
+        "barra_inferior": {
+          "abajo": false,
+          "top": 77,
+          "alto": 518
+        }
+      }
+    },
+    "movil": {
+      "inicio": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/"
+        ],
+        "actuales_visibles": [
+          "/ui/"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/ui/",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      },
+      "revisar": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/pendientes"
+        ],
+        "actuales_visibles": [
+          "/ui/pendientes"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/ui/pendientes",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      },
+      "biblioteca": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/biblioteca",
+          "/ui/biblioteca"
+        ],
+        "actuales_visibles": [
+          "/ui/biblioteca"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/ui/biblioteca",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      },
+      "duplicados": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/auditoria",
+          "/ui/auditoria"
+        ],
+        "actuales_visibles": [
+          "/ui/auditoria"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/ui/auditoria",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      },
+      "descubrir": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/descubrir",
+          "/ui/descubrir"
+        ],
+        "actuales_visibles": [
+          "/ui/descubrir"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/ui/descubrir",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      },
+      "deseados": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/wishlist"
+        ],
+        "actuales_visibles": [
+          "/ui/wishlist"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/ui/wishlist",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      },
+      "estado": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/estado"
+        ],
+        "actuales_visibles": [
+          "/estado"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/estado",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      },
+      "ajustes": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/ajustes",
+          "/ui/ajustes"
+        ],
+        "actuales_visibles": [
+          "/ui/ajustes"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "ruta": "/ui/ajustes",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 778,
+          "alto": 66
+        }
+      }
+    },
+    "movil320": {
+      "inicio": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/"
+        ],
+        "actuales_visibles": [
+          "/ui/"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/ui/",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      },
+      "revisar": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/pendientes"
+        ],
+        "actuales_visibles": [
+          "/ui/pendientes"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/ui/pendientes",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      },
+      "biblioteca": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/biblioteca",
+          "/ui/biblioteca"
+        ],
+        "actuales_visibles": [
+          "/ui/biblioteca"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/ui/biblioteca",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      },
+      "duplicados": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/auditoria",
+          "/ui/auditoria"
+        ],
+        "actuales_visibles": [
+          "/ui/auditoria"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/ui/auditoria",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      },
+      "descubrir": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/descubrir",
+          "/ui/descubrir"
+        ],
+        "actuales_visibles": [
+          "/ui/descubrir"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/ui/descubrir",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      },
+      "deseados": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/wishlist"
+        ],
+        "actuales_visibles": [
+          "/ui/wishlist"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/ui/wishlist",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      },
+      "estado": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/estado"
+        ],
+        "actuales_visibles": [
+          "/estado"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/estado",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      },
+      "ajustes": {
+        "href_en_dom": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/wishlist",
+          "/estado",
+          "/ui/ajustes"
+        ],
+        "enlaces_visibles": [
+          "/ui/",
+          "/ui/pendientes",
+          "/ui/wishlist",
+          "/estado",
+          "MAS",
+          "/ui/biblioteca",
+          "/ui/auditoria",
+          "/ui/descubrir",
+          "/ui/ajustes"
+        ],
+        "actuales_en_dom": [
+          "/ui/ajustes",
+          "/ui/ajustes"
+        ],
+        "actuales_visibles": [
+          "/ui/ajustes"
+        ],
+        "pendientes": {
+          "texto": "6 por revisar",
+          "oculto": false
+        },
+        "deseados": {
+          "texto": "5 deseados",
+          "oculto": false
+        },
+        "estado": {
+          "oculto": true
+        },
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "ruta": "/ui/ajustes",
+        "barra_inferior": {
+          "abajo": true,
+          "top": 634,
+          "alto": 66
+        }
+      }
+    }
+  },
+  "acceso_movil_a_secundarias": {
+    "movil:/ui/biblioteca": {
+      "abierto": true,
+      "ruta_final": "/ui/biblioteca",
+      "visibles_aria_current": [
+        "/ui/biblioteca"
+      ],
+      "mas_marcado": true
+    },
+    "movil:/ui/auditoria": {
+      "abierto": true,
+      "ruta_final": "/ui/auditoria",
+      "visibles_aria_current": [
+        "/ui/auditoria"
+      ],
+      "mas_marcado": true
+    },
+    "movil:/ui/descubrir": {
+      "abierto": true,
+      "ruta_final": "/ui/descubrir",
+      "visibles_aria_current": [
+        "/ui/descubrir"
+      ],
+      "mas_marcado": true
+    },
+    "movil:/ui/ajustes": {
+      "abierto": true,
+      "ruta_final": "/ui/ajustes",
+      "visibles_aria_current": [
+        "/ui/ajustes"
+      ],
+      "mas_marcado": true
+    },
+    "movil320:/ui/biblioteca": {
+      "abierto": true,
+      "ruta_final": "/ui/biblioteca",
+      "visibles_aria_current": [
+        "/ui/biblioteca"
+      ],
+      "mas_marcado": true
+    },
+    "movil320:/ui/auditoria": {
+      "abierto": true,
+      "ruta_final": "/ui/auditoria",
+      "visibles_aria_current": [
+        "/ui/auditoria"
+      ],
+      "mas_marcado": true
+    },
+    "movil320:/ui/descubrir": {
+      "abierto": true,
+      "ruta_final": "/ui/descubrir",
+      "visibles_aria_current": [
+        "/ui/descubrir"
+      ],
+      "mas_marcado": true
+    },
+    "movil320:/ui/ajustes": {
+      "abierto": true,
+      "ruta_final": "/ui/ajustes",
+      "visibles_aria_current": [
+        "/ui/ajustes"
+      ],
+      "mas_marcado": true
+    }
+  }
+}
