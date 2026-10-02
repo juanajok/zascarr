@@ -1,0 +1,28 @@
+{
+  "fase": "principal",
+  "base": "http://127.0.0.1:18000",
+  "fecha": "2026-10-01 23:50:26 CEST",
+  "navegador": "Chrome/154.0.8037.92",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "zoom": "100 % (factor de escala del dispositivo 1)",
+  "ficha_serie": "/ui/series/0336ae1e-2ab8-4b8b-89a1-d2a76675402e",
+  "aceptar_aviso_legal_http": 303,
+  "caso_409_antes": {
+    "id": "card-ae371684-38f3-4684-8538-859da1adcb4e",
+    "antes": "<div class=\"pending-card\" id=\"card-ae371684-38f3-4684-8538-859da1adcb4e\">\n    <img class=\"cover\" src=\"/ui/pendientes/ae371684-38f3-4684-8538-859da1adcb4e/portada\" alt=\"\" onerror=\"this.classList.add('cover-missing')\">\n    <div class=\"pending-body\">\n      <div class=\"filename\" title=\"Los Guardianes del Alba Omnigold 12 [CRG].cbz\">Los Guardianes del Alba Omnigold 12 [CRG].cbz</div>\n      <div class=\"detected\">Detectado: Los Guardianes del Alba Omnigold #12</div>\n      \n      \n      <div class=\"suggestion\">\n        <span class=\"suggestion-label\">¿Es esta serie?</span>\n        <span class=\"series-name\">Los Guardianes del Alba (2010)</span>\n        <span class=\"suggestion-score\">88% de coincidencia</span>\n        <form class=\"assign-form\" hx-post=\"/ui/pendientes/ae371684-38f3-4684-8538-859da1adcb4e/asignar\" hx-target=\"#card-ae371684-38f3-4684-8538-859da1adcb4e\" hx-swap=\"outerHTML\" data-htmx-powered=\"true\">\n          <input type=\"hidden\" name=\"series_id\" value=\"0336ae1e-2ab8-4b8b-89a1-d2a76675402e\">\n          <input type=\"text\" name=\"issue_number\" placeholder=\"nº\" required=\"\" class=\"issue-input\" size=\"4\" value=\"12\">\n          <button type=\"submit\" class=\"btn-sugerencia\">Sí, es esta</button>\n        </form>\n      </div>\n      \n      <input type=\"search\" class=\"series-search\" placeholder=\"Buscar serie…\" name=\"q\" hx-get=\"/ui/pendientes/ae371684-38f3-4684-8538-859da1adcb4e/buscar-serie\" hx-trigger=\"keyup changed delay:400ms\" hx-target=\"#resultados-ae371684-38f3-4684-8538-859da1adcb4e\" hx-swap=\"innerHTML\" data-htmx-powered=\"true\">\n      <div id=\"resultados-ae371684-38f3-4684-8538-859da1adcb4e\" class=\"series-results\"></div>\n      <button type=\"button\" class=\"btn-ignorar\" hx-post=\"/ui/pendientes/ae371684-38f3-4684-8538-859da1adcb4e/ignorar\" hx-target=\"#card-ae371684-38f3-4684-8538-859da1adcb4e\" hx-swap=\"outerHTML\" hx-confirm=\"¿Ignorar este archivo? No volverá a aparecer aquí.\" data-htmx-powered=\"true\">\n        Ignorar\n      </button>\n    </div>\n  </div>",
+    "numero": "12",
+    "serie": "0336ae1e-2ab8-4b8b-89a1-d2a76675402e"
+  },
+  "caso_409_respuesta": [
+    {
+      "url": "http://127.0.0.1:18000/ui/pendientes/ae371684-38f3-4684-8538-859da1adcb4e/asignar",
+      "estado": 409,
+      "content_type": "application/json",
+      "cuerpo": "{\"detail\":\"El número 12 ya existe en esta serie como otra edición (single_issue) — número compartido entre ediciones. El archivo 'Los Guardianes del Alba Omnigold 12 [CRG].cbz' se queda en Pendientes sin asignar.\"}"
+    }
+  ],
+  "caso_409_despues": {
+    "existe": false,
+    "texto_main": "PENDIENTES DE REVISAR\n\nArchivos que el sistema no supo clasificar solo. Busca la serie correcta y confirma el número, o ignóralos si no pertenecen a tu colección.\n\n{\"detail\":\"El número 12 ya existe en esta serie como otra edición (single_issue) — número compartido entre ediciones. El archivo 'Los Guardianes del Alba Omnigold 12 [CRG].cbz' se queda en Pendientes sin asignar.\"}\nLos Guardianes del Alba Omnigold 13 [CRG].cbz\nDetectado: Los Guardianes del Alba Omnigold #13\n¿Es esta serie?\nLos Guardianes del Alba (2010)\n88% de coincidencia\nSí, es esta\nIgnorar\nLos Guardianes del Alba (21-35) Pack especial [CRG].cbz\nDetectado: Los Guardianes del Alba Pack\n¿Es esta serie?\nLos Guardianes del Alba (2010)\n88% de coincidencia\nSí, es esta\nIgnorar\nMundo Cobalto - Edicion Integral 01 [Equipo X].cbz\nDetectado: Mundo Cobalto #1\n¿Es esta serie?\nMundo Cobalto (2015)\n88% de coincidencia\nSí, es esta\nIgnorar\nSaga del Faro por un autor (by Alguien) [MQ].cbz\nDetectado: Saga del Faro\nIgnorar\nTomo suelto sin identificar 7.cbz\nDetectado: Tomo suelto sin identificar #7\nIgnorar"
+  }
+}
