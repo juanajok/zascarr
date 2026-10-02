@@ -71,19 +71,25 @@ def tipo_aviso(tipo: str) -> TipoAviso:
         ) from None
 
 
-#: macros de `_componentes.html` que se exponen a TODAS las plantillas.
+#: macros de `_componentes.html`, disponibles en las plantillas como `ui.<macro>`.
 MACROS = ("chip", "aviso", "grupo", "estado_vacio", "progreso", "region_viva")
 PLANTILLA = "_componentes.html"
+#: ÚNICO nombre que se añade al entorno de Jinja.
+ESPACIO_DE_NOMBRES = "ui"
 
 
 def registrar(env: Environment) -> None:
-    """Hace disponibles las macros en cualquier plantilla del entorno, sin tocar ningún
-    `TemplateResponse` ni los contextos de los routers (misma lección que `auth_activo`, A6).
+    """Expone las macros en cualquier plantilla del entorno como `ui.chip(...)`, `ui.aviso(...)`…
+    sin tocar ningún `TemplateResponse` ni los contextos de los routers (misma lección que
+    `auth_activo`, A6).
 
-    Se llama desde `crear_templates()`. Los ayudantes (`aspecto`, `tipo_aviso`) se registran
-    ANTES de cargar el módulo: las macros los resuelven al ejecutarse."""
-    env.globals["aspecto"] = aspecto
-    env.globals["tipo_aviso"] = tipo_aviso
-    modulo = env.get_template(PLANTILLA).module
-    for nombre in MACROS:
-        env.globals[nombre] = getattr(modulo, nombre)
+    Un solo espacio de nombres, NO una macro global por cada una: Jinja incorpora los globales al
+    contexto de TODAS las plantillas, así que un global `aviso` hacía verdadero el `{% if aviso %}`
+    de `_ajustes_guardado.html` en cada respuesta que no pasaba esa variable y pintaba
+    `<Macro 'aviso'>` como texto de ayuda (reproducido y corregido en la revisión de V2).
+
+    Los ayudantes (`aspecto`, `tipo_aviso`) tampoco son globales del entorno: se pasan como globales
+    de ESA plantilla, que es donde las macros los resuelven al ejecutarse."""
+    modulo = env.get_template(
+        PLANTILLA, globals={"aspecto": aspecto, "tipo_aviso": tipo_aviso}).module
+    env.globals[ESPACIO_DE_NOMBRES] = modulo

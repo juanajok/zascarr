@@ -9,20 +9,22 @@ ni la navegación** (V3).
 | Pieza | CSS | Macro (`templates/_componentes.html`) |
 |---|---|---|
 | Botón | `.btn` (+ `.primary`, `.ghost`, `.sm`), `button[disabled]` | — (son clases) |
-| Chip de estado | `.chip` (+ `.ok`, `.warn`, `.amber`, `.info`) | `chip(estado, texto)` |
+| Chip de estado | `.chip` (+ `.ok`, `.warn`, `.amber`, `.info`) | `ui.chip(estado, texto)` |
 | Tarjeta | `.card` (comparte regla con las viñetas existentes) | — |
-| Grupo | `.group`, `.ghead` | `{% call grupo(titulo, recuento) %}…{% endcall %}` |
-| Aviso | `.aviso` (+ tipos) y `.caption` para la nota | `aviso(tipo, texto)` o `{% call aviso(tipo) %}` |
-| Estado vacío | `.empty-state` (ya existía) | `estado_vacio(titulo, texto, accion)` |
+| Grupo | `.group`, `.ghead` | `{% call ui.grupo(titulo, recuento) %}…{% endcall %}` |
+| Aviso | `.aviso` (+ tipos) y `.caption` para la nota | `ui.aviso(tipo, texto)` o `{% call ui.aviso(tipo) %}` |
+| Estado vacío | `.empty-state` (ya existía) | `ui.estado_vacio(titulo, texto, accion)` |
 | Estado grande | `.hero-state` (+ matices) | — |
-| Progreso | `progress.progress` (nativo) | `progreso(valor, maximo, etiqueta)` |
+| Progreso | `progress.progress` (nativo) | `ui.progreso(valor, maximo, etiqueta)` |
 | Aviso temporal | `.toast` (se desvanece solo por CSS) | — |
-| Región viva | — | `region_viva(id)` (`aria-live="polite"`) |
+| Región viva | — | `ui.region_viva(id)` (`aria-live="polite"`) |
 
 El estado → aspecto vive **una sola vez**, en `src/zascarr/web/componentes.py` (`ASPECTOS`, `TIPOS_AVISO`);
 las plantillas no repiten ni clases de matiz ni iconos (una prueba lo comprueba). Un estado desconocido
-**falla** en vez de pintarse neutro. Las macros se registran en `crear_templates()` y llegan a todas las
-plantillas **sin tocar ningún router ni `TemplateResponse`**.
+**falla** en vez de pintarse neutro. Las macros se registran en `crear_templates()` **bajo un único nombre,
+`ui`** (`ui.chip(...)`, `ui.aviso(...)`…) y llegan a todas las plantillas **sin tocar ningún router ni
+`TemplateResponse`**. Es lo único que V2 añade al entorno de Jinja; los ayudantes (`aspecto`, `tipo_aviso`)
+son globales solo de la plantilla de macros.
 
 ## Decisiones (y por qué)
 
@@ -41,16 +43,26 @@ plantillas **sin tocar ningún router ni `TemplateResponse`**.
 - **Tokens nuevos** (`--ok-bg`, `--warn-bg`, `--amber-bg`, `--info-bg`, valores de la maqueta), con valor propio
   en oscuro y pares de texto comprobados por `tests/test_web_css_contraste.py`.
 
-## Una colisión de nombres, encontrada por la prueba y acotada
+## Un fallo que la primera versión de V2 habría metido en producción (corregido en la revisión)
 
-Las macros son globales. `ajustes.py` ya pasa una variable `aviso` a `_ajustes_guardado.html` (el aviso de
-contraseña justa de A11), que **tapa la macro `aviso` solo dentro de esa plantilla**. Renombrarla sería tocar
-Ajustes, fuera del alcance de V2: queda como colisión **conocida y acotada** (la prueba falla si aparece una
-nueva o si esta se resuelve sin actualizar la lista) y se renombra en **V10**, que es quien migra Ajustes.
+La primera versión registraba cada macro como **global suelta** (`chip`, `aviso`, `grupo`…). Jinja incorpora
+los globales al contexto de **todas** las plantillas, y `_ajustes_guardado.html` hace `{% if aviso %}` sobre
+una variable que el router solo pasa a veces. Con la macro global `aviso`, **ese `if` era verdadero en cada
+guardado de Ajustes que no pasaba la variable y pintaba `<Macro 'aviso'>` como texto de ayuda** (reproducido
+con el entorno de esa versión). La prueba de colisiones de entonces solo comparaba *nombres* y lo daba por
+«colisión conocida e inocua»: no lo era, y las capturas de páginas no pasan por esos fragmentos.
+
+**Arreglo:** un único espacio de nombres, `ui`. Los nombres genéricos dejan de existir como globales (los
+usan las plantillas como variables libres, como antes) y no hace falta tocar Ajustes. **Regresión:**
+`TestPlantillasExistentesNoCambian` renderiza `_ajustes_guardado.html` con guardado correcto sin clave
+`aviso`, `aviso=None`, aviso real de contraseña corta y error —y `_ajustes_prueba.html`— y compara el HTML
+**con el del entorno de antes de V2**, exigiendo además que no aparezca ninguna representación de macro;
+`test_v2_solo_anade_un_nombre_al_entorno` fija que `ui` es lo único nuevo. Con la versión anterior
+reintroducida, **fallan 10 casos**.
 
 ## Verificación
 
-- **Pruebas** (sin navegador): `tests/test_web_componentes.py` (94 casos: todas las variantes de cada macro,
+- **Pruebas** (sin navegador): `tests/test_web_componentes.py` (109 casos: todas las variantes de cada macro,
   clase/texto/ARIA/escape, estado desconocido, registro en los 11 routers, colisiones, vocabulario único,
   CSS de cada variante, `prefers-reduced-motion`) y `tests/test_web_css_contraste.py` (112), que ahora
   cubre los componentes nuevos en claro y oscuro. **Compatibilidad:** ninguna de las 143 clases anteriores
@@ -65,6 +77,10 @@ nueva o si esta se resuelve sin actualizar la lista) y se renombra en **V10**, q
 
 ## Límites
 - Ninguna pantalla usa aún los componentes: lo verificado es el catálogo y la no regresión, no su uso real.
+- La no regresión de las **páginas** (capturas) no cubre los **fragmentos** HTMX (guardados de Ajustes, filas,
+  resultados de búsqueda): ahí la garantía es la comparación de HTML contra el entorno de antes de V2 que
+  hace `TestPlantillasExistentesNoCambian`, hoy solo para `_ajustes_guardado.html` y `_ajustes_prueba.html`
+  (las que consultan variables con nombre de macro); el resto no usa esos nombres.
 - El desvanecimiento del `.toast` no se demuestra en capturas (el catálogo lo desactiva); se prueba que la
   animación existe y que «reducir movimiento» la apaga.
 - El contraste lo cubre la prueba por reglas (heurística, ver V1) más la inspección del catálogo; un navegador,
