@@ -56,14 +56,25 @@ usa la prueba (`tests/test_web_css_contraste.py`).
 | Estado | 390 → 390 | 1.040 → 1.053 |
 | Ficha de serie | **413** → **413** | 1.806 → 1.867 |
 | Aviso legal (texto) | **409** → **409** | 6.000 → 6.000 |
-| Deseados | **731** → **756** | 1.582 → 1.637 |
+| Deseados | **731** → **390** (con V1 a secas llegó a 756) | 1.582 → 1.542 |
 
-**Hallazgo para V13 (no se arregla aquí):** hay páginas que **ya desbordaban en horizontal** en 390 px
-(Deseados 731 px, ficha 413, aviso legal 409). V1 **empeora Deseados en 25 px** porque el texto mínimo de
-14 px ensancha las filas. Se deja medido y registrado en V13; arreglar el desborde es maquetación
-responsive, no tokens.
+**Deseados: una regresión de V1, corregida en V1.** Con el texto mínimo de 14 px, y sin otro cambio, el
+ancho de página en Deseados subía de 731 a **756 px** a 390 px de viewport. La causa, medida con el DOM:
+`.wishlist-row` es `display: flex` **sin `flex-wrap`**, y el título (`flex: 1`) se aplastaba a 36 px mientras
+la insignia (`white-space: nowrap`, 123 px), «Buscar ahora», el «Buscando…» invisible pero con su sitio
+(87 px) y «Quitar» seguían sin caber. Arreglo mínimo, sin bajar los 14 px ni ocultar nada:
+`flex-wrap: wrap`, una base para el título (`flex: 1 1 10rem`) y que el panel de candidatos ocupe línea
+propia solo cuando tiene contenido. Medido: **390 px → 390 de ancho de página; 320 px → 320; 1280 px sin
+cambios (captura idéntica píxel a píxel)**; títulos, estados, motivos y botones siguen visibles y
+utilizables (`despues--deseados--movil-*.png`; `intermedio--…sin-flex-wrap.png` muestra el desborde).
+
+**Lo que sigue desbordando, y no es de V1 (a V13):** la ficha de serie (413 px) y el aviso legal en texto
+(409 px) desbordaban ya en la línea base y no cambian. V13 debe medir también a **320 px CSS**, la
+referencia de reflujo de WCAG.
 
 ## Límites
-Un navegador y un equipo; el contraste de la prueba es el de los colores declarados, no el renderizado sobre
-tramas o sombras. Las capturas «después» son un subconjunto (9) de las 30 tomadas, para no inflar el
+Un navegador y un equipo (Chrome 154, sin probar en la Pi). **La prueba de contraste es una heurística por
+reglas**: comprueba los pares de color que `web.css` declara (con los fondos de contexto que define), no la
+cascada ni los colores heredados del DOM, ni el contraste renderizado sobre tramas o sombras; cualquier color
+que no sabe resolver la hace fallar en vez de omitirse. Se complementa con esta revisión en navegador. Las capturas «después» son un subconjunto (9) de las 30 tomadas, para no inflar el
 repositorio; el resto está reproducible con `ui-baseline/README.md`.

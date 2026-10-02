@@ -528,8 +528,15 @@ button[type="submit"].btn-sugerencia {
 .wishlist-row {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 14px;
+  /* V1: sin `wrap`, el texto mínimo de 14 px hacía que título, insignia y botones no cupieran
+     en móvil y la fila se saliera de la pantalla (731 → 756 px de ancho de página a 390 px).
+     Con `wrap` lo que no cabe pasa a la línea siguiente; nada se oculta ni se encoge. */
+  flex-wrap: wrap;
 }
-.wishlist-title { flex: 1; font-size: .95rem; font-weight: 600; }
+.wishlist-title { flex: 1 1 10rem; font-size: .95rem; font-weight: 600; }
+/* El panel de candidatos de «Buscar ahora» ocupa su propia línea, pero solo cuando tiene
+   contenido: vacío no debe forzar una línea (12 px de hueco) en cada fila. */
+.wishlist-row .candidatos-wishlist:not(:empty) { flex: 1 1 100%; }
 
 /* ── 12. FICHA DE SERIE (C2) ─────────────────────────────────────────────── */
 .issue-grid { display: flex; flex-wrap: wrap; gap: 7px; margin: 8px 0 20px; }
