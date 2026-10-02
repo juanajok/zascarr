@@ -1,0 +1,23 @@
+# Complemento de docker-compose.yml SOLO para la línea base de la UI (V0).
+# Se usa siempre a través de `ensayo.sh`, que además comprueba el resultado antes de arrancar.
+#
+# Por qué existe: `container_name` fijo en el compose del proyecto es GLOBAL en el daemon de
+# Docker. Con los nombres por defecto, `docker stop zascarr-db` o `docker compose up` desde otra
+# carpeta actúan sobre la instalación REAL si existe. Aquí cada nombre, el proyecto, la red y los
+# puertos son distintos, y Postgres y Redis no se publican en absoluto.
+name: zascarr-uibase
+
+services:
+  postgres:
+    container_name: zascarr-uibase-db
+    ports: !reset []
+  redis:
+    container_name: zascarr-uibase-cache
+    ports: !reset []
+  zascarr:
+    container_name: zascarr-uibase-app
+    ports: !override
+      - "127.0.0.1:18000:8000"
+    environment:
+      # Lo exige sembrar.py: sin esta marca se niega a escribir nada.
+      - ZASCARR_UI_BASELINE=ensayo
