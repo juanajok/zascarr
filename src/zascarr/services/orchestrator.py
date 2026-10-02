@@ -73,6 +73,14 @@ logger = structlog.get_logger()
 COMIC_CATEGORIES = [7030, 7020]
 MAX_SIZE_BYTES = 500 * 1024 * 1024
 
+
+def hay_fuente_de_busqueda(settings) -> bool:
+    """¿Hay al menos una fuente de búsqueda de descargas activa? (D9; la reutiliza el Inicio, V4,
+    para no inventar su propia definición de «fuente activa»)."""
+    foro_configurado = bool(settings.forum_enabled and settings.forum_username and settings.forum_url)
+    return bool(settings.prowlarr_enabled) or foro_configurado
+
+
 # D9: causas distinguibles de "por qué esta búsqueda no avanza", en
 # español llano — nunca un detalle técnico (excepción, URL, cuerpo HTTP)
 # que el coleccionista no pueda accionar. El aviso legal pendiente NO
@@ -212,8 +220,7 @@ class Orchestrator:
         # D9: si ninguna fuente está siquiera activa, ni lo intentamos —
         # se lo decimos al coleccionista en vez de dejarlo en "Buscando…"
         # para siempre sin explicación.
-        foro_configurado = settings.forum_enabled and settings.forum_username and settings.forum_url
-        if not settings.prowlarr_enabled and not foro_configurado:
+        if not hay_fuente_de_busqueda(settings):
             item.status = WishlistStatus.WANTED
             item.last_error = MOTIVO_SIN_FUENTE
             await self.db.flush()

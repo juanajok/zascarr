@@ -1,10 +1,16 @@
 """
 Resumen de la biblioteca (V4): las cifras del Inicio, en un único sitio.
 
-Hasta V3 estas cinco consultas vivían dentro del router `web/dashboard.py`: ninguna otra pantalla
-podía reutilizarlas y la plantilla del Inicio recibía números sueltos. Se extraen aquí SIN cambiar
-ninguna cifra (ni el orden de las consultas, que fijan los tests) para que `PrimerosPasos` (V4) y el
-resto de pantallas lean de la misma fuente en vez de recalcular.
+Hasta V3 estas consultas vivían dentro del router `web/dashboard.py` (V4a las extrajo SIN cambiar
+ninguna cifra). V4b corrige lo que esas cifras afirmaban de más:
+
+- «Completitud» dividía los números que HAY (de cualquier serie) entre la suma del catálogo de
+  TODAS las fuentes: mezclaba unidades (grapas de Comic Vine, capítulos de AniList, «números» de
+  Tebeosfera) y series sin catálogo. Ahora solo cuentan las series cuyo recuento está acreditado
+  como de grapas (`UNIDAD_DE_GRAPA`), y si no hay ninguna NO hay cifra (`completitud is None`),
+  no «0 %».
+- «Números pendientes» = 0 podía significar «colección completa» o «no sé calcularlo». Ahora se
+  acompaña de cuántas series se pudieron calcular y cuántas no.
 
 Nota de modelo: `File` NO tiene `series_id`; la relación es File → Issue → Series.
 """
@@ -27,22 +33,33 @@ ULTIMAS_SERIES = 10
 
 
 @dataclass(frozen=True)
+class Completitud:
+    """Cobertura SOLO de las series con recuento de grapas acreditado."""
+    tienes: int
+    de: int
+    series: int
+
+    @property
+    def porcentaje(self) -> int:
+        return round(self.tienes / self.de * 100)
+
+
+@dataclass(frozen=True)
 class ResumenBiblioteca:
     total_series: int
     series_con_archivos: int
-    # Suma de `Series.total_issues` (el catálogo conocido); 0 si ninguna serie lo tiene.
-    total_issues: int
-    # Números distintos con al menos un archivo disponible.
-    issues_importados: int
+    # Ficheros registrados y disponibles (no marcados como desaparecidos): lo que ZascArr tiene
+    # anotado, NO una lectura del disco.
+    archivos_registrados: int
+    # Series cuyo catálogo permite contar huecos (recuento de grapas) y las que no.
+    series_con_recuento: int
     huecos_pendientes: int
+    completitud: Completitud | None
     ultimas_series: tuple[Series, ...]
 
     @property
-    def porcentaje_completitud(self) -> int:
-        """Redondeado; 0 cuando no hay catálogo (V4b lo distingue de un 0 % real)."""
-        if not self.total_issues:
-            return 0
-        return round(self.issues_importados / self.total_issues * 100)
+    def series_sin_recuento(self) -> int:
+        return self.total_series - self.series_con_recuento
 
 
 async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
@@ -59,14 +76,8 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
         .where(File.is_missing.is_(False))
     )).scalar() or 0
 
-    total_issues = (await db.execute(
-        select(func.sum(Series.total_issues)).where(Series.total_issues.isnot(None))
-    )).scalar() or 0
-
-    issues_importados = (await db.execute(
-        select(func.count(func.distinct(File.issue_id)))
-        .where(File.issue_id.isnot(None))
-        .where(File.is_missing.is_(False))
+    archivos_registrados = (await db.execute(
+        select(func.count()).select_from(File).where(File.is_missing.is_(False))
     )).scalar() or 0
 
     # Huecos pendientes: UNA consulta para todas las series (no una query por
@@ -85,11 +96,23 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
     poseidos_por_serie = await numeros_poseidos_por_serie(db)
 
     huecos_pendientes = 0
+    series_con_recuento = 0
+    numeros_con_recuento = 0
     for series_id, total, fuente in series_totales:
-        if fuente not in UNIDAD_DE_GRAPA:
+        if fuente not in UNIDAD_DE_GRAPA or not total:
             continue
+        series_con_recuento += 1
+        numeros_con_recuento += total
         huecos_pendientes += len(
             compute_missing_issues(total, poseidos_por_serie.get(series_id, set()))
+        )
+
+    completitud = None
+    if numeros_con_recuento:
+        completitud = Completitud(
+            tienes=numeros_con_recuento - huecos_pendientes,
+            de=numeros_con_recuento,
+            series=series_con_recuento,
         )
 
     # Últimas series actualizadas: subconsulta con max(imported_at) por serie.
@@ -110,8 +133,9 @@ async def resumen_biblioteca(db: AsyncSession) -> ResumenBiblioteca:
     return ResumenBiblioteca(
         total_series=total_series,
         series_con_archivos=series_con_archivos,
-        total_issues=total_issues,
-        issues_importados=issues_importados,
+        archivos_registrados=archivos_registrados,
+        series_con_recuento=series_con_recuento,
         huecos_pendientes=huecos_pendientes,
+        completitud=completitud,
         ultimas_series=tuple(ultimas_series),
     )
