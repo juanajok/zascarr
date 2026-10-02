@@ -12,11 +12,13 @@ Lo que estas pruebas protegen, en orden de gravedad:
 """
 from __future__ import annotations
 
+import asyncio
 import re
 from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import OperationalError
@@ -123,14 +125,19 @@ class _Resultado:
 class SesionFalsa:
     """Sesión que responde `escalares` en orden a cada `execute` (y 0 después), o lanza `error`."""
 
-    def __init__(self, escalares=(), error: Exception | None = None):
+    def __init__(self, escalares=(), error: Exception | None = None,
+                 congelada: asyncio.Event | None = None):
         self.escalares = list(escalares)
         self.error = error
+        self.congelada = congelada
         self.consultas: list = []
         self.rollbacks = 0
+        self.commits = 0
 
     async def execute(self, stmt, *a, **k):
         self.consultas.append(stmt)
+        if self.congelada is not None:
+            await self.congelada.wait()      # BD congelada: no contesta hasta que el test la libera
         if self.error:
             raise self.error
         return _Resultado(self.escalares.pop(0) if self.escalares else 0)
@@ -139,7 +146,7 @@ class SesionFalsa:
         return None
 
     async def commit(self):
-        pass
+        self.commits += 1
 
     async def rollback(self):
         self.rollbacks += 1
@@ -152,6 +159,55 @@ class SesionFalsa:
 
     async def flush(self):
         pass
+
+
+class FabricaFalsa:
+    """Sustituye a `async_session_factory`: puede fallar en CADA fase del ciclo de la sesión
+    (crearla, abrirla, consultar, cerrarla) o tardar más que el plazo, y cuenta lo que ocurre."""
+
+    def __init__(self, escalares=(), *, al_crear=None, al_abrir=None, en_consulta=None,
+                 al_cerrar=None, demora: float = 0.0, congelada: bool = False):
+        self.liberar = asyncio.Event()
+        self.congelada = congelada
+        self.sesion = SesionFalsa(escalares, error=en_consulta,
+                                  congelada=self.liberar if congelada else None)
+        self.al_crear, self.al_abrir = al_crear, al_abrir
+        self.al_cerrar, self.demora = al_cerrar, demora
+        self.creadas = self.abiertas = self.cerradas = 0
+
+    def __call__(self):
+        self.creadas += 1
+        if self.al_crear:
+            raise self.al_crear
+        return self
+
+    async def __aenter__(self):
+        if self.demora:
+            await asyncio.sleep(self.demora)
+        if self.al_abrir:
+            raise self.al_abrir
+        self.abiertas += 1      # como en Python: si __aenter__ falla, __aexit__ no se llama
+        return self.sesion
+
+    async def __aexit__(self, tipo, exc, tb):
+        if self.congelada:
+            await self.liberar.wait()        # el rollback sobre la conexión congelada no vuelve
+        self.cerradas += 1
+        if self.al_cerrar:
+            raise self.al_cerrar
+        return False
+
+
+@pytest.fixture
+def con_fabrica(monkeypatch):
+    """Contexto: `with con_fabrica(FabricaFalsa(...)) as client`; el fragmento abre su sesión."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _ctx(fabrica):
+        monkeypatch.setattr("zascarr.web.navegacion.async_session_factory", fabrica)
+        yield TestClient(app, follow_redirects=False)
+    return _ctx
 
 
 @pytest.fixture
@@ -424,12 +480,17 @@ class TestPaginas:
 
 
 # ── 4. el fragmento de contadores ─────────────────────────────────────────────────────────
+def _sin_seguridad(monkeypatch, atencion: bool = False):
+    monkeypatch.setattr(
+        "zascarr.web.navegacion.estado_de_seguridad", lambda: {"atencion": atencion})
+
+
 class TestFragmento:
 
-    def test_con_datos_devuelve_los_tres_marcadores(self, con_sesion, monkeypatch):
-        monkeypatch.setattr(
-            "zascarr.web.navegacion.estado_de_seguridad", lambda: {"atencion": True})
-        with con_sesion(SesionFalsa([14, 6])) as client:
+    def test_con_datos_devuelve_los_marcadores_y_libera_la_sesion(self, con_fabrica, monkeypatch):
+        _sin_seguridad(monkeypatch, True)
+        fabrica = FabricaFalsa([14, 6])
+        with con_fabrica(fabrica) as client:
             r = client.get(FRAGMENTO)
 
         assert r.status_code == 200
@@ -440,11 +501,13 @@ class TestFragmento:
         assert all("hidden" not in at for at in por_id.values())
         assert "14" in r.text and "6" in r.text
         assert "por revisar" in r.text and "deseados" in r.text and "necesita atención" in r.text
+        # Camino correcto: una sesión, abierta y cerrada, y NUNCA un commit (es de solo lectura).
+        assert (fabrica.creadas, fabrica.abiertas, fabrica.cerradas) == (1, 1, 1)
+        assert fabrica.sesion.commits == 0 and len(fabrica.sesion.consultas) == 2
 
-    def test_a_cero_se_oculta_en_vez_de_mostrar_cero(self, con_sesion, monkeypatch):
-        monkeypatch.setattr(
-            "zascarr.web.navegacion.estado_de_seguridad", lambda: {"atencion": False})
-        with con_sesion(SesionFalsa([0, 0])) as client:
+    def test_a_cero_se_oculta_en_vez_de_mostrar_cero(self, con_fabrica, monkeypatch):
+        _sin_seguridad(monkeypatch, False)
+        with con_fabrica(FabricaFalsa([0, 0])) as client:
             r = client.get(FRAGMENTO)
 
         assert r.status_code == 200
@@ -452,57 +515,122 @@ class TestFragmento:
         assert len(por_id) == 3 and all("hidden" in at for at in por_id.values())
         assert ">0<" not in r.text and "0" not in re.sub(r"<[^>]+>", "", r.text)
 
-    def test_mas_de_mil_se_muestra_999_mas(self, con_sesion):
-        with con_sesion(SesionFalsa([5000, 1])) as client:
+    def test_mas_de_mil_se_muestra_999_mas(self, con_fabrica):
+        with con_fabrica(FabricaFalsa([5000, 1])) as client:
             r = client.get(FRAGMENTO)
         assert "999+" in r.text and "5000" not in r.text
 
-    def test_cada_contador_usa_el_mismo_numero_que_la_lista(self, con_sesion):
+    def test_cada_contador_usa_el_mismo_numero_que_la_lista(self, con_fabrica):
         """Primero pendientes, después deseados."""
-        with con_sesion(SesionFalsa([7, 3])) as client:
+        with con_fabrica(FabricaFalsa([7, 3])) as client:
             r = client.get(FRAGMENTO)
         pend = re.search(r'id="cnt-pendientes"[^>]*>(\d+)', r.text).group(1)
         dese = re.search(r'id="cnt-deseados"[^>]*>(\d+)', r.text).group(1)
         assert (pend, dese) == ("7", "3")
 
-    @pytest.mark.parametrize("error", [
-        OSError("connection refused"),
-        OperationalError("SELECT", {}, Exception("server closed the connection")),
-        RuntimeError("cualquier cosa"),
-    ], ids=["oserror", "operational", "otra"])
-    def test_cualquier_fallo_de_la_bd_es_204_vacio(self, con_sesion, error):
-        """La BD cae con la app EN MARCHA: en /ui/* eso es hoy un 500 de texto plano. Aquí, no."""
-        sesion = SesionFalsa(error=error)
-        with con_sesion(sesion) as client:
+    def test_la_ruta_no_usa_la_dependencia_generica_get_db(self, con_fabrica):
+        """`get_db` adquiere ANTES del cuerpo y hace `commit` DESPUÉS de responder: dos fases fuera
+        de cualquier `try` del manejador. El fragmento es de solo lectura y abre su propia sesión.
+        Prueba por comportamiento: con `get_db` ROTO el fragmento funciona igual."""
+        import inspect
+
+        from zascarr.web import navegacion
+
+        async def get_db_roto():
+            raise AssertionError("el fragmento no debe usar get_db")
+            yield   # pragma: no cover
+
+        app.dependency_overrides[get_db] = get_db_roto
+        try:
+            with con_fabrica(FabricaFalsa([2, 3])) as client:
+                r = client.get(FRAGMENTO)
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "2" in r.text
+        assert list(inspect.signature(navegacion.contadores_del_menu).parameters) == ["request"]
+        assert not hasattr(navegacion, "get_db")
+
+
+#: cada fase del ciclo de la sesión puede fallar: todas acaban en 204 vacío
+FALLOS_DE_SESION = {
+    "al crear la sesión": {"al_crear": OSError("sin fábrica")},
+    "al abrirla (conectar)": {"al_abrir": OperationalError("SELECT 1", {}, Exception("refused"))},
+    "al abrirla (OSError)": {"al_abrir": OSError("connection refused")},
+    "en la primera consulta": {"en_consulta": OperationalError("SELECT", {}, Exception("closed"))},
+    "en la consulta (otra)": {"en_consulta": RuntimeError("cualquier cosa")},
+    "al liberarla": {"al_cerrar": OSError("el cierre también falla")},
+}
+
+
+class TestCualquierFalloEs204:
+    """El contrato publicado dice «cualquier fallo»: se prueba en TODAS las fases, no solo en las
+    consultas (la versión anterior dejaba fuera abrir y cerrar la sesión: venían de `get_db`)."""
+
+    @pytest.mark.parametrize("fase", list(FALLOS_DE_SESION))
+    def test_204_vacio_sin_cuerpo_de_error(self, con_fabrica, fase):
+        fabrica = FabricaFalsa([14, 6], **FALLOS_DE_SESION[fase])
+        with con_fabrica(fabrica) as client:
             r = client.get(FRAGMENTO)
 
         assert r.status_code == 204 and r.content == b""
         assert r.headers["cache-control"] == "no-store"
-        assert sesion.rollbacks == 1
+        assert fabrica.sesion.commits == 0
+        # lo que se llegó a abrir se cerró (no se filtran sesiones)
+        assert fabrica.cerradas == fabrica.abiertas
 
-    def test_si_hasta_el_rollback_falla_sigue_siendo_204(self, con_sesion):
-        class Sesion(SesionFalsa):
-            async def rollback(self):
-                raise OSError("tampoco")
+    def test_si_falla_al_liberar_no_se_sirven_numeros_de_una_sesion_dudosa(self, con_fabrica):
+        fabrica = FabricaFalsa([14, 6], al_cerrar=OSError("x"))
+        with con_fabrica(fabrica) as client:
+            r = client.get(FRAGMENTO)
+        assert r.status_code == 204 and "14" not in r.text and len(fabrica.sesion.consultas) == 2
 
-        with con_sesion(Sesion(error=OSError("caída"))) as client:
-            assert client.get(FRAGMENTO).status_code == 204
+    def test_un_fallo_de_renderizado_tambien_es_204(self, con_fabrica, monkeypatch):
+        def roto(*a, **k):
+            raise RuntimeError("plantilla rota")
 
-    def test_un_fallo_en_el_estado_de_seguridad_tambien_es_204(self, con_sesion, monkeypatch):
+        monkeypatch.setattr("zascarr.web.navegacion.templates.TemplateResponse", roto)
+        fabrica = FabricaFalsa([1, 1])
+        with con_fabrica(fabrica) as client:
+            r = client.get(FRAGMENTO)
+        assert r.status_code == 204 and r.content == b"" and fabrica.cerradas == 1
+
+    def test_un_fallo_en_el_estado_de_seguridad_tambien_es_204(self, con_fabrica, monkeypatch):
         def roto():
             raise ValueError("ajustes ilegibles")
 
         monkeypatch.setattr("zascarr.web.navegacion.estado_de_seguridad", roto)
-        with con_sesion(SesionFalsa([1, 1])) as client:
+        with con_fabrica(FabricaFalsa([1, 1])) as client:
             assert client.get(FRAGMENTO).status_code == 204
 
-    def test_el_log_no_lleva_datos_solo_la_clase_del_error(self, con_sesion):
+    def test_una_bd_que_no_contesta_a_tiempo_es_204_y_no_deja_la_peticion_colgada(
+            self, con_fabrica, monkeypatch):
+        """Un fallo más: sin plazo, una BD que no responde dejaría peticiones colgadas."""
+        import time
+
+        monkeypatch.setattr("zascarr.web.navegacion.PLAZO_SEGUNDOS", 0.05)
+        fabrica = FabricaFalsa([14, 6], demora=5)
+        inicio = time.monotonic()
+        with con_fabrica(fabrica) as client:
+            r = client.get(FRAGMENTO)
+
+        assert r.status_code == 204 and r.content == b""
+        assert time.monotonic() - inicio < 2          # no esperó los 5 s de la BD
+        assert fabrica.cerradas == fabrica.abiertas
+
+    def test_el_log_no_lleva_datos_solo_la_clase_del_error(self, con_fabrica):
         from structlog.testing import capture_logs
 
-        with capture_logs() as logs, con_sesion(SesionFalsa(error=OSError("/ruta/secreta/x"))) as c:
+        fabrica = FabricaFalsa(en_consulta=OSError("/ruta/secreta/x"))
+        with capture_logs() as logs, con_fabrica(fabrica) as c:
             c.get(FRAGMENTO)
         evento = next(e for e in logs if e["event"] == "nav_contadores_no_disponibles")
         assert evento["error"] == "OSError" and "secreta" not in str(evento)
+
+    def test_cancelar_la_peticion_no_se_traga(self, con_fabrica):
+        """`CancelledError` no es un fallo que ocultar (el cliente se fue): no pasa a 204."""
+        fabrica = FabricaFalsa([1, 1], al_abrir=asyncio.CancelledError())
+        with con_fabrica(fabrica) as client, pytest.raises(BaseException):  # noqa: B017, PT011
+            client.get(FRAGMENTO)
 
 
 # ── 5. autenticación y arranque degradado ─────────────────────────────────────────────────
@@ -515,31 +643,33 @@ def _con_auth(monkeypatch):
 
 class TestAutenticacion:
 
-    def test_sin_sesion_es_204_vacio_y_no_se_toca_la_bd(self, con_sesion, monkeypatch):
-        """Ni datos ni redirección a /login (htmx la seguiría e intercambiaría su página)."""
+    def test_sin_sesion_es_204_vacio_y_no_se_abre_la_sesion_de_bd(self, con_fabrica, monkeypatch):
+        """Ni datos ni redirección a /login (htmx la seguiría e intercambiaría su página). Ni
+        siquiera se llama a la fábrica de sesiones: no hay conexión que abrir sin sesión válida."""
         _con_auth(monkeypatch)
-        sesion = SesionFalsa([14, 6])
-        with con_sesion(sesion) as client:
+        fabrica = FabricaFalsa([14, 6])
+        with con_fabrica(fabrica) as client:
             r = client.get(FRAGMENTO)
 
         assert r.status_code == 204 and r.content == b""
         assert "location" not in r.headers
-        assert sesion.consultas == []              # la BD ni se consultó: no hay nada que filtrar
+        assert fabrica.creadas == 0 and fabrica.abiertas == 0 and fabrica.sesion.consultas == []
 
-    def test_con_la_cookie_de_otra_clave_tampoco(self, con_sesion, monkeypatch):
+    def test_con_la_cookie_de_otra_clave_tampoco(self, con_fabrica, monkeypatch):
         _con_auth(monkeypatch)
-        sesion = SesionFalsa([14, 6])
-        with con_sesion(sesion) as client:
+        fabrica = FabricaFalsa([14, 6])
+        with con_fabrica(fabrica) as client:
             client.cookies.set(COOKIE_NAME, crear_cookie_sesion("OTRA-CLAVE"))
             r = client.get(FRAGMENTO)
-        assert r.status_code == 204 and sesion.consultas == []
+        assert r.status_code == 204 and fabrica.creadas == 0
 
-    def test_con_sesion_valida_si_responde(self, con_sesion, monkeypatch):
+    def test_con_sesion_valida_si_responde(self, con_fabrica, monkeypatch):
         _con_auth(monkeypatch)
-        with con_sesion(SesionFalsa([14, 6])) as client:
+        fabrica = FabricaFalsa([14, 6])
+        with con_fabrica(fabrica) as client:
             client.cookies.set(COOKIE_NAME, crear_cookie_sesion("s"))
             r = client.get(FRAGMENTO)
-        assert r.status_code == 200 and "14" in r.text
+        assert r.status_code == 200 and "14" in r.text and fabrica.cerradas == 1
 
     def test_el_resto_de_ui_sigue_redirigiendo_a_login(self, con_sesion, monkeypatch):
         """La excepción es solo del fragmento; el contrato de A6 para /ui/* no cambia."""
@@ -562,20 +692,20 @@ class TestArranqueDegradado:
     def degradado(self, monkeypatch):
         monkeypatch.setattr(app.state, "db_degraded", True, raising=False)
 
-    def test_el_fragmento_es_204_y_no_el_503_html(self, degradado, con_sesion):
-        sesion = SesionFalsa([1, 1])
-        with con_sesion(sesion) as client:
+    def test_el_fragmento_es_204_y_no_el_503_html(self, degradado, con_fabrica):
+        fabrica = FabricaFalsa([1, 1])
+        with con_fabrica(fabrica) as client:
             r = client.get(FRAGMENTO)
-        assert r.status_code == 204 and r.content == b"" and sesion.consultas == []
+        assert r.status_code == 204 and r.content == b"" and fabrica.creadas == 0
 
     def test_el_fragmento_es_204_con_o_sin_sesion_y_nunca_sirve_datos(
-            self, degradado, con_sesion, monkeypatch):
+            self, degradado, con_fabrica, monkeypatch):
         _con_auth(monkeypatch)
-        sesion = SesionFalsa([14, 6])
-        with con_sesion(sesion) as client:
+        fabrica = FabricaFalsa([14, 6])
+        with con_fabrica(fabrica) as client:
             client.cookies.set(COOKIE_NAME, crear_cookie_sesion("s"))
             r = client.get(FRAGMENTO)
-        assert r.status_code == 204 and sesion.consultas == []
+        assert r.status_code == 204 and fabrica.creadas == 0
 
     def test_estado_sigue_sirviendose_como_diagnostico(self, degradado, con_sesion):
         """Decisión 2 de la épica: `/estado` se queda en `/estado` y funciona con la BD caída."""
@@ -673,3 +803,93 @@ class TestCssDelShell:
         """`.topnav` y compañía se retiran en V14, no antes."""
         for c in ("topnav", "brand", "btn-logout", "nav-logout"):
             assert f".{c}" in CSS
+
+
+def _peticion() -> Request:
+    return Request({"type": "http", "method": "GET", "path": FRAGMENTO, "headers": [],
+                    "query_string": b"", "app": app})
+
+
+class TestBdCongelada:
+    """La BD ACEPTA la conexión y no contesta (`docker pause` en el ensayo; un disco o red que se
+    cuelgan). Cancelar la consulta no basta: liberar la sesión hace un `rollback` sobre esa misma
+    conexión y también se cuelga. Con un `asyncio.timeout` alrededor de todo, el fragmento NO
+    respondía (medido en el stack real: curl cortó a los 20 s con un plazo de 5). Estas pruebas
+    modelan esa BD: consulta que no vuelve y cierre que tampoco."""
+
+    @pytest.fixture
+    def corto(self, monkeypatch):
+        from zascarr.web import navegacion
+
+        monkeypatch.setattr(navegacion, "PLAZO_SEGUNDOS", 0.05)
+        monkeypatch.setattr(navegacion, "_calculo_en_curso", None)
+        return navegacion
+
+    @pytest.mark.asyncio
+    async def test_responde_204_sin_esperar_a_la_limpieza(self, corto, monkeypatch):
+        fabrica = FabricaFalsa([1, 1], congelada=True)
+        monkeypatch.setattr(corto, "async_session_factory", fabrica)
+        try:
+            # Con `wait_for` de 2 s: una respuesta que dependiera del cierre colgado lo agotaría.
+            r = await asyncio.wait_for(corto.contadores_del_menu(_peticion()), timeout=2)
+            assert r.status_code == 204 and r.body == b""
+            assert fabrica.cerradas == 0 and not corto._calculo_en_curso.done()   # sigue limpiando
+        finally:
+            fabrica.liberar.set()
+            await asyncio.wait({corto._calculo_en_curso}, timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_los_sondeos_no_se_apilan_contra_una_bd_que_no_contesta(self, corto, monkeypatch):
+        fabrica = FabricaFalsa([1, 1], congelada=True)
+        monkeypatch.setattr(corto, "async_session_factory", fabrica)
+        try:
+            respuestas = [await corto.contadores_del_menu(_peticion()) for _ in range(5)]
+            assert [r.status_code for r in respuestas] == [204] * 5
+            assert fabrica.creadas == 1          # UNA sesión, no cinco
+        finally:
+            fabrica.liberar.set()
+            await asyncio.wait({corto._calculo_en_curso}, timeout=2)
+
+    @pytest.mark.asyncio
+    async def test_las_peticiones_concurrentes_comparten_el_trabajo(self, corto, monkeypatch):
+        monkeypatch.setattr(corto, "PLAZO_SEGUNDOS", 2)
+        fabrica = FabricaFalsa([14, 6], demora=0.05)
+        monkeypatch.setattr(corto, "async_session_factory", fabrica)
+
+        a, b, c = await asyncio.gather(*(corto.contadores_del_menu(_peticion()) for _ in range(3)))
+
+        assert [a.status_code, b.status_code, c.status_code] == [200, 200, 200]
+        assert fabrica.creadas == 1 and fabrica.cerradas == 1 and fabrica.sesion.commits == 0
+        assert b"14" in a.body and a.body == b.body == c.body      # el mismo resultado
+
+    @pytest.mark.asyncio
+    async def test_cuando_la_bd_vuelve_el_siguiente_sondeo_funciona(self, corto, monkeypatch):
+        fabrica = FabricaFalsa([14, 6], congelada=True)
+        monkeypatch.setattr(corto, "async_session_factory", fabrica)
+        r1 = await corto.contadores_del_menu(_peticion())
+        assert r1.status_code == 204
+        # la BD se descongela: la tarea abandonada termina sola (con sus números, que se tiran)
+        fabrica.liberar.set()
+        await asyncio.wait({corto._calculo_en_curso}, timeout=2)
+        assert corto._calculo_en_curso.done() and fabrica.cerradas == 1
+
+        nueva = FabricaFalsa([21, 9])
+        monkeypatch.setattr(corto, "async_session_factory", nueva)
+        monkeypatch.setattr(corto, "PLAZO_SEGUNDOS", 2)
+        r2 = await corto.contadores_del_menu(_peticion())
+        assert r2.status_code == 200 and b"21" in r2.body and nueva.creadas == 1
+
+    @pytest.mark.asyncio
+    async def test_una_tarea_de_otro_bucle_no_bloquea_el_fragmento(self, corto, monkeypatch):
+        """Cada bucle (cada TestClient) crea la suya: no se espera una tarea de un bucle cerrado."""
+        class Ajena:
+            def done(self):
+                return False
+
+            def get_loop(self):
+                return object()
+
+        monkeypatch.setattr(corto, "_calculo_en_curso", Ajena())
+        monkeypatch.setattr(corto, "PLAZO_SEGUNDOS", 2)
+        monkeypatch.setattr(corto, "async_session_factory", FabricaFalsa([1, 1]))
+        assert (await corto.contadores_del_menu(_peticion())).status_code == 200

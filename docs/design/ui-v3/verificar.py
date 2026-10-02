@@ -15,6 +15,8 @@ Casos:
     teclado      orden de tabulación, enlace de salto, foco visible, «Más» con teclado
     sondeo       el fragmento se pide al cargar y se repite a los ~30 s
     red          fallo de red del fragmento (URL bloqueada): el menú sigue entero
+    bd-congelada BD CONGELADA (`docker compose pause`: acepta la conexión y no contesta) con la página
+                 ya cargada: el sondeo da 204 a los ~5 s, sin apilarse, y no borra nada
     bd-caida     BD parada con la app EN MARCHA, ya con contadores cargados: el sondeo da 204 y no
                  borra nada
     degradado    app arrancada SIN BD: /estado funciona, el fragmento es 204, el menú intacto
@@ -232,6 +234,31 @@ async def caso_bd_caida(nav, base, salida, datos):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+async def caso_bd_congelada(nav, base, salida, datos):
+    import os
+    import subprocess
+    await nav.vista(ESCRITORIO, "light")
+    await nav.ir(base + "/ui/descubrir", espera=2.0)
+    antes = await estado(nav)
+    datos["antes_de_congelar_la_bd"] = antes
+    ensayo = AQUI.parent / "ui-baseline" / "ensayo.sh"
+    subprocess.run([str(ensayo), "dc", "pause", "postgres"], env=os.environ, check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        n0 = n_peticiones(nav)
+        # El siguiente sondeo llega a los 30 s y tarda ~5 s en recibir el 204 (el plazo)
+        await asyncio.sleep(40)
+        datos["tras_el_siguiente_sondeo_con_la_bd_congelada"] = {
+            "peticiones_nuevas": n_peticiones(nav) - n0, "respuestas": respuestas(nav)[-1:],
+            "menu": await estado(nav), "la_pagina_sigue_en": await nav.js("location.pathname")}
+        await nav.foto(salida / "bd-congelada-sondeo--escritorio-1280x800-claro.png", completa=False)
+        datos["contadores_conservados"] = (
+            antes["pendientes"] == datos["tras_el_siguiente_sondeo_con_la_bd_congelada"]["menu"]["pendientes"])
+    finally:
+        subprocess.run([str(ensayo), "dc", "unpause", "postgres"], env=os.environ, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 async def caso_degradado(nav, base, salida, datos):
     await nav.vista(ESCRITORIO, "light")
     await nav.ir(base + "/estado", espera=2.5)
@@ -300,7 +327,8 @@ async def main() -> None:
         await capturar.comprobar_entorno(nav, base, "verificar")
         datos["navegador"] = nav.version.get("Browser")
         fn = {"menu": caso_menu, "teclado": caso_teclado, "sondeo": caso_sondeo, "red": caso_red,
-              "bd-caida": caso_bd_caida, "degradado": caso_degradado}.get(caso)
+              "bd-caida": caso_bd_caida, "bd-congelada": caso_bd_congelada,
+              "degradado": caso_degradado}.get(caso)
         if caso == "sesion":
             await caso_sesion(nav, base, salida, datos, clave)
         elif fn:
