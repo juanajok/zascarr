@@ -104,16 +104,47 @@ if errores:
 PY
 }
 
+# Contenedores del proyecto de ensayo que existan AHORA, uno por línea. Aborta si Docker no
+# responde: «no pude comprobar» NO equivale a «no hay nada». Une la etiqueta del proyecto de
+# Compose y el prefijo del nombre, porque `container_name` explícito no se aísla por carpeta.
+contenedores_del_ensayo() {
+    local por_etiqueta por_nombre nombre
+    por_etiqueta="$(docker ps -a --filter "label=com.docker.compose.project=${PROYECTO}" \
+        --format '{{.Names}}')" || die "Docker no responde (docker ps): no puedo comprobar si hay un stack de ensayo; no actúo."
+    por_nombre="$(docker ps -a --format '{{.Names}}')" \
+        || die "Docker no responde (docker ps): no puedo comprobar si hay un stack de ensayo; no actúo."
+    {
+        printf '%s\n' "${por_etiqueta}"
+        while IFS= read -r nombre; do
+            case "${nombre}" in "${PROYECTO}"-*) printf '%s\n' "${nombre}" ;; esac
+        done <<< "${por_nombre}"
+    } | sed '/^$/d' | sort -u
+}
+
 # El nombre de proyecto `zascarr-uibase` es único por máquina: si OTRA carpeta de datos (otra
-# sesión, otro worktree) tiene el stack en marcha, `dc` o `bajar` desde ésta lo tocarían igual.
-# Se exige que los montajes del stack vivo cuelguen de ESTA carpeta de ensayo.
+# sesión, otro worktree) tiene SU stack, `dc` o `bajar` desde ésta lo tocarían igual. Se mira
+# CADA contenedor existente —también un stack parcial (solo Postgres y Redis, por ejemplo)— y
+# se exige que TODOS sus montajes cuelguen de ESTA carpeta; basta uno ajeno, o no poder
+# acreditar ninguno, para abortar. Las rutas se comparan como rutas (`[[ == "…"* ]]`), no como
+# expresión regular.
 comprobar_propietario() {
-    local montajes
-    docker ps -a --format '{{.Names}}' | grep -qx zascarr-uibase-app || return 0
-    montajes="$(docker inspect zascarr-uibase-app --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' 2>/dev/null)" \
-        || die "no pude comprobar de quién es el stack zascarr-uibase en marcha; no lo toco."
-    grep -q "^${DATOS}/" <<< "${montajes}" \
-        || die "el stack zascarr-uibase en marcha pertenece a OTRA carpeta de datos; no lo toco."
+    local contenedores nombre montajes origen n
+    # OJO: `die` dentro de `$(…)` solo sale del subshell; el estado se propaga a mano.
+    contenedores="$(contenedores_del_ensayo)" || exit 1
+    [[ -n "${contenedores}" ]] || return 0               # consulta correcta y sin recursos
+    while IFS= read -r nombre; do
+        montajes="$(docker inspect "${nombre}" \
+            --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' 2>/dev/null)" \
+            || die "no pude comprobar los montajes de ${nombre}; no actúo."
+        n=0
+        while IFS= read -r origen; do
+            [[ -n "${origen}" ]] || continue
+            n=$((n + 1))
+            [[ "${origen}" == "${DATOS}/"* ]] \
+                || die "${nombre} monta ${origen}: el stack zascarr-uibase en marcha pertenece a OTRA carpeta de datos; no lo toco."
+        done <<< "${montajes}"
+        [[ "${n}" -gt 0 ]] || die "no puedo acreditar de quién es ${nombre} (sin montajes); no lo toco."
+    done <<< "${contenedores}"
 }
 
 preparar() {
@@ -122,8 +153,10 @@ preparar() {
     if ss -ltn "sport = :${PUERTO}" 2>/dev/null | grep -q LISTEN; then
         die "el puerto ${PUERTO} ya está en uso."
     fi
-    if docker ps -a --format '{{.Names}}' | grep -qx -e zascarr-uibase-db -e zascarr-uibase-app; then
-        die "ya hay un stack de ensayo (zascarr-uibase-*): ejecuta 'bajar' antes."
+    local existentes
+    existentes="$(contenedores_del_ensayo)" || exit 1   # `die` en $(…) no sale del script
+    if [[ -n "${existentes}" ]]; then
+        die "ya hay recursos de un stack de ensayo (zascarr-uibase-*): ejecuta 'bajar' antes (o espera a la otra sesión)."
     fi
     mkdir -p "${DATOS}"/data/{postgres,redis,covers,vpn-state} "${DATOS}/lib" "${DATOS}/dl"
     : > "${DATOS}/.ui-baseline"

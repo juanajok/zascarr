@@ -28,10 +28,19 @@ def entorno(tmp_path):
     (bin_ / "docker").write_text(
         '#!/usr/bin/env bash\n'
         'echo "$*" >> "$DOBLE_LOG"\n'
+        # `docker ps …`: lo que haya (DOBLE_PS_OUT) o un fallo (DOBLE_PS_RC)
+        'if [ "$1" = ps ]; then\n'
+        '  [ -n "${DOBLE_PS_RC:-}" ] && exit "$DOBLE_PS_RC"\n'
+        '  printf "%s" "${DOBLE_PS_OUT:-}"; exit 0\n'
+        'fi\n'
+        # `docker inspect <nombre> …`: un fichero por contenedor; sin fichero, falla
+        'if [ "$1" = inspect ]; then\n'
+        '  f="${DOBLE_INSPECT_DIR:-/nonexistent}/$2"\n'
+        '  [ -f "$f" ] && { cat "$f"; exit 0; }\n'
+        '  exit 1\n'
+        'fi\n'
         'case "$*" in\n'
         '  *" config --format json"*) cat "$DOBLE_CONFIG_JSON" ;;\n'
-        '  "ps -a"*) printf "%s" "${DOBLE_PS_OUT:-}" ;;\n'
-        '  "inspect "*) printf "%s" "${DOBLE_INSPECT_OUT:-}" ;;\n'
         'esac\n'
         'exit 0\n')
     (bin_ / "ss").write_text('#!/usr/bin/env bash\nexit 0\n')
@@ -264,30 +273,136 @@ class TestComposeNoAislado:
         assert "fuera de" in r.stderr or "no está aislado" in r.stderr
 
 
-class TestStackDeOtraCarpeta:
-    """`zascarr-uibase` es un nombre único por máquina: otra sesión puede tener su stack vivo."""
+def stack_vivo(entorno, montajes: dict[str, list[str]]) -> dict:
+    """Entorno de `ejecutar` con esos contenedores 'vivos' y sus montajes (origen por línea)."""
+    d = entorno["tmp"] / "inspect"
+    d.mkdir(exist_ok=True)
+    for nombre, origenes in montajes.items():
+        (d / nombre).write_text("".join(f"{o}\n" for o in origenes))
+    return {"DOBLE_PS_OUT": "".join(f"{n}\n" for n in montajes), "DOBLE_INSPECT_DIR": str(d)}
 
-    @pytest.mark.parametrize("orden,args", [("bajar", ()), ("dc", ("stop", "postgres"))])
-    def test_no_actua_sobre_un_stack_cuyos_montajes_son_de_otra_carpeta(self, entorno, orden, args):
+
+class TestStackDeOtraCarpeta:
+    """`zascarr-uibase` es un nombre único por máquina: otra sesión puede tener su stack vivo,
+    COMPLETO O PARCIAL, y «no pude comprobarlo» no autoriza nada."""
+
+    @pytest.fixture
+    def mio(self, entorno):
         datos = entorno["base"] / "mio"
         assert ejecutar(entorno, "preparar", datos).returncode == 0
         entorno["log"].write_text("")
-        ajeno = {"DOBLE_PS_OUT": "zascarr-uibase-app\n",
-                 "DOBLE_INSPECT_OUT": f"{entorno['base']}/de-otra-sesion/lib\n"}
+        return datos
 
-        r = ejecutar(entorno, orden, datos, *args, extra_env=ajeno)
+    def _sin_cambios(self, entorno) -> bool:
+        log = llamadas(entorno)
+        return " down" not in log and " stop" not in log and " restart" not in log
 
-        assert r.returncode != 0
-        assert "OTRA carpeta de datos" in r.stderr
-        assert " down" not in llamadas(entorno) and " stop" not in llamadas(entorno)
+    @pytest.mark.parametrize("orden,args", [("bajar", ()), ("dc", ("stop", "postgres"))])
+    def test_stack_ajeno_completo_no_se_toca(self, entorno, mio, orden, args):
+        ajeno = entorno["base"] / "de-otra-sesion"
+        env = stack_vivo(entorno, {
+            "zascarr-uibase-db": [f"{ajeno}/data/postgres"],
+            "zascarr-uibase-cache": [f"{ajeno}/data/redis"],
+            "zascarr-uibase-app": [f"{ajeno}/lib", f"{ajeno}/dl"]})
 
-    def test_si_el_stack_vivo_es_el_propio_si_actua(self, entorno):
-        datos = entorno["base"] / "mio"
+        r = ejecutar(entorno, orden, mio, *args, extra_env=env)
+
+        assert r.returncode != 0 and "OTRA carpeta de datos" in r.stderr
+        assert self._sin_cambios(entorno)
+
+    @pytest.mark.parametrize("orden,args", [("bajar", ()), ("dc", ("stop", "postgres"))])
+    def test_stack_ajeno_parcial_sin_app_tampoco_se_toca(self, entorno, mio, orden, args):
+        """Su preparación falló antes de crear la app: solo Postgres y Redis. Antes se aceptaba."""
+        ajeno = entorno["base"] / "de-otra-sesion"
+        env = stack_vivo(entorno, {
+            "zascarr-uibase-db": [f"{ajeno}/data/postgres"],
+            "zascarr-uibase-cache": [f"{ajeno}/data/redis"]})
+
+        r = ejecutar(entorno, orden, mio, *args, extra_env=env)
+
+        assert r.returncode != 0 and "OTRA carpeta de datos" in r.stderr
+        assert self._sin_cambios(entorno)
+
+    @pytest.mark.parametrize("orden,args", [("bajar", ()), ("dc", ("stop", "postgres"))])
+    def test_montajes_propios_y_ajenos_mezclados_se_rechazan(self, entorno, mio, orden, args):
+        """No basta con una coincidencia: TODOS los montajes tienen que ser de esta carpeta."""
+        ajeno = entorno["base"] / "de-otra-sesion"
+        env = stack_vivo(entorno, {
+            "zascarr-uibase-app": [f"{mio}/lib", f"{ajeno}/dl"]})
+
+        r = ejecutar(entorno, orden, mio, *args, extra_env=env)
+
+        assert r.returncode != 0 and "OTRA carpeta de datos" in r.stderr
+        assert self._sin_cambios(entorno)
+
+    @pytest.mark.parametrize("orden,args", [("bajar", ()), ("dc", ("stop", "postgres"))])
+    def test_si_docker_ps_falla_no_se_actua(self, entorno, mio, orden, args):
+        """«No pude comprobar» no es «no hay nada»."""
+        r = ejecutar(entorno, orden, mio, *args, extra_env={"DOBLE_PS_RC": "1"})
+
+        assert r.returncode != 0 and "Docker no responde" in r.stderr
+        assert self._sin_cambios(entorno)
+
+    def test_preparar_tampoco_continua_si_docker_ps_falla(self, entorno):
+        datos = entorno["base"] / "nuevo"
+
+        r = ejecutar(entorno, "preparar", datos, extra_env={"DOBLE_PS_RC": "1"})
+
+        assert r.returncode != 0 and "Docker no responde" in r.stderr
+        assert nada_de_docker_que_arranque(entorno)
+
+    def test_si_no_se_pueden_leer_los_montajes_de_un_contenedor_no_se_actua(self, entorno, mio):
+        env = stack_vivo(entorno, {})
+        env["DOBLE_PS_OUT"] = "zascarr-uibase-db\n"       # existe, pero `inspect` falla
+
+        r = ejecutar(entorno, "bajar", mio, extra_env=env)
+
+        assert r.returncode != 0 and "no pude comprobar los montajes" in r.stderr
+        assert self._sin_cambios(entorno)
+
+    def test_un_contenedor_sin_montajes_no_acredita_propietario(self, entorno, mio):
+        env = stack_vivo(entorno, {"zascarr-uibase-cache": []})
+
+        r = ejecutar(entorno, "bajar", mio, extra_env=env)
+
+        assert r.returncode != 0 and "sin montajes" in r.stderr
+        assert self._sin_cambios(entorno)
+
+    def test_la_ruta_se_compara_como_ruta_no_como_expresion_regular(self, entorno):
+        """Con `grep "^${DATOS}/"` el `.` de `a.b` casaba con `aXb`: un stack ajeno pasaba."""
+        datos = entorno["base"] / "a.b"
         assert ejecutar(entorno, "preparar", datos).returncode == 0
-        propio = {"DOBLE_PS_OUT": "zascarr-uibase-app\n",
-                  "DOBLE_INSPECT_OUT": f"{datos}/lib\n"}
+        entorno["log"].write_text("")
+        env = stack_vivo(entorno, {"zascarr-uibase-app": [f"{entorno['base']}/aXb/lib"]})
 
-        r = ejecutar(entorno, "bajar", datos, extra_env=propio)
+        r = ejecutar(entorno, "bajar", datos, extra_env=env)
+
+        assert r.returncode != 0 and "OTRA carpeta de datos" in r.stderr
+        assert self._sin_cambios(entorno)
+
+    def test_stack_parcial_propio_si_se_puede_desmontar(self, entorno, mio):
+        env = stack_vivo(entorno, {
+            "zascarr-uibase-db": [f"{mio}/data/postgres"],
+            "zascarr-uibase-cache": [f"{mio}/data/redis"]})     # sin app
+
+        r = ejecutar(entorno, "bajar", mio, extra_env=env)
 
         assert r.returncode == 0, r.stderr
         assert " down" in llamadas(entorno)
+
+    def test_stack_completo_propio_si_se_puede_desmontar(self, entorno, mio):
+        env = stack_vivo(entorno, {
+            "zascarr-uibase-db": [f"{mio}/data/postgres"],
+            "zascarr-uibase-cache": [f"{mio}/data/redis"],
+            "zascarr-uibase-app": [f"{mio}/lib", f"{mio}/dl", f"{mio}/data/covers"]})
+
+        r = ejecutar(entorno, "bajar", mio, extra_env=env)
+
+        assert r.returncode == 0, r.stderr
+        assert " down" in llamadas(entorno)
+
+    def test_sin_recursos_y_con_docker_respondiendo_se_permite(self, entorno, mio):
+        """Ausencia ACREDITADA (consulta correcta y vacía): único caso de «nada que comprobar»."""
+        r = ejecutar(entorno, "bajar", mio)
+
+        assert r.returncode == 0, r.stderr
