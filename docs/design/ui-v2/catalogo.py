@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E501  (la plantilla HTML embebida no se parte en líneas de 100)
 """Genera `catalogo.html`: todas las variantes de los componentes de V2, renderizadas con las
 macros REALES (`templates/_componentes.html`) y el CSS REAL (`static/web.css`). No es una pantalla
 de la aplicación ni añade ninguna ruta: sirve para revisar los componentes a ojo, en claro y oscuro,
