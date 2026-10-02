@@ -1,36 +1,17 @@
 """
-Dashboard de biblioteca — vista principal de ZascArr 1.0 (look-and-feel).
+Inicio de biblioteca — vista principal de ZascArr (GET /ui/).
 
-Endpoint GET /ui/ que sirve el dashboard con métricas de colección y últimas
-actualizaciones. No añade tablas ni funcionalidad de dominio: solo presenta
-datos que ya existen en el modelo (Series, Issues, Files), inspirado en el
-brief visual sonarr-comics-template.html.
-
-Métricas:
-  - total de series
-  - series con al menos un archivo importado
-  - total de números conocidos (suma de Series.total_issues)
-  - huecos pendientes (suma de missing issues por serie, vía compute_missing_issues)
-  - últimas series actualizadas (por el último File.imported_at)
-
-Nota de modelo: File NO tiene series_id — la relación es File → Issue →
-Series (File.issue_id → Issue.id → Issue.series_id). Todas las consultas que
-cruzan archivos con series pasan por Issue.
+Router fino: las cifras salen de `services/resumen.py` (V4), no se calculan aquí ni en la
+plantilla. No añade tablas ni funcionalidad de dominio.
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.api.series import (
-    UNIDAD_DE_GRAPA,
-    compute_missing_issues,
-    numeros_poseidos_por_serie,
-)
 from zascarr.database import get_db
-from zascarr.models import File, Issue, Series
+from zascarr.services.resumen import resumen_biblioteca
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
@@ -40,74 +21,13 @@ router = APIRouter(prefix="/ui", tags=["ui"])
 
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """Dashboard principal con métricas de la colección."""
-    total_series = (await db.execute(select(func.count(Series.id)))).scalar() or 0
-
-    # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
-    # cuenta como "lo tienes" — sin este filtro, borrar un tebeo a mano
-    # del disco no bajaba ni el contador de completitud ni "series con
-    # archivos", contradiciendo lo que B7 promete en el badge de la fila.
-    series_con_archivos = (await db.execute(
-        select(func.count(func.distinct(Issue.series_id)))
-        .join(File, File.issue_id == Issue.id)
-        .where(File.is_missing.is_(False))
-    )).scalar() or 0
-
-    total_issues = (await db.execute(
-        select(func.sum(Series.total_issues)).where(Series.total_issues.isnot(None))
-    )).scalar() or 0
-
-    issues_importados = (await db.execute(
-        select(func.count(func.distinct(File.issue_id)))
-        .where(File.issue_id.isnot(None))
-        .where(File.is_missing.is_(False))
-    )).scalar() or 0
-
-    porcentaje = round((issues_importados / total_issues * 100) if total_issues else 0)
-
-    # Huecos pendientes: UNA consulta para todas las series (no una query por
-    # serie), luego se agrega en Python reusando la misma función pura
-    # (compute_missing_issues) que usa la ficha de serie. La posesión sale del
-    # DISCO (archivo disponible) y del formato, NO de `sort_order` — que ningún
-    # código de main escribe y hacía que el contador sumara el catálogo entero.
-    # Solo entran las series cuyo `total_issues` está acreditado como recuento
-    # de grapas (ver `UNIDAD_DE_GRAPA`): sumar capítulos de AniList o "números"
-    # de Tebeosfera con grapas sería mezclar unidades.
-    series_totales = (await db.execute(
-        select(Series.id, Series.total_issues, Series.metadata_source)
-        .where(Series.total_issues.isnot(None))
-    )).all()
-
-    poseidos_por_serie = await numeros_poseidos_por_serie(db)
-
-    huecos_pendientes = 0
-    for series_id, total, fuente in series_totales:
-        if fuente not in UNIDAD_DE_GRAPA:
-            continue
-        huecos_pendientes += len(
-            compute_missing_issues(total, poseidos_por_serie.get(series_id, set()))
-        )
-
-    # Últimas series actualizadas: subconsulta con max(imported_at) por serie.
-    last_import = (
-        select(Issue.series_id.label("series_id"), func.max(File.imported_at).label("ultimo"))
-        .join(File, File.issue_id == Issue.id)
-        .where(File.is_missing.is_(False))
-        .group_by(Issue.series_id)
-        .subquery()
-    )
-    ultimas_series = (await db.execute(
-        select(Series)
-        .join(last_import, last_import.c.series_id == Series.id)
-        .order_by(last_import.c.ultimo.desc())
-        .limit(10)
-    )).scalars().all()
-
+    """Inicio con las métricas de la colección."""
+    resumen = await resumen_biblioteca(db)
     return templates.TemplateResponse(request, "dashboard.html", {
-        "total_series": total_series,
-        "series_con_archivos": series_con_archivos,
-        "porcentaje_completitud": porcentaje,
-        "total_issues": total_issues,
-        "huecos_pendientes": huecos_pendientes,
-        "ultimas_series": ultimas_series,
+        "total_series": resumen.total_series,
+        "series_con_archivos": resumen.series_con_archivos,
+        "porcentaje_completitud": resumen.porcentaje_completitud,
+        "total_issues": resumen.total_issues,
+        "huecos_pendientes": resumen.huecos_pendientes,
+        "ultimas_series": resumen.ultimas_series,
     })
