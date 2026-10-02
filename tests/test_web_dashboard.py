@@ -9,6 +9,7 @@ recalcula ni afirma de más. Las clases FakeSession/FakeResult las reutilizan ot
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -25,6 +26,7 @@ from zascarr.services.primeros_pasos import (
     calcular_primeros_pasos,
 )
 from zascarr.services.resumen import Completitud, ResumenBiblioteca
+from zascarr.web.routes import TEMPLATES_DIR
 
 
 class _FakeScalars:
@@ -94,6 +96,33 @@ def use_fake_session(session):
 
 
 FECHA = datetime(2026, 10, 3, 12, 0, tzinfo=UTC)
+
+
+class _Primarios(HTMLParser):
+    """Destinos de los `<a class="btn primary">`, separados según estén dentro de un <details>."""
+
+    def __init__(self):
+        super().__init__()
+        self._details = 0
+        self.dentro: list[str] = []
+        self.fuera: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "details":
+            self._details += 1
+        if tag == "a" and "primary" in (a.get("class") or "").split():
+            (self.dentro if self._details else self.fuera).append(a.get("href"))
+
+    def handle_endtag(self, tag):
+        if tag == "details":
+            self._details -= 1
+
+
+def _primarios_dentro_y_fuera_de_details(html: str) -> tuple[list[str], list[str]]:
+    p = _Primarios()
+    p.feed(html)
+    return p.dentro, p.fuera
 
 
 def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0, seguidas=0,
@@ -186,6 +215,34 @@ class TestPasosEnLaPlantilla:
         assert '<details class="pasos-plegados">' in html
         assert "Lo básico está hecho" in html
 
+    def test_la_accion_recomendada_queda_fuera_del_bloque_plegado(self):
+        """Un botón dentro de un <details> cerrado está en el HTML pero nadie lo ve ni lo alcanza
+        con el teclado: con lo obligatorio hecho, la acción recomendada se ve SIN abrir nada."""
+        html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=10))
+        dentro, fuera = _primarios_dentro_y_fuera_de_details(html)
+        assert fuera == ['/ui/descubrir'] and dentro == []
+
+    def test_con_todo_hecho_y_sin_recomendacion_no_hay_botones_primarios(self):
+        html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=10, seguidas=2,
+                            legal=True, fuente=True))
+        assert _primarios_dentro_y_fuera_de_details(html) == ([], [])
+        assert '<details class="pasos-plegados">' in html
+
+    def test_la_lista_abierta_tiene_un_primario_y_fuera_de_details(self):
+        html = pagina(vista(adopcion=EstadoAdopcion.PENDIENTE))
+        assert _primarios_dentro_y_fuera_de_details(html) == ([], ["/ui/auditoria"])
+
+    def test_el_boton_de_buscar_es_secundario_y_el_css_lo_hace_neutro(self):
+        """Quitar `.primary` no basta: `button[type=submit]` es amarillo en el CSS global."""
+        html = pagina(vista())
+        assert 'class="btn sm neutro">Buscar' in html
+        css = (TEMPLATES_DIR.parent.parent / "static" / "web.css").read_text(encoding="utf-8")
+        amarillo = css.index('button[type="submit"],\n.btn-primary,\n.btn.primary {')
+        neutro = css.index('button[type="submit"].neutro {')
+        assert neutro > amarillo                      # gana por orden a igual o menor especificidad
+        regla = css[neutro:css.index("}", neutro)]
+        assert "--btn-bg: var(--paper)" in regla and "var(--yellow)" not in regla
+
     def test_con_algo_por_hacer_la_lista_va_abierta(self):
         html = pagina(vista(adopcion=EstadoAdopcion.PENDIENTE))
         assert "pasos-plegados" not in html
@@ -239,7 +296,8 @@ class TestHuecosYCompletitud:
         html = pagina(vista(
             adopcion=EstadoAdopcion.HECHA, registrados=60, series=5, con_archivos=5,
             con_recuento=2, huecos=38, completitud=Completitud(tienes=2, de=40, series=2)))
-        assert "en 2 series con recuento de Comic Vine" in html
+        assert "calculados en 2 series, según su recuento de grapas y la numeración actual" in html
+        assert "Comic Vine" not in html.split("Números que te faltan")[1].split("</div>")[0]
         assert "tienes 2 de 40 (5 %)" in html
         assert "3 series sin recuento: de ellas no sabemos qué falta." in html
 

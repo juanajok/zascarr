@@ -6,7 +6,8 @@ pantallas):
 
 - archivos registrados / series / huecos / completitud → `services/resumen.py`
 - archivos sin clasificar → `ReviewService.count_pending` (sin el tope de 50 de la lista)
-- series seguidas → `WishlistService.count_active` (las mismas que lista Deseados)
+- series seguidas → `WishlistService.count_active_series` (series DISTINTAS con algún deseo activo;
+  el contador del menú sigue contando peticiones, que es lo que lista Deseados)
 - adopción → `LibraryAdopter.estado` (marcador explícito de B11, no inferido de que haya filas)
 - informe de duplicados → último `ImportRun` con `details.kind == "audit"`
 - aviso legal → `services/legal.is_acknowledged`
@@ -70,7 +71,8 @@ async def ultimo_informe(db: AsyncSession) -> InformeDisco | None:
 async def cargar_inicio(db: AsyncSession) -> VistaInicio:
     resumen = await resumen_biblioteca(db)
     sin_clasificar = await ReviewService(db).count_pending()
-    seguidas = await WishlistService(db).count_active()
+    # SERIES distintas, no peticiones: «Sigues N series» no puede contar tres peticiones de una.
+    seguidas = await WishlistService(db).count_active_series()
     adopcion = await LibraryAdopter(db).estado()
     informe = await ultimo_informe(db)
     legal = await is_acknowledged(db)

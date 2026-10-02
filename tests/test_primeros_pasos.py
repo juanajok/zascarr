@@ -172,6 +172,10 @@ class TestOpcionales:
         p = paso(calcular_primeros_pasos(
             estado(hay_fuente_de_busqueda=True, aviso_legal_aceptado=True)), ClavePaso.DESCARGAS)
         assert "No comprobamos que conteste" in p.detalle
+        # La salida apunta a donde el motivo SÍ aparece (Deseados), no a un diagnóstico que Estado
+        # todavía no ofrece para una búsqueda concreta.
+        assert "el motivo aparece en Deseados" in p.detalle
+        assert "Estado" not in p.detalle
 
     def test_los_opcionales_no_son_obligatorios(self):
         res = calcular_primeros_pasos(estado())

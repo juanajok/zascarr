@@ -158,7 +158,8 @@ def _paso_series(e: EstadoInicio) -> Paso:
     n = e.series_seguidas
     if n:
         return Paso(ClavePaso.SERIES, f"Sigues {n} {_plural(n, 'serie', 'series')}",
-                    "Están en Deseados.", EstadoPaso.HECHO, False, "/ui/descubrir", "Buscar más")
+                    "Tienes peticiones suyas en Deseados.",
+                    EstadoPaso.HECHO, False, "/ui/descubrir", "Buscar más")
     return Paso(ClavePaso.SERIES, "Elige las series que quieres seguir",
                 "Búscalas por título y las damos de alta con portada y datos.",
                 EstadoPaso.OPCIONAL, False, "/ui/descubrir", "Buscar series")
@@ -168,7 +169,8 @@ def _paso_descargas(e: EstadoInicio) -> Paso:
     if e.hay_fuente_de_busqueda and e.aviso_legal_aceptado:
         return Paso(ClavePaso.DESCARGAS, "La búsqueda de descargas está activada",
                     "Hay una fuente activada y el aviso legal aceptado. "
-                    "No comprobamos que conteste: si algo falla, Estado te lo dirá.",
+                    "No comprobamos que conteste: "
+                    "si una búsqueda falla, el motivo aparece en Deseados.",
                     EstadoPaso.HECHO, False, "/ui/ajustes", "Ajustes")
     if e.hay_fuente_de_busqueda:
         return Paso(ClavePaso.DESCARGAS, "Acepta el aviso legal para buscar descargas",

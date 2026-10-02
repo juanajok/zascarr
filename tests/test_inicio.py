@@ -100,6 +100,19 @@ class TestCargarInicio:
         assert next(p for p in v.pasos.pasos if p.clave is ClavePaso.SERIES).titulo == (
             "Sigues 4 series")
 
+    async def test_sigues_n_series_usa_series_distintas_no_peticiones(self, adopcion, sin_fuente,
+                                                                      monkeypatch):
+        """Cinco peticiones de tres series dijeron «Sigues 5 series» (revisión de la PR #70)."""
+        adopcion(EstadoAdopcion.HECHA)
+        monkeypatch.setattr(inicio.WishlistService, "count_active_series",
+                            AsyncMock(return_value=3))
+        monkeypatch.setattr(inicio.WishlistService, "count_active",
+                            AsyncMock(side_effect=AssertionError("cuenta peticiones")))
+        sesion = FakeSession(_cola()[:-3] + _cola()[-2:])   # sin la consulta de deseados
+        v = await inicio.cargar_inicio(sesion)
+        assert next(p for p in v.pasos.pasos if p.clave is ClavePaso.SERIES).titulo == (
+            "Sigues 3 series")
+
     async def test_descargas_necesita_aviso_legal_aceptado(self, adopcion, monkeypatch):
         adopcion(EstadoAdopcion.HECHA)
         monkeypatch.setattr(inicio, "get_settings", lambda: SimpleNamespace(

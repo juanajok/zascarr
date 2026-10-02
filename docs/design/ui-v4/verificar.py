@@ -66,6 +66,55 @@ JS_INICIO = """(() => {
 })()"""
 
 
+JS_PRINCIPAL = """(() => {
+  const a = document.querySelector('main a.btn.primary');
+  const b = document.querySelector('main .search-form button');
+  const fondo = e => e && getComputedStyle(e).backgroundColor;
+  if (!a) return JSON.stringify({hay_principal: false, fondo_buscar: fondo(b)});
+  const r = a.getBoundingClientRect(), cs = getComputedStyle(a);
+  return JSON.stringify({
+    hay_principal: true, href: a.getAttribute('href'), texto: a.innerText.trim(),
+    visible: a.getClientRects().length > 0 && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0,
+    dentro_de_details_cerrado: !!a.closest('details:not([open])'),
+    alto: Math.round(r.height), fondo_principal: fondo(a), fondo_buscar: fondo(b),
+    buscar_distinto_del_principal: fondo(a) !== fondo(b),
+  });
+})()"""
+
+
+async def tab(nav) -> None:
+    for tipo in ("keyDown", "keyUp"):
+        await nav.cdp("Input.dispatchKeyEvent", type=tipo, key="Tab", code="Tab", windowsVirtualKeyCode=9)
+    await asyncio.sleep(0.03)
+
+
+async def comprobar_principal(nav, base, activar: bool = True) -> dict:
+    """La acción recomendada no solo existe en el HTML: se VE, se alcanza con el teclado y lleva
+    donde dice. Contar `.btn.primary` no acredita nada de eso (revisión de la PR #70)."""
+    await nav.ir(base + "/ui/", espera=0.8)
+    datos = json.loads(await nav.js(JS_PRINCIPAL))
+    if not datos.get("hay_principal"):
+        return datos
+    await nav.js("(() => { document.activeElement && document.activeElement.blur(); window.scrollTo(0, 0); })()")
+    pasos_de_tab = 0
+    for pasos_de_tab in range(1, 61):
+        await tab(nav)
+        foco = json.loads(await nav.js("""JSON.stringify((() => { const e = document.activeElement;
+            return {href: e && e.getAttribute && e.getAttribute('href'), clase: e && e.className} })())"""))
+        if foco["href"] == datos["href"] and "primary" in (foco["clase"] or ""):
+            datos["alcanzable_con_tab_en"] = pasos_de_tab
+            break
+    else:
+        datos["alcanzable_con_tab_en"] = None
+    if activar and datos["alcanzable_con_tab_en"]:
+        for tipo, extra in (("keyDown", {"text": "\r"}), ("keyUp", {})):
+            await nav.cdp("Input.dispatchKeyEvent", type=tipo, key="Enter", code="Enter",
+                          windowsVirtualKeyCode=13, **extra)
+        await asyncio.sleep(1.2)
+        datos["tras_enter_va_a"] = await nav.js("location.pathname")
+    return datos
+
+
 async def inicio(nav, base) -> dict:
     await nav.ir(base + "/ui/", espera=1.0)
     return json.loads(await nav.js(JS_INICIO))
@@ -88,10 +137,22 @@ async def foto_en(nav, salida: Path, nombre: str, vistas=(ESCRITORIO,), tema="li
 
 
 async def caso_estados(nav, base, salida, datos):
+    # «Sigues N series» cuenta SERIES; el contador del menú sigue contando PETICIONES de Deseados.
+    datos["deseados_en_la_bd"] = {
+        "peticiones": int(sql("SELECT count(*) FROM wishlist WHERE status <> 'retirado';")),
+        "series_distintas": int(sql(
+            "SELECT count(DISTINCT coalesce(w.series_id, i.series_id)) FROM wishlist w "
+            "LEFT JOIN issues i ON i.id = w.issue_id WHERE w.status <> 'retirado';")),
+    }
     for v in (ESCRITORIO, MOVIL, MOVIL_MIN):
         await nav.vista(v, "light")
         datos[f"inicio_{v['nombre']}"] = await inicio(nav, base)
+        datos[f"inicio_{v['nombre']}"]["accion_principal"] = await comprobar_principal(nav, base)
         await nav.foto(salida / f"inicio-catalogo-previo--{v['nombre']}-{v['w']}x{v['h']}-claro.png")
+    await nav.ir(base + "/ui/", espera=1.0)   # la comprobación del botón principal termina en otra página
+    datos["menu_deseados"] = await nav.js("document.querySelector('#cnt-deseados').textContent")
+    datos["texto_del_paso_series"] = await nav.js(
+        "[...document.querySelectorAll('.step h3')].map(h => h.innerText).find(t => t.startsWith('Sigues'))")
     await nav.vista(ESCRITORIO, "dark")
     await inicio(nav, base)
     await nav.foto(salida / "inicio-catalogo-previo--escritorio-1280x800-oscuro.png")
@@ -110,6 +171,7 @@ async def caso_flujo(nav, base, salida, datos):
     async def paso(clave, nombre, vistas=(ESCRITORIO,)):
         estado = await inicio(nav, base)
         datos[clave] = estado
+        estado["accion_principal"] = await comprobar_principal(nav, base)
         for v in vistas:
             await nav.vista(v, "light")
             await nav.ir(base + "/ui/", espera=0.8)
