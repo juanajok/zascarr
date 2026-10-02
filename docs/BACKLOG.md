@@ -1054,6 +1054,8 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 - **Pruebas.** Matriz de la función pura (vacío; sin series con pendientes; todo configurado; sin aviso legal; BD degradada); la plantilla con cada estado.
 - **Riesgos.** Definir mal el origen de las cifras vuelve a producir contradicciones. La regla es una sola fuente de verdad.
 - **Dependencias.** V2, V3.
+- **Partición (2026-10-03):** V4 se entrega en dos PR, como pide el criterio 8 («antes de reutilizarlas»). **V4a** extrae las consultas **sin cambiar ninguna cifra**; **V4b** añade `PrimerosPasos` y el Inicio guiado.
+- **Notas de implementación de V4a (2026-10-03):** `services/resumen.py` (`resumen_biblioteca(db) → ResumenBiblioteca`, dataclass inmutable) con las cinco consultas movidas tal cual, **en el mismo orden** (los tests de `test_web_dashboard.py` fijan la cola y siguen **sin tocarse**); `web/dashboard.py` pasa a router fino. `porcentaje_completitud` sigue siendo `0` sin catálogo (idéntico a hoy): **distinguirlo de un 0 % real es V4b** (criterio 2). **No-regresión comprobada contra el router anterior:** 300 escenarios aleatorios (0-6 series, fuentes mezcladas, huecos, últimas) dan el mismo contexto de plantilla, campo a campo. Pruebas nuevas: `tests/test_resumen.py` (7). Sin cambios de plantilla, de CSS ni de HTML.
 
 **V5 — «Por revisar» compacto, agrupado y con selección por HTMX (P0, L)**
 
