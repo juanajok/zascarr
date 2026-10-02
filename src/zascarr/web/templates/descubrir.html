@@ -5,9 +5,9 @@
 <p class="subtitle">Busca un título en Comic Vine, AniList, Tebeosfera y GCD, y dalo de alta en tu biblioteca — sin esto, Deseados y la clasificación automática no tienen con qué comparar.</p>
 
 <input type="search" class="series-search" placeholder="Título de la serie…"
-       name="q"
+       name="q" aria-label="Título de la serie"{% if q %} value="{{ q }}"{% endif %}
        hx-get="/ui/descubrir/buscar"
-       hx-trigger="keyup changed delay:400ms"
+       hx-trigger="keyup changed delay:400ms{% if q %}, load{% endif %}"
        hx-target="#resultados-descubrir"
        hx-swap="innerHTML">
 <div id="resultados-descubrir" class="series-results"></div>

@@ -64,6 +64,35 @@ class TestIndex:
         assert "Descubrir" in r.text
 
 
+class TestIndexConBusquedaPrevia:
+    """V4: «Buscar una serie» del Inicio llega con `?q=` y la búsqueda se lanza al cargar."""
+
+    def test_con_q_prellena_la_caja_y_lanza_la_busqueda_al_cargar(self):
+        r = TestClient(app).get("/ui/descubrir", params={"q": "Batman"})
+        assert r.status_code == 200
+        assert 'value="Batman"' in r.text
+        assert 'hx-trigger="keyup changed delay:400ms, load"' in r.text
+        assert 'hx-get="/ui/descubrir/buscar"' in r.text
+
+    def test_sin_q_no_lanza_nada_al_cargar(self):
+        r = TestClient(app).get("/ui/descubrir")
+        assert 'hx-trigger="keyup changed delay:400ms"' in r.text
+        assert ", load" not in r.text
+        assert 'value="' not in r.text.split("series-search")[1].split(">")[0]
+
+    def test_q_en_blanco_cuenta_como_sin_q(self):
+        r = TestClient(app).get("/ui/descubrir", params={"q": "   "})
+        assert ", load" not in r.text
+
+    def test_q_se_escapa(self):
+        r = TestClient(app).get("/ui/descubrir", params={"q": '"><script>alert(1)</script>'})
+        assert "<script>alert(1)" not in r.text
+        assert "&lt;script&gt;" in r.text
+
+    def test_q_demasiado_larga_se_rechaza(self):
+        assert TestClient(app).get("/ui/descubrir", params={"q": "x" * 201}).status_code == 422
+
+
 class TestBuscar:
 
     def test_busca_y_renderiza_resultados(self):
