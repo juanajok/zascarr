@@ -42,29 +42,29 @@ PAGINA = """<!doctype html>
 
 <h2>Chips</h2>
 <div class="fila">
-{% for e, t in [("neutro","En cola"),("ok","Conectada"),("warn","Falló"),("amber","Sin resultados"),("info","Buscando")] %}{{ chip(e, t) }}{% endfor %}
-{{ chip("neutro", 0) }}
+{% for e, t in [("neutro","En cola"),("ok","Conectada"),("warn","Falló"),("amber","Sin resultados"),("info","Buscando")] %}{{ ui.chip(e, t) }}{% endfor %}
+{{ ui.chip("neutro", 0) }}
 </div>
 
 <h2>Tarjeta</h2>
 <div class="card"><h3>.card</h3><p>Comparte regla con las viñetas existentes (pendientes, deseados, biblioteca).</p></div>
 
 <h2>Grupo</h2>
-{% call grupo("Los Guardianes del Alba · Omnigold", 3) %}<div style="padding:14px 16px">Contenido del grupo.</div>{% endcall %}
-{% call grupo("Otros", 0) %}<div style="padding:14px 16px">Un grupo con recuento 0.</div>{% endcall %}
+{% call ui.grupo("Los Guardianes del Alba · Omnigold", 3) %}<div style="padding:14px 16px">Contenido del grupo.</div>{% endcall %}
+{% call ui.grupo("Otros", 0) %}<div style="padding:14px 16px">Un grupo con recuento 0.</div>{% endcall %}
 
 <h2>Avisos</h2>
-{{ aviso("nota", "Nota: la didascalia de siempre.") }}
-{{ aviso("info", "Información: todo está bien, solo te lo contamos.") }}
-{{ aviso("ok", "Hecho: se ha guardado.") }}
-{{ aviso("amber", "Atención: falta una fuente de búsqueda.") }}
-{{ aviso("warn", "Error: no se pudo conectar con el servidor.") }}
-{% call aviso("info") %}Con enlace: <a href="#">abre Ajustes</a>.{% endcall %}
+{{ ui.aviso("nota", "Nota: la didascalia de siempre.") }}
+{{ ui.aviso("info", "Información: todo está bien, solo te lo contamos.") }}
+{{ ui.aviso("ok", "Hecho: se ha guardado.") }}
+{{ ui.aviso("amber", "Atención: falta una fuente de búsqueda.") }}
+{{ ui.aviso("warn", "Error: no se pudo conectar con el servidor.") }}
+{% call ui.aviso("info") %}Con enlace: <a href="#">abre Ajustes</a>.{% endcall %}
 
 <h2>Estado vacío</h2>
-{{ estado_vacio("¡Todo clasificado!", "No queda nada por revisar.", ("Volver al inicio", "#")) }}
-{{ estado_vacio("No has ignorado nada", "Lo que ignores aparecerá aquí.") }}
-{{ estado_vacio("Sin resultados") }}
+{{ ui.estado_vacio("¡Todo clasificado!", "No queda nada por revisar.", ("Volver al inicio", "#")) }}
+{{ ui.estado_vacio("No has ignorado nada", "Lo que ignores aparecerá aquí.") }}
+{{ ui.estado_vacio("Sin resultados") }}
 
 <h2>Estado grande</h2>
 <div class="hero-state ok"><div class="big" aria-hidden="true">✓</div><div><h2>Todo bien</h2><p>Todo funciona.</p></div></div>
@@ -73,16 +73,16 @@ PAGINA = """<!doctype html>
 <div class="hero-state info"><div class="big" aria-hidden="true">i</div><div><h2>Información</h2><p>Para tu conocimiento.</p></div></div>
 
 <h2>Progreso</h2>
-{{ progreso(0, 100, "Sin empezar") }}
-{{ progreso(30, 100, "Leyendo archivos") }}
-{{ progreso(100, 100, "Terminado") }}
+{{ ui.progreso(0, 100, "Sin empezar") }}
+{{ ui.progreso(30, 100, "Leyendo archivos") }}
+{{ ui.progreso(100, 100, "Terminado") }}
 
 <h2>Aviso temporal (.toast)</h2>
 <div class="toast" role="status">Guardado. Se aplica al instante. <small>(En la app se desvanece solo por CSS.)</small></div>
 
 <h2>Región viva</h2>
 <p class="subtitle">Invisible: <code>aria-live="polite"</code> para lo que cambia tras una acción HTMX.</p>
-{{ region_viva("resultado") }}
+{{ ui.region_viva("resultado") }}
 </main></body></html>
 """
 

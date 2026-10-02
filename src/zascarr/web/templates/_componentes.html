@@ -1,6 +1,9 @@
-{#- Macros de componentes (V2). Disponibles en TODAS las plantillas (web/componentes.py::registrar):
-    {{ chip("ok", "Conectada") }}, {% call grupo("Título", 3) %}…{% endcall %}, etc.
-    El aspecto de cada estado lo decide web/componentes.py, no la plantilla que las usa.
+{#- Macros de componentes (V2). Disponibles en TODAS las plantillas como `ui.<macro>`
+    (web/componentes.py::registrar):
+    {{ ui.chip("ok", "Conectada") }}, {% call ui.grupo("Título", 3) %}…{% endcall %}, etc.
+    Van bajo UN espacio de nombres (`ui`) para no reservar nombres genéricos (`aviso`, `grupo`…)
+    en el contexto de todas las plantillas. El aspecto de cada estado lo decide
+    web/componentes.py, no la plantilla que las usa.
     Con autoescape: el texto que se pasa se escapa; para incluir enlaces usa la forma `call`. -#}
 
 {#- chip(estado, texto): etiqueta de estado. `estado` ∈ neutro | ok | warn | amber | info. -#}
