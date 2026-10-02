@@ -59,6 +59,7 @@
   --amber-bg:       #fdf0c4;
   --info-bg:        #dff1fa;
 
+  --side: 244px;                /* V3: ancho de la barra lateral */
   --radius-panel: 4px;
   --radius-pill:  999px;
   --gutter: clamp(14px, 2.2vw, 24px);
@@ -233,6 +234,156 @@ h1, h2, h3 {
   cursor: pointer;
 }
 .topnav .btn-logout:hover { border-color: var(--ink); color: var(--ink); }
+
+/* ── 3b. SHELL (V3): barra lateral en escritorio, barra inferior en móvil ─────
+   El MISMO marcado (templates/_componentes.html::menu, datos en web/menu.py) se presenta distinto
+   según el ancho. Las reglas de `.topnav` (sección 3) se conservan: se retiran en V14. ─────── */
+.skip {
+  position: absolute; left: 8px; top: -64px; z-index: 100;
+  background: var(--yellow); color: var(--on-yellow);
+  padding: 10px 14px; border: 3px solid var(--ink); font-weight: 700;
+}
+.skip:focus { top: 8px; }
+
+/* Solo para lectores de pantalla (p. ej. «por revisar» tras el número de un contador). */
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+.app {
+  display: grid; grid-template-columns: var(--side) 1fr;
+  min-height: 100vh; position: relative; z-index: 1;
+}
+.side {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 18px 14px;
+  background: var(--paper); border-right: 3px solid var(--ink);
+}
+.side .brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 8px 14px;
+  font-family: var(--font-display); font-size: 1.4rem; letter-spacing: .05em;
+  text-transform: uppercase; text-decoration: none; color: var(--ink);
+}
+.side .brand::before {
+  content: ""; width: 26px; height: 26px; flex: none;
+  border: 3px solid var(--ink); border-radius: 5px;
+  background: radial-gradient(var(--magenta) 1.4px, transparent 1.4px) 0 0 / 6px 6px, var(--yellow);
+  transform: rotate(-4deg);
+}
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-grupo { display: flex; flex-direction: column; gap: 2px; }
+.grp {
+  padding: 14px 10px 4px;
+  font-size: .875rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.nav-enlace {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 8px 12px;
+  border: 2px solid transparent; border-radius: var(--radius-panel);
+  text-decoration: none; font-weight: 700; font-size: .95rem;
+  color: var(--ink-soft);
+}
+.nav-enlace:hover { border-color: var(--ink); color: var(--ink); }
+.nav-enlace[aria-current="page"] {
+  background: var(--yellow); color: var(--on-yellow);
+  border-color: var(--ink); box-shadow: var(--shadow-ink-sm);
+}
+.nav-enlace .ico { width: 22px; text-align: center; font-size: 1.1rem; flex: none; }
+
+/* Contadores: marcadores `hidden` hasta que el fragmento los rellena (web/navegacion.py). El atributo
+   `hidden` no basta frente a `display` de autor, de ahí las reglas explícitas. */
+.badge {
+  margin-left: auto; min-width: 26px; padding: 1px 8px; text-align: center;
+  font-size: .875rem; font-weight: 800;
+  border: 2px solid var(--ink); border-radius: var(--radius-pill);
+  background: var(--paper); color: var(--ink);
+}
+.badge.hot { background: var(--hot); color: var(--on-hot); }
+.dot {
+  margin-left: auto; width: 14px; height: 14px; flex: none;
+  border: 2px solid var(--ink); border-radius: 50%; background: var(--yellow);
+}
+.badge[hidden], .dot[hidden], .nav-sondeo[hidden] { display: none; }
+
+.nav-mas, .nav-corto { display: none; }     /* solo en móvil */
+
+/* Dentro de la rejilla, `margin: 0 auto` hace que el elemento deje de estirarse y se encoja a su
+   contenido (cada página con un ancho distinto). Con `width: 100%` ocupa la columna hasta el máximo. */
+.app > .content { width: 100%; min-width: 0; }
+
+.side-foot {
+  margin-top: auto; padding-top: 14px; border-top: 2px dashed var(--ink-faint);
+}
+.side-foot .nav-logout { margin: 0; }
+.side-foot .btn-logout {
+  --btn-bg: transparent;
+  background: transparent; color: var(--ink-soft);
+  border-color: transparent; box-shadow: none; text-decoration: underline;
+  text-underline-offset: 3px; font-weight: 700;
+}
+.side-foot .btn-logout:hover {
+  border-color: var(--ink); color: var(--ink); transform: none; box-shadow: none;
+}
+
+/* El foco de teclado no puede quedar tapado por la barra inferior (WCAG 2.2, 2.4.11). */
+html { scroll-padding-bottom: 96px; }
+
+@media (max-width: 860px) {
+  .app { display: block; }
+  .side {
+    height: auto; overflow: visible; z-index: 30;
+    flex-direction: row; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-right: 0; border-bottom: 3px solid var(--ink);
+  }
+  .side .brand { padding: 0; font-size: 1.2rem; }
+  .side-foot { margin: 0; padding: 0; border: 0; }
+
+  /* Barra inferior: las entradas principales y «Más». Las demás están en el panel de «Más». */
+  .nav {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    /* Columnas iguales, pero nunca más estrechas que su etiqueta (a 320 px «Deseados» no cabe en 64). */
+    display: grid; grid-template-columns: repeat(5, minmax(max-content, 1fr)); gap: 0;
+    background: var(--paper); border-top: 3px solid var(--ink);
+  }
+  .nav-grupo { display: contents; }
+  .grp, .nav-secundaria { display: none; }
+  .nav-enlace {
+    position: relative; flex-direction: column; justify-content: center; gap: 2px;
+    min-height: 60px; padding: 6px 3px; text-align: center; font-size: .875rem; font-weight: 600;
+    border-width: 0; border-radius: 0;
+  }
+  .nav-enlace[aria-current="page"] { box-shadow: none; }
+  .nav-largo {                   /* el nombre completo sigue disponible para el lector de pantalla */
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
+  }
+  .nav-corto { display: inline; }
+  /* El contador va a la derecha del icono, no encima. */
+  .nav .badge {
+    position: absolute; top: 2px; left: calc(50% + 10px); margin: 0; min-width: 22px; padding: 0 5px;
+  }
+  .nav .dot { position: absolute; top: 8px; left: calc(50% + 12px); margin: 0; }
+
+  .nav-mas { display: block; position: relative; }
+  .nav-mas summary { list-style: none; cursor: pointer; }
+  .nav-mas summary::-webkit-details-marker { display: none; }
+  .nav-mas-activa > summary { background: var(--yellow); color: var(--on-yellow); }
+  .nav-mas-panel {
+    position: absolute; right: 0; bottom: 100%; min-width: 220px;
+    display: flex; flex-direction: column;
+    background: var(--paper); border: 3px solid var(--ink); box-shadow: var(--shadow-ink);
+  }
+  .nav-mas-panel .nav-enlace {
+    flex-direction: row; justify-content: flex-start; gap: 10px;
+    min-height: 48px; padding: 8px 14px; text-align: left; font-size: .95rem;
+  }
+
+  .content { padding-bottom: 112px; }
+}
 
 /* ── 4. CONTENIDO ────────────────────────────────────────────────────────── */
 .content {

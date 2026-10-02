@@ -38,6 +38,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Menú nuevo (V3).** La barra superior pasa a un menú lateral agrupado —*Mi colección* (Inicio, Por revisar,
+  Biblioteca, Duplicados), *Añadir* (Descubrir, Deseados) y *Sistema* (Estado, Ajustes)— y, en el móvil, a una barra
+  inferior con *Inicio, Revisar, Deseados, Estado* y *Más*, donde está el resto. Las direcciones de siempre no
+  cambian. Algunas pantallas cambian de nombre para coincidir con el menú: *Pendientes* → **Por revisar**,
+  *Lista de deseos* → **Deseados**, *Mi biblioteca* → **Duplicados**, *Dashboard* → **Inicio**. El menú muestra
+  cuántos archivos hay por revisar y cuántos deseos tienes, y marca **Estado** si ZascArr está abierto sin
+  contraseña; los números se cargan aparte, así que una base de datos caída no rompe el menú ni te echa de la
+  página. Hay un enlace «Saltar al contenido» para el teclado y el lector de pantalla.
 - **Textos legibles en cualquier pantalla y en los dos temas (V1).** El gris de los textos secundarios,
   el azul, el verde y el rojo usados como texto, y el foco no llegaban al contraste mínimo (4,5:1); en el
   tema oscuro los botones amarillos («Guardar», «Buscar»…) llevaban el texto casi ilegible (1,2:1) y las

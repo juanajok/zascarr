@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import Series, Wishlist, WishlistStatus
@@ -20,6 +20,13 @@ from zascarr.models import Series, Wishlist, WishlistStatus
 class WishlistService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def count_active(self) -> int:
+        """Deseos activos: los que lista /ui/wishlist (los `retirado` no se muestran; D8)."""
+        return (await self.db.execute(
+            select(func.count()).select_from(Wishlist)
+            .where(Wishlist.status != WishlistStatus.RETIRADO)
+        )).scalar_one()
 
     async def search_series(self, query: str, limit: int = 20) -> list[Series]:
         """Búsqueda manual para elegir qué añadir — mismo criterio simple

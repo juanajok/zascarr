@@ -1,0 +1,73 @@
+{
+  "caso": "sesion",
+  "base": "http://127.0.0.1:18000",
+  "navegador": "Chrome/154.0.8037.92",
+  "sin_sesion_redirige_a": "/login?next=%2Fui%2Fpendientes",
+  "pagina_de_login_con_menu": false,
+  "tras_entrar": {
+    "ruta": "/ui/pendientes",
+    "menu": {
+      "href_en_dom": [
+        "/ui/",
+        "/ui/pendientes",
+        "/ui/biblioteca",
+        "/ui/auditoria",
+        "/ui/descubrir",
+        "/ui/wishlist",
+        "/estado",
+        "/ui/ajustes"
+      ],
+      "enlaces_visibles": [
+        "/ui/",
+        "/ui/pendientes",
+        "/ui/biblioteca",
+        "/ui/auditoria",
+        "/ui/descubrir",
+        "/ui/wishlist",
+        "/estado",
+        "/ui/ajustes"
+      ],
+      "actuales_en_dom": [
+        "/ui/pendientes"
+      ],
+      "actuales_visibles": [
+        "/ui/pendientes"
+      ],
+      "pendientes": {
+        "texto": "6 por revisar",
+        "oculto": false
+      },
+      "deseados": {
+        "texto": "5 deseados",
+        "oculto": false
+      },
+      "estado": {
+        "oculto": true
+      },
+      "scrollWidth": 1280,
+      "clientWidth": 1280,
+      "ruta": "/ui/pendientes",
+      "barra_inferior": {
+        "abajo": false,
+        "top": 77,
+        "alto": 518
+      }
+    }
+  },
+  "boton_cerrar_sesion": true,
+  "sesion_caducada": {
+    "peticiones_nuevas": 1,
+    "respuestas": [
+      {
+        "estado": 204
+      }
+    ],
+    "la_pagina_no_cambio": true,
+    "ruta": "/ui/pendientes",
+    "enlaces_intactos": true,
+    "contadores_conservados": true,
+    "texto_de_la_pagina_contiene_login": false
+  },
+  "navegar_sin_sesion": "/login",
+  "tras_cerrar_sesion": "/login"
+}

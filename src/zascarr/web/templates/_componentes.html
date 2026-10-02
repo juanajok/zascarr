@@ -52,3 +52,36 @@
 {% macro region_viva(id) -%}
 <div id="{{ id }}" class="region-viva" aria-live="polite" aria-atomic="true">{% if caller is defined %}{{ caller() }}{% endif %}</div>
 {%- endmacro %}
+
+{#- menu(ruta): navegación principal (V3). Los enlaces están SIEMPRE en el marcado (no los trae ningún
+    fragmento): los contadores son marcadores `hidden` que rellena después `GET /ui/_nav/estado` por
+    intercambio fuera de banda, con `hx-swap="none"`, de modo que nada puede reemplazar un enlace.
+    Un solo origen de datos (web/menu.py) para tres presentaciones: barra lateral (escritorio), barra
+    inferior con las entradas principales (móvil) y el panel «Más» con el resto (móvil). Las entradas
+    secundarias salen dos veces en el DOM (barra y panel) y CSS muestra solo una por tamaño de
+    pantalla: la que está oculta no existe para el lector de pantalla. -#}
+{% macro menu(ruta) -%}
+{%- set activa = entrada_activa(ruta) -%}
+{%- macro enlace(e, extra="") -%}
+<a href="{{ e.url }}" class="nav-enlace{{ extra }}"{% if e.clave == activa %} aria-current="page"{% endif %}><span class="ico" aria-hidden="true">{{ e.icono }}</span><span class="nav-texto">{% if e.corta %}<span class="nav-largo">{{ e.etiqueta }}</span><span class="nav-corto" aria-hidden="true">{{ e.corta }}</span>{% else %}{{ e.etiqueta }}{% endif %}</span>{% if e.contador == "estado" %}<span id="cnt-estado" class="dot" hidden></span>{% elif e.contador %}<span id="cnt-{{ e.contador }}" class="badge{% if e.contador == "pendientes" %} hot{% endif %}" hidden></span>{% endif %}</a>
+{%- endmacro -%}
+<nav class="nav" aria-label="Navegación principal">
+  {%- for g in GRUPOS %}
+  <div class="nav-grupo" role="group" aria-label="{{ g }}">
+    <span class="grp" aria-hidden="true">{{ g }}</span>
+    {%- for e in ENTRADAS if e.grupo == g %}
+    {{ enlace(e, "" if e.movil_principal else " nav-secundaria") }}
+    {%- endfor %}
+  </div>
+  {%- endfor %}
+  <details class="nav-mas{% if activa and not (ENTRADAS | selectattr("clave", "equalto", activa) | first).movil_principal %} nav-mas-activa{% endif %}">
+    <summary class="nav-enlace"><span class="ico" aria-hidden="true">⋯</span><span class="nav-texto">Más</span></summary>
+    <div class="nav-mas-panel">
+      {%- for e in ENTRADAS if not e.movil_principal %}
+      {{ enlace(e) }}
+      {%- endfor %}
+    </div>
+  </details>
+  <span class="nav-sondeo" hidden hx-get="/ui/_nav/estado" hx-trigger="load, every 30s" hx-swap="none"></span>
+</nav>
+{%- endmacro %}

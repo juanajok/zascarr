@@ -1,0 +1,107 @@
+{
+  "caso": "degradado",
+  "base": "http://127.0.0.1:18000",
+  "navegador": "Chrome/154.0.8037.92",
+  "estado_con_arranque_degradado": {
+    "href_en_dom": [
+      "/ui/",
+      "/ui/pendientes",
+      "/ui/biblioteca",
+      "/ui/auditoria",
+      "/ui/descubrir",
+      "/ui/wishlist",
+      "/estado",
+      "/ui/ajustes"
+    ],
+    "enlaces_visibles": [
+      "/ui/",
+      "/ui/pendientes",
+      "/ui/biblioteca",
+      "/ui/auditoria",
+      "/ui/descubrir",
+      "/ui/wishlist",
+      "/estado",
+      "/ui/ajustes"
+    ],
+    "actuales_en_dom": [
+      "/estado"
+    ],
+    "actuales_visibles": [
+      "/estado"
+    ],
+    "pendientes": {
+      "texto": "",
+      "oculto": true
+    },
+    "deseados": {
+      "texto": "",
+      "oculto": true
+    },
+    "estado": {
+      "oculto": true
+    },
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "ruta": "/estado",
+    "barra_inferior": {
+      "abajo": false,
+      "top": 77,
+      "alto": 517
+    }
+  },
+  "texto_de_estado": "ESTADO\n\nSemáforos en vez de JSON crudo — se actualiza solo cada 10s.\n\nError\nBase de datos, Transmission, aMule, VPN\nAVISOS\nFICHERO /RUN/VPN-STATE/WG0.JSON AUSENTE — EL HOST AÚN NO HA ESCRITO EL ESTADO",
+  "peticiones_al_fragmento": 1,
+  "respuestas_al_fragmento": [
+    {
+      "estado": 204
+    }
+  ],
+  "estado_degradado_movil": {
+    "href_en_dom": [
+      "/ui/",
+      "/ui/pendientes",
+      "/ui/biblioteca",
+      "/ui/auditoria",
+      "/ui/descubrir",
+      "/ui/wishlist",
+      "/estado",
+      "/ui/ajustes"
+    ],
+    "enlaces_visibles": [
+      "/ui/",
+      "/ui/pendientes",
+      "/ui/wishlist",
+      "/estado",
+      "MAS",
+      "/ui/biblioteca",
+      "/ui/auditoria",
+      "/ui/descubrir",
+      "/ui/ajustes"
+    ],
+    "actuales_en_dom": [
+      "/estado"
+    ],
+    "actuales_visibles": [
+      "/estado"
+    ],
+    "pendientes": {
+      "texto": "",
+      "oculto": true
+    },
+    "deseados": {
+      "texto": "",
+      "oculto": true
+    },
+    "estado": {
+      "oculto": true
+    },
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "ruta": "/estado",
+    "barra_inferior": {
+      "abajo": true,
+      "top": 778,
+      "alto": 66
+    }
+  }
+}
