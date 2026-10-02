@@ -1,0 +1,134 @@
+{
+  "caso": "estados",
+  "base": "http://127.0.0.1:18000",
+  "navegador": "Chrome/154.0.8037.92",
+  "inicio_escritorio": {
+    "ruta": "/ui/",
+    "subtitulo": "Miramos tu disco el 3 de octubre de 2026 y encontramos 14 tebeos. Ahora ZascArr tiene registrados 13.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "siguiente",
+        "titulo": "Revisa 6 tebeos que no hemos sabido clasificar \ni\nToca ahora",
+        "detalle": "Puedes decirnos de qué serie son, uno a uno.",
+        "boton": "Revisar ahora →",
+        "primario": true
+      },
+      {
+        "clase": "hecho",
+        "titulo": "Sigues 5 series \n✓\nHecho",
+        "detalle": "Están en Deseados.",
+        "boton": "Buscar más",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Conecta cómo descargar Opcional",
+        "detalle": "Solo si quieres que ZascArr busque lo que te falta. Viene desactivado: lo decides tú.",
+        "boton": "Configurar",
+        "primario": false
+      }
+    ],
+    "plegado": false,
+    "botones_primarios": 1,
+    "hay_metricas": true,
+    "metricas": [
+      "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 13 registrados ahora",
+      "3 · SERIES EN LA BIBLIOTECA · 2 con archivos",
+      "6 · POR REVISAR · tebeos sin clasificar →",
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga el recuento de números de Comic Vine. · 3 series sin recuento: de ellas no sabemos qué falta."
+    ],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 1280,
+    "clientWidth": 1280
+  },
+  "inicio_movil": {
+    "ruta": "/ui/",
+    "subtitulo": "Miramos tu disco el 3 de octubre de 2026 y encontramos 14 tebeos. Ahora ZascArr tiene registrados 13.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "siguiente",
+        "titulo": "Revisa 6 tebeos que no hemos sabido clasificar \ni\nToca ahora",
+        "detalle": "Puedes decirnos de qué serie son, uno a uno.",
+        "boton": "Revisar ahora →",
+        "primario": true
+      },
+      {
+        "clase": "hecho",
+        "titulo": "Sigues 5 series \n✓\nHecho",
+        "detalle": "Están en Deseados.",
+        "boton": "Buscar más",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Conecta cómo descargar Opcional",
+        "detalle": "Solo si quieres que ZascArr busque lo que te falta. Viene desactivado: lo decides tú.",
+        "boton": "Configurar",
+        "primario": false
+      }
+    ],
+    "plegado": false,
+    "botones_primarios": 1,
+    "hay_metricas": true,
+    "metricas": [
+      "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 13 registrados ahora",
+      "3 · SERIES EN LA BIBLIOTECA · 2 con archivos",
+      "6 · POR REVISAR · tebeos sin clasificar →",
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga el recuento de números de Comic Vine. · 3 series sin recuento: de ellas no sabemos qué falta."
+    ],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 390,
+    "clientWidth": 390
+  },
+  "inicio_movil320": {
+    "ruta": "/ui/",
+    "subtitulo": "Miramos tu disco el 3 de octubre de 2026 y encontramos 14 tebeos. Ahora ZascArr tiene registrados 13.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "siguiente",
+        "titulo": "Revisa 6 tebeos que no hemos sabido clasificar \ni\nToca ahora",
+        "detalle": "Puedes decirnos de qué serie son, uno a uno.",
+        "boton": "Revisar ahora →",
+        "primario": true
+      },
+      {
+        "clase": "hecho",
+        "titulo": "Sigues 5 series \n✓\nHecho",
+        "detalle": "Están en Deseados.",
+        "boton": "Buscar más",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Conecta cómo descargar Opcional",
+        "detalle": "Solo si quieres que ZascArr busque lo que te falta. Viene desactivado: lo decides tú.",
+        "boton": "Configurar",
+        "primario": false
+      }
+    ],
+    "plegado": false,
+    "botones_primarios": 1,
+    "hay_metricas": true,
+    "metricas": [
+      "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 13 registrados ahora",
+      "3 · SERIES EN LA BIBLIOTECA · 2 con archivos",
+      "6 · POR REVISAR · tebeos sin clasificar →",
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga el recuento de números de Comic Vine. · 3 series sin recuento: de ellas no sabemos qué falta."
+    ],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 320,
+    "clientWidth": 320
+  }
+}
