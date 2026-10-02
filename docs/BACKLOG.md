@@ -997,6 +997,7 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 - **Fuera de alcance.** Cambiar la paleta o la tipografía de cartel.
 - **Dependencias.** Ninguna. Es la primera por ser barata y no destructiva.
 - **Verificación.** Capturas antes/después de las siete pantallas; revisión en navegador real contra Postgres real (práctica del repo).
+- **Notas de implementación de V1 (2026-10-02):** solo `web.css` + `tests/test_web_css_contraste.py` (77 casos); **ninguna plantilla**. **(1)** La prueba lee la hoja, resuelve `var()`, `#hex` y `color-mix()` y calcula el contraste de **todo par que la hoja determina** (550 pares entre claro y oscuro, incluidos los fondos de contexto `--paper`, `--paper-2`, `--caption-bg` y las dos mezclas de `color-mix`), exigiendo **4,5:1 a todo texto** (más estricto que el 3:1 del texto grande, a propósito); 3:1 para foco, bordes e iconos. Contra el CSS anterior **66 de 77 casos fallan**. **(2)** Lo que la medición destapó y la ficha no decía: en oscuro los botones amarillos llevaban **texto claro (1,23:1)** porque `--ink` es claro y el color venía de otra regla (`button` + `--btn-bg`): un recorrido regla a regla no lo veía, el par `--on-yellow` lo arregla; insignias verde/rojo en oscuro a 2,31:1 y 2,89:1; foco cyan a 2,84:1. **(3)** Añadidos más allá de la lista de la ficha, necesarios para cumplirla: `--on-yellow`, los pares sólidos `--ok-solid`/`--warn-solid` con su `--on-*`, el par `--hot`/`--on-hot` (el de la maqueta daba 3,38:1 en oscuro; aún sin clase que lo use, lo estrena V3), el color de `::placeholder`, `✓` y borde discontinuo para no depender solo del color, y borde de tinta en los puntos de estado. **(4)** La paleta y la tipografía de cartel no cambian: los cinco rellenos conservan su valor (lo comprueba la prueba). **(5)** Antes/después en `docs/design/ui-v1/` (9 capturas + tabla de contraste calculada). **(6)** **Efecto colateral medido:** el texto mínimo de 14 px empeora en 25 px el desborde horizontal de Deseados en móvil (731 → 756 px); ya desbordaban antes Deseados, la ficha de serie (413) y el aviso legal (409): se registra en V13, no se arregla en V1.
 
 **V2 — Componentes CSS y macros Jinja (P0, M)**
 
@@ -1193,7 +1194,7 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Historia.** Como coleccionista que usa el móvil o la tablet en el sofá, quiero que todo funcione en pantalla pequeña, para revisar y aprobar sin ampliar.
 - **Criterios de aceptación.**
   1. Verificado a 360, 390 y 414 px y en tablet (768 px), en vertical y horizontal, y en el **Chromium de la propia Pi**.
-  2. Sin desbordamiento horizontal en ninguna pantalla; Por revisar en una columna.
+  2. Sin desbordamiento horizontal en ninguna pantalla; Por revisar en una columna. **Medido en V0/V1 a 390 px: ya desbordan Deseados (731 → 756 px tras V1), la ficha de serie (413) y el aviso legal en texto (409)** (`docs/design/ui-v1/README.md`).
   3. Objetivos táctiles ≥ 24×24 px (WCAG 2.2 AA) y los botones principales con tamaño cómodo.
   4. **Tras cada intercambio HTMX** el foco no se pierde y el resultado se anuncia (`aria-live`); navegación completa solo con teclado.
   5. Respeta `prefers-reduced-motion` y `prefers-color-scheme`.

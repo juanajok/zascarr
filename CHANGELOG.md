@@ -38,6 +38,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Textos legibles en cualquier pantalla y en los dos temas (V1).** El gris de los textos secundarios,
+  el azul, el verde y el rojo usados como texto, y el foco no llegaban al contraste mínimo (4,5:1); en el
+  tema oscuro los botones amarillos («Guardar», «Buscar»…) llevaban el texto casi ilegible (1,2:1) y las
+  insignias verdes y rojas tampoco llegaban. Ahora todo texto cumple 4,5:1 en claro y oscuro, el texto
+  mínimo es de 14 px, los campos y botones miden al menos 40 px y las casillas 24 px. «Lo tienes» en la
+  ficha de serie lleva ✓ además del color. La paleta y la tipografía no cambian; solo se separa el color de
+  relleno del de texto. Una prueba nueva (`tests/test_web_css_contraste.py`) lo comprueba y falla si
+  alguien vuelve a usar un color de relleno como texto.
 - La regla de contraseña (mínimo 12, aviso por debajo de 15) pasa de Ajustes a un
   servicio compartido con el instalador. Sin cambios de comportamiento en Ajustes.
 
