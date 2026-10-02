@@ -17,6 +17,34 @@ DATOS="${UI_BASE_DATOS:-}"
 
 die() { echo "ensayo.sh: $*" >&2; exit 1; }
 
+# Ruta ESCRITA frente a ruta EFECTIVA (la misma distinción que A9): `mkdir -p`, `: >` y los
+# montajes de Docker SIGUEN los enlaces simbólicos, así que comparar el texto de la ruta no basta.
+# Se valida ANTES de crear ninguna carpeta ni marca.
+comprobar_rutas_efectivas() {
+    local real="$1" sub ruta efectiva enlace
+    # La carpeta de ensayo en sí no puede llegar por un enlace (ni ella ni ningún padre).
+    if [[ "$(realpath -m "${DATOS}")" != "$(realpath -m -s "${DATOS}")" ]]; then
+        die "UI_BASE_DATOS pasa por un enlace simbólico: usa la ruta real."
+    fi
+    # Cada subruta que se va a crear, marcar o montar: ni es un enlace (tampoco roto) ni su
+    # destino efectivo sale de la carpeta de ensayo.
+    for sub in data data/postgres data/redis data/covers data/vpn-state lib lib/.ui-baseline \
+               dl .env .ui-baseline .config.json; do
+        ruta="${real}/${sub}"
+        if [[ -L "${ruta}" ]]; then
+            die "${ruta} es un enlace simbólico (hacia $(readlink "${ruta}")): no se acepta en un entorno de ensayo."
+        fi
+        efectiva="$(realpath -m "${ruta}")"
+        [[ "${efectiva}" == "${real}/"* ]] || die "${ruta} resuelve a ${efectiva}, fuera de ${real}."
+    done
+    # Y ningún enlace dentro (`find -type l` también ve los rotos): un `lib/_Unsorted` enlazado
+    # haría que `sembrar.py` escribiera fuera.
+    if [[ -d "${real}" ]]; then
+        enlace="$(find "${real}" -maxdepth 4 -type l -print -quit 2>/dev/null || true)"
+        [[ -z "${enlace}" ]] || die "hay un enlace simbólico dentro del entorno de ensayo: ${enlace}"
+    fi
+}
+
 comprobar_destino() {
     [[ -n "${DATOS}" ]] || die "falta UI_BASE_DATOS (carpeta NUEVA o ya creada por este script)."
     [[ "${DATOS}" = /* ]] || die "UI_BASE_DATOS debe ser una ruta absoluta."
@@ -33,6 +61,7 @@ comprobar_destino() {
             die "${real} existe, no está vacía y no es un entorno de ensayo (falta .ui-baseline)."
         fi
     fi
+    comprobar_rutas_efectivas "${real}"
     DATOS="${real}"
 }
 
@@ -45,8 +74,9 @@ dc() {
 comprobar_compose() {
     dc config --format json > "${DATOS}/.config.json" || die "no se pudo resolver el compose de ensayo."
     python3 - "${DATOS}" "${PUERTO}" <<'PY' || die "el compose de ensayo no está aislado (ver arriba)."
-import json, sys
+import json, os, sys
 datos, puerto = sys.argv[1], int(sys.argv[2])
+base = os.path.realpath(datos)
 cfg = json.load(open(f"{datos}/.config.json"))
 errores = []
 if cfg.get("name") != "zascarr-uibase":
@@ -62,8 +92,9 @@ for nombre, s in cfg["services"].items():
             errores.append(f"{nombre}: publica {host}:{pub} (solo se permite 127.0.0.1:{puerto} en zascarr)")
     for v in s.get("volumes", []):
         src = v.get("source", "")
-        if v.get("type") == "bind" and not src.startswith(datos + "/"):
-            errores.append(f"{nombre}: monta {src}, fuera de {datos}")
+        efectiva = os.path.realpath(src)   # destino REAL: sigue los enlaces simbólicos
+        if v.get("type") == "bind" and not (efectiva == base or efectiva.startswith(base + os.sep)):
+            errores.append(f"{nombre}: monta {src} (efectivo {efectiva}), fuera de {base}")
 for r in cfg.get("networks", {}).values():
     if (r.get("name") or "").startswith("zascarr_"):
         errores.append(f"red global: {r.get('name')}")
@@ -71,6 +102,18 @@ if errores:
     print("\n".join("  - " + e for e in errores), file=sys.stderr)
     sys.exit(1)
 PY
+}
+
+# El nombre de proyecto `zascarr-uibase` es único por máquina: si OTRA carpeta de datos (otra
+# sesión, otro worktree) tiene el stack en marcha, `dc` o `bajar` desde ésta lo tocarían igual.
+# Se exige que los montajes del stack vivo cuelguen de ESTA carpeta de ensayo.
+comprobar_propietario() {
+    local montajes
+    docker ps -a --format '{{.Names}}' | grep -qx zascarr-uibase-app || return 0
+    montajes="$(docker inspect zascarr-uibase-app --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' 2>/dev/null)" \
+        || die "no pude comprobar de quién es el stack zascarr-uibase en marcha; no lo toco."
+    grep -q "^${DATOS}/" <<< "${montajes}" \
+        || die "el stack zascarr-uibase en marcha pertenece a OTRA carpeta de datos; no lo toco."
 }
 
 preparar() {
@@ -118,8 +161,8 @@ ENV
 case "${1:-}" in
     preparar) comprobar_destino; preparar ;;
     dc)       shift; comprobar_destino; [[ -f "${DATOS}/.env" ]] || die "no hay entorno preparado en ${DATOS}."
-              comprobar_compose; dc "$@" ;;
+              comprobar_compose; comprobar_propietario; dc "$@" ;;
     bajar)    comprobar_destino; [[ -f "${DATOS}/.env" ]] || die "no hay entorno preparado en ${DATOS}."
-              dc down ;;
+              comprobar_compose; comprobar_propietario; dc down ;;
     *)        sed -n '2,10p' "${BASH_SOURCE[0]}"; exit 2 ;;
 esac

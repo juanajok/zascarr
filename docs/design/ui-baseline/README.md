@@ -43,6 +43,23 @@ arrancar si el puerto 18000 está ocupado o si ya hay un stack de ensayo. **Toda
 contenedores se hacen con `ensayo.sh dc …`** (que repite esas comprobaciones); el procedimiento no
 contiene ningún `docker stop|start|restart <nombre>` global.
 
+**Ruta escrita frente a ruta efectiva** (la misma distinción que A9): `mkdir -p`, `: >` y los montajes
+de Docker **siguen los enlaces simbólicos**, así que comparar el texto de una ruta no basta. Antes de
+crear ninguna carpeta o marca, `ensayo.sh` rechaza: una `UI_BASE_DATOS` que pase por un enlace; cualquier
+subruta que vaya a crearse o montarse (`data`, `lib`, `dl`, la marca…) que sea un enlace —también roto— o
+cuyo destino efectivo salga de la carpeta de ensayo; y **cualquier enlace dentro** del entorno (un
+`lib/_Unsorted` enlazado haría que `sembrar.py` escribiera fuera). Además, el Compose resuelto se valida
+con el destino **real** de cada montaje, no con su texto.
+
+**Un solo ensayo por máquina.** El proyecto `zascarr-uibase` es único: si otra carpeta de datos (otra
+sesión, otro *worktree*) tiene su stack en marcha, `preparar` se niega (puerto ocupado / stack existente)
+y `dc` y `bajar` comprueban que los montajes del stack vivo cuelguen de **esta** carpeta, o abortan sin
+tocarlo. `bajar` valida el Compose resuelto igual que cualquier otra operación antes de ejecutar `down`.
+Regresión: `tests/test_ensayo_aislamiento.py` (16 casos, con un `docker` de pega que registra cada
+llamada; comprueban qué **no** se ejecuta y qué **no** se escribe fuera: `lib` enlazada a una carpeta
+externa no recibe ni marca ni archivos, un Compose no aislado no llega a `down`, un stack ajeno no se
+toca).
+
 Las dos herramientas que escriben o hacen `POST` se protegen además por su cuenta:
 
 - `sembrar.py` **se niega a escribir** salvo que se cumplan las tres cosas: `ZASCARR_UI_BASELINE=ensayo`
@@ -56,7 +73,7 @@ integraciones de descarga desactivadas (por defecto) y sus URL apuntadas a `127.
 contenedor, no el equipo) para que ni se intente tocar un Transmission o un aMule. El aviso legal se
 acepta **a mano** durante la captura (con un `POST` real), como lo haría un usuario.
 
-Comprobado antes de publicarlo: los siete rechazos de carpeta de datos, los dos de `sembrar.py` (base
+Comprobado antes de publicarlo: los siete rechazos de carpeta de datos (más los de enlaces, arriba), los dos de `sembrar.py` (base
 no vacía; sin marca de entorno) y los dos de `capturar.py` (puerto 8000; destino no local); y el
 procedimiento completo se **repitió con este stack** (no con el anterior): resultados HTTP y cuerpo del
 409 idénticos, y 31 de las 37 capturas idénticas píxel a píxel. De las otras 6, cinco difieren solo en
