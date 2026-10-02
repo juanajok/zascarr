@@ -1626,7 +1626,6 @@ registra cada petición a nivel **INFO con la URL completa**.
   verdad (configurar `logging`/structlog con ellos) o se retiran. Mientras tanto,
   la documentación no debería prometer que cambian el nivel de log.
 
-<<<<<<< HEAD
 ## Deuda técnica registrada (E6: trabajos de fondo con la BD degradada, 2026-10-01)
 
 `lifespan` levantaba la app degradada (E6: `/api/health` responde y `/ui/*` falla
@@ -1643,7 +1642,7 @@ poder hacer nada útil. La interfaz se degradaba; los trabajos no.
   Postgres** (apunta a un puerto muerto, la conexión se rechaza al instante), y la
   contraprueba (con la BD disponible el aviso **no** aparece) se salta sin
   `TEST_DATABASE_URL`.
-=======
+
 ## Deuda técnica registrada (B15: asignación manual ante duplicados de edición, 2026-10-01)
 
 **B15: asignación manual tolerante a duplicados de edición.** Encontrado en la
@@ -1678,7 +1677,6 @@ editorial), que es donde se decidirá si el esquema debe permitir esas dos filas
 impedirlas con una restricción. SQLAlchemy documenta que los métodos de resultado
 que exigen **una sola fila** lanzan `MultipleResultsFound` si hay más de una
 («Using the ORM Result methods», *SQLAlchemy Core exceptions*).
->>>>>>> 2453d3b (BACKLOG: registra la deuda de B15 manual y consolida dos notas obsoletas)
 
 ## Benchmarking competitivo (2026-09-21)
 
