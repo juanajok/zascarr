@@ -41,15 +41,23 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - **Textos legibles en cualquier pantalla y en los dos temas (V1).** El gris de los textos secundarios,
   el azul, el verde y el rojo usados como texto, y el foco no llegaban al contraste mínimo (4,5:1); en el
   tema oscuro los botones amarillos («Guardar», «Buscar»…) llevaban el texto casi ilegible (1,2:1) y las
-  insignias verdes y rojas tampoco llegaban. Ahora todo texto cumple 4,5:1 en claro y oscuro, el texto
-  mínimo es de 14 px, los campos y botones miden al menos 40 px y las casillas 24 px. «Lo tienes» en la
+  insignias verdes y rojas tampoco llegaban. Se corrigen esos pares y los demás que la medición
+  identificó; una prueba comprueba 4,5:1 en los pares de color que la hoja declara, en claro y oscuro (no
+  certifica todo el renderizado: se complementa con la revisión en navegador). El texto mínimo es de 14 px,
+  los campos y botones miden al menos 40 px y las casillas 24 px. «Lo tienes» en la
   ficha de serie lleva ✓ además del color. La paleta y la tipografía no cambian; solo se separa el color de
-  relleno del de texto. Una prueba nueva (`tests/test_web_css_contraste.py`) lo comprueba y falla si
-  alguien vuelve a usar un color de relleno como texto.
+  relleno del de texto. La prueba nueva (`tests/test_web_css_contraste.py`) también falla si alguien
+  vuelve a usar un color de relleno como texto o deja un color que no sabe resolver.
 - La regla de contraseña (mínimo 12, aviso por debajo de 15) pasa de Ajustes a un
   servicio compartido con el instalador. Sin cambios de comportamiento en Ajustes.
 
 ### Corregido
+
+- **La lista de deseos ya no se sale de la pantalla en el móvil.** Cada fila no podía partirse en varias
+  líneas, así que título, estado y botones desbordaban (la página llegaba a 731 px de ancho en un móvil de
+  390 px). Ahora lo que no cabe pasa a la línea siguiente, sin ocultar nada: a 390 y a 320 px la página
+  ya no desborda. Las demás pantallas con desborde (ficha de serie, texto del aviso legal) quedan para la
+  revisión del móvil (V13).
 
 - **`BASE_URL` y `ALLOWED_HOSTS` puestos en el `.env` ahora llegan a la aplicación.**
   Desde la 1.15.0 el changelog y `SECURITY.md` indican «añade `raspberrypi.local` a

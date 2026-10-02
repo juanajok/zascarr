@@ -12,8 +12,17 @@ Umbrales (WCAG 2.2, criterio 1.4.3 y 1.4.11):
   · tamaño mínimo de texto informativo ... 14 px (decisión de producto, no de WCAG)
   · objetivo táctil de controles ......... 40 px; casillas y radios 24 px
 
-Qué NO prueba: el contraste real renderizado (tramas, sombras, imágenes) ni el color de texto que
-fije una plantilla en línea (hoy ninguna lo hace; ver `test_las_plantillas_no_fijan_colores`).
+ALCANCE (qué garantiza esta prueba y qué no):
+  · Es una HEURÍSTICA POR REGLAS: toma cada regla de la hoja que fija `color` (con su `background`
+    o `--btn-bg` si los tiene) y, si no tiene fondo propio, lo contrasta con los fondos de contexto
+    de `FONDOS_DE_CONTEXTO`. NO resuelve la cascada ni los colores heredados del DOM, ni sabe sobre
+    qué fondo cae realmente cada elemento.
+  · Comprueba los pares que la hoja DECLARA; no certifica el contraste real renderizado (tramas,
+    sombras, imágenes) ni el color de texto que fije una plantilla en línea (hoy ninguna lo hace;
+    ver `test_las_plantillas_no_fijan_colores`). Se complementa con la verificación en navegador.
+  · NADA SE OMITE EN SILENCIO: un color o un fondo que el resolvedor no entiende (`hsl()`,
+    `oklch()`, `rgba()`, degradados con texto…) HACE FALLAR la prueba, salvo que esté en
+    `EXCLUSIONES` con su motivo. Esa lista está vacía a propósito.
 """
 from __future__ import annotations
 
@@ -31,8 +40,9 @@ NO_TEXTO = 3.0
 
 
 # ── lectura de la hoja ────────────────────────────────────────────────────────────────────
-def _hoja() -> str:
-    return re.sub(r"/\*.*?\*/", "", CSS_RUTA.read_text(encoding="utf-8"), flags=re.S)
+def _hoja(css: str | None = None) -> str:
+    texto = CSS_RUTA.read_text(encoding="utf-8") if css is None else css
+    return re.sub(r"/\*.*?\*/", "", texto, flags=re.S)
 
 
 def _variables(bloque: str) -> dict[str, str]:
@@ -48,10 +58,10 @@ def _temas() -> dict[str, dict[str, str]]:
     return {"claro": raiz, "oscuro": {**raiz, **_variables(oscuro.group(1))}}
 
 
-def _reglas() -> list[tuple[str, dict[str, str]]]:
+def _reglas(css: str | None = None) -> list[tuple[str, dict[str, str]]]:
     """(selector, declaraciones) de cada regla, incluidas las de @media."""
     salida = []
-    for selector, cuerpo in re.findall(r"([^{}@]+)\{([^{}]*)\}", _hoja()):
+    for selector, cuerpo in re.findall(r"([^{}@]+)\{([^{}]*)\}", _hoja(css)):
         decl = {k.strip(): v.strip() for k, v in re.findall(r"([\w-]+)\s*:\s*([^;]+);?", cuerpo)}
         salida.append((" ".join(selector.split()), decl))
     return salida
@@ -127,14 +137,23 @@ FONDOS_DE_CONTEXTO = [
 FG_BASE_DEL_BOTON = "var(--ink)"   # `button { color: var(--ink) }`; --btn-bg solo cambia el fondo
 
 
-def _pares_de_la_hoja() -> list[tuple[str, str, str, str, str]]:
-    """(tema, selector, fg, bg, origen) de todos los pares que la hoja determina."""
+# Pares que el resolvedor no debe tener que entender y que se excluyen A PROPÓSITO:
+# {(selector, fg, bg): motivo}. Vacío: cada entrada nueva exige su justificación.
+EXCLUSIONES: dict[tuple[str, str, str], str] = {}
+
+
+def _pares_de_la_hoja(css: str | None = None) -> list[tuple[str, str, str, str, str]]:
+    """(tema, selector, fg, bg, origen) de todos los pares que la hoja determina.
+
+    Un fondo que no es un color resoluble NO se sustituye por el contexto: se devuelve tal cual para
+    que `comprobar_pares` lo marque como «sin resolver» (solo `none`/`transparent` significan «sin
+    fondo propio»)."""
     pares = []
     for nombre in _temas():
-        for selector, d in _reglas():
+        for selector, d in _reglas(css):
             fg = d.get("color")
             bg = d.get("background") or d.get("background-color")
-            if bg and ("gradient" in bg or "url(" in bg):
+            if bg in ("none", "transparent"):
                 bg = None
             btn = d.get("--btn-bg")
             if btn:
@@ -144,11 +163,37 @@ def _pares_de_la_hoja() -> list[tuple[str, str, str, str, str]]:
                 fondos = [bg] if bg else FONDOS_DE_CONTEXTO
                 for f in fondos:
                     pares.append((nombre, selector, fg, f, "propio" if bg else "contexto"))
-            elif bg and not fg and "dot" not in selector:
+            elif (bg and not fg and "dot" not in selector
+                  and "gradient" not in bg and "url(" not in bg):
                 # Elemento con fondo y sin color propio: el texto hereda --ink. (Los «puntos»
-                # de estado no llevan texto: se prueban como indicador no textual, abajo.)
+                # de estado no llevan texto: se prueban como indicador no textual, abajo; un
+                # fondo decorativo sin texto, como una trama, no tiene par que medir.)
                 pares.append((nombre, selector, "var(--ink)", bg, "texto heredado"))
     return pares
+
+
+def comprobar_pares(pares, temas) -> None:
+    """Falla si un par no llega a 4,5:1 O no se puede resolver (y no está excluido)."""
+    fallos, sin_resolver = [], []
+    for nombre, selector, fg, bg, origen in pares:
+        if (selector, fg, bg) in EXCLUSIONES:
+            assert EXCLUSIONES[(selector, fg, bg)].strip(), "una exclusión necesita motivo"
+            continue
+        f, b = resolver(fg, temas[nombre]), resolver(bg, temas[nombre])
+        if f is None or b is None:
+            sin_resolver.append(f"[{nombre}] {selector}  {fg} sobre {bg} ({origen})")
+            continue
+        r = contraste(f, b)
+        if r < TEXTO:
+            fallos.append(f"{r:4.2f}:1 [{nombre}] {selector}  {fg} sobre {bg} ({origen})")
+    mensajes = []
+    if sin_resolver:
+        mensajes.append(
+            "pares SIN RESOLVER (añade soporte al resolvedor o una exclusión con motivo):"
+            "\n  " + "\n  ".join(sorted(set(sin_resolver))))
+    if fallos:
+        mensajes.append("pares por debajo de 4,5:1:\n  " + "\n  ".join(sorted(set(fallos))))
+    assert not mensajes, "\n".join(mensajes)
 
 
 # ── 1. contraste de TODO par que la hoja declara ──────────────────────────────────────────
@@ -161,16 +206,10 @@ class TestParesDeLaHoja:
         assert {p[0] for p in pares} == {"claro", "oscuro"}
 
     def test_todo_texto_declarado_cumple_4_5_en_ambos_temas(self):
-        temas = _temas()
-        fallos = []
-        for nombre, selector, fg, bg, origen in _pares_de_la_hoja():
-            f, b = resolver(fg, temas[nombre]), resolver(bg, temas[nombre])
-            if f is None or b is None:
-                continue
-            r = contraste(f, b)
-            if r < TEXTO:
-                fallos.append(f"{r:4.2f}:1 [{nombre}] {selector}  {fg} sobre {bg} ({origen})")
-        assert not fallos, "pares por debajo de 4,5:1:\n  " + "\n  ".join(sorted(set(fallos)))
+        comprobar_pares(_pares_de_la_hoja(), _temas())
+
+    def test_no_hay_exclusiones_sin_justificar(self):
+        assert all(motivo.strip() for motivo in EXCLUSIONES.values())
 
     def test_el_boton_amarillo_lleva_texto_oscuro_tambien_en_el_tema_oscuro(self):
         """Bug medido en la línea base: `--ink` es CLARO en oscuro (1,2:1 sobre el amarillo)."""
@@ -337,3 +376,73 @@ class TestTemas:
         assert {k: claro[k] for k in ("--cyan", "--magenta", "--yellow", "--ok", "--warn")} == {
             "--cyan": "#0d9bd6", "--magenta": "#d81a75", "--yellow": "#f2c500",
             "--ok": "#2e8b57", "--warn": "#c0392b"}
+
+
+class TestLoNoSoportadoNoPasaInadvertido:
+    """Regresión del mecanismo: antes `if f is None or b is None: continue` dejaba fuera, sin
+    avisar, cualquier color que el resolvedor no entendiera."""
+
+    @pytest.mark.parametrize("css", [
+        ".x { color: hsl(0 0% 40%); background: var(--paper); }",          # texto no soportado
+        ".x { color: oklch(40% 0 0); background: var(--paper); }",
+        ".x { color: var(--ink); background: rgba(0, 0, 0, .1); }",          # fondo no soportado
+        ".x { color: var(--ink); background: linear-gradient(red, blue); }",  # degradado con texto
+        ".x { color: var(--no-existe); background: var(--paper); }",         # variable inexistente
+        ".x { color: var(--ink); background: var(--no-existe); }",
+    ])
+    def test_una_expresion_no_soportada_hace_fallar(self, css):
+        with pytest.raises(AssertionError, match="SIN RESOLVER"):
+            comprobar_pares(_pares_de_la_hoja(css), _temas())
+
+    def test_un_par_resoluble_que_no_llega_sigue_fallando_por_contraste(self):
+        with pytest.raises(AssertionError, match="por debajo de 4,5:1"):
+            comprobar_pares(_pares_de_la_hoja(".x { color: #777; background: #888; }"), _temas())
+
+    def test_un_par_correcto_pasa(self):
+        comprobar_pares(_pares_de_la_hoja(".x { color: var(--ink); background: var(--paper); }"),
+                        _temas())
+
+    def test_none_y_transparent_significan_sin_fondo_propio(self):
+        """Antes `background: none` hacía saltar el par en silencio (`.btn-logout`)."""
+        for fondo in ("none", "transparent"):
+            pares = _pares_de_la_hoja(f".x {{ color: var(--ink-soft); background: {fondo}; }}")
+            assert {p[4] for p in pares} == {"contexto"}
+            comprobar_pares(pares, _temas())
+
+    def test_una_exclusion_solo_vale_con_motivo(self, monkeypatch):
+        css = ".x { color: hsl(0 0% 40%); background: var(--paper); }"
+        clave = (".x", "hsl(0 0% 40%)", "var(--paper)")
+        monkeypatch.setitem(EXCLUSIONES, clave, "")
+        with pytest.raises(AssertionError, match="necesita motivo"):
+            comprobar_pares(_pares_de_la_hoja(css), _temas())
+        monkeypatch.setitem(EXCLUSIONES, clave, "componente de terceros, revisado a mano")
+        comprobar_pares(_pares_de_la_hoja(css), _temas())
+
+    def test_la_hoja_real_no_tiene_pares_sin_resolver(self):
+        temas = _temas()
+        for nombre, selector, fg, bg, _ in _pares_de_la_hoja():
+            if (selector, fg, bg) in EXCLUSIONES:
+                continue
+            assert resolver(fg, temas[nombre]) and resolver(bg, temas[nombre]), (selector, fg, bg)
+
+
+# ── 5. la fila de Deseados no desborda por culpa del texto de 14 px (medido en navegador) ─────
+class TestFilaDeDeseados:
+    """V1 subió el texto mínimo a 14 px y, sin `flex-wrap`, la fila de Deseados se salía de la
+    pantalla en móvil (731 → 756 px de ancho de página a 390 px). La medición real está en
+    `docs/design/ui-v1/README.md`; aquí se fija el mecanismo."""
+
+    def _regla(self, selector: str) -> dict[str, str]:
+        return next(d for s, d in _reglas() if s == selector)
+
+    def test_la_fila_puede_partirse_en_varias_lineas(self):
+        assert self._regla(".wishlist-row")["flex-wrap"] == "wrap"
+
+    def test_el_titulo_tiene_una_base_propia_y_no_se_aplasta(self):
+        assert self._regla(".wishlist-title")["flex"].startswith("1 1 ")
+
+    def test_el_panel_de_candidatos_ocupa_linea_propia_solo_si_tiene_contenido(self):
+        """Vacío no debe forzar una línea vacía (12 px de hueco) en cada fila."""
+        regla = self._regla(".wishlist-row .candidatos-wishlist:not(:empty)")
+        assert regla["flex"] == "1 1 100%"
+        assert not any(s == ".wishlist-row .candidatos-wishlist" for s, _ in _reglas())
