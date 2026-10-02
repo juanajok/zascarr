@@ -1,0 +1,54 @@
+{#- Macros de componentes (V2). Disponibles en TODAS las plantillas como `ui.<macro>`
+    (web/componentes.py::registrar):
+    {{ ui.chip("ok", "Conectada") }}, {% call ui.grupo("Título", 3) %}…{% endcall %}, etc.
+    Van bajo UN espacio de nombres (`ui`) para no reservar nombres genéricos (`aviso`, `grupo`…)
+    en el contexto de todas las plantillas. El aspecto de cada estado lo decide
+    web/componentes.py, no la plantilla que las usa.
+    Con autoescape: el texto que se pasa se escapa; para incluir enlaces usa la forma `call`. -#}
+
+{#- chip(estado, texto): etiqueta de estado. `estado` ∈ neutro | ok | warn | amber | info. -#}
+{% macro chip(estado, texto) -%}
+{%- set a = aspecto(estado) -%}
+<span class="chip{% if a.clase %} {{ a.clase }}{% endif %}">{% if a.icono %}<span aria-hidden="true">{{ a.icono }}</span> {% endif %}{{ texto }}</span>
+{%- endmacro %}
+
+{#- aviso(tipo, texto) o {% call aviso(tipo) %}…{% endcall %}. `tipo` ∈ nota | info | ok | amber | warn.
+    `warn` usa role="alert" (asertivo); el resto, role="status" (cortés). -#}
+{% macro aviso(tipo, texto=none) -%}
+{%- set t = tipo_aviso(tipo) -%}
+<div class="{{ t.clase }}" role="{{ t.rol }}">{% if t.icono %}<span class="aviso-icono" aria-hidden="true">{{ t.icono }}</span><div>{% endif %}{% if texto is not none %}{{ texto }}{% else %}{{ caller() }}{% endif %}{% if t.icono %}</div>{% endif %}</div>
+{%- endmacro %}
+
+{#- grupo(titulo, recuento): caja con cabecera; el contenido va dentro con `call`. `recuento` es
+    opcional (número o texto) y se muestra como chip neutro. -#}
+{% macro grupo(titulo, recuento=none) -%}
+<div class="group" role="group" aria-label="{{ titulo }}">
+  <div class="ghead"><h3>{{ titulo }}</h3>{% if recuento is not none %}{{ chip("neutro", recuento) }}{% endif %}</div>
+  {{ caller() }}
+</div>
+{%- endmacro %}
+
+{#- estado_vacio(titulo, texto, accion): `accion` opcional = (etiqueta, url), un enlace con aspecto
+    de botón principal. -#}
+{% macro estado_vacio(titulo, texto=none, accion=none) -%}
+<div class="empty-state">
+  <h3>{{ titulo }}</h3>
+  {%- if texto is not none %}
+  <p>{{ texto }}</p>
+  {%- endif %}
+  {%- if accion is not none %}
+  <a class="btn primary" href="{{ accion[1] }}">{{ accion[0] }}</a>
+  {%- endif %}
+</div>
+{%- endmacro %}
+
+{#- progreso(valor, maximo, etiqueta): <progress> nativo, con nombre accesible. -#}
+{% macro progreso(valor, maximo, etiqueta) -%}
+<progress class="progress" value="{{ valor }}" max="{{ maximo }}" aria-label="{{ etiqueta }}">{{ valor }} de {{ maximo }}</progress>
+{%- endmacro %}
+
+{#- region_viva(id): región `aria-live="polite"` para lo que cambia tras una acción HTMX
+    (destino de hx-target): el lector de pantalla anuncia el resultado sin robar el foco. -#}
+{% macro region_viva(id) -%}
+<div id="{{ id }}" class="region-viva" aria-live="polite" aria-atomic="true">{% if caller is defined %}{{ caller() }}{% endif %}</div>
+{%- endmacro %}
