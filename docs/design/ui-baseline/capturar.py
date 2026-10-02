@@ -203,7 +203,7 @@ async def caso_409(nav: Navegador, base: str, salida: Path, datos: dict) -> None
     datos["caso_409_antes"] = info
     if not info:
         return
-    await nav.js(f"document.getElementById({json.dumps(info['id'])}).scrollIntoView({{block:'center'}})")
+    await nav.js(f"document.getElementById({json.dumps(info['id'])}).scrollIntoView({{block:'center',behavior:'instant'}})")
     await nav.foto(salida / "caso-409-1-antes--escritorio-1280x800-claro.png", completa=False)
 
     nav._eventos.clear()

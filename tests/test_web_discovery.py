@@ -59,7 +59,8 @@ class TestIndex:
         client = TestClient(app)
         r = client.get("/ui/descubrir")
         assert r.status_code == 200
-        assert '<nav class="topnav">' in r.text
+        # V3: la barra de navegación nueva sustituye a `<nav class="topnav">` (cambio a propósito).
+        assert '<nav class="nav" aria-label="Navegación principal">' in r.text
         assert "Descubrir" in r.text
 
 

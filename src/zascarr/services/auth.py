@@ -127,6 +127,14 @@ _PREFIJOS_EXENTOS = ("/static/",)
 # diagnóstico — estas rutas y los estáticos. Todo lo demás falla cerrado.
 _RUTAS_DIAGNOSTICO = {"/api/health", "/estado", "/login", "/legal"}
 
+# V3: fragmentos que una página pide SOLA, en segundo plano (los contadores del menú), y cuyo fallo
+# no debe verse nunca. htmx intercambia por defecto TODO estado distinto de 204/304, así que una
+# redirección a /login (que el navegador sigue y cuya página de acceso acabaría pintada dentro del
+# menú) o el 503 HTML del arranque degradado serían peores que no responder. Para estas rutas, en
+# lugar de redirigir o de servir el 503, el middleware responde `204 No Content` VACÍO: sin datos,
+# sin diagnóstico, sin página. NO son rutas de diagnóstico (esas se sirven sin comprobar la sesión).
+RUTAS_FRAGMENTO_SILENCIOSO = frozenset({"/ui/_nav/estado"})
+
 
 # ── CSRF / Origen / Host (ficha benchmark-seguridad-auth-origen-host) ─────────
 
@@ -622,6 +630,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # se falla cerrado y solo se sirve diagnóstico.
         if getattr(request.app.state, "db_degraded", False):
             path = request.url.path
+            if path in RUTAS_FRAGMENTO_SILENCIOSO:
+                return Response(status_code=204, headers={"Cache-Control": "no-store"})
             if path in _RUTAS_DIAGNOSTICO or path.startswith(_PREFIJOS_EXENTOS):
                 return await call_next(request)
             if path.startswith("/api/"):
@@ -668,6 +678,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         if path.startswith("/api/"):
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="ZascArr"'})
+
+        if path in RUTAS_FRAGMENTO_SILENCIOSO:
+            # Sesión caducada o ausente: el fragmento del menú no se redirige ni se explica.
+            return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
         query = f"?{request.url.query}" if request.url.query else ""
         siguiente = f"{path}{query}"
