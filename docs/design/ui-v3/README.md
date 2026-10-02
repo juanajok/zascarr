@@ -27,8 +27,18 @@ marcado**. Datos del menú en `src/zascarr/web/menu.py` (una sola fuente: escrit
 - **Los enlaces nunca dependen del fragmento.** El menú lleva sus ocho enlaces en el HTML; los contadores son
   marcadores `hidden`. El sondeo es `hx-get` + `hx-trigger="load, every 30s"` + **`hx-swap="none"`** y el fragmento
   responde solo con intercambios **fuera de banda** sobre `#cnt-*`: no contiene ningún enlace ni puede reemplazar uno.
-- **`204 No Content` ante cualquier fallo** (htmx 4 intercambia todo salvo 204/304): BD caída con la app en marcha
-  (que en `/ui/*` es un `500` de texto plano), arranque degradado (E6) y sesión caducada.
+- **`204 No Content` ante cualquier fallo, en TODO el ciclo de la sesión de BD** (htmx 4 intercambia todo salvo
+  204/304): crearla, abrirla, consultar, **liberarla**, calcular la seguridad, renderizar, y una BD que no
+  contesta a tiempo; además de BD caída con la app en marcha (en `/ui/*` es un `500` de texto plano), arranque
+  degradado (E6) y sesión caducada. La sesión **no viene de `get_db`** (que adquiere antes del cuerpo y hace
+  `commit` después, ambas fases fuera de cualquier `try`): el fragmento es de solo lectura, abre y cierra la suya,
+  y no hace `commit`.
+- **La respuesta no espera a la limpieza.** Con la BD **congelada** (acepta la conexión y no contesta), cancelar
+  la consulta no basta: liberar la sesión hace un `rollback` sobre esa misma conexión y también se cuelga. Una
+  primera versión con `asyncio.timeout` alrededor de todo **no respondía** (medido en el stack real: curl cortó a
+  los 20 s con un plazo de 5). Ahora el trabajo va en **una tarea compartida**; la petición espera 5 s, responde
+  `204` y la tarea termina su limpieza por su cuenta. Mientras haya una en vuelo las demás se suman a ella, así que
+  **los sondeos no se apilan** contra una BD que no responde.
 - **El fragmento NO es ruta de diagnóstico.** Esas se sirven sin comprobar la sesión. Sin sesión el middleware
   responde `204` vacío (no redirige: htmx seguiría la redirección e intercambiaría la página de acceso) y la BD ni
   se consulta. El resto de `/ui/*` sigue dando `303 → /login` (A6) y `503` de E6 (E6).
@@ -36,9 +46,9 @@ marcado**. Datos del menú en `src/zascarr/web/menu.py` (una sola fuente: escrit
   atención barata y exacta sin llamar a servicios externos. V9 la amplía a «el peor de los parciales».
 
 ## Verificación
-- **Pruebas** (sin navegador): `tests/test_web_navegacion.py` (122 casos: datos del menú, HTML de la macro,
+- **Pruebas** (sin navegador): `tests/test_web_navegacion.py` (134 casos: datos del menú, HTML de la macro,
   enlaces fuera de cualquier elemento htmx, las 8 pantallas —título, `<h1>`, `aria-current`, salto, un solo `nav`—,
-  fragmento con datos/cero/>999/cualquier fallo, sesión, arranque degradado, filtro de los recuentos compartido con
+  fragmento con datos/cero/>999, **fallo en cada fase del ciclo de la sesión** (crear, abrir, consultar, cerrar), renderizado, seguridad y plazo, **BD congelada con cierre colgado**, tarea compartida y sin apilar, sesión, arranque degradado, filtro de los recuentos compartido con
   las listas, CSS). Suite completa verde.
 - **Navegador real** (Chrome 154, entorno aislado de V0 con la imagen de esta rama; `verificar.py` + `ensayo.sh`;
   resultados en `verificar-*.json`):
@@ -51,6 +61,7 @@ marcado**. Datos del menú en `src/zascarr/web/menu.py` (una sola fuente: escrit
 | Sondeo | 1 petición al cargar, **2 a los ~35 s** |
 | Red: fragmento bloqueado | menú **íntegro** (8 enlaces), contadores ocultos |
 | **BD caída con la página ya cargada** | siguiente sondeo **`204`**; **contadores y 8 enlaces conservados**; la página no cambia |
+| **BD congelada** (`docker compose pause`) con la página cargada | sondeos **`204` a los 5,0 s exactos**, tres seguidos sin apilarse; contadores y 8 enlaces conservados; `/estado` responde en 33 ms; al descongelar, el fragmento vuelve a servir en 17 ms. (Contraste: `/ui/pendientes` sigue colgado: defecto operativo aparte) |
 | **Arranque sin BD** (E6) | `/estado` **200** con menú completo; fragmento **`204`** vacío; `/ui/` sigue en `503` |
 | **Sesión caducada** (cookies borradas en mitad del uso) | sondeo **`204`**, sin redirigir, página y enlaces sin cambios; navegar sí lleva a `/login` |
 | Login / logout | página de acceso sin menú (no cambia); botón *Cerrar sesión* solo con la autenticación activa; sale a `/login` |
