@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from fastapi.templating import Jinja2Templates
 
 from zascarr.config import get_settings
+from zascarr.web.componentes import registrar as registrar_componentes
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -31,4 +32,6 @@ def crear_templates() -> Jinja2Templates:
     meter `auth_mode` en su propio contexto de plantilla."""
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.globals["auth_activo"] = lambda: get_settings().auth_mode != "none"
+    # V2: macros de componentes (chip, aviso, grupo…) disponibles en TODAS las plantillas.
+    registrar_componentes(templates.env)
     return templates

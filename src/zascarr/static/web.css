@@ -52,6 +52,13 @@
   --hot:            #b0125f;
   --on-hot:         #ffffff;
 
+  /* V2: fondos teñidos de los componentes (chip, aviso, hero-state). El texto va con --ink
+     (aviso, hero-state) o con la variante `-t` de su matiz (chip). */
+  --ok-bg:          #e1f2e8;
+  --warn-bg:        #fbe4df;
+  --amber-bg:       #fdf0c4;
+  --info-bg:        #dff1fa;
+
   --radius-panel: 4px;
   --radius-pill:  999px;
   --gutter: clamp(14px, 2.2vw, 24px);
@@ -88,6 +95,10 @@
     --on-warn-solid:  #2a0f0c;
     --hot:            #f46aa7;
     --on-hot:         #1a0610;
+    --ok-bg:          #16301f;
+    --warn-bg:        #3a1b17;
+    --amber-bg:       #35290c;
+    --info-bg:        #10293a;
     --shadow-ink:    4px 4px 0 rgba(0,0,0,.55);
     --shadow-ink-sm: 3px 3px 0 rgba(0,0,0,.55);
   }
@@ -280,7 +291,8 @@ button[type="submit"]:active,
 }
 
 button[type="submit"],
-.btn-primary {
+.btn-primary,
+.btn.primary {
   --btn-bg: var(--yellow);
   /* V1: en oscuro --ink es CLARO: sobre el amarillo daba 1,2:1. El par fijo es --on-yellow. */
   color: var(--on-yellow);
@@ -305,6 +317,7 @@ button[type="submit"],
 }
 
 /* ── 6. VIÑETAS (paneles / tarjetas) ─────────────────────────────────────── */
+.card,
 .pending-card,
 .wishlist-row,
 .library-card,
@@ -905,6 +918,116 @@ button[type="submit"].btn-sugerencia {
 .estado-warnings.visible { display: block; }
 .estado-warnings-title { font-weight: 700; margin-bottom: 6px; }
 .estado-warnings ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* ── 16c. COMPONENTES (V2) ───────────────────────────────────────────────────
+   Piezas reutilizables con los nombres de la maqueta (docs/design/maqueta-ui.html), sobre los
+   tokens ya comprobados de V1. Las clases actuales (.btn-primary, .wishlist-badge, .empty-state…)
+   SIGUEN funcionando: se retiran en V14, no antes. Las macros que las emiten viven en
+   templates/_componentes.html; el estado→aspecto, en web/componentes.py. */
+
+/* Botón: .btn (+ .primary, .ghost, .sm). El estilo base es el de `button` más arriba. */
+.btn.ghost {
+  --btn-bg: transparent;
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.btn.ghost:hover { border-color: var(--ink); color: var(--ink); transform: none; box-shadow: none; }
+.btn.sm { padding: 4px 12px; font-size: .875rem; }       /* conserva los 40 px de V1 */
+button[disabled], .btn[disabled] {
+  opacity: .5; cursor: not-allowed; box-shadow: none; transform: none;
+}
+
+/* Tarjeta: .card (comparte regla con las viñetas, ver sección 6). */
+.card { padding: 20px; }
+
+/* Chip de estado: un estado → un aspecto (web/componentes.py). El icono acompaña al color. */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: .875rem; font-weight: 700;
+  padding: 2px 10px;
+  border: 2px solid var(--ink); border-radius: var(--radius-pill);
+  background: var(--paper); color: var(--ink);
+  white-space: nowrap;
+}
+.chip.ok    { background: var(--ok-bg);    color: var(--ok-t); }
+.chip.warn  { background: var(--warn-bg);  color: var(--warn-t); }
+.chip.amber { background: var(--amber-bg); color: var(--amber-t); }
+.chip.info  { background: var(--info-bg);  color: var(--cyan-t); }
+
+/* Grupo: caja con cabecera (título + recuento). El contenido va directamente dentro. */
+.group {
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper-2); box-shadow: var(--shadow-ink);
+  margin-bottom: 18px;
+}
+.ghead {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  padding: 12px 16px;
+  background: var(--paper); border-bottom: 3px solid var(--ink);
+}
+.ghead h3 { flex: 1 1 14rem; margin: 0; }
+
+/* Estado vacío: reutiliza .empty-state (sección 15); solo se añade lo que le faltaba. */
+.empty-state h3 { margin: 0 0 6px; }
+.empty-state p { margin: 0; }
+.empty-state .btn { margin-top: 14px; }
+
+/* Aviso: nota (.caption), info, ok, warn, amber. El tipo fija el color Y el icono. */
+.aviso {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 14px; margin: 12px 0;
+  border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper-2); color: var(--ink);
+}
+.aviso-icono { font-weight: 800; flex: none; }
+.aviso.ok    { background: var(--ok-bg); }
+.aviso.warn  { background: var(--warn-bg); }
+.aviso.amber { background: var(--amber-bg); }
+.aviso.info  { background: var(--info-bg); }
+
+/* Estado grande de una pantalla («Todo bien», «Atención»…). */
+.hero-state {
+  display: flex; gap: 18px; align-items: center;
+  padding: 20px; margin-bottom: 18px;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper-2); box-shadow: var(--shadow-ink);
+}
+.hero-state .big { font-size: 2.75rem; line-height: 1; }
+.hero-state.ok    { background: var(--ok-bg); }
+.hero-state.warn  { background: var(--warn-bg); }
+.hero-state.amber { background: var(--amber-bg); }
+.hero-state.info  { background: var(--info-bg); }
+
+/* Progreso: <progress class="progress"> nativo (rol y valor accesibles sin JS ni ARIA a mano). */
+progress.progress {
+  appearance: none; -webkit-appearance: none;
+  display: block; width: 100%; height: 14px;
+  border: 3px solid var(--ink); border-radius: var(--radius-pill);
+  background: var(--paper-2); overflow: hidden;
+  margin: 10px 0 18px;
+}
+progress.progress::-webkit-progress-bar { background: var(--paper-2); }
+progress.progress::-webkit-progress-value { background: var(--yellow); border-right: 3px solid var(--ink); }
+progress.progress::-moz-progress-bar { background: var(--yellow); }
+
+/* Aviso temporal: se desvanece SOLO por CSS (sin JS). El estado definitivo siempre está visible
+   en la propia página; con «reducir movimiento» (sección 17) la animación se desactiva y el
+   aviso se queda, que es lo seguro. */
+.toast {
+  padding: 12px 16px; margin: 12px 0;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--caption-bg); color: var(--ink);
+  box-shadow: var(--shadow-ink-sm);
+  animation: toast-sale 8s ease-in forwards;
+}
+@keyframes toast-sale {
+  0%, 85% { opacity: 1; max-height: 12rem; }
+  100%    { opacity: 0; max-height: 0; padding: 0; margin: 0; border-width: 0; visibility: hidden; }
+}
 
 /* ── 17. MOTION ──────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
