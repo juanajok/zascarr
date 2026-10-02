@@ -137,6 +137,10 @@ FONDOS_DE_CONTEXTO = [
 FG_BASE_DEL_BOTON = "var(--ink)"   # `button { color: var(--ink) }`; --btn-bg solo cambia el fondo
 
 
+# Selectores de elementos que NO llevan texto (indicadores y rellenos de barra): su fondo se prueba
+# como no texto (3:1 por el borde de tinta), no con la regla de 4,5:1 del texto heredado.
+SIN_TEXTO = ("dot", "progress-value", "progress-bar")
+
 # Pares que el resolvedor no debe tener que entender y que se excluyen A PROPÓSITO:
 # {(selector, fg, bg): motivo}. Vacío: cada entrada nueva exige su justificación.
 EXCLUSIONES: dict[tuple[str, str, str], str] = {}
@@ -156,6 +160,12 @@ def _pares_de_la_hoja(css: str | None = None) -> list[tuple[str, str, str, str, 
             if bg in ("none", "transparent"):
                 bg = None
             btn = d.get("--btn-bg")
+            if btn in ("none", "transparent"):
+                # Botón «fantasma»: sin relleno propio, el texto cae sobre el contexto.
+                for f in FONDOS_DE_CONTEXTO:
+                    pares.append(
+                        (nombre, selector, fg or FG_BASE_DEL_BOTON, f, "--btn-bg sin relleno"))
+                continue
             if btn:
                 pares.append((nombre, selector, fg or FG_BASE_DEL_BOTON, btn, "--btn-bg"))
                 continue
@@ -163,7 +173,7 @@ def _pares_de_la_hoja(css: str | None = None) -> list[tuple[str, str, str, str, 
                 fondos = [bg] if bg else FONDOS_DE_CONTEXTO
                 for f in fondos:
                     pares.append((nombre, selector, fg, f, "propio" if bg else "contexto"))
-            elif (bg and not fg and "dot" not in selector
+            elif (bg and not fg and not any(x in selector for x in SIN_TEXTO)
                   and "gradient" not in bg and "url(" not in bg):
                 # Elemento con fondo y sin color propio: el texto hereda --ink. (Los «puntos»
                 # de estado no llevan texto: se prueban como indicador no textual, abajo; un
@@ -239,6 +249,15 @@ PARES_DE_TOKENS = [
     ("texto sobre amarillo", "--on-yellow", "--yellow", TEXTO),
     # La insignia «caliente» (.badge.hot de la maqueta). V3 usará estos dos tokens.
     ("insignia caliente (.badge.hot)", "--on-hot", "--hot", TEXTO),
+    # V2: texto de cada matiz sobre su fondo teñido (chip) y texto de tinta sobre él (aviso).
+    ("chip ok", "--ok-t", "--ok-bg", TEXTO),
+    ("chip warn", "--warn-t", "--warn-bg", TEXTO),
+    ("chip amber", "--amber-t", "--amber-bg", TEXTO),
+    ("chip info", "--cyan-t", "--info-bg", TEXTO),
+    ("aviso/hero ok (tinta)", "--ink", "--ok-bg", TEXTO),
+    ("aviso/hero warn (tinta)", "--ink", "--warn-bg", TEXTO),
+    ("aviso/hero amber (tinta)", "--ink", "--amber-bg", TEXTO),
+    ("aviso/hero info (tinta)", "--ink", "--info-bg", TEXTO),
     # No texto (1.4.11): foco, bordes de controles, icono de estado.
     ("anillo de foco sobre --paper", "--cyan-t", "--paper", NO_TEXTO),
     ("anillo de foco sobre --paper-2", "--cyan-t", "--paper-2", NO_TEXTO),
@@ -348,6 +367,7 @@ class TestEstructura:
 TOKENS_QUE_CAMBIAN_EN_OSCURO = [
     "--ink-faint", "--cyan-t", "--ok-t", "--warn-t", "--amber-t", "--mag-t",
     "--ok-solid", "--on-ok-solid", "--warn-solid", "--on-warn-solid", "--hot", "--on-hot",
+    "--ok-bg", "--warn-bg", "--amber-bg", "--info-bg",     # V2: fondos teñidos de chip/aviso
 ]
 TOKENS_IGUALES_EN_AMBOS_TEMAS = ["--on-yellow"]   # texto oscuro sobre amarillo en los dos temas
 
