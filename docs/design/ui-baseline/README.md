@@ -52,13 +52,19 @@ cuyo destino efectivo salga de la carpeta de ensayo; y **cualquier enlace dentro
 con el destino **real** de cada montaje, no con su texto.
 
 **Un solo ensayo por máquina.** El proyecto `zascarr-uibase` es único: si otra carpeta de datos (otra
-sesión, otro *worktree*) tiene su stack en marcha, `preparar` se niega (puerto ocupado / stack existente)
-y `dc` y `bajar` comprueban que los montajes del stack vivo cuelguen de **esta** carpeta, o abortan sin
-tocarlo. `bajar` valida el Compose resuelto igual que cualquier otra operación antes de ejecutar `down`.
-Regresión: `tests/test_ensayo_aislamiento.py` (16 casos, con un `docker` de pega que registra cada
+sesión, otro *worktree*) tiene su stack, `preparar` se niega, y `dc` y `bajar` **lo tratan como ajeno
+salvo que se acredite lo contrario**: listan *todos* los contenedores del proyecto (por etiqueta de
+Compose y por prefijo de nombre), **también un stack parcial** (p. ej. solo Postgres y Redis si la
+preparación de la otra sesión falló antes de crear la app), y exigen que **todos los montajes de cada
+uno** cuelguen de **esta** carpeta —basta uno ajeno, o no poder acreditar ninguno (contenedor sin
+montajes, `inspect` que falla), para abortar sin tocar nada. Las rutas se comparan **como rutas**, no como
+expresión regular. **Si `docker ps` falla, se aborta**: «no pude comprobar» nunca equivale a «no hay
+nada»; la ausencia solo se acepta si la consulta terminó bien y no devolvió recursos. `bajar` valida
+además el Compose resuelto, igual que cualquier otra operación, antes de `down`.
+Regresión: `tests/test_ensayo_aislamiento.py` (28 casos, con un `docker` de pega que registra cada
 llamada; comprueban qué **no** se ejecuta y qué **no** se escribe fuera: `lib` enlazada a una carpeta
-externa no recibe ni marca ni archivos, un Compose no aislado no llega a `down`, un stack ajeno no se
-toca).
+externa no recibe ni marca ni archivos, un Compose no aislado no llega a `down`, un stack ajeno
+—completo, parcial o con montajes mezclados— no se toca, y un stack parcial propio sí se desmonta).
 
 Las dos herramientas que escriben o hacen `POST` se protegen además por su cuenta:
 
