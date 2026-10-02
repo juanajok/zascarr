@@ -106,8 +106,10 @@ class TestDashboard:
         assert "/static/vendor/htmx.min.js" in r.text
         # Nunca un CDN: ver docs/adr/0001-ui-stack.md.
         assert "cdn" not in r.text.lower()
-        assert '<nav class="topnav">' in r.text
-        assert 'href="/estado">Estado</a>' in r.text  # nav enlaza a E1
+        # V3: el menú es la barra de navegación nueva (antes `<nav class="topnav">`); el cambio es
+        # a propósito. Sigue enlazando a Estado, que se queda en /estado (decisión 2 de la épica V).
+        assert '<nav class="nav" aria-label="Navegación principal">' in r.text
+        assert 'href="/estado"' in r.text
 
     def test_vacio_muestra_estado_vacio(self):
         with use_fake_session(_empty_session()) as client:

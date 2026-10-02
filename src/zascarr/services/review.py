@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -72,6 +72,22 @@ class ReviewService:
         self.db = db
         self._library = get_settings().library_path
 
+    @staticmethod
+    def _condiciones_pendientes() -> tuple:
+        """El filtro de «pendiente», UNO solo: lo usan la lista y el recuento del menú (V3). Si el
+        recuento tuviera su propio filtro, el número del menú dejaría de coincidir con la lista."""
+        return (
+            File.issue_id.is_(None),
+            File.review_dismissed.is_(False),
+            File.metadata_["match_status"].astext == "unsorted",
+        )
+
+    async def count_pending(self) -> int:
+        """Cuántos archivos hay por revisar, SIN el tope de 50 de `pending_files`."""
+        return (await self.db.execute(
+            select(func.count()).select_from(File).where(*self._condiciones_pendientes())
+        )).scalar_one()
+
     async def pending_files(self, limit: int = 50) -> list[File]:
         """Archivos sin match fiable que nadie ha resuelto ni descartado.
 
@@ -93,9 +109,7 @@ class ReviewService:
         """
         return list((await self.db.execute(
             select(File)
-            .where(File.issue_id.is_(None))
-            .where(File.review_dismissed.is_(False))
-            .where(File.metadata_["match_status"].astext == "unsorted")
+            .where(*self._condiciones_pendientes())
             .order_by(File.imported_at.desc())
             .limit(limit)
         )).scalars().all())

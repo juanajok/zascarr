@@ -1,0 +1,8 @@
+{#- Fragmento de contadores del menú (V3): SOLO intercambios fuera de banda sobre los marcadores que
+    ya existen en el menú (ids cnt-*). No contiene ningún enlace ni puede reemplazar ninguno.
+    Un contador a cero se oculta (`hidden`) en vez de mostrarse como «0»; el texto oculto para lectores
+    de pantalla explica qué cuenta el número. Más de 999 se muestra como «999+». -#}
+{%- macro cuenta(n) -%}{{ n if n < 1000 else "999+" }}{%- endmacro -%}
+<span id="cnt-pendientes" class="badge hot" hx-swap-oob="true"{% if not pendientes %} hidden{% endif %}>{% if pendientes %}{{ cuenta(pendientes) }}<span class="sr"> por revisar</span>{% endif %}</span>
+<span id="cnt-deseados" class="badge" hx-swap-oob="true"{% if not deseados %} hidden{% endif %}>{% if deseados %}{{ cuenta(deseados) }}<span class="sr"> deseados</span>{% endif %}</span>
+<span id="cnt-estado" class="dot" hx-swap-oob="true"{% if not atencion %} hidden{% endif %}>{% if atencion %}<span class="sr">necesita atención</span>{% endif %}</span>
