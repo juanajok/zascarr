@@ -2,6 +2,10 @@
   "caso": "estados",
   "base": "http://127.0.0.1:18000",
   "navegador": "Chrome/154.0.8037.92",
+  "deseados_en_la_bd": {
+    "peticiones": 5,
+    "series_distintas": 3
+  },
   "inicio_escritorio": {
     "ruta": "/ui/",
     "subtitulo": "Miramos tu disco el 3 de octubre de 2026 y encontramos 14 tebeos. Ahora ZascArr tiene registrados 13.",
@@ -18,8 +22,8 @@
       },
       {
         "clase": "hecho",
-        "titulo": "Sigues 5 series \n✓\nHecho",
-        "detalle": "Están en Deseados.",
+        "titulo": "Sigues 3 series \n✓\nHecho",
+        "detalle": "Tienes peticiones suyas en Deseados.",
         "boton": "Buscar más",
         "primario": false
       },
@@ -38,12 +42,25 @@
       "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 13 registrados ahora",
       "3 · SERIES EN LA BIBLIOTECA · 2 con archivos",
       "6 · POR REVISAR · tebeos sin clasificar →",
-      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga el recuento de números de Comic Vine. · 3 series sin recuento: de ellas no sabemos qué falta."
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga un recuento de grapas. · 3 series sin recuento: de ellas no sabemos qué falta."
     ],
     "porcentajes_en_la_pagina": [],
     "desborde": false,
     "scrollWidth": 1280,
-    "clientWidth": 1280
+    "clientWidth": 1280,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/pendientes",
+      "texto": "Revisar ahora →",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 11,
+      "tras_enter_va_a": "/ui/pendientes"
+    }
   },
   "inicio_movil": {
     "ruta": "/ui/",
@@ -61,8 +78,8 @@
       },
       {
         "clase": "hecho",
-        "titulo": "Sigues 5 series \n✓\nHecho",
-        "detalle": "Están en Deseados.",
+        "titulo": "Sigues 3 series \n✓\nHecho",
+        "detalle": "Tienes peticiones suyas en Deseados.",
         "boton": "Buscar más",
         "primario": false
       },
@@ -81,12 +98,25 @@
       "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 13 registrados ahora",
       "3 · SERIES EN LA BIBLIOTECA · 2 con archivos",
       "6 · POR REVISAR · tebeos sin clasificar →",
-      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga el recuento de números de Comic Vine. · 3 series sin recuento: de ellas no sabemos qué falta."
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga un recuento de grapas. · 3 series sin recuento: de ellas no sabemos qué falta."
     ],
     "porcentajes_en_la_pagina": [],
     "desborde": false,
     "scrollWidth": 390,
-    "clientWidth": 390
+    "clientWidth": 390,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/pendientes",
+      "texto": "Revisar ahora →",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 8,
+      "tras_enter_va_a": "/ui/pendientes"
+    }
   },
   "inicio_movil320": {
     "ruta": "/ui/",
@@ -104,8 +134,8 @@
       },
       {
         "clase": "hecho",
-        "titulo": "Sigues 5 series \n✓\nHecho",
-        "detalle": "Están en Deseados.",
+        "titulo": "Sigues 3 series \n✓\nHecho",
+        "detalle": "Tienes peticiones suyas en Deseados.",
         "boton": "Buscar más",
         "primario": false
       },
@@ -124,11 +154,26 @@
       "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 13 registrados ahora",
       "3 · SERIES EN LA BIBLIOTECA · 2 con archivos",
       "6 · POR REVISAR · tebeos sin clasificar →",
-      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga el recuento de números de Comic Vine. · 3 series sin recuento: de ellas no sabemos qué falta."
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga un recuento de grapas. · 3 series sin recuento: de ellas no sabemos qué falta."
     ],
     "porcentajes_en_la_pagina": [],
     "desborde": false,
     "scrollWidth": 320,
-    "clientWidth": 320
-  }
+    "clientWidth": 320,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/pendientes",
+      "texto": "Revisar ahora →",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 8,
+      "tras_enter_va_a": "/ui/pendientes"
+    }
+  },
+  "menu_deseados": "5 deseados",
+  "texto_del_paso_series": "Sigues 3 series \n✓\nHecho"
 }

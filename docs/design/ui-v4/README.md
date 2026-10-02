@@ -28,7 +28,9 @@ Los **estados con datos sintéticos tal cual** (catálogo previo, informe, 6 por
 
 | Comprobación | Resultado |
 |---|---|
-| Botones primarios (`.btn.primary`) en cada estado | **1** |
+| **Acción principal** en cada estado (7: datos sintéticos a 3 anchos y los 5 del recorrido) | **visible** (caja con tamaño, fuera de un `<details>` cerrado), **alcanzable con Tab** (8-12 tabulaciones) y **`Enter` lleva al destino anunciado**. Con lo obligatorio hecho, la recomendación queda **fuera** del bloque plegado |
+| Botón «Buscar» frente al principal | fondo `rgb(246, 243, 236)` frente a `rgb(242, 197, 0)`: distintos (la regla global `button[type=submit]` lo pintaba de amarillo aunque no llevara `.primary`) |
+| «Sigues N series» frente a Deseados | 5 peticiones, **3 series distintas**: el Inicio dice «Sigues 3 series»; el contador del menú sigue diciendo 5 |
 | `%` en la página sin catálogo de grapas | **ninguno** (en los 5 estados del recorrido y en el de datos sintéticos) |
 | Desborde horizontal en escritorio / 390 / 320 px | **ninguno** |
 | «Buscar una serie» | `GET /ui/descubrir?q=Guardianes+del+Alba` → caja rellena y **una** petición `/ui/descubrir/buscar?q=…` al cargar |
