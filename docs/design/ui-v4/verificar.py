@@ -82,6 +82,18 @@ JS_PRINCIPAL = """(() => {
 })()"""
 
 
+async def foto_de_inicio(nav, base, ruta: Path) -> None:
+    """Fotografía SOLO el Inicio: vuelve a `/ui/` y comprueba la ruta y el <h1> antes de guardar.
+    `comprobar_principal` termina en el destino del botón (Por revisar, Descubrir…): sin esta
+    comprobación una captura con nombre de Inicio podía ser de otra pantalla."""
+    await nav.ir(base + "/ui/", espera=0.8)
+    pagina = json.loads(await nav.js("""JSON.stringify({ruta: location.pathname,
+        h1: (document.querySelector('h1') || {}).textContent})"""))
+    if pagina["ruta"] != "/ui/" or (pagina["h1"] or "").strip().lower() != "inicio":
+        raise SystemExit(f"no es el Inicio ({pagina}); no guardo {ruta.name}")
+    await nav.foto(ruta)
+
+
 async def tab(nav) -> None:
     for tipo in ("keyDown", "keyUp"):
         await nav.cdp("Input.dispatchKeyEvent", type=tipo, key="Tab", code="Tab", windowsVirtualKeyCode=9)
@@ -148,14 +160,13 @@ async def caso_estados(nav, base, salida, datos):
         await nav.vista(v, "light")
         datos[f"inicio_{v['nombre']}"] = await inicio(nav, base)
         datos[f"inicio_{v['nombre']}"]["accion_principal"] = await comprobar_principal(nav, base)
-        await nav.foto(salida / f"inicio-catalogo-previo--{v['nombre']}-{v['w']}x{v['h']}-claro.png")
+        await foto_de_inicio(nav, base, salida / f"inicio-catalogo-previo--{v['nombre']}-{v['w']}x{v['h']}-claro.png")
     await nav.ir(base + "/ui/", espera=1.0)   # la comprobación del botón principal termina en otra página
     datos["menu_deseados"] = await nav.js("document.querySelector('#cnt-deseados').textContent")
     datos["texto_del_paso_series"] = await nav.js(
         "[...document.querySelectorAll('.step h3')].map(h => h.innerText).find(t => t.startsWith('Sigues'))")
     await nav.vista(ESCRITORIO, "dark")
-    await inicio(nav, base)
-    await nav.foto(salida / "inicio-catalogo-previo--escritorio-1280x800-oscuro.png")
+    await foto_de_inicio(nav, base, salida / "inicio-catalogo-previo--escritorio-1280x800-oscuro.png")
 
 
 async def caso_flujo(nav, base, salida, datos):
@@ -174,8 +185,7 @@ async def caso_flujo(nav, base, salida, datos):
         estado["accion_principal"] = await comprobar_principal(nav, base)
         for v in vistas:
             await nav.vista(v, "light")
-            await nav.ir(base + "/ui/", espera=0.8)
-            await nav.foto(salida / f"flujo-{nombre}--{v['nombre']}-{v['w']}x{v['h']}-claro.png")
+            await foto_de_inicio(nav, base, salida / f"flujo-{nombre}--{v['nombre']}-{v['w']}x{v['h']}-claro.png")
         await nav.vista(ESCRITORIO, "light")
         return estado
 
@@ -236,6 +246,8 @@ async def caso_busqueda(nav, base, salida, datos):
         "peticiones_a_la_busqueda": [u.replace(base, "") for u in peticiones if "/buscar" in u],
         "resultado_visible": (await nav.js("document.querySelector('#resultados-descubrir').innerText"))[:200],
     }
+    if not (datos["tras_buscar"]["ruta"] or "").startswith("/ui/descubrir"):
+        raise SystemExit(f"no es Descubrir ({datos['tras_buscar']['ruta']}); no guardo la captura")
     await nav.foto(salida / "busqueda-llega-a-descubrir--escritorio-1280x800-claro.png", completa=False)
 
 

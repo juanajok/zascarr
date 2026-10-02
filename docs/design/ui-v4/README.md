@@ -36,6 +36,16 @@ Los **estados con datos sintéticos tal cual** (catálogo previo, informe, 6 por
 | «Buscar una serie» | `GET /ui/descubrir?q=Guardianes+del+Alba` → caja rellena y **una** petición `/ui/descubrir/buscar?q=…` al cargar |
 | Un solo `<h1>` y orden de pasos como lista numerada | sí |
 
+## Una corrección a la propia evidencia
+
+La primera tanda de `inicio-catalogo-previo--*.png` **no era del Inicio**: `comprobar_principal` pulsa el
+botón principal con `Enter` (para medir que lleva donde dice) y la captura se tomaba después, ya en *Por
+revisar*. Lo vio la revisión de la PR #70, no la herramienta. Ahora `foto_de_inicio` vuelve a `/ui/` y
+**comprueba la ruta y el `<h1>` antes de guardar** (si no es el Inicio, aborta sin escribir), y la captura
+de la búsqueda comprueba que está en Descubrir. Se regeneraron esas 4 capturas y su JSON; las 10 del
+recorrido (`flujo-*`) se tomaron ya tras volver a `/ui/` y se comprobó la franja superior de cada una
+(menú «Inicio» activo y `<h1>` «Inicio»), pero **no se regeneraron con la comprobación nueva**.
+
 ## Lo que NO prueba esto
 
 Un navegador, un equipo, datos sintéticos; **ni Firefox/Safari ni la Pi**. «Comparados a fondo» es la
