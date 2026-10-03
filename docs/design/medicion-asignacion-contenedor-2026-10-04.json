@@ -21,38 +21,38 @@
       "ficheros": {
         "10": {
           "rename_s": 0.0,
-          "copia+fsync+sha256_s": 0.05,
-          "solo_sha256_s": 0.041,
+          "copia+fsync+sha256_s": 0.062,
+          "solo_sha256_s": 0.038,
           "solo_copia_s": 0.007,
           "espacio_temporal_extra_MB": 10
         },
         "100": {
           "rename_s": 0.0,
           "copia+fsync+sha256_s": 0.507,
-          "solo_sha256_s": 0.392,
-          "solo_copia_s": 0.07,
+          "solo_sha256_s": 0.388,
+          "solo_copia_s": 0.083,
           "espacio_temporal_extra_MB": 100
         }
       },
       "extremo_a_extremo": {
-        "recuperar_una_operacion_huerfana_100MB_s": 1.489,
+        "recuperar_una_operacion_huerfana_100MB_s": 1.67,
         "resultado_recuperar": [
           "asignado"
         ],
         "asignar_3_archivos_de_100MB_s": [
-          1.456,
-          1.738,
-          1.437
+          2.277,
+          2.026,
+          2.037
         ],
-        "rendimiento_MB_por_s": 64.8
+        "rendimiento_MB_por_s": 47.3
       }
     }
   },
   "bd": {
     "metadata_con_50000_filas": {
-      "consulta_mediana_ms": 5.9,
+      "consulta_mediana_ms": 5.2,
       "encontradas": 50
     },
-    "operaciones_vivas_con_20000_cerradas_ms": 0.56
+    "operaciones_vivas_con_20000_cerradas_ms": 0.45
   }
 }

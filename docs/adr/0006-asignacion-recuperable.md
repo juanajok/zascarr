@@ -47,11 +47,13 @@ destino por un fallo de resultado desconocido, y solo se informa `asignado` tras
 3. **Confirmar en una transacción:** archivo, `Issue`, alias y la propia operación. Si el `commit` falla con
    resultado desconocido, **se consulta la BD con otra sesión**; si ni eso es posible, se conserva todo.
 4. **Retirar el origen** como limpieza posterior, y **solo si no se puede perder la última copia válida**:
-   (a) el destino existe y es íntegro (tamaño y `sha256`; si se acaba de publicar y verificar en la misma
-   ejecución basta comprobar que sigue ahí); (b) la BD sigue apuntando a ese destino con el `Issue` esperado;
+   (a) el destino existe y es íntegro: tamaño y `sha256` **siempre releídos**, también en la misma ejecución
+   que lo publicó (no hay exclusión de escritores que sostenga «ya lo verifiqué antes»: lo probó un cambio de
+   igual tamaño entre publicar y limpiar); (b) la BD sigue apuntando a ese destino con el `Issue` esperado;
    (c) el origen es, **por contenido** (`sha256`), la copia verificada: tamaño y `mtime_ns` **no** bastan
    (se probó una sustitución de igual tamaño y fecha). Si (a) o (b) fallan: **se conserva el origen** y el
-   resultado es `reparacion_pendiente`. Si (c) falla: `asignado_limpieza_pendiente`, sin borrar.
+   resultado es `reparacion_pendiente`. Si (c) falla: `asignado_limpieza_pendiente`, sin borrar. Y (d) el
+   ejecutor **sigue siendo el dueño** de la operación (ver «Propiedad»).
 5. **Reconciliar:** repetir la operación o reiniciar continúa o reconoce lo ya hecho, **consultando solo la
    tabla de operaciones vivas** (índice parcial), sin escanear la biblioteca.
 
@@ -74,6 +76,27 @@ inactiva: `idle_in_transaction_session_timeout` debe permitirlo) y necesita otra
 que el *pool* debe tener **al menos 2 × operaciones simultáneas** (con 1 conexión y 1 operación habría
 interbloqueo; se probó con un *pool* de 2).
 
+### Propiedad: perder el candado no detiene el trabajo, así que se vallan los efectos
+
+Perder la conexión **libera** el candado, pero el código Python de ese ejecutor sigue vivo y puede seguir
+publicando, confirmando o borrando mientras otro ya ha tomado la operación. Que al final haya cero candados
+no lo impide. Por eso:
+
+- Cada ejecutor que consigue el candado incrementa y confirma la **`epoca`** de la fila de la operación (su
+  ficha de vallado). **Toda escritura en la BD** de un ejecutor lleva `AND epoca = <la suya>`: la confirmación
+  empieza por reclamar la fila con esa época (y la mantiene bloqueada hasta el `commit`), y el cierre
+  (`limpiada`/`cancelada`) es condicional. Un ejecutor antiguo **no puede** confirmar ni cerrar nada.
+- **Antes de cada efecto** (copiar, publicar, confirmar, borrar el origen) comprueba que **su conexión sigue
+  sosteniendo el candado** (`pg_locks` sobre su propia conexión; sin conexión = sin propiedad).
+- El temporal lleva la época en el nombre: un ejecutor no pisa ni borra el de otro. El nuevo descarta los de
+  épocas anteriores sin listar directorios.
+- **Ventana residual:** entre la comprobación y el efecto en disco no hay exclusión posible. Su efecto es
+  inocuo por construcción: lo único que se publica es un fichero verificado y con `NOREPLACE`, y solo se
+  borra un origen cuyo contenido ya es la copia íntegra del destino confirmado.
+- **`max_simultaneas` es por instancia del servicio**, no global. Al integrarlo, el límite debe compartirse
+  entre **todas** las instancias que usan el mismo pool (p. ej. un semáforo ligado al motor); una prueba con
+  una sola instancia no demuestra un límite global, y aquí no se ha demostrado.
+
 **Los hardlinks quedan como optimización posterior, no como requisito de seguridad.** Antes de usarlos hay
 que medir *desde el contenedor y sobre las rutas reales* y contemplar escrituras concurrentes del etiquetador.
 
@@ -94,12 +117,15 @@ acordó; V6a **no** se fusiona rebajando la garantía. El `DDL` propuesto está 
 
 ## Lo demostrado (prototipo de un archivo, Postgres y ficheros reales)
 
-`tests/prototipo_asignacion.py` + `tests/test_prototipo_asignacion_pg.py` (33 pruebas) +
+`tests/prototipo_asignacion.py` + `tests/test_prototipo_asignacion_pg.py` (43 pruebas) +
 `tests/test_prototipo_publicar.py` (6, sin Postgres). Cada defensa se comprobó **por mutación**: quitar la
 verificación del hash de la copia, el escudo, el candado, la comprobación del origen por contenido, la del
 destino o la de la BD antes de borrar, la consulta tras un `commit` desconocido, la distinción «asignado con
-limpieza pendiente», la publicación sin reemplazo (volver a `exists()` + `os.replace`) o el candado de
-transacción (volver al de sesión) hace fallar exactamente las pruebas que lo protegen.
+limpieza pendiente», la publicación sin reemplazo (volver a `exists()` + `os.replace`) el candado de
+transacción (volver al de sesión), la relectura del destino al limpiar, cada comprobación de propiedad
+(antes de publicar, de confirmar y de borrar) o cada vallado de época en la BD hace fallar exactamente las
+pruebas que lo protegen. (Una primera ronda de mutaciones mostró que los vallados de la BD **no** estaban
+cubiertos: faltaban las pruebas directas de `TestValladoDeEpocaEnLaBd`.)
 
 | Requisito de la revisión | Prueba |
 |---|---|
@@ -121,6 +147,9 @@ transacción (volver al de sesión) hace fallar exactamente las pruebas que lo p
 | **Publicar sin reemplazar** (revisión de #76): ajeno que aparece tras la comprobación y antes de publicar | `test_prototipo_publicar.py::…aparece_justo_antes_de_publicar` y `TestPublicarEnElServicio` → ajeno intacto, `destino_ocupado`, el reintento usa el sufijo |
 | Montaje sin ninguna publicación segura | `…::test_si_el_montaje_no_ofrece_ninguna_garantia…` y `…rechaza_la_operacion` → rechazado, nada tocado |
 | **Candado y pool real** (revisión de #76) | `TestCandadoYPoolReutilizable` (5): ninguna conexión vuelve al pool reteniéndolo |
+| **Integridad en la misma ejecución**: destino alterado con igual tamaño entre publicar/confirmar y limpiar | `TestIntegridadEnLaMismaEjecucion` (2) → `reparacion_pendiente`, origen conservado |
+| **Una segunda ejecución entra mientras la primera sigue activa** y la antigua no publica / no confirma / no borra | `TestPerdidaDelCandadoMientrasSigueElTrabajo` (3): dos «procesos» (dos motores), Postgres termina la conexión del candado con la primera **pausada, no terminada**; se cuentan las publicaciones, las confirmaciones y los borrados de la antigua (0) |
+| Vallado de época aunque la comprobación del candado mintiera | `…::test_aunque_la_comprobacion_de_candado_fallara…` (2) y `TestValladoDeEpocaEnLaBd` (2) |
 
 ## Coste medido
 
@@ -135,14 +164,16 @@ transacción (volver al de sesión) hace fallar exactamente las pruebas que lo p
 
 - **El hash domina** (~265 MB/s aquí): la copia es el 15 % y la verificación el 75 %. En una Pi sin
   extensiones criptográficas será peor; **no medido**.
-- Asignar un archivo de 100 MB de extremo a extremo: **1,0-1,3 s** con la primera versión del prototipo y
-  **1,4-1,7 s** con la limpieza que verifica el origen **por contenido** (un segundo hash: ~0,4 s por 100 MB,
-  el precio de no borrar jamás un fichero distinto). Frente a ~0 con `rename`. Optimizable (identidad por
-  inodo y `ctime` como pre-filtro) pero **no fiable en CIFS**, así que no se asume.
-- **Recuperar** una operación huérfana de 100 MB: **0,9 s**; listar operaciones vivas con 20 000 cerradas:
+- Asignar un archivo de 100 MB de extremo a extremo: **1,0-1,3 s** con la primera versión del prototipo,
+  **1,4-1,7 s** al verificar el origen **por contenido**, y **2,0-2,3 s (~47 MB/s sostenidos)** con la versión
+  actual, que además **relee el destino** al limpiar: **tres hashes** de cada archivo (la copia, el destino y
+  el origen, ~0,4 s por 100 MB cada uno) más la copia con `fsync`. Es el precio de no borrar jamás la última
+  copia válida sin exclusión de escritores; frente a ~0 con `rename`. Optimizable (identidad por inodo y
+  `ctime` como pre-filtro) pero **no fiable en CIFS**, así que no se asume.
+- **Recuperar** una operación huérfana de 100 MB: **0,9-1,7 s** (según la versión); listar operaciones vivas con 20 000 cerradas:
   **0,5 ms** (índice parcial).
 - Espacio temporal: **1× el tamaño del archivo en curso** (el lote es secuencial).
-- **Consecuencia para el lote:** 50 archivos de 100 MB serían ~1,3 min aquí (~65 MB/s de rendimiento
+- **Consecuencia para el lote:** 50 archivos de 100 MB serían ~1,8 min aquí (~47 MB/s de rendimiento
   sostenido), y minutos en una Pi o por CIFS: muy probablemente **no cabe en una petición**.
 - **Límites del lote (propuesta, a fijar tras medir en el hardware y los montajes reales):** (1) **por
   bytes** (acota la E/S), (2) **por cantidad** (acota el trabajo de BD y el tamaño del informe), y (3) un
