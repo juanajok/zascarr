@@ -41,9 +41,9 @@ fallar** y una respuesta ya enviada. Ninguna compensa el movimiento.
 | 2 | falla `_learn_alias` **después** de mover y actualizar la fila | 500 | **movido** | **revertida** (fila al origen, sin `Issue` ni alias) | **no** (ver §Reconciliación) |
 | 3 | falla el `commit` de `get_db` | **200** (¡éxito!) | **movido** | **revertida** | **no** |
 | 4 | falla algo tras el servicio y antes de responder (construir la respuesta) | 500 | **movido** | **revertida** | **no** |
-| 5 | el proceso muere entre mover y confirmar (`os._exit(137)`; en la Pi: OOM, `kill -9`, corte de luz) | sin respuesta | **movido** | **revertida** (la conexión cae) | **no** |
+| 5 | el proceso muere entre mover y confirmar (`os._exit(137)`: muerte del **proceso**) | sin respuesta | **movido** | **revertida** (la conexión cae) | **no** |
 | 6 | cruce de discos: falla borrar el original tras colocar el destino | 500 | **dos copias** | **intacta** | **no** (el duplicado aparecerá en Duplicados) |
-| 7 | dos envíos del mismo archivo a la vez | uno 200, otro 500 | **un** fichero | **un** `Issue`, fila al destino | sí, por el índice único de `Issue` |
+| 7 | dos envíos del mismo archivo a la vez, **cuando el `Issue` aún no existe** | uno 200, otro 500 | **un** fichero | **un** `Issue`, fila al destino | sí, por el índice único de `Issue` (solo en este escenario) |
 
 **Hallazgo 3, el más importante:** en esta versión de FastAPI el cierre de una dependencia con `yield`
 (`get_db`: `session.commit()`) se ejecuta **después de enviar la respuesta**. El cliente recibe un `200`
@@ -51,9 +51,16 @@ y la tarjeta desaparece de Pendientes **aunque el `commit` falle**, con el fiche
 ASGI de prueba; **no se ha repetido con uvicorn real** (la semántica de ASGI es la misma, pero no lo he
 comprobado).
 
-**Hallazgo 7 (positivo):** B espera al `commit` de A (el índice único de `Issue` se lo impone), después
+**Hallazgo 7 (parcial):** B espera al `commit` de A (el índice único de `Issue` se lo impone), después
 falla con `IntegrityError` y se revierte. No hay duplicado. La protección es **accidental** (depende del
-índice), no un diseño.
+índice) y **solo está probada para la creación simultánea del `Issue`**. **No** acredita que cualquier
+solapamiento sea seguro: con el `Issue` ya existente no hay nada que serialice a los dos envíos
+(pendiente de probar; ver el ADR).
+
+**Qué mide `os._exit` y qué no:** la **muerte del proceso** (OOM, `kill -9`): la base de datos sigue viva y
+el sistema de ficheros conserva lo escrito. **No** mide la durabilidad ante un **corte eléctrico**: ahí
+puede perderse lo que el sistema operativo aún no volcó a disco (un `rename` o una copia sin `fsync`
+pueden no sobrevivir), y el estado resultante puede ser distinto al de la tabla.
 
 ## Reconciliación: lo que existe hoy y lo que no
 
@@ -72,23 +79,27 @@ Desde el estado inconsistente de los casos 2-5 (fichero en `Comics/Serie/…#012
 **Conclusión: hoy no hay reconciliación automática del movimiento interrumpido.** Los casos 2-5 son
 pérdida de coherencia silenciosa (no pérdida de datos: el fichero está íntegro en el destino).
 
-## Qué exige el lote (V6a, criterio 5) y opciones de reconciliación
+## Qué exige el lote (V6a, criterio 5)
 
 El lote asigna N archivos con `commit` corto por archivo. Con la secuencia actual, un fallo en el 3.º
-dejaría los dos primeros bien y el tercero en alguno de los estados 2-6. Opciones, **ninguna requiere
-persistir nada nuevo** (criterio 1: si hiciera falta, sería otra historia con migración):
+dejaría los dos primeros bien y el tercero en alguno de los estados 2-6. Primera evaluación de opciones
+(**superada por el ADR 0006**, que es el contrato elegido; se conserva como registro del razonamiento):
 
-| Opción | Idea | Ventana tras el fallo | Coste / riesgo |
-|---|---|---|---|
-| **A. Confirmar justo después de mover** | El servicio hace `commit` él mismo inmediatamente tras el `flush` de la fila (y devuelve éxito solo si confirmó). Reduce la ventana de segundos a milisegundos. | queda el crash entre mover y `commit` | Barata. **No elimina** el caso 5. Necesaria igualmente (hallazgo 3). |
-| **B. Reintento idempotente** | Si `origen` no existe pero el **destino canónico** existe con el mismo tamaño y `sha256` que la fila, no mover: **reenlazar** y confirmar. | ninguna, **al reintentar** | Sin persistencia: el destino sale de `build_library_path` (determinista) y el hash ya está en `File.sha256_hash`. Hashear cuesta (solo en la rama de recuperación). Falta un disparador: hoy la tarjeta sigue en Pendientes con el fichero «desaparecido» y el reintento del coleccionista fallaría con `FileNotFoundError`. |
-| **C. Enlace → commit → borrar origen** | En el mismo disco: `os.link(origen, destino)` (atómico y sin copiar), `commit`, y solo entonces `unlink(origen)`. Entre discos: copia verificada. | crash tras el enlace: **dos nombres para el mismo inodo**, BD intacta; crash tras el `commit`: nombre sobrante en `_Unsorted/` | Cierra las dos direcciones sin persistir. **No medido:** `hardlink` en los montajes reales (CIFS, exFAT y algunos NTFS no lo admiten; habría que caer a copia). |
-| **D. Registrar por escaneo del destino** | Como Kapowarr: mover y después **reconciliar escaneando** la carpeta de destino (por hash). | cualquier fallo se repara en el siguiente escaneo | Añade un recorrido de la biblioteca que hoy no existe (coste en la Pi). |
+| Opción | Idea | Por qué sola no basta |
+|---|---|---|
+| **A. Confirmar justo después de mover** | El servicio hace `commit` él mismo tras el `flush`. | Elimina el éxito HTTP previo al `commit` y reduce la ventana, **pero no la incoherencia si el proceso muere entre mover y confirmar**. Necesaria igualmente (hallazgo 3). |
+| **B. Reintento idempotente** | Si el origen no existe y el destino canónico sí, con el mismo hash: reenlazar. | Necesita conocer **inequívocamente el destino**. El destino *canónico* no es el *efectivo* si estaba ocupado y se eligió un nombre con sufijo; y tras revertir la transacción pueden faltar en la BD los datos de la asignación pedida (serie, número, formato). |
+| **C. Enlace → commit → borrar origen** | `os.link`, `commit`, `unlink(origen)`. | Los *hardlinks* no funcionan entre sistemas de ficheros distintos ni en todos los montajes, y dos nombres enlazados **comparten contenido** (una escritura del etiquetador sobre uno altera el otro). Como optimización posterior, no como requisito de seguridad. |
+| **D. Registrar por escaneo del destino** | Como Kapowarr: reconciliar escaneando. | Recorrido de toda la biblioteca, que se quiere evitar en la Pi. |
 
-**Recomendación (a validar con la medición pendiente):** A + B como mínimo suficiente y barato; C si la
-medición de `hardlink` en los montajes reales lo permite. D solo si se quiere reparar también lo ya
-inconsistente. **La opción elegida debe decidirse con el equipo antes de escribir el lote**; esta
-auditoría no la impone.
+**Una afirmación retirada.** La primera versión de esta auditoría decía que «ninguna opción requiere
+persistir nada nuevo». **Eso no está demostrado**: recuperar automáticamente tras un reinicio exige que la
+identidad de la operación y su destino efectivo sobrevivan, y eso *es* persistencia nueva. Si cabe en
+`File.metadata_` o exige esquema es lo que evalúa el ADR 0006, con evidencia.
+
+**Caso que faltaba: `commit` de resultado desconocido.** Si la conexión se pierde después de enviar
+`COMMIT` y antes de recibir su confirmación, la aplicación no sabe si se confirmó. No puede asumir
+`rollback` ni compensar borrando el destino: tiene que conservar los ficheros y consultar la BD.
 
 ## Fuera de alcance (anotado, no medido)
 
