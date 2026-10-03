@@ -37,22 +37,42 @@ destino por un fallo de resultado desconocido, y solo se informa `asignado` tras
    **destino efectivo** (con sufijo si el canónico está ocupado), serie, número, formato y hash esperado.
    Reclamar el archivo y **reservar el destino** son la misma inserción atómica (índices únicos parciales).
 2. **Materializar el destino sin retirar el origen:** copia a un temporal en la carpeta del destino,
-   `fsync`, **verificación** (tamaño y `sha256`) y publicación por `rename` atómico.
+   `fsync`, **verificación** (tamaño y `sha256`) y publicación **que nunca reemplaza**:
+   `renameat2(RENAME_NOREPLACE)` o, si el sistema de ficheros no lo admite, `link` + `unlink`. Si el
+   montaje no ofrece ninguna de las dos, **se rechaza** el montaje: no hay un tercer camino «comprobar
+   `exists()` y luego `replace`», porque deja una ventana en la que otro escritor puede crear el destino y
+   `os.replace` lo sustituiría en silencio (el índice de operaciones solo protege a quien usa esa tabla,
+   no a los demás escritores del disco). Si el destino lo ocupó un ajeno, **no se toca**: la operación
+   se cancela (`destino_ocupado`) y el reintento reserva el siguiente nombre libre.
 3. **Confirmar en una transacción:** archivo, `Issue`, alias y la propia operación. Si el `commit` falla con
    resultado desconocido, **se consulta la BD con otra sesión**; si ni eso es posible, se conserva todo.
-4. **Retirar el origen** como limpieza posterior, solo si la asignación está confirmada y el origen sigue
-   siendo el preparado (tamaño y `mtime_ns`).
+4. **Retirar el origen** como limpieza posterior, y **solo si no se puede perder la última copia válida**:
+   (a) el destino existe y es íntegro (tamaño y `sha256`; si se acaba de publicar y verificar en la misma
+   ejecución basta comprobar que sigue ahí); (b) la BD sigue apuntando a ese destino con el `Issue` esperado;
+   (c) el origen es, **por contenido** (`sha256`), la copia verificada: tamaño y `mtime_ns` **no** bastan
+   (se probó una sustitución de igual tamaño y fecha). Si (a) o (b) fallan: **se conserva el origen** y el
+   resultado es `reparacion_pendiente`. Si (c) falla: `asignado_limpieza_pendiente`, sin borrar.
 5. **Reconciliar:** repetir la operación o reiniciar continúa o reconoce lo ya hecho, **consultando solo la
    tabla de operaciones vivas** (índice parcial), sin escanear la biblioteca.
 
 Resultados (conjunto cerrado, con motivo en español): `asignado`, `asignado_limpieza_pendiente` (la
-asignación confirmada **no** pasa a fallida si falla el borrado del origen), `ya_asignado`, `ya_en_curso`,
-`pendiente` (no se pudo confirmar; se reintenta), `pendiente_de_comprobar` (no se pudo ni preguntar a la BD),
+asignación confirmada **no** pasa a fallida si falla el borrado del origen), `reparacion_pendiente` (el
+destino falta o está dañado: se conserva el origen), `ya_asignado`, `ya_en_curso`, `pendiente` (no se pudo
+confirmar; se reintenta), `pendiente_de_comprobar` (no se pudo ni preguntar a la BD), `destino_ocupado`,
 `colision_edicion`, `no_encontrado`, `error`.
 
 La ejecución no se cancela con el cliente (`asyncio.shield`) y se serializa por operación con un **candado
-consultivo de Postgres**: una operación huérfana (su proceso murió) se distingue de una en curso sin
-plazos ni reloj, porque Postgres libera el candado al caer la conexión.
+consultivo de TRANSACCIÓN** (`pg_try_advisory_xact_lock`) en una **conexión dedicada**: una operación
+huérfana (su proceso murió) se distingue de una en curso sin plazos ni reloj, porque Postgres lo libera al
+terminar esa transacción o caer la conexión. **No es un candado de sesión**: esos sobreviven al `rollback` y
+duran hasta un `pg_advisory_unlock` explícito o el fin de la sesión de Postgres, de modo que un fallo del
+desbloqueo con un *pool* reutilizable dejaría la conexión devuelta al pool reteniéndolo. Con el de
+transacción **no existe un desbloqueo que pueda fallar** (`TestCandadoYPoolReutilizable`, con un *pool* real:
+operación normal, cancelación directa, fallo al cerrar la sesión y terminación de la conexión por Postgres).
+**Coste:** cada operación en curso retiene una conexión del *pool* durante toda la copia (en una transacción
+inactiva: `idle_in_transaction_session_timeout` debe permitirlo) y necesita otra para el trabajo corto, así
+que el *pool* debe tener **al menos 2 × operaciones simultáneas** (con 1 conexión y 1 operación habría
+interbloqueo; se probó con un *pool* de 2).
 
 **Los hardlinks quedan como optimización posterior, no como requisito de seguridad.** Antes de usarlos hay
 que medir *desde el contenedor y sobre las rutas reales* y contemplar escrituras concurrentes del etiquetador.
@@ -74,10 +94,12 @@ acordó; V6a **no** se fusiona rebajando la garantía. El `DDL` propuesto está 
 
 ## Lo demostrado (prototipo de un archivo, Postgres y ficheros reales)
 
-`tests/prototipo_asignacion.py` + `tests/test_prototipo_asignacion_pg.py` (21 pruebas; cada defensa se
-comprobó **por mutación**: quitar la verificación del hash, el escudo, el candado, la comprobación del
-origen, la consulta tras un `commit` desconocido o la distinción «asignado con limpieza pendiente» hace
-fallar exactamente la prueba que la protege).
+`tests/prototipo_asignacion.py` + `tests/test_prototipo_asignacion_pg.py` (33 pruebas) +
+`tests/test_prototipo_publicar.py` (6, sin Postgres). Cada defensa se comprobó **por mutación**: quitar la
+verificación del hash de la copia, el escudo, el candado, la comprobación del origen por contenido, la del
+destino o la de la BD antes de borrar, la consulta tras un `commit` desconocido, la distinción «asignado con
+limpieza pendiente», la publicación sin reemplazo (volver a `exists()` + `os.replace`) o el candado de
+transacción (volver al de sesión) hace fallar exactamente las pruebas que lo protegen.
 
 | Requisito de la revisión | Prueba |
 |---|---|
@@ -94,6 +116,11 @@ fallar exactamente la prueba que la protege).
 | Reinicio que reconcilia sin escanear la biblioteca | `…::test_la_reconciliacion_no_recorre_la_biblioteca` (`rglob`, `iterdir` y `os.walk` prohibidos) |
 | Cancelación del cliente mientras sigue el hilo de copia | `TestCancelacionDelCliente` |
 | Copia corrupta | `TestCopiaVerificada` → no se publica, el origen intacto |
+| **No borrar la última copia** (revisión de #76): destino ausente, corrupto (mismo y distinto tamaño) o BD que ya no apunta, tras confirmar | `TestNoBorrarLaUltimaCopia` → `reparacion_pendiente`, origen conservado |
+| Origen sustituido por otro de **igual tamaño y fecha** | `…::test_un_origen_sustituido_con_igual_tamano_y_fecha_no_se_borra` → no se borra |
+| **Publicar sin reemplazar** (revisión de #76): ajeno que aparece tras la comprobación y antes de publicar | `test_prototipo_publicar.py::…aparece_justo_antes_de_publicar` y `TestPublicarEnElServicio` → ajeno intacto, `destino_ocupado`, el reintento usa el sufijo |
+| Montaje sin ninguna publicación segura | `…::test_si_el_montaje_no_ofrece_ninguna_garantia…` y `…rechaza_la_operacion` → rechazado, nada tocado |
+| **Candado y pool real** (revisión de #76) | `TestCandadoYPoolReutilizable` (5): ninguna conexión vuelve al pool reteniéndolo |
 
 ## Coste medido
 
@@ -108,14 +135,37 @@ fallar exactamente la prueba que la protege).
 
 - **El hash domina** (~265 MB/s aquí): la copia es el 15 % y la verificación el 75 %. En una Pi sin
   extensiones criptográficas será peor; **no medido**.
-- Asignar un archivo de 100 MB de extremo a extremo: **1,0-1,3 s** (frente a ~0 con `rename`).
+- Asignar un archivo de 100 MB de extremo a extremo: **1,0-1,3 s** con la primera versión del prototipo y
+  **1,4-1,7 s** con la limpieza que verifica el origen **por contenido** (un segundo hash: ~0,4 s por 100 MB,
+  el precio de no borrar jamás un fichero distinto). Frente a ~0 con `rename`. Optimizable (identidad por
+  inodo y `ctime` como pre-filtro) pero **no fiable en CIFS**, así que no se asume.
 - **Recuperar** una operación huérfana de 100 MB: **0,9 s**; listar operaciones vivas con 20 000 cerradas:
   **0,5 ms** (índice parcial).
 - Espacio temporal: **1× el tamaño del archivo en curso** (el lote es secuencial).
-- **Consecuencia para el lote:** 50 archivos de 100 MB serían ~1 min aquí, y minutos en una Pi o por CIFS:
-  muy probablemente **no cabe en una petición**. El límite del lote debe fijarse **por bytes, no por número
-  de archivos**, y la ejecución en segundo plano es **otra historia** (V6a criterio 4). Se fija tras medir en
-  el hardware y los montajes reales.
+- **Consecuencia para el lote:** 50 archivos de 100 MB serían ~1,3 min aquí (~65 MB/s de rendimiento
+  sostenido), y minutos en una Pi o por CIFS: muy probablemente **no cabe en una petición**.
+- **Límites del lote (propuesta, a fijar tras medir en el hardware y los montajes reales):** (1) **por
+  bytes** (acota la E/S), (2) **por cantidad** (acota el trabajo de BD y el tamaño del informe), y (3) un
+  **límite de operaciones simultáneas** (acota las conexiones retenidas). «1× el archivo en curso» describe
+  el camino normal, **no el espacio acumulado**: cada `asignado_limpieza_pendiente` o
+  `reparacion_pendiente` deja otra copia completa hasta que se repare, así que el lote debe **dejar de
+  encolar trabajo cuando el volumen de copias pendientes de limpieza supere un umbral** (a fijar), y el
+  informe debe contarlas. La ejecución en segundo plano es **otra historia** (V6a criterio 4).
+
+### Capacidades del montaje (medido en el contenedor)
+
+`scripts/medicion/medir_asignacion.sh` lanza el banco **desde la imagen del proyecto**, con una Postgres propia
+y efímera (tmpfs, sin puertos), montando **solo** las carpetas que se le indiquen. Resultado en
+`docs/design/medicion-asignacion-contenedor-2026-10-04.json` para el único montaje probado:
+
+| Montaje (visto desde el contenedor) | `renameat2` sin reemplazo (libre / ocupado) | `link` | `fsync` fichero / directorio | `_publicar` con un ajeno |
+|---|---|---|---|---|
+| NVMe local, `ntfs3`, bind mount | ok / `EEXIST` | ok | ok / ok | ajeno intacto |
+| **Pi** (ext4, SD/USB) | **sin medir** | | | |
+| **CIFS** | **sin medir** | | | |
+
+Cada montaje nuevo se **acepta o se rechaza** según esta tabla. Que el banco corra desde el contenedor
+importa porque la semántica de un *bind mount* puede diferir de la del anfitrión.
 
 ## Lo que NO está demostrado
 
@@ -123,15 +173,16 @@ fallar exactamente la prueba que la protege).
   El prototipo hace `fsync` del fichero y, en mejor esfuerzo, del directorio; **no se ha probado** que un
   `rename` o una copia sobrevivan a un apagón (ni en ext4, ni NTFS, ni CIFS).
 - **Montajes reales:** NVMe/ntfs3 local es lo único medido. Sin medir: CIFS, exFAT, ext4 en SD/USB y la Pi.
-  La semántica de `fsync` y `rename` sobre CIFS es la gran incógnita.
+  La semántica de `fsync`, `rename`, `renameat2` y `link` sobre CIFS es la gran incógnita; la medición
+  fija **límites y estrategia de ejecución**, **no sustituye** las garantías anteriores.
 - **Cancelación con uvicorn real:** probada a nivel de tarea (`asyncio`), no con una desconexión HTTP real.
 - **Hardlinks:** sin medir ni probar (decididos como optimización posterior).
 - **Importador:** un `commit` para todo `scan_and_import()` (`main.py:35`); el mismo riesgo a mayor escala,
   fuera de este ADR (su propia historia).
 - **Arranque:** dónde y cuándo llamar a `reconciliar()` (tarea de fondo tras el *lifespan*, para no bloquear
   el healthcheck) está por diseñar e implementar.
-- **Candado consultivo** retiene una conexión durante toda la copia; con el *pool* de la Pi (tamaño por
-  confirmar) habrá que medir el efecto con varias operaciones.
+- **Tamaño del *pool* en la Pi** (por confirmar): el candado de transacción retiene una conexión por
+  operación; el límite de simultáneas debe respetar `2 × simultáneas ≤ pool`.
 
 ## Consecuencias
 
