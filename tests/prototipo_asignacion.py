@@ -28,11 +28,22 @@ Las decisiones que lo sostienen (ADR 0006):
 - **Publicar nunca reemplaza:** `renameat2(RENAME_NOREPLACE)` o, si el sistema de ficheros no lo admite,
   `link` + `unlink`; si tampoco, se **rechaza el montaje** (no se vuelve a «comprobar y luego `replace`»).
 - **El origen solo se borra si es, por CONTENIDO, la copia verificada, y el destino sigue existiendo
-  íntegro y la BD sigue apuntando a él**: nunca se borra la última copia válida.
+  íntegro (se vuelve a hashear SIEMPRE: no hay exclusión de escritores que sostenga «ya lo verifiqué
+  antes») y la BD sigue apuntando a él**: nunca se borra la última copia válida.
+- **Perder el candado no detiene el trabajo de Python: se vallan los efectos.** Cada ejecutor toma una
+  `epoca` (contador en la fila de la operación) al conseguir el candado. Antes de publicar, confirmar o
+  borrar comprueba que SIGUE teniendo el candado (consulta a `pg_locks` sobre su propia conexión) y toda
+  escritura en la BD lleva `AND epoca = <la mía>`: un ejecutor antiguo no puede confirmar ni cerrar nada.
+  El temporal lleva la época en el nombre: no pisa el de otro. Queda una ventana mínima entre la
+  comprobación y el efecto en disco; su efecto es inocuo por construcción (se publica un fichero verificado
+  con `NOREPLACE`, y se borra un origen solo si su contenido ya es la copia íntegra y confirmada).
+- `max_simultaneas` es **por instancia del servicio**: al integrarlo habrá que compartir el límite entre
+  todas las instancias que usan el mismo pool (aquí una sola instancia no demuestra un límite global).
 """
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ctypes
 import errno
 import hashlib
@@ -62,6 +73,7 @@ CREATE TABLE asignacion_operaciones (
     temporal       text NOT NULL,
     size_bytes     bigint NOT NULL,
     mtime_ns       bigint NOT NULL,
+    epoca          integer NOT NULL DEFAULT 0,
     sha256         text NOT NULL,
     series_id      uuid NOT NULL REFERENCES series(id),
     issue_number   text NOT NULL,
@@ -80,7 +92,7 @@ VIVAS = "estado IN ('preparada', 'confirmada')"
 
 @dataclass(frozen=True)
 class Resultado:
-    estado: str      # asignado | asignado_limpieza_pendiente | reparacion_pendiente | ya_asignado | ya_en_curso | pendiente | pendiente_de_comprobar | destino_ocupado | colision_edicion | no_encontrado | error
+    estado: str      # asignado | asignado_limpieza_pendiente | reparacion_pendiente | propiedad_perdida | ya_asignado | ya_en_curso | pendiente | pendiente_de_comprobar | destino_ocupado | colision_edicion | no_encontrado | error
     motivo: str = ""
     destino: str | None = None
 
@@ -169,6 +181,25 @@ def _origen_es_el_preparado(origen: Path, size: int, mtime_ns: int) -> bool:
     except FileNotFoundError:
         return False
     return st.st_size == size and st.st_mtime_ns == mtime_ns
+
+
+class _Propiedad:
+    """Lo que un ejecutor sabe de su derecho a actuar: el candado (en su conexión dedicada) y su época."""
+
+    def __init__(self, sesion_del_candado: AsyncSession, clave: int, epoca: int):
+        self._sesion, self._clave, self.epoca = sesion_del_candado, clave, epoca
+
+    async def vigente(self) -> bool:
+        """¿Esta conexión SIGUE sosteniendo el candado? Perder la conexión (o terminar su transacción) lo
+        libera, pero el código Python sigue vivo: hay que preguntarlo antes de cada efecto, no suponerlo."""
+        try:
+            fila = (await self._sesion.execute(text(
+                "SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted AND pid = pg_backend_pid() "
+                "AND classid = :hi AND objid = :lo"),
+                {"hi": self._clave >> 32, "lo": self._clave & 0xFFFFFFFF})).first()
+            return fila is not None
+        except Exception:  # noqa: BLE001 — sin conexión no hay propiedad que acreditar
+            return False
 
 
 class AsignacionRecuperable:
@@ -267,73 +298,115 @@ class AsignacionRecuperable:
             # ni una conexión que vuelva al pool reteniéndolo. La transacción se queda abierta mientras dura
             # el trabajo (en una sesión aparte): `idle_in_transaction_session_timeout` debe permitirlo.
             clave = op_id.int & 0x7FFF_FFFF_FFFF_FFFF
-            async with self._fabrica() as candado_s:
+            candado_s = self._fabrica()
+            try:
                 if not (await candado_s.execute(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": clave})).scalar():
                     return Resultado("ya_en_curso", "Otra ejecución la está completando")
-                return await self._continuar(op_id)
+                epoca = await self._tomar_epoca(op_id)
+                if epoca is None:
+                    return Resultado("ya_asignado", "Operación ya cerrada")
+                return await self._continuar(op_id, _Propiedad(candado_s, clave, epoca))
+            finally:
+                # Si la conexión del candado murió, cerrarla falla; el candado ya no existe y el resultado
+                # de la operación NO debe perderse por eso.
+                with contextlib.suppress(Exception):
+                    await candado_s.close()
+
+    async def _tomar_epoca(self, op_id: UUID) -> int | None:
+        """Cada ejecutor que consigue el candado incrementa la época (y la confirma): es su ficha de vallado."""
+        async with self._fabrica() as s:
+            fila = (await s.execute(text(
+                f"UPDATE asignacion_operaciones SET epoca = epoca + 1, actualizada = now() "
+                f"WHERE id = :i AND {VIVAS} RETURNING epoca"), {"i": op_id})).first()
+            await s.commit()
+        return fila[0] if fila else None
 
     async def _op(self, op_id: UUID):
         async with self._fabrica() as s:
             return (await s.execute(text("SELECT * FROM asignacion_operaciones WHERE id = :i"),
                                     {"i": op_id})).mappings().first()
 
-    async def _continuar(self, op_id: UUID) -> Resultado:
+    async def _continuar(self, op_id: UUID, prop: _Propiedad) -> Resultado:
         op = await self._op(op_id)
         if op is None or op["estado"] in ("limpiada", "cancelada"):
             return Resultado("ya_asignado", "Operación ya cerrada", op["destino"] if op else None)
-        origen, destino, temporal = Path(op["origen"]), Path(op["destino"]), Path(op["temporal"])
-        destino_verificado = False
+        origen, destino = Path(op["origen"]), Path(op["destino"])
+        base_temporal = Path(op["temporal"])
+        mi_temporal = base_temporal.with_name(f"{base_temporal.name}.{prop.epoca}")
+        perdida = Resultado("propiedad_perdida", "Otra ejecución tomó la operación; esta se detiene sin tocar nada",
+                            op["destino"])
 
         if op["estado"] == "preparada":
-            destino_verificado = False
             await self._gancho("tras_preparar")
             if not destino.exists():
-                temporal.unlink(missing_ok=True)       # un temporal de un intento anterior: se descarta
+                for anterior in range(1, prop.epoca):                  # temporales de ejecutores anteriores
+                    base_temporal.with_name(f"{base_temporal.name}.{anterior}").unlink(missing_ok=True)
+                base_temporal.unlink(missing_ok=True)
                 if not _origen_es_el_preparado(origen, op["size_bytes"], op["mtime_ns"]):
                     return Resultado("error", "El origen cambió o desapareció antes de copiarlo; no se toca nada")
+                if not await prop.vigente():
+                    return perdida
                 try:
-                    await asyncio.to_thread(_copiar_y_verificar, origen, temporal, op["sha256"], op["size_bytes"])
+                    await asyncio.to_thread(_copiar_y_verificar, origen, mi_temporal, op["sha256"], op["size_bytes"])
                 except OSError as exc:
                     return Resultado("error", f"La copia no se pudo verificar: {exc}")
                 await self._gancho("tras_copiar")
+                if not await prop.vigente():
+                    mi_temporal.unlink(missing_ok=True)
+                    return perdida
                 try:
-                    await asyncio.to_thread(_publicar, temporal, destino)
+                    await asyncio.to_thread(_publicar, mi_temporal, destino)
+                except FileNotFoundError:
+                    return perdida           # su temporal ya no está: otro ejecutor lo limpió al tomar la operación
                 except FileExistsError:
                     # Alguien (ajeno a las operaciones) ocupó el destino tras reservarlo: NO se toca. La
                     # operación se cancela y quien reintente reservará el siguiente nombre libre.
-                    temporal.unlink(missing_ok=True)
-                    await self._cerrar(op_id, "cancelada")
+                    mi_temporal.unlink(missing_ok=True)
+                    if not await self._cerrar(op_id, "cancelada", prop.epoca):
+                        return perdida
                     return Resultado("destino_ocupado", "Otro fichero ocupó el destino; no se tocó. Reintenta.", op["destino"])
                 except PublicacionNoSoportadaError as exc:
-                    temporal.unlink(missing_ok=True)
-                    await self._cerrar(op_id, "cancelada")
+                    mi_temporal.unlink(missing_ok=True)
+                    await self._cerrar(op_id, "cancelada", prop.epoca)
                     return Resultado("error", str(exc), op["destino"])
-                destino_verificado = True
             else:
                 # Un intento anterior ya publicó. Se comprueba antes de aprovecharlo.
                 ok = destino.stat().st_size == op["size_bytes"] and await asyncio.to_thread(_sha256, destino) == op["sha256"]
                 if not ok:
                     return Resultado("error", "El destino existe pero no coincide con el original; no se toca nada")
-                destino_verificado = True
             await self._gancho("tras_publicar")
-            confirmada = await self._confirmar(op)
+            if not await prop.vigente():
+                return perdida
+            confirmada = await self._confirmar(op, prop)
             if isinstance(confirmada, Resultado):
                 return confirmada
             await self._gancho("tras_confirmar")
 
-        return await self._limpiar(op_id, origen, op, destino_verificado=destino_verificado)
+        return await self._limpiar(op_id, origen, op, prop)
 
-    async def _cerrar(self, op_id: UUID, estado: str) -> None:
+    async def _cerrar(self, op_id: UUID, estado: str, epoca: int) -> bool:
+        """Cierra la operación SOLO si la época sigue siendo la del llamante (vallado)."""
         async with self._fabrica() as s:
-            await s.execute(text("UPDATE asignacion_operaciones SET estado = :e, actualizada = now() WHERE id = :i"),
-                            {"e": estado, "i": op_id})
+            hecho = (await s.execute(text(
+                "UPDATE asignacion_operaciones SET estado = :e, actualizada = now() "
+                "WHERE id = :i AND epoca = :ep RETURNING 1"), {"e": estado, "i": op_id, "ep": epoca})).first()
             await s.commit()
+        return hecho is not None
 
-    async def _confirmar(self, op) -> Resultado | None:
+    async def _confirmar(self, op, prop: _Propiedad) -> Resultado | None:
         """Una transacción: archivo, issue, alias y la propia operación. Ante un fallo de commit de
         RESULTADO DESCONOCIDO no se asume nada: se pregunta a la BD con otra sesión."""
         try:
             async with self._fabrica() as s:
+                # Vallado: lo PRIMERO es reclamar la fila con la época propia; si otro ejecutor la tomó
+                # después, esto no devuelve nada y no se escribe ni una línea más. La fila queda bloqueada
+                # hasta el commit, así que el otro ejecutor tampoco puede confirmar a la vez.
+                if (await s.execute(text(
+                        "UPDATE asignacion_operaciones SET actualizada = now() "
+                        "WHERE id = :i AND epoca = :ep AND estado = 'preparada' RETURNING 1"),
+                        {"i": op["id"], "ep": prop.epoca})).first() is None:
+                    await s.rollback()
+                    return Resultado("propiedad_perdida", "Otra ejecución tomó la operación; no se confirma", op["destino"])
                 file = await s.get(File, op["file_id"], with_for_update=True)
                 serie = await s.get(Series, op["series_id"])
                 issue = (await s.execute(select(Issue).where(
@@ -352,8 +425,8 @@ class AsignacionRecuperable:
                 file.metadata_source = MetadataSource.MANUAL.value
                 await s.flush()
                 await ReviewService(s)._learn_alias(nombre_original, serie.id)
-                await s.execute(text("UPDATE asignacion_operaciones SET estado = 'confirmada', actualizada = now() WHERE id = :i"),
-                                {"i": op["id"]})
+                await s.execute(text("UPDATE asignacion_operaciones SET estado = 'confirmada', actualizada = now() "
+                                     "WHERE id = :i AND epoca = :ep"), {"i": op["id"], "ep": prop.epoca})
                 await s.commit()
             return None
         except Exception as exc:  # noqa: BLE001 — el resultado del commit puede ser desconocido
@@ -367,20 +440,21 @@ class AsignacionRecuperable:
                 return None                      # sí se confirmó: la respuesta se perdió
             return Resultado("pendiente", f"No se pudo confirmar ({type(exc).__name__}); se reintentará", op["destino"])
 
-    async def _limpiar(self, op_id: UUID, origen: Path, op, *, destino_verificado: bool) -> Resultado:
+    async def _limpiar(self, op_id: UUID, origen: Path, op, prop: _Propiedad) -> Resultado:
         """Retira el origen SOLO si su borrado no puede perder la última copia válida:
 
-        1. el destino existe y es íntegro (tamaño y sha256; si se acaba de publicar y verificar en esta
-           misma ejecución basta comprobar que sigue ahí con su tamaño);
+        1. el destino existe y es íntegro: tamaño y sha256 **siempre releídos** (nada de «lo verifiqué al
+           publicar»: entre publicar y limpiar puede alterarlo quien sea, y no hay exclusión de escritores);
         2. la BD sigue apuntando a ese destino con el `Issue` esperado;
-        3. el origen es, por CONTENIDO, la copia verificada (sha256): tamaño y `mtime_ns` no bastan.
+        3. el origen es, por CONTENIDO, la copia verificada (sha256): tamaño y `mtime_ns` no bastan;
+        4. este ejecutor SIGUE siendo el dueño de la operación.
         Si algo no cuadra se CONSERVA el origen y se devuelve `reparacion_pendiente`.
         """
         destino = Path(op["destino"])
         if origen.exists() and origen != destino:
             try:
-                ok_destino = destino.is_file() and destino.stat().st_size == op["size_bytes"] and (
-                    destino_verificado or await asyncio.to_thread(_sha256, destino) == op["sha256"])
+                ok_destino = (destino.is_file() and destino.stat().st_size == op["size_bytes"]
+                              and await asyncio.to_thread(_sha256, destino) == op["sha256"])
             except OSError:
                 ok_destino = False
             if not ok_destino:
@@ -397,6 +471,8 @@ class AsignacionRecuperable:
             if not mismo_contenido:
                 return Resultado("asignado_limpieza_pendiente",
                                  "El origen ya no es el fichero que se copió; no se borra", op["destino"])
+            if not await prop.vigente():
+                return Resultado("propiedad_perdida", "Otra ejecución tomó la operación; no se borra nada", op["destino"])
             try:
                 await asyncio.to_thread(self._borrar, origen)
             except OSError as exc:
@@ -404,7 +480,8 @@ class AsignacionRecuperable:
         elif origen == destino:
             return Resultado("error", "El origen y el destino coinciden; no se borra nada")
         await self._gancho("tras_borrar_origen")
-        await self._cerrar(op_id, "limpiada")
+        if not await self._cerrar(op_id, "limpiada", prop.epoca):
+            return Resultado("propiedad_perdida", "Otra ejecución tomó la operación", op["destino"])
         return Resultado("asignado", "", op["destino"])
 
     async def _bd_apunta_al_destino(self, op) -> bool:

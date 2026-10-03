@@ -8,6 +8,7 @@ corte eléctrico (ver la auditoría). Se saltan sin `TEST_DATABASE_URL`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import os
 import subprocess
@@ -205,7 +206,7 @@ class TestCommitDeResultadoDesconocido:
         async def commit_con_respuesta_perdida(self):
             await original(self)
             estado["n"] += 1
-            if estado["n"] == 2:                    # 1.º = preparar; 2.º = confirmar
+            if estado["n"] == 3:                    # 1.º = preparar; 2.º = tomar la época; 3.º = confirmar
                 raise ConnectionResetError("se perdió la conexión tras enviar COMMIT")
         monkeypatch.setattr(AsyncSession, "commit", commit_con_respuesta_perdida)
         r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
@@ -220,7 +221,7 @@ class TestCommitDeResultadoDesconocido:
 
         async def commit_que_no_llega(self):
             estado["n"] += 1
-            if estado["n"] == 2:
+            if estado["n"] == 3:
                 await self.rollback()
                 raise ConnectionResetError("la conexión cayó antes de que llegara el COMMIT")
             return await original(self)
@@ -242,7 +243,7 @@ class TestCommitDeResultadoDesconocido:
 
         async def commit_roto(self):
             estado["n"] += 1
-            if estado["n"] == 2:
+            if estado["n"] == 3:
                 raise ConnectionResetError("caída")
             return await original_commit(self)
 
@@ -583,10 +584,8 @@ class TestCandadoYPoolReutilizable:
             return await original_close(self)
         try:
             monkeypatch.setattr(AsyncSession, "close", close_que_falla_una_vez)
-            try:
+            with contextlib.suppress(ConnectionResetError):
                 await AsignacionRecuperable(fab, mundo.lib).asignar(mundo.file_id, mundo.serie_id, "12")
-            except ConnectionResetError:
-                pass
             monkeypatch.setattr(AsyncSession, "close", original_close)
             assert await self._candados(mundo) == 0
             # El pool sigue sirviendo: se puede volver a reconciliar sin quedarse esperando un candado huérfano.
@@ -612,10 +611,8 @@ class TestCandadoYPoolReutilizable:
                 await s.execute(text(
                     "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted"))
                 await s.commit()
-            try:
+            with contextlib.suppress(Exception):   # la operación puede acabar con el error de la conexión muerta
                 await tarea
-            except Exception:  # noqa: BLE001 — la operación puede acabar con el error de la conexión muerta
-                pass
             await asyncio.sleep(0.3)
             assert await self._candados(mundo) == 0
             await AsignacionRecuperable(fab, mundo.lib).reconciliar()
@@ -642,3 +639,191 @@ class TestCandadoYPoolReutilizable:
             assert a.estado == "asignado" and b.estado == "asignado"
         finally:
             await motor.dispose()
+
+
+class TestIntegridadEnLaMismaEjecucion:
+    """Revisión de #76: «lo verifiqué al publicar» no sostiene nada sin exclusión de escritores."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("punto", ["tras_publicar", "tras_confirmar"])
+    async def test_un_destino_alterado_con_el_mismo_tamano_antes_de_limpiar_conserva_el_origen(self, mundo, punto):
+        async def alterar(p):
+            if p == punto:
+                async with mundo.fabrica() as s:
+                    destino = Path((await s.execute(text("SELECT destino FROM asignacion_operaciones"))).scalar())
+                datos = bytearray(destino.read_bytes())
+                datos[30] ^= 0xFF                                  # mismo tamaño, otro contenido
+                destino.write_bytes(bytes(datos))
+        r = await mundo.servicio(gancho=alterar).asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "reparacion_pendiente" and "íntegro" in r.motivo
+        assert e.origen_existe and e.ops == ["confirmada"]          # el origen válido es la última copia
+
+
+class _DosProcesos:
+    """Dos «procesos» (dos motores, dos servicios) sobre la misma BD y los mismos ficheros."""
+
+    def __init__(self, mundo, monkeypatch):
+        self.mundo = mundo
+        self.motores = [create_async_engine(url_asyncpg(mundo.url), pool_size=3, max_overflow=0) for _ in range(2)]
+        self.fab = [async_sessionmaker(m, expire_on_commit=False) for m in self.motores]
+        self.publicaciones: list[str] = []
+        import tests.prototipo_asignacion as proto
+        real = proto._publicar
+
+        def publicar_contando(temporal, destino):
+            self.publicaciones.append(temporal.name)
+            return real(temporal, destino)
+        monkeypatch.setattr(proto, "_publicar", publicar_contando)
+
+    def servicio(self, i: int, **kw) -> AsignacionRecuperable:
+        return AsignacionRecuperable(self.fab[i], self.mundo.lib, **kw)
+
+    async def matar_candado(self):
+        """Postgres termina la conexión que sostiene el candado (la primera ejecución SIGUE viva en Python)."""
+        async with self.mundo.fabrica() as s:
+            await s.execute(text("SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted"))
+            await s.commit()
+        await asyncio.sleep(0.3)
+
+    async def cerrar(self):
+        for m in self.motores:
+            await m.dispose()
+
+
+class TestPerdidaDelCandadoMientrasSigueElTrabajo:
+    """El candado desaparece con su conexión, pero el ejecutor antiguo sigue vivo: no puede actuar."""
+
+    async def _escenario(self, mundo, monkeypatch, punto_de_pausa, *, borrar_b=None, vigente_siempre=False):
+        dp = _DosProcesos(mundo, monkeypatch)
+        parada, seguir = asyncio.Event(), asyncio.Event()
+        borrados_a: list[Path] = []
+
+        async def gancho_a(p):
+            if p == punto_de_pausa:
+                parada.set()
+                await seguir.wait()
+
+        def borrar_a(p):
+            borrados_a.append(p)
+            p.unlink()
+        if vigente_siempre:
+            import tests.prototipo_asignacion as proto
+
+            async def siempre(self):
+                return True
+            monkeypatch.setattr(proto._Propiedad, "vigente", siempre)
+        a = asyncio.create_task(dp.servicio(0, gancho=gancho_a, borrar=borrar_a).asignar(mundo.file_id, mundo.serie_id, "12"))
+        await parada.wait()
+        await dp.matar_candado()
+        # La segunda ejecución ENTRA mientras la primera sigue activa (pausada, no terminada).
+        kw = {"borrar": borrar_b} if borrar_b else {}
+        rb = await dp.servicio(1, **kw).reconciliar()
+        assert not a.done()
+        antes = len(dp.publicaciones)
+        seguir.set()
+        try:
+            ra = await asyncio.wait_for(a, 60)
+        except Exception as exc:  # noqa: BLE001 — también valdría que la conexión muerta lo hiciera fallar
+            ra = exc
+        return dp, ra, rb, antes, borrados_a
+
+    @pytest.mark.asyncio
+    async def test_el_antiguo_no_publica_tras_perder_el_candado(self, mundo, monkeypatch):
+        dp, ra, rb, antes, _ = await self._escenario(mundo, monkeypatch, "tras_copiar")
+        try:
+            assert [x.estado for x in rb] == ["asignado"]                   # B completó TODO
+            assert getattr(ra, "estado", None) == "propiedad_perdida"
+            assert len(dp.publicaciones) == antes == 1                      # A no llegó a publicar: solo publicó B
+            _asignado_del_todo(await mundo.estado(), mundo)                  # sin temporales de A
+        finally:
+            await dp.cerrar()
+
+    @pytest.mark.asyncio
+    async def test_el_antiguo_no_confirma_tras_perder_el_candado(self, mundo, monkeypatch):
+        confirmaciones: list[int] = []
+        original = AsignacionRecuperable._confirmar
+
+        async def contando(self, op, prop):
+            confirmaciones.append(prop.epoca)
+            return await original(self, op, prop)
+        monkeypatch.setattr(AsignacionRecuperable, "_confirmar", contando)
+        dp, ra, rb, _, _ = await self._escenario(mundo, monkeypatch, "tras_publicar")
+        try:
+            assert [x.estado for x in rb] == ["asignado"]
+            assert getattr(ra, "estado", None) == "propiedad_perdida"
+            assert confirmaciones == [2]                                     # solo la época de B llegó a confirmar
+            _asignado_del_todo(await mundo.estado(), mundo)
+        finally:
+            await dp.cerrar()
+
+    @pytest.mark.asyncio
+    async def test_el_antiguo_no_borra_el_origen_tras_perder_el_candado(self, mundo, monkeypatch):
+        def b_no_puede_borrar(_p):
+            raise PermissionError("B no puede borrar el origen")
+        dp, ra, rb, _, borrados_a = await self._escenario(
+            mundo, monkeypatch, "tras_confirmar", borrar_b=b_no_puede_borrar)
+        try:
+            e = await mundo.estado()
+            assert [x.estado for x in rb] == ["asignado_limpieza_pendiente"]  # B dejó la limpieza pendiente
+            assert getattr(ra, "estado", None) == "propiedad_perdida"
+            assert borrados_a == [] and e.origen_existe                       # A NO llegó a borrar
+            assert e.ops == ["confirmada"]                                    # y no cerró la operación de B
+        finally:
+            await dp.cerrar()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("punto", ["tras_copiar", "tras_publicar"])
+    async def test_aunque_la_comprobacion_de_candado_fallara_el_vallado_de_epoca_protege_la_bd(self, mundo, monkeypatch, punto):
+        """Defensa en profundidad: con `vigente()` mentiroso, A todavía no puede cerrar ni confirmar la operación de B."""
+        dp, ra, rb, _, _ = await self._escenario(mundo, monkeypatch, punto, vigente_siempre=True)
+        try:
+            assert [x.estado for x in rb] == ["asignado"]
+            assert getattr(ra, "estado", None) == "propiedad_perdida"       # el vallado de época lo detiene
+            e = await mundo.estado()
+            assert e.ops == ["limpiada"]                                     # la operación de B no fue alterada por A
+            _asignado_del_todo(e, mundo)
+        finally:
+            await dp.cerrar()
+
+
+class TestLimiteDeSimultaneasPorInstancia:
+    @pytest.mark.asyncio
+    async def test_el_cupo_es_por_instancia_y_no_global(self, mundo):
+        """Anotado para la integración: dos instancias con el mismo pool NO comparten `max_simultaneas`."""
+        a = mundo.servicio(max_simultaneas=1)
+        b = mundo.servicio(max_simultaneas=1)
+        assert a._cupo is not b._cupo
+
+
+class TestValladoDeEpocaEnLaBd:
+    """Cada escritura de un ejecutor antiguo se rechaza en la propia BD, sin depender de ninguna comprobación previa."""
+
+    async def _con_epoca_2(self, mundo):
+        servicio = mundo.servicio()
+        op_id = await servicio._preparar(mundo.file_id, mundo.serie_id, "12")
+        assert await servicio._tomar_epoca(op_id) == 1          # el ejecutor ANTIGUO
+        assert await servicio._tomar_epoca(op_id) == 2          # el que lo sustituyó
+        return servicio, op_id
+
+    @pytest.mark.asyncio
+    async def test_cerrar_con_una_epoca_antigua_no_cambia_nada(self, mundo):
+        servicio, op_id = await self._con_epoca_2(mundo)
+        assert await servicio._cerrar(op_id, "cancelada", 1) is False
+        assert (await mundo.estado()).ops == ["preparada"]
+        assert await servicio._cerrar(op_id, "cancelada", 2) is True      # la vigente sí puede
+
+    @pytest.mark.asyncio
+    async def test_confirmar_con_una_epoca_antigua_no_escribe_ni_una_fila(self, mundo):
+        from tests.prototipo_asignacion import _Propiedad
+        servicio, op_id = await self._con_epoca_2(mundo)
+        op = await servicio._op(op_id)
+        # El destino ya está publicado (como si la ejecución antigua hubiera llegado hasta aquí).
+        destino = Path(op["destino"])
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(mundo.origen.read_bytes())
+        r = await servicio._confirmar(op, _Propiedad(None, 0, 1))
+        e = await mundo.estado()
+        assert r.estado == "propiedad_perdida"
+        assert e.issue_id is None and e.issues == 0 and e.alias == 0 and e.ruta == str(mundo.origen)
+        assert e.ops == ["preparada"]
