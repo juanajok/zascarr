@@ -2,51 +2,138 @@
 
 {% block title %}Inicio — ZascArr{% endblock %}
 
+{#- V4: el Inicio solo PINTA lo que `services/inicio.py` ya calculó (`v`); no recalcula nada. -#}
+{% set r = v.resumen %}
+{% set pasos = v.pasos %}
+{% set informe = v.informe %}
+
+{% macro etiqueta_paso(p) -%}
+{%- if p.estado == "hecho" -%}{{ ui.chip("ok", "Hecho") }}
+{%- elif p.estado == "siguiente" -%}{{ ui.chip("info", "Toca ahora") }}
+{%- elif p.estado == "pendiente" -%}{{ ui.chip("neutro", "Después") }}
+{%- elif p.estado == "bloqueado" -%}{{ ui.chip("neutro", "Aún no se puede") }}
+{%- else -%}{{ ui.chip("neutro", "Opcional") }}
+{%- endif -%}
+{%- endmacro %}
+
+{#- `con_principal=false` (lista plegada): ningún botón de la lista es el principal; ese ya está
+    visible fuera del bloque plegado, y no puede haber dos. -#}
+{% macro lista_de_pasos(con_principal=true) -%}
+<ol class="steps">
+  {% for p in pasos.pasos %}
+  <li class="step {{ p.estado }}"{% if p.estado == "siguiente" %} aria-current="step"{% endif %}>
+    <div class="step-body">
+      <h3>{{ p.titulo }} {{ etiqueta_paso(p) }}</h3>
+      <p class="muted">{{ p.detalle }}</p>
+    </div>
+    {% if p.enlace and p.accion %}
+    <a class="btn{% if con_principal and p == pasos.principal %} primary{% else %} sm{% endif %}" href="{{ p.enlace }}">{{ p.accion }}</a>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{%- endmacro %}
+
 {% block content %}
 <div class="dashboard">
   <h1>Inicio</h1>
-  <p class="subtitle">Mientras tanto, en tu biblioteca: resumen del estado de tu colección y últimas actualizaciones.</p>
-  
+
+  {% if informe %}
+  <p class="subtitle">Miramos tu disco el {{ informe.fecha|fecha_llana }} y encontramos <b>{{ informe.archivos_leidos }}</b> tebeos. Ahora ZascArr tiene registrados <b>{{ r.archivos_registrados }}</b>.</p>
+  {% elif r.archivos_registrados %}
+  <p class="subtitle">ZascArr tiene registrados <b>{{ r.archivos_registrados }}</b> tebeos. Todavía no has mirado tu disco en busca de repetidos.</p>
+  {% else %}
+  <p class="subtitle">Aún no hay tebeos en ZascArr. Te guiamos paso a paso.</p>
+  {% endif %}
+
+  <section class="primeros-pasos" aria-labelledby="h-pasos">
+    {% if pasos.completo %}
+    {#- La acción recomendada se queda FUERA del bloque plegado: un botón dentro de un <details>
+        cerrado existe en el HTML pero nadie lo ve ni lo alcanza con el teclado. -#}
+    <h2 id="h-pasos">Lo básico está hecho</h2>
+    {% set sig = pasos.principal %}
+    {% if sig %}
+    <div class="siguiente-paso">
+      <div class="step-body">
+        <h3>{{ sig.titulo }} {{ etiqueta_paso(sig) }}</h3>
+        <p class="muted">{{ sig.detalle }}</p>
+      </div>
+      <a class="btn primary" href="{{ sig.enlace }}">{{ sig.accion }}</a>
+    </div>
+    {% endif %}
+    <details class="pasos-plegados">
+      <summary>Ver los pasos · {{ pasos.hechos }} de {{ pasos.total }} hechos</summary>
+      {{ lista_de_pasos(false) }}
+    </details>
+    {% else %}
+    <div class="row-pasos">
+      <h2 id="h-pasos">Tu tebeoteca, paso a paso</h2>
+      <span class="muted">{{ pasos.hechos }} de {{ pasos.total }} hechos · lo «opcional» puedes saltártelo</span>
+    </div>
+    {{ ui.progreso(pasos.hechos, pasos.total, "Pasos hechos") }}
+    {{ lista_de_pasos() }}
+    {% endif %}
+  </section>
+
+  {#- Sin nada registrado no hay «colección» que medir: el subtítulo ya dice lo que se encontró. -#}
+  {% if r.total_series or r.archivos_registrados %}
+  <h2 class="seccion">Tu colección ahora</h2>
   <div class="metrics-grid">
     <div class="metric-card">
-      <span class="metric-value">{{ total_series }}</span>
-      <span class="metric-label">Series en la biblioteca</span>
-      {% if series_con_archivos > 0 %}
-      <span class="metric-delta">▲ {{ series_con_archivos }} con archivos</span>
+      {% if informe %}
+      <span class="metric-value">{{ informe.archivos_leidos }}</span>
+      <span class="metric-label">Tebeos encontrados</span>
+      <span class="metric-detail">al mirar tu disco el {{ informe.fecha|fecha_llana }} · {{ r.archivos_registrados }} registrados ahora</span>
+      {% else %}
+      <span class="metric-value">{{ r.archivos_registrados }}</span>
+      <span class="metric-label">Tebeos registrados</span>
+      <span class="metric-detail">en ZascArr · no hemos mirado el disco</span>
       {% endif %}
     </div>
-    
+
     <div class="metric-card">
-      <span class="metric-value">{{ porcentaje_completitud }}%</span>
-      <span class="metric-label">Completitud estimada</span>
-      <span class="metric-detail">{{ total_issues }} números</span>
+      <span class="metric-value">{{ r.total_series }}</span>
+      <span class="metric-label">Series en la biblioteca</span>
+      {% if r.series_con_archivos > 0 %}
+      <span class="metric-delta">{{ r.series_con_archivos }} con archivos</span>
+      {% endif %}
     </div>
-    
-    <div class="metric-card metric-warning">
-      <span class="metric-value">{{ huecos_pendientes }}</span>
-      <span class="metric-label">Números pendientes</span>
-      <span class="metric-detail">Requieren atención</span>
-    </div>
-    
+
     <div class="metric-card">
-      <span class="metric-value">{{ ultimas_series|length }}</span>
-      <span class="metric-label">Actualizadas recientemente</span>
-      <span class="metric-detail">con actividad reciente</span>
+      <span class="metric-value">{{ v.archivos_sin_clasificar }}</span>
+      <span class="metric-label">Por revisar</span>
+      <span class="metric-detail">{% if v.archivos_sin_clasificar %}<a href="/ui/pendientes">tebeos sin clasificar →</a>{% else %}nada sin clasificar{% endif %}</span>
+    </div>
+
+    <div class="metric-card{% if r.series_con_recuento and r.huecos_pendientes %} metric-warning{% endif %}">
+      {% if r.series_con_recuento %}
+      <span class="metric-value">{{ r.huecos_pendientes }}</span>
+      <span class="metric-label">Números que te faltan</span>
+      <span class="metric-detail">calculados en {{ r.series_con_recuento }} {{ "serie" if r.series_con_recuento == 1 else "series" }}, según su recuento de grapas y la numeración actual{% if r.completitud %} · tienes {{ r.completitud.tienes }} de {{ r.completitud.de }} ({{ r.completitud.porcentaje }} %){% endif %}</span>
+      {% else %}
+      <span class="metric-value" aria-label="sin datos">—</span>
+      <span class="metric-label">Números que te faltan</span>
+      <span class="metric-detail">Aún no se pueden calcular: aparecerán cuando alguna serie tenga un recuento de grapas.</span>
+      {% endif %}
+      {% if r.series_sin_recuento and r.total_series %}
+      <span class="metric-detail">{{ r.series_sin_recuento }} {{ "serie" if r.series_sin_recuento == 1 else "series" }} sin recuento: de {{ "ella" if r.series_sin_recuento == 1 else "ellas" }} no sabemos qué falta.</span>
+      {% endif %}
     </div>
   </div>
-  
+  {% endif %}
+
   <section class="latest-updates">
     <div class="section-header">
       <h2>Últimas actualizaciones</h2>
       <a href="/ui/biblioteca" class="view-all">Ver toda la biblioteca →</a>
     </div>
-    
-    {% if ultimas_series %}
+
+    {% if r.ultimas_series %}
     <div class="series-grid">
-      {% for series in ultimas_series %}
+      {% for series in r.ultimas_series %}
       <a href="/ui/series/{{ series.id }}" class="series-card">
-        <img 
-          src="/ui/series/{{ series.id }}/portada" 
+        <img
+          src="/ui/series/{{ series.id }}/portada"
           alt="{{ series.title }}"
           onerror="this.classList.add('cover-missing')"
         >
@@ -58,29 +145,19 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="empty-state">Aún no hay series importadas. ¡Empieza añadiendo tebeos a tu colección!</p>
+    <p class="empty-state">Aún no hay series con archivos. Cuando tus tebeos estén clasificados aparecerán aquí.</p>
     {% endif %}
   </section>
-  
-  <section class="discover">
-    <h2>Descubre tu próxima serie</h2>
-    <p class="discover-desc">Busca por título, autor, personaje, género o editorial y añádela a tu seguimiento.</p>
-    
-    <form action="/ui/wishlist" method="get" class="search-form">
-      <input 
-        type="search" 
-        name="q" 
-        placeholder="Buscar serie para añadir a deseados" 
-        class="search-input"
-        hx-get="/ui/wishlist/buscar-serie"
-        hx-trigger="keyup changed delay:400ms"
-        hx-target="#resultados-wishlist"
-        hx-swap="innerHTML"
-      >
-      <button type="submit" class="btn-primary">Ir a deseados →</button>
+
+  <section class="discover" aria-labelledby="h-buscar">
+    <h2 id="h-buscar">Buscar una serie</h2>
+    <p class="discover-desc">Busca en Comic Vine, AniList, Tebeosfera y GCD para darla de alta y seguirla. No busca entre lo que ya tienes: para eso está <a href="/ui/biblioteca">Biblioteca</a>.</p>
+
+    <form action="/ui/descubrir" method="get" class="search-form" role="search">
+      <label class="sr" for="q-inicio">Título de la serie</label>
+      <input id="q-inicio" type="search" name="q" placeholder="Título de la serie…" class="search-input" required>
+      <button type="submit" class="btn sm neutro">Buscar →</button>
     </form>
-    
-    <div id="resultados-wishlist" class="series-results"></div>
   </section>
 </div>
 {% endblock %}

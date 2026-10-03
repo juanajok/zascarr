@@ -14,7 +14,7 @@ import asyncio
 import hashlib
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,8 +61,9 @@ def _cover_host_allowed(url: str, source: MetadataSource) -> bool:
 
 
 @router.get("", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "descubrir.html", {})
+async def index(request: Request, q: str = Query(default="", max_length=200)) -> HTMLResponse:
+    """`?q=` (V4: «Buscar una serie» del Inicio) prellena la caja y lanza la búsqueda al cargar."""
+    return templates.TemplateResponse(request, "descubrir.html", {"q": q.strip()})
 
 
 @router.get("/buscar", response_class=HTMLResponse)

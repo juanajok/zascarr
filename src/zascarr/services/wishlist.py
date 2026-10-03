@@ -14,7 +14,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import Series, Wishlist, WishlistStatus
+from zascarr.models import Issue, Series, Wishlist, WishlistStatus
 
 
 class WishlistService:
@@ -25,6 +25,20 @@ class WishlistService:
         """Deseos activos: los que lista /ui/wishlist (los `retirado` no se muestran; D8)."""
         return (await self.db.execute(
             select(func.count()).select_from(Wishlist)
+            .where(Wishlist.status != WishlistStatus.RETIRADO)
+        )).scalar_one()
+
+    async def count_active_series(self) -> int:
+        """SERIES distintas con algún deseo activo (el Inicio dice «sigues N series»).
+
+        `count_active` cuenta peticiones: varias de la misma serie, o por número, o duplicadas,
+        inflarían ese texto. Una petición por número no lleva `series_id`: se toma el de su issue.
+        """
+        serie = func.coalesce(Wishlist.series_id, Issue.series_id)
+        return (await self.db.execute(
+            select(func.count(func.distinct(serie)))
+            .select_from(Wishlist)
+            .outerjoin(Issue, Issue.id == Wishlist.issue_id)
             .where(Wishlist.status != WishlistStatus.RETIRADO)
         )).scalar_one()
 
