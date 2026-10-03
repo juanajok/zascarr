@@ -56,3 +56,27 @@ def _testclient_en_localhost(monkeypatch, request):
         original(self, app, *args, **kwargs)
 
     monkeypatch.setattr(TestClient, "__init__", _init)
+
+
+@pytest.fixture(scope="session")
+def _bd_de_pruebas_al_dia():
+    """La BD de `TEST_DATABASE_URL` se migra a `head` UNA vez por sesión.
+
+    Antes cada prueba de Postgres daba por hecho un esquema que nadie preparaba: sobre una base
+    vacía fallaban ~100 y sobre una migrada fallaba la que exigía lo contrario (ver `tests/_pg.py`).
+    Idempotente: si ya está en `head`, `upgrade` no hace nada.
+    """
+    import os
+
+    url = os.environ.get("TEST_DATABASE_URL")
+    if url:
+        from tests._pg import migrar_a_head
+        migrar_a_head(url)
+
+
+@pytest.fixture(autouse=True)
+def _esquema_de_pruebas(request):
+    import os
+
+    if os.environ.get("TEST_DATABASE_URL"):
+        request.getfixturevalue("_bd_de_pruebas_al_dia")
