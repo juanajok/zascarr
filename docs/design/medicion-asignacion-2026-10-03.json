@@ -1,0 +1,60 @@
+{
+  "maquina": {
+    "python": "3.14.4",
+    "cpu": "desconocido",
+    "nucleos": 8,
+    "disco": "ntfs3 /dev/nvme0n1p5"
+  },
+  "ficheros": {
+    "10": {
+      "rename_s (ida y vuelta /2)": 0.0,
+      "copia+fsync+sha256_s": 0.053,
+      "solo_sha256_s": 0.038,
+      "solo_copia_s": 0.008,
+      "espacio_temporal_extra_MB": 10
+    },
+    "50": {
+      "rename_s (ida y vuelta /2)": 0.0,
+      "copia+fsync+sha256_s": 0.247,
+      "solo_sha256_s": 0.2,
+      "solo_copia_s": 0.037,
+      "espacio_temporal_extra_MB": 50
+    },
+    "100": {
+      "rename_s (ida y vuelta /2)": 0.0,
+      "copia+fsync+sha256_s": 0.5,
+      "solo_sha256_s": 0.378,
+      "solo_copia_s": 0.073,
+      "espacio_temporal_extra_MB": 100
+    },
+    "200": {
+      "rename_s (ida y vuelta /2)": 0.0,
+      "copia+fsync+sha256_s": 1.007,
+      "solo_sha256_s": 0.747,
+      "solo_copia_s": 0.148,
+      "espacio_temporal_extra_MB": 200
+    }
+  },
+  "bd": {
+    "metadata_con_50000_filas": {
+      "consulta_mediana_ms": 5.2,
+      "encontradas": 50,
+      "plan": "Aggregate  (cost=1412.99..1413.00 rows=1 width=8) |   ->  Bitmap Heap Scan on files  (cost=1236.41..1412.86 rows=53 width=0) |         Recheck Cond: (metadata ? 'asignacion_pendiente'::text)"
+    },
+    "operaciones_vivas_con_20000_cerradas": {
+      "consulta_mediana_ms": 0.5,
+      "plan": "Index Scan using uq_asignacion_viva_por_destino on asignacion_operaciones  (cost=0.12..7.52 rows=1 width=16)"
+    },
+    "recuperar_una_operacion_100MB_publicada_sin_confirmar_s": {
+      "s": 0.918,
+      "resultado": [
+        "asignado"
+      ]
+    },
+    "asignar_un_archivo_de_100MB_extremo_a_extremo_s": [
+      1.312,
+      1.036,
+      1.15
+    ]
+  }
+}
