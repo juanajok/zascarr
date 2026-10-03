@@ -12,11 +12,12 @@ Ver también `tests/test_pg_ciclo_de_vida.py`.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 import sys
-from collections.abc import AsyncIterator, Mapping
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator, Mapping
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -84,13 +85,7 @@ def migrar_a_head(url: str) -> None:
     alembic(url, "upgrade", "head")
 
 
-@asynccontextmanager
-async def bd_efimera(url_base: str) -> AsyncIterator[str]:
-    """Una base de datos NUEVA y vacía (sin migrar) en el mismo servidor; se borra al salir.
-
-    Devuelve su URL. Necesita permiso de `CREATE DATABASE` (el usuario de los contenedores de
-    pruebas y el del servicio de CI lo tienen).
-    """
+async def _crear_efimera(url_base: str) -> tuple[str, str]:
     exigir_nombre_de_prueba(url_base)
     nombre = f"zascarr_test_efimera_{uuid4().hex[:12]}"
     destino = make_url(url_base).set(database=nombre).render_as_string(hide_password=False)
@@ -98,10 +93,41 @@ async def bd_efimera(url_base: str) -> AsyncIterator[str]:
     try:
         async with admin.connect() as conexion:
             await conexion.execute(text(f'CREATE DATABASE "{nombre}"'))
-        try:
-            yield destino
-        finally:
-            async with admin.connect() as conexion:
-                await conexion.execute(text(f'DROP DATABASE IF EXISTS "{nombre}" WITH (FORCE)'))
     finally:
         await admin.dispose()
+    return destino, nombre
+
+
+async def _borrar_efimera(url_base: str, nombre: str) -> None:
+    admin = create_async_engine(url_asyncpg(url_base), isolation_level="AUTOCOMMIT")
+    try:
+        async with admin.connect() as conexion:
+            await conexion.execute(text(f'DROP DATABASE IF EXISTS "{nombre}" WITH (FORCE)'))
+    finally:
+        await admin.dispose()
+
+
+@asynccontextmanager
+async def bd_efimera(url_base: str) -> AsyncIterator[str]:
+    """Una base de datos NUEVA y vacía (sin migrar) en el mismo servidor; se borra al salir.
+
+    Devuelve su URL. Necesita permiso de `CREATE DATABASE` (el usuario de los contenedores de
+    pruebas y el del servicio de CI lo tienen).
+    """
+    destino, nombre = await _crear_efimera(url_base)
+    try:
+        yield destino
+    finally:
+        await _borrar_efimera(url_base, nombre)
+
+
+@contextmanager
+def bd_efimera_sync(url_base: str) -> Iterator[str]:
+    """Lo mismo para fixtures SÍNCRONAS de alcance de módulo (crear y borrar en bucles distintos:
+    un `asynccontextmanager` abierto con `asyncio.run` se cerraría, y borraría la BD, al acabar
+    ese bucle)."""
+    destino, nombre = asyncio.run(_crear_efimera(url_base))
+    try:
+        yield destino
+    finally:
+        asyncio.run(_borrar_efimera(url_base, nombre))
