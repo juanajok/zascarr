@@ -123,23 +123,38 @@ class TestDatabaseStatusPg:
 
 class TestArranqueDegradadoPg:
 
-    def test_bd_sin_esquema_arranca_y_sirve_solo_diagnostico(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_bd_sin_esquema_arranca_y_sirve_solo_diagnostico(self, monkeypatch):
         """E6: contra una BD real SIN migrar, la app arranca degradada y
-        /api/health reporta `migration_required`; /ui/* falla cerrado con 503."""
-        import zascarr.database as dbmod
+        /api/health reporta `migration_required`; /ui/* falla cerrado con 503.
+
+        Usa SU PROPIA base de datos vacía (`bd_efimera`). Antes leía la de `TEST_DATABASE_URL`,
+        que el resto de pruebas de Postgres exigen MIGRADA: las dos condiciones son incompatibles
+        sobre la misma base, así que esta prueba solo pasaba en una base virgen (y entonces
+        fallaban ~100 de las demás)."""
         from fastapi.testclient import TestClient
 
+        import zascarr.database as dbmod
+        from tests._pg import bd_efimera
         from zascarr.main import app
 
-        engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
-        sesion = async_sessionmaker(engine, expire_on_commit=False)
-        monkeypatch.setattr(dbmod, "engine", engine)
-        monkeypatch.setattr(dbmod, "async_session_factory", sesion)
-
-        with TestClient(app, raise_server_exceptions=False) as client:
-            r_health = client.get("/api/health")
-            r_ui = client.get("/ui/")
+        async with bd_efimera(TEST_DATABASE_URL) as url:
+            engine = create_async_engine(_url_asyncpg(url))
+            sesion = async_sessionmaker(engine, expire_on_commit=False)
+            monkeypatch.setattr(dbmod, "engine", engine)
+            monkeypatch.setattr(dbmod, "async_session_factory", sesion)
+            try:
+                # TestClient es síncrono y arranca su propio bucle: fuera del bucle de la prueba.
+                import anyio
+                r_health, r_ui = await anyio.to_thread.run_sync(_peticiones, TestClient, app)
+            finally:
+                await engine.dispose()
 
         assert r_health.status_code == 200
         assert r_health.json()["checks"]["database"] == "migration_required"
         assert r_ui.status_code == 503
+
+
+def _peticiones(cliente, app):
+    with cliente(app, raise_server_exceptions=False) as client:
+        return client.get("/api/health"), client.get("/ui/")
