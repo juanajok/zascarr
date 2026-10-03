@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """ADR 0006: publicar un fichero NUNCA reemplaza a otro (sin Postgres).
 
 `os.replace` sustituye en silencio un nombre existente, y comprobar `exists()` antes deja una ventana en
