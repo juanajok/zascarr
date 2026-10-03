@@ -63,4 +63,4 @@ inalcanzable → 3; pytest sin variable, 141 saltadas → 1) y el camino bueno (
 
 ## Lo que sigue sin hacerse
 
-No se reprodujo con Python 3.11 fuera de la propia CI; el primer resultado del job en GitHub es esa prueba.
+El primer resultado del job en GitHub (Python 3.11, SQLAlchemy 2.1.3, alembic 1.20.0, Postgres 15.19) fue verde con **170 pruebas ejecutadas y 0 saltadas**; antes de eso solo se había comprobado con Python 3.14.
