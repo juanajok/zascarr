@@ -163,6 +163,11 @@ como marco permanente.
 - Cada bug real (sort_order truncado, mass assignment) se cierra con
   **test de regresión explícito** nombrado con el mecanismo del bug.
 - Tests asíncronos: `pytest.mark.asyncio`, nunca asyncio.run() dentro.
+- **Pruebas con Postgres real** (`TEST_DATABASE_URL`, siempre una base cuyo nombre lleve «test»): la
+  sesión **migra esa BD a `head`** una vez (`tests/conftest.py`); lo que necesite otro estado (p. ej. «sin
+  migrar») crea su propia BD con `tests._pg.bd_efimera()`. Los subprocesos de alembic usan
+  `tests._pg.alembic`, que quita la raíz del repo de `PYTHONPATH` (si no, el `alembic/` del repo sombrea el
+  paquete). Detalle y causa en `docs/design/diagnostico-postgres-pruebas.md`.
 
 ## 9. Git y ramas
 
