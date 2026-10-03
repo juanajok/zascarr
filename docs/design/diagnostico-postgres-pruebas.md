@@ -52,7 +52,15 @@ medias.
   mecanismo original: sin sanear, el subproceso falla con `alembic.__main__`), guardas de nombre, BD
   compartida en `head`, efímera vacía/migrable/borrada incluso si la prueba falla.
 
+## La CI
+
+El job `Pruebas con Postgres real` (`.github/workflows/ci.yml`) levanta `postgres:15-alpine` como servicio
+(healthcheck `pg_isready`), con una base nueva y dedicada, y ejecuta los ficheros que usan
+`TEST_DATABASE_URL`. `scripts/ci_postgres.py` impide que quede verde sin haber probado nada: falla si la
+variable no está definida, si el servidor no contesta o si el informe junit tiene menos de 150 pruebas o
+alguna saltada, con fallo o con error. Se simularon tres averías (sin variable → salida 2; servidor
+inalcanzable → 3; pytest sin variable, 141 saltadas → 1) y el camino bueno (170 ejecutadas, 0 saltadas).
+
 ## Lo que sigue sin hacerse
 
-La CI **no** ejecuta estas pruebas (se saltan sin `TEST_DATABASE_URL`): es el siguiente paso, aparte.
-Tampoco se reprodujo con Python 3.11 ni con las versiones exactas que instala la CI.
+No se reprodujo con Python 3.11 fuera de la propia CI; el primer resultado del job en GitHub es esa prueba.
