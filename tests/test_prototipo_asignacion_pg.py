@@ -427,3 +427,218 @@ class TestMetadataNoBasta:
         async with mundo.fabrica() as s:
             vivas = (await s.execute(text("SELECT count(*) FROM asignacion_operaciones WHERE estado = 'preparada'"))).scalar()
         assert vivas == 1
+
+
+class TestNoBorrarLaUltimaCopia:
+    """Revisión de la PR #76: la limpieza no puede dejar al coleccionista sin ninguna copia válida."""
+
+    async def _tras_confirmar(self, mundo):
+        p = mundo.subproceso("tras_confirmar")
+        assert p.returncode == 137, p.stderr[-600:]
+        async with mundo.fabrica() as s:
+            return Path((await s.execute(text("SELECT destino FROM asignacion_operaciones"))).scalar())
+
+    @pytest.mark.asyncio
+    async def test_destino_ausente_tras_confirmar_conserva_el_origen(self, mundo):
+        destino = await self._tras_confirmar(mundo)
+        destino.unlink()                                          # el destino desaparece
+        r = (await mundo.servicio().reconciliar())[0]
+        e = await mundo.estado()
+        assert r.estado == "reparacion_pendiente" and "falta" in r.motivo
+        assert e.origen_existe and e.ops == ["confirmada"]       # la última copia sigue ahí; la operación sigue viva
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("corrupcion", ["mismo_tamano", "distinto_tamano"])
+    async def test_destino_corrupto_tras_confirmar_conserva_el_origen(self, mundo, corrupcion):
+        destino = await self._tras_confirmar(mundo)
+        datos = bytearray(destino.read_bytes())
+        if corrupcion == "mismo_tamano":
+            datos[20] ^= 0xFF
+        else:
+            datos = datos[:-10]
+        destino.write_bytes(bytes(datos))
+        r = (await mundo.servicio().reconciliar())[0]
+        assert r.estado == "reparacion_pendiente" and (await mundo.estado()).origen_existe
+
+    @pytest.mark.asyncio
+    async def test_si_la_bd_ya_no_apunta_a_la_asignacion_conserva_el_origen(self, mundo):
+        await self._tras_confirmar(mundo)
+        async with mundo.fabrica() as s:
+            await s.execute(text("UPDATE files SET file_path = '/otra/ruta.cbz' WHERE id = :f"), {"f": mundo.file_id})
+            await s.commit()
+        r = (await mundo.servicio().reconciliar())[0]
+        assert r.estado == "reparacion_pendiente" and "BD" in r.motivo and mundo.origen.exists()
+
+    @pytest.mark.asyncio
+    async def test_un_origen_sustituido_con_igual_tamano_y_fecha_no_se_borra(self, mundo):
+        """Tamaño y mtime_ns iguales NO acreditan el mismo contenido."""
+        await self._tras_confirmar(mundo)
+        st = mundo.origen.stat()
+        otro = bytearray(mundo.origen.read_bytes())
+        otro[100] ^= 0xFF                                         # mismo tamaño, contenido distinto
+        mundo.origen.write_bytes(bytes(otro))
+        os.utime(mundo.origen, ns=(st.st_atime_ns, st.st_mtime_ns))     # y la misma fecha
+        assert mundo.origen.stat().st_size == st.st_size and mundo.origen.stat().st_mtime_ns == st.st_mtime_ns
+        r = (await mundo.servicio().reconciliar())[0]
+        assert r.estado == "asignado_limpieza_pendiente" and "ya no es el fichero" in r.motivo
+        assert mundo.origen.read_bytes() == bytes(otro)           # el fichero distinto sigue intacto
+
+
+class TestPublicarEnElServicio:
+
+    @pytest.mark.asyncio
+    async def test_un_ajeno_que_ocupa_el_destino_justo_antes_de_publicar_queda_intacto(self, mundo):
+        """El ajeno aparece DESPUÉS de reservar y copiar: el servicio no lo pisa, cancela y se reintenta."""
+        async def intruso(punto):
+            if punto == "tras_copiar":
+                async with mundo.fabrica() as s:
+                    destino = Path((await s.execute(text("SELECT destino FROM asignacion_operaciones"))).scalar())
+                hacer_cbz(destino, "AJENO", relleno=777)
+        ajeno_bytes = None
+        r = await mundo.servicio(gancho=intruso).asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "destino_ocupado"
+        assert e.ops == ["cancelada"] and e.origen_existe and e.partes == [] and e.issue_id is None
+        ocupado = mundo.lib / e.destinos[0]
+        ajeno_bytes = ocupado.read_bytes()
+        assert b"AJENOAJENO" in ajeno_bytes or len(ajeno_bytes) > 0
+        # El reintento reserva el siguiente nombre libre y el ajeno sigue intacto.
+        r2 = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e2 = await mundo.estado()
+        assert r2.estado == "asignado" and ocupado.read_bytes() == ajeno_bytes
+        assert e2.ruta.endswith("(1).cbz") and e2.ruta != str(ocupado)
+
+    @pytest.mark.asyncio
+    async def test_un_montaje_sin_publicacion_segura_rechaza_la_operacion(self, mundo, monkeypatch):
+        import errno
+
+        import tests.prototipo_asignacion as proto
+        monkeypatch.setattr(proto, "_renameat2_noreplace",
+                            lambda *_a: (_ for _ in ()).throw(OSError(errno.EOPNOTSUPP, "no")))
+        monkeypatch.setattr(os, "link", lambda *_a: (_ for _ in ()).throw(OSError(errno.EPERM, "sin enlaces")))
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "error" and "no permite publicar sin reemplazar" in r.motivo
+        assert e.origen_existe and e.destinos == [] and e.partes == [] and e.issue_id is None
+
+
+class TestCandadoYPoolReutilizable:
+    """El candado es de TRANSACCIÓN: ninguna conexión que vuelva al pool puede conservarlo."""
+
+    async def _pool(self, mundo):
+        motor = create_async_engine(url_asyncpg(mundo.url), pool_size=3, max_overflow=0)
+        return motor, async_sessionmaker(motor, expire_on_commit=False)
+
+    async def _candados(self, mundo) -> int:
+        async with mundo.fabrica() as s:
+            return (await s.execute(text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"))).scalar()
+
+    @pytest.mark.asyncio
+    async def test_tras_una_operacion_normal_el_pool_no_retiene_candados(self, mundo):
+        motor, fab = await self._pool(mundo)
+        try:
+            r = await AsignacionRecuperable(fab, mundo.lib).asignar(mundo.file_id, mundo.serie_id, "12")
+            assert r.estado == "asignado"
+            assert await self._candados(mundo) == 0              # las conexiones siguen en el pool, sin candado
+        finally:
+            await motor.dispose()
+
+    @pytest.mark.asyncio
+    async def test_cancelar_la_operacion_no_deja_el_candado_en_el_pool(self, mundo):
+        motor, fab = await self._pool(mundo)
+        dentro = asyncio.Event()
+
+        async def gancho(punto):
+            if punto == "tras_preparar":
+                dentro.set()
+                await asyncio.sleep(30)
+        try:
+            servicio = AsignacionRecuperable(fab, mundo.lib, gancho=gancho)
+            op = await servicio._preparar(mundo.file_id, mundo.serie_id, "12")
+            tarea = asyncio.create_task(servicio._ejecutar(op))        # SIN escudo: cancelación directa
+            await dentro.wait()
+            assert await self._candados(mundo) == 1                    # mientras trabaja, lo tiene
+            tarea.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await tarea
+            await asyncio.sleep(0.3)
+            assert await self._candados(mundo) == 0                    # al cancelar, no queda en el pool
+            # y la conexión reutilizada funciona: la operación huérfana se completa después
+            assert [x.estado for x in await AsignacionRecuperable(fab, mundo.lib).reconciliar()] == ["asignado"]
+        finally:
+            await motor.dispose()
+
+    @pytest.mark.asyncio
+    async def test_si_la_conexion_del_candado_muere_o_falla_al_cerrar_no_queda_nada_retenido(self, mundo, monkeypatch):
+        """El equivalente de «falla el desbloqueo»: el cierre de la sesión del candado revienta."""
+        motor, fab = await self._pool(mundo)
+        original_close = AsyncSession.close
+        estado = {"roto": False}
+
+        async def close_que_falla_una_vez(self):
+            if not estado["roto"]:
+                estado["roto"] = True
+                await original_close(self)       # la conexión vuelve al pool (reset = rollback)…
+                raise ConnectionResetError("fallo al cerrar la sesión del candado")   # …y el cierre «falla»
+            return await original_close(self)
+        try:
+            monkeypatch.setattr(AsyncSession, "close", close_que_falla_una_vez)
+            try:
+                await AsignacionRecuperable(fab, mundo.lib).asignar(mundo.file_id, mundo.serie_id, "12")
+            except ConnectionResetError:
+                pass
+            monkeypatch.setattr(AsyncSession, "close", original_close)
+            assert await self._candados(mundo) == 0
+            # El pool sigue sirviendo: se puede volver a reconciliar sin quedarse esperando un candado huérfano.
+            await AsignacionRecuperable(fab, mundo.lib).reconciliar()
+            assert await self._candados(mundo) == 0
+        finally:
+            await motor.dispose()
+
+    @pytest.mark.asyncio
+    async def test_si_postgres_mata_la_conexion_del_candado_se_libera_y_se_puede_reconciliar(self, mundo):
+        motor, fab = await self._pool(mundo)
+        dentro = asyncio.Event()
+
+        async def gancho(punto):
+            if punto == "tras_preparar":
+                dentro.set()
+                await asyncio.sleep(1.0)
+        try:
+            servicio = AsignacionRecuperable(fab, mundo.lib, gancho=gancho)
+            tarea = asyncio.create_task(servicio.asignar(mundo.file_id, mundo.serie_id, "12"))
+            await dentro.wait()
+            async with mundo.fabrica() as s:
+                await s.execute(text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted"))
+                await s.commit()
+            try:
+                await tarea
+            except Exception:  # noqa: BLE001 — la operación puede acabar con el error de la conexión muerta
+                pass
+            await asyncio.sleep(0.3)
+            assert await self._candados(mundo) == 0
+            await AsignacionRecuperable(fab, mundo.lib).reconciliar()
+            _asignado_del_todo(await mundo.estado(), mundo)
+        finally:
+            await motor.dispose()
+
+    @pytest.mark.asyncio
+    async def test_el_limite_de_simultaneas_no_interbloquea_con_un_pool_de_dos_por_operacion(self, mundo):
+        otro = mundo.lib / "_Unsorted" / "Saga del Faro 13.cbz"
+        contenido = hacer_cbz(otro, "q")
+        async with mundo.fabrica() as s:
+            f2 = File(id=uuid4(), file_path=str(otro), file_name=otro.name, file_format=FileFormat.CBZ,
+                      file_size_bytes=len(contenido), sha256_hash=hashlib.sha256(contenido).hexdigest(),
+                      metadata_={"match_status": "unsorted"})
+            s.add(f2)
+            await s.commit()
+        motor = create_async_engine(url_asyncpg(mundo.url), pool_size=2, max_overflow=0)   # 2 conexiones = 1 operación
+        fab = async_sessionmaker(motor, expire_on_commit=False)
+        try:
+            svc = AsignacionRecuperable(fab, mundo.lib, max_simultaneas=1)
+            a, b = await asyncio.wait_for(asyncio.gather(
+                svc.asignar(mundo.file_id, mundo.serie_id, "12"), svc.asignar(f2.id, mundo.serie_id, "13")), 60)
+            assert a.estado == "asignado" and b.estado == "asignado"
+        finally:
+            await motor.dispose()

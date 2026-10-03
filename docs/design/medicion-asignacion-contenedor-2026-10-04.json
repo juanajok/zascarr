@@ -1,0 +1,58 @@
+{
+  "maquina": {
+    "python": "3.11.16",
+    "plataforma": "Linux-7.0.0-34-generic-x86_64-with-glibc2.36",
+    "cpu": "x86_64",
+    "nucleos": 8
+  },
+  "directorios": {
+    "/ensayo/1": {
+      "montaje": "ntfs3  /dev/nvme0n1p5[/Documentos/Repos/.zascarr_medicion] rw,relatime,uid=1000,gid=1000,dmask=0022,fmask=0022,windows_names,acl,iocharset=utf8,prealloc",
+      "capacidades": {
+        "renameat2_noreplace_destino_libre": "ok",
+        "renameat2_noreplace_destino_ocupado": "EEXIST (bien)",
+        "link": "ok",
+        "replace_sobre_existente_reemplaza": true,
+        "fsync_fichero": "ok",
+        "fsync_directorio": "ok",
+        "_publicar_con_ajeno": "FileExistsError, ajeno intacto (bien)",
+        "_publicar_libre": "ok"
+      },
+      "ficheros": {
+        "10": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.05,
+          "solo_sha256_s": 0.041,
+          "solo_copia_s": 0.007,
+          "espacio_temporal_extra_MB": 10
+        },
+        "100": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.507,
+          "solo_sha256_s": 0.392,
+          "solo_copia_s": 0.07,
+          "espacio_temporal_extra_MB": 100
+        }
+      },
+      "extremo_a_extremo": {
+        "recuperar_una_operacion_huerfana_100MB_s": 1.489,
+        "resultado_recuperar": [
+          "asignado"
+        ],
+        "asignar_3_archivos_de_100MB_s": [
+          1.456,
+          1.738,
+          1.437
+        ],
+        "rendimiento_MB_por_s": 64.8
+      }
+    }
+  },
+  "bd": {
+    "metadata_con_50000_filas": {
+      "consulta_mediana_ms": 5.9,
+      "encontradas": 50
+    },
+    "operaciones_vivas_con_20000_cerradas_ms": 0.56
+  }
+}
