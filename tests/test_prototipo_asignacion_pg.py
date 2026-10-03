@@ -397,7 +397,7 @@ class TestCancelacionDelCliente:
 
 
 class TestMetadataNoBasta:
-    """Por qué NO `File.metadata_`: seis escritores la reescriben ENTERA a partir de una lectura anterior."""
+    """Por qué NO `File.metadata_`: cinco puntos la reescriben ENTERA a partir de una lectura anterior."""
 
     @pytest.mark.asyncio
     async def test_un_escritor_con_lectura_obsoleta_borra_el_marcador(self, mundo):
