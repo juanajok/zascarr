@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 
 import structlog
@@ -51,6 +52,14 @@ from zascarr.utils.fs import listar_comics
 logger = structlog.get_logger()
 
 _MARCADOR_HECHO = "_library_adoption_done"
+
+
+class EstadoAdopcion(StrEnum):
+    """Dónde está la adopción (B11), observado y no supuesto."""
+    PENDIENTE = "pendiente"              # hay tebeos en la biblioteca, catálogo vacío, sin adoptar
+    HECHA = "hecha"                      # ya se ejecutó (marcador): aunque registrara 0
+    CATALOGO_PREVIO = "catalogo_previo"  # ya hay series sin haber adoptado: no se ofrece
+    SIN_TEBEOS = "sin_tebeos"            # la carpeta no existe o no contiene ningún cómic
 
 
 @dataclass
@@ -88,22 +97,28 @@ class LibraryAdopter:
         self._db = db
         self._library: Path = get_settings().library_path
 
-    async def should_run(self) -> bool:
-        """Condición del disparo automático (ver docstring del módulo):
-        biblioteca con contenido, catálogo vacío, y no se ha adoptado ya
-        antes — comprobado en ese orden porque el marcador y el conteo de
-        `series` son consultas baratas, listar la biblioteca no lo es."""
+    async def estado(self) -> EstadoAdopcion:
+        """Por qué la adopción corre o no (V4: el Inicio necesita distinguirlo; `should_run` solo
+        dice sí/no). Comprobado en este orden porque el marcador y el conteo de `series` son
+        consultas baratas y listar la biblioteca no lo es."""
         from zascarr.services.runtime_settings import RuntimeSettingsService
 
         if await RuntimeSettingsService(self._db).get_flag(_MARCADOR_HECHO):
-            return False
+            return EstadoAdopcion.HECHA
         total_series = (await self._db.execute(select(func.count(Series.id)))).scalar() or 0
         if total_series > 0:
-            return False
+            return EstadoAdopcion.CATALOGO_PREVIO
         # E/S de disco (en red, cada llamada es una ida y vuelta): a un hilo.
         if not await asyncio.to_thread(self._library.exists):
-            return False
-        return await asyncio.to_thread(self._primer_comic) is not None
+            return EstadoAdopcion.SIN_TEBEOS
+        if await asyncio.to_thread(self._primer_comic) is None:
+            return EstadoAdopcion.SIN_TEBEOS
+        return EstadoAdopcion.PENDIENTE
+
+    async def should_run(self) -> bool:
+        """Condición del disparo (ver docstring del módulo): biblioteca con contenido, catálogo
+        vacío, y no se ha adoptado ya antes."""
+        return await self.estado() is EstadoAdopcion.PENDIENTE
 
     def _primer_comic(self) -> Path | None:
         for ext in COMIC_EXTS:

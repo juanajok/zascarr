@@ -38,6 +38,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Un Inicio que te dice qué hacer (V4).** En lugar de «5 series · 0 % · 0 pendientes», el Inicio te
+  guía paso a paso según lo que ZascArr ha visto de verdad: registrar tu biblioteca (mirar tu disco y
+  registrarla son dos cosas distintas, y las dos son acciones tuyas), revisar los tebeos sin clasificar
+  con su número real, elegir series que seguir y, si quieres, conectar cómo descargar. Hay **una sola
+  acción principal** y lo opcional va marcado. Las cifras dicen de dónde salen («encontrados al mirar tu
+  disco el 3 de octubre» o «registrados»). **Ya no se enseña un «0 %» cuando no hay catálogo**, y la
+  completitud solo cuenta las series con recuento de números de Comic Vine (con cuántas series se
+  calculó y cuántas no). «Buscar una serie» te lleva a Descubrir con la búsqueda ya hecha. Desaparece la
+  tarjeta «Actualizadas recientemente», que contaba una lista, no actualizaciones.
 - **Menú nuevo (V3).** La barra superior pasa a un menú lateral agrupado —*Mi colección* (Inicio, Por revisar,
   Biblioteca, Duplicados), *Añadir* (Descubrir, Deseados) y *Sistema* (Estado, Ajustes)— y, en el móvil, a una barra
   inferior con *Inicio, Revisar, Deseados, Estado* y *Más*, donde está el resto. Las direcciones de siempre no

@@ -449,6 +449,13 @@ button[type="submit"],
   color: var(--on-yellow);
 }
 
+/* Un botón de envío secundario: sin esto, la regla global de arriba lo pinta de amarillo aunque no
+   lleve `.primary`. Misma especificidad que ella y va después. */
+button[type="submit"].neutro {
+  --btn-bg: var(--paper);
+  color: var(--ink);
+}
+
 .btn-ignorar {
   color: var(--ink-soft);
   border-color: var(--ink-faint);
@@ -919,6 +926,49 @@ button[type="submit"].btn-sugerencia {
 .series-results ul { list-style: none; padding: 0; margin: 0; }
 .series-results li { padding: 10px 2px; border-bottom: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent); }
 .series-results li:last-child { border-bottom: none; }
+
+/* ── 15b. PRIMEROS PASOS (V4) ────────────────────────────────────────────────
+   Lista numerada; el estado se ve por TEXTO (chip) además de por color/forma. */
+.primeros-pasos { margin: 22px 0 8px; }
+.row-pasos { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+.row-pasos h2, .seccion { font-size: clamp(19px, 2.4vw, 26px); margin: 0; }
+.seccion { margin-top: 30px; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: paso; }
+.step {
+  display: grid; grid-template-columns: 48px 1fr auto; gap: 14px; align-items: center;
+  padding: 16px; counter-increment: paso;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--paper);
+}
+.step::before {
+  content: counter(paso);
+  width: 44px; height: 44px; border: 3px solid var(--ink); border-radius: 50%;
+  display: grid; place-items: center; font-family: var(--font-display); font-size: 1.25rem;
+  background: var(--paper-2);
+}
+.step.hecho::before { content: "✓"; background: var(--ok-bg); color: var(--ok-t); }
+.step.siguiente { background: var(--caption-bg); box-shadow: var(--shadow-ink); }
+.step.siguiente::before { background: var(--yellow); color: var(--on-yellow); }
+.step.bloqueado { border-style: dashed; }
+.step h3 { margin: 0 0 2px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.step h3 .chip { margin-left: 6px; vertical-align: middle; }
+.step p { margin: 0; }
+.muted { color: var(--ink-soft); }
+.pasos-plegados summary { cursor: pointer; font-weight: 700; padding: 10px 0; min-height: 44px; }
+.siguiente-paso {
+  display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center;
+  padding: 16px; margin: 10px 0 6px;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--caption-bg);
+  box-shadow: var(--shadow-ink);
+}
+.siguiente-paso h3 { margin: 0 0 2px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.siguiente-paso h3 .chip { margin-left: 6px; vertical-align: middle; }
+.siguiente-paso p { margin: 0; }
+.pasos-plegados .steps { margin-top: 10px; }
+@media (max-width: 768px) {
+  .step { grid-template-columns: 44px 1fr; }
+  .step .btn { grid-column: 1 / -1; }
+  .siguiente-paso { grid-template-columns: 1fr; }
+}
 
 /* ── 16. RESPONSIVE ──────────────────────────────────────────────────────── */
 @media (max-width: 768px) {

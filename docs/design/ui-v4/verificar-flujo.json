@@ -1,0 +1,310 @@
+{
+  "caso": "flujo",
+  "base": "http://127.0.0.1:18000",
+  "navegador": "Chrome/154.0.8037.92",
+  "vaciado": "TRUNCATE TABLE\nUPDATE 1\n0 series, 0 ficheros",
+  "1_tebeos_en_el_disco_sin_registrar": {
+    "ruta": "/ui/",
+    "subtitulo": "Aún no hay tebeos en ZascArr. Te guiamos paso a paso.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "siguiente",
+        "titulo": "Registra tu biblioteca \ni\nToca ahora",
+        "detalle": "Hay tebeos en la carpeta de tu biblioteca que ZascArr aún no conoce. Registrarlos no mueve, renombra ni borra nada. Antes puedes ver qué hay repetido en tu disco; tampoco cambia nada.",
+        "boton": "Preparar mi biblioteca →",
+        "primario": true
+      },
+      {
+        "clase": "bloqueado",
+        "titulo": "Revisa lo que no sepamos clasificar Aún no se puede",
+        "detalle": "Aún no hay tebeos registrados: los que no sepamos clasificar aparecerán aquí.",
+        "boton": null,
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Elige las series que quieres seguir Opcional",
+        "detalle": "Búscalas por título y las damos de alta con portada y datos.",
+        "boton": "Buscar series",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Conecta cómo descargar Opcional",
+        "detalle": "Solo si quieres que ZascArr busque lo que te falta. Viene desactivado: lo decides tú.",
+        "boton": "Configurar",
+        "primario": false
+      }
+    ],
+    "plegado": false,
+    "botones_primarios": 1,
+    "hay_metricas": false,
+    "metricas": [],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/auditoria",
+      "texto": "Preparar mi biblioteca →",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 11,
+      "tras_enter_va_a": "/ui/auditoria"
+    }
+  },
+  "2_el_boton_principal_lleva_a": "/ui/auditoria",
+  "2_informe_generado": true,
+  "2_con_informe_sin_registrar": {
+    "ruta": "/ui/",
+    "subtitulo": "Miramos tu disco el 3 de octubre de 2026 y encontramos 14 tebeos. Ahora ZascArr tiene registrados 0.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "siguiente",
+        "titulo": "Registra tu biblioteca \ni\nToca ahora",
+        "detalle": "Hay tebeos en la carpeta de tu biblioteca que ZascArr aún no conoce. Registrarlos no mueve, renombra ni borra nada. Ya miraste qué hay repetido el 3 de octubre de 2026 (14 leídos, 4 comparados).",
+        "boton": "Preparar mi biblioteca →",
+        "primario": true
+      },
+      {
+        "clase": "bloqueado",
+        "titulo": "Revisa lo que no sepamos clasificar Aún no se puede",
+        "detalle": "Aún no hay tebeos registrados: los que no sepamos clasificar aparecerán aquí.",
+        "boton": null,
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Elige las series que quieres seguir Opcional",
+        "detalle": "Búscalas por título y las damos de alta con portada y datos.",
+        "boton": "Buscar series",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Conecta cómo descargar Opcional",
+        "detalle": "Solo si quieres que ZascArr busque lo que te falta. Viene desactivado: lo decides tú.",
+        "boton": "Configurar",
+        "primario": false
+      }
+    ],
+    "plegado": false,
+    "botones_primarios": 1,
+    "hay_metricas": false,
+    "metricas": [],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/auditoria",
+      "texto": "Preparar mi biblioteca →",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 11,
+      "tras_enter_va_a": "/ui/auditoria"
+    }
+  },
+  "3_adopcion_ejecutada": true,
+  "3_biblioteca_registrada": {
+    "ruta": "/ui/",
+    "subtitulo": "Miramos tu disco el 3 de octubre de 2026 y encontramos 14 tebeos. Ahora ZascArr tiene registrados 12.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "hecho",
+        "titulo": "Tu biblioteca está registrada \n✓\nHecho",
+        "detalle": "12 tebeos registrados · no se movió ni se renombró nada · 4 comparados a fondo el 3 de octubre de 2026",
+        "boton": "Ver duplicados",
+        "primario": false
+      },
+      {
+        "clase": "siguiente",
+        "titulo": "Revisa 12 tebeos que no hemos sabido clasificar \ni\nToca ahora",
+        "detalle": "Puedes decirnos de qué serie son, uno a uno.",
+        "boton": "Revisar ahora →",
+        "primario": true
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Elige las series que quieres seguir Opcional",
+        "detalle": "Búscalas por título y las damos de alta con portada y datos.",
+        "boton": "Buscar series",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Conecta cómo descargar Opcional",
+        "detalle": "Solo si quieres que ZascArr busque lo que te falta. Viene desactivado: lo decides tú.",
+        "boton": "Configurar",
+        "primario": false
+      }
+    ],
+    "plegado": false,
+    "botones_primarios": 1,
+    "hay_metricas": true,
+    "metricas": [
+      "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 12 registrados ahora",
+      "0 · SERIES EN LA BIBLIOTECA",
+      "12 · POR REVISAR · tebeos sin clasificar →",
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga un recuento de grapas."
+    ],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/pendientes",
+      "texto": "Revisar ahora →",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 12,
+      "tras_enter_va_a": "/ui/pendientes"
+    }
+  },
+  "4_descartados": 13,
+  "4_todo_clasificado": {
+    "ruta": "/ui/",
+    "subtitulo": "Miramos tu disco el 3 de octubre de 2026 y encontramos 14 tebeos. Ahora ZascArr tiene registrados 12.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "hecho",
+        "titulo": "",
+        "detalle": "",
+        "boton": "",
+        "primario": false
+      },
+      {
+        "clase": "hecho",
+        "titulo": "",
+        "detalle": "",
+        "boton": "",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "",
+        "detalle": "",
+        "boton": "",
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "",
+        "detalle": "",
+        "boton": "",
+        "primario": false
+      }
+    ],
+    "plegado": true,
+    "botones_primarios": 1,
+    "hay_metricas": true,
+    "metricas": [
+      "14 · TEBEOS ENCONTRADOS · al mirar tu disco el 3 de octubre de 2026 · 12 registrados ahora",
+      "0 · SERIES EN LA BIBLIOTECA",
+      "0 · POR REVISAR · nada sin clasificar",
+      "— · NÚMEROS QUE TE FALTAN · Aún no se pueden calcular: aparecerán cuando alguna serie tenga un recuento de grapas."
+    ],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/descubrir",
+      "texto": "Buscar series",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 11,
+      "tras_enter_va_a": "/ui/descubrir"
+    }
+  },
+  "5_instalacion_vacia": {
+    "ruta": "/ui/",
+    "subtitulo": "Aún no hay tebeos en ZascArr. Te guiamos paso a paso.",
+    "encabezados": [
+      "INICIO"
+    ],
+    "pasos": [
+      {
+        "clase": "bloqueado",
+        "titulo": "Registra tu biblioteca Aún no se puede",
+        "detalle": "No hemos encontrado tebeos (.cbz, .cbr) en la carpeta de tu biblioteca. Cuando los copies ahí podrás registrarlos desde aquí.",
+        "boton": null,
+        "primario": false
+      },
+      {
+        "clase": "bloqueado",
+        "titulo": "Revisa lo que no sepamos clasificar Aún no se puede",
+        "detalle": "Aún no hay tebeos registrados: los que no sepamos clasificar aparecerán aquí.",
+        "boton": null,
+        "primario": false
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Elige las series que quieres seguir Opcional",
+        "detalle": "Búscalas por título y las damos de alta con portada y datos.",
+        "boton": "Buscar series",
+        "primario": true
+      },
+      {
+        "clase": "opcional",
+        "titulo": "Conecta cómo descargar Opcional",
+        "detalle": "Solo si quieres que ZascArr busque lo que te falta. Viene desactivado: lo decides tú.",
+        "boton": "Configurar",
+        "primario": false
+      }
+    ],
+    "plegado": false,
+    "botones_primarios": 1,
+    "hay_metricas": false,
+    "metricas": [],
+    "porcentajes_en_la_pagina": [],
+    "desborde": false,
+    "scrollWidth": 1280,
+    "clientWidth": 1280,
+    "accion_principal": {
+      "hay_principal": true,
+      "href": "/ui/descubrir",
+      "texto": "Buscar series",
+      "visible": true,
+      "dentro_de_details_cerrado": false,
+      "alto": 40,
+      "fondo_principal": "rgb(242, 197, 0)",
+      "fondo_buscar": "rgb(246, 243, 236)",
+      "buscar_distinto_del_principal": true,
+      "alcanzable_con_tab_en": 11,
+      "tras_enter_va_a": "/ui/descubrir"
+    }
+  }
+}

@@ -16,7 +16,12 @@ from uuid import uuid4
 import pytest
 
 from zascarr.models import File, ImportRun
-from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter, _MARCADOR_HECHO
+from zascarr.services.library_adopter import (
+    AdoptionReport,
+    EstadoAdopcion,
+    LibraryAdopter,
+    _MARCADOR_HECHO,
+)
 
 
 def make_cbz(path: Path) -> None:
@@ -130,6 +135,71 @@ class TestShouldRun:
                 AsyncMock(return_value=False),
             )
             assert await adopter.should_run() is True
+
+
+class TestEstado:
+    """V4: el Inicio necesita el POR QUÉ, no solo el sí/no de `should_run`."""
+
+    @staticmethod
+    async def _estado(monkeypatch, tmp_path, *, marcador, series):
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter.get_settings",
+            lambda: MagicMock(library_path=tmp_path),
+        )
+        cola = [] if marcador else [FakeExecResult(series)]
+        adopter = LibraryAdopter(db=FakeSession(cola))
+        with pytest.MonkeyPatch().context() as mp:
+            mp.setattr(
+                "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
+                AsyncMock(return_value=marcador),
+            )
+            return await adopter.estado()
+
+    @pytest.mark.asyncio
+    async def test_hecha_si_hay_marcador_aunque_el_catalogo_este_vacio(self, monkeypatch, tmp_path):
+        make_cbz(tmp_path / "Batman 001.cbz")
+        estado = await self._estado(monkeypatch, tmp_path, marcador=True, series=0)
+        assert estado is EstadoAdopcion.HECHA
+
+    @pytest.mark.asyncio
+    async def test_catalogo_previo_si_hay_series_sin_marcador(self, monkeypatch, tmp_path):
+        make_cbz(tmp_path / "Batman 001.cbz")
+        estado = await self._estado(monkeypatch, tmp_path, marcador=False, series=5)
+        assert estado is EstadoAdopcion.CATALOGO_PREVIO
+
+    @pytest.mark.asyncio
+    async def test_sin_tebeos_si_la_carpeta_esta_vacia(self, monkeypatch, tmp_path):
+        estado = await self._estado(monkeypatch, tmp_path, marcador=False, series=0)
+        assert estado is EstadoAdopcion.SIN_TEBEOS
+
+    @pytest.mark.asyncio
+    async def test_sin_tebeos_si_la_carpeta_no_existe(self, monkeypatch, tmp_path):
+        estado = await self._estado(
+            monkeypatch, tmp_path / "no-existe", marcador=False, series=0)
+        assert estado is EstadoAdopcion.SIN_TEBEOS
+
+    @pytest.mark.asyncio
+    async def test_pendiente_con_tebeos_y_catalogo_vacio(self, monkeypatch, tmp_path):
+        make_cbz(tmp_path / "Batman 001.cbz")
+        estado = await self._estado(monkeypatch, tmp_path, marcador=False, series=0)
+        assert estado is EstadoAdopcion.PENDIENTE
+
+    @pytest.mark.asyncio
+    async def test_should_run_solo_es_verdadero_si_esta_pendiente(self, monkeypatch, tmp_path):
+        """should_run es `estado() is PENDIENTE` (mismas consultas, mismo orden)."""
+        make_cbz(tmp_path / "Batman 001.cbz")
+        for marcador, series, esperado in ((True, 0, False), (False, 5, False), (False, 0, True)):
+            monkeypatch.setattr(
+                "zascarr.services.library_adopter.get_settings",
+                lambda: MagicMock(library_path=tmp_path),
+            )
+            adopter = LibraryAdopter(db=FakeSession([] if marcador else [FakeExecResult(series)]))
+            with pytest.MonkeyPatch().context() as mp:
+                mp.setattr(
+                    "zascarr.services.runtime_settings.RuntimeSettingsService.get_flag",
+                    AsyncMock(return_value=marcador),
+                )
+                assert await adopter.should_run() is esperado
 
 
 class TestAdopt:
