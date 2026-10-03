@@ -50,8 +50,9 @@ Sigue las guías oficiales con estas precisiones locales:
    entre routers = bug seguro.
 2. **El ORM nunca cruza `shutil.move` con la sesión viva.** Regla
    aprendida del tracker de Kapowarr: mueve primero, haz commit corto
-   después. Pendiente de auditar en `ReviewService.assign_to_series` y el
-   importer (ver BACKLOG pendientes).
+   después. Auditado en `ReviewService.assign_to_series` (V6a, 2026-10-03:
+   `docs/design/auditoria-mover-y-sesion.md`): **hoy no cumple la regla** (el `commit` de
+   `get_db` ocurre tras la respuesta). Pendiente el importer (un solo `commit` por ciclo).
 3. **Mass assignment prohibido en endpoints.** Los endpoints de escritura
    usan esquemas Pydantic explícitos (`WishlistCreate`, `SeriesCreate`),
    nunca `Model(**data)` ni `setattr(model, k, v)` sobre body crudo. El
