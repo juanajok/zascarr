@@ -65,7 +65,7 @@ con evidencia:
 | Criterio | `File.metadata_` | Tabla `asignacion_operaciones` |
 |---|---|---|
 | Coste de consultar «operaciones pendientes» | **bueno**: 5,2 ms con 50 000 filas (el GIN ya existe). *No* es el motivo del descarte. | 0,5 ms con 20 000 cerradas (índice parcial) |
-| **Integridad ante otros escritores** | **No acreditable.** Seis puntos reescriben la columna **entera** a partir de una lectura anterior (`tagger.py:334` y `:525`, `review.py:164`, `pendientes.py:115`, `importer.py:181`, y los dos que la crean). Medido: un escritor con lectura obsoleta **borra el marcador** (`TestMetadataNoBasta`). Solo se arreglaría cambiando *todos* los escritores, presentes y futuros. | Ningún otro código la toca (prueba gemela) |
+| **Integridad ante otros escritores** | **No acreditable.** **Cinco** puntos reescriben la columna **entera** a partir de una lectura anterior (`tagger.py:334` y `:525`, `review.py:164`, `pendientes.py:115`, `importer.py:181`), y otros dos la crean (`importer.py:437`, `library_adopter.py:205`). Medido: un escritor con lectura obsoleta **borra el marcador** (`TestMetadataNoBasta`). Solo se arreglaría cambiando *todos* los escritores, presentes y futuros. | Ningún otro código la toca (prueba gemela) |
 | **Reservar un destino único** | No hay forma de imponer «un destino, una operación viva» sin un índice único sobre una expresión: **es una migración igualmente**. | Índice único parcial por destino y por archivo |
 | Reclamar el archivo (concurrencia) | `UPDATE … WHERE NOT metadata ? …` serviría | índice único parcial por archivo |
 
