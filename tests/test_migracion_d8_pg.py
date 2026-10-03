@@ -18,23 +18,19 @@ Se salta sin `TEST_DATABASE_URL`, mismo patrón que el resto de tests de Postgre
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from tests._pg import alembic
+
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
     not TEST_DATABASE_URL,
     reason="requiere TEST_DATABASE_URL (Postgres real) — ver docstring del módulo",
 )
-
-RAIZ = Path(__file__).resolve().parents[1]
-
 
 def _url_asyncpg(url: str) -> str:
     if url.startswith("postgresql://"):
@@ -43,19 +39,8 @@ def _url_asyncpg(url: str) -> str:
 
 
 def _alembic(*args: str, estricto: bool = True) -> None:
-    """Ejecuta alembic contra la BD de pruebas.
-
-    `PYTHONSAFEPATH=1` a propósito: sin él, el directorio `alembic/` del repo
-    sombrea el paquete instalado al lanzar `python -m alembic` desde la raíz."""
-    entorno = dict(os.environ)
-    entorno["DATABASE_URL"] = _url_asyncpg(TEST_DATABASE_URL or "")
-    entorno["PYTHONSAFEPATH"] = "1"
-    resultado = subprocess.run(
-        [sys.executable, "-m", "alembic", *args],
-        cwd=RAIZ, env=entorno, capture_output=True, text=True, timeout=180,
-    )
-    if estricto:
-        assert resultado.returncode == 0, resultado.stderr[-2000:]
+    """Ejecuta alembic contra la BD de pruebas (entorno saneado: ver `tests/_pg.py`)."""
+    alembic(TEST_DATABASE_URL or "", *args, estricto=estricto)
 
 
 @pytest.mark.asyncio
