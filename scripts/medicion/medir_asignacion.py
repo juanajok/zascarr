@@ -52,7 +52,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 from tests._pg import bd_efimera, migrar_a_head, url_asyncpg  # noqa: E402
-from tests.prototipo_asignacion import AsignacionRecuperable  # noqa: E402
+from zascarr.services.asignacion import AsignacionService  # noqa: E402
 from zascarr.models import ComicTradition, File, FileFormat, Series  # noqa: E402
 
 
@@ -88,7 +88,7 @@ def tiempo(fn, repeticiones=3):
 
 def capacidades(base: Path) -> dict:
     """Qué garantías ofrece ESTE montaje a la publicación sin reemplazo (decide aceptar o rechazar)."""
-    from tests.prototipo_asignacion import (
+    from zascarr.services.asignacion import (
         PublicacionNoSoportadaError,
         _publicar,
         _renameat2_noreplace,
@@ -131,7 +131,7 @@ def capacidades(base: Path) -> dict:
             os.close(fd)
     intentar("fsync_fichero", fsync_fichero)
     intentar("fsync_directorio", fsync_dir)
-    # Lo que haría el prototipo de verdad:
+    # Lo que haría el servicio de verdad:
     x, y = d / "x.part", d / "y.cbz"
     x.write_bytes(b"N")
     y.write_bytes(b"AJENO")
@@ -195,7 +195,7 @@ async def sembrar_serie(fab) -> object:
 
 async def medir_extremo_a_extremo(fab, serie, base: Path, mb_archivo: int, n: int,
                                   origen_base: Path | None = None) -> dict:
-    """Asignar N archivos de `mb_archivo` MB con el prototipo, por el camino completo.
+    """Asignar N archivos de `mb_archivo` MB con el servicio, por el camino completo.
 
     Los archivos de origen viven en `origen_base/_Unsorted` (por defecto, la misma carpeta que la biblioteca
     de destino `base/lib`); con `origen_base` en OTRO dispositivo se mide la copia entre dispositivos."""
@@ -215,11 +215,11 @@ async def medir_extremo_a_extremo(fab, serie, base: Path, mb_archivo: int, n: in
         if punto == "tras_publicar":
             raise Muerte
     try:
-        await AsignacionRecuperable(fab, lib, gancho=gancho).asignar(f.id, serie.id, "1")
+        await AsignacionService(fab, lib, gancho=gancho).asignar(f.id, serie.id, "1")
     except Muerte:
         pass
     t = time.perf_counter()
-    r = await AsignacionRecuperable(fab, lib).reconciliar()
+    r = await AsignacionService(fab, lib).reconciliar()
     recuperar = round(time.perf_counter() - t, 3)
 
     tiempos = []
@@ -232,7 +232,7 @@ async def medir_extremo_a_extremo(fab, serie, base: Path, mb_archivo: int, n: in
             s.add(ff)
             await s.commit()
         t = time.perf_counter()
-        res = await AsignacionRecuperable(fab, lib).asignar(ff.id, serie.id, str(10 + i))
+        res = await AsignacionService(fab, lib).asignar(ff.id, serie.id, str(10 + i))
         tiempos.append(time.perf_counter() - t)
         assert res.estado == "asignado", res
     total = sum(tiempos)

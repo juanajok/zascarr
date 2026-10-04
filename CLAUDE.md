@@ -52,7 +52,7 @@ Sigue las guías oficiales con estas precisiones locales:
    aprendida del tracker de Kapowarr: mueve primero, haz commit corto
    después. Auditado en `ReviewService.assign_to_series` (V6a, 2026-10-03:
    `docs/design/auditoria-mover-y-sesion.md`): **hoy no cumple la regla** (el `commit` de
-   `get_db` ocurre tras la respuesta). Pendiente el importer (un solo `commit` por ciclo).
+   `get_db` ocurre tras la respuesta); `services/asignacion.py` (ADR 0006) la cumple pero aún no está conectado. Pendiente el importer (un solo `commit` por ciclo).
 3. **Mass assignment prohibido en endpoints.** Los endpoints de escritura
    usan esquemas Pydantic explícitos (`WishlistCreate`, `SeriesCreate`),
    nunca `Model(**data)` ni `setattr(model, k, v)` sobre body crudo. El
