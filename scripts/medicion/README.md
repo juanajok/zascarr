@@ -159,3 +159,14 @@ Cuantifica cuánto de la vista de huecos era un artefacto de un campo sin poblar
 (`Issue.sort_order`, que ningún código de `main` escribe) frente al criterio
 nuevo. Fue el instrumento del cierre de `compute_missing_issues` (2026-09-27).
 
+
+## `medir_asignacion.sh` / `medir_asignacion.py` (ADR 0006)
+
+Coste y capacidades del contrato de asignación recuperable, **desde el contenedor** y con ficheros sintéticos.
+`./scripts/medicion/medir_asignacion.sh --dir /ruta/de/ensayo [--dir /otra] --confirmo`: solo escribe en las
+carpetas **ya existentes** que se le indiquen (subcarpeta propia que borra), con una Postgres efímera propia
+(sin puertos, datos en tmpfs). Sin `--confirmo` solo enseña el plan. Mide, por carpeta, las **capacidades del
+montaje** (`renameat2` sin reemplazo, `link`, `fsync`), el coste de rename/copia/hash y la asignación de
+extremo a extremo. Pruebas de que no toca nada más: `tests/test_medir_asignacion_sh.py`.
+
+`--cruzado ORIGEN,DESTINO` (posiciones 1-based de los `--dir`) mide además la asignación con el origen en un dispositivo y la biblioteca en otro. La espera a Postgres es por TCP con plazo de 120 s (`MEDICION_ESPERA_PG`).
