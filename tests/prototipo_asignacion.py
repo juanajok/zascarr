@@ -11,9 +11,9 @@ esto se convierte en el servicio de V6a.
 
 Las decisiones que lo sostienen (ADR 0006):
 
-- La operación vive en una **tabla propia** (`asignacion_operaciones`; aquí se crea con `DDL` en la BD de
-  pruebas, la migración real es otra historia). `File.metadata_` no sirve (ver el ADR y las pruebas
-  de `test_prototipo_asignacion_pg.py::TestMetadataNoBasta`).
+- La operación vive en una **tabla propia** (`asignacion_operaciones`, migración 0017: el prototipo corre
+  sobre el esquema de PRODUCCIÓN). `File.metadata_` no sirve (ver el ADR y las pruebas de
+  `test_prototipo_asignacion_pg.py::TestMetadataNoBasta`).
 - **Una operación viva por archivo y por destino** (índices únicos parciales): reclamar un archivo y
   reservar un destino son la misma inserción atómica. El destino que se guarda es el **efectivo**
   (con sufijo si el canónico estaba ocupado).
@@ -63,30 +63,7 @@ from zascarr.services.importer import build_library_path
 from zascarr.services.review import ReviewService
 from zascarr.utils.naming import parse_comic_filename
 
-DDL = """
-CREATE TABLE asignacion_operaciones (
-    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    file_id        uuid NOT NULL REFERENCES files(id) ON DELETE CASCADE,
-    estado         text NOT NULL CHECK (estado IN ('preparada', 'confirmada', 'limpiada', 'cancelada')),
-    origen         text NOT NULL,
-    destino        text NOT NULL,
-    temporal       text NOT NULL,
-    size_bytes     bigint NOT NULL,
-    mtime_ns       bigint NOT NULL,
-    epoca          integer NOT NULL DEFAULT 0,
-    sha256         text NOT NULL,
-    series_id      uuid NOT NULL REFERENCES series(id),
-    issue_number   text NOT NULL,
-    formato        text NOT NULL,
-    creada         timestamptz NOT NULL DEFAULT now(),
-    actualizada    timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX uq_asignacion_viva_por_archivo ON asignacion_operaciones (file_id)
-    WHERE estado IN ('preparada', 'confirmada');
-CREATE UNIQUE INDEX uq_asignacion_viva_por_destino ON asignacion_operaciones (destino)
-    WHERE estado IN ('preparada', 'confirmada');
-"""
-
+# El esquema ya NO se crea aquí: es la migración 0017 (`asignacion_operaciones`), que el prototipo usa tal cual.
 VIVAS = "estado IN ('preparada', 'confirmada')"
 
 
@@ -273,7 +250,7 @@ class AsignacionRecuperable:
                         await s.execute(text(
                             "INSERT INTO asignacion_operaciones (id, file_id, estado, origen, destino, temporal, "
                             "size_bytes, mtime_ns, sha256, series_id, issue_number, formato) VALUES "
-                            "(:id, :f, 'preparada', :o, :d, :t, :sz, :mt, :sha, :s, :n, :fmt)"),
+                            "(:id, :f, 'preparada', :o, :d, :t, :sz, :mt, :sha, :s, :n, CAST(:fmt AS issue_format))"),
                             {"id": op_id, "f": file_id, "o": str(origen), "d": str(candidato),
                              "t": str(candidato.with_name(f".{candidato.name}.{op_id.hex[:8]}.part")),
                              "sz": st.st_size, "mt": st.st_mtime_ns, "sha": sha, "s": series_id,
@@ -388,7 +365,7 @@ class AsignacionRecuperable:
         """Cierra la operación SOLO si la época sigue siendo la del llamante (vallado)."""
         async with self._fabrica() as s:
             hecho = (await s.execute(text(
-                "UPDATE asignacion_operaciones SET estado = :e, actualizada = now() "
+                "UPDATE asignacion_operaciones SET estado = CAST(:e AS asignacion_estado), actualizada = now() "
                 "WHERE id = :i AND epoca = :ep RETURNING 1"), {"e": estado, "i": op_id, "ep": epoca})).first()
             await s.commit()
         return hecho is not None

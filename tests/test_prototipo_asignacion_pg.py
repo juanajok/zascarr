@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from tests._pg import RAIZ, bd_efimera_sync, migrar_a_head, url_asyncpg
-from tests.prototipo_asignacion import DDL, AsignacionRecuperable
+from tests.prototipo_asignacion import AsignacionRecuperable
 from zascarr.models import ComicTradition, File, FileFormat, Issue, LocalAlias, Series
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -33,16 +33,9 @@ pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Pos
 
 @pytest.fixture(scope="module")
 def url_bd():
+    """BD efímera y MIGRADA a head (incluye `asignacion_operaciones`, migración 0017)."""
     with bd_efimera_sync(URL) as url:
         migrar_a_head(url)
-
-        async def crear():
-            motor = create_async_engine(url_asyncpg(url))
-            async with motor.begin() as c:
-                for sentencia in [s for s in DDL.split(";\n") if s.strip()]:
-                    await c.execute(text(sentencia))
-            await motor.dispose()
-        asyncio.run(crear())
         yield url
 
 
