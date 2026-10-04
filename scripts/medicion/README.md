@@ -168,3 +168,5 @@ carpetas **ya existentes** que se le indiquen (subcarpeta propia que borra), con
 (sin puertos, datos en tmpfs). Sin `--confirmo` solo enseña el plan. Mide, por carpeta, las **capacidades del
 montaje** (`renameat2` sin reemplazo, `link`, `fsync`), el coste de rename/copia/hash y la asignación de
 extremo a extremo. Pruebas de que no toca nada más: `tests/test_medir_asignacion_sh.py`.
+
+`--cruzado ORIGEN,DESTINO` (posiciones 1-based de los `--dir`) mide además la asignación con el origen en un dispositivo y la biblioteca en otro. La espera a Postgres es por TCP con plazo de 120 s (`MEDICION_ESPERA_PG`).

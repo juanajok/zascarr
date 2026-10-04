@@ -4,7 +4,7 @@
 #
 #   medir_asignacion.sh --dir /ruta/de/ensayo [--dir /otra/ruta] [--salida informe.json]
 #                       [--imagen IMAGEN] [--usuario UID:GID] [--tamanos 10,50,100,200]
-#                       [--archivos 5] [--mb-extremo 100] --confirmo
+#                       [--archivos 5] [--mb-extremo 100] [--cruzado I,J] --confirmo
 #
 # Qué toca, y NADA más:
 #   - SOLO escribe dentro de cada `--dir` (una subcarpeta `zascarr_medicion_*` que borra al terminar).
@@ -20,7 +20,7 @@ set -euo pipefail
 
 AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${AQUI}/../.." && pwd)"
-DIRS=(); SALIDA=""; IMAGEN=""; USUARIO="$(id -u):$(id -g)"; TAMANOS="10,50,100,200"; ARCHIVOS="5"; MB_EXTREMO="100"; CONFIRMO=0
+DIRS=(); SALIDA=""; IMAGEN=""; USUARIO="$(id -u):$(id -g)"; TAMANOS="10,50,100,200"; ARCHIVOS="5"; MB_EXTREMO="100"; CRUZADO=""; CONFIRMO=0
 
 die() { echo "medir_asignacion.sh: $*" >&2; exit 1; }
 
@@ -33,6 +33,7 @@ while [[ $# -gt 0 ]]; do
         --tamanos) TAMANOS="$2"; shift 2 ;;
         --archivos) ARCHIVOS="$2"; shift 2 ;;
         --mb-extremo) MB_EXTREMO="$2"; shift 2 ;;
+        --cruzado) CRUZADO="$2"; shift 2 ;;
         --confirmo) CONFIRMO=1; shift ;;
         -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) die "argumento desconocido: $1" ;;
@@ -42,6 +43,13 @@ done
 [[ ${#DIRS[@]} -gt 0 ]] || die "indica al menos una carpeta de ensayo con --dir (existente, nueva para este fin)."
 [[ "${ARCHIVOS}" =~ ^[0-9]+$ && "${MB_EXTREMO}" =~ ^[0-9]+$ && "${TAMANOS}" =~ ^[0-9]+(,[0-9]+)*$ ]] \
     || die "--archivos, --mb-extremo y --tamanos deben ser números."
+
+if [[ -n "${CRUZADO}" ]]; then
+    [[ "${CRUZADO}" =~ ^[0-9]+,[0-9]+$ ]] || die "--cruzado debe ser «ORIGEN,DESTINO» con posiciones numéricas (p. ej. 2,3)."
+    c1="${CRUZADO%,*}"; c2="${CRUZADO#*,}"
+    [[ "${c1}" != "${c2}" && "${c1}" -ge 1 && "${c2}" -ge 1 && "${c1}" -le ${#DIRS[@]} && "${c2}" -le ${#DIRS[@]} ]] \
+        || die "--cruzado ${CRUZADO}: deben ser dos posiciones DISTINTAS entre 1 y ${#DIRS[@]} (el orden de los --dir)."
+fi
 
 # Validación ANTES de tocar nada, incluida la existencia de Docker.
 for d in "${DIRS[@]}"; do
@@ -67,6 +75,7 @@ for d in "${DIRS[@]}"; do
     n=$((n + 1))
     echo "  - escribiré ficheros sintéticos de hasta ${TAMANOS##*,} MB en  ${d}/zascarr_medicion_*  (montada como /ensayo/${n}) y los borraré."
 done
+[[ -z "${CRUZADO}" ]] || echo "  - además asignaré archivos sintéticos con el ORIGEN en /ensayo/${CRUZADO%,*} y la biblioteca en /ensayo/${CRUZADO#*,} (copia entre dispositivos)."
 echo "  - levantaré una Postgres propia y efímera (zascarr-medicion-pg-*, sin puertos, datos en tmpfs) y la borraré."
 echo "  - NO tocaré ninguna otra carpeta, contenedor, red ni volumen."
 [[ "${CONFIRMO}" -eq 1 ]] || { echo "Sin --confirmo: no hago nada."; exit 2; }
@@ -90,11 +99,16 @@ docker network create "${RED}" >/dev/null
 docker run -d --name "${PG}" --network "${RED}" --tmpfs /var/lib/postgresql/data \
     -e POSTGRES_USER=test -e POSTGRES_PASSWORD=medicion -e POSTGRES_DB=zascarr_test \
     postgres:15-alpine >/dev/null
-for _ in $(seq 1 40); do
-    docker exec "${PG}" pg_isready -U test -d zascarr_test -q 2>/dev/null && break
+# Se espera por TCP (`-h 127.0.0.1`), NO por el socket: la imagen arranca primero un servidor temporal que solo
+# escucha en el socket de Unix para el `initdb`, y `pg_isready` por socket da «listo» antes de que la aplicación
+# pueda conectar. En una Pi con los datos en tmpfs eso tarda más de 40 s: plazo de 120 s.
+LISTA=0
+ESPERA="${MEDICION_ESPERA_PG:-120}"
+for _ in $(seq 1 "${ESPERA}"); do
+    if docker exec "${PG}" pg_isready -h 127.0.0.1 -U test -d zascarr_test -q 2>/dev/null; then LISTA=1; break; fi
     sleep 1
 done
-docker exec "${PG}" pg_isready -U test -d zascarr_test -q || die "Postgres de medición no arrancó."
+[[ "${LISTA}" -eq 1 ]] || die "Postgres de medición no arrancó en ${ESPERA} s (por TCP)."
 
 MONTAJES=(); ARGS=(); n=0
 for d in "${DIRS[@]}"; do
@@ -108,7 +122,7 @@ docker run --rm --network "${RED}" --user "${USUARIO}" --entrypoint python \
     -e HOME=/tmp -e "TEST_DATABASE_URL=postgresql://test:medicion@${PG}:5432/zascarr_test" \
     -e PYTHONPATH=/app/src -w /app "${MONTAJES[@]}" "${IMAGEN}" \
     scripts/medicion/medir_asignacion.py "${ARGS[@]}" --tamanos "${TAMANOS}" \
-    --archivos "${ARCHIVOS}" --mb-extremo "${MB_EXTREMO}" > "${SALIDA_TMP}"
+    --archivos "${ARCHIVOS}" --mb-extremo "${MB_EXTREMO}" ${CRUZADO:+--cruzado "${CRUZADO}"} > "${SALIDA_TMP}"
 
 if [[ -n "${SALIDA}" ]]; then cp "${SALIDA_TMP}" "${SALIDA}"; echo "Informe en ${SALIDA}" >&2; fi
 cat "${SALIDA_TMP}"
