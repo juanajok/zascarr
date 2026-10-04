@@ -1,0 +1,209 @@
+{
+  "maquina": {
+    "python": "3.11.17",
+    "plataforma": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.36",
+    "cpu": "aarch64",
+    "nucleos": 4
+  },
+  "directorios": {
+    "/ensayo/1": {
+      "montaje": "ext4   /dev/nvme0n1p2[/home/pi/zascarr_ensayo_W6YE1uPU] rw,noatime",
+      "capacidades": {
+        "renameat2_noreplace_destino_libre": "ok",
+        "renameat2_noreplace_destino_ocupado": "EEXIST (bien)",
+        "link": "ok",
+        "replace_sobre_existente_reemplaza": true,
+        "fsync_fichero": "ok",
+        "fsync_directorio": "ok",
+        "_publicar_con_ajeno": "FileExistsError, ajeno intacto (bien)",
+        "_publicar_libre": "ok"
+      },
+      "ficheros": {
+        "10": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.049,
+          "solo_sha256_s": 0.008,
+          "solo_copia_s": 0.006,
+          "espacio_temporal_extra_MB": 10
+        },
+        "50": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.267,
+          "solo_sha256_s": 0.041,
+          "solo_copia_s": 0.119,
+          "espacio_temporal_extra_MB": 50
+        },
+        "100": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.519,
+          "solo_sha256_s": 0.082,
+          "solo_copia_s": 0.231,
+          "espacio_temporal_extra_MB": 100
+        },
+        "200": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 1.081,
+          "solo_sha256_s": 0.163,
+          "solo_copia_s": 0.489,
+          "espacio_temporal_extra_MB": 200
+        }
+      },
+      "extremo_a_extremo": {
+        "recuperar_una_operacion_huerfana_100MB_s": 0.635,
+        "resultado_recuperar": [
+          "asignado"
+        ],
+        "asignar_5_archivos_de_100MB_s": [
+          1.136,
+          1.143,
+          1.163,
+          1.104,
+          0.828
+        ],
+        "rendimiento_MB_por_s": 93.1
+      }
+    },
+    "/ensayo/2": {
+      "montaje": "ext4   /dev/sdc1[/zascarr_ensayo_fN51weJu] rw,noatime",
+      "capacidades": {
+        "renameat2_noreplace_destino_libre": "ok",
+        "renameat2_noreplace_destino_ocupado": "EEXIST (bien)",
+        "link": "ok",
+        "replace_sobre_existente_reemplaza": true,
+        "fsync_fichero": "ok",
+        "fsync_directorio": "ok",
+        "_publicar_con_ajeno": "FileExistsError, ajeno intacto (bien)",
+        "_publicar_libre": "ok"
+      },
+      "ficheros": {
+        "10": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.056,
+          "solo_sha256_s": 0.014,
+          "solo_copia_s": 0.006,
+          "espacio_temporal_extra_MB": 10
+        },
+        "50": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.226,
+          "solo_sha256_s": 0.041,
+          "solo_copia_s": 0.128,
+          "espacio_temporal_extra_MB": 50
+        },
+        "100": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.458,
+          "solo_sha256_s": 0.085,
+          "solo_copia_s": 0.29,
+          "espacio_temporal_extra_MB": 100
+        },
+        "200": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 1.4,
+          "solo_sha256_s": 0.171,
+          "solo_copia_s": 0.917,
+          "espacio_temporal_extra_MB": 200
+        }
+      },
+      "extremo_a_extremo": {
+        "recuperar_una_operacion_huerfana_100MB_s": 0.644,
+        "resultado_recuperar": [
+          "asignado"
+        ],
+        "asignar_5_archivos_de_100MB_s": [
+          1.141,
+          1.128,
+          1.274,
+          1.185,
+          1.237
+        ],
+        "rendimiento_MB_por_s": 83.8
+      }
+    },
+    "/ensayo/3": {
+      "montaje": "ext4   /dev/sdb1[/zascarr_ensayo_BAOxFjZt] rw,noatime",
+      "capacidades": {
+        "renameat2_noreplace_destino_libre": "ok",
+        "renameat2_noreplace_destino_ocupado": "EEXIST (bien)",
+        "link": "ok",
+        "replace_sobre_existente_reemplaza": true,
+        "fsync_fichero": "ok",
+        "fsync_directorio": "ok",
+        "_publicar_con_ajeno": "FileExistsError, ajeno intacto (bien)",
+        "_publicar_libre": "ok"
+      },
+      "ficheros": {
+        "10": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.1,
+          "solo_sha256_s": 0.008,
+          "solo_copia_s": 0.005,
+          "espacio_temporal_extra_MB": 10
+        },
+        "50": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.229,
+          "solo_sha256_s": 0.041,
+          "solo_copia_s": 0.082,
+          "espacio_temporal_extra_MB": 50
+        },
+        "100": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 1.79,
+          "solo_sha256_s": 0.087,
+          "solo_copia_s": 0.487,
+          "espacio_temporal_extra_MB": 100
+        },
+        "200": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 6.236,
+          "solo_sha256_s": 0.182,
+          "solo_copia_s": 3.27,
+          "espacio_temporal_extra_MB": 200
+        }
+      },
+      "extremo_a_extremo": {
+        "recuperar_una_operacion_huerfana_100MB_s": 0.904,
+        "resultado_recuperar": [
+          "asignado"
+        ],
+        "asignar_5_archivos_de_100MB_s": [
+          3.44,
+          3.872,
+          2.434,
+          3.638,
+          2.976
+        ],
+        "rendimiento_MB_por_s": 30.6
+      }
+    }
+  },
+  "cruce": {
+    "origen": "/ensayo/2",
+    "destino": "/ensayo/3",
+    "mismo_dispositivo": false,
+    "montaje_origen": "ext4   /dev/sdc1[/zascarr_ensayo_fN51weJu] rw,noatime",
+    "montaje_destino": "ext4   /dev/sdb1[/zascarr_ensayo_BAOxFjZt] rw,noatime",
+    "extremo_a_extremo": {
+      "recuperar_una_operacion_huerfana_100MB_s": 0.594,
+      "resultado_recuperar": [
+        "asignado"
+      ],
+      "asignar_5_archivos_de_100MB_s": [
+        1.575,
+        1.688,
+        1.411,
+        1.766,
+        1.457
+      ],
+      "rendimiento_MB_por_s": 63.3
+    }
+  },
+  "bd": {
+    "metadata_con_50000_filas": {
+      "consulta_mediana_ms": 4.2,
+      "encontradas": 50
+    },
+    "operaciones_vivas_con_20000_cerradas_ms": 0.32
+  }
+}

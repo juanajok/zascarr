@@ -1,0 +1,188 @@
+{
+  "maquina": {
+    "python": "3.11.17",
+    "plataforma": "Linux-6.18.50+rpt-rpi-2712-aarch64-with-glibc2.36",
+    "cpu": "aarch64",
+    "nucleos": 4
+  },
+  "directorios": {
+    "/ensayo/1": {
+      "montaje": "ext4   /dev/nvme0n1p2[/home/pi/zascarr_ensayo_W6YE1uPU] rw,noatime",
+      "capacidades": {
+        "renameat2_noreplace_destino_libre": "ok",
+        "renameat2_noreplace_destino_ocupado": "EEXIST (bien)",
+        "link": "ok",
+        "replace_sobre_existente_reemplaza": true,
+        "fsync_fichero": "ok",
+        "fsync_directorio": "ok",
+        "_publicar_con_ajeno": "FileExistsError, ajeno intacto (bien)",
+        "_publicar_libre": "ok"
+      },
+      "ficheros": {
+        "10": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.041,
+          "solo_sha256_s": 0.008,
+          "solo_copia_s": 0.007,
+          "espacio_temporal_extra_MB": 10
+        },
+        "50": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.258,
+          "solo_sha256_s": 0.043,
+          "solo_copia_s": 0.131,
+          "espacio_temporal_extra_MB": 50
+        },
+        "100": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.539,
+          "solo_sha256_s": 0.083,
+          "solo_copia_s": 0.273,
+          "espacio_temporal_extra_MB": 100
+        },
+        "200": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 1.119,
+          "solo_sha256_s": 0.22,
+          "solo_copia_s": 0.677,
+          "espacio_temporal_extra_MB": 200
+        }
+      },
+      "extremo_a_extremo": {
+        "recuperar_una_operacion_huerfana_100MB_s": 0.611,
+        "resultado_recuperar": [
+          "asignado"
+        ],
+        "asignar_5_archivos_de_100MB_s": [
+          1.122,
+          1.362,
+          1.147,
+          1.036,
+          1.155
+        ],
+        "rendimiento_MB_por_s": 85.9
+      }
+    },
+    "/ensayo/2": {
+      "montaje": "ext4   /dev/sdc1[/zascarr_ensayo_fN51weJu] rw,noatime",
+      "capacidades": {
+        "renameat2_noreplace_destino_libre": "ok",
+        "renameat2_noreplace_destino_ocupado": "EEXIST (bien)",
+        "link": "ok",
+        "replace_sobre_existente_reemplaza": true,
+        "fsync_fichero": "ok",
+        "fsync_directorio": "ok",
+        "_publicar_con_ajeno": "FileExistsError, ajeno intacto (bien)",
+        "_publicar_libre": "ok"
+      },
+      "ficheros": {
+        "10": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.053,
+          "solo_sha256_s": 0.008,
+          "solo_copia_s": 0.006,
+          "espacio_temporal_extra_MB": 10
+        },
+        "50": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.252,
+          "solo_sha256_s": 0.043,
+          "solo_copia_s": 0.101,
+          "espacio_temporal_extra_MB": 50
+        },
+        "100": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.604,
+          "solo_sha256_s": 0.099,
+          "solo_copia_s": 0.242,
+          "espacio_temporal_extra_MB": 100
+        },
+        "200": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 1.321,
+          "solo_sha256_s": 0.228,
+          "solo_copia_s": 0.733,
+          "espacio_temporal_extra_MB": 200
+        }
+      },
+      "extremo_a_extremo": {
+        "recuperar_una_operacion_huerfana_100MB_s": 0.699,
+        "resultado_recuperar": [
+          "asignado"
+        ],
+        "asignar_5_archivos_de_100MB_s": [
+          1.518,
+          1.373,
+          1.455,
+          1.449,
+          1.264
+        ],
+        "rendimiento_MB_por_s": 70.8
+      }
+    },
+    "/ensayo/3": {
+      "montaje": "ext4   /dev/sdb1[/zascarr_ensayo_BAOxFjZt] rw,noatime",
+      "capacidades": {
+        "renameat2_noreplace_destino_libre": "ok",
+        "renameat2_noreplace_destino_ocupado": "EEXIST (bien)",
+        "link": "ok",
+        "replace_sobre_existente_reemplaza": true,
+        "fsync_fichero": "ok",
+        "fsync_directorio": "ok",
+        "_publicar_con_ajeno": "FileExistsError, ajeno intacto (bien)",
+        "_publicar_libre": "ok"
+      },
+      "ficheros": {
+        "10": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.089,
+          "solo_sha256_s": 0.008,
+          "solo_copia_s": 0.005,
+          "espacio_temporal_extra_MB": 10
+        },
+        "50": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 0.485,
+          "solo_sha256_s": 0.139,
+          "solo_copia_s": 0.092,
+          "espacio_temporal_extra_MB": 50
+        },
+        "100": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 1.88,
+          "solo_sha256_s": 0.086,
+          "solo_copia_s": 0.485,
+          "espacio_temporal_extra_MB": 100
+        },
+        "200": {
+          "rename_s": 0.0,
+          "copia+fsync+sha256_s": 6.255,
+          "solo_sha256_s": 0.196,
+          "solo_copia_s": 3.783,
+          "espacio_temporal_extra_MB": 200
+        }
+      },
+      "extremo_a_extremo": {
+        "recuperar_una_operacion_huerfana_100MB_s": 0.981,
+        "resultado_recuperar": [
+          "asignado"
+        ],
+        "asignar_5_archivos_de_100MB_s": [
+          3.34,
+          2.525,
+          2.758,
+          3.115,
+          2.857
+        ],
+        "rendimiento_MB_por_s": 34.3
+      }
+    }
+  },
+  "bd": {
+    "metadata_con_50000_filas": {
+      "consulta_mediana_ms": 4.7,
+      "encontradas": 50
+    },
+    "operaciones_vivas_con_20000_cerradas_ms": 0.33
+  }
+}

@@ -1,0 +1,36 @@
+commit,trayecto,asignacion,tamano_MB_etiqueta_banco,tiempo_s
+2716ef4,NVMe,1,100,1.122
+2716ef4,NVMe,2,100,1.362
+2716ef4,NVMe,3,100,1.147
+2716ef4,NVMe,4,100,1.036
+2716ef4,NVMe,5,100,1.155
+2716ef4,Descargas,1,100,1.518
+2716ef4,Descargas,2,100,1.373
+2716ef4,Descargas,3,100,1.455
+2716ef4,Descargas,4,100,1.449
+2716ef4,Descargas,5,100,1.264
+2716ef4,WDElements,1,100,3.34
+2716ef4,WDElements,2,100,2.525
+2716ef4,WDElements,3,100,2.758
+2716ef4,WDElements,4,100,3.115
+2716ef4,WDElements,5,100,2.857
+4ab2b07,NVMe,1,100,1.136
+4ab2b07,NVMe,2,100,1.143
+4ab2b07,NVMe,3,100,1.163
+4ab2b07,NVMe,4,100,1.104
+4ab2b07,NVMe,5,100,0.828
+4ab2b07,Descargas,1,100,1.141
+4ab2b07,Descargas,2,100,1.128
+4ab2b07,Descargas,3,100,1.274
+4ab2b07,Descargas,4,100,1.185
+4ab2b07,Descargas,5,100,1.237
+4ab2b07,WDElements,1,100,3.44
+4ab2b07,WDElements,2,100,3.872
+4ab2b07,WDElements,3,100,2.434
+4ab2b07,WDElements,4,100,3.638
+4ab2b07,WDElements,5,100,2.976
+4ab2b07,Descargas -> WDElements,1,100,1.575
+4ab2b07,Descargas -> WDElements,2,100,1.688
+4ab2b07,Descargas -> WDElements,3,100,1.411
+4ab2b07,Descargas -> WDElements,4,100,1.766
+4ab2b07,Descargas -> WDElements,5,100,1.457
