@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     )
     db_pool_size: int = 5
     db_max_overflow: int = 2
+    # V6a: asignaciones de archivos simultáneas (ADR 0006). Cada una retiene una conexión del pool durante toda
+    # la copia y usa otra para el trabajo corto: db_pool_size + db_max_overflow debe ser al menos el doble.
+    asignacion_simultaneas: int = Field(default=1, ge=1)
     db_pool_recycle: int = 1800
 
     # ── Redis ──────────────────────────────────────────────────────

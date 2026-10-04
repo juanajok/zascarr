@@ -130,7 +130,11 @@ class TestEsquema:
 
     @pytest.mark.asyncio
     async def test_los_indices_del_modelo_coinciden_con_los_de_la_tabla_en_todo(self, banco):
-        """Nombre, unicidad, columnas (en orden) y predicado de CADA índice — no un subconjunto."""
+        """Nombre, unicidad, columnas (en orden) y predicado de CADA índice — no un subconjunto.
+
+        LIMITACIÓN: del predicado se comparan los LITERALES de estado, no la expresión entera: detecta cambiar qué
+        estados incluye, pero no distinguiría `IN` de `NOT IN` con los mismos literales. No es una comparación
+        semántica completa, y el autogenerate de Alembic tampoco compara predicados."""
         async with banco.motor.connect() as c:
             filas = (await c.execute(text("""
                 SELECT i.relname, ix.indisunique,
