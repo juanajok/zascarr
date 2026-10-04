@@ -409,10 +409,11 @@ class File(Base):
 class AsignacionEstado(str, enum.Enum):
     """Estados PERSISTIDOS de una operación de asignación (ADR 0006, migración 0017).
 
-    Son solo cuatro. Los RESULTADOS que el servicio devuelve al cliente (`asignado_limpieza_pendiente`,
-    `reparacion_pendiente`, `pendiente`, `destino_ocupado`…) NO son estados: tras ellos la operación sigue
-    `confirmada` o `preparada`, es decir, VIVA, con su reserva intacta. Una reparación pendiente no debe
-    liberar el destino por accidente."""
+    Son solo cuatro. Los RESULTADOS que el servicio devuelve al cliente no son estados. Los RECUPERABLES
+    (`pendiente`, `reparacion_pendiente`, `asignado_limpieza_pendiente`) dejan la operación `preparada` o
+    `confirmada`, es decir, VIVA, con su reserva intacta: una reparación pendiente no debe liberar el destino
+    por accidente. `destino_ocupado`, en cambio, CANCELA la operación y libera la reserva (el reintento
+    reserva el siguiente nombre libre)."""
     PREPARADA = "preparada"      # reservada; el origen sigue siendo la única copia confirmada
     CONFIRMADA = "confirmada"    # la BD ya apunta al destino; falta (o falló) retirar el origen
     LIMPIADA = "limpiada"        # terminada: el origen se retiró
@@ -443,15 +444,19 @@ class AsignacionOperacion(Base):
         Index("uq_asignacion_viva_por_destino", "destino", unique=True,
               postgresql_where=text(_VIVOS_SQL)),
         Index("ix_asignacion_viva_creada", "creada", postgresql_where=text(_VIVOS_SQL)),
+        # Declarados a mano (no `index=True`, que los llamaría `ix_asignacion_operaciones_*`): mismos nombres
+        # que la migración 0017, para que Alembic no proponga renombrarlos.
+        Index("ix_asignacion_file_id", "file_id"),
+        Index("ix_asignacion_series_id", "series_id"),
     )
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4,
                                     server_default=text("gen_random_uuid()"))
     # SET NULL + el CHECK de arriba: borrar un archivo/serie con una operación VIVA falla; con una cerrada
     # procede y la fila queda como historial.
     file_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), index=True)
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"))
     series_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"), index=True)
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"))
     estado: Mapped[AsignacionEstado] = mapped_column(
         Enum(AsignacionEstado, name="asignacion_estado",
              values_callable=lambda obj: [e.value for e in obj]),

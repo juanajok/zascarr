@@ -93,19 +93,24 @@ El `DDL` del prototipo **no** se copió: se revisó como esquema de producción 
 | Índices | dos únicos parciales | los dos únicos parciales + uno parcial por antigüedad (reconciliar lista solo lo vivo) + dos para las acciones `SET NULL` |
 
 **Estados persistidos frente a resultados devueltos.** Solo existen `preparada`, `confirmada`, `limpiada` y
-`cancelada`. Los resultados del servicio (`asignado_limpieza_pendiente`, `reparacion_pendiente`, `pendiente`,
-`destino_ocupado`…) **no son estados**: tras ellos la operación sigue `confirmada` o `preparada`, viva, con la
-reserva intacta (prueba: `test_una_reparacion_pendiente_no_libera_la_reserva`).
+`cancelada`. Los resultados del servicio **no son estados**. Los **recuperables** (`pendiente`,
+`reparacion_pendiente`, `asignado_limpieza_pendiente`) dejan la operación `preparada` o `confirmada`, viva, con la
+reserva intacta (prueba: `test_una_reparacion_pendiente_no_libera_la_reserva`). **`destino_ocupado` no es uno de
+ellos:** cancela la operación y libera la reserva; el reintento reserva el siguiente nombre libre.
 
 **Downgrade — destructivo.** Elimina la tabla y el tipo: se pierde el historial y, sobre todo, la información
 para recuperar las operaciones vivas; por eso **se niega si hay alguna viva**. Con solo historial baja y lo
-descarta (no toca archivos, issues ni alias). No es inocuo: copia primero y reconcilia lo vivo.
+descarta (no toca archivos, issues ni alias). No es inocuo: copia primero y reconcilia lo vivo. **Toma
+`ACCESS EXCLUSIVE` antes de contar**, en la misma transacción que el `DROP`: sin eso, otra transacción podría
+confirmar una operación viva entre el recuento y el borrado.
 
 **Consecuencia para el borrado de series:** `DELETE /api/series/{id}` y cualquier borrado de archivos fallarán
-con la integridad mientras haya una asignación viva afectada; el servicio deberá traducirlo a un `409` con
-motivo (historia del servicio, no de esta migración). **No cubierto por el esquema:** que el destino reservado
-coincida con el `file_path` de otro `File` (la unicidad es entre operaciones, no entre tablas): lo comprueba el
-servicio.
+con la integridad mientras haya una asignación viva afectada. El `409` con motivo (con *rollback* y traducción de
+la restricción **concreta**, no de cualquier `IntegrityError`) debe estar implementado **antes** de que producción
+empiece a crear operaciones vivas: es condición de la historia del servicio. **No cubierto por el esquema:** que
+el destino reservado coincida con el `file_path` de otro `File` (la unicidad es entre operaciones, no entre
+tablas); el servicio debe comprobarlo y **coordinarlo con los demás escritores**: una consulta previa aislada no
+es una reserva frente a cambios concurrentes.
 
 ### Propiedad: perder el candado no detiene el trabajo, así que se vallan los efectos
 

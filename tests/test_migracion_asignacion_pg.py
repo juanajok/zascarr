@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from uuid import uuid4
 
 import pytest
@@ -128,18 +129,76 @@ class TestEsquema:
             assert resultado not in valores
 
     @pytest.mark.asyncio
-    async def test_el_modelo_coincide_con_la_tabla(self, banco):
+    async def test_los_indices_del_modelo_coinciden_con_los_de_la_tabla_en_todo(self, banco):
+        """Nombre, unicidad, columnas (en orden) y predicado de CADA índice — no un subconjunto."""
+        async with banco.motor.connect() as c:
+            filas = (await c.execute(text("""
+                SELECT i.relname, ix.indisunique,
+                       array_agg(a.attname ORDER BY k.ord) AS columnas,
+                       pg_get_expr(ix.indpred, ix.indrelid) AS predicado
+                FROM pg_index ix
+                JOIN pg_class i ON i.oid = ix.indexrelid
+                JOIN pg_class t ON t.oid = ix.indrelid
+                JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord) ON true
+                JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+                WHERE t.relname = 'asignacion_operaciones' AND NOT ix.indisprimary
+                GROUP BY i.relname, ix.indisunique, ix.indpred, ix.indrelid"""))).all()
+
+        def literales(predicado):
+            return frozenset(re.findall(r"'([a-z_]+)'", predicado)) if predicado else None
+        en_bd = {f[0]: (f[1], tuple(f[2]), literales(f[3])) for f in filas}
+        en_modelo = {}
+        for ix in AsignacionOperacion.__table__.indexes:
+            donde = ix.dialect_options["postgresql"]["where"]
+            en_modelo[ix.name] = (bool(ix.unique), tuple(col.name for col in ix.columns),
+                                  literales(str(donde)) if donde is not None else None)
+        assert en_modelo == en_bd
+        assert set(en_bd) == {"uq_asignacion_viva_por_archivo", "uq_asignacion_viva_por_destino",
+                              "ix_asignacion_viva_creada", "ix_asignacion_file_id", "ix_asignacion_series_id"}
+        assert en_bd["uq_asignacion_viva_por_destino"][2] == VIVOS
+
+    @pytest.mark.asyncio
+    async def test_columnas_y_comprobaciones_del_modelo_coinciden_con_la_tabla(self, banco):
         async with banco.motor.connect() as c:
             columnas = {r[0] for r in (await c.execute(text(
                 "SELECT column_name FROM information_schema.columns WHERE table_name = 'asignacion_operaciones'"))).all()}
-            indices = {r[0] for r in (await c.execute(text(
-                "SELECT indexname FROM pg_indexes WHERE tablename = 'asignacion_operaciones'"))).all()}
             checks = {r[0] for r in (await c.execute(text(
                 "SELECT conname FROM pg_constraint WHERE conrelid = 'asignacion_operaciones'::regclass AND contype = 'c'"))).all()}
         tabla = AsignacionOperacion.__table__
         assert {col.name for col in tabla.columns} == columnas
-        assert {ix.name for ix in tabla.indexes if ix.name.startswith(("uq_", "ix_asignacion_viva"))} <= indices
         assert {c.name for c in tabla.constraints if c.name and c.name.startswith("ck_")} == checks
+
+    @pytest.mark.asyncio
+    async def test_alembic_no_propone_ningun_cambio_para_esta_tabla(self, banco):
+        """El autogenerate de Alembic compara columnas, tipos, nulos, índices y claves foráneas del modelo con la BD.
+
+        Va en un SUBPROCESO con el entorno saneado: en este proceso `import alembic` resuelve al directorio
+        `alembic/` del repo (el de las migraciones), no al paquete instalado."""
+        import subprocess
+        import sys
+
+        from tests._pg import RAIZ, entorno_para_alembic
+        guion = (
+            "import asyncio, json\n"
+            "from alembic.autogenerate import compare_metadata\n"
+            "from alembic.migration import MigrationContext\n"
+            "from sqlalchemy.ext.asyncio import create_async_engine\n"
+            "from zascarr.database import Base\n"
+            "import zascarr.models\n"
+            "def comparar(c):\n"
+            "    return compare_metadata(MigrationContext.configure(c, opts={'compare_type': True}), Base.metadata)\n"
+            "async def main():\n"
+            "    m = create_async_engine(__import__('os').environ['DATABASE_URL'])\n"
+            "    async with m.connect() as c:\n"
+            "        d = await c.run_sync(comparar)\n"
+            "    await m.dispose()\n"
+            "    print(json.dumps([repr(x) for x in d if 'asignacion_operaciones' in repr(x)]))\n"
+            "asyncio.run(main())\n"
+        )
+        r = subprocess.run([sys.executable, "-c", guion], cwd=RAIZ, env=entorno_para_alembic(os.environ, banco.url),
+                           capture_output=True, text=True, timeout=120)
+        assert r.returncode == 0, r.stderr[-1500:]
+        assert r.stdout.strip().splitlines()[-1] == "[]", r.stdout
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("clave", ["archivo", "destino"])
@@ -484,3 +543,65 @@ class TestBajada:
             assert await version(url) == "0015"
             alembic(url, "upgrade", "head")
             assert await version(url) == "0017"
+
+
+class TestBajadaConcurrente:
+    """Revisión de #77: contar y borrar no pueden estar separados por una confirmación ajena."""
+
+    @pytest.mark.asyncio
+    async def test_una_operacion_viva_confirmada_durante_la_bajada_la_hace_negarse(self):
+        async with bd_efimera(URL) as url:
+            migrar_a_head(url)
+            ids = await sembrar_a_0016(url)
+            b = Banco(url)
+            try:
+                # Sesión A: inserta una operación viva y NO confirma todavía.
+                a = b.fab()
+                sa = await a.__aenter__()
+                await sa.execute(text(b.SQL), b.params(ids["f_manual"], ids["serie"], "preparada"))
+                # Sesión B: intenta bajar (en otro proceso, como `alembic downgrade`).
+                bajada = asyncio.create_task(asyncio.to_thread(alembic, url, "downgrade", "0016", estricto=False))
+                # B debe quedarse ESPERANDO el bloqueo de la tabla (no contar, ver cero y seguir).
+                esperando = False
+                for _ in range(100):
+                    await asyncio.sleep(0.2)
+                    async with b.motor.connect() as c:
+                        esperando = (await c.execute(text(
+                            "SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' "
+                            "AND query ILIKE 'LOCK TABLE asignacion_operaciones%'"))).scalar() > 0
+                    if esperando:
+                        break
+                assert esperando, "la bajada no está esperando el bloqueo de la tabla"
+                assert not bajada.done()
+                await sa.commit()                                  # A confirma la operación viva
+                await a.__aexit__(None, None, None)
+                r = await asyncio.wait_for(bajada, 120)
+            finally:
+                await b.cerrar()
+            assert r.returncode != 0 and "operaciones de asignación vivas" in r.stderr
+            assert await version(url) == "0017" and await existe_tabla_y_tipo(url) == (True, True)
+            motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
+            async with motor.connect() as c:
+                assert (await c.execute(text("SELECT estado::text FROM asignacion_operaciones"))).scalar() == "preparada"
+            await motor.dispose()
+
+    @pytest.mark.asyncio
+    async def test_si_la_otra_sesion_se_revierte_la_bajada_procede(self):
+        async with bd_efimera(URL) as url:
+            migrar_a_head(url)
+            ids = await sembrar_a_0016(url)
+            b = Banco(url)
+            try:
+                a = b.fab()
+                sa = await a.__aenter__()
+                await sa.execute(text(b.SQL), b.params(ids["f_manual"], ids["serie"], "preparada"))
+                bajada = asyncio.create_task(asyncio.to_thread(alembic, url, "downgrade", "0016", estricto=False))
+                await asyncio.sleep(2.0)
+                assert not bajada.done()                          # sigue esperando a A
+                await sa.rollback()
+                await a.__aexit__(None, None, None)
+                r = await asyncio.wait_for(bajada, 120)
+            finally:
+                await b.cerrar()
+            assert r.returncode == 0, r.stderr[-500:]
+            assert await version(url) == "0016" and await existe_tabla_y_tipo(url) == (False, False)

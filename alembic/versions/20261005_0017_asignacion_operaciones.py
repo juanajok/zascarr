@@ -31,6 +31,16 @@ asignaciones y, sobre todo, la información para recuperar las que estén vivas.
 operaciones vivas: bajar con una asignación a medias dejaría ficheros copiados o publicados que nada reclama.
 Con solo operaciones cerradas baja y descarta el historial (no toca archivos, issues ni alias). No es inocuo:
 haz copia antes (`scripts/update.sh` ya la hace) y reconcilia lo vivo primero.
+
+**El downgrade toma `ACCESS EXCLUSIVE` ANTES de contar**, en la misma transacción que la comprobación y el
+`DROP`. Sin eso, una transacción ajena podría confirmar una operación viva entre el recuento (que vería cero) y el
+borrado de la tabla, y se perdería la información de recuperación. Detener los escritores sigue siendo
+recomendable, pero no sustituye esta defensa.
+
+Estados y resultados: solo `preparada` y `confirmada` son vivas. Los resultados RECUPERABLES del servicio
+(`pendiente`, `reparacion_pendiente`, `asignado_limpieza_pendiente`) no son estados y mantienen la operación viva
+con su reserva; `destino_ocupado`, en cambio, CANCELA la operación y libera la reserva (el reintento reserva el
+siguiente nombre libre).
 """
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import ENUM as PGEnum
@@ -99,7 +109,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    vivas = op.get_bind().execute(
+    bind = op.get_bind()
+    # PRIMERO el bloqueo, en esta misma transacción (se mantiene hasta el commit/rollback, tras el DROP): espera
+    # a que terminen las transacciones que hayan tocado la tabla y bloquea las nuevas. Contar sin él deja una
+    # ventana en la que otra sesión confirma una operación viva después del recuento y antes del borrado.
+    bind.execute(sa.text("LOCK TABLE asignacion_operaciones IN ACCESS EXCLUSIVE MODE"))
+    vivas = bind.execute(
         sa.text(f"SELECT count(*) FROM asignacion_operaciones WHERE {_VIVAS}")).scalar()
     if vivas:
         raise RuntimeError(
