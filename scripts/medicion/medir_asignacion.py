@@ -52,7 +52,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # no
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 from tests._pg import bd_efimera, migrar_a_head, url_asyncpg  # noqa: E402
-from tests.prototipo_asignacion import DDL, AsignacionRecuperable  # noqa: E402
+from tests.prototipo_asignacion import AsignacionRecuperable  # noqa: E402
 from zascarr.models import ComicTradition, File, FileFormat, Series  # noqa: E402
 
 
@@ -245,9 +245,6 @@ async def medir_bd(url: str) -> dict:
     """Lo que no depende del disco de los ficheros: consultas sobre tablas grandes."""
     out = {}
     motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
-    async with motor.begin() as c:
-        for s in [x for x in DDL.split(";\n") if x.strip()]:
-            await c.execute(text(s))
     fab = async_sessionmaker(motor, expire_on_commit=False)
     serie = await sembrar_serie(fab)
     async with motor.begin() as c:
@@ -268,7 +265,7 @@ async def medir_bd(url: str) -> dict:
     async with motor.begin() as c:
         await c.execute(text("""
             INSERT INTO asignacion_operaciones (file_id, estado, origen, destino, temporal, size_bytes, mtime_ns, sha256, series_id, issue_number, formato)
-            SELECT f.id, 'limpiada', f.file_path, '/d/' || row_number() OVER (), '/t', 1, 1, 'x', :s, '1', 'single_issue'
+            SELECT f.id, 'limpiada', f.file_path, '/d/' || row_number() OVER (), '/t', 1, 1, repeat('a', 64), :s, '1', 'single_issue'
             FROM (SELECT id, file_path FROM files LIMIT 20000) f"""), {"s": serie.id})
         await c.execute(text("ANALYZE asignacion_operaciones"))
         ts = []
@@ -324,9 +321,6 @@ async def main() -> None:
         motor = create_async_engine(url_asyncpg(efimera), poolclass=NullPool)
         fab = async_sessionmaker(motor, expire_on_commit=False)
         serie = None
-        async with motor.begin() as c:
-            for s in [x for x in DDL.split(";\n") if x.strip()]:
-                await c.execute(text(s))
         serie = await sembrar_serie(fab)
         for d in args.dir:
             base = Path(tempfile.mkdtemp(prefix="zascarr_medicion_", dir=d))

@@ -14,6 +14,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -21,6 +22,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -402,6 +404,76 @@ class File(Base):
     is_missing:          Mapped[bool]         = mapped_column(Boolean, default=False, server_default="false")
     missing_since:       Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     issue: Mapped["Issue|None"] = relationship(back_populates="files")
+
+
+class AsignacionEstado(str, enum.Enum):
+    """Estados PERSISTIDOS de una operación de asignación (ADR 0006, migración 0017).
+
+    Son solo cuatro. Los RESULTADOS que el servicio devuelve al cliente (`asignado_limpieza_pendiente`,
+    `reparacion_pendiente`, `pendiente`, `destino_ocupado`…) NO son estados: tras ellos la operación sigue
+    `confirmada` o `preparada`, es decir, VIVA, con su reserva intacta. Una reparación pendiente no debe
+    liberar el destino por accidente."""
+    PREPARADA = "preparada"      # reservada; el origen sigue siendo la única copia confirmada
+    CONFIRMADA = "confirmada"    # la BD ya apunta al destino; falta (o falló) retirar el origen
+    LIMPIADA = "limpiada"        # terminada: el origen se retiró
+    CANCELADA = "cancelada"      # abandonada sin efecto (p. ej. el destino lo ocupó un ajeno)
+
+
+#: Estados que RESERVAN archivo y destino (índices únicos parciales). Fuente única: la migración 0017 y
+#: las pruebas comparan contra esta constante.
+ASIGNACION_ESTADOS_VIVOS = (AsignacionEstado.PREPARADA, AsignacionEstado.CONFIRMADA)
+_VIVOS_SQL = "estado IN ('preparada', 'confirmada')"
+
+
+class AsignacionOperacion(Base):
+    """Una asignación de un archivo a una serie y número, recuperable tras un fallo (ADR 0006)."""
+    __tablename__ = "asignacion_operaciones"
+    __table_args__ = (
+        CheckConstraint(
+            "estado IN ('limpiada', 'cancelada') OR (file_id IS NOT NULL AND series_id IS NOT NULL)",
+            name="ck_asignacion_viva_con_referencias"),
+        CheckConstraint("origen <> destino AND temporal <> destino AND temporal <> origen",
+                        name="ck_asignacion_rutas_distintas"),
+        CheckConstraint("size_bytes >= 0", name="ck_asignacion_tamano"),
+        CheckConstraint("epoca >= 0", name="ck_asignacion_epoca"),
+        CheckConstraint("length(btrim(issue_number)) > 0", name="ck_asignacion_issue_number"),
+        CheckConstraint("sha256 ~ '^[0-9a-f]{64}$'", name="ck_asignacion_sha256"),
+        Index("uq_asignacion_viva_por_archivo", "file_id", unique=True,
+              postgresql_where=text(_VIVOS_SQL)),
+        Index("uq_asignacion_viva_por_destino", "destino", unique=True,
+              postgresql_where=text(_VIVOS_SQL)),
+        Index("ix_asignacion_viva_creada", "creada", postgresql_where=text(_VIVOS_SQL)),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4,
+                                    server_default=text("gen_random_uuid()"))
+    # SET NULL + el CHECK de arriba: borrar un archivo/serie con una operación VIVA falla; con una cerrada
+    # procede y la fila queda como historial.
+    file_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"), index=True)
+    series_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="SET NULL"), index=True)
+    estado: Mapped[AsignacionEstado] = mapped_column(
+        Enum(AsignacionEstado, name="asignacion_estado",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False, default=AsignacionEstado.PREPARADA,
+        server_default=AsignacionEstado.PREPARADA.value)
+    origen: Mapped[str] = mapped_column(String(1000), nullable=False)
+    destino: Mapped[str] = mapped_column(String(1000), nullable=False)   # el EFECTIVO, no el canónico
+    temporal: Mapped[str] = mapped_column(String(1000), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    issue_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    formato: Mapped[IssueFormat] = mapped_column(
+        Enum(IssueFormat, name="issue_format",
+             values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False)
+    aprender_alias: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True,
+                                                 server_default="true")
+    # Ficha de vallado: cada ejecutor que toma la operación la incrementa; sus escrituras llevan `AND epoca = <la suya>`.
+    epoca: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    creada: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizada: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Wishlist(Base):

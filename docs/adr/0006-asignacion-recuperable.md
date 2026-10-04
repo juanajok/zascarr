@@ -77,6 +77,36 @@ inactiva: `idle_in_transaction_session_timeout` debe permitirlo) y necesita otra
 que el *pool* debe tener **al menos 2 × operaciones simultáneas** (con 1 conexión y 1 operación habría
 interbloqueo; se probó con un *pool* de 2).
 
+### Esquema (migración 0017)
+
+El `DDL` del prototipo **no** se copió: se revisó como esquema de producción y esto cambió.
+
+| Aspecto | Prototipo | Migración 0017 |
+|---|---|---|
+| Estados | `text` con CHECK | **enum de Postgres** `asignacion_estado` (4 valores) y `AsignacionEstado` en `models/` |
+| Estados vivos | literal repetido en los SQL | `ASIGNACION_ESTADOS_VIVOS` (fuente única) y una prueba por estado que comprueba qué reserva |
+| `file_id`, `series_id` | `NOT NULL` + `ON DELETE CASCADE` (la operación habría desaparecido con el archivo) | **nullable**, `ON DELETE SET NULL` y un **CHECK** que exige ambos para una operación viva |
+| Borrar con la operación viva | cascada silenciosa | **falla**, sin perder nada; con la operación cerrada procede y queda el historial |
+| `formato`, `issue_number` | `text` | enum `issue_format` existente y `varchar(20)` (como `Issue`) |
+| Alias | no persistido | `aprender_alias` (la petición completa debe poder recuperarse) |
+| Integridad | sin comprobaciones | `sha256` = 64 hex en minúscula, `size_bytes >= 0`, `epoca >= 0`, número no vacío, origen / destino / temporal distintos |
+| Índices | dos únicos parciales | los dos únicos parciales + uno parcial por antigüedad (reconciliar lista solo lo vivo) + dos para las acciones `SET NULL` |
+
+**Estados persistidos frente a resultados devueltos.** Solo existen `preparada`, `confirmada`, `limpiada` y
+`cancelada`. Los resultados del servicio (`asignado_limpieza_pendiente`, `reparacion_pendiente`, `pendiente`,
+`destino_ocupado`…) **no son estados**: tras ellos la operación sigue `confirmada` o `preparada`, viva, con la
+reserva intacta (prueba: `test_una_reparacion_pendiente_no_libera_la_reserva`).
+
+**Downgrade — destructivo.** Elimina la tabla y el tipo: se pierde el historial y, sobre todo, la información
+para recuperar las operaciones vivas; por eso **se niega si hay alguna viva**. Con solo historial baja y lo
+descarta (no toca archivos, issues ni alias). No es inocuo: copia primero y reconcilia lo vivo.
+
+**Consecuencia para el borrado de series:** `DELETE /api/series/{id}` y cualquier borrado de archivos fallarán
+con la integridad mientras haya una asignación viva afectada; el servicio deberá traducirlo a un `409` con
+motivo (historia del servicio, no de esta migración). **No cubierto por el esquema:** que el destino reservado
+coincida con el `file_path` de otro `File` (la unicidad es entre operaciones, no entre tablas): lo comprueba el
+servicio.
+
 ### Propiedad: perder el candado no detiene el trabajo, así que se vallan los efectos
 
 Perder la conexión **libera** el candado, pero el código Python de ese ejecutor sigue vivo y puede seguir
@@ -114,7 +144,7 @@ con evidencia:
 | Reclamar el archivo (concurrencia) | `UPDATE … WHERE NOT metadata ? …` serviría | índice único parcial por archivo |
 
 **Conclusión: la persistencia necesaria es esquema.** Se separa una historia con migración (`0017`), como se
-acordó; V6a **no** se fusiona rebajando la garantía. El `DDL` propuesto está en `tests/prototipo_asignacion.py`.
+acordó; V6a **no** se fusiona rebajando la garantía. El esquema definitivo es la migración `0017` (sección siguiente).
 
 ## Lo demostrado (prototipo de un archivo, Postgres y ficheros reales)
 
@@ -309,7 +339,7 @@ importa porque la semántica de un *bind mount* puede diferir de la del anfitri�
 
 ## Consecuencias
 
-- **Historias nuevas, en este orden:** (1) migración `0017` con `asignacion_operaciones`; (2) el servicio de
+- **Historias nuevas, en este orden:** (1) migración `0017` con `asignacion_operaciones` (**hecha**: ver «Esquema»); (2) el servicio de
   un archivo, conectado a la asignación individual **conservando su contrato** (B13/B15); (3) el lote con
   límite por bytes; (4) ejecución en segundo plano si la medición lo exige; (5) el importador.
 - La asignación individual actual **no cambia** hasta (2). Las pruebas de caracterización de la auditoría
