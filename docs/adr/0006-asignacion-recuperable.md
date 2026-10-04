@@ -2,11 +2,12 @@
 
 ## Estado
 
-**Propuesto** — 2026-10-03. El **contrato** lo fijó la revisión del 2026-10-03 (ver «Decisión»); este ADR
-lo escribe, lo apoya en un prototipo de un archivo y en mediciones, y deja explícito qué **no** está
-demostrado. Se acepta cuando se revise esa evidencia. Origen: criterio 1 de V6a (`docs/BACKLOG.md`) y la
-auditoría `docs/design/auditoria-mover-y-sesion.md`. Ficha de benchmarking:
-`docs/design/benchmark-V6a-asignacion.md`.
+**Aceptado** — 2026-10-05 (propuesto el 2026-10-03). Se acepta como **decisión de arquitectura**: el
+contrato de «Decisión», la tabla propia en lugar de `File.metadata_` y el orden de historias de
+«Consecuencias». **No certifica** apagones, CIFS, la desconexión HTTP real, un lote real ni la integración
+de producción: el prototipo es de **un archivo** y vive en `tests/` (ver «Lo que NO está demostrado»). El
+**contrato** lo fijó la revisión del 2026-10-03. Origen: criterio 1 de V6a (`docs/BACKLOG.md`) y la auditoría
+`docs/design/auditoria-mover-y-sesion.md`. Ficha de benchmarking: `docs/design/benchmark-V6a-asignacion.md`.
 
 ## Contexto
 
@@ -162,7 +163,8 @@ cubiertos: faltaban las pruebas directas de `TestValladoDeEpocaEnLaBd`.)
 | 100 MB | ~0 s | 0,50 s | 0,38 s | 100 MB |
 | 200 MB | ~0 s | 1,01 s | 0,75 s | 200 MB |
 
-- **En esta máquina el hash domina** (~265 MB/s): la copia es el 15 % y la verificación el 75 %. **Eso no se
+- **En esta máquina el hash aislado ocupa la mayor parte del tiempo combinado** (~265 MB/s: 0,38 s de 0,50 s por
+  100 MB; mediciones aisladas, no fases de una misma ejecución). **Eso no se
   generaliza:** la medición en la Pi (más abajo) lo desmiente, y la predicción «en una Pi será peor» que figuraba
   aquí se **retira**.
 - Asignar un archivo de 100 MB de extremo a extremo: **1,0-1,3 s** con la primera versión del prototipo,
@@ -232,12 +234,14 @@ diferencia.) Las proyecciones a 50 archivos son **lineales sobre cinco muestras,
 - **Predicción retirada.** Se esperaba que el hash dominara y que la Pi lo agravara. Hashear 100 MB tarda
   **0,082–0,099 s** en la Pi (frente a 0,38 s en la máquina de desarrollo); copiar + `fsync` + verificar tarda
   **0,458–1,880 s**. El hash es barato aquí.
-- **Dónde se va el tiempo (estimación, no medición directa).** Restando del «copia + fsync + sha256» los
-  tiempos aislados de copia (sin `fsync`, que se queda en la caché de páginas) y de hash, queda ≈ el coste de
-  **escribir de verdad a disco**: ≈ 0,18–0,21 s (NVMe), ≈ 0,08–0,26 s (Descargas) y ≈ **1,2–1,3 s (WDElements)** por
-  100 MB (rangos entre las dos ejecuciones). En WDElements la **sincronización del escritor** parece dominar el coste; en los otros dos pesa poco.
-  Es una resta de medianas de pocas muestras con la caché caliente: orienta, no concluye. Quedan sin explicar
-  ≈ 1 s por asignación en WDElements (BD, `fsync` del directorio, rename, borrado del origen).
+- **Residuales aritméticos exploratorios (no son una atribución).** Restar de «copia + fsync + sha256» los
+  tiempos aislados de copia y de hash deja ≈ 0,18–0,21 s (NVMe), ≈ 0,08–0,26 s (Descargas) y ≈ 1,2–1,3 s
+  (WDElements) por 100 MB (rangos entre las dos ejecuciones), y en WDElements la asignación completa excede en
+  ≈ 1 s lo que suman esas fases. Pero las mediciones aisladas **no son fases instrumentadas de una misma
+  ejecución**: cambian la caché de páginas, las escrituras pendientes y el trabajo efectuado, y restar medianas
+  no equivale, en general, a obtener la mediana del coste restante. La diferencia entre el tiempo combinado y
+  los tiempos aislados **sugiere investigar la sincronización y la E/S**; **no permite cuantificar su
+  contribución ni identificar el componente dominante**. No se instrumenta más por ahora.
 - **Los tiempos de BD no representan producción:** Postgres en `tmpfs` guarda sus datos en memoria. La
   consulta de `File.metadata_` con 50 000 filas: 4,2–4,7 ms; operaciones vivas con 20 000 cerradas: 0,32–0,33 ms.
 - **Capacidades** (ambos informes, los tres ext4): `renameat2(RENAME_NOREPLACE)` ok con el destino libre y
@@ -254,10 +258,10 @@ diferencia.) Las proyecciones a 50 archivos son **lineales sobre cinco muestras,
 ### Lanzador: lo que la Pi destapó
 
 La primera ejecución en la Pi necesitó un **ajuste local del lanzador** (espera por TCP y plazo de 120 s) que **no
-estaba en el repositorio**. Causa (por lectura, y coherente con el síntoma): la imagen de Postgres arranca primero
-un servidor temporal para `initdb` que **solo escucha en el socket de Unix**, así que `pg_isready` por socket da
-«listo» antes de que la aplicación pueda conectar, y con los datos en tmpfs en una Pi 40 s no bastaban. Esta
-rama lo **reimplementa** (`pg_isready -h 127.0.0.1`, plazo de 120 s configurable con `MEDICION_ESPERA_PG`, con
+estaba en el repositorio**. La espera por socket podía detectar el servidor temporal de inicialización (la imagen de Postgres
+arranca primero uno que solo escucha en el socket de Unix). Es una **causa probable** del fallo observado; **no se
+capturaron los logs del intento original**, así que no está demostrada. La espera por TCP con un margen de 120 s
+completó la segunda ejecución. Esta rama lo **reimplementa** (`pg_isready -h 127.0.0.1`, plazo de 120 s configurable con `MEDICION_ESPERA_PG`, con
 aborto y limpieza si no llega) y añade **`--cruzado ORIGEN,DESTINO`** (posiciones de los `--dir`) para medir la
 copia entre dispositivos. No es el parche local del operador. **La segunda ejecución (`4ab2b07`) lo usó en la
 Pi y completó sin necesitar el parche.**
