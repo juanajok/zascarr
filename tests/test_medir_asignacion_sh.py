@@ -117,3 +117,42 @@ class TestLoQueSeEjecuta:
         assert r.returncode == 0, r.stderr
         run = next(ln for ln in llamadas(registro) if "medir_asignacion.py" in ln)
         assert "--user 1234:5678" in run and "--entrypoint python" in run
+
+
+class TestEsperaYCruce:
+
+    def test_espera_a_postgres_por_tcp_no_por_el_socket(self, entorno):
+        """El servidor temporal de `initdb` solo escucha en el socket: `pg_isready` por socket da «listo» antes de tiempo."""
+        env, registro, ensayo = entorno
+        r = correr(env, "--dir", str(ensayo), "--imagen", "img:x", "--confirmo")
+        assert r.returncode == 0, r.stderr
+        listos = [ln for ln in llamadas(registro) if "pg_isready" in ln]
+        assert listos and all("-h 127.0.0.1" in ln for ln in listos)
+
+    def test_si_postgres_no_llega_a_estar_listo_aborta_y_limpia(self, entorno, tmp_path):
+        env, registro, ensayo = entorno
+        docker = Path(env["PATH"].split(":")[0]) / "docker"
+        docker.write_text(docker.read_text().replace("exec) exit 0 ;;", "exec) exit 1 ;;"))
+        env = dict(env, MEDICION_ESPERA_PG="2")
+        r = correr(env, "--dir", str(ensayo), "--imagen", "img:x", "--confirmo")
+        assert r.returncode != 0 and "no arrancó en 2 s (por TCP)" in r.stderr
+        assert not any("medir_asignacion.py" in ln for ln in llamadas(registro))        # no llega a medir
+        assert any(ln.startswith("rm -f zascarr-medicion-pg-") for ln in llamadas(registro))   # y limpia
+
+    def test_cruzado_se_pasa_a_la_medicion_y_se_anuncia_en_el_plan(self, entorno, tmp_path):
+        env, registro, ensayo = entorno
+        otra = tmp_path / "otra"
+        otra.mkdir()
+        r = correr(env, "--dir", str(ensayo), "--dir", str(otra), "--cruzado", "1,2", "--imagen", "img:x", "--confirmo")
+        assert r.returncode == 0, r.stderr
+        assert "ORIGEN en /ensayo/1" in r.stdout and "biblioteca en /ensayo/2" in r.stdout
+        run = next(ln for ln in llamadas(registro) if "medir_asignacion.py" in ln)
+        assert "--cruzado 1,2" in run
+
+    @pytest.mark.parametrize("valor", ["1,1", "1,3", "0,1", "a,b", "1", "1,2,3"])
+    def test_cruzado_invalido_se_rechaza_antes_de_tocar_nada(self, entorno, tmp_path, valor):
+        env, registro, ensayo = entorno
+        otra = tmp_path / "otra"
+        otra.mkdir()
+        r = correr(env, "--dir", str(ensayo), "--dir", str(otra), "--cruzado", valor, "--confirmo")
+        assert r.returncode != 0 and "--cruzado" in r.stderr and llamadas(registro) == []

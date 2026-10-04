@@ -193,12 +193,17 @@ async def sembrar_serie(fab) -> object:
     return serie
 
 
-async def medir_extremo_a_extremo(fab, serie, base: Path, mb_archivo: int, n: int) -> dict:
-    """Asignar N archivos de `mb_archivo` MB con el prototipo, por el camino completo, en esa carpeta."""
+async def medir_extremo_a_extremo(fab, serie, base: Path, mb_archivo: int, n: int,
+                                  origen_base: Path | None = None) -> dict:
+    """Asignar N archivos de `mb_archivo` MB con el prototipo, por el camino completo.
+
+    Los archivos de origen viven en `origen_base/_Unsorted` (por defecto, la misma carpeta que la biblioteca
+    de destino `base/lib`); con `origen_base` en OTRO dispositivo se mide la copia entre dispositivos."""
     lib = base / "lib"
+    pendientes = (origen_base or base) / "lib" / "_Unsorted"
     class Muerte(Exception): ...
     # Recuperar una operación huérfana (muerta tras publicar).
-    origen = lib / "_Unsorted" / "Saga 1.cbz"
+    origen = pendientes / "Saga 1.cbz"
     sha = escribir_fichero(origen, mb_archivo)
     async with fab() as s:
         f = File(id=uuid4(), file_path=str(origen), file_name=origen.name, file_format=FileFormat.CBZ,
@@ -219,7 +224,7 @@ async def medir_extremo_a_extremo(fab, serie, base: Path, mb_archivo: int, n: in
 
     tiempos = []
     for i in range(n):
-        o = lib / "_Unsorted" / f"Saga {10 + i}.cbz"
+        o = pendientes / f"Saga {10 + i}.cbz"
         sha = escribir_fichero(o, mb_archivo)
         async with fab() as s:
             ff = File(id=uuid4(), file_path=str(o), file_name=o.name, file_format=FileFormat.CBZ,
@@ -288,11 +293,22 @@ async def main() -> None:
     ap.add_argument("--tamanos", default="10,50,100,200", help="MB de los ficheros de prueba, separados por comas")
     ap.add_argument("--archivos", type=int, default=5, help="cuántos ficheros asignar de punta a punta por carpeta")
     ap.add_argument("--mb-extremo", type=int, default=100, help="tamaño (MB) de esos ficheros")
+    ap.add_argument("--cruzado", metavar="ORIGEN,DESTINO", help="además, asignar con el origen en una carpeta y la "
+                    "biblioteca en OTRA (posiciones 1-based de los --dir, p. ej. 2,3): mide la copia entre dispositivos")
     args = ap.parse_args()
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
         sys.exit("falta TEST_DATABASE_URL (apunta a una base de PRUEBAS; se crea y borra una efímera)")
     tamanos = [int(x) for x in args.tamanos.split(",")]
+    cruce = None
+    if args.cruzado:
+        try:
+            a, b = (int(x) for x in args.cruzado.split(","))
+        except ValueError:
+            sys.exit("--cruzado debe ser «ORIGEN,DESTINO» con dos posiciones numéricas (p. ej. 2,3)")
+        if a == b or not (1 <= a <= len(args.dir) and 1 <= b <= len(args.dir)):
+            sys.exit(f"--cruzado {args.cruzado}: deben ser dos posiciones DISTINTAS entre 1 y {len(args.dir)}")
+        cruce = (a - 1, b - 1)
     necesario = (max(tamanos) * 3 + args.mb_extremo * 3) * 1024 * 1024
     for d in args.dir:
         if not d.is_dir():
@@ -323,6 +339,22 @@ async def main() -> None:
                 salida["directorios"][str(d)] = r
             finally:
                 shutil.rmtree(base, ignore_errors=True)
+        if cruce is not None:
+            di, dj = args.dir[cruce[0]], args.dir[cruce[1]]
+            base_o = Path(tempfile.mkdtemp(prefix="zascarr_medicion_", dir=di))
+            base_d = Path(tempfile.mkdtemp(prefix="zascarr_medicion_", dir=dj))
+            try:
+                async with motor.begin() as c:
+                    await c.execute(text("TRUNCATE asignacion_operaciones, files, issues, local_aliases CASCADE"))
+                same = os.stat(base_o).st_dev == os.stat(base_d).st_dev
+                salida["cruce"] = {
+                    "origen": str(di), "destino": str(dj), "mismo_dispositivo": same,
+                    "montaje_origen": info_disco(base_o), "montaje_destino": info_disco(base_d),
+                    "extremo_a_extremo": await medir_extremo_a_extremo(
+                        fab, serie, base_d, args.mb_extremo, args.archivos, origen_base=base_o)}
+            finally:
+                shutil.rmtree(base_o, ignore_errors=True)
+                shutil.rmtree(base_d, ignore_errors=True)
         await motor.dispose()
     async with bd_efimera(url) as efimera2:
         migrar_a_head(efimera2)
