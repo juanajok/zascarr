@@ -186,53 +186,81 @@ cubiertos: faltaban las pruebas directas de `TestValladoDeEpocaEnLaBd`.)
 
 ### Medición en la Pi (2026-10-04, ejecutada por el operador desde el contenedor)
 
-**Datos propios verificados:** `docs/design/medicion-pi-2026-10-04.csv` (15 asignaciones de 100 MB, cinco por
-dispositivo; solo contiene los tiempos por asignación y la identificación de versión). **Datos tomados del
-informe del operador, que no está en el repositorio** (solo se adjuntó el CSV): capacidades de los montajes,
-tiempos de hash/copia y de recuperación, la plataforma y la carga de memoria. Si se quiere que figuren como
-evidencia verificable hay que añadir el JSON que escribe `--salida`.
+**Evidencia en el repositorio** (informes JSON originales, sin modificar, y las tablas recalculadas):
+`docs/design/medicion-pi-ext4-2716ef4-2026-10-04.json`, `docs/design/medicion-pi-cruzado-4ab2b07-2026-10-04.json`,
+`docs/design/medicion-pi-asignaciones-2026-10-04.csv` (las **35** asignaciones) y
+`docs/design/medicion-pi-resumen-2026-10-04.csv`. Las estadísticas de abajo las **recalculé desde el CSV** y
+coinciden con el resumen; los datos de capacidades, hash, copia y recuperación salen de los JSON.
 
-- **Qué se ejecutó:** commit `2716ef4` **más un ajuste local del lanzador** (espera por TCP a Postgres y plazo
-  de 120 s; ver «Lanzador» más abajo). Plataforma (informe): ARM64, 4 núcleos, Python 3.11.17, kernel
-  `6.18.50+rpt-rpi-2712`; tres dispositivos **ext4** montados como `/ensayo/1` (NVMe), `/ensayo/2` (Descargas)
-  y `/ensayo/3` (WDElements). Postgres efímero en **tmpfs**, caché caliente.
-- **Asignar un archivo sintético de 100 MB** (camino completo del prototipo, 5 por dispositivo; recalculado
-  desde el CSV):
+Dos ejecuciones **separadas**, que no deben mezclarse:
 
-| Dispositivo | Media | Mediana | Rango | Rendimiento | 50 archivos (proyección lineal) |
-|---|---:|---:|---:|---:|---:|
-| NVMe | 1,164 s | 1,147 s | 1,036–1,362 s | 85,9 MB/s | ~58 s |
-| Descargas | 1,412 s | 1,449 s | 1,264–1,518 s | 70,8 MB/s | ~71 s |
-| WDElements | 2,919 s | 2,857 s | 2,525–3,340 s | 34,3 MB/s | ~146 s (2 min 26 s) |
+| | Código | Lanzador | Asignaciones |
+|---|---|---|---|
+| **1.ª** | `2716ef4` | **ajuste local** del operador (espera TCP, 120 s), no presente en el repositorio | 15 (3 dispositivos × 5) |
+| **2.ª** | `4ab2b07` | el **del repositorio** (sin parche local) | 15 individuales + 5 cruzadas |
 
-- **WDElements tarda ~2,5× lo que el NVMe.** La proyección a 50 archivos es **lineal, no un lote medido**.
-  Refuerza que un lote grande no debe depender de una petición HTTP abierta.
-- **Recuperar** una operación huérfana de 100 MB (informe): 0,611 s (NVMe), 0,699 s (Descargas), 0,981 s (WDElements).
-- **Predicción retirada.** Se esperaba que el hash dominara y que la Pi lo agravara. Con los datos del informe,
-  hashear 100 MB tarda **0,083–0,099 s** (≈1 GB/s) frente a **0,38 s** en la máquina de desarrollo, mientras que
-  copiar + sincronizar + verificar tarda **0,539–1,880 s**. Aquí pesan la **E/S y la sincronización**, sobre todo
-  en WDElements; con estos datos **no se puede separar** el coste de cada componente (haría falta medir copia y
-  `fsync` por separado en esos discos).
-- **Los tiempos de BD no representan producción:** Postgres en `tmpfs` guarda sus datos en memoria y evita la
-  ruta de escritura persistente.
-- **Límite síncrono:** **no se fija todavía**. Cinco muestras de 100 MB por disco no bastan. Se mantiene **una
-  operación simultánea inicial**, con límites por bytes, por cantidad y por copias pendientes.
-- **Siguiente medición útil:** una copia **entre Descargas y WDElements** (origen y destino en dispositivos
-  distintos), con archivos sintéticos solo en las carpetas de ensayo: el banco medía cada disco por separado y
-  no ese cruce (`--cruzado`, ver más abajo). **CIFS queda pendiente**; no hace falta montar un recurso que no
-  forma parte de la instalación real para validar primero los discos reales.
+El JSON **no registra el commit**: se identifica por el nombre del fichero y la declaración del operador. En
+ambas: ARM64 (`aarch64`), 4 núcleos, Python 3.11.17, kernel `6.18.50+rpt-rpi-2712` (la familia `rpi-2712` es la
+de la Pi 5; es una inferencia, el JSON no dice el modelo), glibc 2.36; tres **ext4** (`rw,noatime`):
+`/ensayo/1` = `/dev/nvme0n1p2`, `/ensayo/2` = `/dev/sdc1` (Descargas), `/ensayo/3` = `/dev/sdb1` (WDElements).
+Postgres efímero en **tmpfs**, caché caliente. La carga de memoria previa **no consta** en los informes.
+
+**Asignar un archivo sintético de 100 MB** (camino completo del prototipo, cinco por trayecto):
+
+| Commit | Trayecto | Media | Mediana | Rango | Rendimiento | 50 archivos (lineal) |
+|---|---|---:|---:|---:|---:|---:|
+| `2716ef4` | NVMe | 1,164 s | 1,147 s | 1,036–1,362 s | 85,9 MB/s | ~58 s |
+| `2716ef4` | Descargas | 1,412 s | 1,449 s | 1,264–1,518 s | 70,8 MB/s | ~71 s |
+| `2716ef4` | WDElements | 2,919 s | 2,857 s | 2,525–3,340 s | 34,3 MB/s | ~146 s |
+| `4ab2b07` | NVMe | 1,075 s | 1,136 s | 0,828–1,163 s | 93,0 MB/s | ~54 s |
+| `4ab2b07` | Descargas | 1,193 s | 1,185 s | 1,128–1,274 s | 83,8 MB/s | ~60 s |
+| `4ab2b07` | WDElements (mismo disco) | 3,272 s | 3,440 s | 2,434–3,872 s | 30,6 MB/s | ~164 s |
+| `4ab2b07` | **Descargas → WDElements** | **1,579 s** | **1,575 s** | 1,411–1,766 s | 63,3 MB/s | ~79 s |
+
+(El banco publica 93,1 y 85,9 con sus tiempos sin redondear; recalcular desde los redondeados da décimas de
+diferencia.) Las proyecciones a 50 archivos son **lineales sobre cinco muestras, no un lote medido**.
+
+- **Copia entre dispositivos** (`mismo_dispositivo: false`, `/dev/sdc1` → `/dev/sdb1`): las cinco asignaciones
+  suman 7,897 s y la recuperación terminó en `asignado` en 0,594 s. Es **~2,07× más rápida** que asignar dentro
+  de WDElements en esta ejecución. **Es un resultado medido, no una garantía**: con origen y destino en el
+  mismo disco las lecturas y las escrituras compiten por él; es una **hipótesis plausible que este banco no
+  aísla**. El cruce sigue siendo ~32 % más lento que asignar dentro de Descargas.
+- **Variación entre ejecuciones:** WDElements pasó de 2,919 s a 3,272 s (+12 %) mientras NVMe y Descargas
+  mejoraron. **No se atribuye** al cambio de lanzador ni se trata como regresión sin un ensayo controlado.
+- **Recuperar** una operación huérfana de 100 MB: 0,611 / 0,699 / 0,981 s (1.ª) y 0,635 / 0,644 / 0,904 s (2.ª)
+  para NVMe / Descargas / WDElements.
+- **Predicción retirada.** Se esperaba que el hash dominara y que la Pi lo agravara. Hashear 100 MB tarda
+  **0,082–0,099 s** en la Pi (frente a 0,38 s en la máquina de desarrollo); copiar + `fsync` + verificar tarda
+  **0,458–1,880 s**. El hash es barato aquí.
+- **Dónde se va el tiempo (estimación, no medición directa).** Restando del «copia + fsync + sha256» los
+  tiempos aislados de copia (sin `fsync`, que se queda en la caché de páginas) y de hash, queda ≈ el coste de
+  **escribir de verdad a disco**: ≈ 0,18–0,21 s (NVMe), ≈ 0,08–0,26 s (Descargas) y ≈ **1,2–1,3 s (WDElements)** por
+  100 MB (rangos entre las dos ejecuciones). En WDElements la **sincronización del escritor** parece dominar el coste; en los otros dos pesa poco.
+  Es una resta de medianas de pocas muestras con la caché caliente: orienta, no concluye. Quedan sin explicar
+  ≈ 1 s por asignación en WDElements (BD, `fsync` del directorio, rename, borrado del origen).
+- **Los tiempos de BD no representan producción:** Postgres en `tmpfs` guarda sus datos en memoria. La
+  consulta de `File.metadata_` con 50 000 filas: 4,2–4,7 ms; operaciones vivas con 20 000 cerradas: 0,32–0,33 ms.
+- **Capacidades** (ambos informes, los tres ext4): `renameat2(RENAME_NOREPLACE)` ok con el destino libre y
+  `EEXIST` con el ocupado, `link` ok, `fsync` de fichero y de directorio ok, y la publicación del prototipo con
+  un ajeno presente lo deja intacto. `replace` **sí reemplazó** (por eso no se usa para publicar).
+- **Límite síncrono:** **no se fija todavía**. Se mantiene **una operación simultánea inicial**, con límites
+  por bytes, por cantidad y por copias pendientes.
+- **Qué cubre y qué no:** completa esta ronda de medición local del prototipo (los tres dispositivos por
+  separado y Descargas → WDElements) y confirma que el lanzador del repositorio funciona sin el parche local.
+  **No amplía** la evidencia a apagones (que `fsync` devuelva éxito no prueba que el nombre sobreviva), a CIFS, a
+  la desconexión HTTP real, ni a las fronteras de fallo **durante** una copia cruzada. CIFS queda pendiente: no
+  forma parte de la instalación real.
 
 ### Lanzador: lo que la Pi destapó
 
-La ejecución en la Pi necesitó un **ajuste local del lanzador** (espera por TCP y plazo de 120 s) que **no
+La primera ejecución en la Pi necesitó un **ajuste local del lanzador** (espera por TCP y plazo de 120 s) que **no
 estaba en el repositorio**. Causa (por lectura, y coherente con el síntoma): la imagen de Postgres arranca primero
 un servidor temporal para `initdb` que **solo escucha en el socket de Unix**, así que `pg_isready` por socket da
 «listo» antes de que la aplicación pueda conectar, y con los datos en tmpfs en una Pi 40 s no bastaban. Esta
 rama lo **reimplementa** (`pg_isready -h 127.0.0.1`, plazo de 120 s configurable con `MEDICION_ESPERA_PG`, con
 aborto y limpieza si no llega) y añade **`--cruzado ORIGEN,DESTINO`** (posiciones de los `--dir`) para medir la
-copia entre dispositivos. No es el parche local del operador y **no se ha probado en la Pi**: hay que
-repetir la ejecución con esta versión para confirmarlo. La copia cruzada sí se probó aquí entre un tmpfs y un
-`ntfs3` (dispositivos distintos): publica, confirma y limpia.
+copia entre dispositivos. No es el parche local del operador. **La segunda ejecución (`4ab2b07`) lo usó en la
+Pi y completó sin necesitar el parche.**
 
 ### Capacidades del montaje (medido en el contenedor)
 
@@ -243,9 +271,9 @@ y efímera (tmpfs, sin puertos), montando **solo** las carpetas que se le indiqu
 | Montaje (visto desde el contenedor) | `renameat2` sin reemplazo (libre / ocupado) | `link` | `fsync` fichero / directorio | `_publicar` con un ajeno |
 |---|---|---|---|---|
 | NVMe local, `ntfs3`, bind mount | ok / `EEXIST` | ok | ok / ok | ajeno intacto |
-| **Pi, NVMe** (ext4, `/ensayo/1`) | ok / `EEXIST` (informe del operador) | ok | ok / ok | ajeno intacto |
-| **Pi, Descargas** (ext4, `/ensayo/2`) | ok / `EEXIST` (informe del operador) | ok | ok / ok | ajeno intacto |
-| **Pi, WDElements** (ext4, `/ensayo/3`) | ok / `EEXIST` (informe del operador) | ok | ok / ok | ajeno intacto |
+| **Pi, NVMe** (ext4, `/ensayo/1`) | ok / `EEXIST` | ok | ok / ok | ajeno intacto |
+| **Pi, Descargas** (ext4, `/ensayo/2`) | ok / `EEXIST` | ok | ok / ok | ajeno intacto |
+| **Pi, WDElements** (ext4, `/ensayo/3`) | ok / `EEXIST` | ok | ok / ok | ajeno intacto |
 | **CIFS** | **sin medir** (pendiente; no forma parte de la instalación real) | | | |
 
 En los tres, `replace` **sí reemplazó** un destino existente (lo registra el banco): por eso la publicación
@@ -262,9 +290,10 @@ importa porque la semántica de un *bind mount* puede diferir de la del anfitri�
   El prototipo hace `fsync` del fichero y, en mejor esfuerzo, del directorio; **no se ha probado** que un
   `rename` o una copia sobrevivan a un apagón (ni en ext4, ni NTFS, ni CIFS).
 - **Montajes reales:** medidos NVMe/ntfs3 local (desarrollo) y los tres ext4 de la Pi (NVMe, Descargas,
-  WDElements). **Sin medir:** CIFS, exFAT, ext4 en SD y **la copia entre dos dispositivos distintos**. Estos
-  resultados fijan **límites y estrategia de ejecución**, **no sustituyen** las garantías anteriores ni validan
-  el servicio de producción (hay un prototipo de un archivo, sin lote ni integración).
+  WDElements) y la copia Descargas → WDElements. **Sin medir:** CIFS, exFAT, ext4 en SD, un lote real de varios
+  archivos, y ningún fallo inyectado **durante** una copia cruzada en la Pi. Estos resultados fijan **límites y
+  estrategia de ejecución**, **no sustituyen** las garantías anteriores ni validan el servicio de producción
+  (hay un prototipo de un archivo, sin lote ni integración).
 - **Cancelación con uvicorn real:** probada a nivel de tarea (`asyncio`), no con una desconexión HTTP real.
 - **Hardlinks:** sin medir ni probar (decididos como optimización posterior).
 - **Importador:** un `commit` para todo `scan_and_import()` (`main.py:35`); el mismo riesgo a mayor escala,
