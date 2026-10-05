@@ -107,9 +107,10 @@ class AdoptionReport:
     #: mirados de un lote cuyo commit falló y NO se pudo comprobar si se guardó: pendiente de contrastar
     unknown: int = 0
     #: filas que este lote ha escrito en `files`, para acreditar con OTRA sesión si el commit se aplicó:
-    #: (id de la fila, ruta nueva, ruta previa). Fila CREADA → ruta previa `None` (su id solo existe si el commit
-    #: se aplicó). Fila REENLAZADA (ya existía) → su ruta previa: la prueba de que se aplicó es el cambio esperado.
-    added_rows: list[tuple[UUID, str, str | None]] = field(default_factory=list)
+    #: (id de la fila, ruta nueva, ruta previa, ¿estaba desaparecida antes?). Fila CREADA → ruta previa `None` (su id
+    #: solo existe si el commit se aplicó). Fila REENLAZADA (ya existía) → su estado previo completo (ruta y
+    #: `is_missing`, que en una referencia obsoleta es False): «sigue como estaba» es ese estado, no otro.
+    added_rows: list[tuple[UUID, str, str | None, bool]] = field(default_factory=list)
 
     def absorb(self, lote: AdoptionReport) -> None:
         """Pasa a este informe lo de un lote YA CONFIRMADO."""
@@ -348,7 +349,9 @@ class LibraryAdopter:
             raise
         report.absorb(en_lote)
 
-    async def _contrastar(self, filas: list[tuple[UUID, str, str | None]], run_id: UUID | None = None) -> str:
+    async def _contrastar(
+        self, filas: list[tuple[UUID, str, str | None, bool]], run_id: UUID | None = None,
+    ) -> str:
         """Con OTRA sesión: ¿se aplicó la transacción de ESTE lote? confirmado / revertido / desconocido.
 
         Se acredita por IDENTIDAD, no por presencia de rutas: que una ruta conste no prueba que la escribiera esta
@@ -385,7 +388,7 @@ class LibraryAdopter:
         # exactamente el mismo reenlace tras el rollback; una sesión independiente ve lo confirmado por otros).
         atribuibles = aplicadas = no_aplicadas = 0
         reenlace_nuevo = reenlace_previo = reenlace_otro = 0
-        for fid, ruta_nueva, ruta_previa in filas:
+        for fid, ruta_nueva, ruta_previa, previa_ausente in filas:
             estado = actuales.get(fid)
             if ruta_previa is None:                               # creada por este lote
                 atribuibles += 1
@@ -395,7 +398,7 @@ class LibraryAdopter:
                     aplicadas += 1
             elif estado == (ruta_nueva, False):                   # reenlazada: ya en el estado esperado
                 reenlace_nuevo += 1
-            elif estado is not None and estado[0] == ruta_previa and estado[1]:   # sigue como estaba
+            elif estado == (ruta_previa, previa_ausente):          # sigue como estaba
                 reenlace_previo += 1
             else:                                                 # en un tercer estado
                 reenlace_otro += 1
@@ -427,10 +430,10 @@ class LibraryAdopter:
             # la fila desaparecida a ESTA ruta en vez de descartar. Si se
             # descartara, la fila seguiría `is_missing` y un fichero que el
             # coleccionista reorganizó quedaría sin registrar.
-            ruta_previa = outcome.recuperar.file_path
+            ruta_previa, previa_ausente = outcome.recuperar.file_path, bool(outcome.recuperar.is_missing)
             await _reenlazar_fila(outcome.recuperar, outcome.tr, path)
             await self._db.flush()
-            report.added_rows.append((outcome.recuperar.id, str(path), ruta_previa))
+            report.added_rows.append((outcome.recuperar.id, str(path), ruta_previa, previa_ausente))
             report.registered.append(f"{path.name} — reenlazado (recuperado)")
             logger.info("library_adopter.reenlazado", path=str(path))
             return
@@ -470,7 +473,7 @@ class LibraryAdopter:
         )
         self._db.add(file_rec)
         await self._db.flush()
-        report.added_rows.append((file_rec.id, str(path), None))
+        report.added_rows.append((file_rec.id, str(path), None, False))
 
         if is_unsorted:
             motivo = "; ".join(result.notes) or "sin match fiable"
