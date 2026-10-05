@@ -157,8 +157,12 @@ class TestImportFileDuplicado:
         src = tmp_path / "Batman 001.cbz"
         make_cbz(src)
 
-        existing = File(id=uuid4(), file_name="Batman #001.cbz",
-                        file_path="/library/Batman #001.cbz")
+        # La copia ya registrada EXISTE en la biblioteca: un duplicado real. (Antes bastaba una ruta ficticia porque
+        # «presente» era «no marcada como desaparecida»; ahora una ruta que no existe es una referencia obsoleta.)
+        copia = tmp_path / "library" / "Batman #001.cbz"
+        copia.parent.mkdir()
+        make_cbz(copia)
+        existing = File(id=uuid4(), file_name="Batman #001.cbz", file_path=str(copia))
         session = FakeDedupeSession(existing)
         importer = Importer(session)
         report = ImportReport(started_at=datetime.now(timezone.utc))

@@ -409,7 +409,7 @@ class TestFalloDespuesDeConfirmarUnLote:
 
         async def contrastar_tras_ocupar_todas(self, filas, run_id=None):
             async with mundo.fabrica() as otra:
-                for _id, ruta, _previa in filas:                       # filas DISTINTAS en las MISMAS rutas
+                for _id, ruta, _previa, _ausente in filas:                       # filas DISTINTAS en las MISMAS rutas
                     otra.add(File(id=uuid4(), file_path=ruta, file_name=Path(ruta).name,
                                   file_format=FileFormat.CBR, sha256_hash=None))
                 await otra.commit()
