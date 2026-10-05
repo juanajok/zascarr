@@ -479,7 +479,7 @@ class LibraryAdopter:
             motivo = "; ".join(result.notes) or "sin match fiable"
             report.unsorted.append(f"{path.name} (pendiente de revisar) — {motivo}")
         else:
-            report.registered.append(f"{path.name} — serie ya identificada")
+            report.registered.append(f"{path.name} — serie sugerida, falta confirmar número y edición")
         logger.info("library_adopter.registered", path=str(path), status=result.status)
 
     async def _persist_run(self, report: AdoptionReport) -> UUID:
