@@ -555,6 +555,37 @@ class TestFalloDespuesDeConfirmarUnLote:
         restaurar()
         assert vistas[-1] == (0, 8, 0)
 
+    async def test_lote_solo_de_reenlaces_con_el_mismo_reenlace_hecho_por_otro_queda_por_comprobar(
+            self, mundo, monkeypatch):
+        """EL CASO DE LA REVISIÓN. Un lote INTERMEDIO (sin informe de cierre) compuesto solo por un reenlace de una
+        fila que ya existía: el commit propio no se aplica y, tras el rollback, otro escritor hace EXACTAMENTE el mismo
+        reenlace. La sesión independiente ve el estado esperado, pero eso no prueba que lo hiciera esta transacción:
+        ni el id (la fila ya existía) ni el estado final son evidencia atribuible. → por comprobar, y NO se atribuye
+        a la ejecución fallida."""
+        ruta = await self._con_una_fila_por_reenlazar(mundo)
+        # Con lotes de 1, los archivos nuevos van en orden y «Obra rara 04» es el 6.º: su lote es el commit nº 6.
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=6)
+        contrastar = LibraryAdopter._contrastar
+
+        async def contrastar_tras_el_mismo_reenlace(self, filas, run_id=None):
+            assert run_id is None and [f[2] for f in filas] == ["/viejo/lugar.cbz"]     # solo un reenlace, sin recibo
+            async with mundo.motor.begin() as c:                        # otro escritor: el MISMO cambio exacto
+                await c.execute(text(
+                    "UPDATE files SET file_path = :r, file_name = :n, is_missing = false WHERE file_path = '/viejo/lugar.cbz'"),
+                    {"r": str(ruta), "n": ruta.name})
+            return await contrastar(self, filas, run_id)
+        monkeypatch.setattr(LibraryAdopter, "_contrastar", contrastar_tras_el_mismo_reenlace)
+        informes = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(lote=1, progreso=lambda r: informes.append(
+                    (r.added_count, r.reverted, r.unknown, [x for x in r.registered if "reenlazado" in x])))
+        restaurar()
+        added, revertidos, desconocidos, reenlazados = informes[-1]
+        assert desconocidos == 1 and revertidos == 0     # por comprobar: ni confirmado ni revertido
+        assert reenlazados == []                          # y NO se atribuye a la ejecución que falló
+        assert added == 4                                 # solo lo de los 5 lotes anteriores (el gemelo es repetido)
+
     async def test_reenlace_cambiado_por_otro_escritor_no_se_puede_distinguir_y_queda_por_comprobar(
             self, mundo, monkeypatch):
         await self._con_una_fila_por_reenlazar(mundo)
