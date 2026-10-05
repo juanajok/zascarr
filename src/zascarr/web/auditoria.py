@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 Router de la auditoría de biblioteca (B16) — /ui/auditoria.
 
@@ -17,12 +18,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr import database
 from zascarr.database import get_db
-from zascarr.models import ImportRun
-from zascarr.services.library_adopter import LibraryAdopter
+from zascarr.models import ImportRun, Series
+from zascarr.services import registro_biblioteca
+from zascarr.services.library_adopter import EstadoAdopcion, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
 from zascarr.web.routes import crear_templates
 
@@ -67,10 +70,7 @@ async def _ultimo_informe(db: AsyncSession) -> dict | None:
 @router.get("", response_class=HTMLResponse)
 async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     informe = await _ultimo_informe(db)
-    return templates.TemplateResponse(
-        request, "auditoria.html",
-        {"informe": informe, "adopcion_pendiente": await LibraryAdopter(db).should_run()},
-    )
+    return templates.TemplateResponse(request, "auditoria.html", {"informe": informe})
 
 
 @router.post("/analizar", response_class=HTMLResponse)
@@ -78,23 +78,36 @@ async def analizar(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
     """Relanza el análisis. Solo lectura del disco (ver LibraryAudit)."""
     await LibraryAudit(db).run()
     informe = await _ultimo_informe(db)
-    return templates.TemplateResponse(
-        request, "_auditoria_informe.html",
-        {"informe": informe, "adopcion_pendiente": await LibraryAdopter(db).should_run()},
-    )
+    return templates.TemplateResponse(request, "_auditoria_informe.html", {"informe": informe})
+
+
+async def _fragmento_registro(request: Request, db: AsyncSession) -> HTMLResponse:
+    """Lo que el coleccionista debe ver del registro AHORA: progreso, resultado o inventario previo."""
+    reg = registro_biblioteca.estado_actual()
+    contexto: dict = {"reg": reg, "estado": EstadoAdopcion.HECHA, "inv": None, "series": 0}
+    if reg.fase is registro_biblioteca.FaseRegistro.INACTIVO:
+        adopter = LibraryAdopter(db)
+        contexto["estado"] = await adopter.estado()
+        if contexto["estado"] in (EstadoAdopcion.PENDIENTE, EstadoAdopcion.CATALOGO_PREVIO):
+            contexto["inv"] = await adopter.inventario()
+            contexto["series"] = (await db.execute(select(func.count(Series.id)))).scalar() or 0
+    return templates.TemplateResponse(request, "_auditoria_registro.html", contexto)
+
+
+@router.get("/registro", response_class=HTMLResponse)
+async def registro(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Inventario previo, progreso o resultado del registro de la biblioteca. Solo lectura."""
+    return await _fragmento_registro(request, db)
 
 
 @router.post("/adoptar", response_class=HTMLResponse)
 async def adoptar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    """B11, ahora explícito: registra la biblioteca en el catálogo SIN
-    mover ni renombrar nada. Irreversible solo en el sentido de que
-    crea filas; los archivos del disco no se tocan."""
-    adopter = LibraryAdopter(db)
-    if not await adopter.should_run():
-        return templates.TemplateResponse(
-            request, "_auditoria_adopcion.html", {"report": None, "ya_hecha": True}
-        )
-    report = await adopter.adopt()
-    return templates.TemplateResponse(
-        request, "_auditoria_adopcion.html", {"report": report, "ya_hecha": False}
-    )
+    """B11, explícito: registra la biblioteca SIN mover ni renombrar nada, aunque ya haya series.
+
+    Lanza el registro en segundo plano (ver `services/registro_biblioteca.py`) y devuelve el progreso; la
+    página lo vuelve a pedir hasta que termina. Si ya hay uno en marcha no lanza otro. Repetirlo tras un
+    fallo continúa donde se quedó."""
+    en_marcha = registro_biblioteca.estado_actual().fase is registro_biblioteca.FaseRegistro.CORRIENDO
+    if not en_marcha and await LibraryAdopter(db).puede_registrar():
+        registro_biblioteca.iniciar(database.async_session_factory)
+    return await _fragmento_registro(request, db)

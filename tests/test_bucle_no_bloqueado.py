@@ -115,12 +115,36 @@ class TestLaAdopcionNoCongelaLaApp:
         monkeypatch.setattr(
             "zascarr.services.runtime_settings.RuntimeSettingsService.set_flag", AsyncMock()
         )
-        adopter = LibraryAdopter(db=MagicMock())
+        adopter = LibraryAdopter(db=MagicMock(commit=AsyncMock()))
         monkeypatch.setattr(adopter, "_persist_run", AsyncMock())
+        # `adopt` pregunta primero qué rutas ya están registradas (consulta a la BD, no a disco).
+        monkeypatch.setattr(adopter, "_rutas_registradas", AsyncMock(return_value=set()))
+        monkeypatch.setattr(adopter, "_ya_registrada", AsyncMock(return_value=False))
 
         hueco = await _con_latido(adopter.adopt())
 
         assert hueco < HUECO_MAXIMO_S, f"el listado congeló el bucle {hueco:.2f} s"
+
+    @pytest.mark.asyncio
+    async def test_el_inventario_tambien_lista_fuera_del_bucle(self, monkeypatch, tmp_path):
+        """El inventario previo al registro recorre toda la carpeta: en una Pi con el disco por USB
+        son segundos, y la pantalla no puede congelar la app mientras tanto."""
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter.get_settings",
+            lambda: MagicMock(library_path=tmp_path),
+        )
+
+        def listado_lento(*_a, **_k):
+            time.sleep(BLOQUEO_S)
+            return []
+
+        monkeypatch.setattr("zascarr.services.library_adopter.listar_comics", listado_lento)
+        adopter = LibraryAdopter(db=MagicMock())
+        monkeypatch.setattr(adopter, "_rutas_registradas", AsyncMock(return_value=set()))
+
+        hueco = await _con_latido(adopter.inventario())
+
+        assert hueco < HUECO_MAXIMO_S, f"el inventario congeló el bucle {hueco:.2f} s"
 
 
 class TestElImportadorNoCongelaLaApp:

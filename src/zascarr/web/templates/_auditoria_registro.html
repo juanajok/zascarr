@@ -1,0 +1,107 @@
+{#- Registro de la biblioteca (B11, explícito). Un solo bloque `#registro` que se reemplaza a sí mismo.
+    Reglas: nunca anuncia éxito si hay errores; mientras corre se vuelve a pedir cada 2 s y deja de pedirse
+    en cuanto termina (el fragmento final ya no lleva `hx-trigger`). -#}
+{% import "_componentes.html" as ui %}
+{%- macro boton(texto) -%}
+<button type="button" class="btn-primary" hx-post="/ui/auditoria/adoptar"
+        hx-target="#registro" hx-swap="outerHTML" hx-disabled-elt="this">{{ texto }}</button>
+{%- endmacro -%}
+
+{% if reg.en_marcha %}
+<section id="registro" class="audit-block audit-adoptar" hx-get="/ui/auditoria/registro"
+         hx-trigger="every 2s" hx-swap="outerHTML">
+  <h2>Registrando tu biblioteca…</h2>
+  {% if reg.total %}
+  <progress class="progress" value="{{ reg.procesados }}" max="{{ reg.total }}">
+    {{ reg.procesados }} de {{ reg.total }}</progress>
+  <p class="audit-why"><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> tebeos.
+    Puedes cerrar esta página: sigue en segundo plano. Ni un archivo se mueve ni se renombra.</p>
+  {% else %}
+  <p class="audit-why">Mirando qué hay en la carpeta… Puedes cerrar esta página: sigue en segundo plano.
+    Ni un archivo se mueve ni se renombra.</p>
+  {% endif %}
+</section>
+
+{% elif reg.fase.value in ("terminado", "interrumpido") %}
+<section id="registro" class="audit-block audit-adoptar">
+  {#- Al terminar (bien o mal) cambia lo que está «por revisar»: el menú vuelve a pedir su contador a la BD. Va
+      como elemento inerte DENTRO del fragmento y NO como cabecera `HX-Trigger`: htmx 4 la despacha sobre el
+      elemento que hizo la petición, que ya no está en el DOM tras el reemplazo (outerHTML), y el evento no llega. -#}
+  <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+  {% if reg.completo %}
+  <h2>Biblioteca registrada</h2>
+  <p class="audit-why">Ni un archivo se ha movido ni renombrado.</p>
+  {% else %}
+  <h2>El registro ha quedado incompleto</h2>
+  {% call ui.aviso("amber") %}
+    {% if reg.fase.value == "interrumpido" %}
+    El registro se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba confirmado; el último grupo de tebeos pudo no llegar a guardarse.
+    {% else %}
+    No se pudo registrar {{ reg.errores | length }} {{ "tebeo" if reg.errores | length == 1 else "tebeos" }}.
+    El resto sí está registrado.
+    {% endif %}
+    Puedes continuar: solo se intentará lo que falte, sin duplicar nada.
+  {% endcall %}
+  {% endif %}
+  {#- Tres números distintos que no se confunden: lo MIRADO, lo realmente AÑADIDO y lo que dio ERROR.
+      Haber mirado todo no es haber registrado todo. -#}
+  <ul class="audit-resumen">
+    <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> tebeos nuevos mirados{% if reg.ya_registrados %}
+      (otros <strong>{{ reg.ya_registrados }}</strong> ya estaban registrados y no se han tocado){% endif %}</li>
+    <li><strong>{{ reg.anadidos }}</strong> añadidos al catálogo: <strong>{{ reg.registrados }}</strong> reconocidos y
+      colocados en su serie y <strong>{{ reg.sin_identificar }}</strong> sin identificar, que te esperan en
+      <a href="/ui/pendientes">Por revisar</a> para que los asignes tú</li>
+    <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro ya registrado): no se añaden dos veces</li>
+    {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
+    {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
+  </ul>
+  {% if reg.fase.value == "interrumpido" %}
+  <p class="audit-why">Estas cifras son hasta donde llegó. Al continuar se vuelve a mirar qué falta de verdad.</p>
+  {% endif %}
+  {% if reg.errores %}
+  <details><summary>Ver los que han dado error</summary>
+    <ul class="audit-resumen">
+      {% for e in reg.errores[:10] %}<li>{{ e }}</li>{% endfor %}
+      {% if reg.errores | length > 10 %}<li>… y {{ reg.errores | length - 10 }} más.</li>{% endif %}
+    </ul>
+  </details>
+  {% endif %}
+  {% if not reg.completo %}{{ boton("Continuar el registro") }}{% endif %}
+</section>
+
+{% elif estado.value == "sin_tebeos" %}
+<section id="registro" class="audit-block">
+  <h2>Registrar mi biblioteca</h2>
+  <p class="audit-why">No hemos encontrado tebeos (.cbz, .cbr) en la carpeta de tu biblioteca.</p>
+</section>
+
+{% elif estado.value == "hecha" %}
+<section id="registro" class="audit-block">
+  <h2>Tu biblioteca ya está registrada</h2>
+  <p class="audit-ok">No hay nada nuevo que registrar.</p>
+</section>
+
+{% else %}
+<section id="registro" class="audit-block audit-adoptar">
+  <h2>Registrar mi biblioteca</h2>
+  <p class="audit-why">Registrar mete tus tebeos en el catálogo de ZascArr <strong>sin mover ni renombrar
+    ni un archivo</strong>: se quedan exactamente donde los tienes.
+    {% if series %}Tus <strong>{{ series }}</strong> {{ "serie" if series == 1 else "series" }} y lo que ya hayas asignado
+    se conservan tal cual.{% endif %}</p>
+  <ul class="audit-resumen">
+    <li><strong>{{ inv.en_disco }}</strong> tebeos en la carpeta
+      ({{ inv.cbz }} CBZ, {{ inv.cbr }} CBR{% if inv.otros_formatos %}, {{ inv.otros_formatos }} de otros formatos{% endif %})</li>
+    <li><strong>{{ inv.ya_registrados }}</strong> ya registrados: no se tocan</li>
+    <li><strong>{{ inv.nuevos }}</strong> por registrar (si alguno es idéntico a otro ya registrado, se registra una sola vez)</li>
+    {% if inv.registrados_sin_fichero %}<li><strong>{{ inv.registrados_sin_fichero }}</strong> registrados cuyo archivo
+      ya no está en la carpeta: no se cambia nada; revísalos en <a href="/estado">Estado</a></li>{% endif %}
+  </ul>
+  {% if inv.hay_que_registrar %}
+  <p class="audit-why">Los que no sepamos clasificar quedarán registrados y te esperarán en
+    <a href="/ui/pendientes">Por revisar</a>. En una colección grande puede tardar varios minutos.</p>
+  {{ boton("Registrar los " ~ inv.nuevos ~ " tebeos nuevos") }}
+  {% else %}
+  <p class="audit-ok">Todo lo que hay en la carpeta ya está registrado.</p>
+  {% endif %}
+</section>
+{% endif %}
