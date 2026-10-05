@@ -98,21 +98,77 @@ contrasena_suficiente() {
     (( ${#c} >= LONGITUD_MINIMA_CONTRASENA ))
 }
 
+# interfaz_es_virtual IFACE
+#   0 si el nombre es de una interfaz que NO es la red local del equipo: loopback, puentes de
+#   contenedores (docker0, br-…, veth…), VPN y túneles (tun, tap, wg, tailscale, zt, ppp) y
+#   virtualización (virbr, vmnet, vboxnet, cni, flannel, cali). Una dirección de esas no sirve desde
+#   el móvil.
+interfaz_es_virtual() {
+    case "${1:-}" in
+        ""|lo|docker*|br-*|veth*|virbr*|cni*|flannel*|cali*|tun*|tap*|wg*|tailscale*|zt*|ppp*|vmnet*|vboxnet*)
+            return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ip_es_privada DIRECCION
+#   0 si es una dirección de red local (RFC 1918). Una pública no es «tu red local».
+ip_es_privada() {
+    [[ "${1:-}" =~ ^(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)$ ]]
+}
+
 # ip_de_la_red
-#   Primera IPv4 no local de este equipo, para decirle al coleccionista a qué
-#   dirección entrar desde el móvil. Vacío si no se puede saber.
+#   La dirección de este equipo en la red local, SOLO si se puede ACREDITAR: la ruta por defecto sale
+#   por una interfaz de red local (no un puente de Docker ni una VPN) y su dirección es privada.
+#   Si no, no imprime nada. La dirección con la que se sale a internet es solo una CANDIDATA: con una
+#   VPN como ruta por defecto sería la del túnel. Nunca se toma «la primera» de `hostname -I`, que
+#   lista también los puentes de Docker (172.17.0.1).
 ip_de_la_red() {
-    local ip=""
-    # La dirección con la que este equipo SALE a la red (la de la ruta por defecto): `hostname -I`
-    # lista todas las interfaces —también los puentes de Docker, 172.17.0.1— y la primera puede
-    # no ser la que sirve desde el móvil. Solo si no hay ruta se cae a `hostname -I`.
-    if command -v ip >/dev/null 2>&1; then
-        ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
+    local ruta dev ip=""
+    command -v ip >/dev/null 2>&1 || return 0
+    ruta="$(ip -4 route get 1.1.1.1 2>/dev/null)" || return 0
+    ip="$(sed -n 's/.* src \([0-9.]*\).*/\1/p' <<< "${ruta}" | head -1)"
+    dev="$(sed -n 's/.* dev \([^ ]*\).*/\1/p' <<< "${ruta}" | head -1)"
+    if [[ "${ip}" =~ ^[0-9]+(\.[0-9]+){3}$ ]] && ! interfaz_es_virtual "${dev}" && ip_es_privada "${ip}"; then
+        echo "${ip}"
     fi
-    if [[ ! "${ip}" =~ ^[0-9]+(\.[0-9]+){3}$ ]] && command -v hostname >/dev/null 2>&1; then
-        ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    return 0
+}
+
+# direcciones_candidatas
+#   «interfaz dirección» por línea: IPv4 privadas de interfaces que no son virtuales. Es lo más que se
+#   puede decir sin acreditar cuál es la buena. Vacío si no hay `ip` o no hay ninguna.
+direcciones_candidatas() {
+    local dev cidr
+    command -v ip >/dev/null 2>&1 || return 0
+    ip -4 -o addr show scope global 2>/dev/null | awk '{print $2, $4}' | while read -r dev cidr; do
+        interfaz_es_virtual "${dev}" && continue
+        ip_es_privada "${cidr%%/*}" && echo "${dev} ${cidr%%/*}"
+    done
+    return 0
+}
+
+# linea_url_lan ETIQUETA SANGRIA
+#   Imprime cómo entrar desde la red local: la URL si la dirección se acredita; si no, las candidatas
+#   (con su interfaz) y la aclaración de que no se ha podido confirmar; si no hay ninguna, el marcador.
+linea_url_lan() {
+    local etiqueta="${1:-Desde otros dispositivos de tu red}" sangria="${2:-  }" ip cand dev dir
+    ip="$(ip_de_la_red)"
+    if [[ -n "${ip}" ]]; then
+        echo "${sangria}${etiqueta}:  http://${ip}:8000"
+        return 0
     fi
-    [[ "${ip}" =~ ^[0-9]+(\.[0-9]+){3}$ ]] && echo "${ip}"
+    cand="$(direcciones_candidatas)"
+    if [[ -n "${cand}" ]]; then
+        echo "${sangria}${etiqueta}:  no he podido confirmar cuál es la dirección de este equipo en tu red."
+        echo "${sangria}Candidatas (prueba la que responda desde el móvil):"
+        while read -r dev dir; do
+            [[ -n "${dir}" ]] && echo "${sangria}  http://${dir}:8000   (interfaz ${dev})"
+        done <<< "${cand}"
+    else
+        echo "${sangria}${etiqueta}:  http://<la IP de este equipo>:8000"
+        echo "${sangria}No he podido determinar la dirección de este equipo en tu red (mira  ip -4 addr )."
+    fi
     return 0
 }
 
@@ -280,12 +336,11 @@ subred_de_la_red() {
 #   `estado_de_publicacion` (lo que Docker tiene de verdad); CONTRASENA, si/no/«» (lo que la app aplicaría).
 #   Si está abierto y no hay contraseña se avisa con claridad; ante la duda no se afirma nada.
 resumen_acceso() {
-    local estado="${1:-indeterminada}" contrasena="${2:-}" ip
+    local estado="${1:-indeterminada}" contrasena="${2:-}"
     echo "  Cómo se entra (actualizar no lo cambia):"
     case "${estado}" in
         abierta)
-            ip="$(ip_de_la_red)"
-            echo "    Abierto a tu red local:  http://${ip:-<la IP de este equipo>}:8000"
+            linea_url_lan "Abierto a tu red local" "    "
             case "${contrasena}" in
                 si) echo "    Te pedirá la contraseña de acceso." ;;
                 no) echo "    ATENCIÓN: no hay contraseña fijada. Ejecuta  bash bootstrap.sh  para fijarla"
@@ -307,11 +362,10 @@ resumen_acceso() {
 # resumen_exposicion OPCION URL_PUBLICA
 #   Qué decirle al coleccionista al terminar, según lo que se haya dejado.
 resumen_exposicion() {
-    local opcion="${1:-1}" url="${2:-}" ip subred
+    local opcion="${1:-1}" url="${2:-}" subred
     case "${opcion}" in
         2)
-            ip="$(ip_de_la_red)"
-            echo "  Desde otros dispositivos de tu red:  http://${ip:-<la IP de este equipo>}:8000"
+            linea_url_lan "Desde otros dispositivos de tu red" "  "
             echo "  Te pedirá la contraseña que acabas de fijar."
             echo "  Importante: NO reenvíes el puerto 8000 en tu router hacia internet."
             if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi "^Status: active"; then

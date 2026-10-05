@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_pendientes.py
 
@@ -150,6 +151,29 @@ class TestBuscarSerie:
         with use_fake_session(FakeSession(exec_queue=[FakeExecResult([])])) as client:
             r = client.get(f"/ui/pendientes/{uuid4()}/buscar-serie?q=zzz")
         assert "Sin coincidencias" in r.text
+
+
+class TestFragmentoDeRecuento:
+    """El elemento que hace que el menú recuente «Por revisar» al sustituirse la tarjeta. Se prueba su CONTENIDO
+    literal y que apunta a la ruta REAL del menú: las demás pruebas comparan con la constante y, si esta cambiara,
+    seguirían pasando."""
+
+    def test_pide_al_cargar_la_ruta_real_del_menu_y_no_intercambia_nada(self):
+        from zascarr.web.navegacion import router as router_menu
+        ruta_real = next(r.path for r in router_menu.routes if r.path.endswith("/estado"))
+        assert ruta_real == "/ui/_nav/estado"
+        assert f'hx-get="{ruta_real}"' in RECONTAR_MENU
+        assert 'hx-trigger="load"' in RECONTAR_MENU          # se pide una vez, al incorporarse al DOM
+        assert 'hx-swap="none"' in RECONTAR_MENU             # no cambia nada visible (los contadores van fuera de banda)
+        assert " hidden" in RECONTAR_MENU                     # inerte para quien mira y para un lector de pantalla
+
+    def test_no_depende_de_cabeceras_hx_trigger(self):
+        """Mecanismo retirado: htmx 4 despacha esa cabecera sobre el elemento origen, que ya no está en el DOM
+        tras el reemplazo, y el evento no llega a `body`."""
+        import inspect
+
+        import zascarr.web.pendientes as modulo
+        assert "HX-Trigger" not in inspect.getsource(modulo).replace("`HX-Trigger`", "")
 
 
 class TestIgnorar:

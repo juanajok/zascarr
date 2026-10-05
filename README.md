@@ -124,8 +124,9 @@ Al terminar, ZascArr ya está funcionando. Ábrelo en:
 
 Esa dirección **solo funciona en la propia máquina** donde está instalado: desde el móvil u otro
 equipo, `127.0.0.1` es *ese* dispositivo, no la Pi. Si elegiste abrirlo a tu red local, el instalador
-te da al terminar la dirección que sirve (`http://<IP de la Pi>:8000`, la de la interfaz por la que sale a tu
-red) y te pedirá la contraseña. Si no lo abriste, desde otro equipo no responderá aunque escribas la IP:
+te da al terminar la dirección que sirve (`http://<IP de la Pi>:8000`) y te pedirá la contraseña. Si no puede
+confirmar cuál es la dirección de la Pi en tu red (por ejemplo, con una VPN o Docker de por medio), te da las
+candidatas con su interfaz y te lo dice, en lugar de adivinar. Si no lo abriste, desde otro equipo no responderá aunque escribas la IP:
 vuelve a ejecutar el instalador y elige esa opción.
 
 ¿Cambias de idea sobre el móvil? Vuelve a ejecutar el instalador y elige otra
