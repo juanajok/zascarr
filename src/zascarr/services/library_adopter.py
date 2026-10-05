@@ -38,6 +38,7 @@ de `OVERRIDABLE_FIELDS` — nunca editable desde /ui/ajustes).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -97,6 +98,23 @@ class AdoptionReport:
     by_other_run: int = 0
     #: cuántos archivos nuevos había al empezar (el denominador del progreso)
     to_process: int = 0
+    #: PREPARADOS en el lote en curso: mirados, pero sin confirmar en la BD. NO están en las listas de arriba:
+    #: las listas (`registered`, `unsorted`, `duplicates`, `errors`) y `added_count` solo cuentan lo CONFIRMADO.
+    pending_count: int = 0
+    #: mirados cuyo lote NO se guardó (el commit falló y se comprobó que no quedó nada): no están añadidos
+    reverted: int = 0
+    #: mirados de un lote cuyo commit falló y NO se pudo comprobar si se guardó: pendiente de contrastar
+    unknown: int = 0
+    #: rutas que este lote ha dejado en `files`, para contrastarlas con otra sesión si el commit falla
+    added_paths: list[str] = field(default_factory=list)
+
+    def absorb(self, lote: AdoptionReport) -> None:
+        """Pasa a este informe lo de un lote YA CONFIRMADO."""
+        self.registered += lote.registered
+        self.unsorted += lote.unsorted
+        self.duplicates += lote.duplicates
+        self.errors += lote.errors
+        self.by_other_run += lote.by_other_run
 
     @property
     def registered_count(self) -> int:
@@ -241,38 +259,101 @@ class LibraryAdopter:
         if progreso is not None:
             progreso(report)        # ya se sabe cuántos hay: la barra puede tener su total desde el principio
 
+        # Lo CONFIRMADO va en `report`; lo del lote en curso, en `en_lote`, y solo pasa a `report` cuando el
+        # commit se acredita. Si el commit falla, el lote no se presenta como añadido.
+        en_lote = AdoptionReport(started_at=report.started_at)
+        confirmados = 0                   # archivos mirados cuyo lote ya está resuelto
+
         for n, path in enumerate(nuevos, start=1):
             try:
                 if await self._ya_registrada(path):
                     # Otra ejecución (otra petición, otro proceso) la registró desde que se hizo la lista:
                     # consta, no se duplica y no es un error de esta.
-                    report.by_other_run += 1
+                    en_lote.by_other_run += 1
                 else:
                     async with self._db.begin_nested():
-                        await self._adopt_file(path, report, pistas.get(path.name))
+                        await self._adopt_file(path, en_lote, pistas.get(path.name))
             except IntegrityError as exc:
                 if _restriccion(exc) == "files_file_path_key":      # la registró otra ejecución a la vez
-                    report.by_other_run += 1
+                    en_lote.by_other_run += 1
                 else:
                     logger.warning("library_adopter.file_failed", error=type(exc).__name__)
-                    report.errors.append(f"{path.name}: no se pudo registrar ({type(exc).__name__})")
+                    en_lote.errors.append(f"{path.name}: no se pudo registrar ({type(exc).__name__})")
             except Exception as exc:
                 logger.warning("library_adopter.file_failed", error=type(exc).__name__)   # sin ruta ni mensaje (§5.4)
-                report.errors.append(f"{path.name}: no se pudo registrar ({type(exc).__name__})")
+                en_lote.errors.append(f"{path.name}: no se pudo registrar ({type(exc).__name__})")
             report.processed = n
+            report.pending_count = n - confirmados
             if progreso is not None:
                 progreso(report)
             if n % lote == 0:
-                await self._db.commit()
+                await self._confirmar_lote(en_lote, report, n - confirmados, progreso)
+                confirmados = n
+                report.pending_count = 0
+                en_lote = AdoptionReport(started_at=report.started_at)
 
         report.finished_at = datetime.now(UTC)
-        await self._persist_run(report)
+        # El informe que se guarda incluye el último lote, pero `report` solo lo incorpora si el commit se acredita.
+        provisional = AdoptionReport(started_at=report.started_at, finished_at=report.finished_at,
+                                     files_scanned=report.files_scanned,
+                                     already_registered=report.already_registered, to_process=report.to_process,
+                                     processed=report.processed)
+        provisional.absorb(report)
+        provisional.absorb(en_lote)
+        await self._persist_run(provisional)
         # El marcador dice «el registro terminó». Con errores NO terminó: no se pone, y lo que
         # quedó sin registrar sigue a la vista (`inventario`) y se puede continuar repitiendo.
-        if not report.errors:
+        if not provisional.errors:
             await RuntimeSettingsService(self._db).set_flag(_MARCADOR_HECHO, True)
-        await self._db.commit()
+        await self._confirmar_lote(en_lote, report, report.processed - confirmados, progreso)
+        report.pending_count = 0
         return report
+
+    async def _confirmar_lote(
+        self, en_lote: AdoptionReport, report: AdoptionReport, mirados: int,
+        progreso: Callable[[AdoptionReport], None] | None,
+    ) -> None:
+        """Confirma el lote y SOLO ENTONCES lo cuenta como añadido.
+
+        Un `commit` que falla puede haber guardado el lote o no (p. ej. la conexión se cae tras enviarlo): no se
+        asume ni una cosa ni la otra. Se contrasta con OTRA sesión qué rutas quedaron:
+          · todas → se guardó (la respuesta se perdió): se cuenta y se sigue;
+          · ninguna → se revirtió: el lote queda como «no guardado» y se propaga el fallo;
+          · otra cosa, o no se puede preguntar → «por comprobar»: tampoco se cuenta, y se propaga el fallo.
+        """
+        try:
+            await self._db.commit()
+        except Exception as exc:
+            logger.warning("library_adopter.commit_fallido", error=type(exc).__name__)
+            with contextlib.suppress(Exception):
+                await self._db.rollback()
+            veredicto = await self._contrastar(en_lote.added_paths)
+            if veredicto == "confirmado":
+                report.absorb(en_lote)
+                return
+            if veredicto == "revertido":
+                report.reverted += mirados
+            else:
+                report.unknown += mirados
+            report.pending_count = 0
+            if progreso is not None:
+                progreso(report)
+            raise
+        report.absorb(en_lote)
+
+    async def _contrastar(self, rutas: list[str]) -> str:
+        """Con OTRA sesión: ¿están en `files` las rutas que el lote dejó? confirmado / revertido / desconocido."""
+        if not rutas:
+            return "revertido"          # el lote no añadía filas: no hay nada que se pudiera haber guardado
+        try:
+            async with AsyncSession(self._db.bind, expire_on_commit=False) as otra:
+                cuantas = (await otra.execute(
+                    select(func.count(File.id)).where(File.file_path.in_(rutas)))).scalar() or 0
+        except Exception:  # noqa: BLE001 — ni siquiera se puede preguntar
+            return "desconocido"
+        if cuantas == len(rutas):
+            return "confirmado"
+        return "revertido" if cuantas == 0 else "desconocido"
 
     async def _adopt_file(
         self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
@@ -285,6 +366,7 @@ class LibraryAdopter:
             # coleccionista reorganizó quedaría sin registrar.
             await _reenlazar_fila(outcome.recuperar, outcome.tr, path)
             await self._db.flush()
+            report.added_paths.append(str(path))
             report.registered.append(f"{path.name} — reenlazado (recuperado)")
             logger.info("library_adopter.reenlazado", path=str(path))
             return
@@ -324,6 +406,7 @@ class LibraryAdopter:
         )
         self._db.add(file_rec)
         await self._db.flush()
+        report.added_paths.append(str(path))
 
         if is_unsorted:
             motivo = "; ".join(result.notes) or "sin match fiable"

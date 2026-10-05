@@ -14,8 +14,9 @@
   {% if reg.total %}
   <progress class="progress" value="{{ reg.procesados }}" max="{{ reg.total }}">
     {{ reg.procesados }} de {{ reg.total }}</progress>
-  <p class="audit-why"><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> tebeos.
-    Puedes cerrar esta página: sigue en segundo plano. Ni un archivo se mueve ni se renombra.</p>
+  <p class="audit-why"><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> tebeos mirados;
+    <strong>{{ reg.anadidos }}</strong> ya guardados en el catálogo (el resto del grupo en curso se guarda al
+    terminarlo). Puedes cerrar esta página: sigue en segundo plano. Ni un archivo se mueve ni se renombra.</p>
   {% else %}
   <p class="audit-why">Mirando qué hay en la carpeta… Puedes cerrar esta página: sigue en segundo plano.
     Ni un archivo se mueve ni se renombra.</p>
@@ -35,7 +36,7 @@
   <h2>El registro ha quedado incompleto</h2>
   {% call ui.aviso("amber") %}
     {% if reg.fase.value == "interrumpido" %}
-    El registro se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba confirmado; el último grupo de tebeos pudo no llegar a guardarse.
+    El registro se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba guardado.
     {% else %}
     No se pudo registrar {{ reg.errores | length }} {{ "tebeo" if reg.errores | length == 1 else "tebeos" }}.
     El resto sí está registrado.
@@ -54,9 +55,14 @@
     <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro ya registrado): no se añaden dos veces</li>
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
     {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
+    {% if reg.no_guardados %}<li><strong>{{ reg.no_guardados }}</strong> del último grupo no llegaron a guardarse
+      (se comprobó que no quedaron): no se han añadido</li>{% endif %}
+    {% if reg.por_comprobar %}<li><strong>{{ reg.por_comprobar }}</strong> del último grupo: no se ha podido comprobar si
+      llegaron a guardarse. No se cuentan como añadidos; al continuar se comprueba</li>{% endif %}
   </ul>
   {% if reg.fase.value == "interrumpido" %}
-  <p class="audit-why">Estas cifras son hasta donde llegó. Al continuar se vuelve a mirar qué falta de verdad.</p>
+  <p class="audit-why">«Añadidos» cuenta solo lo que se ha comprobado guardado en el catálogo. Al continuar se vuelve a
+    mirar qué falta de verdad.</p>
   {% endif %}
   {% if reg.errores %}
   <details><summary>Ver los que han dado error</summary>

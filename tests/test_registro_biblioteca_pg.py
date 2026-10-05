@@ -288,51 +288,177 @@ class TestRegistro:
 
 
 class TestFalloDespuesDeConfirmarUnLote:
-    """Mecanismo: lo confirmado en un lote no depende de que los siguientes salgan bien."""
+    """Mecanismo: lo confirmado en un lote no depende de que los siguientes salgan bien, y el informe solo
+    cuenta como «añadido» lo que se ha acreditado guardado: nunca un lote revertido o dudoso."""
 
-    async def test_si_falla_el_commit_de_un_lote_posterior_el_anterior_sigue_ahi(self, mundo, monkeypatch):
+    @staticmethod
+    def _commit_que_falla(monkeypatch, *, en_la_llamada: int, guardando_antes: bool = False):
+        """Parchea `AsyncSession.commit`: la llamada nº `en_la_llamada` lanza `ConnectionError`. Con
+        `guardando_antes` el commit SÍ se hace y después falla (se guardó y la respuesta se perdió)."""
         from sqlalchemy.ext.asyncio import AsyncSession
         original = AsyncSession.commit
         llamadas = {"n": 0}
 
-        async def commit_que_falla_el_segundo_lote(self):
+        async def commit(self):
             llamadas["n"] += 1
-            if llamadas["n"] == 2:
-                raise ConnectionError("se cayó la base de datos")
+            if llamadas["n"] == en_la_llamada:
+                if guardando_antes:
+                    await original(self)
+                raise ConnectionError("password=secreta host=10.0.0.5")
             return await original(self)
-        monkeypatch.setattr(AsyncSession, "commit", commit_que_falla_el_segundo_lote)
+        monkeypatch.setattr(AsyncSession, "commit", commit)
+        return lambda: monkeypatch.setattr(AsyncSession, "commit", original)
+
+    async def test_lote_revertido_no_se_cuenta_como_anadido(self, mundo, monkeypatch):
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
+        vistas = []
         async with mundo.fabrica() as s:
             with pytest.raises(ConnectionError):
-                await LibraryAdopter(s).adopt(lote=2)
-        monkeypatch.setattr(AsyncSession, "commit", original)
-        # Primer lote (2 archivos): 1 añadido y 1 repetido, ya confirmados; el segundo se perdió con su transacción.
-        assert await mundo.n_files() == 6 + 1
+                await LibraryAdopter(s).adopt(
+                    lote=2, progreso=lambda r: vistas.append(
+                        (r.added_count, r.duplicate_count, r.reverted, r.unknown, r.pending_count, r.processed)))
+        restaurar()
+        # 1.er lote (copia + su gemelo): 1 añadido y 1 repetido, CONFIRMADOS. 2.º lote (2 archivos): el commit
+        # falla y se comprueba que no quedó nada → 2 «no guardados», 0 añadidos de ese lote.
+        assert vistas[-1] == (1, 1, 2, 0, 0, 4)
+        assert await mundo.n_files() == 6 + 1                     # y la BD lo confirma
         assert await mundo.marcador() is False
-        async with mundo.fabrica() as s:
-            assert await LibraryAdopter(s).estado() is EstadoAdopcion.CATALOGO_PREVIO   # y se puede continuar
-            informe = await LibraryAdopter(s).adopt()
-        assert informe.already_registered == 3 + 1 and informe.error_count == 0
-        assert await mundo.n_files() == 6 + 7 and await mundo.marcador() is True
 
-    async def test_el_estado_en_segundo_plano_dice_interrumpido_y_no_registrada(self, mundo, monkeypatch):
-        from sqlalchemy.ext.asyncio import AsyncSession
-        original = AsyncSession.commit
-        llamadas = {"n": 0}
-
-        async def falla_el_segundo_commit(self):
-            llamadas["n"] += 1
-            if llamadas["n"] == 2:
-                raise ConnectionError("password=secreta")
-            return await original(self)
-        monkeypatch.setattr(AsyncSession, "commit", falla_el_segundo_commit)
+    async def test_estado_y_pantalla_enseñan_lo_confirmado_y_no_los_intentos_del_lote_revertido(
+            self, mundo, monkeypatch):
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
         monkeypatch.setattr(LibraryAdopter, "adopt", _adopt_con_lote_de(2, LibraryAdopter.adopt))
         registro_biblioteca.iniciar(mundo.fabrica)
         await asyncio.wait_for(registro_biblioteca._tarea, 60)
-        monkeypatch.setattr(AsyncSession, "commit", original)
+        restaurar()
         e = registro_biblioteca.estado_actual()
         assert e.fase.value == "interrumpido" and not e.completo and e.causa == "ConnectionError"
+        assert (e.anadidos, e.repetidos, e.no_guardados, e.por_comprobar, e.procesados) == (1, 1, 2, 0, 4)
         assert "secreta" not in repr(e)
-        assert await mundo.n_files() == 6 + 1                     # lo confirmado se conserva
+
+        async def _get_db():
+            async with mundo.fabrica() as s:
+                yield s
+        app.dependency_overrides[get_db] = _get_db
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost",
+                                     headers={"Origin": "http://localhost"}) as c:
+            r = await c.get("/ui/auditoria/registro")
+        assert "El registro ha quedado incompleto" in r.text and "Continuar el registro" in r.text
+        assert "Biblioteca registrada" not in r.text
+        assert "<strong>1</strong> añadidos al catálogo" in r.text            # el 1.º lote, no los 3 intentos
+        assert "<strong>3</strong> añadidos" not in r.text
+        assert "<strong>2</strong> del último grupo no llegaron a guardarse" in r.text
+        assert "secreta" not in r.text and "10.0.0.5" not in r.text
+
+    async def test_resultado_desconocido_no_se_cuenta_ni_como_anadido_ni_como_revertido(self, mundo, monkeypatch):
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
+
+        async def no_se_puede_preguntar(self, rutas):
+            return "desconocido"
+        monkeypatch.setattr(LibraryAdopter, "_contrastar", no_se_puede_preguntar)
+        monkeypatch.setattr(LibraryAdopter, "adopt", _adopt_con_lote_de(2, LibraryAdopter.adopt))
+        registro_biblioteca.iniciar(mundo.fabrica)
+        await asyncio.wait_for(registro_biblioteca._tarea, 60)
+        restaurar()
+        e = registro_biblioteca.estado_actual()
+        assert (e.anadidos, e.no_guardados, e.por_comprobar) == (1, 0, 2)
+        async def _get_db():
+            async with mundo.fabrica() as s:
+                yield s
+        app.dependency_overrides[get_db] = _get_db
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost",
+                                     headers={"Origin": "http://localhost"}) as c:
+            r = await c.get("/ui/auditoria/registro")
+        assert "no se ha podido comprobar si" in r.text and "llegaron a guardarse" in r.text
+        assert "<strong>1</strong> añadidos al catálogo" in r.text
+        assert "Biblioteca registrada" not in r.text
+
+    async def test_el_contraste_no_depende_de_la_sesion_que_acaba_de_fallar(self, mundo, monkeypatch):
+        """Tras un commit fallido la conexión de la sesión puede estar muerta: si el contraste usara esa misma
+        sesión, un lote que de verdad se revirtió se daría por «desconocido». Aquí la sesión que falla queda
+        inservible (como con la conexión caída) y aun así se acredita que no quedó nada → «no guardados»."""
+        from sqlalchemy.ext.asyncio import AsyncSession
+        original = AsyncSession.commit
+        n = {"c": 0}
+
+        async def commit_que_mata_la_sesion(self):
+            n["c"] += 1
+            if n["c"] == 2:
+                async def muerta(*a, **k):
+                    raise ConnectionError("conexión perdida")
+                self.execute = muerta                                # a partir de aquí esta sesión no contesta
+                self.rollback = muerta
+                raise ConnectionError("conexión perdida")
+            return await original(self)
+        monkeypatch.setattr(AsyncSession, "commit", commit_que_mata_la_sesion)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(
+                    lote=2, progreso=lambda r: vistas.append((r.added_count, r.reverted, r.unknown)))
+        monkeypatch.setattr(AsyncSession, "commit", original)
+        assert vistas[-1] == (1, 2, 0)          # revertido y ACREDITADO por otra sesión, no «desconocido»
+
+    async def test_un_resultado_parcial_no_se_da_por_confirmado(self, mundo, monkeypatch):
+        """Si tras el fallo solo algunas de las rutas del lote constan (p. ej. las puso otra ejecución), no se
+        sabe qué pasó: ni «confirmado» ni «revertido». El intruso entra DESPUÉS del rollback de la sesión del
+        lote (antes, esa sesión tiene la ruta bloqueada y su insert esperaría)."""
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
+        contrastar = LibraryAdopter._contrastar
+
+        async def contrastar_con_intruso(self, rutas):
+            intruso = mundo.lib / "BD" / "Album 2" / "Tomo raro 02.cbr"          # una de las rutas del 2.º lote
+            async with mundo.fabrica() as otra:
+                otra.add(File(id=uuid4(), file_path=str(intruso), file_name=intruso.name,
+                              file_format=FileFormat.CBR, sha256_hash=None))
+                await otra.commit()
+            return await contrastar(self, rutas)
+        monkeypatch.setattr(LibraryAdopter, "_contrastar", contrastar_con_intruso)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(
+                    lote=2, progreso=lambda r: vistas.append((r.added_count, r.reverted, r.unknown)))
+        restaurar()
+        assert vistas[-1] == (1, 0, 2)          # solo 1 de 2 rutas consta: desconocido, y NO añadido
+
+    async def test_commit_que_se_guardo_pero_cuya_respuesta_se_perdio_se_cuenta_tras_contrastarlo(
+            self, mundo, monkeypatch):
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2, guardando_antes=True)
+        async with mundo.fabrica() as s:
+            informe = await LibraryAdopter(s).adopt(lote=2)       # NO lanza: se contrastó con otra sesión
+        restaurar()
+        assert informe.added_count == 7 and informe.reverted == 0 and informe.unknown == 0
+        assert informe.error_count == 0 and await mundo.n_files() == 6 + 7 and await mundo.marcador() is True
+        async with mundo.fabrica() as s:
+            repetidas = (await s.execute(text(
+                "SELECT count(*) FROM (SELECT file_path FROM files GROUP BY file_path HAVING count(*) > 1) t"))).scalar()
+        assert repetidas == 0
+
+    async def test_si_falla_el_ultimo_commit_el_ultimo_lote_no_se_cuenta(self, mundo, monkeypatch):
+        """Con el tamaño de lote por defecto (25) los 8 archivos nuevos son UN solo lote, el del commit final."""
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=1)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(progreso=lambda r: vistas.append(
+                    (r.added_count, r.reverted, r.unknown, r.pending_count, r.processed)))
+        restaurar()
+        assert vistas[-1] == (0, 8, 0, 0, 8)
+        assert await mundo.n_files() == 6 and await mundo.marcador() is False
+
+    async def test_tras_un_lote_revertido_continuar_completa_sin_duplicar(self, mundo, monkeypatch):
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(lote=2)
+        restaurar()
+        async with mundo.fabrica() as s:
+            assert await LibraryAdopter(s).estado() is EstadoAdopcion.CATALOGO_PREVIO   # sigue ofreciendo continuar
+            informe = await LibraryAdopter(s).adopt()
+        assert informe.already_registered == 3 + 1 and informe.error_count == 0
+        assert informe.added_count == 6                           # los 6 que faltaban (el gemelo es repetido)
+        assert await mundo.n_files() == 6 + 7 and await mundo.marcador() is True
 
 
 async def _vacio() -> set[str]:
