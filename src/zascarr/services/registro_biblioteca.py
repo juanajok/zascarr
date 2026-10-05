@@ -49,6 +49,12 @@ class EstadoRegistro:
     sin_identificar: int = 0
     repetidos: int = 0
     otra_ejecucion: int = 0
+    #: mirados pero aún SIN confirmar en la BD (el lote en curso)
+    en_lote: int = 0
+    #: mirados de un lote que NO se guardó (el commit falló y se comprobó que no quedó nada)
+    no_guardados: int = 0
+    #: mirados de un lote cuyo commit falló y no se pudo comprobar si se guardó
+    por_comprobar: int = 0
     errores: list[str] = field(default_factory=list)
     causa: str | None = None          # solo si INTERRUMPIDO: el TIPO de error, nunca el mensaje
 
@@ -83,6 +89,9 @@ def _volcar(report: AdoptionReport) -> None:
     _estado.sin_identificar = report.unsorted_count
     _estado.repetidos = report.duplicate_count
     _estado.otra_ejecucion = report.by_other_run
+    _estado.en_lote = report.pending_count
+    _estado.no_guardados = report.reverted
+    _estado.por_comprobar = report.unknown
     _estado.errores = list(report.errors)
 
 
