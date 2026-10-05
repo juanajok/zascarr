@@ -50,7 +50,10 @@ ISSUE_PATTERNS = [
     # española, que no estaba cubierta. El "║" no es un error de copia:
     # media biblioteca real viene de scans con nombres en CP437 releídos
     # como Latin-1 ("Espa±a", "Traducci≤n"), y ahí "º" aparece así.
-    (r"(?:Issue|No\.?|N[úu]m(?:ero)?\.?|[Nn][ºo°º║])\s*(\d{1,4}[a-zA-Z]?)\b", False),
+    # `(?<![A-Za-zÀ-ÿ])`: el marcador NO puede ir pegado a una letra por la izquierda. Sin esto, el "no"
+    # final de "Inferno 01" o "La Cosa del Pantano 01" se leía como «nº 01» y el título se truncaba
+    # ("Infer", "La Cosa del Panta"). Medido en la biblioteca real: 14 de 1.542 nombres.
+    (r"(?<![A-Za-zÀ-ÿ])(?:Issue|No\.?|N[úu]m(?:ero)?\.?|[Nn][ºo°º║])\s*(\d{1,4}[a-zA-Z]?)\b", False),
     # El sufijo de letra es real y frecuente ("Superman Vol2 123a" son las
     # entregas partidas de Zinco); sin él, esos números se perdían enteros.
     (r"\b(\d{3,4}[a-zA-Z]?)\b(?!\s*\))", False),
