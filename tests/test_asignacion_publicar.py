@@ -13,8 +13,8 @@ import os
 
 import pytest
 
-import tests.prototipo_asignacion as proto
-from tests.prototipo_asignacion import PublicacionNoSoportadaError, _publicar
+import zascarr.services.asignacion as proto
+from zascarr.services.asignacion import PublicacionNoSoportadaError, _publicar
 
 
 @pytest.fixture

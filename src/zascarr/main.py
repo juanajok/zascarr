@@ -234,7 +234,15 @@ async def lifespan(app: FastAPI):
         logger.warning("background_tasks_skipped_db_degraded", db_degraded=True)
         background_tasks = []
     else:
+        # V6a (ADR 0006): continúa o cierra las asignaciones que quedaron vivas en una ejecución anterior.
+        # Tarea de fondo (no retrasa el healthcheck) que nunca propaga una excepción.
+        from zascarr.services.asignacion import comprobar_pool, reconciliar_al_arrancar
+        if not comprobar_pool(engine, settings.asignacion_simultaneas):
+            logger.warning("asignacion.pool_insuficiente",
+                           simultaneas=settings.asignacion_simultaneas,
+                           pool=settings.db_pool_size + settings.db_max_overflow)
         background_tasks = [
+            asyncio.create_task(reconciliar_al_arrancar()),
             asyncio.create_task(_library_audit_task()),
             asyncio.create_task(_import_loop(settings.import_interval_minutes)),
             asyncio.create_task(
