@@ -370,9 +370,19 @@ limpieza pendiente» y «reparación pendiente» son 200 con aviso ámbar; «pen
 corta propia (fusión `||` de JSONB), sin depender del `commit` de `get_db`. El contrato visible de B13 (el alias se
 aprende siempre) y de B15 se mantiene; cambia solo que, con htmx, un 4xx/5xx devuelve la **tarjeta** y no un JSON
 (htmx 4 intercambia todo salvo 204/304). `ReviewService.assign_to_series` y sus pruebas siguen, sin ruta.
-Defecto hallado al conectar: un `OSError` genérico al publicar (solo lectura, permisos, espacio) se escapaba de
-`asignar`; ahora cancela la operación, retira la copia propia y devuelve `error`. Cualquier excepción del servicio
-llega a la página como aviso, nunca como un 500 sin explicar. El 409 y la reconciliación ya estaban antes de que
+Defecto hallado al conectar (y corregido en la revisión de la PR #79): un `OSError` al publicar se escapaba de
+`asignar`, y la primera corrección presuponía «no se publicó nada», que no vale para cualquier fallo. Ahora se
+distinguen **tres casos**: (1) *anterior a publicar* (solo lectura, permisos, espacio): se retira la copia propia y
+**solo entonces** se cancela; si retirarla falla, la operación sigue viva con un resultado explícito; (2)
+*publicación realizada con fallo posterior* (`link` creó el destino y falló `unlink` del temporal;
+`PublicadoConResiduoError`): el destino es íntegro, el flujo sigue hacia confirmar, el origen se conserva mientras
+quede un residuo y la limpieza lo retira con el destino ya acreditado (la ruta y la época están en la operación);
+(3) *resultado incierto* (el destino aparece tras el error): no se cancela ni se libera la reserva, queda
+`pendiente_de_comprobar` y la reconciliación lo resuelve comparando el contenido. El endpoint traduce cualquier
+excepción no controlada a un aviso **neutral** («No se pudo comprobar que la operación terminara…»): no sabe si el
+servicio llegó a confirmar o a retirar el original, así que no afirma que «no se ha tocado» nada. Los avisos
+nombran el mecanismo real: **reconciliación al arrancar y continuación al volver a asignar**; no hay disparador
+periódico (no se promete «lo reintentará solo»). El 409 y la reconciliación ya estaban antes de que
 existiera ninguna operación viva.
 
 **Limitación de la prueba de esquema (anotada, no bloqueante):** la comparación de predicados entre el modelo y

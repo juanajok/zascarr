@@ -127,11 +127,11 @@ RESPUESTAS: dict[EstadoResultado, Respuesta] = {
     _R.ASIGNADO: Respuesta(200, asignado=True),
     _R.YA_ASIGNADO: Respuesta(200, asignado=True),
     _R.ASIGNADO_LIMPIEZA_PENDIENTE: Respuesta(
-        200, "Asignado. Falta retirar el archivo original de la carpeta de revisión; "
-             "ZascArr lo reintentará solo.", "amber", asignado=True),
+        200, "Asignado. El archivo original sigue en la carpeta de revisión y se intentará retirar "
+             "al reiniciar ZascArr.", "amber", asignado=True),
     _R.REPARACION_PENDIENTE: Respuesta(
-        200, "Asignado, pero la copia nueva no ha pasado la comprobación. Se ha conservado el "
-             "original por seguridad y ZascArr lo revisará.", "amber", asignado=True),
+        200, "La asignación necesita revisión; se ha conservado el original. ZascArr volverá a "
+             "comprobarla al reiniciar.", "amber", asignado=True),
     _R.COLISION_EDICION: Respuesta(
         409, f"No se asigna: {MOTIVO_COLISION_EDICION}. Ese número ya existe como otra edición "
              "(por ejemplo una grapa y un recopilatorio). Elige otro número o revísalo a mano."),
@@ -145,20 +145,27 @@ RESPUESTAS: dict[EstadoResultado, Respuesta] = {
     _R.PROPIEDAD_PERDIDA: Respuesta(
         409, "Este archivo ya se está asignando. Espera unos segundos y recarga.", "info"),
     _R.PENDIENTE: Respuesta(
-        503, "No se pudo confirmar la asignación. Tus archivos están a salvo y ZascArr lo "
-             "reintentará.", "amber"),
+        503, "No se pudo confirmar la asignación. Tus archivos están a salvo. Se reintentará al "
+             "reiniciar ZascArr o al volver a asignar este archivo.", "amber"),
     _R.PENDIENTE_DE_COMPROBAR: Respuesta(
-        503, "No se pudo comprobar si la asignación se guardó. No se ha borrado nada; ZascArr lo "
-             "comprobará al reiniciar o al reintentar.", "amber"),
+        503, "No se pudo comprobar si la asignación se guardó. No se ha borrado nada; se "
+             "comprobará al reiniciar ZascArr o al volver a asignar este archivo.", "amber"),
     _R.ERROR: Respuesta(500, _TEXTO_ERROR_GENERICO),
 }
+
+
+#: Excepción que el servicio no controló: el endpoint NO sabe hasta dónde llegó (puede haber
+#: confirmado e incluso retirado el original), así que no promete nada sobre los archivos.
+RESPUESTA_INESPERADA = Respuesta(
+    500, "No se pudo comprobar que la operación terminara. Recarga la página para consultar su "
+         "estado antes de volver a intentarlo.")
 
 
 def interpretar(r: Resultado) -> Respuesta:
     """Los recuperables no se esconden: «asignado con limpieza pendiente» y «reparación
     pendiente» son éxito con aviso; «pendiente» y «pendiente de comprobar» son 503 con la tarjeta
     delante. Un estado sin tratar nunca queda mudo."""
-    return RESPUESTAS.get(r.estado, Respuesta(500, _TEXTO_ERROR_GENERICO))
+    return RESPUESTAS.get(r.estado, RESPUESTA_INESPERADA)
 
 
 def _es_htmx(request: Request) -> bool:
@@ -180,8 +187,8 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
             r = await servicio_por_defecto().asignar(file_id, series_id, issue_number)
         except Exception as exc:  # noqa: BLE001 — nada llega al coleccionista como un 500 sin explicar
             logger.error("pendientes.asignar_fallo", error=type(exc).__name__)
-            r = Resultado(EstadoResultado.ERROR, "excepción no controlada")
-    resp = interpretar(r)
+            r = None
+    resp = interpretar(r) if r is not None else RESPUESTA_INESPERADA
     aviso = {"tipo": resp.tipo, "texto": resp.texto}
     if resp.status == 200 and not resp.texto:
         return HTMLResponse("")                                # la tarjeta desaparece
