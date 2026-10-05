@@ -164,8 +164,8 @@ class TestIgnorar:
         assert file.review_dismissed is True
 
     def test_ignorar_confirma_antes_de_responder(self, tmp_path):
-        """Regresión del mecanismo: el `commit` de `get_db` llega DESPUÉS de responder, y el menú pide
-        su contador en cuanto llega la respuesta: contaría todavía el archivo ignorado."""
+        """Regresión del mecanismo: el `commit` de `get_db` llega DESPUÉS de responder, y el menú
+        pide su contador en cuanto llega la respuesta: contaría todavía el archivo ignorado."""
         file = File(id=uuid4(), file_path=str(tmp_path / "x.cbz"), file_name="x.cbz",
                     file_format=FileFormat.CBZ, review_dismissed=False)
         session = FakeSession(get_map={(File, file.id): file})
