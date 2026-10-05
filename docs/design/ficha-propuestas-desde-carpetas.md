@@ -44,8 +44,8 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 > hay». **Eso era falso: no se había buscado.** Suwayomi-Server tiene una *fuente local* que lee una biblioteca por carpetas, y es una
 > referencia directa. Se añadió también **Aidoku**, a petición expresa.
 >
-> **Supuesto a confirmar:** «Aizoku» se ha interpretado como **Aidoku** (`Aidoku/Aidoku`, lector de manga para iOS/iPadOS/macOS). La
-> búsqueda literal «aizoku» en GitHub solo devuelve un asistente de IA sin relación. Si se refería a otro proyecto, hay que añadirlo.
+> **Confirmado por el operador (2026-10-05):** «Aizoku» es **Aidoku** (`Aidoku/Aidoku`, lector de manga para iOS/iPadOS/macOS). La
+> búsqueda literal «aizoku» en GitHub solo devuelve un asistente de IA sin relación.
 
 | Referencia | Versión leída | Ficheros |
 |---|---|---|
@@ -142,7 +142,25 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 - **Copiar los archivos al almacenamiento de la app** al importar (Aidoku) y el **escuchador de cambios del sistema de ficheros** que resincroniza solo: ZascArr registra en su sitio y solo escribe tras una confirmación.
 - **Identidad por convención sin comprobación** (Suwayomi: «carpeta = serie» sin contraste con nada): es lo que la auditoría de la biblioteca real desmiente en un 8 % de los archivos.
 
+### Qué se toma de cada referencia (resumen)
+
+| Decisión | Suwayomi-Server | Aidoku | ZascArr (propuesto) |
+|---|---|---|---|
+| Carpeta como señal | La carpeta de primer nivel **define** la serie | Carpeta por serie en su almacenamiento | **Evidencia, nunca autoridad ciega** |
+| Metadatos declarados | `ComicInfo.xml` de la carpeta de serie | `ComicInfo` embebido, luego parser | **Mayor prioridad como señal**, con el conflicto visible |
+| Nombre de archivo | Descuenta el título de la serie antes de leer el número | Parser local (port del de Kavita, con pruebas) | Parser existente, **enriquecido por el contexto** una vez confirmada la serie |
+| Creación de serie | Implícita por estructura | Serie **prefijada y validada** antes de importar | **Propuesta explicada; confirmación obligatoria** |
+| Archivos | Fuente local, en su sitio | **Copia** al almacenamiento de la app | **Mantener las rutas originales**; solo mover tras confirmar y por el servicio recuperable |
+
 ## Contrato de la historia
+
+### Política de conflicto (invariante de la historia)
+
+> **Si el nombre de archivo coincide exactamente con una serie, pero la carpeta, el año o la edición discrepan, el resultado es siempre
+> `requiere_confirmacion` («por confirmar»): nunca una asignación directa, nunca un enlace a `Issue`, nunca una serie «preseleccionada».**
+>
+> Un título exacto sin corroboración por año o volumen tampoco llega a `lista`. Es el caso real `Batman - Saga Scott Snyder` ↔ `BATMAN (2025)`;
+> es la prueba nº 1 de esta ficha y el criterio de aceptación de la medición (falsos `lista` = 0).
 
 ### Entrada
 - Archivos de `files` con `issue_id IS NULL`, no descartados, y **de dos tipos**: (a) `match_status = unsorted` (hoy en «Por revisar») y (b) **«serie sugerida pero sin `Issue`»** (hoy invisibles: los 17). Se trabaja **sobre la BD** (`file_path`, `file_name`, `metadata`), sin releer discos ni hashear.
@@ -223,13 +241,13 @@ Con Postgres y ficheros reales (nombres reales de la biblioteca como casos; ning
 3. **Asignar un grupo** por el servicio recuperable (con la vista previa de rutas de destino).
 4. **Descubrir** como fuente opcional de candidatas, por cola, a petición.
 
-## Decisiones abiertas para la revisión
+## Decisiones abiertas para la revisión (D1-D5)
 
-1. **Dónde persistir el registro de altas de serie**: `import_runs.details` (`kind = "series_from_folders"`, sin migración) frente a una tabla propia (migración). Recomendación: lo primero en la rebanada 2.
-2. **Los 17 y la bandeja**: ¿se unen a «Por revisar» con un estado propio, o una pestaña aparte? Recomendación: mismo lugar, estado propio.
-3. **Tradición** de una serie nueva: la carpeta de primer nivel (`Comics`, `BD`, `Tebeos`, `Manga`) sugiere, no decide; ¿se admite que la persona la fije por carpeta una sola vez?
-4. **Perfil por carpeta raíz** (Sonarr/Suwayomi lo imponen por convención; Kapowarr/Mylar lo evitan agrupando por nombre): ¿se admite que la persona declare una vez cómo está organizada cada carpeta de primer nivel, o se infiere siempre? Recomendación: **inferir y mostrar**, y dejar la declaración como mejora posterior si la medición lo justifica.
-5. **Política de duplicados** (~200 grupos) y **referencias obsoletas** (14): fuera de esta historia, pero la rebanada 1 las deja a la vista.
+- **D1 — Dónde persistir el registro de altas de serie.** `import_runs.details` (`kind = "series_from_folders"`, sin migración) frente a una tabla propia (migración). *Recomendación:* lo primero en la rebanada 2.
+- **D2 — Los 17 «serie sugerida sin `Issue`» y la bandeja.** ¿Se unen a «Por revisar» con un estado propio, o una pestaña aparte? *Recomendación:* mismo lugar, estado propio. Implica revisar la decisión de B11 («se resuelve sola con el enriquecedor»).
+- **D3 — Tradición de una serie nueva.** La carpeta de primer nivel (`Comics`, `BD`, `Tebeos`, `Manga`) sugiere, no decide; ¿se admite que la persona la fije por carpeta una sola vez? *Recomendación:* sugerir y exigir elección explícita; sin valor por defecto.
+- **D4 — Perfil por carpeta raíz.** Sonarr y Suwayomi lo imponen por convención; Kapowarr y Mylar lo evitan agrupando por nombre. ¿La persona declara una vez cómo está organizada cada carpeta de primer nivel («una carpeta por serie», «por autor»…) o se infiere siempre? *Recomendación:* **inferir y mostrar**; la declaración queda como mejora posterior si la medición lo justifica.
+- **D5 — Política de duplicados (~200 grupos de copias idénticas) y de referencias obsoletas (14).** Fuera de esta historia, pero la rebanada 1 las deja a la vista. *Recomendación:* decidir después de la rebanada 1, con las propuestas delante.
 
 ## Límites de esta ficha
-Lectura de código de cinco referencias (Kapowarr, Sonarr, Mylar3, Suwayomi-Server y Aidoku) en versiones concretas, sin ejecutarlas; «Aizoku» interpretado como Aidoku (a confirmar); Sonarr se leyó en `develop`, no en la release; las etiquetas de «carpeta incorrecta» son un juicio mío sobre nombres (auditoría), una biblioteca y un coleccionista; los umbrales son hipótesis hasta medirlos.
+Lectura de código de cinco referencias (Kapowarr, Sonarr, Mylar3, Suwayomi-Server y Aidoku) en versiones concretas, sin ejecutarlas; «Aizoku» = Aidoku (confirmado por el operador); Sonarr se leyó en `develop`, no en la release; las etiquetas de «carpeta incorrecta» son un juicio mío sobre nombres (auditoría), una biblioteca y un coleccionista; los umbrales son hipótesis hasta medirlos.
