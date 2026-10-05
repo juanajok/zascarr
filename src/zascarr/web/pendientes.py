@@ -171,7 +171,8 @@ def interpretar(r: Resultado) -> Respuesta:
 #: Tras asignar o ignorar, el menú vuelve a pedir SUS contadores a la BD (`/ui/_nav/estado`, que ya
 #: los calcula a partir de los pendientes reales). No se resta uno a ciegas: el número lo da la
 #: consulta, no la respuesta.
-#: Va como un elemento inerte DENTRO de la respuesta que sustituye a la tarjeta y se pide al cargarse.
+#: Va como un elemento inerte DENTRO de la respuesta que sustituye a la tarjeta y se pide al
+#: cargarse.
 #: NO como cabecera `HX-Trigger`: htmx 4 la despacha sobre el elemento que hizo la petición,
 #: que ya no está en el DOM cuando la tarjeta se reemplaza (`outerHTML`), y un evento de un nodo
 #: desconectado no llega a `body` (comprobado en navegador real con un clic; con `htmx.ajax` sin
