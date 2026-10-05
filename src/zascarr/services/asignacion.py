@@ -1,77 +1,107 @@
 # ruff: noqa: E501
-"""PROTOTIPO del contrato del ADR 0006: asignar UN archivo de forma recuperable.
+"""Asignar UN archivo a una serie y número de forma RECUPERABLE (ADR 0006, migración 0017).
 
-No es código de producción ni lo llama ningún router: es una **especificación ejecutable** del orden
+El orden, cada paso con su razón:
 
     preparar (commit) → copiar y verificar → publicar → confirmar (commit) → retirar el origen → limpiar
 
-con la que se demuestra, contra Postgres real y ficheros reales, que cada punto de fallo queda
-reconciliable SIN escanear la biblioteca. Cuando se apruebe la tabla (historia con migración propia),
-esto se convierte en el servicio de V6a.
+Una asignación interrumpida (muerte del proceso, caída de la conexión, `commit` de resultado desconocido) se
+reconcilia SIN escanear la biblioteca: lo necesario vive en `asignacion_operaciones`. Cada decisión está
+demostrada con Postgres y ficheros reales en `tests/test_asignacion_servicio_pg.py` (y por mutación):
 
-Las decisiones que lo sostienen (ADR 0006):
+- **Una operación viva por archivo y por destino** (índices únicos parciales): reclamar el archivo y reservar
+  el destino son la misma inserción atómica. Se guarda el destino **efectivo** (con sufijo si el canónico
+  estaba ocupado). Además se comprueba que ninguna otra fila de `files` lo tenga ya registrado (`file_path`
+  es único) y, al confirmar, esa restricción es la que decide frente a escritores concurrentes.
+- **Nunca se borra el origen** hasta que la asignación está confirmada, y solo si: el destino existe íntegro
+  (se relee SIEMPRE: no hay exclusión de escritores que sostenga «ya lo verifiqué»), la BD apunta a él y el
+  origen es, por CONTENIDO (sha256), la copia verificada. Si no, se conserva (`reparacion_pendiente`).
+- **Un `commit` de resultado desconocido no se trata como `rollback`**: se pregunta a la BD con otra sesión y,
+  si ni eso es posible, se conserva todo (`pendiente_de_comprobar`). Nunca se borra el destino por eso.
+- **Publicar nunca reemplaza**: `renameat2(RENAME_NOREPLACE)` o, si el sistema de ficheros no lo admite,
+  `link` + `unlink`; si tampoco, se RECHAZA el montaje (no hay un tercer camino «comprobar y reemplazar»).
+- **Candado consultivo de TRANSACCIÓN** en una conexión dedicada: distingue una operación huérfana de una en
+  curso sin plazos ni reloj y no existe un `unlock` que pueda fallar. Perder el candado no detiene el código
+  Python del ejecutor, así que cada ejecutor lleva una `epoca`: toda escritura en la BD lleva
+  `AND epoca = <la suya>` y se comprueba que SIGUE siendo el dueño antes de publicar, confirmar o borrar.
+  Queda una ventana mínima entre la comprobación y el efecto en disco; su efecto es inocuo por construcción.
+- **La ejecución no se cancela con el cliente** (`asyncio.shield`).
+- **Límite de simultáneas compartido** por todas las instancias que usan el mismo motor (mismo pool): cada
+  operación en curso retiene una conexión (la del candado) además de las cortas, así que el pool debe tener
+  al menos `2 × simultáneas` (ver `comprobar_pool`).
 
-- La operación vive en una **tabla propia** (`asignacion_operaciones`, migración 0017: el prototipo corre
-  sobre el esquema de PRODUCCIÓN). `File.metadata_` no sirve (ver el ADR y las pruebas de
-  `test_prototipo_asignacion_pg.py::TestMetadataNoBasta`).
-- **Una operación viva por archivo y por destino** (índices únicos parciales): reclamar un archivo y
-  reservar un destino son la misma inserción atómica. El destino que se guarda es el **efectivo**
-  (con sufijo si el canónico estaba ocupado).
-- **Nunca se borra el origen hasta que la asignación está confirmada** y solo si sigue siendo el que se
-  preparó (tamaño y `mtime_ns`).
-- **Nunca se borra el destino por un fallo de `commit` de resultado desconocido**: se consulta la BD.
-- El trabajo corre protegido de la cancelación del cliente (`asyncio.shield`) y bajo un **candado
-  consultivo de TRANSACCIÓN** de Postgres, en una conexión dedicada, por operación: una operación
-  huérfana (su proceso murió) se distingue de una en curso sin plazos ni reloj, y el candado se suelta
-  con la propia transacción, así que **no hay `unlock` que pueda fallar** y ninguna conexión vuelve al
-  pool reteniéndolo (revisión de la PR #76; antes era un candado de sesión).
-- **Publicar nunca reemplaza:** `renameat2(RENAME_NOREPLACE)` o, si el sistema de ficheros no lo admite,
-  `link` + `unlink`; si tampoco, se **rechaza el montaje** (no se vuelve a «comprobar y luego `replace`»).
-- **El origen solo se borra si es, por CONTENIDO, la copia verificada, y el destino sigue existiendo
-  íntegro (se vuelve a hashear SIEMPRE: no hay exclusión de escritores que sostenga «ya lo verifiqué
-  antes») y la BD sigue apuntando a él**: nunca se borra la última copia válida.
-- **Perder el candado no detiene el trabajo de Python: se vallan los efectos.** Cada ejecutor toma una
-  `epoca` (contador en la fila de la operación) al conseguir el candado. Antes de publicar, confirmar o
-  borrar comprueba que SIGUE teniendo el candado (consulta a `pg_locks` sobre su propia conexión) y toda
-  escritura en la BD lleva `AND epoca = <la mía>`: un ejecutor antiguo no puede confirmar ni cerrar nada.
-  El temporal lleva la época en el nombre: no pisa el de otro. Queda una ventana mínima entre la
-  comprobación y el efecto en disco; su efecto es inocuo por construcción (se publica un fichero verificado
-  con `NOREPLACE`, y se borra un origen solo si su contenido ya es la copia íntegra y confirmada).
-- `max_simultaneas` es **por instancia del servicio**: al integrarlo habrá que compartir el límite entre
-  todas las instancias que usan el mismo pool (aquí una sola instancia no demuestra un límite global).
+Resultados (`EstadoResultado`) ≠ estados persistidos (`AsignacionEstado`): los resultados RECUPERABLES dejan la
+operación viva con su reserva; `destino_ocupado` la cancela y la libera. NO se registra ninguna ruta en los logs.
+
+Este módulo NO lo llama todavía ningún router: conectar la asignación individual (`POST /ui/pendientes/{id}/asignar`)
+es el paso siguiente, y el lote viene después.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import ctypes
+import enum
 import errno
 import hashlib
 import os
 import shutil
+import weakref
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import structlog
 from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.importer import build_library_path
 from zascarr.services.review import ReviewService
 from zascarr.utils.naming import parse_comic_filename
 
-# El esquema ya NO se crea aquí: es la migración 0017 (`asignacion_operaciones`), que el prototipo usa tal cual.
+logger = structlog.get_logger()
+
+#: Cuántas veces se vuelve a reservar un nombre si un ajeno ocupa el destino justo antes de publicar.
+_REINTENTOS_DESTINO = 3
+
+# El esquema es la migración 0017 (`asignacion_operaciones`).
 VIVAS = "estado IN ('preparada', 'confirmada')"
+
+
+class EstadoResultado(enum.StrEnum):
+    """Lo que el servicio DEVUELVE. No es lo que se persiste (`AsignacionEstado`)."""
+    ASIGNADO = "asignado"
+    ASIGNADO_LIMPIEZA_PENDIENTE = "asignado_limpieza_pendiente"   # confirmada; falló retirar el origen
+    REPARACION_PENDIENTE = "reparacion_pendiente"                 # destino dañado/ausente o BD desviada: se conserva el origen
+    PROPIEDAD_PERDIDA = "propiedad_perdida"                       # otro ejecutor tomó la operación: este se detiene
+    YA_ASIGNADO = "ya_asignado"
+    YA_EN_CURSO = "ya_en_curso"
+    PENDIENTE = "pendiente"                                       # no se pudo confirmar; se reintentará
+    PENDIENTE_DE_COMPROBAR = "pendiente_de_comprobar"             # ni siquiera se pudo preguntar a la BD
+    DESTINO_OCUPADO = "destino_ocupado"                           # CANCELA la operación y libera la reserva
+    COLISION_EDICION = "colision_edicion"
+    NO_ENCONTRADO = "no_encontrado"
+    ERROR = "error"
+
+
+#: Resultados tras los cuales la operación SIGUE viva y conserva su reserva.
+RESULTADOS_RECUPERABLES = frozenset({
+    EstadoResultado.PENDIENTE, EstadoResultado.REPARACION_PENDIENTE,
+    EstadoResultado.ASIGNADO_LIMPIEZA_PENDIENTE, EstadoResultado.PENDIENTE_DE_COMPROBAR,
+})
 
 
 @dataclass(frozen=True)
 class Resultado:
-    estado: str      # asignado | asignado_limpieza_pendiente | reparacion_pendiente | propiedad_perdida | ya_asignado | ya_en_curso | pendiente | pendiente_de_comprobar | destino_ocupado | colision_edicion | no_encontrado | error
+    estado: EstadoResultado
     motivo: str = ""
     destino: str | None = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "estado", EstadoResultado(self.estado))
 
 
 async def _no_hacer_nada(_punto: str) -> None:
@@ -160,6 +190,34 @@ def _origen_es_el_preparado(origen: Path, size: int, mtime_ns: int) -> bool:
     return st.st_size == size and st.st_mtime_ns == mtime_ns
 
 
+_CUPOS: weakref.WeakKeyDictionary[AsyncEngine, tuple[asyncio.Semaphore, int]] = weakref.WeakKeyDictionary()
+_CUPO_SIN_MOTOR: dict[int, asyncio.Semaphore] = {}
+
+
+def _cupo_compartido(motor: AsyncEngine | None, limite: int) -> asyncio.Semaphore:
+    """Un único semáforo por motor (= por pool): dos instancias del servicio sobre el mismo motor no pueden
+    sumar sus límites. Dos límites DISTINTOS para el mismo motor son un error de configuración: se rechaza en
+    vez de elegir uno en silencio."""
+    if limite < 1:
+        raise ValueError("max_simultaneas debe ser al menos 1")
+    if motor is None:                     # fábrica sin motor asociado (no ocurre en producción)
+        return _CUPO_SIN_MOTOR.setdefault(limite, asyncio.Semaphore(limite))
+    if motor not in _CUPOS:
+        _CUPOS[motor] = (asyncio.Semaphore(limite), limite)
+    semaforo, fijado = _CUPOS[motor]
+    if fijado != limite:
+        raise ValueError(f"el motor ya tiene un límite de {fijado} asignaciones simultáneas; no puede ser {limite}")
+    return semaforo
+
+
+def comprobar_pool(motor: AsyncEngine, max_simultaneas: int) -> bool:
+    """Cada operación retiene una conexión (el candado) y usa otra para el trabajo corto: hacen falta 2 por
+    operación. Devuelve False si el pool del motor no da para eso."""
+    pool = motor.pool
+    capacidad = (getattr(pool, "size", lambda: 0)() or 0) + (getattr(pool, "_max_overflow", 0) or 0)
+    return capacidad >= 2 * max_simultaneas
+
+
 class _Propiedad:
     """Lo que un ejecutor sabe de su derecho a actuar: el candado (en su conexión dedicada) y su época."""
 
@@ -179,37 +237,55 @@ class _Propiedad:
             return False
 
 
-class AsignacionRecuperable:
+class AsignacionService:
     def __init__(self, fabrica: async_sessionmaker[AsyncSession], biblioteca: Path, *,
                  gancho: Callable[[str], Awaitable[None]] = _no_hacer_nada,
                  borrar: Callable[[Path], None] | None = None, max_simultaneas: int = 1):
         self._fabrica = fabrica
         self._biblioteca = biblioteca
-        # Cada operación en curso retiene UNA conexión (la del candado) además de las cortas que use:
-        # el pool debe tener al menos 2 × max_simultaneas.
-        self._cupo = asyncio.Semaphore(max_simultaneas)
+        # El límite es de TODAS las instancias que usan el mismo motor (el mismo pool), no de esta.
+        self._max_simultaneas = max_simultaneas
+        self._motor = fabrica.kw.get("bind")
         self._gancho = gancho            # las pruebas inyectan aquí el fallo (muerte, excepción…)
         self._borrar = borrar or (lambda p: p.unlink())
 
+    @property
+    def _cupo(self) -> asyncio.Semaphore:
+        return _cupo_compartido(self._motor, self._max_simultaneas)
+
     # ── API ──────────────────────────────────────────────────────────────────
 
-    async def asignar(self, file_id: UUID, series_id: UUID, issue_number: str) -> Resultado:
-        """Prepara (con commit) y ejecuta. La ejecución no se cancela con el cliente."""
-        preparada = await self._preparar(file_id, series_id, (issue_number or "").strip())
-        if isinstance(preparada, Resultado):
-            return preparada
-        return await asyncio.shield(self._ejecutar(preparada))
+    async def asignar(self, file_id: UUID, series_id: UUID, issue_number: str, *,
+                       aprender_alias: bool = True) -> Resultado:
+        """Prepara (con commit) y ejecuta. La ejecución no se cancela con el cliente.
+
+        Si el destino lo ocupa un ajeno justo antes de publicar (`destino_ocupado`), la operación queda
+        cancelada y se reintenta con el siguiente nombre libre (hasta `_REINTENTOS_DESTINO` veces)."""
+        resultado = Resultado(EstadoResultado.ERROR, "sin intentar")
+        for _ in range(_REINTENTOS_DESTINO):
+            preparada = await self._preparar(file_id, series_id, (issue_number or "").strip(), aprender_alias)
+            if isinstance(preparada, Resultado):
+                return preparada
+            resultado = await asyncio.shield(self._ejecutar(preparada))
+            if resultado.estado is not EstadoResultado.DESTINO_OCUPADO:
+                return resultado
+        return resultado
 
     async def reconciliar(self) -> list[Resultado]:
         """Continúa o cierra las operaciones vivas. Consulta SOLO la tabla (índice parcial): no recorre la biblioteca."""
         async with self._fabrica() as s:
             ids = [r[0] for r in (await s.execute(text(
                 f"SELECT id FROM asignacion_operaciones WHERE {VIVAS} ORDER BY creada"))).all()]
-        return [await self._ejecutar(i) for i in ids]
+        resultados = []
+        for i in ids:
+            r = await self._ejecutar(i)
+            logger.info("asignacion.reconciliada", operacion=str(i), resultado=r.estado.value)
+            resultados.append(r)
+        return resultados
 
     # ── 1. preparar ──────────────────────────────────────────────────────────
 
-    async def _preparar(self, file_id, series_id, issue_number) -> UUID | Resultado:
+    async def _preparar(self, file_id, series_id, issue_number, aprender_alias: bool = True) -> UUID | Resultado:
         if not issue_number:
             return Resultado("error", "El número de issue no puede estar vacío")
         async with self._fabrica() as s:
@@ -237,24 +313,33 @@ class AsignacionRecuperable:
                 st = origen.stat()
             except FileNotFoundError:
                 return Resultado("error", "El archivo de origen ya no está en su sitio")
-            sha = file.sha256_hash or await asyncio.to_thread(_sha256, origen)
+            # El hash esperado es el del fichero QUE SE VA A COPIAR, leído ahora: `File.sha256_hash` puede estar
+            # obsoleto (p. ej. tras reescribir ComicInfo) y daría un fallo espurio al verificar la copia.
+            sha = await asyncio.to_thread(_sha256, origen)
+            st2 = origen.stat()
+            if (st2.st_size, st2.st_mtime_ns) != (st.st_size, st.st_mtime_ns):
+                return Resultado("error", "El archivo cambió mientras se preparaba la asignación; inténtalo de nuevo")
             canonico = build_library_path(self._biblioteca, serie, issue_number, origen.suffix)
 
             for k in range(0, 1000):
                 candidato = canonico if k == 0 else canonico.with_name(f"{canonico.stem} ({k}){canonico.suffix}")
                 if candidato.exists():
                     continue
+                registrado = (await s.execute(text("SELECT 1 FROM files WHERE file_path = :p"),
+                                              {"p": str(candidato)})).first()
+                if registrado is not None:        # otra fila de `files` ya usa ese nombre
+                    continue
                 op_id = uuid4()
                 try:
                     async with s.begin_nested():
                         await s.execute(text(
                             "INSERT INTO asignacion_operaciones (id, file_id, estado, origen, destino, temporal, "
-                            "size_bytes, mtime_ns, sha256, series_id, issue_number, formato) VALUES "
-                            "(:id, :f, 'preparada', :o, :d, :t, :sz, :mt, :sha, :s, :n, CAST(:fmt AS issue_format))"),
+                            "size_bytes, mtime_ns, sha256, series_id, issue_number, formato, aprender_alias) VALUES "
+                            "(:id, :f, 'preparada', :o, :d, :t, :sz, :mt, :sha, :s, :n, CAST(:fmt AS issue_format), :alias)"),
                             {"id": op_id, "f": file_id, "o": str(origen), "d": str(candidato),
                              "t": str(candidato.with_name(f".{candidato.name}.{op_id.hex[:8]}.part")),
                              "sz": st.st_size, "mt": st.st_mtime_ns, "sha": sha, "s": series_id,
-                             "n": issue_number, "fmt": formato.value})
+                             "n": issue_number, "fmt": formato.value, "alias": aprender_alias})
                     await s.commit()
                     return op_id
                 except IntegrityError as exc:
@@ -389,7 +474,9 @@ class AsignacionRecuperable:
                 issue = (await s.execute(select(Issue).where(
                     Issue.series_id == serie.id, Issue.issue_number == op["issue_number"]))).scalar_one_or_none()
                 if issue is not None and (issue.format or IssueFormat.SINGLE_ISSUE).value != op["formato"]:
-                    return Resultado("colision_edicion", "Ese número apareció como otra edición mientras se copiaba")
+                    await s.rollback()
+                    return await self._abandonar(op, prop, Resultado(
+                        EstadoResultado.COLISION_EDICION, "Ese número apareció como otra edición mientras se copiaba"))
                 if issue is None:
                     issue = Issue(series_id=serie.id, issue_number=op["issue_number"],
                                   locked_fields=["series_id", "issue_number"], format=IssueFormat(op["formato"]))
@@ -401,21 +488,48 @@ class AsignacionRecuperable:
                 file.file_name = Path(op["destino"]).name
                 file.metadata_source = MetadataSource.MANUAL.value
                 await s.flush()
-                await ReviewService(s)._learn_alias(nombre_original, serie.id)
+                if op["aprender_alias"]:
+                    await ReviewService(s)._learn_alias(nombre_original, serie.id)
                 await s.execute(text("UPDATE asignacion_operaciones SET estado = 'confirmada', actualizada = now() "
                                      "WHERE id = :i AND epoca = :ep"), {"i": op["id"], "ep": prop.epoca})
                 await s.commit()
             return None
+        except IntegrityError as exc:
+            if _restriccion(exc) == "files_file_path_key":
+                # FALLO CONOCIDO (la sentencia falló antes de cualquier commit): otra fila de `files` registró
+                # ese nombre mientras se copiaba. Es la restricción única de la BD, no una consulta previa,
+                # quien decide frente a escritores concurrentes.
+                return await self._abandonar(op, prop, Resultado(
+                    EstadoResultado.DESTINO_OCUPADO, "Otro archivo registró ese nombre mientras se copiaba", op["destino"]))
+            return await self._resultado_desconocido(op, exc)
         except Exception as exc:  # noqa: BLE001 — el resultado del commit puede ser desconocido
-            actual = None
-            try:
-                actual = await self._op(op["id"])
-            except Exception:  # noqa: BLE001 — ni siquiera se puede preguntar
-                return Resultado("pendiente_de_comprobar",
-                                 f"No se sabe si se confirmó ({type(exc).__name__}); se conservan los ficheros", op["destino"])
-            if actual is not None and actual["estado"] == "confirmada":
-                return None                      # sí se confirmó: la respuesta se perdió
-            return Resultado("pendiente", f"No se pudo confirmar ({type(exc).__name__}); se reintentará", op["destino"])
+            return await self._resultado_desconocido(op, exc)
+
+    async def _abandonar(self, op, prop: _Propiedad, resultado: Resultado) -> Resultado:
+        """Fallo CONOCIDO tras publicar y antes de confirmar: ninguna fila referencia el destino y el origen
+        sigue intacto, así que se retira SOLO la copia propia (si su contenido es el verificado) y se cancela la
+        operación, que libera la reserva. Si este ejecutor ya no es el dueño, no se toca nada."""
+        if not await prop.vigente():
+            return Resultado(EstadoResultado.PROPIEDAD_PERDIDA, "Otra ejecución tomó la operación", op["destino"])
+        destino = Path(op["destino"])
+        with contextlib.suppress(OSError):
+            if destino.is_file() and await asyncio.to_thread(_sha256, destino) == op["sha256"]:
+                destino.unlink()
+        await self._cerrar(op["id"], "cancelada", prop.epoca)
+        return resultado
+
+    async def _resultado_desconocido(self, op, exc: Exception) -> Resultado | None:
+        """El `commit` pudo o no aplicarse. NO se asume `rollback` ni se borra nada: se pregunta a la BD con
+        otra sesión. `None` = sí se confirmó (la respuesta se perdió) y el flujo sigue."""
+        try:
+            actual = await self._op(op["id"])
+        except Exception:  # noqa: BLE001 — ni siquiera se puede preguntar
+            return Resultado(EstadoResultado.PENDIENTE_DE_COMPROBAR,
+                             f"No se sabe si se confirmó ({type(exc).__name__}); se conservan los ficheros", op["destino"])
+        if actual is not None and actual["estado"] == "confirmada":
+            return None
+        return Resultado(EstadoResultado.PENDIENTE,
+                         f"No se pudo confirmar ({type(exc).__name__}); se reintentará", op["destino"])
 
     async def _limpiar(self, op_id: UUID, origen: Path, op, prop: _Propiedad) -> Resultado:
         """Retira el origen SOLO si su borrado no puede perder la última copia válida:
@@ -468,3 +582,56 @@ class AsignacionRecuperable:
                 "WHERE f.id = :f"), {"f": op["file_id"]})).first()
         return (fila is not None and fila[0] == op["destino"] and fila[1] == op["series_id"]
                 and fila[2] == op["issue_number"])
+
+
+# ── Integración con el resto de la aplicación ─────────────────────────────────────────────────────
+
+def _restriccion(exc: DBAPIError) -> str | None:
+    """Nombre de la restricción de Postgres que provocó el error, si se puede saber (asyncpg lo expone en la
+    excepción original o en su causa). Nunca se decide por el texto del mensaje."""
+    orig = getattr(exc, "orig", None)
+    for candidato in (orig, getattr(orig, "__cause__", None)):
+        nombre = getattr(candidato, "constraint_name", None)
+        if nombre:
+            return nombre
+    return None
+
+
+#: La restricción que impide borrar un archivo o una serie con una asignación VIVA (migración 0017).
+RESTRICCION_OPERACION_VIVA = "ck_asignacion_viva_con_referencias"
+
+
+def conflicto_por_operacion_viva(exc: DBAPIError) -> bool:
+    """¿Este error de integridad es EXACTAMENTE «hay una asignación viva que depende de esto»?
+
+    Solo esa restricción se traduce a un 409; cualquier otro `IntegrityError` sigue siendo un error."""
+    return _restriccion(exc) == RESTRICCION_OPERACION_VIVA
+
+
+def servicio_por_defecto(gancho: Callable[[str], Awaitable[None]] = _no_hacer_nada) -> AsignacionService:
+    """El servicio con la configuración de la aplicación (motor y biblioteca reales)."""
+    from zascarr.config import get_settings
+    from zascarr.database import async_session_factory
+
+    s = get_settings()
+    return AsignacionService(async_session_factory, s.library_path, gancho=gancho,
+                             max_simultaneas=s.asignacion_simultaneas)
+
+
+async def reconciliar_al_arrancar(servicio: AsignacionService | None = None) -> int:
+    """Continúa o cierra las operaciones que quedaron vivas en una ejecución anterior.
+
+    Se lanza como TAREA DE FONDO tras el arranque (no retrasa el healthcheck), solo con la BD disponible y
+    **nunca propaga una excepción**: un fallo aquí se registra y se reintenta al siguiente arranque, pero no
+    puede tirar la aplicación. Consulta solo `asignacion_operaciones` (índice parcial): no recorre la
+    biblioteca. Devuelve cuántas operaciones procesó (0 si falló)."""
+    try:
+        servicio = servicio or servicio_por_defecto()
+        resultados = await servicio.reconciliar()
+    except Exception:  # noqa: BLE001 — ver la docstring
+        logger.exception("asignacion.reconciliacion_fallida")
+        return 0
+    if resultados:
+        logger.info("asignacion.reconciliacion_terminada", operaciones=len(resultados),
+                    pendientes=sum(1 for r in resultados if r.estado in RESULTADOS_RECUPERABLES))
+    return len(resultados)

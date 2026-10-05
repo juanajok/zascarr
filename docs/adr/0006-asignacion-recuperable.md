@@ -5,7 +5,7 @@
 **Aceptado** — 2026-10-05 (propuesto el 2026-10-03). Se acepta como **decisión de arquitectura**: el
 contrato de «Decisión», la tabla propia en lugar de `File.metadata_` y el orden de historias de
 «Consecuencias». **No certifica** apagones, CIFS, la desconexión HTTP real, un lote real ni la integración
-de producción: el prototipo es de **un archivo** y vive en `tests/` (ver «Lo que NO está demostrado»). El
+de producción: el servicio es de **un archivo**, aún sin conectar a la interfaz (ver «Estado de la implementación» y «Lo que NO está demostrado»). El
 **contrato** lo fijó la revisión del 2026-10-03. Origen: criterio 1 de V6a (`docs/BACKLOG.md`) y la auditoría
 `docs/design/auditoria-mover-y-sesion.md`. Ficha de benchmarking: `docs/design/benchmark-V6a-asignacion.md`.
 
@@ -151,10 +151,10 @@ con evidencia:
 **Conclusión: la persistencia necesaria es esquema.** Se separa una historia con migración (`0017`), como se
 acordó; V6a **no** se fusiona rebajando la garantía. El esquema definitivo es la migración `0017` (sección siguiente).
 
-## Lo demostrado (prototipo de un archivo, Postgres y ficheros reales)
+## Lo demostrado (servicio de un archivo, Postgres y ficheros reales)
 
-`tests/prototipo_asignacion.py` + `tests/test_prototipo_asignacion_pg.py` (43 pruebas) +
-`tests/test_prototipo_publicar.py` (6, sin Postgres). Cada defensa se comprobó **por mutación**: quitar la
+`src/zascarr/services/asignacion.py` (antes un prototipo en `tests/`) con `tests/test_asignacion_servicio_pg.py` (49 pruebas),
+`tests/test_asignacion_integracion_pg.py` (18) y `tests/test_asignacion_publicar.py` (6, sin Postgres). Cada defensa se comprobó **por mutación**: quitar la
 verificación del hash de la copia, el escudo, el candado, la comprobación del origen por contenido, la del
 destino o la de la BD antes de borrar, la consulta tras un `commit` desconocido, la distinción «asignado con
 limpieza pendiente», la publicación sin reemplazo (volver a `exists()` + `os.replace`) el candado de
@@ -180,7 +180,7 @@ cubiertos: faltaban las pruebas directas de `TestValladoDeEpocaEnLaBd`.)
 | Copia corrupta | `TestCopiaVerificada` → no se publica, el origen intacto |
 | **No borrar la última copia** (revisión de #76): destino ausente, corrupto (mismo y distinto tamaño) o BD que ya no apunta, tras confirmar | `TestNoBorrarLaUltimaCopia` → `reparacion_pendiente`, origen conservado |
 | Origen sustituido por otro de **igual tamaño y fecha** | `…::test_un_origen_sustituido_con_igual_tamano_y_fecha_no_se_borra` → no se borra |
-| **Publicar sin reemplazar** (revisión de #76): ajeno que aparece tras la comprobación y antes de publicar | `test_prototipo_publicar.py::…aparece_justo_antes_de_publicar` y `TestPublicarEnElServicio` → ajeno intacto, `destino_ocupado`, el reintento usa el sufijo |
+| **Publicar sin reemplazar** (revisión de #76): ajeno que aparece tras la comprobación y antes de publicar | `test_asignacion_publicar.py::…aparece_justo_antes_de_publicar` y `TestPublicarEnElServicio` → ajeno intacto, `destino_ocupado`, el reintento usa el sufijo |
 | Montaje sin ninguna publicación segura | `…::test_si_el_montaje_no_ofrece_ninguna_garantia…` y `…rechaza_la_operacion` → rechazado, nada tocado |
 | **Candado y pool real** (revisión de #76) | `TestCandadoYPoolReutilizable` (5): ninguna conexión vuelve al pool reteniéndolo |
 | **Integridad en la misma ejecución**: destino alterado con igual tamaño entre publicar/confirmar y limpiar | `TestIntegridadEnLaMismaEjecucion` (2) → `reparacion_pendiente`, origen conservado |
@@ -342,10 +342,40 @@ importa porque la semántica de un *bind mount* puede diferir de la del anfitri�
 - **Tamaño del *pool* en la Pi** (por confirmar): el candado de transacción retiene una conexión por
   operación; el límite de simultáneas debe respetar `2 × simultáneas ≤ pool`.
 
+### Estado de la implementación (servicio de un archivo)
+
+El prototipo pasó a `src/zascarr/services/asignacion.py` (`AsignacionService`). Respecto al prototipo:
+
+- **Límite de simultáneas compartido** por todas las instancias que usan el mismo motor (`_cupo_compartido`,
+  ligado al motor, no a la instancia); un límite distinto para el mismo motor es un error de configuración.
+  `comprobar_pool` avisa en el arranque si el pool no da para 2 conexiones por operación.
+  Ajuste: `ASIGNACION_SIMULTANEAS` (1 por defecto).
+- **Coordinación con otros escritores de `files`:** se salta un nombre que otra fila ya tenga registrado, y,
+  como esa consulta no es una reserva frente a cambios concurrentes, quien decide al confirmar es la restricción
+  única `files.file_path` de la BD: es un fallo CONOCIDO (no un `commit` desconocido), la operación se cancela
+  y se retira SOLO la copia propia, si su contenido es el verificado. `asignar` reintenta con el siguiente nombre.
+- **Hash esperado leído del disco al preparar**, no de `File.sha256_hash`, que puede estar obsoleto (p. ej. tras
+  reescribir ComicInfo) y daría un fallo espurio al verificar la copia. Cuesta un hash más (4 por archivo).
+- `aprender_alias` se persiste, así que la petición completa sobrevive a un reinicio.
+- **Reconciliación al arrancar** (`reconciliar_al_arrancar`): tarea de fondo del `lifespan`, solo con la BD
+  disponible, que nunca propaga una excepción y solo consulta `asignacion_operaciones`.
+- **409 al borrar** (`DELETE /api/series/{id}`): traduce SOLO `ck_asignacion_viva_con_referencias`, con
+  `flush` dentro del manejador (el `commit` de `get_db` llega después de responder) y `rollback`.
+- **Sin registrar rutas en los logs.**
+
+**No está conectado:** `POST /ui/pendientes/{id}/asignar` sigue usando `ReviewService.assign_to_series`. Conectarlo
+cambia los contratos de B13/B15 (sus pruebas usan una sesión simulada) y es el paso siguiente; el 409 y la
+reconciliación ya están antes de que exista ninguna operación viva en producción.
+
+**Limitación de la prueba de esquema (anotada, no bloqueante):** la comparación de predicados entre el modelo y
+la tabla extrae los **literales** de estado; detecta cambiar qué estados incluye, pero no distinguiría `IN` de
+`NOT IN` con los mismos literales. No es una comparación semántica completa, y el autogenerate de Alembic
+tampoco compara predicados.
+
 ## Consecuencias
 
-- **Historias nuevas, en este orden:** (1) migración `0017` con `asignacion_operaciones` (**hecha**: ver «Esquema»); (2) el servicio de
-  un archivo, conectado a la asignación individual **conservando su contrato** (B13/B15); (3) el lote con
+- **Historias nuevas, en este orden:** (1) migración `0017` con `asignacion_operaciones` (**hecha**: ver «Esquema»); (2a) el servicio de
+  un archivo (**hecho**, sin conectar); (2b) conectarlo a la asignación individual **conservando su contrato** (B13/B15); (3) el lote con
   límite por bytes; (4) ejecución en segundo plano si la medición lo exige; (5) el importador.
 - La asignación individual actual **no cambia** hasta (2). Las pruebas de caracterización de la auditoría
   cambiarán entonces con el comportamiento, no se silenciarán.
