@@ -114,6 +114,40 @@ class TestAsignarConectadoAlServicio:
         assert r.status_code == 400 and "ya no existen" in r.text
 
 
+class TestContadorDelMenu:
+    """El menú recuenta SUS pendientes (desde la BD) cuando algo deja de estar pendiente; no resta uno a ciegas."""
+
+    async def test_el_exito_pide_recontar(self, mundo, cliente_de):
+        async with cliente_de() as c:
+            r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
+        assert r.status_code == 200 and r.headers["HX-Trigger"] == "zascarr:pendientes"
+
+    async def test_asignado_con_aviso_tambien_recuenta(self, mundo, cliente_de):
+        def borrar_fallido(_ruta):
+            raise OSError("disco de solo lectura")
+        async with cliente_de(borrar=borrar_fallido) as c:
+            r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
+        assert r.status_code == 200 and "al reiniciar ZascArr" in r.text
+        assert r.headers["HX-Trigger"] == "zascarr:pendientes"      # YA no está pendiente aunque haya aviso
+
+    async def test_un_rechazo_no_recuenta(self, mundo, cliente_de):
+        """Si el archivo SIGUE pendiente (409/503/400) no se dispara nada: el número no cambia."""
+        async with cliente_de() as c:
+            r = await c.post(_url(mundo), data=_datos(mundo, "   "), headers=HTMX)
+        assert r.status_code == 400 and "HX-Trigger" not in r.headers
+
+    async def test_el_numero_lo_da_la_consulta_del_menu(self, mundo, cliente_de):
+        """Antes y después de asignar, `contadores()` cuenta los pendientes REALES de la BD."""
+        from zascarr.services.navegacion import contadores
+        async with mundo.fabrica() as s:
+            antes = (await contadores(s)).pendientes
+        async with cliente_de() as c:
+            await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
+        async with mundo.fabrica() as s:
+            despues = (await contadores(s)).pendientes
+        assert (antes, despues) == (1, 0)
+
+
 class TestColisionDeEdiciones:
     """B15: el número compartido entre ediciones se rechaza, se explica y el motivo SE GUARDA."""
 
