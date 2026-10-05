@@ -356,9 +356,9 @@ class LibraryAdopter:
         debía escribir:
           · fila CREADA: existe SU id (nadie más puede tener un id generado en esta transacción) con SU ruta;
             si el id no existe, no se aplicó;
-          · fila REENLAZADA: la fila ya existía; se aplicó si tiene el cambio esperado (ruta nueva, no desaparecida)
-            y no se aplicó si sigue en su estado previo. (Si otro escritor hiciera EXACTAMENTE el mismo reenlace no
-            se distinguiría: límite conocido, escrito en el ADR/BACKLOG.);
+          · fila REENLAZADA: la fila ya existía, así que su id NO prueba autoría y su estado final esperado tampoco
+            (otro escritor pudo hacer EXACTAMENTE el mismo reenlace). No es evidencia atribuible: solo sirve para
+            afirmar que NO se aplicó (sigue en su estado previo) y para NO confirmar nada cuando es lo único que hay;
           · el informe del cierre (`ImportRun`), si lo hay: existe su id. Se guarda en la misma transacción que el
             marcador, así que acreditarlo acredita también el marcador.
         Cualquier otra combinación (una parte sí y otra no, una fila cambiada por otro) es «desconocido»: ni se
@@ -379,27 +379,44 @@ class LibraryAdopter:
                     informe = (await otra.execute(select(ImportRun.id).where(ImportRun.id == run_id))).first()
         except Exception:  # noqa: BLE001 — ni siquiera se puede preguntar
             return "desconocido"
-        aplicadas = no_aplicadas = 0
+        # EVIDENCIA ATRIBUIBLE a esta transacción: las filas que CREÓ (su id solo existe si se aplicó) y su informe
+        # del cierre. Un REENLACE de una fila que ya existía NO es atribuible: que la fila esté en el estado
+        # esperado prueba que ALGUIEN lo aplicó, no que fuera esta transacción (otro escritor pudo hacer
+        # exactamente el mismo reenlace tras el rollback; una sesión independiente ve lo confirmado por otros).
+        atribuibles = aplicadas = no_aplicadas = 0
+        reenlace_nuevo = reenlace_previo = reenlace_otro = 0
         for fid, ruta_nueva, ruta_previa in filas:
             estado = actuales.get(fid)
             if ruta_previa is None:                               # creada por este lote
+                atribuibles += 1
                 if estado is None:
                     no_aplicadas += 1
                 elif estado == (ruta_nueva, False):
                     aplicadas += 1
-            elif estado == (ruta_nueva, False):                   # reenlazada: cambio esperado
-                aplicadas += 1
+            elif estado == (ruta_nueva, False):                   # reenlazada: ya en el estado esperado
+                reenlace_nuevo += 1
             elif estado is not None and estado[0] == ruta_previa and estado[1]:   # sigue como estaba
-                no_aplicadas += 1
+                reenlace_previo += 1
+            else:                                                 # en un tercer estado
+                reenlace_otro += 1
         if run_id is not None:
+            atribuibles += 1
             if informe is not None:
                 aplicadas += 1
             else:
                 no_aplicadas += 1
-        esperadas = len(filas) + (1 if run_id is not None else 0)
-        if aplicadas == esperadas:
-            return "confirmado"
-        return "revertido" if no_aplicadas == esperadas else "desconocido"
+        reenlaces = reenlace_nuevo + reenlace_previo + reenlace_otro
+        if reenlace_otro:
+            return "desconocido"                                  # alguien más ha tocado la fila: no se adivina
+        if atribuibles == 0:
+            # Lote solo de reenlaces, sin recibo propio: el estado FINAL esperado no acredita autoría. Solo se
+            # puede afirmar que NO se aplicó (todas siguen como estaban); cualquier otra cosa, por comprobar.
+            return "revertido" if reenlaces and reenlace_previo == reenlaces else "desconocido"
+        if aplicadas == atribuibles:                              # recibo propio presente → la transacción se aplicó
+            return "confirmado" if reenlace_previo == 0 else "desconocido"
+        if no_aplicadas == atribuibles:                           # recibo propio ausente → no se aplicó
+            return "revertido" if reenlace_nuevo == 0 else "desconocido"
+        return "desconocido"
 
     async def _adopt_file(
         self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
