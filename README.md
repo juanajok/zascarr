@@ -122,6 +122,13 @@ Al terminar, ZascArr ya está funcionando. Ábrelo en:
 
 **http://127.0.0.1:8000** — el panel de estado, en español.
 
+Esa dirección **solo funciona en la propia máquina** donde está instalado: desde el móvil u otro
+equipo, `127.0.0.1` es *ese* dispositivo, no la Pi. Si elegiste abrirlo a tu red local, el instalador
+te da al terminar la dirección que sirve (`http://<IP de la Pi>:8000`) y te pedirá la contraseña. Si no puede
+confirmar cuál es la dirección de la Pi en tu red (por ejemplo, con una VPN o Docker de por medio), te da las
+candidatas con su interfaz y te lo dice, en lugar de adivinar. Si no lo abriste, desde otro equipo no responderá aunque escribas la IP:
+vuelve a ejecutar el instalador y elige esa opción.
+
 ¿Cambias de idea sobre el móvil? Vuelve a ejecutar el instalador y elige otra
 opción; no pierdes nada. Al volver a ejecutarlo, `Intro` **mantiene la opción que
 ya tenías** (que puede ser abrirlo a la red: te lo dice antes de preguntar) y, si
@@ -234,6 +241,12 @@ El script hace, **en este orden** (el orden importa):
 4. Reconstruye la imagen Docker (las dependencias viven en la imagen, no en el host).
 5. Aplica las migraciones **dentro del contenedor** (`alembic upgrade head`).
 6. Reinicia ZascArr y verifica el healthcheck en `http://127.0.0.1:8000`.
+
+**Actualizar no cambia cómo se entra.** Recrea el servicio con el `.env` que ya tienes, así que si lo
+tenías abierto a tu red sigue abierto (y con contraseña), y si estaba solo en esa máquina, sigue así.
+Al terminar, `update.sh` te lo **dice con lo que Docker tiene configurado de verdad**: la dirección que sirve
+desde el móvil, o por qué no responde desde fuera y cómo abrirlo. Si no puede comprobarlo, lo dice en lugar
+de suponerlo.
 
 Antes de tocar nada, el script deja **dos cosas emparejadas**: una referencia de
 git (`refs/zascarr/update/<fecha>`) apuntando al commit anterior, y el dump
