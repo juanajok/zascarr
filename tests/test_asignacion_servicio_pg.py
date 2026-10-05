@@ -79,7 +79,7 @@ class Mundo:
             issues = (await s.execute(select(Issue).where(Issue.series_id == self.serie_id))).scalars().all()
             alias = (await s.execute(select(LocalAlias).where(LocalAlias.series_id == self.serie_id))).scalars().all()
         cbz = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.cbz"))
-        partes = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.part"))
+        partes = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.part*"))   # incluye `.part.<época>`
         return type("E", (), dict(
             ruta=f.file_path, issue_id=f.issue_id, ops=[o[0] for o in ops], issues=len(issues), alias=len(alias),
             origen_existe=self.origen.exists(), destinos=[c for c in cbz if not c.startswith("_Unsorted")],
@@ -923,3 +923,116 @@ class TestValladoDeEpocaEnLaBd:
         assert r.estado == "propiedad_perdida"
         assert e.issue_id is None and e.issues == 0 and e.alias == 0 and e.ruta == str(mundo.origen)
         assert e.ops == ["preparada"]
+
+
+class TestFalloDeEscrituraAlPublicar:
+    """Un `OSError` al publicar no es siempre «no se publicó nada». Se distinguen tres casos:
+
+    1. anterior a publicar (solo lectura, permisos, espacio): se retira la copia propia y se cancela;
+    2. publicación REALIZADA y fallo posterior (`link` creó el destino y no se pudo retirar el temporal):
+       se sigue hacia confirmar y el residuo se retira con el destino ya acreditado;
+    3. resultado INCIERTO (el destino aparece tras el error): no se cancela ni se libera la reserva."""
+
+    @staticmethod
+    def _temporales_bloqueados(monkeypatch):
+        """`Path.unlink` falla para los nombres temporales (`*.part*`), como un directorio sin permiso de borrado."""
+        unlink = Path.unlink
+
+        def unlink_selectivo(self, *a, **k):
+            if ".part" in self.name and self.exists():
+                raise PermissionError(13, "sin permiso para borrar")
+            return unlink(self, *a, **k)
+        monkeypatch.setattr(Path, "unlink", unlink_selectivo)
+        return lambda: monkeypatch.setattr(Path, "unlink", unlink)
+
+    @pytest.mark.asyncio
+    async def test_oserror_antes_de_publicar_cancela_limpia_y_se_puede_reintentar(self, mundo, monkeypatch):
+        import zascarr.services.asignacion as modulo
+        publicar = modulo._publicar
+
+        def publicar_roto(temporal, destino):
+            raise OSError(30, "Read-only file system")
+        monkeypatch.setattr(modulo, "_publicar", publicar_roto)
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "error" and "Read-only" not in r.motivo
+        assert e.ops == ["cancelada"] and e.origen_existe and e.issue_id is None
+        assert e.partes == [] and e.destinos == []                 # ni copia a medias ni destino
+        monkeypatch.setattr(modulo, "_publicar", publicar)          # el disco vuelve a estar bien
+        r2 = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e2 = await mundo.estado()
+        assert r2.estado == "asignado" and e2.ops == ["cancelada", "limpiada"] and len(e2.destinos) == 1
+
+    @pytest.mark.asyncio
+    async def test_publicado_con_link_y_fallo_al_retirar_el_temporal_no_cancela_y_conserva_el_origen(self, mundo, monkeypatch):
+        """Regresión del mecanismo: `link` crea el destino y `unlink(temporal)` falla. Cancelar aquí dejaría un
+        destino publicado SIN operación viva que lo reconcilie."""
+        import errno
+
+        import zascarr.services.asignacion as modulo
+
+        def sin_renameat2(origen, destino):
+            raise OSError(errno.EINVAL, "no soportado")            # fuerza el camino link → unlink
+        monkeypatch.setattr(modulo, "_renameat2_noreplace", sin_renameat2)
+        restaurar = self._temporales_bloqueados(monkeypatch)
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        # Destino publicado y CONFIRMADO en la BD; el origen se conserva mientras quede un residuo; la operación sigue viva.
+        assert r.estado == "asignado_limpieza_pendiente"
+        assert e.ops == ["confirmada"] and e.origen_existe and e.issue_id is not None
+        assert len(e.destinos) == 1 and len(e.partes) == 1          # el residuo está identificado, no perdido
+        assert Path(e.ruta).read_bytes() == mundo.origen.read_bytes()
+        # La reconciliación (arranque o reintento) lo cierra cuando ya se puede borrar.
+        restaurar()
+        rs = await mundo.servicio().reconciliar()
+        e2 = await mundo.estado()
+        assert [x.estado for x in rs] == ["asignado"]
+        assert e2.ops == ["limpiada"] and e2.partes == [] and not e2.origen_existe and len(e2.destinos) == 1
+
+    @pytest.mark.asyncio
+    async def test_fallo_al_retirar_el_temporal_en_el_manejo_del_error_deja_la_operacion_viva(self, mundo, monkeypatch):
+        """Nada publicado, y retirar la copia propia también falla: no se cancela (se perdería la pista del
+        temporal) y el resultado es explícito. Reintentar retira el residuo y completa."""
+        import zascarr.services.asignacion as modulo
+        publicar = modulo._publicar
+
+        def publicar_roto(temporal, destino):
+            raise OSError(28, "No space left on device")
+        monkeypatch.setattr(modulo, "_publicar", publicar_roto)
+        restaurar = self._temporales_bloqueados(monkeypatch)
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "error" and "temporal" in r.motivo
+        assert e.ops == ["preparada"] and e.origen_existe and e.destinos == [] and len(e.partes) == 1
+        # Reintentar con el temporal anterior TODAVÍA imposible de retirar: resultado explícito, no excepción,
+        # y la operación sigue viva.
+        r_mid = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e_mid = await mundo.estado()
+        assert r_mid.estado == "error" and "temporal anterior" in r_mid.motivo
+        assert e_mid.ops == ["preparada"] and e_mid.origen_existe and e_mid.destinos == []
+        restaurar()
+        monkeypatch.setattr(modulo, "_publicar", publicar)
+        r2 = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")   # continúa LA MISMA operación
+        e2 = await mundo.estado()
+        assert r2.estado == "asignado" and e2.ops == ["limpiada"] and e2.partes == [] and len(e2.destinos) == 1
+
+    @pytest.mark.asyncio
+    async def test_resultado_incierto_con_el_destino_presente_no_cancela_ni_borra(self, mundo, monkeypatch):
+        """Un montaje de red que publica y falla al responder: el destino aparece tras el error."""
+        import os
+
+        import zascarr.services.asignacion as modulo
+
+        def publica_y_falla(temporal, destino):
+            os.link(temporal, destino)
+            raise OSError(5, "Input/output error")
+        monkeypatch.setattr(modulo, "_publicar", publica_y_falla)
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "pendiente_de_comprobar"
+        assert e.ops == ["preparada"] and e.origen_existe and len(e.destinos) == 1 and len(e.partes) == 1
+        monkeypatch.undo()
+        rs = await mundo.servicio().reconciliar()                    # comprueba el destino por contenido y sigue
+        e2 = await mundo.estado()
+        assert [x.estado for x in rs] == ["asignado"]
+        assert e2.ops == ["limpiada"] and e2.partes == [] and not e2.origen_existe and len(e2.destinos) == 1
