@@ -12,9 +12,10 @@
   <span class="audit-why">En una colección grande esto puede tardar un rato: hay que leer los archivos que se parecen.</span>
 </form>
 
-<div id="resultado-adopcion"></div>
-
 <div id="informe">
   {% include "_auditoria_informe.html" %}
 </div>
+
+{#- Registro de la biblioteca: se pide al cargar (el recorrido del disco no retrasa la página). -#}
+<div id="registro" hx-get="/ui/auditoria/registro" hx-trigger="load" hx-swap="outerHTML"></div>
 {% endblock %}
