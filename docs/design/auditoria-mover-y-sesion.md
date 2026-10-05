@@ -119,3 +119,10 @@ identidad de la operación y su destino efectivo sobrevivan, y eso *es* persiste
 cuatro caminos (servicio, `commit`, respuesta, muerte del proceso); cruce de discos; solapamiento; y las
 dos reconciliaciones existentes. Se saltan sin `TEST_DATABASE_URL`; las ejecuta el job de Postgres de la CI.
 **Cuando el lote cambie el comportamiento, estas pruebas deben cambiar con él**, no ser silenciadas.
+
+> **Actualización (conexión del endpoint al servicio recuperable, ADR 0006).** Tal como se anunció, las pruebas
+> de `tests/test_asignacion_fronteras_pg.py` se cambiaron a propósito: conservan las mismas fronteras y nombres
+> («antes …») y ahora afirman el comportamiento nuevo —el original nunca se pierde, el éxito que ve el cliente ya
+> está confirmado, el doble clic produce una sola asignación—. El texto de arriba describe el estado **anterior**
+> y se conserva como registro. La frontera «muerte del proceso» la cubren los subprocesos de
+> `tests/test_asignacion_servicio_pg.py`.

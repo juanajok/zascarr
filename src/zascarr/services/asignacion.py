@@ -59,7 +59,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.importer import build_library_path
-from zascarr.services.review import ReviewService
+from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -83,6 +83,7 @@ class EstadoResultado(enum.StrEnum):
     PENDIENTE_DE_COMPROBAR = "pendiente_de_comprobar"             # ni siquiera se pudo preguntar a la BD
     DESTINO_OCUPADO = "destino_ocupado"                           # CANCELA la operación y libera la reserva
     COLISION_EDICION = "colision_edicion"
+    DATOS_NO_VALIDOS = "datos_no_validos"                         # p. ej. número vacío: la petición está mal
     NO_ENCONTRADO = "no_encontrado"
     ERROR = "error"
 
@@ -287,7 +288,7 @@ class AsignacionService:
 
     async def _preparar(self, file_id, series_id, issue_number, aprender_alias: bool = True) -> UUID | Resultado:
         if not issue_number:
-            return Resultado("error", "El número de issue no puede estar vacío")
+            return Resultado(EstadoResultado.DATOS_NO_VALIDOS, "El número de issue no puede estar vacío")
         async with self._fabrica() as s:
             file = await s.get(File, file_id)
             serie = await s.get(Series, series_id)
@@ -304,7 +305,8 @@ class AsignacionService:
             issue = (await s.execute(select(Issue).where(
                 Issue.series_id == serie.id, Issue.issue_number == issue_number))).scalar_one_or_none()
             if issue is not None and (issue.format or IssueFormat.SINGLE_ISSUE) != formato:
-                return Resultado("colision_edicion", "Ese número ya existe como otra edición")
+                await self._marcar_colision(file_id)
+                return Resultado(EstadoResultado.COLISION_EDICION, "Ese número ya existe como otra edición")
             if issue is not None and file.issue_id == issue.id:
                 return Resultado("ya_asignado", "Ya estaba asignado", file.file_path)
 
@@ -383,6 +385,19 @@ class AsignacionService:
             await s.commit()
         return fila[0] if fila else None
 
+    async def _marcar_colision(self, file_id: UUID) -> None:
+        """B15: deja el motivo en el archivo para que siga visible al recargar «Por revisar».
+
+        Fusión ATÓMICA (`||` de JSONB) y en su propia transacción corta: varios escritores reescriben
+        `File.metadata_` ENTERO a partir de una lectura anterior, y una escritura así borraría lo que
+        hubiera añadido otro entretanto."""
+        async with self._fabrica() as s:
+            await s.execute(text(
+                "UPDATE files SET metadata = coalesce(metadata, '{}'::jsonb) || "
+                "jsonb_build_object('review_motivo', CAST(:m AS text)) WHERE id = :f"),
+                {"m": MOTIVO_COLISION_EDICION, "f": file_id})
+            await s.commit()
+
     async def _op(self, op_id: UUID):
         async with self._fabrica() as s:
             return (await s.execute(text("SELECT * FROM asignacion_operaciones WHERE id = :i"),
@@ -431,6 +446,14 @@ class AsignacionService:
                     mi_temporal.unlink(missing_ok=True)
                     await self._cerrar(op_id, "cancelada", prop.epoca)
                     return Resultado("error", str(exc), op["destino"])
+                except OSError as exc:
+                    # Sin permiso, disco de solo lectura, sin espacio…: NO se publicó nada y el origen sigue
+                    # intacto. Se retira la copia propia y se cancela, para que reintentar sea limpio (la
+                    # operación viva no bloquea al coleccionista) y el fallo llegue como resultado, no como excepción.
+                    mi_temporal.unlink(missing_ok=True)
+                    await self._cerrar(op_id, "cancelada", prop.epoca)
+                    logger.warning("asignacion.publicar_fallo", operacion=str(op_id), error=type(exc).__name__)
+                    return Resultado("error", "No se pudo escribir en la carpeta de destino", op["destino"])
             else:
                 # Un intento anterior ya publicó. Se comprueba antes de aprovecharlo.
                 ok = destino.stat().st_size == op["size_bytes"] and await asyncio.to_thread(_sha256, destino) == op["sha256"]
@@ -475,6 +498,7 @@ class AsignacionService:
                     Issue.series_id == serie.id, Issue.issue_number == op["issue_number"]))).scalar_one_or_none()
                 if issue is not None and (issue.format or IssueFormat.SINGLE_ISSUE).value != op["formato"]:
                     await s.rollback()
+                    await self._marcar_colision(op["file_id"])
                     return await self._abandonar(op, prop, Resultado(
                         EstadoResultado.COLISION_EDICION, "Ese número apareció como otra edición mientras se copiaba"))
                 if issue is None:
