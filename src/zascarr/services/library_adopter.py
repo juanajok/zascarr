@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from uuid import UUID
 
 import structlog
 from sqlalchemy import func, select
@@ -105,8 +106,10 @@ class AdoptionReport:
     reverted: int = 0
     #: mirados de un lote cuyo commit falló y NO se pudo comprobar si se guardó: pendiente de contrastar
     unknown: int = 0
-    #: rutas que este lote ha dejado en `files`, para contrastarlas con otra sesión si el commit falla
-    added_paths: list[str] = field(default_factory=list)
+    #: filas que este lote ha escrito en `files`, para acreditar con OTRA sesión si el commit se aplicó:
+    #: (id de la fila, ruta nueva, ruta previa). Fila CREADA → ruta previa `None` (su id solo existe si el commit
+    #: se aplicó). Fila REENLAZADA (ya existía) → su ruta previa: la prueba de que se aplicó es el cambio esperado.
+    added_rows: list[tuple[UUID, str, str | None]] = field(default_factory=list)
 
     def absorb(self, lote: AdoptionReport) -> None:
         """Pasa a este informe lo de un lote YA CONFIRMADO."""
@@ -300,26 +303,30 @@ class LibraryAdopter:
                                      processed=report.processed)
         provisional.absorb(report)
         provisional.absorb(en_lote)
-        await self._persist_run(provisional)
+        run_id = await self._persist_run(provisional)
         # El marcador dice «el registro terminó». Con errores NO terminó: no se pone, y lo que
         # quedó sin registrar sigue a la vista (`inventario`) y se puede continuar repitiendo.
         if not provisional.errors:
             await RuntimeSettingsService(self._db).set_flag(_MARCADOR_HECHO, True)
-        await self._confirmar_lote(en_lote, report, report.processed - confirmados, progreso)
+        await self._confirmar_lote(en_lote, report, report.processed - confirmados, progreso, run_id)
         report.pending_count = 0
         return report
 
     async def _confirmar_lote(
         self, en_lote: AdoptionReport, report: AdoptionReport, mirados: int,
-        progreso: Callable[[AdoptionReport], None] | None,
+        progreso: Callable[[AdoptionReport], None] | None, run_id: UUID | None = None,
     ) -> None:
         """Confirma el lote y SOLO ENTONCES lo cuenta como añadido.
 
         Un `commit` que falla puede haber guardado el lote o no (p. ej. la conexión se cae tras enviarlo): no se
-        asume ni una cosa ni la otra. Se contrasta con OTRA sesión qué rutas quedaron:
-          · todas → se guardó (la respuesta se perdió): se cuenta y se sigue;
-          · ninguna → se revirtió: el lote queda como «no guardado» y se propaga el fallo;
+        asume ni una cosa ni la otra. Se acredita con OTRA sesión qué escribió ESTA transacción (ver
+        `_contrastar`):
+          · todo → se guardó (la respuesta se perdió): se cuenta y se sigue;
+          · nada → se revirtió: el lote queda como «no guardado» y se propaga el fallo;
           · otra cosa, o no se puede preguntar → «por comprobar»: tampoco se cuenta, y se propaga el fallo.
+
+        `run_id` es el informe (`ImportRun`) del cierre: el último commit guarda también el informe y el marcador,
+        no solo filas de archivos, y debe poder acreditarse aunque el último lote no tenga ninguna fila.
         """
         try:
             await self._db.commit()
@@ -327,7 +334,7 @@ class LibraryAdopter:
             logger.warning("library_adopter.commit_fallido", error=type(exc).__name__)
             with contextlib.suppress(Exception):
                 await self._db.rollback()
-            veredicto = await self._contrastar(en_lote.added_paths)
+            veredicto = await self._contrastar(en_lote.added_rows, run_id)
             if veredicto == "confirmado":
                 report.absorb(en_lote)
                 return
@@ -341,19 +348,58 @@ class LibraryAdopter:
             raise
         report.absorb(en_lote)
 
-    async def _contrastar(self, rutas: list[str]) -> str:
-        """Con OTRA sesión: ¿están en `files` las rutas que el lote dejó? confirmado / revertido / desconocido."""
-        if not rutas:
-            return "revertido"          # el lote no añadía filas: no hay nada que se pudiera haber guardado
+    async def _contrastar(self, filas: list[tuple[UUID, str, str | None]], run_id: UUID | None = None) -> str:
+        """Con OTRA sesión: ¿se aplicó la transacción de ESTE lote? confirmado / revertido / desconocido.
+
+        Se acredita por IDENTIDAD, no por presencia de rutas: que una ruta conste no prueba que la escribiera esta
+        transacción (otro escritor pudo registrarla con otra fila tras el rollback). Se mira cada cosa que el commit
+        debía escribir:
+          · fila CREADA: existe SU id (nadie más puede tener un id generado en esta transacción) con SU ruta;
+            si el id no existe, no se aplicó;
+          · fila REENLAZADA: la fila ya existía; se aplicó si tiene el cambio esperado (ruta nueva, no desaparecida)
+            y no se aplicó si sigue en su estado previo. (Si otro escritor hiciera EXACTAMENTE el mismo reenlace no
+            se distinguiría: límite conocido, escrito en el ADR/BACKLOG.);
+          · el informe del cierre (`ImportRun`), si lo hay: existe su id. Se guarda en la misma transacción que el
+            marcador, así que acreditarlo acredita también el marcador.
+        Cualquier otra combinación (una parte sí y otra no, una fila cambiada por otro) es «desconocido»: ni se
+        cuenta como añadida ni como revertida. Sin nada que acreditar no hay nada que perder.
+        """
+        if not filas and run_id is None:
+            return "confirmado"
         try:
             async with AsyncSession(self._db.bind, expire_on_commit=False) as otra:
-                cuantas = (await otra.execute(
-                    select(func.count(File.id)).where(File.file_path.in_(rutas)))).scalar() or 0
+                ids = [f[0] for f in filas]
+                actuales = {}
+                if ids:
+                    for fid, ruta, falta in (await otra.execute(
+                            select(File.id, File.file_path, File.is_missing).where(File.id.in_(ids)))).all():
+                        actuales[fid] = (ruta, falta)
+                informe = None
+                if run_id is not None:
+                    informe = (await otra.execute(select(ImportRun.id).where(ImportRun.id == run_id))).first()
         except Exception:  # noqa: BLE001 — ni siquiera se puede preguntar
             return "desconocido"
-        if cuantas == len(rutas):
+        aplicadas = no_aplicadas = 0
+        for fid, ruta_nueva, ruta_previa in filas:
+            estado = actuales.get(fid)
+            if ruta_previa is None:                               # creada por este lote
+                if estado is None:
+                    no_aplicadas += 1
+                elif estado == (ruta_nueva, False):
+                    aplicadas += 1
+            elif estado == (ruta_nueva, False):                   # reenlazada: cambio esperado
+                aplicadas += 1
+            elif estado is not None and estado[0] == ruta_previa and estado[1]:   # sigue como estaba
+                no_aplicadas += 1
+        if run_id is not None:
+            if informe is not None:
+                aplicadas += 1
+            else:
+                no_aplicadas += 1
+        esperadas = len(filas) + (1 if run_id is not None else 0)
+        if aplicadas == esperadas:
             return "confirmado"
-        return "revertido" if cuantas == 0 else "desconocido"
+        return "revertido" if no_aplicadas == esperadas else "desconocido"
 
     async def _adopt_file(
         self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
@@ -364,9 +410,10 @@ class LibraryAdopter:
             # la fila desaparecida a ESTA ruta en vez de descartar. Si se
             # descartara, la fila seguiría `is_missing` y un fichero que el
             # coleccionista reorganizó quedaría sin registrar.
+            ruta_previa = outcome.recuperar.file_path
             await _reenlazar_fila(outcome.recuperar, outcome.tr, path)
             await self._db.flush()
-            report.added_paths.append(str(path))
+            report.added_rows.append((outcome.recuperar.id, str(path), ruta_previa))
             report.registered.append(f"{path.name} — reenlazado (recuperado)")
             logger.info("library_adopter.reenlazado", path=str(path))
             return
@@ -406,7 +453,7 @@ class LibraryAdopter:
         )
         self._db.add(file_rec)
         await self._db.flush()
-        report.added_paths.append(str(path))
+        report.added_rows.append((file_rec.id, str(path), None))
 
         if is_unsorted:
             motivo = "; ".join(result.notes) or "sin match fiable"
@@ -415,7 +462,7 @@ class LibraryAdopter:
             report.registered.append(f"{path.name} — serie ya identificada")
         logger.info("library_adopter.registered", path=str(path), status=result.status)
 
-    async def _persist_run(self, report: AdoptionReport) -> None:
+    async def _persist_run(self, report: AdoptionReport) -> UUID:
         run = ImportRun(
             started_at=report.started_at,
             finished_at=report.finished_at,
@@ -436,3 +483,4 @@ class LibraryAdopter:
         )
         self._db.add(run)
         await self._db.flush()
+        return run.id
