@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, File, FileFormat, Series
+from zascarr.web.pendientes import RECONTAR_MENU
 
 
 class FakeScalarResult:
@@ -159,13 +160,12 @@ class TestIgnorar:
         with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
             r = client.post(f"/ui/pendientes/{file.id}/ignorar")
         assert r.status_code == 200
-        assert r.text == ""
+        assert r.text == RECONTAR_MENU          # la tarjeta desaparece; el menú recuenta
         assert file.review_dismissed is True
-        assert r.headers["HX-Trigger"] == "zascarr:pendientes"      # el menú recuenta los pendientes
 
     def test_ignorar_confirma_antes_de_responder(self, tmp_path):
-        """Regresión del mecanismo: el `commit` de `get_db` llega DESPUÉS de responder, y el menú pide su
-        contador en cuanto llega la respuesta: contaría todavía el archivo ignorado."""
+        """Regresión del mecanismo: el `commit` de `get_db` llega DESPUÉS de responder, y el menú pide
+        su contador en cuanto llega la respuesta: contaría todavía el archivo ignorado."""
         file = File(id=uuid4(), file_path=str(tmp_path / "x.cbz"), file_name="x.cbz",
                     file_format=FileFormat.CBZ, review_dismissed=False)
         session = FakeSession(get_map={(File, file.id): file})
