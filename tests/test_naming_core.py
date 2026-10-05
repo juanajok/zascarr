@@ -913,6 +913,29 @@ class TestRealWorldFilenames:
         assert result.series == expected_series
         assert result.issue_number == expected_num
 
+    @pytest.mark.parametrize("filename,expected_series,expected_num", [
+        # El «no» final del título NO es un marcador «nº»: truncaba la serie en «Infer» y «La Cosa del Panta».
+        ("Inferno 01 [SC][por Auror y Tildoras][CRG].cbr", "Inferno", "1"),
+        ("La Cosa del Pantano 06 [por The RockJR][CRG].cbr", "La Cosa del Pantano", "6"),
+        ("Vino 12.cbz", "Vino", "12"),
+        # …y los marcadores de verdad, tras un espacio, un signo o el principio, siguen funcionando.
+        ("Patrulla-X nº 03.cbr", "Patrulla X", "3"),
+        ("Patrulla-X, nº 03 (122).cbr", "Patrulla X", "3"),
+        ("Superman No. 7.cbz", "Superman", "7"),
+        ("Batman Issue 12.cbz", "Batman", "12"),
+        ("WildCATS vol1 n║05.cbr", "WildCATS", "5"),
+    ])
+    def test_el_marcador_de_numero_no_se_pega_a_una_letra_del_titulo(
+        self, filename, expected_series, expected_num
+    ):
+        """Regresión del mecanismo: el patrón `No|nº|n║…` sin límite por la izquierda partía el título por la
+        «no» de «Inferno», «Pantano»… (14 de 1.542 nombres de la biblioteca real)."""
+        from zascarr.utils.naming import parse_comic_filename
+
+        result = parse_comic_filename(filename)
+        assert result.series == expected_series
+        assert result.issue_number == expected_num
+
     def test_numero_con_sufijo_de_letra(self):
         """Las entregas partidas de Zinco ("123a", "123b") perdían el
         número entero porque los patrones solo aceptaban cifras."""
