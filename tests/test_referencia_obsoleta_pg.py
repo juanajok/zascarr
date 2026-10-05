@@ -112,6 +112,53 @@ class TestReferenciaObsoletaAlRegistrar:
         assert fila_de_la_copia is None                                        # la copia no se registra dos veces
         assert await mundo.n_files() == antes + 6
 
+    async def test_sin_coincidencia_de_contenido_no_se_recupera_por_parecido_de_nombre(self, mundo):
+        """Criterio: la identidad se acredita por CONTENIDO. Una fila obsoleta con casi el mismo nombre que un
+        archivo de la biblioteca pero distinto hash NO se reenlaza: el archivo entra como nuevo y la fila queda como estaba."""
+        real = _real(mundo)
+        nombre_parecido = real.with_name("Obra rara 04 (antes de moverlo).cbz")
+        async with mundo.fabrica() as s:
+            fila = File(id=uuid4(), file_path=str(nombre_parecido), file_name=nombre_parecido.name,
+                        file_format=FileFormat.CBZ, sha256_hash=hashlib.sha256(b"otro contenido").hexdigest(),
+                        is_missing=False, metadata_={"ajuste_manual": "no-tocar"})
+            s.add(fila)
+            await s.commit()
+        antes = await mundo.n_files()
+        async with mundo.fabrica() as s:
+            informe = await LibraryAdopter(s).adopt()
+        assert not any("reenlazado" in r for r in informe.registered)
+        async with mundo.fabrica() as s:
+            intacta = await s.get(File, fila.id)
+            nueva = (await s.execute(select(File).where(File.file_path == str(real)))).scalar_one()
+        assert intacta.file_path == str(nombre_parecido) and intacta.is_missing is False
+        assert intacta.metadata_ == {"ajuste_manual": "no-tocar"}
+        assert nueva.id != fila.id                                              # el archivo real es una fila nueva
+        assert await mundo.n_files() == antes + 7                               # 8 nuevos, 1 repetido (la copia idéntica)
+
+    async def test_varias_filas_obsoletas_con_el_mismo_hash_se_recupera_la_mas_antigua_y_la_otra_queda_como_estaba(
+            self, mundo):
+        """Con varias candidatas obsoletas no se decide por «la primera que salga»: el criterio es el de siempre y
+        explícito —la más antigua (`imported_at`)— y la otra no se toca."""
+        from datetime import UTC, datetime
+        real = _real(mundo)
+        hash_real = hashlib.sha256(mundo.contenido[real]).hexdigest()
+        async with mundo.fabrica() as s:
+            nueva_fila = File(id=uuid4(), file_path=str(real.with_name("copia obsoleta B.cbz")),
+                              file_name="copia obsoleta B.cbz", file_format=FileFormat.CBZ, sha256_hash=hash_real,
+                              is_missing=False, imported_at=datetime(2026, 6, 1, tzinfo=UTC))
+            antigua = File(id=uuid4(), file_path=str(real.with_name("copia obsoleta A.cbz")),
+                           file_name="copia obsoleta A.cbz", file_format=FileFormat.CBZ, sha256_hash=hash_real,
+                           is_missing=False, imported_at=datetime(2026, 1, 1, tzinfo=UTC))
+            s.add_all([nueva_fila, antigua])        # se insertan en orden inverso a propósito
+            await s.commit()
+        async with mundo.fabrica() as s:
+            await LibraryAdopter(s).adopt()
+        async with mundo.fabrica() as s:
+            a = await s.get(File, antigua.id)
+            b = await s.get(File, nueva_fila.id)
+        assert a.file_path == str(real) and a.is_missing is False          # la más antigua, recuperada
+        assert b.file_path == str(real.with_name("copia obsoleta B.cbz"))  # la otra, sin tocar
+
     async def test_repetir_el_registro_tras_recuperarla_no_vuelve_a_tocar_nada(self, mundo):
         await _fila_obsoleta(mundo)
         async with mundo.fabrica() as s:
