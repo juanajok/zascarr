@@ -363,9 +363,27 @@ El prototipo pasó a `src/zascarr/services/asignacion.py` (`AsignacionService`).
   `flush` dentro del manejador (el `commit` de `get_db` llega después de responder) y `rollback`.
 - **Sin registrar rutas en los logs.**
 
-**No está conectado:** `POST /ui/pendientes/{id}/asignar` sigue usando `ReviewService.assign_to_series`. Conectarlo
-cambia los contratos de B13/B15 (sus pruebas usan una sesión simulada) y es el paso siguiente; el 409 y la
-reconciliación ya están antes de que exista ninguna operación viva en producción.
+**Conectado (PR aparte, tras el servicio):** `POST /ui/pendientes/{id}/asignar` usa `AsignacionService`; el
+`commit` ya no es el de `get_db`. Los resultados recuperables se muestran sin esconder el error: «asignado con
+limpieza pendiente» y «reparación pendiente» son 200 con aviso ámbar; «pendiente» y «pendiente de comprobar» son
+503 con la tarjeta delante; la colisión de ediciones (B15) es 409 y **su motivo se guarda** en una transacción
+corta propia (fusión `||` de JSONB), sin depender del `commit` de `get_db`. El contrato visible de B13 (el alias se
+aprende siempre) y de B15 se mantiene; cambia solo que, con htmx, un 4xx/5xx devuelve la **tarjeta** y no un JSON
+(htmx 4 intercambia todo salvo 204/304). `ReviewService.assign_to_series` y sus pruebas siguen, sin ruta.
+Defecto hallado al conectar (y corregido en la revisión de la PR #79): un `OSError` al publicar se escapaba de
+`asignar`, y la primera corrección presuponía «no se publicó nada», que no vale para cualquier fallo. Ahora se
+distinguen **tres casos**: (1) *anterior a publicar* (solo lectura, permisos, espacio): se retira la copia propia y
+**solo entonces** se cancela; si retirarla falla, la operación sigue viva con un resultado explícito; (2)
+*publicación realizada con fallo posterior* (`link` creó el destino y falló `unlink` del temporal;
+`PublicadoConResiduoError`): el destino es íntegro, el flujo sigue hacia confirmar, el origen se conserva mientras
+quede un residuo y la limpieza lo retira con el destino ya acreditado (la ruta y la época están en la operación);
+(3) *resultado incierto* (el destino aparece tras el error): no se cancela ni se libera la reserva, queda
+`pendiente_de_comprobar` y la reconciliación lo resuelve comparando el contenido. El endpoint traduce cualquier
+excepción no controlada a un aviso **neutral** («No se pudo comprobar que la operación terminara…»): no sabe si el
+servicio llegó a confirmar o a retirar el original, así que no afirma que «no se ha tocado» nada. Los avisos
+nombran el mecanismo real: **reconciliación al arrancar y continuación al volver a asignar**; no hay disparador
+periódico (no se promete «lo reintentará solo»). El 409 y la reconciliación ya estaban antes de que
+existiera ninguna operación viva.
 
 **Limitación de la prueba de esquema (anotada, no bloqueante):** la comparación de predicados entre el modelo y
 la tabla extrae los **literales** de estado; detecta cambiar qué estados incluye, pero no distinguiría `IN` de

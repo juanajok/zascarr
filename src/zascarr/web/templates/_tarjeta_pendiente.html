@@ -1,0 +1,43 @@
+{#- La tarjeta de UN archivo por revisar. La usa la lista y también el fallo de «asignar» (HTMX):
+    el formulario sustituye la tarjeta entera, así que un error DEBE devolver la tarjeta con su aviso,
+    no un cuerpo JSON (que se pintaba en crudo). `aviso` = {tipo, texto} opcional. -#}
+  <div class="pending-card" id="card-{{ c.file.id }}">
+    <img class="cover" src="/ui/pendientes/{{ c.file.id }}/portada" alt=""
+         onerror="this.classList.add('cover-missing')">
+    <div class="pending-body">
+      {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto) }}{% endif %}
+      <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
+      <div class="detected">Detectado: {{ c.detected }}</div>
+      {% if c.motivo %}
+      <div class="detected motivo">{{ c.motivo }}</div>
+      {% endif %}
+      {% if c.suggestion %}
+      <div class="suggestion">
+        <span class="suggestion-label">¿Es esta serie?</span>
+        <span class="series-name">{{ c.suggestion.title }}{% if c.suggestion.start_year %} ({{ c.suggestion.start_year }}){% endif %}</span>
+        <span class="suggestion-score">{{ c.suggestion.score_pct }}% de coincidencia</span>
+        <form class="assign-form"
+              hx-post="/ui/pendientes/{{ c.file.id }}/asignar"
+              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
+          <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
+          <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
+                 value="{{ c.suggestion.issue_number }}">
+          <button type="submit" class="btn-sugerencia">Sí, es esta</button>
+        </form>
+      </div>
+      {% endif %}
+      <input type="search" class="series-search" placeholder="Buscar serie…"
+             name="q"
+             hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
+             hx-trigger="keyup changed delay:400ms"
+             hx-target="#resultados-{{ c.file.id }}"
+             hx-swap="innerHTML">
+      <div id="resultados-{{ c.file.id }}" class="series-results"></div>
+      <button type="button" class="btn-ignorar"
+              hx-post="/ui/pendientes/{{ c.file.id }}/ignorar"
+              hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML"
+              hx-confirm="¿Ignorar este archivo? No volverá a aparecer aquí.">
+        Ignorar
+      </button>
+    </div>
+  </div>
