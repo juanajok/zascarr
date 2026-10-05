@@ -120,25 +120,24 @@ class TestIndex:
         assert "está limpia" in r.text
 
 
-class TestBotonAdoptar:
+class TestRegistroEnLaPagina:
+    """El registro ya no se decide al pintar la página: se pide aparte (así el recorrido del disco
+    no la retrasa) y se ofrece AUNQUE haya catálogo previo. Los flujos reales están en
+    `tests/test_registro_biblioteca_pg.py` (Postgres y ficheros reales)."""
 
-    def test_no_aparece_si_no_hay_nada_que_adoptar(self):
-        # should_run() -> get_flag devuelve fila sin marcador, luego
-        # count(series) > 0 -> no corre.
-        session = FakeSession([
-            FakeExecResult(informe_falso()),
-            FakeExecResult(type("Fila", (), {"values": {}})()),
-            FakeExecResult(7),  # ya hay 7 series: catálogo no vacío
-        ])
-        with use_fake_session(session) as client:
+    def test_la_pagina_pide_el_registro_aparte_y_no_trae_el_boton_antiguo(self):
+        with use_fake_session(FakeSession([FakeExecResult(informe_falso())])) as client:
             r = client.get("/ui/auditoria")
+        assert 'hx-get="/ui/auditoria/registro"' in r.text and 'hx-trigger="load"' in r.text
         assert "Adoptar mi biblioteca" not in r.text
 
-    def test_adoptar_sobre_biblioteca_ya_adoptada_no_hace_nada(self):
-        session = FakeSession([
-            FakeExecResult(type("Fila", (), {"values": {"_library_adoption_done": True}})()),
-        ])
+    def test_adoptar_sobre_biblioteca_ya_registrada_no_lanza_nada(self):
+        from zascarr.services import registro_biblioteca
+        registro_biblioteca.reiniciar_para_pruebas()
+        marcada = type("Fila", (), {"values": {"_library_adoption_done": True}})()
+        session = FakeSession([FakeExecResult(marcada), FakeExecResult(marcada)])
         with use_fake_session(session) as client:
             r = client.post("/ui/auditoria/adoptar")
         assert r.status_code == 200
-        assert "ya estaba adoptada" in r.text
+        assert "ya está registrada" in r.text
+        assert not registro_biblioteca.estado_actual().en_marcha

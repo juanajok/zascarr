@@ -100,18 +100,4 @@
 <p class="audit-why">Hay más hallazgos de los que caben en esta pantalla; se muestran los primeros de cada tipo.</p>
 {% endif %}
 
-{% if adopcion_pendiente %}
-<section class="audit-block audit-adoptar">
-  <h2>Cuando lo tengas revisado</h2>
-  <p class="audit-why">Adoptar registra tus tebeos en el catálogo de ZascArr <strong>sin mover ni renombrar
-    ni un archivo</strong>: se quedan exactamente donde los tienes.</p>
-  <button type="button" class="btn-primary"
-          hx-post="/ui/auditoria/adoptar"
-          hx-target="#resultado-adopcion" hx-swap="innerHTML"
-          hx-disabled-elt="this">
-    Adoptar mi biblioteca
-  </button>
-</section>
-{% endif %}
-
 {% endif %}
