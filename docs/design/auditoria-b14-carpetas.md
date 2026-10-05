@@ -6,6 +6,11 @@
 > incorrecta» las puse **leyendo los nombres, sin catálogo**: son un juicio revisable, no una verdad medida. La
 > tabla carpeta por carpeta lleva nombres reales y **no se publica** (queda en el equipo de quien midió); aquí
 > solo hay recuentos y formas.
+>
+> **Versión de las cifras.** Se midieron con el parser **anterior a la PR #81** (que corrige el «no» final leído
+> como «nº»: `Inferno`, `La Cosa del Pantano`). Se conservan como **evidencia histórica de esa versión**: no se
+> han recalculado. El efecto de #81 sobre este corpus está acotado y medido aparte (14 de 1.542 nombres pasan a
+> ser correctos, ninguno empeora), y aquí solo afecta a la columna «el nombre también falla».
 
 ## Qué hace hoy el código (leído, no supuesto)
 
@@ -16,10 +21,13 @@
 - **El matcher solo enlaza con series que YA existen** en el catálogo (`find_series` / alias). La adopción
   (`LibraryAdopter`) registra los archivos en su sitio y los deja sin serie si no hay coincidencia; **no crea
   series**. Las series nacen de Descubrir (`DiscoveryService.get_or_create_series`), de una en una.
-  Consecuencia para el MVP: en una instalación nueva con cientos de CBZ, ninguna señal —ni el nombre ni la
-  carpeta— puede enlazar nada hasta que existan las series. **Esto conviene confirmarlo con el catálogo real
-  de la instalación de producción** (no lo he visto): si está vacío, el cuello de botella del MVP no es
-  «reconocer mejor» sino «crear las series de una vez».
+  Consecuencia para el MVP: sin series, ninguna señal —ni el nombre ni la carpeta— puede enlazar nada.
+  **Contexto ya comprobado en la instalación de producción** (consulta de solo lectura, 2026-10-05): tiene
+  **5 series**, **14 archivos registrados** (todos sin Issue), **1.542 visibles** en la carpeta y **ningún marcador
+  de adopción**. El catálogo, por tanto, **no estaba vacío**, y el bloqueo confirmado no era «reconocer mejor»
+  sino que con catálogo previo **el registro de la biblioteca no se ofrecía** (se corrige en la PR #83). La
+  cobertura de esas 5 series sobre los nombres de la biblioteca sigue siendo **limitada** (no cubren los 14
+  archivos ya registrados), así que crear series a partir de las carpetas sigue siendo un paso necesario después.
 - B15 ya separó «la carpeta que no es una serie» como caso conocido (autor, saga, crossover); sigue abierto.
 
 ## Método
@@ -64,12 +72,18 @@ descritas en el backlog: **autor** (`Carlos Giménez`, en dos carpetas casi geme
 ### La prueba que decide: ¿vale una regla por carpeta?
 
 Se probó la heurística más natural —«la carpeta es una serie si la mayoría de sus archivos coincide con ella»—
-contra los veredictos de arriba. **No basta**: con cualquier umbral entre 50 % y 80 %, 5 de las 16 carpetas
-«incorrectas» **pasan** (`Flash (1987)`: 89 % de acuerdo; `20th Century Boys`: 92 %; `Locas…`, `Marvel-Inhumanos`,
+contra los veredictos de arriba. **En este corpus no basta**: con los umbrales ensayados (50, 60, 70 y 80 %), 5 de
+las 16 carpetas «incorrectas» **pasan** (`Flash (1987)`: 89 % de acuerdo; `20th Century Boys`: 92 %; `Locas…`, `Marvel-Inhumanos`,
 `_Omnibus`: 100 %). Son ~38 archivos (2,5 % de la biblioteca) que una regla por carpeta enlazaría **en
 silencio a una serie equivocada**, aun con el mejor umbral; y a la vez rechazaría 11 de 95 carpetas buenas.
 Una carpeta puede ser una serie casi entera y esconder en su interior series ajenas; solo el nombre de cada
-archivo lo delata. Es el patrón de la medición del 2026-09-25: la heurística floja, automatizada, se convierte en dato persistente.
+archivo lo delata.
+
+**Alcance de la conclusión.** Se mide una biblioteca, una heurística (la mayoría de acuerdo) y cuatro umbrales: lo
+que queda demostrado es que **esa heurística y esos umbrales no garantizan ausencia de errores en este corpus**,
+no que ninguna regla por carpeta pueda funcionar jamás. La política conservadora que se propone abajo (la carpeta
+sugiere y agrupa, no asigna sola) se sostiene por el coste de equivocarse en silencio —el patrón de la medición del
+2026-09-25: una heurística floja, automatizada, se convierte en dato persistente—, no por una imposibilidad.
 
 ## Lo que la carpeta SÍ aporta
 
@@ -89,8 +103,9 @@ archivo lo delata. Es el patrón de la medición del 2026-09-25: la heurística 
    donde una persona confirma la serie de la carpeta y el número sale del nombre de cada archivo.
 3. **Una carpeta con archivos de títulos distintos no se propone como serie del grupo** (autor, contenedor): se
    mide por archivo, no por carpeta (ver la prueba). Se limpian volumen, año, editorial y «Saga de…» antes de comparar.
-4. Antes de construir nada: **confirmar si el catálogo de producción está vacío** (ver arriba). Si lo está, la
-   historia que desbloquea el MVP es «proponer crear las series de las carpetas», y B14 se subordina a ella.
+4. El catálogo de producción **no está vacío** (5 series) y ya se sabe cuál era el bloqueo (el registro con
+   catálogo previo, PR #83). Después del registro, las series que faltan hay que proponerlas/crearlas con
+   confirmación humana (p. ej. a partir de las carpetas); B14 se subordina a ese paso y a la política de arriba.
 
 ## Límites
 
