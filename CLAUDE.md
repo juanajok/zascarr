@@ -157,6 +157,7 @@ como marco permanente.
 - Patrón prevalente: `app.dependency_overrides[get_db]` + `FakeSession`
   queue-driven. Los ~220 tests ya montados son referencia
   (`tests/test_api_wishlist.py`, `tests/test_api_series.py`).
+- **La suite se ejecuta también con el directorio temporal en el MISMO dispositivo que `/`** (`pytest --basetemp=<ruta en el disco raíz>`): en una máquina donde `/tmp` es un `tmpfs`, el comportamiento que depende del dispositivo (p. ej. la guarda de rutas obsoletas de `services/importer.py`) pasa distinto que en la CI y un fallo real queda enmascarado (ocurrió con la PR #84).
 - **Ninguna dependencia nueva por "testing"**: los tests existentes ya
   cubren casos de UI-legal sin necesidad de BD (el hallazgo del wizard
   legal se cerró así).
