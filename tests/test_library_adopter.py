@@ -254,14 +254,18 @@ class TestAdopt:
         assert file_rec.metadata_["adopted"] is True
 
     @pytest.mark.asyncio
-    async def test_duplicado_no_se_registra_dos_veces(self, monkeypatch, tmp_path):
+    async def test_duplicado_no_se_registra_dos_veces(self, monkeypatch, tmp_path, tmp_path_factory):
         original = tmp_path / "Batman 001.cbz"
         make_cbz(original)
         monkeypatch.setattr(
             "zascarr.services.library_adopter.get_settings",
             lambda: MagicMock(library_path=tmp_path),
         )
-        existente = File(id=uuid4(), file_name="Batman #001.cbz", file_path="/otro/sitio.cbz")
+        # La copia ya registrada EXISTE (fuera de la biblioteca que se recorre): un duplicado real. Con una ruta
+        # ficticia sería una referencia obsoleta, que ahora se recupera en vez de descartarse.
+        copia = tmp_path_factory.mktemp("copia_registrada") / "sitio.cbz"
+        make_cbz(copia)
+        existente = File(id=uuid4(), file_name="Batman #001.cbz", file_path=str(copia))
         session = FakeSession([
             FakeExecResult(existente),  # dedup: SÍ hay duplicado
             FakeExecResult(MagicMock(values={})),  # set_flag -> _row()

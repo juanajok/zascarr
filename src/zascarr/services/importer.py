@@ -20,6 +20,7 @@ ciclo de las 03:00?" sin depender solo de los logs.
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -144,6 +145,45 @@ class _Outcome:
     edition_kind: str | None = None
 
 
+def _dispositivo(ruta: str | Path) -> int:
+    return os.stat(ruta).st_dev
+
+
+def _fichero_de_la_fila_existe(ruta_fila: str, nuevo: Path) -> bool:
+    """¿El archivo que una fila `is_missing = false` dice tener está de verdad donde dice?
+
+    Una fila puede quedar apuntando a una ruta que ya no existe sin que nadie la haya marcado como
+    desaparecida (p. ej. un archivo movido con la BD sin actualizar, o una carpeta reorganizada a
+    mano). Tratarla como «copia presente» descartaba como repetido el archivo real y dejaba la fila
+    apuntando a la nada.
+
+    Devuelve False SOLO cuando se puede afirmar que no existe: el archivo falta y el primer
+    ancestro que sí existe está en el MISMO sistema de ficheros que `nuevo` (el archivo que acaba
+    de leerse). Si el sitio viejo cuelga de otro disco, puede estar desmontado y NO se afirma que
+    falte; ante cualquier duda (error al consultar, ningún ancestro visible) se devuelve True: es
+    el comportamiento de siempre, el conservador."""
+    antiguo = Path(ruta_fila)
+    try:
+        os.stat(antiguo)
+        return True
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return True        # permisos, E/S…: no se sabe → comportamiento de siempre
+    for ancestro in antiguo.parents:
+        try:
+            os.stat(ancestro)
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return True
+        try:
+            return _dispositivo(ancestro) != _dispositivo(nuevo)
+        except OSError:
+            return True
+    return True
+
+
 async def _coincidencias_de_hash(db: AsyncSession, sha256: str) -> list[File]:
     """Filas cuyo contenido coincide con `sha256`, por `sha256_hash` **o**
     `original_sha256` (integridad). Orden determinista: las presentes
@@ -205,12 +245,18 @@ async def _triage_and_match(
                     "importer.dedupe_coincidencias_multiples",
                     hash=tr.sha256[:12], filas=len(coincidencias),
                 )
-            primero = coincidencias[0]
-            if not primero.is_missing:
-                return _Outcome(tr=tr, result=None, duplicate_of=primero.file_name)
-            # Todas las coincidencias están desaparecidas: recuperar la más
-            # antigua en vez de descartar o crear una fila nueva.
-            return _Outcome(tr=tr, result=None, recuperar=primero)
+            # Una copia cuenta como presente solo si su fichero EXISTE de verdad. Una fila
+            # `is_missing = false` cuya ruta ya no existe (referencia obsoleta) no es un duplicado:
+            # es la fila a recuperar.
+            for fila in coincidencias:
+                if fila.is_missing:
+                    continue
+                if await asyncio.to_thread(_fichero_de_la_fila_existe, fila.file_path, tr.path):
+                    return _Outcome(tr=tr, result=None, duplicate_of=fila.file_name)
+                logger.info("importer.referencia_obsoleta", fila=str(fila.id))  # sin ruta (§5.4)
+            # Ninguna coincidencia tiene su fichero (desaparecidas o con la ruta obsoleta):
+            # recuperar la más antigua en vez de descartar o crear una fila nueva.
+            return _Outcome(tr=tr, result=None, recuperar=coincidencias[0])
 
     matcher = SeriesMatcher(db)
 
