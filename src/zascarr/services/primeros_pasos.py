@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 Primeros pasos del Inicio (V4): una función PURA que convierte el estado observado en pasos.
 
@@ -105,7 +106,15 @@ def _plural(n: int, uno: str, varios: str) -> str:
 def _paso_biblioteca(e: EstadoInicio) -> Paso | None:
     informe = e.informe
     if e.adopcion is EstadoAdopcion.CATALOGO_PREVIO:
-        return None   # ya había catálogo sin adopción: no se ofrece (mismo criterio que should_run)
+        # Ya hay series pero la biblioteca no consta como registrada. Antes (V4) este caso NO se ofrecía,
+        # y el coleccionista que había dado de alta alguna serie antes de registrar sus archivos se
+        # quedaba sin poder incorporarlos. Ahora se ofrece como acción CONSCIENTE (nada arranca solo) y
+        # dice que el catálogo existente se conserva.
+        return Paso(ClavePaso.BIBLIOTECA, "Registra los tebeos de tu biblioteca",
+                    "Hay tebeos en la carpeta de tu biblioteca que ZascArr aún no tiene registrados. "
+                    "Antes de empezar verás cuántos son. Tus series y lo que ya hayas asignado se "
+                    "conservan, y registrarlos no mueve, renombra ni borra nada.",
+                    EstadoPaso.SIGUIENTE, True, "/ui/auditoria", "Ver y registrar →")
     if e.adopcion is EstadoAdopcion.HECHA:
         if e.archivos_registrados:
             n = e.archivos_registrados

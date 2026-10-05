@@ -107,9 +107,15 @@ class TestAdopcionYAuditoria:
             res = calcular_primeros_pasos(estado(adopcion=adopcion, informe=INFORME))
             assert paso(res, ClavePaso.BIBLIOTECA).estado is not EstadoPaso.HECHO
 
-    def test_catalogo_previo_no_ofrece_adoptar(self):
-        res = calcular_primeros_pasos(estado(adopcion=EstadoAdopcion.CATALOGO_PREVIO))
-        assert paso(res, ClavePaso.BIBLIOTECA) is None
+    def test_catalogo_previo_ofrece_registrar_como_accion_consciente(self):
+        """DECISIÓN CAMBIADA a propósito (2026-10-05). V4 no ofrecía registrar con catálogo previo;
+        así un coleccionista con alguna serie dada de alta no podía incorporar sus archivos.
+        Ahora se ofrece, dice que lo existente se conserva y no promete mover nada."""
+        p = paso(calcular_primeros_pasos(estado(adopcion=EstadoAdopcion.CATALOGO_PREVIO)),
+                 ClavePaso.BIBLIOTECA)
+        assert p is not None and p.estado is EstadoPaso.SIGUIENTE and p.enlace == "/ui/auditoria"
+        assert "se conservan" in p.detalle and "no mueve, renombra ni borra nada" in p.detalle
+        assert "Antes de empezar verás cuántos son" in p.detalle   # inventario previo
 
 
 class TestRevisar:
@@ -203,10 +209,10 @@ class TestCompleto:
             adopcion=EstadoAdopcion.HECHA, archivos_registrados=100, archivos_sin_clasificar=1))
         assert not res.completo
 
-    def test_catalogo_previo_cuenta_tres_pasos_no_cuatro(self):
+    def test_catalogo_previo_cuenta_los_mismos_pasos_que_cualquier_otro_caso(self):
         res = calcular_primeros_pasos(estado(
             adopcion=EstadoAdopcion.CATALOGO_PREVIO, archivos_registrados=10))
-        assert res.total == 3
+        assert res.total == 4 and not res.completo
 
 
 class TestPureza:

@@ -8,6 +8,7 @@ Importer, que sí mueve desde las carpetas de descargas.
 from __future__ import annotations
 
 import zipfile
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -61,6 +62,13 @@ class FakeSession:
         self._queue = list(queue)
         self.added: list = []
         self.flush = AsyncMock()
+        self.commit = AsyncMock()
+        self.commits_en_lote = 0
+
+    @asynccontextmanager
+    async def begin_nested(self):
+        """Savepoint por archivo (la adopción lo usa): aquí solo hace falta poder entrar y salir."""
+        yield
 
     async def execute(self, _statement):
         return self._queue.pop(0)
@@ -202,6 +210,14 @@ class TestEstado:
                 assert await adopter.should_run() is esperado
 
 
+@pytest.fixture(autouse=True)
+def _sin_rutas_registradas(monkeypatch):
+    """`adopt` empieza preguntando qué rutas ya están registradas; estas pruebas de sesión simulada
+    no la modelan (su cola es la de los archivos). Las pruebas con Postgres real SÍ la ejercitan."""
+    monkeypatch.setattr(LibraryAdopter, "_rutas_registradas", AsyncMock(return_value=set()))
+    monkeypatch.setattr(LibraryAdopter, "_ya_registrada", AsyncMock(return_value=False))
+
+
 class TestAdopt:
 
     @pytest.mark.asyncio
@@ -259,8 +275,9 @@ class TestAdopt:
 
     @pytest.mark.asyncio
     async def test_marca_hecho_incluso_si_todo_queda_sin_clasificar(self, monkeypatch, tmp_path):
-        """El marcador se pone pase lo que pase — el objetivo es no
-        repetir el escaneo completo, no garantizar que hubo matches."""
+        """Sin ERRORES, el marcador se pone aunque todo quede sin clasificar: «registrado» no es
+        «clasificado». (Cambio de 2026-10-05: el marcador ya NO se pone «pase lo que pase»; ver el
+        test de errores.)"""
         make_cbz(tmp_path / "Algo.cbz")
         monkeypatch.setattr(
             "zascarr.services.library_adopter.get_settings",
@@ -275,6 +292,25 @@ class TestAdopt:
         await adopter.adopt()
 
         assert fila_settings.values.get(_MARCADOR_HECHO) is True
+
+    @pytest.mark.asyncio
+    async def test_con_errores_el_marcador_no_se_pone(self, monkeypatch, tmp_path):
+        """Un marcador no puede esconder lo pendiente: si un archivo falla, el registro NO consta
+        como hecho y el estado sigue ofreciendo continuar."""
+        make_cbz(tmp_path / "Algo.cbz")
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter.get_settings",
+            lambda: MagicMock(library_path=tmp_path),
+        )
+        monkeypatch.setattr(
+            LibraryAdopter, "_adopt_file", AsyncMock(side_effect=RuntimeError("disco roto")))
+        fila_settings = MagicMock(values={})
+        session = FakeSession([FakeExecResult(fila_settings)])
+        report = await LibraryAdopter(db=session).adopt()
+
+        assert report.error_count == 1
+        assert "disco roto" not in report.errors[0]          # sin mensajes del sistema
+        assert _MARCADOR_HECHO not in fila_settings.values
 
     @pytest.mark.asyncio
     async def test_persiste_import_run_con_kind_adoption(self, monkeypatch, tmp_path):
