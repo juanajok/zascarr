@@ -366,8 +366,7 @@ class TestLosEnlacesNoDependenDelFragmento:
         a = arbol(menu(env, "/ui/"))
         sondeo = next(at for _, at, _ in a.elementos if "nav-sondeo" in clases(at))
         assert sondeo["hx-get"] == FRAGMENTO
-        # Cada 30 s, y de inmediato cuando Por revisar cambia (asignar / ignorar envían ese evento).
-        assert sondeo["hx-trigger"] == "load, every 30s, zascarr:pendientes from:body"
+        assert sondeo["hx-trigger"] == "load, every 30s"
         assert sondeo["hx-swap"] == "none"
 
     def test_ningun_enlace_cuelga_de_un_elemento_htmx(self, env):
