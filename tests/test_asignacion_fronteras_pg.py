@@ -83,6 +83,7 @@ class Entorno:
         monkeypatch.setattr("zascarr.config.get_settings", lambda: ajustes)
         app = FastAPI()
         app.include_router(router)
+        self.app = app
         self.cliente = TestClient(app, raise_server_exceptions=False)
         self.serie_id: UUID | None = None
         self.file_id: UUID | None = None
@@ -189,13 +190,38 @@ class TestFronterasDeFallo:
 
     @pytest.mark.asyncio
     async def test_antes_el_commit_de_get_db_fallaba_tras_dar_exito_al_cliente(self, ent, monkeypatch):
-        """Era el defecto (2) de la auditoría: el `commit` de `get_db` corre tras enviar la respuesta. Ahora
-        el servicio confirma ANTES de responder, así que un `commit` roto de `get_db` ya no puede deshacer un
-        éxito: lo que el cliente ve (200) está ya confirmado en la BD, visto desde otra sesión."""
+        """Era el defecto (2) de la auditoría: el `commit` de `get_db` corre tras enviar la respuesta y, si
+        fallaba, el cliente ya tenía su 200 sobre una BD sin cambios. Ahora el servicio confirma ANTES de
+        responder: se hace fallar SOLO el commit de la sesión de la petición y se comprueba, desde otra
+        sesión, que la asignación ya confirmada NO se revierte."""
+        from zascarr.database import get_db
+        intentos = {"n": 0}
+        original = AsyncSession.commit
+
+        async def commit_solo_de_la_peticion(self):
+            if self.info.get("peticion"):
+                intentos["n"] += 1
+                raise RuntimeError("el commit de la petición falló (conexión perdida)")
+            return await original(self)
+        monkeypatch.setattr(AsyncSession, "commit", commit_solo_de_la_peticion)
+
+        async def get_db_de_la_peticion():                          # mismo ciclo que `get_db`, con sesión marcada
+            async with ent.fabrica() as s:
+                s.sync_session.info["peticion"] = True
+                try:
+                    yield s
+                    await s.commit()
+                except Exception:
+                    await s.rollback()
+                    raise
+        ent.app.dependency_overrides[get_db] = get_db_de_la_peticion
         r = ent.asignar()
+        monkeypatch.setattr(AsyncSession, "commit", original)
+        assert intentos["n"] >= 1                                     # el fallo SÍ se inyectó en la petición
+        bd, disco = await ent.bd(), ent.disco()                       # sesión distinta de la de la petición
         assert r.status_code == 200
-        bd, disco = await ent.bd(), ent.disco()
-        assert bd.issue_id is not None and bd.ruta.endswith(disco.destinos[0]) and not disco.origen_existe
+        assert bd.issue_id is not None and bd.ops == ["limpiada"]
+        assert bd.ruta.endswith(disco.destinos[0]) and not disco.origen_existe
 
     @pytest.mark.asyncio
     async def test_antes_un_fallo_al_construir_la_respuesta_dejaba_el_estado_inconsistente(self, ent, monkeypatch):
@@ -228,7 +254,7 @@ class TestFronterasDeFallo:
         r = ent.asignar()
         monkeypatch.setattr(Path, "unlink", unlink)
         bd, disco = await ent.bd(), ent.disco()
-        assert r.status_code == 200 and "retirar el archivo original" in r.text
+        assert r.status_code == 200 and "se intentará retirar al reiniciar ZascArr" in r.text
         assert disco.origen_existe and len(disco.destinos) == 1       # dos copias, pero REGISTRADAS y avisadas
         assert bd.ops == ["confirmada"] and bd.issue_id is not None and bd.ruta.endswith(disco.destinos[0])
 

@@ -132,6 +132,13 @@ class PublicacionNoSoportadaError(OSError):
     """El sistema de ficheros del destino no ofrece ninguna publicación atómica sin reemplazo."""
 
 
+class PublicadoConResiduoError(OSError):
+    """El destino SÍ quedó publicado (con `link`), pero no se pudo retirar el nombre temporal.
+
+    No es un fallo de publicar: el destino es íntegro y hay que seguir adelante; lo que queda es un residuo
+    (un segundo nombre del mismo contenido) que se retira en la limpieza, no antes de acreditar el destino."""
+
+
 _RENAME_NOREPLACE = 1
 _AT_FDCWD = -100
 _libc = ctypes.CDLL(None, use_errno=True)
@@ -154,7 +161,8 @@ def _publicar(temporal: Path, destino: Path) -> None:
     en la que otro escritor puede crear el destino. Aquí la garantía la da el núcleo:
     `renameat2(RENAME_NOREPLACE)`, o `link` (que falla con EEXIST) + `unlink` si el sistema de ficheros
     no admite lo primero. Si no admite ninguna, se rechaza: NO hay un tercer camino «comprobar y
-    reemplazar». Lanza `FileExistsError` si el destino ya existe (no se toca) y `PublicacionNoSoportadaError`.
+    reemplazar». Lanza `FileExistsError` si el destino ya existe (no se toca), `PublicacionNoSoportadaError`
+    (nada publicado) y `PublicadoConResiduoError` (SÍ publicado; solo falló retirar el temporal).
     """
     try:
         _renameat2_noreplace(temporal, destino)
@@ -170,7 +178,11 @@ def _publicar(temporal: Path, destino: Path) -> None:
         except OSError as exc2:
             raise PublicacionNoSoportadaError(
                 exc2.errno, f"este montaje no permite publicar sin reemplazar ({exc2.strerror})") from exc2
-        temporal.unlink()
+        try:
+            temporal.unlink()
+        except OSError as exc3:
+            # `link` ya creó el destino: borrar OTRO nombre no lo deshace. Se avisa de que está publicado.
+            raise PublicadoConResiduoError(exc3.errno, "destino publicado; el temporal no se pudo retirar") from exc3
     # Durabilidad del nombre ante un corte eléctrico: sincronizar el directorio. Mejor esfuerzo: no todos
     # los sistemas de ficheros lo admiten (NO medido en CIFS/exFAT/NTFS reales; ver el ADR).
     try:
@@ -181,6 +193,13 @@ def _publicar(temporal: Path, destino: Path) -> None:
             os.close(fd)
     except OSError:
         pass
+
+
+def _temporales_de(op, epoca: int) -> list[Path]:
+    """Los nombres temporales que esta operación pudo dejar (el base y uno por época) y que SIGUEN existiendo."""
+    base = Path(op["temporal"])
+    candidatos = [base, *(base.with_name(f"{base.name}.{n}") for n in range(1, epoca + 1))]
+    return [c for c in candidatos if c.exists()]
 
 
 def _origen_es_el_preparado(origen: Path, size: int, mtime_ns: int) -> bool:
@@ -416,9 +435,14 @@ class AsignacionService:
         if op["estado"] == "preparada":
             await self._gancho("tras_preparar")
             if not destino.exists():
-                for anterior in range(1, prop.epoca):                  # temporales de ejecutores anteriores
-                    base_temporal.with_name(f"{base_temporal.name}.{anterior}").unlink(missing_ok=True)
-                base_temporal.unlink(missing_ok=True)
+                try:
+                    for anterior in range(1, prop.epoca):              # temporales de ejecutores anteriores
+                        base_temporal.with_name(f"{base_temporal.name}.{anterior}").unlink(missing_ok=True)
+                    base_temporal.unlink(missing_ok=True)
+                except OSError as exc:
+                    # No se toca nada más: la operación sigue viva y el próximo intento vuelve a limpiarlos.
+                    logger.warning("asignacion.temporal_previo_sin_retirar", operacion=str(op_id), error=type(exc).__name__)
+                    return Resultado("error", "No se pudo retirar un temporal anterior; se reintentará", op["destino"])
                 if not _origen_es_el_preparado(origen, op["size_bytes"], op["mtime_ns"]):
                     return Resultado("error", "El origen cambió o desapareció antes de copiarlo; no se toca nada")
                 if not await prop.vigente():
@@ -442,17 +466,30 @@ class AsignacionService:
                     if not await self._cerrar(op_id, "cancelada", prop.epoca):
                         return perdida
                     return Resultado("destino_ocupado", "Otro fichero ocupó el destino; no se tocó. Reintenta.", op["destino"])
+                except PublicadoConResiduoError:
+                    # Publicado y verificado (es el mismo contenido que la copia verificada): se SIGUE hacia
+                    # confirmar. El temporal que no se pudo retirar lo recoge la limpieza (su ruta y su época
+                    # están en la operación), sin liberar nada antes.
+                    logger.warning("asignacion.temporal_sin_retirar", operacion=str(op_id))
                 except PublicacionNoSoportadaError as exc:
-                    mi_temporal.unlink(missing_ok=True)
-                    await self._cerrar(op_id, "cancelada", prop.epoca)
+                    # Nada publicado. Si retirar la copia propia falla, la operación se CONSERVA viva.
+                    if not await self._retirar_copia_y_cancelar(op_id, mi_temporal, prop):
+                        return Resultado("error", "No se pudo retirar la copia temporal; se limpiará al reintentar",
+                                         op["destino"])
                     return Resultado("error", str(exc), op["destino"])
                 except OSError as exc:
-                    # Sin permiso, disco de solo lectura, sin espacio…: NO se publicó nada y el origen sigue
-                    # intacto. Se retira la copia propia y se cancela, para que reintentar sea limpio (la
-                    # operación viva no bloquea al coleccionista) y el fallo llegue como resultado, no como excepción.
-                    mi_temporal.unlink(missing_ok=True)
-                    await self._cerrar(op_id, "cancelada", prop.epoca)
+                    # Sin permiso, solo lectura, sin espacio…, o un error cuyo efecto no se conoce. Primero se
+                    # MIRA el destino: si existe, pudo publicarse (p. ej. un montaje de red que falló al responder),
+                    # así que NO se cancela ni se libera la reserva: la operación sigue viva y la reconciliación
+                    # (que comprueba el destino por contenido) la resuelve. Solo si no hay destino se da por
+                    # no publicado, se retira la copia propia y se cancela; si retirarla falla, tampoco se cancela.
                     logger.warning("asignacion.publicar_fallo", operacion=str(op_id), error=type(exc).__name__)
+                    if destino.exists():
+                        return Resultado(EstadoResultado.PENDIENTE_DE_COMPROBAR,
+                                         "Error al publicar con el destino ya presente; se conserva todo", op["destino"])
+                    if not await self._retirar_copia_y_cancelar(op_id, mi_temporal, prop):
+                        return Resultado("error", "No se pudo retirar la copia temporal; se limpiará al reintentar",
+                                         op["destino"])
                     return Resultado("error", "No se pudo escribir en la carpeta de destino", op["destino"])
             else:
                 # Un intento anterior ya publicó. Se comprueba antes de aprovecharlo.
@@ -468,6 +505,18 @@ class AsignacionService:
             await self._gancho("tras_confirmar")
 
         return await self._limpiar(op_id, origen, op, prop)
+
+    async def _retirar_copia_y_cancelar(self, op_id: UUID, temporal: Path, prop: _Propiedad) -> bool:
+        """Fallo anterior a publicar: retira la copia propia y SOLO ENTONCES cancela (libera la reserva).
+
+        Si no se puede retirar, devuelve False y la operación sigue viva: su ruta temporal está en la fila, y
+        al continuar se retiran los temporales de épocas anteriores antes de copiar de nuevo."""
+        try:
+            await asyncio.to_thread(temporal.unlink, missing_ok=True)
+        except OSError:
+            return False
+        await self._cerrar(op_id, "cancelada", prop.epoca)
+        return True
 
     async def _cerrar(self, op_id: UUID, estado: str, epoca: int) -> bool:
         """Cierra la operación SOLO si la época sigue siendo la del llamante (vallado)."""
@@ -566,7 +615,10 @@ class AsignacionService:
         Si algo no cuadra se CONSERVA el origen y se devuelve `reparacion_pendiente`.
         """
         destino = Path(op["destino"])
-        if origen.exists() and origen != destino:
+        if origen == destino:
+            return Resultado("error", "El origen y el destino coinciden; no se borra nada")
+        temporales = _temporales_de(op, prop.epoca)
+        if origen.exists() or temporales:
             try:
                 ok_destino = (destino.is_file() and destino.stat().st_size == op["size_bytes"]
                               and await asyncio.to_thread(_sha256, destino) == op["sha256"])
@@ -578,6 +630,16 @@ class AsignacionService:
             if not await self._bd_apunta_al_destino(op):
                 return Resultado("reparacion_pendiente",
                                  "La BD no apunta a la asignación esperada; se conserva el origen", op["destino"])
+        # Residuos de la publicación (un segundo nombre del mismo contenido): con el destino ya acreditado.
+        # Si alguno no se puede retirar se CONSERVA el origen y la operación sigue confirmada: la próxima
+        # continuación (reintento o arranque) vuelve a intentarlo.
+        for temporal in temporales:
+            try:
+                await asyncio.to_thread(temporal.unlink)
+            except OSError:
+                return Resultado("asignado_limpieza_pendiente",
+                                 "Queda un temporal sin retirar; se conserva el origen", op["destino"])
+        if origen.exists():
             try:
                 mismo_contenido = (origen.stat().st_size == op["size_bytes"]
                                    and await asyncio.to_thread(_sha256, origen) == op["sha256"])
@@ -592,8 +654,6 @@ class AsignacionService:
                 await asyncio.to_thread(self._borrar, origen)
             except OSError as exc:
                 return Resultado("asignado_limpieza_pendiente", f"No se pudo borrar el original: {exc}", op["destino"])
-        elif origen == destino:
-            return Resultado("error", "El origen y el destino coinciden; no se borra nada")
         await self._gancho("tras_borrar_origen")
         if not await self._cerrar(op_id, "limpiada", prop.epoca):
             return Resultado("propiedad_perdida", "Otra ejecución tomó la operación", op["destino"])

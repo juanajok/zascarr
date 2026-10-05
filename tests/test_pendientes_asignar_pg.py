@@ -164,30 +164,58 @@ class TestResultadosRecuperables:
             raise OSError("disco de solo lectura")
         async with cliente_de(borrar=borrar_fallido) as c:
             r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
-        assert r.status_code == 200 and "retirar el archivo original" in r.text
+        assert r.status_code == 200 and "se intentará retirar al reiniciar ZascArr" in r.text
         assert "disco de solo lectura" not in r.text       # el motivo técnico no llega a pantalla
         e = await mundo.estado()
         assert e.ops == ["confirmada"] and e.origen_existe and e.issue_id is not None and len(e.destinos) == 1
 
     async def test_pendiente_devuelve_503_con_la_tarjeta_delante(self, mundo, cliente_de, monkeypatch):
+        """Falla EXACTAMENTE el commit que confirma (1.º: preparar; 2.º: tomar la operación; 3.º: confirmar)."""
         from sqlalchemy.ext.asyncio import AsyncSession
         original = AsyncSession.commit
-        confirmaciones = {"n": 0}
+        n = {"c": 0}
 
         async def commit_que_no_llega(self):
-            # El primer commit de la preparación pasa; el que confirma el resultado falla de forma definitiva.
-            confirmaciones["n"] += 1
-            if confirmaciones["n"] >= 3:
+            n["c"] += 1
+            if n["c"] == 3:
                 raise ConnectionError("se cayó la base de datos")
             return await original(self)
         monkeypatch.setattr(AsyncSession, "commit", commit_que_no_llega)
         async with cliente_de() as c:
             r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
         monkeypatch.setattr(AsyncSession, "commit", original)
-        assert r.status_code in (503, 500) and 'id="card-' in r.text
-        assert "se cayó" not in r.text
+        assert r.status_code == 503
+        assert 'id="card-' in r.text and "No se pudo confirmar la asignación" in r.text
+        assert "se cayó" not in r.text and "reintentará solo" not in r.text
         e = await mundo.estado()
-        assert e.origen_existe or e.destinos                # nunca se pierde el contenido
+        assert e.ops == ["preparada"] and e.issue_id is None          # operación VIVA, sin confirmar
+        assert e.origen_existe and len(e.destinos) == 1               # nada se pierde: original y copia publicada
+
+    async def test_excepcion_tras_completar_la_asignacion_no_afirma_que_el_original_no_se_toco(self, mundo, cliente_de):
+        """Regresión del texto: una excepción DESPUÉS de confirmar y retirar el original no puede decir «el
+        original no se ha tocado». El endpoint no sabe hasta dónde llegó y se lo dice al coleccionista."""
+        async def gancho(punto):
+            if punto == "tras_borrar_origen":
+                raise RuntimeError("fallo al cerrar la operación")
+        async with cliente_de(gancho=gancho) as c:
+            r = await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
+        assert r.status_code == 500 and 'id="card-' in r.text
+        assert "No se pudo comprobar que la operación terminara" in r.text
+        assert "Recarga la página para consultar su estado antes de volver a intentarlo" in r.text
+        assert "no se ha tocado" not in r.text and "fallo al cerrar" not in r.text
+        e = await mundo.estado()                                        # y, de hecho, SÍ se completó
+        assert not e.origen_existe and e.issue_id is not None and len(e.destinos) == 1
+        assert e.ops == ["confirmada"]                                  # viva: la reconciliación la cierra
+
+    async def test_tras_esa_excepcion_el_reinicio_cierra_la_operacion(self, mundo, cliente_de):
+        async def gancho(punto):
+            if punto == "tras_borrar_origen":
+                raise RuntimeError("fallo al cerrar la operación")
+        async with cliente_de(gancho=gancho) as c:
+            await c.post(_url(mundo), data=_datos(mundo), headers=HTMX)
+        await mundo.servicio().reconciliar()
+        e = await mundo.estado()
+        assert e.ops == ["limpiada"] and len(e.destinos) == 1 and e.partes == []
 
 
 class TestRespuestasExhaustivas:
@@ -204,6 +232,19 @@ class TestRespuestasExhaustivas:
         assert all(RESPUESTAS[e].status == 200 for e in asignados)
         assert all(r.status != 200 for e, r in RESPUESTAS.items() if e not in asignados)
 
+    def test_ningun_aviso_promete_un_reintento_que_no_existe(self):
+        """El servicio reconcilia al ARRANCAR y al volver a asignar; no hay disparador periódico."""
+        for estado, resp in RESPUESTAS.items():
+            assert "solo." not in resp.texto and "automáticamente" not in resp.texto, estado
+        assert "reiniciar" in RESPUESTAS[EstadoResultado.ASIGNADO_LIMPIEZA_PENDIENTE].texto
+
+    def test_la_reparacion_pendiente_no_afirma_que_se_asigno_con_una_copia_danada(self):
+        """Incluye el caso «BD desviada», no solo una copia dañada."""
+        texto = RESPUESTAS[EstadoResultado.REPARACION_PENDIENTE].texto
+        assert texto.startswith("La asignación necesita revisión; se ha conservado el original")
+        assert "copia nueva" not in texto
+
     def test_estado_desconocido_no_queda_mudo(self):
         from types import SimpleNamespace
-        assert interpretar(SimpleNamespace(estado="inventado", motivo="x", destino=None)).status == 500
+        resp = interpretar(SimpleNamespace(estado="inventado", motivo="x", destino=None))
+        assert resp.status == 500 and "no se ha tocado" not in resp.texto
