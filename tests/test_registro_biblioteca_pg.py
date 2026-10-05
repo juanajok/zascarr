@@ -353,7 +353,7 @@ class TestFalloDespuesDeConfirmarUnLote:
     async def test_resultado_desconocido_no_se_cuenta_ni_como_anadido_ni_como_revertido(self, mundo, monkeypatch):
         restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
 
-        async def no_se_puede_preguntar(self, rutas):
+        async def no_se_puede_preguntar(self, filas, run_id=None):
             return "desconocido"
         monkeypatch.setattr(LibraryAdopter, "_contrastar", no_se_puede_preguntar)
         monkeypatch.setattr(LibraryAdopter, "adopt", _adopt_con_lote_de(2, LibraryAdopter.adopt))
@@ -399,28 +399,70 @@ class TestFalloDespuesDeConfirmarUnLote:
         monkeypatch.setattr(AsyncSession, "commit", original)
         assert vistas[-1] == (1, 2, 0)          # revertido y ACREDITADO por otra sesión, no «desconocido»
 
-    async def test_un_resultado_parcial_no_se_da_por_confirmado(self, mundo, monkeypatch):
-        """Si tras el fallo solo algunas de las rutas del lote constan (p. ej. las puso otra ejecución), no se
-        sabe qué pasó: ni «confirmado» ni «revertido». El intruso entra DESPUÉS del rollback de la sesión del
-        lote (antes, esa sesión tiene la ruta bloqueada y su insert esperaría)."""
+    async def test_otro_escritor_ocupa_todas_las_rutas_tras_el_rollback_y_no_se_atribuyen_a_este_lote(
+            self, mundo, monkeypatch):
+        """EL CASO DE LA REVISIÓN. El lote se revierte y, antes de contrastar, otro escritor registra TODAS sus
+        rutas con filas distintas. Comprobar solo la presencia de rutas concluiría «confirmado» y atribuiría a esta
+        ejecución lo que escribió otra. Se acredita por IDENTIDAD (los ids de las filas de este lote)."""
         restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
         contrastar = LibraryAdopter._contrastar
 
-        async def contrastar_con_intruso(self, rutas):
-            intruso = mundo.lib / "BD" / "Album 2" / "Tomo raro 02.cbr"          # una de las rutas del 2.º lote
+        async def contrastar_tras_ocupar_todas(self, filas, run_id=None):
             async with mundo.fabrica() as otra:
-                otra.add(File(id=uuid4(), file_path=str(intruso), file_name=intruso.name,
-                              file_format=FileFormat.CBR, sha256_hash=None))
+                for _id, ruta, _previa in filas:                       # filas DISTINTAS en las MISMAS rutas
+                    otra.add(File(id=uuid4(), file_path=ruta, file_name=Path(ruta).name,
+                                  file_format=FileFormat.CBR, sha256_hash=None))
                 await otra.commit()
-            return await contrastar(self, rutas)
-        monkeypatch.setattr(LibraryAdopter, "_contrastar", contrastar_con_intruso)
+            return await contrastar(self, filas, run_id)
+        monkeypatch.setattr(LibraryAdopter, "_contrastar", contrastar_tras_ocupar_todas)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(
+                    lote=2, progreso=lambda r: vistas.append((r.added_count, r.reverted, r.unknown, r.by_other_run)))
+        restaurar()
+        assert vistas[-1] == (1, 2, 0, 0)       # revertido: NO «confirmado», y no cuenta como añadido de esta ejecución
+        assert await mundo.n_files() == 6 + 1 + 2                  # las 2 filas son del otro escritor
+
+    async def test_si_solo_se_acredita_una_parte_de_lo_que_escribio_el_lote_es_desconocido(self, mundo, monkeypatch):
+        """El commit SÍ se aplicó, pero antes de contrastar alguien borra una de las filas del lote: hay una parte
+        acreditada y otra no, y no se inventa el desenlace."""
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2, guardando_antes=True)
+        contrastar = LibraryAdopter._contrastar
+
+        async def contrastar_tras_borrar_una(self, filas, run_id=None):
+            async with mundo.fabrica() as otra:
+                await otra.execute(text("DELETE FROM files WHERE id = :i"), {"i": filas[0][0]})
+                await otra.commit()
+            return await contrastar(self, filas, run_id)
+        monkeypatch.setattr(LibraryAdopter, "_contrastar", contrastar_tras_borrar_una)
         vistas = []
         async with mundo.fabrica() as s:
             with pytest.raises(ConnectionError):
                 await LibraryAdopter(s).adopt(
                     lote=2, progreso=lambda r: vistas.append((r.added_count, r.reverted, r.unknown)))
         restaurar()
-        assert vistas[-1] == (1, 0, 2)          # solo 1 de 2 rutas consta: desconocido, y NO añadido
+        assert vistas[-1] == (1, 0, 2)          # ni añadido ni revertido: por comprobar
+
+    async def test_una_fila_del_lote_con_otra_ruta_ya_no_es_la_que_escribio_este_lote(self, mundo, monkeypatch):
+        """El commit se aplicó, pero antes de contrastar otro escritor cambió la ruta de una de las filas del lote:
+        existe SU id, pero no con lo que este lote escribió. No se acredita: por comprobar, no confirmado."""
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2, guardando_antes=True)
+        contrastar = LibraryAdopter._contrastar
+
+        async def contrastar_tras_mover_una(self, filas, run_id=None):
+            async with mundo.motor.begin() as c:
+                await c.execute(text("UPDATE files SET file_path = file_path || '.movida' WHERE id = :i"),
+                                {"i": filas[0][0]})
+            return await contrastar(self, filas, run_id)
+        monkeypatch.setattr(LibraryAdopter, "_contrastar", contrastar_tras_mover_una)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(
+                    lote=2, progreso=lambda r: vistas.append((r.added_count, r.reverted, r.unknown)))
+        restaurar()
+        assert vistas[-1] == (1, 0, 2)
 
     async def test_commit_que_se_guardo_pero_cuya_respuesta_se_perdio_se_cuenta_tras_contrastarlo(
             self, mundo, monkeypatch):
@@ -446,6 +488,90 @@ class TestFalloDespuesDeConfirmarUnLote:
         restaurar()
         assert vistas[-1] == (0, 8, 0, 0, 8)
         assert await mundo.n_files() == 6 and await mundo.marcador() is False
+
+    async def test_cierre_final_aplicado_con_la_respuesta_perdida_y_el_ultimo_lote_ya_confirmado(
+            self, mundo, monkeypatch):
+        """8 candidatos con lotes de 4: los dos lotes se confirman EN EL BUCLE y el último lote queda vacío. El commit
+        final solo guarda el informe y el marcador; si se aplica y se pierde su respuesta, NO es una interrupción
+        (antes `_contrastar([])` devolvía siempre «revertido»). Se acredita desde otra sesión."""
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=3, guardando_antes=True)
+        async with mundo.fabrica() as s:
+            informe = await LibraryAdopter(s).adopt(lote=4)           # NO lanza
+        restaurar()
+        assert informe.added_count == 7 and informe.reverted == 0 and informe.unknown == 0
+        async with mundo.fabrica() as s:                               # el informe de ESTA ejecución y el marcador
+            corridas = (await s.execute(text(
+                "SELECT count(*) FROM import_runs WHERE details->>'kind' = 'adoption'"))).scalar()
+        assert corridas == 1 and await mundo.marcador() is True and await mundo.n_files() == 6 + 7
+
+    async def test_cierre_final_no_aplicado_no_deja_informe_ni_marcador_y_no_pierde_los_lotes_ya_confirmados(
+            self, mundo, monkeypatch):
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=3)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(lote=4, progreso=lambda r: vistas.append(
+                    (r.added_count, r.reverted, r.unknown, r.pending_count)))
+        restaurar()
+        assert vistas[-1] == (7, 0, 0, 0)       # los 7 ya estaban confirmados; del cierre no hay nada «no guardado»
+        async with mundo.fabrica() as s:
+            corridas = (await s.execute(text(
+                "SELECT count(*) FROM import_runs WHERE details->>'kind' = 'adoption'"))).scalar()
+        assert corridas == 0 and await mundo.marcador() is False and await mundo.n_files() == 6 + 7
+        async with mundo.fabrica() as s:                               # continuar cierra el registro sin duplicar
+            informe = await LibraryAdopter(s).adopt()
+        assert informe.to_process == 1 and informe.added_count == 0    # solo reaparece la copia idéntica
+        assert await mundo.marcador() is True and await mundo.n_files() == 6 + 7
+
+    async def _con_una_fila_por_reenlazar(self, mundo) -> Path:
+        """Una fila `is_missing` con el contenido de «Obra rara 04.cbz»: al registrar, ese archivo se REENLAZA."""
+        ruta = mundo.lib / "Comics" / "Coleccion 4" / "Obra rara 04.cbz"
+        async with mundo.fabrica() as s:
+            s.add(File(id=uuid4(), file_path="/viejo/lugar.cbz", file_name="lugar.cbz", file_format=FileFormat.CBZ,
+                       sha256_hash=hashlib.sha256(mundo.contenido[ruta]).hexdigest(), is_missing=True))
+            await s.commit()
+        return ruta
+
+    async def test_reenlace_aplicado_con_la_respuesta_perdida_se_acredita_por_el_cambio_esperado(
+            self, mundo, monkeypatch):
+        await self._con_una_fila_por_reenlazar(mundo)
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=1, guardando_antes=True)
+        async with mundo.fabrica() as s:
+            informe = await LibraryAdopter(s).adopt()                  # un solo lote: el commit final
+        restaurar()
+        assert informe.reverted == 0 and informe.unknown == 0
+        assert any("reenlazado" in r for r in informe.registered)
+        async with mundo.fabrica() as s:
+            fila = (await s.execute(select(File).where(File.file_name == "Obra rara 04.cbz"))).scalar_one()
+        assert fila.is_missing is False
+
+    async def test_reenlace_no_aplicado_sigue_en_su_estado_previo_y_es_revertido(self, mundo, monkeypatch):
+        await self._con_una_fila_por_reenlazar(mundo)
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=1)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(progreso=lambda r: vistas.append((r.added_count, r.reverted, r.unknown)))
+        restaurar()
+        assert vistas[-1] == (0, 8, 0)
+
+    async def test_reenlace_cambiado_por_otro_escritor_no_se_puede_distinguir_y_queda_por_comprobar(
+            self, mundo, monkeypatch):
+        await self._con_una_fila_por_reenlazar(mundo)
+        restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=1)
+        contrastar = LibraryAdopter._contrastar
+
+        async def contrastar_tras_tocar_la_fila(self, filas, run_id=None):
+            async with mundo.motor.begin() as c:                        # la fila no está ni en su estado previo ni en el esperado
+                await c.execute(text("UPDATE files SET file_path = '/otro/sitio.cbz' WHERE file_path = '/viejo/lugar.cbz'"))
+            return await contrastar(self, filas, run_id)
+        monkeypatch.setattr(LibraryAdopter, "_contrastar", contrastar_tras_tocar_la_fila)
+        vistas = []
+        async with mundo.fabrica() as s:
+            with pytest.raises(ConnectionError):
+                await LibraryAdopter(s).adopt(progreso=lambda r: vistas.append((r.added_count, r.reverted, r.unknown)))
+        restaurar()
+        assert vistas[-1] == (0, 0, 8)
 
     async def test_tras_un_lote_revertido_continuar_completa_sin_duplicar(self, mundo, monkeypatch):
         restaurar = self._commit_que_falla(monkeypatch, en_la_llamada=2)
