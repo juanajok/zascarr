@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """A11 — la elección de exposición del instalador (`scripts/_exposicion.sh`).
 
 La lógica vive en Bash porque la usa `bootstrap.sh` en el host, antes de que
@@ -238,7 +239,7 @@ class TestDescripcionYResumen:
         assert "router" in salida
 
     def test_resumen_de_red_sin_ip_no_inventa_una(self):
-        salida = _bash('ip_de_la_red() { :; }\nresumen_exposicion 2 ""').stdout
+        salida = _bash('ip_de_la_red() { :; }\ndirecciones_candidatas() { :; }\nresumen_exposicion 2 ""').stdout
         assert "<la IP de este equipo>" in salida
 
     def test_resumen_de_proxy_deja_claro_que_el_proxy_lo_pone_el_operador(self):
@@ -747,3 +748,143 @@ class TestUrlHistoricaSeLimpia:
         _estado(docker_doble, env_url="http://vieja.ejemplo.org/x", db_url="http://vieja.ejemplo.org/x")
         datos, _ = _efectiva_tras(docker_doble, "3", "https://nueva.ejemplo.org")
         assert datos["URL"] == "https://nueva.ejemplo.org"
+
+
+class TestIpDeLaRedPorRuta:
+    """`hostname -I` lista TODAS las interfaces (también los puentes de Docker) y la dirección de salida a
+    internet puede ser la de una VPN: solo se AFIRMA una URL de LAN si se acredita; si no, se ofrecen
+    candidatas por interfaz o se dice que no se pudo determinar. Nunca «la primera» de `hostname -I`."""
+
+    ROUTE_ETH0 = "1.1.1.1 via 192.168.1.1 dev eth0 src 192.168.1.176 uid 1000"
+    ADDR_DOCKER_Y_ETH0 = (
+        "1: lo    inet 127.0.0.1/8 scope host lo\\n"
+        "2: eth0    inet 192.168.1.176/24 brd 192.168.1.255 scope global eth0\\n"
+        "3: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0")
+
+    @staticmethod
+    def _con_comandos(tmp_path, *, route: str | None, addr: str | None = "", hostname: str | None = None):
+        """Un `ip` y un `hostname` de pega. `route=None` = «no hay ruta» (código 2); `hostname=None` = no hay
+        `hostname`. Con `ip=False` en la mezcla de abajo se prueba también la ausencia de `ip`."""
+        bin_ = tmp_path / "bin"
+        bin_.mkdir(exist_ok=True)
+        ruta = f'echo "{route}"' if route is not None else "exit 2"
+        direcciones = f'printf "{addr}\\n"' if addr else ""
+        (bin_ / "ip").write_text(
+            f'#!/bin/sh\ncase "$*" in\n  *"route get"*) {ruta} ;;\n  *"addr show"*) {direcciones} ;;\nesac\n')
+        if hostname is not None:
+            (bin_ / "hostname").write_text(f'#!/bin/sh\necho "{hostname}"\n')
+        for f in bin_.iterdir():
+            f.chmod(0o755)
+        return bin_
+
+    def _ejecutar(self, bin_, cuerpo: str, solo_pega: bool = False):
+        ruta = f'PATH="{bin_}"' if solo_pega else f'PATH="{bin_}:$PATH"'
+        return _bash(f"{ruta}\n{cuerpo}")
+
+    def test_acredita_la_direccion_de_la_ruta_por_defecto(self, tmp_path):
+        bin_ = self._con_comandos(tmp_path, route=self.ROUTE_ETH0, hostname="172.17.0.1 192.168.1.176")
+        assert self._ejecutar(bin_, "ip_de_la_red").stdout.strip() == "192.168.1.176"
+
+    def test_sin_ruta_no_se_toma_la_primera_de_hostname_i(self, tmp_path):
+        """EL CASO PEDIDO. Sin ruta disponible y `hostname -I` → `172.17.0.1 192.168.1.176`."""
+        bin_ = self._con_comandos(tmp_path, route=None, addr=self.ADDR_DOCKER_Y_ETH0,
+                                  hostname="172.17.0.1 192.168.1.176")
+        r = self._ejecutar(bin_, "ip_de_la_red")
+        assert r.returncode == 0 and r.stdout.strip() == ""            # no se acredita nada
+        salida = self._ejecutar(bin_, 'linea_url_lan "Desde otros dispositivos de tu red" "  "').stdout
+        assert "172.17.0.1" not in salida                              # nunca el puente de Docker
+        assert "no he podido confirmar" in salida                      # no afirma una URL de LAN…
+        assert "http://192.168.1.176:8000   (interfaz eth0)" in salida  # …ofrece la candidata, con su interfaz
+
+    def test_sin_ip_y_solo_hostname_no_inventa_nada(self, tmp_path):
+        bin_ = self._con_comandos(tmp_path, route=None, hostname="172.17.0.1 192.168.1.176")
+        (bin_ / "ip").unlink()                                          # el equipo no tiene `ip`
+        salida = self._ejecutar(bin_, 'linea_url_lan "Desde otros dispositivos de tu red" "  "', solo_pega=True).stdout
+        assert "172.17.0.1" not in salida and "192.168.1.176" not in salida
+        assert "<la IP de este equipo>" in salida and "No he podido determinar" in salida
+
+    @pytest.mark.parametrize("ruta", [
+        "1.1.1.1 dev wg0 src 10.8.0.2 uid 1000",            # la ruta por defecto es una VPN
+        "1.1.1.1 dev tun0 src 10.9.0.6 uid 1000",
+        "1.1.1.1 dev docker0 src 172.17.0.1 uid 1000",      # o un puente de contenedores
+        "1.1.1.1 via 80.1.1.1 dev eth0 src 203.0.113.5 uid 1000",   # o la dirección es pública
+    ])
+    def test_la_direccion_de_salida_no_acreditada_es_solo_candidata(self, tmp_path, ruta):
+        bin_ = self._con_comandos(tmp_path, route=ruta, addr=self.ADDR_DOCKER_Y_ETH0)
+        assert self._ejecutar(bin_, "ip_de_la_red").stdout.strip() == ""
+        salida = self._ejecutar(bin_, 'linea_url_lan "Abierto a tu red local" "    "').stdout
+        assert "no he podido confirmar" in salida and "http://192.168.1.176:8000   (interfaz eth0)" in salida
+
+    def test_varias_candidatas_se_listan_todas_con_su_interfaz(self, tmp_path):
+        addr = ("2: eth0    inet 192.168.1.176/24 scope global eth0\\n"
+                "3: wlan0    inet 192.168.1.177/24 scope global wlan0\\n"
+                "4: br-1a2b3c    inet 172.18.0.1/16 scope global br-1a2b3c\\n"
+                "5: tailscale0    inet 100.64.0.5/32 scope global tailscale0")
+        bin_ = self._con_comandos(tmp_path, route=None, addr=addr)
+        salida = self._ejecutar(bin_, "direcciones_candidatas").stdout.splitlines()
+        assert salida == ["eth0 192.168.1.176", "wlan0 192.168.1.177"]     # sin puentes ni VPN
+
+    def test_una_salida_ilegible_no_inventa_una_direccion(self, tmp_path):
+        bin_ = self._con_comandos(tmp_path, route="RTNETLINK answers: Network is unreachable")
+        r = self._ejecutar(bin_, "ip_de_la_red")
+        assert r.returncode == 0 and r.stdout.strip() == ""
+
+
+class TestResumenDeAcceso:
+    """Tras ACTUALIZAR: cómo se entra, sin cambiarlo y sin afirmar lo que no se comprobó."""
+
+    @staticmethod
+    def _salida(estado, contrasena="", ip="192.168.1.176"):
+        return _bash(f'ip_de_la_red() {{ echo "{ip}"; }}\nresumen_acceso "{estado}" "{contrasena}"').stdout
+
+    def test_abierta_con_contrasena_da_la_url_y_dice_que_la_pide(self):
+        s = self._salida("abierta", "si")
+        assert "http://192.168.1.176:8000" in s and "Te pedirá la contraseña" in s and "ATENCIÓN" not in s
+
+    def test_abierta_sin_contrasena_avisa_con_claridad(self):
+        s = self._salida("abierta", "no")
+        assert "ATENCIÓN" in s and "no hay contraseña" in s and "bootstrap.sh" in s
+
+    def test_abierta_sin_poder_comprobar_la_contrasena_no_afirma_nada(self):
+        s = self._salida("abierta", "")
+        assert "No he podido comprobar si pide contraseña" in s
+        assert "Te pedirá" not in s and "ATENCIÓN" not in s
+
+    def test_local_explica_por_que_no_responde_desde_el_movil(self):
+        s = self._salida("local")
+        assert "Solo desde esta máquina" in s and "no responderá" in s and "opción 2" in s
+        assert "http://192.168" not in s                  # no promete una URL que no funciona
+
+    @pytest.mark.parametrize("estado", ["indeterminada", "ausente", "", "cualquier-cosa"])
+    def test_ante_la_duda_no_afirma_ni_abierto_ni_cerrado(self, estado):
+        s = self._salida(estado)
+        assert "No he podido comprobarlo" in s
+        assert "Abierto a tu red" not in s and "Solo desde esta máquina" not in s
+
+    def test_siempre_aclara_que_actualizar_no_lo_cambia(self):
+        for estado in ("abierta", "local", "indeterminada"):
+            assert "actualizar no lo cambia" in self._salida(estado, "si")
+
+
+class TestUpdateMuestraComoSeEntra:
+    """`update.sh` es largo y toca Docker: aquí se protege su CONTRATO con el resumen, no se ejecuta."""
+
+    UPDATE = Path(__file__).resolve().parents[1] / "scripts" / "update.sh"
+
+    def test_el_script_es_sintacticamente_valido(self):
+        assert subprocess.run(["bash", "-n", str(self.UPDATE)], capture_output=True).returncode == 0
+
+    def test_carga_el_resumen_y_lo_muestra_al_final_sin_poder_romper_la_actualizacion(self):
+        texto = self.UPDATE.read_text()
+        assert "_exposicion.sh" in texto
+        fin = texto.index("Actualización completada")
+        bloque = texto[fin:]
+        assert "resumen_acceso" in bloque
+        # informativo: ni la comprobación ni el resumen pueden abortar bajo `set -e`
+        assert '|| ESTADO_ACCESO="indeterminada"' in bloque
+        assert 'resumen_acceso "${ESTADO_ACCESO}" "${CONTRASENA_ACCESO_EFECTIVA}" || true' in bloque
+
+    def test_solo_pregunta_por_la_contrasena_si_esta_abierto(self):
+        """`leer_efectiva` arranca un contenedor: no se paga cuando el puerto está cerrado."""
+        bloque = self.UPDATE.read_text()
+        assert '"${ESTADO_ACCESO}" == "abierta" ]] && leer_efectiva' in bloque

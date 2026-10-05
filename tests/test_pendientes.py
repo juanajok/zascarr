@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_pendientes.py
 
@@ -22,6 +23,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, File, FileFormat, Series
+from zascarr.web.pendientes import RECONTAR_MENU
 
 
 class FakeScalarResult:
@@ -151,6 +153,29 @@ class TestBuscarSerie:
         assert "Sin coincidencias" in r.text
 
 
+class TestFragmentoDeRecuento:
+    """El elemento que hace que el menú recuente «Por revisar» al sustituirse la tarjeta. Se prueba su CONTENIDO
+    literal y que apunta a la ruta REAL del menú: las demás pruebas comparan con la constante y, si esta cambiara,
+    seguirían pasando."""
+
+    def test_pide_al_cargar_la_ruta_real_del_menu_y_no_intercambia_nada(self):
+        from zascarr.web.navegacion import router as router_menu
+        ruta_real = next(r.path for r in router_menu.routes if r.path.endswith("/estado"))
+        assert ruta_real == "/ui/_nav/estado"
+        assert f'hx-get="{ruta_real}"' in RECONTAR_MENU
+        assert 'hx-trigger="load"' in RECONTAR_MENU          # se pide una vez, al incorporarse al DOM
+        assert 'hx-swap="none"' in RECONTAR_MENU             # no cambia nada visible (los contadores van fuera de banda)
+        assert " hidden" in RECONTAR_MENU                     # inerte para quien mira y para un lector de pantalla
+
+    def test_no_depende_de_cabeceras_hx_trigger(self):
+        """Mecanismo retirado: htmx 4 despacha esa cabecera sobre el elemento origen, que ya no está en el DOM
+        tras el reemplazo, y el evento no llega a `body`."""
+        import inspect
+
+        import zascarr.web.pendientes as modulo
+        assert "HX-Trigger" not in inspect.getsource(modulo).replace("`HX-Trigger`", "")
+
+
 class TestIgnorar:
 
     def test_ignorar_devuelve_vacio_para_eliminar_la_tarjeta(self, tmp_path):
@@ -159,8 +184,18 @@ class TestIgnorar:
         with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
             r = client.post(f"/ui/pendientes/{file.id}/ignorar")
         assert r.status_code == 200
-        assert r.text == ""
+        assert r.text == RECONTAR_MENU          # la tarjeta desaparece; el menú recuenta
         assert file.review_dismissed is True
+
+    def test_ignorar_confirma_antes_de_responder(self, tmp_path):
+        """Regresión del mecanismo: el `commit` de `get_db` llega DESPUÉS de responder, y el menú
+        pide su contador en cuanto llega la respuesta: contaría todavía el archivo ignorado."""
+        file = File(id=uuid4(), file_path=str(tmp_path / "x.cbz"), file_name="x.cbz",
+                    file_format=FileFormat.CBZ, review_dismissed=False)
+        session = FakeSession(get_map={(File, file.id): file})
+        with use_fake_session(session) as client:
+            client.post(f"/ui/pendientes/{file.id}/ignorar")
+        assert session.commit.await_count >= 1
 
     def test_archivo_inexistente_da_404(self):
         with use_fake_session(FakeSession()) as client:

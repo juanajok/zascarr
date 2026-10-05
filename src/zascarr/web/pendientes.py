@@ -168,6 +168,20 @@ def interpretar(r: Resultado) -> Respuesta:
     return RESPUESTAS.get(r.estado, RESPUESTA_INESPERADA)
 
 
+#: Tras asignar o ignorar, el menú vuelve a pedir SUS contadores a la BD (`/ui/_nav/estado`, que ya
+#: los calcula a partir de los pendientes reales). No se resta uno a ciegas: el número lo da la
+#: consulta, no la respuesta.
+#: Va como un elemento inerte DENTRO de la respuesta que sustituye a la tarjeta y se pide al
+#: cargarse.
+#: NO como cabecera `HX-Trigger`: htmx 4 la despacha sobre el elemento que hizo la petición,
+#: que ya no está en el DOM cuando la tarjeta se reemplaza (`outerHTML`), y un evento de un nodo
+#: desconectado no llega a `body` (comprobado en navegador real con un clic; con `htmx.ajax` sin
+#: elemento origen sí «funcionaba»).
+RECONTAR_MENU = (
+    '<span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" '
+    'hx-swap="none"></span>')
+
+
 def _es_htmx(request: Request) -> bool:
     return request.headers.get("HX-Request", "").lower() == "true"
 
@@ -191,9 +205,10 @@ async def asignar(request: Request, file_id: UUID, series_id: UUID = Form(...),
     resp = interpretar(r) if r is not None else RESPUESTA_INESPERADA
     aviso = {"tipo": resp.tipo, "texto": resp.texto}
     if resp.status == 200 and not resp.texto:
-        return HTMLResponse("")                                # la tarjeta desaparece
+        return HTMLResponse(RECONTAR_MENU)                      # la tarjeta desaparece
     if resp.status == 200:                  # asignado, con un aviso que no debe perderse
-        return templates.TemplateResponse(request, "_asignacion_aviso.html", {"aviso": aviso})
+        return templates.TemplateResponse(
+            request, "_asignacion_aviso.html", {"aviso": aviso, "recontar_menu": RECONTAR_MENU})
     if not _es_htmx(request):
         raise HTTPException(status_code=resp.status, detail=resp.texto)
     # HTMX sustituye la TARJETA entera: se devuelve la tarjeta con el motivo y el aviso,
@@ -213,4 +228,7 @@ async def ignorar(file_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLResp
         await ReviewService(db).dismiss(file_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return HTMLResponse("")
+    # Se confirma AQUÍ y no en `get_db` (que lo hace DESPUÉS de responder): el menú pide su contador
+    # en cuanto llega la respuesta y, si el commit aún no ha ocurrido, contaría el archivo ignorado.
+    await db.commit()
+    return HTMLResponse(RECONTAR_MENU)
