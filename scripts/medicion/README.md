@@ -170,3 +170,14 @@ montaje** (`renameat2` sin reemplazo, `link`, `fsync`), el coste de rename/copia
 extremo a extremo. Pruebas de que no toca nada más: `tests/test_medir_asignacion_sh.py`.
 
 `--cruzado ORIGEN,DESTINO` (posiciones 1-based de los `--dir`) mide además la asignación con el origen en un dispositivo y la biblioteca en otro. La espera a Postgres es por TCP con plazo de 120 s (`MEDICION_ESPERA_PG`).
+
+
+## `medir_carpetas.py` — B14 (solo lectura, sin BD)
+
+Compara el título que el parser saca del nombre de cada archivo con el de la carpeta que lo contiene y cuenta la
+relación (iguales / uno dentro del otro / distintos / sin carpeta de serie). **No decide ninguna serie.** La salida
+lleva rutas reales: no se publica. Resultados y lectura: `docs/design/auditoria-b14-carpetas.md`.
+
+```bash
+python scripts/medicion/medir_carpetas.py /ruta/biblioteca -o salida.json
+```
