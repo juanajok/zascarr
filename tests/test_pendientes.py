@@ -161,6 +161,17 @@ class TestIgnorar:
         assert r.status_code == 200
         assert r.text == ""
         assert file.review_dismissed is True
+        assert r.headers["HX-Trigger"] == "zascarr:pendientes"      # el menú recuenta los pendientes
+
+    def test_ignorar_confirma_antes_de_responder(self, tmp_path):
+        """Regresión del mecanismo: el `commit` de `get_db` llega DESPUÉS de responder, y el menú pide su
+        contador en cuanto llega la respuesta: contaría todavía el archivo ignorado."""
+        file = File(id=uuid4(), file_path=str(tmp_path / "x.cbz"), file_name="x.cbz",
+                    file_format=FileFormat.CBZ, review_dismissed=False)
+        session = FakeSession(get_map={(File, file.id): file})
+        with use_fake_session(session) as client:
+            client.post(f"/ui/pendientes/{file.id}/ignorar")
+        assert session.commit.await_count >= 1
 
     def test_archivo_inexistente_da_404(self):
         with use_fake_session(FakeSession()) as client:

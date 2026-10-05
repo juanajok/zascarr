@@ -747,3 +747,93 @@ class TestUrlHistoricaSeLimpia:
         _estado(docker_doble, env_url="http://vieja.ejemplo.org/x", db_url="http://vieja.ejemplo.org/x")
         datos, _ = _efectiva_tras(docker_doble, "3", "https://nueva.ejemplo.org")
         assert datos["URL"] == "https://nueva.ejemplo.org"
+
+
+class TestIpDeLaRedPorRuta:
+    """`hostname -I` lista TODAS las interfaces (también los puentes de Docker): se prefiere la dirección
+    con la que el equipo sale a la red."""
+
+    @staticmethod
+    def _con_comandos(tmp_path, ip_route: str, hostname: str):
+        bin_ = tmp_path / "bin"
+        bin_.mkdir()
+        (bin_ / "ip").write_text(f"#!/bin/sh\n{ip_route}\n")
+        (bin_ / "hostname").write_text(f"#!/bin/sh\n{hostname}\n")
+        for f in bin_.iterdir():
+            f.chmod(0o755)
+        return f'PATH="{bin_}:$PATH"\nip_de_la_red'
+
+    def test_prefiere_la_direccion_de_la_ruta_por_defecto(self, tmp_path):
+        cuerpo = self._con_comandos(
+            tmp_path, 'echo "1.1.1.1 via 192.168.1.1 dev eth0 src 192.168.1.176 uid 1000"',
+            'echo "172.17.0.1 192.168.1.176"')
+        assert _bash(cuerpo).stdout.strip() == "192.168.1.176"
+
+    def test_sin_ruta_cae_a_hostname(self, tmp_path):
+        cuerpo = self._con_comandos(tmp_path, "exit 2", 'echo "192.168.1.50 172.17.0.1"')
+        assert _bash(cuerpo).stdout.strip() == "192.168.1.50"
+
+    def test_una_salida_ilegible_no_inventa_una_direccion(self, tmp_path):
+        cuerpo = self._con_comandos(tmp_path, 'echo "RTNETLINK answers: Network is unreachable"', "exit 1")
+        r = _bash(cuerpo)
+        assert r.returncode == 0 and r.stdout.strip() == ""
+
+
+class TestResumenDeAcceso:
+    """Tras ACTUALIZAR: cómo se entra, sin cambiarlo y sin afirmar lo que no se comprobó."""
+
+    @staticmethod
+    def _salida(estado, contrasena="", ip="192.168.1.176"):
+        return _bash(f'ip_de_la_red() {{ echo "{ip}"; }}\nresumen_acceso "{estado}" "{contrasena}"').stdout
+
+    def test_abierta_con_contrasena_da_la_url_y_dice_que_la_pide(self):
+        s = self._salida("abierta", "si")
+        assert "http://192.168.1.176:8000" in s and "Te pedirá la contraseña" in s and "ATENCIÓN" not in s
+
+    def test_abierta_sin_contrasena_avisa_con_claridad(self):
+        s = self._salida("abierta", "no")
+        assert "ATENCIÓN" in s and "no hay contraseña" in s and "bootstrap.sh" in s
+
+    def test_abierta_sin_poder_comprobar_la_contrasena_no_afirma_nada(self):
+        s = self._salida("abierta", "")
+        assert "No he podido comprobar si pide contraseña" in s
+        assert "Te pedirá" not in s and "ATENCIÓN" not in s
+
+    def test_local_explica_por_que_no_responde_desde_el_movil(self):
+        s = self._salida("local")
+        assert "Solo desde esta máquina" in s and "no responderá" in s and "opción 2" in s
+        assert "http://192.168" not in s                  # no promete una URL que no funciona
+
+    @pytest.mark.parametrize("estado", ["indeterminada", "ausente", "", "cualquier-cosa"])
+    def test_ante_la_duda_no_afirma_ni_abierto_ni_cerrado(self, estado):
+        s = self._salida(estado)
+        assert "No he podido comprobarlo" in s
+        assert "Abierto a tu red" not in s and "Solo desde esta máquina" not in s
+
+    def test_siempre_aclara_que_actualizar_no_lo_cambia(self):
+        for estado in ("abierta", "local", "indeterminada"):
+            assert "actualizar no lo cambia" in self._salida(estado, "si")
+
+
+class TestUpdateMuestraComoSeEntra:
+    """`update.sh` es largo y toca Docker: aquí se protege su CONTRATO con el resumen, no se ejecuta."""
+
+    UPDATE = Path(__file__).resolve().parents[1] / "scripts" / "update.sh"
+
+    def test_el_script_es_sintacticamente_valido(self):
+        assert subprocess.run(["bash", "-n", str(self.UPDATE)], capture_output=True).returncode == 0
+
+    def test_carga_el_resumen_y_lo_muestra_al_final_sin_poder_romper_la_actualizacion(self):
+        texto = self.UPDATE.read_text()
+        assert "_exposicion.sh" in texto
+        fin = texto.index("Actualización completada")
+        bloque = texto[fin:]
+        assert "resumen_acceso" in bloque
+        # informativo: ni la comprobación ni el resumen pueden abortar bajo `set -e`
+        assert '|| ESTADO_ACCESO="indeterminada"' in bloque
+        assert 'resumen_acceso "${ESTADO_ACCESO}" "${CONTRASENA_ACCESO_EFECTIVA}" || true' in bloque
+
+    def test_solo_pregunta_por_la_contrasena_si_esta_abierto(self):
+        """`leer_efectiva` arranca un contenedor: no se paga cuando el puerto está cerrado."""
+        bloque = self.UPDATE.read_text()
+        assert '"${ESTADO_ACCESO}" == "abierta" ]] && leer_efectiva' in bloque

@@ -23,6 +23,7 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_comun.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_exposicion.sh"
 
 BRANCH="${BRANCH:-$(git -C "${REPO_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
 
@@ -138,4 +139,12 @@ echo "      sudo bash scripts/rollback.sh"
 echo ""
 echo "  El script empareja el commit y el backup por la referencia de rescate"
 echo "  (${UPDATE_REF##*/}) y hace su propia copia de seguridad antes de tocar nada."
+echo ""
+# Cómo se entra. Es informativo: un fallo al comprobarlo NUNCA estropea una actualización ya hecha.
+ESTADO_ACCESO="$(estado_de_publicacion 2>/dev/null)" || ESTADO_ACCESO="indeterminada"
+CONTRASENA_ACCESO_EFECTIVA=""
+if [[ "${ESTADO_ACCESO}" == "abierta" ]] && leer_efectiva 2>/dev/null; then
+    CONTRASENA_ACCESO_EFECTIVA="${EFECTIVA_CONTRASENA}"
+fi
+resumen_acceso "${ESTADO_ACCESO}" "${CONTRASENA_ACCESO_EFECTIVA}" || true
 echo ""

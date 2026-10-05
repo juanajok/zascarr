@@ -103,7 +103,13 @@ contrasena_suficiente() {
 #   dirección entrar desde el móvil. Vacío si no se puede saber.
 ip_de_la_red() {
     local ip=""
-    if command -v hostname >/dev/null 2>&1; then
+    # La dirección con la que este equipo SALE a la red (la de la ruta por defecto): `hostname -I`
+    # lista todas las interfaces —también los puentes de Docker, 172.17.0.1— y la primera puede
+    # no ser la que sirve desde el móvil. Solo si no hay ruta se cae a `hostname -I`.
+    if command -v ip >/dev/null 2>&1; then
+        ip="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)"
+    fi
+    if [[ ! "${ip}" =~ ^[0-9]+(\.[0-9]+){3}$ ]] && command -v hostname >/dev/null 2>&1; then
         ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
     fi
     [[ "${ip}" =~ ^[0-9]+(\.[0-9]+){3}$ ]] && echo "${ip}"
@@ -266,6 +272,36 @@ subred_de_la_red() {
     subred="$(ip -4 route show dev "${dev}" scope link 2>/dev/null | awk '{print $1}' | head -1)"
     [[ "${subred}" =~ ^[0-9]+(\.[0-9]+){3}/[0-9]+$ ]] && echo "${subred}"
     return 0
+}
+
+# resumen_acceso ESTADO [CONTRASENA]
+#   Qué decirle al coleccionista tras ACTUALIZAR sobre cómo se entra. Actualizar NO cambia la
+#   exposición: recrea el contenedor con lo que ya hay en el `.env`. ESTADO es lo que informa
+#   `estado_de_publicacion` (lo que Docker tiene de verdad); CONTRASENA, si/no/«» (lo que la app aplicaría).
+#   Si está abierto y no hay contraseña se avisa con claridad; ante la duda no se afirma nada.
+resumen_acceso() {
+    local estado="${1:-indeterminada}" contrasena="${2:-}" ip
+    echo "  Cómo se entra (actualizar no lo cambia):"
+    case "${estado}" in
+        abierta)
+            ip="$(ip_de_la_red)"
+            echo "    Abierto a tu red local:  http://${ip:-<la IP de este equipo>}:8000"
+            case "${contrasena}" in
+                si) echo "    Te pedirá la contraseña de acceso." ;;
+                no) echo "    ATENCIÓN: no hay contraseña fijada. Ejecuta  bash bootstrap.sh  para fijarla"
+                    echo "    (o elige la opción 1 para volver a dejarlo solo en esta máquina)." ;;
+                *)  echo "    No he podido comprobar si pide contraseña; ejecuta  bash bootstrap.sh  para verlo." ;;
+            esac
+            ;;
+        local)
+            echo "    Solo desde esta máquina (http://127.0.0.1:8000), o a través de tu proxy si lo configuraste."
+            echo "    Desde el móvil u otro equipo no responderá aunque escribas la IP de la Pi."
+            echo "    Para abrirlo a tu red, ejecuta  bash bootstrap.sh  y elige la opción 2."
+            ;;
+        *)
+            echo "    No he podido comprobarlo ahora. Para verlo o cambiarlo, ejecuta  bash bootstrap.sh."
+            ;;
+    esac
 }
 
 # resumen_exposicion OPCION URL_PUBLICA
