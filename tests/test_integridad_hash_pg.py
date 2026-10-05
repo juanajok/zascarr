@@ -114,8 +114,10 @@ async def _montar(db, tmp_path: Path, *, formato: FileFormat = FileFormat.CBZ,
 
 
 def _fila(db, *, sha256_hash: str, original_sha256: str | None = None,
-           is_missing: bool = False, imported_at=None, nombre="x.cbz") -> File:
-    f = File(id=uuid4(), file_path=f"/lib/{uuid4()}.cbz", file_name=nombre,
+           is_missing: bool = False, imported_at=None, nombre="x.cbz", ruta: Path | None = None) -> File:
+    """`ruta`: dónde está de verdad el fichero de la fila. Una fila que debe ser una copia PRESENTE (duplicado real)
+    necesita un fichero que exista; sin él, su ruta es una referencia obsoleta."""
+    f = File(id=uuid4(), file_path=str(ruta) if ruta else f"/lib/{uuid4()}.cbz", file_name=nombre,
              file_format=FileFormat.CBZ, sha256_hash=sha256_hash,
              original_sha256=original_sha256, is_missing=is_missing,
              imported_at=imported_at)
@@ -133,9 +135,9 @@ class TestDedupeIntegridad:
         única lanzaba `MultipleResultsFound` y rompía el ciclo para siempre."""
         ruta = _crear_cbz(tmp_path / "a.cbz")
         sha = sha256_streaming(ruta)
-        _fila(db, sha256_hash=sha, nombre="vieja.cbz",
+        _fila(db, sha256_hash=sha, nombre="vieja.cbz", ruta=_crear_cbz(tmp_path / "vieja.cbz"),
               imported_at=datetime(2020, 1, 1, tzinfo=UTC))
-        _fila(db, sha256_hash=sha, nombre="nueva.cbz",
+        _fila(db, sha256_hash=sha, nombre="nueva.cbz", ruta=_crear_cbz(tmp_path / "nueva.cbz"),
               imported_at=datetime(2021, 1, 1, tzinfo=UTC))
         await db.flush()
 
@@ -150,7 +152,8 @@ class TestDedupeIntegridad:
         `original_sha256`, no solo por `sha256_hash`."""
         ruta = _crear_cbz(tmp_path / "a.cbz")
         sha = sha256_streaming(ruta)
-        _fila(db, sha256_hash="d" * 64, original_sha256=sha, nombre="etiquetado.cbz")
+        _fila(db, sha256_hash="d" * 64, original_sha256=sha, nombre="etiquetado.cbz",
+              ruta=_crear_cbz(tmp_path / "etiquetado.cbz"))
         await db.flush()
 
         outcome = await _triage_and_match(db, ruta)
@@ -181,7 +184,7 @@ class TestDedupeIntegridad:
         _fila(db, sha256_hash=sha, is_missing=True,
               imported_at=datetime(2020, 1, 1, tzinfo=UTC))
         _fila(db, sha256_hash=sha, is_missing=False, nombre="presente.cbz",
-              imported_at=datetime(2021, 1, 1, tzinfo=UTC))
+              ruta=_crear_cbz(tmp_path / "presente.cbz"), imported_at=datetime(2021, 1, 1, tzinfo=UTC))
         await db.flush()
 
         outcome = await _triage_and_match(db, ruta)
