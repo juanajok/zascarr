@@ -923,3 +923,27 @@ class TestValladoDeEpocaEnLaBd:
         assert r.estado == "propiedad_perdida"
         assert e.issue_id is None and e.issues == 0 and e.alias == 0 and e.ruta == str(mundo.origen)
         assert e.ops == ["preparada"]
+
+
+class TestFalloDeEscrituraAlPublicar:
+    """Regresión del mecanismo: un `OSError` genérico al publicar (solo lectura, sin permiso, sin espacio) se
+    escapaba de `asignar` como excepción —un 500 sin explicar en la página— y dejaba la operación viva y la
+    copia a medias. Ahora es un resultado `error`, la operación queda cancelada y reintentar es limpio."""
+
+    @pytest.mark.asyncio
+    async def test_oserror_al_publicar_cancela_limpia_y_se_puede_reintentar(self, mundo, monkeypatch):
+        import zascarr.services.asignacion as modulo
+        publicar = modulo._publicar
+
+        def publicar_roto(temporal, destino):
+            raise OSError(30, "Read-only file system")
+        monkeypatch.setattr(modulo, "_publicar", publicar_roto)
+        r = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e = await mundo.estado()
+        assert r.estado == "error" and "Read-only" not in r.motivo
+        assert e.ops == ["cancelada"] and e.origen_existe and e.issue_id is None
+        assert e.partes == [] and e.destinos == []                 # ni copia a medias ni destino
+        monkeypatch.setattr(modulo, "_publicar", publicar)          # el disco vuelve a estar bien
+        r2 = await mundo.servicio().asignar(mundo.file_id, mundo.serie_id, "12")
+        e2 = await mundo.estado()
+        assert r2.estado == "asignado" and e2.ops == ["cancelada", "limpiada"] and len(e2.destinos) == 1

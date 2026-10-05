@@ -363,9 +363,17 @@ El prototipo pasó a `src/zascarr/services/asignacion.py` (`AsignacionService`).
   `flush` dentro del manejador (el `commit` de `get_db` llega después de responder) y `rollback`.
 - **Sin registrar rutas en los logs.**
 
-**No está conectado:** `POST /ui/pendientes/{id}/asignar` sigue usando `ReviewService.assign_to_series`. Conectarlo
-cambia los contratos de B13/B15 (sus pruebas usan una sesión simulada) y es el paso siguiente; el 409 y la
-reconciliación ya están antes de que exista ninguna operación viva en producción.
+**Conectado (PR aparte, tras el servicio):** `POST /ui/pendientes/{id}/asignar` usa `AsignacionService`; el
+`commit` ya no es el de `get_db`. Los resultados recuperables se muestran sin esconder el error: «asignado con
+limpieza pendiente» y «reparación pendiente» son 200 con aviso ámbar; «pendiente» y «pendiente de comprobar» son
+503 con la tarjeta delante; la colisión de ediciones (B15) es 409 y **su motivo se guarda** en una transacción
+corta propia (fusión `||` de JSONB), sin depender del `commit` de `get_db`. El contrato visible de B13 (el alias se
+aprende siempre) y de B15 se mantiene; cambia solo que, con htmx, un 4xx/5xx devuelve la **tarjeta** y no un JSON
+(htmx 4 intercambia todo salvo 204/304). `ReviewService.assign_to_series` y sus pruebas siguen, sin ruta.
+Defecto hallado al conectar: un `OSError` genérico al publicar (solo lectura, permisos, espacio) se escapaba de
+`asignar`; ahora cancela la operación, retira la copia propia y devuelve `error`. Cualquier excepción del servicio
+llega a la página como aviso, nunca como un 500 sin explicar. El 409 y la reconciliación ya estaban antes de que
+existiera ninguna operación viva.
 
 **Limitación de la prueba de esquema (anotada, no bloqueante):** la comparación de predicados entre el modelo y
 la tabla extrae los **literales** de estado; detecta cambiar qué estados incluye, pero no distinguiría `IN` de

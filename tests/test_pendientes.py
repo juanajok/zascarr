@@ -6,8 +6,8 @@ la dependencia get_db con una sesión falsa (patrón recomendado por
 FastAPI) para no necesitar Postgres real — mismo motivo que test_web.py
 usa TestClient sin `with`: evitar el lifespan real de la app.
 
-El movimiento de archivos real (assign_to_series con tmp_path) ya está
-cubierto en test_review.py contra el servicio directamente; aquí se
+El movimiento de archivos real ya está cubierto en test_asignacion_*_pg.py (servicio
+recuperable) y test_review.py (camino heredado de B13/B15); aquí se
 prueba el CONTRATO HTTP de cada ruta (200/404/400, qué fragmento HTML
 devuelve cada una), no la lógica de negocio por duplicado.
 """
@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, File, FileFormat, Issue, IssueFormat, Series
+from zascarr.models import ComicTradition, File, FileFormat, Series
 
 
 class FakeScalarResult:
@@ -170,14 +170,6 @@ class TestIgnorar:
 
 class TestAsignar:
 
-    def test_serie_inexistente_da_400(self, tmp_path):
-        file = File(id=uuid4(), file_path=str(tmp_path / "x.cbz"), file_name="x.cbz",
-                    file_format=FileFormat.CBZ)
-        with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
-            r = client.post(f"/ui/pendientes/{file.id}/asignar",
-                            data={"series_id": str(uuid4()), "issue_number": "5"})
-        assert r.status_code == 400
-
     def test_numero_vacio_da_400(self, tmp_path):
         file = File(id=uuid4(), file_path=str(tmp_path / "x.cbz"), file_name="x.cbz",
                     file_format=FileFormat.CBZ)
@@ -188,35 +180,10 @@ class TestAsignar:
                             data={"series_id": str(series.id), "issue_number": "   "})
         assert r.status_code == 400
 
-    def test_colision_grapa_recopilacion_da_409_y_persiste_motivo(self, tmp_path):
-        """B15: asignar un Omnigold 12 sobre la grapa #12 existente NO enlaza ni
-        mueve el archivo — el endpoint devuelve 409 y deja el motivo en el File
-        para que siga visible al recargar Pendientes."""
-        file = File(
-            id=uuid4(),
-            file_path=str(tmp_path / "la patrulla x omnigold 12.cbz"),
-            file_name="la patrulla x omnigold 12.cbz",
-            file_format=FileFormat.CBZ,
-            metadata_={"match_status": "unsorted"},
-        )
-        series = Series(id=uuid4(), title="La Patrulla-X", tradition=ComicTradition.AMERICAN)
-        grapa = Issue(id=uuid4(), series_id=series.id, issue_number="12",
-                      format=IssueFormat.SINGLE_ISSUE)
-        session = FakeSession(
-            get_map={(File, file.id): file, (Series, series.id): series},
-            exec_queue=[FakeExecResult([grapa])],
-        )
-        with use_fake_session(session) as client:
-            r = client.post(f"/ui/pendientes/{file.id}/asignar",
-                            data={"series_id": str(series.id), "issue_number": "12"})
-        assert r.status_code == 409
-        assert "número compartido entre ediciones" in r.json()["detail"]
-        assert file.metadata_["review_motivo"] == "número compartido entre ediciones"
-        assert file.issue_id is None  # no se enlazó a la grapa
-        # Refuerzo barato: el router PIDIÓ persistir el motivo. NO demuestra
-        # que sobreviva a cerrar y reabrir una sesión de BD — eso exige
-        # Postgres real (pendiente, ver nota de B15 en BACKLOG).
-        session.commit.assert_awaited_once()
+    # Las pruebas de «serie inexistente» y de la colisión de ediciones (B15) pasaron a
+    # `tests/test_pendientes_asignar_pg.py`: el endpoint ya no asigna con la sesión de la petición
+    # (usa el servicio recuperable, ADR 0006, con sus propias sesiones), así que una sesión simulada
+    # no las alcanza. Con Postgres real sí se prueba que el motivo sobrevive a cerrar la sesión.
 
 
 class TestPortada:

@@ -1,22 +1,22 @@
 # ruff: noqa: E501
-"""V6a, auditoría (criterio 1): qué queda en disco y en BD si algo falla entre mover y confirmar.
+"""V6a, auditoría (criterio 1): las MISMAS fronteras de fallo, ahora contra el endpoint conectado al servicio.
 
-PRUEBAS DE CARACTERIZACIÓN: describen lo que `ReviewService.assign_to_series` hace HOY, con el
-endpoint real (`POST /ui/pendientes/{id}/asignar`), el `get_db` real, Postgres real y ficheros reales.
-Los nombres dicen el mecanismo. Algunas fijan un comportamiento que NO es el deseable (un fichero
-movido con la BD revertida): están ahí para que el lote de V6a las cambie a propósito, no por
-accidente. El análisis y la propuesta de reconciliación: `docs/design/auditoria-mover-y-sesion.md`.
+Historia del módulo. Se escribió como **caracterización** de `ReviewService.assign_to_series` con el endpoint
+real, Postgres real y ficheros reales (PR #75): fijaba, a propósito, los defectos de entonces (fichero movido
+con la BD revertida por cuatro caminos; el `commit` de `get_db` después de responder; ningún reconciliador;
+solapamiento seguro solo por el índice único de `Issue`). El análisis sigue en
+`docs/design/auditoria-mover-y-sesion.md`. Al conectar la asignación individual al servicio recuperable
+(ADR 0006) esas pruebas **se cambian a propósito**, como se anunció: cada frontera conserva su nombre y
+ahora afirma el comportamiento nuevo —o la prueba que lo cubre con más detalle—.
 
-Se saltan sin `TEST_DATABASE_URL`. Cada módulo crea su propia BD efímera y migrada.
+El endpoint se prueba SIN sustituir `servicio_por_defecto`: el motor y la biblioteca llegan por
+`zascarr.database` y `get_settings`, como en producción. Se saltan sin `TEST_DATABASE_URL`.
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import os
-import subprocess
-import sys
-import textwrap
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +27,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from tests._pg import RAIZ, bd_efimera_sync, entorno_para_alembic, migrar_a_head, url_asyncpg
+from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
 from zascarr.models import (
     ComicTradition,
     File,
@@ -76,11 +76,11 @@ class Entorno:
         self.engine = create_async_engine(url_asyncpg(url), poolclass=NullPool)
         self.fabrica = async_sessionmaker(self.engine, expire_on_commit=False)
         monkeypatch.setattr(dbmod, "async_session_factory", self.fabrica)
-        ajustes = SimpleNamespace(
-            library_path=self.lib, downloads_path=self.dl,
-            transmission_download_dir=str(self.dl), amule_incoming_dir=str(self.dl / "amule"))
-        monkeypatch.setattr("zascarr.services.review.get_settings", lambda: ajustes)
-        monkeypatch.setattr("zascarr.services.importer.get_settings", lambda: ajustes)
+        from zascarr.config import get_settings
+        ajustes = get_settings().model_copy(update=dict(
+            library_path=self.lib, downloads_path=self.dl, transmission_download_dir=str(self.dl),
+            amule_incoming_dir=str(self.dl / "amule"), asignacion_simultaneas=1))
+        monkeypatch.setattr("zascarr.config.get_settings", lambda: ajustes)
         app = FastAPI()
         app.include_router(router)
         self.cliente = TestClient(app, raise_server_exceptions=False)
@@ -92,7 +92,7 @@ class Entorno:
         # La BD es EFÍMERA y de este módulo: se vacía entre pruebas para que el recuento de ficheros de
         # la biblioteca (y el guardarraíl de desaparición masiva de B7) dependa solo de cada prueba.
         async with self.engine.begin() as c:
-            await c.execute(text("TRUNCATE files, issues, series, local_aliases, import_runs CASCADE"))
+            await c.execute(text("TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, import_runs CASCADE"))
         self.origen = self.lib / "_Unsorted" / nombre
         contenido = hacer_cbz(self.origen, marca)
         async with self.fabrica() as s:
@@ -108,7 +108,7 @@ class Entorno:
         return self
 
     def asignar(self, numero="12"):
-        return self.cliente.post(f"/ui/pendientes/{self.file_id}/asignar",
+        return self.cliente.post(f"/ui/pendientes/{self.file_id}/asignar", headers={"HX-Request": "true"},
                                  data={"series_id": str(self.serie_id), "issue_number": numero})
 
     async def bd(self) -> SimpleNamespace:
@@ -116,9 +116,10 @@ class Entorno:
             f = await s.get(File, self.file_id)
             issues = (await s.execute(select(Issue).where(Issue.series_id == self.serie_id))).scalars().all()
             alias = (await s.execute(select(LocalAlias).where(LocalAlias.series_id == self.serie_id))).scalars().all()
+            ops = (await s.execute(text("SELECT estado FROM asignacion_operaciones ORDER BY creada"))).scalars().all()
             return SimpleNamespace(
                 ruta=f.file_path, issue_id=f.issue_id, fuente=f.metadata_source, is_missing=f.is_missing,
-                issues=len(issues), alias=len(alias))
+                issues=len(issues), alias=len(alias), ops=list(ops))
 
     def disco(self) -> SimpleNamespace:
         todos = sorted(str(p.relative_to(self.lib)) for p in self.lib.rglob("*.cbz"))
@@ -147,6 +148,7 @@ class TestCaminoFeliz:
         assert not disco.origen_existe and len(disco.destinos) == 1
         assert bd.ruta.endswith(disco.destinos[0]) and bd.issue_id is not None
         assert bd.fuente == MetadataSource.MANUAL.value and bd.issues == 1 and bd.alias == 1
+        assert bd.ops == ["limpiada"]
 
 
 class TestFronterasDeFallo:
@@ -154,51 +156,50 @@ class TestFronterasDeFallo:
 
     @pytest.mark.asyncio
     async def test_fallo_antes_de_mover_no_deja_nada(self, ent, monkeypatch):
-        async def mover_roto(orig, dest):
+        def publicar_roto(temporal, destino):
             raise OSError("disco de destino de solo lectura")
-        monkeypatch.setattr("zascarr.services.review.safe_move_async", mover_roto)
+        monkeypatch.setattr("zascarr.services.asignacion._publicar", publicar_roto)
         r = ent.asignar()
         bd, disco = await ent.bd(), ent.disco()
-        assert r.status_code == 500
-        assert disco.origen_existe and disco.destinos == []          # disco intacto
-        assert bd.issue_id is None and bd.issues == 0 and bd.alias == 0  # el Issue del flush se revirtió
+        assert r.status_code == 500 and 'id="card-' in r.text         # la tarjeta sigue con su aviso
+        assert "disco de destino" not in r.text and "No se pudo asignar" in r.text
+        assert disco.origen_existe and disco.destinos == []            # disco intacto
+        assert bd.issue_id is None and bd.ruta == str(ent.origen)
 
     @pytest.mark.asyncio
-    async def test_hoy_fallo_despues_de_mover_deja_el_fichero_movido_y_la_bd_revertida(self, ent, monkeypatch):
-        """El punto que `CLAUDE.md` §3.1.2 marcaba «pendiente de auditar»."""
-        async def alias_roto(self, *a, **k):
-            raise RuntimeError("fallo en _learn_alias, después de mover y de actualizar la fila")
-        monkeypatch.setattr("zascarr.services.review.ReviewService._learn_alias", alias_roto)
-        r = ent.asignar()
-        bd, disco = await ent.bd(), ent.disco()
-        assert r.status_code == 500
-        assert not disco.origen_existe and len(disco.destinos) == 1   # EL FICHERO SE MOVIÓ…
-        assert bd.ruta == str(ent.origen) and bd.issue_id is None     # …y la BD sigue apuntando al origen
-        assert bd.issues == 0                                          # (el Issue se revirtió)
-
-    @pytest.mark.asyncio
-    async def test_hoy_si_el_commit_de_get_db_falla_el_cliente_ya_recibio_exito(self, ent, monkeypatch):
-        """El `commit` de `get_db` corre al SALIR de la dependencia. En este FastAPI el cierre de una
-        dependencia con `yield` es, por defecto, posterior al envío de la respuesta."""
+    async def test_antes_fallo_despues_de_mover_dejaba_el_fichero_movido_y_la_bd_revertida(self, ent, monkeypatch):
+        """Era el punto que `CLAUDE.md` §3.1.2 marcaba «pendiente de auditar». Ahora el movimiento es una
+        COPIA verificada y el original solo se borra tras confirmar: un fallo al confirmar deja el original."""
         original = AsyncSession.commit
-        llamadas = {"n": 0}
+        n = {"c": 0}
 
-        async def commit_que_falla_la_primera(self):
-            llamadas["n"] += 1
-            if llamadas["n"] == 1:
-                raise RuntimeError("el commit falló (conexión perdida)")
+        async def commit_que_falla_al_confirmar(self):
+            n["c"] += 1
+            if n["c"] == 3:                 # 1.º: preparar; 2.º: tomar la operación; 3.º: confirmar fichero+Issue+alias
+                raise RuntimeError("fallo al confirmar")
             return await original(self)
-        monkeypatch.setattr(AsyncSession, "commit", commit_que_falla_la_primera)
+        monkeypatch.setattr(AsyncSession, "commit", commit_que_falla_al_confirmar)
         r = ent.asignar()
         monkeypatch.setattr(AsyncSession, "commit", original)
-        bd, disco = await ent.bd(), ent.disco()
-        assert r.status_code == 200                                    # el cliente cree que fue bien…
-        assert not disco.origen_existe and len(disco.destinos) == 1   # …el fichero se movió…
-        assert bd.ruta == str(ent.origen) and bd.issue_id is None     # …y la BD no lo sabe
+        disco, bd = ent.disco(), await ent.bd()
+        assert disco.origen_existe                                     # NUNCA se pierde el original
+        assert r.status_code == 503 and 'id="card-' in r.text          # y el coleccionista ve que está pendiente
+        assert bd.ops == ["preparada"] and bd.issue_id is None         # operación VIVA y sin confirmar: la retoma la reconciliación
+        assert len(disco.destinos) == 1                                # la copia ya publicada se conserva, no se borra
 
     @pytest.mark.asyncio
-    async def test_hoy_un_fallo_tras_el_servicio_pero_en_el_endpoint_tambien_revierte(self, ent, monkeypatch):
-        """Excepción DESPUÉS de `assign_to_series` y antes de responder (p. ej. al construir la respuesta)."""
+    async def test_antes_el_commit_de_get_db_fallaba_tras_dar_exito_al_cliente(self, ent, monkeypatch):
+        """Era el defecto (2) de la auditoría: el `commit` de `get_db` corre tras enviar la respuesta. Ahora
+        el servicio confirma ANTES de responder, así que un `commit` roto de `get_db` ya no puede deshacer un
+        éxito: lo que el cliente ve (200) está ya confirmado en la BD, visto desde otra sesión."""
+        r = ent.asignar()
+        assert r.status_code == 200
+        bd, disco = await ent.bd(), ent.disco()
+        assert bd.issue_id is not None and bd.ruta.endswith(disco.destinos[0]) and not disco.origen_existe
+
+    @pytest.mark.asyncio
+    async def test_antes_un_fallo_al_construir_la_respuesta_dejaba_el_estado_inconsistente(self, ent, monkeypatch):
+        """Excepción DESPUÉS del servicio y antes de responder: la asignación ya está confirmada y es coherente."""
         import zascarr.web.pendientes as pend
 
         class Rota:
@@ -208,45 +209,15 @@ class TestFronterasDeFallo:
         r = ent.asignar()
         bd, disco = await ent.bd(), ent.disco()
         assert r.status_code == 500
-        assert not disco.origen_existe and bd.issue_id is None        # mismo estado inconsistente
+        assert bd.issue_id is not None and bd.ruta.endswith(disco.destinos[0]) and not disco.origen_existe
+
+    # «Si el proceso muere entre mover y confirmar» ya no es una caracterización de un defecto: lo cubren,
+    # con subprocesos reales que mueren en cada punto, `TestMuerteDelProceso` y la reconciliación de
+    # `tests/test_asignacion_servicio_pg.py` / `tests/test_asignacion_integracion_pg.py`.
 
     @pytest.mark.asyncio
-    async def test_hoy_si_el_proceso_muere_entre_mover_y_commit_queda_igual(self, ent):
-        """Un `kill -9` / OOM en la Pi entre `safe_move` y el `commit`. Subproceso real que sale con
-        `os._exit` justo después del `flush`: sin `rollback` ni `finally`, como una muerte real."""
-        guion = textwrap.dedent(f"""
-            import asyncio, os, sys
-            from pathlib import Path
-            from types import SimpleNamespace
-            from uuid import UUID
-            from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-            import zascarr.services.review as review
-            ajustes = SimpleNamespace(library_path=Path({str(ent.lib)!r}))
-            review.get_settings = lambda: ajustes
-            async def main():
-                motor = create_async_engine({url_asyncpg(ent.url)!r})
-                async with async_sessionmaker(motor, expire_on_commit=False)() as s:
-                    async def alias_y_muerte(self, *a, **k):
-                        os._exit(137)          # tras mover y tras el UPDATE+flush de la fila
-                    review.ReviewService._learn_alias = alias_y_muerte
-                    await review.ReviewService(s).assign_to_series(
-                        UUID({str(ent.file_id)!r}), UUID({str(ent.serie_id)!r}), "12")
-            asyncio.run(main())
-        """)
-        entorno = entorno_para_alembic(os.environ, ent.url)
-        entorno["PYTHONPATH"] = str(RAIZ / "src")
-        p = subprocess.run([sys.executable, "-c", guion], env=entorno, capture_output=True, text=True, timeout=120)
-        assert p.returncode == 137, p.stderr[-800:]
-        bd, disco = await ent.bd(), ent.disco()
-        assert not disco.origen_existe and len(disco.destinos) == 1
-        assert bd.ruta == str(ent.origen) and bd.issue_id is None and bd.issues == 0
-
-    @pytest.mark.asyncio
-    async def test_hoy_entre_discos_si_falla_borrar_el_original_quedan_las_dos_copias(self, ent, monkeypatch):
-        """`safe_move` entre sistemas de ficheros distintos: copia, `os.replace` y SOLO ENTONCES `unlink`
-        del original. Si ese `unlink` falla, el destino ya está colocado y el original sigue ahí."""
-        import zascarr.utils.fs as fs
-        monkeypatch.setattr(fs, "_same_filesystem", lambda a, b: False)
+    async def test_antes_entre_discos_si_fallaba_borrar_el_original_quedaban_dos_copias(self, ent, monkeypatch):
+        """Ahora es un resultado explícito: asignado, con el original pendiente de retirar (y avisado)."""
         unlink = Path.unlink
 
         def unlink_que_falla_en_el_origen(self, *a, **k):
@@ -257,88 +228,38 @@ class TestFronterasDeFallo:
         r = ent.asignar()
         monkeypatch.setattr(Path, "unlink", unlink)
         bd, disco = await ent.bd(), ent.disco()
-        assert r.status_code == 500
-        assert disco.origen_existe and len(disco.destinos) == 1       # DOS copias en disco
-        assert bd.ruta == str(ent.origen) and bd.issue_id is None
+        assert r.status_code == 200 and "retirar el archivo original" in r.text
+        assert disco.origen_existe and len(disco.destinos) == 1       # dos copias, pero REGISTRADAS y avisadas
+        assert bd.ops == ["confirmada"] and bd.issue_id is not None and bd.ruta.endswith(disco.destinos[0])
 
 
 class TestSolapamientoDeEnvios:
 
     @pytest.mark.asyncio
-    async def test_hoy_dos_envios_del_mismo_archivo_a_la_vez(self, ent):
-        """Doble clic: A mueve y aún no ha confirmado; B llega con la fila vieja."""
-        from zascarr.services.review import ReviewService
+    async def test_dos_envios_del_mismo_archivo_a_la_vez(self, ent):
+        """Doble clic por HTTP. Antes el segundo esperaba al índice único de `Issue` y fallaba con
+        IntegrityError; ahora lo ordena el servicio (bloqueo + operación única): una asignación, una copia."""
+        import httpx
 
-        a = ent.fabrica()
-        sa = await a.__aenter__()
-        await ReviewService(sa).assign_to_series(ent.file_id, ent.serie_id, "12")   # movido, sin commit
-
-        async def segundo():
-            async with ent.fabrica() as sb:
-                try:
-                    await ReviewService(sb).assign_to_series(ent.file_id, ent.serie_id, "12")
-                    await sb.commit()
-                    return "ok"
-                except Exception as exc:  # noqa: BLE001
-                    await sb.rollback()
-                    return type(exc).__name__
-
-        tarea = asyncio.create_task(segundo())
-        await asyncio.sleep(1.0)
-        bloqueado = not tarea.done()          # ¿B espera al `commit` de A (índice único) o sigue de largo?
-        await sa.commit()
-        await a.__aexit__(None, None, None)
-        resultado_b = await asyncio.wait_for(tarea, 30)
+        from zascarr.main import app
+        datos = {"series_id": str(ent.serie_id), "issue_number": "12"}
+        url = f"/ui/pendientes/{ent.file_id}/asignar"
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost",
+                                     headers={"Origin": "http://localhost", "HX-Request": "true"}) as c:
+            a, b = await asyncio.gather(c.post(url, data=datos), c.post(url, data=datos))
+        assert sorted([a.status_code, b.status_code])[0] == 200 and {a.status_code, b.status_code} <= {200, 409}
         bd, disco = await ent.bd(), ent.disco()
-        # B se queda esperando al `commit` de A (el índice único de Issue se lo impone) y después falla
-        # con IntegrityError y se revierte: un solo Issue, un solo fichero, fila apuntando al destino real.
-        assert bloqueado is True and resultado_b == "IntegrityError"
         assert bd.issues == 1 and len(disco.destinos) == 1 and bd.ruta.endswith(disco.destinos[0])
+        assert bd.ops == ["limpiada"]
 
 
-class TestReconciliacionQueYaExiste:
-    """Desde el estado inconsistente (fichero movido a la biblioteca, BD apuntando al origen)."""
-
-    @pytest.mark.asyncio
-    async def test_hoy_el_importador_lo_marca_desaparecido_y_nadie_registra_el_destino(self, ent, monkeypatch):
-        from zascarr.services.importer import Importer
-
-        async def alias_roto(self, *a, **k):
-            raise RuntimeError("fallo tras mover")
-        monkeypatch.setattr("zascarr.services.review.ReviewService._learn_alias", alias_roto)
-        ent.asignar()
-        # Hace falta algo más en la biblioteca para que el guardarraíl de «biblioteca vacía» no omita B7.
-        hacer_cbz(ent.lib / "otra" / "Otra #001.cbz", "z")
-        async with ent.fabrica() as s:
-            desaparecidos, reaparecidos = await Importer(s)._detectar_desaparecidos()
-            await s.commit()
-        bd, disco = await ent.bd(), ent.disco()
-        async with ent.fabrica() as s:
-            fila_en_destino = (await s.execute(
-                select(File).where(File.file_path.like(f"%{Path(disco.destinos[0]).name}")))).scalars().all()
-        assert desaparecidos == ["Saga del Faro 12.cbz"] and bd.is_missing is True
-        assert fila_en_destino == []             # el fichero movido NO tiene fila en la BD
-        assert [d for d in disco.destinos if "#012" in d] == [disco.destinos[0]]
+class TestExcepcionNoControlada:
 
     @pytest.mark.asyncio
-    async def test_si_el_fichero_vuelve_a_las_descargas_el_importador_lo_recupera_por_hash(self, ent, monkeypatch):
-        """Sí hay reconciliación hoy, pero manual: hay que devolver el fichero a una carpeta de entrada."""
-        from zascarr.services.importer import Importer
-
-        async def alias_roto(self, *a, **k):
-            raise RuntimeError("fallo tras mover")
-        monkeypatch.setattr("zascarr.services.review.ReviewService._learn_alias", alias_roto)
-        ent.asignar()
-        hacer_cbz(ent.lib / "otra" / "Otra #001.cbz", "z")
-        async with ent.fabrica() as s:
-            await Importer(s)._detectar_desaparecidos()
-            await s.commit()
-        destino = ent.lib / ent.disco().destinos[0]
-        (ent.dl / "devuelto.cbz").write_bytes(destino.read_bytes())
-        destino.unlink()
-        async with ent.fabrica() as s:
-            informe = await Importer(s).scan_and_import()
-            await s.commit()
-        bd = await ent.bd()
-        assert any("recuperado" in linea for linea in informe.imported)
-        assert bd.is_missing is False
+    async def test_una_excepcion_inesperada_del_servicio_llega_como_tarjeta_y_no_como_500_en_crudo(self, ent, monkeypatch):
+        async def explota(self, *a, **k):
+            raise RuntimeError("fallo de /ruta/secreta")
+        monkeypatch.setattr("zascarr.services.asignacion.AsignacionService.asignar", explota)
+        r = ent.asignar()
+        assert r.status_code == 500 and 'id="card-' in r.text and "secreta" not in r.text
+        assert ent.disco().origen_existe
