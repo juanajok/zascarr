@@ -40,7 +40,7 @@ Fuera: archivos con `issue_id`, descartados, y los repetidos no registrados (no 
 1. Ruta relativa a la biblioteca → **componentes** `[tradición, c1, c2, …, archivo]`. El primer nivel (`Comics`, `BD`, `Tebeos`…) es la **tradición**, no una serie.
 2. **Clave del grupo = ruta de la carpeta inmediata (relativa)**, no solo su nombre: `Graphic Novels/Carlos Gimenez` y `Tebeos/Carlos Giménez` son **dos grupos**.
 3. **`carpeta_contextual`** = la primera carpeta, **subiendo desde el archivo**, que **no** sea la tradición ni un **contenedor**. Un contenedor es una carpeta cuyo
-   nombre empieza por `_` o coincide con una lista corta y explícita (`varios`, `revisar`, `otros`, `specials`, `omnibus`…, comparada sin acentos ni mayúsculas). Si todo son
+   nombre empieza por `_` o coincide con una lista corta y explícita (`varios`, `revisar`, `otros`, `specials`, `omnibus`; lista fija, ver «Decisiones adoptadas», comparada sin acentos ni mayúsculas). Si todo son
    contenedores, no hay contexto («sin carpeta de serie»).
 4. **Archivos directamente en la tradición** → un grupo «sin carpeta de serie».
 5. Los **ascendentes** (`c1 … cn-1`) se devuelven siempre, para que `Patrulla-X (Panini)` se vea sobre `Inferno (Panini)(2022)`.
@@ -54,7 +54,7 @@ Fuera: archivos con `issue_id`, descartados, y los repetidos no registrados (no 
 |---|---|---|
 | `anio_discrepa` | año de la carpeta (o dominante en los nombres) difiere en más de 1 del `start_year` de la serie candidata | **conflicto** |
 | `calificador_de_carpeta` | la carpeta limpia añade un calificador (`Saga de …`, `Vol N`, edición) que la serie candidata no tiene | **conflicto** |
-| `carpeta_de_autor_o_contenedor` | la carpeta reúne muchos títulos distintos (umbral **a medir**, no a fijar aquí) | aviso |
+| `carpeta_de_autor_o_contenedor` | la carpeta reúne muchos títulos distintos (≥ 20 títulos distintos como valor inicial, ver «Decisiones adoptadas») | aviso |
 | `titulo_exacto_sin_corroboracion` | el título del nombre coincide con la candidata y no hay año ni volumen que lo corrobore | **conflicto** |
 | `coincide_y_corrobora` | título y año (±1) o volumen coinciden con la candidata | informativa |
 | `sin_contexto_de_carpeta` | no hay `carpeta_contextual` | informativa |
@@ -140,12 +140,12 @@ Como esta rebanada no ofrece ninguna acción, un grupo sin señal no causa daño
 - **1b — vista HTML de solo lectura** sobre el mismo servicio (`/ui/pendientes/carpetas`), con las mismas etiquetas, **verificada en navegador real** (grupos, los 17 visibles, el conflicto explicado) y accesible
   (`aria`, contraste, sin JS nuevo). Su prueba de plantilla repite el 14 (etiquetas) y el 6 (conflicto visible).
 
-## Decisiones que necesito de la revisión antes de empezar
+## Decisiones adoptadas (revisión, 2026-10-06)
 
-1. **Ruta y ubicación:** `GET /api/revision/carpetas` y `/ui/pendientes/carpetas`; ¿bien o prefieres colgarlo de otra ruta?
-2. **Lista de contenedores** (`_*`, `varios`, `revisar`, `otros`, `specials`, `omnibus`): ¿se admite como lista fija, o se prefiere que sea configurable? *Propuesta: fija, en `core/carpetas.py`, con prueba.*
-3. **Los 14 registros obsoletos** aparecerán como «Sin serie» agrupados por su carpeta antigua, **sin afirmar que el archivo existe**. ¿Es suficiente en esta rebanada, o se marcan de otra forma? *Propuesta: suficiente; D5 los trata después.*
-4. **Umbral de «autor o contenedor»** (≥ 20 títulos distintos en la prueba 9): es una hipótesis; ¿se acepta como valor inicial a ajustar con la medición?
+1. **Rutas:** `GET /api/revision/carpetas` y `/ui/pendientes/carpetas`.
+2. **Lista de contenedores, fija** (en `core/carpetas.py`, con prueba): `_*` (cualquier nombre que empiece por `_`), `varios`, `revisar`, `otros`, `specials`, `omnibus`; comparada sin acentos ni mayúsculas. No es configurable en esta rebanada.
+3. **Umbral de «autor o contenedor»:** **≥ 20 títulos distintos**, como **valor inicial** que se ajustará con la medición (no es una verdad fijada).
+4. **Las 14 filas obsoletas** aparecen como «Sin serie», **agrupadas por su carpeta antigua**, sin afirmar que el archivo exista (la rebanada no mira el disco). El texto de la interfaz dice explícitamente: **«registros pendientes de verificar, no archivos confirmados»**. La prueba de plantilla de 1b comprueba esa frase. D5 las trata después.
 
 ## Invariantes (se repiten porque son la razón de la rebanada)
 
