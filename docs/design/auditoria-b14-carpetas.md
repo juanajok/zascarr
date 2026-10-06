@@ -107,6 +107,15 @@ sugiere y agrupa, no asigna sola) se sostiene por el coste de equivocarse en sil
    catálogo previo, PR #83). Después del registro, las series que faltan hay que proponerlas/crearlas con
    confirmación humana (p. ej. a partir de las carpetas); B14 se subordina a ese paso y a la política de arriba.
 
+## Evidencia posterior (2026-10-05): el primer registro real
+
+El caso que esta auditoría describía en abstracto apareció en producción: 9 archivos `Batman - Saga Scott Snyder 01…09`
+emparejaron a 1,0 con la única serie llamada `BATMAN` (tebeo, 2025) y 8 `Absolute Batman 0X` con `Absolute Batman`. La
+primera coincidencia es textual pero **editorialmente dudosa** —la carpeta decía `Batman - Saga de Scott Snyder (2019)`—,
+y quedó **fuera de «Por revisar»** porque la serie sí se había «identificado». Refuerza la política aceptada (la carpeta
+**sugiere y agrupa, no asigna sola**; una coincidencia exacta de título no basta si la carpeta o la edición la
+contradicen) y la historia siguiente: `docs/design/ficha-propuestas-desde-carpetas.md`.
+
 ## Límites
 
 Una biblioteca, un coleccionista, 1.542 archivos; etiquetas puestas por mí leyendo nombres; sin catálogo ni
