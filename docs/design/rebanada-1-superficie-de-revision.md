@@ -56,6 +56,7 @@ Fuera: archivos con `issue_id`, descartados, y los repetidos no registrados (no 
 | `calificador_de_carpeta` | la carpeta limpia añade un calificador (`Saga de …`, `Vol N`, edición) que la serie candidata no tiene | **conflicto** |
 | `carpeta_de_autor_o_contenedor` | la carpeta reúne muchos títulos distintos (≥ 20 títulos distintos como valor inicial, ver «Decisiones adoptadas») | aviso |
 | `titulo_exacto_sin_corroboracion` | el título del nombre coincide con la candidata y no hay año ni volumen que lo corrobore | **conflicto** |
+| `candidatas_distintas` | los archivos de un mismo grupo sugieren series **distintas** (se muestra la que más archivos sugieren) | **conflicto** |
 | `coincide_y_corrobora` | título y año (±1) o volumen coinciden con la candidata | informativa |
 | `sin_contexto_de_carpeta` | no hay `carpeta_contextual` | informativa |
 
@@ -97,6 +98,26 @@ son dos banderas distintas (`por_confirmar` ≠ `en_conflicto`). **No existe un 
 - **Orden determinista:** primero los `en_conflicto`, luego por `n_archivos` descendente, luego por `clave`. **Paginación de grupos** (`limite`, `desplazamiento`; por defecto 200) y **muestra de archivos** (20 por grupo; **todos** en los de estado `serie_sugerida`, que son pocos).
 - **Coste:** **una consulta** para A∪B (columnas mínimas), una para las series candidatas y el cálculo en memoria: el número de consultas **no crece** con el de archivos.
 - **Nada se escribe, nada se lee del disco, ninguna petición de red.**
+
+## Implementación 1a: lo que se añadió o precisó respecto a esta ficha
+
+Se deja escrito para que la ficha y el código sean un solo artefacto. **Nada de esto relaja un invariante**; son precisiones o campos nuevos.
+
+| Cambio | Por qué |
+|---|---|
+| **Señal `candidatas_distintas`** (conflicto) | Si los archivos de una carpeta sugieren series distintas, mostrar solo la mayoritaria ocultaría el desacuerdo. |
+| **Etiqueta de `mixto`**: «Mezcla: archivos sin serie y con serie sugerida (falta confirmar número y edición)» | El contrato nombraba el estado `mixto` pero no su texto; sin etiqueta propia habría que mentir con una de las otras dos. Sigue sin decir «reconocido», «clasificado» ni «lista». |
+| **`archivos[].estado`** (`sin_serie` / `serie_sugerida`) | En un grupo `mixto` hay que saber cuál es cuál; sin ello se perdería el recuento por tipo. |
+| **`totales.candidata_inexistente`** | Archivos con serie sugerida cuya serie ya no existe, o con una lista de candidatas ilegible: no se pueden mostrar como «serie sugerida», pero **se cuentan, no se esconden**. (`metadata.candidates` que no es una lista no entra en ningún conjunto: ni A ni B.) |
+| **`pagina`** (`limite`, `desplazamiento`) en la respuesta | El cliente necesita saber qué página recibe. Parámetros validados: `limite` 1-1000 (por defecto 200), `desplazamiento` ≥ 0; fuera de rango, 422. |
+| **`puntuacion` = la menor** de las candidatas del grupo | No se exagera la confianza de la sugerencia. |
+| **`coincide_y_corrobora` solo si no hay ninguna señal de conflicto** | Que «coincide» conviva con «en conflicto» confundiría; el conflicto manda. |
+| **`titulo_exacto_sin_corroboracion` no se emite si ya hay `anio_discrepa`** | Esa discrepancia ya explica por qué el título solo no basta. |
+| **Un calificador de la carpeta (`Vol 2`, `Saga de …`, `(Ed.…)`, `Omnigold`/`Integral`/`Deluxe`) es conflicto si el título de la serie sugerida no lo lleva** | Es la regla `calificador_de_carpeta`; una editorial entre paréntesis (`(Panini)`) y las etiquetas de release **no** son calificadores. |
+| **Fuera de la biblioteca configurada** | Una ruta que no cuelga de `library_path` se agrupa por su ruta completa (sin error). Archivos en la raíz: clave `.`. |
+| **Sin `ORDER BY` en SQL** | El orden lo fija el servicio (grupos: conflicto, tamaño, clave; archivos: nombre, id). Una prueba entrega las filas al revés y barajadas y exige el mismo resultado. |
+
+**Medido, no supuesto:** cada defensa se probó rompiéndola (18 mutaciones, todas detectadas), y la suite completa se ejecutó también con `--basetemp` en el dispositivo raíz.
 
 ## Qué NO hace (y por qué)
 
