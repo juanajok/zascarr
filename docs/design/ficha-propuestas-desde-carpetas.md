@@ -36,7 +36,7 @@ pasan por una regla de mayoría con cualquier umbral 50-80 %. Cifras con el pars
 
 ## Referencias consultadas
 
-Licencias comprobadas en la API de GitHub: Kapowarr, Sonarr, Mylar3 y Aidoku **GPL-3.0**; Suwayomi-Server **MPL-2.0** (copyleft por
+Licencias comprobadas en la API de GitHub: Kapowarr, Sonarr, Mylar3 y Aidoku **GPL-3.0**; Kaizoku (`oae/kaizoku`) **MIT**; Suwayomi-Server **MPL-2.0** (copyleft por
 fichero, con componentes de terceros). **Solo como patrón; no se copia código** (CLAUDE.md §13, barrera legal: revisar el fichero
 concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no lo encontré» no equivale a «no existe».
 
@@ -46,6 +46,13 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 >
 > **Confirmado por el operador (2026-10-05):** «Aizoku» es **Aidoku** (`Aidoku/Aidoku`, lector de manga para iOS/iPadOS/macOS). La
 > búsqueda literal «aizoku» en GitHub solo devuelve un asistente de IA sin relación.
+>
+> **Kaizoku, añadido a petición expresa (2026-10-06).** El nombre es ambiguo en GitHub; se tomó **`oae/kaizoku`** (Kaizoku.NET, «self-hosted manga
+> downloader», TypeScript, MIT), el original y el más conocido. Existen derivados que **no se han leído**: `maxpiva/Rensaio` (GPL-3.0, activo,
+> «Series Manager and Downloader, fork of the original Kaizoku») e `impishlucy/kaizoku-next` (MIT, archivado). *Supuesto pendiente de confirmar por el
+> operador, como ocurrió con Aidoku: si se quería otro, se lee y se añade.*
+> **Dato que condiciona cómo leerlo:** el original está **archivado** (último commit 2025-02-03; última release v1.6.1, 2023-02-07) y su propio README
+> recomienda **Suwayomi (descargas) + Komf (metadatos)** con Komga o Kavita. Es una referencia **histórica**, no una viva.
 
 | Referencia | Versión leída | Ficheros |
 |---|---|---|
@@ -54,6 +61,7 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 | Mylar3 | `master` @ `cdc94a4` (v0.8.3) | `mylar/librarysync.py` (`libraryScan`) |
 | Suwayomi-Server | `master` @ `cff9169` (última release v2.4.2366) | `server/src/main/kotlin/eu/kanade/tachiyomi/source/local/LocalSource.kt` (listado, detalles, capítulos), `…/local/io/LocalSourceFileSystem.kt` |
 | Aidoku | `main` @ `3091ef2` (última release v0.9) | `Aidoku/Core/Sources/BuiltIn/Local/{LocalFileNameParser,LocalFileManager,LocalSource}.swift`, `Aidoku/Features/Source/LocalFileImportView.swift`, `AidokuTests/LocalFileNameParserTests.swift` |
+| Kaizoku (`oae/kaizoku`) | `main` @ `fc86b7d` (2025-02-03, **archivado**; última release kaizoku-v1.6.1) | `prisma/schema.prisma`, `src/server/utils/mangal.ts` (`getChaptersFromLocal`, `findMissingChapterFiles`, `getOutOfSyncChapters`, `getChapterIndexFromFile`), `src/server/queue/{checkChapters,checkOutOfSyncChapters,fixOutOfSyncChapters}.ts`, `src/server/trpc/router/library.ts`, `src/utils/index.ts` (`sanitizer`), `src/server/utils/integration/kavita.ts` |
 
 ## Cómo lo resuelve cada una
 
@@ -104,6 +112,20 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 - **Valida antes de dejar importar**: el nombre de una serie nueva no puede repetir una existente ni estar vacío, y el volumen/capítulo no puede
   coincidir con uno ya presente en la serie; **sugiere el siguiente número** libre. La importación **copia** el archivo a su almacenamiento.
 
+**Kaizoku — biblioteca de descargas** (`syncDbWithFiles`, `getChaptersFromLocal`, `getOutOfSyncChapters`).
+- **No importa una biblioteca existente: la crea.** Hay una sola `Library` (`path` único; el router solo hace `findFirst`) y cada serie vive en
+  una carpeta **derivada** de su título (`path.resolve(library.path, sanitizer(title))`; `Manga.title` es `@unique`). La carpeta **no se lee para
+  descubrir la serie**: se escribe a partir de ella. Lo que no tenga esa forma no se ve.
+- **Solo reconoce lo que él mismo escribió:** un capítulo es un `.cbz` cuyo nombre lleva `[NNNN]` (`getChapterIndexFromFile`); lo demás se ignora
+  sin avisar (`shouldIncludeFile`). No hay parser de nombres libres ni agrupación por contexto, y el código del repositorio no menciona ComicInfo.
+- **El disco manda y la BD se corrige sola:** `syncDbWithFiles` compara `(fileName, index)` y **borra de la BD** las filas cuyo fichero no está
+  (`dbOnlyChapters`) y crea las que faltan, en una transacción. No hay estado «pendiente de verificar».
+- **Detectar y actuar son pasos separados, y el segundo lo confirma la persona:** `checkOutOfSyncChapters` solo **marca** (`OutOfSyncChapter`);
+  `fixOutOfSyncChapters` **borra ficheros** (`removeChapter`) y filas. Lo que se marca depende de una fuente remota; **si la fuente no devuelve
+  ningún capítulo, no se marca nada** («Source may not be available. I will not mark any chapter for removal.»).
+- **Integración con el lector:** tras cambiar la biblioteca avisa a **Komga o Kavita** para que reescaneen (`scanLibrary`, con 20 reintentos
+  cada 2 min).
+
 ## Supuestos de su modelo que NO valen en ZascArr
 
 | Supuesto | Por qué no vale aquí |
@@ -114,6 +136,7 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 | **Mover es aceptable si el emparejamiento «casi seguro» acierta** (Kapowarr) | ZascArr no mueve sin confirmación y con copia verificada (ADR 0006). |
 | Un único recorrido, estado en memoria/cliente | Pi con 512 MB, posibles reinicios: la propuesta debe poder recalcularse de la BD sin releer discos. |
 | La app es dueña del almacenamiento (Aidoku copia a su carpeta; Suwayomi lee un único `localMangaRoot` con la forma impuesta) | La biblioteca de ZascArr es **del coleccionista**, con varias raíces y estructuras (por tradición, por autor, por franquicia); se registra **en su sitio**. |
+| **La app crea y nombra las carpetas** (Kaizoku: `sanitizer(title)`; el original solo ve lo que escribió él) | ZascArr llega **después** de la biblioteca: la forma de las carpetas ya existe y es de la persona. Aquí la carpeta es una **entrada**, no un derivado del título. |
 | Series ≡ volúmenes con `issue_count` conocido | Sin fuente remota no hay recuento: el filtro «el recuento cubre los números» no se puede aplicar. |
 
 ## Adoptar / adaptar / descartar
@@ -123,6 +146,9 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 - **Importar en sitio** y **sin efectos colaterales** (Sonarr; Kapowarr `volume_folder`).
 - **Duplicados entre carpetas**: detectar que dos grupos apuntan a la misma serie y **no fusionarlos** (Sonarr `duplicate`) → nuestras carpetas gemelas.
 - **Límite por pasada y cola serie a serie** para las fuentes externas (Kapowarr `limit`; Sonarr `lookupQueue`) → respeta los 1,0-2,5 s por petición del proyecto.
+
+- **No declarar «desaparecido» sin comprobar que la fuente de evidencia está disponible** (Kaizoku: si la fuente remota no devuelve nada, no marca ni un capítulo) → ya lo hace `_fichero_de_la_fila_existe`: una referencia solo se da por obsoleta si el primer ancestro existente está en el **mismo dispositivo** que el fichero nuevo; ante la duda, se considera presente. Es la misma defensa, llegada por otro camino.
+- **Separar «detectar» de «actuar», y que actuar lo confirme una persona** (Kaizoku: `OutOfSyncChapter` → `fixOutOfSyncChapters`) → es el patrón de la rebanada 1 (solo mirar) y de las que siguen (proponer, luego confirmar).
 
 **Adaptar**
 - **ComicInfo primero, nombre después, y mostrarlo** (Aidoku: `comicInfo.series ?? parseMangaSeries`) → la propuesta usa la señal **más fuerte disponible** y dice cuál usó.
@@ -136,6 +162,9 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 - **Metadatos embebidos primero** (Mylar, ComicInfo) → ya es la capa 0 del triaje: se reutiliza como señal más fuerte cuando existe.
 
 **Descartar**
+- **La BD se corrige borrando lo que el disco no muestra** (Kaizoku `syncDbWithFiles`, `dbOnlyChapters`) y **borrar ficheros** al «arreglar» (`removeChapter`): ZascArr **no borra filas ni ficheros** por inferencia (las 14 referencias obsoletas se **recuperan o se muestran como «registros pendientes de verificar»**, nunca se eliminan).
+- **Una sola biblioteca y una sola raíz** (`Library.path` único) y la **carpeta derivada del título**: contradicen una biblioteca preexistente con varias raíces y estructuras.
+- **Reconocer solo ficheros con el nombre que escribió la propia app** (`[NNNN]`): lo contrario de leer una biblioteca ajena.
 - Preselección del primer resultado sin umbral (Sonarr) y el supuesto «una carpeta = una serie».
 - Mover automáticamente a la carpeta del volumen asumiendo baja probabilidad de error (Kapowarr, `VolumeAlreadyAdded`).
 - Depender de una clave de API para poder proponer.
@@ -250,4 +279,4 @@ Con Postgres y ficheros reales (nombres reales de la biblioteca como casos; ning
 - **D5 — Política de duplicados (~200 grupos de copias idénticas) y de referencias obsoletas (14).** Fuera de esta historia, pero la rebanada 1 las deja a la vista. *Recomendación:* decidir después de la rebanada 1, con las propuestas delante.
 
 ## Límites de esta ficha
-Lectura de código de cinco referencias (Kapowarr, Sonarr, Mylar3, Suwayomi-Server y Aidoku) en versiones concretas, sin ejecutarlas; «Aizoku» = Aidoku (confirmado por el operador); Sonarr se leyó en `develop`, no en la release; las etiquetas de «carpeta incorrecta» son un juicio mío sobre nombres (auditoría), una biblioteca y un coleccionista; los umbrales son hipótesis hasta medirlos.
+Lectura de código de seis referencias (Kapowarr, Sonarr, Mylar3, Suwayomi-Server, Aidoku y Kaizoku) en versiones concretas, sin ejecutarlas; «Aizoku» = Aidoku (confirmado por el operador); «Kaizoku» = `oae/kaizoku` (**supuesto sin confirmar**; sus derivados Rensaio y kaizoku-next no se han leído; el original está archivado y se lee como patrón histórico, no como referencia viva); Sonarr se leyó en `develop`, no en la release; las etiquetas de «carpeta incorrecta» son un juicio mío sobre nombres (auditoría), una biblioteca y un coleccionista; los umbrales son hipótesis hasta medirlos.
