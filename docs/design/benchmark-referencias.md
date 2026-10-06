@@ -61,7 +61,7 @@ revisión retrospectiva después.
 |---|---|
 | Ciclo de búsqueda, estados, importación, operación | Sonarr / Radarr |
 | Ediciones, ficheros, metadatos de cómic | Kapowarr / Mylar3 |
-| Capítulos, fuentes de manga, lectura, interoperabilidad | Suwayomi |
+| Capítulos, fuentes de manga, lectura, interoperabilidad | Suwayomi; Kaizoku (`oae/kaizoku`, **archivado**: patrón histórico de descarga y de aviso a Komga/Kavita, no referencia viva) |
 
 ## Qué nos habría ahorrado
 
@@ -85,7 +85,7 @@ Pi. No se infiere soporte de una función por su UI, ni ausencia por no encontra
 ## Barrera legal (separada del procedimiento)
 
 Inspirarse en un patrón no es copiar código. Kapowarr y Mylar3 publican GPL-3.0, mientras
-Suwayomi declara MPL-2.0 e identifica componentes de terceros bajo Apache-2.0. Antes de
+Suwayomi declara MPL-2.0 e identifica componentes de terceros bajo Apache-2.0; Kaizoku (`oae/kaizoku`) es MIT y está escrito en TypeScript, y su derivado Rensaio es GPL-3.0. Antes de
 reutilizar una implementación hay que revisar la licencia y los avisos del **fichero de
 origen** concreto, no asumir que «todas tienen la misma licencia». La licencia del propio
 ZascArr está en `LICENSE`; `src/zascarr/LEGAL.md` trata aparte el uso de contenido y las
