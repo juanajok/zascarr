@@ -49,8 +49,7 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 >
 > **Kaizoku, añadido a petición expresa (2026-10-06).** El nombre es ambiguo en GitHub; se tomó **`oae/kaizoku`** (Kaizoku.NET, «self-hosted manga
 > downloader» sobre Mangal, TypeScript, MIT), el original y el más conocido. Existen derivados que **no se han leído**: `maxpiva/Rensaio` (GPL-3.0, activo,
-> «Series Manager and Downloader, fork of the original Kaizoku») e `impishlucy/kaizoku-next` (MIT, archivado). *Supuesto pendiente de confirmar por el
-> operador, como ocurrió con Aidoku: si se quería otro, se lee y se añade.*
+> «Series Manager and Downloader, fork of the original Kaizoku») e `impishlucy/kaizoku-next` (MIT, archivado). **Confirmado por el operador (2026-10-06):** era `oae/kaizoku`.
 > **Dato que condiciona cómo leerlo:** el original está **archivado** (último commit 2025-02-03; última release v1.6.1, 2023-02-07) y su propio README
 > recomienda **Suwayomi (descargas) + Komf (metadatos)** con Komga o Kavita. Es una referencia **histórica**, no una viva.
 
@@ -279,4 +278,4 @@ Con Postgres y ficheros reales (nombres reales de la biblioteca como casos; ning
 - **D5 — Política de duplicados (~200 grupos de copias idénticas) y de referencias obsoletas (14).** Fuera de esta historia, pero la rebanada 1 las deja a la vista. *Recomendación:* decidir después de la rebanada 1, con las propuestas delante.
 
 ## Límites de esta ficha
-Lectura de código de seis referencias (Kapowarr, Sonarr, Mylar3, Suwayomi-Server, Aidoku y Kaizoku) en versiones concretas, sin ejecutarlas; «Aizoku» = Aidoku (confirmado por el operador); «Kaizoku» = `oae/kaizoku` (**supuesto sin confirmar**; sus derivados Rensaio y kaizoku-next no se han leído; el original está archivado y se lee como patrón histórico, no como referencia viva); Sonarr se leyó en `develop`, no en la release; las etiquetas de «carpeta incorrecta» son un juicio mío sobre nombres (auditoría), una biblioteca y un coleccionista; los umbrales son hipótesis hasta medirlos.
+Lectura de código de seis referencias (Kapowarr, Sonarr, Mylar3, Suwayomi-Server, Aidoku y Kaizoku) en versiones concretas, sin ejecutarlas; «Aizoku» = Aidoku (confirmado por el operador); «Kaizoku» = `oae/kaizoku` (confirmado por el operador; sus derivados Rensaio y kaizoku-next no se han leído; el original está archivado y se lee como patrón histórico, no como referencia viva); Sonarr se leyó en `develop`, no en la release; las etiquetas de «carpeta incorrecta» son un juicio mío sobre nombres (auditoría), una biblioteca y un coleccionista; los umbrales son hipótesis hasta medirlos.
