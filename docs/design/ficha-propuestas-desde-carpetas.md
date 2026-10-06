@@ -48,7 +48,7 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 > búsqueda literal «aizoku» en GitHub solo devuelve un asistente de IA sin relación.
 >
 > **Kaizoku, añadido a petición expresa (2026-10-06).** El nombre es ambiguo en GitHub; se tomó **`oae/kaizoku`** (Kaizoku.NET, «self-hosted manga
-> downloader», TypeScript, MIT), el original y el más conocido. Existen derivados que **no se han leído**: `maxpiva/Rensaio` (GPL-3.0, activo,
+> downloader» sobre Mangal, TypeScript, MIT), el original y el más conocido. Existen derivados que **no se han leído**: `maxpiva/Rensaio` (GPL-3.0, activo,
 > «Series Manager and Downloader, fork of the original Kaizoku») e `impishlucy/kaizoku-next` (MIT, archivado). *Supuesto pendiente de confirmar por el
 > operador, como ocurrió con Aidoku: si se quería otro, se lee y se añade.*
 > **Dato que condiciona cómo leerlo:** el original está **archivado** (último commit 2025-02-03; última release v1.6.1, 2023-02-07) y su propio README
@@ -112,19 +112,19 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 - **Valida antes de dejar importar**: el nombre de una serie nueva no puede repetir una existente ni estar vacío, y el volumen/capítulo no puede
   coincidir con uno ya presente en la serie; **sugiere el siguiente número** libre. La importación **copia** el archivo a su almacenamiento.
 
-**Kaizoku — biblioteca de descargas** (`syncDbWithFiles`, `getChaptersFromLocal`, `getOutOfSyncChapters`).
-- **No importa una biblioteca existente: la crea.** Hay una sola `Library` (`path` único; el router solo hace `findFirst`) y cada serie vive en
-  una carpeta **derivada** de su título (`path.resolve(library.path, sanitizer(title))`; `Manga.title` es `@unique`). La carpeta **no se lee para
-  descubrir la serie**: se escribe a partir de ella. Lo que no tenga esa forma no se ve.
-- **Solo reconoce lo que él mismo escribió:** un capítulo es un `.cbz` cuyo nombre lleva `[NNNN]` (`getChapterIndexFromFile`); lo demás se ignora
-  sin avisar (`shouldIncludeFile`). No hay parser de nombres libres ni agrupación por contexto, y el código del repositorio no menciona ComicInfo.
-- **El disco manda y la BD se corrige sola:** `syncDbWithFiles` compara `(fileName, index)` y **borra de la BD** las filas cuyo fichero no está
-  (`dbOnlyChapters`) y crea las que faltan, en una transacción. No hay estado «pendiente de verificar».
-- **Detectar y actuar son pasos separados, y el segundo lo confirma la persona:** `checkOutOfSyncChapters` solo **marca** (`OutOfSyncChapter`);
-  `fixOutOfSyncChapters` **borra ficheros** (`removeChapter`) y filas. Lo que se marca depende de una fuente remota; **si la fuente no devuelve
-  ningún capítulo, no se marca nada** («Source may not be available. I will not mark any chapter for removal.»).
-- **Integración con el lector:** tras cambiar la biblioteca avisa a **Komga o Kavita** para que reescaneen (`scanLibrary`, con 20 reintentos
-  cada 2 min).
+**Kaizoku** (`oae/kaizoku`) — descargador de manga autoalojado que **delega en Mangal** (`mangal` v4.0.6, un binario Go que se invoca con `execa`).
+**Archivado** (último commit 2025-02-03): **referencia histórica, no proyecto mantenido.** Los seis puntos que se pidió comprobar, con el fichero que lo sostiene:
+
+| Aspecto | Qué se encontró | Dónde |
+|---|---|---|
+| **Descubrimiento** | Asistente de cuatro pasos (`sourceStep` → `searchStep` → `reviewStep` → `downloadStep`). La búsqueda es `mangal inline --source S --include-anilist-manga --query kw -j`; **al añadir, vuelve a resolver el título con `--manga exact`** y exige que `mangaDetail.name === title` y que haya **exactamente un** resultado: si hay 0 o varios, `NOT_FOUND`. Es decir, ante la ambigüedad **se niega**, no elige. Luego guarda la serie, programa una comprobación periódica (cron) y lanza una inmediata. | `router/manga.ts` (`add`), `utils/mangal.ts` (`search`, `getMangaDetail`), `components/addManga/steps/*` |
+| **Identidad** | **La clave es el título**: `Manga.title` es `@unique` y casi todas las llamadas a Mangal re-consultan por título. Solo se guarda `source` como **cadena**; **no hay identificador propio de la fuente** (ni de la serie en ella). El id de AniList **no vive en la BD**: se registra en la configuración de Mangal (`mangal inline anilist set --name title --id`); en la BD solo hay `Metadata.urls` (cadenas). El conflicto se detecta **por título, ignorando la fuente**: dos fuentes con el mismo título **no pueden coexistir** (`CONFLICT … already exists in the library`). | `prisma/schema.prisma`, `router/manga.ts` (`add`, `update`), `utils/mangal.ts` (`bindTitleToAnilistId`) |
+| **Organización** | **Una sola biblioteca** (`Library.path` único; el router usa `findFirst`). Carpeta de serie **derivada**: `path.resolve(library.path, sanitizer(title))`, con un saneador que sustituye espacios y signos por `_`. Capítulos `.cbz`; Mangal los escribe con la plantilla `[{padded-index}] {chapter}`, y Kaizoku solo reconoce los que llevan `[NNNN]` (`/.*?\[(\d+)\].*/`, índice base 1 en el nombre y 0 en la BD). Mangal también escribe **`ComicInfo.xml` y `series.json`** (`metadata.comic_info_xml`, `metadata.series_json`), que Kaizoku **no lee**. | `utils/index.ts`, `utils/mangal.ts` (`getChapterIndexFromFile`, `shouldIncludeFile`), `docker/root/etc/services.d/kaizoku/run` |
+| **Biblioteca existente** | **Solo gestiona sus propias descargas.** No hay importación ni descubrimiento: `getChaptersFromLocal` crea la carpeta si no existe (`mkdir -p`) y lista únicamente los `.cbz` con `[NNNN]`; el resto se ignora **sin avisar**. Un fichero ajeno con otro nombre es invisible. Si ya hubiera ficheros con esa forma, `syncDbWithFiles` los **registraría** (crea las filas que faltan) y **borraría de la BD** las que el disco no muestra. | `utils/mangal.ts`, `queue/checkChapters.ts` (`syncDbWithFiles`) |
+| **Confirmación y conflictos** | **Valida poco y solo en el servidor**: título ya existente → `CONFLICT`; nombre exacto distinto → `NOT_FOUND`; intervalo cron válido. **No comprueba la carpeta**: no mira si el destino ya existe ni si lo ocupa otra cosa (el `mkdir` es recursivo). La **confirmación humana** está en el asistente: la revisión muestra el detalle encontrado y permite **vincular a mano el id de AniList** (`bind`), y el último paso **muestra la carpeta de destino** (`libraryPath/sanitizer(title)`) como campo **deshabilitado**: se ve, no se edita. También en el «arreglo» de capítulos fuera de sincronía, que **detecta y marca** (`OutOfSyncChapter`) en un paso y **borra ficheros y filas** (`removeChapter`) en otro. Guarda explícita: **si la fuente devuelve 0 capítulos, no marca ninguno** («Source may not be available»). | `router/manga.ts`, `queue/checkOutOfSyncChapters.ts`, `queue/fixOutOfSyncChapters.ts`, `utils/mangal.ts` (`getOutOfSyncChapters`) |
+| **Recursos** | **Tres procesos propios** además de Mangal: Next.js/Node 18, **PostgreSQL** (Prisma; 6 modelos) y **Redis** (BullMQ: 7 colas — comprobación de capítulos, descarga, metadatos, notificación, integración con el lector y las dos de «fuera de sincronía»). Concurrencia declarada: descarga 5, comprobación 5, metadatos 5, notificación e integración 30 (con límite de 30 por 2 s). **Sin límites de memoria** en su `docker-compose.yml`. La imagen instala librerías típicas de un navegador sin cabeza (`libnss3`, `libgbm1`, `libcairo2`…); **no se verificó para qué fuente se usan**. Hay binarios de Mangal para `arm64` y `armv6`. Avisa a **Komga o Kavita** para que reescaneen (`scanLibrary`; 20 reintentos cada 2 min). **No se midió su consumo**: lo anterior es lo declarado en el código. | `docker-compose.yml`, `docker/Dockerfile`, `queue/*.ts`, `utils/integration/kavita.ts` |
+
+**Lectura para ZascArr.** Comparte con ZascArr **PostgreSQL + Redis + cola de tareas** (no sería una dependencia nueva de infraestructura), pero añade un runtime Node, un binario Go y, posiblemente, un navegador sin cabeza; **en una Pi compartida con Kavita, Transmission, aMule y Prowlarr eso es el coste que importa**, y está **sin medir**. Su modelo (la app es dueña de la carpeta; identidad = título) es el **opuesto** del de ZascArr (la biblioteca es de la persona; la carpeta es una entrada).
 
 ## Supuestos de su modelo que NO valen en ZascArr
 
@@ -136,7 +136,7 @@ concreto antes de reutilizar nada). Lectura de código, **no ejecutadas**; «no 
 | **Mover es aceptable si el emparejamiento «casi seguro» acierta** (Kapowarr) | ZascArr no mueve sin confirmación y con copia verificada (ADR 0006). |
 | Un único recorrido, estado en memoria/cliente | Pi con 512 MB, posibles reinicios: la propuesta debe poder recalcularse de la BD sin releer discos. |
 | La app es dueña del almacenamiento (Aidoku copia a su carpeta; Suwayomi lee un único `localMangaRoot` con la forma impuesta) | La biblioteca de ZascArr es **del coleccionista**, con varias raíces y estructuras (por tradición, por autor, por franquicia); se registra **en su sitio**. |
-| **La app crea y nombra las carpetas** (Kaizoku: `sanitizer(title)`; el original solo ve lo que escribió él) | ZascArr llega **después** de la biblioteca: la forma de las carpetas ya existe y es de la persona. Aquí la carpeta es una **entrada**, no un derivado del título. |
+| **La app crea y nombra las carpetas** (Kaizoku: `sanitizer(title)`; solo ve lo que escribió él) | ZascArr llega **después** de la biblioteca: la forma de las carpetas ya existe y es de la persona. Aquí la carpeta es una **entrada**, no un derivado del título. |
 | Series ≡ volúmenes con `issue_count` conocido | Sin fuente remota no hay recuento: el filtro «el recuento cubre los números» no se puede aplicar. |
 
 ## Adoptar / adaptar / descartar
