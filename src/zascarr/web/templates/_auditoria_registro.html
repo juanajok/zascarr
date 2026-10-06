@@ -49,9 +49,10 @@
   <ul class="audit-resumen">
     <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> tebeos nuevos mirados{% if reg.ya_registrados %}
       (otros <strong>{{ reg.ya_registrados }}</strong> ya estaban registrados y no se han tocado){% endif %}</li>
-    <li><strong>{{ reg.anadidos }}</strong> añadidos al catálogo: <strong>{{ reg.registrados }}</strong> reconocidos y
-      colocados en su serie y <strong>{{ reg.sin_identificar }}</strong> sin identificar, que te esperan en
-      <a href="/ui/pendientes">Por revisar</a> para que los asignes tú</li>
+    <li><strong>{{ reg.anadidos }}</strong> añadidos al catálogo:
+      <strong>{{ reg.registrados }}</strong> con serie sugerida (falta confirmar número y edición: <em>no están
+      clasificados</em> y todavía no aparecen en «Por revisar») y <strong>{{ reg.sin_identificar }}</strong> sin
+      identificar, que te esperan en <a href="/ui/pendientes">Por revisar</a> para que los asignes tú</li>
     <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro ya registrado): no se añaden dos veces</li>
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
     {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
@@ -100,7 +101,9 @@
     <li><strong>{{ inv.ya_registrados }}</strong> ya registrados: no se tocan</li>
     <li><strong>{{ inv.nuevos }}</strong> por registrar (si alguno es idéntico a otro ya registrado, se registra una sola vez)</li>
     {% if inv.registrados_sin_fichero %}<li><strong>{{ inv.registrados_sin_fichero }}</strong> registrados cuyo archivo
-      ya no está en la carpeta: no se cambia nada; revísalos en <a href="/estado">Estado</a></li>{% endif %}
+      ya no está donde se guardó: no se cambia ni se borra nada. Si el mismo contenido está en la carpeta, al
+      registrar se reenlaza la fila; si no, sigue como estaba (y, si estaba sin clasificar, la verás en
+      <a href="/ui/pendientes">Por revisar</a>)</li>{% endif %}
   </ul>
   {% if inv.hay_que_registrar %}
   <p class="audit-why">Los que no sepamos clasificar quedarán registrados y te esperarán en

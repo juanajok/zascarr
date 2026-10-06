@@ -745,6 +745,7 @@ class TestPantalla:
         assert "<strong>3</strong> ya registrados" in r.text and "<strong>8</strong> por registrar" in r.text
         assert "Tus <strong>5</strong> series" in r.text and "se conservan" in r.text
         assert "registrados cuyo archivo" in r.text               # los 2 que faltan en disco se avisan
+        assert "no se cambia ni se borra nada" in r.text and 'href="/estado"' not in r.text   # no remite a Estado
         assert "Registrar los 8 tebeos nuevos" in r.text
         assert await mundo.n_files() == 6                         # GET no escribe
 
@@ -759,6 +760,9 @@ class TestPantalla:
         assert "<strong>8</strong> de <strong>8</strong> tebeos nuevos mirados" in r2.text
         assert "<strong>7</strong> añadidos al catálogo" in r2.text        # añadidos ≠ mirados (hay 1 repetido)
         assert "<strong>1</strong> repetidos" in r2.text
+        # Los «con serie sugerida» NO están clasificados ni en «Por revisar»: el texto no debe sugerir lo contrario.
+        assert "con serie sugerida" in r2.text and "no están" in r2.text and "clasificados" in r2.text
+        assert "reconocidos y" not in r2.text and "colocados" not in r2.text
         assert "Biblioteca registrada" in r2.text and "every 2s" not in r2.text    # y deja de consultarse
         assert 'hx-get="/ui/_nav/estado"' in r2.text                  # el menú recuenta «Por revisar» al terminar
         assert "nav-recuento" not in r.text                           # mientras corre, no
