@@ -86,6 +86,8 @@ class Senal(BaseModel):
     codigo: str
     severidad: Severidad
     texto: str
+    #: Archivos concretos a los que se refiere la señal (los que discrepan); vacío si es del grupo entero.
+    archivos: list[str] = []
 
 
 class ArchivoRevision(BaseModel):
@@ -295,7 +297,7 @@ class RevisionCarpetas:
         sugerida, candidatas_distintas = self._serie_sugerida(sugeridos, series)
         carpeta = analizar_carpeta(div.contextual) if div.contextual else None
         senales = self._senales(
-            carpeta, sugerida, candidatas_distintas, patron, archivos, tiene_contexto=bool(div.contextual),
+            carpeta, candidatas_distintas, patron, archivos, series, tiene_contexto=bool(div.contextual),
         )
         en_conflicto = any(s.severidad == "conflicto" for s in senales)
 
@@ -341,7 +343,8 @@ class RevisionCarpetas:
     @staticmethod
     def _serie_sugerida(sugeridos: list[_Archivo], series) -> tuple[SerieSugerida | None, int]:
         """La serie que más archivos del grupo sugieren (desempate: mayor puntuación, luego id) y cuántas
-        series distintas se sugieren. La puntuación es la MENOR del grupo: no se exagera."""
+        series distintas se sugieren. La puntuación es la MENOR entre los archivos que sugieren ESA serie (no cuenta lo que
+        sugieren las otras candidatas, que ya se señala aparte con `candidatas_distintas`)."""
         if not sugeridos:
             return None, 0
         por_serie: dict[UUID, list[float]] = {}
@@ -354,54 +357,68 @@ class RevisionCarpetas:
         ), len(por_serie)
 
     @staticmethod
-    def _senales(carpeta, sugerida, candidatas_distintas, patron, archivos, *, tiene_contexto) -> list[Senal]:
+    def _senales(carpeta, candidatas_distintas, patron, archivos, series, *, tiene_contexto) -> list[Senal]:
+        """Las señales del grupo. Cada comprobación se hace **por archivo contra SU PROPIA candidata**: una
+        mayoría (el año o el título que dominan, la serie más sugerida) nunca puede tapar la discrepancia de
+        un archivo minoritario. La evidencia de la carpeta se conserva además de la de cada archivo."""
         senales: list[Senal] = []
         conflictos: list[Senal] = []
+        sugeridos = sorted((a for a in archivos if not a.sin_serie), key=lambda a: (a.nombre, a.id))
 
-        if sugerida is not None:
-            titulo_serie = sugerida.titulo
-            titulo_coincide = (
-                patron.titulo_dominante is not None
-                and normalize_title(patron.titulo_dominante) == normalize_title(titulo_serie)
-            )
-            # Año de referencia: el de la carpeta; si no lo dice, el que dominan los nombres.
-            anios = Counter(a.anio for a in archivos if a.anio)
-            if carpeta is not None and carpeta.anio:
-                anio_ref, de_donde = carpeta.anio, "La carpeta dice"
-            elif anios:
-                anio_ref, de_donde = min(anios, key=lambda y: (-anios[y], y)), "Los nombres dicen"
-            else:
-                anio_ref, de_donde = None, ""
-            discrepa = bool(anio_ref and sugerida.anio and abs(anio_ref - sugerida.anio) > 1)
-            anio_corrobora = bool(anio_ref and sugerida.anio and abs(anio_ref - sugerida.anio) <= 1)
-            volumen_corrobora = bool(
-                carpeta and carpeta.volumen is not None
-                and texto_incluye(titulo_serie, f"Vol {carpeta.volumen}")
-            )
+        if sugeridos:
+            titulos_serie: dict[UUID, str] = {}
+            hallazgos = _Hallazgos()
+            for a in sugeridos:
+                titulo_serie, anio_serie = series[a.candidata.series_id]
+                if a.candidata.series_id not in titulos_serie:
+                    titulos_serie[a.candidata.series_id] = normalize_title(titulo_serie)
+                hallazgos.evaluar(a, titulo_serie, titulos_serie[a.candidata.series_id], anio_serie, carpeta)
 
-            if discrepa:
+            if hallazgos.anio_carpeta or hallazgos.anio_archivo:
+                partes = []
+                if hallazgos.anio_carpeta:
+                    anios = sorted({anio for _, anio in hallazgos.anio_carpeta})
+                    sugerido = ("la serie sugerida empieza en " if len(anios) == 1
+                                else "las series sugeridas empiezan en ")
+                    partes.append(f"La carpeta dice {carpeta.anio}; {sugerido}{', '.join(map(str, anios))}.")
+                if hallazgos.anio_archivo:
+                    n = len(hallazgos.anio_archivo)
+                    ejemplo = hallazgos.anio_archivo[0]
+                    partes.append(
+                        f"{n} archivo{'s' if n > 1 else ''} lleva{'n' if n > 1 else ''} un año que no cuadra "
+                        f"con su serie sugerida (por ejemplo, {ejemplo[1]} frente a {ejemplo[2]})."
+                    )
+                afectados = {a for a, _ in hallazgos.anio_carpeta} | {a for a, *_ in hallazgos.anio_archivo}
                 conflictos.append(Senal(
-                    codigo="anio_discrepa", severidad="conflicto",
-                    texto=f"{de_donde} {anio_ref}; la serie sugerida empieza en {sugerida.anio}.",
+                    codigo="anio_discrepa", severidad="conflicto", texto=" ".join(partes),
+                    archivos=sorted(afectados),
                 ))
-            # Un calificador que la serie sugerida no lleva en su título es algo que la carpeta añade.
-            que_anade = [] if carpeta is None else [
-                q for q in carpeta.calificadores if not texto_incluye(titulo_serie, q)
-            ]
-            if que_anade:
+            if hallazgos.sin_calificador:
+                que_anade = list(dict.fromkeys(q for _, qs in hallazgos.sin_calificador for q in qs))
                 conflictos.append(Senal(
                     codigo="calificador_de_carpeta", severidad="conflicto",
                     texto="La carpeta añade " + ", ".join(f"«{q}»" for q in que_anade) + ".",
+                    archivos=sorted({a for a, _ in hallazgos.sin_calificador}),
                 ))
             if candidatas_distintas > 1:
                 conflictos.append(Senal(
                     codigo="candidatas_distintas", severidad="conflicto",
                     texto=f"Los archivos del grupo sugieren {candidatas_distintas} series distintas.",
                 ))
-            if titulo_coincide and not (anio_corrobora or volumen_corrobora) and not discrepa:
+            if hallazgos.titulo_distinto:
+                n = len(hallazgos.titulo_distinto)
+                _, titulo, titulo_serie = hallazgos.titulo_distinto[0]
+                conflictos.append(Senal(
+                    codigo="titulo_distinto", severidad="conflicto",
+                    texto=f"{n} archivo{'s' if n > 1 else ''} no tiene{'n' if n > 1 else ''} el título de su "
+                          f"serie sugerida (por ejemplo, «{titulo}» frente a «{titulo_serie}»).",
+                    archivos=sorted({a for a, *_ in hallazgos.titulo_distinto}),
+                ))
+            if hallazgos.exacto_sin_corroboracion:
                 conflictos.append(Senal(
                     codigo="titulo_exacto_sin_corroboracion", severidad="conflicto",
                     texto="El título coincide con la serie sugerida, pero ni un año ni un volumen lo corroboran.",
+                    archivos=sorted(hallazgos.exacto_sin_corroboracion),
                 ))
             senales.extend(conflictos)
 
@@ -411,7 +428,8 @@ class RevisionCarpetas:
                 texto=f"La carpeta reúne {patron.titulos_distintos} títulos distintos: "
                       "parece de autor o de contenedor, no de una serie.",
             ))
-        if sugerida is not None and titulo_coincide and (anio_corrobora or volumen_corrobora) and not conflictos:
+        # Solo si TODOS los archivos con serie sugerida corroboran, y nunca junto a un conflicto.
+        if sugeridos and not conflictos and hallazgos.corroboran == len(sugeridos):
             senales.append(Senal(
                 codigo="coincide_y_corrobora", severidad="informativa",
                 texto="El título coincide con la serie sugerida y el año o el volumen lo corroboran.",
@@ -422,3 +440,49 @@ class RevisionCarpetas:
                 texto="Estos archivos no están en una carpeta de serie.",
             ))
         return senales
+
+
+class _Hallazgos:
+    """Lo que se encuentra al comparar CADA archivo con su propia candidata (acumulado, sin votar)."""
+
+    def __init__(self) -> None:
+        self.anio_carpeta: list[tuple[str, int]] = []              # (archivo, año de la serie)
+        self.anio_archivo: list[tuple[str, int, int]] = []         # (archivo, año del archivo, año de la serie)
+        self.sin_calificador: list[tuple[str, list[str]]] = []     # (archivo, calificadores que su serie no lleva)
+        self.titulo_distinto: list[tuple[str, str, str]] = []      # (archivo, título del archivo, título de la serie)
+        self.exacto_sin_corroboracion: list[str] = []
+        self.corroboran = 0
+
+    def evaluar(self, a: _Archivo, titulo_serie: str, titulo_serie_norm: str, anio_serie: int | None,
+                carpeta) -> None:
+        # Un archivo «Batman 01» en `Batman - Saga de X (2019)` es de la serie «Batman - Saga de X» si ESA es
+        # la serie sugerida: el calificador de la carpeta no cuenta como título distinto.
+        titulo_igual = bool(a.titulo_norm) and (
+            a.titulo_norm == titulo_serie_norm
+            or (carpeta is not None and a.titulo_norm == normalize_title(carpeta.titulo)
+                and normalize_title(carpeta.titulo_completo) == titulo_serie_norm)
+        )
+        carpeta_anio = carpeta.anio if carpeta is not None else None
+        discrepa_carpeta = bool(carpeta_anio and anio_serie and abs(carpeta_anio - anio_serie) > 1)
+        discrepa_archivo = bool(a.anio and anio_serie and abs(a.anio - anio_serie) > 1)
+        anio_ok = bool(anio_serie and (
+            (carpeta_anio and abs(carpeta_anio - anio_serie) <= 1) or (a.anio and abs(a.anio - anio_serie) <= 1)
+        ))
+        volumen_ok = bool(
+            carpeta is not None and carpeta.volumen is not None
+            and texto_incluye(titulo_serie, f"Vol {carpeta.volumen}")
+        )
+        faltan = [] if carpeta is None else [q for q in carpeta.calificadores if not texto_incluye(titulo_serie, q)]
+
+        if discrepa_carpeta:
+            self.anio_carpeta.append((a.id, anio_serie))
+        if discrepa_archivo:
+            self.anio_archivo.append((a.id, a.anio, anio_serie))
+        if faltan:
+            self.sin_calificador.append((a.id, faltan))
+        if not titulo_igual:
+            self.titulo_distinto.append((a.id, a.titulo or "(sin título legible)", titulo_serie))
+        if titulo_igual and not (anio_ok or volumen_ok) and not (discrepa_carpeta or discrepa_archivo):
+            self.exacto_sin_corroboracion.append(a.id)
+        if titulo_igual and (anio_ok or volumen_ok) and not (discrepa_carpeta or discrepa_archivo or faltan):
+            self.corroboran += 1
