@@ -236,7 +236,7 @@ Con Postgres y ficheros reales (nombres reales de la biblioteca como casos; ning
 
 ## Rebanadas propuestas (cada una es una PR; ninguna es la interfaz completa)
 
-1. **Superficie de revisión de solo lectura**: grupos y estados con explicación (sin acciones de escritura) + hacer visibles los 17 como «serie sugerida, falta confirmar». Mide con el corpus real (criterio de aceptación de arriba).
+1. **Superficie de revisión de solo lectura**: grupos y estados con explicación (sin acciones de escritura) + hacer visibles los 17 como «serie sugerida, falta confirmar». Mide con el corpus real (criterio de aceptación de arriba). **Ficha técnica: `docs/design/rebanada-1-superficie-de-revision.md`** (contratos de entrada y salida, 16 pruebas de aceptación, entrega en dos PR).
 2. **Crear serie** desde un grupo (formulario con tradición elegida a mano, sin fuentes externas), con vista previa y confirmación; registro auditable.
 3. **Asignar un grupo** por el servicio recuperable (con la vista previa de rutas de destino).
 4. **Descubrir** como fuente opcional de candidatas, por cola, a petición.
