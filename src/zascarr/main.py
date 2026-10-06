@@ -288,6 +288,7 @@ def create_app() -> FastAPI:
 
     from zascarr.api.health import router as health_router
     from zascarr.api.legal import router as legal_router
+    from zascarr.api.revision import router as revision_router
     from zascarr.api.series import router as series_router
     from zascarr.api.wishlist import router as wishlist_router
     from zascarr.services.auth import AuthMiddleware
@@ -312,6 +313,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router, prefix="/api")
     app.include_router(legal_router)
+    app.include_router(revision_router, prefix="/api")
     app.include_router(series_router, prefix="/api")
     app.include_router(wishlist_router, prefix="/api")
     app.include_router(auth_router)

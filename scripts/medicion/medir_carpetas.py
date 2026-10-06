@@ -13,32 +13,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from collections import Counter
 from pathlib import Path
 
+from zascarr.core.carpetas import limpiar_carpeta
 from zascarr.core.matcher import normalize_title
 from zascarr.utils.naming import parse_comic_filename
 
 EXTENSIONES = {".cbz", ".cbr", ".cb7"}
-_CORCHETES = re.compile(r"\[[^\]]*\]")
-_PARENTESIS = re.compile(r"\(([^)]*)\)")
-_ANIO = re.compile(r"^(?:19|20)\d{2}(?:\s*-\s*(?:\d{2}|\d{4}))?$")
-
-
-def limpiar_carpeta(nombre: str) -> tuple[str, int | None, list[str]]:
-    """(título, año, etiquetas) de un nombre de carpeta: quita corchetes y paréntesis, que llevan año y
-    etiquetas de release («(COMPLETO)(CRG)»), y los separa."""
-    anio: int | None = None
-    etiquetas: list[str] = [m.group(0) for m in _CORCHETES.finditer(nombre)]
-    for m in _PARENTESIS.finditer(nombre):
-        dentro = m.group(1).strip()
-        if _ANIO.match(dentro):
-            anio = anio or int(dentro[:4])
-        else:
-            etiquetas.append(m.group(0))
-    titulo = _PARENTESIS.sub(" ", _CORCHETES.sub(" ", nombre))
-    return re.sub(r"\s+", " ", titulo).strip(" -_."), anio, etiquetas
 
 
 def relacion(titulo_archivo: str, titulo_carpeta: str) -> str:
