@@ -232,6 +232,8 @@ class TestLosDiecisieteYElConflicto:
         assert {s["severidad"] for s in g["senales"]} == {"conflicto"}
         assert "2019" in g["senales"][0]["texto"] and "2025" in g["senales"][0]["texto"]
         assert "Saga de Scott Snyder" in g["senales"][1]["texto"]
+        # Cada señal por archivo nombra a TODOS los afectados: aquí, los nueve.
+        assert len(g["senales"][0]["archivos"]) == len(g["senales"][1]["archivos"]) == 9
         assert g["serie_sugerida"]["titulo"] == "BATMAN" and g["serie_sugerida"]["anio"] == 2025
         assert g["carpeta_limpia"] == {
             "titulo": "Batman", "anio": 2019, "volumen": None, "calificadores": ["Saga de Scott Snyder"]}
@@ -310,6 +312,101 @@ class TestLosDiecisieteYElConflicto:
         )
         g = grupo(await consultar(), "Comics/Flash (1987)")
         assert g["serie_sugerida"]["puntuacion"] == 0.8       # no se exagera la confianza
+
+    # ── Una mayoría no puede tapar la discrepancia de un archivo (revisión de #89) ──────────────────
+
+    async def _flash(self, banco, nombres, carpeta="Comics/Flash", **kw):
+        sid = await banco.serie("Flash", 1987)
+        fs = [archivo(f"{carpeta}/{n}", estado="direct", cands=candidatas(sid, "Flash", 1987)) for n in nombres]
+        await banco.sembrar(*fs)
+        return {f.file_name: str(f.id) for f in fs}
+
+    async def test_un_ano_minoritario_discrepante_no_lo_tapa_la_mayoria(self, banco):
+        ids = await self._flash(banco, ["Flash 01 (1987).cbz", "Flash 02 (1987).cbz", "Flash 03 (2011).cbz"])
+        g = grupo(await consultar(), "Comics/Flash")
+        assert g["en_conflicto"] is True
+        senal = next(s for s in g["senales"] if s["codigo"] == "anio_discrepa")
+        assert senal["severidad"] == "conflicto" and senal["archivos"] == [ids["Flash 03 (2011).cbz"]]
+        assert "2011" in senal["texto"] and "1987" in senal["texto"]
+        assert "coincide_y_corrobora" not in codigos(g)
+
+    async def test_carpeta_corroborante_con_un_archivo_discrepante_sigue_en_conflicto(self, banco):
+        ids = await self._flash(
+            banco, ["Flash 01.cbz", "Flash 02.cbz", "Flash 03.cbz", "Flash 04 (2011).cbz"], carpeta="Comics/Flash (1987)")
+        g = grupo(await consultar(), "Comics/Flash (1987)")
+        assert g["en_conflicto"] is True and "coincide_y_corrobora" not in codigos(g)
+        senal = next(s for s in g["senales"] if s["codigo"] == "anio_discrepa")
+        assert senal["archivos"] == [ids["Flash 04 (2011).cbz"]]
+        assert "La carpeta dice" not in senal["texto"]            # la carpeta SÍ cuadra: no se le atribuye nada
+
+    async def test_la_carpeta_discrepante_se_conserva_aunque_los_archivos_cuadren(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(*(
+            archivo(f"Comics/Batman (2019)/Batman {n:02d} (2025).cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)) for n in range(1, 4)))
+        g = grupo(await consultar(), "Comics/Batman (2019)")
+        senal = next(s for s in g["senales"] if s["codigo"] == "anio_discrepa")
+        assert g["en_conflicto"] is True and "La carpeta dice 2019" in senal["texto"]
+        assert len(senal["archivos"]) == 3
+
+    async def test_ambas_evidencias_a_la_vez_quedan_en_el_mismo_aviso(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(
+            archivo("Comics/Batman (2019)/Batman 01.cbz", estado="direct", cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Comics/Batman (2019)/Batman 02 (2011).cbz", estado="direct", cands=candidatas(sid, "BATMAN", 2025)),
+        )
+        senal = next(s for s in grupo(await consultar(), "Comics/Batman (2019)")["senales"] if s["codigo"] == "anio_discrepa")
+        assert "La carpeta dice 2019" in senal["texto"] and "2011" in senal["texto"]
+
+    async def test_un_titulo_minoritario_distinto_tampoco_se_oculta(self, banco):
+        ids = await self._flash(banco, ["Flash 01 (1987).cbz", "Flash 02 (1987).cbz", "Impulse 03 (1987).cbz"])
+        g = grupo(await consultar(), "Comics/Flash")
+        assert g["en_conflicto"] is True and "coincide_y_corrobora" not in codigos(g)
+        senal = next(s for s in g["senales"] if s["codigo"] == "titulo_distinto")
+        assert senal["archivos"] == [ids["Impulse 03 (1987).cbz"]] and "Impulse" in senal["texto"]
+
+    async def test_un_calificador_se_evalua_contra_cada_candidata(self, banco):
+        """La carpeta añade «Saga de X»: una serie la lleva en el título y la otra no."""
+        con = await banco.serie("Batman - Saga de X", 2019)
+        sin = await banco.serie("Batman", 2019)
+        a = archivo("Comics/Batman - Saga de X (2019)/Batman 01.cbz", estado="direct", cands=candidatas(con, "Batman - Saga de X", 2019))
+        b = archivo("Comics/Batman - Saga de X (2019)/Batman 02.cbz", estado="direct", cands=candidatas(sin, "Batman", 2019))
+        await banco.sembrar(a, b)
+        g = grupo(await consultar(), "Comics/Batman - Saga de X (2019)")
+        senal = next(s for s in g["senales"] if s["codigo"] == "calificador_de_carpeta")
+        assert senal["archivos"] == [str(b.id)]
+
+    async def test_dos_candidatas_que_corroboran_las_dos_son_conflicto_y_no_coincide(self, banco):
+        """El conflicto de grupo (`candidatas_distintas`) también veta «coincide_y_corrobora»: cada archivo
+        corrobora a SU candidata (mismo título, año a ±1), pero no hay una sola serie."""
+        a, b = await banco.serie("Flash", 1987), await banco.serie("Flash", 1988)
+        await banco.sembrar(
+            archivo("Comics/Flash (1987)/Flash 01.cbz", estado="direct", cands=candidatas(a, "Flash", 1987)),
+            archivo("Comics/Flash (1987)/Flash 02.cbz", estado="direct", cands=candidatas(b, "Flash", 1988)),
+        )
+        g = grupo(await consultar(), "Comics/Flash (1987)")
+        assert codigos(g) == ["candidatas_distintas"] and g["en_conflicto"] is True
+
+    async def test_los_archivos_de_una_senal_estan_siempre_en_la_muestra_del_grupo(self, banco):
+        """`senales[].archivos` lleva los ids de TODOS los afectados (ordenados por id); como solo se refieren a
+        archivos con serie sugerida y de esos se devuelven todos, siempre están en `grupos[].archivos`."""
+        ids = await self._flash(banco, [f"Flash {n:02d} (2011).cbz" for n in range(1, 31)] + ["Flash 99 (1987).cbz"])
+        g = grupo(await consultar(), "Comics/Flash")
+        senal = next(s for s in g["senales"] if s["codigo"] == "anio_discrepa")
+        assert len(senal["archivos"]) == 30 and senal["archivos"] == sorted(senal["archivos"])
+        assert set(senal["archivos"]) <= {a["id"] for a in g["archivos"]}
+        assert ids["Flash 99 (1987).cbz"] not in senal["archivos"]
+
+    async def test_todos_corroboran_si_y_solo_si_cada_archivo_lo_hace(self, banco):
+        await self._flash(banco, ["Flash 01 (1987).cbz", "Flash 02 (1987).cbz", "Flash 03 (1987).cbz"])
+        assert codigos(grupo(await consultar(), "Comics/Flash")) == ["coincide_y_corrobora"]
+
+    async def test_un_archivo_sin_corroboracion_basta_para_no_declarar_que_coincide(self, banco):
+        ids = await self._flash(banco, ["Flash 01 (1987).cbz", "Flash 02.cbz", "Flash 03 (1987).cbz"])
+        g = grupo(await consultar(), "Comics/Flash")
+        assert "coincide_y_corrobora" not in codigos(g)
+        senal = next(s for s in g["senales"] if s["codigo"] == "titulo_exacto_sin_corroboracion")
+        assert senal["archivos"] == [ids["Flash 02.cbz"]]
 
     async def test_9_carpeta_de_autor_o_contenedor(self, banco):
         obras = ["Alfa", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa",
@@ -610,7 +707,7 @@ class TestContratoYSeguridad:
             assert isinstance(g["en_conflicto"], bool)
             assert set(g["patron_de_nombres"]) == {"titulo_dominante", "proporcion", "titulos_distintos"}
             for s in g["senales"]:
-                assert set(s) == {"codigo", "severidad", "texto"}
+                assert set(s) == {"codigo", "severidad", "texto", "archivos"} and isinstance(s["archivos"], list)
                 assert s["severidad"] in {"conflicto", "aviso", "informativa"}
             for a in g["archivos"]:
                 assert set(a) == {"id", "nombre", "estado"} and UUID(a["id"])
