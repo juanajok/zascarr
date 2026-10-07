@@ -36,13 +36,35 @@ logger = structlog.get_logger()
 # Traducción fuente → columna de identidad externa en Series. Cada serie
 # solo lleva UNA de las cuatro (igual que en enricher.py): la que
 # corresponde a la fuente donde se encontró.
-_EXTERNAL_ID_FIELD: dict[MetadataSource, str] = {
+CAMPO_ID_EXTERNO: dict[MetadataSource, str] = {
     MetadataSource.COMIC_VINE: "comic_vine_id",
     MetadataSource.ANILIST: "anilist_id",
     MetadataSource.TEBEOSFERA: "tebeosfera_slug",
     MetadataSource.GCD: "gcd_id",
 }
-_TEXT_ID_FIELDS = {"tebeosfera_slug"}
+CAMPOS_ID_DE_TEXTO = {"tebeosfera_slug"}
+_EXTERNAL_ID_FIELD = CAMPO_ID_EXTERNO          # nombres antiguos, por compatibilidad
+_TEXT_ID_FIELDS = CAMPOS_ID_DE_TEXTO
+
+#: Orden FIJO y neutro de las fuentes en cualquier listado (nunca «la mejor primero»).
+ORDEN_DE_FUENTES: tuple[MetadataSource, ...] = (
+    MetadataSource.COMIC_VINE, MetadataSource.ANILIST,
+    MetadataSource.TEBEOSFERA, MetadataSource.GCD,
+)
+
+# Estado de cada fuente en una búsqueda.
+FUENTE_OK = "ok"
+FUENTE_APAGADA = "apagada"
+FUENTE_SIN_CLAVE = "sin_clave"
+FUENTE_ERROR = "error"
+
+
+@dataclass
+class Busqueda:
+    """Una búsqueda: los candidatos, los avisos en español y el estado de CADA fuente."""
+    resultados: list[DiscoveryResult]
+    avisos: list[str]
+    fuentes: dict[str, str]
 
 
 @dataclass
@@ -73,9 +95,18 @@ class DiscoveryService:
         listo para mostrar — bug real reportado: sin esto, "Comic Vine no
         devuelve nada" era indistinguible de "no está configurado" (sin
         COMICVINE_API_KEY), y el coleccionista no tenía forma de saberlo."""
+        b = await self.search_detallada(query, limit)
+        return b.resultados, b.avisos
+
+    async def search_detallada(self, query: str, limit: int = 10) -> Busqueda:
+        """Como `search`, pero además dice en qué estado quedó CADA fuente: `ok`, `apagada`
+        (desactivada en la configuración), `sin_clave` (Comic Vine encendida pero sin
+        `COMICVINE_API_KEY`: no se consulta) o `error` (se consultó y falló). Una fuente que
+        falla o está apagada no tumba las demás."""
         query = query.strip()
+        estados = {f.value: FUENTE_APAGADA for f in ORDEN_DE_FUENTES}
         if not query:
-            return [], []
+            return Busqueda([], [], estados)
 
         avisos: list[str] = []
         settings = get_settings()
@@ -84,29 +115,35 @@ class DiscoveryService:
                 "Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env "
                 "para incluirlo en la búsqueda."
             )
+            estados[MetadataSource.COMIC_VINE.value] = FUENTE_SIN_CLAVE
 
         # B8: «fuente apagada» vale en TODA ZascArr, también en Descubrir — una
         # fuente desactivada no se instancia ni consulta, las demás sí.
-        fuentes = []
+        fuentes: list[tuple[MetadataSource, str, object]] = []
         if settings.comicvine_enabled:
-            fuentes.append(("Comic Vine", self._search_comic_vine(query, limit)))
+            fuentes.append(
+                (MetadataSource.COMIC_VINE, "Comic Vine", self._search_comic_vine(query, limit)))
         if settings.anilist_enabled:
-            fuentes.append(("AniList", self._search_anilist(query, limit)))
+            fuentes.append((MetadataSource.ANILIST, "AniList", self._search_anilist(query, limit)))
         if settings.tebeosfera_enabled:
-            fuentes.append(("Tebeosfera", self._search_tebeosfera(query, limit)))
+            fuentes.append(
+                (MetadataSource.TEBEOSFERA, "Tebeosfera", self._search_tebeosfera(query, limit)))
         if settings.gcd_enabled:
-            fuentes.append(("GCD", self._search_gcd(query, limit)))
+            fuentes.append((MetadataSource.GCD, "GCD", self._search_gcd(query, limit)))
 
-        outcomes = await asyncio.gather(*(coro for _, coro in fuentes), return_exceptions=True)
+        outcomes = await asyncio.gather(*(coro for _, _, coro in fuentes), return_exceptions=True)
 
         results: list[DiscoveryResult] = []
-        for (nombre, _), outcome in zip(fuentes, outcomes, strict=True):
+        for (fuente, nombre, _), outcome in zip(fuentes, outcomes, strict=True):
             if isinstance(outcome, BaseException):
                 logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
                 avisos.append(f"{nombre}: no se pudo consultar ahora mismo.")
+                estados[fuente.value] = FUENTE_ERROR
                 continue
+            if estados[fuente.value] != FUENTE_SIN_CLAVE:
+                estados[fuente.value] = FUENTE_OK
             results.extend(outcome)
-        return results, avisos
+        return Busqueda(results, avisos, estados)
 
     async def _search_comic_vine(self, query: str, limit: int) -> list[DiscoveryResult]:
         # Sin API key, la petición está condenada (401) — no la intentamos.
