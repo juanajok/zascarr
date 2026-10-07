@@ -52,12 +52,16 @@ Fuera: archivos con `issue_id`, descartados, y los repetidos no registrados (no 
 
 | Código | Cuándo se emite | Severidad |
 |---|---|---|
-| `anio_discrepa` | año de la carpeta (o dominante en los nombres) difiere en más de 1 del `start_year` de la serie candidata | **conflicto** |
-| `calificador_de_carpeta` | la carpeta limpia añade un calificador (`Saga de …`, `Vol N`, edición) que la serie candidata no tiene | **conflicto** |
+| `anio_discrepa` | **por archivo, contra SU propia candidata**: el año de la **carpeta** o el año **del propio archivo** difiere en más de 1 del `start_year` de la serie que ese archivo sugiere. Se conservan las dos evidencias: si discrepan la carpeta y algún archivo, ambas quedan en el texto | **conflicto** |
+| `calificador_de_carpeta` | la carpeta limpia añade un calificador (`Saga de …`, `Vol N`, edición) que la serie sugerida **por ese archivo** no lleva en su título | **conflicto** |
+| `candidatas_distintas` | los archivos de un mismo grupo sugieren series **distintas** (se muestra la que más archivos sugieren) | **conflicto** |
+| `titulo_distinto` | el título del nombre de un archivo no es el de su serie sugerida (se tolera el calificador de saga de la carpeta cuando la serie sugerida lo lleva) | **conflicto** |
+| `titulo_exacto_sin_corroboracion` | el título de un archivo coincide con su serie sugerida y **ni su año, ni el de la carpeta, ni un volumen** lo corroboran (y su año no discrepa: eso ya lo explica `anio_discrepa`) | **conflicto** |
 | `carpeta_de_autor_o_contenedor` | la carpeta reúne muchos títulos distintos (≥ 20 títulos distintos como valor inicial, ver «Decisiones adoptadas») | aviso |
-| `titulo_exacto_sin_corroboracion` | el título del nombre coincide con la candidata y no hay año ni volumen que lo corrobore | **conflicto** |
-| `coincide_y_corrobora` | título y año (±1) o volumen coinciden con la candidata | informativa |
+| `coincide_y_corrobora` | **todos** los archivos con serie sugerida tienen el título de su serie y un año (±1) o un volumen que lo corrobora, **y no hay ninguna señal de conflicto** | informativa |
 | `sin_contexto_de_carpeta` | no hay `carpeta_contextual` | informativa |
+
+**Ninguna mayoría tapa a una minoría.** Las comprobaciones no usan «el título/año dominante» ni «la serie más sugerida»: se hacen archivo a archivo y se agregan sin votar. Un solo archivo que discrepe (2011 entre dos de 1987) basta para que el grupo esté `en_conflicto` y para que `coincide_y_corrobora` no aparezca.
 
 **Regla:** cualquier señal de severidad **conflicto** ⇒ `en_conflicto = true` ⇒ «por confirmar». El conjunto B es **siempre** `por_confirmar = true` (le falta el número), tenga o no conflicto:
 son dos banderas distintas (`por_confirmar` ≠ `en_conflicto`). **No existe un estado «lista»** en esta rebanada.
@@ -84,8 +88,8 @@ son dos banderas distintas (`por_confirmar` ≠ `en_conflicto`). **No existe un 
       "por_confirmar": true,
       "en_conflicto": true,
       "senales": [
-        { "codigo": "anio_discrepa", "severidad": "conflicto", "texto": "La carpeta dice 2019; la serie sugerida empieza en 2025." },
-        { "codigo": "calificador_de_carpeta", "severidad": "conflicto", "texto": "La carpeta añade «Saga de Scott Snyder»." }
+        { "codigo": "anio_discrepa", "severidad": "conflicto", "texto": "La carpeta dice 2019; la serie sugerida empieza en 2025.", "archivos": ["…", "…"] },
+        { "codigo": "calificador_de_carpeta", "severidad": "conflicto", "texto": "La carpeta añade «Saga de Scott Snyder».", "archivos": ["…", "…"] }
       ],
       "archivos": [ { "id": "…", "nombre": "Batman - Saga Scott Snyder 01 - El Tribunal de los Buhos [SC][CRG].cbr" } ]
     }
@@ -94,9 +98,34 @@ son dos banderas distintas (`por_confirmar` ≠ `en_conflicto`). **No existe un 
 ```
 
 - **Etiquetas fijas** (una sola fuente, `ETIQUETAS`): «Sin serie» · «Serie sugerida, falta confirmar número y edición» · «por confirmar» · «en conflicto». Nunca «reconocido», «clasificado» ni «lista».
+- **`senales[].archivos`** (campo añadido en la revisión de #89): lista de **ids de archivo afectados** por esa señal, **ordenados por id (texto, ascendente)**.
+  Es la **lista completa** de los afectados, **no** la muestra de `grupos[].archivos`. Como las señales por archivo solo se refieren a archivos con
+  serie sugerida, y de esos `grupos[].archivos` devuelve **todos**, cada id de `senales[].archivos` aparece siempre en `grupos[].archivos` (hay una
+  prueba). Vacía en las señales del grupo entero (`candidatas_distintas`, `carpeta_de_autor_o_contenedor`, `coincide_y_corrobora`, `sin_contexto_de_carpeta`).
 - **Orden determinista:** primero los `en_conflicto`, luego por `n_archivos` descendente, luego por `clave`. **Paginación de grupos** (`limite`, `desplazamiento`; por defecto 200) y **muestra de archivos** (20 por grupo; **todos** en los de estado `serie_sugerida`, que son pocos).
 - **Coste:** **una consulta** para A∪B (columnas mínimas), una para las series candidatas y el cálculo en memoria: el número de consultas **no crece** con el de archivos.
 - **Nada se escribe, nada se lee del disco, ninguna petición de red.**
+
+## Implementación 1a: lo que se añadió o precisó respecto a esta ficha
+
+Se deja escrito para que la ficha y el código sean un solo artefacto. **Nada de esto relaja un invariante**; son precisiones o campos nuevos.
+
+| Cambio | Por qué |
+|---|---|
+| **Señal `candidatas_distintas`** (conflicto) | Si los archivos de una carpeta sugieren series distintas, mostrar solo la mayoritaria ocultaría el desacuerdo. |
+| **Etiqueta de `mixto`**: «Mezcla: archivos sin serie y con serie sugerida (falta confirmar número y edición)» | El contrato nombraba el estado `mixto` pero no su texto; sin etiqueta propia habría que mentir con una de las otras dos. Sigue sin decir «reconocido», «clasificado» ni «lista». |
+| **`archivos[].estado`** (`sin_serie` / `serie_sugerida`) | En un grupo `mixto` hay que saber cuál es cuál; sin ello se perdería el recuento por tipo. |
+| **`totales.candidata_inexistente`** | Archivos con serie sugerida cuya serie ya no existe, o con una lista de candidatas ilegible: no se pueden mostrar como «serie sugerida», pero **se cuentan, no se esconden**. (`metadata.candidates` que no es una lista no entra en ningún conjunto: ni A ni B.) |
+| **`pagina`** (`limite`, `desplazamiento`) en la respuesta | El cliente necesita saber qué página recibe. Parámetros validados: `limite` 1-1000 (por defecto 200), `desplazamiento` ≥ 0; fuera de rango, 422. |
+| **`serie_sugerida.puntuacion` = el mínimo de las puntuaciones de los archivos que sugieren ESA serie** (la elegida; lo que sugieren las otras candidatas no cuenta, ya lo señala `candidatas_distintas`) | No se exagera la confianza de la sugerencia elegida. |
+| **`coincide_y_corrobora` solo si TODOS los archivos corroboran y no hay ninguna señal de conflicto** | Que «coincide» conviva con «en conflicto» confundiría; el conflicto manda. |
+| **Señales por archivo contra su propia candidata** (año del archivo, año de la carpeta, título, calificadores) y **señal nueva `titulo_distinto`** (conflicto) | Una mayoría no puede ocultar a un archivo minoritario (revisión de #89). `titulo_distinto` marca como conflicto un título que no es el de la serie sugerida; **si se prefiere que sea solo un aviso, es un cambio de severidad de una línea**. |
+| **`senales[].archivos`** | Señalar QUÉ archivos discrepan, no solo que el grupo discrepa. |
+| **Un calificador de la carpeta (`Vol 2`, `Saga de …`, `(Ed.…)`, `Omnigold`/`Integral`/`Deluxe`) es conflicto si el título de la serie sugerida no lo lleva** | Es la regla `calificador_de_carpeta`; una editorial entre paréntesis (`(Panini)`) y las etiquetas de release **no** son calificadores. |
+| **Fuera de la biblioteca configurada** | Una ruta que no cuelga de `library_path` se agrupa por su ruta completa (sin error). Archivos en la raíz: clave `.`. |
+| **Sin `ORDER BY` en SQL** | El orden lo fija el servicio (grupos: conflicto, tamaño, clave; archivos: nombre, id). Una prueba entrega las filas al revés y barajadas y exige el mismo resultado. |
+
+**Medido, no supuesto:** cada defensa se probó rompiéndola (mutaciones, ver el PR), y la suite completa se ejecutó también con `--basetemp` en el dispositivo raíz. Un test de propiedades (400 grupos aleatorios) compara el servicio con un oráculo independiente archivo a archivo.
 
 ## Qué NO hace (y por qué)
 
