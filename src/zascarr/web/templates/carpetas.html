@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Pendientes por carpeta — ZascArr{% endblock %}
+{% block content %}
+<h1>Pendientes por carpeta</h1>
+<p class="subtitle">Lo que sigue pendiente, agrupado por la carpeta donde está. Es solo para mirar: aquí no se crea ni se asigna nada.</p>
+
+{% call ui.aviso("info") %}
+  <strong>Son registros pendientes de verificar, no archivos confirmados.</strong>
+  Esta pantalla lee la base de datos y no comprueba el disco: un registro puede apuntar a un archivo que ya no esté donde se anotó.
+  Una carpeta o un nombre son <em>pistas</em>, no decisiones.
+{% endcall %}
+
+<p><a href="/ui/pendientes">← Volver a «Por revisar»</a></p>
+
+{% if r.totales.grupos == 0 and r.totales.candidata_inexistente == 0 %}
+{{ ui.estado_vacio("Nada pendiente", "No hay registros pendientes de verificar.") }}
+{% else %}
+<ul class="carpetas-resumen" aria-label="Resumen">
+  <li>{{ ui.chip("neutro", r.totales.sin_serie ~ " sin serie") }}</li>
+  <li>{{ ui.chip("info", r.totales.serie_sugerida ~ " con serie sugerida (falta confirmar número y edición)") }}</li>
+  <li>{{ ui.chip("neutro", r.totales.grupos ~ " carpetas") }}</li>
+</ul>
+{% if r.totales.candidata_inexistente %}
+{{ ui.aviso("amber", r.totales.candidata_inexistente ~ " registros tenían una serie sugerida que ya no existe o no se puede leer: no se muestran en ninguna carpeta.") }}
+{% endif %}
+{% if r.totales.grupos %}
+<p class="carpetas-pagina" id="pagina-actual">Carpetas {{ desde }}–{{ hasta }} de {{ r.totales.grupos }}.</p>
+{% endif %}
+
+{% for v in grupos %}
+{% set g = v.g %}
+<section class="card carpeta" aria-labelledby="carpeta-{{ loop.index }}">
+  <h2 id="carpeta-{{ loop.index }}" class="carpeta-titulo">{{ g.clave }}</h2>
+  <p class="carpeta-estados">
+    {{ ui.chip("neutro" if g.estado == "sin_serie" else "info", g.etiqueta) }}
+    {% if g.por_confirmar %}{{ ui.chip("amber", "por confirmar") }}{% endif %}
+    {% if g.en_conflicto %}{{ ui.chip("warn", "en conflicto") }}{% endif %}
+  </p>
+
+  <dl class="carpeta-datos">
+    <dt>Registros</dt><dd>{{ g.n_archivos }}</dd>
+    {% if g.carpeta_contextual %}
+    <dt>Carpeta de la serie</dt><dd>{{ g.carpeta_contextual }}{% if g.ascendentes %} <span class="carpeta-ruta">(dentro de {{ g.ascendentes | join(" / ") }})</span>{% endif %}</dd>
+    {% elif g.ascendentes %}
+    <dt>Ruta</dt><dd>{{ g.ascendentes | join(" / ") }}</dd>
+    {% endif %}
+    {% if g.carpeta_limpia %}
+    <dt>La carpeta dice</dt>
+    <dd>{{ g.carpeta_limpia.titulo }}{% if g.carpeta_limpia.anio %}, año {{ g.carpeta_limpia.anio }}{% endif %}{% if g.carpeta_limpia.volumen %}, volumen {{ g.carpeta_limpia.volumen }}{% endif %}{% if g.carpeta_limpia.calificadores %}, con «{{ g.carpeta_limpia.calificadores | join("», «") }}»{% endif %}</dd>
+    {% endif %}
+    {% if g.patron_de_nombres.titulo_dominante %}
+    <dt>Los nombres dicen</dt>
+    <dd>{{ g.patron_de_nombres.titulo_dominante }} ({{ (g.patron_de_nombres.proporcion * 100) | round | int }}&nbsp;% de los registros){% if g.patron_de_nombres.titulos_distintos > 1 %}; {{ g.patron_de_nombres.titulos_distintos }} títulos distintos{% endif %}</dd>
+    {% endif %}
+    {% if g.serie_sugerida %}
+    <dt>Serie sugerida</dt>
+    <dd>{{ g.serie_sugerida.titulo }}{% if g.serie_sugerida.anio %} ({{ g.serie_sugerida.anio }}){% endif %}, coincidencia {{ (g.serie_sugerida.puntuacion * 100) | round | int }}&nbsp;%. <em>Es una sugerencia: no está elegida ni asignada.</em></dd>
+    {% endif %}
+  </dl>
+
+  {% if v.senales %}
+  <h3 class="carpeta-subtitulo">Qué se ha observado</h3>
+  <ul class="carpeta-senales">
+    {% for x in v.senales %}
+    <li>
+      {% if x.s.severidad == "conflicto" %}{{ ui.chip("warn", "En conflicto") }}
+      {% elif x.s.severidad == "aviso" %}{{ ui.chip("amber", "Aviso") }}
+      {% else %}{{ ui.chip("info", "Nota") }}{% endif %}
+      <span class="senal-texto">{{ x.s.texto }}</span>
+      {% if x.afectados or x.sin_nombre %}
+      <details class="senal-afectados">
+        <summary>Afecta a {{ x.s.archivos | length }} registro{{ "s" if x.s.archivos | length != 1 }}</summary>
+        <ul>
+          {% for n in x.afectados %}<li class="nombre-archivo">{{ n }}</li>{% endfor %}
+          {% if x.sin_nombre %}<li>y {{ x.sin_nombre }} más que no se muestran aquí</li>{% endif %}
+        </ul>
+      </details>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <details class="carpeta-archivos">
+    <summary>Ver registros ({{ g.archivos | length }}{% if v.sin_mostrar > 0 %} de {{ g.n_archivos }}{% endif %})</summary>
+    <ul>
+      {% for a in g.archivos %}
+      <li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ "Sin serie" if a.estado == "sin_serie" else "Serie sugerida, falta confirmar número y edición" }}</li>
+      {% endfor %}
+    </ul>
+    {% if v.sin_mostrar > 0 %}<p class="empty">Se muestran {{ g.archivos | length }}; hay {{ v.sin_mostrar }} más en esta carpeta.</p>{% endif %}
+  </details>
+</section>
+{% endfor %}
+
+{% if anterior is not none or siguiente is not none %}
+<nav class="carpetas-paginas" aria-label="Páginas de carpetas">
+  {% if anterior is not none %}<a class="btn ghost sm" rel="prev" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ anterior }}">← Anteriores</a>{% endif %}
+  {% if siguiente is not none %}<a class="btn ghost sm" rel="next" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ siguiente }}">Siguientes →</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+{% endblock %}
