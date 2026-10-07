@@ -1,6 +1,6 @@
 # ADR 0007: Vincular en su sitio y organizar son operaciones distintas
 
-- Estado: **Propuesto** · 2026-10-07 (diseño; **no implementado**)
+- Estado: **Aceptado** · 2026-10-07 (aprobado y fusionado en #91; el diseño gobierna las rebanadas siguientes y **sigue sin implementarse**)
 - Relacionado: ADR-0006 (asignación recuperable), ADR-0003 (identidad editorial), `docs/design/rebanada-2-elegir-serie-y-vincular.md`, `docs/design/ficha-propuestas-desde-carpetas.md`
 - Decisión de producto de la revisión (2026-10-07): *para archivos adoptados, clasificar no puede implicar reorganizar la biblioteca.*
 
