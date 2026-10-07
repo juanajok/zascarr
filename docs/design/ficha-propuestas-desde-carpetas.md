@@ -269,6 +269,8 @@ Con Postgres y ficheros reales (nombres reales de la biblioteca como casos; ning
 3. **Asignar un grupo** por el servicio recuperable (con la vista previa de rutas de destino).
 4. **Descubrir** como fuente opcional de candidatas, por cola, a petición.
 
+> **Reordenación propuesta (2026-10-07).** Cerrada la rebanada 1, la revisión pidió centrar la rebanada 2 en buscar en fuentes, elegir o crear la serie y asignar con vista previa y confirmación. Es **otro orden** que el de arriba; está desarrollado, con ambas posturas y la recomendación (**D0**), en `docs/design/rebanada-2-elegir-serie-y-asignar.md`. **Hasta que se decida D0, el orden de arriba sigue siendo el vigente.**
+
 ## Decisiones abiertas para la revisión (D1-D5)
 
 - **D1 — Dónde persistir el registro de altas de serie.** `import_runs.details` (`kind = "series_from_folders"`, sin migración) frente a una tabla propia (migración). *Recomendación:* lo primero en la rebanada 2.
