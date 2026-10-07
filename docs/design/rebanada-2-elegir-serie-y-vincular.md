@@ -173,7 +173,7 @@ Tres endpoints, todos con `Cache-Control: no-store`, sesión/Basic como el resto
 
 #### Reintento tras deshacer (pendiente de decisión)
 
-La idempotencia de hoy vive en la fila de `series`. **Al deshacer, la fila se borra y con ella el comprobante:** reenviar el token original, **si todavía no ha caducado** (≤ 15 min), vuelve a crear la serie y **revierte el deshacer**. No se presenta `operacion_id` como idempotencia durable. La prueba `test_un_reintento_atrasado_no_revierte_el_deshacer` fija el contrato deseado (`409 operacion_deshecha`, sin serie) como `xfail(strict=True)`: falla hoy a propósito y, en cuanto se implemente, obliga a quitar la marca.
+La idempotencia de hoy vive en la fila de `series`. **Al deshacer, la fila se borra y con ella el comprobante:** reenviar el token original, **si todavía no ha caducado** (≤ 15 min), vuelve a crear la serie y **revierte el deshacer**. No se presenta `operacion_id` como idempotencia durable. La prueba `test_limitacion_conocida_un_reintento_atrasado_tras_deshacer_vuelve_a_crear_la_serie` **documenta el comportamiento actual como limitación, no como contrato** y se invertirá al implementar la opción elegida (el contrato deseado: `409 operacion_deshecha` y ninguna serie). No se usa `xfail`: la puerta de CI de las pruebas con Postgres exige «ninguna saltada».
 
 Cómo impedirlo **exige persistencia adicional**; opciones, para decidir antes de implementar:
 
