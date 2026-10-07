@@ -23,6 +23,7 @@ from zascarr.database import get_db
 from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.discovery import DiscoveryService
 from zascarr.utils.cover import cached_image_response, fetch_and_cache_cover
+from zascarr.utils.url_portada import es_url_de_portada_permitida
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
 
@@ -109,6 +110,10 @@ async def crear(
     cover_url: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
+    # H1: `cover_url` llega de un campo oculto y luego la DESCARGA EL SERVIDOR: solo se admite
+    # una URL que cumpla la política de portadas (la rebanada 2 usará un token firmado).
+    if cover_url and not es_url_de_portada_permitida(cover_url):
+        raise HTTPException(status_code=400, detail="La portada no es una URL permitida")
     try:
         series, creada = await DiscoveryService(db).get_or_create_series(
             source=source, external_id=external_id, title=title,
