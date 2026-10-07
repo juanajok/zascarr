@@ -45,10 +45,9 @@ def crear_token(proposito: str, contexto: str, datos: dict, secret: str, *,
     return sign_token(base64.urlsafe_b64encode(crudo).decode(), secret)
 
 
-def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
-                    ahora: float | None = None) -> dict | None:
-    """Los datos del token, o `None` si falta, está manipulado o no es de este propósito, de este contexto o
-    ha caducado. Nunca lanza con un token ausente o malformado."""
+def _verificar(token: str, proposito: str, contexto: str, secret: str, *,
+               ahora: float | None = None) -> tuple[dict, int] | None:
+    """(datos, caducidad) de un token válido, o `None`. Nunca lanza con un token ausente o malformado."""
     if not token or not secret or not isinstance(token, str):
         return None
     crudo = verify_token(token, secret)
@@ -65,7 +64,15 @@ def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
     if not isinstance(caduca, int) or isinstance(caduca, bool) or caduca < ahora_:
         return None
     datos = payload.get("d")
-    return datos if isinstance(datos, dict) else None
+    return (datos, caduca) if isinstance(datos, dict) else None
+
+
+def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
+                    ahora: float | None = None) -> dict | None:
+    """Los datos del token, o `None` si falta, está manipulado o no es de este propósito, de este contexto o
+    ha caducado. Nunca lanza con un token ausente o malformado."""
+    verificado = _verificar(token, proposito, contexto, secret, ahora=ahora)
+    return verificado[0] if verificado else None
 
 
 @dataclass(frozen=True)
@@ -143,6 +150,8 @@ class AltaFirmada:
     #: Solo con `modo == "reutilizar"`: `identificador` (la coincidencia exacta por id externo, que se REVALIDA al
     #: confirmar) o `eleccion` (la persona eligió una parecida: nunca se le atribuye una coincidencia por id).
     criterio: str | None = None
+    #: Instante (época, segundos) hasta el que el token es válido: `exp` del propio token, ya verificado.
+    caduca: int = 0
 
 
 def crear_token_alta(a: AltaFirmada, secret: str, *, ahora: float | None = None) -> str:
@@ -186,9 +195,10 @@ def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None)
     clave = _contexto_del_token(token, secret)
     if clave is None:
         return None
-    d = verificar_token(token, PROPOSITO_ALTA, clave, secret, ahora=ahora)
-    if d is None:
+    verificado = _verificar(token, PROPOSITO_ALTA, clave, secret, ahora=ahora)
+    if verificado is None:
         return None
+    d, caduca = verificado
     modo, origen, titulo, tradicion = d.get("modo"), d.get("origen"), d.get("titulo"), d.get("tradicion")
     if not all(isinstance(v, str) and v.strip() for v in (modo, origen, titulo, tradicion)):
         return None
@@ -224,4 +234,4 @@ def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None)
     if not isinstance(vistas, list) or not all(_uuid_texto(v) for v in vistas) or not _uuid_texto(operacion):
         return None
     return AltaFirmada(clave, modo, origen, fuente, id_externo, titulo, anio, tradicion, descripcion, cover,
-                       serie_id, tuple(vistas), operacion, criterio)
+                       serie_id, tuple(vistas), operacion, criterio, caduca)

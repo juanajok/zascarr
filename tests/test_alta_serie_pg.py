@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import BIB, Banco, archivo
@@ -37,6 +38,7 @@ from zascarr.services.tokens_revision import (
     CandidataFirmada,
     crear_token_alta,
     crear_token_candidata,
+    verificar_token_alta,
 )
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -82,9 +84,10 @@ async def entorno(url_bd, monkeypatch):
             yield s
     app.dependency_overrides[get_db] = _get_db
     await b.sembrar(*(archivo(f"{CARPETA}/Flash {i:02d} (1987).cbz") for i in range(1, 4)))
-    yield SimpleNamespace(banco=b, red=reales)
+    contexto = SimpleNamespace(banco=b, red=reales)
+    yield contexto
     app.dependency_overrides.pop(get_db, None)
-    await b.cerrar()
+    await contexto.banco.cerrar()          # el banco puede haberse sustituido (`reiniciar`)
 
 
 def cliente(**kw) -> httpx.AsyncClient:
@@ -136,6 +139,14 @@ async def instantanea(b: Banco) -> dict:
     async with b.fabrica() as s:
         return {t: [tuple(r) for r in (await s.execute(text(f"SELECT * FROM {t} ORDER BY id"))).all()]
                 for t in ("files", "issues", "wishlist", "asignacion_operaciones")}
+
+
+async def operaciones(b: Banco) -> list[tuple]:
+    """(operacion_id, series_id, estado, token_hasta, creada) de todos los comprobantes."""
+    async with b.fabrica() as s:
+        return [tuple(r) for r in (await s.execute(text(
+            "SELECT operacion_id::text, series_id::text, estado::text, token_hasta, creada FROM alta_operaciones "
+            "ORDER BY creada, operacion_id"))).all()]
 
 
 async def rutas(b: Banco) -> list[tuple[str, str]]:
@@ -280,13 +291,17 @@ class TestAltaManual:
         (s,) = await serie_en_bd(entorno.banco)
         assert s.enrichment_attempted_at is None and s.wishlist_policy.value == "ninguno"
 
-    async def test_una_sola_escritura_en_series_y_nada_en_files_ni_issues(self, entorno):
+    async def test_solo_se_escribe_la_serie_y_su_comprobante_y_nada_en_files_ni_issues(self, entorno):
         antes = await instantanea(entorno.banco)
         v = (await post(PREV, manual())).json()
         n = len(entorno.banco.sentencias)
         assert (await post(ALTA, {"token": v["token"]})).status_code == 200
-        ins = escrituras(entorno.banco, n)
-        assert [re.match(r"\s*INSERT INTO (\w+)", q, re.I).group(1) for q in ins] == ["series"], ins
+        todas = escrituras(entorno.banco, n)
+        ins = [q for q in todas if re.match(r"\s*INSERT", q, re.I)]
+        assert sorted(re.match(r"\s*INSERT INTO (\w+)", q, re.I).group(1) for q in ins) == [
+            "alta_operaciones", "series"], ins
+        # lo único más que se escribe es la purga acotada del propio comprobante
+        assert all(re.match(r"\s*DELETE FROM alta_operaciones", q, re.I) for q in todas if q not in ins), todas
         despues = await instantanea(entorno.banco)
         assert despues == antes and despues["issues"] == []
         assert (r := await rutas(entorno.banco)) and all(Path(p).name == n for p, n in r)   # rutas y nombres
@@ -832,25 +847,24 @@ class TestDeshacer:
         assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 200
         assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 404
 
-    async def test_la_idempotencia_vale_mientras_la_serie_existe(self, entorno):
-        """Lo que hay HOY: el comprobante de `operacion_id` es la propia fila de `series`; no es durable tras deshacer."""
+    async def test_repetir_el_token_de_una_operacion_creada_devuelve_su_resultado(self, entorno):
         token = (await post(PREV, manual())).json()["token"]
         a = (await post(ALTA, {"token": token})).json()
         b = (await post(ALTA, {"token": token})).json()
         assert (a["repetida"], b["repetida"]) == (False, True) and a["serie"] == b["serie"]
+        assert a["deshacer"] == b["deshacer"] and await numero_de_series(entorno.banco) == 1
 
-    async def test_limitacion_conocida_un_reintento_atrasado_tras_deshacer_vuelve_a_crear_la_serie(self, entorno):
-        """LIMITACIÓN CONOCIDA, no un contrato (ficha 2b, «Reintento tras deshacer»): el comprobante de la operación
-        es la fila de `series` y deshacer la borra, así que reenviar el token original —si aún no ha caducado— la
-        crea de nuevo y revierte el deshacer. El contrato deseado (409 `operacion_deshecha`, sin serie) exige
-        persistencia adicional y está pendiente de decisión; cuando se implemente, esta prueba se INVIERTE."""
+    async def test_un_reintento_atrasado_no_revierte_el_deshacer(self, entorno):
+        """Antes (limitación conocida) el comprobante era la fila de `series`, y deshacer lo borraba: reenviar el
+        token aún válido la recreaba. Ahora el comprobante es `alta_operaciones` y `deshecha` PREVALECE."""
         token = (await post(PREV, manual())).json()["token"]
         d = (await post(ALTA, {"token": token})).json()["deshacer"]
         assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 200
-        assert await numero_de_series(entorno.banco) == 0
-        r = await post(ALTA, {"token": token})
-        assert r.status_code == 200 and r.json()["resultado"] == "creada" and r.json()["repetida"] is False
-        assert await numero_de_series(entorno.banco) == 1
+        for _ in range(2):
+            r = await post(ALTA, {"token": token})
+            assert r.status_code == 409 and r.json()["detail"]["codigo"] == "alta_deshecha"
+            assert await numero_de_series(entorno.banco) == 0
+        assert [(o[2]) for o in await operaciones(entorno.banco)] == ["deshecha"]
 
     async def test_se_puede_volver_a_dar_de_alta_despues_de_deshacer(self, entorno):
         d = await crear_y_obtener(entorno)
@@ -984,6 +998,394 @@ class TestDeshacer:
         assert await numero_de_series(entorno.banco) == 0
 
 
+# ── El comprobante de la operación (migración 0018) ─────────────────────────────────────────────
+
+async def reiniciar(entorno, url_bd) -> None:
+    """«Reiniciar»: otro motor y otra fábrica de sesiones, sin nada de la memoria anterior (el servicio no
+    guarda estado en el proceso: lo que sobrevive es lo que está en Postgres)."""
+    nuevo = Banco(url_bd)
+
+    async def _get_db():
+        async with nuevo.fabrica() as s:
+            yield s
+    app.dependency_overrides[get_db] = _get_db
+    await entorno.banco.cerrar()
+    entorno.banco = nuevo
+
+
+def cliente_sin_excepciones() -> httpx.AsyncClient:
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+                             base_url="http://localhost", headers={"Origin": "http://localhost"})
+
+
+async def envejecer(b: Banco, operacion: str, *, horas: int = 25, token_caducado: bool | None = None) -> None:
+    """Retrasa `creada` y, si se pide, fija el token como caducado (True) o vigente (False)."""
+    async with b.fabrica() as s:
+        await s.execute(text("UPDATE alta_operaciones SET creada = now() - make_interval(hours => :h) "
+                             "WHERE operacion_id = CAST(:o AS uuid)"), {"h": horas, "o": operacion})
+        if token_caducado is not None:
+            await s.execute(text("UPDATE alta_operaciones SET token_hasta = now() + make_interval(hours => :d) "
+                                 "WHERE operacion_id = CAST(:o AS uuid)"),
+                            {"d": -1 if token_caducado else 1, "o": operacion})
+        await s.commit()
+
+
+async def insertar_comprobantes(b: Banco, n: int, *, horas: int, token_caducado: bool, estado="creada") -> list[str]:
+    ids = [str(uuid4()) for _ in range(n)]
+    async with b.fabrica() as s:
+        for i in ids:
+            await s.execute(text(
+                "INSERT INTO alta_operaciones (operacion_id, series_id, estado, token_hasta, creada) VALUES "
+                "(CAST(:o AS uuid), gen_random_uuid(), CAST(:e AS alta_estado), now() + make_interval(hours => :d), "
+                "now() - make_interval(hours => :h))"),
+                {"o": i, "e": estado, "d": -1 if token_caducado else 1, "h": horas})
+        await s.commit()
+    return ids
+
+
+async def ids_de_comprobantes(b: Banco) -> set[str]:
+    return {o[0] for o in await operaciones(b)}
+
+
+def operacion_de(token: str) -> str:
+    return verificar_token_alta(token, SECRETO).operacion
+
+
+class TestComprobanteDeLaOperacion:
+
+    async def test_crear_registra_un_comprobante_minimo_en_la_misma_operacion(self, entorno):
+        token = (await post(PREV, manual())).json()["token"]
+        c = (await post(ALTA, {"token": token})).json()
+        (op,) = await operaciones(entorno.banco)
+        assert op[:3] == (operacion_de(token), c["serie"]["series_id"], "creada")
+        assert op[3] > op[4]                                    # el token vale hasta después de crearse
+        async with entorno.banco.fabrica() as s:
+            columnas = {r[0] for r in (await s.execute(text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'alta_operaciones'"))).all()}
+            fk = (await s.execute(text(
+                "SELECT count(*) FROM pg_constraint WHERE conrelid = 'alta_operaciones'::regclass AND contype = 'f'"))).scalar_one()
+            fila = (await s.execute(text("SELECT alta_operaciones::text FROM alta_operaciones"))).scalar_one()
+        assert columnas == {"operacion_id", "series_id", "estado", "token_hasta", "creada", "actualizada"}
+        assert fk == 0                                          # borrar la serie NO borra su comprobante
+        assert token not in fila and "Flash" not in fila and CARPETA not in fila
+
+    async def test_la_reutilizacion_no_escribe_comprobante(self, entorno):
+        await sembrar_serie(entorno.banco, "Flash", 1987, comic_vine_id=796)
+        n = len(entorno.banco.sentencias)
+        assert (await previsualizar_y_confirmar(desde_fuente())).json()["resultado"] == "reutilizada"
+        assert await operaciones(entorno.banco) == [] and escrituras(entorno.banco, n) == []
+
+    # ── Crear → deshacer → reenviar ──────────────────────────────────────────────────────────────
+
+    async def test_crear_deshacer_y_reenviar_el_mismo_token_no_recrea_la_serie(self, entorno):
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+        (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).raise_for_status()
+        r = await post(ALTA, {"token": token})
+        assert r.status_code == 409 and r.json()["detail"]["codigo"] == "alta_deshecha"
+        assert await numero_de_series(entorno.banco) == 0
+        (op,) = await operaciones(entorno.banco)
+        assert (op[0], op[1], op[2]) == (d["operacion_id"], d["series_id"], "deshecha")
+
+    async def test_el_deshacer_marca_la_operacion_en_la_misma_transaccion_que_el_borrado(self, entorno, monkeypatch):
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+
+        async def falla(self, operacion_id):
+            raise RuntimeError("fallo antes del commit")
+        original = alta_serie.AltaDeSerie._marcar_deshecha
+        monkeypatch.setattr(alta_serie.AltaDeSerie, "_marcar_deshecha", falla)
+        async with cliente_sin_excepciones() as c:
+            r = await c.post(ruta_deshacer(d["series_id"]), json={"operacion_id": d["operacion_id"]})
+        assert r.status_code == 500
+        assert await numero_de_series(entorno.banco) == 1                     # la serie sigue
+        assert [o[2] for o in await operaciones(entorno.banco)] == ["creada"]  # y el comprobante no cambió
+        monkeypatch.setattr(alta_serie.AltaDeSerie, "_marcar_deshecha", original)
+        assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 200
+        assert [o[2] for o in await operaciones(entorno.banco)] == ["deshecha"]
+
+    @pytest.mark.parametrize("donde", ["registrar", "commit"])
+    async def test_un_fallo_antes_del_commit_no_deja_ni_serie_ni_comprobante(self, entorno, monkeypatch, donde):
+        token = (await post(PREV, manual())).json()["token"]
+
+        async def falla(*a, **kw):
+            raise RuntimeError("fallo antes del commit")
+        if donde == "registrar":
+            original = alta_serie.AltaDeSerie._registrar_operacion
+            monkeypatch.setattr(alta_serie.AltaDeSerie, "_registrar_operacion", falla)
+        else:
+            original = AsyncSession.commit
+            monkeypatch.setattr(AsyncSession, "commit", falla)
+        async with cliente_sin_excepciones() as c:
+            r = await c.post(ALTA, json={"token": token})
+        if donde == "registrar":
+            monkeypatch.setattr(alta_serie.AltaDeSerie, "_registrar_operacion", original)
+        else:
+            monkeypatch.setattr(AsyncSession, "commit", original)
+        assert r.status_code == 500
+        assert await numero_de_series(entorno.banco) == 0 and await operaciones(entorno.banco) == []
+        # y el reintento del mismo token funciona y crea UNA
+        assert (await post(ALTA, {"token": token})).json()["resultado"] == "creada"
+        assert await numero_de_series(entorno.banco) == 1 and len(await operaciones(entorno.banco)) == 1
+
+    async def test_la_caducidad_guardada_es_la_del_token(self, entorno):
+        token = (await post(PREV, manual())).json()["token"]
+        await post(ALTA, {"token": token})
+        (op,) = await operaciones(entorno.banco)
+        assert int(op[3].timestamp()) == verificar_token_alta(token, SECRETO).caduca
+
+    async def test_un_comprobante_incoherente_deshecho_con_la_serie_aun_viva_tampoco_da_permiso(self, entorno):
+        """Defensa en profundidad: aunque algo dejara el comprobante `deshecha` con la serie todavía presente,
+        deshacer se niega."""
+        d = await crear_y_obtener(entorno)
+        async with entorno.banco.fabrica() as s:
+            await s.execute(text("UPDATE alta_operaciones SET estado = CAST('deshecha' AS alta_estado)"))
+            await s.commit()
+        r = await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})
+        assert r.status_code == 409 and r.json()["detail"]["motivo"] == "no_creada_por_esta_operacion"
+        assert await numero_de_series(entorno.banco) == 1
+
+    async def test_tras_un_fallo_la_sesion_queda_limpia_y_sin_candados(self, entorno, monkeypatch):
+        """El servicio revierte ÉL MISMO ante cualquier fallo: la sesión no se queda con la transacción abierta ni
+        con los candados consultivos (que se sueltan solo al terminar la transacción)."""
+        async def candados(s) -> int:
+            return (await s.execute(text(
+                "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()"))).scalar_one()
+
+        async def falla(*a, **kw):
+            raise RuntimeError("fallo")
+        token = (await post(PREV, manual())).json()["token"]
+        registrar = alta_serie.AltaDeSerie._registrar_operacion
+        async with entorno.banco.fabrica() as s:
+            monkeypatch.setattr(alta_serie.AltaDeSerie, "_registrar_operacion", falla)
+            with pytest.raises(RuntimeError):
+                await alta_serie.AltaDeSerie(s, secret=SECRETO).confirmar(token)
+            assert await candados(s) == 0
+        monkeypatch.setattr(alta_serie.AltaDeSerie, "_registrar_operacion", registrar)
+        # un fallo al deshacer, con una sesión propia
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+
+        async def falla_marcar(self, operacion_id):
+            raise RuntimeError("fallo")
+        async with entorno.banco.fabrica() as s:
+            monkeypatch.setattr(alta_serie.AltaDeSerie, "_marcar_deshecha", falla_marcar)
+            with pytest.raises(RuntimeError):
+                await alta_serie.AltaDeSerie(s, secret=SECRETO).deshacer(UUID(d["series_id"]), UUID(d["operacion_id"]))
+            assert await candados(s) == 0
+
+    # ── Reiniciar ────────────────────────────────────────────────────────────────────────────────
+
+    async def test_reiniciar_entre_crear_deshacer_y_reenviar_da_el_mismo_resultado(self, entorno, url_bd):
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+        await reiniciar(entorno, url_bd)
+        repetida = (await post(ALTA, {"token": token})).json()
+        assert (repetida["resultado"], repetida["repetida"], repetida["deshacer"]) == ("creada", True, d)
+        await reiniciar(entorno, url_bd)
+        assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 200
+        await reiniciar(entorno, url_bd)
+        r = await post(ALTA, {"token": token})
+        assert r.status_code == 409 and r.json()["detail"]["codigo"] == "alta_deshecha"
+        assert await numero_de_series(entorno.banco) == 0
+
+    async def test_el_servicio_no_guarda_estado_en_el_proceso(self, entorno, url_bd):
+        """Dos instancias independientes del servicio se comportan igual: el comprobante está en Postgres."""
+        token = (await post(PREV, manual())).json()["token"]
+        async with entorno.banco.fabrica() as s1:
+            a = await alta_serie.AltaDeSerie(s1, secret=SECRETO).confirmar(token)
+        async with entorno.banco.fabrica() as s2:
+            b = await alta_serie.AltaDeSerie(s2, secret=SECRETO).confirmar(token)
+        assert (a.repetida, b.repetida, a.serie) == (False, True, b.serie)
+
+    # ── Concurrencia ─────────────────────────────────────────────────────────────────────────────
+
+    async def test_repetir_y_deshacer_a_la_vez_dejan_un_resultado_consistente_sin_recrear(self, entorno):
+        for ronda in range(8):
+            await entorno.banco.limpiar()
+            await entorno.banco.sembrar(*(archivo(f"{CARPETA}/Flash {i:02d} (1987).cbz") for i in range(1, 3)))
+            token = (await post(PREV, manual())).json()["token"]
+            d = (await post(ALTA, {"token": token})).json()["deshacer"]
+            repetir, deshacer = await asyncio.gather(
+                post(ALTA, {"token": token}),
+                post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]}))
+            assert deshacer.status_code == 200, (ronda, deshacer.text)
+            assert repetir.status_code in (200, 409), (ronda, repetir.text)
+            if repetir.status_code == 409:
+                assert repetir.json()["detail"]["codigo"] == "alta_deshecha"
+            assert await numero_de_series(entorno.banco) == 0
+            assert [o[2] for o in await operaciones(entorno.banco)] == ["deshecha"]
+            assert (await post(ALTA, {"token": token})).status_code == 409           # y no se recrea después
+
+    async def test_un_deshacer_de_una_operacion_aun_no_confirmada_no_hace_nada_ni_la_envenena(self, entorno):
+        for ronda in range(10):
+            await entorno.banco.limpiar()
+            await entorno.banco.sembrar(*(archivo(f"{CARPETA}/Flash {i:02d} (1987).cbz") for i in range(1, 3)))
+            token = (await post(PREV, manual())).json()["token"]
+            op = operacion_de(token)
+            # Una operación aún no confirmada no tiene serie que deshacer (su id no se conoce todavía): el deshacer
+            # no hace nada, no deja ningún comprobante `deshecha` y no impide confirmar y deshacer después.
+            confirmar, deshacer = await asyncio.gather(
+                post(ALTA, {"token": token}), post(ruta_deshacer(uuid4(), ), {"operacion_id": op}))
+            assert confirmar.status_code == 200 and deshacer.status_code == 404, (ronda, confirmar.text, deshacer.text)
+            assert await numero_de_series(entorno.banco) == 1
+            assert [o[2] for o in await operaciones(entorno.banco)] == ["creada"]
+            sid = confirmar.json()["serie"]["series_id"]
+            assert (await post(ruta_deshacer(sid), {"operacion_id": op})).status_code == 200
+
+    async def test_confirmar_y_deshacer_esperan_al_candado_de_su_operacion_y_solo_al_suyo(self, entorno):
+        """El primer candado del orden común es el de la OPERACIÓN: quien lo tiene retiene a la confirmación (o
+        repetición) y al deshacer de esa misma operación, y no a las de otras."""
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+        otro = (await post(PREV, manual("Otra serie", 1999))).json()["token"]
+        async with entorno.banco.fabrica() as sujeta:
+            await sujeta.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('alta_op:' || :o, 0))"),
+                                 {"o": d["operacion_id"]})
+            repetir = asyncio.create_task(post(ALTA, {"token": token}))
+            deshacer = asyncio.create_task(post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]}))
+            ajena = await asyncio.wait_for(post(ALTA, {"token": otro}), 10)           # otra operación: no espera
+            assert ajena.status_code == 200
+            await asyncio.sleep(0.7)
+            assert not repetir.done() and not deshacer.done()
+            await sujeta.commit()                                                      # suelta el candado
+        r, u = await asyncio.wait_for(asyncio.gather(repetir, deshacer), 30)
+        assert u.status_code == 200 and r.status_code in (200, 409)
+        assert await numero_de_series(entorno.banco) == 1                              # solo queda «Otra serie»
+
+    async def test_mezcla_de_confirmar_repetir_y_deshacer_con_titulos_compartidos_no_se_bloquea(self, entorno):
+        """Orden de bloqueos coherente (operación → título → serie): sin interbloqueo ni 500 bajo mezcla."""
+        for _ in range(3):
+            await entorno.banco.limpiar()
+            await entorno.banco.sembrar(*(archivo(f"{CARPETA}/Flash {i:02d} (1987).cbz") for i in range(1, 3)))
+            creadas = []
+            for titulo in ("Alfa", "Beta", "Gamma"):
+                t = (await post(PREV, manual(titulo, 1990))).json()["token"]
+                creadas.append((t, (await post(ALTA, {"token": t})).json()["deshacer"]))
+            # nuevas altas del MISMO título que las que se están repitiendo o deshaciendo (decididas como duplicados)
+            nuevos = [(await post(PREV, manual(t, 1990, decision="crear_igualmente"))).json()["token"]
+                      for t in ("Alfa", "Beta", "Delta")]
+            tareas = [post(ALTA, {"token": creadas[0][0]}),                                      # repetir Alfa
+                      post(ruta_deshacer(creadas[1][1]["series_id"]), {"operacion_id": creadas[1][1]["operacion_id"]}),
+                      post(ruta_deshacer(creadas[0][1]["series_id"]), {"operacion_id": creadas[0][1]["operacion_id"]}),
+                      post(ALTA, {"token": creadas[2][0]}),                                      # repetir Gamma
+                      *(post(ALTA, {"token": t}) for t in nuevos)]
+            r = await asyncio.wait_for(asyncio.gather(*tareas), 60)
+            assert all(x.status_code in (200, 409) for x in r), [x.text for x in r]
+            assert r[1].status_code == 200 and r[2].status_code == 200                           # los dos deshacer
+            estados = {o[0]: o[2] for o in await operaciones(entorno.banco)}
+            assert estados[creadas[0][1]["operacion_id"]] == estados[creadas[1][1]["operacion_id"]] == "deshecha"
+            assert estados[creadas[2][1]["operacion_id"]] == "creada"
+            for t, _ in creadas[:2]:                                                             # y no se recrean
+                assert (await post(ALTA, {"token": t})).json()["detail"]["codigo"] == "alta_deshecha"
+
+    # ── La serie borrada por otra vía ────────────────────────────────────────────────────────────
+
+    async def test_si_la_serie_se_borro_por_otra_via_el_reintento_no_la_recrea(self, entorno):
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+        async with entorno.banco.fabrica() as s:                      # borrada por otra vía (p. ej. DELETE /api/series)
+            await s.execute(text("DELETE FROM series WHERE id = :i"), {"i": d["series_id"]})
+            await s.commit()
+        r = await post(ALTA, {"token": token})
+        assert r.status_code == 409 and r.json()["detail"]["codigo"] == "alta_serie_ausente"
+        assert await numero_de_series(entorno.banco) == 0
+        assert [o[2] for o in await operaciones(entorno.banco)] == ["creada"]      # el comprobante sobrevivió
+
+    # ── Reutilizar nunca da permiso para borrar ──────────────────────────────────────────────────
+
+    async def test_la_operacion_de_una_reutilizacion_no_da_permiso_para_borrar_la_serie_reutilizada(self, entorno):
+        sid = await sembrar_serie(entorno.banco, "Flash", 1987, comic_vine_id=796)
+        v = (await post(PREV, desde_fuente())).json()
+        op = operacion_de(v["token"])
+        assert (await post(ALTA, {"token": v["token"]})).json()["resultado"] == "reutilizada"
+        antes = await fila_de_serie(entorno.banco, sid)
+        for operacion in (op, str(uuid4()), str(sid)):
+            r = await post(ruta_deshacer(sid), {"operacion_id": operacion})
+            assert r.status_code == 409 and r.json()["detail"]["motivo"] == "no_creada_por_esta_operacion", operacion
+        assert await fila_de_serie(entorno.banco, sid) == antes and await operaciones(entorno.banco) == []
+
+    async def test_la_operacion_que_creo_una_serie_no_borra_otra(self, entorno):
+        ajena = await sembrar_serie(entorno.banco, "Batman", 1940)
+        d = await crear_y_obtener(entorno)
+        r = await post(ruta_deshacer(ajena), {"operacion_id": d["operacion_id"]})
+        assert r.status_code == 409 and r.json()["detail"]["motivo"] == "no_creada_por_esta_operacion"
+        assert await numero_de_series(entorno.banco) == 2
+
+    async def test_una_serie_con_la_procedencia_de_otra_operacion_sin_comprobante_no_se_borra(self, entorno):
+        """El permiso lo da el COMPROBANTE, no un campo de la serie: una serie con `metadata.alta.operacion_id`
+        pero sin comprobante (p. ej. anterior a la 0018 o purgada) no se puede deshacer."""
+        d = await crear_y_obtener(entorno)
+        async with entorno.banco.fabrica() as s:
+            await s.execute(text("DELETE FROM alta_operaciones"))
+            await s.commit()
+        r = await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})
+        assert r.status_code == 409 and r.json()["detail"]["motivo"] == "no_creada_por_esta_operacion"
+        assert await numero_de_series(entorno.banco) == 1
+
+    # ── Retención y purga ────────────────────────────────────────────────────────────────────────
+
+    async def test_la_purga_exige_las_dos_condiciones_y_no_toca_series(self, entorno):
+        vieja_caducada = (await insertar_comprobantes(entorno.banco, 1, horas=25, token_caducado=True))[0]
+        vieja_vigente = (await insertar_comprobantes(entorno.banco, 1, horas=25, token_caducado=False))[0]
+        reciente_caducada = (await insertar_comprobantes(entorno.banco, 1, horas=1, token_caducado=True))[0]
+        reciente_vigente = (await insertar_comprobantes(entorno.banco, 1, horas=1, token_caducado=False))[0]
+        deshecha_vieja = (await insertar_comprobantes(entorno.banco, 1, horas=48, token_caducado=True, estado="deshecha"))[0]
+        previas = await numero_de_series(entorno.banco)
+        n = len(entorno.banco.sentencias)
+        d = await crear_y_obtener(entorno)                                         # la purga corre al crear
+        assert await ids_de_comprobantes(entorno.banco) == {vieja_vigente, reciente_caducada, reciente_vigente, d["operacion_id"]}
+        assert vieja_caducada not in await ids_de_comprobantes(entorno.banco) and deshecha_vieja not in await ids_de_comprobantes(entorno.banco)
+        assert await numero_de_series(entorno.banco) == previas + 1
+        borrados = [q for q in entorno.banco.sentencias[n:] if re.match(r"\s*DELETE", q, re.I)]
+        assert borrados and all("alta_operaciones" in q and "FROM series" not in q for q in borrados)
+
+    async def test_la_purga_esta_acotada(self, entorno):
+        from zascarr.services.alta_serie import LOTE_DE_PURGA
+        await insertar_comprobantes(entorno.banco, LOTE_DE_PURGA + 50, horas=30, token_caducado=True)
+        await crear_y_obtener(entorno)
+        restantes = len(await operaciones(entorno.banco))
+        assert restantes == 50 + 1                                                 # 100 purgadas, 50 viejas y la nueva
+
+    async def test_un_comprobante_viejo_con_token_vigente_no_se_purga_y_sigue_impidiendo_la_recreacion(self, entorno):
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+        (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).raise_for_status()
+        await envejecer(entorno.banco, d["operacion_id"], horas=30, token_caducado=False)   # 30 h, token aún válido
+        await crear_y_obtener(entorno, manual("Otra", 1999))                                # dispara la purga
+        assert d["operacion_id"] in await ids_de_comprobantes(entorno.banco)
+        assert (await post(ALTA, {"token": token})).json()["detail"]["codigo"] == "alta_deshecha"
+
+    async def test_tras_purgar_un_token_caducado_nunca_ejecuta_un_alta(self, entorno):
+        """Sin comprobante (purgado) y con el token caducado, nada se ejecuta: hay que rehacer la vista previa."""
+        token = (await post(PREV, manual())).json()["token"]
+        async with entorno.banco.fabrica() as s:
+            with pytest.raises(alta_serie.TokenInvalidoError):                     # reloj 16 min por delante
+                await alta_serie.AltaDeSerie(s, secret=SECRETO, ahora=time.time() + 16 * 60).confirmar(token)
+        assert await numero_de_series(entorno.banco) == 0 and await operaciones(entorno.banco) == []
+        # el mismo token, creado en el pasado y ya caducado, tampoco: ni comprobante ni serie
+        viejo = crear_token_alta(AltaFirmada(
+            clave=CARPETA, modo="crear", origen="manual", fuente=None, id_externo=None, titulo="Vieja", anio=None,
+            tradicion="american", descripcion=None, cover_url=None, serie_id=None, vistas=(),
+            operacion=str(uuid4())), SECRETO, ahora=time.time() - 16 * 60)
+        r = await post(ALTA, {"token": viejo})
+        assert r.status_code == 422 and r.json()["detail"]["codigo"] == "token_invalido"
+        assert await numero_de_series(entorno.banco) == 0 and await operaciones(entorno.banco) == []
+
+    async def test_purgado_el_comprobante_de_una_operacion_el_token_vigente_se_distingue_del_caducado(self, entorno):
+        """Documenta POR QUÉ la purga exige el token caducado: si se borrara el comprobante con el token aún
+        vigente, el reintento recrearía la serie. Con el token caducado, el reloj lo impide."""
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+        (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).raise_for_status()
+        async with entorno.banco.fabrica() as s:                                    # purga INDEBIDA, a mano
+            await s.execute(text("DELETE FROM alta_operaciones"))
+            await s.commit()
+        async with entorno.banco.fabrica() as s:
+            with pytest.raises(alta_serie.TokenInvalidoError):                      # caducado: no ejecuta
+                await alta_serie.AltaDeSerie(s, secret=SECRETO, ahora=time.time() + 16 * 60).confirmar(token)
+        assert await numero_de_series(entorno.banco) == 0
+
+
 # ── Efectos laterales: nada fuera de `series` ────────────────────────────────────────────────────
 
 class TestSinEfectosLaterales:
@@ -1007,14 +1409,14 @@ class TestSinEfectosLaterales:
         assert escrituras(entorno.banco, n) == [] and entorno.red == []
         assert existente
 
-    async def test_la_confirmacion_de_un_alta_toma_el_candado_del_titulo_y_escribe_solo_series(self, entorno):
+    async def test_la_confirmacion_de_un_alta_toma_los_candados_y_escribe_solo_la_serie_y_su_comprobante(self, entorno):
         v = (await post(PREV, manual())).json()
         n = len(entorno.banco.sentencias)
         await post(ALTA, {"token": v["token"]})
         sentencias = entorno.banco.sentencias[n:]
         assert any("pg_advisory_xact_lock" in q and "f_title_norm" in q for q in sentencias)
         tablas = {re.match(r"\s*(?:INSERT INTO|UPDATE|DELETE FROM)\s+(\w+)", q, re.I).group(1) for q in escrituras(entorno.banco, n)}
-        assert tablas == {"series"}
+        assert tablas == {"series", "alta_operaciones"}              # la serie y su comprobante; nada más
 
     async def test_sin_sesion_es_401(self, entorno, monkeypatch):
         from zascarr.config import get_settings
