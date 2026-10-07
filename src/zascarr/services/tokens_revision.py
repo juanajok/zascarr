@@ -21,7 +21,7 @@ import json
 import time
 from dataclasses import dataclass
 
-from zascarr.models import MetadataSource
+from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.auth import sign_token, verify_token
 
 TTL_SEGUNDOS = 15 * 60
@@ -36,7 +36,8 @@ def crear_token(proposito: str, contexto: str, datos: dict, secret: str, *,
     una clave vacía la puede falsificar cualquiera."""
     if not secret:
         raise ValueError("No hay clave del servidor con la que firmar")
-    payload = {"p": proposito, "c": contexto, "d": datos, "exp": int((ahora or time.time()) + ttl)}
+    inicio = time.time() if ahora is None else ahora
+    payload = {"p": proposito, "c": contexto, "d": datos, "exp": int(inicio + ttl)}
     crudo = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
     return sign_token(base64.urlsafe_b64encode(crudo).decode(), secret)
 
@@ -57,7 +58,8 @@ def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
     if not isinstance(payload, dict) or payload.get("p") != proposito or payload.get("c") != contexto:
         return None
     caduca = payload.get("exp")
-    if not isinstance(caduca, int) or caduca < (ahora or time.time()):
+    ahora_ = time.time() if ahora is None else ahora
+    if not isinstance(caduca, int) or isinstance(caduca, bool) or caduca < ahora_:
         return None
     datos = payload.get("d")
     return datos if isinstance(datos, dict) else None
@@ -90,15 +92,15 @@ def verificar_token_candidata(token: str, clave: str, secret: str, *,
     d = verificar_token(token, PROPOSITO_CANDIDATA, clave, secret, ahora=ahora)
     if d is None:
         return None
-    try:
-        fuente, id_externo, titulo = str(d["fuente"]), str(d["id"]), str(d["titulo"])
-        anio, tradicion = d.get("anio"), str(d["tradicion"])
-        MetadataSource(fuente)
-    except (KeyError, ValueError, TypeError):
+    # Cadenas REALES y no vacías (un `None` no puede convertirse en «None»), fuente y tradición dentro de sus
+    # enumeraciones, año entero (un booleano no es un año) y el resto de campos opcionales con su tipo.
+    fuente, id_externo, titulo, tradicion = d.get("fuente"), d.get("id"), d.get("titulo"), d.get("tradicion")
+    if not all(isinstance(v, str) and v.strip() for v in (fuente, id_externo, titulo, tradicion)):
         return None
-    if anio is not None and not isinstance(anio, int):
+    if fuente not in {f.value for f in MetadataSource} or tradicion not in {t.value for t in ComicTradition}:
         return None
-    if not titulo or not id_externo:
+    anio = d.get("anio")
+    if anio is not None and (not isinstance(anio, int) or isinstance(anio, bool)):
         return None
     descripcion, cover = d.get("descripcion"), d.get("cover_url")
     if (descripcion is not None and not isinstance(descripcion, str)) or (

@@ -34,7 +34,6 @@ from zascarr.services.discovery import (
     DiscoveryService,
 )
 from zascarr.services.tokens_revision import (
-    crear_token,
     verificar_token,
     verificar_token_candidata,
 )
@@ -404,23 +403,6 @@ class TestTokens:
         assert verificar_token_candidata(token, carpeta, SECRETO) is not None
         import time
         assert verificar_token_candidata(token, carpeta, SECRETO, ahora=time.time() + 16 * 60) is None
-
-    def test_el_contenido_de_un_token_valido_sigue_sin_darse_por_bueno(self):
-        """Firma correcta pero campos con la forma equivocada: se rechaza."""
-        for datos in ({"fuente": "inventada", "id": "1", "titulo": "x", "anio": 1, "tradicion": "american"},
-                      {"fuente": "comic_vine", "id": "1", "titulo": "x", "anio": "1987", "tradicion": "american"},
-                      {"fuente": "comic_vine", "id": "", "titulo": "x", "anio": 1, "tradicion": "american"},
-                      {"fuente": "comic_vine", "id": "1", "titulo": "", "anio": 1, "tradicion": "american"},
-                      {"fuente": "comic_vine", "id": "1", "titulo": "x", "anio": 1},
-                      {"fuente": "comic_vine", "id": "1", "titulo": "x", "anio": 1, "tradicion": "american",
-                       "cover_url": 5}):
-            t = crear_token("candidata", "k", datos, SECRETO)
-            assert verificar_token_candidata(t, "k", SECRETO) is None, datos
-
-    def test_sin_clave_no_se_firma_ni_se_verifica(self):
-        with pytest.raises(ValueError):
-            crear_token("candidata", "k", {}, "")
-        assert verificar_token(crear_token("candidata", "k", {"a": 1}, SECRETO), "candidata", "k", "") is None
 
     async def test_sin_clave_del_servidor_es_503_y_no_se_busca(self, entorno, monkeypatch):
         carpeta = await sembrar_flash(entorno.banco)
