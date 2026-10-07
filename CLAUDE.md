@@ -125,6 +125,11 @@ como marco permanente.
    guiada está en el instalador (**A11**, `scripts/_exposicion.sh`): las dos opciones
    que abren fijan la contraseña **antes** de publicar el puerto.
 
+7. **Toda petición del servidor a una URL que no sea fija pasa por `utils/url_portada.py`**
+   (SSRF, H1): lista de nombres, direcciones resueltas públicas (IPv4 e IPv6), conexión a la IP
+   validada, redirecciones a mano y tope de tamaño. Un token firmado garantiza integridad,
+   **no** seguridad de una URL externa. Ver `docs/design/hallazgo-h1-cover-url.md`.
+
 ## 6. UX
 
 - **Todo en español llano para el coleccionista**: el dashboard y las
