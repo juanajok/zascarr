@@ -7,7 +7,11 @@ Contrato: `docs/design/rebanada-2-elegir-serie-y-vincular.md`, bloque B. Tres op
   duplicados o crear una nueva) y, cuando ya no falta ninguna decisión, emite el **token de alta**.
 - `confirmar`: recibe **solo el token**. Reutilizar no escribe nada; crear escribe **una fila de `series`**
   (con su procedencia) y nada más: ni números, ni archivos, ni búsquedas ni enriquecimientos.
-- `deshacer`: borra una serie **creada por una operación concreta** mientras nada dependa de ella.
+- `deshacer`: borra una serie **creada por una operación concreta** mientras nada dependa de ella, y marca esa
+  operación `deshecha` en la misma transacción: reenviar su token ya no la recrea.
+
+El comprobante de cada alta vive en `alta_operaciones` (migración 0018), **no** en la fila de `series`: así
+sobrevive a un deshacer. Orden de bloqueos común a confirmar, repetir y deshacer: operación → título → serie.
 
 Tres reglas que lo sostienen:
 
@@ -29,13 +33,15 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.matcher import normalize_title
 from zascarr.models import (
     ASIGNACION_ESTADOS_VIVOS,
+    AltaEstado,
+    AltaOperacion,
     AsignacionOperacion,
     ComicTradition,
     File,
@@ -66,6 +72,10 @@ from zascarr.utils.url_portada import es_url_de_portada_permitida
 VERSION_PROCEDENCIA = 1
 #: Espacio de nombres del candado consultivo: que no choque con otros usos de `pg_advisory_xact_lock`.
 _ESPACIO_CANDADO = "alta_serie:"
+_ESPACIO_OPERACION = "alta_op:"
+#: Retención del comprobante: 24 h Y token caducado (lo que tarde más). Ver `AltaOperacion`.
+RETENCION_HORAS = 24
+LOTE_DE_PURGA = 100
 MAX_TITULO = 500
 ANIO_MIN, ANIO_MAX = 1800, 2100
 
@@ -108,6 +118,16 @@ class ParecidasNuevasError(AltaError):
 class IdentificadorCambiadoError(AltaError):
     """La vista previa proponía reutilizar una serie por su identificador externo y esa serie ya no lo tiene."""
     codigo = "identificador_cambiado"
+
+
+class AltaDeshechaError(AltaError):
+    """Esa operación ya se creó y se DESHIZO: reenviar su token no vuelve a crear la serie."""
+    codigo = "alta_deshecha"
+
+
+class AltaSerieAusenteError(AltaError):
+    """Esa operación creó la serie, pero la serie ya no existe (borrada por otra vía): no se recrea."""
+    codigo = "alta_serie_ausente"
 
 
 class SerieNoEncontradaError(AltaError):
@@ -312,20 +332,39 @@ class AltaDeSerie:
                              else "elegida_por_la_persona", deshacer=None)
 
     async def _crear(self, alta: AltaFirmada) -> ResultadoAlta:
+        """Orden de bloqueos, el MISMO en confirmar, repetir y deshacer: **1)** la operación (candado consultivo
+        por `operacion_id`), **2)** el título normalizado (solo al crear), **3)** la fila de la serie (solo al
+        deshacer). Nadie toma uno posterior antes que uno anterior, así que no hay interbloqueo."""
         db = self._db
-        # 1. Candado del TÍTULO NORMALIZADO (sin año ni tradición): serializa todas las altas que podrían
+        try:
+            return await self._crear_en_transaccion(alta)
+        except BaseException:
+            await db.rollback()          # ni serie ni comprobante a medias
+            raise
+
+    async def _crear_en_transaccion(self, alta: AltaFirmada) -> ResultadoAlta:
+        db = self._db
+        # 1. La operación: confirmación, repetición y deshacer de la MISMA operación se serializan aquí.
+        await self._bloquear_operacion(alta.operacion)
+
+        # 2. Comprobante persistido: ya se confirmó (reintento o doble envío) → su resultado; o se deshizo → 409.
+        previa = (await db.execute(
+            select(AltaOperacion).where(AltaOperacion.operacion_id == UUID(alta.operacion)))).scalar_one_or_none()
+        if previa is not None:
+            if previa.estado == AltaEstado.DESHECHA:
+                raise AltaDeshechaError("Esa alta se creó y se deshizo: repite la vista previa si la quieres de nuevo.")
+            serie = (await db.execute(select(Series).where(Series.id == previa.series_id))).scalar_one_or_none()
+            if serie is None:
+                raise AltaSerieAusenteError("Esa alta creó una serie que ya no existe: repite la vista previa.")
+            await db.commit()
+            return self._resultado_creada(serie, alta.operacion, repetida=True)
+
+        # 3. Candado del TÍTULO NORMALIZADO (sin año ni tradición): serializa todas las altas que podrían
         #    colisionar, también 1987 frente a 1988. Dura hasta el `commit` o el `rollback`.
         await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k || f_title_norm(:t), 0))"),
                          {"k": _ESPACIO_CANDADO, "t": alta.titulo})
 
-        # 2. Idempotencia: esta misma operación ya se confirmó (reintento o doble envío).
-        previa = (await db.execute(
-            select(Series).where(Series.metadata_["alta"]["operacion_id"].astext == alta.operacion))).scalar_one_or_none()
-        if previa is not None:
-            await db.commit()
-            return self._resultado_creada(previa, alta.operacion, repetida=True)
-
-        # 3. Carrera por el identificador externo: ya existe → es una REUTILIZACIÓN, no un error.
+        # 4. Carrera por el identificador externo: ya existe → es una REUTILIZACIÓN, no un error.
         campo = CAMPO_ID_EXTERNO.get(MetadataSource(alta.fuente)) if alta.fuente else None
         if campo is not None and alta.id_externo is not None:
             existente = await self._por_id_externo(alta.fuente, alta.id_externo)
@@ -334,14 +373,13 @@ class AltaDeSerie:
                 return ResultadoAlta(resultado="reutilizada", serie=_a_serie_local(existente), repetida=False,
                                      motivo="mismo_identificador", deshacer=None)
 
-        # 4. Se REPITE la comprobación de parecidas dentro de la transacción y bajo el candado.
+        # 5. Se REPITE la comprobación de parecidas dentro de la transacción y bajo el candado.
         ahora_parecidas = await self._parecidas(alta.titulo, alta.anio, ComicTradition(alta.tradicion), excluir=None)
         nuevas = [p for p in ahora_parecidas if p.series_id not in set(alta.vistas)]
         if nuevas:
-            await db.rollback()
             raise ParecidasNuevasError(nuevas)
 
-        # 5. Alta. Si aun así salta el UNIQUE del identificador (otra confirmación con otro título), se trata
+        # 6. Alta. Si aun así salta el UNIQUE del identificador (otra confirmación con otro título), se trata
         #    como «ya existía» (H4), no como un error 500.
         serie = Series(
             title=alta.titulo, tradition=ComicTradition(alta.tradicion), start_year=alta.anio,
@@ -365,8 +403,31 @@ class AltaDeSerie:
                                          motivo="mismo_identificador", deshacer=None)
             raise
         await db.refresh(serie)
+
+        # 7. El comprobante, EN LA MISMA transacción que la serie (y la purga acotada de los viejos).
+        await self._registrar_operacion(alta, serie)
+        await self._purgar()
         await db.commit()
         return self._resultado_creada(serie, alta.operacion, repetida=False)
+
+    async def _bloquear_operacion(self, operacion: str) -> None:
+        await self._db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k || :o, 0))"),
+                               {"k": _ESPACIO_OPERACION, "o": str(operacion)})
+
+    async def _registrar_operacion(self, alta: AltaFirmada, serie: Series) -> None:
+        self._db.add(AltaOperacion(
+            operacion_id=UUID(alta.operacion), series_id=serie.id, estado=AltaEstado.CREADA,
+            token_hasta=datetime.fromtimestamp(alta.caduca, UTC)))
+        await self._db.flush()
+
+    async def _purgar(self) -> None:
+        """Borra, de forma ACOTADA, comprobantes que cumplen las dos condiciones (creados hace más de 24 h Y con
+        el token ya caducado). Solo toca `alta_operaciones`: nunca series. No espera a filas ajenas."""
+        await self._db.execute(text(
+            "DELETE FROM alta_operaciones WHERE operacion_id IN ("
+            " SELECT operacion_id FROM alta_operaciones"
+            " WHERE creada < now() - make_interval(hours => :h) AND token_hasta < now()"
+            " ORDER BY creada LIMIT :n FOR UPDATE SKIP LOCKED)"), {"h": RETENCION_HORAS, "n": LOTE_DE_PURGA})
 
     def _procedencia(self, alta: AltaFirmada) -> dict:
         inicio = self._ahora if self._ahora is not None else datetime.now(UTC).timestamp()
@@ -385,23 +446,33 @@ class AltaDeSerie:
     # ── Deshacer ─────────────────────────────────────────────────────────────────────────────────
 
     async def deshacer(self, series_id: UUID, operacion_id: UUID) -> ResultadoDeshacer:
-        """Borra la serie SOLO si la creó esa operación y nada depende de ella.
+        """Borra la serie SOLO si la creó esa operación y nada depende de ella; y marca la operación `deshecha`
+        en la MISMA transacción, para que reenviar su token no la recree.
 
-        Protegido frente a concurrencia: `SELECT … FOR UPDATE` sobre la fila de la serie. Quien quiera colgarle
-        números (insertar en `issues`, que toma `FOR KEY SHARE` por la clave foránea) espera a este candado o lo
-        hace esperar; y como se exige que NO tenga ningún número, un archivo solo puede vincularse a un número
-        que antes se creó. Quien vincule archivos a números existentes de esta serie (2d) debe tomar `FOR SHARE`
-        sobre la serie antes de comprobar (ficha, bloque D).
+        Bloqueos, en el orden común: la operación (consultivo) y después la fila de la serie (`FOR UPDATE`).
+        Quien quiera colgarle números (insertar en `issues`, que toma `FOR KEY SHARE` por la clave foránea)
+        espera a ese candado o lo hace esperar; y como se exige que NO tenga ningún número, un archivo solo puede
+        vincularse a un número que antes se creó. Quien vincule archivos a números existentes de esta serie (2d)
+        debe tomar `FOR SHARE` sobre la serie antes de comprobar (ficha, bloque D).
         """
         db = self._db
+        try:
+            return await self._deshacer_en_transaccion(series_id, operacion_id)
+        except BaseException:
+            await db.rollback()
+            raise
+
+    async def _deshacer_en_transaccion(self, series_id: UUID, operacion_id: UUID) -> ResultadoDeshacer:
+        db = self._db
+        await self._bloquear_operacion(str(operacion_id))
         serie = (await db.execute(select(Series).where(Series.id == series_id).with_for_update())).scalar_one_or_none()
         if serie is None:
-            await db.rollback()
             raise SerieNoEncontradaError(str(series_id))
-        alta = (serie.metadata_ or {}).get("alta")
-        if not isinstance(alta, dict) or alta.get("operacion_id") != str(operacion_id):
-            # Ni una serie que ya existía y se reutilizó, ni una creada por otra operación.
-            await db.rollback()
+        # Solo el comprobante de la operación que CREÓ esta serie da permiso. Una reutilización no deja
+        # comprobante (no escribe nada), así que nunca obtiene permiso para borrar una serie ajena.
+        operacion = (await db.execute(
+            select(AltaOperacion).where(AltaOperacion.operacion_id == operacion_id).with_for_update())).scalar_one_or_none()
+        if operacion is None or operacion.series_id != series_id or operacion.estado != AltaEstado.CREADA:
             raise NoSePuedeDeshacerError("no_creada_por_esta_operacion")
 
         async def hay(consulta) -> bool:
@@ -419,12 +490,16 @@ class AltaDeSerie:
                 select(Wishlist.id).where(Wishlist.series_id == series_id)):
             motivo = "tiene_deseados"
         if motivo is not None:
-            await db.rollback()
             raise NoSePuedeDeshacerError(motivo)
         titulo = serie.title
+        await self._marcar_deshecha(operacion_id)
         await db.execute(delete(Series).where(Series.id == series_id))
         await db.commit()
         return ResultadoDeshacer(deshecho=True, series_id=str(series_id), titulo=titulo)
+
+    async def _marcar_deshecha(self, operacion_id: UUID) -> None:
+        await self._db.execute(update(AltaOperacion).where(AltaOperacion.operacion_id == operacion_id).values(
+            estado=AltaEstado.DESHECHA, actualizada=func.now()))
 
     # ── Consultas ────────────────────────────────────────────────────────────────────────────────
 

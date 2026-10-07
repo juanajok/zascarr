@@ -481,6 +481,36 @@ class AsignacionOperacion(Base):
     actualizada: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class AltaEstado(enum.StrEnum):
+    """Estado de una operación de alta de serie (migración 0018). `creada`: la confirmación
+    creó la serie; `deshecha`: el deshacer la borró y esa operación **no puede volver a
+    crearla**."""
+    CREADA = "creada"
+    DESHECHA = "deshecha"
+
+
+class AltaOperacion(Base):
+    """Comprobante de una operación de alta de la superficie de revisión (rebanada 2b, 0018).
+
+    **No es un historial de auditoría**: existe para reconocer un reintento del mismo token
+    (devolver el mismo resultado) y para que un reintento atrasado NO revierta un «deshacer».
+    Se purga pasadas 24 h **y** una vez caducado el token. Guarda lo mínimo —sin token, sesión
+    ni credenciales— y **`series_id` no es una clave foránea**: borrar la serie no debe borrar
+    su comprobante (con `CASCADE` el reintento volvería a crearla)."""
+    __tablename__ = "alta_operaciones"
+    __table_args__ = (Index("ix_alta_operaciones_purga", "creada"),)
+    operacion_id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    series_id: Mapped[str] = mapped_column(UUID(as_uuid=True), nullable=False)
+    estado: Mapped[AltaEstado] = mapped_column(
+        Enum(AltaEstado, name="alta_estado", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False)
+    token_hasta: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    creada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    actualizada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Wishlist(Base):
     __tablename__ = "wishlist"
     __table_args__ = (CheckConstraint("series_id IS NOT NULL OR issue_id IS NOT NULL", name="wishlist_target_check"),)

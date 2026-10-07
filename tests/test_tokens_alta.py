@@ -82,6 +82,12 @@ class TestFirma:
         for malo in (t[:-2] + "zz", t + "a", "", "x", ".", None, 42, b"x", [], t.replace(".", "..")):
             assert verificar_token_alta(malo, SECRETO) is None, malo
 
+    def test_el_token_lleva_su_caducidad_para_el_comprobante(self):
+        """`caduca` (la época del `exp` del propio token) es lo que fija hasta cuándo se conserva el comprobante."""
+        t = crear_token_alta(alta(), SECRETO, ahora=5000)
+        assert verificar_token_alta(t, SECRETO, ahora=5000).caduca == 5000 + TTL_SEGUNDOS
+        assert verificar_token_alta(crear_token_alta(alta(), SECRETO), SECRETO).caduca > time.time()
+
     def test_caducado(self):
         t = crear_token_alta(alta(), SECRETO, ahora=1000)
         assert verificar_token_alta(t, SECRETO, ahora=1000 + TTL_SEGUNDOS) is not None

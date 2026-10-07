@@ -24,7 +24,9 @@ from zascarr.database import get_db
 from zascarr.models import ComicTradition
 from zascarr.services.alta_serie import (
     AltaDeSerie,
+    AltaDeshechaError,
     AltaError,
+    AltaSerieAusenteError,
     DatosManuales,
     IdentificadorCambiadoError,
     NoSePuedeDeshacerError,
@@ -197,7 +199,7 @@ async def confirmar_alta(
     except ParecidasNuevasError as e:
         raise _error(409, e, "Han aparecido series parecidas desde la vista previa: repítela y decide.",
                      nuevas=[p.model_dump() for p in e.nuevas]) from None
-    except (SerieYaNoExisteError, IdentificadorCambiadoError) as e:
+    except (SerieYaNoExisteError, IdentificadorCambiadoError, AltaDeshechaError, AltaSerieAusenteError) as e:
         raise _error(409, e, str(e)) from None
     except AltaError as e:
         raise _error(422, e, str(e)) from None
