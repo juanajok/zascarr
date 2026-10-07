@@ -269,7 +269,7 @@ Con Postgres y ficheros reales (nombres reales de la biblioteca como casos; ning
 3. **Asignar un grupo** por el servicio recuperable (con la vista previa de rutas de destino).
 4. **Descubrir** como fuente opcional de candidatas, por cola, a petición.
 
-> **Reordenación propuesta (2026-10-07).** Cerrada la rebanada 1, la revisión pidió centrar la rebanada 2 en buscar en fuentes, elegir o crear la serie y asignar con vista previa y confirmación. Es **otro orden** que el de arriba; está desarrollado, con ambas posturas y la recomendación (**D0**), en `docs/design/rebanada-2-elegir-serie-y-asignar.md`. **Hasta que se decida D0, el orden de arriba sigue siendo el vigente.**
+> **Reordenación decidida (2026-10-07).** Cerrada la rebanada 1, la revisión **adoptó** otro orden (**D0**): descubrimiento desde el grupo → elegir o crear la serie → vista previa → confirmación, con «crear a mano» como camino completo sin red ni claves. Y decidió (**D6**) que **clasificar un archivo adoptado no lo mueve**: se **vincula en su sitio**; **organizar** (mover y renombrar) es otra operación, con consentimiento propio. Las rebanadas **2, 3 y 4 de arriba quedan sustituidas** por `docs/design/rebanada-2-elegir-serie-y-vincular.md` y `docs/adr/0007-vincular-en-su-sitio.md`; la lista de arriba se conserva como historia.
 
 ## Decisiones abiertas para la revisión (D1-D5)
 
