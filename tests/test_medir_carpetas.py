@@ -1,6 +1,9 @@
 # ruff: noqa: E501
 """B14 — `scripts/medicion/medir_carpetas.py`: la medición que sustenta `docs/design/auditoria-b14-carpetas.md`.
 
+`limpiar_carpeta` se movió a `zascarr.core.carpetas` (la comparte el servicio de revisión): sus pruebas viven
+ahora en `tests/test_core_carpetas.py`.
+
 El corpus es SINTÉTICO pero con las formas reales de la biblioteca medida (autor, contenedor, refinamiento por
 volumen, orden de lectura): los nombres de series son títulos publicados; ninguna ruta es de nadie.
 """
@@ -15,25 +18,6 @@ RAIZ = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("medir_carpetas", RAIZ / "scripts" / "medicion" / "medir_carpetas.py")
 medir_carpetas = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(medir_carpetas)
-
-
-class TestLimpiarCarpeta:
-
-    @pytest.mark.parametrize("carpeta,titulo,anio", [
-        ("Flash (1987)", "Flash", 1987),
-        ("JSA (1999)", "JSA", 1999),
-        ("Arrowsmith (COMPLETO)(CRG)", "Arrowsmith", None),
-        ("Superman Vol2 (Ed.Zinco)(1987-96)", "Superman Vol2", 1987),
-        ("Locke & Key [HD]", "Locke & Key", None),
-        ("Green Lantern - Saga de Geoff Johns", "Green Lantern - Saga de Geoff Johns", None),
-    ])
-    def test_titulo_y_anio(self, carpeta, titulo, anio):
-        t, a, _ = medir_carpetas.limpiar_carpeta(carpeta)
-        assert (t, a) == (titulo, anio)
-
-    def test_las_etiquetas_se_separan_no_se_pierden(self):
-        _, _, etiquetas = medir_carpetas.limpiar_carpeta("Arrowsmith (COMPLETO)(CRG)")
-        assert etiquetas == ["(COMPLETO)", "(CRG)"]
 
 
 class TestRelacion:
