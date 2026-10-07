@@ -127,6 +127,18 @@ Se deja escrito para que la ficha y el código sean un solo artefacto. **Nada de
 
 **Medido, no supuesto:** cada defensa se probó rompiéndola (mutaciones, ver el PR), y la suite completa se ejecutó también con `--basetemp` en el dispositivo raíz. Un test de propiedades (400 grupos aleatorios) compara el servicio con un oráculo independiente archivo a archivo.
 
+## Implementación 1b: la vista HTML
+
+`GET /ui/pendientes/carpetas` (`web/pendientes.py`, plantilla `carpetas.html`) pinta **la misma respuesta** que el JSON: no recalcula ninguna señal; solo traduce los ids de `senales[].archivos` a nombres (por eso el contrato de 1a exige que estén siempre en `grupos[].archivos`). Una prueba con una respuesta enlatada comprueba que lo que se ve es lo que devuelve el servicio.
+
+- **Aviso fijo arriba, también sin nada pendiente:** «**Son registros pendientes de verificar, no archivos confirmados.**» + «lee la base de datos y no comprueba el disco». Es la decisión 4: las 14 filas obsoletas salen como «Sin serie» en su carpeta antigua y la pantalla no afirma que el archivo exista.
+- **Cada grupo:** clave de carpeta, etiqueta de estado, «por confirmar» y «en conflicto» (chip con texto e icono, no solo color), lo que dice la carpeta y lo que dicen los nombres, la serie sugerida («**es una sugerencia: no está elegida ni asignada**»), las señales con severidad («En conflicto», «Aviso», «Nota») y, desplegable, **los registros afectados por nombre**.
+- **Muestra limitada dicha:** «Ver registros (20 de 45)… hay 25 más».
+- **Paginación:** 50 carpetas por página (`limite`, `desplazamiento`, mismos nombres que el JSON), con «Anteriores/Siguientes» y «Carpetas 51–80 de 80».
+- **Sin ninguna acción:** ni `<form>`, ni `<button>`, ni `<script>`, ni `hx-*`, ni campos (hay una prueba sobre la salida y otra sobre la plantilla). Sin crear series, asignar ni limpiar.
+- **Accesible:** `<details>/<summary>` nativos (foco y Intro, sin JS), `aria-labelledby` por carpeta, chips con icono, colores de los componentes ya comprobados por `test_web_css_contraste`. Las etiquetas largas **se parten** en pantallas estrechas (con `nowrap` desbordaban 49 px a 712 px de ancho: lo encontró la verificación en navegador).
+- **Verificado en navegador real** (BD de 165 registros con la forma de la biblioteca real): conflicto de la saga de Snyder con sus nueve nombres, grupo `mixto`, año minoritario con solo `Flash 03 (2011).cbz`, carpeta de autor (aviso, sin conflicto), muestra limitada, paginación con clics reales, nombre con HTML escapado como texto, teclado, 375 px y tema claro sin desbordar, y 0 peticiones fallidas de la propia vista.
+
 ## Qué NO hace (y por qué)
 
 No crea series, no asigna, no mueve, no copia, no resuelve duplicados (D5) ni las 14 referencias obsoletas (esas 14 **aparecen** agrupadas por su carpeta antigua como «Sin serie»; la rebanada **no afirma que el archivo exista**, porque no mira el disco). No cambia el contador del menú (**D2** sigue abierta).
