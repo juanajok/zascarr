@@ -26,6 +26,7 @@ from zascarr.services.alta_serie import (
     AltaDeSerie,
     AltaError,
     DatosManuales,
+    IdentificadorCambiadoError,
     NoSePuedeDeshacerError,
     ParecidasNuevasError,
     ResultadoAlta,
@@ -196,7 +197,7 @@ async def confirmar_alta(
     except ParecidasNuevasError as e:
         raise _error(409, e, "Han aparecido series parecidas desde la vista previa: repítela y decide.",
                      nuevas=[p.model_dump() for p in e.nuevas]) from None
-    except SerieYaNoExisteError as e:
+    except (SerieYaNoExisteError, IdentificadorCambiadoError) as e:
         raise _error(409, e, str(e)) from None
     except AltaError as e:
         raise _error(422, e, str(e)) from None
