@@ -14,7 +14,7 @@ from pathlib import Path
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,11 @@ from zascarr.services.asignacion import (
     servicio_por_defecto,
 )
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
+from zascarr.services.revision_carpetas import (
+    LIMITE_MAXIMO,
+    RespuestaCarpetas,
+    RevisionCarpetas,
+)
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.routes import crear_templates
@@ -80,6 +85,59 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
     files = await ReviewService(db).pending_files()
     cards = [_card(f) for f in files]
     return templates.TemplateResponse(request, "pendientes.html", {"cards": cards})
+
+
+#: Grupos por página en la vista HTML (el JSON admite hasta `LIMITE_MAXIMO`): una página corta se
+#: pinta rápido en la Pi y se revisa con calma.
+GRUPOS_POR_PAGINA = 50
+
+
+def _vista_carpetas(r: RespuestaCarpetas) -> dict:
+    """Prepara lo que pinta la plantilla SIN recalcular nada: señales, estados y etiquetas
+    vienen del servicio (la misma respuesta que el JSON). Aquí solo se traducen los ids de
+    `senales[].archivos` a nombres, que es presentación; `grupos[].archivos` contiene siempre
+    a los afectados (contrato de 1a)."""
+    grupos = []
+    for g in r.grupos:
+        nombres = {a.id: a.nombre for a in g.archivos}
+        grupos.append({
+            "g": g,
+            "senales": [
+                {"s": s, "afectados": [nombres[i] for i in s.archivos if i in nombres],
+                 "sin_nombre": sum(1 for i in s.archivos if i not in nombres)}
+                for s in g.senales
+            ],
+            "sin_mostrar": g.n_archivos - len(g.archivos),
+        })
+    p = r.pagina
+    desde = p.desplazamiento + 1 if r.grupos else 0
+    return {
+        "r": r,
+        "grupos": grupos,
+        "desde": desde,
+        "hasta": p.desplazamiento + len(r.grupos),
+        "anterior": max(p.desplazamiento - p.limite, 0) if p.desplazamiento > 0 else None,
+        "siguiente": (
+            p.desplazamiento + p.limite if p.desplazamiento + p.limite < r.totales.grupos else None
+        ),
+        "limite": p.limite,
+    }
+
+
+@router.get("/carpetas", response_class=HTMLResponse)
+async def carpetas(
+    request: Request,
+    limite: int = Query(default=GRUPOS_POR_PAGINA, ge=1, le=LIMITE_MAXIMO),
+    desplazamiento: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Rebanada 1b: lo pendiente agrupado por carpeta, SOLO LECTURA. Misma respuesta que
+    `GET /api/revision/carpetas`; no escribe, no mira el disco y no ofrece ninguna acción."""
+    servicio = RevisionCarpetas(db)
+    respuesta = await servicio.carpetas(limite=limite, desplazamiento=desplazamiento)
+    resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(respuesta))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.get("/{file_id}/portada")

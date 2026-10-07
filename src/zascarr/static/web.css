@@ -1238,3 +1238,24 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Pendientes por carpeta (rebanada 1b, solo lectura) ─────────────────────
+   Solo maquetación: los colores salen de los componentes (chip, aviso, card), ya comprobados. */
+.carpetas-resumen { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 12px 0; list-style: none; }
+.carpeta { margin-bottom: var(--gutter); }
+.carpeta-titulo { margin: 0 0 8px; overflow-wrap: anywhere; font-size: 1.15rem; }
+.carpeta-estados { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+/* Las etiquetas de estado son largas («Serie sugerida, falta confirmar número y edición»): se parten en lugar de
+   desbordar la página en pantallas estrechas. */
+.carpeta-estados .chip, .carpetas-resumen .chip, .carpeta-senales .chip { white-space: normal; text-align: left; border-radius: var(--radius-panel); }
+.carpeta-datos { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0 0 12px; }
+.carpeta-datos dt { font-weight: 700; }
+.carpeta-datos dd { margin: 0; overflow-wrap: anywhere; }
+.carpeta-subtitulo { font-size: 1rem; margin: 12px 0 6px; }
+.carpeta-senales { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 10px; }
+.carpeta-senales li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.senal-afectados, .carpeta-archivos { flex-basis: 100%; }
+.senal-afectados ul, .carpeta-archivos ul { margin: 6px 0 0; padding-left: 20px; }
+.nombre-archivo { overflow-wrap: anywhere; }
+.carpetas-paginas { display: flex; gap: 12px; margin: 18px 0; }
+@media (max-width: 600px) { .carpeta-datos { grid-template-columns: 1fr; } .carpeta-datos dd { margin-bottom: 6px; } }
