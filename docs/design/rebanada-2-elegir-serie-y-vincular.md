@@ -2,7 +2,7 @@
 
 > Desarrolla las rebanadas 2-4 de `docs/design/ficha-propuestas-desde-carpetas.md` tras cerrar la rebanada 1 (`docs/design/rebanada-1-superficie-de-revision.md`, en `main`).
 > **Esta ficha no implementa nada**: fija el problema, los contratos y las pruebas de aceptación **antes** de escribir código. **No autoriza** crear series, vincular ni mover archivos, ni tocar producción.
-> **Versión 2** (2026-10-07): incorpora la revisión de la versión 1. **Clasificar ya no significa mover**: ver `docs/adr/0007-vincular-en-su-sitio.md` (Propuesto).
+> **Versión 2** (2026-10-07): incorpora la revisión de la versión 1. **Clasificar ya no significa mover**: ver `docs/adr/0007-vincular-en-su-sitio.md` (Aceptado, sin implementar).
 
 ## Cambios respecto a la versión 1 (revisión del 2026-10-07)
 
@@ -257,7 +257,7 @@ No mentir («serie sugerida» no es «clasificada»; «registro» no es «archiv
 | **2a** | Descubrimiento contextualizado: servicio + JSON + tokens `candidata` | Nada |
 | **2b** | Alta: previsualizar y confirmar la serie; colisiones, candado, procedencia, regla de enriquecimiento, deshacer | Solo `series` |
 | **2c** | Vista previa de la vinculación (servicio + JSON), con `stat` y sin hash | Nada |
-| **2d** | **Vincular** (ADR 0007 aceptado antes): una transacción, token `vincular`, idempotencia, alias opcional | `files` e `issues`; **ningún fichero** |
+| **2d** | **Vincular** (ADR 0007, aceptado): una transacción, token `vincular`, idempotencia, alias opcional | `files` e `issues`; **ningún fichero** |
 | **2e** | Vistas HTML de los cuatro pasos, **verificadas en navegador real** (móvil, claro/oscuro, teclado) | Lo que ya hacen los servicios |
 | **Rebanada 3** | **Organizar** y «reubicar» (ficha propia, con relación lote↔operaciones durable si se promete informe tras reinicio) | Ficheros, por el servicio recuperable |
 
@@ -287,4 +287,4 @@ No mentir («serie sugerida» no es «clasificada»; «registro» no es «archiv
 
 ## Límites de esta ficha
 
-Lectura de código en `main`; **Mylar3 no se ha leído** para esta rebanada y las referencias externas se leyeron sin ejecutarse. **No se ha medido** que las fuentes encuentren las series de la biblioteca real. Los límites de D8 son hipótesis. **Vincular y su deshacer no existen todavía**: el ADR 0007 está «Propuesto». No se ha ejecutado nada contra producción ni contra fuentes reales.
+Lectura de código en `main`; **Mylar3 no se ha leído** para esta rebanada y las referencias externas se leyeron sin ejecutarse. **No se ha medido** que las fuentes encuentren las series de la biblioteca real. Los límites de D8 son hipótesis. **Vincular y su deshacer no existen todavía**: el ADR 0007 está «Aceptado» pero sin implementar. No se ha ejecutado nada contra producción ni contra fuentes reales.
