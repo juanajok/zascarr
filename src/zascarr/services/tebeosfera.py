@@ -30,6 +30,12 @@ el ciclo del enricher — ver enricher.py, que ya envuelve esto en su
 propio try/except de todos modos, pero el propio cliente no debe ni
 necesita propagar fallos de parseo HTML como errores duros).
 
+Cortesía (decisión del PROYECTO, conservadora; no una afirmación sobre la política oficial del
+sitio): **2,5 s como mínimo entre peticiones**, compartido por TODAS las instancias y caminos del
+proceso (`utils/cortesia.py`): la búsqueda de Descubrir y el enricher llegan al sitio por el mismo
+limitador. Depende de que haya un solo proceso (`uvicorn --workers 1`). Una configuración por
+debajo del mínimo se eleva a él.
+
 Alcance deliberado: solo a nivel de SERIE (título, portada, año, nº de
 números). Sinopsis/créditos por número requerirían parsear la ficha
 completa de cada número — fuera de alcance de esta primera pasada, igual
@@ -37,7 +43,6 @@ que AniList solo enriquece a nivel de serie.
 """
 from __future__ import annotations
 
-import asyncio
 import re
 from dataclasses import dataclass
 
@@ -46,10 +51,16 @@ import structlog
 from lxml import html as lxml_html
 
 from zascarr.config import get_settings
+from zascarr.utils.cortesia import limitador_de
 
 logger = structlog.get_logger()
 
 _BASE_URL = "https://www.tebeosfera.com"
+SITIO = "tebeosfera"
+#: Mínimo entre peticiones, en segundos. Decisión del proyecto (revisión del 2026-10-07): es una
+#: asociación cultural sin ánimo de lucro y un scraping sin contrato; se prefiere pecar de cortés.
+#: Solo se puede SUBIR.
+MINIMO_ENTRE_PETICIONES_S = 2.5
 _SEARCH_ENDPOINT = "/neko/templates/ajax/buscador_txt_post.php"
 
 _YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
@@ -76,14 +87,20 @@ class TebeosferaResult:
 
 
 class TebeosferaClient:
-    def __init__(self):
+    def __init__(self, transporte: httpx.AsyncBaseTransport | None = None):
+        # `transporte`: solo para pruebas (un transporte simulado); en producción es siempre None.
         s = get_settings()
-        self._rate_limit = s.tebeosfera_rate_limit
-        self._last_req: float = 0
+        configurado = float(s.tebeosfera_rate_limit)
+        if configurado < MINIMO_ENTRE_PETICIONES_S:
+            logger.warning("tebeosfera.rate_limit_elevado", configurado=configurado,
+                           minimo=MINIMO_ENTRE_PETICIONES_S)
+        self._rate_limit = max(configurado, MINIMO_ENTRE_PETICIONES_S)
+        self._transporte = transporte
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
+            transport=self._transporte,
             base_url=_BASE_URL, timeout=30.0, follow_redirects=True,
             headers={
                 "User-Agent": "Mozilla/5.0 (compatible; ZascArr/0.1; +comic library manager)",
@@ -98,10 +115,8 @@ class TebeosferaClient:
             await self._client.aclose()
 
     async def _throttle(self) -> None:
-        now = asyncio.get_event_loop().time()
-        if (elapsed := now - self._last_req) < self._rate_limit:
-            await asyncio.sleep(self._rate_limit - elapsed)
-        self._last_req = asyncio.get_event_loop().time()
+        """Espera según el limitador COMPARTIDO del sitio, no el de la instancia."""
+        await limitador_de(SITIO).esperar(self._rate_limit)
 
     async def _search_table(self, tabla: str, kind: str, query: str) -> list[TebeosferaResult]:
         assert self._client is not None

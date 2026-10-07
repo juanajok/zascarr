@@ -68,7 +68,10 @@ class Settings(BaseSettings):
     # no una API pública. Más conservador que Comic Vine/AniList a
     # propósito, y encima cada búsqueda de serie hace 2 peticiones
     # (colecciones + sagas), el doble que las otras fuentes.
-    tebeosfera_rate_limit: float = 2.0
+    # 2,5 s es el MÍNIMO del proyecto (services/tebeosfera.py): un valor menor
+    # se eleva a él; solo se puede subir. Se aplica entre TODAS las peticiones
+    # del proceso, no por instancia del cliente (utils/cortesia.py).
+    tebeosfera_rate_limit: float = 2.5
 
     # ── GCD / Grand Comics Database (descubrimiento, C0) ─────────────
     # API pública real en /api/ (verificado en vivo 2026-09-25, ver
