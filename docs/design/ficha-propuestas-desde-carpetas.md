@@ -269,6 +269,8 @@ Con Postgres y ficheros reales (nombres reales de la biblioteca como casos; ning
 3. **Asignar un grupo** por el servicio recuperable (con la vista previa de rutas de destino).
 4. **Descubrir** como fuente opcional de candidatas, por cola, a petición.
 
+> **Reordenación decidida (2026-10-07).** Cerrada la rebanada 1, la revisión **adoptó** otro orden (**D0**): descubrimiento desde el grupo → elegir o crear la serie → vista previa → confirmación, con «crear a mano» como camino completo sin red ni claves. Y decidió (**D6**) que **clasificar un archivo adoptado no lo mueve**: se **vincula en su sitio**; **organizar** (mover y renombrar) es otra operación, con consentimiento propio. Las rebanadas **2, 3 y 4 de arriba quedan sustituidas** por `docs/design/rebanada-2-elegir-serie-y-vincular.md` y `docs/adr/0007-vincular-en-su-sitio.md`; la lista de arriba se conserva como historia.
+
 ## Decisiones abiertas para la revisión (D1-D5)
 
 - **D1 — Dónde persistir el registro de altas de serie.** `import_runs.details` (`kind = "series_from_folders"`, sin migración) frente a una tabla propia (migración). *Recomendación:* lo primero en la rebanada 2.
