@@ -20,11 +20,11 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import PurePosixPath
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 from sqlalchemy import and_, case, func, or_, select
@@ -241,6 +241,16 @@ class RevisionCarpetas:
             pagina=Pagina(limite=limite, desplazamiento=desplazamiento),
             grupos=grupos[desplazamiento:desplazamiento + limite],
         )
+
+    async def archivos_del_grupo(self, clave: str):
+        """Los archivos pendientes de UNA carpeta y su división en tradición/contexto, o `None` si no hay ninguno.
+        La misma lectura (una consulta) y la misma agrupación que `carpetas()`: no hay una segunda definición de
+        «grupo». Lo usan los pasos siguientes de la rebanada 2 (descubrir, vista previa)."""
+        pertenecen = [(dividir_ruta(a.carpetas), a) for a in await self._leer()]
+        del_grupo = [(d, a) for d, a in pertenecen if d.clave == clave]
+        if not del_grupo:
+            return None
+        return del_grupo[0][0], sorted((a for _, a in del_grupo), key=lambda a: (a.nombre, a.id))
 
     async def _leer(self) -> list[_Archivo]:
         """UNA consulta para A ∪ B, columnas mínimas. A reutiliza el filtro de «Por revisar».
@@ -486,3 +496,17 @@ class _Hallazgos:
             self.exacto_sin_corroboracion.append(a.id)
         if titulo_igual and (anio_ok or volumen_ok) and not (discrepa_carpeta or discrepa_archivo or faltan):
             self.corroboran += 1
+
+
+def senales_contra_serie(archivos: list[_Archivo], carpeta, titulo: str, anio: int | None, *,
+                         tiene_contexto: bool) -> list[Senal]:
+    """Las señales de la rebanada 1 evaluadas como si `(titulo, anio)` fuera la serie candidata de TODOS los
+    archivos del grupo. Es el MISMO cálculo que ve la persona en la superficie de revisión (no se reescribe):
+    se limita a poner esa candidata a cada archivo y llamar a `_senales`."""
+    sid = uuid4()
+    candidata = _Candidata(sid, 1.0)
+    todos = [replace(a, sin_serie=False, candidata=candidata) for a in archivos]
+    return RevisionCarpetas._senales(
+        carpeta, 1, RevisionCarpetas._patron(todos), todos, {sid: (titulo, anio)},
+        tiene_contexto=tiene_contexto,
+    )
