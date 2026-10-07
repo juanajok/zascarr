@@ -839,17 +839,18 @@ class TestDeshacer:
         b = (await post(ALTA, {"token": token})).json()
         assert (a["repetida"], b["repetida"]) == (False, True) and a["serie"] == b["serie"]
 
-    @pytest.mark.xfail(strict=True, reason="Pendiente de decisión (ficha 2b, «Reintento tras deshacer»): hoy el "
-                       "comprobante es la fila de `series`, y deshacer lo borra; reenviar el token aún válido la "
-                       "crea de nuevo. Exige persistencia adicional (una tabla de operaciones de alta).")
-    async def test_un_reintento_atrasado_no_revierte_el_deshacer(self, entorno):
-        """Contrato deseado: tras deshacer, el token original (aún sin caducar) NO vuelve a crear la serie."""
+    async def test_limitacion_conocida_un_reintento_atrasado_tras_deshacer_vuelve_a_crear_la_serie(self, entorno):
+        """LIMITACIÓN CONOCIDA, no un contrato (ficha 2b, «Reintento tras deshacer»): el comprobante de la operación
+        es la fila de `series` y deshacer la borra, así que reenviar el token original —si aún no ha caducado— la
+        crea de nuevo y revierte el deshacer. El contrato deseado (409 `operacion_deshecha`, sin serie) exige
+        persistencia adicional y está pendiente de decisión; cuando se implemente, esta prueba se INVIERTE."""
         token = (await post(PREV, manual())).json()["token"]
         d = (await post(ALTA, {"token": token})).json()["deshacer"]
         assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 200
-        r = await post(ALTA, {"token": token})
-        assert r.status_code == 409 and r.json()["detail"]["codigo"] == "operacion_deshecha"
         assert await numero_de_series(entorno.banco) == 0
+        r = await post(ALTA, {"token": token})
+        assert r.status_code == 200 and r.json()["resultado"] == "creada" and r.json()["repetida"] is False
+        assert await numero_de_series(entorno.banco) == 1
 
     async def test_se_puede_volver_a_dar_de_alta_despues_de_deshacer(self, entorno):
         d = await crear_y_obtener(entorno)
