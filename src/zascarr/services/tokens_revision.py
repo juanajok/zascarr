@@ -115,6 +115,7 @@ def verificar_token_candidata(token: str, clave: str, secret: str, *,
 # ── Token del alta (2b) ──────────────────────────────────────────────────────────────────────────
 
 MODOS_DE_ALTA = ("crear", "reutilizar")
+CRITERIOS_DE_REUTILIZACION = ("identificador", "eleccion")
 ORIGENES_DE_ALTA = ("descubrir", "manual")
 
 
@@ -139,6 +140,9 @@ class AltaFirmada:
     serie_id: str | None
     vistas: tuple[str, ...]
     operacion: str
+    #: Solo con `modo == "reutilizar"`: `identificador` (la coincidencia exacta por id externo, que se REVALIDA al
+    #: confirmar) o `eleccion` (la persona eligió una parecida: nunca se le atribuye una coincidencia por id).
+    criterio: str | None = None
 
 
 def crear_token_alta(a: AltaFirmada, secret: str, *, ahora: float | None = None) -> str:
@@ -146,6 +150,7 @@ def crear_token_alta(a: AltaFirmada, secret: str, *, ahora: float | None = None)
         "modo": a.modo, "origen": a.origen, "fuente": a.fuente, "id": a.id_externo, "titulo": a.titulo,
         "anio": a.anio, "tradicion": a.tradicion, "descripcion": (a.descripcion or "")[:MAX_DESCRIPCION] or None,
         "cover_url": a.cover_url, "serie_id": a.serie_id, "vistas": sorted(a.vistas), "operacion": a.operacion,
+        "criterio": a.criterio,
     }, secret, ahora=ahora)
 
 
@@ -198,7 +203,13 @@ def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None)
             return None
     elif fuente is not None or id_externo is not None:
         return None
-    if modo == "reutilizar" and serie_id is None:
+    criterio = d.get("criterio")
+    if modo == "reutilizar":
+        if serie_id is None or criterio not in CRITERIOS_DE_REUTILIZACION:
+            return None
+        if criterio == "identificador" and origen != "descubrir":
+            return None
+    elif criterio is not None:
         return None
     if serie_id is not None and not _uuid_texto(serie_id):
         return None
@@ -213,4 +224,4 @@ def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None)
     if not isinstance(vistas, list) or not all(_uuid_texto(v) for v in vistas) or not _uuid_texto(operacion):
         return None
     return AltaFirmada(clave, modo, origen, fuente, id_externo, titulo, anio, tradicion, descripcion, cover,
-                       serie_id, tuple(vistas), operacion)
+                       serie_id, tuple(vistas), operacion, criterio)

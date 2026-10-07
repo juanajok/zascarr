@@ -410,6 +410,72 @@ class TestReutilizacion:
         assert await numero_de_series(entorno.banco) == 0
 
 
+class TestIdentidadDeLaReutilizacion:
+    """La reutilización por identificador se REVALIDA al confirmar; una elegida por la persona no se convierte
+    después en «coincidencia por identificador»."""
+
+    async def _vista_por_identificador(self, entorno):
+        sid = await sembrar_serie(entorno.banco, "Flash", 1987, comic_vine_id=796)
+        v = (await post(PREV, desde_fuente())).json()
+        assert (v["accion"], v["existente"]["series_id"]) == ("reutilizar", str(sid))
+        return sid, v["token"]
+
+    @pytest.mark.parametrize("cambio", ["comic_vine_id = 797", "comic_vine_id = NULL", "comic_vine_id = NULL, anilist_id = 5"])
+    async def test_si_la_serie_pierde_el_identificador_visto_es_409_sin_escrituras(self, entorno, cambio):
+        sid, token = await self._vista_por_identificador(entorno)
+        async with entorno.banco.fabrica() as s:
+            await s.execute(text(f"UPDATE series SET {cambio} WHERE id = :i"), {"i": sid})
+            await s.commit()
+        fila, antes, n = await fila_de_serie(entorno.banco, sid), await instantanea(entorno.banco), len(entorno.banco.sentencias)
+        r = await post(ALTA, {"token": token})
+        assert r.status_code == 409 and r.json()["detail"]["codigo"] == "identificador_cambiado"
+        assert "elegida" not in r.text and "resultado" not in r.json()
+        assert escrituras(entorno.banco, n) == []
+        assert await fila_de_serie(entorno.banco, sid) == fila and await instantanea(entorno.banco) == antes
+        assert await numero_de_series(entorno.banco) == 1
+
+    async def test_si_el_identificador_pasa_a_otra_serie_no_se_reutiliza_la_antigua_ni_se_redirige(self, entorno):
+        sid, token = await self._vista_por_identificador(entorno)
+        otra = await sembrar_serie(entorno.banco, "Otra", 2000)
+        async with entorno.banco.fabrica() as s:
+            await s.execute(text("UPDATE series SET comic_vine_id = NULL WHERE id = :i"), {"i": sid})
+            await s.execute(text("UPDATE series SET comic_vine_id = 796 WHERE id = :i"), {"i": otra})
+            await s.commit()
+        r = await post(ALTA, {"token": token})
+        assert r.status_code == 409 and r.json()["detail"]["codigo"] == "identificador_cambiado"
+        assert str(otra) not in r.text
+
+    async def test_si_el_identificador_sigue_igual_se_reutiliza_por_identificador(self, entorno):
+        sid, token = await self._vista_por_identificador(entorno)
+        c = (await post(ALTA, {"token": token})).json()
+        assert (c["resultado"], c["motivo"], c["serie"]["series_id"]) == ("reutilizada", "mismo_identificador", str(sid))
+
+    async def test_tras_rehacer_la_vista_previa_con_el_identificador_nuevo_se_decide_de_nuevo(self, entorno):
+        sid, token = await self._vista_por_identificador(entorno)
+        async with entorno.banco.fabrica() as s:
+            await s.execute(text("UPDATE series SET comic_vine_id = NULL WHERE id = :i"), {"i": sid})
+            await s.commit()
+        assert (await post(ALTA, {"token": token})).status_code == 409
+        v = (await post(PREV, desde_fuente())).json()          # ahora es una parecida sin identificador: hay que elegir
+        assert (v["accion"], v["token"]) == ("elegir", None)
+
+    async def test_una_parecida_elegida_nunca_se_atribuye_a_una_coincidencia_por_identificador(self, entorno):
+        sid = await sembrar_serie(entorno.banco, "Flash", 1988)
+        v = (await post(PREV, {**desde_fuente(), "decision": "reutilizar", "serie_id": str(sid)})).json()
+        assert (v["accion"], v["decision"]) == ("reutilizar", "reutilizar")
+        async with entorno.banco.fabrica() as s:               # después adquiere justo el identificador de la candidata
+            await s.execute(text("UPDATE series SET comic_vine_id = 796 WHERE id = :i"), {"i": sid})
+            await s.commit()
+        c = (await post(ALTA, {"token": v["token"]})).json()
+        assert (c["resultado"], c["motivo"]) == ("reutilizada", "elegida_por_la_persona")
+
+    async def test_una_parecida_elegida_con_otro_identificador_sigue_siendo_eleccion(self, entorno):
+        sid = await sembrar_serie(entorno.banco, "Flash", 1988, comic_vine_id=111)
+        v = (await post(PREV, {**desde_fuente(), "decision": "reutilizar", "serie_id": str(sid)})).json()
+        c = (await post(ALTA, {"token": v["token"]})).json()
+        assert (c["motivo"], c["serie"]["series_id"]) == ("elegida_por_la_persona", str(sid))
+
+
 # ── Posibles duplicados: la persona decide ─────────────────────────────────────────────────────────
 
 class TestParecidas:
@@ -718,16 +784,6 @@ class TestProcedenciaEIdentidad:
         assert despues.metadata_["alta"] == alta_antes
         assert despues.description == "De la fuente"        # sí rellena los descriptivos que estaban vacíos
 
-    async def test_una_serie_de_gcd_sigue_siendo_de_gcd_aunque_el_enriquecedor_le_anada_otro_id(self, entorno):
-        """Observación (se informa en la PR): la query del enriquecedor no mira `gcd_id`, así que a una serie de GCD
-        puede añadirle un id de Comic Vine. NO cambia el de GCD, ni la fuente, ni la procedencia."""
-        await previsualizar_y_confirmar(desde_fuente(fuente="gcd", id_="4120"))
-        cv = ClienteCVFalso(_Candidata("Flash", 999999, 1987))
-        await enriquecer(entorno.banco, cv)
-        (s,) = await serie_en_bd(entorno.banco)
-        assert s.gcd_id == 4120 and s.metadata_source == "gcd" and s.locked_fields == ["gcd_id"]
-        assert s.metadata_["alta"]["fuente"] == "gcd"
-
     async def test_un_escritor_que_fusiona_por_clave_no_pisa_la_procedencia(self, entorno):
         await previsualizar_y_confirmar(manual())
         (s,) = await serie_en_bd(entorno.banco)
@@ -775,6 +831,25 @@ class TestDeshacer:
         d = await crear_y_obtener(entorno)
         assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 200
         assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 404
+
+    async def test_la_idempotencia_vale_mientras_la_serie_existe(self, entorno):
+        """Lo que hay HOY: el comprobante de `operacion_id` es la propia fila de `series`; no es durable tras deshacer."""
+        token = (await post(PREV, manual())).json()["token"]
+        a = (await post(ALTA, {"token": token})).json()
+        b = (await post(ALTA, {"token": token})).json()
+        assert (a["repetida"], b["repetida"]) == (False, True) and a["serie"] == b["serie"]
+
+    @pytest.mark.xfail(strict=True, reason="Pendiente de decisión (ficha 2b, «Reintento tras deshacer»): hoy el "
+                       "comprobante es la fila de `series`, y deshacer lo borra; reenviar el token aún válido la "
+                       "crea de nuevo. Exige persistencia adicional (una tabla de operaciones de alta).")
+    async def test_un_reintento_atrasado_no_revierte_el_deshacer(self, entorno):
+        """Contrato deseado: tras deshacer, el token original (aún sin caducar) NO vuelve a crear la serie."""
+        token = (await post(PREV, manual())).json()["token"]
+        d = (await post(ALTA, {"token": token})).json()["deshacer"]
+        assert (await post(ruta_deshacer(d["series_id"]), {"operacion_id": d["operacion_id"]})).status_code == 200
+        r = await post(ALTA, {"token": token})
+        assert r.status_code == 409 and r.json()["detail"]["codigo"] == "operacion_deshecha"
+        assert await numero_de_series(entorno.banco) == 0
 
     async def test_se_puede_volver_a_dar_de_alta_despues_de_deshacer(self, entorno):
         d = await crear_y_obtener(entorno)

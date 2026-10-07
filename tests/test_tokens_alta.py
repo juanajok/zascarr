@@ -31,7 +31,7 @@ CLAVE = "Comics/Flash (1987)"
 OP, SERIE = str(uuid4()), str(uuid4())
 VALIDO = {"modo": "crear", "origen": "descubrir", "fuente": "comic_vine", "id": "796", "titulo": "Flash", "anio": 1987,
           "tradicion": "american", "descripcion": "algo", "cover_url": "https://comicvine.gamespot.com/a/x.jpg",
-          "serie_id": None, "vistas": [str(uuid4())], "operacion": OP}
+          "serie_id": None, "vistas": [str(uuid4())], "operacion": OP, "criterio": None}
 MANUAL = {**VALIDO, "origen": "manual", "fuente": None, "id": None, "descripcion": None, "cover_url": None}
 
 
@@ -44,6 +44,7 @@ def sin(campo, base=VALIDO) -> str:
 
 
 def alta(**kw) -> AltaFirmada:
+    """Alta de ejemplo (modo `crear`, sin criterio)."""
     base = dict(clave=CLAVE, modo="crear", origen="manual", fuente=None, id_externo=None, titulo="Flash", anio=1987,
                 tradicion="american", descripcion=None, cover_url=None, serie_id=None, vistas=(), operacion=OP)
     return AltaFirmada(**{**base, **kw})
@@ -99,7 +100,7 @@ class TestFirma:
     def test_el_token_lleva_solo_los_campos_del_contrato_sin_secretos_ni_sesion(self):
         datos = verificar_token(crear_token_alta(alta(), SECRETO), PROPOSITO_ALTA, CLAVE, SECRETO)
         assert set(datos) == {"modo", "origen", "fuente", "id", "titulo", "anio", "tradicion", "descripcion",
-                              "cover_url", "serie_id", "vistas", "operacion"}
+                              "cover_url", "serie_id", "vistas", "operacion", "criterio"}
         assert SECRETO not in json.dumps(datos)
 
 
@@ -107,7 +108,9 @@ class TestEsquemaConFirmaValida:
     """Una firma válida no basta: cada campo debe tener la forma esperada."""
 
     def test_el_caso_valido_pasa(self):
-        for base in (VALIDO, MANUAL, {**VALIDO, "modo": "reutilizar", "serie_id": SERIE}):
+        for base in (VALIDO, MANUAL, {**VALIDO, "modo": "reutilizar", "serie_id": SERIE, "criterio": "identificador"},
+                     {**VALIDO, "modo": "reutilizar", "serie_id": SERIE, "criterio": "eleccion"},
+                     {**MANUAL, "modo": "reutilizar", "serie_id": SERIE, "criterio": "eleccion"}):
             assert verificar_token_alta(firmado(base), SECRETO) is not None
 
     @pytest.mark.parametrize("campo", ["modo", "origen", "titulo", "tradicion"])
@@ -142,9 +145,25 @@ class TestEsquemaConFirmaValida:
         valor = "comic_vine" if campo == "fuente" else "1"
         assert verificar_token_alta(firmado(MANUAL, **{campo: valor}), SECRETO) is None
 
-    def test_reutilizar_exige_la_serie(self):
-        assert verificar_token_alta(firmado(modo="reutilizar", serie_id=None), SECRETO) is None
-        assert verificar_token_alta(firmado(modo="reutilizar"), SECRETO) is None
+    def test_reutilizar_exige_la_serie_y_el_criterio(self):
+        assert verificar_token_alta(firmado(modo="reutilizar", serie_id=None, criterio="eleccion"), SECRETO) is None
+        assert verificar_token_alta(firmado(modo="reutilizar", criterio="eleccion"), SECRETO) is None
+        assert verificar_token_alta(firmado(modo="reutilizar", serie_id=SERIE), SECRETO) is None       # sin criterio
+
+    @pytest.mark.parametrize("criterio", [None, "", "id", "Identificador", "automatico", 7, True, [], {}])
+    def test_el_criterio_de_una_reutilizacion_es_uno_de_los_dos(self, criterio):
+        assert verificar_token_alta(firmado(modo="reutilizar", serie_id=SERIE, criterio=criterio), SECRETO) is None
+
+    def test_por_identificador_solo_si_viene_de_una_fuente(self):
+        assert verificar_token_alta(firmado(MANUAL, modo="reutilizar", serie_id=SERIE, criterio="identificador"),
+                                    SECRETO) is None
+        assert verificar_token_alta(firmado(MANUAL, modo="reutilizar", serie_id=SERIE, criterio="eleccion"),
+                                    SECRETO) is not None
+
+    @pytest.mark.parametrize("criterio", ["identificador", "eleccion", "", 7])
+    def test_crear_no_lleva_criterio(self, criterio):
+        assert verificar_token_alta(firmado(criterio=criterio), SECRETO) is None
+        assert verificar_token_alta(firmado(criterio=None), SECRETO) is not None
 
     @pytest.mark.parametrize("valor", ["", "no-es-uuid", 5, True, [], str(uuid4()).upper(), str(uuid4()).replace("-", ""), "x" * 36])
     def test_los_ids_de_serie_son_uuid_en_su_forma_canonica(self, valor):

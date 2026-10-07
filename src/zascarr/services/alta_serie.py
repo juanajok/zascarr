@@ -105,6 +105,11 @@ class ParecidasNuevasError(AltaError):
         self.nuevas = nuevas
 
 
+class IdentificadorCambiadoError(AltaError):
+    """La vista previa proponía reutilizar una serie por su identificador externo y esa serie ya no lo tiene."""
+    codigo = "identificador_cambiado"
+
+
 class SerieNoEncontradaError(AltaError):
     codigo = "serie_no_encontrada"
 
@@ -230,7 +235,8 @@ class AltaDeSerie:
 
         if existente is not None:
             # La única coincidencia automática: el mismo identificador externo. No se modifica la existente.
-            token = crear_token_alta(AltaFirmada(modo="reutilizar", serie_id=str(existente.id), vistas=(), **base),
+            token = crear_token_alta(AltaFirmada(modo="reutilizar", criterio="identificador", serie_id=str(existente.id),
+                                                 vistas=(), **base),
                                      self._secret, ahora=self._ahora)
             return self._vista(origen, fuente, titulo, anio, tradicion, sugerida, "reutilizar", _a_serie_local(existente), [],
                                None, token, "Ya existe una serie con ese identificador: se usará tal cual, "
@@ -243,7 +249,8 @@ class AltaDeSerie:
             elegida = next((p for p in parecidas if serie_id is not None and p.series_id == str(serie_id)), None)
             if elegida is None:
                 raise DecisionInvalidaError("La serie elegida no está entre las parecidas.")
-            token = crear_token_alta(AltaFirmada(modo="reutilizar", serie_id=elegida.series_id, vistas=(), **base),
+            token = crear_token_alta(AltaFirmada(modo="reutilizar", criterio="eleccion", serie_id=elegida.series_id,
+                                                 vistas=(), **base),
                                      self._secret, ahora=self._ahora)
             return self._vista(origen, fuente, titulo, anio, tradicion, sugerida, "reutilizar",
                                SerieLocal(series_id=elegida.series_id, titulo=elegida.titulo, anio=elegida.anio,
@@ -280,19 +287,29 @@ class AltaDeSerie:
         return await self._crear(alta)
 
     async def _reutilizar(self, alta: AltaFirmada) -> ResultadoAlta:
-        """No escribe nada: comprueba que la serie que se vio siga existiendo (y, si se vio por su identificador
-        externo, que siga teniéndolo)."""
+        """No escribe nada. Comprueba que la serie que se vio siga existiendo y, según el criterio con el que se
+        propuso, lo que la justificaba:
+
+        - `identificador`: la coincidencia automática por identificador externo. Si la serie ya no lo tiene, **409**
+          y vista previa nueva: no se convierte en «elegida por la persona», que nunca ocurrió.
+        - `eleccion`: la persona eligió una parecida. No se le atribuye ninguna coincidencia por identificador,
+          aunque la serie lo haya adquirido después.
+        """
         serie = (await self._db.execute(
             select(Series).where(Series.id == UUID(alta.serie_id or "")))).scalar_one_or_none()
-        por_id = False
-        if serie is not None and alta.origen == "descubrir" and alta.fuente and alta.id_externo is not None:
-            campo = CAMPO_ID_EXTERNO[MetadataSource(alta.fuente)]
-            por_id = str(getattr(serie, campo)) == alta.id_externo
         if serie is None:
             raise SerieYaNoExisteError("La serie que ibas a usar ya no existe: repite la vista previa.")
+        if alta.criterio == "identificador":
+            campo = CAMPO_ID_EXTERNO[MetadataSource(alta.fuente or "")]
+            valor = getattr(serie, campo)
+            if valor is None or str(valor) != alta.id_externo:
+                await self._db.rollback()
+                raise IdentificadorCambiadoError(
+                    "Esa serie ya no tiene el identificador por el que se iba a reutilizar: repite la vista previa.")
         await self._db.commit()
         return ResultadoAlta(resultado="reutilizada", serie=_a_serie_local(serie), repetida=False,
-                             motivo="mismo_identificador" if por_id else "elegida_por_la_persona", deshacer=None)
+                             motivo="mismo_identificador" if alta.criterio == "identificador"
+                             else "elegida_por_la_persona", deshacer=None)
 
     async def _crear(self, alta: AltaFirmada) -> ResultadoAlta:
         db = self._db
