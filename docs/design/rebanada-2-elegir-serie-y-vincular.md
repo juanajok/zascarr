@@ -109,6 +109,20 @@ Se firman con la misma clave que la cookie de sesión (`auth.sign_token`). **Un 
 
 **Qué NO hace:** no escribe, no crea, no vincula, no encadena búsquedas.
 
+### Implementación 2a (`POST /api/revision/descubrir`): lo que se precisó o añadió
+
+| Punto | Qué se hizo y por qué |
+|---|---|
+| **Estado por fuente** | `DiscoveryService.search_detallada` devuelve además `fuentes`: `ok`, `apagada`, `sin_clave` (Comic Vine encendida sin clave: no se consulta) o `error`. `search` conserva su contrato |
+| **`consulta_propuesta`** | La respuesta devuelve la consulta usada **y** la propuesta (carpeta limpia; si no hay carpeta de serie, el título que dominan los nombres; **un «título» sin ninguna letra no cuenta**: el parser da «01» para `01.cbz`). Sin propuesta ni consulta escrita: 422 |
+| **`parecidas_locales`** | Mismo **título normalizado** (con las mismas reglas que el resto de ZascArr: `The Flash` = `Flash`) y año compatible (±1; **un año desconocido no descarta**), **sin exigir la misma tradición**: se muestra la de cada parecida y la comparación estricta con tradición es de 2b |
+| **`coincidencia_con_la_carpeta`** | Se llama a **la misma función** que usa la superficie de revisión (`senales_contra_serie` → `_senales`), con la candidata aplicada a **todos** los archivos del grupo (con serie sugerida o sin ella). Una prueba compara las señales con las de `GET /api/revision/carpetas` para el mismo grupo: **son idénticas** |
+| **Portada** | Solo sale (y solo entra en el token) si cumple la política de H1, y **por el proxy** con lista blanca: nunca una URL externa como `src` |
+| **Tokens** | `services/tokens_revision.py`: propósito + contexto (`clave`) + caducidad de 15 min, firmados con `auth.sign_token`. Sin clave del servidor **no se firma** (503) |
+| **Ritmo** | El límite de cortesía de cada fuente vive **en la instancia del cliente** y cada búsqueda crea clientes nuevos (Tebeosfera arranca con `_last_req = 0`): dos búsquedas seguidas llegarían al sitio sin espera. El endpoint admite **una búsqueda a la vez** y exige **3 s** entre dos (429 con `Retry-After`); un 404 o un 422 no consumen ese espaciado |
+| **Sin `editorial`** | Ningún cliente de fuente la devuelve hoy en `DiscoveryResult`: no se inventa el campo |
+| **Consultas** | Dos por búsqueda (por identificador externo y por título normalizado), vengan 3 resultados o 40; más la lectura del grupo: ≤ 3 en total |
+
 ## B. Creación o reutilización de la serie, con validación de colisiones
 
 Tres salidas al elegir una candidata, **siempre con vista previa del alta** y confirmación 1:
