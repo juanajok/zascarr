@@ -33,7 +33,8 @@ necesita propagar fallos de parseo HTML como errores duros).
 Cortesía (decisión del PROYECTO, conservadora; no una afirmación sobre la política oficial del
 sitio): **2,5 s como mínimo entre peticiones**, compartido por TODAS las instancias y caminos del
 proceso (`utils/cortesia.py`): la búsqueda de Descubrir y el enricher llegan al sitio por el mismo
-limitador. Depende de que haya un solo proceso (`uvicorn --workers 1`). Una configuración por
+limitador, cada salto HTTP incluido (las redirecciones se siguen a mano, ≤ 3 y solo al propio
+origen). Depende de que haya un solo proceso (`uvicorn --workers 1`). Una configuración por
 debajo del mínimo se eleva a él.
 
 Alcance deliberado: solo a nivel de SERIE (título, portada, año, nº de
@@ -45,6 +46,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 import structlog
@@ -61,7 +63,27 @@ SITIO = "tebeosfera"
 #: asociación cultural sin ánimo de lucro y un scraping sin contrato; se prefiere pecar de cortés.
 #: Solo se puede SUBIR.
 MINIMO_ENTRE_PETICIONES_S = 2.5
+#: Saltos de redirección que se siguen como máximo. Cada salto es una petición más al sitio y pasa
+#: por el limitador (2,5 s), igual que la inicial; se siguen A MANO, no con `follow_redirects`.
+MAX_SALTOS = 3
+_REDIRECCIONES = (301, 302, 303, 307, 308)
 _SEARCH_ENDPOINT = "/neko/templates/ajax/buscador_txt_post.php"
+
+
+
+def destino_permitido(url: str) -> bool:
+    """Política de redirecciones: solo el ORIGEN del sitio (esquema, host y puerto de `_BASE_URL`),
+    sin credenciales. Cualquier otro destino (otro host, http, otro puerto, CDN, `//otrohost`) se
+    rechaza."""
+    try:
+        destino, base = urlsplit(url), urlsplit(_BASE_URL)
+        puerto = 443 if base.scheme == "https" else 80
+        return (destino.scheme == base.scheme and destino.hostname == base.hostname
+                and destino.port in (None, base.port, puerto)
+                and destino.username is None and destino.password is None)
+    except ValueError:
+        return False
+
 
 _YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 # \d{1,4}, no \d+: ninguna colección real tiene 5+ dígitos de números. Si
@@ -101,7 +123,7 @@ class TebeosferaClient:
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
             transport=self._transporte,
-            base_url=_BASE_URL, timeout=30.0, follow_redirects=True,
+            base_url=_BASE_URL, timeout=30.0, follow_redirects=False,
             headers={
                 "User-Agent": "Mozilla/5.0 (compatible; ZascArr/0.1; +comic library manager)",
                 "Referer": _BASE_URL + "/",
@@ -118,11 +140,39 @@ class TebeosferaClient:
         """Espera según el limitador COMPARTIDO del sitio, no el de la instancia."""
         await limitador_de(SITIO).esperar(self._rate_limit)
 
-    async def _search_table(self, tabla: str, kind: str, query: str) -> list[TebeosferaResult]:
+    async def _enviar(self, metodo: str, url: str, data: dict | None) -> httpx.Response:
+        """Cada petición al sitio, incluida cada redirección, espera en el limitador compartido.
+
+        Las redirecciones se siguen a mano (hasta `MAX_SALTOS`) y solo hacia el origen del sitio
+        (`destino_permitido`); 301/302/303 pasan a GET sin cuerpo, 307/308 conservan método y
+        cuerpo. Un destino no permitido, demasiados saltos o una redirección sin `Location`
+        lanzan `httpx.HTTPError` (el llamador lo trata como «sin resultados»)."""
         assert self._client is not None
-        await self._throttle()
+        for _ in range(MAX_SALTOS + 1):
+            await self._throttle()
+            r = await self._client.request(metodo, url, data=data)
+            if r.status_code not in _REDIRECCIONES:
+                return r
+            destino = r.headers.get("location")
+            try:
+                absoluto = urljoin(str(r.url), destino) if destino else ""
+            except ValueError:
+                absoluto = ""
+            if not absoluto or not destino_permitido(absoluto):
+                # Solo el host en el registro: la URL puede llevar datos de la búsqueda.
+                logger.warning("tebeosfera.redireccion_rechazada",
+                               host=urlsplit(absoluto).hostname if absoluto else None)
+                raise httpx.TooManyRedirects("destino de redirección no permitido",
+                                             request=r.request)
+            if r.status_code in (301, 302, 303):
+                metodo, data = "GET", None
+            url = absoluto
+        logger.warning("tebeosfera.demasiadas_redirecciones", saltos=MAX_SALTOS)
+        raise httpx.TooManyRedirects("demasiadas redirecciones", request=r.request)
+
+    async def _search_table(self, tabla: str, kind: str, query: str) -> list[TebeosferaResult]:
         try:
-            r = await self._client.post(_SEARCH_ENDPOINT, data={"tabla": tabla, "busqueda": query})
+            r = await self._enviar("POST", _SEARCH_ENDPOINT, {"tabla": tabla, "busqueda": query})
             r.raise_for_status()
         except httpx.HTTPError as exc:
             logger.warning("tebeosfera.request_failed", tabla=tabla, query=query, error=str(exc))
