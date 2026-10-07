@@ -24,8 +24,21 @@ from zascarr.services.series import (  # noqa: F401
     numeros_poseidos,
     numeros_poseidos_por_serie,
 )
+from zascarr.utils.url_portada import es_url_de_portada_permitida
 
 router = APIRouter(prefix="/series", tags=["series"])
+
+
+def _portada_permitida(valor: str | None) -> str | None:
+    """H1: la portada se descarga EN EL SERVIDOR: solo se guarda una URL que cumpla la política
+    de `utils/url_portada.py`. `None` borra la portada."""
+    if valor is not None and not es_url_de_portada_permitida(valor):
+        raise ValueError(
+            "La portada debe ser una URL http(s) de Comic Vine, AniList, Tebeosfera o GCD, "
+            "sin usuario, sin dirección IP escrita y sin puerto distinto del habitual."
+        )
+    return valor
+
 
 # ── Schemas de escritura (M1: mass assignment prohibido) ───────────────────
 # Solo se permite escribir los campos de cara al coleccionista. Los campos
@@ -45,6 +58,11 @@ class SeriesCreate(BaseModel):
     status: str = Field(default="ongoing", max_length=50)
     description: str | None = None
     cover_url: str | None = Field(default=None, max_length=500)
+
+    @field_validator("cover_url")
+    @classmethod
+    def _cover_url_permitida(cls, valor: str | None) -> str | None:
+        return _portada_permitida(valor)
 
 
 class SeriesUpdate(BaseModel):
@@ -90,6 +108,11 @@ class SeriesUpdate(BaseModel):
                 "«ninguno» o «faltantes»."
             )
         return valor
+
+    @field_validator("cover_url")
+    @classmethod
+    def _cover_url_permitida(cls, valor: str | None) -> str | None:
+        return _portada_permitida(valor)
 
 
 @router.get("")

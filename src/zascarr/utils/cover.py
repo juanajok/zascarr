@@ -12,12 +12,12 @@ import io
 import zipfile
 from pathlib import Path
 
-import httpx
 import structlog
 from fastapi import Request, Response
 from PIL import Image
 
 from zascarr.core.importer_triage import IMAGE_EXTS, natural_key
+from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_imagen, host_para_log
 
 logger = structlog.get_logger()
 
@@ -83,38 +83,36 @@ def cached_image_response(request: Request, data: bytes, content_type: str, etag
 
 
 async def fetch_and_cache_cover(url: str, dest: Path) -> bool:
-    """Descarga `url` (portada externa de Comic Vine/AniList/Tebeosfera),
-    la redimensiona y la guarda en `dest`. Devuelve False sin lanzar si
-    algo falla (URL muerta, timeout, imagen ilegible) — no se cachea
-    nada en ese caso, la próxima petición simplemente reintenta.
+    """Descarga `url` (portada externa de Comic Vine/AniList/Tebeosfera/GCD), la redimensiona y
+    la guarda en `dest`. Devuelve False sin lanzar si algo falla (URL no permitida, URL muerta,
+    timeout, imagen ilegible): no se cachea nada en ese caso.
 
-    La descarga usa un cliente async (no bloquea el loop por sí sola) y
-    un semáforo global limita cuántas descargas de portada corren a la
-    vez, para no disparar una ráfaga de peticiones a un CDN externo
-    cuando una rejilla entera de tarjetas carga en frío. El decode/
-    resize de Pillow sí es síncrono y se manda a un hilo aparte.
+    ESTE es el punto común que hace la petición, y por eso la política de H1
+    (`utils/url_portada.py`) se aplica AQUÍ y no solo donde se guarda la URL: protege también
+    los registros ya almacenados y lo que devuelva una fuente. Destinos permitidos,
+    direcciones resueltas, conexión a la dirección validada, redirecciones a mano (cada salto
+    se valida), tamaño y tiempo máximos.
+
+    Un semáforo global limita cuántas descargas corren a la vez, para no disparar una ráfaga
+    de peticiones a un CDN externo cuando una rejilla entera de tarjetas carga en frío. El
+    decode/resize de Pillow es síncrono y se manda a un hilo aparte.
     """
     async with _COVER_FETCH_SEMAPHORE:
         try:
-            # follow_redirects: los CDN de portadas externas (Comic Vine,
-            # AniList, y el propio picsum.photos usado para verificar esto
-            # en vivo) redirigen con 302 con normalidad — sin esto,
-            # raise_for_status() lo trata como fallo y nunca se llega a
-            # descargar ninguna imagen real. Encontrado probando en vivo,
-            # no algo que un mock hubiera revelado.
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                r = await client.get(url)
-                r.raise_for_status()
-                content = r.content
+            content = await descargar_imagen(url)
+        except UrlNoPermitidaError as exc:
+            # Solo el host y el código: la URL entera puede llevar credenciales o claves.
+            logger.warning("cover.url_rechazada", host=host_para_log(url), motivo=str(exc))
+            return False
         except Exception:
-            logger.warning("cover.fetch_failed", url=url[:200])
+            logger.warning("cover.fetch_failed", host=host_para_log(url))
             return False
 
     try:
         await asyncio.to_thread(_resize_and_save, content, dest)
         return True
     except Exception:
-        logger.warning("cover.resize_failed", url=url[:200])
+        logger.warning("cover.resize_failed", host=host_para_log(url))
         return False
 
 

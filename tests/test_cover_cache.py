@@ -9,7 +9,6 @@ ASGITransport/monkeypatch de httpx hace de servidor falso.
 from __future__ import annotations
 
 import io
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -54,14 +53,31 @@ def _fake_jpeg_bytes() -> bytes:
 
 
 class TestFetchAndCacheCover:
+    """H1: la descarga pasa por la política de `utils/url_portada.py` (`tests/test_cover_ssrf.py`
+    cubre el rechazo de destinos, direcciones, redirecciones y tamaño). Aquí se conservan los
+    tres casos de siempre (descarga correcta, fallo de red e imagen ilegible) con un host de la
+    lista y la red simulada: antes se parcheaba `httpx.AsyncClient.get` con `cdn.example`, que la
+    política ya no admite."""
+
+    URL = "https://comicvine.gamespot.com/a/uploads/cover.jpg"
+
+    @staticmethod
+    def _red(monkeypatch, handler):
+        from zascarr.utils import url_portada
+
+        async def resolutor(host, puerto):
+            return ["93.184.216.34"]
+        monkeypatch.setattr(url_portada, "resolver_dns", resolutor)
+        def _cliente():
+            return httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=False)
+        monkeypatch.setattr(url_portada, "_cliente_por_defecto", _cliente)
 
     @pytest.mark.asyncio
-    async def test_descarga_correcta_guarda_el_fichero(self, tmp_path):
+    async def test_descarga_correcta_guarda_el_fichero(self, tmp_path, monkeypatch):
         dest = tmp_path / "cover.jpg"
-        fake_response = httpx.Response(200, content=_fake_jpeg_bytes(), request=httpx.Request("GET", "http://x"))
+        self._red(monkeypatch, lambda r: httpx.Response(200, content=_fake_jpeg_bytes()))
 
-        with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
-            ok = await fetch_and_cache_cover("http://cdn.example/cover.jpg", dest)
+        ok = await fetch_and_cache_cover(self.URL, dest)
 
         assert ok is True
         assert dest.exists()
@@ -69,20 +85,24 @@ class TestFetchAndCacheCover:
             assert img.format == "JPEG"
 
     @pytest.mark.asyncio
-    async def test_descarga_fallida_no_lanza_ni_cachea(self, tmp_path):
+    async def test_descarga_fallida_no_lanza_ni_cachea(self, tmp_path, monkeypatch):
         dest = tmp_path / "cover.jpg"
-        with patch("httpx.AsyncClient.get", new=AsyncMock(side_effect=httpx.ConnectTimeout("timeout"))):
-            ok = await fetch_and_cache_cover("http://cdn.muerto/cover.jpg", dest)
+
+        def _caido(request):
+            raise httpx.ConnectTimeout("timeout")
+        self._red(monkeypatch, _caido)
+
+        ok = await fetch_and_cache_cover(self.URL, dest)
 
         assert ok is False
         assert not dest.exists()
 
     @pytest.mark.asyncio
-    async def test_imagen_ilegible_no_lanza_ni_cachea(self, tmp_path):
+    async def test_imagen_ilegible_no_lanza_ni_cachea(self, tmp_path, monkeypatch):
         dest = tmp_path / "cover.jpg"
-        fake_response = httpx.Response(200, content=b"no es una imagen", request=httpx.Request("GET", "http://x"))
-        with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=fake_response)):
-            ok = await fetch_and_cache_cover("http://cdn.example/cover.jpg", dest)
+        self._red(monkeypatch, lambda r: httpx.Response(200, content=b"no es una imagen"))
+
+        ok = await fetch_and_cache_cover(self.URL, dest)
 
         assert ok is False
         assert not dest.exists()
