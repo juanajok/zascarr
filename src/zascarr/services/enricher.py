@@ -28,6 +28,10 @@ Reglas de convivencia con datos ya existentes (peer review, fix C3):
     (None / cadena vacía). Si comicinfo_xml ya puso una sinopsis, se respeta.
   - Solo se marca metadata_source con la fuente que aportó el dato (no se
     reetiqueta lo que ya vino de comicinfo_xml).
+  - NUNCA se empareja por título una serie que ya tiene una identidad externa
+    elegida (comic_vine_id, anilist_id, tebeosfera_slug o gcd_id): la igualdad de
+    título no prueba que sea la misma edición. Asociarle otra fuente es una
+    acción explícita y confirmada, que no existe todavía.
 """
 from __future__ import annotations
 
@@ -172,6 +176,10 @@ class EnrichmentService:
             .where(Series.comic_vine_id.is_(None))
             .where(Series.anilist_id.is_(None))
             .where(Series.tebeosfera_slug.is_(None))
+            # Con identidad GCD elegida ya está identificada: que otra fuente coincida por
+            # TÍTULO no prueba que sea la misma edición. Asociarle otra fuente es una acción
+            # explícita y confirmada, no un emparejamiento automático.
+            .where(Series.gcd_id.is_(None))
             .where(Series.metadata_source.is_distinct_from(MetadataSource.MANUAL.value))
             .where(or_(
                 Series.enrichment_attempted_at.is_(None),
