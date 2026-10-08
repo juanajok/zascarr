@@ -10,7 +10,6 @@ en la vista y en el token; autenticación, `no-store` y logs sin rutas ni nombre
 """
 from __future__ import annotations
 
-import asyncio
 import builtins
 import errno
 import hashlib
