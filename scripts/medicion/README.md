@@ -48,6 +48,8 @@ PYTHONPATH=../../src python3 evaluar_real.py
 PYTHONPATH=../../src python3 sonda_cbr.py 200
 ```
 
+> **Revisión del 2026-10-08** (solo lectura, mismas etiquetas, versión `83a2943`): `docs/design/revision-benchmark-parser-2026-10-08.md`. Sin regresiones; las cifras describen la carpeta de descargas, no la biblioteca.
+
 ## Resultado oficial (2026-09-26, 762 cómics reales, n=81 rutas → 62 de contenido único, cohorte activa)
 
 ```
