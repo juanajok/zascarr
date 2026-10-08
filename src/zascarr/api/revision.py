@@ -4,7 +4,8 @@ la serie (2b: `serie/previsualizar`, `serie` y `serie/{id}/deshacer`).
 
 `carpetas` y `descubrir` no escriben ni ofrecen acciones; `carpetas` no usa disco ni red y `descubrir` es el ÚNICO
 que usa la red, y solo cuando se llama (a petición: nunca al abrir un grupo). El alta solo escribe una fila de
-`series` al confirmar (y la borra al deshacer): ni números, ni archivos, ni red. Exigen sesión o Basic como el resto de `/api/*` (lo
+`series` al confirmar (y la borra al deshacer): ni números, ni archivos, ni red. La vista previa de la vinculación
+(2c) solo lee (`SELECT` y `stat`); no vincula nada. Exigen sesión o Basic como el resto de `/api/*` (lo
 hace `AuthMiddleware`); no llevan dependencia legal porque no son acciones de riesgo (CLAUDE.md §5.2).
 """
 from __future__ import annotations
@@ -48,6 +49,13 @@ from zascarr.services.revision_carpetas import (
     LIMITE_POR_DEFECTO,
     RespuestaCarpetas,
     RevisionCarpetas,
+)
+from zascarr.services.vinculacion_previa import (
+    ArchivoAjenoError,
+    NumeroNoValidoError,
+    RespuestaVinculacion,
+    SerieElegidaNoExisteError,
+    VistaPreviaDeVinculacion,
 )
 
 router = APIRouter(prefix="/revision", tags=["revision"])
@@ -226,3 +234,44 @@ _MENSAJES_DESHACER = {
     "operacion_viva": "La serie tiene una asignación en curso: espera a que termine.",
     "tiene_deseados": "La serie ya tiene deseados: no se puede deshacer.",
 }
+
+
+# ── 2c: vista previa de la vinculación ────────────────────────────────────────────────────────
+
+class PeticionPrevisualizarVinculacion(BaseModel):
+    """El grupo, la serie elegida y las modificaciones EXPLÍCITAS de la persona. Nada viene marcado por defecto."""
+    model_config = ConfigDict(extra="forbid")
+
+    clave: str = Field(..., min_length=1, max_length=1000)
+    series_id: UUID
+    #: id de archivo → número editado (vacío: quitarlo). Lo que no esté aquí usa el número del nombre.
+    numeros: dict[UUID, str] = Field(default_factory=dict, max_length=1000)
+    #: ids de archivo que la persona ha marcado. Vacío al principio.
+    marcados: list[UUID] = Field(default_factory=list, max_length=1000)
+
+
+@router.post("/vinculacion/previsualizar", response_model=RespuestaVinculacion)
+async def previsualizar_vinculacion(
+    peticion: PeticionPrevisualizarVinculacion, response: Response, db: AsyncSession = Depends(get_db),
+) -> RespuestaVinculacion:
+    """Qué pasaría si estos archivos se vincularan a esta serie, SIN hacerlo. Solo `SELECT` y `stat` (metadatos): no
+    escribe, no lee contenido, no calcula hashes, no usa la red y no calcula destinos (vincular conserva nombre y
+    ruta). Emite el token `vincular` solo si hay al menos un archivo marcado y ejecutable."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return await VistaPreviaDeVinculacion(db, secret=_secreto()).previsualizar(
+            peticion.clave, peticion.series_id,
+            numeros={str(k): v for k, v in peticion.numeros.items()},
+            marcados={str(m) for m in peticion.marcados})
+    except GrupoNoEncontradoError:
+        raise HTTPException(status_code=404, detail={
+            "codigo": "grupo_no_encontrado", "mensaje": "No hay registros pendientes en esa carpeta."}) from None
+    except SerieElegidaNoExisteError:
+        raise HTTPException(status_code=404, detail={
+            "codigo": "serie_no_encontrada", "mensaje": "La serie elegida no existe."}) from None
+    except ArchivoAjenoError as e:
+        raise HTTPException(status_code=422, detail={
+            "codigo": "archivo_ajeno_al_grupo",
+            "mensaje": f"{e.cuantos} archivo(s) indicado(s) no pertenecen a este grupo."}) from None
+    except NumeroNoValidoError as e:
+        raise HTTPException(status_code=422, detail={"codigo": "numero_no_valido", "mensaje": str(e)}) from None

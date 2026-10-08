@@ -94,6 +94,6 @@ Postgres real y ficheros reales en un directorio temporal:
 
 ## Preguntas abiertas
 
-- **Q1.** ¿Se admite vincular un archivo cuyo origen **no** se pudo comprobar por un fallo de lectura del disco (disco desmontado)? *Recomendación:* no; es `origen_no_encontrado` con el motivo.
+- **Q1.** ¿Se admite vincular un archivo cuyo origen **no** se pudo comprobar por un fallo de lectura del disco (disco desmontado)? *Recomendación:* no; es `origen_no_encontrado` con el motivo. **Resuelta en 2c:** no se admite, y con un estado propio `origen_no_verificable` (permiso, error de lectura, biblioteca no accesible, no es un archivo), distinto de `origen_no_encontrado`; el texto no afirma que el archivo haya desaparecido.
 - **Q2.** «Reubicar» un archivo ya vinculado: ¿ampliación del ADR 0006 o ADR propio? *Recomendación:* ADR propio.
 - **Q3.** ¿El botón único de «Por revisar» pasa a dos botones («Vincular» y «Organizar») o a un selector de modo? *Recomendación:* dos acciones separadas y con textos distintos; **ninguna** por defecto.
