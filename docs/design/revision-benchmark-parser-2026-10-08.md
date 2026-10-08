@@ -94,7 +94,7 @@ Aciertos y denominadores por estrato y configuración (de ellos se reconstruyen 
 - «1 de 200» (sonda) se confirma con censo: **poca presencia de ComicInfo en los CBR de estos dos corpus**. No se generaliza a otros CBR ni a la escena en general. La extensión `.cbz` no acredita idioma ni procedencia. No se propone ninguna dependencia ni eliminar soporte.
 
 ## 5. Errores residuales (8 contenidos únicos = 11 rutas; detalle por archivo en un CSV privado)
-Recuento corregido: la versión anterior de este informe decía «9 contenidos únicos = 12 rutas»; el recuento real es **8 únicos y 11 rutas** (62 únicos − 54 acertados o correctos-sin-número = 8; 11 filas con tres copias de dos archivos y una de otro). Cada residual tiene **una categoría principal**, de modo que los totales suman:
+Recuento corregido: la versión anterior de este informe decía «9 contenidos únicos = 12 rutas»; el recuento real es **8 únicos y 11 rutas** (62 únicos − 54 acertados o correctos-sin-número = 8; 11 rutas = 8 contenidos únicos + 3 copias: tres de los contenidos aparecen en dos rutas). Cada residual tiene **una categoría principal**, de modo que los totales suman:
 
 | Categoría principal | Únicos | Rutas | Formas |
 |---|---|---|---|
