@@ -252,6 +252,8 @@ La ficha pedía que, al crear una vista previa nueva, **«el token anterior deje
 
 ## D. Confirmación explícita y vinculación
 
+> **El contrato técnico definitivo de la ejecución está en «Contrato técnico de 2d» (más abajo, tras la implementación 2c)** y prevalece sobre lo que sigue donde difieran (resultado persistido en tabla propia, `422` en lugar de `400`, conflictos firmados, orden de bloqueos).
+
 **La confirmación solo acepta el token.** `POST /api/revision/vinculacion` recibe **únicamente** `{token}`: ni números, ni selección, ni serie. Todo lo que cambie la operación aprobada **ha tenido que pasar por una vista previa nueva** (bloque C), así que **lo que se ejecuta es exactamente lo que se vio**. El servidor **vuelve a calcular** las precondiciones dentro de la transacción y **omite por archivo** lo que haya cambiado desde entonces (`cambio_desde_la_vista_previa`, `en_curso`, `origen_no_encontrado`…) **sin abortar** el resto.
 
 **Ejecución (ADR 0007): una transacción, sin ficheros.** `SELECT … FOR UPDATE` de las filas en orden de id, reverificación, confirmación de todo lo aceptado **o de nada**. **No hay segundo plano, ni progreso, ni nada que reconciliar:** la respuesta lleva el resultado completo.
@@ -264,7 +266,7 @@ La ficha pedía que, al crear una vista previa nueva, **«el token anterior deje
 | **El mismo token otra vez** (con o sin caducidad, si la operación ya se ejecutó) | `200` con **el mismo resultado**, reconstruido; **no ejecuta nada** |
 | Token válido, **sin ejecutar** y caducado | `410`: «caducó; repite la vista previa» |
 | Dos envíos **simultáneos** del mismo token | Se serializan por un candado sobre el `operacion_id`; el segundo recibe el resultado del primero |
-| Token alterado, de otro propósito o de otro contexto | `400` |
+| Token alterado, de otro propósito o de otro contexto | `422` (antes `400`; ver el contrato de 2d) |
 | Otro token distinto sobre archivos que ya están vinculados | Esos archivos salen `ya_vinculado`; no es un error |
 
 Un token usado **no se «rechaza»** (eso sería otra semántica): se devuelve su resultado.
@@ -274,6 +276,113 @@ Un token usado **no se «rechaza»** (eso sería otra semántica): se devuelve s
 **Informe honesto:** cuenta cada estado; nunca anuncia éxito si algún archivo no quedó vinculado.
 
 **Alias (D7, aceptada):** **desactivado por defecto**. Es una casilla **separada y explícita** («Recordar este nombre para las próximas descargas»); un alias aprendido hace que las descargas futuras con ese nombre se asignen **sin preguntar**, justo el fallo que la rebanada 1 evita.
+
+### Contrato técnico de 2d (`POST /api/revision/vinculacion`): definitivo, **sin implementar**
+
+Sustituye lo que bloque D y el ADR 0007 dejaban abierto. Nada de esto se implementa hasta aprobarlo. Entrada: `{token}` (solo el token; `extra="forbid"`). Efectos: **una transacción** sobre `files`, `issues` y una tabla nueva de resultados (migración **0019**); **ningún fichero** (ni mover, ni copiar, ni renombrar, ni leer contenido, ni hash, ni red).
+
+#### 1. Idempotencia y resultado tras reiniciar
+
+| Punto | Contrato |
+|---|---|
+| **Dónde se guarda el resultado** | Tabla **propia** `vinculacion_operaciones` (migración **0019**; la última en `main` y en todas las ramas es la 0018). **No se reutiliza `alta_operaciones`**: su contrato es el comprobante de un alta de serie (estados `creada`/`deshecha`, sin informe). Columnas: `operacion_id uuid PK`, `series_id uuid` (**sin FK**: borrar la serie no borra el informe), `resultado jsonb` (esquema versionado abajo), `token_hasta timestamptz` (el `exp` del token), `creada timestamptz`. **Ni token, ni sesión, ni credenciales, ni rutas, ni nombres, ni hash** |
+| **Inmutable** | El `resultado` se **escribe una sola vez**. La aplicación nunca hace `UPDATE`, y la migración añade un **disparador `BEFORE UPDATE`** que lo rechaza (solo se permite `DELETE`, para la purga): ni un fallo de programación puede reescribir un informe. Lo que se muestre además al responder (el **nombre actual** del archivo, `nombre_actual`) es **presentación**, va fuera de `resultado` y puede cambiar sin que cambie el informe original; repetir un token devuelve el `resultado` **idéntico byte a byte** |
+| **Qué contiene `resultado` (v1)** | `{version: 1, global, totales, archivos: [{id, estado, motivo, numero, formato, issue_creado, conflictos: [códigos]}]}`. **Todos** los archivos del token, también los omitidos y su motivo (la procedencia de los vinculados no basta para reproducir un informe que también tiene fallos). Los **nombres** no se guardan: se leen de `files` al mostrar el informe (el nombre actual; si el archivo ya no existe, solo su id) |
+| **Misma transacción** | El resultado se escribe en la **misma transacción** que los vínculos. Si falla, **no hay fila**: reintentar el mismo token ejecuta de nuevo (no hubo efectos) |
+| **Reiniciar** | Nada vive en el proceso: el informe y la idempotencia salen de Postgres. Prueba: otro motor y otras sesiones entre la ejecución y la repetición |
+| **Semántica de un token (tabla única)** | Se verifica firma, propósito y esquema **ignorando la caducidad** para leer su `operacion_id`; después: |
+
+| Situación | Respuesta |
+|---|---|
+| Token alterado, de otro propósito o con esquema inválido | `422 token_invalido` (la ficha decía 400; se unifica con el resto de endpoints) |
+| **Hay fila de esa operación** (token vigente **o caducado**) | `200` con **el mismo resultado**, `repetida: true`. No ejecuta nada |
+| No hay fila y el token **no ha caducado** | Se ejecuta |
+| No hay fila y el token **ha caducado** (nunca se ejecutó, **o su resultado ya se purgó**) | `410 token_caducado`: «caducó; repite la vista previa». Si se purgó, el informe ya no se conserva; lo vinculado consta en la procedencia de cada archivo (`metadata.vinculo.operacion_id`) pero **no** se reconstruye el informe |
+| Token con **solo parte ejecutable** | Se ejecuta lo ejecutable, se omite el resto con su motivo y se guarda **todo** en el resultado (`global: vinculados_parcialmente`) |
+| **Nada** ejecutable | Se guarda igualmente (`global: nada_vinculado`): repetir el mismo token devuelve lo mismo; **para reintentar hace falta una vista previa nueva**. El resultado es definitivo, no un intento a medias |
+| Fallo inesperado | `500 error_inesperado`, **sin fila y sin cambios**: repetir el token ejecuta de nuevo |
+
+**Retención del resultado:** igual que el comprobante del alta pero **propia**: se conserva mientras exista un token válido (`token_hasta`) **y** al menos 24 h desde `creada`; purga **acotada** (100 por ejecución, `SKIP LOCKED`), solo de esta tabla, nunca de `files`/`issues`/`series`. **No es un historial de auditoría.** Bajada de la migración: se **niega** si queda alguna fila con `token_hasta` futuro; `ACCESS EXCLUSIVE` antes de contar.
+
+#### 2. Reverificación y atomicidad
+
+**Qué se vuelve a comprobar, dentro de la transacción** (todo lo que la vista previa miró, más lo que podía cambiar):
+
+| Comprobación | Si falla (por archivo) |
+|---|---|
+| La **serie** existe | **Todo el token**: `409 la_serie_ya_no_existe`; no se guarda fila (no se ejecutó nada; una vista previa nueva dirá qué hay) |
+| El **archivo** existe en `files` (y no está descartado) | `archivo_inexistente` / `descartado` |
+| **Vinculación previa**: `issue_id` ya es el `Issue` de esta serie y número | `ya_estaba_vinculado` (idempotente: cuenta como bien, no cambia nada) |
+| `issue_id` apunta a **cualquier otro** `Issue` (otra serie u otro número) | `ya_vinculado_a_otro`: **nunca se reasigna**; sigue donde estaba |
+| **Operación de asignación viva** (organizar) | `en_curso` |
+| **Origen** (`stat`, en un hilo, sin leer): ausente / no verificable | `origen_no_encontrado` / `origen_no_verificable` (con su causa; sin afirmar que desapareció) |
+| **Ruta registrada** distinta de la que se comprobó (ver «Enlace entre el `stat` y la fila bloqueada») | `cambio_desde_la_vista_previa`: **no se aplica a una ruta nueva la huella de la anterior** |
+| **Huella** `(tamaño, mtime_ns)` distinta de la firmada | `cambio_desde_la_vista_previa`. Es una comprobación de **coherencia**, **no una prueba criptográfica del contenido** (un fichero puede cambiar conservando tamaño y mtime): por eso vincular no afirma nada sobre los bytes |
+| **Número** vacío o duplicado entre dos archivos del propio token (defensa: el esquema del token lo rechaza) | token inválido (`422`) |
+| **Formato / ocupación del `Issue`** (con el bloqueo descrito en «Ocupación del `Issue`») | `colision_de_edicion` / `numero_ya_existe` / `numero_ambiguo`. Un `Issue` existente **sin** archivo y del mismo formato **se reutiliza** |
+
+**Omitir frente a abortar.** Los impedimentos de la tabla son **previstos**: el archivo se omite con su código, se guarda en el informe y **los demás se confirman juntos**. **Cualquier otra cosa** (excepción, `IntegrityError` no previsto, caída de la conexión) es un fallo **inesperado**: se revierte **todo el intento**, no se guarda nada y se responde `500`. No hay estados intermedios ni segundo plano.
+
+#### Enlace entre el `stat` y la fila bloqueada
+1. Dentro de la transacción se lee la **ruta registrada** de cada archivo del token (`SELECT id, file_path`) y se hace el `stat` **sobre esa ruta** (en un hilo, sin leer contenido).
+2. Después se bloquean las filas (`FOR UPDATE`, por id) y se **vuelve a leer `file_path`**: debe ser **la misma** que se comprobó.
+3. Si cambió (otra sesión movió o renombró el archivo, p. ej. *organizar*), ese archivo se **omite** como `cambio_desde_la_vista_previa`: **nunca** se aplica a una ruta nueva la huella obtenida de la anterior. La huella firmada en el token se compara con el `stat` de la ruta comprobada.
+4. Prueba: un gancho de pruebas **pausa después del `stat`**, otra sesión cambia `file_path` y se reanuda; el archivo sale omitido y los demás se vinculan.
+Límite declarado: entre el `stat` y el `commit` el contenido de un fichero puede cambiar sin que lo veamos; tamaño y `mtime_ns` no son una prueba criptográfica.
+
+#### Ocupación del `Issue` (cómo se impide el doble vínculo)
+La restricción real del esquema es `UNIQUE (series_id, issue_number, volume)` y **`volume` admite NULL** (default 1): en una restricción única los NULL **no chocan entre sí**, así que `ON CONFLICT` **no es la garantía** de unicidad ni de ocupación. La garantía es el bloqueo + volver a consultar:
+1. **Se serializa cada clave `(serie, número)`** con un candado consultivo de transacción (`vinc_num:` + `series_id` + número, sin distinguir mayúsculas), tomado **en orden de número** (comparación estable) antes de mirar nada. La **edición no entra en la clave**: dos archivos del mismo número y distinta edición son una colisión (`colision_de_edicion`), no dos claves.
+2. **Con el candado ya tomado** se **consulta** el `Issue` de `(serie, número)` **sin filtrar por `volume`** (los NULL incluidos) y, si existe, se **bloquea la fila** (`SELECT … FOR UPDATE`; así un *organizar* que enlace un archivo a ese `Issue` —su clave foránea pide `KEY SHARE`— espera) y **se cuenta de nuevo cuántos archivos tiene**. Esa consulta de ocupación se hace **después** de obtener el bloqueo, nunca antes.
+3. Decisión por clave: 0 `Issue`s → se crea; 1 `Issue` con otra edición → `colision_de_edicion`; 1 `Issue` **con** archivo → `numero_ya_existe` (el archivo se omite); 1 `Issue` **sin** archivo y misma edición → se reutiliza; **más de uno** (distintos `volume`, o NULL) → `numero_ambiguo` (omitido: no se adivina cuál). Solo **un** archivo por clave puede ganar dentro de una transacción (el token ya no puede traer dos con el mismo número).
+4. **Crear:** `INSERT … (series_id, issue_number, volume=1, …) ON CONFLICT (series_id, issue_number, volume) DO NOTHING RETURNING id` con el objetivo exacto de la restricción y `volume = 1` explícito (el valor que escriben los demás caminos). Es una **red de seguridad frente a otros escritores** (organizar, enriquecedor); si no devuelve fila se repite el paso 2 (consulta, bloqueo y ocupación). Nunca sale como `IntegrityError`.
+5. Efecto: con dos archivos distintos, mismo número y el `Issue` aún vacío o inexistente, **solo el primero que obtiene el candado se vincula**; el segundo, al obtenerlo, ve el `Issue` ocupado y se omite como `numero_ya_existe`. No basta con que termine habiendo un único `Issue`: se **impide el doble vínculo** que la vista previa bloqueaba.
+Mismos campos que `AsignacionService._confirmar` **menos la ruta**: `locked_fields=["series_id","issue_number"]`, `format` del token; el archivo recibe `issue_id` y `metadata_source='manual'`; **`file_path`/`file_name` no cambian**.
+
+**Procedencia por archivo** (fusión JSONB `||`, nunca sustituir el objeto): `metadata.vinculo` v1 = `{version: 1, operacion_id, fecha, serie_id, numero, formato, issue_creado, conflictos: [códigos], previo: {match_status, review_motivo}}`. Sin token ni sesión.
+
+**Conflictos de contexto incluidos: esquema versionado.** El token de vinculación pasa a **versión 2** con `version: 2` y, **por cada archivo, `conflictos` obligatorio** (lista, vacía `[]` si no había): los códigos de las señales de severidad «conflicto» que la persona vio al marcarlo. Ausencia **no** significa «ninguno»: un token **sin `version: 2` o con algún archivo sin `conflictos`** se rechaza (`422 token_invalido`, «repite la vista previa»); **no se conserva compatibilidad** con los tokens de 2c porque nunca hubo ejecución de 2d desplegada. La vista previa (2c) pasa a emitir la versión 2 **en la PR de 2d**. El informe repite los códigos por archivo y cuenta `totales.con_conflicto_incluidos`: **la confirmación nunca los oculta**. Se firman (no se recalculan al confirmar) para informar de lo que se vio.
+
+**Alias:** **no se aprende ninguno en 2d** (D7: sería una casilla propia dentro de la vista previa y del token; se difiere). **Desvincular** tampoco entra: el contrato futuro del ADR 0007 conserva `previo` para poder hacerlo.
+
+**Informe** (`200`): `{operacion_id, repetida, resultado {global (vinculados_todos | vinculados_parcialmente | nada_vinculado), totales {vinculados, ya_estaban, omitidos, issues_creados, con_conflicto_incluidos}, archivos[]}, presentacion {nombres_actuales}}`: `resultado` es **el informe inmutable** guardado; `presentacion` (nombres actuales) se añade al mostrarlo y **no forma parte** de él. **Nunca anuncia éxito si algún archivo no quedó vinculado.** `Cache-Control: no-store`.
+
+#### 3. Concurrencia: orden de bloqueos y pruebas
+
+**Orden único** (confirmar el alta, repetirla, deshacerla y vincular lo comparten; nadie toma uno posterior antes que uno anterior):
+1. candado consultivo de la **operación** (`vinc_op:` + `operacion_id`; en el alta, `alta_op:`);
+2. candado consultivo del **título normalizado** (solo al crear una serie);
+3. fila de la **serie**: `FOR UPDATE` al deshacer el alta; **`FOR SHARE` al vincular** (también cuando solo reutiliza números existentes);
+4. filas de **`files`** `FOR UPDATE`, **en orden de id** (y se relee `file_path`);
+5. candados consultivos `vinc_num:` **en orden de número**, y después las filas de **`issues`** `FOR UPDATE` en el mismo orden: crear/reutilizar.
+`stat` de los orígenes **antes** de los pasos 3–4 (no se retienen filas durante E/S), en un hilo aparte, con el enlace a la ruta descrito arriba.
+
+**Por qué debería no haber interbloqueo — y qué pasa si lo hay.** La compatibilidad de modos de bloqueo es un argumento, **no una prueba**: se comprueba con una prueba de **tres sesiones** (abajo). *Organizar* (`AsignacionService`) toma `FOR UPDATE` solo del archivo y crea `Issue` (`KEY SHARE` de la serie, compatible con el `FOR SHARE` de vincular); *deshacer el alta* toma la serie `FOR UPDATE` y **no** toma archivos; *insertar una operación viva de organizar* pide `KEY SHARE` sobre la fila del archivo y **espera** a que vincular termine (después organizar prevalece sin fila rota, ADR 0007). **Si aun así Postgres detecta un interbloqueo** (`40P01`) o un fallo de serialización, esa transacción es la víctima: **rollback completo, sin resultado persistido y sin efectos parciales**, y la respuesta es `503 conflicto_de_bloqueo` (`Retry-After: 1`, «otra operación coincidió; repite la confirmación»). El mismo token se puede repetir: no hay fila. **No hay reintento automático.**
+
+**Pruebas obligatorias (Postgres real):**
+1. **Doble envío simultáneo** del mismo token: un solo conjunto de efectos, ambos `200`, uno `repetida: true`.
+2. **Tokens distintos sobre el mismo archivo** (vista previa dos veces): el primero vincula; el segundo ve `ya_estaba_vinculado` (mismo serie y número) o `ya_vinculado_a_otro` (otro número u otra serie) y **nunca reasigna**.
+3. **Creación concurrente del mismo número** con archivos distintos: un solo `Issue`; uno vincula, el otro `numero_ya_existe`; sin `IntegrityError` ni 500.
+4. **Deshacer el alta a la vez que vincular:** o vincular primero (el deshacer se niega) o el deshacer primero (vincular da `409`); **nunca** una serie borrada con archivos vinculados ni `Issue`s huérfanos.
+5. **Organizar ya vivo:** `en_curso`, sin escribir; y organizar que nace mientras vincular retiene el archivo **espera** y gana después sin fila rota.
+6. **Serie protegida al reutilizar números existentes:** con la serie bloqueada `FOR UPDATE` desde fuera, vincular **espera**; al borrarse la serie, `409`.
+7. **Fallo inesperado** a mitad (inyectado): ni vínculos, ni `Issue`s, ni fila de resultado; reintentar ejecuta.
+8. **Omisión previa + confirmación conjunta:** un lote con `en_curso`, huella cambiada, origen ausente y un conflicto de carpeta: se vinculan los demás, el informe cuenta cada estado y **no anuncia éxito**.
+9. **Reiniciar** entre ejecutar y repetir; **token caducado con y sin fila**; **purga** (24 h y token caducado, acotada, sin tocar `files`/`issues`/`series`).
+10. **Nombre y ruta intactos** (`file_path`, `file_name`, bytes, `mtime`); **sin hash ni red ni lectura de contenido**; ningún alias.
+11. **Auth, `no-store`, logs sin rutas ni nombres.**
+12. **Enlace del `stat` con la fila:** un gancho pausa **después del `stat`**, otra sesión cambia `file_path` y se reanuda: ese archivo se omite como `cambio_desde_la_vista_previa`, sin aplicar la huella de la ruta anterior; los demás se vinculan. Y la huella distinta con la misma ruta, también omitida.
+13. **Doble vínculo por el mismo número** (los dos casos: `Issue` **inexistente** y `Issue` **existente sin archivo**), dos archivos distintos desde dos tokens a la vez: **gana uno**; el otro `numero_ya_existe`; un solo `Issue`; **nunca dos archivos en el mismo `Issue` por vincular**. Un `Issue` con `volume` NULL se encuentra (la búsqueda no filtra por volumen) y no se duplica; dos `Issue`s del mismo número (volúmenes distintos) → `numero_ambiguo`.
+14. **Tres sesiones:** vincular retiene la serie (`FOR SHARE`), *organizar* retiene el archivo (`FOR UPDATE`) y *deshacer el alta* espera por la serie (`FOR UPDATE`): no hay interbloqueo; terminan en un orden consistente (organizar, vincular, deshacer se niega por `tiene_archivos`) y ninguna serie queda borrada con archivos vinculados. Con un **interbloqueo provocado** (dos sesiones tomando recursos en orden inverso) la víctima responde `503 conflicto_de_bloqueo`, sin fila de resultado ni efectos parciales, y el token se puede repetir.
+15. **Informe inmutable:** un `UPDATE` de `vinculacion_operaciones.resultado` falla (disparador); renombrar un archivo después no cambia el `resultado`; repetir el token devuelve el `resultado` idéntico y solo `nombre_actual` puede variar.
+16. **Token versionado:** un token de 2c (sin `version` o sin `conflictos` en algún archivo) se rechaza (`422`); uno con `conflictos: []` se acepta; los códigos firmados salen en el informe aunque el archivo haya dejado de estar en conflicto.
+**Mutaciones:** cada defensa de las tablas de arriba se rompe a propósito (bytecode desactivado).
+
+#### Decisiones que este contrato cierra o trae a revisión
+- **Cerradas (aceptadas en la revisión):** resultado persistido en tabla propia (0019); bajada de la 0019 negada con filas vigentes; `FOR SHARE` de la serie siempre al vincular; resultado guardado aunque no se vincule nada; `422 token_invalido`; alias y desvincular fuera de 2d.
+- **Cierra este contrato:** enlace del `stat` con la ruta bloqueada; ocupación del `Issue` por candado de `(serie, número)` + `FOR UPDATE` + nueva consulta (no por `ON CONFLICT`, que no cubre `volume` NULL); token **versionado** con `conflictos` obligatorio (sin compatibilidad con los de 2c); rollback completo y `503` ante interbloqueo; informe **inmutable** (disparador) y nombres solo como presentación.
+- **Declara límites:** tamaño y `mtime_ns` no prueban el contenido; entre el `stat` y el `commit` el fichero puede cambiar; tras purgar no se reconstruye el informe; el informe guarda ids, no nombres.
+- **A revisar:** (a) el disparador `BEFORE UPDATE` de la 0019 (función y bajada coherentes, estilo de la 0006); (b) `numero_ambiguo` como motivo previsto nuevo; (c) la clave del candado de número ignora mayúsculas.
 
 ## E. Conflictos sin preselección; duplicados y obsoletas fuera de alcance
 
