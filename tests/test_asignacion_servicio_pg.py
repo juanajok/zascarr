@@ -110,6 +110,21 @@ class Mundo:
         await self.motor.dispose()
 
 
+# Postgres puede ser compartido por varias pasadas de pruebas a la vez, cada una en su BD efímera: los
+# candados consultivos de `pg_locks` son de TODO el servidor y solo se distinguen por `database`. Estas
+# consultas (y el `pg_terminate_backend`) se limitan SIEMPRE a la BD de la prueba.
+SQL_CANDADOS_CONSULTIVOS = (
+    "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+    "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())"
+)
+SQL_MATAR_CONEXION_DEL_CANDADO = (
+    "SELECT pg_terminate_backend(l.pid) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid "
+    "WHERE l.locktype = 'advisory' AND l.granted "
+    "AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database()) "
+    "AND a.datname = current_database()"
+)
+
+
 @pytest.fixture
 async def mundo(url_bd, tmp_path):
     m = await Mundo(url_bd, tmp_path).sembrar()
@@ -568,7 +583,7 @@ class TestCandadoYPoolReutilizable:
 
     async def _candados(self, mundo) -> int:
         async with mundo.fabrica() as s:
-            return (await s.execute(text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"))).scalar()
+            return (await s.execute(text(SQL_CANDADOS_CONSULTIVOS))).scalar()
 
     @pytest.mark.asyncio
     async def test_tras_una_operacion_normal_el_pool_no_retiene_candados(self, mundo):
@@ -644,8 +659,7 @@ class TestCandadoYPoolReutilizable:
             tarea = asyncio.create_task(servicio.asignar(mundo.file_id, mundo.serie_id, "12"))
             await dentro.wait()
             async with mundo.fabrica() as s:
-                await s.execute(text(
-                    "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted"))
+                await s.execute(text(SQL_MATAR_CONEXION_DEL_CANDADO))
                 await s.commit()
             with contextlib.suppress(Exception):   # la operación puede acabar con el error de la conexión muerta
                 await tarea
@@ -655,6 +669,33 @@ class TestCandadoYPoolReutilizable:
             _asignado_del_todo(await mundo.estado(), mundo)
         finally:
             await motor.dispose()
+
+    @pytest.mark.asyncio
+    async def test_un_candado_consultivo_de_otra_bd_no_cuenta_ni_se_mata(self, mundo):
+        """Regresión: `pg_locks` es del servidor entero; con Postgres compartido, el candado de otra pasada
+        (otra BD efímera) hacía fallar los recuentos y `pg_terminate_backend` podía matar su conexión."""
+        from tests._pg import bd_efimera
+        async with bd_efimera(URL) as url_otra:
+            otro = create_async_engine(url_asyncpg(url_otra), poolclass=NullPool)
+            try:
+                async with otro.connect() as ajena:
+                    await ajena.execute(text("SELECT pg_advisory_lock(424242)"))   # de sesión: sigue concedido
+                    pid_ajeno = (await ajena.execute(text("SELECT pg_backend_pid()"))).scalar()
+                    # Premisa: el candado ajeno SÍ está concedido y visible desde esta conexión…
+                    async with mundo.fabrica() as s:
+                        visible = (await s.execute(text(
+                            "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND granted"))).scalar()
+                    assert visible >= 1
+                    # …pero no cuenta para la BD de la prueba, ni la consulta de matar lo toca.
+                    assert await self._candados(mundo) == 0
+                    async with mundo.fabrica() as s:
+                        muertos = (await s.execute(text(SQL_MATAR_CONEXION_DEL_CANDADO))).all()
+                        await s.commit()
+                    assert muertos == []
+                    await asyncio.sleep(0.3)
+                    assert (await ajena.execute(text("SELECT pg_backend_pid()"))).scalar() == pid_ajeno
+            finally:
+                await otro.dispose()
 
     @pytest.mark.asyncio
     async def test_el_limite_de_simultaneas_no_interbloquea_con_un_pool_de_dos_por_operacion(self, mundo):
@@ -718,7 +759,7 @@ class _DosProcesos:
     async def matar_candado(self):
         """Postgres termina la conexión que sostiene el candado (la primera ejecución SIGUE viva en Python)."""
         async with self.mundo.fabrica() as s:
-            await s.execute(text("SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted"))
+            await s.execute(text(SQL_MATAR_CONEXION_DEL_CANDADO))
             await s.commit()
         await asyncio.sleep(0.3)
 
