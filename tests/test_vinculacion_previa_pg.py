@@ -249,6 +249,18 @@ class TestSeleccionYToken:
         assert (a.id, a.numero, a.formato, a.tamano, a.mtime_ns) == (str(elegido), "2", "single_issue", real.st_size, real.st_mtime_ns)
         assert UUID(v.operacion)
 
+    async def test_el_token_es_v2_y_lleva_los_conflictos_vistos_o_una_lista_vacia(self, entorno):
+        serie = await serie_de_prueba(entorno, "Flash", 1987)
+        ids = await archivos(entorno, "Flash 01 (1987).cbz", "Flash 10 (1999).cbz")
+        c = (await previsualizar(serie, marcados=list(ids.values()))).json()
+        from zascarr.services.tokens_revision import verificar_token
+        datos = verificar_token(c["token"], "vincular", CLAVE, SECRETO)
+        assert datos["version"] == 2 and all("conflictos" in a for a in datos["archivos"])
+        firmados = {a.id: a.conflictos for a in verificar_token_vinculacion(c["token"], SECRETO).archivos}
+        assert firmados[str(ids["Flash 01 (1987).cbz"])] == () and firmados[str(ids["Flash 10 (1999).cbz"])]
+        vistos = {s["codigo"] for a in c["archivos"] if a["nombre"] == "Flash 10 (1999).cbz" for s in a["conflictos"] if s["severidad"] == "conflicto"}
+        assert set(firmados[str(ids["Flash 10 (1999).cbz"])]) == vistos
+
     async def test_el_token_solo_lleva_lo_marcado_y_ejecutable(self, entorno):
         serie = await serie_de_prueba(entorno)
         ids = await archivos(entorno, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz", "Flash 03 (1987).cbz", "Flash (1987).cbz")
@@ -370,6 +382,25 @@ class TestEstados:
         a = (await previsualizar(serie)).json()["archivos"][0]
         assert (a["estado"], a["marcable"]) == ("colision_de_edicion", False)
         assert "otra edición" in a["texto"] and "omnibus" in a["texto"]
+
+    async def test_numero_ambiguo_si_la_serie_tiene_varios_issues_con_esa_clave(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        async with entorno.banco.fabrica() as s:
+            s.add(Issue(series_id=serie, issue_number="3", format=IssueFormat.SINGLE_ISSUE, volume=1))
+            s.add(Issue(series_id=serie, issue_number="3", format=IssueFormat.SINGLE_ISSUE, volume=2))
+            await s.commit()
+        await archivos(entorno, "Flash 03 (1987).cbz")
+        a = (await previsualizar(serie)).json()["archivos"][0]
+        assert (a["estado"], a["marcable"]) == ("numero_ambiguo", False) and "más de un número" in a["texto"]
+
+    async def test_la_colision_de_edicion_no_distingue_mayusculas(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        async with entorno.banco.fabrica() as s:
+            s.add(Issue(series_id=serie, issue_number="5a", format=IssueFormat.OMNIBUS))
+            await s.commit()
+        ids = await archivos(entorno, "Flash 01 (1987).cbz")
+        a = (await previsualizar(serie, numeros={ids["Flash 01 (1987).cbz"]: "5A"})).json()["archivos"][0]
+        assert a["estado"] == "colision_de_edicion" and a["numero"] == "5A"          # se conserva el texto presentado
 
     async def test_la_edicion_sale_del_nombre(self, entorno):
         serie = await serie_de_prueba(entorno)
