@@ -6,7 +6,7 @@ firma la cookie de sesión, `auth.sign_token`). El patrón nació en Deseados (`
 tras un hallazgo de revisión: un formulario manipulado podía colar cualquier dato.
 
 Cada token lleva tres cosas, y verificarlo exige que coincidan las tres:
-- un **propósito** (`candidata`, y luego `alta` y `vincular`): un token de un paso no sirve en otro;
+- un **propósito** (`candidata`, `alta` y, más adelante, `vincular`): un token de un paso no sirve en otro;
 - un **contexto** (aquí, la `clave` del grupo): no se puede usar sobre otra carpeta;
 - una **caducidad corta** (15 min).
 
@@ -20,12 +20,15 @@ import base64
 import json
 import time
 from dataclasses import dataclass
+from uuid import UUID
 
 from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.auth import sign_token, verify_token
+from zascarr.services.discovery import CAMPO_ID_EXTERNO
 
 TTL_SEGUNDOS = 15 * 60
 PROPOSITO_CANDIDATA = "candidata"
+PROPOSITO_ALTA = "alta"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
 MAX_DESCRIPCION = 1000
 
@@ -42,10 +45,9 @@ def crear_token(proposito: str, contexto: str, datos: dict, secret: str, *,
     return sign_token(base64.urlsafe_b64encode(crudo).decode(), secret)
 
 
-def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
-                    ahora: float | None = None) -> dict | None:
-    """Los datos del token, o `None` si falta, está manipulado o no es de este propósito, de este contexto o
-    ha caducado. Nunca lanza con un token ausente o malformado."""
+def _verificar(token: str, proposito: str, contexto: str, secret: str, *,
+               ahora: float | None = None) -> tuple[dict, int] | None:
+    """(datos, caducidad) de un token válido, o `None`. Nunca lanza con un token ausente o malformado."""
     if not token or not secret or not isinstance(token, str):
         return None
     crudo = verify_token(token, secret)
@@ -62,7 +64,15 @@ def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
     if not isinstance(caduca, int) or isinstance(caduca, bool) or caduca < ahora_:
         return None
     datos = payload.get("d")
-    return datos if isinstance(datos, dict) else None
+    return (datos, caduca) if isinstance(datos, dict) else None
+
+
+def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
+                    ahora: float | None = None) -> dict | None:
+    """Los datos del token, o `None` si falta, está manipulado o no es de este propósito, de este contexto o
+    ha caducado. Nunca lanza con un token ausente o malformado."""
+    verificado = _verificar(token, proposito, contexto, secret, ahora=ahora)
+    return verificado[0] if verificado else None
 
 
 @dataclass(frozen=True)
@@ -107,3 +117,121 @@ def verificar_token_candidata(token: str, clave: str, secret: str, *,
             cover is not None and not isinstance(cover, str)):
         return None
     return CandidataFirmada(fuente, id_externo, titulo, anio, tradicion, descripcion, cover)
+
+
+# ── Token del alta (2b) ──────────────────────────────────────────────────────────────────────────
+
+MODOS_DE_ALTA = ("crear", "reutilizar")
+CRITERIOS_DE_REUTILIZACION = ("identificador", "eleccion")
+ORIGENES_DE_ALTA = ("descubrir", "manual")
+
+
+@dataclass(frozen=True)
+class AltaFirmada:
+    """Lo que la persona vio en la vista previa del alta: es lo ÚNICO que ejecuta la confirmación.
+
+    `modo`: `crear` una serie nueva o `reutilizar` una existente (sin tocarla). `vistas`: los ids de las series
+    parecidas que la persona vio; si al confirmar aparecen OTRAS, el alta se rechaza. `operacion` identifica
+    esta vista previa (idempotencia y deshacer); no es un identificador de sesión.
+    """
+    clave: str
+    modo: str
+    origen: str
+    fuente: str | None
+    id_externo: str | None
+    titulo: str
+    anio: int | None
+    tradicion: str
+    descripcion: str | None
+    cover_url: str | None
+    serie_id: str | None
+    vistas: tuple[str, ...]
+    operacion: str
+    #: Solo con `modo == "reutilizar"`: `identificador` (la coincidencia exacta por id externo, que se REVALIDA al
+    #: confirmar) o `eleccion` (la persona eligió una parecida: nunca se le atribuye una coincidencia por id).
+    criterio: str | None = None
+    #: Instante (época, segundos) hasta el que el token es válido: `exp` del propio token, ya verificado.
+    caduca: int = 0
+
+
+def crear_token_alta(a: AltaFirmada, secret: str, *, ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_ALTA, a.clave, {
+        "modo": a.modo, "origen": a.origen, "fuente": a.fuente, "id": a.id_externo, "titulo": a.titulo,
+        "anio": a.anio, "tradicion": a.tradicion, "descripcion": (a.descripcion or "")[:MAX_DESCRIPCION] or None,
+        "cover_url": a.cover_url, "serie_id": a.serie_id, "vistas": sorted(a.vistas), "operacion": a.operacion,
+        "criterio": a.criterio,
+    }, secret, ahora=ahora)
+
+
+def _contexto_del_token(token: str, secret: str) -> str | None:
+    """El contexto que lleva un token YA firmado, para tokens cuya confirmación recibe solo el token. La firma,
+    el propósito y la caducidad se comprueban después en `verificar_token`; esto solo lo lee."""
+    if not token or not secret or not isinstance(token, str):
+        return None
+    crudo = verify_token(token, secret)
+    if crudo is None:
+        return None
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(crudo.encode()).decode())
+    except (ValueError, UnicodeDecodeError):
+        return None
+    contexto = payload.get("c") if isinstance(payload, dict) else None
+    return contexto if isinstance(contexto, str) and contexto else None
+
+
+def _uuid_texto(v: object) -> bool:
+    if not isinstance(v, str):
+        return False
+    try:
+        return str(UUID(v)) == v
+    except ValueError:
+        return False
+
+
+def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None) -> AltaFirmada | None:
+    """El alta firmada, o `None`. La confirmación recibe SOLO el token, así que el contexto (la `clave` del grupo
+    desde el que se hizo la vista previa) se lee de dentro del token firmado; firma, propósito y caducidad se
+    comprueban igual, y después la FORMA de cada campo (defensa de esquema: una firma válida no vale por sí sola)."""
+    clave = _contexto_del_token(token, secret)
+    if clave is None:
+        return None
+    verificado = _verificar(token, PROPOSITO_ALTA, clave, secret, ahora=ahora)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    modo, origen, titulo, tradicion = d.get("modo"), d.get("origen"), d.get("titulo"), d.get("tradicion")
+    if not all(isinstance(v, str) and v.strip() for v in (modo, origen, titulo, tradicion)):
+        return None
+    if modo not in MODOS_DE_ALTA or origen not in ORIGENES_DE_ALTA:
+        return None
+    if tradicion not in {t.value for t in ComicTradition}:
+        return None
+    fuente, id_externo, serie_id = d.get("fuente"), d.get("id"), d.get("serie_id")
+    if origen == "descubrir":
+        if not (isinstance(fuente, str) and fuente in {f.value for f in CAMPO_ID_EXTERNO}
+                and isinstance(id_externo, str) and id_externo.strip()):
+            return None
+    elif fuente is not None or id_externo is not None:
+        return None
+    criterio = d.get("criterio")
+    if modo == "reutilizar":
+        if serie_id is None or criterio not in CRITERIOS_DE_REUTILIZACION:
+            return None
+        if criterio == "identificador" and origen != "descubrir":
+            return None
+    elif criterio is not None:
+        return None
+    if serie_id is not None and not _uuid_texto(serie_id):
+        return None
+    anio = d.get("anio")
+    if anio is not None and (not isinstance(anio, int) or isinstance(anio, bool)):
+        return None
+    descripcion, cover = d.get("descripcion"), d.get("cover_url")
+    if (descripcion is not None and not isinstance(descripcion, str)) or (
+            cover is not None and not isinstance(cover, str)):
+        return None
+    vistas, operacion = d.get("vistas"), d.get("operacion")
+    if not isinstance(vistas, list) or not all(_uuid_texto(v) for v in vistas) or not _uuid_texto(operacion):
+        return None
+    return AltaFirmada(clave, modo, origen, fuente, id_externo, titulo, anio, tradicion, descripcion, cover,
+                       serie_id, tuple(vistas), operacion, criterio, caduca)

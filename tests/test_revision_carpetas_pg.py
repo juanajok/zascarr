@@ -64,7 +64,7 @@ class Banco:
     async def limpiar(self):
         async with self.motor.begin() as c:
             await c.execute(text(
-                "TRUNCATE asignacion_operaciones, files, issues, series, local_aliases, import_runs CASCADE"))
+                "TRUNCATE asignacion_operaciones, alta_operaciones, files, issues, series, local_aliases, import_runs CASCADE"))
 
     async def serie(self, titulo: str, anio: int | None = None) -> UUID:
         sid = uuid4()

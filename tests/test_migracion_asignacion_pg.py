@@ -450,6 +450,11 @@ async def foto(url: str, ids: dict) -> dict:
     return res
 
 
+def cabeza() -> str:
+    """La revisión `head` de las migraciones (esta migración, la 0017, ya no es la última)."""
+    return alembic(URL, "heads").stdout.split()[0]
+
+
 async def version(url: str) -> str:
     motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
     async with motor.connect() as c:
@@ -477,7 +482,7 @@ class TestActualizacionDesdeLa0016:
             ids = await sembrar_a_0016(url)
             antes = await foto(url, ids)
             alembic(url, "upgrade", "head")
-            assert await version(url) == "0017"
+            assert await version(url) == cabeza()
             assert await foto(url, ids) == antes                                 # NADA cambió
             assert antes["f_manual"][2] == "manual" and antes["f_ignorado"][0] is True
             motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
@@ -522,7 +527,7 @@ class TestBajada:
             await self._insertar(url, estado, ids)
             r = alembic(url, "downgrade", "0016", estricto=False)
             assert r.returncode != 0 and "operaciones de asignación vivas" in r.stderr
-            assert await version(url) == "0017" and await existe_tabla_y_tipo(url) == (True, True)
+            assert await version(url) == cabeza() and await existe_tabla_y_tipo(url) == (True, True)
             motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
             async with motor.connect() as c:
                 assert (await c.execute(text("SELECT estado::text FROM asignacion_operaciones"))).scalar() == estado
@@ -546,7 +551,7 @@ class TestBajada:
             alembic(url, "downgrade", "0015")
             assert await version(url) == "0015"
             alembic(url, "upgrade", "head")
-            assert await version(url) == "0017"
+            assert await version(url) == cabeza()
 
 
 class TestBajadaConcurrente:
@@ -583,7 +588,7 @@ class TestBajadaConcurrente:
             finally:
                 await b.cerrar()
             assert r.returncode != 0 and "operaciones de asignación vivas" in r.stderr
-            assert await version(url) == "0017" and await existe_tabla_y_tipo(url) == (True, True)
+            assert await version(url) == cabeza() and await existe_tabla_y_tipo(url) == (True, True)
             motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
             async with motor.connect() as c:
                 assert (await c.execute(text("SELECT estado::text FROM asignacion_operaciones"))).scalar() == "preparada"
