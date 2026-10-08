@@ -16,11 +16,21 @@ Orden de precedencia cuando un registro tiene varios impedimentos (el primero qu
 van en `motivos`):
 `ya_vinculado` > `en_curso` > `origen_no_encontrado` > `origen_no_verificable` > `requiere_numero` >
 `numero_repetido_en_el_grupo` > `colision_de_edicion` > `numero_ya_existe`. Sin impedimentos: `con_conflicto_de_carpeta`
-(se puede marcar, con las señales a la vista) o `se_vincularia`. Fuera del límite: `fuera_del_limite`, sin evaluar.
+(se puede marcar, con las señales a la vista) o `se_vincularia`. Fuera de la página: `fuera_de_la_pagina`, sin evaluar.
+
+Páginas: como mucho `LIMITE_ARCHIVOS` (100) archivos evaluados por petición, en orden determinista (nombre e id) y
+con un **cursor** explícito (`cursor` / `siguiente`): se puede llegar a cualquier archivo del grupo aunque los de la
+primera página estén bloqueados. La selección, los números editados y el token valen solo para los archivos de la página.
+
+Números repetidos: la vista los identifica todos (`repetido_con`), pero **no bloquean por sí solos**: lo que no puede
+haber es dos archivos MARCADOS y ejecutables con el mismo número. Marcar solo uno permite vincularlo y deja el otro
+pendiente; nada elige, fusiona ni elimina una copia.
 """
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import os
 import stat as _stat
 from collections import Counter, defaultdict
@@ -63,7 +73,7 @@ BLOQUEOS = ("ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verif
             "numero_repetido_en_el_grupo", "colision_de_edicion", "numero_ya_existe")
 EstadoArchivo = Literal["ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verificable",
                         "requiere_numero", "numero_repetido_en_el_grupo", "colision_de_edicion",
-                        "numero_ya_existe", "con_conflicto_de_carpeta", "se_vincularia", "fuera_del_limite"]
+                        "numero_ya_existe", "con_conflicto_de_carpeta", "se_vincularia", "fuera_de_la_pagina"]
 Causa = Literal["permiso", "error_de_lectura", "biblioteca_no_accesible", "no_es_un_archivo"]
 
 TEXTOS: dict[str, str] = {
@@ -73,8 +83,9 @@ TEXTOS: dict[str, str] = {
     "requiere_numero": "Falta el número: escríbelo para poder vincularlo.",
     "con_conflicto_de_carpeta": "Se puede vincular, pero hay señales que lo contradicen: revísalas antes de marcarlo.",
     "se_vincularia": "Se vincularía en su sitio: conservará su nombre y su carpeta.",
-    "fuera_del_limite": f"Esta vista previa trata como máximo {LIMITE_ARCHIVOS} archivos y este queda fuera: "
-                        "vincula los demás y repite.",
+    "numero_repetido_en_el_grupo": "Otro archivo marcado tiene el mismo número: marca solo uno de los dos.",
+    "fuera_de_la_pagina": f"Este archivo no está en esta página (máximo {LIMITE_ARCHIVOS} por página): "
+                          "ábrela con su cursor para poder marcarlo.",
 }
 #: «No se pudo verificar» NO afirma que el archivo haya desaparecido: solo que la comprobación falló.
 TEXTOS_NO_VERIFICABLE: dict[str, str] = {
@@ -95,6 +106,10 @@ class ArchivoAjenoError(ValueError):
     def __init__(self, cuantos: int):
         super().__init__(f"{cuantos} archivo(s) no pertenecen a este grupo")
         self.cuantos = cuantos
+
+
+class CursorNoValidoError(ValueError):
+    """El cursor de página no se puede interpretar."""
 
 
 class NumeroNoValidoError(ValueError):
@@ -123,14 +138,22 @@ class ArchivoVinculacion(BaseModel):
     incluido_en_token: bool
     #: Existe en la serie un `Issue` con ese número y edición (sin archivo): se reutilizaría, no es un impedimento.
     issue_existente: bool
+    #: Ids de los OTROS archivos de esta página con el mismo número (sin distinguir mayúsculas). Informativo: no
+    #: bloquea mientras no se marquen dos a la vez.
+    repetido_con: list[str]
     conflictos: list[Senal]
 
 
-class LimiteOut(BaseModel):
+class PaginaOut(BaseModel):
+    """Posición de esta vista en el grupo (orden por nombre e id). `siguiente` es el cursor de la página posterior."""
     maximo: int
     en_el_grupo: int
     tratados: int
-    fuera_del_limite: int
+    desde: int
+    hasta: int
+    cursor: str | None
+    siguiente: str | None
+    hay_mas: bool
     texto: str | None
 
 
@@ -139,13 +162,14 @@ class TotalesVinculacion(BaseModel):
     a_vincular: int
     marcados_bloqueados: int
     sin_marcar: int
+    numeros_repetidos: int
     por_estado: dict[str, int]
 
 
 class RespuestaVinculacion(BaseModel):
     clave: str
     serie: SerieLocal
-    limite: LimiteOut
+    pagina: PaginaOut
     archivos: list[ArchivoVinculacion]
     totales: TotalesVinculacion
     avisos_de_grupo: list[Senal]
@@ -208,6 +232,24 @@ def _dentro_de(ruta: str, biblioteca: Path) -> bool:
 
 # ── Servicio ─────────────────────────────────────────────────────────────────────────────────────
 
+# ── Cursor de página ─────────────────────────────────────────────────────────────────────────────
+
+def _cursor_de(a) -> str:
+    """Posición en el orden estable del grupo (nombre, id). Es solo una posición: no autoriza nada ni va firmada."""
+    return base64.urlsafe_b64encode(json.dumps([a.nombre, a.id], ensure_ascii=False).encode()).decode()
+
+
+def _leer_cursor(cursor: str) -> tuple[str, str]:
+    try:
+        nombre, ident = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+        if not isinstance(nombre, str) or not isinstance(ident, str):
+            raise ValueError
+        UUID(ident)
+        return nombre, ident
+    except (ValueError, TypeError, UnicodeError):
+        raise CursorNoValidoError("El cursor de la página no es válido.") from None
+
+
 class VistaPreviaDeVinculacion:
     def __init__(self, db: AsyncSession, *, secret: str, biblioteca: Path | str | None = None,
                  estadistica: Callable[[str], os.stat_result] | None = None, ahora: float | None = None):
@@ -219,7 +261,7 @@ class VistaPreviaDeVinculacion:
         self._ahora = ahora
 
     async def previsualizar(self, clave: str, series_id: UUID, *, numeros: dict[str, str] | None = None,
-                            marcados: set[str] | None = None) -> RespuestaVinculacion:
+                            marcados: set[str] | None = None, cursor: str | None = None) -> RespuestaVinculacion:
         numeros = {k: self._numero_valido(v) for k, v in (numeros or {}).items()}
         marcados = set(marcados or ())
         db = self._db
@@ -232,14 +274,19 @@ class VistaPreviaDeVinculacion:
         if serie is None:
             raise SerieElegidaNoExisteError(str(series_id))
 
-        tratados, resto = todos[:LIMITE_ARCHIVOS], todos[LIMITE_ARCHIVOS:]
+        # La página: los `LIMITE_ARCHIVOS` primeros DESPUÉS del cursor (clave de orden estable: aunque otros archivos
+        # se vinculen entre petición y petición, el cursor sigue señalando el mismo punto).
+        despues = todos if not cursor else [a for a in todos if (a.nombre, a.id) > _leer_cursor(cursor)]
+        tratados, resto = despues[:LIMITE_ARCHIVOS], despues[LIMITE_ARCHIVOS:]
+        antes = len(todos) - len(despues)
         en_grupo = {a.id for a in todos}
         pedidos = set(numeros) | marcados
         ajenos = pedidos - en_grupo
         ya_vinculados = await self._ya_vinculados(ajenos)
         if len(ya_vinculados) != len(ajenos):
             raise ArchivoAjenoError(len(ajenos) - len(ya_vinculados))
-        fuera = [a for a in resto if a.id in pedidos]
+        en_pagina = {a.id for a in tratados}
+        fuera = [a for a in todos if a.id in pedidos and a.id not in en_pagina]
 
         # ── Lecturas de BD (constantes: no dependen del número de archivos) ──
         ids = [UUID(a.id) for a in tratados] + [UUID(i) for i in ya_vinculados]
@@ -263,7 +310,7 @@ class VistaPreviaDeVinculacion:
         origenes = await asyncio.to_thread(
             _comprobar_origenes, {a.id: rutas[a.id] for a in tratados if a.id in rutas},
             self._biblioteca, self._estadistica)
-        repetidos = self._repetidos([(a.id, propuesta[a.id][0]) for a in tratados])
+        repetidos = self._repetidos([(a.id, propuesta[a.id][0]) for a in tratados])      # id → otros con ese número
 
         # ── Señales de la rebanada 1 contra la serie elegida (todo el grupo, no solo lo tratado) ──
         carpeta = analizar_carpeta(div.contextual) if div.contextual else None
@@ -271,15 +318,26 @@ class VistaPreviaDeVinculacion:
         de_grupo = [s for s in senales if not s.archivos]
 
         salida: list[ArchivoVinculacion] = []
+        evaluar = {}
         for a in tratados:
             numero, del_nombre, formato, origen_n = propuesta[a.id]
-            conflictos = [s for s in senales if a.id in s.archivos]
-            salida.append(self._evaluar(
-                a.id, a.nombre, rutas.get(a.id), numero, del_nombre, formato, origen_n, origenes.get(a.id),
-                a.id in en_curso, repetidos, existentes, conflictos, a.id in marcados))
+            evaluar[a.id] = dict(
+                fid=a.id, nombre=a.nombre, ruta=rutas.get(a.id), numero=numero, del_nombre=del_nombre, formato=formato,
+                origen_n=origen_n, origen=origenes.get(a.id), en_curso=a.id in en_curso,
+                repetido_con=repetidos.get(a.id, []), existentes=existentes,
+                conflictos=[s for s in senales if a.id in s.archivos], marcado=a.id in marcados)
+            salida.append(self._evaluar(**evaluar[a.id], repetido_en_seleccion=False))
+        # Lo que no puede haber es dos archivos MARCADOS y ejecutables con el mismo número: se bloquean ambos (nada
+        # elige por la persona). Un duplicado sin marcar, o marcado solo él, no se bloquea.
+        por_numero: dict[str, list[str]] = defaultdict(list)
+        for f in salida:
+            if f.marcado and not f.motivos and f.numero:
+                por_numero[f.numero.lower()].append(f.id)
+        en_conflicto = {i for ids_ in por_numero.values() if len(ids_) > 1 for i in ids_}
+        salida = [self._evaluar(**evaluar[f.id], repetido_en_seleccion=True) if f.id in en_conflicto else f for f in salida]
         for a in fuera:
             numero, del_nombre, formato, origen_n = propuesta[a.id]
-            salida.append(self._fuera_del_limite(a.id, a.nombre, numero, del_nombre, formato, origen_n, a.id in marcados))
+            salida.append(self._fuera_de_la_pagina(a.id, a.nombre, numero, del_nombre, formato, origen_n, a.id in marcados))
         for fid, (nombre, ruta) in ya_vinculados.items():
             salida.append(self._ya_vinculado(fid, nombre, ruta, fid in marcados))
 
@@ -306,16 +364,20 @@ class VistaPreviaDeVinculacion:
         return RespuestaVinculacion(
             clave=clave, serie=SerieLocal(series_id=str(serie.id), titulo=serie.title, anio=serie.start_year,
                                           tradicion=serie.tradition.value),
-            limite=LimiteOut(
-                maximo=LIMITE_ARCHIVOS, en_el_grupo=len(todos), tratados=len(tratados), fuera_del_limite=len(resto),
-                texto=None if not resto else
-                f"Este grupo tiene {len(todos)} archivos; esta vista previa trata los primeros {LIMITE_ARCHIVOS} "
-                f"(por nombre). Los otros {len(resto)} quedan fuera: vincula estos y repite."),
+            pagina=PaginaOut(
+                maximo=LIMITE_ARCHIVOS, en_el_grupo=len(todos), tratados=len(tratados),
+                desde=antes + 1 if tratados else 0, hasta=antes + len(tratados), cursor=cursor or None,
+                siguiente=_cursor_de(tratados[-1]) if resto and tratados else None, hay_mas=bool(resto),
+                texto=None if not resto and not antes else
+                f"Este grupo tiene {len(todos)} archivos pendientes; esta página muestra del {antes + 1} al "
+                f"{antes + len(tratados)} (máximo {LIMITE_ARCHIVOS} por página, por nombre). Lo que marques, los "
+                "números que edites y el token valen solo para los archivos de esta página."),
             archivos=salida,
             totales=TotalesVinculacion(
                 marcados=n_marcados, a_vincular=len(incluidos),
                 marcados_bloqueados=sum(1 for f in salida if f.marcado and not f.marcable),
                 sin_marcar=sum(1 for f in salida if not f.marcado),
+                numeros_repetidos=sum(1 for f in salida if f.repetido_con),
                 por_estado=dict(Counter(f.estado for f in salida))),
             avisos_de_grupo=avisos, token=token, motivo_sin_token=motivo)
 
@@ -350,16 +412,18 @@ class VistaPreviaDeVinculacion:
         return {n: (fmt or IssueFormat.SINGLE_ISSUE, cuenta.get(iid, 0)) for iid, n, fmt in filas}
 
     @staticmethod
-    def _repetidos(pares: list[tuple[str, str | None]]) -> dict[str, str]:
-        """id → número, de los archivos cuyo número (sin distinguir mayúsculas) comparte otro archivo tratado."""
+    def _repetidos(pares: list[tuple[str, str | None]]) -> dict[str, list[str]]:
+        """id → ids de los OTROS archivos con el mismo número (sin distinguir mayúsculas). Solo los que se repiten."""
         por_numero: dict[str, list[str]] = defaultdict(list)
         for fid, numero in pares:
             if numero:
                 por_numero[numero.lower()].append(fid)
-        return {fid: numero for fid, numero in pares if numero and len(por_numero[numero.lower()]) > 1}
+        return {fid: sorted(i for i in por_numero[numero.lower()] if i != fid)
+                for fid, numero in pares if numero and len(por_numero[numero.lower()]) > 1}
 
     def _evaluar(self, fid, nombre, ruta, numero, del_nombre, formato, origen_n, origen: _Origen | None, en_curso: bool,
-                 repetidos, existentes, conflictos: list[Senal], marcado: bool) -> ArchivoVinculacion:
+                 repetido_con: list[str], existentes, conflictos: list[Senal], marcado: bool,
+                 repetido_en_seleccion: bool) -> ArchivoVinculacion:
         motivos: list[str] = []
         causa: str | None = None
         if en_curso:
@@ -371,7 +435,7 @@ class VistaPreviaDeVinculacion:
             causa = origen.causa
         if not numero:
             motivos.append("requiere_numero")
-        elif fid in repetidos:
+        elif repetido_en_seleccion:
             motivos.append("numero_repetido_en_el_grupo")
         existente = existentes.get(numero) if numero else None
         texto_extra = ""
@@ -391,31 +455,34 @@ class VistaPreviaDeVinculacion:
             elif estado in ("colision_de_edicion", "numero_ya_existe"):
                 texto = texto_extra
             elif estado == "numero_repetido_en_el_grupo":
-                texto = f"Otro archivo de este grupo tiene el mismo número ({numero})."
+                texto = f"Otro archivo marcado tiene el mismo número ({numero}): marca solo uno de los dos."
             else:
                 texto = TEXTOS[estado]
         else:
             estado = "con_conflicto_de_carpeta" if any(s.severidad == "conflicto" for s in conflictos) else "se_vincularia"
             texto = TEXTOS[estado]
+            if repetido_con:
+                texto += f" Comparte el número {numero} con otro archivo: se puede vincular uno, no los dos a la vez."
         marcable = not motivos
         return ArchivoVinculacion(
             id=fid, nombre=nombre, **self._ruta(ruta), formato=formato, numero=numero, numero_del_nombre=del_nombre,
             numero_origen=origen_n, estado=estado, motivos=motivos, texto=texto, causa=causa, marcado=marcado,
             marcable=marcable, incluido_en_token=marcado and marcable,
-            issue_existente=bool(existente and not motivos), conflictos=conflictos)
+            issue_existente=bool(existente and not motivos), repetido_con=repetido_con, conflictos=conflictos)
 
-    def _fuera_del_limite(self, fid, nombre, numero, del_nombre, formato, origen_n, marcado) -> ArchivoVinculacion:
+    def _fuera_de_la_pagina(self, fid, nombre, numero, del_nombre, formato, origen_n, marcado) -> ArchivoVinculacion:
         return ArchivoVinculacion(
             id=fid, nombre=nombre, ruta_actual="", fuera_de_la_biblioteca=False, formato=formato, numero=numero,
-            numero_del_nombre=del_nombre, numero_origen=origen_n, estado="fuera_del_limite", motivos=["fuera_del_limite"],
-            texto=TEXTOS["fuera_del_limite"], causa=None, marcado=marcado, marcable=False, incluido_en_token=False,
-            issue_existente=False, conflictos=[])
+            numero_del_nombre=del_nombre, numero_origen=origen_n, estado="fuera_de_la_pagina", motivos=["fuera_de_la_pagina"],
+            texto=TEXTOS["fuera_de_la_pagina"], causa=None, marcado=marcado, marcable=False, incluido_en_token=False,
+            issue_existente=False, repetido_con=[], conflictos=[])
 
     def _ya_vinculado(self, fid, nombre, ruta, marcado) -> ArchivoVinculacion:
         return ArchivoVinculacion(
             id=fid, nombre=nombre, **self._ruta(ruta), formato=None, numero=None, numero_del_nombre=None,
             numero_origen="ninguno", estado="ya_vinculado", motivos=["ya_vinculado"], texto=TEXTOS["ya_vinculado"],
-            causa=None, marcado=marcado, marcable=False, incluido_en_token=False, issue_existente=False, conflictos=[])
+            causa=None, marcado=marcado, marcable=False, incluido_en_token=False, issue_existente=False,
+            repetido_con=[], conflictos=[])
 
     def _ruta(self, ruta: str | None) -> dict:
         if not ruta:
