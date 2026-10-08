@@ -327,9 +327,11 @@ class TestEstados:
     async def test_el_repetido_no_distingue_mayusculas(self, entorno):
         serie = await serie_de_prueba(entorno)
         ids = await archivos(entorno, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
-        a = por_nombre_json((await previsualizar(
-            serie, numeros={ids["Flash 01 (1987).cbz"]: "5A", ids["Flash 02 (1987).cbz"]: "5a"})).json())
-        assert {x["estado"] for x in a.values()} == {"numero_repetido_en_el_grupo"}
+        numeros = {ids["Flash 01 (1987).cbz"]: "5A", ids["Flash 02 (1987).cbz"]: "5a"}
+        sin_marcar = por_nombre_json((await previsualizar(serie, numeros=numeros)).json())
+        assert all(x["repetido_con"] for x in sin_marcar.values())                       # se identifican
+        marcados = por_nombre_json((await previsualizar(serie, numeros=numeros, marcados=list(ids.values()))).json())
+        assert {x["estado"] for x in marcados.values()} == {"numero_repetido_en_el_grupo"}
 
     async def test_editar_un_numero_repetido_lo_resuelve(self, entorno):
         serie = await serie_de_prueba(entorno)
@@ -446,8 +448,8 @@ class TestEstados:
         a = (await previsualizar(serie)).json()["archivos"][0]
         assert a["estado"] == "origen_no_encontrado" and a["motivos"] == ["origen_no_encontrado"]
         assert "pendiente de verificar" in a["texto"]
-        await archivos(entorno, "Flash 07 (1987).cbz", "Flash 07 (1987)(1).cbz")
-        b = por_nombre_json((await previsualizar(serie)).json())
+        ids = await archivos(entorno, "Flash 07 (1987).cbz", "Flash 07 (1987)(1).cbz")
+        b = por_nombre_json((await previsualizar(serie, marcados=list(ids.values()))).json())
         assert b["Flash 07 (1987).cbz"]["estado"] == "numero_repetido_en_el_grupo"
 
 
@@ -639,18 +641,19 @@ class TestLimite:
         serie = await serie_de_prueba(entorno)
         await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 131)))
         c = (await previsualizar(serie)).json()
-        assert c["limite"] == {"maximo": LIMITE_ARCHIVOS, "en_el_grupo": 130, "tratados": 100, "fuera_del_limite": 30,
-                               "texto": c["limite"]["texto"]}
-        assert "130 archivos" in c["limite"]["texto"] and "vincula estos y repite" in c["limite"]["texto"]
+        p = c["pagina"]
+        assert (p["maximo"], p["en_el_grupo"], p["tratados"], p["desde"], p["hasta"], p["hay_mas"], p["cursor"]) == (
+            LIMITE_ARCHIVOS, 130, 100, 1, 100, True, None)
+        assert p["siguiente"] and "130 archivos" in p["texto"] and "valen solo para los archivos de esta página" in p["texto"]
         assert len(c["archivos"]) == 100                                          # el resto solo consta en el recuento
 
-    async def test_un_archivo_marcado_fuera_del_limite_sale_explicado_y_sin_token(self, entorno):
+    async def test_un_archivo_marcado_fuera_de_la_pagina_sale_explicado_y_sin_token(self, entorno):
         serie = await serie_de_prueba(entorno)
         ids = await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 131)))
         fuera = ids["Flash 125 (1987).cbz"]
         c = (await previsualizar(serie, marcados=[fuera])).json()
         a = por_id_json(c)[str(fuera)]
-        assert (a["estado"], a["marcable"], a["marcado"], a["incluido_en_token"]) == ("fuera_del_limite", False, True, False)
+        assert (a["estado"], a["marcable"], a["marcado"], a["incluido_en_token"]) == ("fuera_de_la_pagina", False, True, False)
         assert str(LIMITE_ARCHIVOS) in a["texto"] and c["token"] is None
         assert len(c["archivos"]) == 101
 
@@ -673,6 +676,206 @@ class TestLimite:
         await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 131)))
         nombres = [a["nombre"] for a in (await previsualizar(serie)).json()["archivos"]]
         assert nombres == sorted(nombres) and nombres[0] == "Flash 001 (1987).cbz" and nombres[-1] == "Flash 100 (1987).cbz"
+
+
+# ── Copias: elegir una sin falsear su número ────────────────────────────────────────────────────
+
+class TestCopiasDelMismoNumero:
+    """Dos copias del número 3: la vista las identifica, pero la persona puede vincular UNA y dejar la otra pendiente.
+    Lo único imposible es llevar las dos en la misma selección ejecutable. Nada elige, fusiona ni elimina una copia."""
+
+    NOMBRES = ("Flash 03 (1987).cbz", "Flash 03 (1987)(1).cbz")
+
+    async def _preparar(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        ids = await archivos(entorno, *self.NOMBRES, "Flash 04 (1987).cbz")
+        return serie, ids
+
+    async def test_ninguna_marcada_las_identifica_a_las_dos_sin_bloquear(self, entorno):
+        serie, ids = await self._preparar(entorno)
+        c = (await previsualizar(serie)).json()
+        a = por_nombre_json(c)
+        for n in self.NOMBRES:
+            otro = ids[next(x for x in self.NOMBRES if x != n)]
+            assert a[n]["repetido_con"] == [str(otro)] and a[n]["estado"] == "se_vincularia" and a[n]["marcable"] is True
+            assert "no los dos a la vez" in a[n]["texto"]
+        assert a["Flash 04 (1987).cbz"]["repetido_con"] == [] and c["totales"]["numeros_repetidos"] == 2
+        assert c["token"] is None
+
+    @pytest.mark.parametrize("elegida", NOMBRES)
+    async def test_marcar_solo_una_copia_permite_vincularla_y_deja_la_otra_pendiente(self, entorno, elegida):
+        serie, ids = await self._preparar(entorno)
+        c = (await previsualizar(serie, marcados=[ids[elegida]])).json()
+        a = por_nombre_json(c)
+        otra = next(n for n in self.NOMBRES if n != elegida)
+        assert (a[elegida]["estado"], a[elegida]["incluido_en_token"]) == ("se_vincularia", True)
+        assert (a[otra]["marcado"], a[otra]["incluido_en_token"], a[otra]["estado"]) == (False, False, "se_vincularia")
+        firmados = verificar_token_vinculacion(c["token"], SECRETO).archivos
+        assert [(x.id, x.numero) for x in firmados] == [(str(ids[elegida]), "3")]           # sin falsear el número
+        assert c["totales"]["a_vincular"] == 1 and c["totales"]["marcados_bloqueados"] == 0
+
+    async def test_marcar_las_dos_las_bloquea_a_las_dos_y_no_elige_por_la_persona(self, entorno):
+        serie, ids = await self._preparar(entorno)
+        c = (await previsualizar(serie, marcados=[ids[n] for n in self.NOMBRES])).json()
+        a = por_nombre_json(c)
+        for n in self.NOMBRES:
+            assert (a[n]["estado"], a[n]["marcable"], a[n]["incluido_en_token"]) == ("numero_repetido_en_el_grupo", False, False)
+            assert "marca solo uno" in a[n]["texto"]
+        assert c["token"] is None and c["totales"]["marcados_bloqueados"] == 2
+
+    async def test_dos_marcadas_y_una_tercera_distinta_solo_lleva_la_tercera(self, entorno):
+        serie, ids = await self._preparar(entorno)
+        c = (await previsualizar(serie, marcados=list(ids.values()))).json()
+        firmados = verificar_token_vinculacion(c["token"], SECRETO).archivos
+        assert [x.id for x in firmados] == [str(ids["Flash 04 (1987).cbz"])] and c["totales"]["marcados_bloqueados"] == 2
+
+    async def test_desmarcar_una_de_las_dos_resuelve_el_conflicto(self, entorno):
+        serie, ids = await self._preparar(entorno)
+        ambas = (await previsualizar(serie, marcados=[ids[n] for n in self.NOMBRES])).json()
+        una = (await previsualizar(serie, marcados=[ids[self.NOMBRES[0]]])).json()
+        assert ambas["token"] is None and una["token"]
+
+    async def test_una_copia_marcada_pero_bloqueada_por_otro_motivo_no_bloquea_a_la_otra(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        ids = await archivos(entorno, "Flash 03 (1987).cbz")
+        sin_disco = await archivos(entorno, "Flash 03 (1987)(1).cbz", en_disco=False)
+        c = (await previsualizar(serie, marcados=[ids["Flash 03 (1987).cbz"], sin_disco["Flash 03 (1987)(1).cbz"]])).json()
+        a = por_nombre_json(c)
+        assert a["Flash 03 (1987).cbz"]["estado"] == "se_vincularia" and a["Flash 03 (1987)(1).cbz"]["estado"] == "origen_no_encontrado"
+        assert c["token"] and [x.id for x in verificar_token_vinculacion(c["token"], SECRETO).archivos] == [str(ids["Flash 03 (1987).cbz"])]
+
+    async def test_tres_copias_dos_marcadas_bloquean_solo_a_esas_dos(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        ids = await archivos(entorno, "Flash 03 (1987).cbz", "Flash 03 (1987)(1).cbz", "Flash 03 (1987)(2).cbz")
+        marcadas = [ids["Flash 03 (1987).cbz"], ids["Flash 03 (1987)(2).cbz"]]
+        a = por_nombre_json((await previsualizar(serie, marcados=marcadas)).json())
+        assert {n: x["estado"] for n, x in a.items()} == {
+            "Flash 03 (1987).cbz": "numero_repetido_en_el_grupo", "Flash 03 (1987)(1).cbz": "se_vincularia",
+            "Flash 03 (1987)(2).cbz": "numero_repetido_en_el_grupo"}
+        assert all(len(x["repetido_con"]) == 2 for x in a.values())
+
+    async def test_el_numero_editado_a_mano_cuenta_igual_para_el_repetido(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        ids = await archivos(entorno, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
+        numeros = {ids["Flash 01 (1987).cbz"]: "9", ids["Flash 02 (1987).cbz"]: "9"}
+        una = (await previsualizar(serie, numeros=numeros, marcados=[ids["Flash 01 (1987).cbz"]])).json()
+        ambas = (await previsualizar(serie, numeros=numeros, marcados=list(ids.values()))).json()
+        assert una["token"] and ambas["token"] is None
+
+    async def test_vincular_una_copia_no_obliga_a_cambiar_el_numero_de_la_otra(self, entorno):
+        """Lo que se quería evitar: tener que falsear una copia como «30» para poder elegir la otra."""
+        serie, ids = await self._preparar(entorno)
+        c = (await previsualizar(serie, marcados=[ids[self.NOMBRES[1]]])).json()
+        assert c["token"] and all(a["numero_origen"] == "nombre" for a in c["archivos"])
+
+
+# ── Páginas: llegar a los registros posteriores aunque los primeros estén bloqueados ─────────────
+
+class TestPaginas:
+
+    async def _grupo_con_los_cien_primeros_bloqueados(self, entorno, total=130):
+        """Los 100 primeros por nombre NO existen en disco (bloqueados); los demás sí."""
+        serie = await serie_de_prueba(entorno)
+        bloqueados = await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 101)), en_disco=False)
+        ejecutables = await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(101, total + 1)))
+        return serie, bloqueados, ejecutables
+
+    async def test_con_los_cien_primeros_bloqueados_se_llega_a_los_siguientes_y_se_previsualiza_uno(self, entorno):
+        serie, bloqueados, ejecutables = await self._grupo_con_los_cien_primeros_bloqueados(entorno)
+        p1 = (await previsualizar(serie, marcados=list(bloqueados.values()))).json()
+        assert {a["estado"] for a in p1["archivos"]} == {"origen_no_encontrado"}
+        assert p1["token"] is None and p1["pagina"]["hay_mas"] and p1["pagina"]["siguiente"]
+
+        p2 = (await previsualizar(serie, cursor=p1["pagina"]["siguiente"], marcados=[ejecutables["Flash 105 (1987).cbz"]])).json()
+        pg = p2["pagina"]
+        assert (pg["desde"], pg["hasta"], pg["tratados"], pg["hay_mas"], pg["siguiente"], pg["en_el_grupo"]) == (101, 130, 30, False, None, 130)
+        assert [a["nombre"] for a in p2["archivos"]][0] == "Flash 101 (1987).cbz" and len(p2["archivos"]) == 30
+        v = verificar_token_vinculacion(p2["token"], SECRETO)
+        assert [(a.id, a.numero) for a in v.archivos] == [(str(ejecutables["Flash 105 (1987).cbz"]), "105")]
+
+    async def test_el_token_y_la_seleccion_valen_solo_para_la_pagina(self, entorno):
+        serie, bloqueados, ejecutables = await self._grupo_con_los_cien_primeros_bloqueados(entorno)
+        p1 = (await previsualizar(serie)).json()
+        # en la primera página, un archivo de la segunda: consta, no es marcable y no entra en un token
+        c = (await previsualizar(serie, marcados=[ejecutables["Flash 105 (1987).cbz"]])).json()
+        a = por_id_json(c)[str(ejecutables["Flash 105 (1987).cbz"])]
+        assert (a["estado"], a["marcado"], a["marcable"], a["incluido_en_token"]) == ("fuera_de_la_pagina", True, False, False)
+        assert c["token"] is None
+        # y en la segunda, uno de la primera
+        d = (await previsualizar(serie, cursor=p1["pagina"]["siguiente"], marcados=[bloqueados["Flash 001 (1987).cbz"]])).json()
+        assert por_id_json(d)[str(bloqueados["Flash 001 (1987).cbz"])]["estado"] == "fuera_de_la_pagina" and d["token"] is None
+
+    async def test_los_numeros_editados_valen_solo_para_los_archivos_de_la_pagina(self, entorno):
+        serie, bloqueados, ejecutables = await self._grupo_con_los_cien_primeros_bloqueados(entorno)
+        p1 = (await previsualizar(serie)).json()
+        c = (await previsualizar(serie, cursor=p1["pagina"]["siguiente"], numeros={ejecutables["Flash 110 (1987).cbz"]: "7"},
+                                 marcados=[ejecutables["Flash 110 (1987).cbz"]])).json()
+        assert verificar_token_vinculacion(c["token"], SECRETO).archivos[0].numero == "7"
+
+    async def test_tres_paginas_se_recorren_sin_huecos_ni_solapes_y_en_orden(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 251)))
+        vistos, cursor, paginas = [], None, 0
+        while True:
+            c = (await previsualizar(serie, cursor=cursor)).json()
+            vistos += [a["nombre"] for a in c["archivos"]]
+            paginas += 1
+            cursor = c["pagina"]["siguiente"]
+            if not cursor:
+                break
+        assert paginas == 3 and vistos == sorted(vistos) and len(vistos) == len(set(vistos)) == 250
+
+    async def test_el_cursor_sigue_valiendo_si_otros_archivos_se_vinculan_entre_peticiones(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        ids = await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 131)))
+        p1 = (await previsualizar(serie)).json()
+        async with entorno.banco.fabrica() as s:                       # se vinculan 10 de la primera página
+            issue = Issue(series_id=serie, issue_number="999")
+            s.add(issue)
+            await s.flush()
+            await s.execute(text("UPDATE files SET issue_id = :i WHERE file_name = ANY(:n)"),
+                            {"i": issue.id, "n": [f"Flash {i:03d} (1987).cbz" for i in range(1, 11)]})
+            await s.commit()
+        p2 = (await previsualizar(serie, cursor=p1["pagina"]["siguiente"])).json()
+        assert [a["nombre"] for a in p2["archivos"]] == [f"Flash {i:03d} (1987).cbz" for i in range(101, 131)]
+        assert p2["pagina"]["en_el_grupo"] == 120 and p2["pagina"]["desde"] == 91 and p2["pagina"]["hasta"] == 120
+        assert ids
+
+    async def test_un_cursor_al_final_da_una_pagina_vacia_sin_error(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 4)))
+        ultimo = (await previsualizar(serie)).json()["archivos"][-1]
+        import base64
+        import json
+        cursor = base64.urlsafe_b64encode(json.dumps([ultimo["nombre"], ultimo["id"]]).encode()).decode()
+        c = (await previsualizar(serie, cursor=cursor)).json()
+        assert c["archivos"] == [] and c["pagina"]["tratados"] == 0 and c["pagina"]["desde"] == 0 and c["token"] is None
+
+    @pytest.mark.parametrize("cursor", ["", "x", "no-es-base64!!", "W10=", "WyJhIl0=", "WzEsMl0=", "WyJhIiwgIm5vLXV1aWQiXQ=="])
+    async def test_un_cursor_mal_formado_es_422(self, entorno, cursor):
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, "Flash 01 (1987).cbz")
+        r = await previsualizar(serie, cursor=cursor)
+        if cursor == "":
+            assert r.status_code == 200                                # vacío = sin cursor
+        else:
+            assert r.status_code == 422 and r.json()["detail"]["codigo"] == "cursor_no_valido"
+
+    async def test_un_ajeno_al_grupo_sigue_siendo_422_con_cursor(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 131)))
+        otro = (await archivos(entorno, "Batman 01.cbz", carpeta="Comics/Batman (1940)"))["Batman 01.cbz"]
+        p1 = (await previsualizar(serie)).json()
+        r = await previsualizar(serie, cursor=p1["pagina"]["siguiente"], marcados=[otro])
+        assert r.status_code == 422 and r.json()["detail"]["codigo"] == "archivo_ajeno_al_grupo"
+
+    async def test_las_consultas_siguen_siendo_constantes_con_cursor(self, entorno):
+        serie = await serie_de_prueba(entorno)
+        await archivos(entorno, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 201)))
+        p1 = (await previsualizar(serie)).json()
+        n = len(entorno.banco.sentencias)
+        assert (await previsualizar(serie, cursor=p1["pagina"]["siguiente"])).status_code == 200
+        assert len(entorno.banco.sentencias) - n <= 8
 
 
 # ── Rutas, validación, autenticación y logs ─────────────────────────────────────────────────────

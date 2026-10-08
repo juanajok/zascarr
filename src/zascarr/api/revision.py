@@ -52,6 +52,7 @@ from zascarr.services.revision_carpetas import (
 )
 from zascarr.services.vinculacion_previa import (
     ArchivoAjenoError,
+    CursorNoValidoError,
     NumeroNoValidoError,
     RespuestaVinculacion,
     SerieElegidaNoExisteError,
@@ -248,6 +249,8 @@ class PeticionPrevisualizarVinculacion(BaseModel):
     numeros: dict[UUID, str] = Field(default_factory=dict, max_length=1000)
     #: ids de archivo que la persona ha marcado. Vacío al principio.
     marcados: list[UUID] = Field(default_factory=list, max_length=1000)
+    #: Posición de la página (el `siguiente` de la respuesta anterior). Sin cursor: la primera página.
+    cursor: str | None = Field(default=None, max_length=2000)
 
 
 @router.post("/vinculacion/previsualizar", response_model=RespuestaVinculacion)
@@ -256,13 +259,14 @@ async def previsualizar_vinculacion(
 ) -> RespuestaVinculacion:
     """Qué pasaría si estos archivos se vincularan a esta serie, SIN hacerlo. Solo `SELECT` y `stat` (metadatos): no
     escribe, no lee contenido, no calcula hashes, no usa la red y no calcula destinos (vincular conserva nombre y
-    ruta). Emite el token `vincular` solo si hay al menos un archivo marcado y ejecutable."""
+    ruta). Emite el token `vincular` solo si hay al menos un archivo marcado y ejecutable. Evalúa como mucho 100 archivos por
+    petición; `cursor` / `pagina.siguiente` recorren el resto del grupo."""
     response.headers["Cache-Control"] = "no-store"
     try:
         return await VistaPreviaDeVinculacion(db, secret=_secreto()).previsualizar(
             peticion.clave, peticion.series_id,
             numeros={str(k): v for k, v in peticion.numeros.items()},
-            marcados={str(m) for m in peticion.marcados})
+            marcados={str(m) for m in peticion.marcados}, cursor=peticion.cursor)
     except GrupoNoEncontradoError:
         raise HTTPException(status_code=404, detail={
             "codigo": "grupo_no_encontrado", "mensaje": "No hay registros pendientes en esa carpeta."}) from None
@@ -275,3 +279,5 @@ async def previsualizar_vinculacion(
             "mensaje": f"{e.cuantos} archivo(s) indicado(s) no pertenecen a este grupo."}) from None
     except NumeroNoValidoError as e:
         raise HTTPException(status_code=422, detail={"codigo": "numero_no_valido", "mensaje": str(e)}) from None
+    except CursorNoValidoError as e:
+        raise HTTPException(status_code=422, detail={"codigo": "cursor_no_valido", "mensaje": str(e)}) from None
