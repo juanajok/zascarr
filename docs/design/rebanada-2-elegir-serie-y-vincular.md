@@ -384,6 +384,20 @@ Mismos campos que `AsignacionService._confirmar` **menos la ruta**: `locked_fiel
 - **Declara límites:** tamaño y `mtime_ns` no prueban el contenido; entre el `stat` y el `commit` el fichero puede cambiar; tras purgar no se reconstruye el informe; el informe guarda ids, no nombres.
 - **A revisar:** (a) el disparador `BEFORE UPDATE` de la 0019 (función y bajada coherentes, estilo de la 0006); (b) `numero_ambiguo` como motivo previsto nuevo; (c) la clave del candado de número ignora mayúsculas.
 
+#### Implementación 2d: lo que se implementó y lo que se observó
+
+Implementado tal como fija el contrato: `POST /api/revision/vinculacion` `{token}` (`services/vinculacion.py`), migración **0019** (`vinculacion_operaciones` con el disparador `BEFORE UPDATE` que rechaza todo `UPDATE`), token de vinculación **v2** emitido por la vista previa (con `conflictos` explícitos por archivo), y la vista previa alineada con la misma equivalencia de números (sin distinguir mayúsculas) y el impedimento `numero_ambiguo`. Sin alias, sin desvincular, sin contenido, hash ni red; `file_path` y `file_name` no cambian.
+
+| Punto | Precisión de la implementación |
+|---|---|
+| **«Resultado idéntico»** | Se comprueba como **igualdad del documento JSON persistido** (forma canónica), **no** como identidad de bytes de la respuesta HTTP (el serializador puede variar orden o formato). `presentacion` queda fuera del resultado |
+| **Una sola equivalencia de números** | `clave_de_numero` (recortar y pasar a minúsculas) se usa en: duplicados del token, clave y orden de los candados, búsqueda del `Issue` (`lower(issue_number)`), ocupación y la vista previa. El texto presentado se conserva (`5A` se crea como `5A`). Probado: `5A` y `5a` no permiten un doble vínculo |
+| **`numero_ambiguo`** | Impedimento previsto: si hay **varios** `Issue` para la clave (volúmenes distintos o `volume` NULL), el archivo se omite, se registra el motivo y **no se modifica ninguno ni se elige volumen** |
+| **Comprobación de la serie** | Solo la de `FOR SHARE` (la consulta previa sin bloqueo era redundante y se retiró) |
+| **Bajada de la 0019** | Retira, en orden, disparador, función y tabla (el índice se va con ella); se niega con informes de token vigente (`ACCESS EXCLUSIVE` antes de contar) |
+
+**Tres sesiones, observado (no forzado).** Con S2 (organizar) reteniendo el archivo, S1 (vincular) tomando la serie `FOR SHARE` y esperando al archivo, y S3 (deshacer) esperando la serie `FOR UPDATE`: el `INSERT` de un `Issue` de S2 (necesita `KEY SHARE` de la serie) **no se bloqueó** tras el `FOR UPDATE` en cola (0,01 s); S2 confirmó, S1 omitió el archivo como `ya_vinculado_a_otro`, y S3 se negó con `tiene_archivos`/`tiene_numeros`. No apareció ningún interbloqueo en ese escenario. **Interbloqueo provocado** (dos sesiones con archivos en orden inverso): la víctima fue el servicio —la que llevaba más tiempo esperando—, respondió `503 conflicto_de_bloqueo` con `Retry-After`, sin informe ni efectos, y el mismo token se ejecutó después.
+
 ## E. Conflictos sin preselección; duplicados y obsoletas fuera de alcance
 
 - **Ninguna serie preseleccionada**, ni con un único resultado, ni con título exacto (`BATMAN (2025)` frente a `Batman - Saga de Scott Snyder (2019)`).

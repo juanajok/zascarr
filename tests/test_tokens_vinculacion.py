@@ -40,8 +40,8 @@ def vinc(*archivos: ArchivoFirmado, clave=CLAVE) -> VinculacionFirmada:
 
 
 def datos(**cambios) -> dict:
-    base = {"serie_id": SERIE, "operacion": OP, "archivos": [
-        {"id": str(uuid4()), "numero": "3", "formato": "single_issue", "tamano": 10, "mtime_ns": 5}]}
+    base = {"version": 2, "serie_id": SERIE, "operacion": OP, "archivos": [
+        {"id": str(uuid4()), "numero": "3", "formato": "single_issue", "tamano": 10, "mtime_ns": 5, "conflictos": []}]}
     return {**base, **cambios}
 
 
@@ -85,8 +85,8 @@ class TestFirma:
     def test_solo_lleva_los_campos_del_contrato_sin_rutas_ni_nombres_ni_hash(self):
         from zascarr.services.tokens_revision import verificar_token
         d = verificar_token(crear_token_vinculacion(vinc(), SECRETO), PROPOSITO_VINCULAR, CLAVE, SECRETO)
-        assert set(d) == {"serie_id", "operacion", "archivos"}
-        assert set(d["archivos"][0]) == {"id", "numero", "formato", "tamano", "mtime_ns"}
+        assert set(d) == {"version", "serie_id", "operacion", "archivos"}
+        assert set(d["archivos"][0]) == {"id", "numero", "formato", "tamano", "mtime_ns", "conflictos"}
 
 
 class TestEsquemaConFirmaValida:
@@ -105,11 +105,12 @@ class TestEsquemaConFirmaValida:
 
     def test_a_lo_sumo_cien_archivos(self):
         def lote(n):
-            return [{"id": str(uuid4()), "numero": "1", "formato": "single_issue", "tamano": 1, "mtime_ns": 1} for _ in range(n)]
+            return [{"id": str(uuid4()), "numero": str(i), "formato": "single_issue", "tamano": 1, "mtime_ns": 1,
+                     "conflictos": []} for i in range(n)]
         assert verificar_token_vinculacion(firmado(datos(archivos=lote(MAX_ARCHIVOS_FIRMADOS))), SECRETO) is not None
         assert verificar_token_vinculacion(firmado(datos(archivos=lote(MAX_ARCHIVOS_FIRMADOS + 1))), SECRETO) is None
 
-    @pytest.mark.parametrize("campo", ["id", "numero", "formato", "tamano", "mtime_ns"])
+    @pytest.mark.parametrize("campo", ["id", "numero", "formato", "tamano", "mtime_ns", "conflictos"])
     def test_cada_campo_del_archivo_es_obligatorio(self, campo):
         a = datos()["archivos"][0]
         a.pop(campo)
@@ -141,6 +142,64 @@ class TestEsquemaConFirmaValida:
     def test_sin_ids_repetidos(self):
         a = datos()["archivos"][0]
         assert verificar_token_vinculacion(firmado(datos(archivos=[a, dict(a)])), SECRETO) is None
+
+    @pytest.mark.parametrize(("n1", "n2"), [("5", "5"), ("5A", "5a"), ("5a", "5A"), ("Ab", "aB")])
+    def test_sin_dos_archivos_con_el_mismo_numero_sin_distinguir_mayusculas(self, n1, n2):
+        a = datos()["archivos"][0]
+        b = {**a, "id": str(uuid4()), "numero": n2}
+        a = {**a, "numero": n1}
+        assert verificar_token_vinculacion(firmado(datos(archivos=[a, b])), SECRETO) is None
+
+    def test_numeros_distintos_conservan_el_texto_presentado(self):
+        a = {**datos()["archivos"][0], "numero": "5A"}
+        b = {**a, "id": str(uuid4()), "numero": "6"}
+        v = verificar_token_vinculacion(firmado(datos(archivos=[a, b])), SECRETO)
+        assert sorted(x.numero for x in v.archivos) == ["5A", "6"]
+
+
+class TestVersionYConflictos:
+    """Ausencia de `conflictos` NO significa «ninguno»: el token es versionado y los tokens de 2c se rechazan."""
+
+    @pytest.mark.parametrize("version", [None, 1, 3, 0, "2", True, 2.0, [], {}])
+    def test_solo_la_version_2(self, version):
+        assert verificar_token_vinculacion(firmado(datos(version=version)), SECRETO) is None
+
+    def test_un_token_de_2c_sin_version_ni_conflictos_se_rechaza(self):
+        antiguo = {"serie_id": SERIE, "operacion": OP, "archivos": [
+            {"id": str(uuid4()), "numero": "3", "formato": "single_issue", "tamano": 10, "mtime_ns": 5}]}
+        assert verificar_token_vinculacion(firmado(antiguo), SECRETO) is None
+
+    def test_conflictos_vacios_son_validos_y_explicitos(self):
+        v = verificar_token_vinculacion(firmado(datos()), SECRETO)
+        assert v.archivos[0].conflictos == ()
+
+    def test_los_codigos_firmados_se_conservan(self):
+        a = {**datos()["archivos"][0], "conflictos": ["titulo_distinto", "anio_archivo"]}
+        v = verificar_token_vinculacion(firmado(datos(archivos=[a])), SECRETO)
+        assert v.archivos[0].conflictos == ("titulo_distinto", "anio_archivo")
+
+    @pytest.mark.parametrize("conflictos", [None, "x", 5, {}, [None], [5], [""], ["  "], [" x"], ["x "], ["a", "a"],
+                                           ["x" * 61], [["a"]], ["a"] * 2, [f"c{i}" for i in range(21)]])
+    def test_conflictos_mal_formados_se_rechazan(self, conflictos):
+        a = {**datos()["archivos"][0], "conflictos": conflictos}
+        assert verificar_token_vinculacion(firmado(datos(archivos=[a])), SECRETO) is None
+
+    def test_ida_y_vuelta_con_conflictos(self):
+        a = archivo(conflictos=("anio_archivo",))
+        v = verificar_token_vinculacion(crear_token_vinculacion(vinc(a), SECRETO), SECRETO)
+        assert v.archivos[0].conflictos == ("anio_archivo",)
+
+
+class TestCaducidadIgnorada:
+
+    def test_un_token_caducado_se_lee_solo_si_se_pide_y_la_firma_sigue_valiendo(self):
+        t = crear_token_vinculacion(vinc(), SECRETO, ahora=1000)
+        tarde = 1000 + TTL_SEGUNDOS + 100
+        assert verificar_token_vinculacion(t, SECRETO, ahora=tarde) is None
+        v = verificar_token_vinculacion(t, SECRETO, ahora=tarde, ignorar_caducidad=True)
+        assert v is not None and v.operacion == OP and v.caduca == 1000 + TTL_SEGUNDOS
+        assert verificar_token_vinculacion(t, "otra", ahora=tarde, ignorar_caducidad=True) is None
+        assert verificar_token_vinculacion(t[:-2] + "zz", SECRETO, ahora=tarde, ignorar_caducidad=True) is None
 
     def test_datos_que_no_son_un_objeto(self):
         for d in ([], "x", 5, None, True):
