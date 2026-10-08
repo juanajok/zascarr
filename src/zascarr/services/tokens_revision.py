@@ -22,13 +22,14 @@ import time
 from dataclasses import dataclass
 from uuid import UUID
 
-from zascarr.models import ComicTradition, MetadataSource
+from zascarr.models import ComicTradition, IssueFormat, MetadataSource
 from zascarr.services.auth import sign_token, verify_token
 from zascarr.services.discovery import CAMPO_ID_EXTERNO
 
 TTL_SEGUNDOS = 15 * 60
 PROPOSITO_CANDIDATA = "candidata"
 PROPOSITO_ALTA = "alta"
+PROPOSITO_VINCULAR = "vincular"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
 MAX_DESCRIPCION = 1000
 
@@ -235,3 +236,73 @@ def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None)
         return None
     return AltaFirmada(clave, modo, origen, fuente, id_externo, titulo, anio, tradicion, descripcion, cover,
                        serie_id, tuple(vistas), operacion, criterio, caduca)
+
+
+# ── Token de la vinculación (2c) ─────────────────────────────────────────────────────────────────
+
+MAX_ARCHIVOS_FIRMADOS = 100
+MAX_NUMERO = 20
+
+
+@dataclass(frozen=True)
+class ArchivoFirmado:
+    """Lo que la persona vio de UN archivo: es lo que la confirmación (2d) comprobará de nuevo antes de vincular.
+    `tamano` y `mtime_ns` son los de `stat` en la vista previa (no un hash: el contenido no se lee)."""
+    id: str
+    numero: str
+    formato: str
+    tamano: int
+    mtime_ns: int
+
+
+@dataclass(frozen=True)
+class VinculacionFirmada:
+    """La operación aprobada: serie, los archivos marcados Y ejecutables con su número y edición. El contexto del
+    token es la `clave` del grupo; la `series_id` va firmada dentro (las dos son inseparables del token)."""
+    clave: str
+    series_id: str
+    operacion: str
+    archivos: tuple[ArchivoFirmado, ...]
+    caduca: int = 0
+
+
+def crear_token_vinculacion(v: VinculacionFirmada, secret: str, *, ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_VINCULAR, v.clave, {
+        "serie_id": v.series_id, "operacion": v.operacion,
+        "archivos": [{"id": a.id, "numero": a.numero, "formato": a.formato, "tamano": a.tamano,
+                      "mtime_ns": a.mtime_ns} for a in sorted(v.archivos, key=lambda a: a.id)],
+    }, secret, ahora=ahora)
+
+
+def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None = None) -> VinculacionFirmada | None:
+    """La vinculación firmada, o `None`. Firma, propósito y caducidad como siempre; además el ESQUEMA (UUID
+    canónicos, formatos de la enumeración, números no vacíos, enteros no booleanos, sin ids repetidos y a lo sumo
+    `MAX_ARCHIVOS_FIRMADOS`). El contexto (la `clave`) se lee del propio token: la confirmación recibe solo el token."""
+    clave = _contexto_del_token(token, secret)
+    if clave is None:
+        return None
+    verificado = _verificar(token, PROPOSITO_VINCULAR, clave, secret, ahora=ahora)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    if not _uuid_texto(d.get("serie_id")) or not _uuid_texto(d.get("operacion")):
+        return None
+    crudos = d.get("archivos")
+    if not isinstance(crudos, list) or not crudos or len(crudos) > MAX_ARCHIVOS_FIRMADOS:
+        return None
+    formatos = {f.value for f in IssueFormat}
+    archivos: list[ArchivoFirmado] = []
+    for a in crudos:
+        if not isinstance(a, dict) or not _uuid_texto(a.get("id")):
+            return None
+        numero, formato, tamano, mtime = a.get("numero"), a.get("formato"), a.get("tamano"), a.get("mtime_ns")
+        if not (isinstance(numero, str) and numero.strip() and numero == numero.strip() and len(numero) <= MAX_NUMERO):
+            return None
+        if formato not in formatos:
+            return None
+        if any(not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in (tamano, mtime)):
+            return None
+        archivos.append(ArchivoFirmado(a["id"], numero, formato, tamano, mtime))
+    if len({a.id for a in archivos}) != len(archivos):
+        return None
+    return VinculacionFirmada(clave, d["serie_id"], d["operacion"], tuple(archivos), caduca)
