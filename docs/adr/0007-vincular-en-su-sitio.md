@@ -62,6 +62,10 @@ Si una operación `organizar` naciera después sobre el mismo archivo, su `_conf
 - **Lotes de organizar:** un informe completo **tras un reinicio** exige una relación durable lote ↔ operaciones (por ejemplo `lote_id` en `asignacion_operaciones`, con migración). Mientras no exista, **no se promete**: solo consta lo que consta por operación.
 - **Consentimiento específico:** texto propio («Se moverán *N* archivos de su carpeta actual a la de la biblioteca»), vista previa de las rutas de destino y confirmación **separada**. Límites iniciales (hipótesis, sin validar): 100 archivos y 4 GB.
 
+## Actualización (contrato de 2d, 2026-10-09)
+
+El informe de una vinculación **se persiste** en una tabla propia (`vinculacion_operaciones`, migración 0019) en la misma transacción que los vínculos, para poder devolver **el mismo resultado** —también el de los archivos omitidos y sus motivos— tras un reinicio; la procedencia por archivo no basta para reproducir un informe que también contiene fallos. Ver «Contrato técnico de 2d» en la ficha de la rebanada 2. Lo demás de este ADR (vincular en su sitio, sin tocar ficheros, sin hash ni red) no cambia.
+
 ## Consecuencias
 
 - **Bibliotecas con dos disposiciones.** Los adoptados conservan sus carpetas; las descargas nuevas que procesa el importador siguen entrando en la ruta canónica. Una serie puede quedar repartida entre su carpeta original y la canónica. No es un error; hay que **decirlo**, no ocultarlo. Kavita lee por carpetas, así que puede mostrarlo como dos series. B20 (exportación a un árbol limpio **sin tocar el origen**) sigue aparcado y es el sitio natural para ordenarlo.
