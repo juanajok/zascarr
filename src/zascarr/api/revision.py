@@ -51,9 +51,11 @@ from zascarr.services.revision_carpetas import (
     RespuestaCarpetas,
     RevisionCarpetas,
 )
+from zascarr.services.tokens_revision import MAX_CLAVE_GRUPO, MAX_TOKEN_VINCULACION
 from zascarr.services.vinculacion import (
     ConflictoDeBloqueoError,
     RespuestaEjecucion,
+    ResultadoInciertoError,
     TokenCaducadoError,
     VinculacionDeArchivos,
 )
@@ -254,7 +256,7 @@ class PeticionPrevisualizarVinculacion(BaseModel):
     """El grupo, la serie elegida y las modificaciones EXPLÍCITAS de la persona. Nada viene marcado por defecto."""
     model_config = ConfigDict(extra="forbid")
 
-    clave: str = Field(..., min_length=1, max_length=1000)
+    clave: str = Field(..., min_length=1, max_length=MAX_CLAVE_GRUPO)
     series_id: UUID
     #: id de archivo → número editado (vacío: quitarlo). Lo que no esté aquí usa el número del nombre.
     numeros: dict[UUID, str] = Field(default_factory=dict, max_length=1000)
@@ -297,10 +299,11 @@ async def previsualizar_vinculacion(
 # ── 2d: vincular en su sitio ──────────────────────────────────────────────────────────────────
 
 class PeticionVincular(BaseModel):
-    """La confirmación recibe SOLO el token: ni números, ni selección, ni serie."""
+    """La confirmación recibe SOLO el token: ni números, ni selección, ni serie. Su tamaño máximo es el del mayor
+    token que la vista previa puede emitir (100 archivos, conflictos y clave incluidos): se calcula, no se elige."""
     model_config = ConfigDict(extra="forbid")
 
-    token: str = Field(..., min_length=1, max_length=20000)
+    token: str = Field(..., min_length=1, max_length=MAX_TOKEN_VINCULACION)
 
 
 @router.post("/vinculacion", response_model=RespuestaEjecucion, response_model_by_alias=True)
@@ -322,6 +325,12 @@ async def vincular(
     except ConflictoDeBloqueoError as e:
         raise HTTPException(status_code=503, headers={"Retry-After": "1"},
                             detail={"codigo": e.codigo, "mensaje": str(e)}) from None
+    except ResultadoInciertoError as e:
+        # Falló DESPUÉS de pedir el commit: no se afirma que no haya cambios. Repetir el token lo aclara.
+        raise HTTPException(
+            status_code=503, headers={"Retry-After": "1"},
+            detail={"codigo": e.codigo, "mensaje": "No se pudo confirmar si se aplicó. Repite la confirmación con el "
+                    "mismo token: si ya se aplicó, verás el mismo informe; si no, se aplicará."}) from None
     except HTTPException:
         raise
     except Exception as e:
