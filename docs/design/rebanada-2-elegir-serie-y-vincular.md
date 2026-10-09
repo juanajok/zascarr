@@ -384,6 +384,24 @@ Mismos campos que `AsignacionService._confirmar` **menos la ruta**: `locked_fiel
 - **Declara límites:** tamaño y `mtime_ns` no prueban el contenido; entre el `stat` y el `commit` el fichero puede cambiar; tras purgar no se reconstruye el informe; el informe guarda ids, no nombres.
 - **A revisar:** (a) el disparador `BEFORE UPDATE` de la 0019 (función y bajada coherentes, estilo de la 0006); (b) `numero_ambiguo` como motivo previsto nuevo; (c) la clave del candado de número ignora mayúsculas.
 
+#### Implementación 2d: lo que se implementó y lo que se observó
+
+Implementado tal como fija el contrato: `POST /api/revision/vinculacion` `{token}` (`services/vinculacion.py`), migración **0019** (`vinculacion_operaciones` con el disparador `BEFORE UPDATE` que rechaza todo `UPDATE`), token de vinculación **v2** emitido por la vista previa (con `conflictos` explícitos por archivo), y la vista previa alineada con la misma equivalencia de números (sin distinguir mayúsculas) y el impedimento `numero_ambiguo`. Sin alias, sin desvincular, sin contenido, hash ni red; `file_path` y `file_name` no cambian.
+
+| Punto | Precisión de la implementación |
+|---|---|
+| **«Resultado idéntico»** | Se comprueba como **igualdad del documento JSON persistido** (forma canónica), **no** como identidad de bytes de la respuesta HTTP (el serializador puede variar orden o formato). `presentacion` queda fuera del resultado |
+| **Una sola equivalencia de números** | `clave_de_numero` (recortar y pasar a minúsculas) se usa en: duplicados del token, clave y orden de los candados, búsqueda del `Issue` (`lower(issue_number)`), ocupación y la vista previa. El texto presentado se conserva (`5A` se crea como `5A`). Probado: `5A` y `5a` no permiten un doble vínculo |
+| **`numero_ambiguo`** | Impedimento previsto: si hay **varios** `Issue` para la clave (volúmenes distintos o `volume` NULL), el archivo se omite, se registra el motivo y **no se modifica ninguno ni se elige volumen** |
+| **Comprobación de la serie** | Solo la de `FOR SHARE` (la consulta previa sin bloqueo era redundante y se retiró) |
+| **Bajada de la 0019** | Retira, en orden, disparador, función y tabla (el índice se va con ella); se niega con informes de token vigente (`ACCESS EXCLUSIVE` antes de contar) |
+
+**La respuesta se prepara ANTES del commit.** El informe, la presentación (`nombres_actuales`) y la respuesta entera se construyen y validan **antes** de `COMMIT`; el commit es lo último que se hace. Un fallo al leer los nombres o al construir la respuesta todavía **revierte todo** (y «no se ha cambiado nada» es entonces verdad: cero vínculos, cero `Issue`s, cero informe; se prueba). Desde que se pide el commit, un fallo **ya no puede afirmar eso**: se responde **`503 resultado_incierto`** («no se pudo confirmar si se aplicó; repite la confirmación con el mismo token»), con `Retry-After`, y repetir el token devuelve el informe persistido si se aplicó o lo aplica si no. Una cancelación no se convierte en resultado incierto.
+
+**Límite del cuerpo.** El token que acepta `POST /api/revision/vinculacion` mide como mucho **`MAX_TOKEN_VINCULACION`** caracteres: **calculado, no elegido** (100 archivos, número de 20 caracteres, la edición de nombre más largo, tamaño y mtime de 63 bits, todos los códigos de señal como conflicto y una `clave` de 1000 caracteres de 4 bytes: **56.021**). El límite anterior de 20.000 rechazaba con `422` tokens legítimos (el caso de 100 archivos con números 1–100 y 100 MB mide 20.445). Una prueba recalcula el peor caso con un token emitido de verdad y comprueba que los códigos coinciden con los del código fuente de las señales; otra recorre `100 archivos → vista previa → token → POST` con conflictos, números de 20 caracteres y una clave larga.
+
+**Tres sesiones, observado (no forzado).** Con S2 (organizar) reteniendo el archivo, S1 (vincular) tomando la serie `FOR SHARE` y esperando al archivo, y S3 (deshacer) esperando la serie `FOR UPDATE`: el `INSERT` de un `Issue` de S2 (necesita `KEY SHARE` de la serie) **no se bloqueó** tras el `FOR UPDATE` en cola (0,01 s); S2 confirmó, S1 omitió el archivo como `ya_vinculado_a_otro`, y S3 se negó con `tiene_archivos`/`tiene_numeros`. No apareció ningún interbloqueo en ese escenario. **Interbloqueo provocado** (dos sesiones con archivos en orden inverso): Postgres elige la víctima —en la práctica, la sesión que lleva más esperando— y **eso no es una propiedad garantizada del servicio**. La prueba de integración lo **observa** y comprueba la integridad en cualquier caso; la respuesta `503 conflicto_de_bloqueo` con `Retry-After`, el rollback completo y la ausencia de informe se demuestran **de forma determinista** inyectando un `40P01`.
+
 ## E. Conflictos sin preselección; duplicados y obsoletas fuera de alcance
 
 - **Ninguna serie preseleccionada**, ni con un único resultado, ni con título exacto (`BATMAN (2025)` frente a `Batman - Saga de Scott Snyder (2019)`).

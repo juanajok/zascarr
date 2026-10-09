@@ -511,6 +511,24 @@ class AltaOperacion(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class VinculacionOperacion(Base):
+    """Informe INMUTABLE de una vinculación en su sitio (rebanada 2d, migración 0019).
+
+    Se escribe una sola vez, en la misma transacción que los vínculos (un disparador de la
+    migración rechaza todo `UPDATE`). **No es un historial de auditoría**: sirve para devolver
+    el mismo resultado ante un reintento, también tras un reinicio, y se purga pasadas 24 h
+    **y** caducado el token. Sin token, sesión, rutas, nombres ni hash. `series_id` no es
+    clave foránea: borrar la serie no borra el informe."""
+    __tablename__ = "vinculacion_operaciones"
+    __table_args__ = (Index("ix_vinculacion_operaciones_purga", "creada"),)
+    operacion_id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    series_id: Mapped[str] = mapped_column(UUID(as_uuid=True), nullable=False)
+    resultado: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    token_hasta: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    creada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Wishlist(Base):
     __tablename__ = "wishlist"
     __table_args__ = (CheckConstraint("series_id IS NOT NULL OR issue_id IS NOT NULL", name="wishlist_target_check"),)

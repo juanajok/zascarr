@@ -47,8 +47,10 @@ def crear_token(proposito: str, contexto: str, datos: dict, secret: str, *,
 
 
 def _verificar(token: str, proposito: str, contexto: str, secret: str, *,
-               ahora: float | None = None) -> tuple[dict, int] | None:
-    """(datos, caducidad) de un token válido, o `None`. Nunca lanza con un token ausente o malformado."""
+               ahora: float | None = None, ignorar_caducidad: bool = False) -> tuple[dict, int] | None:
+    """(datos, caducidad) de un token válido, o `None`. Nunca lanza con un token ausente o malformado.
+    `ignorar_caducidad` solo sirve para LEER la operación de un token ya caducado (reproducir un informe
+    guardado); la firma, el propósito y el contexto se comprueban igual."""
     if not token or not secret or not isinstance(token, str):
         return None
     crudo = verify_token(token, secret)
@@ -62,7 +64,7 @@ def _verificar(token: str, proposito: str, contexto: str, secret: str, *,
         return None
     caduca = payload.get("exp")
     ahora_ = time.time() if ahora is None else ahora
-    if not isinstance(caduca, int) or isinstance(caduca, bool) or caduca < ahora_:
+    if not isinstance(caduca, int) or isinstance(caduca, bool) or (caduca < ahora_ and not ignorar_caducidad):
         return None
     datos = payload.get("d")
     return (datos, caduca) if isinstance(datos, dict) else None
@@ -253,6 +255,8 @@ class ArchivoFirmado:
     formato: str
     tamano: int
     mtime_ns: int
+    #: Códigos de las señales de severidad «conflicto» que la persona VIO al marcar este archivo. `()` = ninguno.
+    conflictos: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -266,25 +270,44 @@ class VinculacionFirmada:
     caduca: int = 0
 
 
+#: Versión del esquema del token de vinculación. La 2 añade `conflictos` OBLIGATORIO por archivo: la ausencia del
+#: campo no significa «ninguno», así que los tokens anteriores (2c) se rechazan y exigen una vista previa nueva.
+VERSION_TOKEN_VINCULAR = 2
+MAX_CONFLICTOS = 20
+MAX_CODIGO = 60
+
+
+def clave_de_numero(numero: str) -> str:
+    """UNA sola equivalencia de números en toda la operación (duplicados del token, claves y orden de candados,
+    búsqueda de `Issue` y ocupación): sin distinguir mayúsculas. El texto presentado no cambia."""
+    return numero.strip().lower()
+
+
 def crear_token_vinculacion(v: VinculacionFirmada, secret: str, *, ahora: float | None = None) -> str:
     return crear_token(PROPOSITO_VINCULAR, v.clave, {
-        "serie_id": v.series_id, "operacion": v.operacion,
+        "version": VERSION_TOKEN_VINCULAR, "serie_id": v.series_id, "operacion": v.operacion,
         "archivos": [{"id": a.id, "numero": a.numero, "formato": a.formato, "tamano": a.tamano,
-                      "mtime_ns": a.mtime_ns} for a in sorted(v.archivos, key=lambda a: a.id)],
+                      "mtime_ns": a.mtime_ns, "conflictos": sorted(a.conflictos)}
+                     for a in sorted(v.archivos, key=lambda a: a.id)],
     }, secret, ahora=ahora)
 
 
-def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None = None) -> VinculacionFirmada | None:
+def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None = None,
+                                ignorar_caducidad: bool = False) -> VinculacionFirmada | None:
     """La vinculación firmada, o `None`. Firma, propósito y caducidad como siempre; además el ESQUEMA (UUID
     canónicos, formatos de la enumeración, números no vacíos, enteros no booleanos, sin ids repetidos y a lo sumo
-    `MAX_ARCHIVOS_FIRMADOS`). El contexto (la `clave`) se lee del propio token: la confirmación recibe solo el token."""
+    `MAX_ARCHIVOS_FIRMADOS`; sin números repetidos, sin distinguir mayúsculas; `version` 2 y `conflictos` explícitos
+    por archivo). El contexto (la `clave`) se lee del propio token: la confirmación recibe solo el token."""
     clave = _contexto_del_token(token, secret)
     if clave is None:
         return None
-    verificado = _verificar(token, PROPOSITO_VINCULAR, clave, secret, ahora=ahora)
+    verificado = _verificar(token, PROPOSITO_VINCULAR, clave, secret, ahora=ahora, ignorar_caducidad=ignorar_caducidad)
     if verificado is None:
         return None
     d, caduca = verificado
+    version = d.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != VERSION_TOKEN_VINCULAR:
+        return None
     if not _uuid_texto(d.get("serie_id")) or not _uuid_texto(d.get("operacion")):
         return None
     crudos = d.get("archivos")
@@ -302,7 +325,53 @@ def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None 
             return None
         if any(not isinstance(v, int) or isinstance(v, bool) or v < 0 for v in (tamano, mtime)):
             return None
-        archivos.append(ArchivoFirmado(a["id"], numero, formato, tamano, mtime))
+        conflictos = a.get("conflictos")
+        if (not isinstance(conflictos, list) or len(conflictos) > MAX_CONFLICTOS
+                or not all(isinstance(c, str) and c.strip() and c == c.strip() and len(c) <= MAX_CODIGO
+                           for c in conflictos) or len(set(conflictos)) != len(conflictos)):
+            return None
+        archivos.append(ArchivoFirmado(a["id"], numero, formato, tamano, mtime, tuple(conflictos)))
     if len({a.id for a in archivos}) != len(archivos):
         return None
+    if len({clave_de_numero(a.numero) for a in archivos}) != len(archivos):      # dos archivos, un mismo número
+        return None
     return VinculacionFirmada(clave, d["serie_id"], d["operacion"], tuple(archivos), caduca)
+
+
+# ── Tamaño máximo del token de vinculación ───────────────────────────────────────────────────────
+
+#: Longitud máxima de la `clave` de un grupo que acepta la vista previa (`max_length` de su petición).
+MAX_CLAVE_GRUPO = 1000
+#: Los códigos que la vista previa PUEDE firmar como conflicto (los de `RevisionCarpetas._senales`). Una prueba
+#: comprueba que coinciden con los del código fuente: si se añade uno nuevo, el límite se recalcula solo.
+CODIGOS_DE_SENAL = (
+    "anio_discrepa", "calificador_de_carpeta", "candidatas_distintas", "titulo_distinto",
+    "titulo_exacto_sin_corroboracion", "carpeta_de_autor_o_contenedor", "coincide_y_corrobora",
+    "sin_contexto_de_carpeta",
+)
+
+
+#: Instante usado al calcular el peor caso: una época de 11 dígitos (hasta el año 2286 bastan 10): la caducidad del
+#: token (`exp`) no puede hacerlo más largo.
+EPOCA_DEL_PEOR_CASO = 10**10
+
+
+def _longitud_peor_caso_del_token_de_vinculacion() -> int:
+    """La longitud del MAYOR token que la vista previa puede emitir (calculada, no elegida): 100 archivos, cada uno
+    con número de 20 caracteres, la edición de nombre más largo, tamaño y mtime de 63 bits y TODOS los códigos de
+    señal como conflicto, en un grupo cuya `clave` tiene 1000 caracteres de 4 bytes en UTF-8. El mismo cálculo se
+    repite en las pruebas con un token emitido de verdad."""
+    ident = "00000000-0000-4000-8000-000000000000"
+    formato = max((f.value for f in IssueFormat), key=len)
+    grande = 2**63 - 1
+    archivos = tuple(
+        ArchivoFirmado(f"{i:08d}-0000-4000-8000-000000000000", "9" * MAX_NUMERO, formato, grande, grande, CODIGOS_DE_SENAL)
+        for i in range(MAX_ARCHIVOS_FIRMADOS))
+    token = crear_token_vinculacion(
+        VinculacionFirmada("\U0001F600" * MAX_CLAVE_GRUPO, ident, ident, archivos), "x" * 32,
+        ahora=EPOCA_DEL_PEOR_CASO)
+    return len(token)
+
+
+#: El límite del cuerpo de `POST /api/revision/vinculacion`: acotado, y IGUAL al peor caso emitible.
+MAX_TOKEN_VINCULACION = _longitud_peor_caso_del_token_de_vinculacion()
