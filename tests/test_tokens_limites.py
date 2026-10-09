@@ -18,6 +18,7 @@ Aquí se prueba, con las funciones REALES de serialización, codificación y fir
 """
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
 import pytest
@@ -28,11 +29,12 @@ from zascarr.api.revision import (
     PeticionPrevisualizarAlta,
     PeticionVincular,
 )
-from zascarr.models import ComicTradition, MetadataSource
+from zascarr.models import ComicTradition
 from zascarr.services.discovery import CAMPO_ID_EXTERNO
 from zascarr.services.tokens_revision import (
     ANIO_MAX_FIRMABLE,
     ANIO_MIN_FIRMABLE,
+    CARACTER_MAS_PESADO_DE_UNA_CLAVE,
     EPOCA_DEL_PEOR_CASO,
     MAX_CLAVE_GRUPO,
     MAX_COVER_URL,
@@ -72,19 +74,24 @@ CLASES = [
 ]
 
 
+#: La clave de grupo más pesada: 1000 controles de seis bytes (ver `CARACTER_MAS_PESADO_DE_UNA_CLAVE`).
+CLAVE_PESADA = CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO
+
+
 def peor_candidata(ch: str, *, anio: int | None = ANIO_MIN_FIRMABLE) -> CandidataFirmada:
-    fuente = max((m.value for m in MetadataSource), key=len)
+    fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)      # las fuentes que el servidor emite
     tradicion = max((t.value for t in ComicTradition), key=len)
     return CandidataFirmada(fuente, ch * MAX_ID_EXTERNO, ch * MAX_TITULO, anio, tradicion,
                             ch * MAX_DESCRIPCION, ch * MAX_COVER_URL)
 
 
-def peor_alta(ch: str, *, modo: str = "crear", anio: int | None = ANIO_MIN_FIRMABLE) -> AltaFirmada:
+def peor_alta(ch: str, *, modo: str = "crear", anio: int | None = ANIO_MIN_FIRMABLE,
+              clave: str = CLAVE_PESADA) -> AltaFirmada:
     fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
     tradicion = max((t.value for t in ComicTradition), key=len)
     vistas = tuple(str(uuid4()) for _ in range(MAX_PARECIDAS_FIRMADAS)) if modo == "crear" else ()
     return AltaFirmada(
-        clave=ch * MAX_CLAVE_GRUPO, modo=modo, origen="descubrir", fuente=fuente, id_externo=ch * MAX_ID_EXTERNO,
+        clave=clave, modo=modo, origen="descubrir", fuente=fuente, id_externo=ch * MAX_ID_EXTERNO,
         titulo=ch * MAX_TITULO, anio=anio, tradicion=tradicion, descripcion=ch * MAX_DESCRIPCION,
         cover_url=ch * MAX_COVER_URL, serie_id=None if modo == "crear" else OP,
         vistas=vistas, operacion=OP, criterio=None if modo == "crear" else "identificador")
@@ -102,14 +109,47 @@ def maximo_de_campo(modelo, campo: str) -> int | None:
     return next((m.max_length for m in modelo.model_fields[campo].metadata if hasattr(m, "max_length")), None)
 
 
+def peso_json(o: int) -> int:
+    """Bytes que ocupa un carácter dentro de un texto JSON escrito como lo hace `crear_token` (UTF-8, sin ASCII forzado)."""
+    return len(json.dumps(chr(o), ensure_ascii=False).encode()) - 2
+
+
+# ── 0. Cuánto pesa cada carácter (la base del cálculo) ───────────────────────────────────────────
+
+class TestPesoDeLosCaracteres:
+    """El máximo se calcula suponiendo cuatro bytes por carácter en los textos y seis en la clave. Aquí se comprueba
+    esa suposición sobre TODOS los puntos de código, con el serializador real, en vez de darla por buena."""
+
+    PUNTOS = [o for o in range(0x110000) if not 0xD800 <= o <= 0xDFFF]
+
+    def test_ningun_caracter_firmable_pesa_mas_de_cuatro_bytes(self):
+        assert max(peso_json(o) for o in self.PUNTOS if texto_firmable(chr(o))) == 4
+
+    def test_los_unicos_que_pesan_seis_son_controles_que_el_texto_firmable_excluye(self):
+        seis = [o for o in self.PUNTOS if peso_json(o) == 6]
+        assert seis and all(o < 0x20 for o in seis)
+        assert {o for o in range(0x20) if chr(o) not in "\b\t\n\f\r"} == set(seis)      # el resto se escapa con 2
+        assert not any(texto_firmable(chr(o)) for o in seis)
+
+    def test_la_clave_se_calcula_con_el_caracter_mas_pesado_que_puede_tener(self):
+        """El NUL (que Postgres no guarda) también pesa seis; ningún otro carácter posible pesa más."""
+        assert peso_json(ord(CARACTER_MAS_PESADO_DE_UNA_CLAVE)) == max(peso_json(o) for o in self.PUNTOS) == 6
+
+    def test_una_clave_de_controles_es_mas_larga_que_una_de_cuatro_bytes(self):
+        """La hipótesis de «cuatro bytes» no valía para la clave: con controles el token crece más de 2.600 caracteres."""
+        con_emoji = len(firmada_candidata(peor_candidata(EMOJI), EMOJI * MAX_CLAVE_GRUPO))
+        con_controles = len(firmada_candidata(peor_candidata(EMOJI), CLAVE_PESADA))
+        assert con_controles - con_emoji > 2600
+
+
 # ── 1. Los máximos son el peor caso emitible ──────────────────────────────────────────────────────
 
 class TestMaximosCalculados:
 
     def test_el_maximo_de_candidata_es_la_longitud_del_mayor_token_emitible(self):
-        peor = firmada_candidata(peor_candidata(EMOJI), EMOJI * MAX_CLAVE_GRUPO)
+        peor = firmada_candidata(peor_candidata(EMOJI), CLAVE_PESADA)
         assert len(peor) == MAX_TOKEN_CANDIDATA
-        assert verificar_token_candidata(peor, EMOJI * MAX_CLAVE_GRUPO, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None
+        assert verificar_token_candidata(peor, CLAVE_PESADA, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None
 
     def test_el_maximo_de_alta_es_la_longitud_del_mayor_token_emitible(self):
         peor = firmada_alta(peor_alta(EMOJI))
@@ -117,11 +157,17 @@ class TestMaximosCalculados:
         assert verificar_token_alta(peor, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None
 
     @pytest.mark.parametrize("ch", CLASES)
-    def test_ninguna_clase_de_caracter_supera_el_maximo_de_candidata(self, ch):
-        t = firmada_candidata(peor_candidata(ch), ch * MAX_CLAVE_GRUPO)
+    def test_ninguna_clase_de_caracter_en_los_textos_supera_el_maximo_de_candidata(self, ch):
+        t = firmada_candidata(peor_candidata(ch), CLAVE_PESADA)
         assert len(t) <= MAX_TOKEN_CANDIDATA
         if ch.strip():           # un título en blanco no es válido: de «\n» solo importa el tamaño
-            assert verificar_token_candidata(t, ch * MAX_CLAVE_GRUPO, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None
+            assert verificar_token_candidata(t, CLAVE_PESADA, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None
+
+    @pytest.mark.parametrize("ch", CLASES + [pytest.param("\x01", id="control_6_bytes"), pytest.param("/", id="barra_de_ruta")])
+    def test_ninguna_clase_de_caracter_en_la_clave_supera_el_maximo(self, ch):
+        clave = ch * MAX_CLAVE_GRUPO
+        assert len(firmada_candidata(peor_candidata(EMOJI), clave)) <= MAX_TOKEN_CANDIDATA
+        assert len(firmada_alta(peor_alta(EMOJI, clave=clave))) <= MAX_TOKEN_ALTA
 
     @pytest.mark.parametrize("ch", CLASES)
     @pytest.mark.parametrize("modo", ["crear", "reutilizar"])
@@ -131,25 +177,26 @@ class TestMaximosCalculados:
         if ch.strip():
             assert verificar_token_alta(t, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None
 
-    def test_el_emoji_es_la_clase_mas_pesada_y_alcanza_el_maximo(self):
+    def test_el_emoji_es_la_clase_mas_pesada_de_los_textos_y_alcanza_el_maximo(self):
         """Si alguna clase pesara más, el máximo estaría mal calculado; la que lo fija es la de 4 bytes."""
-        tamanos = {ch: len(firmada_candidata(peor_candidata(ch), ch * MAX_CLAVE_GRUPO))
+        tamanos = {ch: len(firmada_candidata(peor_candidata(ch), CLAVE_PESADA))
                    for ch in ("a", '"', "\\", "\n", "é", "漢", EMOJI)}
         assert max(tamanos, key=tamanos.get) == EMOJI and tamanos[EMOJI] == MAX_TOKEN_CANDIDATA
 
     @pytest.mark.parametrize("anio", [None, 1, 1987, 2100, ANIO_MIN_FIRMABLE, ANIO_MAX_FIRMABLE])
     def test_el_anio_no_supera_el_maximo(self, anio):
-        assert len(firmada_candidata(peor_candidata(EMOJI, anio=anio), EMOJI * MAX_CLAVE_GRUPO)) <= MAX_TOKEN_CANDIDATA
+        assert len(firmada_candidata(peor_candidata(EMOJI, anio=anio), CLAVE_PESADA)) <= MAX_TOKEN_CANDIDATA
         assert len(firmada_alta(peor_alta(EMOJI, anio=anio))) <= MAX_TOKEN_ALTA
 
     def test_un_alta_que_reutiliza_pesa_menos_que_la_que_crea_con_todas_sus_vistas(self):
         assert len(firmada_alta(peor_alta(EMOJI, modo="reutilizar"))) < len(firmada_alta(peor_alta(EMOJI)))
 
     def test_los_maximos_medidos(self):
-        """Los números de esta medición (cotas de campo actuales). Si cambia una cota, estos valores se recalculan
-        — no se editan a mano — y la prueba anterior comprueba que siguen siendo el peor caso. Las cifras que se
-        estimaron antes a mano (4.625 / 5.889 y 14.625 / 15.889) no eran estos máximos."""
-        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (17649, 23013)
+        """Los números de esta medición (cotas de campo actuales, clave de 1000 controles). Si cambia una cota, estos
+        valores se recalculan — no se editan a mano — y las pruebas anteriores comprueban que siguen siendo el peor
+        caso. Las cifras estimadas antes a mano (4.625 / 5.889 y 14.625 / 15.889) no eran estos máximos, y el primer
+        cálculo de esta corrección (17.649 / 23.013) suponía una clave de cuatro bytes por carácter: era menor."""
+        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20313, 25681)
 
 
 # ── 2. El límite antiguo rechazaba un token legítimo (el problema) ────────────────────────────────

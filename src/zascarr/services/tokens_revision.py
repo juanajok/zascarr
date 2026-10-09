@@ -450,19 +450,30 @@ MAX_TOKEN_VINCULACION = _longitud_peor_caso_del_token_de_vinculacion()
 
 # ── Tamaño máximo de los tokens de candidata y alta ──────────────────────────────────────────────
 
+#: El carácter que más pesa en el JSON del token **dentro de la `clave` del grupo**. La clave es la ruta de la carpeta
+#: tal como está en `files.file_path` (`"/".join` de los nombres de carpeta, sin tocar: identifica al grupo y debe
+#: conservar su significado), y un nombre de carpeta de Linux puede llevar cualquier byte salvo `/` y NUL, es decir,
+#: controles. `json.dumps(..., ensure_ascii=False)` escribe los controles como `\u00XX`: **seis bytes**, más que los
+#: cuatro de cualquier carácter UTF-8 (una prueba lo comprueba sobre todos los puntos de código). Los demás textos del
+#: token pasan por `texto_firmable` y no pueden llevar esos controles. El NUL no puede estar: Postgres no lo guarda.
+CARACTER_MAS_PESADO_DE_UNA_CLAVE = "\x01"
+
+
 def _longitud_peor_caso_del_token_de_candidata() -> int:
     """La longitud del MAYOR token de candidata que el servidor puede emitir y el verificador acepta (calculada, no
     elegida): cada texto en su cota y de caracteres de 4 bytes en UTF-8 (el máximo de cualquier texto firmable: el
     JSON se escribe con `ensure_ascii=False`, así que cada carácter pesa lo que su UTF-8; las comillas, las barras y
-    los saltos de línea pesan dos), año de seis caracteres (`-32768`), la fuente y la tradición más largas, y una
-    `clave` de grupo de 1000 caracteres de 4 bytes. Sale de `crear_token_candidata`, es decir, de la serialización,
-    la codificación y la firma reales."""
+    los saltos de línea pesan dos), año de seis caracteres (`-32768`), la tradición más larga, una de las fuentes que
+    el servidor emite (`CAMPO_ID_EXTERNO`: son las únicas que el alta puede procesar) y una `clave` de grupo de 1000
+    controles de seis bytes. Sale de `crear_token_candidata`, es decir, de la serialización, la codificación y la
+    firma reales."""
     ch = "\U0001F600"
-    fuente = max((m.value for m in MetadataSource), key=len)
+    fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
     tradicion = max((t.value for t in ComicTradition), key=len)
     c = CandidataFirmada(fuente, ch * MAX_ID_EXTERNO, ch * MAX_TITULO, ANIO_MIN_FIRMABLE, tradicion,
                          ch * MAX_DESCRIPCION, ch * MAX_COVER_URL)
-    return len(crear_token_candidata(ch * MAX_CLAVE_GRUPO, c, "x" * 32, ahora=EPOCA_DEL_PEOR_CASO))
+    return len(crear_token_candidata(CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, c, "x" * 32,
+                                     ahora=EPOCA_DEL_PEOR_CASO))
 
 
 def _longitud_peor_caso_del_token_de_alta() -> int:
@@ -472,8 +483,8 @@ def _longitud_peor_caso_del_token_de_alta() -> int:
     ident = "00000000-0000-4000-8000-000000000000"
     fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
     tradicion = max((t.value for t in ComicTradition), key=len)
-    comunes = dict(clave=ch * MAX_CLAVE_GRUPO, origen="descubrir", fuente=fuente, id_externo=ch * MAX_ID_EXTERNO,
-                   titulo=ch * MAX_TITULO, anio=ANIO_MIN_FIRMABLE, tradicion=tradicion,
+    comunes = dict(clave=CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, origen="descubrir", fuente=fuente,
+                   id_externo=ch * MAX_ID_EXTERNO, titulo=ch * MAX_TITULO, anio=ANIO_MIN_FIRMABLE, tradicion=tradicion,
                    descripcion=ch * MAX_DESCRIPCION, cover_url=ch * MAX_COVER_URL, operacion=ident)
     vistas = tuple(f"{i:08d}-0000-4000-8000-000000000000" for i in range(MAX_PARECIDAS_FIRMADAS))
     crea = AltaFirmada(modo="crear", serie_id=None, vistas=vistas, **comunes)

@@ -31,7 +31,12 @@ from zascarr.services.discovery import (
     DiscoveryService,
 )
 from zascarr.services.revision_carpetas import RevisionCarpetas, Senal, senales_contra_serie
-from zascarr.services.tokens_revision import candidata_firmable, crear_token_candidata
+from zascarr.services.tokens_revision import (
+    CandidataFirmada,
+    candidata_firmable,
+    crear_token_candidata,
+    texto_firmable,
+)
 from zascarr.utils.url_portada import es_url_de_portada_permitida
 
 MAX_DESCRIPCION_VISTA = 300
@@ -94,6 +99,14 @@ class RespuestaDescubrir(BaseModel):
 
 
 @dataclass
+class _Preparado:
+    """Un resultado de una fuente ya depurado: `firmable` es lo que se firma, se consulta y se muestra."""
+    resultado: DiscoveryResult
+    firmable: CandidataFirmada
+    sitio_url: str | None
+
+
+@dataclass
 class _Locales:
     por_id: dict[tuple[str, str], Series]
     por_titulo: dict[str, list[Series]]
@@ -128,14 +141,11 @@ class DescubrimientoDeGrupo:
             raise ConsultaVaciaError()
 
         busqueda = await self._descubridor.search_detallada(usada)
-        resultados = self._ordenar(busqueda)
-        locales = await self._buscar_locales(resultados)
-
-        candidatas = [self._candidata(clave, r, locales, carpeta, archivos, bool(div.contextual))
-                      for r in resultados]
-        # Un resultado que no se puede dar de alta (título o identificador que no caben en lo que se guarda, o con
-        # caracteres no firmables) no se ofrece: su token no tendría un tamaño máximo conocido. Se avisa, no se calla.
-        omitidas = sum(1 for c in candidatas if c is None)
+        # Primero se PREPARA cada resultado (lo que se firmará, se mostrará y se usará en las consultas), y solo después
+        # se consulta la base: un resultado que no se puede dar de alta (título o identificador que no caben en lo que se
+        # guarda, o con caracteres no firmables) no llega a ninguna consulta, ni a la BD ni al token. Se avisa, no se calla.
+        preparados, omitidas = self._preparar(self._ordenar(busqueda))
+        locales = await self._buscar_locales(preparados)
         avisos = list(busqueda.avisos)
         if omitidas:
             avisos.append(f"Se han omitido {omitidas} resultado(s) cuyo título o identificador no se puede guardar "
@@ -144,7 +154,8 @@ class DescubrimientoDeGrupo:
             consulta=usada, consulta_propuesta=propuesta,
             grupo=GrupoResumen(clave=clave, carpeta_contextual=div.contextual, n_archivos=len(archivos)),
             fuentes=busqueda.fuentes, avisos=avisos,
-            candidatas=[c for c in candidatas if c is not None],
+            candidatas=[self._candidata(clave, p, locales, carpeta, archivos, bool(div.contextual))
+                        for p in preparados],
         )
 
     # ── Piezas ─────────────────────────────────────────────────────────────────────────────────
@@ -163,19 +174,35 @@ class DescubrimientoDeGrupo:
         orden = {f: i for i, f in enumerate(ORDEN_DE_FUENTES)}
         return sorted(b.resultados, key=lambda r: (orden.get(r.source, 99), r.title.casefold(), r.external_id))
 
-    async def _buscar_locales(self, resultados: list[DiscoveryResult]) -> _Locales:
+    @staticmethod
+    def _preparar(resultados: list[DiscoveryResult]) -> tuple[list[_Preparado], int]:
+        """(resultados utilizables, cuántos se omitieron). La portada solo sale si cumple la política de H1 (y por el
+        proxy con lista blanca, nunca `src` externo); la URL de la ficha se muestra solo si es texto firmable."""
+        preparados: list[_Preparado] = []
+        for r in resultados:
+            portada_ok = bool(r.cover_url) and es_url_de_portada_permitida(r.cover_url or "")
+            firmable = candidata_firmable(
+                r.source.value, r.external_id, r.title, r.start_year, r.tradition_guess.value, r.description,
+                r.cover_url if portada_ok else None)
+            if firmable is None:
+                continue
+            sitio = r.site_url if r.site_url is None or texto_firmable(r.site_url) else None
+            preparados.append(_Preparado(r, firmable, sitio))
+        return preparados, len(resultados) - len(preparados)
+
+    async def _buscar_locales(self, preparados: list[_Preparado]) -> _Locales:
         """Dos consultas, vengan 3 resultados o 40: por identificador externo y por título normalizado."""
         ids: dict[str, set] = {}
-        for r in resultados:
-            campo = CAMPO_ID_EXTERNO.get(r.source)
+        for p in preparados:
+            campo = CAMPO_ID_EXTERNO.get(p.resultado.source)
             if campo is None:
                 continue
             valor: int | str | None
             if campo in CAMPOS_ID_DE_TEXTO:
-                valor = r.external_id
+                valor = p.firmable.id_externo
             else:
                 try:
-                    valor = int(r.external_id)
+                    valor = int(p.firmable.id_externo)
                 except ValueError:
                     valor = None
             if valor is not None:
@@ -190,37 +217,31 @@ class DescubrimientoDeGrupo:
                     if v is not None:
                         por_id[(campo, str(v))] = s
 
-        normas = {n for r in resultados if (n := normalize_title(r.title))}
+        normas = {n for p in preparados if (n := normalize_title(p.firmable.titulo))}
         por_titulo: dict[str, list[Series]] = {}
         if normas:
             for s in (await self._db.execute(select(Series).where(Series.title_norm.in_(normas)))).scalars().all():
                 por_titulo.setdefault(s.title_norm or "", []).append(s)
         return _Locales(por_id, por_titulo)
 
-    def _candidata(self, clave: str, r: DiscoveryResult, locales: _Locales, carpeta, archivos,
-                   tiene_contexto: bool) -> Candidata | None:
-        # La portada solo sale si cumple la política de H1 (y por el proxy con lista blanca, nunca `src` externo).
-        portada_ok = bool(r.cover_url) and es_url_de_portada_permitida(r.cover_url or "")
-        firmable = candidata_firmable(
-            r.source.value, r.external_id, r.title, r.start_year, r.tradition_guess.value, r.description,
-            r.cover_url if portada_ok else None)
-        if firmable is None:
-            return None
+    def _candidata(self, clave: str, p: _Preparado, locales: _Locales, carpeta, archivos,
+                   tiene_contexto: bool) -> Candidata:
+        r, firmable = p.resultado, p.firmable
         campo = CAMPO_ID_EXTERNO.get(r.source)
-        ya = locales.por_id.get((campo, str(r.external_id))) if campo else None
+        ya = locales.por_id.get((campo, firmable.id_externo)) if campo else None
         parecidas = [
             SerieParecida(**_a_serie_local(s).model_dump(), motivo=MOTIVO_PARECIDA)
-            for s in sorted(locales.por_titulo.get(normalize_title(r.title), []),
+            for s in sorted(locales.por_titulo.get(normalize_title(firmable.titulo), []),
                             key=lambda s: (s.start_year or 0, str(s.id)))
-            if (ya is None or s.id != ya.id) and _anios_compatibles(r.start_year, s.start_year)
+            if (ya is None or s.id != ya.id) and _anios_compatibles(firmable.anio, s.start_year)
         ]
-        senales = senales_contra_serie(archivos, carpeta, firmable.titulo, r.start_year, tiene_contexto=tiene_contexto)
+        senales = senales_contra_serie(archivos, carpeta, firmable.titulo, firmable.anio, tiene_contexto=tiene_contexto)
 
         cover = firmable.cover_url
         token = crear_token_candidata(clave, firmable, self._secret, ahora=self._ahora)
         return Candidata(
-            token=token, fuente=r.source.value, titulo=firmable.titulo, anio=r.start_year,
-            tradicion_sugerida=r.tradition_guess.value, sitio_url=r.site_url,
+            token=token, fuente=r.source.value, titulo=firmable.titulo, anio=firmable.anio,
+            tradicion_sugerida=r.tradition_guess.value, sitio_url=p.sitio_url,
             portada=None if cover is None else "/ui/descubrir/portada?" + urlencode({"url": cover, "source": r.source.value}),
             descripcion=(firmable.descripcion or "")[:MAX_DESCRIPCION_VISTA] or None,
             ya_en_biblioteca=_a_serie_local(ya) if ya is not None else None,
