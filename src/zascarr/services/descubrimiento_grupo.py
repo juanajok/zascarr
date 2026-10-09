@@ -31,7 +31,7 @@ from zascarr.services.discovery import (
     DiscoveryService,
 )
 from zascarr.services.revision_carpetas import RevisionCarpetas, Senal, senales_contra_serie
-from zascarr.services.tokens_revision import CandidataFirmada, crear_token_candidata
+from zascarr.services.tokens_revision import candidata_firmable, crear_token_candidata
 from zascarr.utils.url_portada import es_url_de_portada_permitida
 
 MAX_DESCRIPCION_VISTA = 300
@@ -131,12 +131,20 @@ class DescubrimientoDeGrupo:
         resultados = self._ordenar(busqueda)
         locales = await self._buscar_locales(resultados)
 
+        candidatas = [self._candidata(clave, r, locales, carpeta, archivos, bool(div.contextual))
+                      for r in resultados]
+        # Un resultado que no se puede dar de alta (título o identificador que no caben en lo que se guarda, o con
+        # caracteres no firmables) no se ofrece: su token no tendría un tamaño máximo conocido. Se avisa, no se calla.
+        omitidas = sum(1 for c in candidatas if c is None)
+        avisos = list(busqueda.avisos)
+        if omitidas:
+            avisos.append(f"Se han omitido {omitidas} resultado(s) cuyo título o identificador no se puede guardar "
+                          "(demasiado largo o con caracteres no válidos).")
         return RespuestaDescubrir(
             consulta=usada, consulta_propuesta=propuesta,
             grupo=GrupoResumen(clave=clave, carpeta_contextual=div.contextual, n_archivos=len(archivos)),
-            fuentes=busqueda.fuentes, avisos=busqueda.avisos,
-            candidatas=[self._candidata(clave, r, locales, carpeta, archivos, bool(div.contextual))
-                        for r in resultados],
+            fuentes=busqueda.fuentes, avisos=avisos,
+            candidatas=[c for c in candidatas if c is not None],
         )
 
     # ── Piezas ─────────────────────────────────────────────────────────────────────────────────
@@ -190,7 +198,14 @@ class DescubrimientoDeGrupo:
         return _Locales(por_id, por_titulo)
 
     def _candidata(self, clave: str, r: DiscoveryResult, locales: _Locales, carpeta, archivos,
-                   tiene_contexto: bool) -> Candidata:
+                   tiene_contexto: bool) -> Candidata | None:
+        # La portada solo sale si cumple la política de H1 (y por el proxy con lista blanca, nunca `src` externo).
+        portada_ok = bool(r.cover_url) and es_url_de_portada_permitida(r.cover_url or "")
+        firmable = candidata_firmable(
+            r.source.value, r.external_id, r.title, r.start_year, r.tradition_guess.value, r.description,
+            r.cover_url if portada_ok else None)
+        if firmable is None:
+            return None
         campo = CAMPO_ID_EXTERNO.get(r.source)
         ya = locales.por_id.get((campo, str(r.external_id))) if campo else None
         parecidas = [
@@ -199,20 +214,15 @@ class DescubrimientoDeGrupo:
                             key=lambda s: (s.start_year or 0, str(s.id)))
             if (ya is None or s.id != ya.id) and _anios_compatibles(r.start_year, s.start_year)
         ]
-        senales = senales_contra_serie(archivos, carpeta, r.title, r.start_year, tiene_contexto=tiene_contexto)
+        senales = senales_contra_serie(archivos, carpeta, firmable.titulo, r.start_year, tiene_contexto=tiene_contexto)
 
-        # La portada solo sale si cumple la política de H1 (y por el proxy con lista blanca, nunca `src` externo).
-        portada_ok = bool(r.cover_url) and es_url_de_portada_permitida(r.cover_url or "")
-        cover = r.cover_url if portada_ok else None
-        token = crear_token_candidata(clave, CandidataFirmada(
-            fuente=r.source.value, id_externo=str(r.external_id), titulo=r.title, anio=r.start_year,
-            tradicion=r.tradition_guess.value, descripcion=r.description, cover_url=cover,
-        ), self._secret, ahora=self._ahora)
+        cover = firmable.cover_url
+        token = crear_token_candidata(clave, firmable, self._secret, ahora=self._ahora)
         return Candidata(
-            token=token, fuente=r.source.value, titulo=r.title, anio=r.start_year,
+            token=token, fuente=r.source.value, titulo=firmable.titulo, anio=r.start_year,
             tradicion_sugerida=r.tradition_guess.value, sitio_url=r.site_url,
             portada=None if cover is None else "/ui/descubrir/portada?" + urlencode({"url": cover, "source": r.source.value}),
-            descripcion=(r.description or "")[:MAX_DESCRIPCION_VISTA] or None,
+            descripcion=(firmable.descripcion or "")[:MAX_DESCRIPCION_VISTA] or None,
             ya_en_biblioteca=_a_serie_local(ya) if ya is not None else None,
             parecidas_locales=parecidas,
             coincidencia_con_la_carpeta=Coincidencia(
