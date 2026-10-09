@@ -25,6 +25,7 @@ from uuid import UUID
 from zascarr.models import ComicTradition, IssueFormat, MetadataSource
 from zascarr.services.auth import sign_token, verify_token
 from zascarr.services.discovery import CAMPO_ID_EXTERNO
+from zascarr.utils.url_portada import LONGITUD_MAXIMA_URL
 
 TTL_SEGUNDOS = 15 * 60
 PROPOSITO_CANDIDATA = "candidata"
@@ -32,6 +33,49 @@ PROPOSITO_ALTA = "alta"
 PROPOSITO_VINCULAR = "vincular"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
 MAX_DESCRIPCION = 1000
+
+#: Cotas de los textos que viajan en los tokens de candidata y alta. No son arbitrarias: son lo que el alta puede
+#: GUARDAR (`Series.title` y `Series.cover_url` son `String(500)`, `tebeosfera_slug` es `String(255)` y el año va en
+#: una `SmallInteger`) y lo que la política de portadas ya admite (`LONGITUD_MAXIMA_URL`). Sin ellas el tamaño de un
+#: token no tendría máximo: lo fijaría lo que devuelva una fuente externa.
+MAX_TITULO = 500
+MAX_ID_EXTERNO = 255
+MAX_COVER_URL = LONGITUD_MAXIMA_URL
+ANIO_MIN_FIRMABLE, ANIO_MAX_FIRMABLE = -32768, 32767
+#: A cuántas series «parecidas» puede referirse un alta que CREA (van firmadas en `vistas`). Por encima de esto no
+#: se emite token: ver `DemasiadasParecidasError`.
+MAX_PARECIDAS_FIRMADAS = 100
+
+_CONTROLES_PERMITIDOS = "\t\n\r"
+
+
+def texto_firmable(texto: str) -> bool:
+    """¿Se puede firmar este texto sin sorpresas? Dos clases de carácter no: los sustitutos sueltos de Unicode
+    (`"\\ud800"` no se codifica en UTF-8: `crear_token` lanzaría `UnicodeEncodeError`) y los controles salvo
+    tabulador y saltos de línea (Postgres no admite el NUL en un `text`, y JSON escribe cada control como seis
+    bytes, lo que rompería la cota de tamaño de más abajo)."""
+    for ch in texto:
+        o = ord(ch)
+        if 0xD800 <= o <= 0xDFFF or (o < 0x20 and ch not in _CONTROLES_PERMITIDOS):
+            return False
+    return True
+
+
+def _depurar(texto: str) -> str:
+    """El mismo texto con cada carácter no firmable sustituido por un espacio."""
+    return "".join(ch if texto_firmable(ch) else " " for ch in texto)
+
+
+def _textos_acotados(titulo: str, id_externo: str, descripcion: str | None, cover: str | None) -> bool:
+    return (len(titulo) <= MAX_TITULO and len(id_externo) <= MAX_ID_EXTERNO
+            and texto_firmable(titulo) and texto_firmable(id_externo)
+            and (descripcion is None or (len(descripcion) <= MAX_DESCRIPCION and texto_firmable(descripcion)))
+            and (cover is None or (len(cover) <= MAX_COVER_URL and texto_firmable(cover))))
+
+
+def _anio_firmable(anio: object) -> bool:
+    return anio is None or (isinstance(anio, int) and not isinstance(anio, bool)
+                            and ANIO_MIN_FIRMABLE <= anio <= ANIO_MAX_FIRMABLE)
 
 
 def crear_token(proposito: str, contexto: str, datos: dict, secret: str, *,
@@ -90,6 +134,25 @@ class CandidataFirmada:
     cover_url: str | None
 
 
+def candidata_firmable(fuente: str, id_externo: object, titulo: str | None, anio: int | None, tradicion: str,
+                       descripcion: str | None, cover_url: str | None) -> CandidataFirmada | None:
+    """La candidata TAL COMO se firmará, o `None` si no se puede dar de alta (su título o su identificador no caben
+    en lo que la base guarda, o llevan caracteres no firmables). El resto se ajusta sin descartar: el título pierde
+    controles y espacios sobrantes (el alta hace lo mismo), la descripción se depura y se recorta, la portada se
+    omite si no cabe o no es firmable y un año fuera de la `SmallInteger` se ignora. Es lo que hace que el tamaño de
+    un token tenga máximo (`MAX_TOKEN_CANDIDATA`), por mucho que devuelva una fuente."""
+    ident = str(id_externo)
+    if not ident.strip() or len(ident) > MAX_ID_EXTERNO or not texto_firmable(ident):
+        return None
+    limpio = " ".join(_depurar(titulo or "").split())
+    if not limpio or len(limpio) > MAX_TITULO:
+        return None
+    desc = _depurar(descripcion or "")[:MAX_DESCRIPCION]
+    desc = desc if desc.strip() else None
+    cover = cover_url if cover_url and len(cover_url) <= MAX_COVER_URL and texto_firmable(cover_url) else None
+    return CandidataFirmada(fuente, ident, limpio, anio if _anio_firmable(anio) else None, tradicion, desc, cover)
+
+
 def crear_token_candidata(clave: str, c: CandidataFirmada, secret: str, *, ahora: float | None = None) -> str:
     return crear_token(PROPOSITO_CANDIDATA, clave, {
         "fuente": c.fuente, "id": c.id_externo, "titulo": c.titulo, "anio": c.anio,
@@ -118,6 +181,9 @@ def verificar_token_candidata(token: str, clave: str, secret: str, *,
     descripcion, cover = d.get("descripcion"), d.get("cover_url")
     if (descripcion is not None and not isinstance(descripcion, str)) or (
             cover is not None and not isinstance(cover, str)):
+        return None
+    # Las cotas de `MAX_TOKEN_CANDIDATA`: un token firmado por el servidor ya las cumple; se exigen igualmente.
+    if not _anio_firmable(anio) or not _textos_acotados(titulo, id_externo, descripcion, cover):
         return None
     return CandidataFirmada(fuente, id_externo, titulo, anio, tradicion, descripcion, cover)
 
@@ -196,7 +262,7 @@ def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None)
     desde el que se hizo la vista previa) se lee de dentro del token firmado; firma, propósito y caducidad se
     comprueban igual, y después la FORMA de cada campo (defensa de esquema: una firma válida no vale por sí sola)."""
     clave = _contexto_del_token(token, secret)
-    if clave is None:
+    if clave is None or len(clave) > MAX_CLAVE_GRUPO:
         return None
     verificado = _verificar(token, PROPOSITO_ALTA, clave, secret, ahora=ahora)
     if verificado is None:
@@ -235,6 +301,11 @@ def verificar_token_alta(token: str, secret: str, *, ahora: float | None = None)
         return None
     vistas, operacion = d.get("vistas"), d.get("operacion")
     if not isinstance(vistas, list) or not all(_uuid_texto(v) for v in vistas) or not _uuid_texto(operacion):
+        return None
+    # Las cotas de `MAX_TOKEN_ALTA`. `fuente` e `id` solo existen con origen `descubrir`, y entonces son cadenas.
+    if len(vistas) > MAX_PARECIDAS_FIRMADAS or not _anio_firmable(anio):
+        return None
+    if not _textos_acotados(titulo, id_externo or "", descripcion, cover):
         return None
     return AltaFirmada(clave, modo, origen, fuente, id_externo, titulo, anio, tradicion, descripcion, cover,
                        serie_id, tuple(vistas), operacion, criterio, caduca)
@@ -375,3 +446,53 @@ def _longitud_peor_caso_del_token_de_vinculacion() -> int:
 
 #: El límite del cuerpo de `POST /api/revision/vinculacion`: acotado, y IGUAL al peor caso emitible.
 MAX_TOKEN_VINCULACION = _longitud_peor_caso_del_token_de_vinculacion()
+
+
+# ── Tamaño máximo de los tokens de candidata y alta ──────────────────────────────────────────────
+
+#: El carácter que más pesa en el JSON del token **dentro de la `clave` del grupo**. La clave es la ruta de la carpeta
+#: tal como está en `files.file_path` (`"/".join` de los nombres de carpeta, sin tocar: identifica al grupo y debe
+#: conservar su significado), y un nombre de carpeta de Linux puede llevar cualquier byte salvo `/` y NUL, es decir,
+#: controles. `json.dumps(..., ensure_ascii=False)` escribe los controles como `\u00XX`: **seis bytes**, más que los
+#: cuatro de cualquier carácter UTF-8 (una prueba lo comprueba sobre todos los puntos de código). Los demás textos del
+#: token pasan por `texto_firmable` y no pueden llevar esos controles. El NUL no puede estar: Postgres no lo guarda.
+CARACTER_MAS_PESADO_DE_UNA_CLAVE = "\x01"
+
+
+def _longitud_peor_caso_del_token_de_candidata() -> int:
+    """La longitud del MAYOR token de candidata que el servidor puede emitir y el verificador acepta (calculada, no
+    elegida): cada texto en su cota y de caracteres de 4 bytes en UTF-8 (el máximo de cualquier texto firmable: el
+    JSON se escribe con `ensure_ascii=False`, así que cada carácter pesa lo que su UTF-8; las comillas, las barras y
+    los saltos de línea pesan dos), año de seis caracteres (`-32768`), la tradición más larga, una de las fuentes que
+    el servidor emite (`CAMPO_ID_EXTERNO`: son las únicas que el alta puede procesar) y una `clave` de grupo de 1000
+    controles de seis bytes. Sale de `crear_token_candidata`, es decir, de la serialización, la codificación y la
+    firma reales."""
+    ch = "\U0001F600"
+    fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
+    tradicion = max((t.value for t in ComicTradition), key=len)
+    c = CandidataFirmada(fuente, ch * MAX_ID_EXTERNO, ch * MAX_TITULO, ANIO_MIN_FIRMABLE, tradicion,
+                         ch * MAX_DESCRIPCION, ch * MAX_COVER_URL)
+    return len(crear_token_candidata(CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, c, "x" * 32,
+                                     ahora=EPOCA_DEL_PEOR_CASO))
+
+
+def _longitud_peor_caso_del_token_de_alta() -> int:
+    """Idem para el alta. El mayor es el que CREA y firma `MAX_PARECIDAS_FIRMADAS` series vistas; el que reutiliza
+    lleva `serie_id` y `criterio` pero ninguna vista. Se calculan los dos y se toma el mayor."""
+    ch = "\U0001F600"
+    ident = "00000000-0000-4000-8000-000000000000"
+    fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
+    tradicion = max((t.value for t in ComicTradition), key=len)
+    comunes = dict(clave=CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, origen="descubrir", fuente=fuente,
+                   id_externo=ch * MAX_ID_EXTERNO, titulo=ch * MAX_TITULO, anio=ANIO_MIN_FIRMABLE, tradicion=tradicion,
+                   descripcion=ch * MAX_DESCRIPCION, cover_url=ch * MAX_COVER_URL, operacion=ident)
+    vistas = tuple(f"{i:08d}-0000-4000-8000-000000000000" for i in range(MAX_PARECIDAS_FIRMADAS))
+    crea = AltaFirmada(modo="crear", serie_id=None, vistas=vistas, **comunes)
+    reutiliza = AltaFirmada(modo="reutilizar", criterio="identificador", serie_id=ident, vistas=(), **comunes)
+    return max(len(crear_token_alta(a, "x" * 32, ahora=EPOCA_DEL_PEOR_CASO)) for a in (crea, reutiliza))
+
+
+#: Los límites del cuerpo de `POST /api/revision/serie/previsualizar` (campo `candidata`) y de `POST
+#: /api/revision/serie` (campo `token`): acotados e IGUALES al peor caso emitible, no un número redondo.
+MAX_TOKEN_CANDIDATA = _longitud_peor_caso_del_token_de_candidata()
+MAX_TOKEN_ALTA = _longitud_peor_caso_del_token_de_alta()
