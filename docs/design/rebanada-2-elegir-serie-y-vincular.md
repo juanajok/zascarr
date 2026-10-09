@@ -193,29 +193,37 @@ La idempotencia vivía en la propia fila de `series`, y deshacer la borra: reenv
 
 **Qué había.** `candidata` (vista previa del alta) y `token` (confirmación) aceptaban como mucho **8.000** caracteres, un número que no salía de ningún cálculo, mientras que el productor firmaba sin cota lo que devolviera una fuente (título, identificador, portada). El límite de la vinculación (#103) sí estaba calculado; estos dos no.
 
-**Qué se midió** (con `crear_token_*`, `ensure_ascii=False` + base64 URL-safe + firma, es decir, la serialización real; no multiplicando a ojo). Las cifras estimadas antes a mano (4.625 / 5.889 y 14.625 / 15.889) **no eran estos máximos** y no se usaron:
+**Qué se midió** (con `crear_token_*`, `ensure_ascii=False` + base64 URL-safe + firma, es decir, la serialización real; no multiplicando a ojo). De las cifras estimadas antes a mano (4.625 / 5.889 y 14.625 / 15.889), solo la primera coincide con una medición (la candidata ASCII); las demás **no eran estos máximos** y no se usaron. El primer cálculo de esta corrección (17.649 / 23.013) tampoco valía: suponía cuatro bytes por carácter también en la clave del grupo (ver abajo).
 
 | Caso | Longitud del token |
 |---|---|
 | Candidata normal (título y id cortos, descripción de 1.000 caracteres) | 1.765 |
-| Candidata con TODO en sus cotas, ASCII | 4.629 |
-| Alta que reutiliza, todo en sus cotas, ASCII / 4 bytes | 4.861 / 17.881 |
+| Candidata con TODO en sus cotas, ASCII | 4.625 |
+| Alta que reutiliza, todo en sus cotas, ASCII | 4.861 |
 | Alta que crea con 100 vistas, todo en sus cotas, ASCII | 9.993 (el límite antiguo la rechazaba) |
-| Candidata con TODO en sus cotas, 4 bytes por carácter | **17.649** (= `MAX_TOKEN_CANDIDATA`) |
-| Alta que crea con 100 vistas, todo en sus cotas, 4 bytes | **23.013** (= `MAX_TOKEN_ALTA`) |
+| Candidata, textos de 4 bytes y clave de 1000 caracteres de 4 bytes | 17.645 |
+| Alta que crea con 100 vistas, textos y clave de 4 bytes | 23.013 |
+| Candidata, textos de 4 bytes y clave de 1000 controles (seis bytes) | **20.313** (= `MAX_TOKEN_CANDIDATA`) |
+| Alta que crea con 100 vistas, textos de 4 bytes y clave de controles | **25.681** (= `MAX_TOKEN_ALTA`) |
 | Un alta con N series parecidas, título corto, ASCII (script de reproducción) | 5.665 con 100; 6.497 con 116; 8.265 con 150 (rechazada por el límite antiguo) |
+
+**La clave del grupo pesa más que los demás textos.** Es la ruta de la carpeta tal como está en `files.file_path` (`"/".join` de los nombres de carpeta): se usa tal cual porque identifica al grupo, no se depura ni se renombra. Un nombre de carpeta de Linux puede llevar cualquier byte salvo `/` y NUL, es decir, controles, y `json.dumps(..., ensure_ascii=False)` escribe los controles como `\u00XX`: **seis bytes**, no cuatro. Un barrido de los 1.112.064 puntos de código con el serializador real lo confirma: 27 caracteres pesan seis bytes (los controles U+0000–U+001F salvo `\b \t \n \f \r`, que pesan dos) y ningún otro pasa de cuatro; el NUL no puede estar en la clave (Postgres no lo guarda). Los demás textos del token (título, identificador, descripción, portada) pasan por `texto_firmable` y no pueden llevar esos controles. Por eso el máximo se calcula con una clave de 1000 caracteres U+0001, y una prueba compara ese cálculo con el efecto de una clave de cuatro bytes (más de 2.600 caracteres de diferencia).
+
+**Qué cota es conservadora.** La clave real nunca llega a 1000 caracteres (el tope de la petición): `files.file_path` es `String(1000)` y la clave es un prefijo de la ruta, de modo que como mucho mide ≈ 970 con la biblioteca de las pruebas (algo más con una ruta más corta, nunca 1000). La portada real empieza por un host ASCII (un byte por carácter, no cuatro). Por eso un token que sale del servicio queda unos cientos de caracteres por debajo del máximo (las pruebas fijan esa holgura) y **el máximo de la candidata no se puede alcanzar de extremo a extremo**: la vista previa necesita un grupo con esa clave. El del alta sí se alcanza, porque su contexto viaja dentro del token y la confirmación no busca el grupo: una prueba firma un alta de exactamente 25.681 caracteres, la envía por HTTP y el servicio la procesa.
 
 **Qué se confirmó con el código anterior** (script de reproducción contra `main` en `94d35e2`): (A) una candidata con todos sus campos dentro de las cotas del sistema pero en texto CJK (título 500, descripción 1000, carpeta 500, portada 300) mide 8.749 y la confirmación del alta 8.917: el esquema las **rechazaba con `string_too_long`**; (B) una fuente que devuelva un título de 9.000 caracteres ASCII se firmaba sin queja (12.305) y se rechazaba después; (C) un alta que crea con 150 series parecidas medía 8.265 y se rechazaba; (D) un sustituto suelto de Unicode (`"\ud800"`) en un título hacía que `crear_token_candidata` lanzara `UnicodeEncodeError`, es decir, un 500 en la búsqueda entera. **Lo que no se confirmó:** que el caso corriente se vea afectado (una candidata normal mide ≈ 1.800) ni que las fuentes reales devuelvan hoy textos que lo provoquen; no se ha consultado ninguna fuente real.
 
 **Qué se corrigió.**
 - **Cotas de campo** (`tokens_revision.py`), las que el alta ya podía guardar: título 500 (`Series.title`), identificador 255 (`tebeosfera_slug`), portada 500 (`Series.cover_url` y la política de portadas), descripción 1000 (el recorte que ya existía), año dentro de una `SmallInteger`, clave de grupo 1000 y **como mucho 100 series parecidas** firmadas en `vistas`.
 - **Texto firmable.** Sin sustitutos sueltos de Unicode (no se codifican) ni controles salvo tabulador y saltos de línea (Postgres no admite el NUL en un `text`, y JSON escribe cada control con seis bytes, lo que rompería la cota).
-- **Productor** (`candidata_firmable`): ajusta lo que puede (título sin espacios ni controles, descripción depurada y recortada, portada o año omitidos si no caben) y **descarta** la candidata cuyo título o identificador no caben o no son firmables, **con un aviso** en la respuesta de `descubrir` (no en silencio).
+- **Productor** (`candidata_firmable`): ajusta lo que puede (título sin espacios ni controles, descripción depurada y recortada, portada o año omitidos si no caben) y **descarta** la candidata cuyo título o identificador no caben o no son firmables, **con un aviso** en la respuesta de `descubrir` (no en silencio). **Esto ocurre ANTES de las consultas locales**: un resultado descartado no llega a la base (el identificador de Tebeosfera es texto y va en un `IN` de SQL), y las consultas, las señales, lo mostrado y el token trabajan con la misma representación depurada.
 - **Verificadores**: exigen las mismas cotas aunque la firma sea válida.
-- **Límites de la petición**: `MAX_TOKEN_CANDIDATA` y `MAX_TOKEN_ALTA`, **calculados** como el token más largo que se puede emitir y verificar (cada texto en su cota, 4 bytes por carácter, año de seis caracteres, `clave` de 1000), y no un número redondo.
+- **Límites de la petición**: `MAX_TOKEN_CANDIDATA` (20.313) y `MAX_TOKEN_ALTA` (25.681), **calculados** como el token más largo que se puede emitir y verificar (cada texto en su cota, 4 bytes por carácter, año de seis caracteres, una fuente de las que el servidor emite y una `clave` de 1000 controles de seis bytes), y no un número redondo.
 - **Parecidas.** Un alta que **crea** con más de 100 series parecidas no emite token (`422 demasiadas_parecidas`, sin efectos): firmar la lista de las que vio la persona era lo único que no tenía cota. Reutilizar una existente no firma ninguna y sigue funcionando con cualquier número.
 
 **Qué no cambia.** El formato, la firma y el máximo del token de vinculación (`MAX_TOKEN_VINCULACION`; una prueba lo fija). Ningún límite de la ficha de 2c/2d.
+
+**Hallazgo previo, sin tocar.** El máximo del token de vinculación se calculó con una clave de cuatro bytes por carácter: con una clave de 1000 controles (seis bytes) el peor caso medido es 58.697, no 56.029. Se registra aparte; esta corrección no lo modifica.
 
 **Limitaciones conocidas.** (1) Un sustituto suelto de Unicode escrito como `\ud800` en el JSON de **cualquier** petición lo rechaza el esquema, y el manejador de errores de validación de FastAPI intenta devolverlo en el cuerpo del `422` y falla (500): es del marco, no de los tokens, y queda sin tocar. (2) Los máximos son cotas de seguridad, no previsiones: una candidata normal usa una décima parte del máximo.
 
