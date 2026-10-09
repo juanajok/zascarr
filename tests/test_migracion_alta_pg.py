@@ -31,6 +31,11 @@ async def consultar(url: str, sql: str, **p):
         await motor.dispose()
 
 
+def cabeza() -> str:
+    """La revisión `head` (la 0018 ya no es la última)."""
+    return alembic(URL, "heads").stdout.split()[0]
+
+
 async def version(url: str) -> str:
     return (await consultar(url, "SELECT version_num FROM alembic_version"))[0][0]
 
@@ -141,7 +146,7 @@ class TestBajada:
             await consultar(url, INSERT, o=str(uuid4()), s=str(uuid4()), e=estado, m=10)
             r = alembic(url, "downgrade", "0017", estricto=False)
             assert r.returncode != 0 and "token todavía válido" in r.stderr
-            assert await version(url) == "0018" and await existe(url) == (True, True)
+            assert await version(url) == cabeza() and await existe(url) == (True, True)    # la bajada entera se revirtió
             assert (await consultar(url, "SELECT estado::text FROM alta_operaciones"))[0][0] == estado
 
     async def test_con_los_tokens_ya_caducados_baja(self):
@@ -168,4 +173,4 @@ class TestBajada:
             finally:
                 await motor.dispose()
             assert r.returncode != 0 and "token todavía válido" in r.stderr
-            assert await version(url) == "0018" and (await consultar(url, "SELECT count(*) FROM alta_operaciones"))[0][0] == 1
+            assert await version(url) == cabeza() and (await consultar(url, "SELECT count(*) FROM alta_operaciones"))[0][0] == 1

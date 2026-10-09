@@ -61,6 +61,7 @@ from zascarr.services.tokens_revision import (
     MAX_NUMERO,
     ArchivoFirmado,
     VinculacionFirmada,
+    clave_de_numero,
     crear_token_vinculacion,
 )
 from zascarr.utils.naming import parse_comic_filename
@@ -70,10 +71,10 @@ LIMITE_ARCHIVOS = 100
 
 #: Impedimentos, por orden de precedencia. Un registro con cualquiera de ellos NO se puede marcar.
 BLOQUEOS = ("ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verificable", "requiere_numero",
-            "numero_repetido_en_el_grupo", "colision_de_edicion", "numero_ya_existe")
+            "numero_repetido_en_el_grupo", "colision_de_edicion", "numero_ambiguo", "numero_ya_existe")
 EstadoArchivo = Literal["ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verificable",
                         "requiere_numero", "numero_repetido_en_el_grupo", "colision_de_edicion",
-                        "numero_ya_existe", "con_conflicto_de_carpeta", "se_vincularia", "fuera_de_la_pagina"]
+                        "numero_ambiguo", "numero_ya_existe", "con_conflicto_de_carpeta", "se_vincularia", "fuera_de_la_pagina"]
 Causa = Literal["permiso", "error_de_lectura", "biblioteca_no_accesible", "no_es_un_archivo"]
 
 TEXTOS: dict[str, str] = {
@@ -84,6 +85,7 @@ TEXTOS: dict[str, str] = {
     "con_conflicto_de_carpeta": "Se puede vincular, pero hay señales que lo contradicen: revísalas antes de marcarlo.",
     "se_vincularia": "Se vincularía en su sitio: conservará su nombre y su carpeta.",
     "numero_repetido_en_el_grupo": "Otro archivo marcado tiene el mismo número: marca solo uno de los dos.",
+    "numero_ambiguo": "La serie tiene más de un número así (volúmenes distintos): no se elige uno por ti.",
     "fuera_de_la_pagina": f"Este archivo no está en esta página (máximo {LIMITE_ARCHIVOS} por página): "
                           "ábrela con su cursor para poder marcarlo.",
 }
@@ -332,7 +334,7 @@ class VistaPreviaDeVinculacion:
         por_numero: dict[str, list[str]] = defaultdict(list)
         for f in salida:
             if f.marcado and not f.motivos and f.numero:
-                por_numero[f.numero.lower()].append(f.id)
+                por_numero[clave_de_numero(f.numero)].append(f.id)
         en_conflicto = {i for ids_ in por_numero.values() if len(ids_) > 1 for i in ids_}
         salida = [self._evaluar(**evaluar[f.id], repetido_en_seleccion=True) if f.id in en_conflicto else f for f in salida]
         for a in fuera:
@@ -345,8 +347,10 @@ class VistaPreviaDeVinculacion:
         incluidos = [f for f in salida if f.incluido_en_token]
         token = None
         if incluidos:
-            firmados = tuple(ArchivoFirmado(f.id, f.numero or "", f.formato or "", origenes[f.id].tamano, origenes[f.id].mtime_ns)
-                             for f in incluidos)
+            firmados = tuple(
+                ArchivoFirmado(f.id, f.numero or "", f.formato or "", origenes[f.id].tamano, origenes[f.id].mtime_ns,
+                               tuple(sorted({s.codigo for s in f.conflictos if s.severidad == "conflicto"})))
+                for f in incluidos)
             token = crear_token_vinculacion(
                 VinculacionFirmada(clave, str(serie.id), str(uuid4()), firmados), self._secret, ahora=self._ahora)
         n_marcados = sum(1 for f in salida if f.marcado)
@@ -399,17 +403,22 @@ class VistaPreviaDeVinculacion:
                 File.id.in_([UUID(i) for i in ids]), File.issue_id.is_not(None)))).all()
         return {str(i): (nombre, ruta) for i, nombre, ruta in filas}
 
-    async def _issues_de_la_serie(self, series_id, numeros: set[str]) -> dict[str, tuple[IssueFormat, int]]:
-        """número → (edición, archivos ya vinculados) de los `Issue` que la serie ya tiene con esos números."""
+    async def _issues_de_la_serie(self, series_id, numeros: set[str]) -> dict[str, list[tuple[IssueFormat, int]]]:
+        """clave de número (sin distinguir mayúsculas) → [(edición, archivos ya vinculados)] de los `Issue` de la
+        serie con esos números. Más de uno por clave (volúmenes distintos, o `volume` NULL) = ambiguo."""
         if not numeros:
             return {}
+        claves = {clave_de_numero(n) for n in numeros}
         filas = (await self._db.execute(select(Issue.id, Issue.issue_number, Issue.format).where(
-            Issue.series_id == series_id, Issue.issue_number.in_(numeros)))).all()
+            Issue.series_id == series_id, func.lower(Issue.issue_number).in_(claves)))).all()
         if not filas:
             return {}
         cuenta = dict((await self._db.execute(
             select(File.issue_id, func.count()).where(File.issue_id.in_([f[0] for f in filas])).group_by(File.issue_id))).all())
-        return {n: (fmt or IssueFormat.SINGLE_ISSUE, cuenta.get(iid, 0)) for iid, n, fmt in filas}
+        salida: dict[str, list[tuple[IssueFormat, int]]] = defaultdict(list)
+        for iid, n, fmt in filas:
+            salida[clave_de_numero(n)].append((fmt or IssueFormat.SINGLE_ISSUE, cuenta.get(iid, 0)))
+        return dict(salida)
 
     @staticmethod
     def _repetidos(pares: list[tuple[str, str | None]]) -> dict[str, list[str]]:
@@ -417,9 +426,9 @@ class VistaPreviaDeVinculacion:
         por_numero: dict[str, list[str]] = defaultdict(list)
         for fid, numero in pares:
             if numero:
-                por_numero[numero.lower()].append(fid)
-        return {fid: sorted(i for i in por_numero[numero.lower()] if i != fid)
-                for fid, numero in pares if numero and len(por_numero[numero.lower()]) > 1}
+                por_numero[clave_de_numero(numero)].append(fid)
+        return {fid: sorted(i for i in por_numero[clave_de_numero(numero)] if i != fid)
+                for fid, numero in pares if numero and len(por_numero[clave_de_numero(numero)]) > 1}
 
     def _evaluar(self, fid, nombre, ruta, numero, del_nombre, formato, origen_n, origen: _Origen | None, en_curso: bool,
                  repetido_con: list[str], existentes, conflictos: list[Senal], marcado: bool,
@@ -437,9 +446,12 @@ class VistaPreviaDeVinculacion:
             motivos.append("requiere_numero")
         elif repetido_en_seleccion:
             motivos.append("numero_repetido_en_el_grupo")
-        existente = existentes.get(numero) if numero else None
+        lista = existentes.get(clave_de_numero(numero)) if numero else None
+        existente = lista[0] if lista and len(lista) == 1 else None
         texto_extra = ""
-        if existente is not None:
+        if lista and len(lista) > 1:
+            motivos.append("numero_ambiguo")
+        elif existente is not None:
             fmt_existente, con_archivos = existente
             if fmt_existente.value != formato:
                 motivos.append("colision_de_edicion")
@@ -454,6 +466,8 @@ class VistaPreviaDeVinculacion:
                 texto = TEXTOS_NO_VERIFICABLE[causa or "error_de_lectura"]
             elif estado in ("colision_de_edicion", "numero_ya_existe"):
                 texto = texto_extra
+            elif estado == "numero_ambiguo":
+                texto = TEXTOS["numero_ambiguo"]
             elif estado == "numero_repetido_en_el_grupo":
                 texto = f"Otro archivo marcado tiene el mismo número ({numero}): marca solo uno de los dos."
             else:

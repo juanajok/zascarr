@@ -5,7 +5,7 @@ la serie (2b: `serie/previsualizar`, `serie` y `serie/{id}/deshacer`).
 `carpetas` y `descubrir` no escriben ni ofrecen acciones; `carpetas` no usa disco ni red y `descubrir` es el ÚNICO
 que usa la red, y solo cuando se llama (a petición: nunca al abrir un grupo). El alta solo escribe una fila de
 `series` al confirmar (y la borra al deshacer): ni números, ni archivos, ni red. La vista previa de la vinculación
-(2c) solo lee (`SELECT` y `stat`); no vincula nada. Exigen sesión o Basic como el resto de `/api/*` (lo
+(2c) solo lee (`SELECT` y `stat`); la confirmación (2d) vincula en su sitio, sin mover ningún fichero. Exigen sesión o Basic como el resto de `/api/*` (lo
 hace `AuthMiddleware`); no llevan dependencia legal porque no son acciones de riesgo (CLAUDE.md §5.2).
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ import time
 from typing import Literal
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,6 +51,16 @@ from zascarr.services.revision_carpetas import (
     RespuestaCarpetas,
     RevisionCarpetas,
 )
+from zascarr.services.tokens_revision import MAX_CLAVE_GRUPO, MAX_TOKEN_VINCULACION
+from zascarr.services.vinculacion import (
+    ConflictoDeBloqueoError,
+    RespuestaEjecucion,
+    ResultadoInciertoError,
+    TokenCaducadoError,
+    VinculacionDeArchivos,
+)
+from zascarr.services.vinculacion import SerieYaNoExisteError as SerieDeVinculacionYaNoExisteError
+from zascarr.services.vinculacion import TokenInvalidoError as TokenDeVinculacionInvalidoError
 from zascarr.services.vinculacion_previa import (
     ArchivoAjenoError,
     CursorNoValidoError,
@@ -58,6 +69,8 @@ from zascarr.services.vinculacion_previa import (
     SerieElegidaNoExisteError,
     VistaPreviaDeVinculacion,
 )
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/revision", tags=["revision"])
 
@@ -243,7 +256,7 @@ class PeticionPrevisualizarVinculacion(BaseModel):
     """El grupo, la serie elegida y las modificaciones EXPLÍCITAS de la persona. Nada viene marcado por defecto."""
     model_config = ConfigDict(extra="forbid")
 
-    clave: str = Field(..., min_length=1, max_length=1000)
+    clave: str = Field(..., min_length=1, max_length=MAX_CLAVE_GRUPO)
     series_id: UUID
     #: id de archivo → número editado (vacío: quitarlo). Lo que no esté aquí usa el número del nombre.
     numeros: dict[UUID, str] = Field(default_factory=dict, max_length=1000)
@@ -281,3 +294,51 @@ async def previsualizar_vinculacion(
         raise HTTPException(status_code=422, detail={"codigo": "numero_no_valido", "mensaje": str(e)}) from None
     except CursorNoValidoError as e:
         raise HTTPException(status_code=422, detail={"codigo": "cursor_no_valido", "mensaje": str(e)}) from None
+
+
+# ── 2d: vincular en su sitio ──────────────────────────────────────────────────────────────────
+
+class PeticionVincular(BaseModel):
+    """La confirmación recibe SOLO el token: ni números, ni selección, ni serie. Su tamaño máximo es el del mayor
+    token que la vista previa puede emitir (100 archivos, conflictos y clave incluidos): se calcula, no se elige."""
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(..., min_length=1, max_length=MAX_TOKEN_VINCULACION)
+
+
+@router.post("/vinculacion", response_model=RespuestaEjecucion, response_model_by_alias=True)
+async def vincular(
+    peticion: PeticionVincular, response: Response, db: AsyncSession = Depends(get_db),
+) -> RespuestaEjecucion:
+    """Ejecuta lo que enseñó y firmó la vista previa, en UNA transacción y SIN mover ningún fichero. Repetir el
+    mismo token devuelve el mismo informe. Nunca anuncia éxito si algún archivo no quedó vinculado."""
+    response.headers["Cache-Control"] = "no-store"
+    secret = _secreto()
+    try:
+        return await VinculacionDeArchivos(db, secret=secret).confirmar(peticion.token)
+    except TokenDeVinculacionInvalidoError as e:
+        raise _error_vinculacion(422, e.codigo, str(e)) from None
+    except TokenCaducadoError as e:
+        raise _error_vinculacion(410, e.codigo, str(e)) from None
+    except SerieDeVinculacionYaNoExisteError as e:
+        raise _error_vinculacion(409, e.codigo, str(e)) from None
+    except ConflictoDeBloqueoError as e:
+        raise HTTPException(status_code=503, headers={"Retry-After": "1"},
+                            detail={"codigo": e.codigo, "mensaje": str(e)}) from None
+    except ResultadoInciertoError as e:
+        # Falló DESPUÉS de pedir el commit: no se afirma que no haya cambios. Repetir el token lo aclara.
+        raise HTTPException(
+            status_code=503, headers={"Retry-After": "1"},
+            detail={"codigo": e.codigo, "mensaje": "No se pudo confirmar si se aplicó. Repite la confirmación con el "
+                    "mismo token: si ya se aplicó, verás el mismo informe; si no, se aplicará."}) from None
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Sin rutas ni nombres en el registro: solo el tipo del error. Nada se ha cambiado (rollback completo).
+        logger.error("vinculacion.error_inesperado", tipo=type(e).__name__)
+        raise _error_vinculacion(
+            500, "error_inesperado", "No se pudo completar y no se ha cambiado nada. Inténtalo de nuevo.") from None
+
+
+def _error_vinculacion(estado: int, codigo: str, mensaje: str) -> HTTPException:
+    return HTTPException(status_code=estado, detail={"codigo": codigo, "mensaje": mensaje})
