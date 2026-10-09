@@ -62,8 +62,11 @@ from zascarr.services.descubrimiento_grupo import (
 from zascarr.services.discovery import CAMPO_ID_EXTERNO, CAMPOS_ID_DE_TEXTO
 from zascarr.services.revision_carpetas import RevisionCarpetas
 from zascarr.services.tokens_revision import (
+    MAX_PARECIDAS_FIRMADAS,
+    MAX_TITULO,
     AltaFirmada,
     crear_token_alta,
+    texto_firmable,
     verificar_token_alta,
     verificar_token_candidata,
 )
@@ -76,7 +79,6 @@ _ESPACIO_OPERACION = "alta_op:"
 #: Retención del comprobante: 24 h Y token caducado (lo que tarde más). Ver `AltaOperacion`.
 RETENCION_HORAS = 24
 LOTE_DE_PURGA = 100
-MAX_TITULO = 500
 ANIO_MIN, ANIO_MAX = 1800, 2100
 
 Decision = Literal["reutilizar", "crear_igualmente"]
@@ -99,6 +101,12 @@ class DatosInvalidosError(AltaError):
 
 class DecisionInvalidaError(AltaError):
     codigo = "decision_invalida"
+
+
+class DemasiadasParecidasError(AltaError):
+    """Un alta que CREA firma las series parecidas que la persona vio (para rechazar la confirmación si aparecen
+    otras). Con más de `MAX_PARECIDAS_FIRMADAS` ese token no tendría un tamaño máximo conocido, así que no se emite."""
+    codigo = "demasiadas_parecidas"
 
 
 class SerieYaNoExisteError(AltaError):
@@ -199,6 +207,8 @@ def fusionar_metadata(actual: dict | None, cambios: dict) -> dict:
 
 
 def _limpiar_titulo(titulo: str) -> str:
+    if not texto_firmable(titulo or ""):
+        raise DatosInvalidosError("El título lleva caracteres que no se pueden guardar.")
     limpio = " ".join((titulo or "").split())
     if not limpio or len(limpio) > MAX_TITULO or not normalize_title(limpio):
         raise DatosInvalidosError("El título no puede estar vacío ni ser solo símbolos.")
@@ -280,6 +290,10 @@ class AltaDeSerie:
             raise DecisionInvalidaError("Decisión desconocida.")
         if decision == "crear_igualmente" and not parecidas:
             decision = None          # nada que decidir: es un alta normal
+        if len(parecidas) > MAX_PARECIDAS_FIRMADAS:
+            raise DemasiadasParecidasError(
+                f"Ya hay {len(parecidas)} series con ese título: son demasiadas para decidir desde aquí. "
+                "Revisa los duplicados antes de dar de alta otra.")
         token = crear_token_alta(
             AltaFirmada(modo="crear", serie_id=None, vistas=tuple(p.series_id for p in parecidas), **base),
             self._secret, ahora=self._ahora)

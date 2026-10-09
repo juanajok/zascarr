@@ -51,7 +51,13 @@ from zascarr.services.revision_carpetas import (
     RespuestaCarpetas,
     RevisionCarpetas,
 )
-from zascarr.services.tokens_revision import MAX_CLAVE_GRUPO, MAX_TOKEN_VINCULACION
+from zascarr.services.tokens_revision import (
+    MAX_CLAVE_GRUPO,
+    MAX_TITULO,
+    MAX_TOKEN_ALTA,
+    MAX_TOKEN_CANDIDATA,
+    MAX_TOKEN_VINCULACION,
+)
 from zascarr.services.vinculacion import (
     ConflictoDeBloqueoError,
     RespuestaEjecucion,
@@ -152,7 +158,7 @@ async def descubrir(
 class DatosManualesIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    titulo: str = Field(..., min_length=1, max_length=500)
+    titulo: str = Field(..., min_length=1, max_length=MAX_TITULO)
     anio: int | None = Field(default=None, ge=1800, le=2100)
 
 
@@ -161,7 +167,7 @@ class PeticionPrevisualizarAlta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     clave: str = Field(..., min_length=1, max_length=1000)
-    candidata: str | None = Field(default=None, max_length=8000)
+    candidata: str | None = Field(default=None, max_length=MAX_TOKEN_CANDIDATA)
     manual: DatosManualesIn | None = None
     tradicion: ComicTradition
     decision: Literal["reutilizar", "crear_igualmente"] | None = None
@@ -172,7 +178,7 @@ class PeticionConfirmarAlta(BaseModel):
     """La confirmación recibe SOLO el token: nada de título, año, tradición ni identificadores sueltos."""
     model_config = ConfigDict(extra="forbid")
 
-    token: str = Field(..., min_length=1, max_length=8000)
+    token: str = Field(..., min_length=1, max_length=MAX_TOKEN_ALTA)
 
 
 class PeticionDeshacerAlta(BaseModel):
