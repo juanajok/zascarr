@@ -16,6 +16,7 @@ Un interbloqueo detectado por Postgres es un fallo inesperado más: rollback com
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 from collections import Counter
@@ -78,6 +79,12 @@ class TokenCaducadoError(VinculacionError):
 
 class SerieYaNoExisteError(VinculacionError):
     codigo = "la_serie_ya_no_existe"
+
+
+class ResultadoInciertoError(VinculacionError):
+    """Falló algo DESPUÉS de pedir el `commit`: no se sabe si la vinculación se aplicó. Repetir el mismo token lo
+    resuelve (si se aplicó, devuelve el mismo informe; si no, la aplica). Nunca se anuncia «no se ha cambiado nada»."""
+    codigo = "resultado_incierto"
 
 
 class ConflictoDeBloqueoError(VinculacionError):
@@ -153,6 +160,7 @@ class VinculacionDeArchivos:
         self._biblioteca = Path(str(biblioteca or get_settings().library_path))
         self._estadistica = estadistica or (lambda ruta: os.stat(ruta))
         self._ahora = ahora
+        self._commit_pedido = False         # tras pedir el `commit` ya no se puede afirmar que no hubo cambios
 
     async def confirmar(self, token: str) -> RespuestaEjecucion:
         firmado = verificar_token_vinculacion(token, self._secret, ahora=self._ahora, ignorar_caducidad=True)
@@ -161,13 +169,13 @@ class VinculacionDeArchivos:
         vigente = verificar_token_vinculacion(token, self._secret, ahora=self._ahora) is not None
         try:
             return await self._en_transaccion(firmado, vigente)
-        except DBAPIError as e:
-            await self._db.rollback()
-            if _es_interbloqueo(e):
+        except BaseException as e:
+            with contextlib.suppress(Exception):
+                await self._db.rollback()    # ni vínculos, ni `Issue`s, ni informe a medias (si aún no se confirmó)
+            if self._commit_pedido and isinstance(e, Exception):
+                raise ResultadoInciertoError("No se pudo confirmar si la vinculación se aplicó.") from None
+            if isinstance(e, DBAPIError) and _es_interbloqueo(e):
                 raise ConflictoDeBloqueoError("Otra operación coincidió; repite la confirmación.") from None
-            raise
-        except BaseException:
-            await self._db.rollback()        # ni vínculos, ni `Issue`s, ni informe a medias
             raise
 
     async def _en_transaccion(self, firmado: VinculacionFirmada, vigente: bool) -> RespuestaEjecucion:
@@ -184,8 +192,9 @@ class VinculacionDeArchivos:
         if previo is not None:
             doc = previo.resultado
             nombres = await self._nombres([UUID(a["id"]) for a in doc["archivos"]])
-            await db.commit()
-            return self._respuesta(doc, repetida=True, nombres=nombres)
+            respuesta = self._respuesta(doc, repetida=True, nombres=nombres)
+            await db.commit()                      # (solo suelta el candado: aquí no se escribió nada)
+            return respuesta
         if not vigente:
             raise TokenCaducadoError("El token caducó: repite la vista previa.")
 
@@ -257,9 +266,13 @@ class VinculacionDeArchivos:
                                     token_hasta=datetime.fromtimestamp(firmado.caduca, UTC)))
         await db.flush()
         await self._purgar()
-        await db.commit()
+        # La RESPUESTA entera (presentación incluida) se prepara y valida ANTES del commit: si falla, todavía se
+        # revierte todo. El `commit` es lo último que se hace; un fallo desde que se pide ya no puede decir «nada».
         nombres = await self._nombres(ids)
-        return self._respuesta(doc, repetida=False, nombres=nombres)
+        respuesta = self._respuesta(doc, repetida=False, nombres=nombres)
+        self._commit_pedido = True
+        await db.commit()
+        return respuesta
 
     # ── Decisión por clave ───────────────────────────────────────────────────────────────────────
 

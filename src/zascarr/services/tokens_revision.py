@@ -336,3 +336,42 @@ def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None 
     if len({clave_de_numero(a.numero) for a in archivos}) != len(archivos):      # dos archivos, un mismo número
         return None
     return VinculacionFirmada(clave, d["serie_id"], d["operacion"], tuple(archivos), caduca)
+
+
+# ── Tamaño máximo del token de vinculación ───────────────────────────────────────────────────────
+
+#: Longitud máxima de la `clave` de un grupo que acepta la vista previa (`max_length` de su petición).
+MAX_CLAVE_GRUPO = 1000
+#: Los códigos que la vista previa PUEDE firmar como conflicto (los de `RevisionCarpetas._senales`). Una prueba
+#: comprueba que coinciden con los del código fuente: si se añade uno nuevo, el límite se recalcula solo.
+CODIGOS_DE_SENAL = (
+    "anio_discrepa", "calificador_de_carpeta", "candidatas_distintas", "titulo_distinto",
+    "titulo_exacto_sin_corroboracion", "carpeta_de_autor_o_contenedor", "coincide_y_corrobora",
+    "sin_contexto_de_carpeta",
+)
+
+
+#: Instante usado al calcular el peor caso: una época de 11 dígitos (hasta el año 2286 bastan 10): la caducidad del
+#: token (`exp`) no puede hacerlo más largo.
+EPOCA_DEL_PEOR_CASO = 10**10
+
+
+def _longitud_peor_caso_del_token_de_vinculacion() -> int:
+    """La longitud del MAYOR token que la vista previa puede emitir (calculada, no elegida): 100 archivos, cada uno
+    con número de 20 caracteres, la edición de nombre más largo, tamaño y mtime de 63 bits y TODOS los códigos de
+    señal como conflicto, en un grupo cuya `clave` tiene 1000 caracteres de 4 bytes en UTF-8. El mismo cálculo se
+    repite en las pruebas con un token emitido de verdad."""
+    ident = "00000000-0000-4000-8000-000000000000"
+    formato = max((f.value for f in IssueFormat), key=len)
+    grande = 2**63 - 1
+    archivos = tuple(
+        ArchivoFirmado(f"{i:08d}-0000-4000-8000-000000000000", "9" * MAX_NUMERO, formato, grande, grande, CODIGOS_DE_SENAL)
+        for i in range(MAX_ARCHIVOS_FIRMADOS))
+    token = crear_token_vinculacion(
+        VinculacionFirmada("\U0001F600" * MAX_CLAVE_GRUPO, ident, ident, archivos), "x" * 32,
+        ahora=EPOCA_DEL_PEOR_CASO)
+    return len(token)
+
+
+#: El límite del cuerpo de `POST /api/revision/vinculacion`: acotado, y IGUAL al peor caso emitible.
+MAX_TOKEN_VINCULACION = _longitud_peor_caso_del_token_de_vinculacion()

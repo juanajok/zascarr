@@ -23,7 +23,6 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from tests.test_alta_serie_pg import operaciones as comprobantes_de_alta
 from tests.test_vinculacion_previa_pg import (  # noqa: F401  (fixtures y ayudas compartidas)
     CLAVE,
     SECRETO,
@@ -967,27 +966,35 @@ class TestConcurrencia:
             assert (await s.execute(text("SELECT count(*) FROM series"))).scalar_one() == 1
             assert (await s.execute(text("SELECT count(*) FROM files WHERE issue_id IS NOT NULL"))).scalar_one() == 1
 
-    async def test_un_interbloqueo_provocado_hace_rollback_completo_y_503_sin_informe(self, ent):
+    async def test_un_interbloqueo_provocado_se_observa_y_la_integridad_se_mantiene_sea_cual_sea_la_victima(self, ent):
+        """Prueba de INTEGRACIÓN, observacional: Postgres elige la víctima (en la práctica, la sesión que lleva más
+        esperando), y eso NO es una propiedad garantizada del servicio. Se comprueba la integridad en cualquier caso;
+        la respuesta 503 y el rollback del servicio se demuestran de forma determinista con la inyección de `40P01`."""
         serie = await serie_de_prueba(ent)
         ids = await archivos(ent, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
         token = await token_de(serie, ids.values())
         ordenados = sorted(ids.values(), key=str)
         primero, segundo = ordenados[0], ordenados[1]
+        victima_x = False
         async with ent.banco.fabrica() as x:
             await x.execute(text("SELECT id FROM files WHERE id = :f FOR UPDATE"), {"f": segundo})      # X retiene el 2.º
             servicio = asyncio.create_task(confirmar(token))                                              # bloquea el 1.º y espera el 2.º
             await asyncio.sleep(0.5)
             try:
                 await asyncio.wait_for(x.execute(text("SELECT id FROM files WHERE id = :f FOR UPDATE"), {"f": primero}), 20)
-                await x.commit()                                          # X pidió el 1.º: ciclo X↔servicio
+                await x.commit()
             except DBAPIError:
-                await x.rollback()                                        # (si la víctima hubiera sido X, se anota)
-                pytest.fail("la víctima del interbloqueo fue la sesión de la prueba y no el servicio")
+                victima_x = True                                          # Postgres eligió la sesión de la prueba
+                await x.rollback()
         r = await asyncio.wait_for(servicio, 30)
-        assert r.status_code == 503 and r.json()["detail"]["codigo"] == "conflicto_de_bloqueo" and r.headers["retry-after"] == "1"
-        assert await numero_de("issues", ent.banco) == 0 and await informes(ent.banco) == []
-        assert all(v[0] is None for v in (await estado_de_archivos(ent.banco)).values())
-        assert (await confirmar(token)).status_code == 200                # el mismo token se puede repetir
+        if victima_x:                                                     # el servicio acabó con normalidad
+            assert r.status_code == 200 and r.json()["resultado"]["global"] == "vinculados_todos"
+            assert await numero_de("issues", ent.banco) == 2 and len(await informes(ent.banco)) == 1
+        else:                                                             # el servicio fue la víctima
+            assert r.status_code == 503 and r.json()["detail"]["codigo"] == "conflicto_de_bloqueo"
+            assert await numero_de("issues", ent.banco) == 0 and await informes(ent.banco) == []
+            assert all(v[0] is None for v in (await estado_de_archivos(ent.banco)).values())
+            assert (await confirmar(token)).status_code == 200            # el mismo token se puede repetir
 
     async def test_un_error_de_interbloqueo_inyectado_responde_503_sin_efectos(self, ent, monkeypatch):
         serie = await serie_de_prueba(ent)
@@ -1003,6 +1010,7 @@ class TestConcurrencia:
         monkeypatch.setattr(VinculacionDeArchivos, "_vincular_archivo", interbloqueo)
         r = await confirmar(token)
         assert r.status_code == 503 and r.json()["detail"]["codigo"] == "conflicto_de_bloqueo"
+        assert r.headers["retry-after"] == "1"
         assert await numero_de("issues", ent.banco) == 0 and await informes(ent.banco) == []
         monkeypatch.setattr(VinculacionDeArchivos, "_vincular_archivo", real)
         assert (await confirmar(token)).status_code == 200
@@ -1097,6 +1105,219 @@ class TestBloqueosYSesionLimpia:
             await s.commit()
         assert (await confirmar(await token_de(serie, ids.values()))).status_code == 200
         assert len(await informes(ent.banco)) == 30 + 1                     # 100 purgadas; quedan 30 viejas y la nueva
+
+
+async def sin_cambios(ent, antes: dict) -> None:
+    """Una respuesta de «no se ha cambiado nada» tiene que ser CIERTA: cero vínculos, cero `Issue`s nuevos, cero informe."""
+    assert await numero_de("issues", ent.banco) == 0 and await informes(ent.banco) == []
+    assert all(v[0] is None for v in (await estado_de_archivos(ent.banco)).values())
+    assert await instantanea(ent.banco) == antes
+
+
+class TestFalloDespuesDeLaRespuestaPreparada:
+    """La respuesta (con su presentación) se prepara ANTES del commit: si falla, todavía se revierte todo. Y un fallo
+    desde que se pide el commit no puede anunciar «no se ha cambiado nada»."""
+
+    async def test_un_fallo_al_leer_los_nombres_durante_la_primera_ejecucion_revierte_todo(self, ent, monkeypatch):
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
+        token = await token_de(serie, ids.values())
+        antes = await instantanea(ent.banco)
+        real = VinculacionDeArchivos._nombres
+
+        async def falla(self, ids):
+            raise RuntimeError("fallo al leer los nombres")
+        monkeypatch.setattr(VinculacionDeArchivos, "_nombres", falla)
+        r = await confirmar(token)
+        assert r.status_code == 500 and r.json()["detail"]["codigo"] == "error_inesperado"
+        assert "no se ha cambiado nada" in r.json()["detail"]["mensaje"]            # y es VERDAD:
+        await sin_cambios(ent, antes)
+        monkeypatch.setattr(VinculacionDeArchivos, "_nombres", real)
+        assert (await confirmar(token)).json()["resultado"]["global"] == "vinculados_todos"      # el reintento ejecuta
+
+    async def test_un_fallo_al_construir_la_respuesta_durante_la_primera_ejecucion_revierte_todo(self, ent, monkeypatch):
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, "Flash 01 (1987).cbz")
+        token = await token_de(serie, ids.values())
+        antes = await instantanea(ent.banco)
+        real = VinculacionDeArchivos.__dict__["_respuesta"]
+
+        def falla(*a, **k):
+            raise RuntimeError("fallo al construir la respuesta")
+        monkeypatch.setattr(VinculacionDeArchivos, "_respuesta", staticmethod(falla))
+        r = await confirmar(token)
+        assert r.status_code == 500 and "no se ha cambiado nada" in r.json()["detail"]["mensaje"]
+        await sin_cambios(ent, antes)
+        monkeypatch.setattr(VinculacionDeArchivos, "_respuesta", real)
+        assert (await confirmar(token)).status_code == 200
+
+    async def test_un_fallo_de_presentacion_al_repetir_no_cambia_ni_borra_el_informe(self, ent, monkeypatch):
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, "Flash 01 (1987).cbz")
+        token = await token_de(serie, ids.values())
+        primero = (await confirmar(token)).json()
+        real = VinculacionDeArchivos._nombres
+
+        async def falla(self, ids):
+            raise RuntimeError("fallo")
+        monkeypatch.setattr(VinculacionDeArchivos, "_nombres", falla)
+        assert (await confirmar(token)).status_code == 500
+        monkeypatch.setattr(VinculacionDeArchivos, "_nombres", real)
+        assert len(await informes(ent.banco)) == 1 and (await confirmar(token)).json()["resultado"] == primero["resultado"]
+
+    async def test_un_fallo_tras_pedir_el_commit_no_anuncia_que_no_se_cambio_nada_y_el_reintento_devuelve_el_informe(self, ent, monkeypatch):
+        """La operación SÍ quedó confirmada pero no se pudo entregar la respuesta."""
+        from sqlalchemy.ext.asyncio import AsyncSession
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
+        token = await token_de(serie, ids.values())
+        real_commit = AsyncSession.commit
+        llamadas = []
+
+        async def commit_y_luego_falla(self):
+            await real_commit(self)                 # el commit llega a Postgres...
+            llamadas.append(1)
+            raise ConnectionError("se perdió la conexión al confirmar")      # ...pero la aplicación no se entera
+        monkeypatch.setattr(AsyncSession, "commit", commit_y_luego_falla)
+        r = await confirmar(token)
+        monkeypatch.setattr(AsyncSession, "commit", real_commit)
+        assert llamadas and r.status_code == 503 and r.json()["detail"]["codigo"] == "resultado_incierto"
+        assert r.headers["retry-after"] == "1"
+        texto = r.text.lower()
+        assert "no se ha cambiado nada" not in texto and "mismo token" in texto
+        # y de hecho SÍ hay efectos: vínculos, Issues e informe
+        assert await numero_de("issues", ent.banco) == 2 and len(await informes(ent.banco)) == 1
+        assert all(v[0] is not None for v in (await estado_de_archivos(ent.banco)).values())
+        # el reintento con el mismo token devuelve el informe persistido
+        b = (await confirmar(token)).json()
+        assert b["repetida"] is True and b["resultado"]["global"] == "vinculados_todos"
+        assert await numero_de("issues", ent.banco) == 2
+
+    async def test_un_fallo_tras_pedir_el_commit_que_no_llego_a_confirmar_tambien_es_incierto_y_el_reintento_ejecuta(self, ent, monkeypatch):
+        """Si el commit falla de verdad (nada confirmado) tampoco se afirma «sin cambios»: no se puede saber desde fuera.
+        El reintento con el mismo token aplica la vinculación (no hay informe)."""
+        from sqlalchemy.ext.asyncio import AsyncSession
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, "Flash 01 (1987).cbz")
+        token = await token_de(serie, ids.values())
+        real_commit = AsyncSession.commit
+
+        async def falla(self):
+            raise ConnectionError("se cayó antes de confirmar")
+        monkeypatch.setattr(AsyncSession, "commit", falla)
+        r = await confirmar(token)
+        monkeypatch.setattr(AsyncSession, "commit", real_commit)
+        assert r.status_code == 503 and r.json()["detail"]["codigo"] == "resultado_incierto"
+        assert "no se ha cambiado nada" not in r.text.lower()
+        assert (await confirmar(token)).json()["resultado"]["global"] == "vinculados_todos"
+
+    async def test_una_cancelacion_antes_o_despues_del_commit_no_se_convierte_en_resultado_incierto(self, ent, monkeypatch):
+        from sqlalchemy.ext.asyncio import AsyncSession
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, "Flash 01 (1987).cbz")
+        token = await token_de(serie, ids.values())
+
+        async def cancela(self):
+            raise asyncio.CancelledError()
+        with monkeypatch.context() as m:                                    # antes del commit: se revierte todo
+            m.setattr(VinculacionDeArchivos, "_purgar", cancela)
+            async with ent.banco.fabrica() as s:
+                with pytest.raises(asyncio.CancelledError):
+                    await VinculacionDeArchivos(s, secret=SECRETO).confirmar(token)
+        assert await numero_de("issues", ent.banco) == 0 and await informes(ent.banco) == []
+
+        real_commit = AsyncSession.commit
+
+        async def commit_y_cancela(self):
+            await real_commit(self)
+            raise asyncio.CancelledError()
+        with monkeypatch.context() as m:                                    # tras pedir el commit: sigue siendo una cancelación
+            m.setattr(AsyncSession, "commit", commit_y_cancela)
+            async with ent.banco.fabrica() as s:
+                with pytest.raises(asyncio.CancelledError):
+                    await VinculacionDeArchivos(s, secret=SECRETO).confirmar(token)
+        assert (await confirmar(token)).json()["repetida"] is True          # la operación sí quedó confirmada
+
+
+class TestTamanoDelToken:
+    """El límite del cuerpo es el del MAYOR token que la vista previa puede emitir (calculado), no una cifra elegida."""
+
+    async def _grupo_de_cien(self, ent, carpeta="Comics/Flash (1987)"):
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 101)), carpeta=carpeta)
+        return serie, ids
+
+    async def test_cien_archivos_con_numeros_del_1_al_100_se_aceptan_de_extremo_a_extremo(self, ent):
+        """El caso que el límite de 20.000 rechazaba: vista previa → token → POST de confirmación."""
+        serie, ids = await self._grupo_de_cien(ent)
+        r = await previsualizar(serie, marcados=list(ids.values()))
+        token = r.json()["token"]
+        assert r.json()["totales"]["a_vincular"] == 100
+        c = await confirmar(token)
+        assert c.status_code == 200 and c.json()["resultado"]["totales"]["vinculados"] == 100
+
+    async def test_el_token_del_caso_de_la_revision_20445_caracteres_no_se_rechaza_por_tamano(self, ent):
+        """100 archivos, números 1–100, single_issue, 100 MB, mtime normal y sin conflictos: 20.445 caracteres, que el
+        límite anterior de 20.000 habría rechazado con 422 aunque la vista previa pudiera emitirlo."""
+        serie = await serie_de_prueba(ent)
+        archivos_firmados = tuple(ArchivoFirmado(str(uuid4()), str(i), "single_issue", 100_000_000, 1_760_000_000_000_000_000)
+                                  for i in range(1, 101))
+        token = crear_token_vinculacion(VinculacionFirmada("Comics/Flash (1987)", str(serie), str(uuid4()), archivos_firmados), SECRETO)
+        assert len(token) > 20000
+        c = await confirmar(token)
+        assert c.status_code == 200 and c.json()["resultado"]["global"] == "nada_vinculado"      # aceptado; los archivos no existen
+
+    async def test_cien_archivos_con_conflictos_firmados_numeros_y_clave_cerca_de_los_limites(self, ent):
+        from zascarr.services.tokens_revision import MAX_TOKEN_VINCULACION
+        carpeta = "Comics/" + "x" * 240 + "/" + "y" * 240 + "/Flash (1987)"            # una clave larga (≈ 500 caracteres)
+        serie = await serie_de_prueba(ent, "Batman", 1940)                              # todos los archivos contradicen la serie
+        ids = await archivos(ent, *(f"Flash {i:03d} (1987).cbz" for i in range(1, 101)), carpeta=carpeta)
+        clave = carpeta
+        numeros = {fid: "9" * 17 + f"{i:03d}" for i, fid in enumerate(ids.values())}      # 20 caracteres cada uno
+        r = await previsualizar(serie, clave=clave, marcados=list(ids.values()), numeros=numeros)
+        assert r.status_code == 200, r.text
+        token = r.json()["token"]
+        firmados = verificar_token_vinculacion(token, SECRETO).archivos
+        assert len(firmados) == 100 and all(len(a.numero) == 20 for a in firmados) and all(a.conflictos for a in firmados)
+        assert 20000 < len(token) <= MAX_TOKEN_VINCULACION                                # por encima del límite antiguo
+        c = await confirmar(token)
+        assert c.status_code == 200 and c.json()["resultado"]["totales"]["con_conflicto_incluidos"] == 100
+
+    def test_el_limite_es_el_peor_caso_calculado_con_los_codigos_reales_de_senal(self):
+        import re
+
+        from zascarr.models import IssueFormat
+        from zascarr.services import revision_carpetas
+        from zascarr.services.tokens_revision import (
+            CODIGOS_DE_SENAL,
+            EPOCA_DEL_PEOR_CASO,
+            MAX_ARCHIVOS_FIRMADOS,
+            MAX_CLAVE_GRUPO,
+            MAX_NUMERO,
+            MAX_TOKEN_VINCULACION,
+        )
+        fuente = Path(revision_carpetas.__file__).read_text(encoding="utf-8")
+        assert set(CODIGOS_DE_SENAL) == set(re.findall(r'codigo="([a-z_]+)"', fuente)), "hay códigos de señal nuevos: actualiza CODIGOS_DE_SENAL"
+        formato = max((f.value for f in IssueFormat), key=len)
+        grande = 2**63 - 1
+        ident = str(uuid4())
+        peor = crear_token_vinculacion(VinculacionFirmada(
+            "\U0001F600" * MAX_CLAVE_GRUPO, ident, ident, tuple(
+                ArchivoFirmado(str(uuid4()), "9" * (MAX_NUMERO - 3) + f"{i:03d}", formato, grande, grande, CODIGOS_DE_SENAL)
+                for i in range(MAX_ARCHIVOS_FIRMADOS))), SECRETO, ahora=EPOCA_DEL_PEOR_CASO)
+        assert len(peor) == MAX_TOKEN_VINCULACION
+        assert verificar_token_vinculacion(peor, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None
+
+    async def test_el_limite_esta_acotado_un_caracter_mas_se_rechaza_en_la_validacion(self, ent):
+        from zascarr.services.tokens_revision import MAX_TOKEN_VINCULACION
+        justo = await confirmar("a" * MAX_TOKEN_VINCULACION)
+        assert justo.status_code == 422 and isinstance(justo.json()["detail"], dict)         # pasa la validación; no es un token
+        de_mas = await confirmar("a" * (MAX_TOKEN_VINCULACION + 1))
+        assert de_mas.status_code == 422 and isinstance(de_mas.json()["detail"], list)       # rechazado por tamaño
+
+    async def test_el_alta_y_la_candidata_no_se_ven_afectadas_por_el_limite_de_vinculacion(self, ent):
+        from zascarr.services.tokens_revision import MAX_TOKEN_VINCULACION
+        assert 40000 < MAX_TOKEN_VINCULACION < 100000                                            # acotado, no infinito
 
 
 class TestSinReintentoAutomatico:
