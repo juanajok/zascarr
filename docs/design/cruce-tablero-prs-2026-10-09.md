@@ -12,12 +12,14 @@
   aceptada por quien revisa, ni desplegada, ni ensayada en la Raspberry Pi.
   Las migraciones 0018 y 0019 siguen sin aplicarse en producción.
 - **Parcial** indica qué parte existe y qué evidencia falta.
-- **Nueva** significa que no hay nada en `main` que la cubra.
+- **Nueva** significa que el entregable específico de la historia está pendiente.
+  Puede apoyarse en servicios, herramientas o pruebas existentes; no implica que
+  deba implementarse desde cero.
 - Las evidencias son PRs fusionadas y ficheros del repositorio. Nada de lo de
   este documento se ha comprobado contra fuentes reales ni en una Pi.
 
-Resumen: **3 cubiertas** (todas de M2, con la salvedad de §2), **8 parciales**,
-**13 nuevas**, sobre las 24 historias. Las 8 funcionalidades (M1–M8) heredan el
+Resumen: **3 cubiertas** (todas de M2, con la salvedad de §2), **7 parciales**,
+**14 nuevas**, sobre las 24 historias. Las 8 funcionalidades (M1–M8) heredan el
 estado de sus historias.
 
 ## 1. Referencias que sostienen el cruce
