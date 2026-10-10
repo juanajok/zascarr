@@ -413,6 +413,19 @@ def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None 
 
 #: Longitud máxima de la `clave` de un grupo que acepta la vista previa (`max_length` de su petición).
 MAX_CLAVE_GRUPO = 1000
+#: El carácter que más pesa en el JSON del token **dentro de la `clave` del grupo**. La clave es la ruta de la carpeta
+#: tal como está en `files.file_path` (`"/".join` de los nombres de carpeta, sin tocar: identifica al grupo y debe
+#: conservar su significado), y un nombre de carpeta de Linux puede llevar cualquier byte salvo `/` y NUL, es decir,
+#: controles. `json.dumps(..., ensure_ascii=False)` escribe los controles como `\u00XX`: **seis bytes**, más que los
+#: cuatro de cualquier carácter UTF-8 (una prueba lo comprueba sobre todos los puntos de código). Los demás textos del
+#: token pasan por `texto_firmable` y no pueden llevar esos controles. El NUL no puede estar: Postgres no lo guarda.
+CARACTER_MAS_PESADO_DE_UNA_CLAVE = "\x01"
+
+#: Los caracteres que pesan SEIS bytes en el JSON y que un **número** admite sin que `strip` los quite de los extremos:
+#: los controles U+0001–U+0007 y U+000E–U+001B. `VistaPreviaDeVinculacion._numero_valido` solo rechaza `\n \r \t`, NUL y
+#: más de `MAX_NUMERO` caracteres, y el verificador no mira el contenido; el número lo escribe la persona. Una prueba
+#: deriva este conjunto del validador real y comprueba que coincide: si el validador cambia, el límite se recalcula.
+CONTROLES_DE_SEIS_BYTES_EN_UN_NUMERO = tuple(chr(o) for o in (*range(0x01, 0x08), *range(0x0E, 0x1C)))
 #: Los códigos que la vista previa PUEDE firmar como conflicto (los de `RevisionCarpetas._senales`). Una prueba
 #: comprueba que coinciden con los del código fuente: si se añade uno nuevo, el límite se recalcula solo.
 CODIGOS_DE_SENAL = (
@@ -427,19 +440,31 @@ CODIGOS_DE_SENAL = (
 EPOCA_DEL_PEOR_CASO = 10**10
 
 
+def _numero_de_peor_caso(i: int) -> str:
+    """El i-ésimo número de `MAX_NUMERO` caracteres, todos de seis bytes y distintos entre sí (el verificador rechaza
+    dos archivos con el mismo número): dos posiciones recorren los controles, el resto es `U+0001`."""
+    n = len(CONTROLES_DE_SEIS_BYTES_EN_UN_NUMERO)
+    return ("\x01" * (MAX_NUMERO - 2) + CONTROLES_DE_SEIS_BYTES_EN_UN_NUMERO[(i // n) % n]
+            + CONTROLES_DE_SEIS_BYTES_EN_UN_NUMERO[i % n])
+
+
 def _longitud_peor_caso_del_token_de_vinculacion() -> int:
     """La longitud del MAYOR token que la vista previa puede emitir (calculada, no elegida): 100 archivos, cada uno
-    con número de 20 caracteres, la edición de nombre más largo, tamaño y mtime de 63 bits y TODOS los códigos de
-    señal como conflicto, en un grupo cuya `clave` tiene 1000 caracteres de 4 bytes en UTF-8. El mismo cálculo se
-    repite en las pruebas con un token emitido de verdad."""
+    con un número de 20 controles de seis bytes (lo escribe la persona y la vista previa los admite), la edición de
+    nombre más largo, tamaño y mtime de 63 bits y TODOS los códigos de señal como conflicto, en un grupo cuya `clave`
+    tiene 1000 caracteres de seis bytes (la ruta de la carpeta, tal cual). Es una COTA: ningún recorrido real junta
+    todo a la vez (la clave real es un prefijo de una ruta de 1000 caracteres, un archivo no pesa 2**63 - 1 bytes y
+    un archivo no tiene más de 4 conflictos); lo que importa es que ningún token válido emitible la supere. Sale de
+    `crear_token_vinculacion`, es decir, de la serialización, la codificación y la firma reales."""
     ident = "00000000-0000-4000-8000-000000000000"
     formato = max((f.value for f in IssueFormat), key=len)
     grande = 2**63 - 1
     archivos = tuple(
-        ArchivoFirmado(f"{i:08d}-0000-4000-8000-000000000000", "9" * MAX_NUMERO, formato, grande, grande, CODIGOS_DE_SENAL)
+        ArchivoFirmado(f"{i:08d}-0000-4000-8000-000000000000", _numero_de_peor_caso(i), formato, grande, grande,
+                       CODIGOS_DE_SENAL)
         for i in range(MAX_ARCHIVOS_FIRMADOS))
     token = crear_token_vinculacion(
-        VinculacionFirmada("\U0001F600" * MAX_CLAVE_GRUPO, ident, ident, archivos), "x" * 32,
+        VinculacionFirmada(CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, ident, ident, archivos), "x" * 32,
         ahora=EPOCA_DEL_PEOR_CASO)
     return len(token)
 
@@ -449,15 +474,6 @@ MAX_TOKEN_VINCULACION = _longitud_peor_caso_del_token_de_vinculacion()
 
 
 # ── Tamaño máximo de los tokens de candidata y alta ──────────────────────────────────────────────
-
-#: El carácter que más pesa en el JSON del token **dentro de la `clave` del grupo**. La clave es la ruta de la carpeta
-#: tal como está en `files.file_path` (`"/".join` de los nombres de carpeta, sin tocar: identifica al grupo y debe
-#: conservar su significado), y un nombre de carpeta de Linux puede llevar cualquier byte salvo `/` y NUL, es decir,
-#: controles. `json.dumps(..., ensure_ascii=False)` escribe los controles como `\u00XX`: **seis bytes**, más que los
-#: cuatro de cualquier carácter UTF-8 (una prueba lo comprueba sobre todos los puntos de código). Los demás textos del
-#: token pasan por `texto_firmable` y no pueden llevar esos controles. El NUL no puede estar: Postgres no lo guarda.
-CARACTER_MAS_PESADO_DE_UNA_CLAVE = "\x01"
-
 
 def _longitud_peor_caso_del_token_de_candidata() -> int:
     """La longitud del MAYOR token de candidata que el servidor puede emitir y el verificador acepta (calculada, no
