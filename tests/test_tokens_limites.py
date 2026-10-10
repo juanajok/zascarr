@@ -391,7 +391,8 @@ class TestLimitesDeLaPeticion:
     def test_el_titulo_manual_admite_la_cota_de_titulo(self):
         assert maximo_de_campo(DatosManualesIn, "titulo") == MAX_TITULO
 
-    def test_el_token_de_vinculacion_no_cambia(self):
-        """Esta corrección no toca el formato, la firma ni el máximo del token de vinculación (#103)."""
-        assert MAX_TOKEN_VINCULACION == 56029
+    def test_el_limite_del_token_de_vinculacion_es_el_endpoint(self):
+        """#138 fijó aquí `MAX_TOKEN_VINCULACION == 56029` («esta corrección no lo toca»). La corrección posterior de ese
+        cálculo (tokens de vinculación: clave y números con controles) lo lleva a 72.029; el valor y su derivación se
+        prueban en `test_tokens_vinculacion_limite.py`. Lo que sigue valiendo aquí: el endpoint usa exactamente ese máximo."""
         assert maximo_de_campo(PeticionVincular, "token") == MAX_TOKEN_VINCULACION
