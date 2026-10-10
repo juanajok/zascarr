@@ -1299,12 +1299,13 @@ class TestTamanoDelToken:
         fuente = Path(revision_carpetas.__file__).read_text(encoding="utf-8")
         assert set(CODIGOS_DE_SENAL) == set(re.findall(r'codigo="([a-z_]+)"', fuente)), "hay códigos de señal nuevos: actualiza CODIGOS_DE_SENAL"
         formato = max((f.value for f in IssueFormat), key=len)
-        grande = 2**63 - 1
+        grande = 2**63 - 1                                                             # tamaño: off_t de 64 bits con signo
+        mtime = (2**63 - 1) * 10**9 + 999_999_999                                       # mtime_ns: time_t de 64 bits × 10**9 + nsec
         ident = str(uuid4())
         pesados = [chr(o) for o in (*range(1, 8), *range(14, 28))]                     # controles de SEIS bytes admitidos
         peor = crear_token_vinculacion(VinculacionFirmada(
             "\x01" * MAX_CLAVE_GRUPO, ident, ident, tuple(                              # clave de controles, tal cual
-                ArchivoFirmado(str(uuid4()), "\x01" * (MAX_NUMERO - 2) + pesados[i // 21] + pesados[i % 21], formato, grande, grande, CODIGOS_DE_SENAL)
+                ArchivoFirmado(str(uuid4()), "\x01" * (MAX_NUMERO - 2) + pesados[i // 21] + pesados[i % 21], formato, grande, mtime, CODIGOS_DE_SENAL)
                 for i in range(MAX_ARCHIVOS_FIRMADOS))), SECRETO, ahora=EPOCA_DEL_PEOR_CASO)
         assert len(peor) == MAX_TOKEN_VINCULACION                                   # ver también test_tokens_vinculacion_limite.py
         assert verificar_token_vinculacion(peor, SECRETO, ahora=EPOCA_DEL_PEOR_CASO) is not None

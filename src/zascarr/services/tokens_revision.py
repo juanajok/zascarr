@@ -426,6 +426,16 @@ CARACTER_MAS_PESADO_DE_UNA_CLAVE = "\x01"
 #: más de `MAX_NUMERO` caracteres, y el verificador no mira el contenido; el número lo escribe la persona. Una prueba
 #: deriva este conjunto del validador real y comprueba que coincide: si el validador cambia, el límite se recalcula.
 CONTROLES_DE_SEIS_BYTES_EN_UN_NUMERO = tuple(chr(o) for o in (*range(0x01, 0x08), *range(0x0E, 0x1C)))
+
+#: Cotas de lo que devuelve `stat` y se firma en cada archivo (`tamano`, `mtime_ns`). Ni el verificador ni el proyecto
+#: las limitan: salen del ABI de Linux, que es la plataforma soportada (contenedor en la Pi). `st_size` es un `off_t`
+#: con signo de 64 bits. `st_mtime` es un `time_t` con signo de 64 bits más una parte de nanosegundos menor que 10**9, y
+#: Python lo expone como `sec * 10**9 + nsec`: hasta 28 dígitos, bastante más que los 2**63 - 1 (19 dígitos) que se
+#: había supuesto. No es una conjetura: un archivo temporal en `tmpfs` conserva un `st_mtime_ns` de 10**19 (20 dígitos)
+#: y otro de 10**27 (28 dígitos). Lo que alcance cada sistema de archivos depende de él; la cota es la del ABI.
+#: No se recorta ni se rechaza ninguna fecha: es solo el número con el que se calcula el máximo.
+MAX_TAMANO_STAT = 2**63 - 1
+MAX_MTIME_NS_STAT = (2**63 - 1) * 10**9 + 999_999_999
 #: Los códigos que la vista previa PUEDE firmar como conflicto (los de `RevisionCarpetas._senales`). Una prueba
 #: comprueba que coinciden con los del código fuente: si se añade uno nuevo, el límite se recalcula solo.
 CODIGOS_DE_SENAL = (
@@ -449,19 +459,19 @@ def _numero_de_peor_caso(i: int) -> str:
 
 
 def _longitud_peor_caso_del_token_de_vinculacion() -> int:
-    """La longitud del MAYOR token que la vista previa puede emitir (calculada, no elegida): 100 archivos, cada uno
-    con un número de 20 controles de seis bytes (lo escribe la persona y la vista previa los admite), la edición de
-    nombre más largo, tamaño y mtime de 63 bits y TODOS los códigos de señal como conflicto, en un grupo cuya `clave`
-    tiene 1000 caracteres de seis bytes (la ruta de la carpeta, tal cual). Es una COTA: ningún recorrido real junta
-    todo a la vez (la clave real es un prefijo de una ruta de 1000 caracteres, un archivo no pesa 2**63 - 1 bytes y
-    un archivo no tiene más de 4 conflictos); lo que importa es que ningún token válido emitible la supere. Sale de
+    """Cota de la longitud de un token de vinculación válido, **calculada para la representación admitida y
+    deliberadamente holgada** respecto al recorrido actual de la vista previa (no es «el mayor token que la vista previa
+    emite»: reúne a la vez cosas que hoy ningún recorrido junta). Reúne: 100 archivos, cada uno con un número de 20
+    controles de seis bytes (lo escribe la persona y la vista previa los admite), la edición de nombre más largo,
+    `tamano` y `mtime_ns` en el máximo del ABI (`MAX_TAMANO_STAT`, `MAX_MTIME_NS_STAT`) y TODOS los códigos de señal como
+    conflicto (hoy un archivo no da más de 3; se cuentan los 8 para no depender de las exclusiones entre señales), en un
+    grupo cuya `clave` tiene 1000 caracteres de seis bytes (la ruta de la carpeta, tal cual). Sale de
     `crear_token_vinculacion`, es decir, de la serialización, la codificación y la firma reales."""
     ident = "00000000-0000-4000-8000-000000000000"
     formato = max((f.value for f in IssueFormat), key=len)
-    grande = 2**63 - 1
     archivos = tuple(
-        ArchivoFirmado(f"{i:08d}-0000-4000-8000-000000000000", _numero_de_peor_caso(i), formato, grande, grande,
-                       CODIGOS_DE_SENAL)
+        ArchivoFirmado(f"{i:08d}-0000-4000-8000-000000000000", _numero_de_peor_caso(i), formato, MAX_TAMANO_STAT,
+                       MAX_MTIME_NS_STAT, CODIGOS_DE_SENAL)
         for i in range(MAX_ARCHIVOS_FIRMADOS))
     token = crear_token_vinculacion(
         VinculacionFirmada(CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, ident, ident, archivos), "x" * 32,
