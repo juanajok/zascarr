@@ -89,6 +89,11 @@ TEXTOS: dict[str, str] = {
     "fuera_de_la_pagina": f"Este archivo no está en esta página (máximo {LIMITE_ARCHIVOS} por página): "
                           "ábrela con su cursor para poder marcarlo.",
 }
+#: El número que sale del NOMBRE no cumple la regla del número (como mucho `MAX_NUMERO` caracteres, sin saltos de línea):
+#: se trata como ausente, no se trunca ni se firma. No se enseña entero (puede ser larguísimo).
+TEXTO_NUMERO_DEL_NOMBRE_NO_VALIDO = (
+    f"El número que sale del nombre tiene más de {MAX_NUMERO} caracteres o no es válido, así que no se puede usar: "
+    "escríbelo para poder vincularlo.")
 #: «No se pudo verificar» NO afirma que el archivo haya desaparecido: solo que la comprobación falló.
 TEXTOS_NO_VERIFICABLE: dict[str, str] = {
     "permiso": "No se pudo comprobar el archivo: no hay permiso para leer su carpeta. No significa que haya desaparecido.",
@@ -298,9 +303,12 @@ class VistaPreviaDeVinculacion:
 
         # ── Número y edición de cada archivo: del nombre, salvo lo que la persona haya editado ──
         propuesta: dict[str, tuple[str | None, str | None, str, str]] = {}
+        descartados: set[str] = set()        # archivos cuyo número del nombre no cumple la regla (se trata como ausente)
         for a in tratados + fuera:
             p = parse_comic_filename(a.nombre)
-            del_nombre = (p.issue_number or "").strip() or None
+            del_nombre, descartado = self._numero_del_nombre(p.issue_number)
+            if descartado and a.id not in numeros:
+                descartados.add(a.id)
             formato = EDITION_KIND_A_FORMAT.get(p.edition_kind, IssueFormat.SINGLE_ISSUE).value
             if a.id in numeros:
                 numero, origen = numeros[a.id] or None, "persona"
@@ -327,7 +335,8 @@ class VistaPreviaDeVinculacion:
                 fid=a.id, nombre=a.nombre, ruta=rutas.get(a.id), numero=numero, del_nombre=del_nombre, formato=formato,
                 origen_n=origen_n, origen=origenes.get(a.id), en_curso=a.id in en_curso,
                 repetido_con=repetidos.get(a.id, []), existentes=existentes,
-                conflictos=[s for s in senales if a.id in s.archivos], marcado=a.id in marcados)
+                conflictos=[s for s in senales if a.id in s.archivos], marcado=a.id in marcados,
+                numero_del_nombre_descartado=a.id in descartados)
             salida.append(self._evaluar(**evaluar[a.id], repetido_en_seleccion=False))
         # Lo que no puede haber es dos archivos MARCADOS y ejecutables con el mismo número: se bloquean ambos (nada
         # elige por la persona). Un duplicado sin marcar, o marcado solo él, no se bloquea.
@@ -388,6 +397,20 @@ class VistaPreviaDeVinculacion:
     # ── Piezas ───────────────────────────────────────────────────────────────────────────────────
 
     @staticmethod
+    def _numero_del_nombre(valor: str | None) -> tuple[str | None, bool]:
+        """(número utilizable o `None`, descartado). El número que sale del nombre pasa por la MISMA regla que el que
+        escribe la persona (`_numero_valido`): si no la cumple se trata como AUSENTE (el archivo pasa a «requiere
+        número»), nunca se trunca. Sin esto, la vista previa lo firmaba y el verificador (≤ `MAX_NUMERO` caracteres)
+        rechazaba el token ENTERO. El parser no acota el número y no se toca."""
+        v = (valor or "").strip()
+        if not v:
+            return None, False
+        try:
+            return VistaPreviaDeVinculacion._numero_valido(v) or None, False
+        except NumeroNoValidoError:
+            return None, True
+
+    @staticmethod
     def _numero_valido(valor: str) -> str:
         v = (valor or "").strip()
         if len(v) > MAX_NUMERO or any(c in v for c in "\n\r\t\x00"):
@@ -432,7 +455,7 @@ class VistaPreviaDeVinculacion:
 
     def _evaluar(self, fid, nombre, ruta, numero, del_nombre, formato, origen_n, origen: _Origen | None, en_curso: bool,
                  repetido_con: list[str], existentes, conflictos: list[Senal], marcado: bool,
-                 repetido_en_seleccion: bool) -> ArchivoVinculacion:
+                 repetido_en_seleccion: bool, numero_del_nombre_descartado: bool = False) -> ArchivoVinculacion:
         motivos: list[str] = []
         causa: str | None = None
         if en_curso:
@@ -470,6 +493,8 @@ class VistaPreviaDeVinculacion:
                 texto = TEXTOS["numero_ambiguo"]
             elif estado == "numero_repetido_en_el_grupo":
                 texto = f"Otro archivo marcado tiene el mismo número ({numero}): marca solo uno de los dos."
+            elif estado == "requiere_numero" and numero_del_nombre_descartado:
+                texto = TEXTO_NUMERO_DEL_NOMBRE_NO_VALIDO
             else:
                 texto = TEXTOS[estado]
         else:
