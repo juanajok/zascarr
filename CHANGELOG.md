@@ -68,6 +68,18 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - La regla de contraseña (mínimo 12, aviso por debajo de 15) pasa de Ajustes a un
   servicio compartido con el instalador. Sin cambios de comportamiento en Ajustes.
 
+### Obsoleto
+
+- **`POST /api/series` queda obsoleto** (fase 1 de su retirada, #114): sigue funcionando
+  exactamente igual, pero aparece marcado como obsoleto en la documentación de la API y
+  **no ofrece las garantías del alta por token** (sin vista previa ni confirmación,
+  tradición `american` si no se indica, sin detección de series con el mismo título,
+  sin procedencia ni «deshacer»). El alta por token (`POST /api/revision/serie/previsualizar`
+  y `POST /api/revision/serie`) ofrece esas garantías, pero **parte de una carpeta con
+  archivos pendientes**: todavía no hay un sustituto para crear una serie vacía desde la
+  API sin carpeta. Se retirará en una versión posterior, con aviso; si tienes un script
+  que lo usa, cuéntalo antes de que se retire.
+
 ### Corregido
 
 - **La lista de deseos ya no se sale de la pantalla en el móvil.** Cada fila no podía partirse en varias
