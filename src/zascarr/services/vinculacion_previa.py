@@ -75,7 +75,7 @@ BLOQUEOS = ("ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verif
 EstadoArchivo = Literal["ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verificable",
                         "requiere_numero", "numero_repetido_en_el_grupo", "colision_de_edicion",
                         "numero_ambiguo", "numero_ya_existe", "con_conflicto_de_carpeta", "se_vincularia", "fuera_de_la_pagina"]
-Causa = Literal["permiso", "error_de_lectura", "biblioteca_no_accesible", "no_es_un_archivo"]
+Causa = Literal["permiso", "error_de_lectura", "biblioteca_no_accesible", "no_es_un_archivo", "fecha_anterior_a_1970"]
 
 TEXTOS: dict[str, str] = {
     "ya_vinculado": "Ya está vinculado a una serie.",
@@ -100,6 +100,9 @@ TEXTOS_NO_VERIFICABLE: dict[str, str] = {
     "error_de_lectura": "No se pudo comprobar el archivo por un error de lectura del disco. No significa que haya desaparecido.",
     "biblioteca_no_accesible": "No se pudo comprobar el archivo: la carpeta de la biblioteca no está disponible (¿disco desmontado?). No significa que haya desaparecido.",
     "no_es_un_archivo": "La ruta registrada existe pero no es un archivo: no se puede vincular.",
+    # No enseña la fecha: solo que es anterior a 1970 (el token no admite fechas negativas, #142).
+    "fecha_anterior_a_1970": "La fecha de modificación del archivo es anterior a 1970 y no se puede comprobar. No significa que haya "
+                             "desaparecido: actualiza su fecha (por ejemplo, volviendo a copiarlo) y repite la vista previa.",
 }
 
 
@@ -224,8 +227,14 @@ def _comprobar_origenes(rutas: dict[str, str], biblioteca: Path, estadistica: Ca
         except OSError:
             salida[fid] = _Origen("no_verificable", causa="error_de_lectura")
         else:
-            salida[fid] = (_Origen("ok", st.st_size, st.st_mtime_ns) if _stat.S_ISREG(st.st_mode)
-                           else _Origen("no_verificable", causa="no_es_un_archivo"))
+            if not _stat.S_ISREG(st.st_mode):
+                salida[fid] = _Origen("no_verificable", causa="no_es_un_archivo")
+            elif st.st_mtime_ns < 0:
+                # El token firma `mtime_ns` y el verificador exige `>= 0`: un archivo anterior a 1970 no se podría
+                # confirmar y arrastraría todo el lote (#142). Se defiende la vista previa; el verificador no cambia.
+                salida[fid] = _Origen("no_verificable", causa="fecha_anterior_a_1970")
+            else:
+                salida[fid] = _Origen("ok", st.st_size, st.st_mtime_ns)
     return salida
 
 
