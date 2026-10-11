@@ -224,6 +224,25 @@ def _valor_de_id(campo: str, id_externo: str) -> int | str:
         raise DatosInvalidosError("El identificador externo no es válido.") from None
 
 
+async def bloquear_titulo(db: AsyncSession, titulo: str) -> None:
+    """Candado consultivo del TÍTULO NORMALIZADO (sin año ni tradición): serializa todo lo que podría crear o cambiar
+    una serie hacia ese título (el alta y la edición de identidad, I5 de #114). Dura hasta el `commit` o el `rollback`."""
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k || f_title_norm(:t), 0))"),
+                     {"k": _ESPACIO_CANDADO, "t": titulo})
+
+
+async def buscar_parecidas(db: AsyncSession, titulo: str, anio: int | None, tradicion: ComicTradition, *,
+                           excluir: str | None) -> list[SerieParecida]:
+    """Mismo título normalizado (el de Postgres, `f_title_norm`), año compatible (±1; un año desconocido no
+    descarta) y la MISMA tradición. Orden fijo: año y id. UNA sola definición para el alta y la edición."""
+    filas = (await db.execute(
+        select(Series).where(Series.title_norm == func.f_title_norm(titulo), Series.tradition == tradicion)
+    )).scalars().all()
+    return [SerieParecida(**_a_serie_local(s).model_dump(), motivo=MOTIVO_PARECIDA)
+            for s in sorted(filas, key=lambda s: (s.start_year or 0, str(s.id)))
+            if _anios_compatibles(anio, s.start_year) and str(s.id) != excluir]
+
+
 class AltaDeSerie:
     def __init__(self, db: AsyncSession, *, secret: str, ahora: float | None = None):
         self._db = db
@@ -375,8 +394,7 @@ class AltaDeSerie:
 
         # 3. Candado del TÍTULO NORMALIZADO (sin año ni tradición): serializa todas las altas que podrían
         #    colisionar, también 1987 frente a 1988. Dura hasta el `commit` o el `rollback`.
-        await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k || f_title_norm(:t), 0))"),
-                         {"k": _ESPACIO_CANDADO, "t": alta.titulo})
+        await bloquear_titulo(db, alta.titulo)
 
         # 4. Carrera por el identificador externo: ya existe → es una REUTILIZACIÓN, no un error.
         campo = CAMPO_ID_EXTERNO.get(MetadataSource(alta.fuente)) if alta.fuente else None
@@ -528,11 +546,4 @@ class AltaDeSerie:
 
     async def _parecidas(self, titulo: str, anio: int | None, tradicion: ComicTradition, *,
                          excluir: str | None) -> list[SerieParecida]:
-        """Mismo título normalizado (el de Postgres, `f_title_norm`), año compatible (±1; un año desconocido no
-        descarta) y la MISMA tradición. Orden fijo: año y id."""
-        filas = (await self._db.execute(
-            select(Series).where(Series.title_norm == func.f_title_norm(titulo), Series.tradition == tradicion)
-        )).scalars().all()
-        return [SerieParecida(**_a_serie_local(s).model_dump(), motivo=MOTIVO_PARECIDA)
-                for s in sorted(filas, key=lambda s: (s.start_year or 0, str(s.id)))
-                if _anios_compatibles(anio, s.start_year) and str(s.id) != excluir]
+        return await buscar_parecidas(self._db, titulo, anio, tradicion, excluir=excluir)
