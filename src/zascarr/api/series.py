@@ -9,11 +9,13 @@ from sqlalchemy.orm import selectinload
 
 from zascarr.database import get_db
 from zascarr.models import ComicTradition, Series, WishlistPolicy
+from zascarr.services.alta_serie import DemasiadasParecidasError
 from zascarr.services.borrado_serie import (
     BorradoDeSerie,
     SerieNoBorrableError,
     SerieNoEncontradaError,
 )
+from zascarr.services.edicion_serie import EdicionDeSerie, ParecidasSinVerError, SerieCambiadaError
 
 # El cálculo de huecos vive en `services/` (lo usa también el orquestador, que
 # no puede depender de `api/`). Se reexportan aquí porque `web/series.py`,
@@ -27,6 +29,7 @@ from zascarr.services.series import (  # noqa: F401
     numeros_poseidos,
     numeros_poseidos_por_serie,
 )
+from zascarr.services.tokens_revision import MAX_PARECIDAS_FIRMADAS
 from zascarr.utils.url_portada import es_url_de_portada_permitida
 
 router = APIRouter(prefix="/series", tags=["series"])
@@ -80,6 +83,8 @@ class SeriesUpdate(BaseModel):
     status: str | None = Field(default=None, max_length=50)
     description: str | None = None
     cover_url: str | None = Field(default=None, max_length=500)
+    # I5: ids de las series parecidas que el cliente ya vio (no es un campo de la serie).
+    vistas: list[UUID] = Field(default_factory=list, max_length=MAX_PARECIDAS_FIRMADAS)
     # D8: la política de búsqueda por serie. Va declarada aquí porque
     # `extra="forbid"` rechazaría el campo si no estuviera — y con los dos
     # valores reservados ya dentro del ENUM, un PATCH podría fijarlos sin pasar
@@ -166,13 +171,26 @@ async def create_series(data: SeriesCreate, db: AsyncSession = Depends(get_db)):
 
 @router.patch("/{series_id}")
 async def update_series(series_id: UUID, data: SeriesUpdate, db: AsyncSession = Depends(get_db)):
-    series = (await db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
-    if not series:
-        raise HTTPException(status_code=404, detail="Serie no encontrada")
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(series, field, value)
-    await db.flush()
-    return series
+    """Edita una serie. Si cambia el título, la tradición o el año, aplica la misma detección de
+    series parecidas que el alta (I5 de #114): `409 serie_parecida` con la lista, salvo que
+    `vistas` incluya sus identificadores."""
+    cambios = data.model_dump(exclude_unset=True)
+    vistas = {str(v) for v in cambios.pop("vistas", [])}
+    try:
+        return await EdicionDeSerie(db).actualizar(series_id, cambios, vistas)
+    except SerieNoEncontradaError:
+        raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+    except ParecidasSinVerError as exc:
+        detalle = {"codigo": "serie_parecida", "mensaje": str(exc),
+                   "parecidas": [p.model_dump() for p in exc.parecidas]}
+        raise HTTPException(status_code=409, detail=detalle) from exc
+    except DemasiadasParecidasError as exc:
+        detalle = {"codigo": exc.codigo, "mensaje": str(exc)}
+        raise HTTPException(status_code=422, detail=detalle) from exc
+    except SerieCambiadaError as exc:
+        detalle = {"codigo": "serie_cambiada",
+                   "mensaje": "La serie ha cambiado mientras se comprobaba: repite la petición."}
+        raise HTTPException(status_code=409, detail=detalle) from exc
 
 
 @router.delete("/{series_id}", status_code=204)
