@@ -3,6 +3,8 @@
 > **Estado: evidencia del estado actual, leída del código. No decide nada.** Las decisiones
 > están en [ADR 0008](../adr/0008-catalogacion-explicita-y-propuestas-sin-ejecucion-silenciosa.md);
 > este documento es lo que el ADR da por hecho y puede actualizarse sin tocarlo.
+>
+> **Ampliación (#112):** la sección [6](#6-ampliación-para-112-mit-m1-us01-inventario-completo-de-entradas-ui-api-tareas-cli-y-scripts) añade el inventario completo de UI, API, tareas, CLI y scripts con su propio SHA (`ef805ec9`). Las secciones 1–5 y su anclaje a `a53465ac` no cambian.
 
 - **SHA revisado:** [`a53465ac`](https://github.com/juanajok/zascarr/tree/a53465ac39e54ea70a978e729660fc5299fa1036)
   (`main` tras la fusión de #136). Todos los enlaces de abajo están anclados a ese SHA.
@@ -79,3 +81,186 @@ a la anterior ([`_learn_alias` L207](https://github.com/juanajok/zascarr/blob/a5
 - Efecto final de `_send` por backend (A4).
 - Prueba contra Postgres real del alias en el matcher (A3).
 - Si el alta (#97) debe tener su propia prueba «no aprende alias» (A5).
+
+---
+
+# 6. Ampliación para [#112](https://github.com/juanajok/zascarr/issues/112) (MIT-M1-US01): inventario completo de entradas (UI, API, tareas, CLI y scripts)
+
+> **Estado: evidencia del estado actual, leída del código. No decide nada y no cambia comportamiento.** Esta sección **amplía**
+> las secciones 1–5 (SHA `a53465ac`, #137), que **se conservan tal cual**, con sus conclusiones y su anclaje histórico: lo que
+> allí se comprobó **no se ha repetido aquí** (ver «Qué se reutiliza»). Los criterios de #112 son tres; este documento aporta
+> el primero y el tercero y **deja trazado el segundo**: **#112 no queda aceptada con este inventario.**
+
+- **SHA de esta ampliación:** [`ef805ec9`](https://github.com/juanajok/zascarr/tree/ef805ec9f623507628de763ad464f9d19b67b650)
+  (`main` tras la fusión de #147). Las rutas de archivo de esta sección se refieren a ese SHA.
+- **Alcance del MVP aplicado** (decisión confirmada el 2026-10-10, comentario de #112): *tebeoteca ordenada y vinculada en la Pi* significa
+  **vincular en sitio**; los archivos conservan nombre y ruta. «Organizar» (mover o renombrar) queda **fuera del MVP** como no objetivo
+  explícito. **«Excluir del recorrido MVP» no significa borrar ni desactivar la función existente.**
+
+## 6.0 Método y leyenda de evidencia
+
+Las cinco clases de evidencia **no se mezclan**; cada fila de las tablas usa estas claves:
+
+| Clave | Significado |
+|---|---|
+| **L** | **Comprobado por lectura de código** (archivo/función citados). No implica que se haya ejecutado. |
+| **P** | **Cubierto por una prueba identificada** (archivo de `tests/`). **No ejecutada en esta ampliación**; su resultado en CI es el de cada PR, no el de esta revisión. |
+| **I** | **Acreditado por un informe previo**, con referencia (PR, ADR o ficha). No repetido aquí. |
+| **X** | **Ejecutado en esta revisión.** Aquí solo es: (a) un barrido estático de los decoradores de ruta de `src/zascarr/api/` y `src/zascarr/web/`, y (b) un cruce textual entre cada ruta y los archivos de `tests/` que la mencionan. **Nada más:** no se ha arrancado la aplicación, ni ejecutado pruebas, ni tocado archivos o fuentes reales. |
+| **N** | **No verificado.** |
+
+**Límites del método.** (1) Los *efectos* y las *garantías* salen de leer los manejadores y los servicios a los que delegan; los servicios muy
+largos (`importer`, `enricher`, `orchestrator`, `tagger`) se leyeron por su documentación de módulo y por las funciones que escriben,
+no línea a línea. (2) **No se han leído las plantillas ni el JavaScript** de HTMX: qué botón llama a qué ruta solo está acreditado
+donde se dice (E1/E2 de §1). (3) Un «P» por *cruce textual* indica que **alguna prueba menciona la ruta**, no que cubra todos sus
+casos; **«sin ruta localizada»** significa que la búsqueda textual no halló una prueba que la mencione (puede existir una prueba de
+servicio, o una parametrizada por f-string que el cruce no ve). (4) Los scripts de operación se leyeron por su **cabecera y estructura**,
+no completos, y **no se ejecutaron**.
+
+## 6.1 Panorama
+
+| | Cantidad | Detalle |
+|---|---:|---|
+| Endpoints HTTP (API + UI) | **72** | 31 `GET` y **41 de escritura** (37 `POST`, 2 `PATCH`, 2 `DELETE`); 21 en `api/` y 51 en `web/` (X). Además, `GET /` (redirección) y el montaje de `/static` (L, `main.py`). |
+| Tareas de fondo del proceso | **5** (+ 1 bajo demanda) | Se lanzan en `lifespan` de `main.py`; **no hay worker `arq`** (L). El registro de la biblioteca corre en segundo plano solo al pulsar «adoptar». |
+| Comandos de CLI | 2 | `python -m zascarr.cli.etiquetar` y `python -m zascarr.cli.seguridad` (L). |
+| Scripts de operación | 13 en `scripts/` (+ `scripts/medicion/`) y 3 más | `scripts/*.sh` (12), `scripts/ci_postgres.py`, `scripts/medicion/*`, más `bootstrap.sh`, `docker-entrypoint.sh` y `Makefile` (L, por cabeceras). |
+
+**Quién mueve o reescribe archivos** (búsqueda textual de `safe_move`, `shutil.move`, `os.replace`, `.rename(`, `unlink(` en `src/`; X):
+`utils/fs.py`, `utils/cbz.py`, `services/tagger.py`, `services/importer.py`, `services/review.py`, `cli/etiquetar.py` y `services/asignacion.py`.
+Ningún otro módulo, **y no aparecen en `services/vinculacion*.py`, `services/alta_serie.py`, `services/library_adopter.py` ni `services/library_audit.py`**.
+
+### Clasificación por efecto (resumen; el detalle está en 6.2–6.6)
+
+| Efecto | Entradas |
+|---|---|
+| **Vincula en sitio** (BD; sin tocar el disco) | `POST /api/revision/vinculacion` · `POST /ui/auditoria/adoptar` (registra archivos ya existentes con su ruta actual) |
+| **Mueve y/o renombra** (→ «Organizar») | `POST /ui/pendientes/{id}/asignar` (E3) · tarea de importación (E6/E7) · reconciliación al arrancar · `ReviewService.assign_to_series` (sin llamadores) |
+| **Reescribe el contenido** (no mueve) | `cli/etiquetar` con `--apply` (`scripts/etiquetar.sh`) |
+| **Crea series** | `POST /api/revision/serie` (alta, C4) · `POST /ui/descubrir/crear` (C1) · `POST /api/series` (C3) |
+| **Borra o desvincula catálogo** | `DELETE /api/series/{id}` · `POST /api/revision/serie/{id}/deshacer` |
+| **Red hacia fuentes de metadatos** | descubrimiento (`/api/revision/descubrir`, `/ui/descubrir/buscar`), tarea de enriquecimiento, portadas |
+| **Red hacia descargas** (Prowlarr, foro, Transmission, aMule) | tarea del orquestador, `buscar-ahora`, `enviar-candidato`, `/api/wishlist/*/search` |
+| **Configuración** | `POST /ui/ajustes/guardar/*`, `cli/seguridad`, `bootstrap.sh`, `update.sh` |
+| **Solo lectura** | el resto de los `GET` (31, con las salvedades de 6.3) |
+
+## 6.2 API (`/api/*`): 21 endpoints
+
+Columnas: **Entrada · Delegación · Efectos (BD / disco / externo) · Consentimiento · Garantías · Evidencia · Disposición propuesta.**
+
+| Entrada | Delegación | Efectos | Consentimiento | Garantías | Evidencia | Disposición |
+|---|---|---|---|---|---|---|
+| `GET /api/health` | `api/health.py::health_check` (`_database_status`, `_check_transmission`, `_check_amule`, fichero de estado de la VPN) | BD: lectura · disco: lee un fichero de estado de VPN · externo: comprueba si Transmission/aMule responden (timeout corto, en paralelo) | n/a; **exenta de autenticación** (`_RUTAS_EXENTAS`) | Solo lectura; el estado es observacional, no bloqueante (CLAUDE.md §3.2) | L · P: `health`, `health_db_pg` | **Conservar** |
+| `GET /api/legal/status`, `POST /api/legal/accept` | `services/legal.py` (`acknowledge`) | BD: registra la aceptación | Explícito (`acknowledged=true`; 400 si no) | Aceptación versionada (hash del texto legal) | L · P: `legal` | **Conservar** |
+| `GET /api/revision/carpetas` | `RevisionCarpetas` | BD: lectura · disco: no · externo: no | n/a (lectura) | Solo lectura; claves de grupo sin depurar | I: #90 (rebanada 1b) · P: `web_carpetas_pg`, `test_vinculacion_limite_pg` | **Conservar** (MVP) |
+| `POST /api/revision/descubrir` | `DescubrimientoDeGrupo` | BD: lectura · disco: no · **externo: consulta las fuentes de metadatos**, solo a petición | Explícito (llamada), con espaciado entre búsquedas (`429`) | No escribe; token firmado por candidata; cortesía compartida de Tebeosfera | I: #95, #96, #138 · P: `descubrimiento_grupo_pg`, `tokens_limites_pg` | **Conservar** (MVP) |
+| `POST /api/revision/serie/previsualizar` | `AltaDeSerie.previsualizar` | Solo lectura (BD) | Explícito | Sin red ni escritura; token de alta firmado; ≤ 100 parecidas | I: #97, #138 · P: `alta_serie_pg`, `tokens_limites*` | **Conservar** (MVP) |
+| `POST /api/revision/serie` | `AltaDeSerie.confirmar` | BD: crea o reutiliza una `Series` + comprobante `alta_operaciones` · disco: no · externo: no | Explícito (solo el token) | Candados, idempotencia, comprobante, procedencia; sin movimientos | I: #97 · P: `alta_serie_pg` | **Conservar** (MVP) |
+| `POST /api/revision/serie/{id}/deshacer` | `AltaDeSerie.deshacer` | BD: borra la serie creada por esa operación si no tiene archivos, números, asignaciones ni deseados | Explícito | Exige el comprobante; 409 si no se puede | I: #97 · P: `alta_serie_pg` | **Conservar** (MVP) |
+| `POST /api/revision/vinculacion/previsualizar` | `VistaPreviaDeVinculacion` | BD: lectura · **disco: solo `stat`** (no lee contenido) · externo: no | n/a (lectura) | Sin escrituras; estados por precedencia; ahora, fecha antigua y número largo del nombre se tratan como impedimentos (#141, #142) | I: #101, #144, #146 · P: `vinculacion_previa_pg`, `numero_largo_del_nombre_pg`, `fecha_anterior_a_1970_pg` | **Conservar** (MVP) |
+| `POST /api/revision/vinculacion` | `VinculacionDeArchivos` | BD: `Issue` + `file.issue_id` + procedencia + informe inmutable · **disco: no mueve, no renombra** · externo: no · alias: no aprende | Explícito (solo el token firmado) | Una transacción, candados, reverificación contra el disco, repetición con el informe persistido, `resultado_incierto` | I: #103, #139 · P: `vinculacion_pg`, `vinculacion_limite_pg` | **Conservar** (MVP; es el camino de «vincular») |
+| `GET /api/series`, `GET /api/series/{id}`, `GET …/{id}/missing` | `SeriesService`, consultas directas | BD: lectura | n/a | Solo lectura | P: `api_series` | **Conservar** |
+| `POST /api/series` | `create_series` → `Series(**SeriesCreate)` | BD: crea una `Series` **sin** las garantías del alta (sin colisión por título, bloqueos ni comprobante) | Ninguno aparte de la autenticación (llamada programática) | Esquema Pydantic explícito (CLAUDE.md §3.1.3) | L (C3 de §2) · P: `api_series` | **Adaptar** al contrato del alta, o **excluir del recorrido MVP** (decisión pendiente; ADR 0008 no la toma) |
+| `PATCH /api/series/{id}` | `update_series` | BD: cambia los campos del esquema `SeriesUpdate` | Ninguno (programática) | `exclude_unset`, esquema explícito | L · P: `api_series` | **Conservar** |
+| `DELETE /api/series/{id}` | `delete_series` | BD: borra la serie; por las FK, **borra sus `Issue` (CASCADE) y deja los `File` con `issue_id` NULL** (SET NULL): **desvincula sin tocar el disco** · otras tablas con CASCADE sobre serie/issue (deseados, alias…) | Ninguno (programática); **no hay confirmación** | Rechaza con 409 si hay una asignación en curso | L (FK en `models/__init__.py`, `conflicto_por_operacion_viva`) · P: `api_series`, `asignacion_integracion_pg` | **Adaptar** (confirmación y efecto visible) o **excluir del recorrido MVP**; **no ejecutado** |
+| `GET /api/wishlist` | `WishlistService` | BD: lectura | n/a | — | P: `api_wishlist` | **Excluir del recorrido MVP** |
+| `POST /api/wishlist` | `WishlistService.add` | BD: crea un deseado · el orquestador lo buscará después | **Aviso legal** (`require_legal_acknowledgment`) | Esquema explícito; legal | P: `api_wishlist` | **Excluir del recorrido MVP** (descargas) |
+| `PATCH /api/wishlist/{id}`, `DELETE /api/wishlist/{id}` | `update_wishlist_item`, `WishlistService.remove` | BD | Ninguno (programática) | Esquema explícito | P: `api_wishlist` | **Excluir del recorrido MVP** |
+| `POST /api/wishlist/{id}/search` | `WishlistService.retry` | BD: vuelve a poner el deseado en cola; la búsqueda la hace el orquestador en su ciclo | Aviso legal | Salta el *cooldown* | L · **sin ruta localizada en pruebas** (N) | **Excluir del recorrido MVP** |
+
+## 6.3 Interfaz web (`/ui/*`, `/login`, `/estado`, `/legal`): 51 endpoints
+
+| Entrada | Delegación | Efectos | Consentimiento | Garantías | Evidencia | Disposición |
+|---|---|---|---|---|---|---|
+| `GET /ui/`, `/ui/biblioteca`, `/ui/biblioteca/resultados`, `/buscar-personaje`, `/buscar-saga`, `/ui/series/{id}`, `/ui/wishlist`, `/ui/wishlist/buscar-serie`, `/ui/_nav/estado`, `/ui/pendientes`, `/ui/pendientes/{id}/buscar-serie`, `/ui/auditoria`, `/ui/ajustes`, `/ui/descubrir`, `/ui/legal`, `/legal`, `/login` | `web/*` + consultas | BD: lectura · disco: no · externo: no | n/a | Solo lectura | P: `web_dashboard`, `web_library`, `web_series`, `web_wishlist`, `web_navegacion`, `pendientes`, `web_auditoria`, `web_ajustes`, `web_discovery`, `web_auth` | **Conservar** |
+| `GET /ui/pendientes/carpetas` | `RevisionCarpetas` | BD: lectura | n/a | Solo lectura (la superficie de revisión de la rebanada 1) | I: #90 · P: `web_carpetas_pg` | **Conservar** (MVP) |
+| `GET /estado` | `web/estado.py` | BD + comprobaciones de alcance de servicios (como `/api/health`) | n/a; accesible en modo diagnóstico | Observacional | L · P: `web_navegacion`, `web_dashboard` | **Conservar** |
+| `GET /ui/pendientes/{file_id}/portada` | `web/pendientes.py::portada` (`extract_cover_thumbnail`) | BD: lectura · **disco: lee el CBZ (extrae la primera página) y NO escribe caché** · externo: no | n/a | `ETag` por fecha del archivo; trabajo bloqueante en hilo | L · P: `pendientes`, `web_navegacion` | **Conservar** |
+| `GET /ui/series/{id}/portada` | `web/series.py::portada` | BD: lectura · **disco: puede leer un CBZ de la serie y escribe la caché local de portadas** (fuera de la biblioteca) · externo: puede descargar `cover_url` una vez | n/a | Caché local-first; política de portadas H1 (sin *hotlinking*); trabajo bloqueante en hilo | L · P: `web_series`, `cover_ssrf` | **Conservar** |
+| `GET /ui/descubrir/buscar` | `DiscoveryService.search` | **externo: consulta las fuentes** a petición · BD: lectura | Explícito (búsqueda) | Cortesía por fuente | L · P: `web_discovery` | **Conservar** |
+| `GET /ui/descubrir/portada` | `fetch_and_cache_cover` | **externo: descarga una portada** y la guarda en la caché local | n/a | Lista blanca de hosts y política H1 (SSRF) | I: H1 · P: `web_discovery`, `cover_ssrf` | **Conservar** |
+| `POST /ui/descubrir/crear` | `DiscoveryService.get_or_create_series` (C1) | BD: crea una `Series` con datos que llegan del formulario, **sin** las garantías del alta | Explícito (botón «Crear serie»), pero sin vista previa ni token | H1 sobre `cover_url`; dedupe por identificador externo | L (§2) · P: `web_discovery`, `test_discovery_service` | **Adaptar** al contrato del alta (ADR 0008 §2) |
+| `POST /ui/pendientes/{id}/asignar` | `AsignacionService.asignar` (E3/E4) | BD: `Issue`, `file.issue_id`, alias · **disco: copia, verifica, publica en una ruta canónica y retira el original (mueve y renombra)** | Explícito (botón «Sí, es esta» / «Confirmar»); **el texto no dice que mueve** | Recuperable (ADR 0006); colisión de edición; `ya_asignado` | I: ADR 0006, §1 · P: `pendientes_asignar_pg`, `asignacion_*_pg` | **Es «Organizar».** Excluir del recorrido MVP; **sustituir en el recorrido normal por «Vincular»** (#114) |
+| `POST /ui/pendientes/{id}/ignorar` | `ReviewService.dismiss` | BD: `review_dismissed = true` · disco: no | Explícito (con confirmación del navegador) | — | P: `pendientes` | **Conservar** |
+| `POST /ui/auditoria/analizar` | `LibraryAudit.run` | BD: escribe un `ImportRun` con el informe · **disco: lee** (`stat` y *hash* en *streaming* solo de los que comparten tamaño) · no mueve, no registra | Explícito (botón) | Solo lectura del disco; coste acotado | I: B16 · P: `test_library_audit`, `web_auditoria` · **ruta sin prueba localizada** | **Conservar** (MVP: informe antes de registrar) |
+| `GET /ui/auditoria/registro` | `registro_biblioteca.estado_actual`, `LibraryAdopter` | BD: lectura | n/a | Solo lectura | P: `web_auditoria`, `registro_biblioteca_pg` | **Conservar** (MVP) |
+| `POST /ui/auditoria/adoptar` | `registro_biblioteca.iniciar` → `LibraryAdopter.adopt` | BD: `File` con la **ruta actual**, emparejado con series existentes (no crea series, L); duplicados por *hash* **no se registran** · **disco: lee para el *hash*; no mueve ni renombra ni borra** (sin `safe_move`/`unlink`/`rename` en el módulo) | Explícito (botón); **no se reanuda sola** | Por lotes, idempotente por ruta, una ejecución a la vez, estado «interrumpido» sanitizado | I: B11, B16 · P: `registro_biblioteca_pg`, `test_library_adopter` | **Conservar** (MVP: «registrar una biblioteca existente») |
+| `POST /ui/series/{id}/politica` | `cambiar_politica` + `politica.retirar_de_serie` | BD: `wishlist_policy`; **retira de inmediato** los deseados de esa serie · efecto **diferido**: el orquestador generará deseados y buscará | Explícito, pero el efecto de descargas llega después y **requiere el aviso legal** | Lista blanca de valores; retirada atómica | L · P: `web_series` | **Excluir del recorrido MVP** (descargas) |
+| `POST /ui/wishlist/anadir`, `/{id}/reintentar` | `WishlistService.add`, `.retry` | BD | Explícito + **aviso legal** | Lista blanca | P: `web_wishlist` | **Excluir del recorrido MVP** |
+| `POST /ui/wishlist/{id}/quitar`, `/{id}/cancelar-busqueda` | `WishlistService.remove`; (cerrar panel) | BD (quitar); sin efecto (cancelar) | Explícito | — | P: `web_wishlist` | **Excluir del recorrido MVP** |
+| `POST /ui/wishlist/{id}/buscar-ahora` | `Orchestrator.preview_candidates` | **externo: Prowlarr/foro** · BD | Explícito + **aviso legal** | Se detiene **antes** de enviar nada; candidatos con token firmado | L · P: `web_wishlist` | **Excluir del recorrido MVP** |
+| `POST /ui/wishlist/{id}/enviar-candidato` | `Orchestrator.send_manual_candidate` | **externo: envía la descarga a Transmission/aMule** · BD | Explícito, por candidato, + **aviso legal** | Token firmado; reclamo atómico del deseado; backend habilitado | L · P: `web_wishlist`, `test_orchestrator` | **Excluir del recorrido MVP** |
+| `POST /ui/ajustes/guardar/{comic-vine, fuentes, prowlarr, transmission, amule, avisos}` (6) | `RuntimeSettingsService` | BD: `runtime_settings` + **muta el objeto `Settings` en memoria** (lista blanca `OVERRIDABLE_FIELDS`) | Explícito (formulario) | Lista blanca; secretos no se registran | P: `web_ajustes` (`prowlarr`, `avisos`); **`comic-vine`, `fuentes`, `transmission` y `amule` sin ruta localizada** | **Conservar** (configuración; las de descargas, fuera del recorrido MVP) |
+| `POST /ui/ajustes/guardar/seguridad` | `services/seguridad.py` | BD: contraseña (PBKDF2), `auth_mode`, versión de sesión | Explícito | Mismo servicio que `cli/seguridad`; regla de longitud única | P: `web_ajustes` | **Conservar** (MVP: acceso) |
+| `POST /ui/ajustes/probar/{comic-vine, prowlarr, transmission, amule, avisos}` (5) | clientes de cada servicio / `Notifier.enviar` | **externo: petición de prueba al servicio o al webhook** · sin escritura | Explícito (botón «Probar») | La causa sale del código HTTP o la clase de excepción, no de `str(exc)` | P: `web_ajustes` (`comic-vine`, `prowlarr`, `avisos`); **`transmission` y `amule` sin ruta localizada** | **Conservar** |
+| `POST /login`, `POST /logout` (el `GET /login` está en la primera fila) | `services/auth.py` | Cookie de sesión firmada | Explícito | PBKDF2; sesión versionada | P: `web_auth` | **Conservar** (MVP) |
+| `POST /ui/legal/accept` | `services/legal.py` | BD: aceptación | Explícito | Versionada | P: `legal` | **Conservar** |
+
+## 6.4 Tareas de fondo del proceso (`main.py::lifespan`)
+
+Se lanzan **solo si la base de datos está disponible**; en arranque degradado no se lanza ninguna (L, `lifespan`). **No hay interruptor individual** en `Settings` para apagarlas; solo los intervalos son ajustables (`import_interval_minutes` 15, `enrich_interval_minutes` 120, `scan_interval_minutes` 60). **No se ha comprobado si un intervalo de 0 las desactiva** (N).
+
+| Tarea | Delegación | Efectos | Consentimiento | Garantías | Evidencia | Disposición |
+|---|---|---|---|---|---|---|
+| `reconciliar_al_arrancar` | `AsignacionService.reconciliar` | BD y **disco: continúa o cierra asignaciones que quedaron vivas** (publica la copia y retira el original) | La operación **ya** la confirmó la persona; al arrancar se completa **sin preguntar** | Solo consulta `asignacion_operaciones`; no propaga excepciones; ADR 0006 | I: ADR 0006 · P: `asignacion_servicio_pg`, `asignacion_integracion_pg` | **Conservar** (no actúa sobre vincular) |
+| `_library_audit_task` | `LibraryAdopter.should_run` + `LibraryAudit.run` | BD: un `ImportRun` · disco: lectura/*hash* · no registra ni mueve | **Automático, una sola vez** (biblioteca con cómics, catálogo vacío y sin marcador de «hecho») | Solo lectura; marcador en `runtime_settings` | I: B16 · P: `test_library_audit`, `test_library_adopter` | **Conservar** (MVP) |
+| `_import_loop` | `Importer.scan_and_import` | BD: `File` · **disco: lee `transmission_download_dir`, `amule_incoming_dir` y `downloads_path`; clasifica, deduplica y MUEVE a la ruta canónica de la serie o a `_Unsorted/`**; marca desaparecidos en la biblioteca (BD, sin tocar el disco, con guardarraíles) · externo: aviso por webhook (mejor esfuerzo) | **Automático**, cada `import_interval_minutes` | `safe_move` (copia verificada, no sobrescribe); dedupe por SHA-256; el instalador comprueba que biblioteca y descargas no se solapen (A9) | I: §1 E6/E7, A9 · P: `test_importer`, `test_importer_triage` | **Es «Organizar» de material entrante.** Excluir del recorrido MVP (no recorre la biblioteca adoptada); **no desactivar** |
+| `_enrichment_loop` | `EnrichmentService.enrich_pending` | BD: completa huecos de metadatos (no pisa `manual` ni campos rellenos; reglas de identidad externa de #98) · **externo: Comic Vine, AniList, Tebeosfera** · disco: caché local de portadas | **Automático**, cada `enrich_interval_minutes`; Comic Vine requiere clave | Cortesía por fuente; reglas de convivencia; sin tocar la biblioteca | I: #98, #96 · P: `test_enricher`, `test_enricher_identidad_pg` | **Conservar**, fuera de la aceptación del MVP |
+| `_orchestrator_loop` | `Orchestrator.sync_policy_items`, `process_wishlist`, `check_completions` | BD: deseados · **externo: Prowlarr, foro (apagado por defecto), Transmission, aMule** · disco: no (descargan los clientes; luego el importador mueve) | **Automático**, **solo con el aviso legal aceptado** (`is_acknowledged`); el foro está apagado por defecto y cada backend de descarga depende de su `*_enabled` | Cooldown de reintento; reclamo atómico; falla cerrado | I: D1, D8, D10 · P: `test_orchestrator` | **Excluir del recorrido MVP** |
+| Registro de la biblioteca (bajo demanda) | `registro_biblioteca.iniciar` | ver `POST /ui/auditoria/adoptar` | Explícito | ver arriba | P: `registro_biblioteca_pg` | **Conservar** (MVP) |
+
+## 6.5 CLI y scripts
+
+| Entrada | Delegación | Efectos | Consentimiento | Garantías | Evidencia | Disposición |
+|---|---|---|---|---|---|---|
+| `python -m zascarr.cli.etiquetar` (`scripts/etiquetar.sh`) | `TaggerService` | **Por defecto no escribe** (imprime el plan). Con `--apply`: **reescribe `ComicInfo.xml` dentro del CBZ** (`os.replace`), recalcula `sha256_hash`/`file_size_bytes` en BD; no mueve ni renombra; CBR/CB7/PDF no se tocan | **Explícito** (`--apply`); **no hay endpoint ni tarea que lo llame** (búsqueda textual de `tagger`/`etiquetar` en `src/` y `scripts/`) | Plan que caduca si el archivo cambia, *advisory lock* por `File.id`, `locked_fields` respetados, un error no pierde el tebeo | I: B6 (`benchmark-B6-comicinfo.md`) · P: `test_b6_tagger_pg` | **Conservar fuera del recorrido MVP**; ver 6.6 |
+| `python -m zascarr.cli.seguridad` (`estado`, `fijar-contrasena`, `efectiva`, `retirar-base-url`) | `services/seguridad.py` | BD: contraseña y `base_url` guardados; la contraseña entra por *stdin* | Explícito (lo invoca el instalador) | Mismo servicio que Ajustes; códigos de salida estables | I: A11 · P: `test_cli_seguridad` | **Conservar** (MVP: instalación) |
+| `bootstrap.sh` | — | Host: instala git y Docker si faltan, clona, escribe `.env`, crea directorios, levanta PostgreSQL/Redis, **ejecuta `alembic upgrade head`**, arranca la app; elección guiada de exposición (A11) | Explícito (se ejecuta) + preguntas del instalador | Idempotente; fija la contraseña **antes** de abrir el puerto | I: A11, A9 · P: `test_exposicion*` · **cuerpo no leído completo** | **Conservar** (MVP: instalar) |
+| `scripts/update.sh` | — | Copia de seguridad verificada → `git merge --ff-only` → reconstruye la imagen → **`alembic upgrade head` dentro del contenedor** | Explícito | Referencia de rescate `refs/zascarr/update/<TS>`; aborta con cambios locales | L (cabecera) · N (no ejecutado) | **Conservar** (MVP: actualizar). **Aplicará las migraciones 0018/0019 en la primera actualización** que incluya este código |
+| `scripts/rollback.sh` | — | Revierte código y restaura el volcado previo | Explícito (`--dry-run` disponible) | Comprueba la revisión de Alembic | L (cabecera) · N | **Conservar** (MVP: restauración) |
+| `scripts/backup.sh` | — | Volcado de PostgreSQL a otro disco, con retención | Programado (instalación en cron/systemd) | Verificado, retención automática | L (cabecera) · N | **Conservar** (MVP) |
+| `scripts/uninstall.sh` (`make uninstall`, `uninstall-purge`) | — | Borra contenedores, red e imagen; **nunca** la biblioteca ni la configuración | Explícito | Lista de «nunca se borra» | I: A4 · P: `test_ensayo_aislamiento` | **Conservar** |
+| `scripts/kavita.sh` (subcomandos `install`, `update`, `status`, `logs`, `restart` y `uninstall`) | — | Gestiona **Kavita** en baremetal. **No se ha localizado en el código una exportación a Kavita** (B20, #149; N) | Explícito | — | L (cabecera) · N | **Excluir del recorrido MVP** |
+| `scripts/diagnostico-red.sh`, `medir-pbkdf2.sh` | — | **Solo leen**; imprimen lo que encuentran | Explícito | «SOLO LEE» | I: A10 · P: `test_diagnostico_red` | **Conservar** |
+| `scripts/vpn-state.sh` | — | Publica el estado del túnel en un fichero del host | Programado (systemd) | — | L (cabecera) · N | **Excluir del recorrido MVP** |
+| `scripts/medicion/*` (`medir_asignacion.*`, `medir_carpetas.py`, `censo*.py`…) | — | Herramientas de medición sobre BD y directorios de prueba; `medir_asignacion` **llama a `AsignacionService.asignar`** (E8) | Explícito (desarrollador) | BD de medición separada | I: V6a · P: `test_medir_asignacion_sh` | **Conservar** (no es una entrada de usuario) |
+| `scripts/ci_postgres.py`, `scripts/_comun.sh`, `_exposicion.sh`, `_rutas.sh`, `docker-entrypoint.sh`, `Makefile` | — | Apoyo de CI / librerías de los scripts / ajuste de UID del contenedor / atajos (`make migrate`, `backup`, `uninstall`) | — | `_exposicion.sh` y `_rutas.sh` **no escriben nada** (lo dicen sus cabeceras) | L (cabeceras) · N | **Conservar** |
+
+## 6.6 Etiquetado y huella: una operación distinta de vincular
+
+**Lo que se acredita por lectura (L).** El etiquetado **puede conservar nombre y ruta y, aun así, reescribir el contenido**: son dos afirmaciones compatibles. Las garantías de cada operación son distintas:
+
+| | Vincular (`POST /api/revision/vinculacion`) | Etiquetar (`cli/etiquetar --apply`) |
+|---|---|---|
+| Nombre y ruta | **No cambian** (garantía y pruebas) | **No cambian** (instala con `os.replace` en la misma ruta; B6) |
+| Contenido, tamaño, fecha, *hash* | No se tocan | **Cambian** (reescribe el CBZ; recalcula `sha256_hash` y `file_size_bytes`) |
+| Qué archivos alcanza | Los **sin vincular** que se marcan | Los que **ya tienen `issue_id`** y no están `is_missing` (`_consulta` hace `JOIN` con `Issue`) |
+| Cómo se activa | Token firmado de la vista previa | Solo CLI con `--apply`; **ninguna ruta web ni tarea de fondo** lo invoca |
+| Coordinación | Candados consultivos + `FOR UPDATE` sobre `files` | *Advisory lock* por `File.id` (`pg_advisory_xact_lock`) y plan que caduca |
+
+**Hipótesis pendientes — no son defectos demostrados (N):**
+1. **Mutua exclusión.** Vincular bloquea las filas de `files` con `FOR UPDATE` y el etiquetado toma un *advisory lock* por `File.id`: **mecanismos distintos que no se excluyen entre sí**. No se ha comprobado qué pasa si ambos coinciden sobre un mismo archivo.
+2. **Huella.** La vista previa firma `(tamaño, mtime)` de los archivos **sin vincular** y la confirmación los reverifica; el etiquetado **solo toca archivos ya vinculados**, así que en el flujo normal no cruza esa huella. Un archivo que ya estuviera vinculado y se etiquetara después **cambia su tamaño y su fecha**: eso afecta a cualquier verificación posterior que dependa de ellos (p. ej. una nueva vista previa sobre ese archivo, o la medición de #122).
+3. **Orden recomendado para el MVP** (propuesta, sin implementar): vincular primero, etiquetar después y solo a petición; documentarlo en la aceptación de M4.
+
+No se ha ejecutado etiquetado ni ensayo alguno sobre archivos.
+
+## 6.7 Pendiente trazado a otras tarjetas
+
+- **Criterio 2 de #112** (*un camino que mueve archivos se denomina «Organizar»*): **pendiente y trazado a [#114](https://github.com/juanajok/zascarr/issues/114)**. Este inventario solo acredita **qué caminos mueven** (§6.1): `POST /ui/pendientes/{id}/asignar`, la tarea de importación, la reconciliación al arrancar y `ReviewService.assign_to_series` (sin llamadores). **No cambia ningún rótulo ni texto de la interfaz.**
+- **Centralizar decisiones** (alta y creación de series por tres caminos distintos: C1, C3, C4) → [#113](https://github.com/juanajok/zascarr/issues/113).
+- **Sin prueba localizada para la ruta** (por cruce textual; puede haber pruebas de servicio): `POST /api/wishlist/{id}/search`, `POST /ui/ajustes/guardar/{comic-vine, fuentes, transmission, amule}`, `POST /ui/ajustes/probar/{transmission, amule}` y `POST /ui/auditoria/analizar`. Cuatro de ellos son de configuración y descargas (fuera del recorrido MVP); **`/ui/auditoria/analizar` está en el recorrido MVP** y su servicio sí tiene pruebas (`test_library_audit`).
+
+## 6.8 Qué se reutiliza y qué no se ha repetido
+
+- **Reutilizado sin repetir:** E1–E8, C1–C4 y A1–A6 (§1–§3), con su SHA `a53465ac`: ninguna de esas filas se ha vuelto a leer línea a línea aquí, salvo las citas de esta sección. Los resultados de #138–#147 se citan como **I**; las cifras de pruebas y CI son las de cada PR.
+- **No verificado (N):** el comportamiento en la Raspberry Pi; los efectos reales de los scripts (solo cabeceras); las plantillas y el JavaScript; si algún intervalo de 0 desactiva una tarea; la interacción entre etiquetado y vinculación; y si existen otras rutas montadas fuera de `api/` y `web/` (el barrido cubrió esos dos paquetes y `main.py`).
+
+## 6.9 Disposición propuesta: resumen
+
+| Disposición | Entradas |
+|---|---|
+| **Conservar (recorrido MVP: instalar, registrar, vincular)** | `bootstrap.sh`, `update.sh`, `rollback.sh`, `backup.sh`, `cli/seguridad`, login/Ajustes de seguridad, auditoría (`analizar`, `registro`, `adoptar`), `/api/revision/*` (7), `GET /ui/pendientes/carpetas`, `_library_audit_task`, `reconciliar_al_arrancar` |
+| **Adaptar** | `POST /ui/descubrir/crear` y `POST /api/series` (al contrato del alta, #113); `DELETE /api/series/{id}` (confirmación y efecto visible); `POST /ui/pendientes/{id}/asignar` → **sustituir en el recorrido normal por «Vincular»** y rotular lo que mueve como **Organizar** (#114) |
+| **Excluir del recorrido MVP** (**sin borrar ni desactivar**) | Todo lo de descargas (wishlist API y UI, orquestador, Prowlarr/foro/Transmission/aMule en Ajustes), `scripts/kavita.sh`, `vpn-state.sh`, el etiquetado (`--apply`), la tarea de importación (como «Organizar» de material entrante) |
+| **Conservar fuera de la aceptación del MVP** | tarea de enriquecimiento, portadas, descubrimiento manual, métricas y diagnóstico |
