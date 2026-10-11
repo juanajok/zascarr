@@ -148,8 +148,15 @@ async def get_series(series_id: UUID, db: AsyncSession = Depends(get_db)):
     return series
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, deprecated=True)
 async def create_series(data: SeriesCreate, db: AsyncSession = Depends(get_db)):
+    """**Obsoleto (I3 de #114, fase 1 de su retirada).** Sin cambios de comportamiento, pero
+    **no ofrece las garantías G1–G8** del alta por token (`POST /api/revision/serie/previsualizar`
+    y `/serie`): no hay vista previa ni confirmación, la tradición es `american` si no se indica,
+    no detecta series con el mismo título, no usa candados, no deja procedencia (`metadata_source`
+    queda vacío y el enriquecedor puede completar la fila) ni comprobante, y no se puede deshacer.
+    El alta por token parte de una carpeta con archivos pendientes (aún no hay un sustituto para
+    crear una serie vacía sin carpeta); esta ruta se retirará en una versión posterior."""
     series = Series(**data.model_dump())
     db.add(series)
     await db.flush()

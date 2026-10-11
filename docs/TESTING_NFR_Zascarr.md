@@ -91,6 +91,19 @@ done
 
 **Oráculo:** campos no declarados producen `422`; los campos protegidos nunca se modifican aunque el cliente envíe valores válidos en formato correcto.
 
+> `POST /api/series` está **obsoleto** (I3 de #114): sigue funcionando igual, pero no ofrece las garantías del alta por token y se retirará. El mismo rechazo se comprueba también sobre `PATCH`, que se mantiene; cuando la ruta de `POST` desaparezca, solo queda este bucle:
+
+```bash
+# Requiere SERIES_ID de una serie de fixture.
+for field in id metadata_source locked_fields comic_vine_id anilist_id \
+  tebeosfera_slug enrichment_attempted_at created_at updated_at title_norm; do
+  code=$(curl -s -o "$ROOT/mass-patch-$field.json" -w '%{http_code}' \
+    -X PATCH "$APP_URL/api/series/$SERIES_ID" \
+    -H 'Content-Type: application/json' -d "{\"$field\":\"forged\"}")
+  test "$code" = 422 || echo "FAIL conocido: $field aceptado con HTTP $code"
+done
+```
+
 Añadir también:
 
 - JSON con 10 MB de texto.

@@ -207,12 +207,16 @@ class TestMassAssignmentSeries:
         "updated_at": "2026-01-01T00:00:00Z",
     }
 
+    # Fase 2 de la retirada de `POST /api/series` (#114): este caso desaparece con la ruta; el
+    # equivalente sobre `SeriesUpdate` es `test_patch_rechaza_campos_internos` (misma lista
+    # `FORBIDDEN`, mismo `extra="forbid"`).
     def test_post_rechaza_campos_internos(self):
         for campo, valor in self.FORBIDDEN.items():
             with use_fake_session(FakeSession([])) as client:
                 r = client.post("/api/series", json={"title": "M1", campo: valor})
             assert r.status_code == 422, f"POST con '{campo}' debería dar 422, dio {r.status_code}"
 
+    # Sin equivalente: comprueba la creación en un paso, que se retira con la ruta.
     def test_post_acepta_campos_validos(self):
         with use_fake_session(FakeSession([])) as client:
             r = client.post(
