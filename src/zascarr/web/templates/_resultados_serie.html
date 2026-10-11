@@ -1,6 +1,7 @@
 {% if not series_list %}
 <p class="no-results">Sin coincidencias.</p>
 {% else %}
+<small>«Organizar» mueve y renombra el archivo.</small>
 <ul class="series-list">
   {% for s in series_list %}
   <li>
@@ -12,7 +13,7 @@
       <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4">
       {#- «Organizar»: esta asignación MUEVE y RENOMBRA el archivo (ADR 0007 / #114, I8). -#}
       <button type="submit"
-              title="Mueve el archivo a la carpeta de esta serie en tu biblioteca y le cambia el nombre.">Organizar (mueve y renombra)</button>
+              title="Mueve el archivo a la carpeta de esta serie en tu biblioteca y le cambia el nombre.">Organizar</button>
     </form>
   </li>
   {% endfor %}
