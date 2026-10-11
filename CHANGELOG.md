@@ -46,8 +46,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   nada**. Para seguir adelante, repite la petición con los identificadores de esas series
   en `vistas` (por ejemplo `{"title": "…", "vistas": ["<id>"]}`); si han aparecido otras
   desde entonces vuelve a avisar. Con más de 100 parecidas responde `422
-  demasiadas_parecidas`. Repetir el valor que ya tiene y el resto de campos (descripción,
-  portada, estado, política de búsqueda…) **no cambian**.
+  demasiadas_parecidas` **a propósito** (es el mismo tope que el alta: `vistas` admite como
+  mucho 100 y no hay forma de revisar tantas desde aquí); el mensaje dice cuántas son —
+  `GET /api/series?search=…` permite verlas— y hay que resolver los duplicados antes. Repetir
+  el valor que ya tiene, un cuerpo vacío o con solo `vistas` (operación vacía, `200`, como
+  ya era `PATCH {}`) y el resto de campos (descripción, portada, estado, política de
+  búsqueda…) **no cambian**.
 - **Un Inicio que te dice qué hacer (V4).** En lugar de «5 series · 0 % · 0 pendientes», el Inicio te
   guía paso a paso según lo que ZascArr ha visto de verdad: registrar tu biblioteca (mirar tu disco y
   registrarla son dos cosas distintas, y las dos son acciones tuyas), revisar los tebeos sin clasificar
