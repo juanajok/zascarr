@@ -22,8 +22,11 @@
           <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
           <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
                  value="{{ c.suggestion.issue_number }}">
-          <button type="submit" class="btn-sugerencia">Sí, es esta</button>
+          {#- «Organizar»: esta asignación MUEVE y RENOMBRA el archivo (ADR 0007 / #114, I8). -#}
+          <button type="submit" class="btn-sugerencia"
+                  title="Mueve el archivo a la carpeta de esta serie en tu biblioteca y le cambia el nombre.">Sí, organizar</button>
         </form>
+        <small>Mueve y renombra el archivo.</small>
       </div>
       {% endif %}
       <input type="search" class="series-search" placeholder="Buscar serie…"
