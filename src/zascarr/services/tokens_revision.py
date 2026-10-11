@@ -28,6 +28,12 @@ from zascarr.services.discovery import CAMPO_ID_EXTERNO
 from zascarr.utils.url_portada import LONGITUD_MAXIMA_URL
 
 TTL_SEGUNDOS = 15 * 60
+#: Contexto firmado de las candidatas y altas que NO parten de un grupo de carpeta (Descubrir libre y el alta a mano, I1 de
+#: #114). Tiene que ser un valor que **ninguna `clave` de grupo pueda tener**: la clave de un grupo es una ruta guardada en
+#: `files.file_path` (Postgres no guarda el NUL en un `text`) y Linux no admite el NUL en una ruta; este valor lo lleva. Así
+#: un token de un grupo no sirve sin grupo (el contexto no coincide) ni al revés, y el servicio puede distinguirlos. NO se
+#: guarda nunca en la base (JSONB tampoco admite `\u0000`): la procedencia guarda `null` en `desde_grupo`.
+CLAVE_SIN_GRUPO = "\x00sin-grupo"
 PROPOSITO_CANDIDATA = "candidata"
 PROPOSITO_ALTA = "alta"
 PROPOSITO_VINCULAR = "vincular"
@@ -485,31 +491,34 @@ MAX_TOKEN_VINCULACION = _longitud_peor_caso_del_token_de_vinculacion()
 
 # ── Tamaño máximo de los tokens de candidata y alta ──────────────────────────────────────────────
 
-def _longitud_peor_caso_del_token_de_candidata() -> int:
+def _longitud_peor_caso_del_token_de_candidata(clave: str | None = None) -> int:
     """La longitud del MAYOR token de candidata que el servidor puede emitir y el verificador acepta (calculada, no
     elegida): cada texto en su cota y de caracteres de 4 bytes en UTF-8 (el máximo de cualquier texto firmable: el
     JSON se escribe con `ensure_ascii=False`, así que cada carácter pesa lo que su UTF-8; las comillas, las barras y
     los saltos de línea pesan dos), año de seis caracteres (`-32768`), la tradición más larga, una de las fuentes que
     el servidor emite (`CAMPO_ID_EXTERNO`: son las únicas que el alta puede procesar) y una `clave` de grupo de 1000
     controles de seis bytes. Sale de `crear_token_candidata`, es decir, de la serialización, la codificación y la
-    firma reales."""
+    firma reales. `clave` es el contexto del token; por defecto, el peor caso de un grupo (1000 controles de seis bytes);
+    `CLAVE_SIN_GRUPO` da el máximo de una candidata sin grupo."""
+    clave = CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO if clave is None else clave
     ch = "\U0001F600"
     fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
     tradicion = max((t.value for t in ComicTradition), key=len)
     c = CandidataFirmada(fuente, ch * MAX_ID_EXTERNO, ch * MAX_TITULO, ANIO_MIN_FIRMABLE, tradicion,
                          ch * MAX_DESCRIPCION, ch * MAX_COVER_URL)
-    return len(crear_token_candidata(CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, c, "x" * 32,
-                                     ahora=EPOCA_DEL_PEOR_CASO))
+    return len(crear_token_candidata(clave, c, "x" * 32, ahora=EPOCA_DEL_PEOR_CASO))
 
 
-def _longitud_peor_caso_del_token_de_alta() -> int:
+def _longitud_peor_caso_del_token_de_alta(clave: str | None = None) -> int:
     """Idem para el alta. El mayor es el que CREA y firma `MAX_PARECIDAS_FIRMADAS` series vistas; el que reutiliza
-    lleva `serie_id` y `criterio` pero ninguna vista. Se calculan los dos y se toma el mayor."""
+    lleva `serie_id` y `criterio` pero ninguna vista. Se calculan los dos y se toma el mayor. `clave`, como en la
+    candidata."""
+    clave = CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO if clave is None else clave
     ch = "\U0001F600"
     ident = "00000000-0000-4000-8000-000000000000"
     fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
     tradicion = max((t.value for t in ComicTradition), key=len)
-    comunes = dict(clave=CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO, origen="descubrir", fuente=fuente,
+    comunes = dict(clave=clave, origen="descubrir", fuente=fuente,
                    id_externo=ch * MAX_ID_EXTERNO, titulo=ch * MAX_TITULO, anio=ANIO_MIN_FIRMABLE, tradicion=tradicion,
                    descripcion=ch * MAX_DESCRIPCION, cover_url=ch * MAX_COVER_URL, operacion=ident)
     vistas = tuple(f"{i:08d}-0000-4000-8000-000000000000" for i in range(MAX_PARECIDAS_FIRMADAS))
@@ -522,3 +531,10 @@ def _longitud_peor_caso_del_token_de_alta() -> int:
 #: /api/revision/serie` (campo `token`): acotados e IGUALES al peor caso emitible, no un número redondo.
 MAX_TOKEN_CANDIDATA = _longitud_peor_caso_del_token_de_candidata()
 MAX_TOKEN_ALTA = _longitud_peor_caso_del_token_de_alta()
+
+#: Lo mismo SIN grupo (I1 de #114): el contexto es `CLAVE_SIN_GRUPO` y no una ruta de hasta 1000 controles, así que el
+#: máximo es menor. Se calcula con las mismas funciones reales, no se deduce restando. Ninguna ruta los usa todavía como
+#: límite del cuerpo: un token sin grupo cabe siempre en los límites de arriba (una prueba lo exige), así que los
+#: puntos de entrada que ya existen lo aceptan.
+MAX_TOKEN_CANDIDATA_SIN_GRUPO = _longitud_peor_caso_del_token_de_candidata(CLAVE_SIN_GRUPO)
+MAX_TOKEN_ALTA_SIN_GRUPO = _longitud_peor_caso_del_token_de_alta(CLAVE_SIN_GRUPO)
