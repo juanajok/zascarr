@@ -20,6 +20,7 @@ from sqlalchemy.pool import NullPool
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
 from zascarr.models import ComicTradition, Series, WishlistPolicy
 from zascarr.services.alta_serie import AltaDeSerie, bloquear_titulo
+from zascarr.services.edicion_serie import EdicionDeSerie, SesionConTrabajoPendienteError
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)")
@@ -220,3 +221,59 @@ class TestConcurrencia:
         assert sorted([ra.status_code, rb.status_code]) == [200, 409]
         async with banco.fabrica() as s:
             assert len((await s.execute(select(Series).where(Series.title == "Saga del Faro"))).scalars().all()) == 1
+
+
+class TestLimiteTransaccional:
+    """El servicio no confirma: quien llama es dueño de la transacción (en la API, `get_db`)."""
+
+    @pytest.mark.asyncio
+    async def test_el_servicio_no_confirma_por_su_cuenta_el_cambio_de_identidad(self, banco):
+        mia = await banco.serie("Crónicas Lunares")
+        async with banco.fabrica() as ses:
+            await EdicionDeSerie(ses).actualizar(mia.id, {"title": "Otro título"}, set())
+            await ses.rollback()                                       # quien llama decide: aquí, descartar
+        assert (await banco.leer(mia.id)).title == "Crónicas Lunares"
+
+    @pytest.mark.asyncio
+    async def test_quien_llama_confirma_y_queda_guardado(self, banco):
+        mia = await banco.serie("Crónicas Lunares")
+        async with banco.fabrica() as ses:
+            await EdicionDeSerie(ses).actualizar(mia.id, {"title": "Otro título"}, set())
+            await ses.commit()
+        assert (await banco.leer(mia.id)).title == "Otro título"
+
+    @pytest.mark.asyncio
+    async def test_se_niega_a_trabajar_sobre_una_sesion_con_cambios_pendientes_ajenos(self, banco):
+        mia = await banco.serie("Crónicas Lunares")
+        async with banco.fabrica() as ses:
+            ses.add(Series(id=uuid4(), title="Ajena", tradition=AM, start_year=2010))     # trabajo de otro, sin confirmar
+            with pytest.raises(SesionConTrabajoPendienteError):
+                await EdicionDeSerie(ses).actualizar(mia.id, {"title": "Otro título"}, set())
+            await ses.rollback()
+        assert (await banco.leer(mia.id)).title == "Crónicas Lunares"
+
+    @pytest.mark.asyncio
+    async def test_si_hay_parecidas_la_transaccion_queda_deshecha_y_el_candado_suelto(self, banco):
+        """El 409 deshace la transacción: otra operación puede tomar el candado del título sin esperar."""
+        await banco.serie("Saga del Faro")
+        mia = await banco.serie("Otra")
+        assert (await banco.patch(mia.id, {"title": "Saga del Faro"})).status_code == 409
+        async with banco.motor.connect() as c:
+            await c.execute(text("SET LOCAL lock_timeout = '2s'"))
+            await bloquear_titulo_en(c, "Saga del Faro")                   # no se queda esperando: no hay candado vivo
+
+
+async def bloquear_titulo_en(conexion, titulo):
+    await conexion.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('alta_serie:' || f_title_norm(:t), 0))"), {"t": titulo})
+
+
+class TestOperacionVacia:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("cuerpo", [{}, {"vistas": []}, {"vistas": ["00000000-0000-4000-8000-000000000001"]}])
+    async def test_un_cuerpo_sin_cambios_es_una_operacion_vacia_con_200(self, banco, cuerpo):
+        """Igual que ya hacía `PATCH {}`: no cambia nada, no es un error."""
+        mia = await banco.serie("Saga del Faro", anio=2010)
+        r = await banco.patch(mia.id, cuerpo)
+        assert r.status_code == 200
+        s = await banco.leer(mia.id)
+        assert (s.title, s.start_year, s.tradition) == ("Saga del Faro", 2010, AM)

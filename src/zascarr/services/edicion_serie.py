@@ -11,6 +11,12 @@ petición con sus identificadores en `vistas` («se rechaza si han aparecido otr
 El resto de campos (descripción, portada, estado, política de búsqueda…) **no cambia de comportamiento**: sin tocar la
 identidad no hay candado ni consulta extra, y la escritura sigue siendo un `flush`.
 
+**Límite transaccional.** Este servicio NO confirma: la transacción es la de la petición (`get_db` la confirma al terminar,
+como en el resto de ediciones), tanto si cambia la identidad como si no. El candado del título dura hasta ese `commit`, así
+que otra operación que espere por él ve lo ya escrito. Solo deshace (`rollback`) en el camino de error, para soltar los
+candados sin esperar a que `get_db` lo haga. Por eso la sesión que recibe debe ser una **sin cambios pendientes ajenos** (la
+de la petición lo es): si se pide cambiar la identidad lo comprueba y se niega si no, en vez de confirmar o descartar trabajo de otro.
+
 Orden de bloqueos, el común: título › serie (`FOR UPDATE`). Como el título que hay que bloquear puede depender del actual
 (si el cuerpo no lo trae), se vuelve a comprobar tras tomar la fila y se reintenta unas pocas veces si cambió entre medias.
 """
@@ -40,6 +46,10 @@ class ParecidasSinVerError(Exception):
         self.parecidas = parecidas
 
 
+class SesionConTrabajoPendienteError(RuntimeError):
+    """Precondición rota: la sesión ya tenía cambios sin confirmar que no son de esta edición."""
+
+
 class SerieCambiadaError(Exception):
     """La serie cambió mientras se comprobaba; el cliente puede repetir."""
 
@@ -50,6 +60,10 @@ class EdicionDeSerie:
 
     async def actualizar(self, series_id: UUID, cambios: dict, vistas: set[str]) -> Series:
         db = self._db
+        # ANTES de la primera consulta (que vaciaría —`autoflush`— lo pendiente de otro dentro de esta transacción).
+        if any(c in cambios for c in CAMPOS_DE_IDENTIDAD) and (db.new or db.dirty or db.deleted):
+            raise SesionConTrabajoPendienteError(
+                "EdicionDeSerie necesita una sesión sin cambios pendientes: no confirma ni descarta trabajo ajeno.")
         serie = (await db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
         if serie is None:
             raise SerieNoEncontradaError(str(series_id))
@@ -95,9 +109,8 @@ class EdicionDeSerie:
                     raise ParecidasSinVerError(parecidas)
                 self._aplicar(fila, cambios)
                 await db.flush()
-                await db.commit()
                 await db.refresh(fila)                  # `title_norm` es una columna generada: se relee tras el UPDATE
-                return fila
+                return fila                             # el `commit` lo hace `get_db`, como en el resto de ediciones
             raise SerieCambiadaError()
         except BaseException:
             await db.rollback()
