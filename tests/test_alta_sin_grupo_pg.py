@@ -10,6 +10,7 @@ Ninguna fuente real; se saltan sin `TEST_DATABASE_URL`.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 
 import pytest
@@ -183,3 +184,30 @@ class TestElMayorTokenSinGrupoLoAceptanLosPuntosDeEntrada:
         assert len(token) < MAX_TOKEN_ALTA
         r = await post(ALTA, {"token": token})
         assert r.status_code == 200 and r.json()["resultado"] in ("creada", "reutilizada"), r.text
+
+
+class TestElCandadoDelTituloSeComparteConElAltaConGrupo:
+    @pytest.mark.asyncio
+    async def test_la_confirmacion_sin_grupo_espera_al_candado_del_titulo_y_luego_ve_lo_que_creo_otra_alta(self, entorno):
+        """Otra alta (con grupo o sin él: el candado es el mismo) tiene el candado del título normalizado. La confirmación
+        sin grupo espera —se comprueba en `pg_locks`, sin esperas fijas— y, al continuar, ve la serie recién creada como
+        parecida nueva. Sin candado, la vería ausente y crearía el duplicado."""
+        from sqlalchemy import text
+
+        from zascarr.services.alta_serie import bloquear_titulo
+        v = await previsualizar(entorno, manual=DatosManuales("Saga del Faro", 2010))
+        async with entorno.banco.fabrica() as otra:
+            await bloquear_titulo(otra, "Saga del Faro")
+            espera = asyncio.create_task(confirmar(entorno, v.token))
+            for _ in range(200):
+                async with entorno.banco.fabrica() as c:
+                    bloqueados = (await c.execute(text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"))).scalar()
+                if bloqueados:
+                    break
+                await asyncio.sleep(0.05)
+            assert bloqueados and not espera.done(), "la confirmación debía esperar al candado del título"
+            otra.add(Series(title="Saga del Faro", tradition=AM, start_year=2010))
+            await otra.commit()
+        with pytest.raises(ParecidasNuevasError):
+            await asyncio.wait_for(espera, timeout=30)
+        assert await numero_de_series(entorno.banco) == 1
