@@ -44,7 +44,7 @@ El inventario fusionado en #165 muestra que **hoy hay tres caminos que crean una
 
 ### El borrado: `DELETE /api/series/{id}` (L)
 
-`delete_series` (en `api/series.py`, **sin servicio**) hace `db.delete(series)` y `flush`. **No hay ruta de interfaz** que lo llame (el barrido de rutas del inventario no halla ningún `DELETE` en `web/`). No tiene confirmación, ni vista previa de efectos, ni comprobante.
+El borrado vigente es **físico, con cascada, y no es reversible**: `delete_series` (en `api/series.py`, **sin servicio**) hace `db.delete(series)` y `flush`, y la fila de la serie y sus dependencias dejan de existir. No hay archivado ni borrado lógico (solo S5 lo plantearía, como opción futura). **No hay ruta de interfaz** que lo llame (el barrido de rutas del inventario no halla ningún `DELETE` en `web/`). No tiene confirmación, ni vista previa de efectos, ni comprobante.
 
 Efecto en la BD, por las claves foráneas del esquema (consulta de metadatos del ORM, **X**; la BD real las crea con Alembic, **N**: no se ha comparado con una base migrada):
 
@@ -108,7 +108,7 @@ La adaptación está decidida (D2); queda **abierta la forma**: (a) encadenar pr
 | **S2** Bloquear si tiene archivos vinculados (`409 tiene_archivos`, como `deshacer`) | Solo se borran series **vacías**; desvincular sería otra operación explícita (que **no existe**) | Obliga a crear «desvincular» para el otro caso | Con archivos → 409 y nada cambia; sin archivos → borra |
 | **S3** Excluirlo del recorrido MVP | Lo deja como operación de administración documentada | No arregla el efecto; solo lo aparta | — |
 | **S4** Sustituirlo por «deshacer» (solo series creadas por una operación) | Reutiliza el contrato existente | **Pierde** el borrado de las series que no vienen del alta | — |
-| **S5** Borrado lógico / archivado | Reversible | **Cambia el modelo** (migración): fuera del alcance del MVP | — |
+| **S5** Archivado / borrado lógico (**futuro**) | Única opción que plantea una retirada **reversible** | **Cambia el modelo** (migración): fuera del alcance del MVP | — |
 
 Cualquier opción **conserva** el `409` por operación viva (ya probado). Combinaciones razonables: S1+S2, S2+S3, S4+S3.
 
