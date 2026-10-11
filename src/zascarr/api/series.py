@@ -4,13 +4,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from zascarr.database import get_db
 from zascarr.models import ComicTradition, Series, WishlistPolicy
-from zascarr.services.asignacion import conflicto_por_operacion_viva
+from zascarr.services.borrado_serie import (
+    BorradoDeSerie,
+    SerieNoBorrableError,
+    SerieNoEncontradaError,
+)
 
 # El cálculo de huecos vive en `services/` (lo usa también el orquestador, que
 # no puede depender de `api/`). Se reexportan aquí porque `web/series.py`,
@@ -167,23 +170,20 @@ async def update_series(series_id: UUID, data: SeriesUpdate, db: AsyncSession = 
 
 @router.delete("/{series_id}", status_code=204)
 async def delete_series(series_id: UUID, db: AsyncSession = Depends(get_db)):
-    series = (await db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
-    if not series:
-        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    """Borra una serie **sin dependientes** (ADR 0010 P-3, I4 de #114). No toca el disco.
+
+    `409` si hay una asignación en curso (`detail` en texto, como siempre), o si tiene archivos
+    vinculados, números o deseados (`detail` = `{"codigo", "mensaje"}`); en ningún caso cambia
+    nada."""
     try:
-        await db.delete(series)
-        # `flush` AQUÍ y no al salir de `get_db`: ese `commit` ocurre DESPUÉS de responder y
-        # un fallo de integridad llegaría tarde, con el 204 ya entregado.
-        await db.flush()
-    except IntegrityError as exc:
-        await db.rollback()
-        if conflicto_por_operacion_viva(exc):
-            raise HTTPException(
-                status_code=409,
-                detail="Esta serie tiene una asignación de archivos en curso; espera a que termine "
-                       "(o se reconcilie) e inténtalo de nuevo.",
-            ) from exc
-        raise                       # cualquier OTRO error de integridad NO es este conflicto
+        await BorradoDeSerie(db).borrar(series_id)
+    except SerieNoEncontradaError:
+        raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+    except SerieNoBorrableError as exc:
+        if exc.motivo == "operacion_viva":
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detalle = {"codigo": exc.motivo, "mensaje": str(exc)}
+        raise HTTPException(status_code=409, detail=detalle) from exc
 
 
 @router.get("/{series_id}/missing")
