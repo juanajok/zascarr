@@ -480,7 +480,11 @@ class TestPuntosDeEntrada:
         with _Cliente(_Sesion()) as client:
             assert client.post("/api/series", json={"title": "Batman"}).status_code == 201
 
-    @pytest.mark.parametrize("url", ["http://169.254.169.254/x", "https://evil.example/x.jpg"])
+    # Misma lista que `test_crear_serie_por_la_api_rechaza_una_portada_no_permitida`: la comprobación equivalente
+    # sobrevive a la retirada de `POST /api/series` (I3/I6 de #114).
+    @pytest.mark.parametrize("url", ["http://169.254.169.254/x", "http://127.0.0.1/x.jpg",
+                                    "https://evil.example/x.jpg", "file:///etc/passwd",
+                                    "https://u:p@comicvine.gamespot.com/x.jpg"])
     def test_editar_serie_por_la_api_rechaza_una_portada_no_permitida(self, url):
         serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN)
         with _Cliente(_Sesion(existente=serie)) as client:

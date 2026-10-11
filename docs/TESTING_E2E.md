@@ -261,9 +261,9 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST "$APP_URL/api/wishlist" \
 
 ## 6. Fixtures (por Python, no por el endpoint de escritura)
 
-> No se usa `POST /api/series` para sembrar datos (ese endpoint se prueba
-> aparte en 14.1, que verifica el rechazo de mass-assignment de M1, ya
-> cerrado). Se siembra con la sesión async directamente, igual que hacen
+> No se usa `POST /api/series` para sembrar datos (ese endpoint, hoy obsoleto,
+> se prueba aparte en 14.1, que verifica el rechazo de mass-assignment de M1,
+> ya cerrado). Se siembra con la sesión async directamente, igual que hacen
 > los tests.
 
 ```bash
@@ -635,6 +635,16 @@ curl -s -o "$ROOT/m1.json" -w '%{http_code}\n' -X POST "$APP_URL/api/series" \
 #  Criterio esperado: 422 (Pydantic con extra="forbid" rechaza id/
 #  metadata_source/locked_fields inyectados). Un 201 aquí es una
 #  regresión real de M1, no un known failure — FAIL del release.
+#  `POST /api/series` está OBSOLETO (I3 de #114): sigue funcionando igual, pero no
+#  ofrece las garantías del alta por token y se retirará. Cuando desaparezca, este
+#  caso se sustituye por 14.1b, que comprueba el mismo rechazo sobre PATCH.
+
+# 14.1b Mismo rechazo sobre PATCH (misma lista de campos internos; persiste tras
+#       retirar POST /api/series). Requiere SERIES_ID (ver 8.2).
+curl -s -o "$ROOT/m1b.json" -w '%{http_code}\n' -X PATCH "$APP_URL/api/series/$SERIES_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"11111111-1111-1111-1111-111111111111","metadata_source":"manual","locked_fields":["id"]}'
+#  Criterio esperado: 422 (SeriesUpdate también es extra="forbid"), y la serie no cambia.
 
 # 14.2 ZIP con path traversal interno (../../evil.txt) → al importar/leer no
 #     escribe fuera del destino.
