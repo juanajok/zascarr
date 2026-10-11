@@ -153,6 +153,58 @@ class TestBuscarSerie:
         assert "Sin coincidencias" in r.text
 
 
+class TestLaAsignacionSeRotulaOrganizar:
+    """I8 de #114: la asignación MUEVE y RENOMBRA el archivo (ADR 0007), así que sus botones lo dicen. Solo cambia el
+    texto: la ruta, los campos del formulario y el servicio son los de siempre."""
+
+    @staticmethod
+    def _botones_de_asignar(html: str) -> list[str]:
+        import re
+        formularios = re.findall(r'<form[^>]*hx-post="/ui/pendientes/[^"]+/asignar"[^>]*>(.*?)</form>', html, re.S)
+        return [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", re.search(r'<button[^>]*type="submit"[^>]*>.*?</button>', f, re.S).group(0))).strip()
+                for f in formularios]
+
+    def _tarjeta(self):
+        sid = uuid4()
+        file = File(id=uuid4(), file_path="/lib/_Unsorted/la patrulla x 12.cbz", file_name="la patrulla x 12.cbz",
+                    file_format=FileFormat.CBZ,
+                    metadata_={"match_status": "unsorted",
+                               "candidates": [{"series_id": str(sid), "title": "La Patrulla-X", "start_year": 1985, "score": 0.62}]})
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([file])])) as client:
+            return client.get("/ui/pendientes").text, file, sid
+
+    def test_el_boton_de_la_sugerencia_dice_que_organiza_moviendo_y_renombrando(self):
+        html, _, _ = self._tarjeta()
+        (boton,) = self._botones_de_asignar(html)
+        assert "organizar" in boton.lower() and "mueve y renombra" in boton
+        assert "Sí, es esta" not in html
+
+    def test_el_boton_de_los_resultados_de_busqueda_dice_lo_mismo(self):
+        series = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN, start_year=2011)
+        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([series])])) as client:
+            html = client.get(f"/ui/pendientes/{uuid4()}/buscar-serie?q=bat").text
+        (boton,) = self._botones_de_asignar(html)
+        assert "Organizar" in boton and "mueve y renombra" in boton
+        assert ">Confirmar<" not in html
+
+    def test_todo_formulario_que_asigna_tiene_un_boton_que_lo_dice(self):
+        """Si alguien añade otro formulario que llame a `/asignar` con un texto engañoso, esto lo detecta."""
+        from pathlib import Path
+
+        import zascarr.web as web
+        plantillas = Path(web.__file__).parent / "templates"
+        con_asignar = [p for p in plantillas.glob("*.html") if "/asignar" in p.read_text(encoding="utf-8")]
+        assert {p.name for p in con_asignar} == {"_tarjeta_pendiente.html", "_resultados_serie.html"}
+        for p in con_asignar:
+            botones = self._botones_de_asignar(p.read_text(encoding="utf-8"))
+            assert botones and all("mueve y renombra" in b for b in botones), p.name
+
+    def test_el_recorrido_no_cambia_misma_ruta_y_mismos_campos(self):
+        html, file, sid = self._tarjeta()
+        assert f'hx-post="/ui/pendientes/{file.id}/asignar"' in html
+        assert f'name="series_id" value="{sid}"' in html and 'name="issue_number"' in html
+
+
 class TestFragmentoDeRecuento:
     """El elemento que hace que el menú recuente «Por revisar» al sustituirse la tarjeta. Se prueba su CONTENIDO
     literal y que apunta a la ruta REAL del menú: las demás pruebas comparan con la constante y, si esta cambiara,

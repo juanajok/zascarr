@@ -38,6 +38,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Los botones de «Por revisar» dicen que mueven y renombran el archivo** (#114, I8). Asignar
+  un archivo a una serie desde «Por revisar» **siempre ha movido el archivo a la carpeta de
+  la serie y le ha cambiado el nombre**; el botón de la sugerencia decía «Sí, es esta» y el de
+  los resultados de búsqueda «Confirmar», sin avisarlo. Ahora dicen «Sí, organizar (mueve y
+  renombra)» y «Organizar (mueve y renombra)», con una ayuda al pasar el ratón. **Solo cambia
+  el texto**: la acción, los campos y el servicio son los mismos. Vincular un archivo en su
+  sitio, sin moverlo, es otro camino (`POST /api/revision/vinculacion`) que todavía no tiene
+  pantalla.
 - **`PATCH /api/series/{id}` avisa si el cambio de título, tradición o año choca con otra
   serie** (#114, I5). Renombrar una serie hasta que se parezca a otra ya no evita la
   detección que sí hace el alta: si el cambio **modifica de verdad** alguno de esos tres
