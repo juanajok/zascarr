@@ -26,7 +26,8 @@
       {% if r.descripcion %}
       <div class="discovery-card-desc">{{ r.descripcion }}</div>
       {% endif %}
-      <form hx-post="/ui/descubrir/revisar" hx-target="closest .discovery-card-body" hx-swap="outerHTML">
+      <div class="alta-paso">
+      <form hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
         <input type="hidden" name="candidata" value="{{ r.token }}">
         <div class="discovery-card-actions">
           <select name="tradition" required aria-label="Tradición">
@@ -39,6 +40,7 @@
         </div>
         <small>La fuente sugiere: {{ tradiciones | selectattr(0, "equalto", r.sugerida.value) | map(attribute=1) | first }}. Tú decides.</small>
       </form>
+      </div>
     </div>
   </li>
   {% endfor %}

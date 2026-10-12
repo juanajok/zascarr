@@ -1,13 +1,9 @@
 {#- Paso 2 de Descubrir (crear o reutilizar): el resultado, con enlace a la ficha y, si se creó, «Deshacer». `r` es el
     `ResultadoAlta` del servicio. -#}
-<div class="discovery-card-body">
-  <div class="discovery-card-title">
-    {{ r.serie.titulo }}{% if r.serie.anio %} ({{ r.serie.anio }}){% endif %}
-    <span class="caption">
-      {%- if r.resultado == "creada" %}creada{% if r.repetida %} (ya se había creado){% endif %}
-      {%- else %}ya estaba en tu biblioteca{% endif -%}
-    </span>
-  </div>
+<div class="alta-paso">
+  <p><strong>«{{ r.serie.titulo }}»{% if r.serie.anio %} ({{ r.serie.anio }}){% endif %}</strong>:
+    {%- if r.resultado == "creada" %} creada{% if r.repetida %} (ya se había creado){% endif %}
+    {%- else %} ya estaba en tu biblioteca{% endif -%}.</p>
   {% if r.resultado == "creada" %}
   <p>Es una serie vacía: sin números ni archivos. Vincular archivos es otro paso.</p>
   {% endif %}
@@ -24,7 +20,7 @@
     </button>
   </div>
   {% if r.deshacer %}
-  <form hx-post="/ui/descubrir/deshacer" hx-target="closest .discovery-card-body" hx-swap="outerHTML">
+  <form hx-post="/ui/descubrir/deshacer" hx-target="closest .alta-paso" hx-swap="outerHTML">
     <input type="hidden" name="series_id" value="{{ r.deshacer.series_id }}">
     <input type="hidden" name="operacion_id" value="{{ r.deshacer.operacion_id }}">
     <div class="discovery-card-actions"><button type="submit">Deshacer</button></div>

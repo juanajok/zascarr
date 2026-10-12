@@ -1,5 +1,5 @@
 {#- Un fallo recuperable de Descubrir, dentro de la tarjeta (htmx no sustituye una respuesta 4xx). -#}
-<div class="discovery-card-body">
+<div class="alta-paso">
   {{ ui.aviso("warn", texto) }}
   {% if parecidas %}
   <ul class="series-list">
@@ -9,7 +9,7 @@
   </ul>
   {% endif %}
   {% if candidata and tradicion %}
-  <form hx-post="/ui/descubrir/revisar" hx-target="closest .discovery-card-body" hx-swap="outerHTML">
+  <form hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
     <input type="hidden" name="candidata" value="{{ candidata }}">
     <input type="hidden" name="tradition" value="{{ tradicion }}">
     <div class="discovery-card-actions"><button type="submit">Revisar de nuevo</button></div>

@@ -130,6 +130,25 @@ def _servicio(db: AsyncSession) -> AltaDeSerie | None:
     return AltaDeSerie(db, secret=secreto) if secreto else None
 
 
+#: Los `AltaError` cuyo mensaje YA está escrito para la persona. Cualquier otro código (o una excepción base) no muestra su
+#: texto —podría ser un identificador, un UUID o un detalle interno—: sale el mensaje de reserva.
+_CODIGOS_CON_MENSAJE_PROPIO = frozenset({
+    "token_invalido", "datos_invalidos", "decision_invalida", "demasiadas_parecidas", "la_serie_ya_no_existe",
+    "identificador_cambiado", "alta_deshecha", "alta_serie_ausente",
+})
+_MENSAJES_POR_CODIGO = {
+    "serie_no_encontrada": "La serie ya no está en tu biblioteca; no hay nada que deshacer.",
+}
+_MENSAJE_DE_RESERVA = "No se ha podido completar la operación. Vuelve a buscar el título e inténtalo de nuevo."
+
+
+def _texto_de(exc: AltaError) -> str:
+    codigo = getattr(exc, "codigo", "")
+    if codigo in _MENSAJES_POR_CODIGO:
+        return _MENSAJES_POR_CODIGO[codigo]
+    return str(exc) if codigo in _CODIGOS_CON_MENSAJE_PROPIO else _MENSAJE_DE_RESERVA
+
+
 def _error(request: Request, texto: str, **extra) -> HTMLResponse:
     """Los fallos recuperables se pintan DENTRO de la tarjeta (con 200): htmx no sustituye una respuesta 4xx."""
     return templates.TemplateResponse(request, "_alta_error.html", {"texto": texto, **extra})
@@ -152,7 +171,7 @@ async def revisar(
         vista = await servicio.previsualizar_sin_grupo(
             tradicion=tradition, candidata=candidata, decision=decision, serie_id=serie_id)
     except AltaError as exc:
-        return _error(request, str(exc))
+        return _error(request, _texto_de(exc))
     return templates.TemplateResponse(request, "_alta_vista_previa.html", {
         "vista": vista, "candidata": candidata, "tradicion": tradition.value,
         "tradicion_etiqueta": _TRADICION_LABEL[tradition], "tradiciones": _tradiciones(),
@@ -178,7 +197,7 @@ async def crear(
                       parecidas=exc.nuevas, candidata=candidata, tradicion=tradition.value if tradition else None,
                       tradiciones=_tradiciones())
     except AltaError as exc:
-        return _error(request, str(exc))
+        return _error(request, _texto_de(exc))
     return templates.TemplateResponse(request, "_alta_resultado.html", {"r": resultado})
 
 
@@ -205,5 +224,5 @@ async def deshacer(
     except NoSePuedeDeshacerError as exc:
         return _error(request, _MOTIVOS_DE_NO_DESHACER.get(exc.motivo, "No se puede deshacer."))
     except AltaError as exc:
-        return _error(request, str(exc))
+        return _error(request, _texto_de(exc))
     return templates.TemplateResponse(request, "_alta_deshecha.html", {"hecho": hecho})

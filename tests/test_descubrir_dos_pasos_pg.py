@@ -257,3 +257,61 @@ class TestConcurrencia:
         assert r1.status_code == r2.status_code == 200
         assert await numero_de_series(entorno.banco) == 1
         assert sorted(("creada" in r.text and "ya estaba" not in r.text) for r in (r1, r2)) == [False, True]
+
+
+class TestMensajesAptosParaLaPersona:
+    @pytest.mark.asyncio
+    async def test_deshacer_una_serie_que_ya_no_existe_lo_explica_y_no_enseña_un_uuid(self, entorno, monkeypatch):
+        _, token = await crear_flash(monkeypatch)
+        creada = await post("/ui/descubrir/crear", token=token)
+        sid, op = valor(creada.text, "series_id"), valor(creada.text, "operacion_id")
+        async with entorno.banco.fabrica() as s:                      # la serie desaparece por otra vía
+            await s.execute(text("DELETE FROM series"))
+            await s.commit()
+        d = await post("/ui/descubrir/deshacer", series_id=sid, operacion_id=op)
+        assert d.status_code == 200 and "ya no está en tu biblioteca; no hay nada que deshacer" in d.text
+        assert sid not in d.text
+
+    @pytest.mark.asyncio
+    async def test_un_error_del_servicio_sin_mensaje_propio_sale_con_el_de_reserva(self, entorno, monkeypatch):
+        from zascarr.services.alta_serie import AltaDeSerie, AltaError
+        _, token = await crear_flash(monkeypatch)
+
+        async def roto(self, token):
+            raise AltaError("detalle interno: 3f2a-uuid-que-no-se-debe-ver")
+        monkeypatch.setattr(AltaDeSerie, "confirmar", roto)
+        r = await post("/ui/descubrir/crear", token=token)
+        assert r.status_code == 200 and "No se ha podido completar la operación" in r.text
+        assert "detalle interno" not in r.text and "uuid" not in r.text
+
+
+class TestConcurrenciaPorTitulo:
+    @pytest.mark.asyncio
+    async def test_dos_candidatas_con_identificadores_distintos_y_el_mismo_titulo_solo_dejan_crear_una(self, entorno, monkeypatch):
+        """El segundo escenario de la concurrencia: NO es el mismo identificador (eso lo resuelve la unicidad) sino el mismo
+        título normalizado, tradición y año. Las dos vistas previas se hacen antes de que exista ninguna serie."""
+        html = await buscar(monkeypatch, resultado(external_id="796"), resultado(external_id="797", cover_url=None))
+        c1, c2 = valor(html, "candidata", 0), valor(html, "candidata", 1)
+        v1, v2 = await revisar(c1, "american"), await revisar(c2, "american")
+        t1, t2 = valor(v1.text, "token"), valor(v2.text, "token")
+        r1, r2 = await asyncio.gather(post("/ui/descubrir/crear", token=t1, candidata=c1, tradition="american"),
+                                      post("/ui/descubrir/crear", token=t2, candidata=c2, tradition="american"))
+        assert r1.status_code == r2.status_code == 200                 # ningún 500
+        textos = [r1.text, r2.text]
+        creadas = [t for t in textos if "creada" in t and "Han aparecido" not in t]
+        colision = [t for t in textos if "Han aparecido series parecidas" in t]
+        assert len(creadas) == 1 and len(colision) == 1, textos
+        assert await numero_de_series(entorno.banco) == 1 and await comprobantes(entorno.banco) == 1
+
+
+class TestLaTarjetaConservaLaFichaDeLaFuente:
+    @pytest.mark.asyncio
+    async def test_solo_se_sustituye_el_paso_y_la_cabecera_con_el_enlace_a_la_ficha_queda(self, entorno, monkeypatch):
+        html = await buscar(monkeypatch, resultado(site_url="https://comicvine.gamespot.com/flash/4050-796/"))
+        enlace = html.index('href="https://comicvine.gamespot.com/flash/4050-796/"')
+        paso = html.index('<div class="alta-paso">')
+        assert enlace < paso                                           # el enlace está FUERA de lo que se sustituye
+        assert html.count('hx-target="closest .alta-paso"') == 1
+        v = await revisar(valor(html, "candidata"), "american")
+        assert v.text.lstrip().startswith('<div class="alta-paso">')   # el fragmento reemplaza exactamente ese contenedor
+        assert "discovery-card-body" not in v.text
