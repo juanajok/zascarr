@@ -38,6 +38,17 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **`DELETE /api/series/{id}` solo borra una serie que no tiene nada colgando** (#114, I4). Antes borraba
+  en cascada sus números, sus deseados y sus alias y dejaba sin vincular sus archivos, sin avisar;
+  lo único que lo frenaba era una asignación en curso. Ahora responde `409` y **no cambia nada** si
+  hay una asignación de archivos en curso (el mismo texto de siempre, y se comprueba primero), si algún
+  archivo está vinculado a un número de la serie (`tiene_archivos`), si tiene números (`tiene_numeros`)
+  o si tiene deseados o una política de búsqueda activa (`tiene_deseados`). Los `409` nuevos llevan
+  `detail` = `{"codigo", "mensaje"}`; el de la asignación en curso sigue siendo un texto. Con una serie
+  vacía, borra la serie **y sus alias y géneros**; los comprobantes de alta y los informes de
+  vinculación **se conservan**. **Nunca toca los archivos del disco.** No hay pantalla para borrar
+  series: es una operación de la API. Si tenías un script que borraba series con contenido, ahora
+  recibirá un `409` y tendrás que vaciar antes lo que cuelga de ella.
 - **Crear una serie desde Descubrir ahora es en dos pasos: «Revisar» y «Crear»** (#114, I2). Antes un
   solo clic creaba la serie con datos que reenviaba el navegador, con la tradición ya marcada y
   sin avisar de series parecidas. Ahora: eliges la **tradición tú** (la sugerencia de la fuente
