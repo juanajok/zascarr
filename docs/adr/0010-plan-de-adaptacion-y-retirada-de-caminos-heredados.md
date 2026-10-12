@@ -18,7 +18,7 @@
 | **P-2** | C3 en dos fases | Fase 1 (obsoleto, sin cambio de comportamiento) **adoptada e implementada**: [#169](https://github.com/juanajok/zascarr/pull/169) (`62ba2bd5`). **Fase 2 (I6): abierta** | ver abajo |
 | **P-3** | `DELETE` S2 + S3, con el `409` por operación viva **comprobado primero** (desviación del orden propuesto, para conservar su texto) | **Adoptada e implementada** | [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
 | **P-4** | `PATCH` con `409 serie_parecida` y `vistas` | **Adoptada e implementada** (el servicio no confirma: la transacción es la de la petición) | [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`) |
-| **P-5** | G1–G8 vinculantes con excepciones | **Adoptada** (ver la matriz en el ADR 0009) | [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
+| **P-5** | G1–G8 como principios con excepciones | **Adoptada solo donde el ADR 0009 enumera implementación y prueba por entrada** (tabla «Evidencia por garantía», **borrador informativo**); las celdas sin prueba específica no se adoptan | [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
 | **P-6** | D1–D6 como criterios de #114 | **Adoptados**; acreditación parcial (abajo) | — |
 | **P-7** | Rotular «Organizar» y, después, sustituir por «Vincular» | Rotulado **adoptado e implementado**: [#171](https://github.com/juanajok/zascarr/pull/171) (`a15a5cd2`). Sustitución (I7): **bloqueada por 2e** | — |
 

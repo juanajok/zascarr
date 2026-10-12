@@ -13,7 +13,7 @@
 ### Adoptado
 | Decisión del ADR | Qué queda decidido | Implementado y probado en |
 |---|---|---|
-| **G1–G8** como contrato común | Para toda entrada que **cree** una serie: el alta con grupo, el alta sin grupo y Descubrir. Para el cambio de identidad por `PATCH` rigen **G3 (colisiones) y G4 (candado)**; G1, G2 y G5–G8 no aplican porque no crea | Alta sin grupo [#172](https://github.com/juanajok/zascarr/pull/172) (`e316ba12`); Descubrir [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`); `PATCH` [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`); paridad entre entradas [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
+| **G1–G8** como principios del contrato común | Se adoptan **solo para las entradas y garantías con implementación y prueba enumeradas** en la tabla «Evidencia por garantía» de abajo: el alta con grupo, el alta sin grupo y Descubrir. Para el cambio de identidad por `PATCH` rigen **G3 (colisiones) y G4 (candado)**; G1, G2 y G5–G8 no aplican porque no crea. **Una celda sin prueba específica no se adopta** para esa entrada: queda como pendiente | Alta sin grupo [#172](https://github.com/juanajok/zascarr/pull/172) (`e316ba12`); Descubrir [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`); `PATCH` [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`); paridad entre entradas [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
 | **O-A**: C1 en dos pasos (opción a) | `POST /ui/descubrir/crear` ya no crea en un clic: «Revisar» (sin escribir) y «Crear» con el token de la vista previa; el navegador no aporta los datos de la serie | [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`) |
 | **O-B**: C3 fuera de la centralización y retirada en **dos fases** (B3) | `POST /api/series` queda **excluido (A1)**; la fase 1 (obsoleto, sin cambiar comportamiento) está hecha | Fase 1 [#169](https://github.com/juanajok/zascarr/pull/169) (`62ba2bd5`). **La fase 2 no está adoptada como hecha**: ver «Abierto» |
 | **O-C**: S2 + S3 | `DELETE` solo borra una serie **sin dependientes**; `409` por operación viva (se comprueba primero), archivos, números o deseados; alias y géneros se borran con la serie; los comprobantes se conservan; **no toca el disco** | [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
@@ -33,24 +33,28 @@
 - **S4** (sustituir `DELETE` por «deshacer»): no adoptada.
 - **S5** (archivado o borrado lógico): **futuro**, cambia el modelo y exige migración; no está adoptado.
 - **Retirada de `POST /api/series`** (fase 2, I6 de [#114](https://github.com/juanajok/zascarr/issues/114)): **no autorizada**. Condiciones: un ciclo de versión, la comprobación de consumidores y decidir antes el hueco de la API (crear una serie vacía sin carpeta; el servicio sin grupo ya existe, falta una ruta).
-- **A3** (tabla de cumplimiento): existe una **primera versión, sin revisión formal** (abajo).
+- **A3** (tabla de cumplimiento): existe un **borrador informativo, sin revisión formal** (abajo, «Evidencia por garantía»); sus celdas sin prueba específica no se adoptan.
 - **A5 por interfaz**: NOT RUN.
 
-### A3 — matriz de cumplimiento G1–G8 por entrada (primera versión, **sin revisión formal**)
-`sí` = lo cumple y hay prueba en `main` · `n/a` = no aplica a esa entrada · `no` = no lo cumple (excepción declarada).
+### Evidencia por garantía (A3: **borrador informativo**, sin revisión formal)
+No es una prueba formal de cumplimiento: es el mapa de **qué prueba respalda cada garantía en cada entrada**. `—` significa **sin prueba específica** (no se adopta para esa entrada); `n/a` no aplica. Los nombres son ficheros y clases/pruebas de `tests/`.
 
-| | Alta con grupo | Alta sin grupo | Descubrir (C1) | `PATCH` de identidad | `POST /api/series` (C3) | `DELETE` |
-|---|---|---|---|---|---|---|
-| G1 vista previa y confirmación | sí | sí | sí | n/a (usa `vistas`) | **no** | n/a |
-| G2 tradición elegida | sí | sí | sí | n/a | **no** (`american` por defecto) | n/a |
-| G3 colisiones | sí | sí | sí | sí | **no** | n/a |
-| G4 concurrencia | sí | sí | sí | sí | **no** | sí (mismo orden de bloqueos) |
-| G5 procedencia | sí | sí | sí | n/a | **no** | n/a |
-| G6 idempotencia y comprobante | sí | sí | sí | n/a | **no** | n/a |
-| G7 reversibilidad | sí | sí | sí | n/a | **no** | n/a |
-| G8 sin efectos laterales | sí | sí | sí | sí | sí | sí (no toca el disco) |
+| | Alta con grupo | Alta sin grupo | Descubrir (C1) | `PATCH` de identidad | `DELETE` |
+|---|---|---|---|---|---|
+| **G1** vista previa y confirmación | `test_alta_serie_pg`: `TestAltaManual::test_la_vista_previa_no_escribe_ni_usa_la_red`, `TestAltaDesdeFuente::test_la_vista_previa_con_una_candidata_no_escribe_ni_usa_la_red` | `test_alta_sin_grupo_pg`: `TestAltaManualSinGrupo::test_la_vista_previa_no_escribe_nada_y_ofrece_crear` | `test_descubrir_dos_pasos_pg`: `TestRevisarNoEscribeNada` | n/a (usa `vistas`) | n/a |
+| **G2** tradición elegida | `test_alta_serie_pg`: `TestAltaManual::test_la_tradicion_se_elige_y_no_tiene_valor_por_defecto` | `test_alta_sin_grupo`: `test_la_tradicion_sigue_sin_valor_por_defecto_tambien_sin_grupo`; `test_alta_sin_grupo_pg`: `test_confirmar_crea_la_serie_con_la_tradicion_elegida_y_sin_carpeta` | `test_web_discovery`: `TestBuscar::test_la_tradicion_no_viene_preseleccionada_y_la_sugerencia_es_solo_un_texto`; `test_descubrir_dos_pasos_pg`: `TestRevisarNoEscribeNada` | n/a | n/a |
+| **G3** colisiones | `test_paridad_de_entradas_pg::TestLasCuatroEntradasVenLasMismasParecidas` | ídem | ídem | ídem (+ `test_edicion_serie_pg`) | n/a |
+| **G4** concurrencia | `test_alta_serie_pg::TestConcurrencia` | `test_alta_sin_grupo_pg::TestElCandadoDelTituloSeComparteConElAltaConGrupo` | `test_descubrir_dos_pasos_pg::TestConcurrencia`, `TestConcurrenciaPorTitulo` | `test_edicion_serie_pg::TestConcurrencia` | `test_borrado_serie_pg::TestConcurrenciaConUnaVinculacion` |
+| **G5** procedencia | `test_alta_serie_pg::TestProcedenciaEIdentidad` | `test_alta_sin_grupo_pg::TestAltaDesdeFuenteSinGrupo::test_crea_con_el_identificador_protegido_y_la_procedencia` | `test_descubrir_dos_pasos_pg::TestCrear::test_crea_la_serie_con_la_tradicion_elegida_el_identificador_protegido_y_la_procedencia` | n/a | n/a |
+| **G6** idempotencia y comprobante | `test_alta_serie_pg::TestComprobanteDeLaOperacion` | `test_alta_sin_grupo_pg::TestAltaManualSinGrupo::test_repetir_la_confirmacion_devuelve_lo_mismo_sin_crear_otra` | `test_descubrir_dos_pasos_pg::TestCrear::test_repetir_la_confirmacion_no_crea_otra_y_lo_dice` | n/a | n/a |
+| **G7** reversibilidad | `test_alta_serie_pg::TestDeshacer` | `test_alta_sin_grupo_pg::TestAltaManualSinGrupo::test_se_puede_deshacer_y_el_token_no_la_recrea` | `test_descubrir_dos_pasos_pg::TestDeshacer` | n/a | n/a |
+| **G8** sin efectos laterales | `test_alta_serie_pg::TestSinEfectosLaterales` | — (la vista previa declara `numeros: 0, archivos: 0`, probado en `test_la_vista_previa_no_escribe_nada_y_ofrece_crear`; sin prueba de los efectos de la confirmación) | — | — | `test_borrado_serie_pg::TestElBorradoNoTocaElDisco` |
 
-Lo que **no** acredita esta matriz: despliegue, comportamiento en la Raspberry Pi, htmx fuera del navegador integrado, ni el peso real de página de Descubrir con 40 resultados (**NOT RUN**).
+**`POST /api/series` (C3):** no cumple G1–G7 (excepción A1). Sobre G8 **no hay prueba específica**; `test_c3_deprecado` fija solo que sigue creando en un paso, con tradición `american` y sin procedencia.
+
+**Celdas sin prueba específica hoy** (no adoptadas para esa entrada, a cubrir cuando se decida): G8 en alta sin grupo, Descubrir y `PATCH`.
+
+Lo que **no** acredita este mapa: despliegue, comportamiento en la Raspberry Pi, htmx fuera del navegador integrado, ni el peso real de página de Descubrir con 40 resultados (**NOT RUN**).
 
 ---
 
