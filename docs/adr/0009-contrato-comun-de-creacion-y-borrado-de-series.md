@@ -1,8 +1,60 @@
 # ADR 0009: Contrato común de creación y borrado de series (refinamiento de #113)
 
-- Estado: **Propuesto** · 2026-10-11 (documento pendiente de revisión; **no hay nada adoptado por este ADR hasta que se apruebe** y, aun así, **no se implementa** aquí)
+- Estado: **Aceptado parcialmente** · 2026-10-12. Redactado como **Propuesto** el 2026-10-11 ([#166](https://github.com/juanajok/zascarr/pull/166)). **Solo está adoptado lo que figura en «Estado de adopción»**, cada punto con su implementación y prueba en `main`; lo demás sigue **propuesto o abierto**, y ninguna opción sin implementar queda adoptada por este cambio de estado.
 - SHA de `main` revisado: [`1b107b2d`](https://github.com/juanajok/zascarr/tree/1b107b2d039cee9d4a4502bb288d212056535b0a) (`main` tras la fusión de #165)
 - Relacionado: [#113](https://github.com/juanajok/zascarr/issues/113) (MIT-M1-US02, *Centralizar decisiones de dominio*), [#114](https://github.com/juanajok/zascarr/issues/114), ADR-0007 (vincular en su sitio), ADR-0008 (catalogación explícita), `docs/design/inventario-entradas-heredadas-y-alias-2026-10-09.md` (§2 y §6), `docs/design/rebanada-2-elegir-serie-y-vincular.md` (bloque B), CLAUDE.md §3.1.1
+
+## Estado de adopción (2026-10-12)
+
+> **Qué cambia con esta sección.** El resto del documento es la propuesta tal como se redactó el 2026-10-11 y **se conserva sin reescribir** (es el histórico de por qué se decidió así). Aquí se separa lo **adoptado** —con su evidencia— de lo que sigue **abierto**. Se adopta **solo lo ya implementado y probado en `main`**.
+
+**Evidencia:** `main` en `d062366e`; CI de `main` [38248822432](https://github.com/juanajok/zascarr/actions/runs/38248822432) (unitaria 3141 passed, Postgres real 964 passed, Docker y pip-audit correctos; ruff informativo, los mismos 178/11 que antes). **Nada de esto está desplegado.**
+
+### Adoptado
+| Decisión del ADR | Qué queda decidido | Implementado y probado en |
+|---|---|---|
+| **G1–G8** como contrato común | Para toda entrada que **cree** una serie: el alta con grupo, el alta sin grupo y Descubrir. Para el cambio de identidad por `PATCH` rigen **G3 (colisiones) y G4 (candado)**; G1, G2 y G5–G8 no aplican porque no crea | Alta sin grupo [#172](https://github.com/juanajok/zascarr/pull/172) (`e316ba12`); Descubrir [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`); `PATCH` [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`); paridad entre entradas [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
+| **O-A**: C1 en dos pasos (opción a) | `POST /ui/descubrir/crear` ya no crea en un clic: «Revisar» (sin escribir) y «Crear» con el token de la vista previa; el navegador no aporta los datos de la serie | [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`) |
+| **O-B**: C3 fuera de la centralización y retirada en **dos fases** (B3) | `POST /api/series` queda **excluido (A1)**; la fase 1 (obsoleto, sin cambiar comportamiento) está hecha | Fase 1 [#169](https://github.com/juanajok/zascarr/pull/169) (`62ba2bd5`). **La fase 2 no está adoptada como hecha**: ver «Abierto» |
+| **O-C**: S2 + S3 | `DELETE` solo borra una serie **sin dependientes**; `409` por operación viva (se comprueba primero), archivos, números o deseados; alias y géneros se borran con la serie; los comprobantes se conservan; **no toca el disco** | [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
+| **O-D** (a) | `PATCH` que cambia título, tradición o año aplica la **misma** detección y candado que el alta: `409 serie_parecida` con `vistas`; más de 100 parecidas, `422` | [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`) |
+| **A1, A2** (delegación y colisión) | Cumplidas para las entradas acordadas | [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
+| **A4** (borrado) | Cumplida | [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
+| **A5** (vincular conserva nombre y ruta) | **Aceptada acotada**: para la vinculación por API (`POST /api/revision/vinculacion`, probada). La vinculación **por interfaz** queda como limitación explícita hasta 2e | `test_vinculacion_pg` (#103) |
+
+### Excepciones declaradas
+- **`POST /api/series` (C3)** no delega ni detecta colisiones: obsoleto, fuera de la centralización (**A1**) hasta su retirada.
+- **Las filas históricas** creadas por C1 o C3 antes de estos cambios **no se reescriben** ni reciben comprobante retroactivo.
+- **G7** (deshacer) solo para las series **creadas por el alta**; para las históricas queda el `DELETE` protegido.
+- **La vinculación desde la interfaz no existe** (2e/M3, sin autorizar): no hay entrada de UI que probar.
+
+### Abierto, sin adoptar
+- **S1** (vista previa de efectos del borrado): solo si algún día hay interfaz de borrado.
+- **S4** (sustituir `DELETE` por «deshacer»): no adoptada.
+- **S5** (archivado o borrado lógico): **futuro**, cambia el modelo y exige migración; no está adoptado.
+- **Retirada de `POST /api/series`** (fase 2, I6 de [#114](https://github.com/juanajok/zascarr/issues/114)): **no autorizada**. Condiciones: un ciclo de versión, la comprobación de consumidores y decidir antes el hueco de la API (crear una serie vacía sin carpeta; el servicio sin grupo ya existe, falta una ruta).
+- **A3** (tabla de cumplimiento): existe una **primera versión, sin revisión formal** (abajo).
+- **A5 por interfaz**: NOT RUN.
+
+### A3 — matriz de cumplimiento G1–G8 por entrada (primera versión, **sin revisión formal**)
+`sí` = lo cumple y hay prueba en `main` · `n/a` = no aplica a esa entrada · `no` = no lo cumple (excepción declarada).
+
+| | Alta con grupo | Alta sin grupo | Descubrir (C1) | `PATCH` de identidad | `POST /api/series` (C3) | `DELETE` |
+|---|---|---|---|---|---|---|
+| G1 vista previa y confirmación | sí | sí | sí | n/a (usa `vistas`) | **no** | n/a |
+| G2 tradición elegida | sí | sí | sí | n/a | **no** (`american` por defecto) | n/a |
+| G3 colisiones | sí | sí | sí | sí | **no** | n/a |
+| G4 concurrencia | sí | sí | sí | sí | **no** | sí (mismo orden de bloqueos) |
+| G5 procedencia | sí | sí | sí | n/a | **no** | n/a |
+| G6 idempotencia y comprobante | sí | sí | sí | n/a | **no** | n/a |
+| G7 reversibilidad | sí | sí | sí | n/a | **no** | n/a |
+| G8 sin efectos laterales | sí | sí | sí | sí | sí | sí (no toca el disco) |
+
+Lo que **no** acredita esta matriz: despliegue, comportamiento en la Raspberry Pi, htmx fuera del navegador integrado, ni el peso real de página de Descubrir con 40 resultados (**NOT RUN**).
+
+---
+
+> **Texto original (propuesta del 2026-10-11).** Lo que sigue se conserva tal como se redactó.
 
 ## Qué está decidido, qué es papel y qué falta
 
