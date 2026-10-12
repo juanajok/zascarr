@@ -62,6 +62,7 @@ from zascarr.services.descubrimiento_grupo import (
 from zascarr.services.discovery import CAMPO_ID_EXTERNO, CAMPOS_ID_DE_TEXTO
 from zascarr.services.revision_carpetas import RevisionCarpetas
 from zascarr.services.tokens_revision import (
+    CLAVE_SIN_GRUPO,
     MAX_PARECIDAS_FIRMADAS,
     MAX_TITULO,
     AltaFirmada,
@@ -255,9 +256,29 @@ class AltaDeSerie:
         self, clave: str, *, tradicion: ComicTradition, candidata: str | None = None,
         manual: DatosManuales | None = None, decision: Decision | None = None, serie_id: UUID | None = None,
     ) -> VistaPreviaAlta:
+        """El alta desde un GRUPO de carpeta: la `clave` tiene que ser la de un grupo con registros pendientes."""
+        return await self._previsualizar(clave, con_grupo=True, tradicion=tradicion, candidata=candidata,
+                                         manual=manual, decision=decision, serie_id=serie_id)
+
+    async def previsualizar_sin_grupo(
+        self, *, tradicion: ComicTradition, candidata: str | None = None, manual: DatosManuales | None = None,
+        decision: Decision | None = None, serie_id: UUID | None = None,
+    ) -> VistaPreviaAlta:
+        """El alta que NO parte de una carpeta (Descubrir libre, alta a mano; I1 de #114). Mismo contrato que con grupo:
+        vista previa, tradición elegida, coincidencia exacta por identificador, parecidas que decide la persona, token,
+        candados, comprobante y deshacer. Cambia solo el **contexto** de los tokens: `CLAVE_SIN_GRUPO` (una `candidata` de
+        un grupo no vale aquí, ni al revés) y que no hay carpeta que comprobar ni que anotar en la procedencia."""
+        return await self._previsualizar(CLAVE_SIN_GRUPO, con_grupo=False, tradicion=tradicion, candidata=candidata,
+                                         manual=manual, decision=decision, serie_id=serie_id)
+
+    async def _previsualizar(
+        self, clave: str, *, con_grupo: bool, tradicion: ComicTradition, candidata: str | None = None,
+        manual: DatosManuales | None = None, decision: Decision | None = None, serie_id: UUID | None = None,
+    ) -> VistaPreviaAlta:
         if candidata is not None and manual is not None or (candidata is None and manual is None):
             raise DatosInvalidosError("Indica una candidata de una fuente o los datos a mano, no ambos ni ninguno.")
-        if await RevisionCarpetas(self._db).archivos_del_grupo(clave) is None:
+        # La clave reservada de «sin grupo» no es la de ningún grupo (lleva un NUL): se rechaza sin consultar la base.
+        if con_grupo and (clave == CLAVE_SIN_GRUPO or await RevisionCarpetas(self._db).archivos_del_grupo(clave) is None):
             raise GrupoNoEncontradoError(clave)
 
         if candidata is not None:
@@ -465,7 +486,9 @@ class AltaDeSerie:
         inicio = self._ahora if self._ahora is not None else datetime.now(UTC).timestamp()
         return {
             "version": VERSION_PROCEDENCIA, "origen": alta.origen, "fuente": alta.fuente,
-            "id_externo": alta.id_externo, "desde_grupo": alta.clave,
+            "id_externo": alta.id_externo,
+            # `null` si no partió de una carpeta; la clave reservada (con NUL) nunca se guarda: JSONB no la admite.
+            "desde_grupo": None if alta.clave == CLAVE_SIN_GRUPO else alta.clave,
             "fecha": datetime.fromtimestamp(inicio, UTC).isoformat(), "tradicion_elegida": True,
             "operacion_id": alta.operacion,
         }
