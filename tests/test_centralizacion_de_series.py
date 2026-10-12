@@ -160,6 +160,24 @@ class TestCadaEntradaDelegaEnElServicioComun:
         previsualizar.assert_awaited_once()
         confirmar.assert_awaited_once_with("TOKEN")
 
+    def test_el_alta_por_api_sin_carpeta_llama_a_previsualizar_sin_grupo(self, monkeypatch):
+        import zascarr.api.revision as api_revision
+        monkeypatch.setattr(api_revision, "get_settings", lambda: SimpleNamespace(secret_key="secreto-de-prueba"))
+
+        async def _get_db():
+            yield MagicMock()
+        app.dependency_overrides[get_db] = _get_db
+        try:
+            falso = AsyncMock(return_value=_vista())
+            with patch.object(alta_serie.AltaDeSerie, "previsualizar_sin_grupo", falso):
+                r = TestClient(app).post("/api/revision/serie/sin-carpeta/previsualizar",
+                                         json={"manual": {"titulo": "Flash", "anio": 1987}, "tradicion": "manga"})
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200
+        falso.assert_awaited_once()
+        assert falso.await_args.kwargs["tradicion"] == ComicTradition.MANGA
+
     def test_patch_de_identidad_delega_en_edicion_de_serie(self, monkeypatch):
         from uuid import uuid4
 
