@@ -1,8 +1,59 @@
 # ADR 0010: Plan de adaptación y retirada de caminos heredados (refinamiento de #114)
 
-- Estado: **Propuesto** · 2026-10-11 (documento pendiente de revisión; **no hay nada adoptado por este ADR hasta que se apruebe** y, aun así, **no se implementa** aquí)
+- Estado: **Aceptado parcialmente** · 2026-10-12. Redactado como **Propuesto** el 2026-10-11 ([#167](https://github.com/juanajok/zascarr/pull/167)). **Solo está adoptado lo que figura en «Estado de adopción»**, con su implementación y prueba en `main`; el resto sigue **propuesto o abierto**.
 - SHA de `main` revisado: [`9a396591`](https://github.com/juanajok/zascarr/tree/9a39659152a5399a926c6f9d6b2031f513100eca) (`main` tras la fusión de #166, ADR 0009). Entre `1b107b2d` (el SHA que revisó el ADR 0009) y `9a396591` **solo cambia el propio ADR 0009** (`git diff --stat 1b107b2d 9a396591`: un fichero, 157 líneas añadidas; nada en `src/`, `tests/` ni `scripts/`), así que las citas de código del ADR 0009 siguen vigentes **sin repetir su lectura**; en este refinamiento se han **releído** los caminos que aquí se proponen cambiar (L).
 - Relacionado: [#114](https://github.com/juanajok/zascarr/issues/114) (MIT-M1-US03, *Adaptar o retirar caminos heredados*), [#113](https://github.com/juanajok/zascarr/issues/113) (MIT-M1-US02), [#104](https://github.com/juanajok/zascarr/issues/104) (Feature M1, *Operaciones coherentes*), [#105](https://github.com/juanajok/zascarr/issues/105) (Feature M2, *Confirmación robusta*), [#112](https://github.com/juanajok/zascarr/issues/112), [#118](https://github.com/juanajok/zascarr/issues/118); ADR-0007, ADR-0008, [ADR-0009](0009-contrato-comun-de-creacion-y-borrado-de-series.md); `docs/design/inventario-entradas-heredadas-y-alias-2026-10-09.md` (§2 y §6); CLAUDE.md §3.1.1 y §3.1.3
+
+## Estado de adopción (2026-10-12)
+
+> **Qué cambia con esta sección.** El resto del documento es la propuesta del 2026-10-11 y **se conserva sin reescribir**. Aquí se separa lo **adoptado** —con su evidencia— de lo **abierto**. Se adopta **solo lo ya implementado y probado en `main`**. Las decisiones de producto de fondo (C1 en dos pasos, `DELETE` S2 + S3, `PATCH` con `409` y `vistas`, C3 en dos fases, G1–G8 con excepciones, D1–D6) las comunicó la persona responsable y constan en un [comentario de #114](https://github.com/juanajok/zascarr/issues/114#issuecomment-6111681080).
+
+**Evidencia:** `main` en `d062366e`; CI de `main` [38248822432](https://github.com/juanajok/zascarr/actions/runs/38248822432) (unitaria 3141 passed, Postgres real 964 passed, Docker y pip-audit correctos; ruff informativo, los mismos 178/11 que antes). **Nada está desplegado.**
+
+### Propuestas: qué se adopta y con qué evidencia
+| | Decisión | Estado | Evidencia |
+|---|---|---|---|
+| **F1** | `AltaDeSerie` no podía delegar sin grupo | **Resuelto** con una variante sin grupo (contexto firmado reservado, límites recalculados) | [#172](https://github.com/juanajok/zascarr/pull/172) (`e316ba12`) |
+| **P-1** | C1 en dos pasos, sobre la variante sin grupo; firma al buscar; `/ui/descubrir/crear` solo acepta el token. **Se mantiene D2** (la alternativa estructural de crear solo desde un grupo, #118, **no se adopta**) | **Adoptada e implementada** | [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`) |
+| **P-2** | C3 en dos fases | Fase 1 (obsoleto, sin cambio de comportamiento) **adoptada e implementada**: [#169](https://github.com/juanajok/zascarr/pull/169) (`62ba2bd5`). **Fase 2 (I6): abierta** | ver abajo |
+| **P-3** | `DELETE` S2 + S3, con el `409` por operación viva **comprobado primero** (desviación del orden propuesto, para conservar su texto) | **Adoptada e implementada** | [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
+| **P-4** | `PATCH` con `409 serie_parecida` y `vistas` | **Adoptada e implementada** (el servicio no confirma: la transacción es la de la petición) | [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`) |
+| **P-5** | G1–G8 como principios con excepciones | **Adoptada solo donde el ADR 0009 enumera implementación y prueba por entrada** (tabla «Evidencia por garantía», **borrador informativo**); las celdas sin prueba específica no se adoptan | [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
+| **P-6** | D1–D6 como criterios de #114 | **Adoptados**; acreditación parcial (abajo) | — |
+| **P-7** | Rotular «Organizar» y, después, sustituir por «Vincular» | Rotulado **adoptado e implementado**: [#171](https://github.com/juanajok/zascarr/pull/171) (`a15a5cd2`). Sustitución (I7): **bloqueada por 2e** | — |
+
+### I1–I8 (división de #114)
+| | Cambio | Estado |
+|---|---|---|
+| I1 | Variante de `AltaDeSerie` sin grupo | **Fusionada** [#172](https://github.com/juanajok/zascarr/pull/172) (`e316ba12`) |
+| I2 | C1 en dos pasos | **Fusionada** [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`) |
+| I3 | C3 fase 1 | **Fusionada** [#169](https://github.com/juanajok/zascarr/pull/169) (`62ba2bd5`) |
+| I4 | `DELETE` protegido | **Fusionada** [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
+| I5 | `PATCH` con colisiones | **Fusionada** [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`) |
+| I6 | C3 fase 2 (retirada) | **No autorizada** |
+| I7 | Sustituir la asignación por «Vincular» | **Bloqueada por 2e** |
+| I8 | Rotular «Organizar» | **Fusionada** [#171](https://github.com/juanajok/zascarr/pull/171) (`a15a5cd2`) |
+
+### D1–D6: qué está acreditado
+| | Estado |
+|---|---|
+| **D1** decisión por camino | C1, `DELETE`, `PATCH` y el rotulado: **sí**. C3: fase 1 sí, fase 2 abierta. Asignación que mueve: rotulada; sustitución abierta |
+| **D2** contrato G1–G8 y excepciones | **Sí** (ADR 0009, «Estado de adopción») |
+| **D3** borrado acotado | **Sí** ([#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`)) |
+| **D4** compatibilidad y retirada documentadas | **Parcial**: el changelog recoge `PATCH`, Descubrir, «Organizar» y la obsolescencia de C3; **falta la entrada de los `409` nuevos de `DELETE` (I4)** |
+| **D5** pruebas de aceptación enumeradas | **Parcial**: delegación, paridad de colisiones, el borrado protegido (rechazo con dependientes y sin tocar el disco) y la concurrencia están; **falta** lo que dependa de I6 |
+| **D6** división en cambios | **Sí** (I1–I8) |
+
+### Abierto, sin adoptar
+- **I6 (retirada de `POST /api/series`)**: no autorizada. Condiciones: un ciclo de versión, comprobación de consumidores, y decidir antes el hueco de la API (crear una serie vacía sin carpeta).
+- **I7**: depende de 2e (interfaz de vinculación), sin autorizar.
+- **Peso real de página** de Descubrir con 40 resultados, **token caducado en htmx real**, otro navegador y escritorio ancho: **NOT RUN**.
+- **Consumidores externos de `POST /api/series`**: **no verificables** (sin telemetría).
+- Tallas de las historias: **sin calibrar**.
+
+---
+
+> **Texto original (propuesta del 2026-10-11).** Lo que sigue se conserva tal como se redactó.
 
 ## Qué está decidido, qué es papel y qué falta
 
