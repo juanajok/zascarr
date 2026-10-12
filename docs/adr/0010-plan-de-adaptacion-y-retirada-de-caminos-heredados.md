@@ -40,8 +40,8 @@
 | **D1** decisión por camino | C1, `DELETE`, `PATCH` y el rotulado: **sí**. C3: fase 1 sí, fase 2 abierta. Asignación que mueve: rotulada; sustitución abierta |
 | **D2** contrato G1–G8 y excepciones | **Sí** (ADR 0009, «Estado de adopción») |
 | **D3** borrado acotado | **Sí** ([#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`)) |
-| **D4** compatibilidad y retirada documentadas | **Parcial**: el changelog recoge `PATCH`, Descubrir, «Organizar» y la obsolescencia de C3; **falta la entrada de los `409` nuevos de `DELETE` (I4)** |
-| **D5** pruebas de aceptación enumeradas | **Parcial**: delegación, paridad de colisiones, el borrado protegido (rechazo con dependientes y sin tocar el disco) y la concurrencia están; **falta** lo que dependa de I6 |
+| **D4** compatibilidad y retirada documentadas | **Sí** para lo adoptado: el changelog recoge `DELETE` (I4), `PATCH`, Descubrir, «Organizar» y la obsolescencia de C3. La retirada de C3 (I6) queda como **excepción expresa**: su mecanismo y su periodo están descritos, pero **no se ejecutan** |
+| **D5** pruebas de aceptación enumeradas | **Sí** para lo adoptado: delegación, paridad de colisiones, el borrado protegido (rechazo con dependientes y sin tocar el disco) y la concurrencia. Lo que dependa de I6 o de I7 queda como **excepción expresa**, **NOT RUN** |
 | **D6** división en cambios | **Sí** (I1–I8) |
 
 ### Abierto, sin adoptar
