@@ -1,19 +1,28 @@
+# ruff: noqa: E501
 """
 tests/test_web_discovery.py
 
-Suite de /ui/descubrir (C0): contrato HTTP del alta de series externas.
-Mismo patrón de FakeSession que tests/test_api_series.py.
+Suite de /ui/descubrir (C0): contrato HTTP de la búsqueda y de la creación en dos pasos (I2 de #114). Aquí, lo que no
+necesita base de datos (FakeSession, mismo patrón que tests/test_api_series.py); el recorrido completo contra Postgres
+real está en tests/test_descubrir_dos_pasos_pg.py.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, MetadataSource, Series
+from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.discovery import DiscoveryResult
+from zascarr.services.tokens_revision import (
+    CLAVE_SIN_GRUPO,
+    MAX_TOKEN_ALTA,
+    verificar_token_candidata,
+)
 
 
 class FakeSession:
@@ -93,20 +102,31 @@ class TestIndexConBusquedaPrevia:
         assert TestClient(app).get("/ui/descubrir", params={"q": "x" * 201}).status_code == 422
 
 
+SECRETO = "secreto-de-prueba-para-firmar"
+
+
+@pytest.fixture
+def con_clave_de_firma(monkeypatch):
+    """La ruta firma los resultados con `secret_key`: en las pruebas se fija una."""
+    import zascarr.web.discovery as web
+    monkeypatch.setattr(web, "get_settings", lambda: SimpleNamespace(secret_key=SECRETO))
+
+
+def _resultado(**kw):
+    base = dict(
+        source=MetadataSource.COMIC_VINE, external_id="1234", title="Batman", start_year=2011, description=None,
+        cover_url=None, site_url="https://comicvine.gamespot.com/batman/4050-1234/",
+        tradition_guess=ComicTradition.AMERICAN)
+    return DiscoveryResult(**{**base, **kw})
+
+
+@pytest.mark.usefixtures("con_clave_de_firma")
 class TestBuscar:
 
     def test_busca_y_renderiza_resultados(self):
-        resultados = [
-            DiscoveryResult(
-                source=MetadataSource.COMIC_VINE, external_id="1234",
-                title="Batman", start_year=2011, description=None,
-                cover_url=None, site_url="https://comicvine.gamespot.com/batman/4050-1234/",
-                tradition_guess=ComicTradition.AMERICAN,
-            )
-        ]
         with use_fake_session(FakeSession()) as client, \
              patch("zascarr.web.discovery.DiscoveryService.search",
-                   AsyncMock(return_value=(resultados, []))):
+                   AsyncMock(return_value=([_resultado()], []))):
             r = client.get("/ui/descubrir/buscar", params={"q": "Batman"})
 
         assert r.status_code == 200
@@ -129,36 +149,79 @@ class TestBuscar:
 
         assert "Comic Vine no está configurado" in r.text
 
+    # ── I2 de #114: lo que vuelve del navegador es un token firmado, no datos de la serie ──
 
-class TestCrear:
+    def _buscar(self, resultados):
+        with use_fake_session(FakeSession()) as client, \
+             patch("zascarr.web.discovery.DiscoveryService.search", AsyncMock(return_value=(resultados, []))):
+            return client.get("/ui/descubrir/buscar", params={"q": "x"}).text
 
-    def test_crea_serie_sin_exigir_aceptacion_legal(self):
-        """Bug de diseño evitado a propósito: dar de alta una serie es
-        catalogar metadatos, no descargar nada — a diferencia de
-        /ui/wishlist/anadir, esta ruta NUNCA debe devolver 403 por falta
-        de aceptación legal."""
-        with use_fake_session(FakeSession(existing=None)) as client:
+    def test_la_tarjeta_reenvia_solo_un_token_y_no_datos_de_la_serie(self):
+        html = self._buscar([_resultado(description="Murciélago.", cover_url="https://comicvine.gamespot.com/a.jpg")])
+        assert 'name="candidata"' in html
+        for campo in ("title", "external_id", "source", "start_year", "description", "cover_url"):
+            assert f'name="{campo}"' not in html, campo
+
+    def test_el_token_de_la_tarjeta_lo_firmo_el_servidor_con_el_contexto_sin_grupo(self):
+        import re
+        html = self._buscar([_resultado(external_id="1234")])
+        token = re.search(r'name="candidata" value="([^"]+)"', html).group(1)
+        c = verificar_token_candidata(token, CLAVE_SIN_GRUPO, SECRETO)
+        assert (c.fuente, c.id_externo, c.titulo, c.anio) == ("comic_vine", "1234", "Batman", 2011)
+        assert verificar_token_candidata(token, "Comics/Flash (1987)", SECRETO) is None     # no vale en un grupo
+
+    def test_la_tradicion_no_viene_preseleccionada_y_la_sugerencia_es_solo_un_texto(self):
+        html = self._buscar([_resultado(tradition_guess=ComicTradition.MANGA)])
+        select = html[html.index("<select"):html.index("</select>")]
+        assert "required" in select and select.count("selected") == 1          # solo el marcador vacío
+        assert 'value="" selected disabled' in select
+        assert 'value="manga" selected' not in select
+        assert "La fuente sugiere: Manga" in html
+
+    def test_la_portada_no_permitida_no_se_muestra_ni_se_firma(self):
+        html = self._buscar([_resultado(cover_url="http://127.0.0.1:9091/x.jpg")])
+        assert "127.0.0.1" not in html and "cover-missing" in html
+
+    def test_un_resultado_que_no_se_puede_firmar_se_omite_con_aviso(self):
+        malo = _resultado(external_id="x" * 300, title="Malo")                  # el identificador no cabe en lo que se guarda
+        html = self._buscar([malo, _resultado(external_id="1", title="Bueno")])
+        assert "Bueno" in html and "Malo" not in html
+        assert "Se han omitido 1 resultado(s)" in html
+
+    def test_sin_clave_de_firma_no_se_ofrece_nada_que_crear(self, monkeypatch):
+        import zascarr.web.discovery as web
+        monkeypatch.setattr(web, "get_settings", lambda: SimpleNamespace(secret_key=""))
+        html = self._buscar([_resultado()])
+        assert "no tiene clave para firmar" in html and 'name="candidata"' not in html
+
+
+class TestLasRutasDeCreacionNoAceptanLosDatosDeLaSerie:
+    """Ya no hay ninguna vía de creación en un clic: faltan el token firmado o la tradición y la petición es inválida (422),
+    sin crear nada ni tocar la base."""
+
+    def test_crear_con_el_cuerpo_antiguo_da_422_y_no_crea(self):
+        sesion = FakeSession(existing=None)
+        with use_fake_session(sesion) as client:
             r = client.post("/ui/descubrir/crear", data={
-                "source": "comic_vine", "external_id": "1234",
-                "title": "Batman", "tradition": "american",
-                "start_year": "2011",
-            })
+                "source": "comic_vine", "external_id": "1234", "title": "Batman", "tradition": "american",
+                "start_year": "2011"})
+        assert r.status_code == 422 and sesion.added == []
 
-        assert r.status_code == 200
-        assert "Batman" in r.text
-        assert "Ver ficha" in r.text
-        assert "Añadir a deseados" in r.text
+    def test_revisar_sin_tradicion_da_422(self):
+        with use_fake_session(FakeSession()) as client:
+            r = client.post("/ui/descubrir/revisar", data={"candidata": "cualquiera"})
+        assert r.status_code == 422
 
-    def test_id_externo_ya_registrado_reutiliza_la_serie(self):
-        existente = Series(title="Batman", comic_vine_id=1234)
-        with use_fake_session(FakeSession(existing=existente)) as client:
-            r = client.post("/ui/descubrir/crear", data={
-                "source": "comic_vine", "external_id": "1234",
-                "title": "Batman", "tradition": "american",
-            })
+    def test_revisar_con_una_tradicion_inventada_da_422(self):
+        with use_fake_session(FakeSession()) as client:
+            r = client.post("/ui/descubrir/revisar", data={"candidata": "x", "tradition": "inventada"})
+        assert r.status_code == 422
 
-        assert r.status_code == 200
-        assert "ya estaba en tu biblioteca" in r.text
+    def test_un_token_de_alta_de_mas_de_su_limite_se_rechaza_sin_efectos(self):
+        sesion = FakeSession()
+        with use_fake_session(sesion) as client:
+            r = client.post("/ui/descubrir/crear", data={"token": "a" * (MAX_TOKEN_ALTA + 1)})
+        assert r.status_code == 422 and sesion.added == []
 
 
 class TestPortada:

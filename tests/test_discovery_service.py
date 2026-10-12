@@ -9,11 +9,10 @@ una instalación nueva (tabla `series` vacía) no tiene con qué comparar.
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 import pytest
 
-from zascarr.models import ComicTradition, MetadataSource, Series
+from zascarr.models import MetadataSource, Series
 from zascarr.services.anilist import AniListResult
 from zascarr.services.comic_vine import CVResult
 from zascarr.services.discovery import DiscoveryService
@@ -176,64 +175,3 @@ class TestSearch:
 
         gcd_client.return_value.search_series.assert_not_called()
         assert {r.source for r in resultados} == {MetadataSource.ANILIST}
-
-
-class TestGetOrCreateSeries:
-
-    @pytest.mark.asyncio
-    async def test_crea_serie_nueva(self):
-        session = FakeSession(existing=None)
-        service = DiscoveryService(db=session)
-
-        series, creada = await service.get_or_create_series(
-            source=MetadataSource.COMIC_VINE, external_id="1234",
-            title="Batman", tradition=ComicTradition.AMERICAN,
-            start_year=2011, cover_url="https://example.com/x.jpg",
-        )
-
-        assert creada is True
-        assert series.comic_vine_id == 1234
-        assert series.title == "Batman"
-        assert series.metadata_source == "comic_vine"
-        assert session.added == [series]
-
-    @pytest.mark.asyncio
-    async def test_id_externo_ya_registrado_no_duplica(self):
-        """Bug que se evita a propósito: buscar dos veces la misma serie
-        (o volver a encontrarla ya importada) nunca debe violar el UNIQUE
-        de comic_vine_id/anilist_id/tebeosfera_slug."""
-        existente = Series(id=uuid4(), title="Batman", comic_vine_id=1234)
-        session = FakeSession(existing=existente)
-        service = DiscoveryService(db=session)
-
-        series, creada = await service.get_or_create_series(
-            source=MetadataSource.COMIC_VINE, external_id="1234",
-            title="Batman", tradition=ComicTradition.AMERICAN,
-        )
-
-        assert creada is False
-        assert series is existente
-        assert session.added == []
-
-    @pytest.mark.asyncio
-    async def test_tebeosfera_usa_slug_como_texto_no_como_entero(self):
-        session = FakeSession(existing=None)
-        service = DiscoveryService(db=session)
-
-        series, _ = await service.get_or_create_series(
-            source=MetadataSource.TEBEOSFERA, external_id="thorgal_1981_distrinovel",
-            title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN,
-        )
-
-        assert series.tebeosfera_slug == "thorgal_1981_distrinovel"
-        assert series.comic_vine_id is None
-        assert series.anilist_id is None
-
-    @pytest.mark.asyncio
-    async def test_fuente_desconocida_lanza_value_error(self):
-        service = DiscoveryService(db=FakeSession())
-        with pytest.raises(ValueError, match="desconocida"):
-            await service.get_or_create_series(
-                source="algo-raro", external_id="1",
-                title="X", tradition=ComicTradition.OTHER,
-            )

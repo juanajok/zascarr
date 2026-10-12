@@ -497,22 +497,39 @@ class TestPuntosDeEntrada:
             r = client.patch(f"/api/series/{serie.id}", json={"cover_url": None})
         assert r.status_code == 200 and serie.cover_url is None
 
-    @pytest.mark.parametrize("url", ["http://127.0.0.1:9091/x.jpg", "https://evil.example/x.jpg"])
-    def test_el_alta_de_descubrir_rechaza_una_portada_no_permitida(self, url):
-        sesion = _Sesion()
-        with _Cliente(sesion) as client:
-            r = client.post("/ui/descubrir/crear", data={
-                "source": "comic_vine", "external_id": "1234", "title": "Batman",
-                "tradition": "american", "cover_url": url})
-        assert r.status_code == 400 and sesion.added == []
+    # I2 de #114: la portada de un resultado de Descubrir ya no llega por un campo oculto del formulario; el servidor la
+    # valida AL FIRMAR el resultado y solo el token (sin portada hostil) vuelve del navegador.
+    @staticmethod
+    def _resultado_con_portada(url):
+        from zascarr.models import MetadataSource
+        from zascarr.services.discovery import DiscoveryResult
+        return DiscoveryResult(source=MetadataSource.COMIC_VINE, external_id="1234", title="Batman", start_year=2011,
+                               description=None, cover_url=url, site_url=None, tradition_guess=ComicTradition.AMERICAN)
 
-    def test_el_alta_de_descubrir_acepta_una_portada_permitida(self):
+    @pytest.mark.parametrize("url", ["http://127.0.0.1:9091/x.jpg", "https://evil.example/x.jpg",
+                                    "file:///etc/passwd", "https://u:p@comicvine.gamespot.com/x.jpg"])
+    def test_descubrir_no_firma_una_portada_no_permitida(self, url):
+        from zascarr.services.descubrimiento_libre import firmar_resultados
+        from zascarr.services.tokens_revision import CLAVE_SIN_GRUPO, verificar_token_candidata
+        (r,), omitidas = firmar_resultados([self._resultado_con_portada(url)], "secreto-de-prueba")
+        assert omitidas == 0 and r.portada is None
+        assert verificar_token_candidata(r.token, CLAVE_SIN_GRUPO, "secreto-de-prueba").cover_url is None
+
+    def test_descubrir_firma_una_portada_permitida_y_la_sirve_por_el_proxy(self):
+        from zascarr.services.descubrimiento_libre import firmar_resultados
+        from zascarr.services.tokens_revision import CLAVE_SIN_GRUPO, verificar_token_candidata
+        (r,), _ = firmar_resultados([self._resultado_con_portada(CV)], "secreto-de-prueba")
+        assert r.portada.startswith("/ui/descubrir/portada?") and CV.replace(":", "%3A") in r.portada.replace("%2F", "/")
+        assert verificar_token_candidata(r.token, CLAVE_SIN_GRUPO, "secreto-de-prueba").cover_url == CV
+
+    def test_la_ruta_de_crear_ya_no_acepta_la_portada_ni_ningun_dato_de_la_serie(self):
+        """El cuerpo antiguo (campos ocultos) no crea nada: falta el token firmado."""
         sesion = _Sesion()
         with _Cliente(sesion) as client:
             r = client.post("/ui/descubrir/crear", data={
                 "source": "comic_vine", "external_id": "1234", "title": "Batman",
                 "tradition": "american", "cover_url": CV})
-        assert r.status_code == 200 and sesion.added[0].cover_url == CV
+        assert r.status_code == 422 and sesion.added == []
 
     def test_un_registro_guardado_con_una_url_hostil_no_dispara_ninguna_peticion_desde_la_cascada(
             self, tmp_path, monkeypatch):

@@ -38,6 +38,17 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Crear una serie desde Descubrir ahora es en dos pasos: «Revisar» y «Crear»** (#114, I2). Antes un
+  solo clic creaba la serie con datos que reenviaba el navegador, con la tradición ya marcada y
+  sin avisar de series parecidas. Ahora: eliges la **tradición tú** (la sugerencia de la fuente
+  es solo un texto), pulsas **Revisar** y ves exactamente qué pasaría **sin que se escriba
+  nada**: si ya tienes esa serie (se usa tal cual, sin modificarla), si hay **series parecidas**
+  (eliges si es una de ellas o es distinta) o que se creará una serie vacía. Al pulsar **Crear**
+  se ejecuta lo que viste, queda un comprobante y puedes **Deshacer** mientras nada dependa de
+  la serie. Lo que viaja del navegador es un token que firmó ZascArr al buscar, no los datos de
+  la serie: la creación en un clic **ya no existe** (`POST /ui/descubrir/crear` ahora solo
+  acepta el token de la vista previa). Si aparece una serie parecida entre «Revisar» y «Crear»,
+  no se crea nada en silencio: se te avisa. Las series ya creadas no cambian.
 - **«Por revisar» dice con claridad que asignar mueve y renombra el archivo** (#114, I8).
   Asignar un archivo a una serie desde «Por revisar» **siempre ha movido el archivo a la
   carpeta de la serie y le ha cambiado el nombre**; el botón de la sugerencia decía «Sí, es

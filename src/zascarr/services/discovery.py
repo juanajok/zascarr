@@ -1,15 +1,18 @@
 """
-DiscoveryService — C0: buscar series en fuentes externas y darlas de alta.
+DiscoveryService — C0: buscar series en fuentes externas.
+
+La BÚSQUEDA vive aquí; el ALTA de la serie la hace `AltaDeSerie` (I2 de #114: ya no hay
+una creación directa paralela, `get_or_create_series` se retiró).
 
 Cierra el círculo vicioso confirmado en producción: Wishlist
 (WishlistService.search_series) y el matcher (core/matcher.py) SOLO
 trabajan contra `Series` que YA existen en la BD local — en una
 instalación nueva (tabla `series` vacía) no hay nada que buscar ni con
-qué emparejar un archivo bien nombrado. Este servicio es el paso de alta
-que falta: busca en las mismas fuentes que ya usa el enricher (Comic
-Vine, AniList, Tebeosfera) — las REUTILIZA para buscar, nunca las toca
-para nada de descarga — y da de alta la `Series` local que el resto del
-sistema necesita para funcionar.
+qué emparejar un archivo bien nombrado. Este servicio es el paso de
+búsqueda del alta: busca en las mismas fuentes que ya usa el enricher
+(Comic Vine, AniList, Tebeosfera) — las REUTILIZA para buscar, nunca las
+toca para nada de descarga — y ofrece los resultados con los que se da de
+alta la `Series` local que el resto del sistema necesita para funcionar.
 
 Un fallo de una fuente (sin API key, sitio caído, rate limit agotado) no
 tumba la búsqueda entera: se registra y se sigue con las demás — mismo
@@ -21,11 +24,10 @@ import asyncio
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import ComicTradition, MetadataSource, Series
+from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
 from zascarr.services.gcd import GCDClient
@@ -43,8 +45,6 @@ CAMPO_ID_EXTERNO: dict[MetadataSource, str] = {
     MetadataSource.GCD: "gcd_id",
 }
 CAMPOS_ID_DE_TEXTO = {"tebeosfera_slug"}
-_EXTERNAL_ID_FIELD = CAMPO_ID_EXTERNO          # nombres antiguos, por compatibilidad
-_TEXT_ID_FIELDS = CAMPOS_ID_DE_TEXTO
 
 #: Orden FIJO y neutro de las fuentes en cualquier listado (nunca «la mejor primero»).
 ORDEN_DE_FUENTES: tuple[MetadataSource, ...] = (
@@ -205,40 +205,3 @@ class DiscoveryService:
             for h in hits
         ]
 
-    async def get_or_create_series(
-        self,
-        source: MetadataSource,
-        external_id: str,
-        title: str,
-        tradition: ComicTradition,
-        start_year: int | None = None,
-        description: str | None = None,
-        cover_url: str | None = None,
-    ) -> tuple[Series, bool]:
-        """Devuelve (serie, creada). Nunca duplica: si el ID externo ya
-        está registrado (búsqueda repetida, o ya se importó antes por otra
-        vía), reutiliza la fila existente en vez de violar el UNIQUE."""
-        field = _EXTERNAL_ID_FIELD.get(source)
-        if field is None:
-            raise ValueError(f"Fuente de descubrimiento desconocida: {source}")
-
-        value: int | str = external_id if field in _TEXT_ID_FIELDS else int(external_id)
-        existing = (await self.db.execute(
-            select(Series).where(getattr(Series, field) == value)
-        )).scalar_one_or_none()
-        if existing:
-            return existing, False
-
-        series = Series(
-            title=title,
-            tradition=tradition,
-            start_year=start_year,
-            description=description,
-            cover_url=cover_url,
-            metadata_source=source.value,
-            **{field: value},
-        )
-        self.db.add(series)
-        await self.db.flush()
-        await self.db.refresh(series)
-        return series, True
