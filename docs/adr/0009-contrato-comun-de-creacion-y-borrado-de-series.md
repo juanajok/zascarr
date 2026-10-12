@@ -1,8 +1,64 @@
 # ADR 0009: Contrato común de creación y borrado de series (refinamiento de #113)
 
-- Estado: **Propuesto** · 2026-10-11 (documento pendiente de revisión; **no hay nada adoptado por este ADR hasta que se apruebe** y, aun así, **no se implementa** aquí)
+- Estado: **Aceptado parcialmente** · 2026-10-12. Redactado como **Propuesto** el 2026-10-11 ([#166](https://github.com/juanajok/zascarr/pull/166)). **Solo está adoptado lo que figura en «Estado de adopción»**, cada punto con su implementación y prueba en `main`; lo demás sigue **propuesto o abierto**, y ninguna opción sin implementar queda adoptada por este cambio de estado.
 - SHA de `main` revisado: [`1b107b2d`](https://github.com/juanajok/zascarr/tree/1b107b2d039cee9d4a4502bb288d212056535b0a) (`main` tras la fusión de #165)
 - Relacionado: [#113](https://github.com/juanajok/zascarr/issues/113) (MIT-M1-US02, *Centralizar decisiones de dominio*), [#114](https://github.com/juanajok/zascarr/issues/114), ADR-0007 (vincular en su sitio), ADR-0008 (catalogación explícita), `docs/design/inventario-entradas-heredadas-y-alias-2026-10-09.md` (§2 y §6), `docs/design/rebanada-2-elegir-serie-y-vincular.md` (bloque B), CLAUDE.md §3.1.1
+
+## Estado de adopción (2026-10-12)
+
+> **Qué cambia con esta sección.** El resto del documento es la propuesta tal como se redactó el 2026-10-11 y **se conserva sin reescribir** (es el histórico de por qué se decidió así). Aquí se separa lo **adoptado** —con su evidencia— de lo que sigue **abierto**. Se adopta **solo lo ya implementado y probado en `main`**.
+
+**Evidencia:** `main` en `d062366e`; CI de `main` [38248822432](https://github.com/juanajok/zascarr/actions/runs/38248822432) (unitaria 3141 passed, Postgres real 964 passed, Docker y pip-audit correctos; ruff informativo, los mismos 178/11 que antes). **Nada de esto está desplegado.**
+
+### Adoptado
+| Decisión del ADR | Qué queda decidido | Implementado y probado en |
+|---|---|---|
+| **G1–G8** como principios del contrato común | Se adoptan **solo para las entradas y garantías con implementación y prueba enumeradas** en la tabla «Evidencia por garantía» de abajo: el alta con grupo, el alta sin grupo y Descubrir. Para el cambio de identidad por `PATCH` rigen **G3 (colisiones) y G4 (candado)**; G1, G2 y G5–G8 no aplican porque no crea. **Una celda sin prueba específica no se adopta** para esa entrada: queda como pendiente | Alta sin grupo [#172](https://github.com/juanajok/zascarr/pull/172) (`e316ba12`); Descubrir [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`); `PATCH` [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`); paridad entre entradas [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
+| **O-A**: C1 en dos pasos (opción a) | `POST /ui/descubrir/crear` ya no crea en un clic: «Revisar» (sin escribir) y «Crear» con el token de la vista previa; el navegador no aporta los datos de la serie | [#173](https://github.com/juanajok/zascarr/pull/173) (`8e14f182`) |
+| **O-B**: C3 fuera de la centralización y retirada en **dos fases** (B3) | `POST /api/series` queda **excluido (A1)**; la fase 1 (obsoleto, sin cambiar comportamiento) está hecha | Fase 1 [#169](https://github.com/juanajok/zascarr/pull/169) (`62ba2bd5`). **La fase 2 no está adoptada como hecha**: ver «Abierto» |
+| **O-C**: S2 + S3 | `DELETE` solo borra una serie **sin dependientes**; `409` por operación viva (se comprueba primero), archivos, números o deseados; alias y géneros se borran con la serie; los comprobantes se conservan; **no toca el disco** | [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
+| **O-D** (a) | `PATCH` que cambia título, tradición o año aplica la **misma** detección y candado que el alta: `409 serie_parecida` con `vistas`; más de 100 parecidas, `422` | [#170](https://github.com/juanajok/zascarr/pull/170) (`f19a8323`) |
+| **A1, A2** (delegación y colisión) | Cumplidas para las entradas acordadas | [#174](https://github.com/juanajok/zascarr/pull/174) (`d062366e`) |
+| **A4** (borrado) | Cumplida | [#168](https://github.com/juanajok/zascarr/pull/168) (`f3b467b1`) |
+| **A5** (vincular conserva nombre y ruta) | **Aceptada acotada**: para la vinculación por API (`POST /api/revision/vinculacion`, probada). La vinculación **por interfaz** queda como limitación explícita hasta 2e | `test_vinculacion_pg` (#103) |
+
+### Excepciones declaradas
+- **`POST /api/series` (C3)** no delega ni detecta colisiones: obsoleto, fuera de la centralización (**A1**) hasta su retirada.
+- **Las filas históricas** creadas por C1 o C3 antes de estos cambios **no se reescriben** ni reciben comprobante retroactivo.
+- **G7** (deshacer) solo para las series **creadas por el alta**; para las históricas queda el `DELETE` protegido.
+- **La vinculación desde la interfaz no existe** (2e/M3, sin autorizar): no hay entrada de UI que probar.
+
+### Abierto, sin adoptar
+- **S1** (vista previa de efectos del borrado): solo si algún día hay interfaz de borrado.
+- **S4** (sustituir `DELETE` por «deshacer»): no adoptada.
+- **S5** (archivado o borrado lógico): **futuro**, cambia el modelo y exige migración; no está adoptado.
+- **Retirada de `POST /api/series`** (fase 2, I6 de [#114](https://github.com/juanajok/zascarr/issues/114)): **no autorizada**. Condiciones: un ciclo de versión, la comprobación de consumidores y decidir antes el hueco de la API (crear una serie vacía sin carpeta; el servicio sin grupo ya existe, falta una ruta).
+- **A3** (tabla de cumplimiento): existe un **borrador informativo, sin revisión formal** (abajo, «Evidencia por garantía»); sus celdas sin prueba específica no se adoptan.
+- **A5 por interfaz**: NOT RUN.
+
+### Evidencia por garantía (A3: **borrador informativo**, sin revisión formal)
+No es una prueba formal de cumplimiento: es el mapa de **qué prueba respalda cada garantía en cada entrada**. `—` significa **sin prueba específica** (no se adopta para esa entrada); `n/a` no aplica. Los nombres son ficheros y clases/pruebas de `tests/`.
+
+| | Alta con grupo | Alta sin grupo | Descubrir (C1) | `PATCH` de identidad | `DELETE` |
+|---|---|---|---|---|---|
+| **G1** vista previa y confirmación | `test_alta_serie_pg`: `TestAltaManual::test_la_vista_previa_no_escribe_ni_usa_la_red`, `TestAltaDesdeFuente::test_la_vista_previa_con_una_candidata_no_escribe_ni_usa_la_red` | `test_alta_sin_grupo_pg`: `TestAltaManualSinGrupo::test_la_vista_previa_no_escribe_nada_y_ofrece_crear` | `test_descubrir_dos_pasos_pg`: `TestRevisarNoEscribeNada` | n/a (usa `vistas`) | n/a |
+| **G2** tradición elegida | `test_alta_serie_pg`: `TestAltaManual::test_la_tradicion_se_elige_y_no_tiene_valor_por_defecto` | `test_alta_sin_grupo`: `test_la_tradicion_sigue_sin_valor_por_defecto_tambien_sin_grupo`; `test_alta_sin_grupo_pg`: `test_confirmar_crea_la_serie_con_la_tradicion_elegida_y_sin_carpeta` | `test_web_discovery`: `TestBuscar::test_la_tradicion_no_viene_preseleccionada_y_la_sugerencia_es_solo_un_texto`; `test_descubrir_dos_pasos_pg`: `TestRevisarNoEscribeNada` | n/a | n/a |
+| **G3** colisiones | `test_paridad_de_entradas_pg::TestLasCuatroEntradasVenLasMismasParecidas` | ídem | ídem | ídem (+ `test_edicion_serie_pg`) | n/a |
+| **G4** concurrencia | `test_alta_serie_pg::TestConcurrencia` | `test_alta_sin_grupo_pg::TestElCandadoDelTituloSeComparteConElAltaConGrupo` | `test_descubrir_dos_pasos_pg::TestConcurrencia`, `TestConcurrenciaPorTitulo` | `test_edicion_serie_pg::TestConcurrencia` | `test_borrado_serie_pg::TestConcurrenciaConUnaVinculacion` |
+| **G5** procedencia | `test_alta_serie_pg::TestProcedenciaEIdentidad` | `test_alta_sin_grupo_pg::TestAltaDesdeFuenteSinGrupo::test_crea_con_el_identificador_protegido_y_la_procedencia` | `test_descubrir_dos_pasos_pg::TestCrear::test_crea_la_serie_con_la_tradicion_elegida_el_identificador_protegido_y_la_procedencia` | n/a | n/a |
+| **G6** idempotencia y comprobante | `test_alta_serie_pg::TestComprobanteDeLaOperacion` | `test_alta_sin_grupo_pg::TestAltaManualSinGrupo::test_repetir_la_confirmacion_devuelve_lo_mismo_sin_crear_otra` | `test_descubrir_dos_pasos_pg::TestCrear::test_repetir_la_confirmacion_no_crea_otra_y_lo_dice` | n/a | n/a |
+| **G7** reversibilidad | `test_alta_serie_pg::TestDeshacer` | `test_alta_sin_grupo_pg::TestAltaManualSinGrupo::test_se_puede_deshacer_y_el_token_no_la_recrea` | `test_descubrir_dos_pasos_pg::TestDeshacer` | n/a | n/a |
+| **G8** sin efectos laterales | `test_alta_serie_pg::TestSinEfectosLaterales` | — (la vista previa declara `numeros: 0, archivos: 0`, probado en `test_la_vista_previa_no_escribe_nada_y_ofrece_crear`; sin prueba de los efectos de la confirmación) | — | — | `test_borrado_serie_pg::TestElBorradoNoTocaElDisco` |
+
+**`POST /api/series` (C3):** no cumple G1–G7 (excepción A1). Sobre G8 **no hay prueba específica**; `test_c3_deprecado` fija solo que sigue creando en un paso, con tradición `american` y sin procedencia.
+
+**Celdas sin prueba específica hoy** (no adoptadas para esa entrada, a cubrir cuando se decida): G8 en alta sin grupo, Descubrir y `PATCH`.
+
+Lo que **no** acredita este mapa: despliegue, comportamiento en la Raspberry Pi, htmx fuera del navegador integrado, ni el peso real de página de Descubrir con 40 resultados (**NOT RUN**).
+
+---
+
+> **Texto original (propuesta del 2026-10-11).** Lo que sigue se conserva tal como se redactó.
 
 ## Qué está decidido, qué es papel y qué falta
 
