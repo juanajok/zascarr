@@ -32,7 +32,7 @@
 - **S1** (vista previa de efectos del borrado): solo si algún día hay interfaz de borrado.
 - **S4** (sustituir `DELETE` por «deshacer»): no adoptada.
 - **S5** (archivado o borrado lógico): **futuro**, cambia el modelo y exige migración; no está adoptado.
-- **Retirada de `POST /api/series`** (fase 2, I6 de [#114](https://github.com/juanajok/zascarr/issues/114)): **no autorizada**. Condiciones: un ciclo de versión, la comprobación de consumidores y decidir antes el hueco de la API (crear una serie vacía sin carpeta; el servicio sin grupo ya existe, falta una ruta).
+- **Retirada de `POST /api/series`** (fase 2, I6 de [#114](https://github.com/juanajok/zascarr/issues/114)): **no autorizada**. Condiciones: un ciclo de versión y la comprobación de consumidores. El hueco de la API (crear una serie vacía sin carpeta) **tiene ya sustituto**: `POST /api/revision/serie/sin-carpeta/previsualizar`, sobre el servicio sin grupo (primer paso de I6, sin retirar nada).
 - **A3** (tabla de cumplimiento): existe un **borrador informativo, sin revisión formal** (abajo, «Evidencia por garantía»); sus celdas sin prueba específica no se adoptan.
 - **A5 por interfaz**: NOT RUN.
 

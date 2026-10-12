@@ -45,7 +45,7 @@
 | **D6** división en cambios | **Sí** (I1–I8) |
 
 ### Abierto, sin adoptar
-- **I6 (retirada de `POST /api/series`)**: no autorizada. Condiciones: un ciclo de versión, comprobación de consumidores, y decidir antes el hueco de la API (crear una serie vacía sin carpeta).
+- **I6 (retirada de `POST /api/series`)**: no autorizada. Condiciones: un ciclo de versión y la comprobación de consumidores. **El hueco de la API (crear una serie vacía sin carpeta) tiene ya sustituto**: `POST /api/revision/serie/sin-carpeta/previsualizar` (primer paso de I6, sin retirar nada).
 - **I7**: depende de 2e (interfaz de vinculación), sin autorizar.
 - **Peso real de página** de Descubrir con 40 resultados, **token caducado en htmx real**, otro navegador y escritorio ancho: **NOT RUN**.
 - **Consumidores externos de `POST /api/series`**: **no verificables** (sin telemetría).

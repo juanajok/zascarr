@@ -160,8 +160,10 @@ async def create_series(data: SeriesCreate, db: AsyncSession = Depends(get_db)):
     y `/serie`): no hay vista previa ni confirmación, la tradición es `american` si no se indica,
     no detecta series con el mismo título, no usa candados, no deja procedencia (`metadata_source`
     queda vacío y el enriquecedor puede completar la fila) ni comprobante, y no se puede deshacer.
-    El alta por token parte de una carpeta con archivos pendientes (aún no hay un sustituto para
-    crear una serie vacía sin carpeta); esta ruta se retirará en una versión posterior."""
+    Sustituto: `POST /api/revision/serie/sin-carpeta/previsualizar` (título y año a mano, tradición
+    elegida) y `POST /api/revision/serie` con su token; después, `PATCH /api/series/{id}` para la
+    descripción, la portada, el estado o el total de números. Esta ruta se retirará en una versión
+    posterior."""
     series = Series(**data.model_dump())
     db.add(series)
     await db.flush()
