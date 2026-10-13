@@ -192,6 +192,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Redis ya no se publica en el host.** El `docker-compose.yml` lo exponía en `127.0.0.1:6379`, y en una instalación
+  real otro proceso del equipo lo adoptó y guardó ~160 MB en él; al aplicarse el tope de memoria (128 MB) el contenedor
+  entraba en bucle de reinicios. ZascArr no usa ese puerto (llega por la red interna), así que se quita. Si ya tenías
+  ese contenedor en bucle, mira «Actualizar» en el BACKLOG, «Redis adoptado por otro proceso del host».
+
 - **La lista de deseos ya no se sale de la pantalla en el móvil.** Cada fila no podía partirse en varias
   líneas, así que título, estado y botones desbordaban (la página llegaba a 731 px de ancho en un móvil de
   390 px). Ahora lo que no cabe pasa a la línea siguiente, sin ocultar nada: a 390 y a 320 px la página
