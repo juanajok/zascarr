@@ -7,6 +7,16 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Asistente «Elegir la serie de una carpeta», primer paso** (#118, rebanada 2e). Desde «Pendientes por carpeta»
+  cada carpeta tiene un enlace para abrirlo: enseña la carpeta, cuántos registros tiene y una búsqueda propuesta
+  que puedes cambiar. **Abrirlo no consulta ninguna fuente**; solo se busca cuando pulsas «Buscar». Los resultados
+  salen sin ninguno elegido (aunque haya uno solo), cada uno con su fuente y solo los datos que la fuente da, y te
+  dice **qué fuente no ha respondido** en lugar de contarlo como «sin coincidencias». Eliges la serie y **la
+  tradición tú**: la que sugiere la fuente o la carpeta se ve como pista, nunca marcada. Si no aparece, o no hay
+  fuentes activas ni claves, puedes crearla **a mano** (título, año opcional y tradición) sin consultar nada. En
+  este paso **no se crea ninguna serie ni se vincula ningún archivo**: queda anotada la elección. El paso siguiente
+  (ver qué se crearía antes de confirmar) llega aparte (#119). La búsqueda del asistente comparte el ritmo de
+  cortesía con `POST /api/revision/descubrir`.
 - **Crear una serie vacía por la API sin carpeta de origen** (#114, primer paso de I6):
   `POST /api/revision/serie/sin-carpeta/previsualizar` con `{"manual": {"titulo", "anio"}, "tradicion"}`
   (o una `candidata` firmada por Descubrir). Es el **sustituto de `POST /api/series`**: eliges la tradición

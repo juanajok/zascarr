@@ -1,0 +1,22 @@
+{#- Paso «elegir esta candidata»: la tradición la ELIGE la persona (sin valor por defecto). La que sugiere la fuente
+    y la que suele guardar la carpeta se muestran como PISTAS, nunca marcadas. El token lo firmó el servidor al buscar
+    y es lo único que vuelve del navegador, junto con la clave del grupo y la tradición. -#}
+{% macro eleccion_form(clave, token, etiqueta_sugerida, tradiciones, pista, error=none) -%}
+<div class="asistente-paso">
+  {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
+  <form hx-post="/ui/pendientes/carpetas/asistente/elegir" hx-target="closest .asistente-paso" hx-swap="outerHTML">
+    <input type="hidden" name="clave" value="{{ clave }}">
+    <input type="hidden" name="candidata" value="{{ token }}">
+    <div class="discovery-card-actions">
+      <select name="tradition" required aria-label="Tradición">
+        <option value="" selected disabled>Elige la tradición…</option>
+        {% for value, label in tradiciones %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Elegir esta serie</button>
+    </div>
+    <small>La fuente sugiere: {{ etiqueta_sugerida }}.{% if pista %} La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}.{% endif %} Tú decides.</small>
+  </form>
+</div>
+{%- endmacro %}
