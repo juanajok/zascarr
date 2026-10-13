@@ -122,13 +122,10 @@ def _demasiado_pronto(detalle: str, espera: float) -> HTTPException:
                          headers={"Retry-After": str(max(1, math.ceil(espera)))})
 
 
-@router.post("/descubrir", response_model=RespuestaDescubrir)
-async def descubrir(
-    peticion: PeticionDescubrir, response: Response, db: AsyncSession = Depends(get_db),
-) -> RespuestaDescubrir:
-    """Busca en las fuentes DESDE un grupo de la superficie de revisión. No escribe nada, no elige ni recomienda
-    ninguna candidata y no crea series: cada candidata lleva un token firmado para los pasos siguientes."""
-    response.headers["Cache-Control"] = "no-store"
+async def buscar_a_ritmo(db: AsyncSession, clave: str, consulta: str | None) -> RespuestaDescubrir:
+    """Busca en las fuentes desde un grupo, **respetando el ritmo de cortesía**. Es lo que comparten `POST /descubrir`
+    y el asistente de la interfaz (#118): el espaciado y el candado viven AQUÍ, una sola vez, porque el límite es del
+    proceso y no de la entrada por la que llegue la búsqueda. Levanta `HTTPException` con el texto ya en español."""
     secret = get_settings().secret_key
     if not secret:
         raise HTTPException(status_code=503, detail="El servidor no tiene clave para firmar; reinícialo.")
@@ -140,8 +137,7 @@ async def descubrir(
         raise _demasiado_pronto("Espera unos segundos antes de buscar de nuevo: las fuentes piden calma.", espera)
     async with _BUSQUEDA_EN_CURSO:
         try:
-            respuesta = await DescubrimientoDeGrupo(db, secret=secret).descubrir(
-                peticion.clave, peticion.consulta)
+            respuesta = await DescubrimientoDeGrupo(db, secret=secret).descubrir(clave, consulta)
         except GrupoNoEncontradoError:
             # Sin red de por medio: no consume el espaciado entre búsquedas.
             raise HTTPException(status_code=404, detail="No hay registros pendientes en esa carpeta.") from None
@@ -152,6 +148,16 @@ async def descubrir(
             raise
         _fin_de_la_ultima = time.monotonic()
         return respuesta
+
+
+@router.post("/descubrir", response_model=RespuestaDescubrir)
+async def descubrir(
+    peticion: PeticionDescubrir, response: Response, db: AsyncSession = Depends(get_db),
+) -> RespuestaDescubrir:
+    """Busca en las fuentes DESDE un grupo de la superficie de revisión. No escribe nada, no elige ni recomienda
+    ninguna candidata y no crea series: cada candidata lleva un token firmado para los pasos siguientes."""
+    response.headers["Cache-Control"] = "no-store"
+    return await buscar_a_ritmo(db, peticion.clave, peticion.consulta)
 
 
 # ── 2b: alta o reutilización de la serie ──────────────────────────────────────────────────────

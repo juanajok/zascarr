@@ -1,0 +1,14 @@
+{#- La elección ya anotada. NO se ha creado la serie ni vinculado ningún archivo. -#}
+<div class="asistente-paso">
+  {{ ui.aviso("ok", "Elección anotada. Todavía no se ha creado ninguna serie ni se ha vinculado ningún archivo.") }}
+  <dl class="carpeta-datos">
+    <dt>Carpeta</dt><dd>{{ clave }}</dd>
+    <dt>Serie</dt><dd>{{ titulo }}{% if anio %} ({{ anio }}){% endif %}</dd>
+    <dt>Origen</dt><dd>{% if origen == "fuente" %}{{ fuente }}{% else %}Creada a mano{% endif %}</dd>
+    <dt>Tradición elegida</dt><dd>{{ tradicion }}</dd>
+    {% if sugerida %}<dt>La fuente sugería</dt><dd>{{ sugerida }} (era solo una sugerencia)</dd>{% endif %}
+  </dl>
+  <p class="caption">El paso siguiente —ver qué se crearía antes de confirmar— todavía no está disponible en esta pantalla.</p>
+  <p><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}">Elegir otra</a>
+     <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a></p>
+</div>

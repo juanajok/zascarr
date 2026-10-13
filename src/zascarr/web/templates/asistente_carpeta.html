@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Elegir la serie de una carpeta — ZascArr{% endblock %}
+{% block content %}
+<h1>Elegir la serie de una carpeta</h1>
+<p class="subtitle">Busca la serie en las fuentes o créala a mano. En este paso no se crea ninguna serie ni se vincula ningún archivo.</p>
+<p><a href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
+
+{% if apertura is none %}
+{{ ui.aviso("warn", "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado. Vuelve a «Pendientes por carpeta» para ver lo que queda.") }}
+{% else %}
+{% set g = apertura.grupo %}
+<section class="card" aria-labelledby="asistente-carpeta">
+  <h2 id="asistente-carpeta">{{ g.clave }}</h2>
+  <dl class="carpeta-datos">
+    <dt>Registros en esta carpeta</dt><dd>{{ g.n_archivos }}</dd>
+    {% if g.carpeta_contextual %}<dt>Carpeta de la serie</dt><dd>{{ g.carpeta_contextual }}</dd>{% endif %}
+  </dl>
+  <p class="caption">Abrir este asistente no ha consultado ninguna fuente: solo se busca cuando tú lo pides.</p>
+</section>
+
+<section class="card" aria-labelledby="asistente-buscar">
+  <h2 id="asistente-buscar">Buscar en las fuentes</h2>
+  <form class="asistente-form" hx-post="/ui/pendientes/carpetas/asistente/buscar" hx-target="#asistente-resultados" hx-swap="innerHTML">
+    <input type="hidden" name="clave" value="{{ g.clave }}">
+    <label for="asistente-consulta">Qué buscar</label>
+    <input id="asistente-consulta" type="search" name="consulta" maxlength="200" value="{{ apertura.consulta_propuesta }}"
+           placeholder="Título de la serie…" autocomplete="off">
+    {% if apertura.consulta_propuesta %}
+    <p class="caption">Propuesta a partir del nombre de la carpeta o de los archivos. Puedes cambiarla antes de buscar.</p>
+    {% else %}
+    <p class="caption">No hemos podido proponer una búsqueda con esta carpeta: escribe el título.</p>
+    {% endif %}
+    <button type="submit">Buscar en las fuentes</button>
+  </form>
+  <div id="asistente-resultados" class="series-results" aria-live="polite"></div>
+</section>
+
+<section class="card" aria-labelledby="asistente-manual-titulo">
+  <h2 id="asistente-manual-titulo">¿No aparece? Crear la serie a mano</h2>
+  <p>No hace falta ninguna fuente ni clave: solo el título y la tradición.</p>
+  <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/manual?clave={{ g.clave | urlencode }}"
+     hx-get="/ui/pendientes/carpetas/asistente/manual?clave={{ g.clave | urlencode }}"
+     hx-target="#asistente-manual" hx-swap="innerHTML">Abrir el formulario a mano</a>
+  <div id="asistente-manual" aria-live="polite">{% if manual_abierto %}{% include "_asistente_manual.html" %}{% endif %}</div>
+</section>
+{% endif %}
+{% endblock %}
