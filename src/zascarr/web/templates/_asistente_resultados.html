@@ -1,0 +1,63 @@
+{% from "_asistente_macros.html" import eleccion_form %}
+{#- Resultado de una búsqueda a petición. El orden es el fijo de las fuentes; nada se marca como «mejor» y nada llega
+    preseleccionado, aunque solo haya una candidata. Un fallo de fuente NO es «sin coincidencias». -#}
+{% if error %}
+{{ ui.aviso("warn", error ~ (" Vuelve a intentarlo en " ~ espera ~ " s." if espera else "")) }}
+{% else %}
+<p class="caption">Se ha buscado «{{ r.consulta }}».</p>
+
+<ul class="carpeta-senales" aria-label="Estado de cada fuente">
+  {% for f in fuentes %}
+  <li>{{ ui.chip(f.chip, f.nombre ~ ": " ~ f.texto) }}</li>
+  {% endfor %}
+</ul>
+{% if r.avisos %}<p class="caption">{{ r.avisos | join(" · ") }}</p>{% endif %}
+
+{% if con_error %}
+{% set respondieron = fuentes | selectattr("estado", "equalto", "ok") | list %}
+{{ ui.aviso("warn", "No han respondido: " ~ (con_error | map(attribute="nombre") | join(", ")) ~ "." ~ (" Lo que se muestra abajo viene solo de las fuentes que sí respondieron; eso no significa que en las otras no haya coincidencias." if respondieron else "")) }}
+{% endif %}
+
+{% if r.candidatas %}
+<ul class="discovery-list">
+  {% for c in r.candidatas %}
+  <li class="discovery-card">
+    {% if c.portada %}
+    <img class="cover" alt="" src="{{ c.portada }}" onerror="this.classList.add('cover-missing')">
+    {% else %}
+    <img class="cover cover-missing" alt="">
+    {% endif %}
+    <div class="discovery-card-body">
+      <div class="discovery-card-title">
+        {{ c.titulo }}{% if c.anio %} ({{ c.anio }}){% endif %}
+        <span class="caption">{{ nombre_fuente(c.fuente) }}</span>
+        {% if c.sitio_url %}
+        <a href="{{ c.sitio_url }}" target="_blank" rel="noopener noreferrer" title="Ver ficha original para confirmar">↗</a>
+        {% endif %}
+      </div>
+      {% if c.descripcion %}<div class="discovery-card-desc">{{ c.descripcion }}</div>{% endif %}
+      {% if c.ya_en_biblioteca %}
+      <p class="caption">Ya tienes una serie con este identificador:
+        <a href="/ui/series/{{ c.ya_en_biblioteca.series_id }}">{{ c.ya_en_biblioteca.titulo }}</a>{% if c.ya_en_biblioteca.anio %} ({{ c.ya_en_biblioteca.anio }}){% endif %}.</p>
+      {% endif %}
+      {% if c.coincidencia_con_la_carpeta.senales %}
+      <details>
+        <summary>Qué dice la carpeta frente a <strong>esta</strong> candidata{% if c.coincidencia_con_la_carpeta.en_conflicto %} — hay un conflicto{% endif %}</summary>
+        <ul>
+          {% for s in c.coincidencia_con_la_carpeta.senales %}<li>{{ s.texto }}</li>{% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+      {{ eleccion_form(clave, c.token, etiqueta_de_tradicion(c.tradicion_sugerida), tradiciones, pista) }}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% elif con_error and not respondieron %}
+{{ ui.aviso("warn", "No se ha podido consultar ninguna fuente ahora mismo. No es que no haya coincidencias: vuelve a intentarlo en unos minutos o crea la serie a mano.") }}
+{% elif not hubo_consulta %}
+{{ ui.aviso("info", "No hay ninguna fuente activa (apagadas o sin clave): puedes crear la serie a mano, abajo.") }}
+{% else %}
+<p class="no-results">Ninguna fuente que ha respondido ha encontrado coincidencias con «{{ r.consulta }}». Prueba con otra búsqueda o crea la serie a mano.</p>
+{% endif %}
+{% endif %}

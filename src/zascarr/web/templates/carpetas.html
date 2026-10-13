@@ -2,7 +2,7 @@
 {% block title %}Pendientes por carpeta — ZascArr{% endblock %}
 {% block content %}
 <h1>Pendientes por carpeta</h1>
-<p class="subtitle">Lo que sigue pendiente, agrupado por la carpeta donde está. Es solo para mirar: aquí no se crea ni se asigna nada.</p>
+<p class="subtitle">Lo que sigue pendiente, agrupado por la carpeta donde está. Esta pantalla es solo para mirar: no se crea ni se asigna nada. Desde cada carpeta puedes abrir el asistente para elegir su serie; abrirlo tampoco crea nada ni consulta ninguna fuente.</p>
 
 {% call ui.aviso("info") %}
   <strong>Son registros pendientes de verificar, no archivos confirmados.</strong>
@@ -80,6 +80,8 @@
     {% endfor %}
   </ul>
   {% endif %}
+
+  <p class="carpeta-accion"><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ g.clave | urlencode }}">Elegir la serie de esta carpeta</a></p>
 
   <details class="carpeta-archivos">
     <summary>Ver registros ({{ g.archivos | length }}{% if v.sin_mostrar > 0 %} de {{ g.n_archivos }}{% endif %})</summary>
