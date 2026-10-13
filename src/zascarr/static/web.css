@@ -1265,3 +1265,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .asistente-form label { font-size: .875rem; font-weight: 700; }
 .asistente-form input[type="text"], .asistente-form input[type="search"] { width: 100%; max-width: 32rem; }
 .carpeta-accion { margin: 0 0 10px; }
+
+/* Revisión de selección y números (#119). La revisión pendiente se avisa y el lote anterior deja de usarse. */
+.vinculacion-lista { list-style: none; padding: 0; margin: 0 0 var(--gutter); display: grid; gap: 12px; }
+.vinc-fila { border: 1px solid currentColor; border-radius: var(--radius-panel); padding: 10px 12px; }
+.vinc-cab { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.vinc-cab .chip { white-space: normal; text-align: left; }
+.vinc-marca { display: flex; gap: 8px; align-items: center; font-weight: 700; overflow-wrap: anywhere; }
+.vinc-ruta { margin: 4px 0; font-size: .875rem; overflow-wrap: anywhere; }
+.vinc-numero { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin: 6px 0; }
+.vinc-numero input[type="text"] { width: 8rem; }
+.vinc-texto { margin: 4px 0; }
+.vinculacion-paginas { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 var(--gutter); }
+.vinculacion-pendiente { display: none; font-weight: 700; }
+.vinculacion.pendiente .vinculacion-pendiente { display: block; }
+.vinculacion.pendiente .lote-listo { opacity: .35; pointer-events: none; }
