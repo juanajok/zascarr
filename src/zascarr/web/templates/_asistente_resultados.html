@@ -38,7 +38,8 @@
       {% if c.descripcion %}<div class="discovery-card-desc">{{ c.descripcion }}</div>{% endif %}
       {% if c.ya_en_biblioteca %}
       <p class="caption">Ya tienes una serie con este identificador:
-        <a href="/ui/series/{{ c.ya_en_biblioteca.series_id }}">{{ c.ya_en_biblioteca.titulo }}</a>{% if c.ya_en_biblioteca.anio %} ({{ c.ya_en_biblioteca.anio }}){% endif %}.</p>
+        <a href="/ui/series/{{ c.ya_en_biblioteca.series_id }}">{{ c.ya_en_biblioteca.titulo }}</a>{% if c.ya_en_biblioteca.anio %} ({{ c.ya_en_biblioteca.anio }}){% endif %}.
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ c.ya_en_biblioteca.series_id }}">Preparar los archivos de esta carpeta para esa serie</a></p>
       {% endif %}
       {% if c.coincidencia_con_la_carpeta.senales %}
       <details>

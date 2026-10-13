@@ -1,0 +1,138 @@
+{#- La revisión completa (lo que se renueva con cada cambio). Un solo objetivo de htmx: al sustituirlo, el token y el
+    estado «pendiente» de la revisión anterior desaparecen con él. -#}
+<div id="revision" class="vinculacion">
+{% if error %}
+{{ ui.aviso("warn", error) }}
+{% else %}
+{% set s = r.serie %}
+<form id="vinculacion-form" method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/revisar"
+      hx-post="/ui/pendientes/carpetas/asistente/vinculacion/revisar" hx-trigger="change, submit"
+      hx-target="#revision" hx-swap="outerHTML" hx-sync="this:replace"
+      hx-on::before-request="this.closest('.vinculacion').classList.add('pendiente')"
+      hx-on::send-error="this.closest('.vinculacion').classList.add('pendiente')">
+  <input type="hidden" name="clave" value="{{ r.clave }}">
+  <input type="hidden" name="series_id" value="{{ s.series_id }}">
+  <input type="hidden" name="cursor_actual" value="{{ cursor_actual }}">
+  <input type="hidden" name="pagina_desde" value="{{ r.pagina.desde }}">
+  <input type="hidden" name="pagina_hasta" value="{{ r.pagina.hasta }}">
+  <input type="hidden" name="borradores" value="{{ borradores_json }}">
+
+  <section class="card" aria-labelledby="vinc-contexto">
+    <h2 id="vinc-contexto">{{ r.clave }}</h2>
+    <dl class="carpeta-datos">
+      <dt>Serie elegida</dt><dd>{{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %}</dd>
+      <dt>Archivos en la carpeta</dt><dd>{{ r.pagina.en_el_grupo }}</dd>
+      <dt>Esta página</dt><dd>{% if r.pagina.tratados %}archivos {{ r.pagina.desde }}–{{ r.pagina.hasta }}{% else %}sin archivos{% endif %}</dd>
+    </dl>
+    <p class="caption">Lo que marques, los números que escribas y el lote preparado valen <strong>solo para los archivos de esta página</strong>.{% if r.pagina.texto %} {{ r.pagina.texto }}{% endif %}</p>
+    {% for a in avisos %}{{ ui.aviso("amber", a) }}{% endfor %}
+    {% for av in r.avisos_de_grupo %}{{ ui.aviso("amber", av.texto) }}{% endfor %}
+  </section>
+
+  {% if pendientes %}
+  <section class="card" aria-labelledby="vinc-borradores">
+    <h3 id="vinc-borradores">Trabajo guardado en otras páginas</h3>
+    <p class="caption">Son borradores: no forman parte del lote de esta página y se vuelven a revisar al regresar a ellas. No se conservan si recargas la página.</p>
+    <ul>
+      {% for p in pendientes %}
+      <li>Archivos {{ p.desde }}–{{ p.hasta }}: {{ p.n_marcados }} marcado{{ "s" if p.n_marcados != 1 }}, {{ p.n_numeros }} número{{ "s" if p.n_numeros != 1 }} escrito{{ "s" if p.n_numeros != 1 }}
+        <button type="submit" name="ir_a" value="{{ p.clave or inicio }}" class="btn ghost sm">Volver a esa página</button></li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <p class="vinculacion-pendiente" role="status">Revisión pendiente: se está renovando. Hasta que termine no se puede usar el lote anterior.</p>
+
+  <ul class="vinculacion-lista">
+    {% for a in r.archivos %}
+    {% set editable = a.estado not in ("ya_vinculado", "fuera_de_la_pagina") %}
+    <li class="vinc-fila" data-id="{{ a.id }}" data-estado="{{ a.estado }}" data-marcado="{{ 1 if a.marcado else 0 }}"
+        data-marcable="{{ 1 if a.marcable else 0 }}" data-incluido="{{ 1 if a.incluido_en_token else 0 }}"
+        data-numero-origen="{{ a.numero_origen }}">
+      <div class="vinc-cab">
+        {% if editable %}
+        <label class="vinc-marca">
+          <input type="checkbox" name="marcar" value="{{ a.id }}"{% if a.marcado %} checked{% endif %}{% if not a.marcable and not a.marcado %} disabled{% endif %}>
+          <span class="nombre-archivo">{{ a.nombre }}</span>
+        </label>
+        {% else %}
+        <span class="nombre-archivo">{{ a.nombre }}</span>
+        {% endif %}
+        {% if a.incluido_en_token %}{{ ui.chip("ok", "Incluido en el lote") }}
+        {% elif a.marcado %}{{ ui.chip("warn", "Marcado, pero bloqueado") }}
+        {% elif a.marcable %}{{ ui.chip("neutro", "Sin marcar") }}
+        {% else %}{{ ui.chip("amber", "No se puede marcar") }}{% endif %}
+      </div>
+      {% if a.ruta_actual %}<p class="vinc-ruta">{{ a.ruta_actual }}{% if a.fuera_de_la_biblioteca %} <em>(fuera de la biblioteca)</em>{% endif %}</p>{% endif %}
+
+      {% if editable %}
+      <div class="vinc-numero">
+        <label for="n-{{ a.id }}">Número</label>
+        <input id="n-{{ a.id }}" type="text" name="numero:{{ a.id }}" value="{{ a.numero or '' }}" maxlength="20" autocomplete="off">
+        <input type="hidden" name="numero_base:{{ a.id }}" value="{{ a.numero or '' }}">
+        <input type="hidden" name="numero_origen:{{ a.id }}" value="{{ a.numero_origen }}">
+        <small class="vinc-origen">
+          {% if a.numero_origen == "persona" %}Escrito por ti{% if a.numero_del_nombre %} (el nombre decía {{ a.numero_del_nombre }}){% endif %}
+          {% elif a.numero_origen == "nombre" %}Sale del nombre del archivo
+          {% else %}Sin número: escríbelo si lo quieres vincular{% endif %}
+        </small>
+      </div>
+      {% endif %}
+
+      <p class="vinc-texto">{{ a.texto }}</p>
+
+      {% if a.motivos and a.motivos | length > 1 %}
+      <p class="caption vinc-motivos">Otros motivos: {{ a.motivos[1:] | join(", ") }}</p>
+      {% endif %}
+      {% if a.repetido_con %}
+      <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
+      {% endif %}
+      {% if a.issue_existente %}
+      <p class="caption vinc-existente">La serie ya tiene esta publicación sin archivos: se reutilizaría, no se crea una nueva.</p>
+      {% endif %}
+      {% if a.conflictos %}
+      <details>
+        <summary>Qué dice la carpeta frente a esta serie</summary>
+        <ul>{% for c in a.conflictos %}<li>{{ c.texto }}</li>{% endfor %}</ul>
+      </details>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+
+  {% if r.pagina.hay_mas or r.pagina.cursor %}
+  <nav class="vinculacion-paginas" aria-label="Páginas de archivos">
+    {% if r.pagina.cursor %}<button type="submit" name="ir_a" value="{{ inicio }}" class="btn ghost sm">← Primera página</button>{% endif %}
+    {% if r.pagina.hay_mas %}<button type="submit" name="ir_a" value="{{ r.pagina.siguiente }}" class="btn ghost sm">Página siguiente →</button>{% endif %}
+  </nav>
+  {% endif %}
+
+  <section class="card vinculacion-resumen" aria-labelledby="vinc-resumen">
+    <h3 id="vinc-resumen">Resumen de esta página</h3>
+    <ul class="carpetas-resumen">
+      <li data-total="marcados">{{ ui.chip("neutro", r.totales.marcados ~ " marcados") }}</li>
+      <li data-total="a_vincular">{{ ui.chip("ok" if r.totales.a_vincular else "neutro", r.totales.a_vincular ~ " a vincular") }}</li>
+      <li data-total="marcados_bloqueados">{{ ui.chip("warn" if r.totales.marcados_bloqueados else "neutro", r.totales.marcados_bloqueados ~ " marcados bloqueados") }}</li>
+    </ul>
+    {% if r.token %}
+    <div class="lote-listo" data-token="{{ r.token }}" data-n="{{ incluidos | length }}">
+      {{ ui.aviso("ok", "Lote preparado: " ~ (incluidos | length) ~ " archivo" ~ ("s" if incluidos | length != 1) ~ " de esta página. Todavía no se ha vinculado nada.") }}
+      <p>Entra en el lote:</p>
+      <ul>{% for a in incluidos %}<li class="nombre-archivo">{{ a.nombre }} — número {{ a.numero }}</li>{% endfor %}</ul>
+      {% if excluidos %}
+      <p>Marcados pero <strong>fuera del lote</strong>:</p>
+      <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ a.texto }}</li>{% endfor %}</ul>
+      {% endif %}
+      <p class="caption">El paso siguiente —confirmar la vinculación— todavía no está disponible en esta pantalla.</p>
+    </div>
+    {% else %}
+    {{ ui.aviso("info", r.motivo_sin_token) }}
+    {% if excluidos %}
+    <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ a.texto }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% endif %}
+  </section>
+</form>
+{% endif %}
+</div>
