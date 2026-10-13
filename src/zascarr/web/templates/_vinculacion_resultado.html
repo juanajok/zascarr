@@ -1,0 +1,90 @@
+{#- Lo que pasó al confirmar (#120). Serie y grupo salen del token firmado; la página, del formulario (solo presentación).
+    Nunca se dice «completado» sin que el servicio lo haya confirmado, y un resultado parcial no se presenta como completo. -#}
+{% macro volver(clave, series_id, cursor_actual, inicio, texto) -%}
+<a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ series_id }}{% if cursor_actual and cursor_actual != inicio %}&amp;cursor={{ cursor_actual | urlencode }}{% endif %}">{{ texto }}</a>
+{%- endmacro %}
+<div id="revision" class="vinculacion vinculacion-resultado" data-estado="{{ 'fallo' if fallo else informe.global_ }}">
+  <section class="card" aria-labelledby="res-contexto">
+    <h2 id="res-contexto">{{ clave or "Carpeta" }}</h2>
+    <dl class="carpeta-datos">
+      <dt>Serie</dt><dd>{{ titulo_serie or "(no disponible)" }}</dd>
+      <dt>Carpeta</dt><dd>{{ clave or "(no disponible)" }}</dd>
+      {% if pagina %}<dt>Página revisada</dt><dd>archivos {{ pagina }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  {% if fallo %}
+  <section class="card" aria-labelledby="res-fallo">
+    <h3 id="res-fallo">{{ fallo.titulo }}</h3>
+    {{ ui.aviso("warn", fallo.mensaje) }}
+    {% if fallo.codigo == "resultado_incierto" %}
+    <p><strong>No sabemos si la vinculación llegó a aplicarse.</strong> No la des por hecha ni por fallida: comprueba el
+      resultado. Repetirla es seguro: si ya se aplicó verás el mismo informe y no se duplica nada.</p>
+    {% endif %}
+    <div class="vinc-acciones">
+      {% if fallo.repetible and token %}
+      <form method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/confirmar"
+            hx-post="/ui/pendientes/carpetas/asistente/vinculacion/confirmar" hx-target="#revision" hx-swap="outerHTML"
+            hx-disabled-elt="find button">
+        <input type="hidden" name="token" value="{{ token }}">
+        <input type="hidden" name="cursor_actual" value="{{ cursor_actual }}">
+        {% if pagina %}<input type="hidden" name="pagina_desde" value="{{ pagina.split('–')[0] }}">
+        <input type="hidden" name="pagina_hasta" value="{{ pagina.split('–')[1] }}">{% endif %}
+        <button type="submit">{{ "Comprobar el resultado" if fallo.codigo == "resultado_incierto" else "Reintentar" }}</button>
+      </form>
+      {% endif %}
+      {% if clave and series_id %}{{ volver(clave, series_id, cursor_actual, inicio, "Revisar de nuevo esta página") }}{% endif %}
+      <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+    </div>
+  </section>
+
+  {% else %}
+  {% set t = informe.totales %}
+  <section class="card" aria-labelledby="res-resultado">
+    <h3 id="res-resultado">
+      {% if informe.global_ == "vinculados_todos" %}Hecho: todos los archivos del lote quedaron vinculados
+      {% elif informe.global_ == "vinculados_parcialmente" %}Vinculación parcial: quedaron archivos sin vincular
+      {% else %}No se vinculó ningún archivo{% endif %}
+    </h3>
+    {% if informe.global_ == "vinculados_todos" %}{{ ui.aviso("ok", "El servicio confirma que todos los archivos de este lote están vinculados.") }}
+    {% elif informe.global_ == "vinculados_parcialmente" %}{{ ui.aviso("amber", "Esto NO está completo: " ~ t.omitidos ~ " archivo" ~ ("s" if t.omitidos != 1) ~ " de este lote no se vinculó. Mira abajo el motivo de cada uno.") }}
+    {% else %}{{ ui.aviso("warn", "No se vinculó nada. Mira abajo el motivo de cada archivo.") }}{% endif %}
+    {% if r.repetida %}{{ ui.aviso("info", "Esta confirmación ya se había aplicado antes: este es su resultado guardado, no se ha repetido nada.") }}{% endif %}
+    <ul class="carpetas-resumen" aria-label="Totales">
+      <li data-total="vinculados">{{ ui.chip("ok" if t.vinculados else "neutro", t.vinculados ~ " vinculados") }}</li>
+      <li data-total="ya_estaban">{{ ui.chip("neutro", t.ya_estaban ~ " ya estaban vinculados") }}</li>
+      <li data-total="omitidos">{{ ui.chip("warn" if t.omitidos else "neutro", t.omitidos ~ " pendientes") }}</li>
+      {% if t.issues_creados %}<li data-total="issues_creados">{{ ui.chip("info", t.issues_creados ~ " números nuevos en la serie") }}</li>{% endif %}
+    </ul>
+    <p class="caption">Vincular conserva el nombre y la carpeta de cada archivo: no se ha movido ni renombrado nada.</p>
+  </section>
+
+  {% if grupos.vinculado %}
+  <section class="card vinc-grupo" data-grupo="vinculado" aria-labelledby="res-vinculados">
+    <h3 id="res-vinculados">Vinculados ({{ grupos.vinculado | length }})</h3>
+    <ul>{% for a in grupos.vinculado %}<li class="nombre-archivo">{{ a.nombre }} — número {{ a.numero }}{% if a.creado %} (número nuevo en la serie){% endif %}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+  {% if grupos.ya_estaba_vinculado %}
+  <section class="card vinc-grupo" data-grupo="ya_estaba_vinculado" aria-labelledby="res-ya">
+    <h3 id="res-ya">Ya estaban vinculados ({{ grupos.ya_estaba_vinculado | length }})</h3>
+    <p class="caption">Ya estaban en ese número de esta serie: no se ha cambiado nada.</p>
+    <ul>{% for a in grupos.ya_estaba_vinculado %}<li class="nombre-archivo">{{ a.nombre }} — número {{ a.numero }}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+  {% if grupos.omitido %}
+  <section class="card vinc-grupo" data-grupo="omitido" aria-labelledby="res-pendientes">
+    <h3 id="res-pendientes">Pendientes: no se vincularon ({{ grupos.omitido | length }})</h3>
+    <p class="caption">Siguen pendientes. Nada se ha elegido, fusionado ni resuelto por ti. Lo que puedes hacer es revisarlos de nuevo: verás su estado actual y podrás corregir el número o dejarlos como están.</p>
+    <ul>{% for a in grupos.omitido %}
+      <li><span class="nombre-archivo">{{ a.nombre }}</span>{% if a.numero %} (número {{ a.numero }}){% endif %} — {{ a.texto or "No se vinculó." }}</li>
+    {% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  <div class="vinc-acciones">
+    {% if clave and series_id %}{{ volver(clave, series_id, cursor_actual, inicio, "Revisar de nuevo" if grupos.omitido else "Seguir revisando esta carpeta") }}{% endif %}
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+  </div>
+  {% endif %}
+</div>

@@ -353,16 +353,13 @@ class PeticionVincular(BaseModel):
     token: str = Field(..., min_length=1, max_length=MAX_TOKEN_VINCULACION)
 
 
-@router.post("/vinculacion", response_model=RespuestaEjecucion, response_model_by_alias=True)
-async def vincular(
-    peticion: PeticionVincular, response: Response, db: AsyncSession = Depends(get_db),
-) -> RespuestaEjecucion:
-    """Ejecuta lo que enseñó y firmó la vista previa, en UNA transacción y SIN mover ningún fichero. Repetir el
-    mismo token devuelve el mismo informe. Nunca anuncia éxito si algún archivo no quedó vinculado."""
-    response.headers["Cache-Control"] = "no-store"
+async def ejecutar_vinculacion(db: AsyncSession, token: str) -> RespuestaEjecucion:
+    """Ejecuta lo que enseñó y firmó la vista previa, en UNA transacción y SIN mover ningún fichero. Es lo que comparten
+    `POST /vinculacion` y el asistente de la interfaz (#120): la traducción de cada fallo a su estado y a su texto vive
+    AQUÍ, una sola vez. Levanta `HTTPException` con un `detail` ya en español y con su `codigo`."""
     secret = _secreto()
     try:
-        return await VinculacionDeArchivos(db, secret=secret).confirmar(peticion.token)
+        return await VinculacionDeArchivos(db, secret=secret).confirmar(token)
     except TokenDeVinculacionInvalidoError as e:
         raise _error_vinculacion(422, e.codigo, str(e)) from None
     except TokenCaducadoError as e:
@@ -388,6 +385,16 @@ async def vincular(
         logger.error("vinculacion.error_inesperado", tipo=type(e).__name__)
         raise _error_vinculacion(
             500, "error_inesperado", "No se pudo completar y no se ha cambiado nada. Inténtalo de nuevo.") from None
+
+
+@router.post("/vinculacion", response_model=RespuestaEjecucion, response_model_by_alias=True)
+async def vincular(
+    peticion: PeticionVincular, response: Response, db: AsyncSession = Depends(get_db),
+) -> RespuestaEjecucion:
+    """Ejecuta lo que enseñó y firmó la vista previa, en UNA transacción y SIN mover ningún fichero. Repetir el
+    mismo token devuelve el mismo informe. Nunca anuncia éxito si algún archivo no quedó vinculado."""
+    response.headers["Cache-Control"] = "no-store"
+    return await ejecutar_vinculacion(db, peticion.token)
 
 
 def _error_vinculacion(estado: int, codigo: str, mensaje: str) -> HTTPException:

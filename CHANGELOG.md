@@ -7,6 +7,16 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Confirmar la vinculación desde el navegador** (#120, rebanada 2e). En la revisión de selección y números (#119),
+  cuando hay un lote preparado aparece «Vincular N archivos», con lo que hará: vincula en su sitio, no mueve ni renombra
+  nada y no crea ninguna serie. **Revisar y confirmar son acciones distintas**: hasta que pulsas el botón no cambia
+  nada, y recargar o abrir el enlace no confirma. El resultado separa lo **vinculado**, lo que **ya estaba vinculado** y lo
+  **pendiente** (con el motivo de cada archivo) y conserva la serie, la carpeta y la página; un resultado parcial dice que
+  NO está completo y ofrece «Revisar de nuevo», que prepara una vista nueva antes de poder confirmar otra vez (no se
+  reutiliza el lote anterior). Si algo falla, se distingue **«no se sabe si se llegó a vincular»** —con «Comprobar el
+  resultado», que repite la misma confirmación sin duplicar nada— de un fallo definitivo, y nunca se dice «hecho» sin que
+  el servicio lo confirme. Repetir una confirmación ya aplicada muestra su resultado guardado. La traducción de fallos
+  se comparte con `POST /api/revision/vinculacion` (sin cambios en la API).
 - **Revisar la selección y los números antes de vincular** (#119, rebanada 2e). Con una carpeta y una **serie de tu
   biblioteca** ya elegida, `/ui/pendientes/carpetas/asistente/vinculacion` te enseña los archivos de la carpeta
   (hasta 100 por página) **sin ninguno marcado**, con el número que sale del nombre —o el que tú escribas— y por qué
