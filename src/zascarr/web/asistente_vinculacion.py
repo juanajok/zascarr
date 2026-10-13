@@ -13,8 +13,13 @@ Qué hace y qué NO hace:
 - **Páginas:** la selección, los números y el token valen solo para la página evaluada. Lo marcado y escrito en otras
   páginas se conserva como **borrador** en el propio formulario (sin base de datos, sin sesión: no sobrevive a recargar la
   página ni a un reinicio), y solo se vuelve a evaluar cuando se regresa a esa página.
-- **No confirma** nada: ni vincula, ni crea la serie, ni mueve archivos. La salida es la vista revisada y, si el servicio la
-  emite, el token del subconjunto ejecutable de la página. Confirmarlo es el paso siguiente (#120).
+- **Revisar no confirma nada**: ni vincula, ni crea la serie, ni mueve archivos. La salida es la vista revisada y, si el
+  servicio la emite, el token del subconjunto ejecutable de la página.
+- **Confirmar (#120)** es una acción APARTE y explícita (`POST /confirmar`): envía al servicio el token de esa página, y solo
+  ese, muestra el informe que devuelve y, si falla, dice qué se sabe y qué no. Vincula en su sitio: no mueve ni renombra
+  archivos, no crea la serie y no resuelve nada por la persona. Reutiliza `ejecutar_vinculacion` (la misma traducción de
+  fallos que `POST /api/revision/vinculacion`) y la recuperación ya fusionada (#116/#117): repetir el mismo token devuelve
+  el mismo informe.
 
 Los fallos recuperables se pintan dentro de la página con 200 (htmx no sustituye una respuesta 4xx).
 """
@@ -24,14 +29,21 @@ import json
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.api.revision import ejecutar_vinculacion
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.models import Series
 from zascarr.services.descubrimiento_grupo import GrupoNoEncontradoError
-from zascarr.services.tokens_revision import MAX_CLAVE_GRUPO
+from zascarr.services.tokens_revision import (
+    MAX_CLAVE_GRUPO,
+    MAX_TOKEN_VINCULACION,
+    verificar_token_vinculacion,
+)
 from zascarr.services.vinculacion_previa import (
     LIMITE_ARCHIVOS,
     ArchivoAjenoError,
@@ -220,10 +232,12 @@ async def abrir(
     request: Request,
     clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
     series_id: str = Query(default="", max_length=64),
+    cursor: str = Query(default="", max_length=2000),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Abre la preparación para un grupo y una serie LOCAL. Todo empieza sin marcar; no escribe nada."""
-    return await _revisar(request, db, clave, series_id, estado=Borrador(), cursor="", otros={}, avisos=[],
+    """Abre la preparación para un grupo y una serie LOCAL. Todo empieza sin marcar; no escribe nada. `cursor` (opcional)
+    es la posición de la página a la que se vuelve tras una confirmación: un cursor que no vale da la primera página."""
+    return await _revisar(request, db, clave, series_id, estado=Borrador(), cursor=cursor, otros={}, avisos=[],
                           pagina_completa=True)
 
 
@@ -261,3 +275,94 @@ def _entero(valor: object) -> int:
     except ValueError:
         return 0
     return n if n >= 0 else 0
+
+
+# ── Confirmar (#120) ─────────────────────────────────────────────────────────────────────────────
+
+#: Qué pasó con cada archivo omitido y qué se puede hacer con lo que el contrato ofrece (revisar de nuevo). El servicio
+#: devuelve solo el CÓDIGO; el texto es presentación. Un código que no esté aquí no se inventa: sale con su código.
+TEXTO_DE_MOTIVO: dict[str, str] = {
+    "archivo_inexistente": "El registro ya no existe: puede que se haya borrado o vinculado desde otro sitio.",
+    "descartado": "Lo descartaste de la bandeja de pendientes, así que no se vincula.",
+    "ya_vinculado_a_otro": "Ya estaba vinculado a otro número: no se cambia por ti.",
+    "en_curso": "Tiene una asignación en curso: espera a que termine y revísalo de nuevo.",
+    "origen_no_encontrado": "En la ruta registrada ya no hay ningún archivo. Si el disco no está montado, no es que haya desaparecido.",
+    "origen_no_verificable": "No se pudo comprobar el archivo (permisos, lectura o disco). No significa que haya desaparecido.",
+    "cambio_desde_la_vista_previa": "Cambió (tamaño o fecha) mientras revisabas: revísalo de nuevo para ver su estado actual.",
+    "colision_de_edicion": "Ese número ya existe en la serie como otra edición: no se elige una por ti.",
+    "numero_ambiguo": "La serie tiene más de un número así (volúmenes distintos): no se elige uno por ti.",
+    "numero_ya_existe": "Ese número ya tiene un archivo vinculado en la serie: no se pisa.",
+}
+
+#: Un fallo de la confirmación → (título, ¿es definitivo?, ¿se puede repetir con el MISMO token sin riesgo?). «Resultado
+#: desconocido» (`resultado_incierto`) y «definitivo» se distinguen; nunca se dice que se completó sin que el servicio lo
+#: haya confirmado. Repetir el mismo token es seguro: si ya se aplicó devuelve el mismo informe, si no, lo aplica.
+FALLOS: dict[str, tuple[str, bool, bool]] = {
+    "resultado_incierto": ("No se sabe si se llegó a vincular", False, True),
+    "conflicto_de_bloqueo": ("Otra operación coincidió y no se vinculó nada todavía", False, True),
+    "error_inesperado": ("No se pudo completar y no se ha cambiado nada", False, True),
+    "token_caducado": ("La preparación caducó", True, False),
+    "token_invalido": ("La preparación no es válida", True, False),
+    "la_serie_ya_no_existe": ("La serie ya no existe", True, False),
+}
+
+
+def _contexto_de_la_confirmacion(token: str) -> dict:
+    """Serie y grupo SALEN DEL TOKEN firmado (no de campos que reenvíe el navegador). Con el token inválido no hay nada."""
+    secreto = get_settings().secret_key
+    firmado = verificar_token_vinculacion(token, secreto, ignorar_caducidad=True) if secreto else None
+    if firmado is None:
+        return {"clave": "", "series_id": ""}
+    return {"clave": firmado.clave, "series_id": firmado.series_id}
+
+
+async def _titulo_de_la_serie(db: AsyncSession, series_id: str) -> str | None:
+    if not _es_uuid(series_id):
+        return None
+    fila = (await db.execute(select(Series.title, Series.start_year).where(Series.id == UUID(series_id)))).first()
+    if fila is None:
+        return None
+    return f"{fila[0]} ({fila[1]})" if fila[1] else fila[0]
+
+
+@router.post("/confirmar", response_class=HTMLResponse)
+async def confirmar(
+    request: Request,
+    token: str = Form(..., min_length=1, max_length=MAX_TOKEN_VINCULACION),
+    cursor_actual: str = Form(default=INICIO, max_length=2000),
+    pagina_desde: str = Form(default="", max_length=10),
+    pagina_hasta: str = Form(default="", max_length=10),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Confirma el lote de UNA página con SU token. Es la única acción de este asistente que escribe, y solo ocurre
+    aquí: abrir, revisar o paginar no la ejecutan. El token se envía tal cual al servicio: no se reconstruye nada."""
+    contexto = _contexto_de_la_confirmacion(token)
+    base = {**contexto, "cursor_actual": cursor_actual, "inicio": INICIO,
+            "pagina": f"{_entero(pagina_desde)}–{_entero(pagina_hasta)}" if _entero(pagina_hasta) else None}
+    plantilla = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_resultado.html"
+    base["titulo_serie"] = await _titulo_de_la_serie(db, contexto["series_id"])
+    try:
+        r = await ejecutar_vinculacion(db, token)
+    except HTTPException as e:
+        d = e.detail if isinstance(e.detail, dict) else {"codigo": "error_inesperado", "mensaje": str(e.detail)}
+        codigo = str(d.get("codigo", "error_inesperado"))
+        titulo, definitivo, repetible = FALLOS.get(codigo, ("No se pudo vincular", True, False))
+        mensaje = str(d.get("mensaje", ""))
+        if codigo == "token_caducado" and d.get("puede_haberse_aplicado"):
+            mensaje += " Vuelve a revisar los archivos para ver su estado actual antes de decidir nada."
+        return _sin_cache(templates.TemplateResponse(request, plantilla, {
+            **base, "resultado": True, "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje,
+                                                   "definitivo": definitivo, "repetible": repetible}, "token": token,
+            "r": None, "error": None}))
+    informe = r.resultado
+    nombres = r.presentacion.nombres_actuales
+    grupos: dict[str, list[dict]] = {"vinculado": [], "ya_estaba_vinculado": [], "omitido": []}
+    for a in informe.archivos:
+        grupos[a.estado].append({
+            "id": a.id, "nombre": nombres.get(a.id, "(archivo que ya no está en la lista)"), "numero": a.numero,
+            "motivo": a.motivo, "creado": a.issue_creado,
+            "texto": (TEXTO_DE_MOTIVO.get(a.motivo, f"No se pudo vincular (motivo: {a.motivo}).")
+                      if a.estado == "omitido" and a.motivo else None)})
+    return _sin_cache(templates.TemplateResponse(request, plantilla, {
+        **base, "resultado": True, "fallo": None, "r": r, "informe": informe, "grupos": grupos, "error": None,
+        "token": token}))
