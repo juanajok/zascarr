@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import json
 import os
+import time
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -43,6 +44,7 @@ from zascarr.models import (
     VinculacionOperacion,
 )
 from zascarr.services.tokens_revision import (
+    TTL_SEGUNDOS,
     ArchivoFirmado,
     VinculacionFirmada,
     clave_de_numero,
@@ -74,7 +76,24 @@ class TokenInvalidoError(VinculacionError):
 
 
 class TokenCaducadoError(VinculacionError):
+    """El token caducó y NO hay informe guardado: no se puede reconstruir lo que se iba a confirmar (#116, criterio 5).
+
+    `puede_haberse_aplicado`: si pudo llegar a aplicarse y su informe ya haberse purgado. El informe se escribe en la MISMA
+    transacción que los vínculos y se conserva `RETENCION_HORAS` desde su creación, que es posterior a la firma del token:
+    mientras no hayan pasado `RETENCION_HORAS` desde la firma, que no haya informe prueba que NO se aplicó. Pasado ese
+    tiempo ya no se puede saber."""
     codigo = "token_caducado"
+
+    def __init__(self, mensaje: str, *, puede_haberse_aplicado: bool):
+        super().__init__(mensaje)
+        self.puede_haberse_aplicado = puede_haberse_aplicado
+
+
+MENSAJE_CADUCADO_SIN_APLICAR = (
+    "El token caducó y esta operación no llegó a aplicarse: no hay informe ni cambios. Repite la vista previa.")
+MENSAJE_CADUCADO_SIN_INFORME = (
+    "El token caducó y ya no se conserva el informe de esta operación: no se puede saber si llegó a aplicarse ni "
+    "reconstruir lo que se iba a confirmar. Repite la vista previa: mostrará el estado actual de los archivos.")
 
 
 class SerieYaNoExisteError(VinculacionError):
@@ -196,7 +215,13 @@ class VinculacionDeArchivos:
             await db.commit()                      # (solo suelta el candado: aquí no se escribió nada)
             return respuesta
         if not vigente:
-            raise TokenCaducadoError("El token caducó: repite la vista previa.")
+            # Sin informe y con el token caducado. El informe de una operación aplicada sigue guardado al menos
+            # `RETENCION_HORAS` desde que se firmó el token; antes de eso, que no esté prueba que no se aplicó.
+            firma = firmado.caduca - TTL_SEGUNDOS
+            ahora = self._ahora if self._ahora is not None else time.time()
+            puede = ahora >= firma + RETENCION_HORAS * 3600
+            raise TokenCaducadoError(MENSAJE_CADUCADO_SIN_INFORME if puede else MENSAJE_CADUCADO_SIN_APLICAR,
+                                     puede_haberse_aplicado=puede)
 
         # 3. Rutas registradas y `stat` SOBRE ESAS rutas, antes de bloquear filas (sin retener bloqueos durante E/S).
         ids = [UUID(a.id) for a in firmado.archivos]
