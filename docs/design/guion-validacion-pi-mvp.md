@@ -306,8 +306,9 @@ V-36 (disco lleno) y V-53 (Pi con carga).
 
 ### Hallazgos del ensayo
 
-1. **El compose base publica Postgres y Redis en `127.0.0.1`** (5432 y 6379): una segunda pila en el mismo equipo chocaría
-   con producción. Por eso §4.2 usa `ports: !override []` (hace falta Compose ≥ 2.24).
+1. **El compose base publica Postgres en `127.0.0.1`** (5432; Redis dejó de publicarse, ver BACKLOG «Redis adoptado»): una
+   segunda pila en el mismo equipo chocaría con producción. Por eso §4.2 usa `ports: !override []` (hace falta Compose ≥ 2.24;
+   para Redis es ya un no-op inofensivo, pero cubre un checkout anterior).
 2. **Hay que migrar antes de usar la pila nueva**; si no, `/api/health` dice `migration_required` y la interfaz no sirve.
 3. **El estado `degraded` es normal** en la pila aislada (sin Transmission, aMule ni VPN); no es un fallo.
 4. **Dos CBZ iguales son duplicados**: una biblioteca de prueba con archivos idénticos no se registra como archivos distintos.

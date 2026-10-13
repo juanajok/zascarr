@@ -1765,6 +1765,39 @@ independiente de la Épica V** (no se arregla dentro de ninguna historia de UI):
   `/ui/`, `/ui/pendientes` y una ruta de `/api/`, con nombre del mecanismo (p. ej.
   `test_bd_caida_tras_arrancar_no_devuelve_500_crudo`).
 
+## Deuda técnica registrada (Redis adoptado por otro proceso del host, 2026-10-13)
+
+Encontrado al activar el cgroup de memoria en la Pi de producción (Raspberry Pi 5, 4 GB) para que se aplicaran los
+topes del compose.
+
+- **Síntoma medido:** con los topes ya aplicados, `zascarr-cache` entró en bucle de reinicios (`oom=true`, 8 reinicios
+  en minutos). Antes del tope usaba ~168 MiB frente a un límite de 128M; su `dump.rdb` pesaba 160 MB y Redis lo
+  recargaba entero en cada arranque.
+- **Causa:** el contenido no era de ZascArr. Una copia del dump, cargada en un Redis temporal aislado, tenía 7510 claves
+  y **todas** con prefijo `pcp` (compatible con Performance Co-Pilot; que PCP esté instalado en esa Pi **no se
+  verificó**, se infiere del prefijo). Ningún código de ZascArr, ni en `HEAD` ni en todo el histórico, importa un
+  cliente de Redis y `redis_url` no se lee en ninguna parte. El compose publicaba `127.0.0.1:6379`, y eso permitió que un
+  proceso local usara ese Redis.
+- **(a) Hecho — no publicar Redis en el host:** se quita `ports:` del servicio `redis`; ZascArr sigue llegando por
+  `redis://redis:6379/0` (red interna). Nada del repo consume el puerto del host (búsqueda de `6379`/`redis-cli`:
+  `rollback.sh` y la documentación entran por `docker compose exec redis`). Regresión:
+  `test_redis_no_se_publica_en_el_host_para_que_otro_proceso_no_lo_adopte`, que sustituye a la aserción que fijaba
+  `127.0.0.1:6379:6379`. Enmienda fechada en ADR 0004.
+  **Al desplegarlo en una instalación afectada:** `update.sh` solo hace `up -d zascarr`, que arrastra a Redis por
+  `depends_on`; si el `dump.rdb` heredado sigue ahí, Redis vuelve a morir por OOM al arrancar. Hay que **apartarlo**
+  (no borrarlo) antes: `mv <ZASCARR_DATA_DIR>/redis/dump.rdb <ZASCARR_DATA_DIR>/redis/dump.rdb.ajeno`.
+- **(b) Decisión pendiente (ADR): ¿se retira Redis del stack?** Evidencia: no hay cliente en el código (`redis` y
+  `arq` están en `pyproject.toml` sin uso), el compose lo levanta con 128M de presupuesto, `rollback.sh` lo vacía y
+  `uninstall.sh` lo borra. Toca la línea del stack de `CLAUDE.md` §1 y exige ADR (§3.1.5). Antes de decidir:
+  confirmar que ninguna historia prevista (trabajos en cola con `arq`, caché de fuentes) lo va a necesitar.
+- **Documentación incorrecta detectada, pendiente de corregir con (b):** `CLAUDE.md` §4 dice que el refresco periódico
+  del orchestrator/importer usa Redis como canal, y `services/comic_vine.py` documenta «cacheadas en Redis 24h»; el
+  código no hace ninguna de las dos cosas.
+- **Relacionado, sin cambio de repo:** en Raspberry Pi OS el kernel arranca con el controlador de memoria
+  desactivado y Docker **descarta en silencio** los límites de `deploy.resources.limits` («Limitation discarded»).
+  Hay que activarlo (`cgroup_enable=memory cgroup_memory=1` en `cmdline.txt`) **y recrear** los contenedores, porque
+  el límite se descarta al *crearlos*. Pendiente de valorar: que el instalador lo detecte y lo avise.
+
 ## Benchmarking competitivo (2026-09-21)
 
 Comparado contra tres proyectos del mismo espacio para no reinventar ni
