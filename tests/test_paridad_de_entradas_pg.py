@@ -1,6 +1,6 @@
 # ruff: noqa: E501, F401, F811
 """Paridad de las entradas que crean o renombran una serie (#113, criterio «una colisión por otra entrada no elude la
-comprobación»): sobre Postgres real, con los MISMOS datos, el alta con grupo (API), el alta sin grupo (servicio), Descubrir
+comprobación»): sobre Postgres real, con los MISMOS datos, el alta con grupo (API), el alta sin grupo (servicio y API sin carpeta), Descubrir
 (UI, dos pasos) y `PATCH` ven EXACTAMENTE las mismas series parecidas y ninguna crea ni cambia nada en silencio.
 
 **Excepción declarada (A1):** `POST /api/series` no participa: no detecta colisiones y está obsoleto (I3), su retirada es de
@@ -85,6 +85,13 @@ async def por_alta_con_grupo(anio, tradicion) -> set[str]:
     return {p["series_id"] for p in r.json()["parecidas"]}
 
 
+async def por_alta_api_sin_carpeta(anio, tradicion) -> set[str]:
+    r = await post("/api/revision/serie/sin-carpeta/previsualizar",
+                   {"manual": {"titulo": "Saga del Faro", "anio": anio}, "tradicion": tradicion})
+    assert r.status_code == 200, r.text
+    return {p["series_id"] for p in r.json()["parecidas"]}
+
+
 async def por_alta_sin_grupo(entorno, anio, tradicion) -> set[str]:
     async with entorno.banco.fabrica() as s:
         v = await AltaDeSerie(s, secret=SECRETO).previsualizar_sin_grupo(
@@ -121,6 +128,7 @@ class TestLasCuatroEntradasVenLasMismasParecidas:
         resultados = {
             "alta con grupo (API)": await por_alta_con_grupo(anio, tradicion),
             "alta sin grupo (servicio)": await por_alta_sin_grupo(entorno, anio, tradicion),
+            "alta por API sin carpeta": await por_alta_api_sin_carpeta(anio, tradicion),
             "Descubrir (UI)": await por_descubrir(monkeypatch, anio, tradicion),
             "PATCH": await por_patch(entorno, anio, tradicion),
         }

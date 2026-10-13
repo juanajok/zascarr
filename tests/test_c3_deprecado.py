@@ -28,8 +28,9 @@ class TestMarcadoComoObsoleto:
 
     def test_la_descripcion_dice_que_no_ofrece_las_garantias_del_alta(self):
         descripcion = _operaciones()[RUTA]["post"]["description"]
-        assert "G1–G8" in descripcion and "alta por token" in descripcion and "carpeta" in descripcion
+        assert "G1–G8" in descripcion and "alta por token" in descripcion
         assert "/api/revision/serie" in descripcion
+        assert "/api/revision/serie/sin-carpeta/previsualizar" in descripcion       # el sustituto existe y se nombra
 
     def test_el_resto_de_operaciones_de_series_no_cambia(self):
         paths = _operaciones()

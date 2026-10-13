@@ -56,6 +56,7 @@ from zascarr.services.tokens_revision import (
     MAX_TITULO,
     MAX_TOKEN_ALTA,
     MAX_TOKEN_CANDIDATA,
+    MAX_TOKEN_CANDIDATA_SIN_GRUPO,
     MAX_TOKEN_VINCULACION,
 )
 from zascarr.services.vinculacion import (
@@ -174,6 +175,20 @@ class PeticionPrevisualizarAlta(BaseModel):
     serie_id: UUID | None = None
 
 
+class PeticionPrevisualizarAltaSinCarpeta(BaseModel):
+    """Lo mismo que `PeticionPrevisualizarAlta`, **sin `clave`**: el alta no parte de una carpeta con archivos pendientes
+    (I6 de #114: es el sustituto de `POST /api/series`). Los datos a mano son título y año; para los demás campos de la
+    serie (descripción, portada, estado, total de números) se usa después `PATCH /api/series/{id}`. La candidata, si se
+    da, es la que firmó el servidor con el contexto sin carpeta (Descubrir); una candidata de un grupo no vale aquí."""
+    model_config = ConfigDict(extra="forbid")
+
+    candidata: str | None = Field(default=None, max_length=MAX_TOKEN_CANDIDATA_SIN_GRUPO)
+    manual: DatosManualesIn | None = None
+    tradicion: ComicTradition
+    decision: Literal["reutilizar", "crear_igualmente"] | None = None
+    serie_id: UUID | None = None
+
+
 class PeticionConfirmarAlta(BaseModel):
     """La confirmación recibe SOLO el token: nada de título, año, tradición ni identificadores sueltos."""
     model_config = ConfigDict(extra="forbid")
@@ -212,6 +227,26 @@ async def previsualizar_alta(
             decision=peticion.decision, serie_id=peticion.serie_id)
     except GrupoNoEncontradoError:
         raise HTTPException(status_code=404, detail="No hay registros pendientes en esa carpeta.") from None
+    except AltaError as e:
+        raise _error(422, e, str(e)) from None
+
+
+@router.post("/serie/sin-carpeta/previsualizar", response_model=VistaPreviaAlta)
+async def previsualizar_alta_sin_carpeta(
+    peticion: PeticionPrevisualizarAltaSinCarpeta, response: Response, db: AsyncSession = Depends(get_db),
+) -> VistaPreviaAlta:
+    """Qué pasaría al dar de alta una serie **sin carpeta de origen** (p. ej. una serie vacía por API). Solo lectura.
+
+    Mismo contrato que `/serie/previsualizar`: tradición elegida (sin valor por defecto), coincidencia exacta por
+    identificador, parecidas que decide la persona, y la confirmación y el deshacer son los de siempre
+    (`POST /serie` con el token y `POST /serie/{id}/deshacer`)."""
+    response.headers["Cache-Control"] = "no-store"
+    servicio = AltaDeSerie(db, secret=_secreto())
+    manual = DatosManuales(peticion.manual.titulo, peticion.manual.anio) if peticion.manual else None
+    try:
+        return await servicio.previsualizar_sin_grupo(
+            tradicion=peticion.tradicion, candidata=peticion.candidata, manual=manual,
+            decision=peticion.decision, serie_id=peticion.serie_id)
     except AltaError as e:
         raise _error(422, e, str(e)) from None
 
