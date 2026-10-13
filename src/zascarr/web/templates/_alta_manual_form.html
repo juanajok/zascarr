@@ -1,0 +1,24 @@
+{#- Alta a MANO (#189): título, año opcional y tradición elegida, sin consultar ninguna fuente. Lo comparten «Crear a mano» de
+    Descubrir (sin carpeta) y el asistente de una carpeta (con `clave`). Envía a la MISMA vista previa del alta que usa
+    Descubrir; escribir aquí no crea nada. -#}
+<div class="alta-paso">
+  {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
+  <form class="asistente-form" hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
+    {% if clave %}<input type="hidden" name="clave" value="{{ clave }}">{% endif %}
+    <label for="manual-titulo">Título de la serie</label>
+    <input id="manual-titulo" type="text" name="titulo" maxlength="500" required value="{{ titulo }}">
+    <label for="manual-anio">Año de inicio (opcional)</label>
+    <input id="manual-anio" type="text" inputmode="numeric" name="anio" maxlength="4" value="{{ anio }}" placeholder="1987">
+    <label for="manual-tradicion">Tradición</label>
+    <select id="manual-tradicion" name="tradition" required>
+      <option value=""{% if not tradicion_elegida %} selected{% endif %} disabled>Elige la tradición…</option>
+      {% for value, label in tradiciones %}
+      <option value="{{ value }}"{% if value == tradicion_elegida %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    {% if pista %}<small>La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}. Tú decides.</small>{% endif %}
+    <p class="caption">Solo el título y la tradición son necesarios. No se inventa nada más (editorial, país, idioma…).
+      Lo escrito aquí no crea nada hasta que lo revises y lo confirmes.</p>
+    <div class="discovery-card-actions"><button type="submit">Revisar lo que se creará</button></div>
+  </form>
+</div>

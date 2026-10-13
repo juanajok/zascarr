@@ -1,19 +1,2 @@
-<div class="asistente-paso">
-  {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
-  <form class="asistente-form" hx-post="/ui/pendientes/carpetas/asistente/elegir" hx-target="closest .asistente-paso" hx-swap="outerHTML">
-    <input type="hidden" name="clave" value="{{ clave }}">
-    <label for="manual-titulo">Título de la serie</label>
-    <input id="manual-titulo" type="text" name="titulo" maxlength="500" required value="{{ titulo }}">
-    <label for="manual-anio">Año de inicio (opcional)</label>
-    <input id="manual-anio" type="text" inputmode="numeric" name="anio" maxlength="4" value="{{ anio }}" placeholder="1987">
-    <label for="manual-tradicion">Tradición</label>
-    <select id="manual-tradicion" name="tradition" required>
-      <option value="" selected disabled>Elige la tradición…</option>
-      {% for value, label in tradiciones %}
-      <option value="{{ value }}">{{ label }}</option>
-      {% endfor %}
-    </select>
-    {% if pista %}<small>La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}. Tú decides.</small>{% endif %}
-    <div class="discovery-card-actions"><button type="submit">Anotar esta serie</button></div>
-  </form>
-</div>
+{#- El formulario a mano del asistente de una carpeta ES el de #189: envía a la vista previa del alta con la `clave`. -#}
+{% include "_alta_manual_form.html" %}

@@ -361,43 +361,16 @@ class TestCriterio6Manual:
         assert 'name="titulo"' in t and f'name="clave" value="{CARPETA}"' in t
         assert entorno.fuentes.llamadas == []
 
-    async def test_funciona_sin_clave_de_firma_ni_fuentes(self, entorno, monkeypatch):
-        """Sin credenciales ni conexión: ni siquiera hace falta la clave del servidor para firmar."""
+    async def test_se_abre_sin_clave_de_firma_ni_fuentes_y_envia_a_la_vista_previa_del_alta(self, entorno, monkeypatch):
+        """Abrir el formulario no necesita ninguna credencial. Desde #189 envía a la vista previa del alta (la misma de
+        Descubrir), que es la que firma y por tanto la que necesita la clave del servidor: se prueba en `test_alta_manual_pg`."""
         await sembrar_flash(entorno.banco)
         monkeypatch.setattr(asistente_carpetas, "get_settings", lambda: SimpleNamespace(secret_key=""))
         assert (await abrir()).status_code == 200
-        assert (await manual()).status_code == 200
-        r = await elegir(titulo="Flash", anio="1987", tradition="american")
-        assert "Elección anotada" in visible(r.text) and "Creada a mano" in visible(r.text)
+        r = await manual()
+        assert r.status_code == 200 and 'hx-post="/ui/descubrir/revisar"' in r.text
+        assert 'name="titulo"' in r.text and 'name="tradition"' in r.text and f'name="clave" value="{CARPETA}"' in r.text
         assert entorno.fuentes.llamadas == []
-
-    async def test_anota_titulo_anio_y_tradicion_explicita_sin_crear_la_serie(self, entorno):
-        await sembrar_flash(entorno.banco)
-        antes = await estado_de_la_base(entorno.banco)
-        r = await elegir(titulo="  Flash  ", anio="1987", tradition="american")
-        v = visible(r.text)
-        assert "Elección anotada" in v and "Flash (1987)" in v and CARPETA in v
-        assert re.search(r"Tradición elegida\s*Grapa americana", v)
-        assert await estado_de_la_base(entorno.banco) == antes
-
-    @pytest.mark.parametrize("datos,mensaje", [
-        ({"titulo": "", "tradition": "american"}, "Escribe el título"),
-        ({"titulo": "Flash", "anio": "mil novecientos", "tradition": "american"}, "El año debe ser un número"),
-        ({"titulo": "Flash", "anio": "1500", "tradition": "american"}, "entre 1800 y 2100"),
-        ({"titulo": "Flash", "anio": "1987"}, "Elige la tradición antes de continuar"),
-        ({"titulo": "Fla\x00sh", "tradition": "american"}, "caracteres que no se pueden guardar"),
-    ])
-    async def test_los_datos_invalidos_se_explican_y_no_se_anota_nada(self, entorno, datos, mensaje):
-        await sembrar_flash(entorno.banco)
-        r = await elegir(**datos)
-        v = visible(r.text)
-        assert r.status_code == 200 and mensaje in v and "Elección anotada" not in v
-        assert 'name="titulo"' in r.text                                          # y el formulario sigue ahí
-
-    async def test_el_titulo_escrito_se_escapa(self, entorno):
-        await sembrar_flash(entorno.banco)
-        r = await elegir(titulo="<img src=x onerror=alert(1)>", tradition="american")
-        assert "<img src=x" not in r.text and "&lt;img" in r.text
 
 
 # ── 7. Atribución de las señales ────────────────────────────────────────────────────────────────

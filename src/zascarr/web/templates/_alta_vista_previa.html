@@ -1,7 +1,13 @@
 {#- Paso 1 de Descubrir (revisar): lo que pasaría, SIN escribir nada. Sustituye SOLO el paso (`.alta-paso`): la cabecera de la tarjeta, con la ficha original, se conserva. `vista` es la
-    `VistaPreviaAlta` del servicio; `candidata` y `tradicion` se reenvían para poder revisar de nuevo. -#}
+    `VistaPreviaAlta` del servicio; `campos_origen` (la candidata firmada, o el título y el año escritos a mano) y `tradicion` se reenvían para poder revisar de nuevo. -#}
 <div class="alta-paso">
+  {% if vista.accion == "reutilizar" and vista.existente %}
+  <p>Se usará la serie que ya tienes: <strong>«{{ vista.existente.titulo }}»{% if vista.existente.anio %} ({{ vista.existente.anio }}){% endif %}</strong>, sin modificarla.</p>
+  {% else %}
   <p>Se guardará como <strong>«{{ vista.titulo }}»{% if vista.anio %} ({{ vista.anio }}){% endif %}</strong>. Tradición elegida: <strong>{{ tradicion_etiqueta }}</strong>.</p>
+  {% endif %}
+  {% if vista.origen == "manual" %}<p class="caption">Datos escritos por ti (origen «manual»): no viene de ninguna fuente y no se completa con nada.</p>{% endif %}
+  {% if clave %}<p class="caption">Parte de la carpeta «{{ clave }}». Crear la serie no vincula ningún archivo.</p>{% endif %}
   {{ ui.aviso("info", vista.resumen) }}
 
   {% if vista.existente %}
@@ -14,7 +20,7 @@
     {% for p in vista.parecidas %}
     <li>
       <form class="assign-form" hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
-        <input type="hidden" name="candidata" value="{{ candidata }}">
+        {% for n, v in campos_origen %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
         <input type="hidden" name="tradition" value="{{ tradicion }}">
         <input type="hidden" name="decision" value="reutilizar">
         <input type="hidden" name="serie_id" value="{{ p.series_id }}">
@@ -25,7 +31,7 @@
     {% endfor %}
   </ul>
   <form hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
-    <input type="hidden" name="candidata" value="{{ candidata }}">
+    {% for n, v in campos_origen %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="tradition" value="{{ tradicion }}">
     <input type="hidden" name="decision" value="crear_igualmente">
     <div class="discovery-card-actions"><button type="submit">Es distinta: crear otra</button></div>
@@ -33,7 +39,7 @@
   {% else %}
   <form hx-post="/ui/descubrir/crear" hx-target="closest .alta-paso" hx-swap="outerHTML">
     <input type="hidden" name="token" value="{{ vista.token }}">
-    <input type="hidden" name="candidata" value="{{ candidata }}">
+    {% for n, v in campos_origen %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="tradition" value="{{ tradicion }}">
     <div class="discovery-card-actions">
       <button type="submit">{% if vista.accion == "crear" %}Crear serie vacía{% else %}Usar esta serie{% endif %}</button>
@@ -42,7 +48,7 @@
   {% endif %}
 
   <form hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
-    <input type="hidden" name="candidata" value="{{ candidata }}">
+    {% for n, v in campos_origen %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <div class="discovery-card-actions">
       <select name="tradition" required aria-label="Cambiar la tradición">
         {% for value, label in tradiciones %}

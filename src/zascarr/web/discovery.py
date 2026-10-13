@@ -28,12 +28,20 @@ from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.alta_serie import (
     AltaDeSerie,
     AltaError,
+    DatosManuales,
     NoSePuedeDeshacerError,
     ParecidasNuevasError,
 )
+from zascarr.services.descubrimiento_grupo import GrupoNoEncontradoError
 from zascarr.services.descubrimiento_libre import firmar_resultados
 from zascarr.services.discovery import DiscoveryService
-from zascarr.services.tokens_revision import MAX_TOKEN_ALTA, MAX_TOKEN_CANDIDATA_SIN_GRUPO
+from zascarr.services.tokens_revision import (
+    MAX_CLAVE_GRUPO,
+    MAX_TITULO,
+    MAX_TOKEN_ALTA,
+    MAX_TOKEN_CANDIDATA_SIN_GRUPO,
+    grupo_de_un_token,
+)
 from zascarr.utils.cover import cached_image_response, fetch_and_cache_cover
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
@@ -75,7 +83,9 @@ def _cover_host_allowed(url: str, source: MetadataSource) -> bool:
 @router.get("", response_class=HTMLResponse)
 async def index(request: Request, q: str = Query(default="", max_length=200)) -> HTMLResponse:
     """`?q=` (V4: «Buscar una serie» del Inicio) prellena la caja y lanza la búsqueda al cargar."""
-    return templates.TemplateResponse(request, "descubrir.html", {"q": q.strip()})
+    return templates.TemplateResponse(request, "descubrir.html", {
+        "q": q.strip(), "clave": None, "titulo": "", "anio": "", "error": None, "tradicion_elegida": "",
+        "tradiciones": _tradiciones(), "pista": None})
 
 
 def _tradiciones() -> list[tuple[str, str]]:
@@ -154,28 +164,93 @@ def _error(request: Request, texto: str, **extra) -> HTMLResponse:
     return templates.TemplateResponse(request, "_alta_error.html", {"texto": texto, **extra})
 
 
+def _campos_de_origen(candidata: str | None, titulo: str | None, anio: int | None, clave: str | None) -> list[tuple[str, str]]:
+    """Lo que hay que reenviar para poder REVISAR DE NUEVO: la candidata firmada, o los datos escritos a mano (y el grupo
+    del que se parte, si lo hay). La persona los escribió; lo que ejecuta la confirmación sigue siendo solo el token."""
+    if candidata:
+        return [("candidata", candidata)]
+    campos = [("titulo", titulo or ""), ("anio", "" if anio is None else str(anio))]
+    if clave:
+        campos.append(("clave", clave))
+    return campos
+
+
+def _anio_de(texto: str | None) -> int | None:
+    """El año escrito a mano: vacío = sin año. Lo demás tiene que ser un número; el rango lo valida el servicio."""
+    t = (texto or "").strip()
+    if not t:
+        return None
+    try:
+        return int(t)
+    except ValueError:
+        raise ValueError("El año debe ser un número (por ejemplo, 1987) o dejarse en blanco.") from None
+
+
+def _formulario_a_mano(request: Request, *, clave: str | None, titulo: str, anio: str, error: str | None,
+                       tradicion: str = "") -> HTMLResponse:
+    """El formulario de alta a mano, con el motivo del error y lo que la persona había escrito (nada se pierde)."""
+    return templates.TemplateResponse(request, "_alta_manual_form.html", {
+        "clave": clave, "titulo": titulo, "anio": anio, "error": error, "tradicion_elegida": tradicion,
+        "tradiciones": _tradiciones(), "pista": None})
+
+
 @router.post("/revisar", response_class=HTMLResponse)
 async def revisar(
     request: Request,
-    candidata: str = Form(..., min_length=1, max_length=MAX_TOKEN_CANDIDATA_SIN_GRUPO),
+    candidata: str | None = Form(default=None, max_length=MAX_TOKEN_CANDIDATA_SIN_GRUPO),
+    titulo: str | None = Form(default=None, max_length=MAX_TITULO),
+    anio: str | None = Form(default=None, max_length=100),
+    clave: str | None = Form(default=None, max_length=MAX_CLAVE_GRUPO),
     tradition: ComicTradition = Form(...),
     decision: Literal["reutilizar", "crear_igualmente"] | None = Form(default=None),
     serie_id: UUID | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Paso 1: la vista previa de lo que pasaría. NO escribe nada. La tradición la elige la persona (sin valor por defecto)."""
+    """Paso 1: la vista previa de lo que pasaría. NO escribe nada. La tradición la elige la persona (sin valor por defecto).
+
+    Dos orígenes, ninguno consulta fuentes en este paso: una candidata firmada al buscar (Descubrir) o los datos a mano
+    —título, año opcional y tradición—, con o sin la carpeta de la que se parte (`clave`). #189."""
     servicio = _servicio(db)
+    a_mano = not candidata
     if servicio is None:
         return _fragmento_sin_clave(request)
+    elegida = tradition
+    anio_valor: int | None = None
+    if a_mano:
+        try:
+            anio_valor = _anio_de(anio)
+        except ValueError as exc:
+            return _formulario_a_mano(request, clave=clave, titulo=titulo or "", anio=anio or "", error=str(exc),
+                                      tradicion=elegida.value)
     try:
-        vista = await servicio.previsualizar_sin_grupo(
-            tradicion=tradition, candidata=candidata, decision=decision, serie_id=serie_id)
+        if a_mano:
+            datos = DatosManuales(titulo=titulo or "", anio=anio_valor)
+            if clave:
+                vista = await servicio.previsualizar(clave, tradicion=elegida, manual=datos, decision=decision,
+                                                     serie_id=serie_id)
+            else:
+                vista = await servicio.previsualizar_sin_grupo(
+                    tradicion=elegida, manual=datos, decision=decision, serie_id=serie_id)
+        else:
+            vista = await servicio.previsualizar_sin_grupo(
+                tradicion=elegida, candidata=candidata, decision=decision, serie_id=serie_id)
+    except GrupoNoEncontradoError:
+        return _error(request, "Esa carpeta ya no tiene registros pendientes: la serie se puede crear desde Descubrir.")
     except AltaError as exc:
+        if a_mano and getattr(exc, "codigo", "") in ("datos_invalidos", "demasiadas_parecidas"):
+            return _formulario_a_mano(request, clave=clave, titulo=titulo or "", anio=anio or "",
+                                      error=_texto_de(exc), tradicion=elegida.value)
         return _error(request, _texto_de(exc))
     return templates.TemplateResponse(request, "_alta_vista_previa.html", {
-        "vista": vista, "candidata": candidata, "tradicion": tradition.value,
-        "tradicion_etiqueta": _TRADICION_LABEL[tradition], "tradiciones": _tradiciones(),
+        "vista": vista, "campos_origen": _campos_de_origen(candidata, vista.titulo, vista.anio, clave),
+        "tradicion": elegida.value, "tradicion_etiqueta": _TRADICION_LABEL[elegida], "tradiciones": _tradiciones(),
+        "clave": clave if a_mano else None,
     })
+
+
+MENSAJE_RESULTADO_DESCONOCIDO = (
+    "No se sabe si la serie llegó a crearse. No la des por hecha ni por fallida: comprueba el resultado. Repetirlo es "
+    "seguro: si ya se creó verás la misma serie y no se duplica.")
 
 
 @router.post("/crear", response_class=HTMLResponse)
@@ -183,22 +258,41 @@ async def crear(
     request: Request,
     token: str = Form(..., min_length=1, max_length=MAX_TOKEN_ALTA),
     candidata: str | None = Form(default=None, max_length=MAX_TOKEN_CANDIDATA_SIN_GRUPO),
+    titulo: str | None = Form(default=None, max_length=MAX_TITULO),
+    anio: str | None = Form(default=None, max_length=100),
+    clave: str | None = Form(default=None, max_length=MAX_CLAVE_GRUPO),
     tradition: ComicTradition | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Paso 2: ejecuta EXACTAMENTE lo que enseñó la vista previa (solo el token). Ya no acepta los datos de la serie."""
+    """Paso 2: ejecuta EXACTAMENTE lo que enseñó la vista previa (solo el token). Ya no acepta los datos de la serie.
+
+    Escribe como mucho UNA fila de `series` y su comprobante; no vincula ni toca archivos. Si el alta parte de una carpeta
+    (el grupo va DENTRO del token firmado), el resultado ofrece pasar a la revisión de archivos (#119), que tiene su propia
+    confirmación; sin carpeta dice que no hay nada que vincular."""
     servicio = _servicio(db)
     if servicio is None:
         return _fragmento_sin_clave(request)
     try:
+        anio_valor = _anio_de(anio)
+    except ValueError:
+        anio_valor = None
+    origen = _campos_de_origen(candidata, titulo, anio_valor, clave)
+    try:
         resultado = await servicio.confirmar(token)
     except ParecidasNuevasError as exc:
         return _error(request, "Han aparecido series parecidas desde la vista previa: revísalas y decide de nuevo.",
-                      parecidas=exc.nuevas, candidata=candidata, tradicion=tradition.value if tradition else None,
-                      tradiciones=_tradiciones())
+                      parecidas=exc.nuevas, campos_origen=origen,
+                      tradicion=tradition.value if tradition else None, tradiciones=_tradiciones(), clave=clave)
     except AltaError as exc:
         return _error(request, _texto_de(exc))
-    return templates.TemplateResponse(request, "_alta_resultado.html", {"r": resultado})
+    except Exception:
+        # Un fallo que no es del contrato (la conexión, p. ej.): no se sabe si se llegó a crear. El mismo token es
+        # idempotente (comprobante en `alta_operaciones`): repetirlo devuelve la serie o la crea UNA vez.
+        return templates.TemplateResponse(request, "_alta_error.html", {
+            "texto": MENSAJE_RESULTADO_DESCONOCIDO, "reintentar_token": token, "campos_origen": origen,
+            "tradicion": tradition.value if tradition else None, "clave": clave})
+    grupo = grupo_de_un_token(token, get_settings().secret_key)
+    return templates.TemplateResponse(request, "_alta_resultado.html", {"r": resultado, "grupo": grupo})
 
 
 _MOTIVOS_DE_NO_DESHACER = {

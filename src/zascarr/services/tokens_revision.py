@@ -254,6 +254,14 @@ def _contexto_del_token(token: str, secret: str) -> str | None:
     return contexto if isinstance(contexto, str) and contexto else None
 
 
+def grupo_de_un_token(token: str, secret: str) -> str | None:
+    """La clave del GRUPO de carpeta con la que se firmó un token (el de alta, el de candidata…), o `None` si no tiene
+    grupo (`CLAVE_SIN_GRUPO`) o la firma no vale. Solo LEE el contexto firmado —no comprueba propósito ni caducidad—:
+    sirve para decidir a dónde llevar a la persona tras una confirmación, nunca para autorizar nada."""
+    clave = _contexto_del_token(token, secret)
+    return None if clave is None or clave == CLAVE_SIN_GRUPO else clave
+
+
 def _uuid_texto(v: object) -> bool:
     if not isinstance(v, str):
         return False
