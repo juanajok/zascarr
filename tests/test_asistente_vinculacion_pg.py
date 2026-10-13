@@ -101,7 +101,7 @@ class Pagina:
 
     @property
     def token(self) -> str | None:
-        m = re.search(r'class="lote-listo" data-token="([^"]+)"', self.t)
+        m = re.search(r'class="card lote-listo" data-token="([^"]+)"', self.t)
         return m.group(1) if m else None
 
     def oculto(self, nombre: str) -> str:

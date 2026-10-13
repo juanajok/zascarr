@@ -115,18 +115,7 @@
       <li data-total="a_vincular">{{ ui.chip("ok" if r.totales.a_vincular else "neutro", r.totales.a_vincular ~ " a vincular") }}</li>
       <li data-total="marcados_bloqueados">{{ ui.chip("warn" if r.totales.marcados_bloqueados else "neutro", r.totales.marcados_bloqueados ~ " marcados bloqueados") }}</li>
     </ul>
-    {% if r.token %}
-    <div class="lote-listo" data-token="{{ r.token }}" data-n="{{ incluidos | length }}">
-      {{ ui.aviso("ok", "Lote preparado: " ~ (incluidos | length) ~ " archivo" ~ ("s" if incluidos | length != 1) ~ " de esta página. Todavía no se ha vinculado nada.") }}
-      <p>Entra en el lote:</p>
-      <ul>{% for a in incluidos %}<li class="nombre-archivo">{{ a.nombre }} — número {{ a.numero }}</li>{% endfor %}</ul>
-      {% if excluidos %}
-      <p>Marcados pero <strong>fuera del lote</strong>:</p>
-      <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ a.texto }}</li>{% endfor %}</ul>
-      {% endif %}
-      <p class="caption">El paso siguiente —confirmar la vinculación— todavía no está disponible en esta pantalla.</p>
-    </div>
-    {% else %}
+    {% if not r.token %}
     {{ ui.aviso("info", r.motivo_sin_token) }}
     {% if excluidos %}
     <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ a.texto }}</li>{% endfor %}</ul>
@@ -134,5 +123,30 @@
     {% endif %}
   </section>
 </form>
+
+{% if r.token %}
+<section class="card lote-listo" data-token="{{ r.token }}" data-n="{{ incluidos | length }}" aria-labelledby="vinc-lote">
+  <h3 id="vinc-lote">Lote preparado</h3>
+  {{ ui.aviso("ok", "Lote preparado: " ~ (incluidos | length) ~ " archivo" ~ ("s" if incluidos | length != 1) ~ " de esta página. Todavía no se ha vinculado nada.") }}
+  <p>Entra en el lote:</p>
+  <ul>{% for a in incluidos %}<li class="nombre-archivo">{{ a.nombre }} — número {{ a.numero }}</li>{% endfor %}</ul>
+  {% if excluidos %}
+  <p>Marcados pero <strong>fuera del lote</strong>:</p>
+  <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ a.texto }}</li>{% endfor %}</ul>
+  {% endif %}
+  <form class="vinculacion-confirmar" method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/confirmar"
+        hx-post="/ui/pendientes/carpetas/asistente/vinculacion/confirmar" hx-target="#revision" hx-swap="outerHTML"
+        hx-disabled-elt="find button">
+    <input type="hidden" name="token" value="{{ r.token }}">
+    <input type="hidden" name="cursor_actual" value="{{ cursor_actual }}">
+    <input type="hidden" name="pagina_desde" value="{{ r.pagina.desde }}">
+    <input type="hidden" name="pagina_hasta" value="{{ r.pagina.hasta }}">
+    <p class="caption">Al pulsar «Vincular», estos {{ incluidos | length }} archivo{{ "s" if incluidos | length != 1 }} quedarán vinculados a
+      «{{ s.titulo }}» <strong>en su sitio</strong>: conservan su nombre y su carpeta, no se mueve ni se renombra nada y no
+      se crea ninguna serie. Es una acción distinta de revisar: hasta que la pulses, no cambia nada.</p>
+    <button type="submit">Vincular {{ incluidos | length }} archivo{{ "s" if incluidos | length != 1 }}</button>
+  </form>
+</section>
+{% endif %}
 {% endif %}
 </div>
