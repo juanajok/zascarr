@@ -201,10 +201,15 @@ class TestComposePublicaElPuerto:
                 servicios[actual].append(p.group(1))
         return servicios
 
-    def test_postgres_y_redis_siguen_fijos_en_localhost(self):
-        puertos = self._puertos()
-        assert puertos["postgres"] == ["127.0.0.1:5432:5432"]
-        assert puertos["redis"] == ["127.0.0.1:6379:6379"]
+    def test_postgres_sigue_fijo_en_localhost(self):
+        assert self._puertos()["postgres"] == ["127.0.0.1:5432:5432"]
+
+    def test_redis_no_se_publica_en_el_host_para_que_otro_proceso_no_lo_adopte(self):
+        """Regresión: con `127.0.0.1:6379` publicado, un proceso ajeno del host (PCP) lo usó y
+        volcó ~160 MB; con el tope de 128M aplicado, Redis recargaba el dump, el kernel lo
+        mataba y entraba en bucle de reinicios. ZascArr llega por la red interna de Docker:
+        no necesita puerto en el host."""
+        assert self._puertos()["redis"] == []
 
     def test_la_app_usa_la_variable_con_localhost_por_defecto(self):
         assert self._puertos()["zascarr"] == ["${ZASCARR_BIND_ADDRESS:-127.0.0.1}:8000:8000"]

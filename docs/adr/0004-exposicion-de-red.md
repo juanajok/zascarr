@@ -32,6 +32,10 @@ habría dejado todo eso al alcance de cualquier dispositivo de la red.
 8000, y Postgres (5432) y Redis (6379), que además **no deben ser alcanzables
 desde la red en ningún caso** — no son para el operador, son de la aplicación.
 
+> **Enmienda (2026-10-13):** Redis **ya no se publica ni en `127.0.0.1`**: la aplicación lo alcanza por la red interna
+> de Docker y publicarlo en el host dejó que otro proceso local lo adoptara (BACKLOG, «Redis adoptado por otro proceso
+> del host»). Es más estricto que lo decidido aquí, no más laxo: nada de lo que protege este ADR cambia.
+
 Abrir a la LAN es una acción **explícita** del operador, con un modelo de acceso
 escalonado:
 
@@ -65,8 +69,8 @@ abierta por defecto.
 
 ## Referencias
 
-- `docker-compose.yml` — Postgres y Redis fijos en `127.0.0.1`; el de la aplicación
-  vale `${ZASCARR_BIND_ADDRESS:-127.0.0.1}` (A11).
+- `docker-compose.yml` — Postgres fijo en `127.0.0.1` y Redis sin publicar (enmienda de arriba); el de la
+  aplicación vale `${ZASCARR_BIND_ADDRESS:-127.0.0.1}` (A11).
 - ADR 0001 (`docs/adr/0001-ui-stack.md`) — mismo patrón de decisión.
 - A6 y A11 en `docs/BACKLOG.md` — autenticación/reverse proxy y la elección
   explícita pendiente.

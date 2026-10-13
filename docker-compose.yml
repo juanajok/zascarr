@@ -54,8 +54,9 @@ services:
     networks:
       - zascarr-internal
     command: redis-server --save 60 1 --loglevel warning
-    ports:
-      - "127.0.0.1:6379:6379"
+    # Sin `ports:` a propósito: ZascArr llega a Redis por la red interna (`redis://redis:6379`). Publicarlo en
+    # 127.0.0.1 dejó que un proceso ajeno del host lo adoptara (caso real: ~160 MB de series de PCP; con el tope
+    # de 128M aplicado, Redis entraba en bucle de reinicios por OOM al recargar el dump). Ver BACKLOG, «Redis adoptado».
     volumes:
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/redis:/data
     deploy:
