@@ -41,7 +41,6 @@ from zascarr.services.tokens_revision import (
     MAX_CLAVE_GRUPO,
     MAX_TITULO,
     MAX_TOKEN_CANDIDATA,
-    texto_firmable,
     verificar_token_candidata,
 )
 from zascarr.web.library import _TRADICION_LABEL
@@ -107,7 +106,7 @@ async def _pagina(request: Request, db: AsyncSession, clave: str, *, manual_abie
         "apertura": apertura, "clave": clave,
         "pista": _pista_de_carpeta(clave, apertura.tradiciones_de_la_carpeta),
         "manual_abierto": manual_abierto, "tradiciones": _tradiciones(),
-        "titulo": apertura.consulta_propuesta, "anio": "", "error": None,
+        "titulo": apertura.consulta_propuesta, "anio": "", "error": None, "tradicion_elegida": "",
     }))
 
 
@@ -167,7 +166,8 @@ async def manual(
     except GrupoNoEncontradoError:
         return _fragmento_error(request, "Esa carpeta ya no tiene registros pendientes.")
     return _sin_cache(templates.TemplateResponse(request, "_asistente_manual.html", {
-        "clave": clave, "titulo": propuesta, "anio": "", "error": None, "tradiciones": _tradiciones(),
+        "clave": clave, "titulo": propuesta, "anio": "", "error": None, "tradicion_elegida": "",
+        "tradiciones": _tradiciones(),
         "pista": _pista_de_carpeta(clave, tradiciones_de_la_carpeta(clave)),
     }))
 
@@ -176,13 +176,12 @@ async def manual(
 async def elegir(
     request: Request,
     clave: str = Form(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
-    candidata: str | None = Form(default=None, max_length=MAX_TOKEN_CANDIDATA),
-    titulo: str | None = Form(default=None, max_length=MAX_TITULO),
-    anio: str | None = Form(default=None, max_length=100),
+    candidata: str = Form(..., min_length=1, max_length=MAX_TOKEN_CANDIDATA),
     tradition: str | None = Form(default=None, max_length=40),
 ) -> HTMLResponse:
-    """Anota la elección (candidata firmada o datos a mano) con la tradición que ELIGE la persona. **No crea la serie ni
-    vincula archivos**; conserva el grupo de origen. La vista previa del alta es el paso siguiente (#119)."""
+    """Anota la elección de una candidata de fuente con la tradición que ELIGE la persona. **No crea la serie ni vincula
+    archivos**; conserva el grupo de origen. Conectar este camino con el alta es una historia aparte (#189 es solo a mano:
+    el formulario a mano envía a la vista previa del alta, no pasa por aquí)."""
     pista = _pista_de_carpeta(clave, tradiciones_de_la_carpeta(clave))
     tradicion = None
     if tradition:
@@ -190,46 +189,18 @@ async def elegir(
             tradicion = ComicTradition(tradition)
         except ValueError:
             return _fragmento_error(request, "La tradición elegida no es válida: elige una de la lista.")
-
-    if candidata:
-        secreto = get_settings().secret_key
-        if not secreto:
-            return _fragmento_error(request, MENSAJE_SIN_CLAVE)
-        firmada = verificar_token_candidata(candidata, clave, secreto)
-        if firmada is None:
-            return _fragmento_error(request, MENSAJE_BUSQUEDA_CADUCADA)
-        if tradicion is None:
-            return _sin_cache(templates.TemplateResponse(request, "_asistente_paso.html", {
-                "clave": clave, "token": candidata, "sugerida": firmada.tradicion,
-                "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion),
-                "error": MENSAJE_FALTA_TRADICION, "tradiciones": _tradiciones(), "pista": pista}))
-        return _sin_cache(templates.TemplateResponse(request, "_asistente_eleccion.html", {
-            "clave": clave, "origen": "fuente", "fuente": _NOMBRE_FUENTE.get(firmada.fuente, firmada.fuente),
-            "titulo": firmada.titulo, "anio": firmada.anio, "tradicion": _TRADICION_LABEL[tradicion],
-            "sugerida": _etiqueta_de_tradicion(firmada.tradicion)}))
-
-    # A mano: título (obligatorio, texto normal), año (opcional, 1800–2100) y tradición explícita.
-    texto = (titulo or "").strip()
-    anio_valor: int | None = None
-    error = None
-    if not texto:
-        error = "Escribe el título de la serie."
-    elif not texto_firmable(texto):
-        error = "El título tiene caracteres que no se pueden guardar: revísalo."
-    if error is None and (anio or "").strip():
-        try:
-            anio_valor = int(anio.strip())
-        except ValueError:
-            error = "El año debe ser un número (por ejemplo, 1987) o dejarse en blanco."
-        else:
-            if not 1800 <= anio_valor <= 2100:
-                error = "El año debe estar entre 1800 y 2100, o dejarse en blanco."
-    if error is None and tradicion is None:
-        error = MENSAJE_FALTA_TRADICION
-    if error is not None:
-        return _sin_cache(templates.TemplateResponse(request, "_asistente_manual.html", {
-            "clave": clave, "titulo": titulo or "", "anio": anio or "", "error": error,
-            "tradiciones": _tradiciones(), "pista": pista}))
+    secreto = get_settings().secret_key
+    if not secreto:
+        return _fragmento_error(request, MENSAJE_SIN_CLAVE)
+    firmada = verificar_token_candidata(candidata, clave, secreto)
+    if firmada is None:
+        return _fragmento_error(request, MENSAJE_BUSQUEDA_CADUCADA)
+    if tradicion is None:
+        return _sin_cache(templates.TemplateResponse(request, "_asistente_paso.html", {
+            "clave": clave, "token": candidata, "sugerida": firmada.tradicion,
+            "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion),
+            "error": MENSAJE_FALTA_TRADICION, "tradiciones": _tradiciones(), "pista": pista}))
     return _sin_cache(templates.TemplateResponse(request, "_asistente_eleccion.html", {
-        "clave": clave, "origen": "manual", "fuente": None, "titulo": texto, "anio": anio_valor,
-        "tradicion": _TRADICION_LABEL[tradicion], "sugerida": None}))
+        "clave": clave, "origen": "fuente", "fuente": _NOMBRE_FUENTE.get(firmada.fuente, firmada.fuente),
+        "titulo": firmada.titulo, "anio": firmada.anio, "tradicion": _TRADICION_LABEL[tradicion],
+        "sugerida": _etiqueta_de_tradicion(firmada.tradicion)}))

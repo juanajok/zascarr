@@ -19,6 +19,15 @@
       Añadir a deseados
     </button>
   </div>
+  {% if grupo %}
+  <div class="alta-entrega">
+    <p>Siguiente paso, que <strong>todavía no se ha hecho</strong>: revisar qué archivos de la carpeta «{{ grupo }}» se vinculan a esta serie.
+      Confirmar el alta no vincula nada; la revisión y su confirmación son pasos aparte.</p>
+    <a class="btn" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ grupo | urlencode }}&amp;series_id={{ r.serie.series_id }}">Revisar los archivos de esta carpeta</a>
+  </div>
+  {% else %}
+  <p class="caption alta-sin-grupo">Esta alta no parte de ninguna carpeta, así que no hay ninguna vinculación pendiente.</p>
+  {% endif %}
   {% if r.deshacer %}
   <form hx-post="/ui/descubrir/deshacer" hx-target="closest .alta-paso" hx-swap="outerHTML">
     <input type="hidden" name="series_id" value="{{ r.deshacer.series_id }}">
