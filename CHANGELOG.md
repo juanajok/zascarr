@@ -7,6 +7,16 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Crear una serie a mano, sin fuentes** (#189). Desde «Descubrir» («Crear la serie a mano») y desde el asistente de una
+  carpeta puedes dar de alta una serie escribiendo solo el **título**, la **tradición** (la eliges tú) y, si quieres, el
+  **año**. No consulta ninguna fuente ni necesita claves, no inventa editorial, país, idioma ni formato, y queda con origen
+  «manual». Antes de crearla ves **qué se creará** y, si ya tienes series que se parecen (mismo título, año cercano y misma
+  tradición), eliges tú entre **usar la que ya tienes** o **crear otra**: no se fusiona nada. Crear es una acción aparte y
+  explícita; si falla en mitad, te dice que no sabe si se llegó a crear y «Comprobar el resultado» no la duplica. Si el alta
+  parte de una carpeta, el resultado te lleva a **revisar los archivos** de esa carpeta con la serie ya elegida (#119);
+  confirmar el alta **no vincula** nada. Sin carpeta, dice que no hay ninguna vinculación pendiente. El formulario a mano del
+  asistente de carpeta deja de terminar en «Elección anotada» y envía a esta misma vista previa; la candidata de una fuente
+  sigue terminando allí.
 - **Confirmar la vinculación desde el navegador** (#120, rebanada 2e). En la revisión de selección y números (#119),
   cuando hay un lote preparado aparece «Vincular N archivos», con lo que hará: vincula en su sitio, no mueve ni renombra
   nada y no crea ninguna serie. **Revisar y confirmar son acciones distintas**: hasta que pulsas el botón no cambia

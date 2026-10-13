@@ -12,8 +12,8 @@ elegir serie → revisar archivos y números → confirmar la vinculación → v
 Además: restauración de la base de datos de la pila de validación y el tiempo de confirmar 100 archivos (D8, hoy una
 **hipótesis**: «100 archivos» no está validado).
 
-**No valida** (sigue NOT RUN aunque todo pase): crear una serie desde el asistente (el tramo de alta no está asignado),
-fuentes reales (Comic Vine, AniList, Tebeosfera, GCD), el despliegue sobre la instalación real, el ensayo completo de
+**No valida** (sigue NOT RUN aunque todo pase): crear la serie con una **candidata de fuente** (el alta a mano sin fuentes
+sí, desde #189: V-17b), fuentes reales (Comic Vine, AniList, Tebeosfera, GCD), el despliegue sobre la instalación real, el ensayo completo de
 `backup.sh`/`rollback.sh` de #123, lectores de pantalla y móvil físico.
 
 ## 2. Reglas que no se rompen
@@ -155,8 +155,8 @@ recoge («Tu biblioteca ya está registrada, no hay nada nuevo»). Para repetir 
 
 ### 5.1 Crear la serie «a mano» (operador, por API)
 
-Hoy **no hay camino por la interfaz** para crear una serie sin fuentes (el tramo de alta no está asignado): se hace por
-la ruta sin carpeta, que no consulta nada. Es un paso de preparación, no parte del recorrido de la persona.
+Desde #189 **sí hay camino por la interfaz** (V-17b); aquí se deja el equivalente por API, que es el que se ensayó en x86
+y sirve para preparar la pila sin depender de un navegador. Usa la ruta sin carpeta, que no consulta nada.
 
 ```bash
 B=http://127.0.0.1:18000
@@ -171,6 +171,8 @@ echo "$SID"
 | ID | Qué hacer | Oráculo | PASS / FAIL |
 |---|---|---|---|
 | V-17 | Lo anterior | Devuelve un UUID de serie | PASS |
+| V-17b | **Por la interfaz (#189), con carpeta:** «Pendientes por carpeta» → «Elegir la serie de esta carpeta» → «Abrir el formulario a mano» → título, año, tradición → «Revisar lo que se creará» → «Crear serie vacía» | «creada»; el resultado ofrece «Revisar los archivos de esta carpeta» y ese enlace abre la revisión (V-22); no se vinculó nada | PASS |
+| V-17c | **Por la interfaz, sin carpeta:** «Descubrir» → «Crear la serie a mano» (con las fuentes apagadas) | «creada», y dice que **no hay ninguna vinculación pendiente**; sin enlace a la revisión | PASS |
 
 ## 6. El recorrido de la persona (V-20…V-29), por la interfaz
 
@@ -310,8 +312,8 @@ V-36 (disco lleno) y V-53 (Pi con carga).
 3. **El estado `degraded` es normal** en la pila aislada (sin Transmission, aMule ni VPN); no es un fallo.
 4. **Dos CBZ iguales son duplicados**: una biblioteca de prueba con archivos idénticos no se registra como archivos distintos.
 5. **Adoptar es asíncrono** («puedes cerrar la página»): hay que sondear `GET /api/revision/carpetas`.
-6. **No hay camino por la interfaz para crear una serie sin fuentes** (§5.1): confirma que el tramo de alta sigue siendo
-   el hueco del MVP.
+6. ~~No hay camino por la interfaz para crear una serie sin fuentes~~ — **resuelto por #189** (V-17b/V-17c). Queda sin
+   cubrir crear la serie desde una **candidata de fuente** en el asistente de carpeta.
 7. **`backup.sh` y `rollback.sh` no sirven para esta pila** (apuntan al proyecto por defecto): se documentan los
    comandos explícitos.
 8. **Lo que se añade a la biblioteca después de registrarla no se recoge** por esta vía (el registro queda «hecho»;

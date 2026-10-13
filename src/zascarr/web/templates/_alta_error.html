@@ -1,4 +1,4 @@
-{#- Un fallo recuperable de Descubrir, dentro de la tarjeta (htmx no sustituye una respuesta 4xx). -#}
+{#- Un fallo recuperable del alta (Descubrir y alta a mano), dentro de la tarjeta (htmx no sustituye una respuesta 4xx). -#}
 <div class="alta-paso">
   {{ ui.aviso("warn", texto) }}
   {% if parecidas %}
@@ -8,9 +8,17 @@
     {% endfor %}
   </ul>
   {% endif %}
-  {% if candidata and tradicion %}
+  {% if reintentar_token %}
+  {#- Resultado desconocido: repetir el MISMO token es seguro (comprobante en `alta_operaciones`). -#}
+  <form hx-post="/ui/descubrir/crear" hx-target="closest .alta-paso" hx-swap="outerHTML">
+    <input type="hidden" name="token" value="{{ reintentar_token }}">
+    {% for n, v in campos_origen or [] %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
+    {% if tradicion %}<input type="hidden" name="tradition" value="{{ tradicion }}">{% endif %}
+    <div class="discovery-card-actions"><button type="submit">Comprobar el resultado</button></div>
+  </form>
+  {% elif campos_origen and tradicion %}
   <form hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
-    <input type="hidden" name="candidata" value="{{ candidata }}">
+    {% for n, v in campos_origen %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="tradition" value="{{ tradicion }}">
     <div class="discovery-card-actions"><button type="submit">Revisar de nuevo</button></div>
   </form>

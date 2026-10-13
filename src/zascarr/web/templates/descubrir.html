@@ -11,4 +11,10 @@
        hx-target="#resultados-descubrir"
        hx-swap="innerHTML">
 <div id="resultados-descubrir" class="series-results"></div>
+
+<details class="alta-a-mano">
+  <summary>¿No aparece, o no quieres usar fuentes? Crear la serie a mano</summary>
+  <p class="caption">No consulta ninguna fuente ni necesita claves: solo el título y la tradición.</p>
+  {% include "_alta_manual_form.html" %}
+</details>
 {% endblock %}
