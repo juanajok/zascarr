@@ -250,6 +250,8 @@ class TestSinLogicaPropia:
         cuerpo = principal((await pagina()).text)
         for prohibido in ("<form", "<button", "<script", "hx-post", "hx-delete", "hx-put", "hx-get", "onclick", "onerror=", 'type="submit"'):
             assert prohibido not in cuerpo, prohibido
+        # #118: lo único nuevo es un ENLACE por carpeta al asistente (abrirlo no consulta ni escribe nada).
+        assert cuerpo.count('href="/ui/pendientes/carpetas/asistente?clave=') == 2
         plantilla = (Path(__file__).resolve().parents[1] / "src/zascarr/web/templates/carpetas.html").read_text(encoding="utf-8")
         assert "<script" not in plantilla and "hx-" not in plantilla
 

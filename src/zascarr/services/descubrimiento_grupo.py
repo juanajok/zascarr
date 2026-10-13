@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.carpetas import analizar_carpeta
 from zascarr.core.matcher import normalize_title
-from zascarr.models import Series
+from zascarr.models import ComicTradition, Series
 from zascarr.services.discovery import (
     CAMPO_ID_EXTERNO,
     CAMPOS_ID_DE_TEXTO,
@@ -30,6 +30,7 @@ from zascarr.services.discovery import (
     DiscoveryResult,
     DiscoveryService,
 )
+from zascarr.services.importer import TRADITION_MAP
 from zascarr.services.revision_carpetas import RevisionCarpetas, Senal, senales_contra_serie
 from zascarr.services.tokens_revision import (
     CandidataFirmada,
@@ -89,6 +90,17 @@ class GrupoResumen(BaseModel):
     n_archivos: int
 
 
+class AperturaDeGrupo(BaseModel):
+    """Lo que se sabe de un grupo al ABRIR el asistente, sin consultar ninguna fuente (#118, criterio 1).
+
+    `consulta_propuesta` es `""` cuando ni la carpeta ni los nombres permiten proponer una: la persona la escribe.
+    `tradiciones_de_la_carpeta` es una **pista** (qué tradiciones suelen guardarse en la carpeta raíz del grupo),
+    nunca un valor elegido: puede estar vacía o tener varias."""
+    grupo: GrupoResumen
+    consulta_propuesta: str
+    tradiciones_de_la_carpeta: list[str]
+
+
 class RespuestaDescubrir(BaseModel):
     consulta: str
     consulta_propuesta: str
@@ -96,6 +108,18 @@ class RespuestaDescubrir(BaseModel):
     fuentes: dict[str, str]
     avisos: list[str]
     candidatas: list[Candidata]
+
+
+def tradiciones_de_la_carpeta(clave: str) -> list[str]:
+    """Tradiciones cuya carpeta raíz de la biblioteca (`TRADITION_MAP`, la que usa el importador para ORGANIZAR) es la
+    del grupo. Comparación sin distinguir mayúsculas. Es una pista, no una decisión: «Comics» corresponde a la
+    americana y a la británica, y «Manga» a manga y manhua, así que puede haber varias; ninguna se elige por la persona.
+    `other` (`_Unsorted`) no es una pista y no se devuelve."""
+    raiz = clave.split("/", 1)[0].strip().casefold()
+    if not raiz:
+        return []
+    return [t for t, carpeta in TRADITION_MAP.items()
+            if carpeta.casefold() == raiz and t != ComicTradition.OTHER.value]
 
 
 @dataclass
@@ -129,13 +153,25 @@ class DescubrimientoDeGrupo:
         self._secret = secret
         self._ahora = ahora
 
-    async def descubrir(self, clave: str, consulta: str | None) -> RespuestaDescubrir:
+    async def _contexto(self, clave: str):
+        """(división del grupo, archivos, carpeta limpia, consulta propuesta). Una sola definición de «grupo» y de
+        «consulta propuesta» para abrir el asistente y para buscar. Sin red."""
         grupo = await RevisionCarpetas(self._db).archivos_del_grupo(clave)
         if grupo is None:
             raise GrupoNoEncontradoError(clave)
         div, archivos = grupo
         carpeta = analizar_carpeta(div.contextual) if div.contextual else None
-        propuesta = self._consulta_propuesta(carpeta, archivos)
+        return div, archivos, carpeta, self._consulta_propuesta(carpeta, archivos)
+
+    async def abrir(self, clave: str) -> AperturaDeGrupo:
+        """El contexto del grupo y la consulta propuesta. **No consulta ninguna fuente ni usa la red.**"""
+        div, archivos, _, propuesta = await self._contexto(clave)
+        return AperturaDeGrupo(
+            grupo=GrupoResumen(clave=clave, carpeta_contextual=div.contextual, n_archivos=len(archivos)),
+            consulta_propuesta=propuesta, tradiciones_de_la_carpeta=tradiciones_de_la_carpeta(clave))
+
+    async def descubrir(self, clave: str, consulta: str | None) -> RespuestaDescubrir:
+        div, archivos, carpeta, propuesta = await self._contexto(clave)
         usada = (consulta or "").strip() or propuesta
         if not usada:
             raise ConsultaVaciaError()
