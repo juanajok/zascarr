@@ -1,6 +1,7 @@
 # Identidad editorial y cobertura tomo → grapa (especificación)
 
 **Estado:** especificación, pendiente de implementación (migración y código van aparte).
+**Vocabulario y reglas de identidad:** ver la revisión de #124 en `docs/adr/0003-identidad-editorial.md`.
 **Origen:** cierre de la cadena A4 → A6 → B15 → huecos fiables (2026-09-27). La vista de
 huecos de grapas ya es fiable y acotada (PR #13); esto es el rediseño de catálogo que la
 precede. **No es C6.**
@@ -27,7 +28,7 @@ publicaciones distintas, y deben poder serlo sin trucos.
 - `issue_number` es `sa.String(20)` **nullable**: «sin número» ya se representa como `NULL`,
   no hace falta inventar un `0`.
 - `File.covered_issue_ids` es `ARRAY(UUID) server_default "{}"`: solo se escribe **vacío**
-  (`importer.py:384`, `library_adopter.py:180`) y **nadie lo lee** para semántica. Es una
+  (`importer.py:476`, `library_adopter.py:470`; verificado en `main` 8f2b190) y **nadie lo lee** para semántica. Es una
   pista ligada a una copia física, sin procedencia ni confirmación; hoy, en la práctica, una
   columna muerta. **Decisión:** se mantiene por ahora como dato heredado **del archivo
   físico**, no como fuente autorizada de cobertura editorial; se audita cualquier valor
