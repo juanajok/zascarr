@@ -360,7 +360,10 @@ async def vincular(
     except TokenDeVinculacionInvalidoError as e:
         raise _error_vinculacion(422, e.codigo, str(e)) from None
     except TokenCaducadoError as e:
-        raise _error_vinculacion(410, e.codigo, str(e)) from None
+        # #116, criterio 5: caducado y SIN informe. No es un informe de la operación: dice qué se sabe y qué no.
+        raise HTTPException(status_code=410, detail={
+            "codigo": e.codigo, "mensaje": str(e), "informe_disponible": False,
+            "puede_haberse_aplicado": e.puede_haberse_aplicado}) from None
     except SerieDeVinculacionYaNoExisteError as e:
         raise _error_vinculacion(409, e.codigo, str(e)) from None
     except ConflictoDeBloqueoError as e:
