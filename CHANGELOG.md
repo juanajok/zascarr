@@ -7,6 +7,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Crear una serie vacía por la API sin carpeta de origen** (#114, primer paso de I6):
+  `POST /api/revision/serie/sin-carpeta/previsualizar` con `{"manual": {"titulo", "anio"}, "tradicion"}`
+  (o una `candidata` firmada por Descubrir). Es el **sustituto de `POST /api/series`**: eliges la tradición
+  (no hay valor por defecto), ves qué pasaría **sin que se escriba nada** (si ya existe, si hay series
+  parecidas), confirmas con `POST /api/revision/serie` y el token, y puedes deshacer con
+  `POST /api/revision/serie/{id}/deshacer`. Para la descripción, la portada, el estado o el total de
+  números, usa después `PATCH /api/series/{id}`. No acepta `clave` ni datos sueltos de la serie.
 - **El instalador te pregunta si quieres usar ZascArr desde otros dispositivos (A11).**
   Una cuarta pregunta, **que por defecto no abre nada** (`Intro` = solo esta
   máquina): «solo esta máquina», «mi red local» o «detrás de un proxy inverso con
@@ -121,9 +128,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   tradición `american` si no se indica, sin detección de series con el mismo título,
   sin procedencia ni «deshacer»). El alta por token (`POST /api/revision/serie/previsualizar`
   y `POST /api/revision/serie`) ofrece esas garantías, pero **parte de una carpeta con
-  archivos pendientes**: todavía no hay un sustituto para crear una serie vacía desde la
-  API sin carpeta. Se retirará en una versión posterior, con aviso; si tienes un script
-  que lo usa, cuéntalo antes de que se retire.
+  archivos pendientes**; para crear una serie vacía **sin carpeta** el sustituto es
+  `POST /api/revision/serie/sin-carpeta/previsualizar` (ver «Añadido»). Se retirará en una
+  versión posterior, con aviso; si tienes un script que lo usa, pásate al sustituto o cuéntalo
+  antes de que se retire.
 
 ### Corregido
 
