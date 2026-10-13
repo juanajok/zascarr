@@ -1,7 +1,8 @@
 # ADR 0003: Identidad editorial y cobertura — cierre de B22 (censo real + cuatro decisiones)
 
-- Estado: **Propuesto** · 2026-09-27 · **revisión de #124 (2026-10-13): vocabulario, modelo mínimo y casos —
-  pendiente de decisión del PO** (estado recomendado: aceptado con decisiones diferidas)
+- Estado: **Aceptado con decisiones diferidas** · 2026-10-13 (revisión de #124) — acepta lo listado en
+  «Decisiones cerradas» y difiere lo listado en «Decisiones abiertas»; **no autoriza ninguna migración**.
+  El ADR original (2026-09-27) estaba **Propuesto**.
 - Relacionado: ADR-0002 (enricher), BACKLOG §B22, `docs/design/identidad-editorial-cobertura.md`
 
 ## Revisión de 2026-10-13 (#124): vocabulario, modelo mínimo y casos de identidad
@@ -16,10 +17,10 @@
 
 | | |
 |---|---|
-| **Estado explícito** | **Propuesto.** Este documento aún no está aceptado: la aceptación es decisión del PO y el spike **no se cierra por existir el documento** (#124). |
-| **Estado que se recomienda al PO** | **Aceptado con decisiones diferidas**: vocabulario, modelo mínimo y reglas de identidad cerrados; lo listado en «Decisiones abiertas» queda diferido. La alternativa de «posponer» solo tendría sentido si el PO considera que ni el vocabulario es útil sin el censo de filas. |
+| **Estado explícito** | **Aceptado con decisiones diferidas.** Se aceptan el vocabulario, el modelo mínimo y las reglas de identidad (y lo demás de «Decisiones cerradas»); quedan diferidas la función exacta de `number_key`, la reimpresión sin renumerar, el esquema N:M archivo ↔ publicaciones y los discriminantes para homónimas (ver «Decisiones abiertas»). **La migración no queda autorizada.** |
+| **Aceptación** | 2026-10-13, en la revisión de la PR #180 (PO). Antes de eso el documento estaba **Propuesto**: se redactó así y se pasó a «Aceptado con decisiones diferidas» a petición de la revisión, **antes** de fusionar. |
 | **Fecha** | 2026-10-13 (revisión); 2026-09-27 (ADR original) |
-| **Autoría** | Revisión redactada por Claude (asistente de desarrollo) sobre el ADR de 2026-09-27 y su especificación. **Revisores: pendientes** (PO: `juanajok`). |
+| **Autoría** | Revisión redactada por Claude (asistente de desarrollo) sobre el ADR de 2026-09-27 y su especificación. **Revisión y aceptación:** PR #180 (PO, `juanajok`). |
 | **Especificación** | [`docs/design/identidad-editorial-cobertura.md`](../design/identidad-editorial-cobertura.md) |
 | **Benchmark** | [`docs/design/benchmark-identidad-editorial.md`](../design/benchmark-identidad-editorial.md) (cerrado 2026-10-01: Kapowarr `c191dda`, Mylar3 `cdc94a4`). **No se ha vuelto a consultar** en esta revisión. |
 | **Casos analizados** | Los cuatro de §«Casos de identidad» más la evidencia de nombres reales ya citada en D1–D4 (listado del disco del coleccionista). Los casos nuevos van **anonimizados**: «Serie A», «Serie B»; ningún título ni ruta real. |
@@ -51,7 +52,7 @@ las mezclas.
 - **«Pack»** y **«recopilación»** no son entidades: el primero es un archivo con varias publicaciones; la segunda,
   una publicación que reproduce otras (cobertura, D4).
 
-**Decisión sobre la obra (propuesta, reversible).** El modelo mínimo **no crea** una entidad «obra»: ninguna fuente
+**Decisión sobre la obra (aceptada el 2026-10-13; reversible y aditiva).** El modelo mínimo **no crea** una entidad «obra»: ninguna fuente
 (Comic Vine, AniList, Tebeosfera, GCD) aporta una identidad de obra independiente de su volumen o ficha, y crearla
 obligaría a **inventar un identificador**, lo que las reglas de identidad prohíben. Si más adelante hace falta,
 un `work_id` opcional es **aditivo**.
@@ -78,7 +79,7 @@ mismo tipo). Es un parche conservador, no el modelo.
 |---|---|---|---|---|
 | 1 | **Grapa y recopilación con el mismo número**: en la Serie A, la grapa nº 12 y el Omnigold nº 12. | La restricción `UNIQUE(series_id, issue_number, volume)` no incluye el formato (`alembic 0001`, `models`): con el mismo `volume` —el alta de vinculación crea `volume=1`— **chocan**; con `volume` distinto o `NULL` **coexisten por accidente**. El matcher los separa por formato y, si no puede, no enlaza. | Dos ediciones distintas; el mismo `number_key` coexiste entre ellas y **no** dentro de una. Ninguno se funde con el otro. | **Resuelto por el modelo**; implementación y migración no autorizadas (#125/#126). |
 | 2 | **Dos publicaciones homónimas con el mismo título y año**: la Serie A y la Serie B, ambas «Título» (2011), de distinto sello o país. | `Series` solo tiene unicidad en los IDs de proveedor; `title_norm` no es único. En el matcher, varias candidatas con puntuación empatada (±0,05) **no se eligen**: `UNSORTED` con «empate ambiguo». El `PATCH` de series responde `409 serie_parecida` con la lista (`api/series.py`) y el alta muestra las parecidas antes de crear. `Series` **no tiene idioma ni país** (solo `Publisher.country`). | Título y año **no** son identidad. Se distinguen por ID de proveedor, sello, tradición, formato y unidad de numeración **cuando existen**; si tras eso quedan dos candidatas compatibles es **ambiguo** y no se inventa un identificador. | **Ambiguo por diseño**; qué discriminantes se muestran y la vía manual son de **#125**. |
-| 3 | **Renumeración o reimpresión**: la Serie A reeditada con nueva numeración (nº 03 que remite al nº 122 original), o una reimpresión con la misma numeración. | `naming.py` reconoce el marcador de edición («Omnigold 5» → `issue_number=5`, `edition_kind=omnigold`) y solo lo traduce a `Issue.format`; **no se persiste** como edición ni existe «reimpresión de». | **Renumeración**: edición propia; `03` es la clave en la edición nueva y `122` es una **referencia** a la original, nunca el mismo número (D1/D2). **Reimpresión sin cambiar la numeración**: no crea publicación nueva por sí sola; se trata como otra **copia** (archivo) de la misma, salvo que una fuente la separe como edición con numeración propia. | Renumeración **resuelta**; reimpresión sin renumerar **pendiente de revisión** (no hay dónde guardar «reimpresión de»): #125 para la colisión, #126 si afecta a la migración. |
+| 3 | **Renumeración o reimpresión**: la Serie A reeditada con nueva numeración (nº 03 que remite al nº 122 original), o una reimpresión con la misma numeración. | `naming.py` reconoce el marcador de edición («Omnigold 5» → `issue_number=5`, `edition_kind=omnigold`) y solo lo traduce a `Issue.format`; **no se persiste** como edición ni existe «reimpresión de». | **Renumeración**: edición propia; `03` es la clave en la edición nueva y `122` es una **referencia** a la original, nunca el mismo número (D1/D2). **Reimpresión sin cambiar la numeración**: no crea publicación nueva por sí sola; se trata como otra **copia** (archivo) de la misma, salvo que una fuente la separe como edición con numeración propia. | Renumeración **resuelta**; reimpresión sin renumerar: la lectura «otra copia de la misma publicación, salvo que una fuente la separe» está **aceptada (2026-10-13)** y sigue **pendiente de revisión** porque no hay dónde guardar «reimpresión de»: #125 para la colisión, #126 si afecta a la migración. |
 | 4 | **Un archivo que contiene varias publicaciones**: un CBZ «01–07» de la Serie A. | `File.issue_id` es 0..1: un pack no puede apuntar a N publicaciones. `naming.py` quita el rango (`era_pack`) y el archivo queda **sin número** → `UNSORTED`/Pendientes. `File.covered_issue_ids` solo se escribe `[]` (`importer.py:476`, `library_adopter.py:470`) y nadie lo lee. La vinculación (#103) exige un número por archivo. | Relación **archivo ↔ publicaciones N:M** (D4.1), distinta de la cobertura editorial (D4.2). El rango del nombre es evidencia **candidata** (`proposed`), nunca `confirmed` automático. Sin publicación identificable no se inventa un `Issue`. | **Pendiente de diseño**: el esquema N:M **no está decidido**. Mientras tanto, Pendientes. |
 
 ### Reglas de identidad
