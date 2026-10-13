@@ -7,6 +7,17 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Revisar la selección y los números antes de vincular** (#119, rebanada 2e). Con una carpeta y una **serie de tu
+  biblioteca** ya elegida, `/ui/pendientes/carpetas/asistente/vinculacion` te enseña los archivos de la carpeta
+  (hasta 100 por página) **sin ninguno marcado**, con el número que sale del nombre —o el que tú escribas— y por qué
+  cada archivo se puede o no marcar: falta el número, el número es ambiguo en la serie, otro archivo marcado tiene el
+  mismo número, ya existe esa publicación con archivo o como otra edición… Un archivo que marcas y queda bloqueado
+  **no se desmarca en silencio**: sigue marcado y te dice por qué queda fuera. Cada cambio vuelve a preparar la
+  revisión; arriba ves cuántos están marcados, cuántos entran en el lote y cuántos marcados quedan bloqueados.
+  Lo que marcas y escribes vale **solo para la página que ves**; al pasar a otra página queda como borrador y al volver
+  se recupera y se revisa de nuevo (no se guarda si recargas). **No vincula nada ni crea la serie**: el lote preparado
+  espera al paso de confirmar, que llega aparte (#120). Se llega desde el asistente de #118 cuando la candidata ya es una
+  serie de tu biblioteca («Preparar los archivos de esta carpeta para esa serie»).
 - **Asistente «Elegir la serie de una carpeta», primer paso** (#118, rebanada 2e). Desde «Pendientes por carpeta»
   cada carpeta tiene un enlace para abrirlo: enseña la carpeta, cuántos registros tiene y una búsqueda propuesta
   que puedes cambiar. **Abrirlo no consulta ninguna fuente**; solo se busca cuando pulsas «Buscar». Los resultados
