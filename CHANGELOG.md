@@ -45,6 +45,22 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Confirmar una vinculación con un token caducado y sin informe dice qué se sabe y qué no** (#116).
+  Antes respondía `410` con un texto único. Ahora, además del `codigo: token_caducado`, el detalle trae
+  `informe_disponible: false` (esto **no es un informe**: no hay `resultado` ni `repetida`) y
+  `puede_haberse_aplicado`:
+  - `false` — el token caducó **dentro de las 24 h** en que se conserva el informe y no hay ninguno: la
+    operación **no llegó a aplicarse** (el informe se escribe en la misma transacción que los vínculos).
+    Repite la vista previa.
+  - `true` — han pasado **24 h o más** desde la firma: el informe pudo haberse purgado y **ya no se puede
+    saber** si se aplicó ni reconstruir lo que se iba a confirmar. Repite la vista previa: mostrará el
+    estado actual de los archivos.
+
+  Si el informe sigue guardado, un token caducado **sigue devolviendo ese informe** (sin cambios). Los
+  demás resultados (fallo antes del commit → `500` «no se ha cambiado nada»; resultado no determinable →
+  `503 resultado_incierto`, «repite con el mismo token»; reenvío → informe persistido) no cambian: quedan
+  fijados, criterio a criterio, en `tests/test_vinculacion_resultado_pg.py`. No hay migración.
+
 - **`DELETE /api/series/{id}` solo borra una serie que no tiene nada colgando** (#114, I4). Antes borraba
   en cascada sus números, sus deseados y sus alias y dejaba sin vincular sus archivos, sin avisar;
   lo único que lo frenaba era una asignación en curso. Ahora responde `409` y **no cambia nada** si

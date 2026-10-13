@@ -298,7 +298,9 @@ class TestIdempotencia:
         ids = await archivos(ent, "Flash 01 (1987).cbz")
         token = await firmar(ent, serie, [(ids["Flash 01 (1987).cbz"], "1")], ahora=time.time() - 16 * 60)
         r = await confirmar(token)
-        assert r.status_code == 410 and r.json()["detail"]["codigo"] == "token_caducado"
+        d = r.json()["detail"]
+        assert r.status_code == 410 and d["codigo"] == "token_caducado"
+        assert d["informe_disponible"] is False and d["puede_haberse_aplicado"] is False   # #116, criterio 5
         assert await numero_de("issues", ent.banco) == 0 and await informes(ent.banco) == []
 
     async def test_purga_acotada_con_las_dos_condiciones_y_tras_purgar_el_caducado_es_410(self, ent):
