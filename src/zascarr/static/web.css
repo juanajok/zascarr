@@ -1280,3 +1280,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinculacion-pendiente { display: none; font-weight: 700; }
 .vinculacion.pendiente .vinculacion-pendiente { display: block; }
 .vinculacion.pendiente .lote-listo { opacity: .35; pointer-events: none; }
+.vinc-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 var(--gutter); }
+.vinculacion-confirmar { margin-top: 10px; }
+.vinc-grupo ul { margin: 6px 0 0; padding-left: 20px; }
