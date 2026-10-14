@@ -10,8 +10,9 @@
           hx-target="#card-{{ file_id }}" hx-swap="outerHTML">
       <input type="hidden" name="series_id" value="{{ s.id }}">
       <span class="series-name">{{ s.title }}{% if s.start_year %} ({{ s.start_year }}){% endif %}</span>
+      <label class="sr" for="n-{{ file_id }}-{{ s.id }}">Número en «{{ s.title }}»</label>
       <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
-             aria-label="Número en «{{ s.title }}»">
+             id="n-{{ file_id }}-{{ s.id }}">
       {#- «Organizar»: esta asignación MUEVE y RENOMBRA el archivo (ADR 0007 / #114, I8). -#}
       <button type="submit"
               title="Mueve el archivo a la carpeta de esta serie en tu biblioteca y le cambia el nombre.">Organizar</button>

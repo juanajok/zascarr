@@ -13,8 +13,9 @@
 {% endif %}
 {{ legal_disclaimer("wishlist") }}
 
+<label class="sr" for="q-deseados">Buscar serie para añadir a Deseados</label>
 <input type="search" class="series-search" placeholder="Buscar serie para añadir…"
-       name="q" aria-label="Buscar serie para añadir a Deseados"
+       name="q" id="q-deseados"
        hx-get="/ui/wishlist/buscar-serie"
        hx-trigger="keyup changed delay:400ms"
        hx-target="#resultados-wishlist"
