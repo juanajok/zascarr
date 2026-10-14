@@ -4,6 +4,8 @@
 > comandos y los resultados esperados no sean suposiciones, pero **un ensayo en x86 no es evidencia de la Pi**: el
 > disco, la memoria y la CPU son justo lo que se quiere medir. Hasta que alguien lo ejecute, todo lo que dice «en la
 > Pi» está **NOT RUN**.
+>
+> **Ejecutado el 2026-10-13/14:** el resultado está en [`informe-validacion-pi-mvp-2026-10-13.md`](informe-validacion-pi-mvp-2026-10-13.md) (36 PASS, 0 FAIL, 2 NOT RUN). Lo que dice «NOT RUN» en este guion sigue siendo cierto salvo lo que ese informe cubre.
 
 ## 1. Qué valida y qué no
 
