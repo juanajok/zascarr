@@ -204,6 +204,15 @@ como marco permanente.
 - El histórico es documentación: cuando cierras una historia P0/P1 del
   backlog, actualiza `docs/BACKLOG.md` a "Hecho" con la nota del
   mecanismo ("cómo se cerró, no solo que se cerró").
+- **Flujo: Scrumban hasta tener datos** (decidido el 2026-10-15). Sin sprints
+  ni compromiso de puntos: se tira del campo **«Estado»** del Project 1 (el
+  campo «Status» no se usa) con WIP **En curso 2** (máx. 1 MVP + 1),
+  **En revisión 2**, **En refinamiento 4** y aviso con **≥ 5** en «Fusionado —
+  pendiente de despliegue». «Lista para desarrollar» exige DoR completa y
+  `Bloqueada = No`. Al entrar en «En curso» se rellena **Inicio**; al llegar a
+  «Fusionado», **Fin**. El sprint se fija con la mediana y el p85 del tiempo
+  de ciclo cuando haya 8 historias terminadas o el 2026-11-12, lo que llegue
+  antes (umbrales provisionales).
 
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
