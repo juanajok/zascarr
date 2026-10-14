@@ -7,14 +7,15 @@
 <form id="filtros" class="filter-bar"
       hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
       hx-trigger="change, submit" hx-push-url="true">
-  <input type="search" name="q" placeholder="Buscar por título…" value="{{ q }}">
-  <select name="tradition">
+  <input type="search" name="q" placeholder="Buscar por título…" value="{{ q }}"
+         aria-label="Buscar por título">
+  <select name="tradition" aria-label="Tradición">
     <option value="">Todas las tradiciones</option>
     {% for value, label in tradiciones %}
     <option value="{{ value }}" {% if value == tradition %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-  <select name="publisher_id">
+  <select name="publisher_id" aria-label="Editorial">
     <option value="">Todas las editoriales</option>
     {% for p in publishers %}
     <option value="{{ p.id }}" {% if publisher_id and p.id == publisher_id %}selected{% endif %}>{{ p.name }}</option>
@@ -27,13 +28,13 @@
 
 <div class="filter-bar filter-bar-secondary">
   <div class="filter-search-box">
-    <input type="search" placeholder="Buscar personaje…"
+    <input type="search" placeholder="Buscar personaje…" aria-label="Buscar personaje"
            hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="keyup changed delay:400ms"
            hx-target="#resultados-personaje" hx-swap="innerHTML" name="q">
     <div id="resultados-personaje" class="series-results"></div>
   </div>
   <div class="filter-search-box">
-    <input type="search" placeholder="Buscar saga…"
+    <input type="search" placeholder="Buscar saga…" aria-label="Buscar saga"
            hx-get="/ui/biblioteca/buscar-saga" hx-trigger="keyup changed delay:400ms"
            hx-target="#resultados-saga" hx-swap="innerHTML" name="q">
     <div id="resultados-saga" class="series-results"></div>

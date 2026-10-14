@@ -21,6 +21,7 @@
               hx-target="#card-{{ c.file.id }}" hx-swap="outerHTML">
           <input type="hidden" name="series_id" value="{{ c.suggestion.series_id }}">
           <input type="text" name="issue_number" placeholder="nº" required class="issue-input" size="4"
+                 aria-label="Número de «{{ c.file.file_name }}»"
                  value="{{ c.suggestion.issue_number }}">
           {#- «Organizar»: esta asignación MUEVE y RENOMBRA el archivo (ADR 0007 / #114, I8). -#}
           <button type="submit" class="btn-sugerencia"
@@ -30,7 +31,7 @@
       </div>
       {% endif %}
       <input type="search" class="series-search" placeholder="Buscar serie…"
-             name="q"
+             name="q" aria-label="Serie de «{{ c.file.file_name }}»"
              hx-get="/ui/pendientes/{{ c.file.id }}/buscar-serie"
              hx-trigger="keyup changed delay:400ms"
              hx-target="#resultados-{{ c.file.id }}"
