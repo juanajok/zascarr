@@ -1,0 +1,129 @@
+{
+  "etiqueta": "antes",
+  "chrome": "Chrome/154.0.8037.92",
+  "web_css_con_u11": false,
+  "casos": [
+    {
+      "elemento": "input.series-search[name=q]",
+      "focus_visible": true,
+      "outline": "none",
+      "fondo": "rgb(27, 27, 32)",
+      "contraste_anillo": null,
+      "contraste_sombra": 1.14,
+      "nombre_accesible_del_foco": "Buscar serie…",
+      "controles": [
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "nº"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Buscar serie…"
+        },
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "nº"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Buscar serie…"
+        },
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "nº"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Buscar serie…"
+        },
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "nº"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Buscar serie…"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Buscar serie…"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Buscar serie…"
+        }
+      ],
+      "url": "/ui/pendientes",
+      "tema": "dark",
+      "captura": "antes--por-revisar-foco-buscador--dark.png"
+    },
+    {
+      "elemento": "select[name=tradition]",
+      "focus_visible": true,
+      "outline": "none",
+      "fondo": "rgb(246, 243, 236)",
+      "contraste_anillo": null,
+      "contraste_sombra": 16.14,
+      "nombre_accesible_del_foco": "",
+      "controles": [
+        {
+          "control": "q",
+          "placeholder": "Buscar por título…",
+          "nombre_accesible": "Buscar por título…"
+        },
+        {
+          "control": "tradition",
+          "placeholder": null,
+          "nombre_accesible": ""
+        },
+        {
+          "control": "publisher_id",
+          "placeholder": null,
+          "nombre_accesible": ""
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar personaje…",
+          "nombre_accesible": "Buscar personaje…"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar saga…",
+          "nombre_accesible": "Buscar saga…"
+        }
+      ],
+      "url": "/ui/biblioteca",
+      "tema": "light",
+      "captura": "antes--biblioteca-foco-tradicion--light.png"
+    },
+    {
+      "elemento": "input.series-search[name=q]",
+      "focus_visible": true,
+      "outline": "none",
+      "fondo": "rgb(19, 19, 22)",
+      "contraste_anillo": null,
+      "contraste_sombra": 1.08,
+      "nombre_accesible_del_foco": "Buscar serie para añadir…",
+      "controles": [
+        {
+          "control": "q",
+          "placeholder": "Buscar serie para añadir…",
+          "nombre_accesible": "Buscar serie para añadir…"
+        }
+      ],
+      "url": "/ui/wishlist",
+      "tema": "dark",
+      "captura": "antes--deseados-foco-buscador--dark.png"
+    }
+  ]
+}
