@@ -36,10 +36,6 @@ class Settings(BaseSettings):
     asignacion_simultaneas: int = Field(default=1, ge=1)
     db_pool_recycle: int = 1800
 
-    # ── Redis ──────────────────────────────────────────────────────
-    redis_url: str = Field(default="redis://127.0.0.1:6379/0")
-    redis_cache_ttl: int = 3600
-
     # ── Comic Vine API ─────────────────────────────────────────────
     comicvine_api_key: str = Field(default="")
     comicvine_base_url: str = "https://comicvine.gamespot.com/api"

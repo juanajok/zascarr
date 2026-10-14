@@ -45,7 +45,7 @@ docker inspect "$COMPOSE_PROJECT_NAME-zascarr-1" | grep -Eqi 'changeme|cambia_es
 
 ## NFR-02 — Exposición de red y aislamiento Docker
 
-**Objetivo:** garantizar que PostgreSQL y Redis no están expuestos innecesariamente.
+**Objetivo:** garantizar que PostgreSQL no está expuesto innecesariamente (Redis ya no forma parte del stack: ADR 0011).
 
 ```bash
 "${COMPOSE[@]}" config > "$ROOT/compose.rendered.yml"
@@ -63,15 +63,15 @@ grep -nE '"127\.0\.0\.1:(5432|6379):' "$ROOT/compose.rendered.yml" || true
 ss -ltn 2>/dev/null | grep -E ':(5432|6379)\b'
 ```
 
-**Oráculo:** PostgreSQL y Redis no se publican en `0.0.0.0`. El estado actual
-los publica en `127.0.0.1` (loopback) por compatibilidad con el alembic del
+**Oráculo:** PostgreSQL no se publica en `0.0.0.0`. El estado actual
+lo publica en `127.0.0.1` (loopback) por compatibilidad con el alembic del
 bootstrap; eso es aceptable, y eliminarlo es la deuda M3. La app queda en
-loopback (`127.0.0.1:$APP_PORT`). ZascArr dentro de Compose usa los nombres
-internos `postgres` y `redis`, no `127.0.0.1`.
+loopback (`127.0.0.1:$APP_PORT`). ZascArr dentro de Compose usa el nombre
+interno `postgres`, no `127.0.0.1`.
 
-**Prueba negativa:** desde un contenedor externo en una red distinta, DB y Redis no deben ser accesibles; desde el servicio ZascArr sí deben serlo mediante los nombres internos `postgres` y `redis`.
+**Prueba negativa:** desde un contenedor externo en una red distinta, la DB no debe ser accesible; desde el servicio ZascArr sí debe serlo mediante el nombre interno `postgres`.
 
-**Severidad:** P0 si PostgreSQL/Redis están accesibles desde la LAN sin justificación.
+**Severidad:** P0 si PostgreSQL está accesible desde la LAN sin justificación.
 
 ## NFR-03 — Mass assignment y límites de entrada
 
@@ -202,7 +202,7 @@ Comprobar tras cada fallo:
 Medir durante una carga sintética:
 
 - RSS de ZascArr.
-- RSS de PostgreSQL y Redis.
+- RSS de PostgreSQL.
 - CPU.
 - conexiones activas de PostgreSQL.
 - tamaño de pool.
@@ -235,7 +235,7 @@ Criterios iniciales a ajustar con medición real:
 
 No convertir estos umbrales en garantía universal para toda Raspberry: registrar hardware y dataset.
 
-## NFR-08 — Resiliencia de PostgreSQL, Redis e integraciones
+## NFR-08 — Resiliencia de PostgreSQL e integraciones
 
 **Objetivo:** comprobar recuperación y degradación controlada.
 
@@ -256,7 +256,7 @@ Esperado:
 
 ### Redis
 
-Repetir con Redis. Confirmar si Redis es obligatorio para arrancar o solo para caché; el criterio debe coincidir con la arquitectura.
+No aplica: Redis se retiró del stack (ADR 0011). Comprobar que **no** hay ningún contenedor `redis` ni variable `REDIS_URL`.
 
 ### Servicios externos
 
@@ -468,7 +468,6 @@ Revisar también:
 Provocar deliberadamente:
 
 - PostgreSQL caído;
-- Redis caído;
 - VPN stale;
 - importador con corruptos;
 - backend de descargas inaccesible;
@@ -499,7 +498,7 @@ Registrar diferencias. No asumir que una prueba de Docker x86 demuestra rendimie
 | NFR | Resultado | Severidad | Bloquea release | Evidencia |
 |---|---|---:|---:|---|
 | Secretos por defecto | PASS/FAIL | P0 | Sí | logs/config |
-| Exposición DB/Redis | PASS/FAIL | P0 | Sí | compose/ports |
+| Exposición DB | PASS/FAIL | P0 | Sí | compose/ports |
 | Mass assignment | PASS/FAIL | P0 | Sí | HTTP + BD |
 | Traversal/ZIP | PASS/FAIL | P0 | Sí | paths/logs |
 | DoS XML/ZIP | PASS/FAIL | P1 | Sí si crash | RSS/timeout |
@@ -517,7 +516,7 @@ Registrar diferencias. No asumir que una prueba de Docker x86 demuestra rendimie
 2. Mass assignment y autorización.
 3. Traversal, ZIP/XML y XSS.
 4. Consistencia de filesystem/BD.
-5. Resiliencia de PostgreSQL, Redis e integraciones.
+5. Resiliencia de PostgreSQL e integraciones.
 6. Concurrencia, backpressure y capacidad.
 7. Backup, restore y disaster recovery.
 8. Observabilidad, portabilidad y escaneo de dependencias.

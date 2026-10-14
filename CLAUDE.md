@@ -10,7 +10,7 @@
 
 ZascArr es un gestor self-hosted de tebeoteca (CBZ/CBR) tipo Sonarr/Radarr,
 optimizado para Raspberry Pi 4/5 y pensado para el público hispanohablante.
-Stack: **FastAPI + SQLAlchemy async + PostgreSQL + Redis + Jinja2 + HTMX**.
+Stack: **FastAPI + SQLAlchemy async + PostgreSQL + Jinja2 + HTMX**. Sin Redis (ADR-0011).
 Sin SPA, sin build de Node, htmx vendorizado en disco (ADR-0001).
 
 **Persona:** "El Coleccionista" — no técnico, no abre terminales ni JSON.
@@ -99,8 +99,8 @@ Sigue las guías oficiales con estas precisiones locales:
   y se sirve local después. Endpoints de imagen llevan `Cache-Control:
   private, max-age=86400` + `ETag` por mtime (`utils/cover.py::
   cached_image_response`).
-- El refresco periódico del orchestrator/importer usa Redis como canal,
-  no polling contra la BD.
+- El refresco periódico del orchestrator/importer corre en el propio proceso (un solo worker), con los
+  intervalos de `config.py`; no hay cola ni caché externa (ADR-0011: Redis retirado).
 
 ## 5. Seguridad y blindaje legal
 
@@ -122,8 +122,8 @@ como marco permanente.
    usuario (rutas, credenciales), sanitiza antes.
 5. Endpoints mutables usan `Form(...)` con campos explícitos en UI HTMX;
    `Cache-Control` y `X-Legal-Redirect` documentados en `api/legal.py`.
-6. **La UI escucha en localhost por defecto** (`127.0.0.1` en la app; Postgres y
-   Redis no se publican a la red en ningún caso). Abrir a la LAN es una decisión
+6. **La UI escucha en localhost por defecto** (`127.0.0.1` en la app; Postgres
+   no se publica a la red en ningún caso). Abrir a la LAN es una decisión
    **explícita** del operador y exige contraseña; el exterior, proxy inverso con
    TLS y `BASE_URL`/`ALLOWED_HOSTS`. No se copia el valor por defecto de
    Sonarr/Radarr: es una elección del producto, no una herencia. Decisión
@@ -223,7 +223,7 @@ como marco permanente.
 | Doc | Rol |
 |---|---|
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
-| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI) |
+| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis; 0006–0010 en el propio directorio) |
 | `docs/design/ui-migracion.md` | Inventario de la UI (plantillas, rutas, contratos HTMX), maqueta frente a la realidad y estimaciones de la Épica V. **Consultar antes de tocar una plantilla o un contrato `hx-*`** |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
