@@ -58,8 +58,6 @@ def config_valida(datos: Path) -> dict:
         "services": {
             "postgres": {"container_name": "zascarr-uibase-db",
                          "volumes": [{"type": "bind", "source": f"{datos}/data/postgres"}]},
-            "redis": {"container_name": "zascarr-uibase-cache",
-                      "volumes": [{"type": "bind", "source": f"{datos}/data/redis"}]},
             "zascarr": {"container_name": "zascarr-uibase-app",
                         "ports": [{"published": "18000", "host_ip": "127.0.0.1"}],
                         "volumes": [{"type": "bind", "source": f"{datos}/lib"},
@@ -302,7 +300,6 @@ class TestStackDeOtraCarpeta:
         ajeno = entorno["base"] / "de-otra-sesion"
         env = stack_vivo(entorno, {
             "zascarr-uibase-db": [f"{ajeno}/data/postgres"],
-            "zascarr-uibase-cache": [f"{ajeno}/data/redis"],
             "zascarr-uibase-app": [f"{ajeno}/lib", f"{ajeno}/dl"]})
 
         r = ejecutar(entorno, orden, mio, *args, extra_env=env)
@@ -312,11 +309,10 @@ class TestStackDeOtraCarpeta:
 
     @pytest.mark.parametrize("orden,args", [("bajar", ()), ("dc", ("stop", "postgres"))])
     def test_stack_ajeno_parcial_sin_app_tampoco_se_toca(self, entorno, mio, orden, args):
-        """Su preparación falló antes de crear la app: solo Postgres y Redis. Antes se aceptaba."""
+        """Su preparación falló antes de crear la app: solo Postgres. Antes se aceptaba."""
         ajeno = entorno["base"] / "de-otra-sesion"
         env = stack_vivo(entorno, {
-            "zascarr-uibase-db": [f"{ajeno}/data/postgres"],
-            "zascarr-uibase-cache": [f"{ajeno}/data/redis"]})
+            "zascarr-uibase-db": [f"{ajeno}/data/postgres"]})
 
         r = ejecutar(entorno, orden, mio, *args, extra_env=env)
 
@@ -382,8 +378,7 @@ class TestStackDeOtraCarpeta:
 
     def test_stack_parcial_propio_si_se_puede_desmontar(self, entorno, mio):
         env = stack_vivo(entorno, {
-            "zascarr-uibase-db": [f"{mio}/data/postgres"],
-            "zascarr-uibase-cache": [f"{mio}/data/redis"]})     # sin app
+            "zascarr-uibase-db": [f"{mio}/data/postgres"]})     # sin app
 
         r = ejecutar(entorno, "bajar", mio, extra_env=env)
 
@@ -393,7 +388,6 @@ class TestStackDeOtraCarpeta:
     def test_stack_completo_propio_si_se_puede_desmontar(self, entorno, mio):
         env = stack_vivo(entorno, {
             "zascarr-uibase-db": [f"{mio}/data/postgres"],
-            "zascarr-uibase-cache": [f"{mio}/data/redis"],
             "zascarr-uibase-app": [f"{mio}/lib", f"{mio}/dl", f"{mio}/data/covers"]})
 
         r = ejecutar(entorno, "bajar", mio, extra_env=env)

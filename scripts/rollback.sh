@@ -25,7 +25,7 @@
 #   5. Parar ZascArr y restaurar el dump (dropdb --force + psql ON_ERROR_STOP).
 #   6. Verificar que la restauración tiene tablas.
 #   7. Guardar copia de este script fuera del repo y resetear el código.
-#   8. Vaciar Redis, reconstruir y arrancar. Verificar healthcheck.
+#   8. Reconstruir y arrancar. Verificar healthcheck.
 #
 # Aviso importante: si el commit destino es anterior a la existencia de este
 # script, `git reset --hard` lo borra del repo. Por eso el paso 7 guarda una
@@ -337,13 +337,8 @@ git -C "${REPO_DIR}" reset --hard "${TARGET_SHA}" >/dev/null || die \
   Resuélvelo a mano: git -C ${REPO_DIR} reset --hard ${TARGET_SHA}"
 success "Código en ${TARGET_SHA:0:7}"
 
-# ── 8. Redis, reconstruir y arrancar ─────────────────────────────────────────
+# ── 8. Reconstruir y arrancar ────────────────────────────────────────────────
 FASE="arranque del servicio"
-# Redis es EXCLUSIVO de ZascArr: docker-compose.yml levanta un contenedor
-# zascarr-cache que solo consume la app, así que FLUSHDB no toca datos ajenos.
-info "Vaciando la caché de Redis (puede tener estado de la versión nueva)..."
-"${COMPOSE[@]}" exec -T redis redis-cli FLUSHDB >/dev/null 2>&1 \
-    || warn "No pude vaciar Redis. Si algo se comporta raro: docker compose -f ${COMPOSE_FILE} restart redis"
 
 info "Reconstruyendo la imagen (puede tardar varios minutos en una Pi)..."
 "${COMPOSE[@]}" build zascarr || die \
@@ -351,7 +346,7 @@ info "Reconstruyendo la imagen (puede tardar varios minutos en una Pi)..."
   Reintenta: docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
 
 info "Arrancando ZascArr..."
-"${COMPOSE[@]}" up -d zascarr || die \
+"${COMPOSE[@]}" up -d --remove-orphans zascarr || die \
     "No pude arrancar ZascArr. Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck (${HEALTH_URL})..."
