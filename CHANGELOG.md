@@ -177,6 +177,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - La regla de contraseña (mínimo 12, aviso por debajo de 15) pasa de Ajustes a un
   servicio compartido con el instalador. Sin cambios de comportamiento en Ajustes.
 
+### Eliminado
+
+- **Redis ya no forma parte del stack** ([ADR 0011](docs/adr/0011-retirar-redis.md)). Ningún código lo usaba (ni
+  hoy ni en el histórico) y ocupaba un contenedor y hasta 128 MB en una Pi compartida; publicado en el host, otro proceso
+  del equipo lo adoptó hasta dejarlo en bucle de reinicios. Se quitan el servicio, `REDIS_URL`, las dependencias
+  `redis` y `arq`, y los campos `redis_url` y `redis_cache_ttl`. **Al actualizar**, `update.sh` retira el contenedor
+  `zascarr-cache` de la instalación anterior; la carpeta `redis/` de datos no se borra sola. Los documentos que decían que
+  el refresco o la caché de Comic Vine usaban Redis se corrigen: no era cierto.
+
 ### Obsoleto
 
 - **`POST /api/series` queda obsoleto** (fase 1 de su retirada, #114): sigue funcionando

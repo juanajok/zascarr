@@ -14,7 +14,7 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 - El contenedor solo publica `127.0.0.1:8000` en el host por defecto
   (`ZASCARR_BIND_ADDRESS` en el `.env`, ver abajo). Sin acción explícita tuya,
   ZascArr **no es alcanzable** desde tu LAN ni desde internet.
-- PostgreSQL y Redis publican en `127.0.0.1`, nunca en `0.0.0.0`.
+- PostgreSQL publica en `127.0.0.1`, nunca en `0.0.0.0`. (Redis ya no forma parte del stack: ADR 0011.)
 - Las integraciones P2P (Prowlarr, Transmission, aMule, foro) nacen
   **desactivadas** y piden activación explícita.
 
@@ -31,7 +31,7 @@ valga de inmediato. Detalle de la decisión en
 [`docs/design/benchmark-A11-exposicion.md`](docs/design/benchmark-A11-exposicion.md).
 
 - **Mi red local** pone `ZASCARR_BIND_ADDRESS=0.0.0.0` en el `.env`: se publica el
-  puerto de la **aplicación**; PostgreSQL y Redis siguen en `127.0.0.1` siempre.
+  puerto de la **aplicación**; PostgreSQL sigue en `127.0.0.1` siempre.
   **No reenvíes el puerto 8000 en tu router hacia internet**: el instalador no
   puede comprobarlo.
 - **Proxy inverso** deja el puerto en localhost (lo expuesto es el proxy), guarda

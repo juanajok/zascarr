@@ -107,7 +107,9 @@ info "Aplicando migraciones de base de datos..."
 
 # ── 8. Recrear el servicio y verificar ───────────────────────────────────────
 info "Reiniciando ZascArr..."
-"${COMPOSE[@]}" up -d zascarr || die \
+# `--remove-orphans`: una instalación anterior a ADR 0011 tiene un contenedor `zascarr-cache` (Redis) que ya no está en el
+# compose; sin esto seguiría vivo, gastando RAM, sin que nada lo use.
+"${COMPOSE[@]}" up -d --remove-orphans zascarr || die \
     "No pude arrancar ZascArr. Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck (${HEALTH_URL})..."
