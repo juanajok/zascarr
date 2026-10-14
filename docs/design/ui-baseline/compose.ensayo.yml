@@ -4,15 +4,12 @@
 # Por qué existe: `container_name` fijo en el compose del proyecto es GLOBAL en el daemon de
 # Docker. Con los nombres por defecto, `docker stop zascarr-db` o `docker compose up` desde otra
 # carpeta actúan sobre la instalación REAL si existe. Aquí cada nombre, el proyecto, la red y los
-# puertos son distintos, y Postgres y Redis no se publican en absoluto.
+# puertos son distintos, y Postgres no se publica en absoluto.
 name: zascarr-uibase
 
 services:
   postgres:
     container_name: zascarr-uibase-db
-    ports: !reset []
-  redis:
-    container_name: zascarr-uibase-cache
     ports: !reset []
   zascarr:
     container_name: zascarr-uibase-app

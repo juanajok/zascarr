@@ -3,10 +3,10 @@
 # uninstall.sh — Desinstala ZascArr sin tocar tu biblioteca ni tu configuración.
 #
 # Por defecto ("make uninstall") borra SOLO lo que es de Docker:
-#   - Los tres contenedores (zascarr-orquestador, zascarr-db, zascarr-cache).
+#   - Los contenedores (zascarr-orquestador, zascarr-db y, en instalaciones anteriores a ADR 0011, zascarr-cache).
 #   - La red interna que los conecta.
-#   - La imagen que este repo construyó (la de postgres/redis, que son
-#     oficiales y pueden estar en uso por otra cosa en la misma máquina,
+#   - La imagen que este repo construyó (la de postgres, que es
+#     oficial y pueden estar en uso por otra cosa en la misma máquina,
 #     NUNCA se tocan).
 #
 # NUNCA se borra, ni siquiera con --purge:
@@ -18,7 +18,7 @@
 #
 # Con --purge ("make uninstall-purge") además se borra lo que es de la APP
 # (nunca lo tuyo):
-#   - ZASCARR_DATA_DIR (postgres/, redis/, covers/, vpn-state/): catálogo,
+#   - ZASCARR_DATA_DIR (postgres/, covers/, vpn-state/ y, si es una instalación anterior a ADR 0011, redis/): catálogo,
 #     wishlist, ajustes y caché de portadas. Se reconstruye solo volviendo a
 #     apuntar a tu biblioteca — no es información que solo exista ahí.
 #   - El propio .env (en ZASCARR_ROOT, el padre del repo): la próxima
@@ -285,7 +285,7 @@ fi
 
 # ── Qué va a pasar, ANTES de tocar nada ─────────────────────────────────────
 echo "Esto va a hacer:"
-echo "  - Parar y borrar los contenedores de ZascArr (zascarr-orquestador, zascarr-db, zascarr-cache)."
+echo "  - Parar y borrar los contenedores de ZascArr (zascarr-orquestador, zascarr-db y, si existe, el zascarr-cache de versiones anteriores)."
 echo "  - Borrar la red interna y la imagen que este repo construyó."
 echo "    (las imágenes oficiales de postgres/redis NO se tocan)"
 if $PURGE; then

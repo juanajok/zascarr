@@ -417,7 +417,7 @@ class TestOrdenEnBootstrap:
         """Escribir 127.0.0.1 en el .env no cierra el puerto de un contenedor ya creado."""
         comprobar = self._indice("estado_de_publicacion)")
         parar = self._indice("stop zascarr")
-        assert comprobar < parar < self._indice("up -d postgres redis")
+        assert comprobar < parar < self._indice("up -d postgres")
         assert parar < self._indice("alembic upgrade head")
         assert parar < self._indice("! asegurar_contrasena_de_acceso")
 

@@ -28,7 +28,7 @@ comprobar_rutas_efectivas() {
     fi
     # Cada subruta que se va a crear, marcar o montar: ni es un enlace (tampoco roto) ni su
     # destino efectivo sale de la carpeta de ensayo.
-    for sub in data data/postgres data/redis data/covers data/vpn-state lib lib/.ui-baseline \
+    for sub in data data/postgres data/covers data/vpn-state lib lib/.ui-baseline \
                dl .env .ui-baseline .config.json; do
         ruta="${real}/${sub}"
         if [[ -L "${ruta}" ]]; then
@@ -123,7 +123,7 @@ contenedores_del_ensayo() {
 
 # El nombre de proyecto `zascarr-uibase` es único por máquina: si OTRA carpeta de datos (otra
 # sesión, otro worktree) tiene SU stack, `dc` o `bajar` desde ésta lo tocarían igual. Se mira
-# CADA contenedor existente —también un stack parcial (solo Postgres y Redis, por ejemplo)— y
+# CADA contenedor existente —también un stack parcial (solo Postgres, por ejemplo)— y
 # se exige que TODOS sus montajes cuelguen de ESTA carpeta; basta uno ajeno, o no poder
 # acreditar ninguno, para abortar. Las rutas se comparan como rutas (`[[ == "…"* ]]`), no como
 # expresión regular.
@@ -158,7 +158,7 @@ preparar() {
     if [[ -n "${existentes}" ]]; then
         die "ya hay recursos de un stack de ensayo (zascarr-uibase-*): ejecuta 'bajar' antes (o espera a la otra sesión)."
     fi
-    mkdir -p "${DATOS}"/data/{postgres,redis,covers,vpn-state} "${DATOS}/lib" "${DATOS}/dl"
+    mkdir -p "${DATOS}"/data/{postgres,covers,vpn-state} "${DATOS}/lib" "${DATOS}/dl"
     : > "${DATOS}/.ui-baseline"
     : > "${DATOS}/lib/.ui-baseline"          # lo exige sembrar.py dentro del contenedor
     cat > "${DATOS}/.env" <<ENV
@@ -179,7 +179,7 @@ ENV
     comprobar_compose
     echo "ensayo.sh: aislamiento comprobado; levantando el stack '${PROYECTO}'…"
     dc build zascarr
-    dc up -d postgres redis
+    dc up -d postgres
     local i
     for i in $(seq 40); do
         docker exec zascarr-uibase-db pg_isready -U comics_admin -d zascarr -q && break
