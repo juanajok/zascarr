@@ -1786,11 +1786,13 @@ topes del compose.
   **Al desplegarlo en una instalación afectada:** `update.sh` solo hace `up -d zascarr`, que arrastra a Redis por
   `depends_on`; si el `dump.rdb` heredado sigue ahí, Redis vuelve a morir por OOM al arrancar. Hay que **apartarlo**
   (no borrarlo) antes: `mv <ZASCARR_DATA_DIR>/redis/dump.rdb <ZASCARR_DATA_DIR>/redis/dump.rdb.ajeno`.
-- **(b) Decisión pendiente (ADR): ¿se retira Redis del stack?** Evidencia: no hay cliente en el código (`redis` y
+- **(b) Decidido el 2026-10-15 — se retira Redis del stack** ([ADR 0011](adr/0011-retirar-redis.md); implementado en la PR de
+  retirada, **sin desplegar**). Lo que sigue es el análisis que lo motivó:
+  ~~Decisión pendiente (ADR): ¿se retira Redis del stack?~~ Evidencia: no hay cliente en el código (`redis` y
   `arq` están en `pyproject.toml` sin uso), el compose lo levanta con 128M de presupuesto, `rollback.sh` lo vacía y
   `uninstall.sh` lo borra. Toca la línea del stack de `CLAUDE.md` §1 y exige ADR (§3.1.5). Antes de decidir:
   confirmar que ninguna historia prevista (trabajos en cola con `arq`, caché de fuentes) lo va a necesitar.
-- **Documentación incorrecta detectada, pendiente de corregir con (b):** `CLAUDE.md` §4 dice que el refresco periódico
+- **Documentación incorrecta detectada; corregida con (b):** `CLAUDE.md` §4 dice que el refresco periódico
   del orchestrator/importer usa Redis como canal, y `services/comic_vine.py` documenta «cacheadas en Redis 24h»; el
   código no hace ninguna de las dos cosas.
 - **Relacionado, sin cambio de repo:** en Raspberry Pi OS el kernel arranca con el controlador de memoria

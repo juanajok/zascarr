@@ -27,7 +27,7 @@ ROOT="$(mktemp -d /tmp/zascarr-e2e.XXXXXX)"
 export COMPOSE_PROJECT_NAME="zascarr-e2e-$(date +%s)-$$"
 APP_PORT="${E2E_APP_PORT:-18000}"        # puerto de la app en el HOST (efímero)
 
-# Fichero override para publicar la app en un puerto libre (postgres/redis se
+# Fichero override para publicar la app en un puerto libre (postgres se
 # quedan en la red interna de Compose; no hace falta publicarlos al host).
 cat > "$ROOT/docker-compose.e2e.yml" <<EOF
 services:
@@ -50,7 +50,7 @@ trap cleanup EXIT
 ```
 
 > **Limitar recursos (simular Pi)**: el compose ya declara `deploy.resources.limits.memory`
-> (zascarr 512M, redis 128M, postgres 512M). Si el sandbox lo permite, verificar
+> (zascarr 512M, postgres 512M). Si el sandbox lo permite, verificar
 > que esos límites se aplican con `docker stats --no-stream`. No es obligatorio
 > emular la Pi con precisión; solo documentar qué se valida y qué no.
 
@@ -164,14 +164,13 @@ cd "$ROOT/zascarr"
 "${COMPOSE[@]}" down -v --remove-orphans 2>/dev/null || true
 rm -rf "$ROOT/config/postgres"; mkdir -p "$ROOT/config/postgres"
 
-"${COMPOSE[@]}" up -d postgres redis
+"${COMPOSE[@]}" up -d postgres
 "${COMPOSE[@]}" run --rm zascarr alembic upgrade head     # aplica 0001..0008
 "${COMPOSE[@]}" up -d zascarr
 
 # 4.2 Salud por servicio (separar running de healthy)
 "${COMPOSE[@]}" ps --format json
 "${COMPOSE[@]}" exec -T postgres pg_isready -U comics_admin -d zascarr
-"${COMPOSE[@]}" exec -T redis redis-cli ping          # → PONG
 
 # 4.3 Estado de migración y esquema
 "${COMPOSE[@]}" run --rm zascarr alembic current      # → head
@@ -184,7 +183,7 @@ rm -rf "$ROOT/config/postgres"; mkdir -p "$ROOT/config/postgres"
   "select column_name from information_schema.columns where table_name in ('series','issues','wishlist','legal_acknowledgments') order by table_name, column_name;"
 ```
 
-**Criterio**: postgres/redis `healthy`; zascarr `running` y su `/api/health`
+**Criterio**: postgres `healthy`; zascarr `running` y su `/api/health`
 responde (ver 4.4). `alembic current == head`. Existen las tablas `series`,
 `issues`, `files`, `wishlist`, `import_runs`, `legal_acknowledgments`; y columnas
 como `series.title_norm`, `series.enrichment_attempted_at`, `issues.locked_fields`,
@@ -592,7 +591,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "$APP_URL/api/health"    # 200
 
 # 12.2 down/up SIN borrar volúmenes → los datos persisten
 "${COMPOSE[@]}" down
-"${COMPOSE[@]}" up -d postgres redis zascarr
+"${COMPOSE[@]}" up -d postgres zascarr
 "${COMPOSE[@]}" exec -T postgres psql -U comics_admin -d zascarr -c \
   "select (select count(*) from series) as series, (select count(*) from files) as files, (select count(*) from legal_acknowledgments) as legal;"
 #  Criterio: las cuentas NO bajan; la portada cacheada sigue en $ROOT/config/covers.
@@ -651,8 +650,7 @@ curl -s -o "$ROOT/m1b.json" -w '%{http_code}\n' -X PATCH "$APP_URL/api/series/$S
 # 14.3 CBR (sin unrar) → no se extrae portada, no crashea.
 # 14.4 CBZ sin imágenes / JPEG corrupto → warning, no crash.
 # 14.5 Título Unicode, con espacios, o de >255 bytes → ruta segura (is_relative_to).
-# 14.6 Redis caído durante el arranque → la app arranca (degradado) o falla con
-#     mensaje claro, sin dejar el stack a medias.
+# 14.6 (Redis retirado: ADR 0011; ya no hay dependencia que simular.)
 # 14.7 Errores de red/timeouts de integraciones (Prowlarr/Transmission/aMule/
 #     Tebeosfera/Comic Vine) → el ciclo no se bloquea, registra error y reintenta
 #     según política (un error de red NO debe marcar caché negativa).
@@ -704,8 +702,8 @@ BD ni se escribe fuera de la biblioteca) y no bloquea el ciclo.
 > `127.0.0.1:8000`. No caben en paralelo con el stack E2E (compartirían los
 > puertos 5432/6379/8000), así que esta fase va **después del teardown de la 15**,
 > con esos puertos libres. Es la prueba que valida de verdad lo que la
-> simulación no puede: `dropdb --force`, `psql -v ON_ERROR_STOP=1` y
-> `redis-cli FLUSHDB` contra Docker/PostgreSQL reales.
+> simulación no puede: `dropdb --force` y `psql -v ON_ERROR_STOP=1`
+> contra Docker/PostgreSQL reales.
 
 ```bash
 cd "$ROOT"
@@ -724,7 +722,7 @@ PCOMPOSE=(docker compose -f "$UT/zascarr/docker-compose.yml" --env-file "$UT/.en
 
 # ── 16.2 Stack en v1: build, migrar y sembrar un dato "antes" ──
 "${PCOMPOSE[@]}" build zascarr
-"${PCOMPOSE[@]}" up -d postgres redis
+"${PCOMPOSE[@]}" up -d postgres
 "${PCOMPOSE[@]}" run --rm zascarr alembic upgrade head
 "${PCOMPOSE[@]}" run --rm zascarr python - <<'PY'
 import asyncio

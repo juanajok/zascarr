@@ -21,8 +21,8 @@ htmx 4 y `/estado`. Inventario asociado: `docs/design/ui-migracion.md`.
 
 ## Aislamiento: el ensayo NO puede tocar una instalación real
 
-El `docker-compose.yml` del proyecto fija `container_name` (`zascarr-db`, `zascarr-cache`,
-`zascarr-orquestador`) y publica los puertos 5432, 6379 y 8000. **Esos nombres son globales en el
+El `docker-compose.yml` del proyecto fija `container_name` (`zascarr-db`,
+`zascarr-orquestador` y, en instalaciones anteriores a ADR 0011, `zascarr-cache`) y publica los puertos 5432 y 8000. **Esos nombres son globales en el
 daemon de Docker**: un *worktree* y unas carpetas de datos distintas no bastan, y un
 `docker stop zascarr-db` o un `docker restart zascarr-orquestador` actuaría sobre la instalación real
 si existe. Por eso el ensayo **no usa ninguno de esos nombres**:
@@ -30,8 +30,8 @@ si existe. Por eso el ensayo **no usa ninguno de esos nombres**:
 | | Producción (compose del proyecto) | Ensayo (`compose.ensayo.yml`) |
 |---|---|---|
 | Proyecto de Compose | `zascarr` | `zascarr-uibase` (también red e imagen) |
-| Contenedores | `zascarr-db`, `zascarr-cache`, `zascarr-orquestador` | `zascarr-uibase-db`, `-cache`, `-app` |
-| Puertos publicados | 5432, 6379, 8000 | **ninguno** para Postgres y Redis; **`127.0.0.1:18000`** para la app |
+| Contenedores | `zascarr-db`, `zascarr-orquestador` | `zascarr-uibase-db`, `-app` |
+| Puertos publicados | 5432, 8000 | **ninguno** para Postgres; **`127.0.0.1:18000`** para la app |
 | Datos | `ZASCARR_DATA_DIR` y las carpetas `HOST_*` reales | carpeta **nueva** de ensayo, marcada con `.ui-baseline` |
 
 `ensayo.sh` lo impone, no lo recomienda: antes de arrancar **resuelve el Compose combinado** y aborta si
@@ -54,7 +54,7 @@ con el destino **real** de cada montaje, no con su texto.
 **Un solo ensayo por máquina.** El proyecto `zascarr-uibase` es único: si otra carpeta de datos (otra
 sesión, otro *worktree*) tiene su stack, `preparar` se niega, y `dc` y `bajar` **lo tratan como ajeno
 salvo que se acredite lo contrario**: listan *todos* los contenedores del proyecto (por etiqueta de
-Compose y por prefijo de nombre), **también un stack parcial** (p. ej. solo Postgres y Redis si la
+Compose y por prefijo de nombre), **también un stack parcial** (p. ej. solo Postgres si la
 preparación de la otra sesión falló antes de crear la app), y exigen que **todos los montajes de cada
 uno** cuelguen de **esta** carpeta —basta uno ajeno, o no poder acreditar ninguno (contenedor sin
 montajes, `inspect` que falla), para abortar sin tocar nada. Las rutas se comparan **como rutas**, no como
