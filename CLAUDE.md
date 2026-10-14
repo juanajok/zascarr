@@ -149,6 +149,17 @@ como marco permanente.
   Documentado como limitación aceptada en B2.
 - Tarjetas con gracia de fallo: portada rota = placeholder CSS
   `.cover-missing`, no imagen rota; campo ausente con icono claro.
+- **Presupuesto de texto** (historia U21, decidido el 2026-10-15; los umbrales
+  son provisionales hasta validarlos en U10):
+  - Una frase de entrada por pantalla, de ≤ 20 palabras, que diga qué se hace aquí.
+  - ≤ 50 palabras visibles antes de la primera acción. El resto va en
+    `<details>` («¿De dónde salen estos datos?», «Avanzado»).
+  - La garantía («no se mueve ni se renombra nada») va **junto a la acción
+    con efecto** y en su confirmación, no en la cabecera de pantallas que
+    no cambian nada.
+  - Resumen antes que listado. Las mayúsculas, solo en rótulos de ≤ 3 palabras.
+  - Los textos explican la tarea, no el contrato: nada de «token», «lote»
+    ni códigos internos en superficie (ver A2 y U20).
 
 ## 7. Base de datos
 
