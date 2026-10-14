@@ -558,9 +558,11 @@ button[type="submit"].neutro {
 }
 
 /* Convención estándar de htmx: oculto hasta que la petición está en
-   vuelo (htmx añade/quita .htmx-request ella sola, sin JS propio). */
-.htmx-indicator { opacity: 0; }
-.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+   vuelo (htmx añade/quita .htmx-request ella sola, sin JS propio). U11: `visibility` lo saca
+   también del árbol de accesibilidad. htmx 4 ya lo hace con su hoja adoptada
+   (`includeIndicatorCSS`), pero esta hoja no depende de esa opción ni de que htmx haya cargado. */
+.htmx-indicator { opacity: 0; visibility: hidden; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; visibility: visible; }
 
 /* D10: panel de candidatos de "Buscar ahora" — lista simple, cada fila
    con su formulario de confirmación explícita antes de descargar nada. */
@@ -599,11 +601,12 @@ button[type="submit"].neutro {
   font-size: .9rem;
 }
 
+/* U11: el anillo de `:focus-visible` (--cyan-t, ≥ 3:1 en los dos temas) se CONSERVA; la sombra
+   solo lo acompaña. Antes `outline: none` la dejaba sola y en oscuro medía 1,14:1. */
 .series-search:focus,
 .filter-bar input[type="search"]:focus,
 .filter-bar select:focus,
 .search-input:focus {
-  outline: none;
   box-shadow: var(--shadow-ink-sm);
 }
 
