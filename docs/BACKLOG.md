@@ -1786,6 +1786,12 @@ topes del compose.
   **Al desplegarlo en una instalación afectada:** `update.sh` solo hace `up -d zascarr`, que arrastra a Redis por
   `depends_on`; si el `dump.rdb` heredado sigue ahí, Redis vuelve a morir por OOM al arrancar. Hay que **apartarlo**
   (no borrarlo) antes: `mv <ZASCARR_DATA_DIR>/redis/dump.rdb <ZASCARR_DATA_DIR>/redis/dump.rdb.ajeno`.
+- **(a) Desplegado y verificado en la Pi de producción (2026-10-13, `a5369ef`):** `update.sh` recreó
+  `zascarr-cache` sin puerto (`docker port zascarr-cache` vacío; 6379 cerrado desde la LAN). Con el `dump.rdb`
+  heredado apartado (`dump.rdb.ajeno`, 160 MB, conservado: qué hacer con él lo decide la persona operadora),
+  Redis arrancó estable: `running`, 0 reinicios, `oom=false`, 5,9 MiB frente a su tope de 128 MiB; los tres
+  contenedores con el tope aplicado (512M / 128M / 512M). Verificado con un script local de cgroup que **no** está
+  en el repo. No cubre PCP: que siga funcionando sin ese Redis no se comprobó.
 - **(b) Decidido el 2026-10-15 — se retira Redis del stack** ([ADR 0011](adr/0011-retirar-redis.md); implementado en la PR de
   retirada, **sin desplegar**). Lo que sigue es el análisis que lo motivó:
   ~~Decisión pendiente (ADR): ¿se retira Redis del stack?~~ Evidencia: no hay cliente en el código (`redis` y
