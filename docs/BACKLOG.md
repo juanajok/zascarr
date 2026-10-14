@@ -908,6 +908,35 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   4. Resultado registrado como ficha §13 en `docs/design/` con decisión adoptar/adaptar/descartar por cada hallazgo de U1–U9 y su versión de la UI evaluada.
   5. Se hace **antes** de implementar U1 y U2 y no bloquea U4 y U6, que son correcciones objetivas.
 - **Dependencias.** Ninguna.
+- **Actualización (auditoría del 2026-10-15).** El guion de 14 archivos ya no representa la instalación real (**1.322 pendientes en 108 carpetas**). La validación debe usar esa escala y comparar dos entradas a «Por revisar»: por carpetas (U13) y la lista compacta de la maqueta (V5). Es la puerta G1 de U13, V5 y V6b.
+
+#### Ampliación de la Épica U: auditoría en vivo del 2026-10-15 (U11–U18)
+
+**Origen:** auditoría de UI, aspecto visual y usabilidad sobre la instancia real de la Pi (`origin/main` `a5369ef`, v1.15.1). Se hizo en el navegador, en tema claro y oscuro, a 1440, 727, 375 y 360 px, con medición automática en el DOM (contraste, tamaños, objetivos, etiquetas y reflow), y se revisó también la maqueta. Informe completo y evidencia: `docs/design/auditoria-ui-2026-10-15.md`. **Alcance honesto:** es una evaluación experta, **no** una prueba con usuarios. iPhone/Safari se emuló, no se probó en un dispositivo.
+
+**Lo que confirma la auditoría:** V1 funciona (**0 pares de texto por debajo de 4,5:1** en 11 pantallas y ambos temas); V3 y V4 están bien resueltos. Los hallazgos que ya cubren V8–V11 no se duplican aquí: su evidencia se añade en la Épica V («Evidencia de la auditoría del 2026-10-15»).
+
+| ID | Historia | Aceptación clave | P | Est |
+|---|---|---|---|---|
+| U11 | Como coleccionista que usa el teclado o un lector de pantalla, quiero ver qué campo estoy usando y saber qué pide cada uno, para no escribir a ciegas | Anillo de foco ≥ 3:1 en ambos temas; todo `input`/`select` visible con nombre accesible; nombre único por archivo en Por revisar; indicador oculto fuera del árbol de accesibilidad; prueba automática | P0 | S |
+| U12 | Como coleccionista con más de mil pendientes, quiero saber cuántos hay y leer el nombre entero de cada archivo, para decidir sin abrir nada | «Mostrando N de M» + paginación; sin hueco cuando no hay portada; nombre sin recortar; sin peticiones de portada que el servidor ya sabe que darán 404 | P0 | M |
+| U13 | Como coleccionista con la colección en carpetas, quiero empezar a clasificar por carpeta y dejar el archivo a archivo para lo que quede suelto, para resolver 1.322 pendientes con unas cien decisiones | «Por revisar» entra por la vista de carpetas; los sueltos en cola de uno en uno; sin «seleccionar todo» sobre el total; decisión validada en U10 | P0 | L |
+| U14 | Como coleccionista que busca una serie en Descubrir, quiero ver que la búsqueda avanza y leer resultados limpios, para no pensar que se ha colgado | Indicador durante la búsqueda y anuncio del resultado; descripción como texto (sin HTML visible); nombre legible de la fuente; controles con el estilo del sistema; enlace externo con nombre y aviso | P1 | M |
+| U15 | Como coleccionista de tebeo español, quiero que la tradición que sugiere Descubrir no me lleve a error, para no dar de alta *Mortadelo* como grapa americana | Spike: medir si la sugerencia sale de la fuente o de la obra con títulos españoles; si no es fiable, no se preselecciona y se dice por qué | P1 | S |
+| U16 | Como coleccionista en el móvil, quiero usar todas las pantallas sin que se amplíen solas ni se desplacen de lado, para no pelearme con el teléfono | Sin scroll horizontal a 360 px (ficha de serie); campos ≥ 16 px; `select` ≥ 24 px; objetivos primarios ≥ 44 px; verificado en iPhone y Android reales | P1 | S |
+| U17 | Como coleccionista, quiero leer los avisos y el texto legal sin esfuerzo, para entender a qué me comprometo | Mayúsculas y giro solo en rótulos cortos; párrafos en caja normal; aviso legal adecuado a cada pantalla; decisión sobre plegarlo registrada | P1 | S |
+| U18 | Como coleccionista, quiero que la aplicación me hable con mis palabras, para no tropezar con términos internos | Login sin «usuario» cuando solo hay contraseña; etiquetas y no valores internos (`tebeo`, `COMIC_VINE`); sin controles vacíos; un término por concepto en Por revisar; sin «JSON» en Estado | P2 | S |
+
+**Fichas (resumen; criterios completos en las tarjetas del Kanban «BL-U»)**
+
+- **U11 — Foco visible y campos con nombre (P0, S).** *Evidencia:* `web.css:602-607` quita el `outline` de los buscadores y lo sustituye por una sombra negra al 55 %, que en oscuro da **1,14:1** (WCAG 1.4.11/2.4.7). Por revisar tiene 50 campos cuyo único nombre es «Buscar serie…» (más el campo «nº»); Biblioteca tiene 3 buscadores y 2 `select` sin nombre; el buscador de Deseados se corta en «Buscar serie para añad». `.htmx-indicator { opacity: 0 }` (`web.css:562`) se sigue anunciando. *Pruebas:* ampliar `test_web_css_contraste` con el foco y añadir una prueba de plantillas que falle ante un control visible sin `label`/`aria-label`. *Dependencias:* ninguna; es una corrección objetiva y no espera a U10.
+- **U12 — Saber cuántos hay y leer el nombre entero (P0, M).** *Evidencia:* 50 tarjetas de 1.322 sin indicarlo. `.pending-card .cover.cover-missing { visibility: hidden }` (`web.css:628`) oculta la imagen pero **conserva el hueco 2:3**: a 375 px, la primera pantalla no muestra ningún nombre. `.filename` recorta con elipsis. 50 peticiones `/portada`, casi todas 404. *Encaje:* es el subconjunto objetivo de V5 que **no depende de G1**; V5 conserva el rediseño. *Dependencias:* U11.
+- **U13 — Empezar por carpetas (P0, L).** *Evidencia:* la vista «Pendientes por carpeta» (108 carpetas, paginada, con serie sugerida y conflictos) ya existe, junto con su asistente (ADR 0007/0008), pero es un enlace secundario. La maqueta (MQ1) se diseñó con 14 archivos: «seleccionar todo» + «Asignar…» sobre 1.322 es una acción masiva peligrosa. Variantes comparadas en la §5 del informe; recomendada: carpetas primero + cola para los sueltos. *Dependencias:* **U10 (G1)**; Kanban M3 (#106) y V5/V6b. Si se adopta, **reescribe la ficha de V5**.
+- **U14 — Descubrir con progreso y resultados limpios (P1, M).** *Evidencia:* «Mortadelo» tardó 15-20 s sin indicador; la descripción de Comic Vine se ve como HTML escapado (`<p>…<a href="/editorial-bruguera/…">`); la fuente sale como `COMIC_VINE` (`_resultados_descubrir.html:21`); el `select` nativo es gris claro en una tarjeta oscura; el enlace `↗` no tiene nombre. La maqueta deja Descubrir fuera de alcance (MQ4). *Encaje:* adelanta la parte de Descubrir de V12.
+- **U15 — Sugerencia de tradición fiable (P1, S).** *Evidencia:* 9 resultados de Comic Vine para «Mortadelo» sugieren «Grapa americana». *Hipótesis:* la sugerencia se deriva de la fuente (ADR 0002), no de la obra. Hay que medirlo antes de cambiar nada (medir antes de automatizar). *Dependencias:* Kanban M8-US03 (#135).
+- **U16 — Móvil sin zoom ni desplazamiento lateral (P1, S).** *Evidencia:* la ficha de serie desborda **127 px** a 360 px por `#wishlist_policy` (WCAG 1.4.10); hay campos de 14,4 px (Safari en iOS amplía la página por debajo de 16 px, **por verificar en dispositivo**); los `select` de Ajustes miden 22 px (WCAG 2.5.8); hay 51 objetivos por debajo de 44 px en Por revisar. *Encaje:* adelanta las correcciones medidas de V13; V13 conserva la verificación completa.
+- **U17 — Avisos y texto legal legibles (P1, S).** *Evidencia:* la didascalia (`web.css:495-507`, mayúsculas y `rotate(-1.2deg)`) se usa en párrafos de 2-4 líneas, entre ellos el aviso legal. En Ajustes, el aviso dice «Añadir una serie **aquí**». *Decisión pendiente (de producto y legal, no de diseño):* plegar el aviso como hace la maqueta o dejar una frase visible con enlace. La recomendación es la frase visible; la decisión es del responsable (CLAUDE.md §5, `LEGAL.md`).
+- **U18 — Hablar con mis palabras (P2, S).** *Evidencia:* el login dice «Usuario o contraseña incorrectos» con un solo campo (`web/auth.py:93`). Biblioteca muestra `tebeo` en vez de «Tebeo español» y un `select` «Todas las editoriales» sin opciones. Por revisar llama a lo mismo archivos, registros, pendientes y tebeos. Estado: «Semáforos en vez de JSON crudo». *Encaje:* U7 (glosario).
 
 #### Orden de ataque sugerido
 
@@ -975,6 +1004,17 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 | V12 | Como coleccionista, quiero que Biblioteca, Descubrir, ficha de serie, login y aviso legal encajen con el resto | Restyle con los componentes de V2, sin rediseñar el flujo (**`login.html` no hereda de `base.html`; política de serie y candidatos tampoco tienen maqueta**) | P1 | **L** *(era M)* |
 | V13 | Como coleccionista en móvil o tablet, quiero que todo funcione en pantalla pequeña | Verificación a 360/390/414/768 px, objetivos táctiles, foco y avisos tras cada intercambio HTMX | P1 | M |
 | V14 | Como equipo, quiero cerrar la migración sin restos, para no arrastrar CSS ni plantillas huérfanas | Limpieza, docs, capturas nuevas, CHANGELOG/BACKLOG, comprobación de clases CSS sin uso | P2 | S |
+
+**Evidencia de la auditoría del 2026-10-15** (`docs/design/auditoria-ui-2026-10-15.md`; no cambia ni el alcance ni el estado de ninguna historia):
+
+- **V5:** la maqueta parte de 14 archivos; la instalación real tiene 1.322 en 108 carpetas. Antes de construirla hay que ver U13 (entrar por carpetas) y la actualización de U10. Las correcciones objetivas (recuento, hueco de portada, nombre entero) se adelantan en U12.
+- **V6b:** el `<datalist>` de la maqueta para la serie de destino no busca en el servidor, se ve distinto en iOS Safari y Android y no distingue año ni editorial. Hay que usar el buscador HTMX que ya existe.
+- **V8:** confirmado en vivo: las dos filas de Deseados muestran «Buscando…» y a la vez «No se encontró nada en las fuentes activas».
+- **V9:** confirmado en vivo: «Todo bien» convive con un aviso en mayúsculas que enseña `/run/vpn-state/wg0.json`. El patrón de la maqueta (qué pasa / por qué importa / qué hacer, y el detalle técnico plegado) lo resuelve.
+- **V10:** confirmado en vivo: Ajustes muestra 8 botones «Guardar», jerga (`.env`, «enricher», `host.docker.internal`, 403, `BASE_URL`) y un aviso legal fuera de contexto (U17).
+- **V11:** la página de Duplicados mide 27.400 px, no tiene resumen y enseña rutas completas del contenedor (`/media/library/…`).
+- **V12/V13:** U14 y U16 adelantan las partes medidas de Descubrir y del móvil.
+- **Iconos:** la maqueta usa emojis como iconos de estado; cómo se ven depende de la fuente de emoji del sistema. La UI actual (símbolos Unicode monocromos) es más predecible.
 
 #### Fichas detalladas de la Épica V
 
