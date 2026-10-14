@@ -147,6 +147,7 @@ la garantía junto al botón con efecto, lo técnico plegado, resumen antes que 
 | m6 | Duplicados: **27.400 px** de página sin resumen ni índice. Rutas completas del contenedor (`/media/library/Comics/…`) que el usuario no asocia a su disco | C | Nielsen 6, 8 · U8/V11 |
 | m7 | Por revisar lanza **50 peticiones `/portada` por carga, casi todas 404**, para acabar en `onerror` (JS en línea). Hoy es rápido, pero cada 404 cuesta trabajo a la Pi y el servidor ya sabe que no hay portada | C | Rendimiento; CSP |
 | m8 | `.htmx-indicator { opacity: 0 }` (`web.css:562`) **sigue en el árbol de accesibilidad**: el lector de pantalla anuncia «Buscando…» aunque no se esté buscando | C | WCAG 1.3.1 |
+| | **Seguimiento de m8 (2026-10-15, PR #209):** **no se reproduce en ejecución.** htmx 4 inyecta su propia hoja (`includeIndicatorCSS`) con `.htmx-indicator { opacity: 0; visibility: hidden }`, y en el ensayo con Postgres real la `visibility` calculada de los 3 indicadores de Deseados salió `hidden`. La lectura «C» venía de `web.css`, no del árbol de accesibilidad renderizado. Aun así, U11 añade la regla a `web.css` para no depender de esa opción ni de que htmx haya cargado | P (corregido) | `docs/design/ui-u11/` |
 | m9 | En este PC (Linux), `system-ui` resuelve a una **monoespaciada** (medido: 10×«i» = 10×«M» = 96 px). Respeta el escritorio del usuario, pero las líneas salen ~30 % más largas. No afecta a Android/iOS | C (en este equipo) | Tipografía |
 
 ---
