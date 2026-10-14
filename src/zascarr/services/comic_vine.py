@@ -1,7 +1,7 @@
 """
 Cliente Comic Vine API.
 
-Rate limit: 1 req/s (ToS). Respuestas cacheadas en Redis 24h.
+Rate limit: 1 req/s (ToS). Sin caché compartida: lo que se guarda se guarda en PostgreSQL.
 Documentación: https://comicvine.gamespot.com/api/documentation
 """
 import asyncio

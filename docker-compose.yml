@@ -47,23 +47,6 @@ services:
         limits:
           memory: 512M
 
-  redis:
-    image: redis:7-alpine
-    container_name: zascarr-cache
-    restart: unless-stopped
-    networks:
-      - zascarr-internal
-    command: redis-server --save 60 1 --loglevel warning
-    # Sin `ports:` a propósito: ZascArr llega a Redis por la red interna (`redis://redis:6379`). Publicarlo en
-    # 127.0.0.1 dejó que un proceso ajeno del host lo adoptara (caso real: ~160 MB de series de PCP; con el tope
-    # de 128M aplicado, Redis entraba en bucle de reinicios por OOM al recargar el dump). Ver BACKLOG, «Redis adoptado».
-    volumes:
-      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/redis:/data
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-
   zascarr:
     build:
       context: .
@@ -77,12 +60,11 @@ services:
     ports:
       # A11: dirección en la que el HOST publica la interfaz. Por defecto solo esta
       # máquina (ADR 0004); `bootstrap.sh` la cambia a 0.0.0.0 si eliges «mi red
-      # local», y solo tras fijar una contraseña. Postgres y Redis NO se
+      # local», y solo tras fijar una contraseña. Postgres NO se
       # parametrizan: nunca deben ser alcanzables desde la red.
       - "${ZASCARR_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/zascarr
-      - REDIS_URL=redis://redis:6379/0
       - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
       - PROWLARR_URL=${PROWLARR_URL:-http://host.docker.internal:9696}
       - PROWLARR_API_KEY=${PROWLARR_API_KEY:-}
@@ -124,8 +106,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     deploy:
       resources:
         limits:

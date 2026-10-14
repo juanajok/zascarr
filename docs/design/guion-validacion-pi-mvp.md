@@ -4,6 +4,8 @@
 > comandos y los resultados esperados no sean suposiciones, pero **un ensayo en x86 no es evidencia de la Pi**: el
 > disco, la memoria y la CPU son justo lo que se quiere medir. Hasta que alguien lo ejecute, todo lo que dice «en la
 > Pi» está **NOT RUN**.
+>
+> **Ejecutado el 2026-10-13/14:** el resultado está en [`informe-validacion-pi-mvp-2026-10-13.md`](informe-validacion-pi-mvp-2026-10-13.md) (36 PASS, 0 FAIL, 2 NOT RUN). Lo que dice «NOT RUN» en este guion sigue siendo cierto salvo lo que ese informe cubre.
 
 ## 1. Qué valida y qué no
 
@@ -24,7 +26,7 @@ sí, desde #189: V-17b), fuentes reales (Comic Vine, AniList, Tebeosfera, GCD), 
    biblioteca real; la pila de validación nunca monta la real.
 3. **Sin red hacia fuentes ni hacia los servicios de la Pi.** Fuentes apagadas; Transmission, Prowlarr y aMule vacíos
    (si no, la pila de validación hablaría con los de producción). No se acepta el asistente legal.
-4. **Postgres y Redis no se publican** (ADR 0004); la interfaz escucha solo en `127.0.0.1`. Se entra por túnel SSH.
+4. **Postgres no se publica** más que en `127.0.0.1` y **Redis ya no existe** (ADR 0004 y ADR 0011); la interfaz escucha solo en `127.0.0.1`. Se entra por túnel SSH.
 5. **`scripts/backup.sh` y `scripts/rollback.sh` NO valen para esta pila**: no llevan `--project-name` y apuntarían al
    proyecto `zascarr` (producción). Aquí se usan los comandos explícitos de §7.
 6. **Un FAIL de seguridad (§9, V-40…V-43) para el guion** y se informa antes de seguir.
@@ -68,9 +70,6 @@ services:
   postgres:
     container_name: zascarr-val-db
     ports: !override []          # el compose base publica 127.0.0.1:5432: chocaría con producción
-  redis:
-    container_name: zascarr-val-cache
-    ports: !override []
   zascarr:
     container_name: zascarr-val-orquestador
     ports: !override
@@ -291,14 +290,14 @@ aislada de §4**, 121 CBZ sintéticos y **sin tocar nada fuera de `/tmp`**:
 
 | Qué | Resultado |
 |---|---|
-| `docker compose config` con el fichero de §4.2 | Sin puertos de Postgres/Redis; app en `127.0.0.1:18000`; datos y biblioteca en la carpeta de prueba |
+| `docker compose config` con el fichero de §4.2 | Sin puerto de Postgres; app en `127.0.0.1:18000`; datos y biblioteca en la carpeta de prueba |
 | Migrar, arrancar, adoptar la biblioteca | `database=ok`; 1 grupo, 121 archivos; biblioteca sin cambios |
 | Crear serie a mano + previsualizar + confirmar **100** archivos | `vinculados_todos`, 100 vinculados, 100 números nuevos; **0,33 s** (x86, 8 CPU) |
 | Repetir el token | `repetida: true`, 0,01 s, mismos totales |
 | **Medición de §8, 3 rondas de 100** (con el script literal de §8, 320 archivos) | `previsualizar` 0,03–0,06 s; `confirmar` **0,35 / 0,28 / 0,28 s**; `vinculados_todos` ×3; 0 reinicios del contenedor; app ~86 MB (x86, 8 CPU, NVMe: **no extrapolable a la Pi**) |
 | Confirmar 20 + `docker kill` + `docker start` + repetir el token | Misma operación, `repetida: true`, mismos totales, **biblioteca idéntica** |
 | `pg_dump` → `dropdb` → `createdb` → restaurar | Recuentos idénticos (120 / 120 / 2 / 1); salud `ok`; pendientes correctos |
-| Uso de memoria en reposo | app ~90 MB, Postgres ~100 MB, Redis ~4–12 MB |
+| Uso de memoria en reposo | app ~90 MB, Postgres ~100 MB (y Redis ~4–12 MB, **ya retirado**: ADR 0011) |
 
 **No se ensayó (sigue NOT RUN):** nada en la Pi; la **interfaz web** de V-20…V-29 (cubierta por pruebas automáticas y
 una comprobación en navegador en las PR #185–#187, no por este guion); V-32 (espera de 16 min), V-35 (reinicio),
@@ -306,9 +305,9 @@ V-36 (disco lleno) y V-53 (Pi con carga).
 
 ### Hallazgos del ensayo
 
-1. **El compose base publica Postgres en `127.0.0.1`** (5432; Redis dejó de publicarse, ver BACKLOG «Redis adoptado»): una
-   segunda pila en el mismo equipo chocaría con producción. Por eso §4.2 usa `ports: !override []` (hace falta Compose ≥ 2.24;
-   para Redis es ya un no-op inofensivo, pero cubre un checkout anterior).
+1. **El compose base publica Postgres en `127.0.0.1`** (5432): una segunda pila en el mismo equipo chocaría con producción.
+   Por eso §4.2 usa `ports: !override []` (hace falta Compose ≥ 2.24). Redis ya no está en el compose (ADR 0011); si
+   usas un checkout anterior que aún lo tenga, el fichero de §4.2 necesitaría un bloque `redis:` con el mismo `!override []`.
 2. **Hay que migrar antes de usar la pila nueva**; si no, `/api/health` dice `migration_required` y la interfaz no sirve.
 3. **El estado `degraded` es normal** en la pila aislada (sin Transmission, aMule ni VPN); no es un fallo.
 4. **Dos CBZ iguales son duplicados**: una biblioteca de prueba con archivos idénticos no se registra como archivos distintos.

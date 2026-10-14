@@ -77,7 +77,7 @@ del producto.
 ## Stack
 
 Python 3.11+ · **FastAPI** (async end-to-end) · SQLAlchemy async + asyncpg ·
-**PostgreSQL 15** · Redis · Alembic · **Jinja2 + HTMX** (vendorizado, sin SPA
+**PostgreSQL 15** · Alembic · **Jinja2 + HTMX** (vendorizado, sin SPA
 ni Node) · structlog.
 
 La UI es server-side (Jinja2 + HTMX), siguiendo el
@@ -187,7 +187,7 @@ sudo bash zascarr/bootstrap.sh
   se lo confirmes: nunca cambia una ruta por su cuenta.
 - Crea la estructura de carpetas de la biblioteca (`Comics`, `Manga`, `BD`,
   `Tebeos`, …) **sin tocar tus archivos**.
-- Levanta PostgreSQL, Redis y ZascArr como contenedores Docker.
+- Levanta PostgreSQL y ZascArr como contenedores Docker.
 - Aplica las migraciones de la base de datos y comprueba que todo está sano.
 
 ### Instalación manual (para quien prefiera Docker Compose)
@@ -283,7 +283,7 @@ Qué hace:
    BD de ZascArr de verdad (tablas `series`, `files`, `wishlist` y revisión de
    Alembic), no un HTTP 200 cualquiera del healthcheck.
 5. Vuelve el código al commit anterior —dejando antes una referencia para poder
-   **deshacer el rollback**—, vacía la caché de Redis, reconstruye y arranca.
+   **deshacer el rollback**—, reconstruye y arranca.
    Verifica el healthcheck.
 
 Si el commit al que vuelve es anterior a la existencia de `rollback.sh`, el
@@ -317,9 +317,8 @@ $COMPOSE exec -T postgres createdb -U comics_admin zascarr
 gunzip -c /var/backups/zascarr/postgres/update_AAAAMMDD_HHMMSS.sql.gz | \
   $COMPOSE exec -T postgres psql -q -v ON_ERROR_STOP=1 -U comics_admin zascarr
 
-# 4. Volver al commit anterior, limpiar la caché y reconstruir
+# 4. Volver al commit anterior y reconstruir
 git reset --hard <SHA-anterior>
-$COMPOSE exec -T redis redis-cli FLUSHDB
 $COMPOSE build zascarr && $COMPOSE up -d zascarr
 ```
 
@@ -327,9 +326,7 @@ Dos detalles que no son opcionales: `psql` **sin** `ON_ERROR_STOP=1` devuelve
 éxito aunque fallen sentencias sueltas (te quedaría una restauración a medias
 con cara de haber ido bien), y `dropdb --force` evita el fallo típico de
 «database is being accessed by other users» (necesita PostgreSQL 13+, que es el
-que fija este repo). El `FLUSHDB` de Redis es seguro aquí porque Redis es
-exclusivo de ZascArr (`zascarr-cache` en el compose); no copies ese patrón a
-un Redis compartido con otras aplicaciones.
+que fija este repo).
 
 ### Copia de seguridad manual
 
@@ -350,7 +347,7 @@ sudo make uninstall
 
 Por defecto borra **solo lo que es de Docker**: los contenedores, la red
 interna y la imagen que este repo construyó (las imágenes oficiales de
-Postgres/Redis, que pueden estar en uso por otra cosa en la misma máquina,
+Postgres, que pueden estar en uso por otra cosa en la misma máquina,
 nunca se tocan). Conserva el catálogo/wishlist/ajustes (Postgres, en
 `ZASCARR_DATA_DIR`) y tu `.env`, así que reinstalar después no te hace
 volver a responder el asistente ni a re-escanear la biblioteca desde cero.

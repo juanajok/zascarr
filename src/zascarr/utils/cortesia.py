@@ -11,7 +11,7 @@ Qué garantiza y qué NO:
   instancia, del camino o de la tarea que sea; las concurrentes hacen cola (FIFO) y se escalonan.
 - **Depende de que haya UN SOLO proceso.** La imagen arranca `uvicorn --workers 1` y el enriquecedor corre en
   ese mismo proceso (`main._enrichment_loop`), así que cubre todos los caminos que existen hoy. Con varios
-  procesos o réplicas NO se coordinan (haría falta un estado compartido, p. ej. en Redis).
+  procesos o réplicas NO se coordinan (haría falta un estado compartido, p. ej. en PostgreSQL).
 - Mide con `time.monotonic` (no se ve afectado por cambios de la hora del sistema).
 """
 from __future__ import annotations

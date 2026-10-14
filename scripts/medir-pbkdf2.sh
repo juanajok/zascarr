@@ -14,7 +14,7 @@
 #
 # Se decide con la mediana de **dos verificaciones a la vez**, no en solitario:
 # la app verifica con dos hilos de PBKDF2, y de una en una el coste se subestima
-# cuando compite con Postgres o con Redis. La mediana en solitario se imprime
+# cuando compite con Postgres. La mediana en solitario se imprime
 # como referencia.
 #
 # Uso:
@@ -95,7 +95,7 @@ mediana_sola="$(mediana "${valores[@]}")"
 # ── 2) Dos a la vez (lo que de verdad hace la app) ───────────────────────────
 echo
 info "Dos a la vez (${REPETICIONES_PARALELAS} rondas): es el caso real — la app"
-info "verifica con dos hilos de PBKDF2, compitiendo con Postgres y Redis."
+info "verifica con dos hilos de PBKDF2, compitiendo con Postgres."
 tmp="$(mktemp -d)"
 trap 'rm -rf "${tmp}"' EXIT
 valores_par=()
