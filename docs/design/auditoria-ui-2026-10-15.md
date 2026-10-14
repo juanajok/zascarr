@@ -29,7 +29,7 @@ Cada hallazgo lleva **[C] confirmado** (observado en vivo o medido) o **[P] plau
 | Severidad | Nº | IDs |
 |---|---|---|
 | Crítico | 2 | C1, MQ1 |
-| Mayor | 8 | M1–M7, MQ2 |
+| Mayor | 9 | M1–M8, MQ2 |
 | Menor | 12 | m1–m9, MQ3–MQ5 |
 
 ---
@@ -116,6 +116,24 @@ La didascalia (`web.css:495-507`: `text-transform: uppercase; transform: rotate(
 de la ficha de serie («GUARDAR APLICA LA RETIRADA AL MOMENTO (LO QUE SOBRA DEJA DE BUSCARSE)…»). En mayúsculas
 se pierde la forma de la palabra y la lectura es más lenta. Girado, se lee peor en móvil. Es bonito en
 rótulos de 1-3 palabras y contraproducente en párrafos, sobre todo los legales.
+
+**M8 — Demasiado texto antes de poder hacer nada.** [C] · Nielsen 8; carga cognitiva extrínseca (Sweller) · U21
+Medido: palabras visibles en `main`, sin pie legal, controles ni contenido plegado.
+
+| Pantalla | Palabras | Antes de la 1.ª acción | Párrafos ≥ 35 p. | En mayúsculas |
+|---|---|---|---|---|
+| Pendientes por carpeta | 1.261 | **415** | 2 | 0 |
+| Ajustes | 472 | 84 | **7** | 41 |
+| Duplicados | **9.522** | 37 | 2 | 0 |
+| Ficha de serie | 146 | 63 | 0 | **52** |
+| Deseados | 76 | 51 | 0 | 33 |
+| Inicio *(referencia)* | 174 | 49 | 0 | 12 |
+| Descubrir *(referencia)* | 29 | 29 | 0 | 0 |
+
+Causa: los textos explican el contrato y sus garantías («esta pantalla es solo para mirar: no se crea ni se
+asigna nada… abrirlo tampoco crea nada ni consulta ninguna fuente») más que la tarea, y la tranquilidad se repite
+en pantallas sin efectos. Propuesta: un presupuesto de texto. Una frase de entrada de ≤ 20 palabras, ≤ 50 palabras antes de la primera acción,
+la garantía junto al botón con efecto, lo técnico plegado, resumen antes que listado.
 
 ### Menores
 
