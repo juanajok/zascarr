@@ -70,7 +70,7 @@ backup:
 	@bash scripts/backup.sh
 
 # A4: borra contenedores/red/imagen de ZascArr; conserva biblioteca, datos
-# de la app (Postgres/Redis/portadas) y .env. --purge borra también los
+# de la app (Postgres/portadas) y .env. --purge borra también los
 # datos de la app y el .env — la biblioteca nunca se toca, ni con --purge.
 uninstall:
 	@bash scripts/uninstall.sh

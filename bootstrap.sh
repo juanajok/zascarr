@@ -9,7 +9,7 @@
 #      relanza a sí mismo desde dentro del clon para seguir con el paso 2.
 #   2. Desde dentro del repo ya clonado (primera vez o re-ejecuciones
 #      posteriores): configura .env, crea la estructura de directorios,
-#      levanta PostgreSQL/Redis, migra y arranca ZascArr. Idempotente.
+#      levanta PostgreSQL, migra y arranca ZascArr. Idempotente.
 #
 # Garantía (A3): este instalador NUNCA borra ni modifica los ficheros de tu
 # colección. Solo crea directorios, copia .env.example a .env y levanta
@@ -170,7 +170,7 @@ fi
 # ── A partir de aquí, siempre dentro de un clon real del repo ──────────────
 # El repo (código) vive en SCRIPT_DIR, dentro de ZASCARR_ROOT (su padre — en
 # /opt/zascarr por defecto, da /opt/zascarr/zascarr). Los DATOS (Postgres,
-# Redis, portadas) viven aparte, en ZASCARR_DATA_DIR (/var/lib/zascarr por
+# portadas) viven aparte, en ZASCARR_DATA_DIR (/var/lib/zascarr por
 # defecto) — mismo patrón que el resto de la suite *arr: código en /opt,
 # datos en /var/lib, nunca mezclados.
 SCRIPT_DIR="${_SD}"
@@ -382,10 +382,10 @@ success "Idioma:     ${APP_LOCALE}"
 
 info "Creando estructura de directorios..."
 
-# Datos de los contenedores (Postgres, Redis, estado de VPN, portadas),
+# Datos de los contenedores (Postgres, estado de VPN, portadas),
 # separados del código (ZASCARR_ROOT) — mismo patrón que el resto de la
 # suite *arr: código en /opt, datos en /var/lib.
-mkdir -p "${ZASCARR_DATA_DIR}/"{postgres,redis,covers,vpn-state} || die \
+mkdir -p "${ZASCARR_DATA_DIR}/"{postgres,covers,vpn-state} || die \
     "No puedo crear ${ZASCARR_DATA_DIR}/. ¿Tienes permisos de escritura?"
 
 # Biblioteca (donde el coleccionista haya dicho que vive).
@@ -422,7 +422,7 @@ done
 # Solo los datos del propio bootstrap (creados más arriba) se chown en
 # profundidad; la colección del usuario no se toca (H5).
 #
-# "postgres" y "redis" NO se tocan aquí a propósito (bug real, encontrado
+# "postgres" NO se toca aquí a propósito (bug real, encontrado
 # en una reejecución idempotente): sus contenedores autocorrigen el
 # propietario de su directorio de datos a SU PROPIO usuario interno en
 # cada arranque — pero solo en el arranque. Si bootstrap.sh se vuelve a
@@ -431,14 +431,14 @@ done
 # de un Postgres en marcha, y las migraciones revientan con "Permission
 # denied" en cuanto pierde acceso a sus propios ficheros. No hace falta:
 # el propietario que deje el "mkdir -p" (root) es indiferente, porque
-# postgres/redis arrancan como root y se autoasignan lo que necesitan.
+# postgres arranca como root y se autoasigna lo que necesita.
 chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_DATA_DIR}/vpn-state" 2>/dev/null || \
     warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/vpn-state"
 # "covers" SÍ tiene que quedarse en el UID/GID real del contenedor
 # (RESOLVED_UID/RESOLVED_GID = PUID/PGID): lo escribe el propio contenedor
 # de ZascArr, que tras el ajuste de docker-entrypoint.sh corre como ese
 # usuario SIN privilegios para autocorregirse (a diferencia de
-# postgres/redis) — no es una preferencia de convención, es una
+# postgres) — no es una preferencia de convención, es una
 # restricción técnica. Aquí sí es seguro repetirlo: el contenedor nunca
 # cambia su propio UID entre arranques (mismo PUID/PGID en el .env), así
 # que no hay nada que se pueda corromper.
@@ -498,10 +498,10 @@ case "${ESTADO_APP}" in
         ;;
 esac
 
-info "Levantando PostgreSQL y Redis..."
+info "Levantando PostgreSQL..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
-docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d postgres redis || die \
-    "No pude levantar PostgreSQL/Redis. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs postgres"
+docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d postgres || die \
+    "No pude levantar PostgreSQL. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs postgres"
 
 info "Esperando a PostgreSQL..."
 MAX=60; ELAPSED=0

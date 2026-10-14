@@ -185,7 +185,7 @@ class TestHealthAvisaDeExposicion:
 
 
 class TestComposePublicaElPuerto:
-    """El puerto de la aplicación es configurable; los de Postgres y Redis, jamás."""
+    """El puerto de la aplicación es configurable; el de Postgres, jamás."""
 
     @staticmethod
     def _puertos() -> dict[str, list[str]]:
@@ -204,12 +204,11 @@ class TestComposePublicaElPuerto:
     def test_postgres_sigue_fijo_en_localhost(self):
         assert self._puertos()["postgres"] == ["127.0.0.1:5432:5432"]
 
-    def test_redis_no_se_publica_en_el_host_para_que_otro_proceso_no_lo_adopte(self):
-        """Regresión: con `127.0.0.1:6379` publicado, un proceso ajeno del host (PCP) lo usó y
-        volcó ~160 MB; con el tope de 128M aplicado, Redis recargaba el dump, el kernel lo
-        mataba y entraba en bucle de reinicios. ZascArr llega por la red interna de Docker:
-        no necesita puerto en el host."""
-        assert self._puertos()["redis"] == []
+    def test_ya_no_hay_servicio_redis_en_el_compose(self):
+        """ADR 0011: Redis se retiró. Era una dependencia sin uso que, publicada en el host, otro
+        proceso adoptó (~160 MB de series ajenas) hasta dejarla en bucle de OOM. Sin servicio no
+        hay puerto que adoptar."""
+        assert "redis" not in self._puertos()
 
     def test_la_app_usa_la_variable_con_localhost_por_defecto(self):
         assert self._puertos()["zascarr"] == ["${ZASCARR_BIND_ADDRESS:-127.0.0.1}:8000:8000"]
