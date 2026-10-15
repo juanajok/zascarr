@@ -1,0 +1,116 @@
+{
+  "chrome": "Chrome/154.0.8037.92",
+  "viewport": "375x812 (emulación de viewport con mobile=true)",
+  "pagina_1": {
+    "ancho_pagina": 375,
+    "ancho_ventana": 375,
+    "sin_scroll_horizontal": true,
+    "rango": "Mostrando 1–50 de 68 pendientes.",
+    "primer_nombre_completo_en_el_primer_pantallazo": true,
+    "primer_nombre": {
+      "texto": 16,
+      "caben": true,
+      "ellipsis": false,
+      "nowrap": false,
+      "alto": 22
+    },
+    "nombre_largo": {
+      "texto": 158,
+      "caben": true,
+      "ellipsis": false,
+      "nowrap": false,
+      "alto": 87
+    },
+    "cbr": {
+      "img": false,
+      "bloque_portada": false,
+      "html_portada": false
+    },
+    "con_portada": {
+      "alto": 180,
+      "ancho": 120,
+      "debajo_del_nombre": true,
+      "natural": 240
+    },
+    "imagenes": 49,
+    "tarjetas": 50,
+    "portadas_rotas": {
+      "n": 43,
+      "alturas": [
+        0
+      ],
+      "alto_tarjeta_con_rota": 324
+    },
+    "onerror_en_pagina": false
+  },
+  "peticiones_portada": {
+    "total": 49,
+    "estados": [
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404
+    ]
+  },
+  "siguiente": "Mostrando 51–68 de 68 pendientes.",
+  "siguiente_tarjetas": 18,
+  "anterior": "Mostrando 1–50 de 68 pendientes.",
+  "confirm_aceptado": true,
+  "refresco_sin_recargar": {
+    "antes": "Mostrando 1–50 de 68 pendientes.",
+    "despues": "Mostrando 1–49 de 67 pendientes.",
+    "tarjetas": 49,
+    "peticion_rango": [
+      "http://127.0.0.1:18000/ui/pendientes/rango?primero=2026-10-15T19%3A10%3A56.912472%2B00%3A00%7C90ac398f-c9cd-4fd6-bc71-31a364025d13&ultimo=2026-10-15T18%3A28%3A57.916088%2B00%3A00%7C9f18c2d0-3bf9-4957-9da1-ee429432aea7"
+    ],
+    "estado_rango": [
+      200
+    ],
+    "navegaciones": 1
+  }
+}
