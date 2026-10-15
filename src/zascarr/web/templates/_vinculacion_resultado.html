@@ -17,10 +17,6 @@
   <section class="card" aria-labelledby="res-fallo">
     <h3 id="res-fallo">{{ fallo.titulo }}</h3>
     {{ ui.aviso("warn", fallo.mensaje) }}
-    {% if fallo.codigo == "resultado_incierto" %}
-    <p><strong>No sabemos si la vinculación llegó a aplicarse.</strong> No la des por hecha ni por fallida: comprueba el
-      resultado. Repetirla es seguro: si ya se aplicó verás el mismo informe y no se duplica nada.</p>
-    {% endif %}
     <div class="vinc-acciones">
       {% if fallo.repetible and token %}
       <form method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/confirmar"
@@ -42,12 +38,12 @@
   {% set t = informe.totales %}
   <section class="card" aria-labelledby="res-resultado">
     <h3 id="res-resultado">
-      {% if informe.global_ == "vinculados_todos" %}Hecho: todos los archivos del lote quedaron vinculados
+      {% if informe.global_ == "vinculados_todos" %}Hecho: todos los archivos quedaron vinculados
       {% elif informe.global_ == "vinculados_parcialmente" %}Vinculación parcial: quedaron archivos sin vincular
       {% else %}No se vinculó ningún archivo{% endif %}
     </h3>
-    {% if informe.global_ == "vinculados_todos" %}{{ ui.aviso("ok", "El servicio confirma que todos los archivos de este lote están vinculados.") }}
-    {% elif informe.global_ == "vinculados_parcialmente" %}{{ ui.aviso("amber", "Esto NO está completo: " ~ t.omitidos ~ " archivo" ~ ("s" if t.omitidos != 1) ~ " de este lote no se vinculó. Mira abajo el motivo de cada uno.") }}
+    {% if informe.global_ == "vinculados_todos" %}{{ ui.aviso("ok", "Todos los archivos que preparaste están vinculados.") }}
+    {% elif informe.global_ == "vinculados_parcialmente" %}{{ ui.aviso("amber", "Esto NO está completo: " ~ t.omitidos ~ " archivo" ~ ("s" if t.omitidos != 1) ~ " de los que preparaste no se vincularon. Mira abajo el motivo de cada uno.") }}
     {% else %}{{ ui.aviso("warn", "No se vinculó nada. Mira abajo el motivo de cada archivo.") }}{% endif %}
     {% if r.repetida %}{{ ui.aviso("info", "Esta confirmación ya se había aplicado antes: este es su resultado guardado, no se ha repetido nada.") }}{% endif %}
     <ul class="carpetas-resumen" aria-label="Totales">

@@ -357,7 +357,7 @@ class TestCriterio8Fallos:
         ids = await archivos(ent, UNO)
         token = await firmar(ent, serie, [(ids[UNO], "1")], ahora=time.time() - 25 * 3600)
         r = Resultado((await enviar([("token", token)])).text)
-        assert "no se puede saber si llegó a aplicarse" in r.visible and "Vuelve a revisar los archivos" in r.visible
+        assert "no se sabe si llegó a vincularse" in r.visible and "Vuelve a revisar los archivos" in r.visible
         assert "Hecho" not in r.visible and "Comprobar el resultado" not in r.visible
 
     async def test_resultado_incierto_se_distingue_y_se_puede_comprobar_sin_duplicar(self, ent, monkeypatch):
@@ -371,7 +371,7 @@ class TestCriterio8Fallos:
         r = Resultado((await enviar(formulario_de_confirmacion(p.t))).text)
         monkeypatch.setattr(AsyncSession, "commit", real)
         assert r.estado == "fallo" and "No se sabe si se llegó a vincular" in r.visible
-        assert "No sabemos si la vinculación llegó a aplicarse" in r.visible
+        assert "no lo des por hecho ni por fallido" in r.visible
         assert "Hecho" not in r.visible and "Comprobar el resultado" in r.visible
         assert "no se ha cambiado nada" not in r.visible.lower()
         # «Comprobar el resultado» = repetir el MISMO token: devuelve el informe y no duplica nada

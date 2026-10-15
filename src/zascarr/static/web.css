@@ -1286,3 +1286,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 var(--gutter); }
 .vinculacion-confirmar { margin-top: 10px; }
 .vinc-grupo ul { margin: 6px 0 0; padding-left: 20px; }
+
+/* U20: marcar/desmarcar todos y detalle plegado de las explicaciones de página */
+.vinc-masivo { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 var(--gutter); }
+.vinc-alcance { margin: 6px 0; }
+.vinc-detalle { margin: 4px 0 8px; }
+.vinc-detalle summary { cursor: pointer; font-size: .9rem; }
+.vinc-accion-resultado { margin: 0 0 var(--gutter); }
