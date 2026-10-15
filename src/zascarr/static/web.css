@@ -1293,3 +1293,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .vinc-detalle { margin: 4px 0 8px; }
 .vinc-detalle summary { cursor: pointer; font-size: .9rem; }
 .vinc-accion-resultado { margin: 0 0 var(--gutter); }
+
+/* U12: recuento y paginación de «Por revisar» */
+.pend-rango { margin: 0 0 8px; font-weight: 700; }
+.pend-paginas { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 0 0 var(--gutter); }
+.pend-paginas a { display: inline-block; min-height: 40px; padding: 8px 4px; }

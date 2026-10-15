@@ -1,0 +1,7 @@
+{#- «Mostrando X–Y de N», del conjunto ACTUAL. Lo emite la página y el refresco tras resolver una tarjeta (`GET /ui/pendientes/rango`),
+    con el mismo marcado: los `data-*` son los que leen las pruebas y el texto, el que lee la persona. -#}
+<p id="pend-rango" class="pend-rango" role="status" data-desde="{{ rango.desde }}" data-hasta="{{ rango.hasta }}" data-total="{{ rango.total }}">
+{%- if rango.hasta -%}Mostrando {{ rango.desde }}–{{ rango.hasta }} de {{ rango.total }} pendientes.
+{%- elif rango.total -%}Ya no quedan pendientes en esta página. En total quedan {{ rango.total }}.
+{%- else -%}Ya no queda nada pendiente.{%- endif -%}
+</p>
