@@ -26,10 +26,24 @@ referencia: `docs/design/benchmark-U12-pendientes-escala.md` (PR #213).
 | Disponible (11) | La portada mide **120 × 180** y está **debajo** del nombre | PASS |
 | Desconocida sin hueco (10) | **43 portadas** que fallan, todas con **0 px** de alto; sin `onerror` en la página | PASS (Chrome) |
 | Peticiones de portada | 49 para 50 tarjetas (la del `.cbr` no pide): 6 × 200 y 43 × 404 | informativo |
-| Enlace a carpetas (criterio 5) | «Verlos por carpeta (**1 carpeta**)»: N = número de **carpetas** (grupos), con la misma definición que la pantalla de carpetas. En el ensayo todo está en `_Unsorted`, de ahí 1 | PASS |
+| Enlace a carpetas (criterio 5) | «Verlos por carpeta (**1 carpeta**)», ya cargado en la página: N = número de **carpetas** (grupos), con la misma definición que la pantalla de carpetas. En el ensayo todo está en `_Unsorted`, de ahí 1. El número **se pide después de pintar la lista** (ver «Coste») | PASS |
 | Refrescos fuera de orden (bloqueante 3) | Dos «Ignorar» seguidos; la respuesta del **primer** refresco se retiene hasta que termina el segundo y entonces se suelta. Con `hx-sync`: **1 petición abortada** y queda «1–48 de 65». **Control sin `hx-sync`: también queda «1–48 de 63»** (ver abajo) | PASS |
 
 ![primera página](1-primera-pagina-375.png) ![segunda](2-segunda-pagina-375.png) ![tras ignorar](3-tras-ignorar-375.png)
+
+## Coste del recuento de carpetas (medido en local, **no en la Pi**)
+
+Con la escala de la instalación de referencia (1.322 pendientes en 108 carpetas, Postgres real, esta máquina):
+
+| Qué | Tiempo |
+|---|---|
+| `GET /ui/pendientes` (lista, rango, enlaces) | **~13–15 ms** |
+| `GET /ui/pendientes/carpetas/recuento` (agrupa todos los pendientes en memoria) | **~107–108 ms** |
+| Primera versión, con el recuento DENTRO de la lista | ~113–115 ms por carga |
+
+Por eso el número se pide **después** de pintar la lista (mismo mecanismo ligero que ya usa el menú): la lista no
+espera, y si el recuento falla el enlace sigue funcionando sin número. En la Pi será más lento; **no medido**. Reducirlo
+de verdad exigiría contar en SQL, y el criterio de agrupación (`dividir_ruta`) vive en Python.
 
 ## Refrescos fuera de orden: lo que se midió y lo que NO se puede afirmar
 

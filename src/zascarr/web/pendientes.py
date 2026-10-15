@@ -90,15 +90,6 @@ async def contar_carpetas(db: AsyncSession) -> int:
     return (await RevisionCarpetas(db).carpetas(limite=1)).totales.grupos
 
 
-async def _carpetas_o_nada(db: AsyncSession) -> int | None:
-    """El recuento adorna un enlace: si falla, la bandeja sigue y el enlace va sin número."""
-    try:
-        return await contar_carpetas(db)
-    except Exception as exc:  # noqa: BLE001 — no debe tumbar la lista
-        logger.warning("pendientes.recuento_de_carpetas_fallo", error=type(exc).__name__)
-        return None
-
-
 def _enlace(parametro: str, clave: ClavePendiente) -> str:
     return f"/ui/pendientes?{urlencode({parametro: clave.a_texto()})}"
 
@@ -125,10 +116,8 @@ async def index(
     contexto: dict = {
         "cards": [_card(f) for f in pagina.archivos],
         "rango": _rango(pagina.desde, pagina.hasta, pagina.total),
-        "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None,
-        "carpetas": None}
+        "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None}
     if pagina.archivos:
-        contexto["carpetas"] = await _carpetas_o_nada(db)
         primero = ClavePendiente.de(pagina.archivos[0])
         ultimo = ClavePendiente.de(pagina.archivos[-1])
         contexto.update(
@@ -138,6 +127,28 @@ async def index(
             inicio="/ui/pendientes" if pagina.hay_anterior else None)
     resp = templates.TemplateResponse(request, "pendientes.html", contexto)
     resp.headers["Cache-Control"] = "no-store"      # la cola cambia con cada tarjeta resuelta
+    return resp
+
+
+@router.get("/carpetas/recuento", response_class=HTMLResponse)
+async def recuento_de_carpetas(
+    request: Request, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """El enlace «Verlos por carpeta (N carpetas)», que la lista pide DESPUÉS de pintarse.
+
+    Contar carpetas agrupa todos los pendientes en memoria (medido: ~100 ms con 1.322, frente a
+    ~13 ms de toda la lista), así que no bloquea la carga de la bandeja. Si falla, o no hay
+    carpetas, responde 204 y el enlace se queda como estaba, sin número: es un adorno del
+    enlace, no puede romper nada."""
+    try:
+        n = await contar_carpetas(db)
+    except Exception as exc:  # noqa: BLE001 — no debe afectar a la bandeja
+        logger.warning("pendientes.recuento_de_carpetas_fallo", error=type(exc).__name__)
+        return HTMLResponse(status_code=204)
+    if not n:
+        return HTMLResponse(status_code=204)
+    resp = templates.TemplateResponse(request, "_pendientes_carpetas_enlace.html", {"carpetas": n})
+    resp.headers["Cache-Control"] = "no-store"
     return resp
 
 

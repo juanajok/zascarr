@@ -193,6 +193,8 @@ async def main(base: str, salida: Path) -> None:
         await nav.js("document.querySelectorAll('img.cover').forEach(i => i.scrollIntoView())")   # fuerza la carga diferida
         await asyncio.sleep(1.5)
         await nav.js("window.scrollTo(0, 0)")
+        datos["enlace_a_carpetas"] = await nav.js(
+            "(document.querySelector('a.pend-carpetas') || {}).textContent?.replace(/\\s+/g, ' ').trim()")
         datos["pagina_1"] = await nav.js(MEDIR)
         datos["peticiones_portada"] = {"total": len(peticiones(nav, r"/portada$")), "estados": sorted(respuestas(nav, r"/portada$"))}
         await nav.foto(salida / "1-primera-pagina-375.png", completa=False)
