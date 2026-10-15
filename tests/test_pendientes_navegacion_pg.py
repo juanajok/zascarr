@@ -331,3 +331,27 @@ class TestCursorInvalido:
         assert p.ids == orden[:PAGINA]
         assert (p.desde, p.hasta, p.total) == (1, 50, 60)
         assert not p.anterior
+
+
+# ── Hallazgo de la implementación: `imported_at` admite NULL en la BD real ────────────────────
+class TestImportedAtNulo:
+    """El modelo declara `imported_at` sin `Optional`, pero la migración inicial no pone `NOT NULL`: la columna admite
+    NULL. En un cursor, una comparación con NULL no es verdadera ni falsa y la fila quedaría FUERA de toda página
+    posterior a la primera: un pendiente inalcanzable. Se trata como la fecha más antigua, sin perder ninguno."""
+
+    async def test_un_pendiente_sin_imported_at_se_alcanza_y_va_al_final(self, entorno):
+        orden = await sembrar(entorno, 60)
+        async with entorno.banco.fabrica() as s:
+            await s.execute(text("UPDATE files SET imported_at = NULL WHERE file_name = 'Flash 0003.cbz'"))
+            await s.commit()
+        vistos, ruta = [], "/ui/pendientes"
+        while ruta:
+            p = await pedir(ruta)
+            assert p.status == 200
+            vistos += p.ids
+            ruta = p.siguiente
+        assert len(vistos) == 60 and len(set(vistos)) == 60, "se perdió o se repitió un pendiente"
+        assert set(vistos) == set(orden)
+        async with entorno.banco.fabrica() as s:
+            nulo = str((await s.execute(text("SELECT id FROM files WHERE imported_at IS NULL"))).scalar_one())
+        assert vistos[-1] == nulo, "el que no tiene fecha va el último"

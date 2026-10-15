@@ -111,8 +111,8 @@ async def index(
         "rango": _rango(pagina.desde, pagina.hasta, pagina.total),
         "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None}
     if pagina.archivos:
-        primero = ClavePendiente(pagina.archivos[0].imported_at, pagina.archivos[0].id)
-        ultimo = ClavePendiente(pagina.archivos[-1].imported_at, pagina.archivos[-1].id)
+        primero = ClavePendiente.de(pagina.archivos[0])
+        ultimo = ClavePendiente.de(pagina.archivos[-1])
         contexto.update(
             primero=primero.a_texto(), ultimo=ultimo.a_texto(),
             siguiente=_enlace("despues", ultimo) if pagina.hay_siguiente else None,
