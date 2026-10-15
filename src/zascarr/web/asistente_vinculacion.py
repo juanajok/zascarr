@@ -151,6 +151,22 @@ def _plural(n: int, uno: str, varios: str) -> str:
     return f"{n} {uno if n == 1 else varios}"
 
 
+def _frase_marcados(n: int) -> str:
+    return "Se marcó 1 archivo que se puede vincular." if n == 1 else f"Se marcaron {n} archivos que se pueden vincular."
+
+
+def _frase_repetidos(n: int) -> str:
+    if n == 1:
+        return "1 archivo comparte el número con otro y no se marcó: decide tú cuál de los dos."
+    return f"{n} archivos comparten el número con otro y no se marcaron: marca tú el que quieras de cada grupo."
+
+
+def _frase_cambiados(n: int) -> str:
+    if n == 1:
+        return "1 archivo marcado cambió al revisarlo y ya no se puede vincular: mira su motivo."
+    return f"{n} archivos marcados cambiaron al revisarlos y ya no se pueden vincular: mira el motivo de cada uno."
+
+
 @dataclass
 class Borrador:
     """Lo que la persona ha marcado y escrito en UNA página. Solo decisiones suyas: el servicio las valida cada vez."""
@@ -307,14 +323,12 @@ async def _revisar(request: Request, db: AsyncSession, clave: str, series_id: st
             vinculables = {a.id for a in r.archivos if a.incluido_en_token}
             logradas = [i for i in elegidos if i in vinculables]
             perdidas = len(elegidos) - len(logradas)
-            partes = [f"Se marcaron {_plural(len(logradas), 'archivo', 'archivos')} que se pueden vincular."
-                      if logradas else "No hay ningún archivo más que se pueda marcar en esta página."]
+            partes = [_frase_marcados(len(logradas)) if logradas
+                      else "No hay ningún archivo más que se pueda marcar en esta página."]
             if repetidos:
-                partes.append(f"{_plural(repetidos, 'archivo comparte', 'archivos comparten')} el número con otro y "
-                              "no se marcó: marca tú el que quieras de cada grupo.")
+                partes.append(_frase_repetidos(repetidos))
             if perdidas:
-                partes.append(f"{_plural(perdidas, 'archivo marcado cambió', 'archivos marcados cambiaron')} al "
-                              "revisarlos y ya no se pueden vincular: mira el motivo de cada uno.")
+                partes.append(_frase_cambiados(perdidas))
             resultado_accion = {"accion": accion, "n": len(logradas), "repetidos": repetidos,
                                 "tipo": "ok" if logradas and not perdidas else "amber" if perdidas else "info",
                                 "texto": " ".join(partes)}

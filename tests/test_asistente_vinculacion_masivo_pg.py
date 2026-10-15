@@ -119,7 +119,7 @@ class TestMarcarTodos:
         q = await accionar(p, "marcar_todos")
         assert nombres_marcados(q) == ["Flash 04 (1987).cbz"]
         assert aviso_de_accion(q) == {"accion": "marcar_todos", "n": 1, "repetidos": 2}
-        assert "2 archivos comparten el número con otro y no se marcó" in q.visible
+        assert "2 archivos comparten el número con otro y no se marcaron" in q.visible
         assert q.total("marcados_bloqueados") == 0                    # nada marcado quedó bloqueado
         # y la persona puede elegir uno: ese sí queda marcado y vinculable
         r = await q.reenviar(marcar=["Flash 03 (1987).cbz"])
@@ -151,25 +151,31 @@ class TestMarcarTodos:
         assert nombres_marcados(q) == ["Flash 01 (1987).cbz", "Sin numero.cbz"]
         assert q.fila("Sin numero.cbz").numero == "7" and q.fila("Sin numero.cbz").incluido
 
-    async def test_una_marca_que_acaba_bloqueada_no_se_cuenta_ni_se_deja_caer_en_silencio(self, entorno, monkeypatch):
+    async def test_un_cambio_real_entre_las_dos_evaluaciones_no_se_cuenta_ni_se_deja_caer_en_silencio(
+            self, entorno, monkeypatch):
         """Mecanismo (benchmark U20, Kapowarr): su «seleccionar todo» incluye filas que luego se descartan sin decirlo.
-        Aquí el recuento sale de la evaluación FINAL: si algo marcado ya no se puede vincular, se dice y no suma."""
-        from zascarr.web import asistente_vinculacion as web
+        Aquí el recuento sale de la evaluación FINAL. El cambio es REAL: entre la evaluación que propone la selección y
+        la final desaparece del disco uno de los archivos propuestos, y el servicio lo bloquea."""
+        from zascarr.services.vinculacion_previa import VistaPreviaDeVinculacion
         serie = await serie_de_prueba(entorno)
-        await archivos(entorno, "Flash 01 (1987).cbz", "Sin numero.cbz")
+        await archivos(entorno, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
         p = await abrir(serie)
-        bloqueado = p.fila("Sin numero.cbz").id
-        real = web.elegir_para_marcar_todos
+        real = VistaPreviaDeVinculacion.previsualizar
+        llamadas = []
 
-        def con_deriva(r):                       # entre las dos evaluaciones, uno «cambia»: se marca un bloqueado
-            elegidos, repetidos = real(r)
-            return elegidos + [bloqueado], repetidos
-        monkeypatch.setattr(web, "elegir_para_marcar_todos", con_deriva)
+        async def con_cambio_en_el_disco(self, *a, **k):
+            llamadas.append(1)
+            if len(llamadas) == 2:                          # la evaluación final: ya no está el segundo archivo
+                (entorno.lib / "Comics/Flash (1987)" / "Flash 02 (1987).cbz").unlink()
+            return await real(self, *a, **k)
+        monkeypatch.setattr(VistaPreviaDeVinculacion, "previsualizar", con_cambio_en_el_disco)
         q = await accionar(p, "marcar_todos")
+        assert len(llamadas) == 2
         assert aviso_de_accion(q)["n"] == 1                          # solo el que de verdad se puede vincular
-        assert "Se marcaron 1 archivo que se pueden vincular" in q.visible
-        assert "1 archivo marcado cambió al revisarlos y ya no se pueden vincular" in q.visible
-        assert q.fila("Sin numero.cbz").marcado and not q.fila("Sin numero.cbz").incluido
+        assert "Se marcó 1 archivo que se puede vincular." in q.visible
+        assert "1 archivo marcado cambió al revisarlo y ya no se puede vincular" in q.visible
+        assert q.fila("Flash 02 (1987).cbz").marcado and not q.fila("Flash 02 (1987).cbz").incluido
+        assert q.total("a_vincular") == 1 and q.total("marcados_bloqueados") == 1
 
     async def test_sin_htmx_devuelve_la_pagina_entera(self, entorno):
         serie = await serie_de_prueba(entorno)
@@ -367,14 +373,50 @@ class TestSinJergaEnElResultado:
         r = Resultado((await enviar_confirmacion(formulario_de_confirmacion(p.t))).text)
         assert "La serie ya no existe" in r.visible and "Hecho" not in r.visible and not jerga_en(r.visible)
 
-    async def test_un_codigo_de_fallo_o_de_motivo_desconocido_sale_sin_su_identificador(self, ent, monkeypatch):
-        """Mecanismo: «No se pudo vincular (motivo: x)» enseñaba el código del contrato."""
+    async def test_un_codigo_de_fallo_desconocido_sale_con_el_texto_generico_por_la_ruta_real(self, ent, monkeypatch):
+        """Mecanismo: un código que el router no conoce se pintaba tal cual. Se simula la respuesta del servicio y se
+        deja REAL el router `/confirmar` y su plantilla."""
+        from fastapi import HTTPException
+
         from zascarr.web import asistente_vinculacion as web
-        assert "motivo:" not in web.TEXTO_DE_MOTIVO_DESCONOCIDO.lower()
-        assert "{" not in web.TEXTO_DE_MOTIVO_DESCONOCIDO and "{" not in web.MENSAJE_DE_FALLO_DESCONOCIDO
+
+        async def servicio_con_codigo_nuevo(db, token):
+            raise HTTPException(status_code=500, detail={
+                "codigo": "codigo_inventado_del_contrato", "mensaje": "El token interno 7 falló (motivo: zeta)"})
+        monkeypatch.setattr(web, "ejecutar_vinculacion", servicio_con_codigo_nuevo)
+        r = Resultado((await enviar_confirmacion([("token", "x")])).text)
+        assert web.MENSAJE_DE_FALLO_DESCONOCIDO in r.visible
+        assert "codigo_inventado_del_contrato" not in r.visible and "token interno" not in r.visible.lower()
+        assert not jerga_en(r.visible), jerga_en(r.visible)
+        assert "Hecho" not in r.visible
+
+    async def test_un_motivo_de_omision_desconocido_sale_con_el_texto_generico_por_la_ruta_real(self, ent, monkeypatch):
+        from types import SimpleNamespace
+
+        from zascarr.web import asistente_vinculacion as web
+        fid = "11111111-1111-1111-1111-111111111111"
+        informe = SimpleNamespace(
+            global_="vinculados_parcialmente",
+            totales=SimpleNamespace(vinculados=0, ya_estaban=0, omitidos=1, issues_creados=0),
+            archivos=[SimpleNamespace(id=fid, estado="omitido", numero="1", motivo="motivo_inventado_del_contrato",
+                                      issue_creado=False)])
+        respuesta = SimpleNamespace(resultado=informe, repetida=False,
+                                    presentacion=SimpleNamespace(nombres_actuales={fid: "Flash 01 (1987).cbz"}))
+
+        async def servicio_con_motivo_nuevo(db, token):
+            return respuesta
+        monkeypatch.setattr(web, "ejecutar_vinculacion", servicio_con_motivo_nuevo)
+        r = Resultado((await enviar_confirmacion([("token", "x")])).text)
+        assert "Flash 01 (1987).cbz" in r.visible and web.TEXTO_DE_MOTIVO_DESCONOCIDO in r.visible
+        assert "motivo_inventado_del_contrato" not in r.visible and "(motivo:" not in r.visible
+        assert not jerga_en(r.visible), jerga_en(r.visible)
+        assert r.estado == "vinculados_parcialmente" and "Esto NO está completo" in r.visible
+
+    async def test_los_textos_fijos_de_fallo_no_tienen_jerga(self):
+        from zascarr.web import asistente_vinculacion as web
         for codigo, texto in web.MENSAJES_DE_FALLO.items():
             assert not jerga_en(texto), (codigo, texto)
-        assert not jerga_en(web.MENSAJE_CADUCADO_SIN_INFORME)
+        assert not jerga_en(web.MENSAJE_CADUCADO_SIN_INFORME) and not jerga_en(web.MENSAJE_DE_FALLO_DESCONOCIDO)
 
 
 class TestSinCodigosInternosDeFormato:
