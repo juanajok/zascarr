@@ -21,14 +21,21 @@ Qué hace y qué NO hace:
   fallos que `POST /api/revision/vinculacion`) y la recuperación ya fusionada (#116/#117): repetir el mismo token devuelve
   el mismo informe.
 
+- **Marcar y desmarcar todos (U20)**: son DOS acciones de `POST /revisar` (`accion=marcar_todos|desmarcar_todos`). El
+  servidor evalúa la página, marca SOLO los archivos que el servicio dice que se pueden marcar —nunca los bloqueados, nunca
+  los de otras páginas— y no elige entre números repetidos: los que comparten número con otro se dejan sin marcar y se
+  cuentan. El recuento sale de ese cálculo, no del navegador. No hay JavaScript propio (ADR 0005, decisión 3).
+
 Los fallos recuperables se pintan dentro de la página con 200 (htmx no sustituye una respuesta 4xx).
 """
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
@@ -56,6 +63,7 @@ from zascarr.services.vinculacion_previa import (
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/ui/pendientes/carpetas/asistente/vinculacion", tags=["ui"])
 
@@ -74,6 +82,73 @@ MENSAJE_SERIE_NO_EXISTE = "La serie elegida ya no existe en tu biblioteca. Vuelv
 MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado."
 MENSAJE_BORRADOR_NO_VALE = ("No se ha podido reconstruir lo que habías marcado y escrito en esa página, así que se muestra "
                             "sin ello. Ese borrador no cuenta como una revisión válida.")
+
+
+ACCIONES = ("marcar_todos", "desmarcar_todos")
+
+#: Los impedimentos del servicio (códigos) dichos en llano, para «Otros motivos». Un código que no esté aquí NO se enseña:
+#: nunca sale un identificador interno (U20, criterio 4).
+MOTIVOS_LEGIBLES: dict[str, str] = {
+    "ya_vinculado": "ya está vinculado a una serie",
+    "en_curso": "tiene una asignación en curso",
+    "origen_no_encontrado": "no hay ningún archivo en su ruta registrada",
+    "origen_no_verificable": "no se pudo comprobar el archivo",
+    "requiere_numero": "falta el número",
+    "numero_repetido_en_el_grupo": "otro archivo marcado tiene el mismo número",
+    "colision_de_edicion": "ese número ya existe como otra edición",
+    "numero_ambiguo": "la serie tiene más de un número así",
+    "numero_ya_existe": "ese número ya tiene un archivo vinculado",
+}
+
+
+def motivos_legibles(codigos: list[str]) -> list[str]:
+    return [MOTIVOS_LEGIBLES[c] for c in codigos if c in MOTIVOS_LEGIBLES]
+
+
+#: El formato de una publicación (`IssueFormat`) dicho como lo dice el coleccionista. El texto del servicio lo cita por
+#: su valor interno («otra edición (single_issue)»); aquí se traduce, no se cambia el contrato.
+FORMATOS_LEGIBLES: dict[str, str] = {
+    "single_issue": "grapa", "trade_paperback": "tomo en rústica", "hardcover": "tomo en tapa dura",
+    "omnibus": "ómnibus", "graphic_novel": "novela gráfica", "album": "álbum", "manga_tankobon": "tomo de manga",
+    "digital": "digital",
+}
+_FORMATO_EN_TEXTO = re.compile(r"\b(" + "|".join(FORMATOS_LEGIBLES) + r")\b")
+
+
+def texto_legible(texto: str | None) -> str:
+    """El texto del servicio sin identificadores internos de formato. El resto del texto no se toca."""
+    return _FORMATO_EN_TEXTO.sub(lambda m: FORMATOS_LEGIBLES[m.group(1)], texto or "")
+
+
+def texto_de_la_pagina(pagina) -> str | None:
+    """El detalle de la paginación, dicho aquí con los números del servicio. No se usa `pagina.texto` del servicio:
+    es un texto del contrato (también lo lee la API) y habla del «token»."""
+    if not (pagina.hay_mas or pagina.cursor):
+        return None
+    return (f"Este grupo tiene {pagina.en_el_grupo} archivos; esta página muestra del {pagina.desde} al "
+            f"{pagina.hasta} (máximo {pagina.maximo} por página, por nombre). Lo que marques y los números que "
+            "escribas valen solo para esos archivos.")
+
+
+def elegir_para_marcar_todos(r: RespuestaVinculacion) -> tuple[list[str], int]:
+    """(ids que se marcan, cuántos se dejan sin marcar por compartir número). Solo se marca lo que el servicio da por
+    `marcable`. Si un archivo comparte número con otro que ya está marcado o que también se marcaría, NO se marca ninguno
+    de ellos por la persona: marcar los dos los bloquearía a ambos, y elegir uno sería decidir por ella."""
+    ya = {a.id for a in r.archivos if a.marcado}
+    candidatos = [a for a in r.archivos if a.marcable and not a.marcado]
+    conjunto = ya | {a.id for a in candidatos}
+    elegidos: list[str] = []
+    repetidos = 0
+    for a in candidatos:
+        if any(otro in conjunto for otro in a.repetido_con):
+            repetidos += 1
+        else:
+            elegidos.append(a.id)
+    return elegidos, repetidos
+
+
+def _plural(n: int, uno: str, varios: str) -> str:
+    return f"{n} {uno if n == 1 else varios}"
 
 
 @dataclass
@@ -173,7 +248,7 @@ def _sin_cache(resp: HTMLResponse) -> HTMLResponse:
 
 
 def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros: dict[str, Borrador],
-                             avisos: list[str]) -> dict:
+                             avisos: list[str], accion: dict | None = None) -> dict:
     por_id = {a.id: a for a in r.archivos}
     pendientes = [
         {"clave": k, "desde": b.desde, "hasta": b.hasta, "n_marcados": len(b.marcados), "n_numeros": len(b.numeros)}
@@ -185,11 +260,16 @@ def _contexto_de_la_revision(r: RespuestaVinculacion, cursor_actual: str, otros:
         "nombres_de": lambda ids: [por_id[i].nombre for i in ids if i in por_id],
         "borradores_json": json.dumps({k: b.a_json() for k, b in otros.items() if not b.vacio()}, ensure_ascii=False),
         "pendientes": pendientes, "incluidos": incluidos, "excluidos": excluidos, "limite": LIMITE_ARCHIVOS,
+        "motivos_legibles": motivos_legibles, "texto_de_la_pagina": texto_de_la_pagina(r.pagina), "accion": accion,
+        "texto_legible": texto_legible,
+        "hay_que_marcar": any(a.marcable and not a.marcado for a in r.archivos),
+        "hay_marcados": any(a.marcado for a in r.archivos),
     }
 
 
 async def _revisar(request: Request, db: AsyncSession, clave: str, series_id: str, *, estado: Borrador,
-                   cursor: str, otros: dict[str, Borrador], avisos: list[str], pagina_completa: bool) -> HTMLResponse:
+                   cursor: str, otros: dict[str, Borrador], avisos: list[str], pagina_completa: bool,
+                   accion: str = "") -> HTMLResponse:
     """Pide la vista previa al servicio y la pinta. Un fallo recuperable se explica; nunca deja un token a la vista."""
     secreto = get_settings().secret_key
     plantilla = "asistente_vinculacion.html" if pagina_completa else "_vinculacion_revision.html"
@@ -204,9 +284,40 @@ async def _revisar(request: Request, db: AsyncSession, clave: str, series_id: st
     avisos = list(avisos)
     if malos:
         avisos.append(f"{len(malos)} número(s) no se han aplicado: tienen más de 20 caracteres o saltos de línea.")
+    resultado_accion: dict | None = None
     try:
+        if accion == "desmarcar_todos":
+            quitadas = len(estado.marcados)
+            estado.marcados = []
+            resultado_accion = {"accion": accion, "n": quitadas, "tipo": "info" if quitadas else "nota", "texto": (
+                f"Se quitaron las marcas de {_plural(quitadas, 'archivo', 'archivos')} de esta página."
+                if quitadas else "No había ningún archivo marcado en esta página.")}
+        elif accion == "marcar_todos":
+            # Se evalúa la página como está y se marca solo lo que el servicio da por marcable (ni bloqueados ni otras
+            # páginas); después se vuelve a evaluar con esas marcas, que es lo que se pinta.
+            antes = await servicio.previsualizar(
+                clave, UUID(series_id), numeros=numeros, marcados=set(estado.marcados), cursor=cursor or None)
+            elegidos, repetidos = elegir_para_marcar_todos(antes)
+            estado.marcados = sorted(set(estado.marcados) | set(elegidos))
         r = await servicio.previsualizar(
             clave, UUID(series_id), numeros=numeros, marcados=set(estado.marcados), cursor=cursor or None)
+        if accion == "marcar_todos":
+            # El recuento sale de la evaluación FINAL del servicio, no de lo que se pretendía marcar: una marca que
+            # acabara bloqueada no se cuenta como «se pueden vincular» ni se deja caer en silencio.
+            vinculables = {a.id for a in r.archivos if a.incluido_en_token}
+            logradas = [i for i in elegidos if i in vinculables]
+            perdidas = len(elegidos) - len(logradas)
+            partes = [f"Se marcaron {_plural(len(logradas), 'archivo', 'archivos')} que se pueden vincular."
+                      if logradas else "No hay ningún archivo más que se pueda marcar en esta página."]
+            if repetidos:
+                partes.append(f"{_plural(repetidos, 'archivo comparte', 'archivos comparten')} el número con otro y "
+                              "no se marcó: marca tú el que quieras de cada grupo.")
+            if perdidas:
+                partes.append(f"{_plural(perdidas, 'archivo marcado cambió', 'archivos marcados cambiaron')} al "
+                              "revisarlos y ya no se pueden vincular: mira el motivo de cada uno.")
+            resultado_accion = {"accion": accion, "n": len(logradas), "repetidos": repetidos,
+                                "tipo": "ok" if logradas and not perdidas else "amber" if perdidas else "info",
+                                "texto": " ".join(partes)}
     except GrupoNoEncontradoError:
         return _sin_cache(templates.TemplateResponse(
             request, plantilla, {**base, "r": None, "error": MENSAJE_GRUPO_NO_EXISTE}))
@@ -223,7 +334,8 @@ async def _revisar(request: Request, db: AsyncSession, clave: str, series_id: st
                 request, plantilla, {**base, "r": None, "error": MENSAJE_GRUPO_NO_EXISTE}))
         avisos.append(MENSAJE_BORRADOR_NO_VALE)
         cursor = ""
-    ctx = _contexto_de_la_revision(r, cursor, otros, avisos)
+        resultado_accion = None            # la página que se pidió ya no vale: no se cuenta una acción sobre otra
+    ctx = _contexto_de_la_revision(r, cursor, otros, avisos, resultado_accion)
     return _sin_cache(templates.TemplateResponse(request, plantilla, {**base, **ctx, "error": None}))
 
 
@@ -253,6 +365,9 @@ async def revisar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     estado = leer_estado_de_la_pagina(f)
     estado.desde, estado.hasta = _entero(f.get("pagina_desde")), _entero(f.get("pagina_hasta"))
 
+    # Una acción masiva vale para la página que se ve; si a la vez se cambia de página, no se aplica.
+    accion = str(f.get("accion", ""))
+    accion = accion if accion in ACCIONES and not f.get("ir_a") else ""
     destino = str(f.get("ir_a", "")) or (cursor_actual or INICIO)
     destino = "" if destino == INICIO else destino
     if destino != cursor_actual:
@@ -266,7 +381,7 @@ async def revisar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
         otros.pop(cursor_actual, None)
     # Sin htmx (un envío normal del formulario) se devuelve la página entera, no un fragmento suelto.
     return await _revisar(request, db, clave, series_id, estado=estado, cursor=destino, otros=otros, avisos=[],
-                          pagina_completa="hx-request" not in request.headers)
+                          pagina_completa="hx-request" not in request.headers, accion=accion)
 
 
 def _entero(valor: object) -> int:
@@ -293,6 +408,27 @@ TEXTO_DE_MOTIVO: dict[str, str] = {
     "numero_ambiguo": "La serie tiene más de un número así (volúmenes distintos): no se elige uno por ti.",
     "numero_ya_existe": "Ese número ya tiene un archivo vinculado en la serie: no se pisa.",
 }
+TEXTO_DE_MOTIVO_DESCONOCIDO = "No se pudo vincular. Revísalo de nuevo para ver su estado actual."
+
+#: El texto de cada fallo de la confirmación, EN LLANO y por código. Los mensajes del contrato (`token`, «operación»…) son
+#: de la API y no se enseñan aquí. Cada texto dice qué se sabe y qué no, y no afirma «no se ha cambiado nada» donde
+#: no consta. Un código que no esté aquí sale con el texto genérico, sin su identificador.
+MENSAJES_DE_FALLO: dict[str, str] = {
+    "token_caducado": "La preparación caducó y no llegó a aplicarse: no se ha vinculado nada. Vuelve a revisar los "
+                      "archivos y prepárala de nuevo.",
+    "token_invalido": "Esta preparación no es válida, así que no se ha vinculado nada. Vuelve a revisar los archivos.",
+    "la_serie_ya_no_existe": "La serie ya no existe en tu biblioteca, así que no se ha vinculado nada. Vuelve a "
+                             "elegir la serie.",
+    "conflicto_de_bloqueo": "Otra operación coincidió con esta y no se ha vinculado nada todavía. Puedes reintentarlo.",
+    "resultado_incierto": "No se sabe si se llegó a vincular: no lo des por hecho ni por fallido. Pulsa «Comprobar el "
+                          "resultado»: si ya se vinculó, verás el mismo resultado y no se duplica nada; si no, se "
+                          "vinculará ahora.",
+    "error_inesperado": "No se pudo completar y no se ha cambiado nada. Inténtalo de nuevo.",
+}
+MENSAJE_DE_FALLO_DESCONOCIDO = "No se pudo vincular. Vuelve a revisar los archivos para ver su estado actual."
+MENSAJE_CADUCADO_SIN_INFORME = (
+    "La preparación caducó y ya no se conserva su resultado: no se sabe si llegó a vincularse. Vuelve a revisar los "
+    "archivos para ver su estado actual antes de decidir nada.")
 
 #: Un fallo de la confirmación → (título, ¿es definitivo?, ¿se puede repetir con el MISMO token sin riesgo?). «Resultado
 #: desconocido» (`resultado_incierto`) y «definitivo» se distinguen; nunca se dice que se completó sin que el servicio lo
@@ -347,9 +483,10 @@ async def confirmar(
         d = e.detail if isinstance(e.detail, dict) else {"codigo": "error_inesperado", "mensaje": str(e.detail)}
         codigo = str(d.get("codigo", "error_inesperado"))
         titulo, definitivo, repetible = FALLOS.get(codigo, ("No se pudo vincular", True, False))
-        mensaje = str(d.get("mensaje", ""))
-        if codigo == "token_caducado" and d.get("puede_haberse_aplicado"):
-            mensaje += " Vuelve a revisar los archivos para ver su estado actual antes de decidir nada."
+        mensaje = (MENSAJE_CADUCADO_SIN_INFORME if codigo == "token_caducado" and d.get("puede_haberse_aplicado")
+                   else MENSAJES_DE_FALLO.get(codigo, MENSAJE_DE_FALLO_DESCONOCIDO))
+        if codigo not in MENSAJES_DE_FALLO:
+            logger.warning("vinculacion.fallo_sin_texto", codigo=codigo)
         return _sin_cache(templates.TemplateResponse(request, plantilla, {
             **base, "resultado": True, "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje,
                                                    "definitivo": definitivo, "repetible": repetible}, "token": token,
@@ -361,8 +498,10 @@ async def confirmar(
         grupos[a.estado].append({
             "id": a.id, "nombre": nombres.get(a.id, "(archivo que ya no está en la lista)"), "numero": a.numero,
             "motivo": a.motivo, "creado": a.issue_creado,
-            "texto": (TEXTO_DE_MOTIVO.get(a.motivo, f"No se pudo vincular (motivo: {a.motivo}).")
+            "texto": (TEXTO_DE_MOTIVO.get(a.motivo, TEXTO_DE_MOTIVO_DESCONOCIDO)
                       if a.estado == "omitido" and a.motivo else None)})
+        if a.estado == "omitido" and a.motivo and a.motivo not in TEXTO_DE_MOTIVO:
+            logger.warning("vinculacion.motivo_sin_texto", motivo=a.motivo)
     return _sin_cache(templates.TemplateResponse(request, plantilla, {
         **base, "resultado": True, "fallo": None, "r": r, "informe": informe, "grupos": grupos, "error": None,
         "token": token}))
