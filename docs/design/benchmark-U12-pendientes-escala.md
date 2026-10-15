@@ -75,10 +75,10 @@ ellas; **no se afirma que no la tengan**).
 
 - **La lista es una cola que se vacía.** En Sonarr, ver una página no la altera. Aquí **resolver una tarjeta la
   saca del conjunto** (`RECONTAR_MENU` la hace desaparecer): un `OFFSET` calculado antes de resolver salta filas
-  después. Es el punto delicado de la historia (ver opciones).
-- **Pi compartida.** Sonarr usa dos consultas por vista; aquí el recuento ya está calculado para el menú, pero la
-  lista de páginas profundas con `OFFSET` recorre todas las filas anteriores. Con 1.322 filas es irrelevante;
-  **no medido** más allá.
+  después. Por eso **no se adopta su paginación por desplazamiento** y el contrato de navegación (sin saltos) se fija
+  en «Decisiones», donde se propone un cursor.
+- **Pi compartida.** Sonarr hace dos consultas por vista (registros y `COUNT`) con `OFFSET`. Aquí se propone una
+  lista y dos `COUNT` con **cursor** (sin `OFFSET`); el presupuesto completo y sus límites están en «Invariantes».
 - **Hoja de portadas.** Sonarr tiene miniaturas casi siempre (metadatos); aquí salen del propio CBZ y un `.cbr` **no
   tiene extractor** (`extract_cover_thumbnail` devuelve `None`), así que «sin portada» es el caso normal, no la excepción.
 - **Selector de tamaño de página.** Sonarr lo expone; para El Coleccionista sería otro control que entender. No se
@@ -91,15 +91,28 @@ ellas; **no se afirma que no la tengan**).
 | Recuento total junto a la lista (`TotalRecords`) | **Adoptar** | `count_pending()` ya existe y usa el mismo filtro que la lista |
 | Texto «Mostrando 1–50 de N» en vez de «página / total» | **Adaptar** | Lo exige el criterio 1; coincide con el vocabulario de «Pendientes por carpeta» |
 | Anterior/siguiente con `aria-label` propio | **Adoptar** | Criterio 1: operables por teclado |
-| Paginación por `OFFSET` (Sonarr) | **Adaptar** con un desempate estable (`imported_at DESC, id`) | Consistente con `/ui/pendientes/carpetas` (`desplazamiento`/`limite`); ver decisión abierta 1 |
+| Paginación por `OFFSET` (Sonarr) | **Descartar** | Con una cola que se vacía, salta pendientes al resolver (contrato del revisor: sin saltos). Tampoco se imita `/ui/pendientes/carpetas` (`desplazamiento`/`limite`), cuya lista no se vacía al verla |
+| Orden total y estable + navegación relativa a una clave (no a una posición) | **Adaptar** (propuesta técnica) | Cursor sobre `(imported_at DESC, id DESC)`: «Anterior», «Siguiente», «Inicio» y rango sobre el conjunto actual. Ver «Decisiones» |
 | Selector de tamaño de página | **Descartar** | Un control más sin valor para el caso |
-| Primera/última página y selector de página | **Descartar por ahora** | Con 50 por página y ~27 páginas, anterior/siguiente basta; revisable |
-| Placeholder que conserva el tamaño del póster | **Descartar** | Contradice el criterio 2 (no reservar el espacio). Ver decisión abierta 2 |
+| Primera/última página y selector de página | **Descartar** | El cursor no ofrece «ir a la página N» (se dice en «Decisiones»); con ~27 páginas, anterior/siguiente/inicio basta |
+| Placeholder que conserva el tamaño del póster | **Descartar** | Contradice el criterio 2 (no reservar el espacio). Ver «Portadas: tres casos» |
 | Acotar por fuera en vez de paginar (Kapowarr) | **Descartar** | La persona tiene que poder llegar a todos |
 
-## Decisiones (cerradas por el revisor de la PR #213, 2026-10-15)
+## Decisiones
 
-### 1. Navegación: sin saltos. *Contrato del revisor*
+Dos tipos, para no confundirlos:
+- **Decisión de producto** (la fijó el revisor de la PR #213, 2026-10-15): qué debe cumplirse. Es vinculante.
+- **Solución técnica propuesta** (la propone quien implementa): cómo cumplirlo. **Está pendiente de demostración**
+  con las pruebas de abajo y puede cambiar si no las pasa.
+
+| Tema | Decisión de producto (vinculante) | Solución técnica propuesta (pendiente de demostrar) |
+|---|---|---|
+| Navegación | Orden total y estable; resolver tarjetas de la página no hace que «Siguiente» salte pendientes; se puede volver atrás e ir al inicio; el rango es el del conjunto actual | Cursor sobre `(imported_at DESC, id DESC)`, dos `COUNT`, refresco del rango con el gancho del menú |
+| Portadas | Ausencia conocida → ni petición ni bloque; desconocida → qué mecanismo y sin hueco; disponible → sin perjudicar el nombre; **no** SVG con 200, **no** explorar archivos | Predicado por extensión compartido con el extractor; `<img loading="lazy" alt="">` sin `aspect-ratio`; portada bajo el nombre |
+| Texto del Inicio | «Revisa los archivos pendientes y elige a qué serie pertenecen.» | — |
+
+### 1. Navegación: sin saltos
+*Producto (vinculante):*
 
 > Orden total y estable. Resolver o ignorar tarjetas de la página actual **no** hace que «Siguiente» salte
 > pendientes. Se puede volver hacia los anteriores y regresar al inicio. El rango mostrado corresponde al conjunto
@@ -109,7 +122,7 @@ ellas; **no se afirma que no la tengan**).
 `id` arregla empates, no el desplazamiento del conjunto al sacar filas. La coherencia con Carpetas no justifica
 reproducir la limitación aquí.
 
-**Implementación propuesta (a demostrar con las pruebas de abajo): paginación por cursor sobre la clave
+*Solución técnica propuesta, pendiente de demostrar con las pruebas 1–8:* **paginación por cursor sobre la clave
 `(imported_at DESC, id DESC)`.**
 - «Siguiente» = los 50 que van **después de la clave del último mostrado**, no «a partir de la posición 51». Que esa
   fila se resuelva o desaparezca no mueve el cursor: es una clave, no una posición.
@@ -129,6 +142,9 @@ reproducir la limitación aquí.
 anterior/siguiente «o equivalente»; no hay selector de página.
 
 ### 2. Portadas: tres casos, sin rebajar la aceptación
+*Producto (vinculante):* distinguir ausencia conocida, disponibilidad desconocida y portada disponible; no devolver
+un SVG con 200 solo para quitar los 404; no explorar archivos en producción; no rebajar la aceptación en silencio.
+*Solución técnica propuesta, pendiente de demostrar (pruebas 9–12):* la de la tabla siguiente.
 
 El criterio 4 dice «archivo del que el servidor **ya sabe** que no hay portada». No exige averiguarlo abriendo todos
 los CBZ en cada renderizado.
@@ -155,7 +171,7 @@ también ahí, es otra decisión (esquema o precálculo) y **no** está en U12.
 Safari (incluido iOS) **NOT RUN**: hay que comprobarlo antes de dar el criterio 2 por cumplido, y si alguno reserva
 el bloque, la opción de la tarjeta con miniatura pequeña vuelve a estudiarse.
 
-### 3. Texto del Inicio. *Aprobado por el revisor*
+### 3. Texto del Inicio. *Producto (aprobado por el revisor)*
 
 > Revisa los archivos pendientes y elige a qué serie pertenecen.
 
@@ -168,8 +184,16 @@ revisión general de textos de U21. Hay que revisar `tests/test_primeros_pasos.p
   la misma cifra (hoy el recuento del menú ya se comparte con ese filtro único).
 - **No perder nada:** ningún pendiente queda sin poder alcanzarse; paginar no filtra.
 - **Sin efectos:** la lista no escribe nada.
-- **Pi:** una consulta de lista + una de recuento por carga; `OFFSET` profundo a vigilar si la cola crece mucho.
-- **Sin JS propio ni migraciones** (ADR 0005): el recuento y el desplazamiento no necesitan esquema nuevo.
+- **Pi (presupuesto de consultas, el único vigente):** por carga, **una consulta de lista** (hacia delante o hacia
+  atrás según el enlace) y **dos `COUNT`**: el total (`count_pending()`) y la posición del primero mostrado. **Sin
+  `OFFSET`.** El total ya lo calcula el menú en cada página (`navegacion.py:27`): al implementar hay que
+  **comprobar si se puede reutilizar** en vez de repetirlo, lo que lo dejaría en una consulta de lista y un `COUNT`.
+- **Índices (verificado en las migraciones):** `files` solo tiene `idx_files_hash`, `idx_files_issue`,
+  `idx_files_original_sha256` y un GIN sobre `metadata`; **no hay índice sobre `imported_at`**. A 1.322 filas la
+  lista es un barrido más una ordenación, y el cursor **no lo empeora ni lo mejora**. **No medido en la Pi.** No se
+  propone un índice: es una migración (ADR 0005 la excluye) y no hace falta a esta escala; si la cola creciera mucho,
+  sería otra historia.
+- **Sin JS propio ni migraciones** (ADR 0005): ni el recuento ni el cursor necesitan esquema nuevo.
 
 ## Casos de prueba antes de implementar
 
@@ -210,14 +234,19 @@ Postgres real para el orden, el cursor y el recuento; `FakeSession` donde baste.
 
 ## Estimación refinada
 
-Se mantiene **5 (M)**, **confianza Media**, con una advertencia honesta: el cursor (consulta de lista **y** de
-«anterior», dos `COUNT`, ampliar el gancho que refresca el menú, paginador y CSS de tarjeta) pesa más que el
+Se mantiene **5 (M)**, **confianza Media**, con una advertencia honesta: el cursor (consulta de lista en los dos
+sentidos, dos `COUNT`, ampliar el gancho que refresca el menú, paginador y CSS de tarjeta) pesa más que el
 `OFFSET` que se había contado. Si al implementar la parte del cursor + refresco del rango + las pruebas 2–7 supera
 lo previsto, se **divide** (navegación / portadas y nombre) en lugar de recortar criterios. Es una estimación, no un
 compromiso.
 
 ## Decisión final
 
-Las tres decisiones las **cerró el revisor** (2026-10-15). No cambia la arquitectura: **sin ADR** (sin esquema, sin
-JS propio, sin dependencia nueva). Esta ficha pasa a «lista para implementar» solo cuando el revisor la dé por
-corregida; hasta entonces, **U12 sigue en «En refinamiento»**.
+- **Producto:** el revisor fijó el contrato de navegación, el reparto en tres casos de las portadas y el texto del
+  Inicio (2026-10-15). Es vinculante.
+- **Técnica:** el cursor, el predicado por extensión y el CSS sin `aspect-ratio` son **propuestas del implementador,
+  pendientes de demostración**. El colapso de la imagen rota está medido **solo en Chrome 154** y en una página
+  aislada; **no acredita todavía el criterio 2 en la aplicación integrada**, que se comprueba con las pruebas 10–12.
+- No cambia la arquitectura: **sin ADR** (sin esquema, sin JS propio, sin dependencia nueva).
+- Esta ficha pasa a «lista para implementar» solo cuando el revisor la dé por corregida; hasta entonces, **U12
+  sigue en «En refinamiento»**.
