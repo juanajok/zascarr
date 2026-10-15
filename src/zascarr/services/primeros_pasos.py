@@ -152,7 +152,7 @@ def _paso_revisar(e: EstadoInicio) -> Paso:
         cuantos = _plural(n, "tebeo que no hemos sabido clasificar",
                           "tebeos que no hemos sabido clasificar")
         return Paso(ClavePaso.REVISAR, f"Revisa {n} {cuantos}",
-                    "Puedes decirnos de qué serie son, uno a uno.",
+                    "Revisa los archivos pendientes y elige a qué serie pertenecen.",
                     EstadoPaso.SIGUIENTE, True, "/ui/pendientes", "Revisar ahora →")
     if e.archivos_registrados:
         return Paso(ClavePaso.REVISAR, "No tienes tebeos por clasificar",

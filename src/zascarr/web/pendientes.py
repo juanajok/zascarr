@@ -32,7 +32,7 @@ from zascarr.services.revision_carpetas import (
     RespuestaCarpetas,
     RevisionCarpetas,
 )
-from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail
+from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, puede_tener_portada
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.routes import crear_templates
 
@@ -75,6 +75,8 @@ def _card(f: File) -> dict:
         "file": f,
         "detected": _detected_label(f.file_name),
         "suggestion": _suggestion(f),
+        # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
+        "con_portada": puede_tener_portada(f.file_path),
         # B15: motivo de por qué este archivo sigue en revisión (p.ej. un
         # número compartido entre ediciones rechazado en una asignación).
         "motivo": (f.metadata_ or {}).get("review_motivo"),

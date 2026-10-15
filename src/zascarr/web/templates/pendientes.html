@@ -14,14 +14,14 @@
   <input type="hidden" name="primero" value="{{ primero }}">
   <input type="hidden" name="ultimo" value="{{ ultimo }}">
 </div>
-{% macro paginas(clase) %}
-<nav class="pend-paginas {{ clase }}" aria-label="Páginas de pendientes">
+{% macro paginas(clase, nombre) %}
+<nav class="pend-paginas {{ clase }}" aria-label="{{ nombre }}">
   {% if inicio %}<a class="pend-inicio" href="{{ inicio }}">← Volver al principio</a>{% endif %}
   {% if anterior %}<a class="pend-anterior" href="{{ anterior }}">← Anteriores</a>{% endif %}
   {% if siguiente %}<a class="pend-siguiente" href="{{ siguiente }}">Siguientes →</a>{% endif %}
 </nav>
 {% endmacro %}
-{% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba") }}{% endif %}
+{% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de pendientes, arriba") }}{% endif %}
 {% endif %}
 
 <div class="pending-grid">
@@ -29,5 +29,5 @@
   {% include "_tarjeta_pendiente.html" %}
   {% endfor %}
 </div>
-{% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo") }}{% endif %}
+{% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo", "Páginas de pendientes, abajo") }}{% endif %}
 {% endblock %}

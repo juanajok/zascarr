@@ -621,18 +621,19 @@ button[type="submit"].neutro {
   display: flex;
   flex-direction: column;
 }
+/* U12: SIN `aspect-ratio` y con `height: auto`: una portada que falla mide 0 px y no deja hueco (medido en
+   Chrome 154, docs/design/benchmark-U12-experimento); una que carga ocupa su alto natural, acotado en ancho. */
 .pending-card .cover {
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  background: var(--paper);
-  border-bottom: 3px solid var(--ink);
+  display: block;
+  width: min(100%, 120px);
+  height: auto;
+  margin: 0 auto;
 }
-.pending-card .cover.cover-missing { visibility: hidden; }
 .pending-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+/* U12: el nombre se lee ENTERO: se parte si no cabe (también uno largo y sin espacios), nunca se recorta. */
 .filename {
   font-size: .875rem;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .detected { font-size: .875rem; color: var(--ink-faint); }
 
