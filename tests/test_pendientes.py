@@ -15,6 +15,7 @@ devuelve cada una), no la lógica de negocio por duplicado.
 from __future__ import annotations
 
 import zipfile
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -43,6 +44,20 @@ class FakeExecResult:
 
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
+
+    def scalar_one(self):
+        return self._rows if isinstance(self._rows, int) else self._rows[0]
+
+
+def cola_de(files: list) -> list:
+    """Lo que consume `GET /ui/pendientes` (cursor, U12): el total, la lista y —si hay lista— cuántos van antes del
+    primero. `imported_at` es NOT NULL en la BD: aquí se rellena para los archivos que no lo traen."""
+    ahora = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+    for f in files:
+        f.imported_at = f.imported_at or ahora
+    if not files:
+        return [FakeExecResult(0), FakeExecResult([])]
+    return [FakeExecResult(len(files)), FakeExecResult(files), FakeExecResult(0)]
 
 
 class FakeSession:
@@ -86,13 +101,13 @@ class TestPendientesIndex:
     def test_pagina_lista_archivos_pendientes(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/batman misterioso 12.cbz",
                     file_name="batman misterioso 12.cbz", file_format=FileFormat.CBZ)
-        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([file])])) as client:
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
             r = client.get("/ui/pendientes")
         assert r.status_code == 200
         assert "batman misterioso 12.cbz" in r.text
 
     def test_pagina_sin_pendientes_muestra_mensaje_vacio(self):
-        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([])])) as client:
+        with use_fake_session(FakeSession(exec_queue=cola_de([]))) as client:
             r = client.get("/ui/pendientes")
         assert r.status_code == 200
         assert "Nada pendiente" in r.text
@@ -119,7 +134,7 @@ class TestPendientesIndex:
                 ],
             },
         )
-        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([file])])) as client:
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
             r = client.get("/ui/pendientes")
         assert r.status_code == 200
         assert "¿Es esta serie?" in r.text
@@ -130,7 +145,7 @@ class TestPendientesIndex:
     def test_archivo_sin_candidatos_no_muestra_sugerencia(self):
         file = File(id=uuid4(), file_path="/lib/_Unsorted/algo.cbz", file_name="algo.cbz",
                     file_format=FileFormat.CBZ, metadata_={"match_status": "unsorted"})
-        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([file])])) as client:
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
             r = client.get("/ui/pendientes")
         assert r.status_code == 200
         assert "¿Es esta serie?" not in r.text
@@ -177,7 +192,7 @@ class TestLaAsignacionSeRotulaOrganizar:
                     file_format=FileFormat.CBZ,
                     metadata_={"match_status": "unsorted",
                                "candidates": [{"series_id": str(sid), "title": "La Patrulla-X", "start_year": 1985, "score": 0.62}]})
-        with use_fake_session(FakeSession(exec_queue=[FakeExecResult([file])])) as client:
+        with use_fake_session(FakeSession(exec_queue=cola_de([file]))) as client:
             return client.get("/ui/pendientes").text, file, sid
 
     def test_el_boton_de_la_sugerencia_se_rotula_organizar_y_la_tarjeta_dice_que_mueve_y_renombra(self):

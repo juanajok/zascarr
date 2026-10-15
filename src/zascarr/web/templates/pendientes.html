@@ -7,6 +7,21 @@
 
 {% if not cards %}
 <p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
+{% else %}
+{% include "_pendientes_rango.html" %}
+{#- Las claves de los extremos de la página: el refresco tras resolver una tarjeta las envía para recalcular el rango. -#}
+<div id="pend-clave" hidden>
+  <input type="hidden" name="primero" value="{{ primero }}">
+  <input type="hidden" name="ultimo" value="{{ ultimo }}">
+</div>
+{% macro paginas(clase) %}
+<nav class="pend-paginas {{ clase }}" aria-label="Páginas de pendientes">
+  {% if inicio %}<a class="pend-inicio" href="{{ inicio }}">← Volver al principio</a>{% endif %}
+  {% if anterior %}<a class="pend-anterior" href="{{ anterior }}">← Anteriores</a>{% endif %}
+  {% if siguiente %}<a class="pend-siguiente" href="{{ siguiente }}">Siguientes →</a>{% endif %}
+</nav>
+{% endmacro %}
+{% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba") }}{% endif %}
 {% endif %}
 
 <div class="pending-grid">
@@ -14,4 +29,5 @@
   {% include "_tarjeta_pendiente.html" %}
   {% endfor %}
 </div>
+{% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo") }}{% endif %}
 {% endblock %}

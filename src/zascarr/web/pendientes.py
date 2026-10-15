@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlencode
 from uuid import UUID
 
 import structlog
@@ -25,7 +26,7 @@ from zascarr.services.asignacion import (
     Resultado,
     servicio_por_defecto,
 )
-from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
+from zascarr.services.review import MOTIVO_COLISION_EDICION, ClavePendiente, ReviewService
 from zascarr.services.revision_carpetas import (
     LIMITE_MAXIMO,
     RespuestaCarpetas,
@@ -80,11 +81,67 @@ def _card(f: File) -> dict:
     }
 
 
+def _enlace(parametro: str, clave: ClavePendiente) -> str:
+    return f"/ui/pendientes?{urlencode({parametro: clave.a_texto()})}"
+
+
+def _rango(desde: int, hasta: int, total: int) -> dict:
+    """«Mostrando X–Y de N»: una sola construcción para la página y para el refresco."""
+    return {"desde": desde, "hasta": hasta, "total": total}
+
+
 @router.get("", response_class=HTMLResponse)
-async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    files = await ReviewService(db).pending_files()
-    cards = [_card(f) for f in files]
-    return templates.TemplateResponse(request, "pendientes.html", {"cards": cards})
+async def index(
+    request: Request,
+    despues: str = Query(default=""),
+    antes: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """La cola de pendientes, por cursor (U12). `despues` / `antes` son claves
+    `imported_at|id`; una que no vale, o las dos a la vez, dan la primera página: una URL
+    manipulada o vieja nunca es un error."""
+    k_despues, k_antes = ClavePendiente.desde_texto(despues), ClavePendiente.desde_texto(antes)
+    if k_despues and k_antes:
+        k_despues = k_antes = None
+    pagina = await ReviewService(db).pagina_de_pendientes(despues=k_despues, antes=k_antes)
+    contexto: dict = {
+        "cards": [_card(f) for f in pagina.archivos],
+        "rango": _rango(pagina.desde, pagina.hasta, pagina.total),
+        "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None}
+    if pagina.archivos:
+        primero = ClavePendiente(pagina.archivos[0].imported_at, pagina.archivos[0].id)
+        ultimo = ClavePendiente(pagina.archivos[-1].imported_at, pagina.archivos[-1].id)
+        contexto.update(
+            primero=primero.a_texto(), ultimo=ultimo.a_texto(),
+            siguiente=_enlace("despues", ultimo) if pagina.hay_siguiente else None,
+            anterior=_enlace("antes", primero) if pagina.hay_anterior else None,
+            inicio="/ui/pendientes" if pagina.hay_anterior else None)
+    resp = templates.TemplateResponse(request, "pendientes.html", contexto)
+    resp.headers["Cache-Control"] = "no-store"      # la cola cambia con cada tarjeta resuelta
+    return resp
+
+
+@router.get("/rango", response_class=HTMLResponse)
+async def rango(
+    request: Request,
+    primero: str = Query(default=""),
+    ultimo: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """«Mostrando X–Y de N» recalculado sobre el conjunto ACTUAL, para refrescar tras
+    resolver una tarjeta sin recargar. `primero` y `ultimo` son las claves de los extremos
+    de la página que se ve. Solo lectura."""
+    k1, k2 = ClavePendiente.desde_texto(primero), ClavePendiente.desde_texto(ultimo)
+    if k1 is None or k2 is None:
+        return HTMLResponse(status_code=204)        # htmx no intercambia un 204
+    servicio = ReviewService(db)
+    total = await servicio.count_pending()
+    delante = await servicio.contar_antes_de(k1)
+    quedan = await servicio.contar_entre(k1, k2)
+    r = _rango(delante + 1 if quedan else 0, delante + quedan, total)
+    resp = templates.TemplateResponse(request, "_pendientes_rango.html", {"rango": r})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 #: Grupos por página en la vista HTML (el JSON admite hasta `LIMITE_MAXIMO`): una página corta se
@@ -235,9 +292,14 @@ def interpretar(r: Resultado) -> Respuesta:
 #: que ya no está en el DOM cuando la tarjeta se reemplaza (`outerHTML`), y un evento de un nodo
 #: desconectado no llega a `body` (comprobado en navegador real con un clic; con `htmx.ajax` sin
 #: elemento origen sí «funcionaba»).
+#: U12: junto al menú se refresca «Mostrando X–Y de N» con el MISMO mecanismo (un elemento
+#: inerte que se pide al cargarse). Toma las claves de los extremos de `#pend-clave`; si no
+#: hay lista en pantalla, `#pend-rango` no existe y no se intercambia nada.
 RECONTAR_MENU = (
     '<span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" '
-    'hx-swap="none"></span>')
+    'hx-swap="none"></span>'
+    '<span class="pend-recuento" hidden hx-get="/ui/pendientes/rango" hx-trigger="load" '
+    'hx-include="#pend-clave" hx-target="#pend-rango" hx-swap="outerHTML"></span>')
 
 
 def _es_htmx(request: Request) -> bool:

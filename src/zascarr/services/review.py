@@ -23,9 +23,12 @@ SeriesMatcher.decide() no vuelva a preguntar la próxima vez.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -65,6 +68,47 @@ class ColisionDeEdicionError(ValueError):
             f"({formato_existente}) — {MOTIVO_COLISION_EDICION}. El archivo "
             f"'{file_name}' se queda en Pendientes sin asignar."
         )
+
+
+#: Pendientes por página en «Por revisar».
+POR_PAGINA = 50
+#: Un cursor es `imported_at|id` y cabe de sobra; más es un parámetro manipulado.
+MAX_CLAVE = 100
+
+
+@dataclass(frozen=True)
+class ClavePendiente:
+    """La posición de un pendiente en la lista: `(imported_at, id)`. Es la CLAVE del cursor."""
+    imported_at: datetime
+    id: UUID
+
+    def a_texto(self) -> str:
+        return f"{self.imported_at.isoformat()}|{self.id}"
+
+    @staticmethod
+    def desde_texto(texto: str | None) -> ClavePendiente | None:
+        """None si no tiene la forma exacta. Se lee con desconfianza: viene de la URL."""
+        if not texto or len(texto) > MAX_CLAVE or texto.count("|") != 1:
+            return None
+        ts, _, ident = texto.partition("|")
+        try:
+            momento = datetime.fromisoformat(ts)
+            ident_uuid = UUID(ident)
+        except ValueError:
+            return None
+        if momento.tzinfo is None:
+            return None
+        return ClavePendiente(momento, ident_uuid)
+
+
+@dataclass
+class PaginaPendientes:
+    archivos: list
+    total: int
+    desde: int
+    hasta: int
+    hay_anterior: bool
+    hay_siguiente: bool
 
 
 class ReviewService:
@@ -113,6 +157,72 @@ class ReviewService:
             .order_by(File.imported_at.desc())
             .limit(limit)
         )).scalars().all())
+
+    @staticmethod
+    def _ref(c: ClavePendiente):
+        """La clave como valor tipado para comparar con `(imported_at, id)`."""
+        return tuple_(literal(c.imported_at, File.imported_at.type), literal(c.id, File.id.type))
+
+    async def pagina_de_pendientes(
+        self, *, despues: ClavePendiente | None = None, antes: ClavePendiente | None = None,
+        limite: int = POR_PAGINA,
+    ) -> PaginaPendientes:
+        """Una página de la cola, por CURSOR sobre `(imported_at DESC, id DESC)` (U12).
+
+        La cola SE VACÍA: asignar o ignorar una tarjeta la saca del conjunto. Con un
+        desplazamiento (`OFFSET`) calculado antes de resolver, «Siguiente» omitiría
+        pendientes; una CLAVE no se desplaza: «Siguiente» es «lo que va después de ESTA
+        fila», exista ya o no. `id` desempata: una adopción registra muchos archivos en
+        una transacción y `now()` es el mismo para todos.
+
+        `despues` = lo que sigue a esa clave; `antes` = lo que la precede (se consulta al
+        revés y se invierte); ninguno = el principio. Un cursor que ya no lleva a nada
+        cae en el principio.
+
+        Presupuesto: una consulta de lista y dos `COUNT` (el total y la posición del
+        primero mostrado), sin `OFFSET`."""
+        clave = tuple_(File.imported_at, File.id)
+        total = await self.count_pending()
+        filas: list[File] = []
+        if antes is not None or despues is not None:
+            consulta = select(File).where(*self._condiciones_pendientes())
+            if antes is not None:
+                consulta = (consulta.where(clave > self._ref(antes))
+                            .order_by(File.imported_at.asc(), File.id.asc()).limit(limite))
+                filas = list(reversed(list((await self.db.execute(consulta)).scalars().all())))
+            else:
+                consulta = (consulta.where(clave < self._ref(despues))
+                            .order_by(File.imported_at.desc(), File.id.desc()).limit(limite))
+                filas = list((await self.db.execute(consulta)).scalars().all())
+        if not filas:                       # sin cursor, o un cursor que ya no lleva a nada
+            filas = list((await self.db.execute(
+                select(File).where(*self._condiciones_pendientes())
+                .order_by(File.imported_at.desc(), File.id.desc()).limit(limite)
+            )).scalars().all())
+        if not filas:
+            return PaginaPendientes([], total, 0, 0, False, False)
+        delante = await self.contar_antes_de(ClavePendiente(filas[0].imported_at, filas[0].id))
+        return PaginaPendientes(
+            archivos=filas, total=total, desde=delante + 1, hasta=delante + len(filas),
+            hay_anterior=delante > 0, hay_siguiente=total - delante - len(filas) > 0)
+
+    async def contar_antes_de(self, c: ClavePendiente) -> int:
+        """Cuántos pendientes van ANTES de esa clave en el orden de la lista."""
+        return (await self.db.execute(
+            select(func.count()).select_from(File)
+            .where(*self._condiciones_pendientes(),
+                   tuple_(File.imported_at, File.id) > self._ref(c))
+        )).scalar_one()
+
+    async def contar_entre(self, primero: ClavePendiente, ultimo: ClavePendiente) -> int:
+        """Cuántos pendientes hay hoy entre dos claves, ambas incluidas: lo que queda de
+        una página que ya se mostró."""
+        clave = tuple_(File.imported_at, File.id)
+        return (await self.db.execute(
+            select(func.count()).select_from(File)
+            .where(*self._condiciones_pendientes(),
+                   clave <= self._ref(primero), clave >= self._ref(ultimo))
+        )).scalar_one()
 
     async def search_series(self, query: str, limit: int = 20) -> list[Series]:
         """Búsqueda manual para el selector de la bandeja: coincidencia
