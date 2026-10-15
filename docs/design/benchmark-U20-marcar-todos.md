@@ -92,7 +92,7 @@ El caso que motivó la historia y el límite que las referencias no cubren:
 - Marcar solo lo marcable y devolver el recuento (el caso de la historia).
 - No marcar ni tocar otras páginas ni sus borradores; no elegir entre repetidos; respetar el número recién escrito.
 - **El límite que Kapowarr no cubre:** una marca que acaba bloqueada **no** se cuenta y **no** se oculta
-  (`test_una_marca_que_acaba_bloqueada_no_se_cuenta_ni_se_deja_caer_en_silencio`).
+  (`test_un_cambio_real_entre_las_dos_evaluaciones_no_se_cuenta_ni_se_deja_caer_en_silencio`: borra del disco un archivo entre la evaluación que propone la selección y la final).
 - Sin efectos (BD y disco idénticos), sin `<script>` ni `onclick`, acción desconocida ignorada.
 - Regresión de jerga: ninguna revisión ni resultado dice «token», «lote» ni «motivo:».
 
