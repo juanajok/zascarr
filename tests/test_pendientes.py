@@ -51,7 +51,9 @@ class FakeExecResult:
 
 def cola_de(files: list) -> list:
     """Lo que consume `GET /ui/pendientes` (cursor, U12): el total, la lista y —si hay lista— cuántos van antes del
-    primero. `imported_at` es NOT NULL en la BD: aquí se rellena para los archivos que no lo traen."""
+    primero. `imported_at` ADMITE NULL en la BD real (la migración inicial no pone NOT NULL); los archivos de
+    estas pruebas no lo traen y se rellena para que el cursor tenga clave. El caso NULL real tiene su prueba
+    con Postgres en `test_pendientes_navegacion_pg.py::TestImportedAtNulo`."""
     ahora = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
     for f in files:
         f.imported_at = f.imported_at or ahora

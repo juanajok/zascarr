@@ -3,11 +3,12 @@
 {% block content %}
 <h1>Por revisar</h1>
 <p class="subtitle">Archivos que el sistema no supo clasificar solo. Busca la serie correcta y confirma el número, o ignóralos si no pertenecen a tu colección.</p>
-<p><a href="/ui/pendientes/carpetas">Ver lo pendiente agrupado por carpeta →</a></p>
-
 {% if not cards %}
 <p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
 {% else %}
+{#- Criterio 5: el acceso a las carpetas se ve como ACCIÓN, con su recuento y qué cuenta (carpetas). -#}
+<p><a class="btn ghost pend-carpetas" href="/ui/pendientes/carpetas">
+  Verlos por carpeta{% if carpetas %} ({{ carpetas }} carpeta{{ "s" if carpetas != 1 }}){% endif %}</a></p>
 {% include "_pendientes_rango.html" %}
 {#- Las claves de los extremos de la página: el refresco tras resolver una tarjeta las envía para recalcular el rango. -#}
 <div id="pend-clave" hidden>

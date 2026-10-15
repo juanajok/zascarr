@@ -83,6 +83,22 @@ def _card(f: File) -> dict:
     }
 
 
+async def contar_carpetas(db: AsyncSession) -> int:
+    """Cuántas carpetas (grupos) tienen pendientes, con la MISMA definición que la pantalla de
+    carpetas: una sola definición de «grupo» (`RevisionCarpetas`). Lee los pendientes y los
+    agrupa en memoria, igual que esa pantalla; `limite=1` evita materializar la página."""
+    return (await RevisionCarpetas(db).carpetas(limite=1)).totales.grupos
+
+
+async def _carpetas_o_nada(db: AsyncSession) -> int | None:
+    """El recuento adorna un enlace: si falla, la bandeja sigue y el enlace va sin número."""
+    try:
+        return await contar_carpetas(db)
+    except Exception as exc:  # noqa: BLE001 — no debe tumbar la lista
+        logger.warning("pendientes.recuento_de_carpetas_fallo", error=type(exc).__name__)
+        return None
+
+
 def _enlace(parametro: str, clave: ClavePendiente) -> str:
     return f"/ui/pendientes?{urlencode({parametro: clave.a_texto()})}"
 
@@ -109,8 +125,10 @@ async def index(
     contexto: dict = {
         "cards": [_card(f) for f in pagina.archivos],
         "rango": _rango(pagina.desde, pagina.hasta, pagina.total),
-        "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None}
+        "siguiente": None, "anterior": None, "inicio": None, "primero": None, "ultimo": None,
+        "carpetas": None}
     if pagina.archivos:
+        contexto["carpetas"] = await _carpetas_o_nada(db)
         primero = ClavePendiente.de(pagina.archivos[0])
         ultimo = ClavePendiente.de(pagina.archivos[-1])
         contexto.update(
@@ -140,7 +158,8 @@ async def rango(
     total = await servicio.count_pending()
     delante = await servicio.contar_antes_de(k1)
     quedan = await servicio.contar_entre(k1, k2)
-    r = _rango(delante + 1 if quedan else 0, delante + quedan, total)
+    # Una página vaciada no tiene rango: ni «desde» ni «hasta» (no «0–50»).
+    r = _rango(delante + 1, delante + quedan, total) if quedan else _rango(0, 0, total)
     resp = templates.TemplateResponse(request, "_pendientes_rango.html", {"rango": r})
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -297,11 +316,15 @@ def interpretar(r: Resultado) -> Respuesta:
 #: U12: junto al menú se refresca «Mostrando X–Y de N» con el MISMO mecanismo (un elemento
 #: inerte que se pide al cargarse). Toma las claves de los extremos de `#pend-clave`; si no
 #: hay lista en pantalla, `#pend-rango` no existe y no se intercambia nada.
+#: `hx-sync="#pend-rango:replace"`: dos resoluciones seguidas lanzan dos refrescos; el último
+#: REEMPLAZA (aborta) al que sigue en vuelo, así que una respuesta antigua que llegue tarde no
+#: sobrescribe el rango más reciente. Es del propio htmx, sin JavaScript nuestro.
 RECONTAR_MENU = (
     '<span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" '
     'hx-swap="none"></span>'
     '<span class="pend-recuento" hidden hx-get="/ui/pendientes/rango" hx-trigger="load" '
-    'hx-include="#pend-clave" hx-target="#pend-rango" hx-swap="outerHTML"></span>')
+    'hx-include="#pend-clave" hx-target="#pend-rango" hx-swap="outerHTML" '
+    'hx-sync="#pend-rango:replace"></span>')
 
 
 def _es_htmx(request: Request) -> bool:

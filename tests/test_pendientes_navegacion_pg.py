@@ -355,3 +355,85 @@ class TestImportedAtNulo:
         async with entorno.banco.fabrica() as s:
             nulo = str((await s.execute(text("SELECT id FROM files WHERE imported_at IS NULL"))).scalar_one())
         assert vistos[-1] == nulo, "el que no tiene fecha va el último"
+
+
+# ── Revisión de #214 ──────────────────────────────────────────────────────────────────────────
+class TestPaginaPosteriorVaciada:
+    """Bloqueante 1 de la revisión: con la segunda página completamente resuelta, `/rango` devolvía `desde=0` y
+    `hasta=delante`: «Mostrando 0–50 de 70». Una página vaciada no tiene rango."""
+
+    async def test_el_rango_de_una_pagina_posterior_completamente_resuelta_no_es_imposible(self, entorno):
+        await sembrar(entorno, 120)
+        p1 = await pedir()
+        p2 = await pedir(p1.siguiente)
+        assert (p2.desde, p2.hasta, p2.total) == (51, 100, 120)
+        primero, ultimo = p2.primero, p2.ultimo
+        await ignorar(p2.ids)                                   # se vacía la segunda página entera
+        async with cliente() as c:
+            r = await c.get("/ui/pendientes/rango", params={"primero": primero, "ultimo": ultimo})
+        assert r.status_code == 200
+        f = Lista(r.text)
+        assert (f.desde, f.hasta, f.total) == (0, 0, 70)
+        assert "Mostrando" not in f.visible and "0–50" not in f.visible
+        assert "Ya no quedan pendientes en esta página" in f.visible and "70" in f.visible
+
+    async def test_vaciar_la_ultima_pagina_y_toda_la_cola(self, entorno):
+        orden = await sembrar(entorno, 4)
+        p = await pedir()
+        await ignorar(orden)
+        async with cliente() as c:
+            r = await c.get("/ui/pendientes/rango", params={"primero": p.primero, "ultimo": p.ultimo})
+        assert "Ya no queda nada pendiente" in Lista(r.text).visible
+
+
+class TestEnlaceACarpetas:
+    """Bloqueante 2: el criterio 5 pide «Verlos por carpeta (N)» y N no existía. N = número de CARPETAS, con el
+    mismo conteo de grupos que la propia pantalla de carpetas (una sola definición de «grupo»)."""
+
+    async def test_el_enlace_dice_cuantas_carpetas_y_coincide_con_la_pantalla_de_carpetas(self, entorno):
+        for carpeta in ("Comics/Flash (1987)", "Comics/Batman (2011)", "Manga/Akira"):
+            await archivos(entorno, f"{carpeta.split('/')[1]} 01.cbz", f"{carpeta.split('/')[1]} 02.cbz",
+                           carpeta=carpeta, en_disco=False)
+        p = await pedir()
+        m = re.search(r'<a class="[^"]*pend-carpetas[^"]*" href="/ui/pendientes/carpetas">(.*?)</a>', p.t, re.S)
+        assert m, "no hay enlace a carpetas con su clase"
+        assert " ".join(re.sub(r"<[^>]+>", " ", m.group(1)).split()) == "Verlos por carpeta (3 carpetas)"
+        from zascarr.services.revision_carpetas import RevisionCarpetas
+        async with entorno.banco.fabrica() as s:
+            assert (await RevisionCarpetas(s).carpetas(limite=1)).totales.grupos == 3
+
+    async def test_una_sola_carpeta_va_en_singular(self, entorno):
+        await sembrar(entorno, 3)
+        assert "Verlos por carpeta (1 carpeta)" in (await pedir()).visible
+
+    async def test_sin_pendientes_no_hay_enlace(self, entorno):
+        assert "pend-carpetas" not in (await pedir()).t
+
+    async def test_si_el_recuento_de_carpetas_falla_la_bandeja_sigue_funcionando(self, entorno, monkeypatch):
+        """El recuento es un adorno de un enlace: no puede tumbar la lista."""
+        from zascarr.web import pendientes as web
+
+        async def roto(db):
+            raise RuntimeError("fallo del recuento")
+        monkeypatch.setattr(web, "contar_carpetas", roto)
+        orden = await sembrar(entorno, 3)
+        p = await pedir()
+        assert p.status == 200 and p.ids == orden
+        assert re.search(r'<a class="[^"]*pend-carpetas[^"]*" href="/ui/pendientes/carpetas">\s*Verlos por carpeta\s*</a>', p.t)
+        assert "carpetas)" not in p.visible
+
+
+class TestRefrescosFueraDeOrden:
+    """Bloqueante 3: dos refrescos seguidos no pueden dejar visible el rango del PRIMERO si el segundo ya terminó.
+    La prueba real (orden inverso de finalización) es la del navegador, `docs/design/ui-u12/`; aquí se fija el
+    mecanismo: ambos refrescos se sincronizan sobre `#pend-rango` y el nuevo REEMPLAZA al que sigue en vuelo."""
+
+    async def test_el_gancho_de_refresco_reemplaza_al_que_sigue_en_vuelo(self, entorno):
+        await sembrar(entorno, 3)
+        p = await pedir()
+        async with cliente() as c:
+            r = await c.post(f"/ui/pendientes/{p.ids[0]}/ignorar", headers={"HX-Request": "true"})
+        span = re.search(r'<span class="pend-recuento"[^>]*>', r.text)
+        assert span, r.text
+        assert 'hx-sync="#pend-rango:replace"' in span.group(0)
+        assert 'hx-include="#pend-clave"' in span.group(0) and 'hx-target="#pend-rango"' in span.group(0)
