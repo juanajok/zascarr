@@ -99,6 +99,80 @@ def respuestas(nav, patron: str) -> list[int]:
             if e.get("method") == "Network.responseReceived" and re.search(patron, e["params"]["response"]["url"])]
 
 
+async def refrescos_fuera_de_orden(nav, base: str, quitar_sync: bool) -> dict:
+    """Bloqueante 3 de la revisión: dos «Ignorar» seguidos lanzan dos refrescos del rango y el PRIMERO termina
+    DESPUÉS. Con `Fetch` se retiene la RESPUESTA del primero (en la etapa de respuesta: el servidor ya la calculó,
+    con el dato de ese momento) hasta que el segundo ha terminado, y se mira qué queda en pantalla. `quitar_sync` elimina `hx-sync` de las respuestas de «Ignorar» (variante de control: sin el
+    mecanismo...). RESULTADO HONESTO: en htmx 4.0.0 / Chrome 154 la variante de control TAMBIÉN conserva el último,
+    porque el refresco es un `outerHTML`: al sustituir el nuevo a `#pend-rango`, la respuesta antigua apunta a un
+    elemento ya desconectado y no hace nada. `hx-sync` añade el ABORTO de la petición antigua (visible en
+    `refrescos_abortados_o_fallidos`), pero no es lo que evita la sobrescritura: es una defensa adicional."""
+    await nav.ir(base + "/ui/pendientes", espera=1.5)
+    inicial = await nav.js("document.querySelector('#pend-rango').textContent.trim()")
+    retenidas: list[dict] = []
+    await nav.cdp("Fetch.enable", patterns=[
+        {"urlPattern": "*/ui/pendientes/rango*", "requestStage": "Response"},
+        {"urlPattern": "*/ignorar", "requestStage": "Response"}])
+    nav._eventos.clear()
+
+    async def atender() -> None:
+        while True:
+            for e in list(nav._eventos):
+                if e.get("method") != "Fetch.requestPaused" or e.get("_visto"):
+                    continue
+                e["_visto"] = True
+                par = e["params"]
+                url = par["request"]["url"]
+                if url.endswith("/ignorar") and "responseStatusCode" in par:
+                    cuerpo = await nav.cdp("Fetch.getResponseBody", requestId=par["requestId"])
+                    import base64
+                    texto = base64.b64decode(cuerpo["body"]).decode() if cuerpo.get("base64Encoded") else cuerpo["body"]
+                    if quitar_sync:
+                        texto = texto.replace(' hx-sync="#pend-rango:replace"', "")
+                    cabeceras = [h for h in par["responseHeaders"] if h["name"].lower() != "content-length"]
+                    await nav.cdp("Fetch.fulfillRequest", requestId=par["requestId"], responseCode=200,
+                                  responseHeaders=cabeceras, body=base64.b64encode(texto.encode()).decode())
+                elif "/ui/pendientes/rango" in url:
+                    if not retenidas:                       # la respuesta del PRIMER refresco se retiene
+                        retenidas.append(par)
+                    else:
+                        await nav.cdp("Fetch.continueResponse", requestId=par["requestId"])
+            await asyncio.sleep(0.05)
+
+    tarea = asyncio.create_task(atender())
+    try:
+        for _ in range(2):                                  # dos tarjetas resueltas, seguidas
+            await asyncio.gather(clic(nav, ".pending-card .btn-ignorar"), aceptar_confirm(nav))
+            nav._eventos[:] = [e for e in nav._eventos if e.get("method") != "Page.javascriptDialogOpening"]
+            await asyncio.sleep(0.8)
+        await asyncio.sleep(1.0)
+        tras_el_segundo = await nav.js("document.querySelector('#pend-rango').textContent.trim()")
+        if retenidas:                                       # ahora se SUELTA la respuesta antigua
+            try:
+                await nav.cdp("Fetch.continueResponse", requestId=retenidas[0]["requestId"])
+            except RuntimeError:
+                pass                                        # htmx la abortó: ya no existe
+        await asyncio.sleep(1.5)
+        al_final = await nav.js("document.querySelector('#pend-rango').textContent.trim()")
+    finally:
+        tarea.cancel()
+        await nav.cdp("Fetch.disable")
+    def cuenta(metodo: str, patron: str) -> int:
+        return sum(1 for e in nav._eventos if e.get("method") == metodo
+                   and re.search(patron, json.dumps(e.get("params", {}))))
+    diagnostico = {
+        "posts_ignorar": cuenta("Network.requestWillBeSent", r'"url": "[^"]*/ignorar"'),
+        "refrescos_pedidos": cuenta("Network.requestWillBeSent", r'/ui/pendientes/rango'),
+        "refrescos_abortados_o_fallidos": cuenta("Network.loadingFailed", r'.'),
+        "fetch_pausados": sum(1 for e in nav._eventos if e.get("method") == "Fetch.requestPaused")}
+    # Una ejecución solo vale si ocurrió lo que se quería probar: dos resoluciones y dos refrescos.
+    valido = diagnostico["posts_ignorar"] == 2 and diagnostico["refrescos_pedidos"] == 2 and bool(retenidas)
+    return {"valido": valido, "con_hx_sync": not quitar_sync, "diagnostico": diagnostico, "inicial": inicial,
+            "tras_el_segundo_refresco": tras_el_segundo,
+            "tras_soltar_el_primero": al_final, "primero_retenido": bool(retenidas),
+            "gana_el_ultimo": al_final == tras_el_segundo}
+
+
 async def main(base: str, salida: Path) -> None:
     salida.mkdir(parents=True, exist_ok=True)
     sembrado = subprocess.run(
@@ -147,6 +221,11 @@ async def main(base: str, salida: Path) -> None:
             "estado_rango": respuestas(nav, r"/ui/pendientes/rango"),
             "navegaciones": await nav.js("performance.getEntriesByType('navigation').length")}
         await nav.foto(salida / "3-tras-ignorar-375.png", completa=False)
+
+        # ── D. Refrescos que terminan FUERA DE ORDEN (revisión de #214): con el mecanismo y sin él (control)
+        datos["fuera_de_orden"] = {
+            "con_hx_sync": await refrescos_fuera_de_orden(nav, base, quitar_sync=False),
+            "control_sin_hx_sync": await refrescos_fuera_de_orden(nav, base, quitar_sync=True)}
     finally:
         await nav.cerrar()
     (salida / "datos.json").write_text(json.dumps(datos, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

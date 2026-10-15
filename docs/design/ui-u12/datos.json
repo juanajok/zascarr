@@ -106,11 +106,43 @@
     "despues": "Mostrando 1–49 de 67 pendientes.",
     "tarjetas": 49,
     "peticion_rango": [
-      "http://127.0.0.1:18000/ui/pendientes/rango?primero=2026-10-15T19%3A10%3A56.912472%2B00%3A00%7C90ac398f-c9cd-4fd6-bc71-31a364025d13&ultimo=2026-10-15T18%3A28%3A57.916088%2B00%3A00%7C9f18c2d0-3bf9-4957-9da1-ee429432aea7"
+      "http://127.0.0.1:18000/ui/pendientes/rango?primero=2026-10-15T19%3A33%3A09.318061%2B00%3A00%7C09bfcabf-e37a-41ae-a7f6-3f609216c3ff&ultimo=2026-10-15T18%3A51%3A10.320930%2B00%3A00%7C53717849-76d3-4650-bd7c-da10e74746a7"
     ],
     "estado_rango": [
       200
     ],
     "navegaciones": 1
+  },
+  "fuera_de_orden": {
+    "con_hx_sync": {
+      "valido": true,
+      "con_hx_sync": true,
+      "diagnostico": {
+        "posts_ignorar": 2,
+        "refrescos_pedidos": 2,
+        "refrescos_abortados_o_fallidos": 1,
+        "fetch_pausados": 4
+      },
+      "inicial": "Mostrando 1–50 de 67 pendientes.",
+      "tras_el_segundo_refresco": "Mostrando 1–48 de 65 pendientes.",
+      "tras_soltar_el_primero": "Mostrando 1–48 de 65 pendientes.",
+      "primero_retenido": true,
+      "gana_el_ultimo": true
+    },
+    "control_sin_hx_sync": {
+      "valido": true,
+      "con_hx_sync": false,
+      "diagnostico": {
+        "posts_ignorar": 2,
+        "refrescos_pedidos": 2,
+        "refrescos_abortados_o_fallidos": 0,
+        "fetch_pausados": 4
+      },
+      "inicial": "Mostrando 1–50 de 65 pendientes.",
+      "tras_el_segundo_refresco": "Mostrando 1–48 de 63 pendientes.",
+      "tras_soltar_el_primero": "Mostrando 1–48 de 63 pendientes.",
+      "primero_retenido": true,
+      "gana_el_ultimo": true
+    }
   }
 }

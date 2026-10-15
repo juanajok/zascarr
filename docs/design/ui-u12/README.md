@@ -1,6 +1,7 @@
 # Evidencia de U12 (#199): «Por revisar» a escala, en la aplicación integrada a 375 px
 
-Mediciones en **navegador real** de la rama `claude/u12-pendientes-escala` (`31acfce`), 2026-10-15. Ficha de
+Mediciones en **navegador real** de la rama `claude/u12-pendientes-escala`, 2026-10-15 (segunda versión, tras la
+revisión de la PR #214: enlace a carpetas con recuento, página vaciada y refrescos fuera de orden). Ficha de
 referencia: `docs/design/benchmark-U12-pendientes-escala.md` (PR #213).
 
 | Dato | Valor |
@@ -25,8 +26,31 @@ referencia: `docs/design/benchmark-U12-pendientes-escala.md` (PR #213).
 | Disponible (11) | La portada mide **120 × 180** y está **debajo** del nombre | PASS |
 | Desconocida sin hueco (10) | **43 portadas** que fallan, todas con **0 px** de alto; sin `onerror` en la página | PASS (Chrome) |
 | Peticiones de portada | 49 para 50 tarjetas (la del `.cbr` no pide): 6 × 200 y 43 × 404 | informativo |
+| Enlace a carpetas (criterio 5) | «Verlos por carpeta (**1 carpeta**)»: N = número de **carpetas** (grupos), con la misma definición que la pantalla de carpetas. En el ensayo todo está en `_Unsorted`, de ahí 1 | PASS |
+| Refrescos fuera de orden (bloqueante 3) | Dos «Ignorar» seguidos; la respuesta del **primer** refresco se retiene hasta que termina el segundo y entonces se suelta. Con `hx-sync`: **1 petición abortada** y queda «1–48 de 65». **Control sin `hx-sync`: también queda «1–48 de 63»** (ver abajo) | PASS |
 
 ![primera página](1-primera-pagina-375.png) ![segunda](2-segunda-pagina-375.png) ![tras ignorar](3-tras-ignorar-375.png)
+
+## Refrescos fuera de orden: lo que se midió y lo que NO se puede afirmar
+
+El experimento (`refrescos_fuera_de_orden` en el guion, con `Fetch` del protocolo, en la etapa de **respuesta**) retiene
+la respuesta ya calculada del primer refresco, deja terminar el segundo, suelta la antigua y mira qué queda. Cada
+ejecución solo vale si hubo 2 resoluciones y 2 refrescos (`valido`). Resultado, en htmx 4.0.0 / Chrome 154:
+
+| Variante | Resoluciones / refrescos | Abortados | Tras el 2.º refresco | Tras soltar el 1.º |
+|---|---|---|---|---|
+| Con `hx-sync="#pend-rango:replace"` | 2 / 2 | **1** | 1–48 de 65 | 1–48 de 65 |
+| Control: sin `hx-sync` (se quita de la respuesta) | 2 / 2 | 0 | 1–48 de 63 | 1–48 de 63 |
+
+**El control también conserva el último.** La explicación, que es la que mejor encaja con lo observado pero que **no
+he verificado leyendo el código de htmx**: el refresco es un `outerHTML`; cuando el nuevo sustituye a `#pend-rango`,
+la respuesta antigua apunta al elemento viejo, ya desconectado, y no tiene efecto visible. Por tanto:
+- **No puedo afirmar que `hx-sync` sea necesario** para este contrato; lo que añade es **abortar** la petición
+  antigua (1 abortada en la variante con él) y no depender de un detalle del intercambio. Se mantiene como defensa
+  adicional, no como la causa de que el rango sea correcto.
+- Una primera versión de este experimento retenía la **petición** (antes de que el servidor la calculara) y por eso
+  la respuesta tardía salía fresca: no probaba nada. Está corregido y documentado en el guion.
+- No se ha probado el caso en que el refresco nuevo **falla** (204/500) mientras llega el antiguo.
 
 ## Lo que esto NO acredita
 
