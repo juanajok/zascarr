@@ -394,14 +394,14 @@ class TestCriterio7y8Seleccion:
         q = await self._lote_mixto(entorno)
         f = q.fila("Sin numero.cbz")
         assert f.marcado and not f.marcable and not f.incluido                  # solicitado, bloqueado, fuera del token
-        assert "checked" in f.cuerpo and "Marcado, pero bloqueado" in q.visible
+        assert "checked" in f.cuerpo and "Marcado, pero no se puede vincular" in q.visible
         assert q.total("marcados") == 3 and q.total("a_vincular") == 2 and q.total("marcados_bloqueados") == 1
 
     async def test_el_token_representa_solo_el_subconjunto_y_se_listan_los_excluidos_con_su_motivo(self, entorno):
         q = await self._lote_mixto(entorno)
         assert q.token is not None
-        assert "Lote preparado: 2 archivos de esta página" in q.visible
-        assert "Marcados pero fuera del lote" in q.visible and "Sin numero.cbz — Falta el número" in q.visible
+        assert "Listo para vincular: 2 archivos de esta página" in q.visible
+        assert "Marcados, pero no se vincularán" in q.visible and "Sin numero.cbz — Falta el número" in q.visible
         from zascarr.services.tokens_revision import verificar_token_vinculacion
         firmado = verificar_token_vinculacion(q.token, SECRETO)
         assert sorted(a.id for a in firmado.archivos) == sorted(f.id for f in q.filas if f.incluido) and len(firmado.archivos) == 2
@@ -412,7 +412,7 @@ class TestCriterio7y8Seleccion:
         p = await abrir(serie)
         q = await p.reenviar(marcar=["Sin numero.cbz"])
         assert q.token is None and "Ninguno de los archivos marcados se puede vincular" in q.visible
-        assert "Lote preparado" not in q.visible
+        assert "Listo para vincular" not in q.visible
 
 
 # ── 9. Renovación ───────────────────────────────────────────────────────────────────────────────
@@ -450,7 +450,7 @@ class TestCriterio9Renovacion:
         await archivos(entorno, "Flash 01 (1987).cbz")
         t = (await abrir(serie)).t
         assert 'hx-post="/ui/pendientes/carpetas/asistente/vinculacion/revisar"' in t
-        assert "classList.add('pendiente')" in t and "Revisión pendiente" in t
+        assert "classList.add('pendiente')" in t and "Actualizando la revisión" in t
         assert "hx-sync" in t                                                    # una renovación sustituye a la anterior
 
     async def test_si_la_renovacion_falla_se_muestra_el_fallo_y_no_queda_token(self, entorno):

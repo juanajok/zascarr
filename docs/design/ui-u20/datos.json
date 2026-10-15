@@ -1,0 +1,75 @@
+{
+  "chrome": "Chrome/154.0.8037.92",
+  "web_css_con_u20": true,
+  "series_id": "f6c2c56f-ee03-4cd0-b0af-c7a48768d687",
+  "pasos": [
+    {
+      "paso": "0-abierta",
+      "captura": "0-abierta.png",
+      "marcados": 0,
+      "bloqueados_marcados": 0,
+      "filas": 6,
+      "recuento": null,
+      "botones": [
+        {
+          "texto": "Marcar todos los que se pueden vincular",
+          "desactivado": false
+        },
+        {
+          "texto": "Desmarcar todos",
+          "desactivado": true
+        }
+      ],
+      "listo_para_vincular": false,
+      "texto_visible_con_jerga": []
+    },
+    {
+      "paso": "1-marcar-todos",
+      "captura": "1-marcar-todos.png",
+      "marcados": 2,
+      "bloqueados_marcados": 0,
+      "filas": 6,
+      "recuento": {
+        "accion": "marcar_todos",
+        "n": 2,
+        "texto": "✓\nSe marcaron 2 archivos que se pueden vincular."
+      },
+      "botones": [
+        {
+          "texto": "Marcar todos los que se pueden vincular",
+          "desactivado": true
+        },
+        {
+          "texto": "Desmarcar todos",
+          "desactivado": false
+        }
+      ],
+      "listo_para_vincular": true,
+      "texto_visible_con_jerga": []
+    },
+    {
+      "paso": "2-desmarcar-todos",
+      "captura": "2-desmarcar-todos.png",
+      "marcados": 0,
+      "bloqueados_marcados": 0,
+      "filas": 6,
+      "recuento": {
+        "accion": "desmarcar_todos",
+        "n": 2,
+        "texto": "i\nSe quitaron las marcas de 2 archivos de esta página."
+      },
+      "botones": [
+        {
+          "texto": "Marcar todos los que se pueden vincular",
+          "desactivado": false
+        },
+        {
+          "texto": "Desmarcar todos",
+          "desactivado": true
+        }
+      ],
+      "listo_para_vincular": false,
+      "texto_visible_con_jerga": []
+    }
+  ]
+}
