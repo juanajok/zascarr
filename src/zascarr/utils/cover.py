@@ -26,6 +26,19 @@ logger = structlog.get_logger()
 # abierta, y el dispositivo es una Pi).
 _THUMB_MAX_WIDTH = 240
 
+#: Extensiones de las que `extract_cover_thumbnail` SABE sacar una miniatura (las que son un
+#: zip). El resto (CBR, CB7, PDF, EPUB) no tiene extractor: «sin portada» se sabe por la
+#: extensión, sin abrir el archivo. Esta constante y el extractor tienen que decir lo mismo,
+#: por eso el extractor la usa.
+EXTENSIONES_CON_PORTADA = frozenset({".cbz", ".zip"})
+
+
+def puede_tener_portada(ruta: str | Path) -> bool:
+    """¿Tiene sentido pedir la portada de este archivo? Solo mira la extensión: ni abre el
+    archivo ni lo busca en disco. `False` = ausencia CONOCIDA; `True` = disponibilidad
+    desconocida (solo abriéndolo se sabe)."""
+    return Path(str(ruta)).suffix.lower() in EXTENSIONES_CON_PORTADA
+
 # Portada de biblioteca: algo más grande que la miniatura de revisión de
 # B2 (se ve en una tarjeta de la rejilla, no en una lista compacta).
 _COVER_MAX_WIDTH = 320
@@ -41,7 +54,7 @@ def extract_cover_thumbnail(path: Path) -> tuple[bytes, str] | None:
     orden natural, o None si el archivo no es un zip legible o no tiene
     páginas de imagen (CBR, por ejemplo: requeriría unrar, fuera de
     alcance — ver importer_triage.py)."""
-    if path.suffix.lower() not in {".cbz", ".zip"} or not path.exists():
+    if not puede_tener_portada(path) or not path.exists():
         return None
 
     try:
