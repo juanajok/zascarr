@@ -1,6 +1,7 @@
 {
   "chrome": "Chrome/154.0.8037.92",
   "viewport": "375x812 (emulación de viewport con mobile=true)",
+  "enlace_a_carpetas": "Verlos por carpeta (1 carpeta)",
   "pagina_1": {
     "ancho_pagina": 375,
     "ancho_ventana": 375,
@@ -106,7 +107,7 @@
     "despues": "Mostrando 1–49 de 67 pendientes.",
     "tarjetas": 49,
     "peticion_rango": [
-      "http://127.0.0.1:18000/ui/pendientes/rango?primero=2026-10-15T19%3A33%3A09.318061%2B00%3A00%7C09bfcabf-e37a-41ae-a7f6-3f609216c3ff&ultimo=2026-10-15T18%3A51%3A10.320930%2B00%3A00%7C53717849-76d3-4650-bd7c-da10e74746a7"
+      "http://127.0.0.1:18000/ui/pendientes/rango?primero=2026-10-15T19%3A43%3A44.967937%2B00%3A00%7C3509aee4-0533-4fa8-b3bb-6ab377f1e247&ultimo=2026-10-15T19%3A01%3A45.970507%2B00%3A00%7C00e74be5-bba9-44a5-9bad-3deb19adb8aa"
     ],
     "estado_rango": [
       200

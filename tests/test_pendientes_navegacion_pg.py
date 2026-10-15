@@ -388,29 +388,43 @@ class TestPaginaPosteriorVaciada:
 
 class TestEnlaceACarpetas:
     """Bloqueante 2: el criterio 5 pide «Verlos por carpeta (N)» y N no existía. N = número de CARPETAS, con el
-    mismo conteo de grupos que la propia pantalla de carpetas (una sola definición de «grupo»)."""
+    mismo conteo de grupos que la propia pantalla de carpetas (una sola definición de «grupo»). El recuento agrupa
+    todos los pendientes en memoria (~100 ms con 1.322, medido) y por eso NO bloquea la lista: se pide al cargarse."""
 
-    async def test_el_enlace_dice_cuantas_carpetas_y_coincide_con_la_pantalla_de_carpetas(self, entorno):
+    async def _fragmento(self) -> tuple[int, str]:
+        async with cliente() as c:
+            r = await c.get("/ui/pendientes/carpetas/recuento")
+        return r.status_code, " ".join(html.unescape(re.sub(r"<[^>]+>", " ", r.text)).split())
+
+    async def test_la_lista_no_espera_al_recuento_y_el_enlace_ya_funciona_sin_el(self, entorno):
+        await sembrar(entorno, 3)
+        t = (await pedir()).t
+        m = re.search(r'<a class="[^"]*pend-carpetas[^"]*"([^>]*)>\s*Verlos por carpeta\s*</a>', t)
+        assert m, "falta el enlace a carpetas"
+        assert 'href="/ui/pendientes/carpetas"' in m.group(1)
+        assert 'hx-get="/ui/pendientes/carpetas/recuento"' in m.group(1) and 'hx-trigger="load"' in m.group(1)
+        assert "carpetas)" not in html.unescape(t)               # la lista no lo calcula
+
+    async def test_el_fragmento_dice_cuantas_carpetas_y_coincide_con_la_pantalla_de_carpetas(self, entorno):
         for carpeta in ("Comics/Flash (1987)", "Comics/Batman (2011)", "Manga/Akira"):
             await archivos(entorno, f"{carpeta.split('/')[1]} 01.cbz", f"{carpeta.split('/')[1]} 02.cbz",
                            carpeta=carpeta, en_disco=False)
-        p = await pedir()
-        m = re.search(r'<a class="[^"]*pend-carpetas[^"]*" href="/ui/pendientes/carpetas">(.*?)</a>', p.t, re.S)
-        assert m, "no hay enlace a carpetas con su clase"
-        assert " ".join(re.sub(r"<[^>]+>", " ", m.group(1)).split()) == "Verlos por carpeta (3 carpetas)"
+        estado, texto = await self._fragmento()
+        assert estado == 200 and texto == "Verlos por carpeta (3 carpetas)"
         from zascarr.services.revision_carpetas import RevisionCarpetas
         async with entorno.banco.fabrica() as s:
             assert (await RevisionCarpetas(s).carpetas(limite=1)).totales.grupos == 3
 
     async def test_una_sola_carpeta_va_en_singular(self, entorno):
         await sembrar(entorno, 3)
-        assert "Verlos por carpeta (1 carpeta)" in (await pedir()).visible
+        assert await self._fragmento() == (200, "Verlos por carpeta (1 carpeta)")
 
-    async def test_sin_pendientes_no_hay_enlace(self, entorno):
+    async def test_sin_pendientes_no_hay_enlace_ni_fragmento(self, entorno):
         assert "pend-carpetas" not in (await pedir()).t
+        estado, _ = await self._fragmento()
+        assert estado == 204
 
-    async def test_si_el_recuento_de_carpetas_falla_la_bandeja_sigue_funcionando(self, entorno, monkeypatch):
-        """El recuento es un adorno de un enlace: no puede tumbar la lista."""
+    async def test_si_el_recuento_falla_el_fragmento_es_204_y_la_bandeja_no_se_entera(self, entorno, monkeypatch):
         from zascarr.web import pendientes as web
 
         async def roto(db):
@@ -419,8 +433,7 @@ class TestEnlaceACarpetas:
         orden = await sembrar(entorno, 3)
         p = await pedir()
         assert p.status == 200 and p.ids == orden
-        assert re.search(r'<a class="[^"]*pend-carpetas[^"]*" href="/ui/pendientes/carpetas">\s*Verlos por carpeta\s*</a>', p.t)
-        assert "carpetas)" not in p.visible
+        assert (await self._fragmento())[0] == 204
 
 
 class TestRefrescosFueraDeOrden:
@@ -437,3 +450,39 @@ class TestRefrescosFueraDeOrden:
         assert span, r.text
         assert 'hx-sync="#pend-rango:replace"' in span.group(0)
         assert 'hx-include="#pend-clave"' in span.group(0) and 'hx-target="#pend-rango"' in span.group(0)
+
+
+class TestALaEscalaDeLaInstalacionDeReferencia:
+    """La auditoría midió 1.322 pendientes en 108 carpetas. No es una prueba de rendimiento (no hay umbral: el tiempo
+    depende de la máquina y no se midió en la Pi); fija que el rango, el total y el recuento de carpetas son correctos
+    a esa escala y deja el tiempo local en el informe de la prueba."""
+
+    async def test_1322_pendientes_en_108_carpetas(self, entorno):
+        import time
+
+        from zascarr.services.revision_carpetas import RevisionCarpetas
+        # 107 carpetas de 12 archivos + 1 de 38 = 1.322 pendientes en 108 carpetas
+        creados = 0
+        for i in range(108):
+            n = 12 if i < 107 else 38
+            await archivos(entorno, *(f"S{i:03d} {k:02d}.cbz" for k in range(n)),
+                           carpeta=f"Comics/Serie {i:03d}", en_disco=False)
+            creados += n
+        assert creados == 1322
+        total = await total_en_bd(entorno)
+        assert total == creados
+        await pedir()                                       # calienta (conexión, plantillas)
+        t0 = time.perf_counter()
+        p = await pedir()
+        lista_ms = (time.perf_counter() - t0) * 1000
+        t0 = time.perf_counter()
+        async with cliente() as c:
+            fragmento = await c.get("/ui/pendientes/carpetas/recuento")
+        recuento_ms = (time.perf_counter() - t0) * 1000
+        async with entorno.banco.fabrica() as s:
+            grupos = (await RevisionCarpetas(s).carpetas(limite=1)).totales.grupos
+        assert grupos == 108
+        assert p.status == 200 and p.total == total and len(p.ids) == PAGINA
+        assert f"({grupos} carpetas)" in " ".join(re.sub(r"<[^>]+>", " ", fragmento.text).split())
+        print(f"\n[U12] {total} pendientes en {grupos} carpetas (local, no Pi): la lista = {lista_ms:.0f} ms y "
+              f"el recuento de carpetas, que va aparte, = {recuento_ms:.0f} ms")
