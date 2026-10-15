@@ -24,7 +24,8 @@
       <dt>Archivos en la carpeta</dt><dd>{{ r.pagina.en_el_grupo }}</dd>
       <dt>Esta página</dt><dd>{% if r.pagina.tratados %}archivos {{ r.pagina.desde }}–{{ r.pagina.hasta }}{% else %}sin archivos{% endif %}</dd>
     </dl>
-    <p class="caption">Lo que marques, los números que escribas y el lote preparado valen <strong>solo para los archivos de esta página</strong>.{% if r.pagina.texto %} {{ r.pagina.texto }}{% endif %}</p>
+    <p class="vinc-alcance">Lo que marques y escribas vale <strong>solo para los archivos de esta página</strong>.</p>
+    {% if texto_de_la_pagina %}<details class="vinc-detalle"><summary>Más detalle de las páginas</summary><p>{{ texto_de_la_pagina }}</p></details>{% endif %}
     {% for a in avisos %}{{ ui.aviso("amber", a) }}{% endfor %}
     {% for av in r.avisos_de_grupo %}{{ ui.aviso("amber", av.texto) }}{% endfor %}
   </section>
@@ -32,7 +33,8 @@
   {% if pendientes %}
   <section class="card" aria-labelledby="vinc-borradores">
     <h3 id="vinc-borradores">Trabajo guardado en otras páginas</h3>
-    <p class="caption">Son borradores: no forman parte del lote de esta página y se vuelven a revisar al regresar a ellas. No se conservan si recargas la página.</p>
+    <p class="vinc-alcance">Son borradores: se vuelven a revisar cuando regreses a cada página.</p>
+    <details class="vinc-detalle"><summary>Más detalle de los borradores</summary><p>No forman parte de lo que se va a vincular ahora y se pierden si recargas la página.</p></details>
     <ul>
       {% for p in pendientes %}
       <li>Archivos {{ p.desde }}–{{ p.hasta }}: {{ p.n_marcados }} marcado{{ "s" if p.n_marcados != 1 }}, {{ p.n_numeros }} número{{ "s" if p.n_numeros != 1 }} escrito{{ "s" if p.n_numeros != 1 }}
@@ -42,7 +44,16 @@
   </section>
   {% endif %}
 
-  <p class="vinculacion-pendiente" role="status">Revisión pendiente: se está renovando. Hasta que termine no se puede usar el lote anterior.</p>
+  <p class="vinculacion-pendiente" role="status">Actualizando la revisión… Hasta que termine, no se puede vincular.</p>
+
+  {% if accion %}<div class="vinc-accion-resultado" role="status" data-accion="{{ accion.accion }}" data-n="{{ accion.n }}"{% if accion.repetidos is defined %} data-repetidos="{{ accion.repetidos }}"{% endif %}>{{ ui.aviso(accion.tipo, accion.texto) }}</div>{% endif %}
+
+  {% if r.archivos %}
+  <div class="vinc-masivo" role="group" aria-label="Marcar varios a la vez">
+    <button type="submit" name="accion" value="marcar_todos" class="btn ghost sm"{% if not hay_que_marcar %} disabled{% endif %}>Marcar todos los que se pueden vincular</button>
+    <button type="submit" name="accion" value="desmarcar_todos" class="btn ghost sm"{% if not hay_marcados %} disabled{% endif %}>Desmarcar todos</button>
+  </div>
+  {% endif %}
 
   <ul class="vinculacion-lista">
     {% for a in r.archivos %}
@@ -59,8 +70,8 @@
         {% else %}
         <span class="nombre-archivo">{{ a.nombre }}</span>
         {% endif %}
-        {% if a.incluido_en_token %}{{ ui.chip("ok", "Incluido en el lote") }}
-        {% elif a.marcado %}{{ ui.chip("warn", "Marcado, pero bloqueado") }}
+        {% if a.incluido_en_token %}{{ ui.chip("ok", "Se vinculará") }}
+        {% elif a.marcado %}{{ ui.chip("warn", "Marcado, pero no se puede vincular") }}
         {% elif a.marcable %}{{ ui.chip("neutro", "Sin marcar") }}
         {% else %}{{ ui.chip("amber", "No se puede marcar") }}{% endif %}
       </div>
@@ -80,10 +91,11 @@
       </div>
       {% endif %}
 
-      <p class="vinc-texto">{{ a.texto }}</p>
+      <p class="vinc-texto">{{ texto_legible(a.texto) }}</p>
 
       {% if a.motivos and a.motivos | length > 1 %}
-      <p class="caption vinc-motivos">Otros motivos: {{ a.motivos[1:] | join(", ") }}</p>
+      {% set otros_motivos = motivos_legibles(a.motivos[1:]) %}
+      {% if otros_motivos %}<p class="caption vinc-motivos">Otros motivos: {{ otros_motivos | join(", ") }}.</p>{% endif %}
       {% endif %}
       {% if a.repetido_con %}
       <p class="caption vinc-repetido">Mismo número que: {{ nombres_de(a.repetido_con) | join(", ") }}. Nada se elige, se fusiona ni se elimina por ti.</p>
@@ -113,12 +125,12 @@
     <ul class="carpetas-resumen">
       <li data-total="marcados">{{ ui.chip("neutro", r.totales.marcados ~ " marcados") }}</li>
       <li data-total="a_vincular">{{ ui.chip("ok" if r.totales.a_vincular else "neutro", r.totales.a_vincular ~ " a vincular") }}</li>
-      <li data-total="marcados_bloqueados">{{ ui.chip("warn" if r.totales.marcados_bloqueados else "neutro", r.totales.marcados_bloqueados ~ " marcados bloqueados") }}</li>
+      <li data-total="marcados_bloqueados">{{ ui.chip("warn" if r.totales.marcados_bloqueados else "neutro", r.totales.marcados_bloqueados ~ " marcados que no se pueden vincular") }}</li>
     </ul>
     {% if not r.token %}
     {{ ui.aviso("info", r.motivo_sin_token) }}
     {% if excluidos %}
-    <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ a.texto }}</li>{% endfor %}</ul>
+    <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ texto_legible(a.texto) }}</li>{% endfor %}</ul>
     {% endif %}
     {% endif %}
   </section>
@@ -126,13 +138,13 @@
 
 {% if r.token %}
 <section class="card lote-listo" data-token="{{ r.token }}" data-n="{{ incluidos | length }}" aria-labelledby="vinc-lote">
-  <h3 id="vinc-lote">Lote preparado</h3>
-  {{ ui.aviso("ok", "Lote preparado: " ~ (incluidos | length) ~ " archivo" ~ ("s" if incluidos | length != 1) ~ " de esta página. Todavía no se ha vinculado nada.") }}
-  <p>Entra en el lote:</p>
+  <h3 id="vinc-lote">Listo para vincular</h3>
+  {{ ui.aviso("ok", "Listo para vincular: " ~ (incluidos | length) ~ " archivo" ~ ("s" if incluidos | length != 1) ~ " de esta página. Todavía no se ha vinculado nada.") }}
+  <p>Se vincularán:</p>
   <ul>{% for a in incluidos %}<li class="nombre-archivo">{{ a.nombre }} — número {{ a.numero }}</li>{% endfor %}</ul>
   {% if excluidos %}
-  <p>Marcados pero <strong>fuera del lote</strong>:</p>
-  <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ a.texto }}</li>{% endfor %}</ul>
+  <p>Marcados, pero <strong>no se vincularán</strong>:</p>
+  <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ texto_legible(a.texto) }}</li>{% endfor %}</ul>
   {% endif %}
   <form class="vinculacion-confirmar" method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/confirmar"
         hx-post="/ui/pendientes/carpetas/asistente/vinculacion/confirmar" hx-target="#revision" hx-swap="outerHTML"
