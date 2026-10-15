@@ -24,11 +24,11 @@ SeriesMatcher.decide() no vuelva a preguntar la próxima vez.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import func, literal, select, tuple_
+from sqlalchemy import DateTime, func, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -72,6 +72,12 @@ class ColisionDeEdicionError(ValueError):
 
 #: Pendientes por página en «Por revisar».
 POR_PAGINA = 50
+#: `imported_at` ADMITE NULL en la BD (la migración inicial no pone NOT NULL, aunque el
+#: modelo no declare `Optional`). Una comparación con NULL no es verdadera ni falsa: la fila
+#: quedaría fuera de todo cursor. Se trata como la fecha más antigua: va la última y siempre
+#: se alcanza.
+SIN_FECHA = datetime(1970, 1, 1, tzinfo=UTC)
+_MOMENTO = func.coalesce(File.imported_at, literal(SIN_FECHA, DateTime(timezone=True)))
 #: Un cursor es `imported_at|id` y cabe de sobra; más es un parámetro manipulado.
 MAX_CLAVE = 100
 
@@ -84,6 +90,10 @@ class ClavePendiente:
 
     def a_texto(self) -> str:
         return f"{self.imported_at.isoformat()}|{self.id}"
+
+    @staticmethod
+    def de(archivo: File) -> ClavePendiente:
+        return ClavePendiente(archivo.imported_at or SIN_FECHA, archivo.id)
 
     @staticmethod
     def desde_texto(texto: str | None) -> ClavePendiente | None:
@@ -161,7 +171,7 @@ class ReviewService:
     @staticmethod
     def _ref(c: ClavePendiente):
         """La clave como valor tipado para comparar con `(imported_at, id)`."""
-        return tuple_(literal(c.imported_at, File.imported_at.type), literal(c.id, File.id.type))
+        return tuple_(literal(c.imported_at, DateTime(timezone=True)), literal(c.id, File.id.type))
 
     async def pagina_de_pendientes(
         self, *, despues: ClavePendiente | None = None, antes: ClavePendiente | None = None,
@@ -181,27 +191,27 @@ class ReviewService:
 
         Presupuesto: una consulta de lista y dos `COUNT` (el total y la posición del
         primero mostrado), sin `OFFSET`."""
-        clave = tuple_(File.imported_at, File.id)
+        clave = tuple_(_MOMENTO, File.id)
         total = await self.count_pending()
         filas: list[File] = []
         if antes is not None or despues is not None:
             consulta = select(File).where(*self._condiciones_pendientes())
             if antes is not None:
                 consulta = (consulta.where(clave > self._ref(antes))
-                            .order_by(File.imported_at.asc(), File.id.asc()).limit(limite))
+                            .order_by(_MOMENTO.asc(), File.id.asc()).limit(limite))
                 filas = list(reversed(list((await self.db.execute(consulta)).scalars().all())))
             else:
                 consulta = (consulta.where(clave < self._ref(despues))
-                            .order_by(File.imported_at.desc(), File.id.desc()).limit(limite))
+                            .order_by(_MOMENTO.desc(), File.id.desc()).limit(limite))
                 filas = list((await self.db.execute(consulta)).scalars().all())
         if not filas:                       # sin cursor, o un cursor que ya no lleva a nada
             filas = list((await self.db.execute(
                 select(File).where(*self._condiciones_pendientes())
-                .order_by(File.imported_at.desc(), File.id.desc()).limit(limite)
+                .order_by(_MOMENTO.desc(), File.id.desc()).limit(limite)
             )).scalars().all())
         if not filas:
             return PaginaPendientes([], total, 0, 0, False, False)
-        delante = await self.contar_antes_de(ClavePendiente(filas[0].imported_at, filas[0].id))
+        delante = await self.contar_antes_de(ClavePendiente.de(filas[0]))
         return PaginaPendientes(
             archivos=filas, total=total, desde=delante + 1, hasta=delante + len(filas),
             hay_anterior=delante > 0, hay_siguiente=total - delante - len(filas) > 0)
@@ -211,13 +221,13 @@ class ReviewService:
         return (await self.db.execute(
             select(func.count()).select_from(File)
             .where(*self._condiciones_pendientes(),
-                   tuple_(File.imported_at, File.id) > self._ref(c))
+                   tuple_(_MOMENTO, File.id) > self._ref(c))
         )).scalar_one()
 
     async def contar_entre(self, primero: ClavePendiente, ultimo: ClavePendiente) -> int:
         """Cuántos pendientes hay hoy entre dos claves, ambas incluidas: lo que queda de
         una página que ya se mostró."""
-        clave = tuple_(File.imported_at, File.id)
+        clave = tuple_(_MOMENTO, File.id)
         return (await self.db.execute(
             select(func.count()).select_from(File)
             .where(*self._condiciones_pendientes(),
