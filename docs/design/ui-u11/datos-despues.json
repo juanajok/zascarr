@@ -1,0 +1,129 @@
+{
+  "etiqueta": "despues",
+  "chrome": "Chrome/154.0.8037.92",
+  "web_css_con_u11": true,
+  "casos": [
+    {
+      "elemento": "input.series-search[name=q]",
+      "focus_visible": true,
+      "outline": "solid 3px rgb(92, 196, 240)",
+      "fondo": "rgb(27, 27, 32)",
+      "contraste_anillo": 8.67,
+      "contraste_sombra": 1.14,
+      "nombre_accesible_del_foco": "Serie de «Mundo Cobalto - Edicion Integral 01 [Equipo X].cbz»",
+      "controles": [
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "Número de «Los Guardianes del Alba Omnigold 12 [CRG].cbz»"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Serie de «Los Guardianes del Alba Omnigold 12 [CRG].cbz»"
+        },
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "Número de «Los Guardianes del Alba Omnigold 13 [CRG].cbz»"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Serie de «Los Guardianes del Alba Omnigold 13 [CRG].cbz»"
+        },
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "Número de «Los Guardianes del Alba (21-35) Pack especial [CRG].cbz»"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Serie de «Los Guardianes del Alba (21-35) Pack especial [CRG].cbz»"
+        },
+        {
+          "control": "issue_number",
+          "placeholder": "nº",
+          "nombre_accesible": "Número de «Mundo Cobalto - Edicion Integral 01 [Equipo X].cbz»"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Serie de «Mundo Cobalto - Edicion Integral 01 [Equipo X].cbz»"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Serie de «Saga del Faro por un autor (by Alguien) [MQ].cbz»"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar serie…",
+          "nombre_accesible": "Serie de «Tomo suelto sin identificar 7.cbz»"
+        }
+      ],
+      "url": "/ui/pendientes",
+      "tema": "dark",
+      "captura": "despues--por-revisar-foco-buscador--dark.png"
+    },
+    {
+      "elemento": "select[name=tradition]",
+      "focus_visible": true,
+      "outline": "solid 3px rgb(10, 106, 150)",
+      "fondo": "rgb(246, 243, 236)",
+      "contraste_anillo": 5.39,
+      "contraste_sombra": 16.14,
+      "nombre_accesible_del_foco": "Tradición",
+      "controles": [
+        {
+          "control": "q",
+          "placeholder": "Buscar por título…",
+          "nombre_accesible": "Buscar por título"
+        },
+        {
+          "control": "tradition",
+          "placeholder": null,
+          "nombre_accesible": "Tradición"
+        },
+        {
+          "control": "publisher_id",
+          "placeholder": null,
+          "nombre_accesible": "Editorial"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar personaje…",
+          "nombre_accesible": "Buscar personaje"
+        },
+        {
+          "control": "q",
+          "placeholder": "Buscar saga…",
+          "nombre_accesible": "Buscar saga"
+        }
+      ],
+      "url": "/ui/biblioteca",
+      "tema": "light",
+      "captura": "despues--biblioteca-foco-tradicion--light.png"
+    },
+    {
+      "elemento": "input.series-search[name=q]",
+      "focus_visible": true,
+      "outline": "solid 3px rgb(92, 196, 240)",
+      "fondo": "rgb(19, 19, 22)",
+      "contraste_anillo": 9.37,
+      "contraste_sombra": 1.08,
+      "nombre_accesible_del_foco": "Buscar serie para añadir a Deseados",
+      "controles": [
+        {
+          "control": "q",
+          "placeholder": "Buscar serie para añadir…",
+          "nombre_accesible": "Buscar serie para añadir a Deseados"
+        }
+      ],
+      "url": "/ui/wishlist",
+      "tema": "dark",
+      "captura": "despues--deseados-foco-buscador--dark.png"
+    }
+  ]
+}

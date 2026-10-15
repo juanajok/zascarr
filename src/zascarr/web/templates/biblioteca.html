@@ -7,14 +7,17 @@
 <form id="filtros" class="filter-bar"
       hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML"
       hx-trigger="change, submit" hx-push-url="true">
-  <input type="search" name="q" placeholder="Buscar por título…" value="{{ q }}">
-  <select name="tradition">
+  <label class="sr" for="f-q">Buscar por título</label>
+  <input type="search" name="q" id="f-q" placeholder="Buscar por título…" value="{{ q }}">
+  <label class="sr" for="f-tradition">Tradición</label>
+  <select name="tradition" id="f-tradition">
     <option value="">Todas las tradiciones</option>
     {% for value, label in tradiciones %}
     <option value="{{ value }}" {% if value == tradition %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-  <select name="publisher_id">
+  <label class="sr" for="f-publisher">Editorial</label>
+  <select name="publisher_id" id="f-publisher">
     <option value="">Todas las editoriales</option>
     {% for p in publishers %}
     <option value="{{ p.id }}" {% if publisher_id and p.id == publisher_id %}selected{% endif %}>{{ p.name }}</option>
@@ -27,13 +30,15 @@
 
 <div class="filter-bar filter-bar-secondary">
   <div class="filter-search-box">
-    <input type="search" placeholder="Buscar personaje…"
+    <label class="sr" for="f-personaje">Buscar personaje</label>
+    <input type="search" placeholder="Buscar personaje…" id="f-personaje"
            hx-get="/ui/biblioteca/buscar-personaje" hx-trigger="keyup changed delay:400ms"
            hx-target="#resultados-personaje" hx-swap="innerHTML" name="q">
     <div id="resultados-personaje" class="series-results"></div>
   </div>
   <div class="filter-search-box">
-    <input type="search" placeholder="Buscar saga…"
+    <label class="sr" for="f-saga">Buscar saga</label>
+    <input type="search" placeholder="Buscar saga…" id="f-saga"
            hx-get="/ui/biblioteca/buscar-saga" hx-trigger="keyup changed delay:400ms"
            hx-target="#resultados-saga" hx-swap="innerHTML" name="q">
     <div id="resultados-saga" class="series-results"></div>

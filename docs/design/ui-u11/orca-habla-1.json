@@ -1,0 +1,87 @@
+{
+  "orca": "Orca version 50.2, AT-SPI2 version: 2.60.4, Session: wayland ubuntu",
+  "pasos": [
+    {
+      "ruta": "/ui/pendientes",
+      "tabs": 1,
+      "esperado": "Serie de «Mundo Cobalto - Edicion Integral 01 [Equipo X].cbz»",
+      "foco_inicial": "<button type=\"submit\" class=\"btn-sugerencia\" title=\"Mueve el archivo a la carpet",
+      "foco_final": "q-953102f1-f3e3-4360-82f8-105020a519c4",
+      "orca_dijo": [
+        "saliendo del formulario.",
+        "Serie de «Mundo Cobalto - Edicion Integral 01 [Equipo X].cbz»",
+        "entry",
+        "Buscar serie…",
+        "Modo foco"
+      ]
+    },
+    {
+      "ruta": "/ui/pendientes",
+      "tabs": 1,
+      "esperado": "Número de «Los Guardianes del Alba Omnigold 12 [CRG].cbz»",
+      "foco_inicial": "<a href=\"/ui/pendientes/carpetas\">Ver lo pendiente agrupado por carpeta →</a>",
+      "foco_final": "n-b49a664a-e98c-45c7-9f8a-8a1aab1374cb",
+      "orca_dijo": [
+        "Número de «Los Guardianes del Alba Omnigold 12 [CRG].cbz»",
+        "entry",
+        "12",
+        "seleccionado requerido.",
+        "Modo foco"
+      ]
+    },
+    {
+      "ruta": "/ui/biblioteca",
+      "tabs": 5,
+      "esperado": "Buscar por título · Tradición · Editorial · Buscar personaje · Buscar saga",
+      "foco_inicial": "<a href=\"/ui/ajustes\" class=\"nav-enlace nav-secundaria\"><span class=\"ico\" aria-h",
+      "foco_final": "f-saga",
+      "orca_dijo": [
+        "saliendo del panel.",
+        "saliendo de la navegación.",
+        "contenido principal",
+        "Buscar por título",
+        "entry",
+        "Buscar por título…",
+        "Modo foco",
+        "Tradición",
+        "combo box",
+        "Todas las tradiciones.",
+        "abre el menú",
+        "Editorial",
+        "combo box",
+        "Todas las editoriales.",
+        "abre el menú",
+        "saliendo del formulario.",
+        "Buscar personaje",
+        "entry",
+        "Buscar personaje…",
+        "Buscar saga",
+        "entry",
+        "Buscar saga…"
+      ]
+    },
+    {
+      "ruta": "/ui/wishlist",
+      "tabs": 1,
+      "esperado": "Buscar serie para añadir a Deseados",
+      "foco_inicial": "<a href=\"/legal\">Aviso legal</a>",
+      "foco_final": "q-deseados",
+      "buscando_en_dom": [
+        "wishlist-badge estado-wanted visible",
+        "htmx-indicator hidden",
+        "wishlist-badge estado-wanted visible",
+        "htmx-indicator hidden",
+        "wishlist-badge estado-searching visible",
+        "htmx-indicator hidden"
+      ],
+      "orca_dijo": [
+        "saliendo del contenido complementario.",
+        "Buscar serie para añadir a Deseados",
+        "entry",
+        "Buscar serie para añadir…",
+        "Modo foco"
+      ]
+    }
+  ],
+  "chrome": "Chrome/154.0.8037.92"
+}
