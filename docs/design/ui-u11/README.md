@@ -54,7 +54,10 @@ configuración **propia y temporal**: es una base de dconf aparte, no toca la de
 al terminar. Desactiva «leer todo al cargar», porque mientras lee Orca ignora los cambios de foco.
 Después abre Chrome con accesibilidad y mueve el foco con pulsaciones reales de Tab por CDP. Lo que
 se anota es lo que Orca mandó al sintetizador (`SPEECH OUTPUT`). Resultados en bruto:
-[`orca-habla-1.json`](orca-habla-1.json) y [`orca-habla-2.json`](orca-habla-2.json).
+[`orca-habla-1.json`](orca-habla-1.json) y [`orca-habla-2.json`](orca-habla-2.json). La pasada 2
+es la salida directa de la versión publicada de la herramienta. La pasada 1 se hizo con una versión
+anterior, que además intentaba la consulta AT-SPI descrita abajo; de su salida se quitaron ese campo,
+la ruta del registro temporal y los datos de la voz que acompañan a cada frase.
 
 | Paso | Lo que dijo Orca (pasada 1) | Pasada 2 |
 |---|---|---|
