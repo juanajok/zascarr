@@ -213,7 +213,14 @@ class TestNingunControlSinNombre:
     def test_las_etiquetas_de_u11_son_label_y_no_aria_label(self, plantilla):
         """Revisión de #209: `label` asociado antes que `aria-label` (traducible, visible si hace
         falta). Si alguien vuelve a `aria-label` en estas plantillas, esto lo detecta."""
-        assert "aria-label=" not in (PLANTILLAS / plantilla).read_text("utf-8")
+        lineas = [n for n, linea in enumerate(
+            (PLANTILLAS / plantilla).read_text("utf-8").splitlines(), 1) if "aria-label=" in linea]
+        assert not lineas, (
+            f"{plantilla}, línea(s) {lineas}: un campo se nombra con "
+            '`<label class="sr" for="id">` + `id` único, no con `aria-label` '
+            "(el `label` lo traduce el navegador y se puede hacer visible). "
+            "`aria-label` solo con justificación explícita: "
+            "si la hay, añade la excepción a esta prueba con su motivo.")
 
 
 # ── 2. Por revisar: un nombre por archivo ─────────────────────────────────────────────────
