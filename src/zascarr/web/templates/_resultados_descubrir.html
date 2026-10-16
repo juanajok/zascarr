@@ -1,10 +1,14 @@
 {#- Resultados de Descubrir. Cada tarjeta lleva un token que FIRMÓ el servidor al buscar: lo único que vuelve del
     navegador es ese token y la tradición que elige la persona (sin valor por defecto). I2 de #114. -#}
-{% if avisos %}
-<p class="caption">{{ avisos | join(" · ") }}</p>
-{% endif %}
+{#- La región viva de la página, actualizada fuera de banda: es la ÚNICA que se anuncia. Mismo marcado que `ui.region_viva`. -#}
+<div id="descubrir-estado" class="region-viva" aria-live="polite" aria-atomic="true" hx-swap-oob="true">{{ anuncio }}</div>
+{#- Los avisos NO llevan `role`: lo que dicen ya va en la región viva y se anunciaría dos veces. -#}
+{% for aviso in avisos %}
+<div class="{{ clase_aviso }}"><span class="aviso-icono" aria-hidden="true">?</span><div>{{ aviso }}</div></div>
+{% endfor %}
 {% if not resultados %}
-<p class="no-results">{% if hay_resultados %}Ningún resultado se puede dar de alta.{% else %}Sin coincidencias en Comic Vine/AniList/Tebeosfera/GCD.{% endif %}</p>
+{% if hay_resultados %}<p class="no-results">Ningún resultado se puede dar de alta.</p>
+{% elif hay_consultadas %}<p class="no-results">Sin coincidencias en {{ consultadas }}.</p>{% endif %}
 {% else %}
 <ul class="discovery-list">
   {% for r in resultados %}
@@ -18,13 +22,15 @@
     <div class="discovery-card-body">
       <div class="discovery-card-title">
         {{ r.titulo }}{% if r.anio %} ({{ r.anio }}){% endif %}
-        <span class="caption">{{ r.fuente }}</span>
+        <span class="caption">{{ r.fuente | etiqueta_fuente }}</span>
         {% if r.sitio_url %}
-        <a href="{{ r.sitio_url }}" target="_blank" rel="noopener noreferrer" title="Ver ficha original para confirmar">↗</a>
+        <a href="{{ r.sitio_url }}" target="_blank" rel="noopener noreferrer" title="Ver ficha original para confirmar"
+           aria-label="Ver la ficha de «{{ r.titulo }}» en {{ r.fuente | etiqueta_fuente }} (se abre en otra pestaña)"><span aria-hidden="true">↗</span></a>
         {% endif %}
       </div>
-      {% if r.descripcion %}
-      <div class="discovery-card-desc">{{ r.descripcion }}</div>
+      {% set descripcion = r.descripcion | texto_plano %}
+      {% if descripcion %}
+      <div class="discovery-card-desc">{{ descripcion }}</div>
       {% endif %}
       <div class="alta-paso">
       <form hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">

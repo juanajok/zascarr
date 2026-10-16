@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, MetadataSource
-from zascarr.services.discovery import DiscoveryResult
+from zascarr.services.discovery import Busqueda, DiscoveryResult
 from zascarr.services.tokens_revision import (
     CLAVE_SIN_GRUPO,
     MAX_TOKEN_ALTA,
@@ -125,35 +125,36 @@ class TestBuscar:
 
     def test_busca_y_renderiza_resultados(self):
         with use_fake_session(FakeSession()) as client, \
-             patch("zascarr.web.discovery.DiscoveryService.search",
-                   AsyncMock(return_value=([_resultado()], []))):
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+                   AsyncMock(return_value=Busqueda([_resultado()], [], {"comic_vine": "ok", "anilist": "ok", "tebeosfera": "ok", "gcd": "ok"}))):
             r = client.get("/ui/descubrir/buscar", params={"q": "Batman"})
 
         assert r.status_code == 200
         assert "Batman" in r.text
-        assert "comic_vine" in r.text
+        assert "Comic Vine" in r.text and "comic_vine" not in r.text.split("<main", 1)[-1].lower().replace('value="comic_vine"', "")
 
     def test_sin_resultados_muestra_mensaje(self):
         with use_fake_session(FakeSession()) as client, \
-             patch("zascarr.web.discovery.DiscoveryService.search",
-                   AsyncMock(return_value=([], []))):
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+                   AsyncMock(return_value=Busqueda([], [], {"comic_vine": "ok", "anilist": "ok", "tebeosfera": "ok", "gcd": "ok"}))):
             r = client.get("/ui/descubrir/buscar", params={"q": "xyz"})
 
         assert "Sin coincidencias" in r.text
 
     def test_muestra_avisos_de_fuentes_no_configuradas_o_caidas(self):
         with use_fake_session(FakeSession()) as client, \
-             patch("zascarr.web.discovery.DiscoveryService.search",
-                   AsyncMock(return_value=([], ["Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env para incluirlo en la búsqueda."]))):
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+                   AsyncMock(return_value=Busqueda([], [], {"comic_vine": "sin_clave", "anilist": "error", "tebeosfera": "ok", "gcd": "apagada"}))):
             r = client.get("/ui/descubrir/buscar", params={"q": "xyz"})
 
-        assert "Comic Vine no está configurado" in r.text
+        assert "Comic Vine no está configurado" in r.text and "No respondió AniList" in r.text
 
     # ── I2 de #114: lo que vuelve del navegador es un token firmado, no datos de la serie ──
 
     def _buscar(self, resultados):
         with use_fake_session(FakeSession()) as client, \
-             patch("zascarr.web.discovery.DiscoveryService.search", AsyncMock(return_value=(resultados, []))):
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+                   AsyncMock(return_value=Busqueda(resultados, [], {"comic_vine": "ok", "anilist": "ok", "tebeosfera": "ok", "gcd": "ok"}))):
             return client.get("/ui/descubrir/buscar", params={"q": "x"}).text
 
     def test_la_tarjeta_reenvia_solo_un_token_y_no_datos_de_la_serie(self):

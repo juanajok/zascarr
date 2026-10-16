@@ -43,10 +43,21 @@ from zascarr.services.tokens_revision import (
     grupo_de_un_token,
 )
 from zascarr.utils.cover import cached_image_response, fetch_and_cache_cover
+from zascarr.web.componentes import tipo_aviso
+from zascarr.web.descubrir_texto import (
+    enumerar,
+    etiqueta_fuente,
+    fuentes_que_se_consultan,
+    resumir,
+    texto_plano,
+)
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
+# U14: la fuente se muestra con su nombre y la descripción como texto (nunca el HTML de la fuente).
+templates.env.filters["etiqueta_fuente"] = etiqueta_fuente
+templates.env.filters["texto_plano"] = texto_plano
 
 router = APIRouter(prefix="/ui/descubrir", tags=["ui"])
 
@@ -83,9 +94,11 @@ def _cover_host_allowed(url: str, source: MetadataSource) -> bool:
 @router.get("", response_class=HTMLResponse)
 async def index(request: Request, q: str = Query(default="", max_length=200)) -> HTMLResponse:
     """`?q=` (V4: «Buscar una serie» del Inicio) prellena la caja y lanza la búsqueda al cargar."""
+    fuentes = fuentes_que_se_consultan(get_settings())
     return templates.TemplateResponse(request, "descubrir.html", {
         "q": q.strip(), "clave": None, "titulo": "", "anio": "", "error": None, "tradicion_elegida": "",
-        "tradiciones": _tradiciones(), "pista": None})
+        "tradiciones": _tradiciones(), "pista": None,
+        "buscando_en": enumerar(fuentes) if fuentes else None})
 
 
 def _tradiciones() -> list[tuple[str, str]]:
@@ -100,17 +113,23 @@ def _fragmento_sin_clave(request: Request) -> HTMLResponse:
 
 @router.get("/buscar", response_class=HTMLResponse)
 async def buscar(request: Request, q: str = "", db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    resultados, avisos = await DiscoveryService(db).search(q)
+    busqueda = await DiscoveryService(db).search_detallada(q)
     secreto = get_settings().secret_key
     if not secreto:
         return _fragmento_sin_clave(request)
-    firmados, omitidas = firmar_resultados(resultados, secreto)
-    avisos = list(avisos)
+    firmados, omitidas = firmar_resultados(busqueda.resultados, secreto)
+    # U14: la web explica el estado de CADA fuente ella misma (qué no respondió y que las demás sí); los avisos
+    # de texto del servicio ya no se pintan (llevaban `.env` y nombres de variables).
+    resumen = resumir(busqueda.fuentes, len(firmados))
+    avisos = list(resumen.avisos)
     if omitidas:
         avisos.append(f"Se han omitido {omitidas} resultado(s) cuyo título o identificador no se puede guardar.")
     return templates.TemplateResponse(
         request, "_resultados_descubrir.html",
-        {"resultados": firmados, "avisos": avisos, "tradiciones": _tradiciones(), "hay_resultados": bool(resultados)},
+        {"resultados": firmados, "avisos": avisos, "tradiciones": _tradiciones(),
+         "hay_resultados": bool(busqueda.resultados), "anuncio": resumen.anuncio,
+         "clase_aviso": tipo_aviso("amber").clase,       # el aspecto de «aviso», SIN su `role` (ver la plantilla)
+         "consultadas": enumerar(resumen.consultadas), "hay_consultadas": bool(resumen.consultadas)},
     )
 
 

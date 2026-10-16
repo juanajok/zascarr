@@ -1299,3 +1299,14 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .pend-rango { margin: 0 0 8px; font-weight: 700; }
 .pend-paginas { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 0 0 var(--gutter); }
 .pend-paginas a { display: inline-block; min-height: 40px; padding: 8px 4px; }
+
+/* U14: el progreso de la búsqueda de Descubrir aparece a los 400 ms (solo CSS: una respuesta rápida no lo hace
+   parpadear) y desaparece al terminar sin retardo. El selector de tradición usa el control del sistema (el mismo patrón
+   que el selector de política de búsqueda), no el `select` nativo gris. */
+.htmx-indicator.indicador-diferido { transition: none; }
+.htmx-indicator.indicador-diferido.htmx-request { transition: opacity 0s linear .4s, visibility 0s linear .4s; }
+.discovery-card-actions select {
+  font: inherit; padding: 7px 10px; min-height: 40px;
+  border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper); color: var(--ink);
+}
