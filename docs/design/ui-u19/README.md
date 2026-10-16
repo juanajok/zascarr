@@ -1,6 +1,7 @@
 # Evidencia de U19 (#206): de la carpeta a sus archivos vinculados, en navegador real
 
-Rama `claude/u19-recorrido`, 2026-10-16. Código evaluado: el de la rama tras la corrección de la revisión de #219 (ver el SHA en la PR). Ficha y contratos: `docs/design/benchmark-U19-recorrido-vincular.md` (§6.4 y §7.2).
+Rama `claude/u19-recorrido`, 2026-10-16. Código funcional evaluado: `35a3d8929d69db12c053e10205220478abdd714e` (último commit que toca `src/` o `tests/`); la evidencia
+(capturas y `datos.json`) se publicó en `1b754b30960687f642ca695f87a388e63bd4a70f`, que no cambia código. Fusionada en `57259ac`. Ficha y contratos: `docs/design/benchmark-U19-recorrido-vincular.md` (§6.4 y §7.2).
 
 | Dato | Valor |
 |---|---|
