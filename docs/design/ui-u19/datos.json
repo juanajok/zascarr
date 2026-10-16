@@ -38,7 +38,7 @@
     },
     {
       "paso": "1e-revision",
-      "url": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=2582bbca-f69b-4eec-96c3-5d75105900b4",
+      "url": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=d23c6048-fab7-4ee6-a643-5583c453eae8",
       "banner": true,
       "pasos": [
         {
@@ -61,7 +61,29 @@
     {
       "paso": "2a-resultados-simulados",
       "texto": "SE HA BUSCADO «MUNDO COBALTO». ✓ Comic Vine: ha respondido AniList: apagada en los ajustes ✓ Tebeosfera: ha respondido GCD: apagada en los ajustes Mundo Cobalto (2015) COMIC VINE Serie de ensayo (simulada). SERIES QUE YA TIENES Y SE PARECEN: MUNDO COBALTO (2015) GRAPA AMERICANA PREPARAR LOS ARCHIVOS DE ESTA CARPETA PARA ESA SERIE Elige la tradición… Grapa americana Franco-belga (BD) Manga Tebeo es",
-      "parecidas_bajo_la_candidata": false
+      "parecidas_bajo_la_candidata": true
+    },
+    {
+      "paso": "2a2-decidir-entre-parecidas",
+      "texto": "✓ Elección anotada. Todavía no se ha creado ninguna serie ni se ha vinculado ningún archivo. Carpeta _Unsorted Serie Mundo Cobalto (2015) Origen Comic Vine Tradición elegida Grapa americana La fuente sugería Grapa americana (era solo una sugerencia) Se guardará como «Mundo Cobalto» (2015). Tradición",
+      "ofrece_es_esta": true,
+      "ofrece_crear_otra": true
+    },
+    {
+      "paso": "2a3-es-esta",
+      "texto": " ARCHIVO. i Se usará la serie existente que elegiste, sin modificarla. En tu biblioteca: Mundo Cobalto (2015) Usar esta serie Grapa americana Franco-belga (BD) Manga Tebeo español Fumetti Manhwa Manhua Británico Otra Cambiar y revisar Puedes recargar o volver a esta vista previa sin perder lo que elegiste (lo elegido en una fuente caduca a los 15 minutos): enlace a esta vista previa. Elegir otra Volver a las carpetas",
+      "decision_tomada": true
+    },
+    {
+      "paso": "2a4-el-enlace-lleva-la-decision",
+      "decision": true,
+      "serie_id": true,
+      "consulta": true
+    },
+    {
+      "paso": "2a5-reconstruida-con-la-decision",
+      "conserva": true,
+      "vuelve_a_preguntar": false
     },
     {
       "paso": "2b-tras-elegir",
@@ -100,12 +122,14 @@
     {
       "paso": "2e-alta-creada",
       "tabs": 13,
-      "texto": "«Mundo Cobalto Integral» (2020): creada. Es una serie vacía: sin números ni archivos. Vincular archivos es otro paso. Ver ficha Añadir a deseados Siguiente paso, que todavía no se ha hecho: revisar qué archivos de la carpeta «_Unsorted» se vinculan a esta serie. Confirmar el alta no vincula nada; la revisión y su confirmación son pasos aparte. Revisar los archivos de esta carpeta Deshacer"
+      "texto": "«Mundo Cobalto Integral» (2020): creada. Es una serie vacía: sin números ni archivos. Vincular archivos es otro paso. Ver ficha Añadir a deseados Siguiente paso, que todavía no se ha hecho: revisar qué archivos de la carpeta «_Unsorted» se vinculan a esta serie. Confirmar el alta no vincula nada; la revisión y su confirmación son pasos aparte. Revisar los archivos de esta carpeta Si recargas o vue"
     },
     {
       "paso": "2f-alta-reconstruida",
-      "texto": "ESTADO DEL ALTA 1 Elegir la serie (paso actual) 2 Revisar los archivos (pendiente) 3 Vincular (pendiente) ← Volver a «Pendientes por carpeta» ESTADO DEL ALTA La serie «Mundo Cobalto Integral» (2020) ya está creada. Es una serie vacía: sin números ni archivos propios todavía. Quedan 6 archivos de la ",
+      "enlace_ofrecido": "/ui/pendientes/carpetas/asistente/alta/resultado?clave=_Unsorted&series_id=ef765",
+      "texto": "ESTADO DEL ALTA 1 Elegir la serie (paso actual) 2 Revisar los archivos (pendiente) 3 Vincular (pendiente) ← Volver a «Pendientes por carpeta» ESTADO DEL ALTA La serie «Mundo Cobalto Integral» (2020) ya está creada. Quedan 6 archivos de la carpeta «_Unsorted» sin vincular. Revisarlos no vincula nada ",
       "deshacer": false,
+      "vacia": false,
       "pasos": [
         {
           "texto": "1 Elegir la serie (paso actual)",
@@ -126,7 +150,7 @@
     },
     {
       "paso": "3a-revision-de-la-serie-nueva",
-      "url": "?clave=_Unsorted&series_id=49f8781b-cd8c-4bed-b894-1bb78a85b14f",
+      "url": "?clave=_Unsorted&series_id=ef76572e-0da0-49fe-8330-520b943e37e8",
       "pasos": [
         {
           "texto": "1 Elegir la serie (hecho)",
