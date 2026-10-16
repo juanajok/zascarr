@@ -106,6 +106,10 @@ class ResultadoInciertoError(VinculacionError):
     codigo = "resultado_incierto"
 
 
+class InformeDeOtraSerieError(VinculacionError):
+    """El informe que se pidió existe, pero es de otra serie que la de la referencia: la referencia no es coherente."""
+
+
 class ConflictoDeBloqueoError(VinculacionError):
     """Postgres detectó un interbloqueo o un fallo de serialización: esta transacción fue la víctima."""
     codigo = "conflicto_de_bloqueo"
@@ -196,6 +200,20 @@ class VinculacionDeArchivos:
             if isinstance(e, DBAPIError) and _es_interbloqueo(e):
                 raise ConflictoDeBloqueoError("Otra operación coincidió; repite la confirmación.") from None
             raise
+
+    async def leer_resultado(self, operacion_id: UUID, series_id: UUID) -> RespuestaEjecucion | None:
+        """SOLO LECTURA del informe guardado de una operación (U19, ficha §7.2): `None` si no hay informe y
+        `InformeDeOtraSerieError` si es de otra serie. Una consulta por clave primaria y la de los nombres actuales; **sin**
+        candado consultivo, sin `_purgar`, sin `commit`: nunca confirma, reintenta, repara ni alarga la retención."""
+        previo = (await self._db.execute(select(VinculacionOperacion).where(
+            VinculacionOperacion.operacion_id == operacion_id))).scalar_one_or_none()
+        if previo is None:
+            return None
+        if UUID(str(previo.series_id)) != series_id:
+            raise InformeDeOtraSerieError("El informe es de otra serie.")
+        doc = previo.resultado
+        nombres = await self._nombres([UUID(a["id"]) for a in doc["archivos"]])
+        return self._respuesta(doc, repetida=True, nombres=nombres)
 
     async def _en_transaccion(self, firmado: VinculacionFirmada, vigente: bool) -> RespuestaEjecucion:
         db = self._db

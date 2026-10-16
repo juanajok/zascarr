@@ -1,0 +1,17 @@
+{#- Series locales que coinciden con la búsqueda (U19, D1). Sin preselección; cada una es un ENLACE a la revisión de la carpeta
+    para esa serie, que no vincula nada hasta que se confirma. No consulta ninguna fuente. -#}
+{% if not q %}
+<p class="caption">Escribe parte del título para buscar entre tus series.</p>
+{% elif not series %}
+<p class="no-results">No hay ninguna serie tuya con «{{ q }}» en el título. Puedes buscarla en las fuentes o crearla a mano.</p>
+{% else %}
+<p class="caption">{{ series | length }} serie{{ "s" if series | length != 1 }} en tu biblioteca{% if series | length == 20 %} (se muestran las 20 primeras: afina la búsqueda){% endif %}. Ninguna está elegida: elige la tuya.</p>
+<ul class="series-list">
+  {% for s in series %}
+  <li>
+    <span class="series-name">{{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %} <span class="caption">{{ s.tradicion }}</span></span>
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ s.series_id }}">Preparar los archivos de esta carpeta para esa serie</a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

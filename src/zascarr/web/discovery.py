@@ -187,7 +187,7 @@ def _campos_de_origen(candidata: str | None, titulo: str | None, anio: int | Non
     """Lo que hay que reenviar para poder REVISAR DE NUEVO: la candidata firmada, o los datos escritos a mano (y el grupo
     del que se parte, si lo hay). La persona los escribió; lo que ejecuta la confirmación sigue siendo solo el token."""
     if candidata:
-        return [("candidata", candidata)]
+        return [("candidata", candidata), *([("clave", clave)] if clave else [])]
     campos = [("titulo", titulo or ""), ("anio", "" if anio is None else str(anio))]
     if clave:
         campos.append(("clave", clave))
@@ -205,12 +205,65 @@ def _anio_de(texto: str | None) -> int | None:
         raise ValueError("El año debe ser un número (por ejemplo, 1987) o dejarse en blanco.") from None
 
 
-def _formulario_a_mano(request: Request, *, clave: str | None, titulo: str, anio: str, error: str | None,
-                       tradicion: str = "") -> HTMLResponse:
+def _plantilla_formulario_a_mano(*, clave: str | None, titulo: str, anio: str, error: str | None,
+                                 tradicion: str = "") -> tuple[str, dict]:
     """El formulario de alta a mano, con el motivo del error y lo que la persona había escrito (nada se pierde)."""
-    return templates.TemplateResponse(request, "_alta_manual_form.html", {
+    return "_alta_manual_form.html", {
         "clave": clave, "titulo": titulo, "anio": anio, "error": error, "tradicion_elegida": tradicion,
-        "tradiciones": _tradiciones(), "pista": None})
+        "tradiciones": _tradiciones(), "pista": None}
+
+
+async def preparar_vista_previa(
+    request: Request, db: AsyncSession, *, candidata: str | None, titulo: str | None, anio: str | None,
+    clave: str | None, tradition: ComicTradition, decision: Literal["reutilizar", "crear_igualmente"] | None = None,
+    serie_id: UUID | None = None, consulta: str | None = None,
+) -> tuple[str, dict]:
+    """La vista previa del alta como (plantilla, contexto), SIN escribir nada. La comparten `POST /revisar` y el GET gemelo
+    del asistente de carpeta (U19, que la reconstruye al volver): una sola definición. Una candidata puede venir con la
+    carpeta (`clave`, la del asistente: el token de la candidata está firmado para ella) o sin ella (Descubrir libre)."""
+    servicio = _servicio(db)
+    a_mano = not candidata
+    if servicio is None:
+        return "_fragmento_sin_clave", {}
+    elegida = tradition
+    anio_valor: int | None = None
+    if a_mano:
+        try:
+            anio_valor = _anio_de(anio)
+        except ValueError as exc:
+            return _plantilla_formulario_a_mano(clave=clave, titulo=titulo or "", anio=anio or "", error=str(exc),
+                                                tradicion=elegida.value)
+    try:
+        if a_mano:
+            datos = DatosManuales(titulo=titulo or "", anio=anio_valor)
+            if clave:
+                vista = await servicio.previsualizar(clave, tradicion=elegida, manual=datos, decision=decision,
+                                                     serie_id=serie_id)
+            else:
+                vista = await servicio.previsualizar_sin_grupo(
+                    tradicion=elegida, manual=datos, decision=decision, serie_id=serie_id)
+        elif clave:
+            vista = await servicio.previsualizar(clave, tradicion=elegida, candidata=candidata, decision=decision,
+                                                 serie_id=serie_id)
+        else:
+            vista = await servicio.previsualizar_sin_grupo(
+                tradicion=elegida, candidata=candidata, decision=decision, serie_id=serie_id)
+    except GrupoNoEncontradoError:
+        return "_alta_error.html", {"texto": "Esa carpeta ya no tiene registros pendientes: la serie se puede crear desde Descubrir.",
+                                    "codigo": "grupo_no_encontrado"}
+    except AltaError as exc:
+        if a_mano and getattr(exc, "codigo", "") in ("datos_invalidos", "demasiadas_parecidas"):
+            return _plantilla_formulario_a_mano(clave=clave, titulo=titulo or "", anio=anio or "",
+                                                error=_texto_de(exc), tradicion=elegida.value)
+        return "_alta_error.html", {"texto": _texto_de(exc), "codigo": getattr(exc, "codigo", "")}
+    campos = _campos_de_origen(candidata, vista.titulo, vista.anio, clave)
+    if clave and consulta:
+        campos.append(("consulta", consulta))             # la búsqueda de la que se parte: solo para «volver», nunca se ejecuta
+    return "_alta_vista_previa.html", {
+        "vista": vista, "campos_origen": campos,
+        "tradicion": elegida.value, "tradicion_etiqueta": _TRADICION_LABEL[elegida], "tradiciones": _tradiciones(),
+        "clave": clave,
+    }
 
 
 @router.post("/revisar", response_class=HTMLResponse)
@@ -223,48 +276,20 @@ async def revisar(
     tradition: ComicTradition = Form(...),
     decision: Literal["reutilizar", "crear_igualmente"] | None = Form(default=None),
     serie_id: UUID | None = Form(default=None),
+    consulta: str | None = Form(default=None, max_length=200),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Paso 1: la vista previa de lo que pasaría. NO escribe nada. La tradición la elige la persona (sin valor por defecto).
 
-    Dos orígenes, ninguno consulta fuentes en este paso: una candidata firmada al buscar (Descubrir) o los datos a mano
-    —título, año opcional y tradición—, con o sin la carpeta de la que se parte (`clave`). #189."""
-    servicio = _servicio(db)
-    a_mano = not candidata
-    if servicio is None:
+    Dos orígenes, ninguno consulta fuentes en este paso: una candidata firmada al buscar (Descubrir, o el asistente de una
+    carpeta, con su `clave`) o los datos a mano —título, año opcional y tradición—, con o sin la carpeta de la que se parte
+    (`clave`). #189, U19."""
+    plantilla, contexto = await preparar_vista_previa(
+        request, db, candidata=candidata, titulo=titulo, anio=anio, clave=clave, tradition=tradition,
+        decision=decision, serie_id=serie_id, consulta=consulta)
+    if plantilla == "_fragmento_sin_clave":
         return _fragmento_sin_clave(request)
-    elegida = tradition
-    anio_valor: int | None = None
-    if a_mano:
-        try:
-            anio_valor = _anio_de(anio)
-        except ValueError as exc:
-            return _formulario_a_mano(request, clave=clave, titulo=titulo or "", anio=anio or "", error=str(exc),
-                                      tradicion=elegida.value)
-    try:
-        if a_mano:
-            datos = DatosManuales(titulo=titulo or "", anio=anio_valor)
-            if clave:
-                vista = await servicio.previsualizar(clave, tradicion=elegida, manual=datos, decision=decision,
-                                                     serie_id=serie_id)
-            else:
-                vista = await servicio.previsualizar_sin_grupo(
-                    tradicion=elegida, manual=datos, decision=decision, serie_id=serie_id)
-        else:
-            vista = await servicio.previsualizar_sin_grupo(
-                tradicion=elegida, candidata=candidata, decision=decision, serie_id=serie_id)
-    except GrupoNoEncontradoError:
-        return _error(request, "Esa carpeta ya no tiene registros pendientes: la serie se puede crear desde Descubrir.")
-    except AltaError as exc:
-        if a_mano and getattr(exc, "codigo", "") in ("datos_invalidos", "demasiadas_parecidas"):
-            return _formulario_a_mano(request, clave=clave, titulo=titulo or "", anio=anio or "",
-                                      error=_texto_de(exc), tradicion=elegida.value)
-        return _error(request, _texto_de(exc))
-    return templates.TemplateResponse(request, "_alta_vista_previa.html", {
-        "vista": vista, "campos_origen": _campos_de_origen(candidata, vista.titulo, vista.anio, clave),
-        "tradicion": elegida.value, "tradicion_etiqueta": _TRADICION_LABEL[elegida], "tradiciones": _tradiciones(),
-        "clave": clave if a_mano else None,
-    })
+    return templates.TemplateResponse(request, plantilla, contexto)
 
 
 MENSAJE_RESULTADO_DESCONOCIDO = (

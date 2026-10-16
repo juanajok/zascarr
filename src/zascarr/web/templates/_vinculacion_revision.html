@@ -24,6 +24,7 @@
       <dt>Archivos en la carpeta</dt><dd>{{ r.pagina.en_el_grupo }}</dd>
       <dt>Esta página</dt><dd>{% if r.pagina.tratados %}archivos {{ r.pagina.desde }}–{{ r.pagina.hasta }}{% else %}sin archivos{% endif %}</dd>
     </dl>
+    <p class="vinc-contexto">Vas a preparar los archivos de esta carpeta para «{{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %}», una serie que ya está en tu biblioteca. Esta pantalla no vincula nada hasta que lo confirmes.</p>
     <p class="vinc-alcance">Lo que marques y escribas vale <strong>solo para los archivos de esta página</strong>.</p>
     {% if texto_de_la_pagina %}<details class="vinc-detalle"><summary>Más detalle de las páginas</summary><p>{{ texto_de_la_pagina }}</p></details>{% endif %}
     {% for a in avisos %}{{ ui.aviso("amber", a) }}{% endfor %}

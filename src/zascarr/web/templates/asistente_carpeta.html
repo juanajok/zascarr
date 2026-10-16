@@ -2,6 +2,7 @@
 {% block title %}Elegir la serie de una carpeta — ZascArr{% endblock %}
 {% block content %}
 <h1>Elegir la serie de una carpeta</h1>
+{% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(1) }}
 <p class="subtitle">Busca la serie en las fuentes o créala a mano. En este paso no se crea ninguna serie ni se vincula ningún archivo.</p>
 <p><a href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
 
@@ -18,14 +19,28 @@
   <p class="caption">Abrir este asistente no ha consultado ninguna fuente: solo se busca cuando tú lo pides.</p>
 </section>
 
+<section class="card" aria-labelledby="asistente-locales-titulo">
+  <h2 id="asistente-locales-titulo">¿Ya la tienes en tu biblioteca?</h2>
+  <p>Busca entre las series que ya tienes. No consulta ninguna fuente ni crea nada.</p>
+  <form class="asistente-form" hx-get="/ui/pendientes/carpetas/asistente/locales" hx-target="#asistente-locales" hx-swap="innerHTML">
+    <input type="hidden" name="clave" value="{{ g.clave }}">
+    <label for="asistente-local-q">Título de tu serie</label>
+    <input id="asistente-local-q" type="search" name="q" maxlength="200" autocomplete="off" placeholder="Parte del título…">
+    <button type="submit">Buscar en mi biblioteca</button>
+  </form>
+  <div id="asistente-locales" class="series-results" aria-live="polite"></div>
+</section>
+
 <section class="card" aria-labelledby="asistente-buscar">
   <h2 id="asistente-buscar">Buscar en las fuentes</h2>
   <form class="asistente-form" hx-post="/ui/pendientes/carpetas/asistente/buscar" hx-target="#asistente-resultados" hx-swap="innerHTML">
     <input type="hidden" name="clave" value="{{ g.clave }}">
     <label for="asistente-consulta">Qué buscar</label>
-    <input id="asistente-consulta" type="search" name="consulta" maxlength="200" value="{{ apertura.consulta_propuesta }}"
+    <input id="asistente-consulta" type="search" name="consulta" maxlength="200" value="{{ consulta_escrita or apertura.consulta_propuesta }}"
            placeholder="Título de la serie…" autocomplete="off">
-    {% if apertura.consulta_propuesta %}
+    {% if consulta_escrita %}
+    <p class="muted">Es la búsqueda que escribiste. Los resultados no se conservan —buscar de nuevo consulta las fuentes—: pulsa «Buscar en las fuentes» si quieres repetirla.</p>
+    {% elif apertura.consulta_propuesta %}
     <p class="caption">Propuesta a partir del nombre de la carpeta o de los archivos. Puedes cambiarla antes de buscar.</p>
     {% else %}
     <p class="caption">No hemos podido proponer una búsqueda con esta carpeta: escribe el título.</p>

@@ -423,6 +423,46 @@ def verificar_token_vinculacion(token: str, secret: str, *, ahora: float | None 
     return VinculacionFirmada(clave, d["serie_id"], d["operacion"], tuple(archivos), caduca)
 
 
+# ── Referencia a un resultado de vinculación (U19, ficha §7.2) ───────────────────────────────────
+
+PROPOSITO_RESULTADO_VINCULACION = "resultado_vinculacion"
+
+
+@dataclass(frozen=True)
+class ReferenciaDeResultado:
+    """A qué resultado guardado apunta un enlace: la carpeta (contexto firmado), la serie y la operación. `vence` es el
+    instante (época) en que deja de poder consultarse; NO es un permiso de acceso: lo da la autenticación."""
+    clave: str
+    series_id: str
+    operacion: str
+    vence: int
+
+
+def crear_referencia_de_resultado(clave: str, series_id: str, operacion: str, *, firma: float, plazo_s: int,
+                                  secret: str) -> str:
+    """La referencia de un resultado de vinculación. Vence a `firma + plazo_s`, donde `firma` es el instante en que se firmó
+    el token de VINCULACIÓN (no el de emitir esta referencia) y `plazo_s` la retención del informe: es una constante de la
+    operación, así que volver a emitirla (repetir la confirmación) NO reinicia el plazo."""
+    return crear_token(PROPOSITO_RESULTADO_VINCULACION, clave, {"series_id": series_id, "operacion": operacion},
+                       secret, ahora=firma, ttl=plazo_s)
+
+
+def verificar_referencia_de_resultado(ref: str, secret: str) -> ReferenciaDeResultado | None:
+    """La referencia, o `None` si no es íntegra: firma, propósito, contexto (la `clave`, que se lee del propio token) y
+    forma de los datos. **No mira el reloj**: una referencia vencida pero íntegra se devuelve igualmente, para poder
+    distinguir «vencida» de «manipulada»; el vencimiento lo decide quien la lee comparando `vence`."""
+    clave = _contexto_del_token(ref, secret)
+    if clave is None:
+        return None
+    verificado = _verificar(ref, PROPOSITO_RESULTADO_VINCULACION, clave, secret, ignorar_caducidad=True)
+    if verificado is None:
+        return None
+    d, vence = verificado
+    if not _uuid_texto(d.get("series_id")) or not _uuid_texto(d.get("operacion")):
+        return None
+    return ReferenciaDeResultado(clave, d["series_id"], d["operacion"], vence)
+
+
 # ── Tamaño máximo del token de vinculación ───────────────────────────────────────────────────────
 
 #: Longitud máxima de la `clave` de un grupo que acepta la vista previa (`max_length` de su petición).
