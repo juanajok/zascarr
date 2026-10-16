@@ -12,10 +12,10 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 1.5,
       "tiempos": {
-        "peticion_empieza_ms": 434,
-        "peticion_termina_ms": 1956,
+        "peticion_empieza_ms": 443,
+        "peticion_termina_ms": 1973,
         "indicador_visible_por_primera_vez_ms": 860,
-        "espera_hasta_verlo_ms": 426,
+        "espera_hasta_verlo_ms": 417,
         "llego_a_verse": true,
         "visible_al_final": false,
         "muestras": 173
@@ -53,13 +53,13 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 433,
-        "peticion_termina_ms": 447,
+        "peticion_empieza_ms": 412,
+        "peticion_termina_ms": 430,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,
         "visible_al_final": false,
-        "muestras": 101
+        "muestras": 100
       },
       "hechos": {
         "regiones_vivas_en_la_pagina": 1,
@@ -94,13 +94,13 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 0.5,
       "tiempos": {
-        "peticion_empieza_ms": 422,
-        "peticion_termina_ms": 951,
-        "indicador_visible_por_primera_vez_ms": 820,
-        "espera_hasta_verlo_ms": 398,
+        "peticion_empieza_ms": 441,
+        "peticion_termina_ms": 966,
+        "indicador_visible_por_primera_vez_ms": 840,
+        "espera_hasta_verlo_ms": 399,
         "llego_a_verse": true,
         "visible_al_final": false,
-        "muestras": 125
+        "muestras": 126
       },
       "hechos": {
         "regiones_vivas_en_la_pagina": 1,
@@ -135,10 +135,10 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 0.5,
       "tiempos": {
-        "peticion_empieza_ms": 429,
-        "peticion_termina_ms": 953,
-        "indicador_visible_por_primera_vez_ms": 840,
-        "espera_hasta_verlo_ms": 411,
+        "peticion_empieza_ms": 428,
+        "peticion_termina_ms": 947,
+        "indicador_visible_por_primera_vez_ms": 820,
+        "espera_hasta_verlo_ms": 392,
         "llego_a_verse": true,
         "visible_al_final": false,
         "muestras": 126
@@ -176,13 +176,13 @@
       "fragmento": "todas_fallan",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 443,
-        "peticion_termina_ms": 453,
+        "peticion_empieza_ms": 423,
+        "peticion_termina_ms": 451,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,
         "visible_al_final": false,
-        "muestras": 102
+        "muestras": 100
       },
       "hechos": {
         "regiones_vivas_en_la_pagina": 1,
@@ -211,8 +211,8 @@
       "fragmento": "sin_clave_y_una_caida",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 442,
-        "peticion_termina_ms": 453,
+        "peticion_empieza_ms": 432,
+        "peticion_termina_ms": 450,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,
@@ -247,8 +247,8 @@
       "fragmento": "sin_coincidencias",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 434,
-        "peticion_termina_ms": 455,
+        "peticion_empieza_ms": 426,
+        "peticion_termina_ms": 434,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,

@@ -24,7 +24,7 @@ Mediciones de la rama `claude/u14-descubrir`, 2026-10-16. Ficha: `docs/design/be
 
 | Criterio de la ficha | Medido | Resultado |
 |---|---|---|
-| 1. Progreso a los 400 ms | Con la respuesta retenida 0,5 y 1,5 s, el indicador pasó a visible **396–431 ms** después de empezar la petición (4 mediciones) y desaparece al terminar | PASS |
+| 1. Progreso a los 400 ms | Con la respuesta retenida 0,5 y 1,5 s, el indicador pasó a visible **392–417 ms** después de empezar la petición (3 mediciones) y desaparece al terminar | PASS |
 | 1. Sin parpadeo | Con una respuesta de 12–16 ms el indicador **nunca llegó a verse** (muestreo cada 20 ms) | PASS |
 | 1. Fuentes nombradas | «Buscando en Comic Vine, AniList, Tebeosfera y GCD…», solo las encendidas; con el ensayo real (todo apagado), no hay indicador y la página lo dice | PASS |
 | 2. Una sola región viva, fuera del destino | 1 `aria-live` en la página, **antes y después** de buscar; 0 dentro de `#resultados-descubrir`; la respuesta la actualiza por `hx-swap-oob` | PASS |
