@@ -102,11 +102,14 @@ def respuestas(nav, patron: str) -> list[int]:
 async def refrescos_fuera_de_orden(nav, base: str, quitar_sync: bool) -> dict:
     """Bloqueante 3 de la revisión: dos «Ignorar» seguidos lanzan dos refrescos del rango y el PRIMERO termina
     DESPUÉS. Con `Fetch` se retiene la RESPUESTA del primero (en la etapa de respuesta: el servidor ya la calculó,
-    con el dato de ese momento) hasta que el segundo ha terminado, y se mira qué queda en pantalla. `quitar_sync` elimina `hx-sync` de las respuestas de «Ignorar» (variante de control: sin el
-    mecanismo...). RESULTADO HONESTO: en htmx 4.0.0 / Chrome 154 la variante de control TAMBIÉN conserva el último,
-    porque el refresco es un `outerHTML`: al sustituir el nuevo a `#pend-rango`, la respuesta antigua apunta a un
-    elemento ya desconectado y no hace nada. `hx-sync` añade el ABORTO de la petición antigua (visible en
-    `refrescos_abortados_o_fallidos`), pero no es lo que evita la sobrescritura: es una defensa adicional."""
+    con el dato de ese momento) hasta que el segundo ha terminado, y se mira qué queda en pantalla.
+    `quitar_sync` elimina `hx-sync` de las respuestas de «Ignorar» (variante de control).
+
+    OBSERVADO (htmx 4.0.0, Chrome 154): la variante de control TAMBIÉN conserva el dato más reciente; con `hx-sync`
+    se aborta además la petición antigua (`refrescos_abortados_o_fallidos`).
+    NO VERIFICADO: por qué. La explicación que encaja es que el refresco es un `outerHTML` y la respuesta antigua
+    apunta a un elemento ya desconectado, pero es una HIPÓTESIS: no se ha comprobado en el código de htmx.
+    TAMPOCO SE HA PROBADO el caso de que el refresco nuevo falle mientras llega el antiguo."""
     await nav.ir(base + "/ui/pendientes", espera=1.5)
     inicial = await nav.js("document.querySelector('#pend-rango').textContent.trim()")
     retenidas: list[dict] = []
