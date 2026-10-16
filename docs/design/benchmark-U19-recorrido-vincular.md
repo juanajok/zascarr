@@ -4,8 +4,8 @@
 > **Esta ficha es de preparación: no se ha escrito código de U19 ni se mueve la tarjeta.** Es un documento propio de
 > U19; no es el estudio U10 ni la ficha de U20 (`benchmark-U20-marcar-todos.md`).
 > Cierra tres casillas de la Definition of Ready de #206: vigencia contra un SHA, ficha §13 identificada con su
-> decisión, y matriz de navegación. **Segunda versión** tras la devolución de la revisión (2026-10-16): D1–D4 resueltas por
-> quien revisa (7) y los dos contratos que faltaban escritos (6.4 conservación al volver; 7.2 lectura del comprobante).
+> decisión, y matriz de navegación. **Tercera versión** tras dos devoluciones (2026-10-16): D1–D4 resueltas por quien revisa (7); conservación al volver
+> (6.4); lectura del comprobante (7.2) con la **precedencia de caducidad** (integridad → vencimiento → fila) separada de la purga.
 
 ## 1. Vigencia contra un SHA concreto
 
@@ -256,12 +256,29 @@ Vincular») en A, P, C, V y X, `aria-current="step"` en el actual y sin presenta
 guardado en `vinculacion_operaciones`. **Nunca** confirma, reintenta, repara ni alarga la retención.
 
 **La referencia (`ref`).** Un token firmado como los demás (`crear_token`), con propósito propio `resultado_vinculacion`,
-contexto = la `clave` del grupo, datos `{series_id, operacion}` y TTL = `RETENCION_HORAS` × 3600 (la emisión es `exp − TTL`,
-igual que `confirmar` calcula la firma de un token caducado). Lo emite la ruta `confirmar` **a partir del token ya validado**
-(serie, grupo y operación salen de él, no del formulario) y lo pone en los enlaces del resultado. *Por qué firmada y no
-`?operacion=`:* (a) liga `clave`, `series_id` y `operacion` entre sí y a este servidor; (b) permite **distinguir «expirado»
-de «inexistente»**: borrada la fila por la purga, solo una referencia firmada demuestra que existió y cuándo se emitió. Es
-**integridad y contexto, no control de acceso**.
+contexto = la `clave` del grupo y datos `{series_id, operacion}`. Lo emite la ruta `confirmar` **a partir del token de
+vinculación ya validado** (serie, grupo y operación salen de él, no del formulario) y se pasa tal cual a los enlaces del
+resultado. *Por qué firmada y no `?operacion=`:* (a) liga `clave`, `series_id` y `operacion` entre sí y a este servidor;
+(b) permite **distinguir «expirado» de «manipulada o inexistente»** sin depender de que la fila siga o no en la tabla.
+Es **integridad y contexto, no control de acceso**.
+
+**El vencimiento de la `ref` es el de la retención, calculado una sola vez desde la firma del token de vinculación.**
+
+> `vence = firma + RETENCION_HORAS × 3600`, con `firma = caduca_del_token_de_vinculacion − TTL_SEGUNDOS`
+> (la misma cuenta que `confirmar` ya hace para un token caducado). La `ref` se crea con `ahora=firma` y
+> `ttl=RETENCION_HORAS × 3600`, así que su `exp` **es** `vence`.
+
+Consecuencias, para que no haya dos relojes:
+- **Es una constante de la operación.** Repetir la confirmación con el mismo token (idempotente) emite una `ref` con **el
+  mismo `exp`**; leer el resultado **no emite ninguna `ref` nueva** (los enlaces de esa pantalla reenvían la recibida); y
+  regenerar o copiar el enlace no mueve el plazo. Leer o regenerar **no reinicia** las 24 horas.
+- **Es compatible con la purga real.** `_purgar` solo borra filas con `creada < now() − 24 h` **y** `token_hasta < now()`, y
+  `creada ≥ firma` (la fila se escribe al confirmar con un token ya firmado). Luego, para cualquier `ahora < vence`, la
+  fila **existe físicamente** salvo fallo o borrado manual: su ausencia antes de `vence` es genuinamente inesperada.
+- **El vencimiento lógico manda sobre la purga física.** Pasado `vence`, la respuesta es «expirado» **haya o no** purgado
+  la fila: no se lee la tabla. (El `confirmar` repetido sí devuelve el informe mientras la fila siga; eso es un
+  comportamiento ya existente que esta ficha no cambia y que la lectura no hereda: **la lectura es más estricta a
+  propósito**, para que el mismo comprobante no se interprete distinto según cuándo corra la purga.)
 
 **Servicio.** Un método de lectura en `VinculacionDeArchivos` (sin tocar `confirmar`, el formato del informe ni la tabla):
 dado `(operacion_id, series_id)` devuelve la `RespuestaEjecucion` con `repetida=True` si la fila existe **y su `serie_id`
@@ -269,17 +286,30 @@ coincide**, o `None`. Reglas: una consulta por clave primaria más la de nombres
 `_purgar()`, sin `commit` con escritura, sin `flush`. (La tabla ya rechaza todo `UPDATE` con un disparador: la prueba lo
 comprueba igualmente.)
 
-**Estados** (los tres que pide la revisión y una cuarta salvedad):
+**Precedencia de la comprobación** (se evalúa **en este orden** y se corta en el primer caso que aplique; con tiempo
+controlado en las pruebas):
 
-| Estado | Condición | Qué ve la persona | Qué puede hacer |
+1. **Integridad y contexto** — sin mirar el reloj ni la base: `ref` ausente, malformada, firma inválida, propósito distinto,
+   contexto ≠ `clave` o datos con forma incorrecta (`series_id`/`operacion` no son UUID) ⇒ **referencia no válida**. Se
+   verifica con `ignorar_caducidad=True`, igual que `confirmar` lee un token caducado: así **una `ref` vencida e íntegra no se
+   confunde con una manipulada**, y una manipulada nunca revela si estaba vencida.
+2. **Vencimiento** — `ahora ≥ exp` (el límite exacto **ya cuenta como vencida**, como `puede = ahora >= firma + …` en
+   `confirmar`) ⇒ **expirado**. No se consulta la base.
+3. **Vigente** (`ahora < exp`) — se lee el comprobante:
+   - hay fila y su `serie_id` coincide con el de la `ref` ⇒ **válido**;
+   - hay fila con **otro** `serie_id` ⇒ **referencia no válida** (incoherente; mismo texto que el caso 1, sin pistas);
+   - no hay fila ⇒ **no encontrado** (ausencia inesperada, por lo dicho arriba).
+
+| Estado | Cuándo | Qué ve la persona | Qué puede hacer |
 |---|---|---|---|
-| **Válido** | `ref` verifica (firma, propósito, contexto = `clave`) **y** hay fila **y** `serie_id` coincide | El informe de siempre (totales, por archivo, motivos en llano) con el aviso ya existente «este es su resultado guardado, no se ha repetido nada» | «Revisar de nuevo» (la acción que ya ofrece el informe), «Volver a las carpetas» |
-| **Inexistente** | `ref` no verifica (manipulada, malformada, de otra carpeta) **o** verifica pero la fila trae otra `serie_id` | «Esta referencia no es válida. No se ha cambiado nada.» **Sin pistas** sobre si existe o no esa operación | «Volver a las carpetas» |
-| **Expirado** | `ref` verifica, **no hay fila**, y `ahora ≥ emisión + RETENCION_HORAS` | «El resultado de esta vinculación ya no se conserva (pasaron más de 24 horas). Que se haya borrado no deshace nada: revisa la carpeta para ver su estado actual.» | «Revisar de nuevo» |
-| **No encontrado (aún sin plazo)** | `ref` verifica, no hay fila, y `ahora < emisión + RETENCION_HORAS` | «No se encuentra el resultado de esta vinculación. **No se sabe** si se aplicó: no lo des por hecho ni por fallido.» Sin botón de reintento (no hay token que repetir aquí) | «Revisar de nuevo» para ver qué hay vinculado |
+| **No válida** | caso 1, o fila con otro `serie_id` | «Esta referencia no es válida. No se ha cambiado nada.» **Sin pistas** sobre si la operación existe ni si venció | «Volver a las carpetas» |
+| **Expirado** | caso 2 (`ahora ≥ exp`), **con o sin fila** | «El resultado de esta vinculación ya no se conserva (pasaron más de 24 horas). Que ya no se muestre no deshace nada: revisa la carpeta para ver su estado actual.» | «Revisar de nuevo» |
+| **Válido** | caso 3 con fila coincidente | El informe de siempre (totales, por archivo, motivos en llano) con el aviso ya existente «este es su resultado guardado, no se ha repetido nada» | «Revisar de nuevo», «Volver a las carpetas» |
+| **No encontrado** | caso 3 sin fila | «No se encuentra el resultado de esta vinculación. **No se sabe** si se aplicó: no lo des por hecho ni por fallido.» Sin botón de reintento (no hay token que repetir aquí) | «Revisar de nuevo» para ver qué hay vinculado |
 
-Es el mismo razonamiento que `confirmar` ya aplica a un token caducado (`puede_haberse_aplicado`) y **no inventa
-éxito, recuperación ni reintento**.
+Es el mismo razonamiento que `confirmar` ya aplica a un token caducado (`puede_haberse_aplicado`) y **no inventa éxito,
+recuperación ni reintento**. El texto «pasaron más de 24 horas» es exacto porque `exp` se mide desde la firma, que es
+anterior al informe.
 
 **Qué datos expone.** Exactamente lo que el resultado inmediato ya muestra: totales, estado y número por archivo, motivo
 traducido, «número nuevo en la serie», y el **nombre actual** de cada archivo que aún exista (presentación, no del informe;
@@ -314,8 +344,14 @@ viaja en las URLs del asistente; no se añade ningún dato nuevo.
 | T9a | 6 | `test_c_reconstruida_con_alta_creada_dice_que_la_serie_existe_sin_repetirla_ni_deshacerla` — BD idéntica; sin botón «Deshacer» |
 | T9b | 6 | `test_c_reconstruida_cubre_creada_deshecha_reutilizada_y_purgada` — las cuatro filas de 6.4; **nunca** dice «no hubo alta» |
 | T10a | 7 | `test_lectura_valida_devuelve_el_informe_guardado_sin_ejecutar` — `confirmar` sustituido por uno que falla; `vinculacion_operaciones` (incl. `creada`) y `files`/`issue_files` idénticos antes y después |
-| T10b | 7 | `test_lectura_inexistente` — `ref` malformada, con la firma rota, firmada para otra `clave`, y válida con otra `serie_id`: el mismo texto sin pistas |
-| T10c | 7 | `test_lectura_expirada_y_no_encontrada` — con `ahora` controlado: fila purgada tras 24 h → «expirado»; fila ausente antes de 24 h → «no encontrado» sin éxito ni fracaso |
+| T10b | 7 | `test_lectura_no_valida` — `ref` malformada, con la firma rota, con otro propósito, firmada para otra `clave`, con datos que no son UUID, y válida con otra `serie_id` en la fila: el mismo texto sin pistas |
+| T10c | 7 | `test_lectura_no_encontrada_antes_del_vencimiento` — `ref` vigente y fila ausente (borrada a mano): «no encontrado», sin éxito ni fracaso ni reintento |
+| T10c2 | 7 | `test_lectura_expirada_con_la_fila_ya_purgada` — `ahora` ≥ `exp`, fila purgada: «expirado» |
+| **T10h** | 7 | **`test_referencia_vencida_con_la_fila_todavia_presente_es_expirada`** — `ahora` ≥ `exp`, **la fila sigue en la tabla** (la purga aún no ha corrido): «expirado», **no** el informe, y la respuesta es la misma que con la fila purgada. Con `confirmar` repetido en el mismo instante, éste sí devuelve el informe (comportamiento existente, comprobado para dejar constancia de la diferencia) |
+| **T10i** | 7 | **`test_el_limite_exacto_del_vencimiento`** — con `ahora` = `exp − 1` ⇒ válido (fila presente); `ahora` = `exp` ⇒ expirado; `ahora` = `exp + 1` ⇒ expirado |
+| **T10j** | 7 | **`test_integridad_antes_que_vencimiento`** — una `ref` manipulada (firma rota o `exp` alterado) y además vencida ⇒ «no válida», **no** «expirado»; una íntegra y vencida ⇒ «expirado» |
+| **T10k** | 7 | **`test_leer_o_regenerar_no_reinicia_el_plazo`** — dos `confirmar` con el mismo token emiten `ref` con el mismo `exp` (= `firma + 24 h`); la lectura no emite ninguna `ref` nueva y reenvía la recibida en sus enlaces |
+| **T10l** | 7 | **`test_el_plazo_es_el_de_la_retencion_original`** — para varias firmas, `exp − firma == RETENCION_HORAS × 3600`, y `_purgar` no borra ninguna fila con `ahora < exp` (la ausencia antes del vencimiento es genuinamente inesperada) |
 | T10d | 7 | `test_la_lectura_no_alarga_la_retencion` — leer no cambia `creada`; tras 24 h y token caducado, la purga borra igual aunque se haya leído |
 | T10e | 7 | `test_la_lectura_no_confirma_ni_reintenta` — ninguna escritura (comparación de sentencias), sin candado consultivo, sin llamar a `_purgar` |
 | T10f | 7 | `test_la_lectura_no_expone_rutas_token_ni_sesion` — el cuerpo no contiene `file_path`, el token ni `zascarr_session` |
