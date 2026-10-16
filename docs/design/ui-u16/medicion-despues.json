@@ -1,0 +1,601 @@
+{
+ "etiqueta": "despues",
+ "pantallas": {
+  "panel": {
+   "ruta": "/ui/",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 24,
+       "ancho": 145.8
+      }
+     ],
+     "n_objetivos": 16
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 24,
+       "ancho": 145.8
+      }
+     ],
+     "n_objetivos": 16
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 24,
+       "ancho": 145.8
+      }
+     ],
+     "n_objetivos": 16
+    }
+   }
+  },
+  "biblioteca": {
+   "ruta": "/ui/biblioteca",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14
+    }
+   }
+  },
+  "ficha-de-serie": {
+   "ruta": "/ui/series/4f0f6305-cd21-4f33-ba36-7c0dd3d2a362",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    }
+   }
+  },
+  "descubrir": {
+   "ruta": "/ui/descubrir",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    }
+   }
+  },
+  "por-revisar": {
+   "ruta": "/ui/pendientes",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30
+    }
+   }
+  },
+  "pendientes-por-carpeta": {
+   "ruta": "/ui/pendientes/carpetas",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12
+    }
+   }
+  },
+  "asistente-de-carpeta": {
+   "ruta": "/ui/pendientes/carpetas/asistente?clave=_Unsorted",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    }
+   }
+  },
+  "revision-de-la-vinculacion": {
+   "ruta": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=4f0f6305-cd21-4f33-ba36-7c0dd3d2a362",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23
+    }
+   }
+  },
+  "deseados": {
+   "ruta": "/ui/wishlist",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19
+    }
+   }
+  },
+  "mi-biblioteca-auditoria": {
+   "ruta": "/ui/auditoria",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11
+    }
+   }
+  },
+  "ajustes": {
+   "ruta": "/ui/ajustes",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37
+    }
+   }
+  },
+  "estado": {
+   "ruta": "/estado",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    }
+   }
+  },
+  "aviso-legal-asistente": {
+   "ruta": "/ui/legal",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    }
+   }
+  },
+  "aviso-legal-texto": {
+   "ruta": "/legal",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    }
+   }
+  }
+ },
+ "chrome": "Chrome/154.0.8037.92"
+}
