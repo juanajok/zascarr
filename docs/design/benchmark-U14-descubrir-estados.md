@@ -18,7 +18,7 @@ en tema oscuro; el enlace `↗` no decía adónde lleva.
 |---|---|---|
 | Espera sin indicador | 15–20 s con «Mortadelo» | Auditoría en la Pi. **No lo he vuelto a medir** (necesita las fuentes reales) |
 | Fuentes consultadas | hasta 4, **en paralelo** (`asyncio.gather`), cada una con su cliente | `services/discovery.py:134` |
-| «Tarda demasiado» | **No hay plazo global.** Cada cliente HTTP tiene `timeout=30.0` **por petición** | `comic_vine.py:69`, `anilist.py:82`, `tebeosfera.py:126`, `gcd.py:82`. Una búsqueda puede esperar a la más lenta |
+| «Tarda demasiado» | **No hay plazo global, y 30 s NO es el máximo de una búsqueda.** Cada cliente HTTP tiene `timeout=30.0` **por petición**; además Comic Vine y AniList **reintentan hasta 3 veces** (`_MAX_RETRIES = 3`) durmiendo `Retry-After` (valor del servidor) o 2·2ⁿ s, y Tebeosfera encadena hasta **4 peticiones** (`MAX_SALTOS = 3`) con espaciado de 2,5 s | `comic_vine.py:18,69,84-96`, `anilist.py:39,82,92-103`, `tebeosfera.py:68,126,151`, `gcd.py:82`. **La cota total por fuente no está calculada ni medida**; no se afirma ninguna |
 | Estado por fuente | ya existe: `Busqueda.fuentes` = `ok` / `apagada` / `sin_clave` / `error` | `services/discovery.py:55,101` (`search_detallada`). La web usa `search()`, que lo descarta |
 | Aviso de fallo | «{Fuente}: no se pudo consultar ahora mismo.» | `discovery.py:140`; **no dice que las demás sí respondieron** |
 | Aviso de «sin clave» | «…añade COMICVINE_API_KEY en tu .env…» | `discovery.py:114`: nombre de variable de entorno y fichero, jerga de administrador |
@@ -103,10 +103,11 @@ en tema oscuro; el enlace `↗` no decía adónde lleva.
    Vine no está configurado: añade su clave en Ajustes». *Corrección al implementar:* **se hace en la capa web**
    (`web/descubrir_texto.py::resumir`), no en el servicio: `discovery.py` y sus pruebas no cambian, y la web deja de pintar
    los avisos de texto del servicio.
-5b. **«Tarda demasiado»: no se añade un plazo global.** Cada cliente ya corta a los 30 s **por petición** y entonces la
-   fuente queda como `error` y se nombra. Un plazo menor (p. ej. 20 s por fuente) cambiaría **lo que devuelve el
-   servicio** y es una decisión de producto no pedida por los criterios 1–6. **Para el revisor:** ¿basta con esta lectura
-   del criterio 7, o quiere un plazo explícito?
+5b. **«Tarda demasiado»: no se añade un plazo global, y no se afirma ninguna duración máxima.** Una fuente que
+   falla (por error o por agotar sus reintentos) queda como `error` y se nombra; una que **tarda** simplemente tarda: el
+   indicador sigue visible mientras haya una petición en vuelo. **No se debe decir «30 segundos» como tope**: es el de cada
+   petición, y los reintentos y los saltos suman. Un plazo explícito (p. ej. 20 s por fuente) cambiaría lo que devuelve el
+   servicio y no lo piden los criterios. *Aprobado por el revisor: no se exige en U14, con esa salvedad de redacción.*
 6. **Controles del sistema.** El `select` de tradición reutiliza el patrón ya existente de `.politica-form select`
    (borde de tinta, `--paper`, `--ink`, ≥ 40 px), válido en los dos temas; **no** se añade ningún componente nuevo.
 7. **Enlace externo.** `aria-label` «Ver la ficha de «{título}» en {fuente} (se abre en otra pestaña)»; el `↗` queda
