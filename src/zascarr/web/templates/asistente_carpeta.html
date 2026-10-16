@@ -4,7 +4,7 @@
 <h1>Elegir la serie de una carpeta</h1>
 {% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(1) }}
 <p class="subtitle">Busca la serie en las fuentes o créala a mano. En este paso no se crea ninguna serie ni se vincula ningún archivo.</p>
-<p><a href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
+<p><a class="back-link" href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
 
 {% if apertura is none %}
 {{ ui.aviso("warn", "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado. Vuelve a «Pendientes por carpeta» para ver lo que queda.") }}

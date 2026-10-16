@@ -2,7 +2,7 @@
 {% block title %}Revisar selección y números — ZascArr{% endblock %}
 {% block content %}
 {% from "_asistente_macros.html" import cabecera_vinculacion %}{{ cabecera_vinculacion(resultado) }}
-<p><a href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a>
-   {% if clave %} · <a href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}">Elegir otra serie</a>{% endif %}</p>
+<p><a class="back-link" href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a>
+   {% if clave %} · <a class="back-link" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}">Elegir otra serie</a>{% endif %}</p>
 {% if resultado %}{% include "_vinculacion_resultado.html" %}{% else %}{% include "_vinculacion_revision.html" %}{% endif %}
 {% endblock %}
