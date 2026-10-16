@@ -4,7 +4,8 @@
 > **Esta ficha es de preparación: no se ha escrito código de U19 ni se mueve la tarjeta.** Es un documento propio de
 > U19; no es el estudio U10 ni la ficha de U20 (`benchmark-U20-marcar-todos.md`).
 > Cierra tres casillas de la Definition of Ready de #206: vigencia contra un SHA, ficha §13 identificada con su
-> decisión, y matriz de navegación. **La estimación y las decisiones abiertas (D1–D4) las valida quien revisa.**
+> decisión, y matriz de navegación. **Segunda versión** tras la devolución de la revisión (2026-10-16): D1–D4 resueltas por
+> quien revisa (7) y los dos contratos que faltaban escritos (6.4 conservación al volver; 7.2 lectura del comprobante).
 
 ## 1. Vigencia contra un SHA concreto
 
@@ -74,7 +75,7 @@ hace falta una variante compacta.
 **H6 — La caducidad del comprobante acota el criterio 7.** El informe de vinculación se conserva `RETENCION_HORAS` =
 24 desde la creación (`vinculacion.py:57`) y después se purga; el servicio solo expone `confirmar(token)`, no una
 lectura por `operacion_id`. «Volver después de vincular muestra el resultado acreditado por el comprobante» es
-cierto **hasta 24 h** y **necesita una lectura nueva** (ver D3).
+cierto **hasta 24 h** y **necesita una lectura nueva** (ver 7.2).
 
 ## 3. Referencias consultadas (código leído, no pantallas)
 
@@ -184,83 +185,167 @@ Elegir (R→P, L→P/V), cambiar de pantalla, paginar y «Volver» no confirman 
 X solo se escriben las filas de E1 y E2 (la prueba compara la BD y el disco antes y después de cada transición que no
 sea confirmación).
 
-## 7. Diseño propuesto y decisiones abiertas
+### 6.4 Referencias de navegación: qué conserva cada pantalla y cómo se valida (contrato de D4)
 
-> Esto es una **propuesta para validar**, no una decisión tomada. Quien revisa decide D1–D4 antes de implementar.
+Completa 6.2. La URL es la única memoria que no depende del navegador (las respuestas llevan `Cache-Control: no-store`,
+así que **no se confía en la caché ni en el botón Atrás**). Cuatro reglas:
 
-**Propuesta (recorrido objetivo):** A → (R | L | M) → P → C → V → X, con un indicador de tres pasos
-(«1 Elegir la serie», «2 Revisar los archivos», «3 Vincular») en A, P, C, V y X, `aria-current="step"` en el actual y
-una frase que no da por hecho lo pendiente.
+1. **La URL lleva solo referencias que el servidor revalida en cada carga.** Ninguna es un permiso: el acceso lo da la
+   autenticación existente (ver 7.2).
+2. **Todo lo reconstruible tiene un GET gemelo de solo lectura** (la vista previa ya es de solo lectura: `previsualizar`
+   no escribe). Las acciones con efecto siguen siendo POST con su token y su botón.
+3. **Ninguna reconstrucción consulta una fuente externa.** Lo que no se puede reconstruir sin consultarlas (la lista de
+   candidatas de R) **se dice**, y de ella solo se conserva el *texto* de la consulta para rellenar el campo, nunca para
+   ejecutarla: buscar de nuevo es siempre un botón que pulsa la persona.
+4. **Si la referencia falta, caduca o ya no vale, se dice qué pasó y qué se puede hacer**; nunca se rehace en silencio
+   ni se muestra una pantalla vacía.
 
-- **D1 — Selección local directa (criterio 1).** *Propuesta:* un bloque «Series que ya tienes» en A con un buscador
-  `hx-get` (título parcial) sobre `ReviewService.search_series`, y los `parecidas_locales` pintados bajo cada
-  candidata de R. Elegir una serie local lleva a V **sin pasar por P/C** (no hay alta: no hay E1) con la frase
-  «Ya en tu biblioteca». Sin selección automática aunque haya un solo resultado. *Cuestión:* `search_series` no filtra
-  por tradición ni muestra año/editorial: el criterio 1 pide «datos para distinguirlas» → mostrar año, tradición y nº
-  de números ya vinculados (consulta de lectura, ¿es aceptable el coste en la Pi? límite 20 ya existe).
-- **D2 — Continuidad desde una candidata (criterio 2).** *Propuesta:* en `/elegir`, en lugar de la página muerta,
-  devolver la vista previa del alta **con grupo** (`previsualizar(clave, candidata=…)`, ya existe; H1). Cambio solo en
-  la capa web: pasar `clave` a la plantilla y distinguir el origen. *Alternativa descartada:* quitar `/elegir` y que
-  las candidatas apunten directamente a `/ui/descubrir/revisar`: `revisar` ya mezcla dos orígenes y un tercero
-  (candidata + grupo) la volvería más difícil de probar. Mantener `/elegir` como el paso que pide la tradición.
-- **D3 — Volver y recargar (criterios 5–7).** Es **la parte de más riesgo** (H6). Dos opciones:
-  - *A (mínima, solo estado de la BD):* los textos de V y de A se calculan por lo que existe en la base («la serie ya
-    existe», «quedan N pendientes»); X sigue siendo un fragmento. Criterio 7 se cumple en el sentido de «no se vuelve
-    a ejecutar ni se llama pendiente a lo vinculado», **pero no** muestra el informe del comprobante.
-  - *B (completa):* una **lectura nueva** del comprobante por `operacion_id` (`GET …/vinculacion/resultado?operacion=`,
-    solo lectura, válida mientras dure la retención de 24 h; después, el mensaje de «ya no se conserva el resultado»
-    que ya existe). Toca `services/vinculacion.py` (método de lectura, sin cambiar `confirmar` ni el formato del
-    informe; la tarjeta lo permite: «no cambia ejecutar_vinculacion ni el formato del comprobante»).
-  *Recomendación:* **B**, porque el criterio 7 dice «acreditado por el comprobante». Si se prefiere A, debe quedar
-  escrito que el criterio 7 se cumple en versión reducida.
-- **D4 — Cómo se conserva «lo elegido» al volver (criterio 5).** Sin JS y sin guardar nada en el servidor, la única
-  memoria es la URL. *Propuesta:* que R, L y M acepten sus parámetros en la URL (`?clave=&consulta=`) y que el enlace
-  «Volver» de P/E las reconstruya; las acciones siguen siendo POST. Sin esto, «volver antes del alta» no puede
-  conservar la elección más allá de lo que el navegador cachee (y las respuestas llevan `Cache-Control: no-store`).
+| Pantalla | URL de reconstrucción (GET, sin efectos) | Referencia mínima | Cómo se valida | Si caduca, cambia o falta |
+|---|---|---|---|---|
+| **A** asistente | `…/asistente?clave=&consulta=` | `clave`; `consulta` (≤ 200 caracteres, solo precarga el campo) | el grupo existe (ya existe) | grupo sin registros → la página de «esa carpeta ya no tiene registros pendientes» (ya existe). La consulta **no se ejecuta** |
+| **R** resultados de fuentes | **no se reconstruye** | — | — | Al volver a A: «La búsqueda no se conserva (volver a hacerla consulta las fuentes). Pulsa «Buscar» si quieres repetirla». Nada se lanza solo |
+| **L** series locales | `…/asistente/locales?clave=&q=` | `clave`, `q` (texto) | solo consulta la base local (`search_series`, ≤ 20) | sin resultados → «No hay series tuyas con ese título» (no es un error) |
+| **M** a mano | `…/asistente/manual?clave=&titulo=&anio=` (ya admite `titulo`) | texto tecleado | las reglas de `DatosManuales` (título, año 1..9999, tradición) | datos inválidos → el formulario con el motivo y lo escrito (ya existe) |
+| **P** vista previa del alta, desde candidata | `…/asistente/alta?clave=&candidata=<token>&tradition=` | el **token de candidata** (firmado, ligado a la `clave`, 15 min) y la tradición elegida | `verificar_token_candidata(token, clave)` + tradición ∈ enum. Recalcula la vista previa (las parecidas pueden haber cambiado: es lo que ya hace el servicio) | token caducado, manipulado o de otra carpeta → «Lo que elegiste caducó (se conserva 15 minutos) o no es de esta carpeta. Vuelve a buscar», con A y la consulta precargada, **sin buscar** |
+| **P** a mano | `…/asistente/alta?clave=&titulo=&anio=&tradition=` | datos tecleados | `DatosManuales` | igual que M |
+| **C** alta hecha | `…/asistente/alta/resultado?clave=&series_id=[&operacion=]` | `series_id` (y `operacion`, solo si el alta *creó* la serie) | la `Series` existe; si hay `operacion`, su fila de `alta_operaciones` coincide en `series_id` | ver «C reconstruida» abajo |
+| **V** revisión | `…/asistente/vinculacion?clave=&series_id=&cursor=` (ya existe) | `clave`, `series_id` | grupo y serie existen (`MENSAJE_GRUPO_NO_EXISTE`, `MENSAJE_SERIE_NO_EXISTE`, ya existen) | ver el aviso de contexto abajo |
+| **X** resultado de la vinculación | `…/asistente/vinculacion/resultado?ref=<referencia>` | la **referencia firmada** de 7.2 | 7.2 | 7.2 |
+
+**C reconstruida** (criterio 6). Lo que el servidor sabe de un alta: una fila de `alta_operaciones` solo existe si el alta
+**creó** la serie (estado `creada` o `deshecha`); **reutilizar no escribe nada** y no deja comprobante. Por tanto la pantalla
+dice solo lo que consta:
+
+| Hechos que el servidor encuentra | Texto (resumen) | ¿Ofrece «Deshacer»? |
+|---|---|---|
+| Serie existe + fila `creada` | «La serie «X» ya está creada. Quedan N archivos de la carpeta sin vincular.» + «Revisar los archivos» | **No** (solo la respuesta recién hecha lo ofrece; reconstruir no reabre un efecto) |
+| Fila `deshecha` | «El alta de «X» se deshizo: la serie ya no está en tu biblioteca.» + «Volver a elegir la serie» | No |
+| Serie existe, sin fila (reutilizada, o comprobante ya purgado) | ««X» está en tu biblioteca.» **No afirma** si la creó este recorrido ni que no | No |
+| Serie no existe, sin fila | «Esa serie ya no existe. Vuelve a elegir.» | No |
+
+**Aviso de contexto en V** (criterios 5–6): cuando V se abre con una `series_id` válida, dice «Vas a preparar los archivos de
+esta carpeta para «X» (ya en tu biblioteca). Esta pantalla no vincula nada hasta que lo confirmes.» y el número de
+pendientes que quedan. **No afirma** «aún no se ha vinculado nada» por su cuenta: eso no consta sin comprobante; se dice con
+hechos («quedan N archivos pendientes de esta carpeta»).
+
+**Cambiar de serie en V descarta los borradores de la anterior** (patrón de Sonarr, 5): los borradores viajan por
+`series_id`; con otra serie, la revisión se abre limpia.
+
+## 7. Decisiones y contratos
+
+> **Revisión recibida (2026-10-16, en la conversación; no hay review en GitHub).** #218 **devuelta** por dos bloqueantes:
+> la conservación de D4 sin especificar (6.4 la completa) y la lectura del comprobante sin contrato (7.2 lo define). Las
+> decisiones D1–D4 las resolvió quien revisa; se recogen tal cual.
+
+| Decisión | Resolución del revisor | Cómo la recoge esta ficha |
+|---|---|---|
+| **D1** Selección local | Buscador local y entrada directa a revisión, sin alta ni preselección. Mostrar título, año y tradición disponibles. El número de ejemplares vinculados es **opcional**: no añadir consultas por fila solo para enriquecer el selector | L muestra título, año y tradición **de la misma consulta** (`Series` ya trae ambos). **Se retira** de la propuesta anterior el «nº de números vinculados» (era una consulta por fila). Sin selección automática aunque haya un solo resultado |
+| **D2** Candidata con carpeta | Reutilizar `previsualizar(clave, candidata=…)` desde `/elegir`, conservando el grupo. Elegir no escribe; alta y vinculación mantienen confirmaciones separadas | `/elegir` pasa a devolver la vista previa del alta **con grupo** (P). Confirmar (C) y vincular (X) siguen siendo dos botones y dos tokens |
+| **D3** Resultado al volver | **B:** lectura del comprobante, sin ejecutar de nuevo. A no cumple íntegramente el criterio 7 y no se autoriza rebajarlo | 7.2 |
+| **D4** Conservación al volver | URLs para el estado de navegación y referencias verificadas, pero `clave + consulta` no basta: debe distinguir selección local, candidata elegida y alta confirmada; volver no relanza búsquedas externas | 6.4 |
+
+### 7.1 Recorrido objetivo
+
+A → (R | L | M) → P → C → V → X, con un indicador de tres pasos («1 Elegir la serie», «2 Revisar los archivos», «3
+Vincular») en A, P, C, V y X, `aria-current="step"` en el actual y sin presentar lo pendiente como hecho. Elegir una serie
+**local** (L) lleva a V sin pasar por P ni C (no hay alta: no hay E1).
+
+### 7.2 Contrato de la lectura del comprobante de la vinculación (D3-B)
+
+**Qué es.** Una ruta `GET …/asistente/vinculacion/resultado?ref=` de **solo lectura** que vuelve a pintar el informe ya
+guardado en `vinculacion_operaciones`. **Nunca** confirma, reintenta, repara ni alarga la retención.
+
+**La referencia (`ref`).** Un token firmado como los demás (`crear_token`), con propósito propio `resultado_vinculacion`,
+contexto = la `clave` del grupo, datos `{series_id, operacion}` y TTL = `RETENCION_HORAS` × 3600 (la emisión es `exp − TTL`,
+igual que `confirmar` calcula la firma de un token caducado). Lo emite la ruta `confirmar` **a partir del token ya validado**
+(serie, grupo y operación salen de él, no del formulario) y lo pone en los enlaces del resultado. *Por qué firmada y no
+`?operacion=`:* (a) liga `clave`, `series_id` y `operacion` entre sí y a este servidor; (b) permite **distinguir «expirado»
+de «inexistente»**: borrada la fila por la purga, solo una referencia firmada demuestra que existió y cuándo se emitió. Es
+**integridad y contexto, no control de acceso**.
+
+**Servicio.** Un método de lectura en `VinculacionDeArchivos` (sin tocar `confirmar`, el formato del informe ni la tabla):
+dado `(operacion_id, series_id)` devuelve la `RespuestaEjecucion` con `repetida=True` si la fila existe **y su `serie_id`
+coincide**, o `None`. Reglas: una consulta por clave primaria más la de nombres actuales; **sin candado consultivo**, sin
+`_purgar()`, sin `commit` con escritura, sin `flush`. (La tabla ya rechaza todo `UPDATE` con un disparador: la prueba lo
+comprueba igualmente.)
+
+**Estados** (los tres que pide la revisión y una cuarta salvedad):
+
+| Estado | Condición | Qué ve la persona | Qué puede hacer |
+|---|---|---|---|
+| **Válido** | `ref` verifica (firma, propósito, contexto = `clave`) **y** hay fila **y** `serie_id` coincide | El informe de siempre (totales, por archivo, motivos en llano) con el aviso ya existente «este es su resultado guardado, no se ha repetido nada» | «Revisar de nuevo» (la acción que ya ofrece el informe), «Volver a las carpetas» |
+| **Inexistente** | `ref` no verifica (manipulada, malformada, de otra carpeta) **o** verifica pero la fila trae otra `serie_id` | «Esta referencia no es válida. No se ha cambiado nada.» **Sin pistas** sobre si existe o no esa operación | «Volver a las carpetas» |
+| **Expirado** | `ref` verifica, **no hay fila**, y `ahora ≥ emisión + RETENCION_HORAS` | «El resultado de esta vinculación ya no se conserva (pasaron más de 24 horas). Que se haya borrado no deshace nada: revisa la carpeta para ver su estado actual.» | «Revisar de nuevo» |
+| **No encontrado (aún sin plazo)** | `ref` verifica, no hay fila, y `ahora < emisión + RETENCION_HORAS` | «No se encuentra el resultado de esta vinculación. **No se sabe** si se aplicó: no lo des por hecho ni por fallido.» Sin botón de reintento (no hay token que repetir aquí) | «Revisar de nuevo» para ver qué hay vinculado |
+
+Es el mismo razonamiento que `confirmar` ya aplica a un token caducado (`puede_haberse_aplicado`) y **no inventa
+éxito, recuperación ni reintento**.
+
+**Qué datos expone.** Exactamente lo que el resultado inmediato ya muestra: totales, estado y número por archivo, motivo
+traducido, «número nuevo en la serie», y el **nombre actual** de cada archivo que aún exista (presentación, no del informe;
+si ya no existe, el texto que hoy se usa). **No** expone rutas, ids de archivo, token, sesión ni hash (el modelo no los
+guarda). Las respuestas llevan `Cache-Control: no-store`.
+
+**Acceso.** Lo da el `AuthMiddleware` global (A6) como para el resto de `/ui`: con la autenticación activada, sin sesión no
+se llega ni a la ruta. ZascArr tiene **un solo operador** (no hay usuarios ni permisos por objeto), así que no hay IDOR que
+modelar; el `operacion_id` (UUID aleatorio) no es un secreto, pero tampoco hay forma de listar operaciones. La `clave` ya
+viaja en las URLs del asistente; no se añade ningún dato nuevo.
 
 ## 8. Casos de prueba que se escribirán ANTES de implementar (§13 punto 5)
 
 **Aún no existen.** Se escribirán rojos primero, en Postgres real (`entorno`/`ent`, patrón de
-`tests/test_asistente_carpetas_pg.py`). El caso que motivó la historia y los límites que las referencias no cubren:
+`tests/test_asistente_carpetas_pg.py`).
 
 | # | Criterio | Prueba (nombre por mecanismo) |
 |---|---|---|
-| T1 | 1 | `test_serie_local_sin_identificadores_se_encuentra_y_se_elige_sin_alta` — serie sin `comic_vine_id`/`anilist_id`/`tebeosfera_slug`; buscar y elegir lleva a V; no se crea ninguna `Series` |
-| T2 | 1 | `test_candidatas_ambiguas_muestran_datos_y_no_se_elige_ninguna` — dos locales con el mismo título; ninguna preseleccionada; se ven año y tradición |
-| T3 | 2 | `test_candidata_de_fuente_con_grupo_llega_a_la_vista_previa_del_alta` — regresión de H1 (hoy rojo: token con grupo no verifica sin grupo) |
-| T4 | 2 | `test_elegir_candidata_no_crea_nada` y `test_confirmar_el_alta_no_vincula_ningun_archivo` (compara BD y disco) |
+| T1 | 1 | `test_serie_local_sin_identificadores_se_encuentra_y_se_elige_sin_alta` — serie sin ids externos; buscar y elegir lleva a V; no se crea ninguna `Series` |
+| T2 | 1 | `test_candidatas_ambiguas_muestran_titulo_anio_y_tradicion_y_no_se_elige_ninguna` — dos locales con el mismo título; ninguna preseleccionada, ni con una sola |
+| T2b | 1 | `test_el_selector_local_no_hace_una_consulta_por_fila` — nº de sentencias constante con 1 y con 20 resultados (D1) |
+| T3 | 2 | `test_candidata_de_fuente_con_grupo_llega_a_la_vista_previa_del_alta` — regresión de H1 (hoy rojo) |
+| T4 | 2, 4 | `test_elegir_candidata_no_crea_nada` y `test_confirmar_el_alta_no_vincula_ningun_archivo` (BD y disco idénticos) |
 | T5 | 2 | `test_candidata_ya_existente_se_reutiliza_y_no_se_duplica` y `test_la_revision_recibe_el_series_id_local_no_el_externo` |
 | T6 | 3 | `test_cada_pantalla_marca_su_paso_con_aria_current_step` y `test_el_paso_pendiente_no_se_presenta_como_hecho` |
 | T7 | 4 | `test_navegar_y_volver_no_escriben_en_la_bd` — recorre todas las transiciones de 6.1 que no son confirmación |
-| T8 | 5 | `test_volver_antes_del_alta_conserva_la_eleccion_y_dice_que_no_hay_nada_creado` |
-| T9 | 6 | `test_volver_despues_del_alta_dice_que_la_serie_existe_y_no_la_repite_ni_la_deshace` |
-| T10 | 7 | `test_volver_despues_de_vincular_muestra_el_comprobante_y_no_ejecuta_de_nuevo` (con D3-B) y el caso de comprobante expirado |
-| T11 | 8 | `test_serie_borrada_grupo_vaciado_o_token_caducado_dicen_el_resultado_real` — sin inventar IDs ni reintentos de resultado desconocido |
+| T8a | 5 | `test_p_desde_candidata_se_reconstruye_por_get_sin_efectos` — mismo resultado que el POST; BD idéntica |
+| T8b | 5 | `test_p_caducada_manipulada_o_de_otra_carpeta_dice_que_caduco_y_no_busca` — token caducado (`ahora` controlado), con la firma rota y firmado para otra `clave` |
+| T8c | 5 | `test_volver_nunca_llama_a_las_fuentes` — `buscar_a_ritmo` y `DiscoveryService.search*` sustituidos por funciones que fallan; recorrer A, P, C, V, X reconstruidos |
+| T8d | 5 | `test_la_consulta_se_precarga_pero_no_se_ejecuta` |
+| T8e | 5 | `test_la_serie_elegida_cambia_o_desaparece_antes_de_volver` — la vista previa se recalcula y lo dice; serie borrada → mensaje, sin éxito inventado |
+| T9a | 6 | `test_c_reconstruida_con_alta_creada_dice_que_la_serie_existe_sin_repetirla_ni_deshacerla` — BD idéntica; sin botón «Deshacer» |
+| T9b | 6 | `test_c_reconstruida_cubre_creada_deshecha_reutilizada_y_purgada` — las cuatro filas de 6.4; **nunca** dice «no hubo alta» |
+| T10a | 7 | `test_lectura_valida_devuelve_el_informe_guardado_sin_ejecutar` — `confirmar` sustituido por uno que falla; `vinculacion_operaciones` (incl. `creada`) y `files`/`issue_files` idénticos antes y después |
+| T10b | 7 | `test_lectura_inexistente` — `ref` malformada, con la firma rota, firmada para otra `clave`, y válida con otra `serie_id`: el mismo texto sin pistas |
+| T10c | 7 | `test_lectura_expirada_y_no_encontrada` — con `ahora` controlado: fila purgada tras 24 h → «expirado»; fila ausente antes de 24 h → «no encontrado» sin éxito ni fracaso |
+| T10d | 7 | `test_la_lectura_no_alarga_la_retencion` — leer no cambia `creada`; tras 24 h y token caducado, la purga borra igual aunque se haya leído |
+| T10e | 7 | `test_la_lectura_no_confirma_ni_reintenta` — ninguna escritura (comparación de sentencias), sin candado consultivo, sin llamar a `_purgar` |
+| T10f | 7 | `test_la_lectura_no_expone_rutas_token_ni_sesion` — el cuerpo no contiene `file_path`, el token ni `zascarr_session` |
+| T10g | 7 | `test_la_lectura_exige_autenticacion` — con `auth_mode=password` y sin cookie, la ruta no devuelve el informe |
+| T11 | 8 | `test_serie_borrada_grupo_vaciado_o_token_caducado_dicen_el_resultado_real` — sin inventar IDs ni reintentos de resultado desconocido (alta y vinculación) |
 | T12 | límite | `test_cambiar_de_serie_descarta_los_numeros_borrador_de_la_anterior` (patrón de Sonarr) |
-| T13 | límite | `test_token_de_candidata_con_clave_larga_cabe_en_el_campo` (H2: ya medido a mano, sin test) |
+| T13 | límite | `test_token_de_candidata_con_clave_larga_cabe_en_el_campo` (H2: medido a mano, sin test) |
 
 Verificación en navegador (DoD): el entorno del ensayo (`ensayo.sh`) **mantiene las fuentes externas apagadas a
-propósito**; el camino «candidata de fuente» se verificará con candidatas **simuladas** (como en U14) y se declarará
-así, **NOT RUN** contra fuentes reales. El teclado se prueba con eventos reales (CDP), no por inspección.
+propósito**; el camino «candidata de fuente» se verifica con candidatas **simuladas** (como en U14) y se declara así. El
+teclado se prueba con eventos reales (CDP); el anuncio del indicador de pasos, con Orca como en U14. Lo no ejecutado
+(otros lectores, móvil real, Pi) se declara **NOT RUN**.
 
 ## 9. Estimación (relativa, sin datos de flujo)
 
-La tarjeta dice 8 / L / confianza Baja. Con lo leído:
+Se mantiene **8 y confianza Media** (decisión del revisor); esta ficha no las cambia. Lo que añaden los contratos:
 
 | Pieza | Tamaño relativo | Riesgo |
 |---|---|---|
-| D2: cablear `/elegir` → vista previa con grupo (H1) | S | Bajo: el servicio existe |
-| D1: buscador local + `parecidas_locales` + datos para distinguir | M | Medio: consulta de lectura nueva, accesibilidad del resultado |
+| D2: `/elegir` → vista previa con grupo (H1) | S | Bajo: el servicio existe |
+| D1: buscador local + `parecidas_locales` (sin consulta por fila) | M | Medio |
 | Indicador de pasos en 5 plantillas + CSS compacto | S | Bajo |
-| D4: parámetros en la URL y textos de volver | S–M | Medio: muchos estados (6.2) |
-| D3-B: lectura del comprobante + ruta | M | **Alto** (toca el servicio de vinculación sin cambiar su contrato) |
-| T1–T13 en Postgres real + evidencia de navegador | M | Medio |
+| D4: GET gemelos (P, C), `ref`, avisos de V, textos de volver (6.4) | M | **Medio-alto**: muchos estados |
+| D3-B: lectura + `ref` + ruta + cuatro estados (7.2) | M | **Alto**: toca el servicio de vinculación sin cambiar su contrato |
+| T1–T13 en Postgres real + evidencia de navegador/Orca | M–L | Medio |
 
-**Sin datos de flujo no se calibra con medidas, solo con comparación relativa:** la parte de continuidad (D2 + D1 +
-indicador) es comparable a U20; D3-B es lo que hace que la tarjeta sea grande. *Propuesta:* mantener **8** y subir la
-confianza de Baja a **Media** (H1 y H3 reducen la incertidumbre), con la advertencia de que si D3-B se complica, la
-salida honesta es **partir** en U19a (continuidad: D1, D2, indicador, criterios 1–4 y 8) y U19b (volver/recargar:
-criterios 5–7). **La partición no se hace sin que quien revisa la decida.**
+La carga se concentra en D3 y D4, que son los criterios 5–7. **Señal para decidir partir** (la decide quien revisa, no
+yo): si al escribir los tests rojos de T8–T10 el cableado de 6.4 y 7.2 supera lo que cabe en una sola PR revisable. **Una
+partición no elimina los criterios 5–7:** cualquier corte debe dejarlos como una tarjeta enlazada a #206 con su
+trazabilidad (criterio → prueba), y #206 no se cierra mientras ellos estén abiertos.
 
 ## 10. Qué NO cambia
 
