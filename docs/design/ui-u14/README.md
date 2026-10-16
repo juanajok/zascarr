@@ -43,8 +43,10 @@ Mediciones de la rama `claude/u14-descubrir`, 2026-10-16. Ficha: `docs/design/be
 - **Lector de pantalla real (Orca/NVDA/VoiceOver): NOT RUN.** Está comprobado el **marcado** (una región, `polite`, `atomic`,
   fuera del destino, actualizada por `hx-swap-oob`) y que el navegador la expone una sola vez, **no cómo la verbaliza** cada
   lector. En U11 se hizo con Orca; aquí queda pendiente.
-- **Fuentes reales y tiempos reales:** la espera de 15–20 s de la auditoría no se ha reproducido; el plazo máximo sigue siendo
-  el de cada cliente (30 s por petición).
+- **Fuentes reales y tiempos reales:** la espera de 15–20 s de la auditoría no se ha reproducido. **No hay una
+  duración máxima conocida de una búsqueda:** 30 s es el tope de **cada petición**; Comic Vine y AniList reintentan hasta 3
+  veces (durmiendo `Retry-After` o 2·2ⁿ s) y Tebeosfera encadena hasta 4 peticiones, así que el total por fuente no está
+  acotado por 30 s ni se ha medido.
 - Firefox y Safari (iOS); un móvil real; la Pi: **NOT RUN**.
 - Hay un hueco vacío bajo el buscador (el indicador oculto conserva su línea para que el resultado no salte al aparecer): es
   una decisión de maquetación, no un error, pero se ve.
