@@ -49,7 +49,7 @@ CARPETA = "Comics/Flash (1987)"
 
 @pytest.fixture(autouse=True)
 def _secreto(monkeypatch):
-    ajustes = lambda: SimpleNamespace(secret_key=SECRETO)           # noqa: E731
+    ajustes = lambda: SimpleNamespace(secret_key=SECRETO, comicvine_enabled=False, comicvine_api_key="", anilist_enabled=False, tebeosfera_enabled=False, gcd_enabled=False)   # noqa: E731
     monkeypatch.setattr(web_discovery, "get_settings", ajustes)
     monkeypatch.setattr(asistente_vinculacion, "get_settings", ajustes)
 

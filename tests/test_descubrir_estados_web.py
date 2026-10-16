@@ -196,7 +196,7 @@ class TestResultadoAnunciado:
         regiones = re.findall(r'<div id="descubrir-estado"[^>]*>', t)
         assert len(regiones) == 1
         assert 'aria-live="polite"' in regiones[0] and 'aria-atomic="true"' in regiones[0]
-        assert 'class="region-viva sr"' in regiones[0]               # solo para el lector: no duplica lo que se ve
+        assert 'class="sr"' in regiones[0]               # solo para el lector: no duplica lo que se ve
         assert len(re.findall(r'aria-live=|role="status"|role="alert"', t.split("<main", 1)[-1])) == 1
         destino = re.search(r'<div id="resultados-descubrir"[^>]*>(.*?)</div>', t, re.S).group(1)
         assert "aria-live" not in destino                       # la región NO es el destino: no se lee la lista entera
@@ -207,7 +207,7 @@ class TestResultadoAnunciado:
         assert len(oob) == 1 and "2 resultados." in visible(oob[0])
         etiqueta = re.search(r'<div id="descubrir-estado"[^>]*>', t).group(0)
         assert 'hx-swap-oob="true"' in etiqueta and 'aria-live="polite"' in etiqueta and 'aria-atomic="true"' in etiqueta
-        assert 'class="region-viva sr"' in etiqueta
+        assert 'class="sr"' in etiqueta
         # el recuento VISIBLE existe y no se lee dos veces (el lector ya tiene la región)
         assert re.search(r'<p class="discovery-count" aria-hidden="true">2 resultados</p>', t)
         resto = re.sub(r'<div id="descubrir-estado".*?</div>', "", t, flags=re.S)
