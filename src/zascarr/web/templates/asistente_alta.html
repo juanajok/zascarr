@@ -4,6 +4,7 @@
 {#- Vista previa del alta, reconstruida por GET (U19, ficha §6.4): solo lectura. Crear la serie es el botón de la vista previa
     (una acción aparte con su propio token); esta pantalla no escribe nada ni consulta ninguna fuente. -#}
 <h1>Crear la serie de la carpeta</h1>
+{% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(1) }}
 <p class="subtitle">Esto es solo una vista previa: no se crea nada hasta que lo confirmes, y crear la serie no vincula ningún archivo.</p>
 <p><a href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">← Volver a elegir la serie de esta carpeta</a>
    · <a href="/ui/pendientes/carpetas">Volver a «Pendientes por carpeta»</a></p>
