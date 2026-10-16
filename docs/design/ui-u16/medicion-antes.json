@@ -1,0 +1,2946 @@
+{
+ "etiqueta": "antes",
+ "pantallas": {
+  "panel": {
+   "ruta": "/ui/",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#q-inicio.search-input[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 19,
+       "ancho": 145.8
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.primary",
+       "texto": "Ver y registrar →",
+       "alto": 40,
+       "ancho": 298
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Revisar ahora →",
+       "alto": 40,
+       "ancho": 298
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Buscar más",
+       "alto": 40,
+       "ancho": 298
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Configurar",
+       "alto": 40,
+       "ancho": 298
+      },
+      {
+       "sel": "button.btn.sm.neutro",
+       "texto": "Buscar →",
+       "alto": 40,
+       "ancho": 290
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 16
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#q-inicio.search-input[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 19,
+       "ancho": 145.8
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.primary",
+       "texto": "Ver y registrar →",
+       "alto": 40,
+       "ancho": 328
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Revisar ahora →",
+       "alto": 40,
+       "ancho": 328
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Buscar más",
+       "alto": 40,
+       "ancho": 328
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Configurar",
+       "alto": 40,
+       "ancho": 328
+      },
+      {
+       "sel": "button.btn.sm.neutro",
+       "texto": "Buscar →",
+       "alto": 40,
+       "ancho": 320
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 16
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#q-inicio.search-input[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 19,
+       "ancho": 145.8
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.primary",
+       "texto": "Ver y registrar →",
+       "alto": 40,
+       "ancho": 352
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Revisar ahora →",
+       "alto": 40,
+       "ancho": 352
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Buscar más",
+       "alto": 40,
+       "ancho": 352
+      },
+      {
+       "sel": "a.btn.sm",
+       "texto": "Configurar",
+       "alto": 40,
+       "ancho": 352
+      },
+      {
+       "sel": "button.btn.sm.neutro",
+       "texto": "Buscar →",
+       "alto": 40,
+       "ancho": 344
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 16
+    }
+   }
+  },
+  "biblioteca": {
+   "ruta": "/ui/biblioteca",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#f-q[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "select#f-tradition",
+       "fuente_px": 14.4,
+       "alto": 43,
+       "etiqueta": "tradition"
+      },
+      {
+       "sel": "select#f-publisher",
+       "fuente_px": 14.4,
+       "alto": 43,
+       "etiqueta": "publisher_id"
+      },
+      {
+       "sel": "input#f-personaje[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#f-saga[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "select#f-tradition",
+       "texto": "Todas las tradiciones Grapa americana Fr",
+       "alto": 43,
+       "ancho": 189
+      },
+      {
+       "sel": "select#f-publisher",
+       "texto": "Todas las editoriales Editorial de Prueb",
+       "alto": 43,
+       "ancho": 185
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#f-q[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "select#f-tradition",
+       "fuente_px": 14.4,
+       "alto": 43,
+       "etiqueta": "tradition"
+      },
+      {
+       "sel": "select#f-publisher",
+       "fuente_px": 14.4,
+       "alto": 43,
+       "etiqueta": "publisher_id"
+      },
+      {
+       "sel": "input#f-personaje[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#f-saga[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "select#f-tradition",
+       "texto": "Todas las tradiciones Grapa americana Fr",
+       "alto": 43,
+       "ancho": 189
+      },
+      {
+       "sel": "select#f-publisher",
+       "texto": "Todas las editoriales Editorial de Prueb",
+       "alto": 43,
+       "ancho": 185
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#f-q[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "select#f-tradition",
+       "fuente_px": 14.4,
+       "alto": 43,
+       "etiqueta": "tradition"
+      },
+      {
+       "sel": "select#f-publisher",
+       "fuente_px": 14.4,
+       "alto": 43,
+       "etiqueta": "publisher_id"
+      },
+      {
+       "sel": "input#f-personaje[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#f-saga[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "select#f-tradition",
+       "texto": "Todas las tradiciones Grapa americana Fr",
+       "alto": 43,
+       "ancho": 189
+      },
+      {
+       "sel": "select#f-publisher",
+       "texto": "Todas las editoriales Editorial de Prueb",
+       "alto": 43,
+       "ancho": 185
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14
+    }
+   }
+  },
+  "ficha-de-serie": {
+   "ruta": "/ui/series/7eff8313-5c28-43d9-bf8e-dd93b2f6d0a8",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": true,
+     "scroll_width": 413,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [
+      {
+       "sel": "select#wishlist_policy",
+       "derecha": 413,
+       "ancho": 401
+      }
+     ],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "select#wishlist_policy",
+       "texto": "No buscar nada por mi cuenta Buscar los ",
+       "alto": 42,
+       "ancho": 401
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "390": {
+     "desborda_en_horizontal": true,
+     "scroll_width": 413,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [
+      {
+       "sel": "select#wishlist_policy",
+       "derecha": 413,
+       "ancho": 401
+      }
+     ],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "select#wishlist_policy",
+       "texto": "No buscar nada por mi cuenta Buscar los ",
+       "alto": 42,
+       "ancho": 401
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "select#wishlist_policy",
+       "texto": "No buscar nada por mi cuenta Buscar los ",
+       "alto": 42,
+       "ancho": 401
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    }
+   }
+  },
+  "descubrir": {
+   "ruta": "/ui/descubrir",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "Título de la serie"
+      }
+     ],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "input#manual-titulo[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 336
+      },
+      {
+       "sel": "input#manual-anio[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 336
+      },
+      {
+       "sel": "select#manual-tradicion",
+       "texto": "",
+       "alto": 26,
+       "ancho": 159
+      },
+      {
+       "sel": "button",
+       "texto": "",
+       "alto": 40,
+       "ancho": 201.8
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "Título de la serie"
+      }
+     ],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "input#manual-titulo[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 366
+      },
+      {
+       "sel": "input#manual-anio[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 366
+      },
+      {
+       "sel": "select#manual-tradicion",
+       "texto": "",
+       "alto": 26,
+       "ancho": 159
+      },
+      {
+       "sel": "button",
+       "texto": "",
+       "alto": 40,
+       "ancho": 201.8
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "Título de la serie"
+      }
+     ],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "input#manual-titulo[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 390
+      },
+      {
+       "sel": "input#manual-anio[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 390
+      },
+      {
+       "sel": "select#manual-tradicion",
+       "texto": "",
+       "alto": 26,
+       "ancho": 159
+      },
+      {
+       "sel": "button",
+       "texto": "",
+       "alto": 40,
+       "ancho": 201.8
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    }
+   }
+  },
+  "por-revisar": {
+   "ruta": "/ui/pendientes",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#n-ab61c042-a245-4195-917f-796e2139a401.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-ab61c042-a245-4195-917f-796e2139a401.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-a49c35d6-ed5c-4aee-a4fe-92caebc9f256.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-a49c35d6-ed5c-4aee-a4fe-92caebc9f256.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-336ce86d-0c26-426b-a33f-97c7962ed6c7.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-336ce86d-0c26-426b-a33f-97c7962ed6c7.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#q-201e9914-6cb8-4032-a70c-bec17aebe2c4.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#q-084d85f4-f789-4d3d-80f9-52ca58e50b45.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.ghost.pend-carpetas",
+       "texto": "Verlos por carpeta (1 carpeta)",
+       "alto": 40,
+       "ancho": 243.8
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 306
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 306
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 306
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 306
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 306
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 306
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#n-ab61c042-a245-4195-917f-796e2139a401.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-ab61c042-a245-4195-917f-796e2139a401.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-a49c35d6-ed5c-4aee-a4fe-92caebc9f256.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-a49c35d6-ed5c-4aee-a4fe-92caebc9f256.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-336ce86d-0c26-426b-a33f-97c7962ed6c7.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-336ce86d-0c26-426b-a33f-97c7962ed6c7.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#q-201e9914-6cb8-4032-a70c-bec17aebe2c4.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#q-084d85f4-f789-4d3d-80f9-52ca58e50b45.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.ghost.pend-carpetas",
+       "texto": "Verlos por carpeta (1 carpeta)",
+       "alto": 40,
+       "ancho": 243.8
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 336
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 336
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 336
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 336
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 336
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 336
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#n-ab61c042-a245-4195-917f-796e2139a401.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-ab61c042-a245-4195-917f-796e2139a401.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-a49c35d6-ed5c-4aee-a4fe-92caebc9f256.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-a49c35d6-ed5c-4aee-a4fe-92caebc9f256.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#n-336ce86d-0c26-426b-a33f-97c7962ed6c7.issue-input[text]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "issue_number"
+      },
+      {
+       "sel": "input#q-336ce86d-0c26-426b-a33f-97c7962ed6c7.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#q-201e9914-6cb8-4032-a70c-bec17aebe2c4.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      },
+      {
+       "sel": "input#q-084d85f4-f789-4d3d-80f9-52ca58e50b45.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.ghost.pend-carpetas",
+       "texto": "Verlos por carpeta (1 carpeta)",
+       "alto": 40,
+       "ancho": 243.8
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 360
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 360
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 360
+      },
+      {
+       "sel": "button.btn-sugerencia",
+       "texto": "Sí, organizar",
+       "alto": 40,
+       "ancho": 123.4
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 360
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 360
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Ignorar",
+       "alto": 40,
+       "ancho": 360
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30
+    }
+   }
+  },
+  "pendientes-por-carpeta": {
+   "ruta": "/ui/pendientes/carpetas",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a «Por revisar»",
+       "alto": 22,
+       "ancho": 181.2
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.ghost.sm",
+       "texto": "Elegir la serie de esta carpeta",
+       "alto": 40,
+       "ancho": 233.5
+      },
+      {
+       "sel": "summary",
+       "texto": "Ver registros (6)",
+       "alto": 24.8,
+       "ancho": 290
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a «Por revisar»",
+       "alto": 22,
+       "ancho": 181.2
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.ghost.sm",
+       "texto": "Elegir la serie de esta carpeta",
+       "alto": 40,
+       "ancho": 233.5
+      },
+      {
+       "sel": "summary",
+       "texto": "Ver registros (6)",
+       "alto": 24.8,
+       "ancho": 320
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a «Por revisar»",
+       "alto": 22,
+       "ancho": 181.2
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "a.btn.ghost.sm",
+       "texto": "Elegir la serie de esta carpeta",
+       "alto": 40,
+       "ancho": 233.5
+      },
+      {
+       "sel": "summary",
+       "texto": "Ver registros (6)",
+       "alto": 24.8,
+       "ancho": 344
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12
+    }
+   }
+  },
+  "asistente-de-carpeta": {
+   "ruta": "/ui/pendientes/carpetas/asistente?clave=_Unsorted",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a «Pendientes por carpeta»",
+       "alto": 22,
+       "ancho": 275.9
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "input#asistente-local-q[search]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 290
+      },
+      {
+       "sel": "button",
+       "texto": "Buscar en mi biblioteca",
+       "alto": 40,
+       "ancho": 200.1
+      },
+      {
+       "sel": "input#asistente-consulta[search]",
+       "texto": "Los Guardianes del Alba Omnigold",
+       "alto": 30.8,
+       "ancho": 290
+      },
+      {
+       "sel": "button",
+       "texto": "Buscar en las fuentes",
+       "alto": 40,
+       "ancho": 185.9
+      },
+      {
+       "sel": "a.btn.ghost.sm",
+       "texto": "Abrir el formulario a mano",
+       "alto": 40,
+       "ancho": 214.5
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a «Pendientes por carpeta»",
+       "alto": 22,
+       "ancho": 275.9
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "input#asistente-local-q[search]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 320
+      },
+      {
+       "sel": "button",
+       "texto": "Buscar en mi biblioteca",
+       "alto": 40,
+       "ancho": 200.1
+      },
+      {
+       "sel": "input#asistente-consulta[search]",
+       "texto": "Los Guardianes del Alba Omnigold",
+       "alto": 30.8,
+       "ancho": 320
+      },
+      {
+       "sel": "button",
+       "texto": "Buscar en las fuentes",
+       "alto": 40,
+       "ancho": 185.9
+      },
+      {
+       "sel": "a.btn.ghost.sm",
+       "texto": "Abrir el formulario a mano",
+       "alto": 40,
+       "ancho": 214.5
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a «Pendientes por carpeta»",
+       "alto": 22,
+       "ancho": 275.9
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "input#asistente-local-q[search]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 344
+      },
+      {
+       "sel": "button",
+       "texto": "Buscar en mi biblioteca",
+       "alto": 40,
+       "ancho": 200.1
+      },
+      {
+       "sel": "input#asistente-consulta[search]",
+       "texto": "Los Guardianes del Alba Omnigold",
+       "alto": 30.8,
+       "ancho": 344
+      },
+      {
+       "sel": "button",
+       "texto": "Buscar en las fuentes",
+       "alto": 40,
+       "ancho": 185.9
+      },
+      {
+       "sel": "a.btn.ghost.sm",
+       "texto": "Abrir el formulario a mano",
+       "alto": 40,
+       "ancho": 214.5
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15
+    }
+   }
+  },
+  "revision-de-la-vinculacion": {
+   "ruta": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=7eff8313-5c28-43d9-bf8e-dd93b2f6d0a8",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn.ghost.sm",
+       "texto": "Marcar todos los que se pueden vincular",
+       "alto": 40,
+       "ancho": 309.9
+      },
+      {
+       "sel": "button.btn.ghost.sm",
+       "texto": "Desmarcar todos",
+       "alto": 40,
+       "ancho": 146.8
+      },
+      {
+       "sel": "input#n-ab61c042-a245-4195-917f-796e2139a401[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 310
+      },
+      {
+       "sel": "input#n-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f[text]",
+       "texto": "12",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 310
+      },
+      {
+       "sel": "input#n-336ce86d-0c26-426b-a33f-97c7962ed6c7[text]",
+       "texto": "13",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 310
+      },
+      {
+       "sel": "input#n-a49c35d6-ed5c-4aee-a4fe-92caebc9f256[text]",
+       "texto": "1",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 310
+      },
+      {
+       "sel": "input#n-201e9914-6cb8-4032-a70c-bec17aebe2c4[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 310
+      },
+      {
+       "sel": "input#n-084d85f4-f789-4d3d-80f9-52ca58e50b45[text]",
+       "texto": "7",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 310
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn.ghost.sm",
+       "texto": "Marcar todos los que se pueden vincular",
+       "alto": 40,
+       "ancho": 309.9
+      },
+      {
+       "sel": "button.btn.ghost.sm",
+       "texto": "Desmarcar todos",
+       "alto": 40,
+       "ancho": 146.8
+      },
+      {
+       "sel": "input#n-ab61c042-a245-4195-917f-796e2139a401[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 340
+      },
+      {
+       "sel": "input#n-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f[text]",
+       "texto": "12",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 340
+      },
+      {
+       "sel": "input#n-336ce86d-0c26-426b-a33f-97c7962ed6c7[text]",
+       "texto": "13",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 340
+      },
+      {
+       "sel": "input#n-a49c35d6-ed5c-4aee-a4fe-92caebc9f256[text]",
+       "texto": "1",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 340
+      },
+      {
+       "sel": "input#n-201e9914-6cb8-4032-a70c-bec17aebe2c4[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 340
+      },
+      {
+       "sel": "input#n-084d85f4-f789-4d3d-80f9-52ca58e50b45[text]",
+       "texto": "7",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 340
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn.ghost.sm",
+       "texto": "Marcar todos los que se pueden vincular",
+       "alto": 40,
+       "ancho": 309.9
+      },
+      {
+       "sel": "button.btn.ghost.sm",
+       "texto": "Desmarcar todos",
+       "alto": 40,
+       "ancho": 146.8
+      },
+      {
+       "sel": "input#n-ab61c042-a245-4195-917f-796e2139a401[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 364
+      },
+      {
+       "sel": "input#n-5ee7cf41-5b3b-4d99-bad0-1abfc0140e1f[text]",
+       "texto": "12",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 364
+      },
+      {
+       "sel": "input#n-336ce86d-0c26-426b-a33f-97c7962ed6c7[text]",
+       "texto": "13",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 364
+      },
+      {
+       "sel": "input#n-a49c35d6-ed5c-4aee-a4fe-92caebc9f256[text]",
+       "texto": "1",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 364
+      },
+      {
+       "sel": "input#n-201e9914-6cb8-4032-a70c-bec17aebe2c4[text]",
+       "texto": "",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 364
+      },
+      {
+       "sel": "input#n-084d85f4-f789-4d3d-80f9-52ca58e50b45[text]",
+       "texto": "7",
+       "alto": 30.8,
+       "ancho": 128
+      },
+      {
+       "sel": "summary",
+       "texto": "Qué dice la carpeta frente a esta serie",
+       "alto": 24.8,
+       "ancho": 364
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23
+    }
+   }
+  },
+  "deseados": {
+   "ruta": "/ui/wishlist",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#q-deseados.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-reintentar",
+       "texto": "Reintentar",
+       "alto": 40,
+       "ancho": 111.8
+      },
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#q-deseados.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-reintentar",
+       "texto": "Reintentar",
+       "alto": 40,
+       "ancho": 111.8
+      },
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input#q-deseados.series-search[search]",
+       "fuente_px": 14.4,
+       "alto": 44.3,
+       "etiqueta": "q"
+      }
+     ],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-reintentar",
+       "texto": "Reintentar",
+       "alto": 40,
+       "ancho": 111.8
+      },
+      {
+       "sel": "button.btn-buscar-ahora",
+       "texto": "Buscar ahora",
+       "alto": 40,
+       "ancho": 128.6
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      },
+      {
+       "sel": "button.btn-ignorar",
+       "texto": "Quitar",
+       "alto": 40,
+       "ancho": 81.8
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19
+    }
+   }
+  },
+  "mi-biblioteca-auditoria": {
+   "ruta": "/ui/auditoria",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn-primary",
+       "texto": "Revisar mi biblioteca",
+       "alto": 40,
+       "ancho": 182.6
+      },
+      {
+       "sel": "button.btn-primary",
+       "texto": "Registrar los 1 tebeos nuevos",
+       "alto": 40,
+       "ancho": 241.3
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn-primary",
+       "texto": "Revisar mi biblioteca",
+       "alto": 40,
+       "ancho": 182.6
+      },
+      {
+       "sel": "button.btn-primary",
+       "texto": "Registrar los 1 tebeos nuevos",
+       "alto": 40,
+       "ancho": 241.3
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button.btn-primary",
+       "texto": "Revisar mi biblioteca",
+       "alto": 40,
+       "ancho": 182.6
+      },
+      {
+       "sel": "button.btn-primary",
+       "texto": "Registrar los 1 tebeos nuevos",
+       "alto": 40,
+       "ancho": 241.3
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11
+    }
+   }
+  },
+  "ajustes": {
+   "ruta": "/ui/ajustes",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "comicvine_api_key"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "prowlarr_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "prowlarr_api_key"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_url"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_username"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_password"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "amule_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "amule_password"
+      },
+      {
+       "sel": "select",
+       "fuente_px": 14,
+       "alto": 23,
+       "etiqueta": "auth_mode"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "auth_username"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "auth_password"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "base_url"
+      },
+      {
+       "sel": "select",
+       "fuente_px": 14,
+       "alto": 23,
+       "etiqueta": "webhook_type"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_token"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_chat_id"
+      }
+     ],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "select",
+       "texto": "Sin contraseña Solo contraseña Usuario y",
+       "alto": 23,
+       "ancho": 294
+      },
+      {
+       "sel": "select",
+       "texto": "URL genérica (JSON) Gotify ntfy Telegram",
+       "alto": 23,
+       "ancho": 294
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 294
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "comicvine_api_key"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "prowlarr_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "prowlarr_api_key"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_url"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_username"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_password"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "amule_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "amule_password"
+      },
+      {
+       "sel": "select",
+       "fuente_px": 14,
+       "alto": 23,
+       "etiqueta": "auth_mode"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "auth_username"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "auth_password"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "base_url"
+      },
+      {
+       "sel": "select",
+       "fuente_px": 14,
+       "alto": 23,
+       "etiqueta": "webhook_type"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_token"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_chat_id"
+      }
+     ],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "select",
+       "texto": "Sin contraseña Solo contraseña Usuario y",
+       "alto": 23,
+       "ancho": 324
+      },
+      {
+       "sel": "select",
+       "texto": "URL genérica (JSON) Gotify ntfy Telegram",
+       "alto": 23,
+       "ancho": 324
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 324
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Enviar aviso de prueba",
+       "alto": 40,
+       "ancho": 195.4
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "comicvine_api_key"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "prowlarr_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "prowlarr_api_key"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_url"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_username"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "transmission_password"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "amule_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "amule_password"
+      },
+      {
+       "sel": "select",
+       "fuente_px": 14,
+       "alto": 23,
+       "etiqueta": "auth_mode"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "auth_username"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "auth_password"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "base_url"
+      },
+      {
+       "sel": "select",
+       "fuente_px": 14,
+       "alto": 23,
+       "etiqueta": "webhook_type"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_url"
+      },
+      {
+       "sel": "input[password]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_token"
+      },
+      {
+       "sel": "input[text]",
+       "fuente_px": 14,
+       "alto": 41.7,
+       "etiqueta": "webhook_chat_id"
+      }
+     ],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "select",
+       "texto": "Sin contraseña Solo contraseña Usuario y",
+       "alto": 23,
+       "ancho": 348
+      },
+      {
+       "sel": "select",
+       "texto": "URL genérica (JSON) Gotify ntfy Telegram",
+       "alto": 23,
+       "ancho": 348
+      }
+     ],
+     "controles_menores_de_44px": [
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "http://127.0.0.1:1",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Probar conexión",
+       "alto": 40,
+       "ancho": 150.8
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[password]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "input[text]",
+       "texto": "",
+       "alto": 41.7,
+       "ancho": 348
+      },
+      {
+       "sel": "button",
+       "texto": "Guardar",
+       "alto": 40,
+       "ancho": 93.9
+      },
+      {
+       "sel": "button",
+       "texto": "Enviar aviso de prueba",
+       "alto": 40,
+       "ancho": 195.4
+      }
+     ],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37
+    }
+   }
+  },
+  "estado": {
+   "ruta": "/estado",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    }
+   }
+  },
+  "aviso-legal-asistente": {
+   "ruta": "/ui/legal",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a la biblioteca",
+       "alto": 22,
+       "ancho": 174.8
+      }
+     ],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a la biblioteca",
+       "alto": 22,
+       "ancho": 174.8
+      }
+     ],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [
+      {
+       "sel": "a",
+       "texto": "← Volver a la biblioteca",
+       "alto": 22,
+       "ancho": 174.8
+      }
+     ],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10
+    }
+   }
+  },
+  "aviso-legal-texto": {
+   "ruta": "/legal",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": true,
+     "scroll_width": 409,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [
+      {
+       "sel": "table",
+       "derecha": 409,
+       "ancho": 397
+      },
+      {
+       "sel": "thead",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "th",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tbody",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "td",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "td",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "td",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      }
+     ],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "390": {
+     "desborda_en_horizontal": true,
+     "scroll_width": 409,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [
+      {
+       "sel": "table",
+       "derecha": 409,
+       "ancho": 397
+      },
+      {
+       "sel": "thead",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "th",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tbody",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "td",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "td",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      },
+      {
+       "sel": "td",
+       "derecha": 408,
+       "ancho": 130
+      },
+      {
+       "sel": "tr",
+       "derecha": 408,
+       "ancho": 395
+      }
+     ],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9
+    }
+   }
+  }
+ },
+ "chrome": "Chrome/154.0.8037.92"
+}
