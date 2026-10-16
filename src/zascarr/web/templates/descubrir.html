@@ -13,13 +13,14 @@
        hx-swap="innerHTML">
 {#- U14: el progreso se ve a los 400 ms (solo CSS) y NO se anuncia: lo único que anuncia el lector de pantalla es la
     región viva de abajo, UNA vez por búsqueda (la respuesta la actualiza por `hx-swap-oob`). La región NO es el destino
-    de la búsqueda, para que no se lea la lista entera. -#}
+    de la búsqueda, para que no se lea la lista entera. Está oculta a la vista (`sr`): lo que dice ya se ve en los avisos y
+    el recuento, y repetirlo en pantalla lo duplicaría. -#}
 {% if buscando_en %}
 <p id="buscando-descubrir" class="htmx-indicator indicador-diferido" aria-hidden="true">Buscando en {{ buscando_en }}…</p>
 {% else %}
 <p class="caption">No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar.</p>
 {% endif %}
-{{ ui.region_viva("descubrir-estado") }}
+<div id="descubrir-estado" class="region-viva sr" aria-live="polite" aria-atomic="true"></div>
 <div id="resultados-descubrir" class="series-results"></div>
 
 <details class="alta-a-mano">

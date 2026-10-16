@@ -141,6 +141,7 @@ class TestErroresPorFuente:
         b = Busqueda([], ["x"], estados(cv=ERR, al=ERR, te=ERR, gcd=ERR))
         r = dt.resumir(b.fuentes, 0)
         assert "ninguna fuente" in r.avisos[0].lower() and "Ningún resultado" not in r.anuncio
+        assert r.anuncio == r.avisos[0], "el anuncio no repite la misma frase dos veces"
         v = visible(buscar(b))
         assert "Sin coincidencias" not in v and "No respondió ninguna fuente" in v
 
@@ -158,6 +159,7 @@ class TestErroresPorFuente:
     def test_todo_apagado_lo_dice_en_vez_de_sin_coincidencias(self):
         r = dt.resumir(estados(cv=OFF, al=OFF, te=OFF, gcd=OFF), 0)
         assert "ninguna fuente activa" in " ".join(r.avisos).lower() and "Ningún resultado" not in r.anuncio
+        assert r.anuncio == r.avisos[0]
 
     def test_ningun_aviso_lleva_codigos_internos(self):
         for e in (estados(cv=ERR), estados(cv=SINCLAVE), estados(cv=ERR, al=ERR, te=ERR, gcd=ERR), estados(cv=OFF, al=OFF, te=OFF, gcd=OFF)):
@@ -194,6 +196,7 @@ class TestResultadoAnunciado:
         regiones = re.findall(r'<div id="descubrir-estado"[^>]*>', t)
         assert len(regiones) == 1
         assert 'aria-live="polite"' in regiones[0] and 'aria-atomic="true"' in regiones[0]
+        assert 'class="region-viva sr"' in regiones[0]               # solo para el lector: no duplica lo que se ve
         assert len(re.findall(r'aria-live=|role="status"|role="alert"', t.split("<main", 1)[-1])) == 1
         destino = re.search(r'<div id="resultados-descubrir"[^>]*>(.*?)</div>', t, re.S).group(1)
         assert "aria-live" not in destino                       # la región NO es el destino: no se lee la lista entera
@@ -204,6 +207,9 @@ class TestResultadoAnunciado:
         assert len(oob) == 1 and "2 resultados." in visible(oob[0])
         etiqueta = re.search(r'<div id="descubrir-estado"[^>]*>', t).group(0)
         assert 'hx-swap-oob="true"' in etiqueta and 'aria-live="polite"' in etiqueta and 'aria-atomic="true"' in etiqueta
+        assert 'class="region-viva sr"' in etiqueta
+        # el recuento VISIBLE existe y no se lee dos veces (el lector ya tiene la región)
+        assert re.search(r'<p class="discovery-count" aria-hidden="true">2 resultados</p>', t)
         resto = re.sub(r'<div id="descubrir-estado".*?</div>', "", t, flags=re.S)
         assert not re.search(r'aria-live=|role="status"|role="alert"', resto), "se anunciaría dos veces"
 
