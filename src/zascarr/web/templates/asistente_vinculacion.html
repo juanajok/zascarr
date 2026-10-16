@@ -1,9 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Revisar selección y números — ZascArr{% endblock %}
 {% block content %}
-<h1>Revisar selección y números</h1>
-{% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(3 if resultado else 2) }}
-<p class="subtitle">Marca los archivos que quieres vincular a la serie y comprueba su número. En este paso no se vincula ni se crea nada: solo se prepara y se revisa.</p>
+{% from "_asistente_macros.html" import cabecera_vinculacion %}{{ cabecera_vinculacion(resultado) }}
 <p><a href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a>
    {% if clave %} · <a href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}">Elegir otra serie</a>{% endif %}</p>
 {% if resultado %}{% include "_vinculacion_resultado.html" %}{% else %}{% include "_vinculacion_revision.html" %}{% endif %}

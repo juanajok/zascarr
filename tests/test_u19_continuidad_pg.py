@@ -25,6 +25,7 @@ import pytest
 from sqlalchemy import text
 
 from tests.test_u19_recorrido_pg import (  # noqa: F401  (fixtures, vigilancia de fuentes y ayudas)
+    ref_de,
     A,
     UNO,
     DOS,
@@ -40,7 +41,7 @@ from tests.test_u19_recorrido_pg import (  # noqa: F401  (fixtures, vigilancia d
     token_de_crear,
     visible,
 )
-from tests.test_asistente_confirmar_pg import listo, numero_de  # noqa: F401
+from tests.test_asistente_confirmar_pg import confirmar, enviar, listo, numero_de  # noqa: F401
 from tests.test_asistente_vinculacion_pg import CLAVE, SECRETO, abrir, archivos, cliente, entorno, serie_de_prueba, url_bd  # noqa: F401
 from tests.test_vinculacion_pg import ent  # noqa: F401
 from tests.test_vinculacion_previa_pg import escrituras, huella_disco, instantanea
@@ -218,7 +219,6 @@ class TestProgreso:
     async def _pantallas(self, ent):
         p = await listo(ent, UNO, DOS)                                  # siembra los archivos y prepara una revisión
         sid = p.serie
-        from tests.test_asistente_confirmar_pg import confirmar
         r = await confirmar(p)
         return {
             "A": (await get(A, clave=CLAVE)).text,
@@ -226,8 +226,8 @@ class TestProgreso:
             "alta/resultado": (await get(f"{A}/alta/resultado", clave=CLAVE, series_id=str(sid))).text,
             "V": (await get(V, clave=CLAVE, series_id=str(sid))).text,
             "X": r.t,
-            "lectura": (await get(f"{V}/resultado", ref="no-valida")).text,
-        }, {"A": 1, "alta": 1, "alta/resultado": 1, "V": 2, "lectura": 3}
+            "lectura": (await get(f"{V}/resultado", ref=ref_de(r.t))).text,
+        }, {"A": 1, "alta": 1, "alta/resultado": 1, "V": 2, "X": 3, "lectura": 3}
 
     async def test_t6_cada_pantalla_marca_su_paso_con_aria_current_step(self, ent):
         pantallas, esperado = await self._pantallas(ent)
@@ -236,9 +236,27 @@ class TestProgreso:
             assert [n for n, _, _ in ps] == ["Elegir la serie", "Revisar los archivos", "Vincular"], nombre
             assert [c for _, _, c in ps].count(True) == 1 and ps[actual - 1][2], nombre      # uno, y el correcto
             assert pantallas[nombre].count('aria-current="step"') == 1, nombre
-        # el resultado inmediato de la vinculación viene sin página (fragmento): el indicador está en la página completa
-        completa = await get(f"{V}/resultado", ref="x")
-        assert pasos(completa.text)[2][2]
+
+    async def test_t6_al_confirmar_la_cabecera_y_los_pasos_pasan_a_vincular(self, ent):
+        """Confirmar solo sustituye `#revision`: la cabecera (título, frase y pasos) viaja como respuesta fuera de banda."""
+        p = await listo(ent, UNO, DOS)
+        r = await confirmar(p)
+        assert re.search(r'<div id="cabecera-vinculacion" hx-swap-oob="true">', r.t)
+        assert "Resultado de la vinculación" in r.t and "En este paso no se vincula ni se crea nada" not in r.t
+        ps = pasos(r.t)
+        assert [c for _, c, _ in ps] == ["hecho", "hecho", "actual"] and ps[2][2]
+        assert r.t.count('aria-current="step"') == 1
+
+    async def test_t6_sin_htmx_el_resultado_es_una_pagina_con_un_solo_indicador(self, ent):
+        p = await listo(ent, UNO, DOS)
+        from tests.test_asistente_confirmar_pg import formulario_de_confirmacion
+        r = await enviar(formulario_de_confirmacion(p.t), htmx=False)
+        assert r.status_code == 200 and r.text.count('class="pasos-asistente"') == 1 and "hx-swap-oob" not in r.text
+        assert r.text.count('aria-current="step"') == 1
+
+    async def test_t6_una_referencia_no_valida_no_afirma_ningun_paso(self, ent):
+        r = await get(f"{V}/resultado", ref="no-valida")
+        assert 'class="pasos-asistente"' not in r.text and "(hecho)" not in visible(r.text)
 
     async def test_t6_lo_pendiente_no_se_presenta_como_hecho(self, ent):
         pantallas, _ = await self._pantallas(ent)

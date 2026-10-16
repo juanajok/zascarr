@@ -1,3 +1,4 @@
+{% from "_asistente_macros.html" import cabecera_vinculacion %}{% if oob_cabecera %}{{ cabecera_vinculacion(true, true) }}{% endif %}
 {#- Lo que pasó al confirmar (#120). Serie y grupo salen del token firmado; la página, del formulario (solo presentación).
     Nunca se dice «completado» sin que el servicio lo haya confirmado, y un resultado parcial no se presenta como completo. -#}
 {% macro volver(clave, series_id, cursor_actual, inicio, texto) -%}
