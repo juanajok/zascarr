@@ -909,7 +909,27 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   5. Se hace **antes** de implementar U1 y U2 y no bloquea U4 y U6, que son correcciones objetivas.
 - **Dependencias.** Ninguna.
 
-#### Orden de ataque sugerido
+#### Solapamientos con historias ya registradas (relacionadas, NO duplicar)
+
+El propio texto de cada épica los señala; se resumen aquí para que **no se conviertan en dos trabajos independientes**. Son propuestas
+**relacionadas**: no se crean tarjetas, no se da por aceptada ninguna prioridad y **la identidad canónica de cada una se resuelve al refinarla**.
+
+| Propuesta | Relacionada con | Nota |
+|---|---|---|
+| S6 | D5 (módulo Novedades) | misma funcionalidad; decidir si S6 sustituye a D5 o se fusionan |
+| R2 | B13 (hecho) | R2 aporta solo lo visible (ver, borrar, confianza de las reglas) |
+| R4 | B14, B15 y B22 / ADR 0003 | debe partir del ADR 0003, no abrir otro |
+| Q4 | B20 | una sola de las dos lleva la nota de cierre |
+| Q3 | A6 y A11 (hechas) | casi cumplida; lo que queda es la guía en castellano |
+| Q5 | E3 (parcial) | es la mitad pendiente de E3 (el botón y la prueba real) |
+| O1 | U2, U5, V4 | fijar el reparto antes de empezar |
+| S5 y S6 | D5 (nota sobre Whakoom) | los dos spikes sobre Whakoom deberían compartir ficha |
+
+#### Orden de ataque sugerido en la propuesta original — **histórico, NO vigente**
+
+> **No es el orden de trabajo del equipo.** Es la secuencia que traía la propuesta del 2026-10-02. Desde el 2026-10-15 el tablero trabaja en
+> Scrumban **sin sprints** y con el MVP «vincular en sitio» como objetivo; las prioridades y el orden se deciden por tarjeta, no por esta lista.
+> Se conserva solo para que se vea qué proponía el texto original.
 
 1. **U4** (contraste, S) y **U6** (Estado, S): correcciones objetivas, baratas y sin riesgo de producto.
 2. **U10** en paralelo: validar antes de invertir en U1 y U2.
@@ -1260,7 +1280,14 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 
 ### Épicas S, O, R y Q — fuentes en español, primer uso, reconocimiento y operación (propuesta del 2026-10-02)
 
-**Origen:** propuesta de 17 historias en 4 épicas nuevas, aportada por el usuario el 2026-10-02 y comprobada contra este fichero antes de registrarla. **Es una propuesta, no un compromiso:** nada de esto está implementado ni ha pasado por la ficha §13 (`docs/design/benchmark-referencias.md`); cada historia P0/P1 de comportamiento nuevo la necesita antes de construirse.
+> **Estado de esta sección (2026-10-16): PROPUESTA HISTÓRICA, no política ni planificación vigente.** Se registra para no perder las ideas y
+> sus solapamientos con lo ya existente. **No** crea tarjetas, **no** acepta las prioridades (P0/P1/P2) ni las tallas, **no** fija una secuencia
+> y **no desplaza el objetivo de MVP vigente** («vincular en sitio», M1–M5). Lo que fija lo vigente es el tablero y las tarjetas de cada historia
+> cuando se refinen, no esta tabla. Las dos subsecciones del final —«Orden de ataque» y «Definición de hecho»— son **parte de la propuesta
+> original**: ver sus avisos. Donde el texto histórico contradice una decisión posterior (p. ej. Redis, [ADR 0011](adr/0011-retirar-redis.md)),
+> **manda la decisión posterior** y el texto se conserva marcado como superado.
+
+**Origen:** propuesta de **20** historias en 4 épicas nuevas (S1–S7, O1–O4, R1–R4 y Q1–Q5; la versión inicial de este texto decía 17 por error), aportada por el usuario el 2026-10-02 y comprobada contra este fichero antes de registrarla. **Es una propuesta, no un compromiso:** nada de esto está implementado ni ha pasado por la ficha §13 (`docs/design/benchmark-referencias.md`); cada historia P0/P1 de comportamiento nuevo la necesita antes de construirse.
 
 **Postura legal (común a todas):** las fuentes nacen **desactivadas**, el proyecto no incluye URLs de foros ni enlaces por defecto y el usuario las activa de forma explícita (CLAUDE.md §3.2 y §5.1; `LEGAL.md`).
 
@@ -1293,14 +1320,14 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 |---|---|---|---|---|
 | O1 | Como usuario recién instalado, quiero un asistente de 3 pasos (biblioteca, descargas, fuentes) que detecte lo que ya tengo en la Pi, para no escribir URLs ni claves | Detecta Transmission, aMule, Prowlarr y Kavita en el host; rellena URL y puertos; prueba la conexión con un mensaje en castellano llano; permite saltarse cada paso; complementa a U2 sin duplicarlo | P0 | M |
 | O2 | Como usuario sin conocimientos, quiero que el instalador resuelva el cortafuegos por mí si lo autorizo | Detecta la subred real del puente de Docker (caso A10); pide un "sí/no" y aplica la regla `ufw`, o muestra el comando exacto si dice que no; reversible con `uninstall` | P1 | S |
-| O3 | Como usuario con una Pi 4 de 4 GB compartida, quiero que ZascArr consuma lo mínimo, para que aMule y Kavita no se queden sin memoria | Spike: evaluar SQLite como alternativa a PostgreSQL+Redis; informe de RAM en reposo y bajo carga; decisión documentada en un ADR | P2 | L |
+| O3 | Como usuario con una Pi 4 de 4 GB compartida, quiero que ZascArr consuma lo mínimo, para que aMule y Kavita no se queden sin memoria | Spike: evaluar SQLite como alternativa a PostgreSQL ~~+Redis~~ *(«+Redis» es texto original **superado**: [ADR 0011](adr/0011-retirar-redis.md) retiró Redis del stack el 2026-10-15; la comparación operativa es solo PostgreSQL frente a SQLite)*; informe de RAM en reposo y bajo carga; decisión documentada en un ADR | P2 | L |
 | O4 | Como usuario, quiero entender el aviso legal en una sola pantalla breve, sin jerga | Texto de menos de 150 palabras, sin referencias a normas; checkbox de aceptación; enlace al texto completo; el banner de Deseados lleva directo a él | P2 | S |
 
 **Encaje y puntos que requieren decisión del dueño del producto:**
 
 - **O1 ↔ U2/U5/V4.** U2 (panel de inicio con checklist) y U5 (asistente «¿Qué quieres conectar?») cubren parte del terreno. La propuesta dice «complementa a U2 sin duplicarlo»; falta fijar el reparto con U5 antes de empezar, porque «detectar lo que hay en el host» desde dentro de un contenedor es justo lo que A10 ya descubrió que es difícil (`host.docker.internal` vs. puerta de enlace real).
 - **O2 choca con una decisión de A10.** `scripts/diagnostico-red.sh` se diseñó **solo lectura** y hay un test que comprueba que **nunca ejecuta `ufw`** salvo `status`/`show added`: se imprime el comando para que lo pegue el usuario. O2 pide aplicarlo tras un «sí». **No se ha resuelto aquí**: o O2 conserva la postura de A10 (solo imprimir) o se reabre esa decisión por escrito (ficha §13 + nota en A10). Además «reversible con `uninstall`» exige registrar qué regla se añadió (A4 hoy no toca el cortafuegos).
-- **O3 choca con CLAUDE.md §2** («aquí siempre Postgres»: `sqlite3` descartado) y con las migraciones Alembic 0001-0013 ya aplicadas, escritas contra `postgresql.ENUM`, `JSONB` y `f_title_norm` (CLAUDE.md §7, §12). Como **spike con ADR** es legítimo, pero la decisión previa se abre solo si el informe de RAM lo justifica; no se da por supuesto que SQLite sea viable (Redis es además el canal del orchestrator, CLAUDE.md §4).
+- **O3 choca con CLAUDE.md §2** («aquí siempre Postgres»: `sqlite3` descartado) y con las migraciones Alembic 0001-0013 ya aplicadas, escritas contra `postgresql.ENUM`, `JSONB` y `f_title_norm` (CLAUDE.md §7, §12). Como **spike con ADR** es legítimo, pero la decisión previa se abre solo si el informe de RAM lo justifica; no se da por supuesto que SQLite sea viable. *(El texto original añadía «Redis es además el canal del orchestrator, CLAUDE.md §4»: **superado**, el refresco corre ya en el propio proceso, ADR 0011.)*
   *Nota del 2026-10-15:* [ADR 0011](adr/0011-retirar-redis.md) retiró Redis del stack, así que O3 ya solo compara PostgreSQL con SQLite; y las migraciones aplicadas llegan hoy a la 0019, no a la 0013.
 - **O4 ↔ `LEGAL.md`.** Reescribir el texto de aceptación cambia el fichero versionado por hash (`legal_version` en `services/legal.py`): quien acepte hoy tendría que volver a aceptar (CLAUDE.md §11).
 
@@ -1347,7 +1374,11 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 
 **Matiz tras la comprobación:** si se aceptan las correcciones de arriba, Q3 y R2 se achican mucho (ya hay base hecha), y R4/Q4 son implementaciones de historias ya diseñadas (B14/B15 + ADR 0003, B20), no historias nuevas.
 
-#### Definición de hecho común a las épicas S, O, R y Q
+#### Definición de hecho propuesta para las épicas S, O, R y Q — **histórica, NO vigente**
+
+> **No sustituye ni complementa por sí sola a la definición de hecho vigente**, que es la de CLAUDE.md (§8 pruebas, §9 «Hecho» con la nota del
+> mecanismo) y la de cada tarjeta cuando se refine. Lo que sigue es lo que proponía el texto original; la regla del presupuesto de 512M por
+> contenedor sí procede de CLAUDE.md §1 y ya es vinculante por esa vía, no por esta lista.
 
 La misma regla de CLAUDE.md, más una condición de rendimiento:
 
