@@ -14,6 +14,7 @@
   {{ ui.aviso("warn", aviso) }}
   <p class="muted">«Volver a elegir» abre el asistente con tu búsqueda escrita, pero no la lanza: buscar de nuevo consulta las fuentes y lo decides tú.</p>
   {% else %}
+  {% if aviso_decision %}{{ ui.aviso("amber", aviso_decision) }}{% endif %}
   {% include plantilla %}
   {% endif %}
 </section>

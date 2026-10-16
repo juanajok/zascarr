@@ -62,6 +62,7 @@ from zascarr.services.discovery import DiscoveryService
 from zascarr.services.tokens_revision import (
     CandidataFirmada,
     candidata_firmable,
+    crear_referencia_de_resultado,
     crear_token,
     crear_token_candidata,
     grupo_de_un_token,
@@ -104,6 +105,20 @@ async def get(ruta: str, **params) -> httpx.Response:
 def candidata(clave: str = CLAVE, **kw) -> str:
     c = candidata_firmable("comic_vine", "4050", kw.get("titulo", "Flash"), kw.get("anio", 1987), "american", None, None)
     return crear_token_candidata(clave, c, SECRETO, ahora=kw.get("ahora"))
+
+
+def enlace(t: str, texto: str) -> str:
+    """El `href` (ya sin escapar) del enlace de la pantalla cuyo texto contiene `texto`: lo que la persona realmente pulsa.
+    Los tests siguen estos enlaces; no componen URLs a partir de los identificadores."""
+    for href, cuerpo in re.findall(r'<a [^>]*href="([^"]+)"[^>]*>(.*?)</a>', t, re.S):
+        if texto in visible(cuerpo):
+            return html.unescape(href)
+    raise AssertionError(f"la pantalla no ofrece ningún enlace «{texto}»")
+
+
+async def seguir(href: str) -> httpx.Response:
+    async with cliente() as c:
+        return await c.get(href)
 
 
 def token_de_crear(t: str) -> str:
@@ -229,11 +244,10 @@ class TestT9VolverDespuesDelAlta:
         await archivos(ent, UNO, DOS, TRES)
         c = await crear_alta(ent)
         assert "creada" in visible(c.text)
-        operacion = re.search(r'name="operacion_id" value="([^"]+)"', c.text).group(1)
-        sid, titulo = (await series(ent))[0]
+        vinculo = enlace(c.text, "enlace al estado de esta alta")                     # el que ve la persona en el resultado
         antes, disco = await instantanea(ent.banco), huella_disco(ent.lib)
         desde = len(ent.banco.sentencias)
-        r = await get(f"{A}/alta/resultado", clave=CLAVE, series_id=str(sid), operacion=operacion)
+        r = await seguir(vinculo)
         assert r.status_code == 200
         v = visible(r.text)
         assert "ya está creada" in v and "Flash" in v
@@ -244,15 +258,42 @@ class TestT9VolverDespuesDelAlta:
         assert escrituras(ent.banco, desde) == []
         sin_fuentes(ent)
 
+    async def test_t9_el_resultado_del_alta_ofrece_el_enlace_al_estado_y_se_puede_recargar(self, ent):
+        await archivos(ent, UNO, DOS)
+        c = await crear_alta(ent)
+        vinculo = enlace(c.text, "enlace al estado de esta alta")
+        antes = await instantanea(ent.banco)
+        primera, segunda = await seguir(vinculo), await seguir(vinculo)               # recargar
+        assert primera.text == segunda.text and "ya está creada" in visible(primera.text)
+        assert await instantanea(ent.banco) == antes
+        assert "Deshacer" in visible(c.text) and "Deshacer" not in visible(primera.text)
+
+    async def test_t9_tras_vincular_el_estado_del_alta_no_dice_que_la_serie_esta_vacia(self, ent):
+        """El comprobante `creada` acredita el alta original, no que la serie siga vacía: con archivos ya vinculados no puede decirlo."""
+        await archivos(ent, UNO, DOS, TRES)
+        c = await crear_alta(ent)
+        sid = (await series(ent))[0][0]
+        vinculo = enlace(c.text, "enlace al estado de esta alta")
+        antes = visible((await seguir(vinculo)).text)
+        assert "vacía" not in antes and "Quedan 3 archivos" in antes                    # tampoco antes: no se afirma
+        p = await abrir(sid)
+        p = await p.reenviar(marcar=[UNO, DOS])
+        r = await confirmar(p)
+        assert r.estado == "vinculados_todos"
+        despues = visible((await seguir(vinculo)).text)
+        assert "vacía" not in despues and "ya está creada" in despues
+        assert "Queda 1 archivo" in despues                                              # los hechos de AHORA, no los de entonces
+
     async def test_t9b_deshecha(self, ent):
         await archivos(ent, UNO)
         c = await crear_alta(ent)
         sid, _ = (await series(ent))[0]
         operacion = re.search(r'name="operacion_id" value="([^"]+)"', c.text).group(1)
+        vinculo = enlace(c.text, "enlace al estado de esta alta")
         async with cliente() as k:
             d = await k.post("/ui/descubrir/deshacer", data={"series_id": str(sid), "operacion_id": operacion})
         assert "Hecho" in visible(d.text)
-        r = await get(f"{A}/alta/resultado", clave=CLAVE, series_id=str(sid), operacion=operacion)
+        r = await seguir(vinculo)
         v = visible(r.text)
         assert "se deshizo" in v and "ya no está en tu biblioteca" in v
         assert "ya está creada" not in v
@@ -270,11 +311,11 @@ class TestT9VolverDespuesDelAlta:
         await archivos(ent, UNO)
         c = await crear_alta(ent)
         sid, _ = (await series(ent))[0]
-        operacion = re.search(r'name="operacion_id" value="([^"]+)"', c.text).group(1)
+        vinculo = enlace(c.text, "enlace al estado de esta alta")
         async with ent.banco.fabrica() as s:
             await s.execute(text("DELETE FROM alta_operaciones"))
             await s.commit()
-        v = visible((await get(f"{A}/alta/resultado", clave=CLAVE, series_id=str(sid), operacion=operacion)).text)
+        v = visible((await seguir(vinculo)).text)
         assert "está en tu biblioteca" in v and "ya está creada" not in v
 
     async def test_t9b_serie_que_ya_no_existe(self, ent):
@@ -317,11 +358,30 @@ async def vinculada(ent, monkeypatch=None):
     return SimpleNamespace(p=p, r=r, ref=ref, exp=caducidad_de(ref), firma=firma)
 
 
+class _RelojFalso:
+    """Sustituye el nombre `time` de un módulo: `time()` devuelve la hora simulada y lo demás, el módulo real."""
+
+    def __init__(self, hora: dict) -> None:
+        self._hora = hora
+
+    def time(self) -> float:
+        return self._hora["t"]
+
+    def __getattr__(self, nombre: str):
+        return getattr(time, nombre)
+
+
 @pytest.fixture
 def reloj(monkeypatch):
-    """Sustituye el reloj de la ruta de lectura (`asistente_vinculacion.reloj`)."""
+    """UN reloj simulado para TODOS los componentes que miran la hora: la lectura y la emisión de la referencia
+    (`web.asistente_vinculacion`), la validez de los tokens (`tokens_revision`) y la confirmación (`services.vinculacion`).
+    Cambiar `reloj["t"]` adelanta de verdad lo que cada uno ve; no depende de cuánto tarde la prueba."""
+    from zascarr.services import tokens_revision as tokens
+    from zascarr.services import vinculacion as servicio
     hora = {"t": time.time()}
-    monkeypatch.setattr(asistente_vinculacion, "reloj", lambda: hora["t"], raising=False)
+    falso = _RelojFalso(hora)
+    for modulo in (asistente_vinculacion, tokens, servicio):
+        monkeypatch.setattr(modulo, "time", falso)
     return hora
 
 
@@ -429,23 +489,55 @@ class TestT10LecturaDelComprobante:
 
     async def test_t10k_leer_o_regenerar_no_reinicia_el_plazo(self, ent, reloj):
         v = await vinculada(ent)
-        # repetir la confirmación con el MISMO token (idempotente), una hora más tarde
+        assert v.exp == v.firma + PLAZO
+        # repetir la confirmación con el MISMO token una hora después (el token, de 15 min, ya está caducado: el servicio
+        # devuelve el informe guardado): la referencia que se emite tiene el MISMO vencimiento
         reloj["t"] = v.firma + 3600
         repetida = await confirmar(v.p)
+        assert repetida.estado == "vinculados_todos" and "ya se había aplicado" in visible(repetida.t)
         assert caducidad_de(ref_de(repetida.t)) == v.exp
+        # y 23 horas después
+        reloj["t"] = v.firma + 23 * 3600
+        assert caducidad_de(ref_de((await confirmar(v.p)).t)) == v.exp
         # la lectura no emite una referencia nueva: reenvía la recibida
         reloj["t"] = v.exp - 10
         leida = (await leer(v.ref)).text
         assert caducidad_de(ref_de(leida)) == v.exp and ref_de(leida) == v.ref
 
-    async def test_t10l_el_plazo_es_el_de_la_retencion_original(self, ent, reloj):
+    async def test_t10l_la_purga_real_no_borra_nada_antes_del_vencimiento_y_si_despues(self, ent, reloj):
+        """El plazo de la referencia y la purga del servicio son coherentes. Se reponen dos filas con las fechas que tendrían si la
+        vinculación se hubiera firmado hace casi 24 h (vence en 60 s) y hace algo más de 24 h (venció hace 60 s); la purga REAL
+        (con el reloj de la base de datos) solo borra la segunda, y la lectura dice lo mismo que la purga."""
         v = await vinculada(ent)
-        assert v.exp - v.firma == PLAZO                                   # firma + RETENCION_HORAS × 3600, no la emisión
-        # antes de `exp` la fila existe físicamente: la purga real no la toca
+        assert v.exp - v.firma == PLAZO
         async with ent.banco.fabrica() as s:
-            await VinculacionDeArchivos(s, secret=SECRETO)._purgar()
+            fila = (await s.execute(text(
+                "SELECT operacion_id::text, series_id::text, resultado FROM vinculacion_operaciones"))).one()
+            await s.execute(text("DELETE FROM vinculacion_operaciones"))
             await s.commit()
-        assert await operaciones(ent.banco) == 1
+        ahora = time.time()
+        casos = {}
+        for nombre, vence_en in (("casi_24h", 60), ("mas_de_24h", -60)):
+            firma = ahora + vence_en - PLAZO
+            op = str(uuid4())
+            documento = {**fila[2], "operacion_id": op}
+            async with ent.banco.fabrica() as s:
+                await s.execute(text(
+                    "INSERT INTO vinculacion_operaciones (operacion_id, series_id, resultado, token_hasta, creada) VALUES "
+                    "(:o, :s, CAST(:r AS jsonb), to_timestamp(:h), to_timestamp(:c))"),
+                    {"o": op, "s": fila[1], "r": json.dumps(documento), "h": firma + 15 * 60, "c": firma + 1})
+                await s.commit()
+            ref = crear_referencia_de_resultado(CLAVE, fila[1], op, firma=firma, plazo_s=PLAZO, secret=SECRETO)
+            assert caducidad_de(ref) == int(firma + PLAZO)
+            casos[nombre] = (op, ref)
+        async with ent.banco.fabrica() as s:
+            await VinculacionDeArchivos(s, secret=SECRETO)._purgar()                    # la purga real, con la hora de la base
+            await s.commit()
+            vivas = {r[0] for r in (await s.execute(text("SELECT operacion_id::text FROM vinculacion_operaciones"))).all()}
+        assert casos["casi_24h"][0] in vivas and casos["mas_de_24h"][0] not in vivas
+        reloj["t"] = ahora
+        assert "Hecho" in visible((await leer(casos["casi_24h"][1])).text)              # antes de `exp`: fila viva y se lee
+        assert VENCIDA in visible((await leer(casos["mas_de_24h"][1])).text)            # después: expirado, y la fila ya no está
 
     async def test_t10d_la_lectura_no_alarga_la_retencion(self, ent, reloj):
         v = await vinculada(ent)

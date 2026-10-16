@@ -58,4 +58,9 @@
       <button type="submit">Cambiar y revisar</button>
     </div>
   </form>
+  {% if clave %}
+  {#- U19: la referencia a ESTA vista previa, con la decisión ya tomada entre parecidas. Vive dentro de `.alta-paso` para que se
+      renueve con cada decisión (la envoltura de fuera no se sustituye). -#}
+  <p class="muted">Puedes recargar o volver a esta vista previa sin perder lo que elegiste (lo elegido en una fuente caduca a los 15 minutos): <a href="/ui/pendientes/carpetas/asistente/alta?{% for n, v in campos_origen %}{{ n }}={{ v | urlencode }}&amp;{% endfor %}tradition={{ tradicion | urlencode }}{% if vista.decision == 'reutilizar' and vista.existente %}&amp;decision=reutilizar&amp;serie_id={{ vista.existente.series_id }}{% elif vista.decision == 'crear_igualmente' %}&amp;decision=crear_igualmente{% endif %}">enlace a esta vista previa</a>.</p>
+  {% endif %}
 </div>
