@@ -25,7 +25,7 @@ import os
 import re
 import time
 from types import SimpleNamespace
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 from uuid import UUID, uuid4
 
 import httpx
@@ -286,7 +286,7 @@ def ref_de(t: str) -> str:
     """La referencia que el resultado de la vinculación pone en el enlace a sí mismo."""
     m = re.search(r'href="[^"]*/vinculacion/resultado\?ref=([^"&]+)"', t)
     assert m, "el resultado no ofrece un enlace a sí mismo (la referencia de §7.2)"
-    return html.unescape(m.group(1))
+    return unquote(html.unescape(m.group(1)))
 
 
 def caducidad_de(ref: str) -> int:
