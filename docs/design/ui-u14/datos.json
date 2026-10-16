@@ -4,6 +4,84 @@
     "indicador": false,
     "texto": "No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar."
   },
+  "persistencia_de_la_region": {
+    "region_inicial": {
+      "id": "descubrir-estado",
+      "aria_live": "polite",
+      "aria_atomic": "true",
+      "clase": "sr"
+    },
+    "busquedas": [
+      {
+        "fragmento": "con_resultados_y_una_caida",
+        "consulta": "Mortadelo",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:2 resultados. No respondió AniList. Los resultados de Comic ",
+          "attributes:class"
+        ]
+      },
+      {
+        "fragmento": "sin_coincidencias",
+        "consulta": "Zzzz",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "Ningún resultado.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:Ningún resultado.",
+          "attributes:class"
+        ]
+      },
+      {
+        "fragmento": "todas_fallan",
+        "consulta": "Flash",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera y GCD. Inténtalo de nuevo en un momento.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera",
+          "attributes:class"
+        ]
+      },
+      {
+        "fragmento": "con_resultados_y_una_caida",
+        "consulta": "Mortadelo y",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:2 resultados. No respondió AniList. Los resultados de Comic ",
+          "attributes:class"
+        ]
+      }
+    ]
+  },
   "escenarios": [
     {
       "escenario": "1-lenta-escritorio-claro",
@@ -12,13 +90,13 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 1.5,
       "tiempos": {
-        "peticion_empieza_ms": 443,
-        "peticion_termina_ms": 1973,
-        "indicador_visible_por_primera_vez_ms": 860,
-        "espera_hasta_verlo_ms": 417,
+        "peticion_empieza_ms": 445,
+        "peticion_termina_ms": 1971,
+        "indicador_visible_por_primera_vez_ms": 861,
+        "espera_hasta_verlo_ms": 416,
         "llego_a_verse": true,
         "visible_al_final": false,
-        "muestras": 173
+        "muestras": 175
       },
       "hechos": {
         "regiones_vivas_en_la_pagina": 1,
@@ -53,13 +131,13 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 412,
-        "peticion_termina_ms": 430,
+        "peticion_empieza_ms": 434,
+        "peticion_termina_ms": 454,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,
         "visible_al_final": false,
-        "muestras": 100
+        "muestras": 101
       },
       "hechos": {
         "regiones_vivas_en_la_pagina": 1,
@@ -94,10 +172,10 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 0.5,
       "tiempos": {
-        "peticion_empieza_ms": 441,
-        "peticion_termina_ms": 966,
-        "indicador_visible_por_primera_vez_ms": 840,
-        "espera_hasta_verlo_ms": 399,
+        "peticion_empieza_ms": 443,
+        "peticion_termina_ms": 974,
+        "indicador_visible_por_primera_vez_ms": 860,
+        "espera_hasta_verlo_ms": 417,
         "llego_a_verse": true,
         "visible_al_final": false,
         "muestras": 126
@@ -135,10 +213,10 @@
       "fragmento": "con_resultados_y_una_caida",
       "retraso_simulado_s": 0.5,
       "tiempos": {
-        "peticion_empieza_ms": 428,
-        "peticion_termina_ms": 947,
-        "indicador_visible_por_primera_vez_ms": 820,
-        "espera_hasta_verlo_ms": 392,
+        "peticion_empieza_ms": 431,
+        "peticion_termina_ms": 952,
+        "indicador_visible_por_primera_vez_ms": 840,
+        "espera_hasta_verlo_ms": 409,
         "llego_a_verse": true,
         "visible_al_final": false,
         "muestras": 126
@@ -176,13 +254,13 @@
       "fragmento": "todas_fallan",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 423,
-        "peticion_termina_ms": 451,
+        "peticion_empieza_ms": 443,
+        "peticion_termina_ms": 456,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,
         "visible_al_final": false,
-        "muestras": 100
+        "muestras": 101
       },
       "hechos": {
         "regiones_vivas_en_la_pagina": 1,
@@ -211,13 +289,13 @@
       "fragmento": "sin_clave_y_una_caida",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 432,
-        "peticion_termina_ms": 450,
+        "peticion_empieza_ms": 441,
+        "peticion_termina_ms": 453,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,
         "visible_al_final": false,
-        "muestras": 100
+        "muestras": 102
       },
       "hechos": {
         "regiones_vivas_en_la_pagina": 1,
@@ -247,8 +325,8 @@
       "fragmento": "sin_coincidencias",
       "retraso_simulado_s": 0.0,
       "tiempos": {
-        "peticion_empieza_ms": 426,
-        "peticion_termina_ms": 434,
+        "peticion_empieza_ms": 433,
+        "peticion_termina_ms": 452,
         "indicador_visible_por_primera_vez_ms": null,
         "espera_hasta_verlo_ms": null,
         "llego_a_verse": false,
