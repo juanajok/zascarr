@@ -36,3 +36,19 @@
   </ol>
 </nav>
 {%- endmacro %}
+
+{#- Cabecera de la pantalla de revisión/resultado de la vinculación: título, frase y pasos. Con `oob` se emite como respuesta
+    fuera de banda para que al confirmar (que solo sustituye `#revision`) la cabecera deje de decir «Revisar» y los pasos
+    pasen al 3. No es una región viva: sustituir el elemento es correcto. -#}
+{% macro cabecera_vinculacion(resultado, oob=false) -%}
+<div id="cabecera-vinculacion"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if resultado %}
+  <h1>Resultado de la vinculación</h1>
+  <p class="subtitle">Esto es lo que pasó al vincular los archivos que habías preparado. Vincular conserva el nombre y la carpeta de cada archivo.</p>
+  {% else %}
+  <h1>Revisar selección y números</h1>
+  <p class="subtitle">Marca los archivos que quieres vincular a la serie y comprueba su número. En este paso no se vincula ni se crea nada: solo se prepara y se revisa.</p>
+  {% endif %}
+  {{ indicador_de_pasos(3 if resultado else 2) }}
+</div>
+{%- endmacro %}

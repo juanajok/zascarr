@@ -1,0 +1,233 @@
+{
+  "pasos_de_la_prueba": [
+    {
+      "paso": "1a-pasos-en-A",
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        },
+        {
+          "texto": "2 Revisar los archivos (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        },
+        {
+          "texto": "3 Vincular (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        }
+      ],
+      "arbol_de_accesibilidad_del_actual": {
+        "level": 1
+      }
+    },
+    {
+      "paso": "1b-tabs-hasta-el-buscador-local",
+      "tabs": 12
+    },
+    {
+      "paso": "1c-resultados-locales",
+      "texto": "1 SERIE EN TU BIBLIOTECA. NINGUNA ESTÁ ELEGIDA: ELIGE LA TUYA. Mundo Cobalto (2015) GRAPA AMERICANA Preparar los archivos de esta carpeta para esa serie",
+      "preseleccion": false
+    },
+    {
+      "paso": "1d-tabs-hasta-el-enlace",
+      "tabs": 2
+    },
+    {
+      "paso": "1e-revision",
+      "url": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=1b2509e3-f6ef-4b45-bdff-9ecae978ff77",
+      "banner": true,
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (hecho)",
+          "clase": "hecho",
+          "aria_current": null
+        },
+        {
+          "texto": "2 Revisar los archivos (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        },
+        {
+          "texto": "3 Vincular (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        }
+      ]
+    },
+    {
+      "paso": "2a-resultados-simulados",
+      "texto": "SE HA BUSCADO «MUNDO COBALTO». ✓ Comic Vine: ha respondido AniList: apagada en los ajustes ✓ Tebeosfera: ha respondido GCD: apagada en los ajustes Mundo Cobalto (2015) COMIC VINE Serie de ensayo (simulada). SERIES QUE YA TIENES Y SE PARECEN: MUNDO COBALTO (2015) GRAPA AMERICANA PREPARAR LOS ARCHIVOS DE ESTA CARPETA PARA ESA SERIE Elige la tradición… Grapa americana Franco-belga (BD) Manga Tebeo es",
+      "parecidas_bajo_la_candidata": false
+    },
+    {
+      "paso": "2b-tras-elegir",
+      "tradicion_elegida_por_teclado": "tebeo",
+      "texto": "Elige la tradición… Grapa americana Franco-belga (BD) Manga Tebeo español Fumetti Manhwa Manhua Británico Otra Elegir esta serie La fuente sugiere: Grapa americana. Tú decides.",
+      "callejon": false,
+      "ofrece_crear": false
+    },
+    {
+      "paso": "2c-la-serie-aun-no-existe",
+      "apariciones_en_la_biblioteca": 0
+    },
+    {
+      "paso": "2d-vista-previa-reconstruida",
+      "url": "/ui/pendientes/carpetas/asistente/alta",
+      "ofrece_crear": true,
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        },
+        {
+          "texto": "2 Revisar los archivos (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        },
+        {
+          "texto": "3 Vincular (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        }
+      ],
+      "encabezado": "CREAR LA SERIE DE LA CARPETA 1 Elegir la serie (paso actual) 2 Revisar los archivos (pendiente) 3 Vincular (pendiente) E"
+    },
+    {
+      "paso": "2e-alta-creada",
+      "tabs": 13,
+      "texto": "«Mundo Cobalto Integral» (2020): creada. Es una serie vacía: sin números ni archivos. Vincular archivos es otro paso. Ver ficha Añadir a deseados Siguiente paso, que todavía no se ha hecho: revisar qué archivos de la carpeta «_Unsorted» se vinculan a esta serie. Confirmar el alta no vincula nada; la revisión y su confirmación son pasos aparte. Revisar los archivos de esta carpeta Deshacer"
+    },
+    {
+      "paso": "2f-alta-reconstruida",
+      "texto": "ESTADO DEL ALTA 1 Elegir la serie (paso actual) 2 Revisar los archivos (pendiente) 3 Vincular (pendiente) ← Volver a «Pendientes por carpeta» ESTADO DEL ALTA La serie «Mundo Cobalto Integral» (2020) ya está creada. Es una serie vacía: sin números ni archivos propios todavía. Quedan 6 archivos de la ",
+      "deshacer": false,
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        },
+        {
+          "texto": "2 Revisar los archivos (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        },
+        {
+          "texto": "3 Vincular (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        }
+      ]
+    },
+    {
+      "paso": "3a-revision-de-la-serie-nueva",
+      "url": "?clave=_Unsorted&series_id=6fe80449-8d05-419a-8c07-77a4d3fed7bf",
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (hecho)",
+          "clase": "hecho",
+          "aria_current": null
+        },
+        {
+          "texto": "2 Revisar los archivos (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        },
+        {
+          "texto": "3 Vincular (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        }
+      ]
+    },
+    {
+      "paso": "3b-marcado",
+      "boton_de_confirmar": "Vincular 4 archivos"
+    },
+    {
+      "paso": "3c-resultado",
+      "titulo": "REVISAR SELECCIÓN Y NÚMEROS 1 Elegir la serie (hecho) 2 Revisar los archivos (paso actual) 3 Vincular (pendiente) Marca los archivos que qui",
+      "hay_enlace_al_resultado": true,
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (hecho)",
+          "clase": "hecho",
+          "aria_current": null
+        },
+        {
+          "texto": "2 Revisar los archivos (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        },
+        {
+          "texto": "3 Vincular (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        }
+      ]
+    },
+    {
+      "paso": "3d-lectura-valida",
+      "url": "/ui/pendientes/carpetas/asistente/vinculacion/resultado",
+      "repetida": true,
+      "mismo_titulo": "REVISAR SELECCIÓN Y NÚMEROS 1 Elegir la serie (hecho) 2 Revisar los archivos (hecho) 3 Vincular (paso actual) Marca los archivos que quieres",
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (hecho)",
+          "clase": "hecho",
+          "aria_current": null
+        },
+        {
+          "texto": "2 Revisar los archivos (hecho)",
+          "clase": "hecho",
+          "aria_current": null
+        },
+        {
+          "texto": "3 Vincular (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        }
+      ]
+    },
+    {
+      "paso": "3e-recargar",
+      "sigue": true
+    },
+    {
+      "paso": "3f-carpeta-tras-vincular",
+      "apariciones_de__Unsorted": 3
+    },
+    {
+      "paso": "3g-referencia-no-valida",
+      "texto": "RESULTADO DE LA VINCULACIÓN 1 Elegir la serie (hecho) 2 Revisar los archivos (hecho) 3 Vincular (paso actual) RESULTADO GUARDADO ! Esta referencia no es válida. No se ha cambiado nada. Volver a las ca",
+      "sin_pistas": true
+    },
+    {
+      "paso": "4a-movil-oscuro",
+      "scroll_horizontal": false,
+      "pasos": [
+        {
+          "texto": "1 Elegir la serie (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
+        },
+        {
+          "texto": "2 Revisar los archivos (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        },
+        {
+          "texto": "3 Vincular (pendiente)",
+          "clase": "pendiente",
+          "aria_current": null
+        }
+      ]
+    }
+  ],
+  "chrome": "Chrome/154.0.8037.92"
+}

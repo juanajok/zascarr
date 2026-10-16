@@ -4,7 +4,6 @@
 {#- Lectura de un resultado guardado (U19, ficha §7.2) cuando NO se puede mostrar el informe: referencia no válida, plazo vencido
     o resultado no encontrado. Solo lectura: ningún botón confirma o reintenta nada. Sin pistas en «no válida». -#}
 <h1>Resultado de la vinculación</h1>
-{% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(3) }}
 <section class="card vinculacion-lectura" data-estado="{{ estado }}" aria-labelledby="lectura-titulo">
   <h2 id="lectura-titulo" class="sr">Resultado guardado</h2>
   {{ ui.aviso("warn" if estado == "no_valida" else "amber" if estado == "no_encontrado" else "info", mensaje) }}

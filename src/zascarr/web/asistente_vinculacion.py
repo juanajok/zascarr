@@ -536,7 +536,7 @@ async def confirmar(
             plazo_s=RETENCION_HORAS * 3600, secret=secreto)
     return _sin_cache(templates.TemplateResponse(request, plantilla, {
         **base, "resultado": True, "fallo": None, "r": r, **_contexto_del_informe(r), "error": None,
-        "token": token, "ref": ref, "ruta_resultado": RUTA + "/resultado"}))
+        "token": token, "ref": ref, "ruta_resultado": RUTA + "/resultado", "oob_cabecera": "hx-request" in request.headers}))
 
 
 def _contexto_del_informe(r) -> dict:
