@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Estado del alta — ZascArr{% endblock %}
+{% block content %}
+{#- Lo que consta de un alta al volver a ella (U19, ficha §6.4). Solo lectura: no repite el alta, no la deshace ni ofrece
+    «Deshacer», y no afirma lo que no consta (quién creó la serie si no hay comprobante). -#}
+<h1>Estado del alta</h1>
+<p><a href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
+{% set serie = hechos.serie if hechos else None %}
+<section class="card" data-estado="{{ 'creada' if serie and hechos.estado == 'creada' else 'existe' if serie else 'deshecha' if hechos and hechos.estado == 'deshecha' else 'no_existe' }}" aria-labelledby="alta-estado">
+  <h2 id="alta-estado" class="sr">Estado del alta</h2>
+  {% if serie and hechos.estado == "creada" %}
+  <p><strong>La serie «{{ serie.titulo }}»{% if serie.anio %} ({{ serie.anio }}){% endif %} ya está creada.</strong> Es una serie vacía: sin números ni archivos propios todavía.</p>
+  {% elif serie %}
+  <p><strong>«{{ serie.titulo }}»{% if serie.anio %} ({{ serie.anio }}){% endif %} está en tu biblioteca.</strong></p>
+  {% elif hechos and hechos.estado == "deshecha" %}
+  {{ ui.aviso("info", "El alta de esa serie se deshizo: la serie ya no está en tu biblioteca. Puedes volver a elegirla o a crearla.") }}
+  {% else %}
+  {{ ui.aviso("amber", "Esa serie ya no existe en tu biblioteca. Vuelve a elegirla.") }}
+  {% endif %}
+
+  {% if serie %}
+  {% if pendientes is none %}
+  <p>Esa carpeta ya no tiene registros pendientes de vincular.</p>
+  {% else %}
+  <p>{% if pendientes == 1 %}Queda 1 archivo{% else %}Quedan {{ pendientes }} archivos{% endif %} de la carpeta «{{ clave }}» sin vincular. Revisarlos no vincula nada hasta que lo confirmes.</p>
+  <p><a class="btn" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ serie.series_id }}">Revisar los archivos de esta carpeta</a></p>
+  {% endif %}
+  {% else %}
+  <p><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}">Volver a elegir la serie</a></p>
+  {% endif %}
+</section>
+{% endblock %}

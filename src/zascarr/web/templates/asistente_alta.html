@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Crear la serie de la carpeta — ZascArr{% endblock %}
+{% block content %}
+{#- Vista previa del alta, reconstruida por GET (U19, ficha §6.4): solo lectura. Crear la serie es el botón de la vista previa
+    (una acción aparte con su propio token); esta pantalla no escribe nada ni consulta ninguna fuente. -#}
+<h1>Crear la serie de la carpeta</h1>
+<p class="subtitle">Esto es solo una vista previa: no se crea nada hasta que lo confirmes, y crear la serie no vincula ningún archivo.</p>
+<p><a href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">← Volver a elegir la serie de esta carpeta</a>
+   · <a href="/ui/pendientes/carpetas">Volver a «Pendientes por carpeta»</a></p>
+<section class="card" aria-labelledby="alta-carpeta">
+  <h2 id="alta-carpeta">{{ clave }}</h2>
+  {% if aviso %}
+  {{ ui.aviso("warn", aviso) }}
+  <p class="caption">«Volver a elegir» abre el asistente con tu búsqueda escrita, pero no la lanza: buscar de nuevo consulta las fuentes y lo decides tú.</p>
+  {% else %}
+  {% include plantilla %}
+  {% endif %}
+</section>
+{% endblock %}

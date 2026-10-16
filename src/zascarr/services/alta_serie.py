@@ -189,6 +189,14 @@ class ResultadoAlta(BaseModel):
     deshacer: dict[str, str] | None
 
 
+class HechosDeAlta(BaseModel):
+    """Lo que CONSTA de un alta al volver a ella (U19, solo lectura). `serie`: la serie si existe. `estado`: el del
+    comprobante de ESA operación (`creada` o `deshecha`), o `None` si no hay comprobante (reutilizar no escribe nada, y los
+    comprobantes se purgan): entonces solo consta que la serie existe, no quién la creó."""
+    serie: SerieLocal | None
+    estado: Literal["creada", "deshecha"] | None
+
+
 class ResultadoDeshacer(BaseModel):
     deshecho: bool
     series_id: str
@@ -497,6 +505,17 @@ class AltaDeSerie:
     def _resultado_creada(serie: Series, operacion: str, *, repetida: bool) -> ResultadoAlta:
         return ResultadoAlta(resultado="creada", serie=_a_serie_local(serie), repetida=repetida, motivo=None,
                              deshacer={"series_id": str(serie.id), "operacion_id": operacion})
+
+    async def hechos_del_alta(self, series_id: UUID, operacion_id: UUID | None = None) -> HechosDeAlta:
+        """SOLO LECTURA: qué consta de un alta para volver a ella. No confirma, no deshace, no purga, no escribe."""
+        serie = (await self._db.execute(select(Series).where(Series.id == series_id))).scalar_one_or_none()
+        estado = None
+        if operacion_id is not None:
+            fila = (await self._db.execute(
+                select(AltaOperacion).where(AltaOperacion.operacion_id == operacion_id))).scalar_one_or_none()
+            if fila is not None and UUID(str(fila.series_id)) == series_id:
+                estado = fila.estado.value
+        return HechosDeAlta(serie=_a_serie_local(serie) if serie is not None else None, estado=estado)
 
     # ── Deshacer ─────────────────────────────────────────────────────────────────────────────────
 
