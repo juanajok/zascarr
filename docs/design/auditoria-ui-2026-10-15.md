@@ -7,6 +7,11 @@
 (contraste, tamaños, objetivos, etiquetas, reflow a 360 px) sobre 11 pantallas en tema claro y oscuro.
 **No es un test con usuarios.**
 
+> **Nota de seguimiento (2026-10-16).** Este informe es una **línea base fechada** (2026-10-15, `main` en `a5369ef`): describe cómo estaba la
+> UI ese día, **no el estado actual de `main`**. Varios de sus hallazgos se corrigieron después; el seguimiento por historia (issue, PR de
+> implementación y estado) está en `docs/BACKLOG.md`, «Seguimiento de las historias U11–U21». Los hallazgos de abajo **no se han reescrito**:
+> se conservan tal como se midieron.
+
 Cada hallazgo lleva **[C] confirmado** (observado en vivo o medido) o **[P] plausible** (deducido, verificar).
 
 ---
@@ -178,7 +183,7 @@ la garantía junto al botón con efecto, lo técnico plegado, resumen antes que 
 «Seleccionar todo» + «Agrupar por patrón de nombre» + barra «Asignar…» está pensada para una pantalla.
 Con 1.322 archivos, «seleccionar todo» y asignar a una serie es una **acción masiva peligrosa**, y agrupar
 por patrón de nombre repite lo que ya hacen mejor las carpetas (ADR 0007/0008 y la vista «Pendientes por carpeta»).
-→ **V5 debe partir de las carpetas, no de la lista de archivos** (variantes en §5).
+→ **Recomendación de esta auditoría** (no una decisión de diseño ya validada): V5 debería partir de las carpetas y no de la lista de archivos (variantes en §5). «Carpetas primero» es una **hipótesis pendiente de U10** (§8, puerta G1).
 
 **MQ2 (mayor) — Serie de destino con `<datalist>`** (línea 301-302). No busca en el servidor, en iOS Safari
 y Android se muestra de forma inconsistente y no distingue entre «Patrulla-X (1985)» y «(1963)» con su editorial.
@@ -297,6 +302,7 @@ select { max-width: 100%; }
 
 ## 8. Riesgos y validación pendiente
 
+- *(Seguimiento 2026-10-16, ver #203: para esa historia la verificación en dispositivo se sustituyó por un contrato emulado en un Debian de ensayo; la ronda en iPhone/Android reales sigue **NOT RUN y fuera del alcance exigido**. Esta línea y el paso 4 de §9 describen el plan original.)*
 - **Safari en iOS no se ha probado en un dispositivo real.** Hay que verificar m2 (zoom), el comportamiento de la barra inferior
   con `safe-area-inset-bottom`, MQ2 (`datalist`) y `hx-confirm` en un iPhone.
 - **«Carpetas primero» (§5) es una hipótesis.** Hay que validarla con **U10** antes de fusionar V5/V6 (puerta G1 de
