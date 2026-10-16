@@ -143,8 +143,33 @@ async def main(base: str, fragmentos: Path, salida: Path) -> None:
             await tecla(nav, "Enter")                                   # envía la búsqueda (simulada)
             await pausa(1.2)
             r = await nav.js("document.querySelector('#asistente-resultados').innerText")
-            anotar("2a-resultados-simulados", texto=texto(r)[:400], parecidas_bajo_la_candidata="Series que ya tienes y se parecen" in r)
+            anotar("2a-resultados-simulados", texto=texto(r)[:400], parecidas_bajo_la_candidata="series que ya tienes y se parecen" in r.lower())
             await nav.foto(salida / "3-resultados-con-parecidas.png", completa=False)
+            # la PRIMERA candidata coincide con una serie que ya tienes: elegir su tradición por teclado lleva a decidir («Es esta»)
+            await nav.js("[...document.querySelectorAll('#asistente-resultados select')][0].focus()")
+            await escribir(nav, "Grapa")
+            await tecla(nav, "Tab")
+            await tecla(nav, "Enter")
+            await pausa(1.5)
+            bloque = "(([...document.querySelectorAll('.asistente-paso')].find(e => e.innerText.includes('Elección anotada'))) || null)"
+            ambig = await nav.js(f"({bloque} || {{innerText: ''}}).innerText")
+            anotar("2a2-decidir-entre-parecidas", texto=texto(ambig)[:300], ofrece_es_esta="Es esta" in ambig, ofrece_crear_otra="Es distinta: crear otra" in ambig)
+            await nav.js(f"{bloque}.querySelector('input[name=decision][value=reutilizar]').form.querySelector('button').focus()")
+            await tecla(nav, "Enter")                                   # «Es esta»
+            await pausa(1.5)
+            tras = await nav.js(f"({bloque} || {{innerText: ''}}).innerText")
+            anotar("2a3-es-esta", texto=texto(tras)[-420:], decision_tomada="Se usará la serie existente que elegiste" in tras)
+            await nav.foto(salida / "3b-es-esta.png", completa=False)
+            enlace_decision = await nav.js(f"[...{bloque}.querySelectorAll('a')].find(a => a.textContent.includes('enlace a esta vista previa')).href")
+            anotar("2a4-el-enlace-lleva-la-decision", decision="decision=reutilizar" in enlace_decision, serie_id="serie_id=" in enlace_decision, consulta="consulta=" in enlace_decision)
+            await nav.ir(enlace_decision, espera=1.0)                   # recargar por el enlace que ofrece la pantalla
+            vd = await visible(nav)
+            anotar("2a5-reconstruida-con-la-decision", conserva="Se usará la serie existente que elegiste" in vd, vuelve_a_preguntar="Es esta" in vd)
+            await nav.foto(salida / "3c-decision-conservada.png", completa=False)
+            await nav.ir(base + A, espera=0.8)
+            await nav.js("document.querySelector('#asistente-consulta').focus()")
+            await tecla(nav, "Enter")
+            await pausa(1.2)
             # la segunda candidata (Tebeosfera): su selector de tradición, por teclado
             await nav.js("[...document.querySelectorAll('#asistente-resultados select')][1].focus()")
             await escribir(nav, "Tebeo")
@@ -177,14 +202,12 @@ async def main(base: str, fragmentos: Path, salida: Path) -> None:
         r2 = await nav.js("document.querySelector('.alta-paso').innerText")
         anotar("2e-alta-creada", tabs=k, texto=texto(r2)[:400])
         await nav.foto(salida / "6-alta-creada.png", completa=False)
-        href_rev = await nav.js("[...document.querySelectorAll('a')].find(a => a.textContent.includes('Revisar los archivos de esta carpeta')).href")
-        sid = re.search(r"series_id=([0-9a-f-]{36})", href_rev).group(1)
-        operacion = await nav.js("document.querySelector('input[name=operacion_id]').value")
-
-        # volver al resultado del alta por su URL: lo que consta, sin repetirlo ni ofrecer «Deshacer»
-        await nav.ir(f"{base}/ui/pendientes/carpetas/asistente/alta/resultado?clave=_Unsorted&series_id={sid}&operacion={operacion}", espera=0.8)
+        # volver al estado del alta por el ENLACE que ofrece el resultado (no se compone ninguna URL)
+        vinculo = await nav.js("(() => { const a = [...document.querySelectorAll('a')].find(a => a.textContent.includes('enlace al estado de esta alta')); return a ? a.href : null; })()")
+        assert vinculo, "el resultado del alta no ofrece el enlace al estado de la alta"
+        await nav.ir(vinculo, espera=0.8)
         v = await visible(nav)
-        anotar("2f-alta-reconstruida", texto=v[:300], deshacer="Deshacer" in v, pasos=(await pasos(nav))["pasos"])
+        anotar("2f-alta-reconstruida", enlace_ofrecido=vinculo.replace(base, "")[:80], texto=v[:300], deshacer="Deshacer" in v, vacia="vacía" in v, pasos=(await pasos(nav))["pasos"])
         await nav.foto(salida / "7-alta-reconstruida.png", completa=False)
 
         # ── 3. Revisión, vinculación y lectura del resultado ───────────────────────────────────
