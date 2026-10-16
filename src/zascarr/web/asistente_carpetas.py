@@ -40,6 +40,7 @@ from zascarr.services.discovery import (
     FUENTE_SIN_CLAVE,
     ORDEN_DE_FUENTES,
 )
+from zascarr.services.review import ReviewService
 from zascarr.services.revision_carpetas import RevisionCarpetas
 from zascarr.services.tokens_revision import (
     MAX_CLAVE_GRUPO,
@@ -191,10 +192,12 @@ async def elegir(
     clave: str = Form(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
     candidata: str = Form(..., min_length=1, max_length=MAX_TOKEN_CANDIDATA),
     tradition: str | None = Form(default=None, max_length=40),
+    consulta: str = Form(default="", max_length=200),
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Anota la elección de una candidata de fuente con la tradición que ELIGE la persona. **No crea la serie ni vincula
-    archivos**; conserva el grupo de origen. Conectar este camino con el alta es una historia aparte (#189 es solo a mano:
-    el formulario a mano envía a la vista previa del alta, no pasa por aquí)."""
+    """Anota la elección de una candidata de fuente con la tradición que ELIGE la persona y enseña la VISTA PREVIA del alta
+    (U19, D2). **Elegir no crea la serie ni vincula archivos**: la vista previa es de solo lectura y crear es su botón, con su
+    propio token; vincular es otro paso con su propia revisión y confirmación. Conserva el grupo de origen."""
     pista = _pista_de_carpeta(clave, tradiciones_de_la_carpeta(clave))
     tradicion = None
     if tradition:
@@ -210,13 +213,19 @@ async def elegir(
         return _fragmento_error(request, MENSAJE_BUSQUEDA_CADUCADA)
     if tradicion is None:
         return _sin_cache(templates.TemplateResponse(request, "_asistente_paso.html", {
-            "clave": clave, "token": candidata, "sugerida": firmada.tradicion,
+            "clave": clave, "token": candidata, "sugerida": firmada.tradicion, "consulta": consulta,
             "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion),
             "error": MENSAJE_FALTA_TRADICION, "tradiciones": _tradiciones(), "pista": pista}))
+    plantilla, contexto = await preparar_vista_previa(
+        request, db, candidata=candidata, titulo=None, anio=None, clave=clave, tradition=tradicion)
+    if plantilla == "_fragmento_sin_clave":
+        return _fragmento_error(request, MENSAJE_SIN_CLAVE)
     return _sin_cache(templates.TemplateResponse(request, "_asistente_eleccion.html", {
-        "clave": clave, "origen": "fuente", "fuente": _NOMBRE_FUENTE.get(firmada.fuente, firmada.fuente),
-        "titulo": firmada.titulo, "anio": firmada.anio, "tradicion": _TRADICION_LABEL[tradicion],
-        "sugerida": _etiqueta_de_tradicion(firmada.tradicion)}))
+        **contexto, "plantilla": plantilla, "clave": clave, "origen": "fuente", "candidata": candidata,
+        "tradition": tradicion.value, "consulta": consulta,
+        "eleccion_fuente": _NOMBRE_FUENTE.get(firmada.fuente, firmada.fuente), "eleccion_titulo": firmada.titulo,
+        "eleccion_anio": firmada.anio, "eleccion_tradicion": _TRADICION_LABEL[tradicion],
+        "eleccion_sugerida": _etiqueta_de_tradicion(firmada.tradicion)}))
 
 
 # ── U19: volver sin perder la elección (ficha §6.4) ──────────────────────────────────────────────
@@ -286,3 +295,22 @@ async def alta_resultado(
     pendientes = None if grupo is None else len(grupo[1])
     return _sin_cache(templates.TemplateResponse(request, "asistente_alta_resultado.html", {
         "clave": clave, "series_id": series_id, "hechos": hechos, "pendientes": pendientes}))
+
+
+@router.get("/locales", response_class=HTMLResponse)
+async def locales(
+    request: Request,
+    clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
+    q: str = Query(default="", max_length=200),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Series que ya tienes en tu biblioteca y se llaman como `q` (U19, D1). **Solo lectura y solo la base local**: no
+    consulta ninguna fuente y no crea nada. Nada llega preseleccionado, ni siquiera con un único resultado: elegir una es un
+    enlace a la revisión, que no vincula nada hasta que se confirma. Muestra título, año y tradición, que ya vienen en la misma
+    consulta (sin consultas por fila)."""
+    texto = q.strip()
+    encontradas = await ReviewService(db).search_series(texto) if texto else []
+    return _sin_cache(templates.TemplateResponse(request, "_asistente_locales.html", {
+        "clave": clave, "q": texto, "series": [
+            {"series_id": str(x.id), "titulo": x.title, "anio": x.start_year,
+             "tradicion": _TRADICION_LABEL.get(x.tradition, str(x.tradition))} for x in encontradas]}))
