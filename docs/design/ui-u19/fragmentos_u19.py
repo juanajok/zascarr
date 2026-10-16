@@ -37,15 +37,15 @@ CLAVE_GRUPO = "_Unsorted"
 def main(fichero_clave: str, serie_id: str, titulo_local: str, salida: str) -> None:
     secreto = open(fichero_clave, encoding="utf-8").read().strip()
 
-    def tok(id_, titulo, anio):
-        return crear_token_candidata(CLAVE_GRUPO, candidata_firmable("comic_vine", id_, titulo, anio, "american", None, None), secreto)
+    def tok(fuente, id_, titulo, anio, tradicion):
+        return crear_token_candidata(CLAVE_GRUPO, candidata_firmable(fuente, id_, titulo, anio, tradicion, None, None), secreto)
 
     parecida = SerieParecida(series_id=serie_id, titulo=titulo_local, anio=2015, tradicion="american", motivo="mismo_titulo")
     candidatas = [
-        Candidata(token=tok("4050", "Mundo Cobalto", 2015), fuente="comic_vine", titulo="Mundo Cobalto", anio=2015,
+        Candidata(token=tok("comic_vine", "4050", "Mundo Cobalto", 2015, "american"), fuente="comic_vine", titulo="Mundo Cobalto", anio=2015,
                   tradicion_sugerida="american", sitio_url=None, portada=None, descripcion="Serie de ensayo (simulada).",
                   ya_en_biblioteca=None, parecidas_locales=[parecida], coincidencia_con_la_carpeta=Coincidencia(en_conflicto=False, senales=[])),
-        Candidata(token=tok("9001", "Mundo Cobalto Integral", 2020), fuente="tebeosfera", titulo="Mundo Cobalto Integral", anio=2020,
+        Candidata(token=tok("tebeosfera", "mundo-cobalto-integral", "Mundo Cobalto Integral", 2020, "tebeo"), fuente="tebeosfera", titulo="Mundo Cobalto Integral", anio=2020,
                   tradicion_sugerida="tebeo", sitio_url=None, portada=None, descripcion=None,
                   ya_en_biblioteca=None, parecidas_locales=[], coincidencia_con_la_carpeta=Coincidencia(en_conflicto=False, senales=[])),
     ]

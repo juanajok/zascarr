@@ -55,7 +55,11 @@ from zascarr.services.tokens_revision import (
     verificar_referencia_de_resultado,
     verificar_token_vinculacion,
 )
-from zascarr.services.vinculacion import RETENCION_HORAS, InformeDeOtraSerieError, VinculacionDeArchivos
+from zascarr.services.vinculacion import (
+    RETENCION_HORAS,
+    InformeDeOtraSerieError,
+    VinculacionDeArchivos,
+)
 from zascarr.services.vinculacion_previa import (
     LIMITE_ARCHIVOS,
     ArchivoAjenoError,

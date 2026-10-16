@@ -24,29 +24,42 @@ import httpx
 import pytest
 from sqlalchemy import text
 
+from tests.test_asistente_confirmar_pg import confirmar, enviar, listo, numero_de  # noqa: F401
+from tests.test_asistente_vinculacion_pg import (  # noqa: F401
+    CLAVE,
+    SECRETO,
+    abrir,
+    archivos,
+    cliente,
+    entorno,
+    serie_de_prueba,
+    url_bd,
+)
 from tests.test_u19_recorrido_pg import (  # noqa: F401  (fixtures, vigilancia de fuentes y ayudas)
-    ref_de,
-    A,
-    UNO,
     DOS,
     TRES,
+    UNO,
+    A,
     V,
     _secreto_y_sin_red,
     _vigilar_las_fuentes,
     candidata,
     crear_alta,
     get,
+    ref_de,
     series,
     sin_fuentes,
     token_de_crear,
     visible,
 )
-from tests.test_asistente_confirmar_pg import confirmar, enviar, listo, numero_de  # noqa: F401
-from tests.test_asistente_vinculacion_pg import CLAVE, SECRETO, abrir, archivos, cliente, entorno, serie_de_prueba, url_bd  # noqa: F401
 from tests.test_vinculacion_pg import ent  # noqa: F401
 from tests.test_vinculacion_previa_pg import escrituras, huella_disco, instantanea
 from zascarr.models import ComicTradition
-from zascarr.services.tokens_revision import MAX_TOKEN_CANDIDATA_SIN_GRUPO, crear_token_candidata, candidata_firmable
+from zascarr.services.tokens_revision import (
+    MAX_TOKEN_CANDIDATA_SIN_GRUPO,
+    candidata_firmable,
+    crear_token_candidata,
+)
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = [

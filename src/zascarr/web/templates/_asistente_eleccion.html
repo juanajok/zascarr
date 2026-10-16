@@ -11,7 +11,7 @@
     {% if eleccion_sugerida %}<dt>La fuente sugería</dt><dd>{{ eleccion_sugerida }} (era solo una sugerencia)</dd>{% endif %}
   </dl>
   {% include plantilla %}
-  <p class="caption">Puedes recargar o volver a esta vista previa sin perder la elección durante 15 minutos: <a href="/ui/pendientes/carpetas/asistente/alta?clave={{ clave | urlencode }}&amp;candidata={{ candidata | urlencode }}&amp;tradition={{ tradition | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">enlace a esta vista previa</a>.</p>
+  <p class="muted">Puedes recargar o volver a esta vista previa sin perder la elección durante 15 minutos: <a href="/ui/pendientes/carpetas/asistente/alta?clave={{ clave | urlencode }}&amp;candidata={{ candidata | urlencode }}&amp;tradition={{ tradition | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">enlace a esta vista previa</a>.</p>
   <p><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">Elegir otra</a>
      <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a></p>
 </div>
