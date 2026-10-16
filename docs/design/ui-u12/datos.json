@@ -1,0 +1,149 @@
+{
+  "chrome": "Chrome/154.0.8037.92",
+  "viewport": "375x812 (emulación de viewport con mobile=true)",
+  "enlace_a_carpetas": "Verlos por carpeta (1 carpeta)",
+  "pagina_1": {
+    "ancho_pagina": 375,
+    "ancho_ventana": 375,
+    "sin_scroll_horizontal": true,
+    "rango": "Mostrando 1–50 de 68 pendientes.",
+    "primer_nombre_completo_en_el_primer_pantallazo": true,
+    "primer_nombre": {
+      "texto": 16,
+      "caben": true,
+      "ellipsis": false,
+      "nowrap": false,
+      "alto": 22
+    },
+    "nombre_largo": {
+      "texto": 158,
+      "caben": true,
+      "ellipsis": false,
+      "nowrap": false,
+      "alto": 87
+    },
+    "cbr": {
+      "img": false,
+      "bloque_portada": false,
+      "html_portada": false
+    },
+    "con_portada": {
+      "alto": 180,
+      "ancho": 120,
+      "debajo_del_nombre": true,
+      "natural": 240
+    },
+    "imagenes": 49,
+    "tarjetas": 50,
+    "portadas_rotas": {
+      "n": 43,
+      "alturas": [
+        0
+      ],
+      "alto_tarjeta_con_rota": 324
+    },
+    "onerror_en_pagina": false
+  },
+  "peticiones_portada": {
+    "total": 49,
+    "estados": [
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404
+    ]
+  },
+  "siguiente": "Mostrando 51–68 de 68 pendientes.",
+  "siguiente_tarjetas": 18,
+  "anterior": "Mostrando 1–50 de 68 pendientes.",
+  "confirm_aceptado": true,
+  "refresco_sin_recargar": {
+    "antes": "Mostrando 1–50 de 68 pendientes.",
+    "despues": "Mostrando 1–49 de 67 pendientes.",
+    "tarjetas": 49,
+    "peticion_rango": [
+      "http://127.0.0.1:18000/ui/pendientes/rango?primero=2026-10-15T19%3A43%3A44.967937%2B00%3A00%7C3509aee4-0533-4fa8-b3bb-6ab377f1e247&ultimo=2026-10-15T19%3A01%3A45.970507%2B00%3A00%7C00e74be5-bba9-44a5-9bad-3deb19adb8aa"
+    ],
+    "estado_rango": [
+      200
+    ],
+    "navegaciones": 1
+  },
+  "fuera_de_orden": {
+    "con_hx_sync": {
+      "valido": true,
+      "con_hx_sync": true,
+      "diagnostico": {
+        "posts_ignorar": 2,
+        "refrescos_pedidos": 2,
+        "refrescos_abortados_o_fallidos": 1,
+        "fetch_pausados": 4
+      },
+      "inicial": "Mostrando 1–50 de 67 pendientes.",
+      "tras_el_segundo_refresco": "Mostrando 1–48 de 65 pendientes.",
+      "tras_soltar_el_primero": "Mostrando 1–48 de 65 pendientes.",
+      "primero_retenido": true,
+      "gana_el_ultimo": true
+    },
+    "control_sin_hx_sync": {
+      "valido": true,
+      "con_hx_sync": false,
+      "diagnostico": {
+        "posts_ignorar": 2,
+        "refrescos_pedidos": 2,
+        "refrescos_abortados_o_fallidos": 0,
+        "fetch_pausados": 4
+      },
+      "inicial": "Mostrando 1–50 de 65 pendientes.",
+      "tras_el_segundo_refresco": "Mostrando 1–48 de 63 pendientes.",
+      "tras_soltar_el_primero": "Mostrando 1–48 de 63 pendientes.",
+      "primero_retenido": true,
+      "gana_el_ultimo": true
+    }
+  }
+}

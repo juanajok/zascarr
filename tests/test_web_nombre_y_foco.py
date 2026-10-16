@@ -30,7 +30,7 @@ from uuid import uuid4
 
 import pytest
 
-from tests.test_pendientes import FakeExecResult, FakeSession, use_fake_session
+from tests.test_pendientes import FakeExecResult, FakeSession, cola_de, use_fake_session
 from tests.test_web_css_contraste import (
     FONDOS_DE_CONTEXTO,
     NO_TEXTO,
@@ -234,7 +234,7 @@ def _archivo(nombre: str, con_sugerencia: bool = False) -> File:
 
 
 def _por_revisar(archivos: list[File]) -> str:
-    with use_fake_session(FakeSession(exec_queue=[FakeExecResult(archivos)])) as client:
+    with use_fake_session(FakeSession(exec_queue=cola_de(archivos))) as client:
         r = client.get("/ui/pendientes")
     assert r.status_code == 200
     return r.text

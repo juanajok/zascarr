@@ -2,12 +2,16 @@
     el formulario sustituye la tarjeta entera, así que un error DEBE devolver la tarjeta con su aviso,
     no un cuerpo JSON (que se pintaba en crudo). `aviso` = {tipo, texto} opcional. -#}
   <div class="pending-card" id="card-{{ c.file.id }}">
-    <img class="cover" src="/ui/pendientes/{{ c.file.id }}/portada" alt=""
-         onerror="this.classList.add('cover-missing')">
     <div class="pending-body">
       {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto) }}{% endif %}
       <div class="filename" title="{{ c.file.file_name }}">{{ c.file.file_name }}</div>
       <div class="detected">Detectado: {{ c.detected }}</div>
+      {#- U12: la portada va DEBAJO del nombre. Sin extractor (CBR, PDF…) no se pinta nada: ni `<img>`, ni petición.
+          Con extractor la disponibilidad es desconocida: si falla, la imagen mide 0 px (sin `aspect-ratio`) y no
+          deja hueco; no hace falta ningún manejador de error. -#}
+      {% if c.con_portada %}
+      <img class="cover" src="/ui/pendientes/{{ c.file.id }}/portada" alt="" loading="lazy" decoding="async">
+      {% endif %}
       {% if c.motivo %}
       <div class="detected motivo">{{ c.motivo }}</div>
       {% endif %}
