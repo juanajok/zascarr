@@ -346,15 +346,17 @@ html { scroll-padding-bottom: 96px; }
   /* Barra inferior: las entradas principales y «Más». Las demás están en el panel de «Más». */
   .nav {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
-    /* Columnas iguales, pero nunca más estrechas que su etiqueta (a 320 px «Deseados» no cabe en 64). */
-    display: grid; grid-template-columns: repeat(5, minmax(max-content, 1fr)); gap: 0;
+    /* U16: columnas iguales que NUNCA superan el ancho (antes `minmax(max-content, 1fr)` hacía la barra más ancha que la pantalla en
+       algunas pantallas: desborde lateral). La etiqueta se reduce con el ancho para que «Deseados» quepa también a 320 px. */
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
     background: var(--paper); border-top: 3px solid var(--ink);
   }
   .nav-grupo { display: contents; }
   .grp, .nav-secundaria { display: none; }
   .nav-enlace {
     position: relative; flex-direction: column; justify-content: center; gap: 2px;
-    min-height: 60px; padding: 6px 3px; text-align: center; font-size: .875rem; font-weight: 600;
+    min-height: 60px; padding: 6px 1px; text-align: center; font-size: clamp(.75rem, 3.3vw, .875rem); font-weight: 600;
+    min-width: 0; overflow-wrap: anywhere;
     border-width: 0; border-radius: 0;
   }
   .nav-enlace[aria-current="page"] { box-shadow: none; }
@@ -725,6 +727,7 @@ button[type="submit"].btn-sugerencia {
 .politica-form label { font-size: .875rem; font-weight: 700; }
 .politica-form select {
   font: inherit; padding: 7px 10px; min-height: 40px;
+  max-width: 100%; min-width: 0;                /* U16: el ancho de un <select> es el de su opción más larga: sin tope desborda el móvil */
   border: 2px solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); color: var(--ink);
 }
@@ -822,6 +825,7 @@ button[type="submit"].btn-sugerencia {
 .legal-checkbox input { margin-top: 3px; flex-shrink: 0; }
 .legal-full { max-width: 760px; line-height: 1.6; }
 .legal-full table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+.legal-full th, .legal-full td { overflow-wrap: anywhere; }      /* U16: una tabla con un texto largo no ensancha la página */
 .legal-full th, .legal-full td {
   border: 2px solid var(--ink); padding: 8px 10px; text-align: left; font-size: .9rem;
 }
@@ -1323,3 +1327,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .pasos-asistente li.actual .num { background: var(--yellow); color: var(--on-yellow); }
 .pasos-asistente li.hecho .num { background: var(--ok-bg); color: var(--ok-t); }
 .pasos-asistente li.pendiente .num { border-style: dashed; }
+
+/* ── U16 (#203): usar todas las pantallas en el móvil ───────────────────────────────────────────
+   Tres contratos medidos en `docs/design/ui-u16/`: (1) los campos miden ≥ 16 px (Safari en iOS amplía la página al enfocar un
+   campo de menos), (2) los controles se tocan con un alto ≥ 44 px (los enlaces sueltos, ≥ 24 px) y (3) nada desborda en horizontal.
+   Se aplica a pantallas estrechas y a las táctiles; en escritorio con ratón no cambia nada. Va al FINAL, con selectores más específicos
+   que los de cada componente, para no tocar cada regla (y sin `!important`). */
+@media (max-width: 860px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="submit"]):not([type="button"]),
+  select:not([hidden]):not([multiple]):not([size]), textarea:not([hidden]):not([data-u16]) {
+    font-size: 1rem; min-height: 44px;
+  }
+  button:not([hidden]):not([data-u16]), .btn:not([hidden]), summary:not([hidden]), .pend-paginas a:not([hidden]),
+  .back-link:not([hidden]), .page-link:not([hidden]), .topnav a.brand:not([hidden]), .side .brand:not([hidden]) { min-height: 44px; }
+  .metric-detail a { display: inline-block; min-height: 24px; }
+}

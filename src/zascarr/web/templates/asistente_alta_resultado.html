@@ -5,7 +5,7 @@
     «Deshacer», y no afirma lo que no consta (quién creó la serie si no hay comprobante). -#}
 <h1>Estado del alta</h1>
 {% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(1) }}
-<p><a href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
+<p><a class="back-link" href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
 {% set serie = hechos.serie if hechos else None %}
 <section class="card" data-estado="{{ 'creada' if serie and hechos.estado == 'creada' else 'existe' if serie else 'deshecha' if hechos and hechos.estado == 'deshecha' else 'no_existe' }}" aria-labelledby="alta-estado">
   <h2 id="alta-estado" class="sr">Estado del alta</h2>

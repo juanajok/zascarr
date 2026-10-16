@@ -6,7 +6,7 @@
 <h1>Crear la serie de la carpeta</h1>
 {% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(1) }}
 <p class="subtitle">Esto es solo una vista previa: no se crea nada hasta que lo confirmes, y crear la serie no vincula ningún archivo.</p>
-<p><a href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">← Volver a elegir la serie de esta carpeta</a>
+<p><a class="back-link" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">← Volver a elegir la serie de esta carpeta</a>
    · <a href="/ui/pendientes/carpetas">Volver a «Pendientes por carpeta»</a></p>
 <section class="card" aria-labelledby="alta-carpeta">
   <h2 id="alta-carpeta">{{ clave }}</h2>

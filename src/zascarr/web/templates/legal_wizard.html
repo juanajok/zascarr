@@ -4,7 +4,7 @@
 {% if accepted %}
 <h1>Aviso legal aceptado</h1>
 <p class="subtitle">Aceptaste la versión vigente el {{ accepted_at.strftime("%d/%m/%Y %H:%M") }}.</p>
-<p><a href="/ui/biblioteca">← Volver a la biblioteca</a></p>
+<p><a class="back-link" href="/ui/biblioteca">← Volver a la biblioteca</a></p>
 {% else %}
 <h1>Antes de buscar o descargar</h1>
 <p class="subtitle">

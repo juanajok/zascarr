@@ -10,7 +10,7 @@
   Una carpeta o un nombre son <em>pistas</em>, no decisiones.
 {% endcall %}
 
-<p><a href="/ui/pendientes">← Volver a «Por revisar»</a></p>
+<p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a></p>
 
 {% if r.totales.grupos == 0 and r.totales.candidata_inexistente == 0 %}
 {{ ui.estado_vacio("Nada pendiente", "No hay registros pendientes de verificar.") }}
