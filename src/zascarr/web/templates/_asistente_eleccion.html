@@ -1,14 +1,16 @@
-{#- La elección ya anotada. NO se ha creado la serie ni vinculado ningún archivo. -#}
+{#- La elección ya anotada y la VISTA PREVIA del alta (U19, D2). NO se ha creado la serie ni vinculado ningún archivo: crear es el
+    botón de la vista previa (su propio token) y vincular, otro paso con su propia revisión. La vista previa se puede recargar:
+    el enlace de abajo la reconstruye por GET sin efectos. -#}
 <div class="asistente-paso">
   {{ ui.aviso("ok", "Elección anotada. Todavía no se ha creado ninguna serie ni se ha vinculado ningún archivo.") }}
   <dl class="carpeta-datos">
     <dt>Carpeta</dt><dd>{{ clave }}</dd>
-    <dt>Serie</dt><dd>{{ titulo }}{% if anio %} ({{ anio }}){% endif %}</dd>
-    <dt>Origen</dt><dd>{% if origen == "fuente" %}{{ fuente }}{% else %}Creada a mano{% endif %}</dd>
-    <dt>Tradición elegida</dt><dd>{{ tradicion }}</dd>
-    {% if sugerida %}<dt>La fuente sugería</dt><dd>{{ sugerida }} (era solo una sugerencia)</dd>{% endif %}
+    <dt>Serie</dt><dd>{{ eleccion_titulo }}{% if eleccion_anio %} ({{ eleccion_anio }}){% endif %}</dd>
+    <dt>Origen</dt><dd>{% if origen == "fuente" %}{{ eleccion_fuente }}{% else %}Creada a mano{% endif %}</dd>
+    <dt>Tradición elegida</dt><dd>{{ eleccion_tradicion }}</dd>
+    {% if eleccion_sugerida %}<dt>La fuente sugería</dt><dd>{{ eleccion_sugerida }} (era solo una sugerencia)</dd>{% endif %}
   </dl>
-  <p class="caption">El paso siguiente —ver qué se crearía antes de confirmar— todavía no está disponible en esta pantalla.</p>
-  <p><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}">Elegir otra</a>
+  {% include plantilla %}
+  <p><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">Elegir otra</a>
      <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a></p>
 </div>

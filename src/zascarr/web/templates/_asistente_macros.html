@@ -1,12 +1,13 @@
 {#- Paso «elegir esta candidata»: la tradición la ELIGE la persona (sin valor por defecto). La que sugiere la fuente
     y la que suele guardar la carpeta se muestran como PISTAS, nunca marcadas. El token lo firmó el servidor al buscar
     y es lo único que vuelve del navegador, junto con la clave del grupo y la tradición. -#}
-{% macro eleccion_form(clave, token, etiqueta_sugerida, tradiciones, pista, error=none) -%}
+{% macro eleccion_form(clave, token, etiqueta_sugerida, tradiciones, pista, error=none, consulta="") -%}
 <div class="asistente-paso">
   {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
   <form hx-post="/ui/pendientes/carpetas/asistente/elegir" hx-target="closest .asistente-paso" hx-swap="outerHTML">
     <input type="hidden" name="clave" value="{{ clave }}">
     <input type="hidden" name="candidata" value="{{ token }}">
+    {% if consulta %}<input type="hidden" name="consulta" value="{{ consulta }}">{% endif %}
     <div class="discovery-card-actions">
       <select name="tradition" required aria-label="Tradición">
         <option value="" selected disabled>Elige la tradición…</option>
@@ -18,5 +19,36 @@
     </div>
     <small>La fuente sugiere: {{ etiqueta_sugerida }}.{% if pista %} La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}.{% endif %} Tú decides.</small>
   </form>
+</div>
+{%- endmacro %}
+
+{#- Indicador de pasos del recorrido «carpeta → serie → revisión → vinculación» (U19, criterio 3). `actual` es 1, 2 o 3. El actual
+    lleva `aria-current="step"`; «hecho» solo se dice de los anteriores (la serie ya elegida, la revisión ya confirmada) y
+    «pendiente» de los siguientes: una acción pendiente nunca se presenta como completada. Solo HTML y CSS. -#}
+{% macro indicador_de_pasos(actual) -%}
+<nav class="pasos-asistente" aria-label="Pasos para vincular los archivos de una carpeta">
+  <ol>
+    {% for n, nombre in [(1, "Elegir la serie"), (2, "Revisar los archivos"), (3, "Vincular")] %}
+    {% set estado = "actual" if n == actual else "hecho" if n < actual else "pendiente" %}
+    <li class="{{ estado }}"{% if n == actual %} aria-current="step"{% endif %}><span class="num" aria-hidden="true">{{ n }}</span>
+      {{ nombre }}<span class="sr"> ({{ "paso actual" if estado == "actual" else "hecho" if estado == "hecho" else "pendiente" }})</span></li>
+    {% endfor %}
+  </ol>
+</nav>
+{%- endmacro %}
+
+{#- Cabecera de la pantalla de revisión/resultado de la vinculación: título, frase y pasos. Con `oob` se emite como respuesta
+    fuera de banda para que al confirmar (que solo sustituye `#revision`) la cabecera deje de decir «Revisar» y los pasos
+    pasen al 3. No es una región viva: sustituir el elemento es correcto. -#}
+{% macro cabecera_vinculacion(resultado, oob=false) -%}
+<div id="cabecera-vinculacion"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if resultado %}
+  <h1>Resultado de la vinculación</h1>
+  <p class="subtitle">Esto es lo que pasó al vincular los archivos que habías preparado. Vincular conserva el nombre y la carpeta de cada archivo.</p>
+  {% else %}
+  <h1>Revisar selección y números</h1>
+  <p class="subtitle">Marca los archivos que quieres vincular a la serie y comprueba su número. En este paso no se vincula ni se crea nada: solo se prepara y se revisa.</p>
+  {% endif %}
+  {{ indicador_de_pasos(3 if resultado else 2) }}
 </div>
 {%- endmacro %}

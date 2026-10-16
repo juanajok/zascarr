@@ -41,7 +41,7 @@ from zascarr.api import revision as api_revision
 from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.discovery import FUENTE_APAGADA, FUENTE_ERROR, FUENTE_OK, FUENTE_SIN_CLAVE
 from zascarr.services.tokens_revision import verificar_token_candidata
-from zascarr.web import asistente_carpetas
+from zascarr.web import asistente_carpetas, discovery
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = [
@@ -56,6 +56,7 @@ CARPETA = "Comics/Flash (1987)"
 @pytest.fixture(autouse=True)
 def _secreto_en_el_asistente(monkeypatch):
     monkeypatch.setattr(asistente_carpetas, "get_settings", lambda: SimpleNamespace(secret_key=SECRETO))
+    monkeypatch.setattr(discovery, "get_settings", lambda: SimpleNamespace(secret_key=SECRETO))     # la vista previa del alta (U19)
 
 
 async def abrir(clave: str = CARPETA) -> httpx.Response:

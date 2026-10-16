@@ -16,6 +16,8 @@ Los fallos recuperables se pintan dentro de la página con 200 (htmx no sustituy
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +26,7 @@ from zascarr.api.revision import buscar_a_ritmo
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
+from zascarr.services.alta_serie import AltaDeSerie
 from zascarr.services.descubrimiento_grupo import (
     DescubrimientoDeGrupo,
     GrupoNoEncontradoError,
@@ -37,12 +40,15 @@ from zascarr.services.discovery import (
     FUENTE_SIN_CLAVE,
     ORDEN_DE_FUENTES,
 )
+from zascarr.services.review import ReviewService
+from zascarr.services.revision_carpetas import RevisionCarpetas
 from zascarr.services.tokens_revision import (
     MAX_CLAVE_GRUPO,
     MAX_TITULO,
     MAX_TOKEN_CANDIDATA,
     verificar_token_candidata,
 )
+from zascarr.web.discovery import preparar_vista_previa
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
 
@@ -66,6 +72,13 @@ MENSAJE_SIN_CLAVE = "ZascArr no tiene clave para firmar lo que ves: reinícialo 
 MENSAJE_BUSQUEDA_CADUCADA = ("Esa búsqueda ya no vale (ha caducado o no es de esta carpeta). "
                          "Vuelve a buscar para elegir de nuevo.")
 MENSAJE_FALTA_TRADICION = "Elige la tradición antes de continuar: ninguna se da por buena."
+#: U19 (ficha §6.4). Volver nunca lanza una búsqueda: lo que no se puede reconstruir sin consultar fuentes se dice.
+MENSAJE_ELECCION_CADUCADA = ("Lo que elegiste caducó (se conserva 15 minutos) o no es de esta carpeta. Vuelve a buscar: no se "
+                             "hace sola, porque consultaría las fuentes.")
+MENSAJE_TRADICION_NO_VALE = "La tradición no es válida: vuelve a elegirla."
+MENSAJE_DECISION_YA_NO_VALE = ("Lo que habías decidido sobre las series parecidas ya no vale, porque esas series han cambiado. "
+                               "Decide de nuevo.")
+MENSAJE_FALTAN_DATOS = "Faltan los datos para preparar el alta: vuelve a elegir la serie."
 
 
 def _tradiciones() -> list[tuple[str, str]]:
@@ -95,7 +108,8 @@ def _pista_de_carpeta(clave: str, tradiciones: list[str]) -> dict | None:
     return {"carpeta": clave.split("/", 1)[0], "etiquetas": [_etiqueta_de_tradicion(t) for t in tradiciones]}
 
 
-async def _pagina(request: Request, db: AsyncSession, clave: str, *, manual_abierto: bool = False) -> HTMLResponse:
+async def _pagina(request: Request, db: AsyncSession, clave: str, *, manual_abierto: bool = False,
+                  consulta: str = "") -> HTMLResponse:
     try:
         apertura = await DescubrimientoDeGrupo(db, secret=get_settings().secret_key or "").abrir(clave)
     except GrupoNoEncontradoError:
@@ -107,16 +121,18 @@ async def _pagina(request: Request, db: AsyncSession, clave: str, *, manual_abie
         "pista": _pista_de_carpeta(clave, apertura.tradiciones_de_la_carpeta),
         "manual_abierto": manual_abierto, "tradiciones": _tradiciones(),
         "titulo": apertura.consulta_propuesta, "anio": "", "error": None, "tradicion_elegida": "",
+        "consulta_escrita": consulta,
     }))
 
 
 @router.get("", response_class=HTMLResponse)
 async def abrir(
     request: Request, clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
-    db: AsyncSession = Depends(get_db),
+    consulta: str = Query(default="", max_length=200), db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Abre el asistente sobre un grupo. **No consulta ninguna fuente** (ni usa la red)."""
-    return await _pagina(request, db, clave)
+    """Abre el asistente sobre un grupo. **No consulta ninguna fuente** (ni usa la red). `consulta` (U19, al volver) solo
+    rellena el campo de búsqueda: nunca la ejecuta."""
+    return await _pagina(request, db, clave, consulta=consulta)
 
 
 @router.post("/buscar", response_class=HTMLResponse)
@@ -178,10 +194,12 @@ async def elegir(
     clave: str = Form(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
     candidata: str = Form(..., min_length=1, max_length=MAX_TOKEN_CANDIDATA),
     tradition: str | None = Form(default=None, max_length=40),
+    consulta: str = Form(default="", max_length=200),
+    db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    """Anota la elección de una candidata de fuente con la tradición que ELIGE la persona. **No crea la serie ni vincula
-    archivos**; conserva el grupo de origen. Conectar este camino con el alta es una historia aparte (#189 es solo a mano:
-    el formulario a mano envía a la vista previa del alta, no pasa por aquí)."""
+    """Anota la elección de una candidata de fuente con la tradición que ELIGE la persona y enseña la VISTA PREVIA del alta
+    (U19, D2). **Elegir no crea la serie ni vincula archivos**: la vista previa es de solo lectura y crear es su botón, con su
+    propio token; vincular es otro paso con su propia revisión y confirmación. Conserva el grupo de origen."""
     pista = _pista_de_carpeta(clave, tradiciones_de_la_carpeta(clave))
     tradicion = None
     if tradition:
@@ -197,10 +215,119 @@ async def elegir(
         return _fragmento_error(request, MENSAJE_BUSQUEDA_CADUCADA)
     if tradicion is None:
         return _sin_cache(templates.TemplateResponse(request, "_asistente_paso.html", {
-            "clave": clave, "token": candidata, "sugerida": firmada.tradicion,
+            "clave": clave, "token": candidata, "sugerida": firmada.tradicion, "consulta": consulta,
             "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion),
             "error": MENSAJE_FALTA_TRADICION, "tradiciones": _tradiciones(), "pista": pista}))
+    plantilla, contexto = await preparar_vista_previa(
+        request, db, candidata=candidata, titulo=None, anio=None, clave=clave, tradition=tradicion, consulta=consulta)
+    if plantilla == "_fragmento_sin_clave":
+        return _fragmento_error(request, MENSAJE_SIN_CLAVE)
     return _sin_cache(templates.TemplateResponse(request, "_asistente_eleccion.html", {
-        "clave": clave, "origen": "fuente", "fuente": _NOMBRE_FUENTE.get(firmada.fuente, firmada.fuente),
-        "titulo": firmada.titulo, "anio": firmada.anio, "tradicion": _TRADICION_LABEL[tradicion],
-        "sugerida": _etiqueta_de_tradicion(firmada.tradicion)}))
+        **contexto, "plantilla": plantilla, "clave": clave, "origen": "fuente", "candidata": candidata,
+        "tradition": tradicion.value, "consulta": consulta,
+        "eleccion_fuente": _NOMBRE_FUENTE.get(firmada.fuente, firmada.fuente), "eleccion_titulo": firmada.titulo,
+        "eleccion_anio": firmada.anio, "eleccion_tradicion": _TRADICION_LABEL[tradicion],
+        "eleccion_sugerida": _etiqueta_de_tradicion(firmada.tradicion)}))
+
+
+# ── U19: volver sin perder la elección (ficha §6.4) ──────────────────────────────────────────────
+
+def _pagina_alta(request: Request, **ctx) -> HTMLResponse:
+    return _sin_cache(templates.TemplateResponse(request, "asistente_alta.html", ctx))
+
+
+@router.get("/alta", response_class=HTMLResponse)
+async def alta_previa(
+    request: Request,
+    clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
+    candidata: str | None = Query(default=None, max_length=MAX_TOKEN_CANDIDATA),
+    titulo: str | None = Query(default=None, max_length=MAX_TITULO),
+    anio: str | None = Query(default=None, max_length=100),
+    tradition: str = Query(default="", max_length=40),
+    consulta: str = Query(default="", max_length=200),
+    decision: str = Query(default="", max_length=20),
+    serie_id: str = Query(default="", max_length=64),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Reconstruye la VISTA PREVIA del alta de una elección (candidata firmada o datos a mano). **Solo lectura**: no crea
+    nada, no consulta fuentes y se puede recargar. La candidata firmada es la única referencia a lo elegido; si caducó o no es
+    de esta carpeta se dice y se ofrece volver a buscar (sin buscar). Crear la serie sigue siendo el botón de la vista previa.
+
+    Conserva también la decisión ya tomada entre series parecidas («es esta» o «crear otra»), **revalidándola**: si las parecidas
+    cambiaron y ya no vale, se dice y se vuelve a la pantalla de decidir; nunca se da por buena en silencio."""
+    base = {"clave": clave, "consulta": consulta}
+    secreto = get_settings().secret_key
+    if not secreto:
+        return _pagina_alta(request, **base, aviso=MENSAJE_SIN_CLAVE)
+    try:
+        elegida = ComicTradition(tradition)
+    except ValueError:
+        return _pagina_alta(request, **base, aviso=MENSAJE_TRADICION_NO_VALE)
+    if candidata:
+        if verificar_token_candidata(candidata, clave, secreto) is None:
+            return _pagina_alta(request, **base, aviso=MENSAJE_ELECCION_CADUCADA)
+    elif not (titulo or "").strip():
+        return _pagina_alta(request, **base, aviso=MENSAJE_FALTAN_DATOS)
+    decidida = decision if decision in ("reutilizar", "crear_igualmente") else None
+    elegida_id = _uuid_o_none(serie_id) if decidida == "reutilizar" else None
+    if decidida == "reutilizar" and elegida_id is None:
+        decidida = None
+    plantilla, contexto = await preparar_vista_previa(
+        request, db, candidata=candidata, titulo=titulo, anio=anio, clave=clave, tradition=elegida,
+        decision=decidida, serie_id=elegida_id, consulta=consulta)
+    aviso_decision = None
+    if decidida and plantilla == "_alta_error.html" and contexto.get("codigo") == "decision_invalida":
+        plantilla, contexto = await preparar_vista_previa(
+            request, db, candidata=candidata, titulo=titulo, anio=anio, clave=clave, tradition=elegida, consulta=consulta)
+        aviso_decision = MENSAJE_DECISION_YA_NO_VALE
+    if plantilla == "_fragmento_sin_clave":
+        return _pagina_alta(request, **base, aviso=MENSAJE_SIN_CLAVE)
+    return _pagina_alta(request, **{**base, **contexto}, plantilla=plantilla, aviso_decision=aviso_decision)
+
+
+def _uuid_o_none(texto: str | None) -> UUID | None:
+    try:
+        return UUID(texto) if texto else None
+    except ValueError:
+        return None
+
+
+@router.get("/alta/resultado", response_class=HTMLResponse)
+async def alta_resultado(
+    request: Request,
+    clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
+    series_id: str = Query(default="", max_length=64),
+    operacion: str = Query(default="", max_length=64),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Lo que CONSTA de un alta al volver a ella. **Solo lectura**: no repite el alta ni la deshace, y no ofrece «Deshacer».
+    Solo afirma lo comprobable: una fila de `alta_operaciones` existe únicamente si el alta CREÓ la serie (reutilizar no
+    escribe nada y el comprobante se purga), así que sin ella solo se dice que la serie existe."""
+    secreto = get_settings().secret_key
+    sid = _uuid_o_none(series_id)
+    hechos = None
+    if secreto and sid is not None:
+        hechos = await AltaDeSerie(db, secret=secreto).hechos_del_alta(sid, _uuid_o_none(operacion))
+    grupo = await RevisionCarpetas(db).archivos_del_grupo(clave)
+    pendientes = None if grupo is None else len(grupo[1])
+    return _sin_cache(templates.TemplateResponse(request, "asistente_alta_resultado.html", {
+        "clave": clave, "series_id": series_id, "hechos": hechos, "pendientes": pendientes}))
+
+
+@router.get("/locales", response_class=HTMLResponse)
+async def locales(
+    request: Request,
+    clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
+    q: str = Query(default="", max_length=200),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Series que ya tienes en tu biblioteca y se llaman como `q` (U19, D1). **Solo lectura y solo la base local**: no
+    consulta ninguna fuente y no crea nada. Nada llega preseleccionado, ni siquiera con un único resultado: elegir una es un
+    enlace a la revisión, que no vincula nada hasta que se confirma. Muestra título, año y tradición, que ya vienen en la misma
+    consulta (sin consultas por fila)."""
+    texto = q.strip()
+    encontradas = await ReviewService(db).search_series(texto) if texto else []
+    return _sin_cache(templates.TemplateResponse(request, "_asistente_locales.html", {
+        "clave": clave, "q": texto, "series": [
+            {"series_id": str(x.id), "titulo": x.title, "anio": x.start_year,
+             "tradicion": _TRADICION_LABEL.get(x.tradition, str(x.tradition))} for x in encontradas]}))

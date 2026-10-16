@@ -1311,3 +1311,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   background: var(--paper); color: var(--ink);
 }
 .discovery-count { margin: 12px 0 0; font-weight: 700; }
+
+/* U19: indicador de pasos del recorrido carpeta → serie → revisión → vinculación (solo CSS). */
+.pasos-asistente ol { list-style: none; margin: 8px 0 16px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.pasos-asistente li { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); font-weight: 600; }
+.pasos-asistente .num {
+  width: 28px; height: 28px; border: 2px solid var(--ink); border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-display); background: var(--paper-2); color: var(--ink);
+}
+.pasos-asistente li.actual { color: var(--ink); }
+.pasos-asistente li.actual .num { background: var(--yellow); color: var(--on-yellow); }
+.pasos-asistente li.hecho .num { background: var(--ok-bg); color: var(--ok-t); }
+.pasos-asistente li.pendiente .num { border-style: dashed; }

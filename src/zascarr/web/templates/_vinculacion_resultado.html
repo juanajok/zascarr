@@ -1,3 +1,4 @@
+{% from "_asistente_macros.html" import cabecera_vinculacion %}{% if oob_cabecera %}{{ cabecera_vinculacion(true, true) }}{% endif %}
 {#- Lo que pasó al confirmar (#120). Serie y grupo salen del token firmado; la página, del formulario (solo presentación).
     Nunca se dice «completado» sin que el servicio lo haya confirmado, y un resultado parcial no se presenta como completo. -#}
 {% macro volver(clave, series_id, cursor_actual, inicio, texto) -%}
@@ -53,6 +54,7 @@
       {% if t.issues_creados %}<li data-total="issues_creados">{{ ui.chip("info", t.issues_creados ~ " números nuevos en la serie") }}</li>{% endif %}
     </ul>
     <p class="caption">Vincular conserva el nombre y la carpeta de cada archivo: no se ha movido ni renombrado nada.</p>
+    {% if ref %}<p class="muted">Si recargas o vuelves a esta pantalla, el resultado sigue disponible mientras no venza el plazo de 24 horas desde que se preparó la vinculación: <a href="{{ ruta_resultado }}?ref={{ ref | urlencode }}">enlace a este resultado</a>.</p>{% endif %}
   </section>
 
   {% if grupos.vinculado %}
