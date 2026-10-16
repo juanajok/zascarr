@@ -24,6 +24,7 @@
     <p>Siguiente paso, que <strong>todavía no se ha hecho</strong>: revisar qué archivos de la carpeta «{{ grupo }}» se vinculan a esta serie.
       Confirmar el alta no vincula nada; la revisión y su confirmación son pasos aparte.</p>
     <a class="btn" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ grupo | urlencode }}&amp;series_id={{ r.serie.series_id }}">Revisar los archivos de esta carpeta</a>
+    <p class="muted">Si recargas o vuelves a esta pantalla, lo que consta de esta alta sigue disponible: <a href="/ui/pendientes/carpetas/asistente/alta/resultado?clave={{ grupo | urlencode }}&amp;series_id={{ r.serie.series_id }}{% if r.deshacer %}&amp;operacion={{ r.deshacer.operacion_id }}{% endif %}">enlace al estado de esta alta</a>.</p>
   </div>
   {% else %}
   <p class="caption alta-sin-grupo">Esta alta no parte de ninguna carpeta, así que no hay ninguna vinculación pendiente.</p>

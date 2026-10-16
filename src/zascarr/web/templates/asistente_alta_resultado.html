@@ -10,7 +10,7 @@
 <section class="card" data-estado="{{ 'creada' if serie and hechos.estado == 'creada' else 'existe' if serie else 'deshecha' if hechos and hechos.estado == 'deshecha' else 'no_existe' }}" aria-labelledby="alta-estado">
   <h2 id="alta-estado" class="sr">Estado del alta</h2>
   {% if serie and hechos.estado == "creada" %}
-  <p><strong>La serie «{{ serie.titulo }}»{% if serie.anio %} ({{ serie.anio }}){% endif %} ya está creada.</strong> Es una serie vacía: sin números ni archivos propios todavía.</p>
+  <p><strong>La serie «{{ serie.titulo }}»{% if serie.anio %} ({{ serie.anio }}){% endif %} ya está creada.</strong></p>
   {% elif serie %}
   <p><strong>«{{ serie.titulo }}»{% if serie.anio %} ({{ serie.anio }}){% endif %} está en tu biblioteca.</strong></p>
   {% elif hechos and hechos.estado == "deshecha" %}

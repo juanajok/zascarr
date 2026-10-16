@@ -19,7 +19,7 @@ import html
 import os
 import re
 from types import SimpleNamespace
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from uuid import uuid4
 
 import httpx
@@ -47,8 +47,10 @@ from tests.test_u19_recorrido_pg import (  # noqa: F401  (fixtures, vigilancia d
     _vigilar_las_fuentes,
     candidata,
     crear_alta,
+    enlace,
     get,
     ref_de,
+    seguir,
     series,
     sin_fuentes,
     token_de_crear,
@@ -316,6 +318,84 @@ class TestNavegarNoEscribe:
         assert await instantanea(ent.banco) == antes and huella_disco(ent.lib) == disco
         sin_fuentes()
 
+
+
+
+# ═══ Volver conserva la decisión ya tomada (criterio 5, revisión de #219) ═══════════════════════
+
+class TestVolverConservaLaEleccion:
+    """Se siguen los ENLACES que la pantalla ofrece (no se componen URLs): elegir → decidir entre parecidas → recargar."""
+
+    async def _con_dos_parecidas(self, ent):
+        await archivos(ent, UNO, DOS)
+        a = await serie_de_prueba(ent, titulo="Flash", anio=1987)
+        b = await serie_de_prueba(ent, titulo="Flash", anio=1986)
+        return a, b
+
+    async def test_es_esta_se_conserva_al_reconstruir_y_se_revalida(self, ent):
+        a, b = await self._con_dos_parecidas(ent)
+        r = await elegir(candidata=candidata(), tradition="american", consulta="Flash")
+        assert "Es esta" in visible(r.text)
+        es_esta = formulario_con(r.text, "/ui/descubrir/revisar", decision="reutilizar", serie_id=str(a))
+        assert es_esta["consulta"] == "Flash"                                           # la búsqueda de la que se parte viaja
+        p = await post("/ui/descubrir/revisar", es_esta)
+        vinculo = enlace(p.text, "enlace a esta vista previa")
+        assert "decision=reutilizar" in vinculo and f"serie_id={a}" in vinculo and "consulta=Flash" in vinculo
+        antes = await instantanea(ent.banco)
+        rec = await seguir(vinculo)
+        v = visible(rec.text)
+        assert "Se usará la serie existente que elegiste" in v and "Es esta" not in v and "Crear serie vacía" not in v
+        assert "Decide de nuevo" not in v
+        assert await instantanea(ent.banco) == antes
+        # la serie elegida deja de existir: ya no vale, se dice, y se vuelve a decidir (no se da por buena en silencio)
+        async with ent.banco.fabrica() as sesion:
+            await sesion.execute(text("DELETE FROM series WHERE id = :i"), {"i": str(a)})
+            await sesion.commit()
+        v2 = visible((await seguir(vinculo)).text)
+        assert "ya no vale" in v2 and "Decide de nuevo" in v2
+        assert "Se usará la serie existente que elegiste" not in v2 and "Es esta" in v2   # queda la otra parecida
+
+    async def test_crear_otra_se_conserva_al_reconstruir(self, ent):
+        await self._con_dos_parecidas(ent)
+        r = await elegir(candidata=candidata(), tradition="american")
+        distinta = formulario_con(r.text, "/ui/descubrir/revisar", decision="crear_igualmente")
+        p = await post("/ui/descubrir/revisar", distinta)
+        vinculo = enlace(p.text, "enlace a esta vista previa")
+        assert "decision=crear_igualmente" in vinculo
+        v = visible((await seguir(vinculo)).text)
+        assert "Crear serie vacía" in v and "Es esta" not in v and "Decide de nuevo" not in v
+
+    async def test_una_decision_inventada_no_se_da_por_buena(self, ent):
+        a, _ = await self._con_dos_parecidas(ent)
+        otra = uuid4()
+        r = await get(f"{A}/alta", clave=CLAVE, candidata=candidata(), tradition="american", decision="reutilizar", serie_id=str(otra))
+        v = visible(r.text)
+        assert "ya no vale" in v and "Es esta" in v and "Se usará la serie existente" not in v
+        r2 = await get(f"{A}/alta", clave=CLAVE, candidata=candidata(), tradition="american", decision="reutilizar", serie_id="no-uuid")
+        assert "Es esta" in visible(r2.text) and "Se usará la serie existente" not in visible(r2.text)
+
+    async def test_el_camino_a_mano_tambien_conserva_sus_datos_y_su_decision(self, ent):
+        a, _ = await self._con_dos_parecidas(ent)
+        async with cliente() as c:
+            f = await c.get(f"{A}/manual", params={"clave": CLAVE}, headers={"HX-Request": "true"})
+        assert 'name="clave"' in f.text
+        p = await post("/ui/descubrir/revisar", {"clave": CLAVE, "titulo": "Flash", "anio": "1987", "tradition": "american"})
+        vinculo = enlace(p.text, "enlace a esta vista previa")
+        assert "titulo=Flash" in vinculo and "anio=1987" in vinculo and "clave=Comics/Flash" in vinculo
+        v = visible((await seguir(vinculo)).text)
+        assert "Es esta" in v and "Crear serie vacía" not in v
+        es_esta = formulario_con(p.text, "/ui/descubrir/revisar", decision="reutilizar", serie_id=str(a))
+        p2 = await post("/ui/descubrir/revisar", es_esta)
+        vinculo2 = enlace(p2.text, "enlace a esta vista previa")
+        assert f"serie_id={a}" in vinculo2 and "titulo=Flash" in vinculo2
+        v2 = visible((await seguir(vinculo2)).text)
+        assert "Se usará la serie existente que elegiste" in v2 and "Es esta" not in v2
+
+    async def test_el_resultado_de_elegir_tiene_una_sola_referencia_a_la_vista_previa(self, ent):
+        """La envoltura de fuera ya no lleva un enlace propio que se quedaría viejo tras decidir."""
+        await archivos(ent, UNO)
+        r = await elegir(candidata=candidata(), tradition="american")
+        assert visible(r.text).count("enlace a esta vista previa") == 1
 
 
 # ═══ T11 · criterio 8: fallos y caducidad ═══════════════════════════════════════════════════════

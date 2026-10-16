@@ -76,6 +76,8 @@ MENSAJE_FALTA_TRADICION = "Elige la tradición antes de continuar: ninguna se da
 MENSAJE_ELECCION_CADUCADA = ("Lo que elegiste caducó (se conserva 15 minutos) o no es de esta carpeta. Vuelve a buscar: no se "
                              "hace sola, porque consultaría las fuentes.")
 MENSAJE_TRADICION_NO_VALE = "La tradición no es válida: vuelve a elegirla."
+MENSAJE_DECISION_YA_NO_VALE = ("Lo que habías decidido sobre las series parecidas ya no vale, porque esas series han cambiado. "
+                               "Decide de nuevo.")
 MENSAJE_FALTAN_DATOS = "Faltan los datos para preparar el alta: vuelve a elegir la serie."
 
 
@@ -217,7 +219,7 @@ async def elegir(
             "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion),
             "error": MENSAJE_FALTA_TRADICION, "tradiciones": _tradiciones(), "pista": pista}))
     plantilla, contexto = await preparar_vista_previa(
-        request, db, candidata=candidata, titulo=None, anio=None, clave=clave, tradition=tradicion)
+        request, db, candidata=candidata, titulo=None, anio=None, clave=clave, tradition=tradicion, consulta=consulta)
     if plantilla == "_fragmento_sin_clave":
         return _fragmento_error(request, MENSAJE_SIN_CLAVE)
     return _sin_cache(templates.TemplateResponse(request, "_asistente_eleccion.html", {
@@ -243,11 +245,16 @@ async def alta_previa(
     anio: str | None = Query(default=None, max_length=100),
     tradition: str = Query(default="", max_length=40),
     consulta: str = Query(default="", max_length=200),
+    decision: str = Query(default="", max_length=20),
+    serie_id: str = Query(default="", max_length=64),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Reconstruye la VISTA PREVIA del alta de una elección (candidata firmada o datos a mano). **Solo lectura**: no crea
     nada, no consulta fuentes y se puede recargar. La candidata firmada es la única referencia a lo elegido; si caducó o no es
-    de esta carpeta se dice y se ofrece volver a buscar (sin buscar). Crear la serie sigue siendo el botón de la vista previa."""
+    de esta carpeta se dice y se ofrece volver a buscar (sin buscar). Crear la serie sigue siendo el botón de la vista previa.
+
+    Conserva también la decisión ya tomada entre series parecidas («es esta» o «crear otra»), **revalidándola**: si las parecidas
+    cambiaron y ya no vale, se dice y se vuelve a la pantalla de decidir; nunca se da por buena en silencio."""
     base = {"clave": clave, "consulta": consulta}
     secreto = get_settings().secret_key
     if not secreto:
@@ -261,11 +268,21 @@ async def alta_previa(
             return _pagina_alta(request, **base, aviso=MENSAJE_ELECCION_CADUCADA)
     elif not (titulo or "").strip():
         return _pagina_alta(request, **base, aviso=MENSAJE_FALTAN_DATOS)
+    decidida = decision if decision in ("reutilizar", "crear_igualmente") else None
+    elegida_id = _uuid_o_none(serie_id) if decidida == "reutilizar" else None
+    if decidida == "reutilizar" and elegida_id is None:
+        decidida = None
     plantilla, contexto = await preparar_vista_previa(
-        request, db, candidata=candidata, titulo=titulo, anio=anio, clave=clave, tradition=elegida)
+        request, db, candidata=candidata, titulo=titulo, anio=anio, clave=clave, tradition=elegida,
+        decision=decidida, serie_id=elegida_id, consulta=consulta)
+    aviso_decision = None
+    if decidida and plantilla == "_alta_error.html" and contexto.get("codigo") == "decision_invalida":
+        plantilla, contexto = await preparar_vista_previa(
+            request, db, candidata=candidata, titulo=titulo, anio=anio, clave=clave, tradition=elegida, consulta=consulta)
+        aviso_decision = MENSAJE_DECISION_YA_NO_VALE
     if plantilla == "_fragmento_sin_clave":
         return _pagina_alta(request, **base, aviso=MENSAJE_SIN_CLAVE)
-    return _pagina_alta(request, **{**base, **contexto}, plantilla=plantilla)
+    return _pagina_alta(request, **{**base, **contexto}, plantilla=plantilla, aviso_decision=aviso_decision)
 
 
 def _uuid_o_none(texto: str | None) -> UUID | None:
