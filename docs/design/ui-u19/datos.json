@@ -38,7 +38,7 @@
     },
     {
       "paso": "1e-revision",
-      "url": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=54a27932-eef0-4ad0-a454-500995ff7b11",
+      "url": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=2582bbca-f69b-4eec-96c3-5d75105900b4",
       "banner": true,
       "pasos": [
         {
@@ -66,7 +66,7 @@
     {
       "paso": "2b-tras-elegir",
       "tradicion_elegida_por_teclado": "tebeo",
-      "texto": "✓ Elección anotada. Todavía no se ha creado ninguna serie ni se ha vinculado ningún archivo. Carpeta _Unsorted Serie Mundo Cobalto Integral (2020) Origen Comic Vine Tradición elegida Tebeo español La fuente sugería Grapa americana (era solo una sugerencia) Se guardará como «Mundo Cobalto Integral» (2020). Tradición elegida: Tebeo español. PARTE DE LA CARPETA «_UNSORTED». CREAR LA SERIE NO VINCULA NINGÚN ARCHIVO. i Se creará una serie vacía: sin números ni archivos. Vincular archivos es otro paso, con su propia confirmación. Crear serie vacía Grapa americana Franco-belga (BD) Manga Tebeo español Fumetti Manhwa Manhua Británico Otra Cambiar y revisar PUEDES RECARGAR O VOLVER A ESTA VISTA PREVI",
+      "texto": "✓ Elección anotada. Todavía no se ha creado ninguna serie ni se ha vinculado ningún archivo. Carpeta _Unsorted Serie Mundo Cobalto Integral (2020) Origen Tebeosfera Tradición elegida Tebeo español La fuente sugería Tebeo español (era solo una sugerencia) Se guardará como «Mundo Cobalto Integral» (2020). Tradición elegida: Tebeo español. PARTE DE LA CARPETA «_UNSORTED». CREAR LA SERIE NO VINCULA NINGÚN ARCHIVO. i Se creará una serie vacía: sin números ni archivos. Vincular archivos es otro paso, con su propia confirmación. Crear serie vacía Grapa americana Franco-belga (BD) Manga Tebeo español Fumetti Manhwa Manhua Británico Otra Cambiar y revisar Puedes recargar o volver a esta vista previa ",
       "callejon": false,
       "ofrece_crear": true
     },
@@ -126,7 +126,7 @@
     },
     {
       "paso": "3a-revision-de-la-serie-nueva",
-      "url": "?clave=_Unsorted&series_id=7b220c45-e65d-4328-91a8-e1b0796dcd5a",
+      "url": "?clave=_Unsorted&series_id=49f8781b-cd8c-4bed-b894-1bb78a85b14f",
       "pasos": [
         {
           "texto": "1 Elegir la serie (hecho)",
