@@ -38,7 +38,7 @@
     },
     {
       "paso": "1e-revision",
-      "url": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=1b2509e3-f6ef-4b45-bdff-9ecae978ff77",
+      "url": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=54a27932-eef0-4ad0-a454-500995ff7b11",
       "banner": true,
       "pasos": [
         {
@@ -66,9 +66,9 @@
     {
       "paso": "2b-tras-elegir",
       "tradicion_elegida_por_teclado": "tebeo",
-      "texto": "Elige la tradición… Grapa americana Franco-belga (BD) Manga Tebeo español Fumetti Manhwa Manhua Británico Otra Elegir esta serie La fuente sugiere: Grapa americana. Tú decides.",
+      "texto": "✓ Elección anotada. Todavía no se ha creado ninguna serie ni se ha vinculado ningún archivo. Carpeta _Unsorted Serie Mundo Cobalto Integral (2020) Origen Comic Vine Tradición elegida Tebeo español La fuente sugería Grapa americana (era solo una sugerencia) Se guardará como «Mundo Cobalto Integral» (2020). Tradición elegida: Tebeo español. PARTE DE LA CARPETA «_UNSORTED». CREAR LA SERIE NO VINCULA NINGÚN ARCHIVO. i Se creará una serie vacía: sin números ni archivos. Vincular archivos es otro paso, con su propia confirmación. Crear serie vacía Grapa americana Franco-belga (BD) Manga Tebeo español Fumetti Manhwa Manhua Británico Otra Cambiar y revisar PUEDES RECARGAR O VOLVER A ESTA VISTA PREVI",
       "callejon": false,
-      "ofrece_crear": false
+      "ofrece_crear": true
     },
     {
       "paso": "2c-la-serie-aun-no-existe",
@@ -126,7 +126,7 @@
     },
     {
       "paso": "3a-revision-de-la-serie-nueva",
-      "url": "?clave=_Unsorted&series_id=6fe80449-8d05-419a-8c07-77a4d3fed7bf",
+      "url": "?clave=_Unsorted&series_id=7b220c45-e65d-4328-91a8-e1b0796dcd5a",
       "pasos": [
         {
           "texto": "1 Elegir la serie (hecho)",
@@ -151,7 +151,7 @@
     },
     {
       "paso": "3c-resultado",
-      "titulo": "REVISAR SELECCIÓN Y NÚMEROS 1 Elegir la serie (hecho) 2 Revisar los archivos (paso actual) 3 Vincular (pendiente) Marca los archivos que qui",
+      "titulo": "RESULTADO DE LA VINCULACIÓN Esto es lo que pasó al vincular los archivos que habías preparado. Vincular conserva el nombre y la carpeta de c",
       "hay_enlace_al_resultado": true,
       "pasos": [
         {
@@ -160,14 +160,14 @@
           "aria_current": null
         },
         {
-          "texto": "2 Revisar los archivos (paso actual)",
-          "clase": "actual",
-          "aria_current": "step"
+          "texto": "2 Revisar los archivos (hecho)",
+          "clase": "hecho",
+          "aria_current": null
         },
         {
-          "texto": "3 Vincular (pendiente)",
-          "clase": "pendiente",
-          "aria_current": null
+          "texto": "3 Vincular (paso actual)",
+          "clase": "actual",
+          "aria_current": "step"
         }
       ]
     },
@@ -175,7 +175,7 @@
       "paso": "3d-lectura-valida",
       "url": "/ui/pendientes/carpetas/asistente/vinculacion/resultado",
       "repetida": true,
-      "mismo_titulo": "REVISAR SELECCIÓN Y NÚMEROS 1 Elegir la serie (hecho) 2 Revisar los archivos (hecho) 3 Vincular (paso actual) Marca los archivos que quieres",
+      "mismo_titulo": "RESULTADO DE LA VINCULACIÓN Esto es lo que pasó al vincular los archivos que habías preparado. Vincular conserva el nombre y la carpeta de c",
       "pasos": [
         {
           "texto": "1 Elegir la serie (hecho)",
@@ -199,12 +199,8 @@
       "sigue": true
     },
     {
-      "paso": "3f-carpeta-tras-vincular",
-      "apariciones_de__Unsorted": 3
-    },
-    {
       "paso": "3g-referencia-no-valida",
-      "texto": "RESULTADO DE LA VINCULACIÓN 1 Elegir la serie (hecho) 2 Revisar los archivos (hecho) 3 Vincular (paso actual) RESULTADO GUARDADO ! Esta referencia no es válida. No se ha cambiado nada. Volver a las ca",
+      "texto": "RESULTADO DE LA VINCULACIÓN RESULTADO GUARDADO ! Esta referencia no es válida. No se ha cambiado nada. Volver a las carpetas ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso le",
       "sin_pistas": true
     },
     {

@@ -39,7 +39,7 @@
     <input id="asistente-consulta" type="search" name="consulta" maxlength="200" value="{{ consulta_escrita or apertura.consulta_propuesta }}"
            placeholder="Título de la serie…" autocomplete="off">
     {% if consulta_escrita %}
-    <p class="caption">Es la búsqueda que escribiste. Los resultados no se conservan —buscar de nuevo consulta las fuentes—: pulsa «Buscar en las fuentes» si quieres repetirla.</p>
+    <p class="muted">Es la búsqueda que escribiste. Los resultados no se conservan —buscar de nuevo consulta las fuentes—: pulsa «Buscar en las fuentes» si quieres repetirla.</p>
     {% elif apertura.consulta_propuesta %}
     <p class="caption">Propuesta a partir del nombre de la carpeta o de los archivos. Puedes cambiarla antes de buscar.</p>
     {% else %}

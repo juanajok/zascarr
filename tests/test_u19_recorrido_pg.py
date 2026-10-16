@@ -208,7 +208,7 @@ class TestT8VolverAntesDelAlta:
     async def test_t8e_si_la_serie_aparece_o_desaparece_la_vista_previa_se_recalcula_y_lo_dice(self, ent):
         await archivos(ent, UNO)
         # entre la elección y volver, alguien creó la serie con ese identificador
-        sid = await serie_de_prueba(ent, comic_vine_id=4050)
+        await serie_de_prueba(ent, comic_vine_id=4050)
         r = await get(f"{A}/alta", clave=CLAVE, candidata=candidata(), tradition="american")
         v = visible(r.text)
         assert "Ya existe una serie con ese identificador" in v or "Se usará la serie que ya tienes" in v
