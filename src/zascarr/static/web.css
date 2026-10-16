@@ -1310,3 +1310,4 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   border: 2px solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); color: var(--ink);
 }
+.discovery-count { margin: 12px 0 0; font-weight: 700; }

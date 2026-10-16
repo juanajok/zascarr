@@ -142,11 +142,9 @@ def resumir(estados: dict[str, str], n_resultados: int) -> Resumen:
 
     if n_resultados > 0:
         cabeza = "1 resultado." if n_resultados == 1 else f"{n_resultados} resultados."
-    elif caidas and not consultadas:
-        cabeza = "No respondió ninguna fuente."
     elif not consultadas:
-        cabeza = "No se ha buscado en ninguna fuente."
+        cabeza = ""             # ya lo dicen los avisos («No respondió ninguna fuente…»)
     else:
         cabeza = "Ningún resultado."
-    return Resumen(avisos=avisos, anuncio=" ".join([cabeza, *avisos]) if avisos else cabeza,
-                   consultadas=consultadas)
+    anuncio = " ".join(x for x in [cabeza, *avisos] if x)
+    return Resumen(avisos=avisos, anuncio=anuncio, consultadas=consultadas)
