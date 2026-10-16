@@ -1,7 +1,12 @@
 # Ficha de benchmarking — U12: saber cuántos pendientes hay y leer el nombre entero
 
 > Procedimiento: `docs/design/benchmark-referencias.md` (CLAUDE.md §13). Historia: Kanban #199 (BL-U12, P0, 5 pts).
-> **Estado: segunda versión, tras la revisión de la PR #213 (DEVUELTO 🔁). No se ha escrito código ni se ha movido
+> **Nota de seguimiento (2026-10-16): este documento es histórico.** Lo que dice del estado —«sin implementar», «no se ha
+> escrito código», «lista para implementar» y «U12 sigue en En refinamiento»— describe la situación **al redactarlo
+> (2026-10-15)**. U12 se implementó después en [#214](https://github.com/juanajok/zascarr/pull/214) (fusionada); la ficha no se
+> ha reescrito y sus propuestas deben leerse contra esa implementación revisada, no como el estado actual del producto.
+>
+> **Estado al redactarla: segunda versión, tras la revisión de la PR #213 (DEVUELTO 🔁). No se ha escrito código ni se ha movido
 > ninguna tarjeta.** Escrita **antes** de implementar, como exige el gate (en U20 se hizo después; ver
 > `benchmark-U20-marcar-todos.md`). Las decisiones marcadas «del revisor» fijan **comportamiento de producto**; la
 > implementación propuesta es mía y debe demostrar ese contrato.
@@ -190,10 +195,11 @@ revisión general de textos de U21. Hay que revisar `tests/test_primeros_pasos.p
   `OFFSET`.** El total ya lo calcula el menú en cada página (`navegacion.py:27`): al implementar hay que
   **comprobar si se puede reutilizar** en vez de repetirlo, lo que lo dejaría en una consulta de lista y un `COUNT`.
 - **Índices (verificado en las migraciones):** `files` solo tiene `idx_files_hash`, `idx_files_issue`,
-  `idx_files_original_sha256` y un GIN sobre `metadata`; **no hay índice sobre `imported_at`**. A 1.322 filas la
-  lista es un barrido más una ordenación, y el cursor **no lo empeora ni lo mejora**. **No medido en la Pi.** No se
-  propone un índice: es una migración (ADR 0005 la excluye) y no hace falta a esta escala; si la cola creciera mucho,
-  sería otra historia.
+  `idx_files_original_sha256` y un GIN sobre `metadata`; **no hay índice sobre `imported_at`**. **Hipótesis, no medida:** a
+  1.322 filas la lista sería un barrido más una ordenación, y se espera que el cursor no la empeore ni la mejore frente a la
+  paginación actual. **No hay ninguna medición en la Pi**: ni el coste del cursor ni la necesidad (o no) de un índice a esta escala
+  están acreditados. No se propone un índice: sería una migración (ADR 0005 la excluye); si la medición mostrara que hace falta,
+  o si la cola creciera mucho, sería otra historia.
 - **Sin JS propio ni migraciones** (ADR 0005): ni el recuento ni el cursor necesitan esquema nuevo.
 
 ## Casos de prueba antes de implementar
@@ -250,4 +256,4 @@ compromiso.
   aislada; **no acredita todavía el criterio 2 en la aplicación integrada**, que se comprueba con las pruebas 10–12.
 - No cambia la arquitectura: **sin ADR** (sin esquema, sin JS propio, sin dependencia nueva).
 - Esta ficha pasa a «lista para implementar» solo cuando el revisor la dé por corregida; hasta entonces, **U12
-  sigue en «En refinamiento»**.
+  sigue en «En refinamiento»**. *(Estado histórico al redactarla: ver la nota de seguimiento de la cabecera y [#214](https://github.com/juanajok/zascarr/pull/214).)*
