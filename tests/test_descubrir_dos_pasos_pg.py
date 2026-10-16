@@ -32,7 +32,7 @@ from tests.test_alta_serie_pg import (  # noqa: F401  (BD efímera y entorno sin
     url_bd,
 )
 from zascarr.models import AltaOperacion, ComicTradition, Issue, MetadataSource, Series
-from zascarr.services.discovery import DiscoveryResult, DiscoveryService
+from zascarr.services.discovery import Busqueda, DiscoveryResult, DiscoveryService
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)")
@@ -40,7 +40,8 @@ pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Pos
 
 @pytest.fixture(autouse=True)
 def _clave_de_firma_web(monkeypatch, entorno):
-    monkeypatch.setattr(web_discovery, "get_settings", lambda: SimpleNamespace(secret_key=SECRETO))
+    monkeypatch.setattr(web_discovery, "get_settings", lambda: SimpleNamespace(
+        secret_key=SECRETO, comicvine_enabled=False, comicvine_api_key="", anilist_enabled=False, tebeosfera_enabled=False, gcd_enabled=False))
 
 
 def resultado(**kw) -> DiscoveryResult:
@@ -50,7 +51,9 @@ def resultado(**kw) -> DiscoveryResult:
 
 
 async def buscar(monkeypatch, *resultados) -> str:
-    monkeypatch.setattr(DiscoveryService, "search", AsyncMock(return_value=(list(resultados), [])))
+    estados = {"comic_vine": "ok", "anilist": "ok", "tebeosfera": "ok", "gcd": "ok"}
+    monkeypatch.setattr(DiscoveryService, "search_detallada",
+                        AsyncMock(return_value=Busqueda(list(resultados), [], estados)))
     async with cliente() as c:
         r = await c.get("/ui/descubrir/buscar", params={"q": "flash"})
     assert r.status_code == 200, r.text

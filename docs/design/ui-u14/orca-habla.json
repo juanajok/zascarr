@@ -1,0 +1,66 @@
+{
+  "orca": "Orca version 50.2, AT-SPI2 version: 2.60.4, Session: wayland ubuntu",
+  "busquedas": [
+    {
+      "fragmento": "con_resultados_y_una_caida",
+      "consulta": "Mortadelo",
+      "esperado": "2 resultados. No respondió AniList",
+      "region": {
+        "mismo_nodo": true,
+        "texto": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "aria_live": "polite",
+        "mutaciones": 3,
+        "foco": "series-search"
+      },
+      "orca_dijo": [
+        "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado."
+      ]
+    },
+    {
+      "fragmento": "sin_coincidencias",
+      "consulta": "Zzzz",
+      "esperado": "Ningún resultado",
+      "region": {
+        "mismo_nodo": true,
+        "texto": "Ningún resultado.",
+        "aria_live": "polite",
+        "mutaciones": 3,
+        "foco": "series-search"
+      },
+      "orca_dijo": [
+        "Ningún resultado."
+      ]
+    },
+    {
+      "fragmento": "todas_fallan",
+      "consulta": "Flash",
+      "esperado": "No respondió ninguna fuente",
+      "region": {
+        "mismo_nodo": true,
+        "texto": "No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera y GCD. Inténtalo de nuevo en un momento.",
+        "aria_live": "polite",
+        "mutaciones": 3,
+        "foco": "series-search"
+      },
+      "orca_dijo": [
+        "No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera y GCD. Inténtalo de nuevo en un momento."
+      ]
+    },
+    {
+      "fragmento": "con_resultados_y_una_caida",
+      "consulta": "Mortadelo y",
+      "esperado": "2 resultados. No respondió AniList",
+      "region": {
+        "mismo_nodo": true,
+        "texto": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "aria_live": "polite",
+        "mutaciones": 3,
+        "foco": "series-search"
+      },
+      "orca_dijo": [
+        "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado."
+      ]
+    }
+  ],
+  "chrome": "Chrome/154.0.8037.92"
+}

@@ -1,0 +1,355 @@
+{
+  "chrome": "Chrome/154.0.8037.92",
+  "ensayo_real_fuentes_apagadas": {
+    "indicador": false,
+    "texto": "No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar."
+  },
+  "persistencia_de_la_region": {
+    "region_inicial": {
+      "id": "descubrir-estado",
+      "aria_live": "polite",
+      "aria_atomic": "true",
+      "clase": "sr"
+    },
+    "busquedas": [
+      {
+        "fragmento": "con_resultados_y_una_caida",
+        "consulta": "Mortadelo",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:2 resultados. No respondió AniList. Los resultados de Comic ",
+          "attributes:class"
+        ]
+      },
+      {
+        "fragmento": "sin_coincidencias",
+        "consulta": "Zzzz",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "Ningún resultado.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:Ningún resultado.",
+          "attributes:class"
+        ]
+      },
+      {
+        "fragmento": "todas_fallan",
+        "consulta": "Flash",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera y GCD. Inténtalo de nuevo en un momento.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera",
+          "attributes:class"
+        ]
+      },
+      {
+        "fragmento": "con_resultados_y_una_caida",
+        "consulta": "Mortadelo y",
+        "es_el_mismo_nodo": true,
+        "sigue_en_el_documento": true,
+        "regiones_con_ese_id": 1,
+        "aria_live": "polite",
+        "aria_atomic": "true",
+        "clase": "sr",
+        "atributo_hx_swap_oob_residual": false,
+        "texto": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "mutaciones_del_observador": [
+          "attributes:class",
+          "childList:2 resultados. No respondió AniList. Los resultados de Comic ",
+          "attributes:class"
+        ]
+      }
+    ]
+  },
+  "escenarios": [
+    {
+      "escenario": "1-lenta-escritorio-claro",
+      "vista": "1280x900",
+      "tema": "light",
+      "fragmento": "con_resultados_y_una_caida",
+      "retraso_simulado_s": 1.5,
+      "tiempos": {
+        "peticion_empieza_ms": 445,
+        "peticion_termina_ms": 1971,
+        "indicador_visible_por_primera_vez_ms": 861,
+        "espera_hasta_verlo_ms": 416,
+        "llego_a_verse": true,
+        "visible_al_final": false,
+        "muestras": 175
+      },
+      "hechos": {
+        "regiones_vivas_en_la_pagina": 1,
+        "la_region_es_la_unica": true,
+        "la_region_no_esta_en_el_destino": true,
+        "destino_con_aria_live": 0,
+        "texto_de_la_region": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "region_visible_a_la_vista": false,
+        "recuento_visible": "2 resultados",
+        "avisos_visibles": [
+          "?No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado."
+        ],
+        "descripcion": "Mortadelo Bruguera & Filemón, agentes de la T.I.A.",
+        "descripcion_con_etiquetas": false,
+        "fuente": "Comic Vine",
+        "enlace_aria_label": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)",
+        "select": {
+          "fondo": "rgb(246, 243, 236)",
+          "color": "rgb(23, 23, 26)",
+          "borde": "2px solid rgb(23, 23, 26)",
+          "alto": 42,
+          "appearance": "auto"
+        },
+        "scroll_horizontal": false,
+        "enlace_nombre_en_el_arbol_de_accesibilidad": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)"
+      }
+    },
+    {
+      "escenario": "2-rapida-sin-parpadeo",
+      "vista": "1280x900",
+      "tema": "light",
+      "fragmento": "con_resultados_y_una_caida",
+      "retraso_simulado_s": 0.0,
+      "tiempos": {
+        "peticion_empieza_ms": 434,
+        "peticion_termina_ms": 454,
+        "indicador_visible_por_primera_vez_ms": null,
+        "espera_hasta_verlo_ms": null,
+        "llego_a_verse": false,
+        "visible_al_final": false,
+        "muestras": 101
+      },
+      "hechos": {
+        "regiones_vivas_en_la_pagina": 1,
+        "la_region_es_la_unica": true,
+        "la_region_no_esta_en_el_destino": true,
+        "destino_con_aria_live": 0,
+        "texto_de_la_region": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "region_visible_a_la_vista": false,
+        "recuento_visible": "2 resultados",
+        "avisos_visibles": [
+          "?No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado."
+        ],
+        "descripcion": "Mortadelo Bruguera & Filemón, agentes de la T.I.A.",
+        "descripcion_con_etiquetas": false,
+        "fuente": "Comic Vine",
+        "enlace_aria_label": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)",
+        "select": {
+          "fondo": "rgb(246, 243, 236)",
+          "color": "rgb(23, 23, 26)",
+          "borde": "2px solid rgb(23, 23, 26)",
+          "alto": 42,
+          "appearance": "auto"
+        },
+        "scroll_horizontal": false,
+        "enlace_nombre_en_el_arbol_de_accesibilidad": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)"
+      }
+    },
+    {
+      "escenario": "3-escritorio-oscuro",
+      "vista": "1280x900",
+      "tema": "dark",
+      "fragmento": "con_resultados_y_una_caida",
+      "retraso_simulado_s": 0.5,
+      "tiempos": {
+        "peticion_empieza_ms": 443,
+        "peticion_termina_ms": 974,
+        "indicador_visible_por_primera_vez_ms": 860,
+        "espera_hasta_verlo_ms": 417,
+        "llego_a_verse": true,
+        "visible_al_final": false,
+        "muestras": 126
+      },
+      "hechos": {
+        "regiones_vivas_en_la_pagina": 1,
+        "la_region_es_la_unica": true,
+        "la_region_no_esta_en_el_destino": true,
+        "destino_con_aria_live": 0,
+        "texto_de_la_region": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "region_visible_a_la_vista": false,
+        "recuento_visible": "2 resultados",
+        "avisos_visibles": [
+          "?No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado."
+        ],
+        "descripcion": "Mortadelo Bruguera & Filemón, agentes de la T.I.A.",
+        "descripcion_con_etiquetas": false,
+        "fuente": "Comic Vine",
+        "enlace_aria_label": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)",
+        "select": {
+          "fondo": "rgb(19, 19, 22)",
+          "color": "rgb(240, 237, 228)",
+          "borde": "2px solid rgb(240, 237, 228)",
+          "alto": 42,
+          "appearance": "auto"
+        },
+        "scroll_horizontal": false,
+        "enlace_nombre_en_el_arbol_de_accesibilidad": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)"
+      }
+    },
+    {
+      "escenario": "4-movil-oscuro",
+      "vista": "375x812",
+      "tema": "dark",
+      "fragmento": "con_resultados_y_una_caida",
+      "retraso_simulado_s": 0.5,
+      "tiempos": {
+        "peticion_empieza_ms": 431,
+        "peticion_termina_ms": 952,
+        "indicador_visible_por_primera_vez_ms": 840,
+        "espera_hasta_verlo_ms": 409,
+        "llego_a_verse": true,
+        "visible_al_final": false,
+        "muestras": 126
+      },
+      "hechos": {
+        "regiones_vivas_en_la_pagina": 1,
+        "la_region_es_la_unica": true,
+        "la_region_no_esta_en_el_destino": true,
+        "destino_con_aria_live": 0,
+        "texto_de_la_region": "2 resultados. No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado.",
+        "region_visible_a_la_vista": false,
+        "recuento_visible": "2 resultados",
+        "avisos_visibles": [
+          "?No respondió AniList. Los resultados de Comic Vine, Tebeosfera y GCD sí se han consultado."
+        ],
+        "descripcion": "Mortadelo Bruguera & Filemón, agentes de la T.I.A.",
+        "descripcion_con_etiquetas": false,
+        "fuente": "Comic Vine",
+        "enlace_aria_label": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)",
+        "select": {
+          "fondo": "rgb(19, 19, 22)",
+          "color": "rgb(240, 237, 228)",
+          "borde": "2px solid rgb(240, 237, 228)",
+          "alto": 42,
+          "appearance": "auto"
+        },
+        "scroll_horizontal": false,
+        "enlace_nombre_en_el_arbol_de_accesibilidad": "Ver la ficha de «Mortadelo y Filemón» en Comic Vine (se abre en otra pestaña)"
+      }
+    },
+    {
+      "escenario": "5-todas-fallan",
+      "vista": "1280x900",
+      "tema": "light",
+      "fragmento": "todas_fallan",
+      "retraso_simulado_s": 0.0,
+      "tiempos": {
+        "peticion_empieza_ms": 443,
+        "peticion_termina_ms": 456,
+        "indicador_visible_por_primera_vez_ms": null,
+        "espera_hasta_verlo_ms": null,
+        "llego_a_verse": false,
+        "visible_al_final": false,
+        "muestras": 101
+      },
+      "hechos": {
+        "regiones_vivas_en_la_pagina": 1,
+        "la_region_es_la_unica": true,
+        "la_region_no_esta_en_el_destino": true,
+        "destino_con_aria_live": 0,
+        "texto_de_la_region": "No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera y GCD. Inténtalo de nuevo en un momento.",
+        "region_visible_a_la_vista": false,
+        "recuento_visible": null,
+        "avisos_visibles": [
+          "?No respondió ninguna fuente: Comic Vine, AniList, Tebeosfera y GCD. Inténtalo de nuevo en un momento."
+        ],
+        "descripcion": null,
+        "descripcion_con_etiquetas": null,
+        "fuente": null,
+        "enlace_aria_label": null,
+        "select": null,
+        "scroll_horizontal": false,
+        "enlace_nombre_en_el_arbol_de_accesibilidad": null
+      }
+    },
+    {
+      "escenario": "6-sin-clave-y-una-caida",
+      "vista": "1280x900",
+      "tema": "light",
+      "fragmento": "sin_clave_y_una_caida",
+      "retraso_simulado_s": 0.0,
+      "tiempos": {
+        "peticion_empieza_ms": 441,
+        "peticion_termina_ms": 453,
+        "indicador_visible_por_primera_vez_ms": null,
+        "espera_hasta_verlo_ms": null,
+        "llego_a_verse": false,
+        "visible_al_final": false,
+        "muestras": 102
+      },
+      "hechos": {
+        "regiones_vivas_en_la_pagina": 1,
+        "la_region_es_la_unica": true,
+        "la_region_no_esta_en_el_destino": true,
+        "destino_con_aria_live": 0,
+        "texto_de_la_region": "Ningún resultado. No respondió Tebeosfera. Los resultados de AniList y GCD sí se han consultado. Comic Vine no está configurado: añade su clave en Ajustes para incluirlo en la búsqueda.",
+        "region_visible_a_la_vista": false,
+        "recuento_visible": null,
+        "avisos_visibles": [
+          "?No respondió Tebeosfera. Los resultados de AniList y GCD sí se han consultado.",
+          "?Comic Vine no está configurado: añade su clave en Ajustes para incluirlo en la búsqueda."
+        ],
+        "descripcion": null,
+        "descripcion_con_etiquetas": null,
+        "fuente": null,
+        "enlace_aria_label": null,
+        "select": null,
+        "scroll_horizontal": false,
+        "enlace_nombre_en_el_arbol_de_accesibilidad": null
+      }
+    },
+    {
+      "escenario": "7-sin-coincidencias",
+      "vista": "1280x900",
+      "tema": "light",
+      "fragmento": "sin_coincidencias",
+      "retraso_simulado_s": 0.0,
+      "tiempos": {
+        "peticion_empieza_ms": 433,
+        "peticion_termina_ms": 452,
+        "indicador_visible_por_primera_vez_ms": null,
+        "espera_hasta_verlo_ms": null,
+        "llego_a_verse": false,
+        "visible_al_final": false,
+        "muestras": 101
+      },
+      "hechos": {
+        "regiones_vivas_en_la_pagina": 1,
+        "la_region_es_la_unica": true,
+        "la_region_no_esta_en_el_destino": true,
+        "destino_con_aria_live": 0,
+        "texto_de_la_region": "Ningún resultado.",
+        "region_visible_a_la_vista": false,
+        "recuento_visible": null,
+        "avisos_visibles": [],
+        "descripcion": null,
+        "descripcion_con_etiquetas": null,
+        "fuente": null,
+        "enlace_aria_label": null,
+        "select": null,
+        "scroll_horizontal": false,
+        "enlace_nombre_en_el_arbol_de_accesibilidad": null
+      }
+    }
+  ]
+}
