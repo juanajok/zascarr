@@ -1,7 +1,9 @@
 # Evidencia de U16 (#203): usar todas las pantallas en el móvil sin zoom ni desplazamiento lateral
 
-Rama `claude/u16-movil`, 2026-10-16. **Verificación emulada**: los dispositivos reales están en **NOT RUN** como deuda visible
-([`ronda-dispositivos-reales.md`](ronda-dispositivos-reales.md)); **la tarjeta no se cierra con ambos en NOT RUN** (criterio 4).
+Rama `claude/u16-movil`, 2026-10-16. **Verificación emulada.** **Alcance revisado (decisión del responsable, 2026-10-16):** la aceptación
+de #203 es una **validación emulada en un Debian de ensayo aislado**; los teléfonos reales y la Pi **no se exigen** y se conservan como NOT RUN
+([`ronda-dispositivos-reales.md`](ronda-dispositivos-reales.md)). El contrato revisado, su resultado y el entorno comprobado están en
+[`verificacion-u16.md`](verificacion-u16.md), que **sustituye** a la frase anterior de este fichero «la tarjeta no se cierra con ambos en NOT RUN».
 
 | Dato | Valor |
 |---|---|
@@ -72,8 +74,9 @@ escritorio** (color, sin subrayado, margen inferior): es un cambio de aspecto po
 
 ## Lo que NO está acreditado
 
-- **Dispositivos reales: NOT RUN** (iPhone con Safari y Android de gama baja con Chrome, contra la Pi, a 360/390/414 px). Es la deuda
-  aceptada; el registro por pantalla está en [`ronda-dispositivos-reales.md`](ronda-dispositivos-reales.md) con todas las filas en NOT RUN.
+- **Dispositivos reales: NOT RUN** (iPhone con Safari y Android de gama baja con Chrome, contra la Pi, a 360/390/414 px). **Fuera del alcance
+  exigido** tras la decisión del 2026-10-16 (ver [`verificacion-u16.md`](verificacion-u16.md)); no es deuda que impida la aceptación. El
+  registro por pantalla está en [`ronda-dispositivos-reales.md`](ronda-dispositivos-reales.md) con todas las filas en NOT RUN.
 - **El zoom de Safari en iOS** no se ha visto: solo se ha medido que ningún campo baja de 16 px.
 - **La Pi**: no se ha tocado; la medida de +127 px de la auditoría no se ha repetido.
 - **Estados interactivos** (resultados de búsqueda, panel «Más», errores) y el tema oscuro: no se han medido con esta herramienta.
