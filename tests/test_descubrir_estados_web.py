@@ -201,24 +201,38 @@ class TestResultadoAnunciado:
         destino = re.search(r'<div id="resultados-descubrir"[^>]*>(.*?)</div>', t, re.S).group(1)
         assert "aria-live" not in destino                       # la región NO es el destino: no se lee la lista entera
 
-    def test_la_respuesta_actualiza_la_region_por_hx_swap_oob_y_no_trae_otra(self, web):
+    def test_la_respuesta_actualiza_el_contenido_de_la_region_y_no_la_sustituye(self, web):
+        """Regresión del mecanismo (revisión de #217): `hx-swap-oob="true"` es `outerHTML` en htmx 4 y sustituiría el
+        propio elemento. Tiene que ser `innerHTML`: se conserva el nodo y solo cambia lo que contiene."""
         t = buscar(Busqueda([_resultado(), _resultado(external_id="2", title="Superman")], [], estados()))
-        oob = re.findall(r'<div id="descubrir-estado"[^>]*>(.*?)</div>', t, re.S)
-        assert len(oob) == 1 and "2 resultados." in visible(oob[0])
-        etiqueta = re.search(r'<div id="descubrir-estado"[^>]*>', t).group(0)
-        assert 'hx-swap-oob="true"' in etiqueta and 'aria-live="polite"' in etiqueta and 'aria-atomic="true"' in etiqueta
-        assert 'class="sr"' in etiqueta
+        etiquetas = re.findall(r'<div id="descubrir-estado"[^>]*>', t)
+        assert len(etiquetas) == 1
+        assert 'hx-swap-oob="innerHTML"' in etiquetas[0]
+        assert 'hx-swap-oob="true"' not in etiquetas[0] and "outerHTML" not in etiquetas[0]
+        oob = re.search(r'<div id="descubrir-estado"[^>]*>(.*?)</div>', t, re.S).group(1)
+        assert "2 resultados." in visible(oob)
+        # los atributos de la región viven SOLO en la página: la respuesta no puede traer una segunda región
+        assert "aria-live" not in etiquetas[0] and "aria-atomic" not in etiquetas[0]
         # el recuento VISIBLE existe y no se lee dos veces (el lector ya tiene la región)
         assert re.search(r'<p class="discovery-count" aria-hidden="true">2 resultados</p>', t)
         resto = re.sub(r'<div id="descubrir-estado".*?</div>', "", t, flags=re.S)
         assert not re.search(r'aria-live=|role="status"|role="alert"', resto), "se anunciaría dos veces"
 
-    def test_la_region_de_la_respuesta_es_la_misma_que_la_de_la_pagina(self, web):
+    def test_la_estrategia_de_la_region_viva_nunca_es_outer(self, web):
+        """Para CUALQUIER resultado de la búsqueda (con resultados, sin coincidencias, todas fallan) la estrategia es
+        `innerHTML`: la región de la página nunca se reemplaza."""
+        casos = [Busqueda([_resultado()], [], estados()), Busqueda([], [], estados()),
+                 Busqueda([], [], estados(cv=ERR, al=ERR, te=ERR, gcd=ERR))]
+        for b in casos:
+            t = buscar(b)
+            assert re.findall(r'hx-swap-oob="([^"]*)"', t) == ["innerHTML"]
+
+    def test_la_region_de_la_pagina_es_unica_y_lleva_sus_atributos(self, web):
         with use_fake_session(FakeSession()) as client:
-            pagina = re.search(r'<div id="descubrir-estado"[^>]*>', client.get("/ui/descubrir").text).group(0)
-        resp = re.search(r'<div id="descubrir-estado"[^>]*>', buscar(Busqueda([_resultado()], [], estados()))).group(0)
-        quitar = lambda s: re.sub(r'\s*hx-swap-oob="true"', "", s)           # noqa: E731
-        assert quitar(resp) == quitar(pagina)
+            t = client.get("/ui/descubrir").text
+        etiqueta = re.search(r'<div id="descubrir-estado"[^>]*>', t).group(0)
+        assert 'aria-live="polite"' in etiqueta and 'aria-atomic="true"' in etiqueta and 'class="sr"' in etiqueta
+        assert "hx-swap-oob" not in etiqueta         # la página no es una respuesta fuera de banda
 
 
 # ── 1. Progreso visible ───────────────────────────────────────────────────────────────────────

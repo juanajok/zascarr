@@ -1,7 +1,11 @@
 {#- Resultados de Descubrir. Cada tarjeta lleva un token que FIRMÓ el servidor al buscar: lo único que vuelve del
     navegador es ese token y la tradición que elige la persona (sin valor por defecto). I2 de #114. -#}
-{#- La región viva de la página, actualizada fuera de banda: es la ÚNICA que se anuncia. Mismo marcado que `ui.region_viva`. -#}
-<div id="descubrir-estado" class="sr" aria-live="polite" aria-atomic="true" hx-swap-oob="true">{{ anuncio }}</div>
+{#- Actualiza el CONTENIDO de la región viva de la página (`descubrir.html`), que es la ÚNICA que se anuncia. `innerHTML` y
+    no `true`: en htmx 4 `true` equivale a `outerHTML` y sustituiría el propio elemento, que es justo lo que no debe pasar
+    con una región viva (la tecnología de apoyo la vigila desde que existe). Con `innerHTML` htmx descarta esta envoltura y
+    solo mete su contenido en el nodo que ya está; los atributos (`aria-live`, `aria-atomic`, `sr`) viven únicamente en la
+    página y esta respuesta no lleva ninguno. -#}
+<div id="descubrir-estado" hx-swap-oob="innerHTML">{{ anuncio }}</div>
 {#- Los avisos NO llevan `role`: lo que dicen ya va en la región viva y se anunciaría dos veces. -#}
 {% for aviso in avisos %}
 <div class="{{ clase_aviso }}"><span class="aviso-icono" aria-hidden="true">?</span><div>{{ aviso }}</div></div>

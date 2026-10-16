@@ -142,6 +142,80 @@ async def escenario(nav, base, datos, salida: Path, *, nombre, vista, tema, frag
             "retraso_simulado_s": retraso, "tiempos": tiempos, "hechos": hechos}
 
 
+OBSERVAR = r"""(() => {
+  const reg = document.querySelector('#descubrir-estado');
+  window.__reg = reg; window.__mut = [];
+  new MutationObserver(m => m.forEach(x => window.__mut.push(x.type + ':' + (x.type === 'childList'
+    ? reg.textContent.trim().slice(0, 60) : x.attributeName)))).observe(reg, {childList: true, subtree: true, characterData: true, attributes: true});
+  return {id: reg.id, aria_live: reg.getAttribute('aria-live'), aria_atomic: reg.getAttribute('aria-atomic'), clase: reg.className}; })()"""
+
+ESTADO_REGION = r"""(() => { const r = document.querySelector('#descubrir-estado');
+  const mut = window.__mut.splice(0);
+  return { es_el_mismo_nodo: r === window.__reg, sigue_en_el_documento: window.__reg.isConnected,
+    regiones_con_ese_id: document.querySelectorAll('#descubrir-estado').length,
+    aria_live: r.getAttribute('aria-live'), aria_atomic: r.getAttribute('aria-atomic'), clase: r.className,
+    atributo_hx_swap_oob_residual: r.hasAttribute('hx-swap-oob'),
+    texto: r.textContent.trim(), mutaciones_del_observador: mut }; })()"""
+
+
+async def servir_secuencia(nav, pagina: str, fragmentos: list[str]) -> asyncio.Task:
+    """Como `servir`, pero la N-ésima petición a `/buscar` recibe el N-ésimo fragmento (varias búsquedas seguidas)."""
+    await nav.cdp("Fetch.enable", patterns=[
+        {"urlPattern": "*/ui/descubrir", "requestStage": "Request"},
+        {"urlPattern": "*/ui/descubrir/buscar*", "requestStage": "Request"}])
+    cabeceras = [{"name": "Content-Type", "value": "text/html; charset=utf-8"}, {"name": "Cache-Control", "value": "no-store"}]
+    n = {"i": 0}
+
+    async def uno(par):
+        if "/buscar" in par["request"]["url"]:
+            cuerpo = fragmentos[min(n["i"], len(fragmentos) - 1)]
+            n["i"] += 1
+        else:
+            cuerpo = pagina
+        await nav.cdp("Fetch.fulfillRequest", requestId=par["requestId"], responseCode=200,
+                      responseHeaders=cabeceras, body=base64.b64encode(cuerpo.encode()).decode())
+
+    async def bucle():
+        vistos: set[str] = set()
+        while True:
+            for e in list(nav._eventos):
+                if e.get("method") == "Fetch.requestPaused":
+                    rid = e["params"]["requestId"]
+                    if rid not in vistos:
+                        vistos.add(rid)
+                        asyncio.create_task(uno(e["params"]))
+            await asyncio.sleep(0.02)
+    return asyncio.create_task(bucle())
+
+
+async def persistencia(nav, base, datos) -> dict:
+    """Revisión de #217: la región viva es EL MISMO nodo antes y después de cada búsqueda, y solo cambia su contenido.
+
+    Tres búsquedas seguidas en la misma página (con resultados y una caída, sin coincidencias, todas fallan) y una cuarta
+    idéntica a la primera. Tras cada una: identidad del nodo, sus atributos, su texto y las mutaciones que vio un
+    `MutationObserver` (lo que recibe la tecnología de apoyo es un cambio de contenido, no un nodo nuevo)."""
+    secuencia = ["con_resultados_y_una_caida", "sin_coincidencias", "todas_fallan", "con_resultados_y_una_caida"]
+    consultas = ["Mortadelo", "Zzzz", "Flash", "Mortadelo y"]
+    await nav.vista(ESCRITORIO, "light")
+    nav._eventos.clear()
+    tarea = await servir_secuencia(nav, datos["pagina"], [datos[k] for k in secuencia])
+    try:
+        await nav.ir(base + "/ui/descubrir", espera=1.0)
+        inicial = await nav.js(OBSERVAR)
+        pasos = []
+        for k, q in zip(secuencia, consultas):
+            await clic_en(nav, "input.series-search")
+            await nav.cdp("Input.dispatchKeyEvent", type="keyDown", key="a", code="KeyA", modifiers=2, commands=["selectAll"])
+            await nav.cdp("Input.dispatchKeyEvent", type="keyUp", key="a", code="KeyA", modifiers=2)
+            await nav.cdp("Input.insertText", text=q)
+            await asyncio.sleep(0.4 + 1.2)
+            pasos.append({"fragmento": k, "consulta": q, **(await nav.js(ESTADO_REGION))})
+    finally:
+        tarea.cancel()
+        await nav.cdp("Fetch.disable")
+    return {"region_inicial": inicial, "busquedas": pasos}
+
+
 async def main(base: str, fragmentos: Path, salida: Path) -> None:
     salida.mkdir(parents=True, exist_ok=True)
     datos = json.loads(fragmentos.read_text(encoding="utf-8"))
@@ -169,9 +243,10 @@ async def main(base: str, fragmentos: Path, salida: Path) -> None:
         ]
         for c in casos:
             resultados.append(await escenario(nav, base, datos, salida, **c))
+        persist = await persistencia(nav, base, datos)
     finally:
         await nav.cerrar()
-    out = {"chrome": nav.version.get("Browser"), "ensayo_real_fuentes_apagadas": real, "escenarios": resultados}
+    out = {"chrome": nav.version.get("Browser"), "ensayo_real_fuentes_apagadas": real, "persistencia_de_la_region": persist, "escenarios": resultados}
     (salida / "datos.json").write_text(json.dumps(out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(out, ensure_ascii=False, indent=2)[:6000])
 
