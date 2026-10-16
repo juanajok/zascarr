@@ -3,10 +3,28 @@
 {% block content %}
 <h1>Por revisar</h1>
 <p class="subtitle">Archivos que el sistema no supo clasificar solo. Busca la serie correcta y confirma el número, o ignóralos si no pertenecen a tu colección.</p>
-<p><a href="/ui/pendientes/carpetas">Ver lo pendiente agrupado por carpeta →</a></p>
-
 {% if not cards %}
 <p class="empty">Nada pendiente — todo lo importado se ha podido clasificar.</p>
+{% else %}
+{#- Criterio 5: el acceso a las carpetas se ve como ACCIÓN, con su recuento y qué cuenta (carpetas). -#}
+{#- El recuento se pide al cargarse (agrupar todos los pendientes cuesta; no bloquea la lista). Sin él, el enlace
+    funciona igual. -#}
+<p><a class="btn ghost pend-carpetas" href="/ui/pendientes/carpetas"
+      hx-get="/ui/pendientes/carpetas/recuento" hx-trigger="load" hx-swap="outerHTML">Verlos por carpeta</a></p>
+{% include "_pendientes_rango.html" %}
+{#- Las claves de los extremos de la página: el refresco tras resolver una tarjeta las envía para recalcular el rango. -#}
+<div id="pend-clave" hidden>
+  <input type="hidden" name="primero" value="{{ primero }}">
+  <input type="hidden" name="ultimo" value="{{ ultimo }}">
+</div>
+{% macro paginas(clase, nombre) %}
+<nav class="pend-paginas {{ clase }}" aria-label="{{ nombre }}">
+  {% if inicio %}<a class="pend-inicio" href="{{ inicio }}">← Volver al principio</a>{% endif %}
+  {% if anterior %}<a class="pend-anterior" href="{{ anterior }}">← Anteriores</a>{% endif %}
+  {% if siguiente %}<a class="pend-siguiente" href="{{ siguiente }}">Siguientes →</a>{% endif %}
+</nav>
+{% endmacro %}
+{% if inicio or anterior or siguiente %}{{ paginas("pend-paginas-arriba", "Páginas de pendientes, arriba") }}{% endif %}
 {% endif %}
 
 <div class="pending-grid">
@@ -14,4 +32,5 @@
   {% include "_tarjeta_pendiente.html" %}
   {% endfor %}
 </div>
+{% if cards and (inicio or anterior or siguiente) %}{{ paginas("pend-paginas-abajo", "Páginas de pendientes, abajo") }}{% endif %}
 {% endblock %}
