@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -49,8 +50,12 @@ from zascarr.services.descubrimiento_grupo import GrupoNoEncontradoError
 from zascarr.services.tokens_revision import (
     MAX_CLAVE_GRUPO,
     MAX_TOKEN_VINCULACION,
+    TTL_SEGUNDOS,
+    crear_referencia_de_resultado,
+    verificar_referencia_de_resultado,
     verificar_token_vinculacion,
 )
+from zascarr.services.vinculacion import RETENCION_HORAS, InformeDeOtraSerieError, VinculacionDeArchivos
 from zascarr.services.vinculacion_previa import (
     LIMITE_ARCHIVOS,
     ArchivoAjenoError,
@@ -82,6 +87,21 @@ MENSAJE_SERIE_NO_EXISTE = "La serie elegida ya no existe en tu biblioteca. Vuelv
 MENSAJE_GRUPO_NO_EXISTE = "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado."
 MENSAJE_BORRADOR_NO_VALE = ("No se ha podido reconstruir lo que habías marcado y escrito en esa página, así que se muestra "
                             "sin ello. Ese borrador no cuenta como una revisión válida.")
+
+
+#: Lectura del resultado guardado (U19, ficha §7.2). Tres textos, tres estados; ninguno inventa éxito ni reintento.
+MENSAJE_REFERENCIA_NO_VALE = "Esta referencia no es válida. No se ha cambiado nada."
+MENSAJE_RESULTADO_VENCIDO = (
+    "Ha vencido el plazo para consultar este resultado. Que ya no se muestre no deshace la vinculación: revisa la "
+    "carpeta para ver su estado actual.")
+MENSAJE_RESULTADO_NO_ENCONTRADO = (
+    "No se encuentra el resultado de esta vinculación. No se sabe si se aplicó: no lo des por hecho ni por fallido. "
+    "Revisa la carpeta para ver qué hay vinculado.")
+
+
+def reloj() -> float:
+    """El instante actual. Una función aparte para poder fijarlo en las pruebas del vencimiento."""
+    return time.time()
 
 
 ACCIONES = ("marcar_todos", "desmarcar_todos")
@@ -505,6 +525,22 @@ async def confirmar(
             **base, "resultado": True, "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje,
                                                    "definitivo": definitivo, "repetible": repetible}, "token": token,
             "r": None, "error": None}))
+    secreto = get_settings().secret_key
+    firmado = verificar_token_vinculacion(token, secreto, ignorar_caducidad=True) if secreto else None
+    ref = None
+    if firmado is not None:
+        # El plazo cuenta desde la FIRMA del token de vinculación, no desde ahora: repetir la confirmación emite la
+        # misma referencia con el mismo vencimiento (no reinicia las 24 horas).
+        ref = crear_referencia_de_resultado(
+            firmado.clave, firmado.series_id, firmado.operacion, firma=firmado.caduca - TTL_SEGUNDOS,
+            plazo_s=RETENCION_HORAS * 3600, secret=secreto)
+    return _sin_cache(templates.TemplateResponse(request, plantilla, {
+        **base, "resultado": True, "fallo": None, "r": r, **_contexto_del_informe(r), "error": None,
+        "token": token, "ref": ref, "ruta_resultado": RUTA + "/resultado"}))
+
+
+def _contexto_del_informe(r) -> dict:
+    """El informe guardado, agrupado y dicho en llano (lo comparten el resultado inmediato y su lectura posterior)."""
     informe = r.resultado
     nombres = r.presentacion.nombres_actuales
     grupos: dict[str, list[dict]] = {"vinculado": [], "ya_estaba_vinculado": [], "omitido": []}
@@ -516,6 +552,40 @@ async def confirmar(
                       if a.estado == "omitido" and a.motivo else None)})
         if a.estado == "omitido" and a.motivo and a.motivo not in TEXTO_DE_MOTIVO:
             logger.warning("vinculacion.motivo_sin_texto", motivo=a.motivo)
-    return _sin_cache(templates.TemplateResponse(request, plantilla, {
-        **base, "resultado": True, "fallo": None, "r": r, "informe": informe, "grupos": grupos, "error": None,
-        "token": token}))
+    return {"informe": informe, "grupos": grupos}
+
+
+@router.get("/resultado", response_class=HTMLResponse)
+async def resultado_guardado(
+    request: Request, ref: str = Query(..., min_length=1, max_length=2 * MAX_TOKEN_VINCULACION),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Vuelve a mostrar el resultado de una vinculación YA hecha, SOLO LEYENDO (U19, ficha §7.2): nunca confirma, reintenta,
+    purga, escribe ni emite una referencia nueva. Orden de las comprobaciones (se corta en la primera que aplica):
+    1) integridad y contexto de la referencia, sin reloj ni base; 2) vencimiento (`ahora >= vence`), haya o no fila;
+    3) solo si sigue vigente, el comprobante: encontrado, de otra serie o ausente."""
+    secreto = get_settings().secret_key
+    referencia = verificar_referencia_de_resultado(ref, secreto) if secreto else None
+    plantilla = "asistente_resultado_guardado.html"
+    if referencia is None:
+        return _sin_cache(templates.TemplateResponse(request, plantilla, {
+            "estado": "no_valida", "mensaje": MENSAJE_REFERENCIA_NO_VALE, "clave": None, "series_id": None}))
+    contexto = {"clave": referencia.clave, "series_id": referencia.series_id}
+    if reloj() >= referencia.vence:
+        return _sin_cache(templates.TemplateResponse(request, plantilla, {
+            "estado": "vencido", "mensaje": MENSAJE_RESULTADO_VENCIDO, **contexto}))
+    servicio = VinculacionDeArchivos(db, secret=secreto)
+    try:
+        r = await servicio.leer_resultado(UUID(referencia.operacion), UUID(referencia.series_id))
+    except InformeDeOtraSerieError:
+        return _sin_cache(templates.TemplateResponse(request, plantilla, {
+            "estado": "no_valida", "mensaje": MENSAJE_REFERENCIA_NO_VALE, "clave": None, "series_id": None}))
+    if r is None:
+        return _sin_cache(templates.TemplateResponse(request, plantilla, {
+            "estado": "no_encontrado", "mensaje": MENSAJE_RESULTADO_NO_ENCONTRADO, **contexto}))
+    base = {**contexto, "cursor_actual": INICIO, "inicio": INICIO, "pagina": None,
+            "titulo_serie": await _titulo_de_la_serie(db, referencia.series_id)}
+    plantilla_ok = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_resultado.html"
+    return _sin_cache(templates.TemplateResponse(request, plantilla_ok, {
+        **base, "resultado": True, "fallo": None, "r": r, **_contexto_del_informe(r), "error": None, "token": None,
+        "ref": ref, "ruta_resultado": RUTA + "/resultado"}))

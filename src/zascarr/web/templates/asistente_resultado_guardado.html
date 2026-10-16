@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Resultado de la vinculación — ZascArr{% endblock %}
+{% block content %}
+{#- Lectura de un resultado guardado (U19, ficha §7.2) cuando NO se puede mostrar el informe: referencia no válida, plazo vencido
+    o resultado no encontrado. Solo lectura: ningún botón confirma o reintenta nada. Sin pistas en «no válida». -#}
+<h1>Resultado de la vinculación</h1>
+<section class="card vinculacion-lectura" data-estado="{{ estado }}" aria-labelledby="lectura-titulo">
+  <h2 id="lectura-titulo" class="sr">Resultado guardado</h2>
+  {{ ui.aviso("warn" if estado == "no_valida" else "amber" if estado == "no_encontrado" else "info", mensaje) }}
+  <p>
+    {% if clave and series_id %}
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ series_id }}">Revisar de nuevo</a>
+    {% endif %}
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+  </p>
+</section>
+{% endblock %}
