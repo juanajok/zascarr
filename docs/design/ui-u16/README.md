@@ -6,7 +6,7 @@ Rama `claude/u16-movil`, 2026-10-16. **Verificación emulada**: los dispositivos
 | Dato | Valor |
 |---|---|
 | Navegador | Google Chrome 154.0.8037.92 **headless por CDP**, viewport **táctil emulado** (`mobile: true`) a 360×740, 390×844 y 414×896 |
-| Entorno | ensayo aislado `docs/design/ui-baseline/ensayo.sh` (Postgres real). «Antes» = `main` `57259ac`; «después» = esta rama. Cada uno, en un ensayo **reconstruido desde cero**, con la **misma** herramienta |
+| Entorno | ensayo aislado `docs/design/ui-baseline/ensayo.sh` (Postgres real). «Antes» = `main` `57259ac`; «después» = el commit funcional **`aa46cccba9617b51db1c97acab938c8346a8c6ee`** de la rama `claude/u16-movil` (el último que toca `src/` o `tests/`; `365da6d` solo añade esta documentación y la fusión es `0275335`, que no es lo medido). Cada uno, en un ensayo **reconstruido desde cero**, con la **misma** herramienta |
 | Herramientas | [`medir_u16.py`](medir_u16.py) (mide), [`capturar_u16.py`](capturar_u16.py) (capturas) |
 | Datos en bruto | [`medicion-antes.json`](medicion-antes.json), [`medicion-despues.json`](medicion-despues.json) |
 | Alcance | **14 pantallas × 3 anchos = 42 medidas** por lado: panel, biblioteca, ficha de serie, Descubrir, Por revisar, Pendientes por carpeta, asistente de carpeta, revisión de la vinculación, Deseados, Mi biblioteca, Ajustes, Estado, aviso legal (asistente y texto) |
@@ -19,6 +19,10 @@ Rama `claude/u16-movil`, 2026-10-16. **Verificación emulada**: los dispositivos
   Es una **medida de tamaño**; **no** he visto el zoom de Safari, porque no tengo un iPhone.
 - **Objetivos táctiles**: alto de botones, campos, selectores, `summary` y enlaces-botón (**< 44 px**, criterio 3) y de cualquier
   control (**< 24 px**). Un enlace **dentro de una frase** está exento (WCAG 2.5.8) y no se cuenta; un enlace **suelto** debe medir ≥ 24 px.
+  *Limitación:* «dentro de una frase» es una **heurística** del script: un enlace se da por integrado si su contenedor tiene más de unos
+  pocos caracteres de texto además del propio enlace. Puede **excluir** un grupo de acciones que no sea una frase (p. ej. enlaces separados por
+  texto corto). Por eso los **ceros publicados valen para los elementos que selecciona el script, no son una certificación exhaustiva** de
+  todos los objetivos táctiles de cada pantalla.
 - Solo pantallas **cargadas**: no están medidos los estados que aparecen tras una interacción (p. ej. los resultados de Descubrir, o
   el panel «Más» abierto). La verificación completa por anchos es **V13** (fuera de alcance de esta tarjeta).
 
@@ -60,8 +64,11 @@ Por pantalla a **360 px** (antes → después): desborde / campos < 16 px / alto
    `clamp()`. Era una *víctima* del desborde, pero con ese ancho mínimo podía **causarlo** en cuanto una etiqueta creciera.
 
 Zoom y objetivos: un bloque **táctil** al final de `web.css` (`@media (max-width: 860px), (pointer: coarse)`): `font-size: 1rem` y
-`min-height: 44px` en campos, selectores, botones, `.btn`, `summary` y enlaces de volver; **sin `!important`** y sin tocar cada regla. En
-escritorio con ratón no cambia nada. Los seis enlaces «← Volver…» sueltos usan ya la clase `.back-link` (que ya existía en la ficha).
+`min-height: 44px` en campos, selectores, botones, `.btn`, `summary` y enlaces de volver; **sin `!important`** y sin tocar cada regla. **Ese bloque**
+no se aplica en escritorio con ratón y ancho > 860 px. **Fuera de él** hay tres cambios que sí valen en cualquier pantalla: el tope de
+ancho del selector de política (`.politica-form select`), `overflow-wrap` en las celdas del aviso legal y las columnas de la barra
+inferior (esta, solo ≤ 860 px). Los seis enlaces «← Volver…» sueltos usan ya la clase `.back-link` (que ya existía en la ficha), **cuyos estilos existentes también se aplican en
+escritorio** (color, sin subrayado, margen inferior): es un cambio de aspecto posible allí, **no medido ni comparado**.
 
 ## Lo que NO está acreditado
 
@@ -73,8 +80,9 @@ escritorio con ratón no cambia nada. Los seis enlaces «← Volver…» sueltos
 - **Lector de pantalla y teclado**: sin cambios en esta tarjeta, no probados aquí.
 - **§13 (benchmarking)**: no se hizo. Es un arreglo de CSS acotado y medido; el procedimiento lo exime («un arreglo evidente de texto o CSS no
   requiere investigación»). Lo digo para que la revisión lo juzgue, no porque lo dé por cerrado.
-- **Escritorio**: sin regresión visual comprobada de forma sistemática. Las reglas nuevas no se aplican con ratón y ancho > 860 px
-  (lo comprueba `tests/test_web_movil.py` por estructura, no por captura).
+- **Regresión visual de escritorio: no ejecutada.** El bloque táctil no se aplica con ratón y ancho > 860 px (lo comprueba
+  `tests/test_web_movil.py` por estructura, no por captura), pero los cambios de fuera del bloque descritos arriba y `.back-link` sí llegan
+  al escritorio y no se han comparado con capturas.
 
 ## Pruebas
 
