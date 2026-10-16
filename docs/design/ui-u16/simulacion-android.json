@@ -1,0 +1,706 @@
+{
+ "simulado": true,
+ "sha_desplegado_en_el_ensayo": "dc9841aec9f709dba1b7c0e9eb5d96f462cb9079",
+ "perfil": {
+  "modelo_en_el_agente": "SM-A105F",
+  "cpu": "4x más lenta",
+  "red": "1,6 Mbit/s, 150 ms",
+  "densidad": 2,
+  "pantallas": [
+   [
+    360,
+    640
+   ],
+   [
+    390,
+    780
+   ],
+   [
+    414,
+    736
+   ]
+  ]
+ },
+ "pantallas": {
+  "panel": {
+   "ruta": "/ui/",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 24,
+       "ancho": 145.8
+      }
+     ],
+     "n_objetivos": 16,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 24,
+       "ancho": 145.8
+      }
+     ],
+     "n_objetivos": 16,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [
+      {
+       "sel": "a",
+       "texto": "tebeos sin clasificar →",
+       "alto": 24,
+       "ancho": 145.8
+      }
+     ],
+     "n_objetivos": 16,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "biblioteca": {
+   "ruta": "/ui/biblioteca",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 5,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 14,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "ficha-de-serie": {
+   "ruta": "/ui/series/2cbef289-a81c-4f82-903b-4f513a84d84e",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "descubrir": {
+   "ruta": "/ui/descubrir",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 4,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "por-revisar": {
+   "ruta": "/ui/pendientes",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 10,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 30,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "pendientes-por-carpeta": {
+   "ruta": "/ui/pendientes/carpetas",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 12,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "asistente-de-carpeta": {
+   "ruta": "/ui/pendientes/carpetas/asistente?clave=_Unsorted",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 2,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 15,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "revision-de-la-vinculacion": {
+   "ruta": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=2cbef289-a81c-4f82-903b-4f513a84d84e",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 6,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 23,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "deseados": {
+   "ruta": "/ui/wishlist",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 1,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 19,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "mi-biblioteca-auditoria": {
+   "ruta": "/ui/auditoria",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 11,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "ajustes": {
+   "ruta": "/ui/ajustes",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 16,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 37,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "estado": {
+   "ruta": "/estado",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "aviso-legal-asistente": {
+   "ruta": "/ui/legal",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 10,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  },
+  "aviso-legal-texto": {
+   "ruta": "/legal",
+   "anchos": {
+    "360": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 360,
+     "ancho_visible": 360,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "390": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 390,
+     "ancho_visible": 390,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    },
+    "414": {
+     "desborda_en_horizontal": false,
+     "scroll_width": 414,
+     "ancho_visible": 414,
+     "elementos_que_sobresalen": [],
+     "campos_menores_de_16px": [],
+     "n_campos": 0,
+     "objetivos_menores_de_24px": [],
+     "controles_menores_de_44px": [],
+     "enlaces_sueltos_entre_24_y_44px": [],
+     "n_objetivos": 9,
+     "agente": "Mozilla/5.0 (Linux; Android 10; SM-A105F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/15",
+     "pointer_coarse": true
+    }
+   }
+  }
+ },
+ "chrome_del_navegador": "Chrome/154.0.8037.92"
+}

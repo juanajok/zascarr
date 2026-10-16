@@ -1,8 +1,10 @@
 # Ronda en dispositivos reales — U16 (#203, criterio 4)
 
-> **Estado: NOT RUN en todas las filas.** La tarjeta acepta empezar con la verificación emulada y los dispositivos reales como **deuda
-> visible** (decisión del responsable, 2026-10-15). **Un NOT RUN no cuenta como PASS y la tarjeta NO se cierra con el iPhone y el Android
-> en NOT RUN** (criterio 4). Este fichero es el registro que hay que rellenar; hasta entonces ninguna fila se da por buena.
+> **Estado: NOT RUN en todas las filas, y FUERA DEL ALCANCE EXIGIDO.** El 2026-10-16 el responsable fijó #203 como **validación emulada** en
+> un Debian de ensayo aislado, **sin móviles de prueba y sin tocar la Pi** (ver [`verificacion-u16.md`](verificacion-u16.md)). Este registro
+> **se conserva** por si algún día se ejecuta la ronda real, pero **ya no es un requisito para aceptar esta versión de #203** ni una deuda
+> que lo impida. **Un NOT RUN sigue sin contar como PASS**, y ningún cierre se referirá a compatibilidad certificada con teléfonos reales.
+> *(Hasta el 2026-10-15 la tarjeta decía lo contrario —«no se cierra con iPhone y Android en NOT RUN»—; esa lectura queda sustituida.)*
 
 ## Qué hay que hacer (por pantalla y por dispositivo)
 
