@@ -87,8 +87,10 @@ en tema oscuro; el enlace `↗` no decía adónde lleva.
    `transition-delay: 400ms` (la propia hoja de htmx ya usa `visibility`/`opacity`). Texto: «Buscando en {fuentes
    activas}…» con **solo las fuentes encendidas** (si GCD está apagada no se nombra). Un `<span>` visible; **no** se anuncia
    al aparecer (lo anuncia la región viva solo al terminar), para no duplicar.
-2. **Región viva única y persistente** (`role="status"`, `aria-live="polite"`) **fuera** del destino del intercambio, que
-   la respuesta actualiza con `hx-swap-oob`. Un solo anuncio por búsqueda: «3 resultados» / «Ningún resultado» /
+2. **Región viva única y persistente** (`aria-live="polite"`, `aria-atomic="true"`, la convención de `ui.region_viva`)
+   **fuera** del destino del intercambio, que la respuesta actualiza con `hx-swap-oob`. *Corrección al implementar:* se
+   **oculta a la vista** (`sr`) y el recuento visible va aparte (`aria-hidden`); de lo contrario el mismo texto sale dos
+   veces en pantalla (región y avisos). Un solo anuncio por búsqueda: «3 resultados» / «Ningún resultado» /
    «No respondió Comic Vine; …». El contenido nuevo del destino **no** lleva `role="status"` para no anunciar dos veces.
 3. **Texto plano en el servidor** con `html.parser` de la biblioteca estándar (sin dependencia nueva): quita etiquetas,
    descarta el contenido de `script`/`style`, decodifica entidades y colapsa espacios. Se aplica a la **presentación**
@@ -98,8 +100,9 @@ en tema oscuro; el enlace `↗` no decía adónde lleva.
 5. **Errores por fuente** a partir de `search_detallada` (`Busqueda.fuentes`): «**No respondió Comic Vine.** Los resultados
    de AniList, Tebeosfera y GCD sí se han consultado.» Con varias caídas, las enumera; con todas caídas, dice que
    ninguna respondió y no «sin resultados». El aviso de «sin clave» pasa de «`COMICVINE_API_KEY` en tu `.env`» a «Comic
-   Vine no está configurado: añade su clave en Ajustes». *Es un cambio de texto del servicio (`discovery.py:114`): el
-   revisor puede preferir dejarlo.*
+   Vine no está configurado: añade su clave en Ajustes». *Corrección al implementar:* **se hace en la capa web**
+   (`web/descubrir_texto.py::resumir`), no en el servicio: `discovery.py` y sus pruebas no cambian, y la web deja de pintar
+   los avisos de texto del servicio.
 5b. **«Tarda demasiado»: no se añade un plazo global.** Cada cliente ya corta a los 30 s **por petición** y entonces la
    fuente queda como `error` y se nombra. Un plazo menor (p. ej. 20 s por fuente) cambiaría **lo que devuelve el
    servicio** y es una decisión de producto no pedida por los criterios 1–6. **Para el revisor:** ¿basta con esta lectura
