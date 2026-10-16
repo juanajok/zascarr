@@ -125,8 +125,23 @@ async def series(ent) -> list[tuple]:
         return [tuple(r) for r in (await s.execute(text("SELECT id, title FROM series ORDER BY id"))).all()]
 
 
-def sin_fuentes(ent):
-    assert ent.fuentes.llamadas == [], "volver/reconstruir no puede consultar ninguna fuente"
+LLAMADAS_A_FUENTES: list[str] = []
+
+
+@pytest.fixture(autouse=True)
+def _vigilar_las_fuentes(monkeypatch):
+    """Cualquier intento de consultar una fuente queda anotado (y falla): volver nunca busca (ficha §6.4, regla 3)."""
+    LLAMADAS_A_FUENTES.clear()
+
+    async def prohibido(*a, **k):
+        LLAMADAS_A_FUENTES.append("consulta")
+        raise AssertionError("no se puede consultar una fuente al volver")
+    monkeypatch.setattr(DiscoveryService, "search_detallada", prohibido)
+    monkeypatch.setattr(asistente_carpetas, "buscar_a_ritmo", prohibido)
+
+
+def sin_fuentes(ent=None):
+    assert LLAMADAS_A_FUENTES == [], "volver/reconstruir no puede consultar ninguna fuente"
 
 
 # ═══ T8 · criterio 5: volver ANTES del alta ═════════════════════════════════════════════════════
@@ -170,12 +185,8 @@ class TestT8VolverAntesDelAlta:
         assert await instantanea(ent.banco) == antes
         sin_fuentes(ent)
 
-    async def test_t8c_volver_nunca_llama_a_las_fuentes(self, ent, monkeypatch):
-        """Recorre A, P, C, V reconstruidos: ni `search_detallada` ni `buscar_a_ritmo`."""
-        async def prohibido(*a, **k):
-            raise AssertionError("no se puede consultar una fuente al volver")
-        monkeypatch.setattr(DiscoveryService, "search_detallada", prohibido)
-        monkeypatch.setattr(asistente_carpetas, "buscar_a_ritmo", prohibido)
+    async def test_t8c_volver_nunca_llama_a_las_fuentes(self, ent):
+        """Recorre A, P, C, V reconstruidos: ni `search_detallada` ni `buscar_a_ritmo` (la vigilancia es autouse)."""
         await archivos(ent, UNO, DOS)
         assert (await get(A, clave=CLAVE, consulta="Flash")).status_code == 200
         assert (await get(f"{A}/alta", clave=CLAVE, candidata=candidata(), tradition="american")).status_code == 200
@@ -184,6 +195,7 @@ class TestT8VolverAntesDelAlta:
         sid = (await series(ent))[0][0]
         assert (await get(f"{A}/alta/resultado", clave=CLAVE, series_id=str(sid))).status_code == 200
         assert (await get(V, clave=CLAVE, series_id=str(sid))).status_code == 200
+        sin_fuentes()
 
     async def test_t8d_la_consulta_se_precarga_pero_no_se_ejecuta(self, ent):
         await archivos(ent, UNO)
