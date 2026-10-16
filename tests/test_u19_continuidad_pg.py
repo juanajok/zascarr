@@ -10,6 +10,7 @@ pruebas puede consultar una). Se saltan sin `TEST_DATABASE_URL`.
 | T3–T5 | 2. Continuidad desde una candidata; reutilizar no duplica | `TestContinuidadDesdeCandidata` |
 | T6 | 3. Progreso accesible | `TestProgreso` |
 | T7 | 4. Navegar no confirma ningún efecto | `TestNavegarNoEscribe` |
+| T11 | 8. Fallos y caducidad: el resultado real y la acción permitida | `TestFallos` |
 | T12, T13 | límites | `TestLimites` |
 """
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 import html
 import os
 import re
+from types import SimpleNamespace
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -60,6 +62,7 @@ from zascarr.services.tokens_revision import (
     candidata_firmable,
     crear_token_candidata,
 )
+from zascarr.web import asistente_carpetas, discovery
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = [
@@ -312,6 +315,47 @@ class TestNavegarNoEscribe:
         assert escrituras(ent.banco, desde) == [], "navegar/elegir/volver no puede escribir"
         assert await instantanea(ent.banco) == antes and huella_disco(ent.lib) == disco
         sin_fuentes()
+
+
+
+# ═══ T11 · criterio 8: fallos y caducidad ═══════════════════════════════════════════════════════
+
+class TestFallos:
+
+    async def test_t11_la_serie_ya_no_existe_al_revisar(self, ent):
+        await archivos(ent, UNO)
+        for series_id in (str(uuid4()), "no-es-un-uuid"):
+            r = await get(V, clave=CLAVE, series_id=series_id)
+            v = visible(r.text)
+            assert r.status_code == 200 and ("ya no existe" in v or "Hace falta una serie" in v), series_id
+            assert 'class="vinculacion-confirmar"' not in r.text                    # no hay nada que confirmar
+
+    async def test_t11_la_carpeta_ya_no_tiene_registros(self, ent):
+        sid = await serie_de_prueba(ent)
+        v = visible((await get(V, clave="Comics/NoExiste", series_id=str(sid))).text)
+        assert "ya no tiene registros pendientes" in v
+        a = visible((await get(f"{A}/alta/resultado", clave="Comics/NoExiste", series_id=str(sid))).text)
+        assert "ya no tiene registros pendientes" in a and "Revisar los archivos de esta carpeta" not in a
+
+    async def test_t11_un_alta_con_el_token_roto_no_crea_nada_ni_afirma_exito(self, ent):
+        await archivos(ent, UNO)
+        p = await get(f"{A}/alta", clave=CLAVE, candidata=candidata(), tradition="american")
+        roto = token_de_crear(p.text)[:-4] + "XXXX"
+        antes = await instantanea(ent.banco)
+        r = await post("/ui/descubrir/crear", {"token": roto})
+        v = visible(r.text)
+        assert r.status_code == 200 and "repite la vista previa" in v and "creada" not in v
+        assert "Revisar los archivos" not in v and "/ui/descubrir/deshacer" not in r.text   # sin éxito, sin ids ni «Deshacer» inventados
+        assert await instantanea(ent.banco) == antes
+
+    async def test_t11_sin_clave_de_firma_no_se_ofrece_nada(self, ent, monkeypatch):
+        await archivos(ent, UNO)
+        sin = lambda: SimpleNamespace(secret_key="")                              # noqa: E731
+        for modulo in (asistente_carpetas, discovery):
+            monkeypatch.setattr(modulo, "get_settings", sin)
+        r = await get(f"{A}/alta", clave=CLAVE, candidata=candidata(), tradition="american")
+        v = visible(r.text)
+        assert "no tiene clave para firmar" in v and "Crear serie vacía" not in v
 
 
 # ═══ T12, T13 · límites ═════════════════════════════════════════════════════════════════════════
