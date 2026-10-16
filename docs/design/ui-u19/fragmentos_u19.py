@@ -25,7 +25,6 @@ from zascarr.services.descubrimiento_grupo import (
     Coincidencia,
     GrupoResumen,
     RespuestaDescubrir,
-    SerieLocal,
     SerieParecida,
 )
 from zascarr.services.tokens_revision import candidata_firmable, crear_token_candidata
@@ -35,7 +34,8 @@ CLAVE_GRUPO = "_Unsorted"
 
 
 def main(fichero_clave: str, serie_id: str, titulo_local: str, salida: str) -> None:
-    secreto = open(fichero_clave, encoding="utf-8").read().strip()
+    with open(fichero_clave, encoding="utf-8") as f:
+        secreto = f.read().strip()
 
     def tok(fuente, id_, titulo, anio, tradicion):
         return crear_token_candidata(CLAVE_GRUPO, candidata_firmable(fuente, id_, titulo, anio, tradicion, None, None), secreto)
@@ -68,7 +68,8 @@ def main(fichero_clave: str, serie_id: str, titulo_local: str, salida: str) -> N
             assert r.status_code == 200, r.text[:300]
     finally:
         app.dependency_overrides.pop(get_db, None)
-    json.dump({"buscar": r.text, "token_comic_vine": candidatas[0].token}, open(salida, "w", encoding="utf-8"), ensure_ascii=False)
+    with open(salida, "w", encoding="utf-8") as f:
+        json.dump({"buscar": r.text, "token_comic_vine": candidatas[0].token}, f, ensure_ascii=False)
     print("fragmento:", len(r.text), "bytes;", r.text.count("Elegir esta serie"), "candidatas")
 
 
