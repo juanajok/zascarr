@@ -1,0 +1,746 @@
+{
+ "etiqueta": "despues",
+ "pantallas": {
+  "ajustes": {
+   "escritorio-light": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Las integraciones que actives aquí pueden buscar y descargar por tu cuent"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-light": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Las integraciones que actives aquí pueden buscar y descargar por tu cuent"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "escritorio-dark": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Las integraciones que actives aquí pueden buscar y descargar por tu cuent"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-dark": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Las integraciones que actives aquí pueden buscar y descargar por tu cuent"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ]
+  },
+  "deseados": {
+   "escritorio-light": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 33,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Añadir una serie aquí puede disparar búsquedas y descargas a través de la"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-light": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 33,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Añadir una serie aquí puede disparar búsquedas y descargas a través de la"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "escritorio-dark": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 33,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Añadir una serie aquí puede disparar búsquedas y descargas a través de la"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-dark": [
+    {
+     "sel": "aside.legal-notice.legal-notice-warn",
+     "palabras": 33,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "Uso responsable. Añadir una serie aquí puede disparar búsquedas y descargas a través de la"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ]
+  },
+  "ficha-de-serie": {
+   "escritorio-light": [
+    {
+     "sel": "aside.legal-notice.legal-notice-info",
+     "palabras": 25,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Los metadatos de esta ficha proceden de fuentes de terceros (Comic Vine, AniList, Tebeosfe"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "«Números que aún no han salido» está deshabilitado: La política «futuros» todavía no se pu"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 23,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Guardar aplica la retirada al momento (lo que sobra deja de buscarse). Los números que fal"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-light": [
+    {
+     "sel": "aside.legal-notice.legal-notice-info",
+     "palabras": 25,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Los metadatos de esta ficha proceden de fuentes de terceros (Comic Vine, AniList, Tebeosfe"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "«Números que aún no han salido» está deshabilitado: La política «futuros» todavía no se pu"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 23,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Guardar aplica la retirada al momento (lo que sobra deja de buscarse). Los números que fal"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "escritorio-dark": [
+    {
+     "sel": "aside.legal-notice.legal-notice-info",
+     "palabras": 25,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Los metadatos de esta ficha proceden de fuentes de terceros (Comic Vine, AniList, Tebeosfe"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "«Números que aún no han salido» está deshabilitado: La política «futuros» todavía no se pu"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 23,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Guardar aplica la retirada al momento (lo que sobra deja de buscarse). Los números que fal"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-dark": [
+    {
+     "sel": "aside.legal-notice.legal-notice-info",
+     "palabras": 25,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Los metadatos de esta ficha proceden de fuentes de terceros (Comic Vine, AniList, Tebeosfe"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "«Números que aún no han salido» está deshabilitado: La política «futuros» todavía no se pu"
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 23,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Guardar aplica la retirada al momento (lo que sobra deja de buscarse). Los números que fal"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ]
+  },
+  "estado": {
+   "escritorio-light": [
+    {
+     "sel": "div.caption.estado-warnings.visible",
+     "palabras": 18,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Avisos fichero /run/vpn-state/wg0.json ausente — el host aún no ha escrito el estado (o el"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-light": [
+    {
+     "sel": "div.caption.estado-warnings.visible",
+     "palabras": 18,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Avisos fichero /run/vpn-state/wg0.json ausente — el host aún no ha escrito el estado (o el"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "escritorio-dark": [
+    {
+     "sel": "div.caption.estado-warnings.visible",
+     "palabras": 18,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Avisos fichero /run/vpn-state/wg0.json ausente — el host aún no ha escrito el estado (o el"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-dark": [
+    {
+     "sel": "div.caption.estado-warnings.visible",
+     "palabras": 18,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Avisos fichero /run/vpn-state/wg0.json ausente — el host aún no ha escrito el estado (o el"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ]
+  },
+  "descubrir": {
+   "escritorio-light": [
+    {
+     "sel": "p.caption",
+     "palabras": 11,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 13,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "No consulta ninguna fuente ni necesita claves: solo el título y la tradición."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "Solo el título y la tradición son necesarios. No se inventa nada más (editorial, país, idi"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-light": [
+    {
+     "sel": "p.caption",
+     "palabras": 11,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 13,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "No consulta ninguna fuente ni necesita claves: solo el título y la tradición."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "Solo el título y la tradición son necesarios. No se inventa nada más (editorial, país, idi"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "escritorio-dark": [
+    {
+     "sel": "p.caption",
+     "palabras": 11,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 13,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "No consulta ninguna fuente ni necesita claves: solo el título y la tradición."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "Solo el título y la tradición son necesarios. No se inventa nada más (editorial, país, idi"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-dark": [
+    {
+     "sel": "p.caption",
+     "palabras": 11,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 13,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "No consulta ninguna fuente ni necesita claves: solo el título y la tradición."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 29,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": true,
+     "texto": "Solo el título y la tradición son necesarios. No se inventa nada más (editorial, país, idi"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ]
+  },
+  "asistente-de-carpeta": {
+   "escritorio-light": [
+    {
+     "sel": "p.caption",
+     "palabras": 15,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Abrir este asistente no ha consultado ninguna fuente: solo se busca cuando tú lo pides."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 17,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Propuesta a partir del nombre de la carpeta o de los archivos. Puedes cambiarla antes de b"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-light": [
+    {
+     "sel": "p.caption",
+     "palabras": 15,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Abrir este asistente no ha consultado ninguna fuente: solo se busca cuando tú lo pides."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 17,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Propuesta a partir del nombre de la carpeta o de los archivos. Puedes cambiarla antes de b"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "escritorio-dark": [
+    {
+     "sel": "p.caption",
+     "palabras": 15,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Abrir este asistente no ha consultado ninguna fuente: solo se busca cuando tú lo pides."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 17,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Propuesta a partir del nombre de la carpeta o de los archivos. Puedes cambiarla antes de b"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ],
+   "estrecha-dark": [
+    {
+     "sel": "p.caption",
+     "palabras": 15,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Abrir este asistente no ha consultado ninguna fuente: solo se busca cuando tú lo pides."
+    },
+    {
+     "sel": "p.caption",
+     "palabras": 17,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14.4,
+     "enlace_aviso_legal": false,
+     "dentro_de_details_cerrado": false,
+     "texto": "Propuesta a partir del nombre de la carpeta o de los archivos. Puedes cambiarla antes de b"
+    },
+    {
+     "sel": "p.legal-notice.legal-notice-footer",
+     "palabras": 10,
+     "mayusculas": false,
+     "giro_grados": 0,
+     "tamano_px": 14,
+     "enlace_aviso_legal": true,
+     "dentro_de_details_cerrado": false,
+     "texto": "ZascArr gestiona bibliotecas personales y no distribuye contenido. Aviso legal."
+    }
+   ]
+  }
+ },
+ "chrome": "Chrome/154.0.8037.92"
+}

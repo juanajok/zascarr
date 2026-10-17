@@ -1,0 +1,2868 @@
+{
+ "etiqueta": "despues",
+ "pantallas": {
+  "panel": {
+   "ruta": "/ui/",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Inicio",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-pasos",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "Tu tebeoteca, paso a paso",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2.seccion",
+      "tag": "h2",
+      "clases": "seccion",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Tu colección ahora",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Tebeos encontrados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Series en la biblioteca",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Números que te faltan",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Últimas actualizaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Buscar una serie",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Inicio",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-pasos",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "Tu tebeoteca, paso a paso",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2.seccion",
+      "tag": "h2",
+      "clases": "seccion",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Tu colección ahora",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Tebeos encontrados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Series en la biblioteca",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Números que te faltan",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Últimas actualizaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Buscar una serie",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Inicio",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-pasos",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "Tu tebeoteca, paso a paso",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2.seccion",
+      "tag": "h2",
+      "clases": "seccion",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Tu colección ahora",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Tebeos encontrados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Series en la biblioteca",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Números que te faltan",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Últimas actualizaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Buscar una serie",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Inicio",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-pasos",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "Tu tebeoteca, paso a paso",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2.seccion",
+      "tag": "h2",
+      "clases": "seccion",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Tu colección ahora",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Tebeos encontrados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Series en la biblioteca",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.metric-label",
+      "tag": "span",
+      "clases": "metric-label",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Números que te faltan",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Últimas actualizaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#h-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Buscar una serie",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "biblioteca": {
+   "ruta": "/ui/biblioteca",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "ficha-de-serie": {
+   "ruta": "/ui/series/0978b14e-cce8-4dbe-96b7-0b6c62a73a72",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Los Guardianes del Alba (2010)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.subtitle",
+      "tag": "span",
+      "clases": "subtitle",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "(2010)",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#1",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#3",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#4",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Búsqueda automática",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Los Guardianes del Alba (2010)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.subtitle",
+      "tag": "span",
+      "clases": "subtitle",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "(2010)",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#1",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#3",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#4",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Búsqueda automática",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Los Guardianes del Alba (2010)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.subtitle",
+      "tag": "span",
+      "clases": "subtitle",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "(2010)",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#1",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#3",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#4",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Búsqueda automática",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Los Guardianes del Alba (2010)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.subtitle",
+      "tag": "span",
+      "clases": "subtitle",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "(2010)",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#1",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#3",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.issue-chip.issue-present",
+      "tag": "span",
+      "clases": "issue-chip issue-present",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "#4",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Búsqueda automática",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "descubrir": {
+   "ruta": "/ui/descubrir",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Descubrir",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Descubrir",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Descubrir",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Descubrir",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "por-revisar": {
+   "ruta": "/ui/pendientes",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Por revisar",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "pendientes-por-carpeta": {
+   "ruta": "/ui/pendientes/carpetas",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Pendientes por carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#carpeta-1.carpeta-titulo",
+      "tag": "h2",
+      "clases": "carpeta-titulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3.carpeta-subtitulo",
+      "tag": "h3",
+      "clases": "carpeta-subtitulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Qué se ha observado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Pendientes por carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#carpeta-1.carpeta-titulo",
+      "tag": "h2",
+      "clases": "carpeta-titulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3.carpeta-subtitulo",
+      "tag": "h3",
+      "clases": "carpeta-subtitulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Qué se ha observado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Pendientes por carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#carpeta-1.carpeta-titulo",
+      "tag": "h2",
+      "clases": "carpeta-titulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3.carpeta-subtitulo",
+      "tag": "h3",
+      "clases": "carpeta-subtitulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Qué se ha observado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Pendientes por carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#carpeta-1.carpeta-titulo",
+      "tag": "h2",
+      "clases": "carpeta-titulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3.carpeta-subtitulo",
+      "tag": "h3",
+      "clases": "carpeta-subtitulo",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Qué se ha observado",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "asistente-de-carpeta": {
+   "ruta": "/ui/pendientes/carpetas/asistente?clave=_Unsorted",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "Elegir la serie de una carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-carpeta",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-locales-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "¿Ya la tienes en tu biblioteca?",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Buscar en las fuentes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-manual-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "¿No aparece? Crear la serie a mano",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "Elegir la serie de una carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-carpeta",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-locales-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "¿Ya la tienes en tu biblioteca?",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Buscar en las fuentes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-manual-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "¿No aparece? Crear la serie a mano",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "Elegir la serie de una carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-carpeta",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-locales-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "¿Ya la tienes en tu biblioteca?",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Buscar en las fuentes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-manual-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "¿No aparece? Crear la serie a mano",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "Elegir la serie de una carpeta",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-carpeta",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-locales-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "¿Ya la tienes en tu biblioteca?",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-buscar",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Buscar en las fuentes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#asistente-manual-titulo",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "¿No aparece? Crear la serie a mano",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "revision-de-la-vinculacion": {
+   "ruta": "/ui/pendientes/carpetas/asistente/vinculacion?clave=_Unsorted&series_id=0978b14e-cce8-4dbe-96b7-0b6c62a73a72",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Revisar selección y números",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#vinc-contexto",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3#vinc-resumen",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Resumen de esta página",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Revisar selección y números",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#vinc-contexto",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3#vinc-resumen",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Resumen de esta página",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Revisar selección y números",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#vinc-contexto",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3#vinc-resumen",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Resumen de esta página",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Revisar selección y números",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2#vinc-contexto",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "_Unsorted",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3#vinc-resumen",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Resumen de esta página",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "deseados": {
+   "ruta": "/ui/wishlist",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Deseados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-searching",
+      "tag": "span",
+      "clases": "wishlist-badge estado-searching",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-failed",
+      "tag": "span",
+      "clases": "wishlist-badge estado-failed",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Sin resultados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-imported",
+      "tag": "span",
+      "clases": "wishlist-badge estado-imported",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "otro"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Deseados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-searching",
+      "tag": "span",
+      "clases": "wishlist-badge estado-searching",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-failed",
+      "tag": "span",
+      "clases": "wishlist-badge estado-failed",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Sin resultados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-imported",
+      "tag": "span",
+      "clases": "wishlist-badge estado-imported",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "otro"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Deseados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-searching",
+      "tag": "span",
+      "clases": "wishlist-badge estado-searching",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-failed",
+      "tag": "span",
+      "clases": "wishlist-badge estado-failed",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Sin resultados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-imported",
+      "tag": "span",
+      "clases": "wishlist-badge estado-imported",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "otro"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Deseados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-wanted",
+      "tag": "span",
+      "clases": "wishlist-badge estado-wanted",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-searching",
+      "tag": "span",
+      "clases": "wishlist-badge estado-searching",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Buscando…",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-failed",
+      "tag": "span",
+      "clases": "wishlist-badge estado-failed",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Sin resultados",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "span.wishlist-badge.estado-imported",
+      "tag": "span",
+      "clases": "wishlist-badge estado-imported",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "En tu biblioteca",
+      "clase_de_uso": "otro"
+     }
+    ]
+   }
+  },
+  "mi-biblioteca-auditoria": {
+   "ruta": "/ui/auditoria",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Duplicados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "El mismo tebeo, dos veces 2",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.audit-count",
+      "tag": "span",
+      "clases": "audit-count",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Registrar mi biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Duplicados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "El mismo tebeo, dos veces 2",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.audit-count",
+      "tag": "span",
+      "clases": "audit-count",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Registrar mi biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Duplicados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "El mismo tebeo, dos veces 2",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.audit-count",
+      "tag": "span",
+      "clases": "audit-count",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Registrar mi biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Duplicados",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "El mismo tebeo, dos veces 2",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "span.audit-count",
+      "tag": "span",
+      "clases": "audit-count",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "2",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Registrar mi biblioteca",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "ajustes": {
+   "ruta": "/ui/ajustes",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Ajustes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Fuentes de metadatos",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Comic Vine",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Prowlarr",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Transmission",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "aMule",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Seguridad",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Avisos",
+      "clase_de_uso": "otro"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Ajustes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Fuentes de metadatos",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Comic Vine",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Prowlarr",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Transmission",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "aMule",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Seguridad",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Avisos",
+      "clase_de_uso": "otro"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Ajustes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Fuentes de metadatos",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Comic Vine",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Prowlarr",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Transmission",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "aMule",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Seguridad",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Avisos",
+      "clase_de_uso": "otro"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Ajustes",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Fuentes de metadatos",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "Comic Vine",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Prowlarr",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Transmission",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "aMule",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Seguridad",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "legend",
+      "tag": "legend",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Avisos",
+      "clase_de_uso": "otro"
+     }
+    ]
+   }
+  },
+  "estado": {
+   "ruta": "/estado",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Estado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Estado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Estado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 1,
+      "texto": "Estado",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "aviso-legal-asistente": {
+   "ruta": "/ui/legal",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Aviso legal aceptado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Aviso legal aceptado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Aviso legal aceptado",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Aviso legal aceptado",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  },
+  "aviso-legal-texto": {
+   "ruta": "/legal",
+   "vistas": {
+    "escritorio-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Aviso Legal — ZascArr",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "1. Propósito del software",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2. Marco legal aplicable (España / Unión Europea)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "2.1 Copia privada (art. 31.2 LPI)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "2.2 Compartir en redes P2P / eD2K",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2.3 Derecho sui generis sobre bases de datos (Directiva 96/9/CE)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "em",
+      "tag": "em",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "sui generis",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "3. Lo que este proyecto NO hace",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "4. Estado legal por componente",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "5. Responsabilidades del usuario",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "6. Licencia del código (GPL-3.0)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "7. Contenido de terceros y atribución",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "8. Contacto y notificaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "9. Jurisdicción aplicable",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "10. Actualizaciones de este documento",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Referencias legales citadas",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-light": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Aviso Legal — ZascArr",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "1. Propósito del software",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2. Marco legal aplicable (España / Unión Europea)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "2.1 Copia privada (art. 31.2 LPI)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "2.2 Compartir en redes P2P / eD2K",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2.3 Derecho sui generis sobre bases de datos (Directiva 96/9/CE)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "em",
+      "tag": "em",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "sui generis",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "3. Lo que este proyecto NO hace",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "4. Estado legal por componente",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "5. Responsabilidades del usuario",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "6. Licencia del código (GPL-3.0)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "7. Contenido de terceros y atribución",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "8. Contacto y notificaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "9. Jurisdicción aplicable",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "10. Actualizaciones de este documento",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Referencias legales citadas",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "escritorio-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Aviso Legal — ZascArr",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "1. Propósito del software",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2. Marco legal aplicable (España / Unión Europea)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "2.1 Copia privada (art. 31.2 LPI)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "2.2 Compartir en redes P2P / eD2K",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2.3 Derecho sui generis sobre bases de datos (Directiva 96/9/CE)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "em",
+      "tag": "em",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "sui generis",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "3. Lo que este proyecto NO hace",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "4. Estado legal por componente",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "5. Responsabilidades del usuario",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "6. Licencia del código (GPL-3.0)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "7. Contenido de terceros y atribución",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "8. Contacto y notificaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "9. Jurisdicción aplicable",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "10. Actualizaciones de este documento",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Referencias legales citadas",
+      "clase_de_uso": "titulo"
+     }
+    ],
+    "movil-dark": [
+     {
+      "sel": "h1",
+      "tag": "h1",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "Aviso Legal — ZascArr",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "1. Propósito del software",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2. Marco legal aplicable (España / Unión Europea)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "2.1 Copia privada (art. 31.2 LPI)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "2.2 Compartir en redes P2P / eD2K",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h3",
+      "tag": "h3",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 8,
+      "texto": "2.3 Derecho sui generis sobre bases de datos (Directiva 96/9/CE)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "em",
+      "tag": "em",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 2,
+      "texto": "sui generis",
+      "clase_de_uso": "otro"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 7,
+      "texto": "3. Lo que este proyecto NO hace",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "4. Estado legal por componente",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "5. Responsabilidades del usuario",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "6. Licencia del código (GPL-3.0)",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 6,
+      "texto": "7. Contenido de terceros y atribución",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 4,
+      "texto": "8. Contacto y notificaciones",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "9. Jurisdicción aplicable",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 5,
+      "texto": "10. Actualizaciones de este documento",
+      "clase_de_uso": "titulo"
+     },
+     {
+      "sel": "h2",
+      "tag": "h2",
+      "clases": "",
+      "mayusculas": true,
+      "giro_grados": 0,
+      "palabras": 3,
+      "texto": "Referencias legales citadas",
+      "clase_de_uso": "titulo"
+     }
+    ]
+   }
+  }
+ },
+ "chrome": "Chrome/154.0.8037.92"
+}
