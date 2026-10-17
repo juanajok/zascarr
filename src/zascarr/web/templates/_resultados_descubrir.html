@@ -28,7 +28,7 @@
     <div class="discovery-card-body">
       <div class="discovery-card-title">
         {{ r.titulo }}{% if r.anio %} ({{ r.anio }}){% endif %}
-        <span class="caption">{{ r.fuente | etiqueta_fuente }}</span>
+        <span class="rotulo">{{ r.fuente | etiqueta_fuente }}</span>
         {% if r.sitio_url %}
         <a href="{{ r.sitio_url }}" target="_blank" rel="noopener noreferrer" title="Ver ficha original para confirmar"
            aria-label="Ver la ficha de «{{ r.titulo }}» en {{ r.fuente | etiqueta_fuente }} (se abre en otra pestaña)"><span aria-hidden="true">↗</span></a>
