@@ -1320,6 +1320,137 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Confundir la maqueta con el producto.** La maqueta simula dos cosas que aquí **no** se implementan (deshacer tras asignar y el conmutador de tema); la tabla de traducción lo deja escrito.
 - **Estimaciones.** Revisadas en V0 con el inventario: V4, V9 y V12 suben de M a L, V7 de S a M y V6 se divide. Siguen siendo estimaciones: la verificación en navegador puede moverlas.
 
+### Épicas S, O, R y Q — fuentes en español, primer uso, reconocimiento y operación (propuesta del 2026-10-02)
+
+> **Estado de esta sección (2026-10-16): PROPUESTA HISTÓRICA, no política ni planificación vigente.** Se registra para no perder las ideas y
+> sus solapamientos con lo ya existente. **No** crea tarjetas, **no** acepta las prioridades (P0/P1/P2) ni las tallas, **no** fija una secuencia
+> y **no desplaza el objetivo de MVP vigente** («vincular en sitio», M1–M5). Lo que fija lo vigente es el tablero y las tarjetas de cada historia
+> cuando se refinen, no esta tabla. Las dos subsecciones del final —«Orden de ataque» y «Definición de hecho»— son **parte de la propuesta
+> original**: ver sus avisos. Donde el texto histórico contradice una decisión posterior (p. ej. Redis, [ADR 0011](adr/0011-retirar-redis.md)),
+> **manda la decisión posterior** y el texto se conserva marcado como superado.
+
+**Origen:** propuesta de **20** historias en 4 épicas nuevas (S1–S7, O1–O4, R1–R4 y Q1–Q5; la versión inicial de este texto decía 17 por error), aportada por el usuario el 2026-10-02 y comprobada contra este fichero antes de registrarla. **Es una propuesta, no un compromiso:** nada de esto está implementado ni ha pasado por la ficha §13 (`docs/design/benchmark-referencias.md`); cada historia P0/P1 de comportamiento nuevo la necesita antes de construirse.
+
+**Postura legal (común a todas):** las fuentes nacen **desactivadas**, el proyecto no incluye URLs de foros ni enlaces por defecto y el usuario las activa de forma explícita (CLAUDE.md §3.2 y §5.1; `LEGAL.md`).
+
+**Tallas:** la propuesta usa **S < 1 día, M 1-3 días, L > 3 días**, que no es la escala de la cabecera de este documento (S < 2 días, M < 1 semana, L > 1 semana). Se conservan las letras tal como llegaron y **hay que reestimarlas** al abrir cada ficha. Los criterios con cifras (≥85 %, ≥200 rutas…) son **objetivos a validar**, no mediciones.
+
+**Prefijos:** la propuesta llamaba **F** a la primera épica, pero `F1`–`F16` ya existen en este fichero (benchmarking competitivo, ronda 2) y están referenciados desde D1, D5 y B8. Para no crear dos historias distintas con el mismo ID, la épica de fuentes se registra como **S** (S1…S7 = F1…F7 de la propuesta). `O`, `R` y `Q` estaban libres.
+
+#### Épica S — "Encuentro tebeos en español" (fuentes)
+
+| ID | Historia | Aceptación | P | Est |
+|---|---|---|---|---|
+| S1 | Como coleccionista sin Prowlarr, quiero buscar un tebeo en la red eD2K/Kad desde ZascArr, para no tener que pegar enlaces `ed2k://` a mano | Búsqueda opt-in vía amuleweb; resultados con nombre, tamaño y nº de fuentes; filtro por cbr/cbz/pdf; mensajes distintos para "aMule no conectado a la red", "sin resultados" y "amuleweb inaccesible" (reutiliza `last_error`/D9); tests con aMule simulado | P0 | L |
+| S2 | Como coleccionista, quiero activar un perfil de foro tipo CRG pegando solo la URL, para buscar donde se publica el tebeo español | Plantilla de foro con selectores configurables y sin URL por defecto; botón "Probar conexión" que dice si el foro es compatible; respeta rate limit y `robots.txt`; extrae título y enlaces; se valida contra el HTML real antes de construirlo (la disciplina que el backlog ya exige) | P0 | M |
+| S3 | Como coleccionista, quiero que los resultados de aMule y de foros se entiendan como serie y número, para que la wishlist los empareje | El parser reutiliza el de importación (patrones de `Serie NN - Subtítulo`); resultado con serie, número, editorial y calidad detectados; los no reconocidos se marcan, no se descartan; corpus de pruebas con nombres reales de eD2K y foros | P0 | M |
+| S4 | Como coleccionista, quiero ver todas las fuentes de una búsqueda en una sola lista, ordenadas por idioma, formato y fuentes disponibles | Búsqueda unificada Prowlarr + eD2K + foro; prioridad configurable (castellano > otros, cbz > cbr > pdf); detecta duplicados entre fuentes; indica de dónde viene cada resultado | P1 | M |
+| S5 | Como coleccionista, quiero importar mi lista de Whakoom, para no teclear mi colección y mis pendientes | Spike previo (S): verificar qué ofrece Whakoom en HTML o exportación y qué licencia aplica; si es viable, importación opt-in con atribución CC-BY-SA visible; la historia se divide si el spike lo desaconseja | P1 | L |
+| S6 | Como coleccionista, quiero ver qué sale este mes en España (Norma, Panini, ECC), para añadir novedades a Deseados con un clic | Spike previo por editorial: verificar HTML real; tabla `novedades` y contrato `NovedadItem` (ya previstos en el backlog, ver D5); vista "Novedades" con botón "Desear"; aviso por Telegram/notificador si sale un título de una serie que sigo | P1 | L |
+| S7 | Como coleccionista, quiero saber con claridad qué cubre Tebeosfera/Gran Catálogo y qué no, para entender por qué algunas fichas salen vacías | Documentar en Ajustes qué datos aporta cada fuente; si falta la ficha, la UI sugiere otra fuente o edición manual; el README y LEGAL llaman a la fuente igual | P2 | S |
+
+**Encaje con lo ya registrado (comprobado el 2026-10-02):**
+
+- **S1/S2 → D9/D10/D11 y `forum_enabled`.** `last_error` (D9) y "Probar conexión" (D11) ya existen y se reutilizan. En el fichero **no hay** ningún trabajo previo sobre amuleweb ni eD2K como fuente de búsqueda: el benchmarking (línea "Ninguno de los tres cubre tebeo español con fuentes honestas + eD2K") lo cita como hueco, no como historia.
+- **S6 ≈ D5 (P2, L).** Es la misma funcionalidad: D5 ya describe el módulo Novedades, su spec (`SPEC_MODULO_NOVEDADES.md`, con la tabla `novedades` y `NovedadItem`) y deja anotado que **la estructura HTML real de Norma/Panini/ECC/Whakoom no se ha comprobado**. S6 la sube a P1 y añade el aviso al notificador; **no se ha tocado D5**: al priorizar, decidir si S6 sustituye a D5 o se fusionan, para no mantener dos historias.
+- **S5.** Whakoom solo aparece hoy como "opcional" en la nota de D5. El spike de S5 y el de S6 sobre Whakoom deberían compartir ficha.
+- **S3 → parser de importación** (`naming.py`, B6/B14/B21): reutilizarlo es coherente con CLAUDE.md §3.1.1 (la lógica vive en una sola capa).
+
+#### Épica O — "Primer uso sin conocimientos técnicos"
+
+| ID | Historia | Aceptación | P | Est |
+|---|---|---|---|---|
+| O1 | Como usuario recién instalado, quiero un asistente de 3 pasos (biblioteca, descargas, fuentes) que detecte lo que ya tengo en la Pi, para no escribir URLs ni claves | Detecta Transmission, aMule, Prowlarr y Kavita en el host; rellena URL y puertos; prueba la conexión con un mensaje en castellano llano; permite saltarse cada paso; complementa a U2 sin duplicarlo | P0 | M |
+| O2 | Como usuario sin conocimientos, quiero que el instalador resuelva el cortafuegos por mí si lo autorizo | Detecta la subred real del puente de Docker (caso A10); pide un "sí/no" y aplica la regla `ufw`, o muestra el comando exacto si dice que no; reversible con `uninstall` | P1 | S |
+| O3 | Como usuario con una Pi 4 de 4 GB compartida, quiero que ZascArr consuma lo mínimo, para que aMule y Kavita no se queden sin memoria | Spike: evaluar SQLite como alternativa a PostgreSQL ~~+Redis~~ *(«+Redis» es texto original **superado**: [ADR 0011](adr/0011-retirar-redis.md) retiró Redis del stack el 2026-10-15; la comparación operativa es solo PostgreSQL frente a SQLite)*; informe de RAM en reposo y bajo carga; decisión documentada en un ADR | P2 | L |
+| O4 | Como usuario, quiero entender el aviso legal en una sola pantalla breve, sin jerga | Texto de menos de 150 palabras, sin referencias a normas; checkbox de aceptación; enlace al texto completo; el banner de Deseados lleva directo a él | P2 | S |
+
+**Encaje y puntos que requieren decisión del dueño del producto:**
+
+- **O1 ↔ U2/U5/V4.** U2 (panel de inicio con checklist) y U5 (asistente «¿Qué quieres conectar?») cubren parte del terreno. La propuesta dice «complementa a U2 sin duplicarlo»; falta fijar el reparto con U5 antes de empezar, porque «detectar lo que hay en el host» desde dentro de un contenedor es justo lo que A10 ya descubrió que es difícil (`host.docker.internal` vs. puerta de enlace real).
+- **O2 choca con una decisión de A10.** `scripts/diagnostico-red.sh` se diseñó **solo lectura** y hay un test que comprueba que **nunca ejecuta `ufw`** salvo `status`/`show added`: se imprime el comando para que lo pegue el usuario. O2 pide aplicarlo tras un «sí». **No se ha resuelto aquí**: o O2 conserva la postura de A10 (solo imprimir) o se reabre esa decisión por escrito (ficha §13 + nota en A10). Además «reversible con `uninstall`» exige registrar qué regla se añadió (A4 hoy no toca el cortafuegos).
+- **O3 choca con CLAUDE.md §2** («aquí siempre Postgres»: `sqlite3` descartado) y con las migraciones Alembic 0001-0013 ya aplicadas, escritas contra `postgresql.ENUM`, `JSONB` y `f_title_norm` (CLAUDE.md §7, §12). Como **spike con ADR** es legítimo, pero la decisión previa se abre solo si el informe de RAM lo justifica; no se da por supuesto que SQLite sea viable. *(El texto original añadía «Redis es además el canal del orchestrator, CLAUDE.md §4»: **superado**, el refresco corre ya en el propio proceso, ADR 0011.)*
+  *Nota del 2026-10-15:* [ADR 0011](adr/0011-retirar-redis.md) retiró Redis del stack, así que O3 ya solo compara PostgreSQL con SQLite; y las migraciones aplicadas llegan hoy a la 0019, no a la 0013.
+- **O4 ↔ `LEGAL.md`.** Reescribir el texto de aceptación cambia el fichero versionado por hash (`legal_version` en `services/legal.py`): quien acepte hoy tendría que volver a aceptar (CLAUDE.md §11).
+
+#### Épica R — "Reconocimiento y revisión"
+
+| ID | Historia | Aceptación | P | Est |
+|---|---|---|---|---|
+| R1 | Como coleccionista con miles de archivos, quiero que ZascArr reconozca la mayoría sin ayuda, para no clasificar a mano | Corpus de ≥200 rutas reales de la escena española; objetivo de reconocimiento ≥85% (hoy 28/41, ~68%); cada patrón nuevo sale de un fallo concreto, con test | P0 | L |
+| R2 | Como coleccionista, quiero que ZascArr recuerde mis correcciones, para no corregir lo mismo dos veces | Al asignar un archivo a una serie se guarda el alias; las siguientes variantes se asignan solas con la confianza visible; las reglas se pueden ver y borrar; nunca asigna sin mostrarlo (coherente con U1) | P1 | M |
+| R3 | Como coleccionista, quiero saber por qué no se reconoció un archivo, para decidir qué hacer | En Pendientes: motivo en lenguaje llano ("no encuentro número", "varias series posibles"); sugerencia de la serie más probable | P2 | S |
+| R4 | Como coleccionista, quiero que una carpeta que no es una serie (recopilatorios, Omnigold, integrales) no se trate como tal | Resuelve B14/B15 y el conflicto Omnigold del changelog: modelo de "colección/tomo" separado del número; decisión documentada en un ADR; tests con casos reales | P1 | M |
+
+**Encaje con lo ya registrado:**
+
+- **R1 — la línea base está desfasada.** El «28/41» es de la medición de v1.5.0 (2026-09-25); tras adoptar RF-07 (Omnigold sin número inventado) el mismo banco bajó a **26/41** con **0 errores** (antes 1), y desde entonces el parser ha cambiado (B14, B21). Hay que **re-medir** el banco de 41 rutas antes de fijar el objetivo; un ≥85 % sobre 200 rutas no es comparable con 41. Y, como siempre, el criterio duro es **errores = 0**, no solo aciertos: acertar más a costa de equivocarse en silencio contradice RF-07.
+- **R2 ≈ B13 (hecho).** `local_aliases` ya guarda el alias al asignar a mano y `SeriesMatcher.decide()` lo consulta antes del fuzzy. Lo que R2 añade de verdad es lo **visible**: ver, borrar y mostrar la confianza de las reglas. Reducir R2 a eso evita reimplementar B13. Ojo con «se asignan solas»: U1 exige confirmación explícita; la propuesta lo resuelve con «nunca asigna sin mostrarlo», pero conviene decidir si «mostrarlo» es avisar después o pedir confirmación antes.
+- **R3 ↔ U1.** La sugerencia a la vista es parte de U1; R3 aporta el *motivo*.
+- **R4 = B14 (pendiente) + mitad abierta de B15 + B22/ADR 0003.** El modelo de «colección/tomo» separado del número ya tiene su decisión de identidad editorial en `docs/adr/0003-identidad-editorial.md` y su censo en B22 (sin migración). R4 debe **partir de ese ADR**, no abrir otro.
+
+#### Épica Q — "Confianza y operación"
+
+| ID | Historia | Aceptación | P | Est |
+|---|---|---|---|---|
+| Q1 | Como usuario de una Pi 4/5, quiero tener la seguridad de que funciona con mi hardware real | Benchmark en Pi 4 (4 GB) y Pi 5: RAM en reposo, auditoría de 5.000 archivos, búsquedas simultáneas; resultados en `docs/`; fallos de ARM64 registrados | P0 | M |
+| Q2 | Como usuario, quiero que si una fuente cambia su web, ZascArr me avise en vez de dejarme sin resultados | Prueba periódica por fuente con una página de referencia; semáforo "fuente rota" en Estado y aviso en el notificador; el mensaje indica qué fuente y desde cuándo | P1 | M |
+| Q3 | Como usuario, quiero abrir mi biblioteca desde fuera de casa con usuario y contraseña | Cierra A6/A11: login obligatorio si `BIND_ADDRESS` no es local; guía de dos pasos para reverse proxy o VPN en castellano; sin exposición por defecto | P1 | M |
+| Q4 | Como coleccionista, quiero exportar mi colección a una carpeta que Kavita lea, para disfrutar de lo descargado | Implementa B20: estructura de carpetas por serie, nombres consistentes; no mueve ni borra el original; informe de lo exportado | P1 | M |
+| Q5 | Como usuario, quiero restaurar una copia de seguridad con un clic | El backup diario ya existe; añadir "Restaurar" en Ajustes con vista previa de fecha y contenido; prueba de restauración automatizada | P2 | M |
+
+**Encaje con lo ya registrado:**
+
+- **Q3 ya está casi hecha.** A6 (auth con contraseña, también tras reverse proxy) y A11 (pregunta de exposición; las opciones que abren **exigen contraseña antes de publicar el puerto**; ADR 0004) están **Hechas**. Lo que queda de Q3 es la **guía en castellano para proxy inverso o VPN**, y la propuesta de «login obligatorio si `BIND_ADDRESS` no es local» ya la cumple A11. Recomendación: reducir Q3 a esa guía (S) o fusionarla con la nota de A11; no se ha modificado el texto de la propuesta.
+- **Q4 = B20.** B20 tiene el diseño fijado (`docs/design/B20-exportacion-kavita.md`, 2026-09-26) y está pendiente de implementar; Q4 es esa implementación. Una sola de las dos debe llevar la nota de cierre.
+- **Q5 ↔ E3 (parcial).** `scripts/backup.sh` (E2) corre a diario y `scripts/rollback.sh` restaura con su propia copia previa; a E3 le faltan precisamente **el botón** y **probarlo contra Docker + PostgreSQL reales**. Q5 es esa mitad pendiente, con la restricción heredada de E3: el restaurado **no puede adivinar** «la copia más reciente» (puede tener ya el esquema nuevo).
+- **Q1 ↔ presupuesto de 512M.** Es la primera medición en hardware real; sus resultados alimentan O3 y el criterio de rendimiento de abajo.
+- **Q2 ↔ B8/healthcheck.** B8 (toggle por proveedor) y el healthcheck observacional ya existen; Q2 añade la sonda activa por fuente. Debe seguir siendo **observacional, no bloqueante** (CLAUDE.md §3.2).
+
+#### Solapamientos con historias ya registradas (relacionadas, NO duplicar)
+
+El propio texto de cada épica los señala; se resumen aquí para que **no se conviertan en dos trabajos independientes**. Son propuestas
+**relacionadas**: no se crean tarjetas, no se da por aceptada ninguna prioridad y **la identidad canónica de cada una se resuelve al refinarla**.
+
+| Propuesta | Relacionada con | Nota |
+|---|---|---|
+| S6 | D5 (módulo Novedades) | misma funcionalidad; decidir si S6 sustituye a D5 o se fusionan |
+| R2 | B13 (hecho) | R2 aporta solo lo visible (ver, borrar, confianza de las reglas) |
+| R4 | B14, B15 y B22 / ADR 0003 | debe partir del ADR 0003, no abrir otro |
+| Q4 | B20 | una sola de las dos lleva la nota de cierre |
+| Q3 | A6 y A11 (hechas) | casi cumplida; lo que queda es la guía en castellano |
+| Q5 | E3 (parcial) | es la mitad pendiente de E3 (el botón y la prueba real) |
+| O1 | U2, U5, V4 | fijar el reparto antes de empezar |
+| S5 y S6 | D5 (nota sobre Whakoom) | los dos spikes sobre Whakoom deberían compartir ficha |
+
+#### Orden de ataque sugerido en la propuesta original — **histórico, NO vigente**
+
+> **No es el orden de trabajo del equipo.** Es la secuencia que traía la propuesta del 2026-10-02. Desde el 2026-10-15 el tablero trabaja en
+> Scrumban **sin sprints** y con el MVP «vincular en sitio» como objetivo; las prioridades y el orden se deciden por tarjeta, no por esta lista.
+> Se conserva solo para que se vea qué proponía el texto original.
+
+1. **Sprint 1:** Q1, S1 y R1 (en paralelo; el spike de S2 y O1). Son la base: saber si la Pi aguanta, tener fuentes y reconocer lo que llega.
+2. **Sprint 2:** S2, S3, O1 y R2.
+3. **Sprint 3:** S4, Q2 y R4, más los spikes de S5 y S6.
+4. **Después:** Q3, Q4, S5/S6 si los spikes salen bien, y las de P2.
+
+**Matiz tras la comprobación:** si se aceptan las correcciones de arriba, Q3 y R2 se achican mucho (ya hay base hecha), y R4/Q4 son implementaciones de historias ya diseñadas (B14/B15 + ADR 0003, B20), no historias nuevas.
+
+#### Definición de hecho propuesta para las épicas S, O, R y Q — **histórica, NO vigente**
+
+> **No sustituye ni complementa por sí sola a la definición de hecho vigente**, que es la de CLAUDE.md (§8 pruebas, §9 «Hecho» con la nota del
+> mecanismo) y la de cada tarjeta cuando se refine. Lo que sigue es lo que proponía el texto original; la regla del presupuesto de 512M por
+> contenedor sí procede de CLAUDE.md §1 y ya es vinculante por esa vía, no por esta lista.
+
+La misma regla de CLAUDE.md, más una condición de rendimiento:
+
+- Tests contra **datos reales**, no solo fixtures.
+- Mensajes en **castellano llano**, sin excepciones ni URLs a la vista.
+- `docs/BACKLOG.md` pasa a «Hecho» explicando **cómo se cerró**, no solo que se cerró (CLAUDE.md §9).
+- **Ninguna historia puede superar el presupuesto de 512M por contenedor** (CLAUDE.md §1; Q1 lo medirá en Pi real).
+
+**Riesgos principales:** S5 y S6, porque la estructura HTML de Whakoom y de las editoriales **sigue sin verificarse**; por eso llevan spike previo y pueden dividirse o descartarse (CLAUDE.md §10: no copiar scrapers sin verificar en vivo).
+
 ## Deuda técnica registrada (peer review v2, hallazgos medios)
 
 Sin arreglar todavía — nombrados aquí a propósito para que no vuelvan a caer
