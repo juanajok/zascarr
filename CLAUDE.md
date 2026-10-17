@@ -149,6 +149,17 @@ como marco permanente.
   Documentado como limitación aceptada en B2.
 - Tarjetas con gracia de fallo: portada rota = placeholder CSS
   `.cover-missing`, no imagen rota; campo ausente con icono claro.
+- **Presupuesto de texto** (historia U21, decidido el 2026-10-15; los umbrales
+  son provisionales hasta validarlos en U10):
+  - Una frase de entrada por pantalla, de ≤ 20 palabras, que diga qué se hace aquí.
+  - ≤ 50 palabras visibles antes de la primera acción. El resto va en
+    `<details>` («¿De dónde salen estos datos?», «Avanzado»).
+  - La garantía («no se mueve ni se renombra nada») va **junto a la acción
+    con efecto** y en su confirmación, no en la cabecera de pantallas que
+    no cambian nada.
+  - Resumen antes que listado. Las mayúsculas, solo en rótulos de ≤ 3 palabras.
+  - Los textos explican la tarea, no el contrato: nada de «token», «lote»
+    ni códigos internos en superficie (ver A2 y U20).
 
 ## 7. Base de datos
 
@@ -193,6 +204,15 @@ como marco permanente.
 - El histórico es documentación: cuando cierras una historia P0/P1 del
   backlog, actualiza `docs/BACKLOG.md` a "Hecho" con la nota del
   mecanismo ("cómo se cerró, no solo que se cerró").
+- **Flujo: Scrumban hasta tener datos** (decidido el 2026-10-15). Sin sprints
+  ni compromiso de puntos: se tira del campo **«Estado»** del Project 1 (el
+  campo «Status» no se usa) con WIP **En curso 2** (máx. 1 MVP + 1),
+  **En revisión 2**, **En refinamiento 4** y aviso con **≥ 5** en «Fusionado —
+  pendiente de despliegue». «Lista para desarrollar» exige DoR completa y
+  `Bloqueada = No`. Al entrar en «En curso» se rellena **Inicio**; al llegar a
+  «Fusionado», **Fin**. El sprint se fija con la mediana y el p85 del tiempo
+  de ciclo cuando haya 8 historias terminadas o el 2026-11-12, lo que llegue
+  antes (umbrales provisionales).
 
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
