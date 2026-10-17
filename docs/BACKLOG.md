@@ -909,27 +909,7 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
   5. Se hace **antes** de implementar U1 y U2 y no bloquea U4 y U6, que son correcciones objetivas.
 - **Dependencias.** Ninguna.
 
-#### Solapamientos con historias ya registradas (relacionadas, NO duplicar)
-
-El propio texto de cada épica los señala; se resumen aquí para que **no se conviertan en dos trabajos independientes**. Son propuestas
-**relacionadas**: no se crean tarjetas, no se da por aceptada ninguna prioridad y **la identidad canónica de cada una se resuelve al refinarla**.
-
-| Propuesta | Relacionada con | Nota |
-|---|---|---|
-| S6 | D5 (módulo Novedades) | misma funcionalidad; decidir si S6 sustituye a D5 o se fusionan |
-| R2 | B13 (hecho) | R2 aporta solo lo visible (ver, borrar, confianza de las reglas) |
-| R4 | B14, B15 y B22 / ADR 0003 | debe partir del ADR 0003, no abrir otro |
-| Q4 | B20 | una sola de las dos lleva la nota de cierre |
-| Q3 | A6 y A11 (hechas) | casi cumplida; lo que queda es la guía en castellano |
-| Q5 | E3 (parcial) | es la mitad pendiente de E3 (el botón y la prueba real) |
-| O1 | U2, U5, V4 | fijar el reparto antes de empezar |
-| S5 y S6 | D5 (nota sobre Whakoom) | los dos spikes sobre Whakoom deberían compartir ficha |
-
-#### Orden de ataque sugerido en la propuesta original — **histórico, NO vigente**
-
-> **No es el orden de trabajo del equipo.** Es la secuencia que traía la propuesta del 2026-10-02. Desde el 2026-10-15 el tablero trabaja en
-> Scrumban **sin sprints** y con el MVP «vincular en sitio» como objetivo; las prioridades y el orden se deciden por tarjeta, no por esta lista.
-> Se conserva solo para que se vea qué proponía el texto original.
+#### Orden de ataque sugerido
 
 1. **U4** (contraste, S) y **U6** (Estado, S): correcciones objetivas, baratas y sin riesgo de producto.
 2. **U10** en paralelo: validar antes de invertir en U1 y U2.
@@ -1365,7 +1345,27 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Q1 ↔ presupuesto de 512M.** Es la primera medición en hardware real; sus resultados alimentan O3 y el criterio de rendimiento de abajo.
 - **Q2 ↔ B8/healthcheck.** B8 (toggle por proveedor) y el healthcheck observacional ya existen; Q2 añade la sonda activa por fuente. Debe seguir siendo **observacional, no bloqueante** (CLAUDE.md §3.2).
 
-#### Orden de ataque sugerido
+#### Solapamientos con historias ya registradas (relacionadas, NO duplicar)
+
+El propio texto de cada épica los señala; se resumen aquí para que **no se conviertan en dos trabajos independientes**. Son propuestas
+**relacionadas**: no se crean tarjetas, no se da por aceptada ninguna prioridad y **la identidad canónica de cada una se resuelve al refinarla**.
+
+| Propuesta | Relacionada con | Nota |
+|---|---|---|
+| S6 | D5 (módulo Novedades) | misma funcionalidad; decidir si S6 sustituye a D5 o se fusionan |
+| R2 | B13 (hecho) | R2 aporta solo lo visible (ver, borrar, confianza de las reglas) |
+| R4 | B14, B15 y B22 / ADR 0003 | debe partir del ADR 0003, no abrir otro |
+| Q4 | B20 | una sola de las dos lleva la nota de cierre |
+| Q3 | A6 y A11 (hechas) | casi cumplida; lo que queda es la guía en castellano |
+| Q5 | E3 (parcial) | es la mitad pendiente de E3 (el botón y la prueba real) |
+| O1 | U2, U5, V4 | fijar el reparto antes de empezar |
+| S5 y S6 | D5 (nota sobre Whakoom) | los dos spikes sobre Whakoom deberían compartir ficha |
+
+#### Orden de ataque sugerido en la propuesta original — **histórico, NO vigente**
+
+> **No es el orden de trabajo del equipo.** Es la secuencia que traía la propuesta del 2026-10-02. Desde el 2026-10-15 el tablero trabaja en
+> Scrumban **sin sprints** y con el MVP «vincular en sitio» como objetivo; las prioridades y el orden se deciden por tarjeta, no por esta lista.
+> Se conserva solo para que se vea qué proponía el texto original.
 
 1. **Sprint 1:** Q1, S1 y R1 (en paralelo; el spike de S2 y O1). Son la base: saber si la Pi aguanta, tener fuentes y reconocer lo que llega.
 2. **Sprint 2:** S2, S3, O1 y R2.
