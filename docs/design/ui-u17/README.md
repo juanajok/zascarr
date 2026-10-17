@@ -47,7 +47,7 @@ a «Aviso legal»**, sin plegarla (comentario en #204). **No cambian** `LEGAL.md
 
 ## Pruebas
 
-`tests/test_u17_avisos.py` (16, escritas **antes** del código: 9 fallaban por el comportamiento que faltaba): `.caption` y `.legal-notice-warn` sin
+`tests/test_u17_avisos.py` (18, escritas **antes** del código: contra `main` fallan 9 y pasan 9; las 9 que pasan son guardas, p. ej. las acciones protegidas): `.caption` y `.legal-notice-warn` sin
 mayúsculas ni giro; `.rotulo` con el estilo de didascalia y ≤ 3 palabras en las plantillas; sin `span.caption`; Ajustes sin «Añadir una serie aquí» y con tipo
 propio; la frase legal visible, con enlace y fuera de un `<details>`; las seis acciones protegidas. Contrato de CSS y plantillas: **no sustituyen la medida
 en Chrome**.
