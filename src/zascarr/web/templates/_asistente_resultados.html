@@ -30,7 +30,7 @@
     <div class="discovery-card-body">
       <div class="discovery-card-title">
         {{ c.titulo }}{% if c.anio %} ({{ c.anio }}){% endif %}
-        <span class="caption">{{ nombre_fuente(c.fuente) }}</span>
+        <span class="rotulo">{{ nombre_fuente(c.fuente) }}</span>
         {% if c.sitio_url %}
         <a href="{{ c.sitio_url }}" target="_blank" rel="noopener noreferrer" title="Ver ficha original para confirmar">↗</a>
         {% endif %}
@@ -45,7 +45,7 @@
       <div class="caption">Series que ya tienes y se parecen:
         <ul class="series-list">
           {% for p in c.parecidas_locales %}
-          <li><span class="series-name">{{ p.titulo }}{% if p.anio %} ({{ p.anio }}){% endif %} <span class="caption">{{ etiqueta_de_tradicion(p.tradicion) }}</span></span>
+          <li><span class="series-name">{{ p.titulo }}{% if p.anio %} ({{ p.anio }}){% endif %} <span class="rotulo">{{ etiqueta_de_tradicion(p.tradicion) }}</span></span>
             <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ p.series_id }}">Preparar los archivos de esta carpeta para esa serie</a></li>
           {% endfor %}
         </ul></div>

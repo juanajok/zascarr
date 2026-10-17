@@ -495,8 +495,22 @@ button[type="submit"].neutro {
 }
 
 /* ── 7. DIDASCALIA (cajita amarilla de narración) ───────────────────────── */
+/* U17: un TEXTO (de más de una línea) va en caja normal: sin mayúsculas, sin giro y sin espaciado de rótulo. Antes, `.caption`
+   pintaba así párrafos enteros —el aviso legal, los avisos de Estado, las notas de la ficha— y costaba leerlos. */
 .caption,
 .legal-notice-warn {
+  display: block;
+  background: var(--caption-bg);
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow-ink-sm);
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: .9rem;
+  line-height: 1.5;
+  max-width: 70ch;
+}
+/* Las mayúsculas y el giro quedan para los RÓTULOS: etiquetas de ≤ 3 palabras (la fuente, la tradición…). */
+.rotulo {
   display: inline-block;
   background: var(--caption-bg);
   border: 2px solid var(--ink);

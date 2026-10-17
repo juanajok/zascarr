@@ -11,6 +11,13 @@
   responsable de verificar que tienes derecho a acceder al contenido que
   solicites. <a href="/legal">Aviso legal</a>.
 </aside>
+{% elif kind == "ajustes" %}
+{#- U17: el aviso legal de Ajustes habla de lo que se hace en Ajustes. Misma responsabilidad que el de Deseados; no cambia `LEGAL.md`. -#}
+<aside class="legal-notice legal-notice-warn">
+  <strong>Uso responsable.</strong> Las integraciones que actives aquí pueden
+  buscar y descargar por tu cuenta. Eres responsable de verificar que tienes
+  derecho a acceder al contenido que solicites. <a href="/legal">Aviso legal</a>.
+</aside>
 {% elif kind == "metadata" %}
 <aside class="legal-notice legal-notice-info">
   Los metadatos de esta ficha proceden de fuentes de terceros (Comic Vine,
