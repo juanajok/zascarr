@@ -37,6 +37,25 @@ comprobar_git_utilizable
 [[ "${BRANCH}" != "HEAD" ]] || die \
     "El repo está en HEAD desacoplado. Ve a una rama (git checkout main) antes de actualizar."
 
+# ── 1b. Credenciales (ADR 0012) ──────────────────────────────────────────────
+# Sin una DB_PASSWORD propia, el servicio `credenciales` de Compose pararía el arranque DESPUÉS de haber hecho el
+# backup y traído el código; se comprueba ya, antes de tocar nada.
+validar_credenciales "${ENV_FILE}" || die \
+    "La configuración no tiene una contraseña de base de datos válida. NO se ha actualizado nada.
+  Ejecuta: sudo bash ${REPO_DIR}/scripts/credenciales.sh   (si ya existe una base de datos, se detendrá
+  sin inventar otra contraseña y te dirá qué hacer)."
+# Protección del .env: solo se AVISA (una instalación anterior lo dejó legible por otros usuarios y esta
+# actualización no debe fallar por eso); la corrige credenciales.sh o volver a ejecutar bootstrap.sh.
+if (( ENV_FILE_EXPLICITO == 0 )); then
+    PROTECCION_RC=0
+    PROTECCION_AVISOS="$(comprobar_proteccion "${ENV_FILE}" "${ZASCARR_ROOT}" "${REPO_DIR}")" || PROTECCION_RC=$?
+    if [[ "${PROTECCION_RC}" -eq 1 ]]; then
+        warn "El .env no está bien protegido:
+${PROTECCION_AVISOS}
+  Corrígelo (no cambia tu contraseña): sudo bash ${REPO_DIR}/scripts/credenciales.sh"
+    fi
+fi
+
 # ── 2. Árbol limpio ──────────────────────────────────────────────────────────
 if ! git -C "${REPO_DIR}" diff --quiet || ! git -C "${REPO_DIR}" diff --cached --quiet; then
     die "Hay cambios locales sin guardar en ${REPO_DIR}.

@@ -70,6 +70,12 @@ poner_docker_de_pega() {
     cat > "${W}/bin/docker" <<'STUB'
 #!/bin/sh
 echo "docker $*" >> "$STUB_LOG"
+# Como Compose de verdad: un --env-file que no se puede leer es un error (y nada se hace).
+prev=""
+for a in "$@"; do
+    if [ "$prev" = "--env-file" ] && [ ! -r "$a" ]; then echo "permission denied: $a" >&2; exit 1; fi
+    prev="$a"
+done
 case "$*" in
   *"up -d postgres"*)
     f=""; prev=""

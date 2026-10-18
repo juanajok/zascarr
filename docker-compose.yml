@@ -18,6 +18,36 @@ networks:
     driver: bridge
 
 services:
+  # Credenciales: servicio de UN solo uso (corre, comprueba y termina; no deja nada en memoria). PostgreSQL y la
+  # aplicación esperan a que termine bien (`service_completed_successfully`), así que con DB_PASSWORD ausente, vacía
+  # o de ejemplo ningún `docker compose up` crea la base ni arranca la app — sea cual sea la ruta (bootstrap.sh, a
+  # mano, `run`). `${VAR:?}` solo cubriría «ausente/vacía» y, además, haría fallar `docker compose down/logs/ps`
+  # cuando falta el .env (justo cuando se quiere parar o desinstalar); aquí el rechazo ocurre al ARRANCAR.
+  # La lista es la de scripts/_credenciales.sh y zascarr/utils/credenciales.py (la prueba test_credenciales_lista.py
+  # comprueba que coinciden). Reutiliza la imagen de PostgreSQL: no se descarga nada nuevo. Sin red, sin escribir.
+  credenciales:
+    image: postgres:15-alpine
+    restart: "no"
+    network_mode: none
+    read_only: true
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:-}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        v=$$(printf '%s' "$$DB_PASSWORD" | tr -d ' \t\r\n"'"'"'' | tr 'A-Z' 'a-z')
+        case "$$v" in
+          ""|cambia_esto_ahora|supersecretpassword123|changeme)
+            echo "ZascArr no arranca: DB_PASSWORD falta, está vacía o conserva un valor de ejemplo." >&2
+            echo "Ejecuta: sudo bash scripts/credenciales.sh   (crea una contraseña propia y no la muestra)" >&2
+            exit 1 ;;
+        esac
+    deploy:
+      resources:
+        limits:
+          memory: 16M
+
   postgres:
     image: postgres:15-alpine
     container_name: zascarr-db
@@ -26,7 +56,7 @@ services:
       - zascarr-internal
     environment:
       POSTGRES_USER: comics_admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-SuperSecretPassword123}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-}
       POSTGRES_DB: zascarr
     command:
       - -c
@@ -37,6 +67,9 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/postgres:/var/lib/postgresql/data
+    depends_on:
+      credenciales:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U comics_admin -d zascarr"]
       interval: 10s
@@ -64,7 +97,7 @@ services:
       # parametrizan: nunca deben ser alcanzables desde la red.
       - "${ZASCARR_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-SuperSecretPassword123}@postgres:5432/zascarr
+      - DATABASE_URL=postgresql+asyncpg://comics_admin:${DB_PASSWORD:-}@postgres:5432/zascarr
       - COMICVINE_API_KEY=${COMICVINE_API_KEY:-}
       - PROWLARR_URL=${PROWLARR_URL:-http://host.docker.internal:9696}
       - PROWLARR_API_KEY=${PROWLARR_API_KEY:-}
@@ -104,6 +137,8 @@ services:
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/vpn-state:/run/vpn-state:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
     depends_on:
+      credenciales:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     deploy:

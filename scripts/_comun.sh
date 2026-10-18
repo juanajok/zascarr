@@ -52,6 +52,10 @@ die()     { echo -e "${R}✗${N} $*" >&2; exit 1; }
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
+# Credenciales del .env (validar, comprobar protección): ADR 0012.
+# shellcheck source=scripts/_credenciales.sh
+source "${SCRIPT_DIR}/_credenciales.sh"
+
 # bootstrap.sh deja un symlink REPO_DIR/.env -> ENV_FILE para que un
 # "docker compose" manual (sin --env-file) invocado desde el repo también
 # encuentre la configuración real, en vez de arrancar en silencio con los
