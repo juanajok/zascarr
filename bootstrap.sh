@@ -197,6 +197,15 @@ fi
 # shellcheck source=scripts/_exposicion.sh
 source "${EXPOSICION_SH}"
 
+# La contraseña de la base de datos y la protección del .env (ensayo M4: la
+# instalación limpia exigía editar el .env a mano y lo dejaba legible por todos).
+CREDENCIALES_SH="${SCRIPT_DIR}/scripts/_credenciales.sh"
+if [[ ! -f "${CREDENCIALES_SH}" ]]; then
+    die "No encuentro ${CREDENCIALES_SH}. ¿Está el repo completo clonado?"
+fi
+# shellcheck source=scripts/_credenciales.sh
+source "${CREDENCIALES_SH}"
+
 [[ "${EUID}" -eq 0 ]] || die \
     "Este instalador necesita permisos de administrador. Ejecútalo así:
   sudo bash ${SCRIPT_DIR}/bootstrap.sh"
@@ -229,19 +238,11 @@ if [[ -z "${_ZASCARR_YA_ACTUALIZADO:-}" ]]; then
 fi
 
 # Actualiza (o añade si no existe) una variable en .env. Idempotente:
-# volver a ejecutar el bootstrap no duplica líneas.
+# volver a ejecutar el bootstrap no duplica líneas. La escritura vive en
+# scripts/_credenciales.sh (env_poner): escapa los caracteres de sed y deja el
+# fichero otra vez en 600 tras reescribirlo.
 set_env_var() {
-    local key="$1" value="$2" escaped
-    # M7: escapar '\' y '&' para sed, y usar '#' como delimitador (menos
-    # frecuente en rutas que '|'). Así "/media/Juan & María" se escribe
-    # literal y no se expande como comando de reemplazo de sed.
-    escaped="${value//\\/\\\\}"
-    escaped="${escaped//&/\\&}"
-    if grep -q "^${key}=" "${ENV_FILE}" 2>/dev/null; then
-        sed -i "s#^${key}=.*#${key}=${escaped}#" "${ENV_FILE}"
-    else
-        echo "${key}=${value}" >> "${ENV_FILE}"
-    fi
+    env_poner "${ENV_FILE}" "$1" "$2" || die "No he podido escribir $1 en ${ENV_FILE}."
 }
 
 # Valor actual de una clave del .env (vacío si no está). Solo lectura.
@@ -266,7 +267,7 @@ ENV_FILE="${ZASCARR_ROOT}/.env"
 mkdir -p "${ZASCARR_ROOT}" || die \
     "No puedo crear ${ZASCARR_ROOT}. ¿Tienes permisos de escritura en el directorio padre?"
 if [[ ! -f "${ENV_FILE}" ]]; then
-    cp "${SCRIPT_DIR}/.env.example" "${ENV_FILE}" 2>/dev/null || \
+    crear_env_protegido "${SCRIPT_DIR}/.env.example" "${ENV_FILE}" 2>/dev/null || \
         die "No encuentro .env.example en ${SCRIPT_DIR}/. ¿Está el repo completo clonado?"
 fi
 
@@ -446,10 +447,12 @@ chown -R "${RESOLVED_UID}:${RESOLVED_GID}" "${ZASCARR_DATA_DIR}/covers" 2>/dev/n
     warn "Sin permisos para ajustar propietario de ${ZASCARR_DATA_DIR}/covers"
 success "Directorios creados en ${LIBRARY}"
 
-info "Validando .env..."
-grep -q "DB_PASSWORD=cambia_esto_ahora" "${ENV_FILE}" && \
-    die "DB_PASSWORD tiene el valor por defecto. Edita ${ENV_FILE} y pon una contraseña segura."
-success ".env válido"
+# Contraseña de la base de datos: una ya puesta se conserva SIEMPRE; si falta o es
+# el marcador de la plantilla se genera una (no hay que editar nada a mano), salvo
+# que ya exista una base creada con otra (entonces se explica y se corta). Y el .env
+# queda en 600. Ver scripts/_credenciales.sh.
+info "Preparando las credenciales del .env..."
+preparar_credenciales "${ENV_FILE}" "${ZASCARR_DATA_DIR}"
 
 # Bug real (reportado): el .env vive en ZASCARR_ROOT (el padre), pero Docker
 # Compose por defecto solo busca .env en el directorio desde el que se
@@ -470,7 +473,7 @@ if [[ -e "${SCRIPT_DIR}/.env" || -L "${SCRIPT_DIR}/.env" ]] && [[ "$(readlink -f
     rm -f "${SCRIPT_DIR}/.env"
 fi
 ln -sf "${ENV_FILE}" "${SCRIPT_DIR}/.env" || \
-    warn "No pude crear el enlace ${SCRIPT_DIR}/.env -> ${ENV_FILE}. Un 'docker compose' sin --env-file ejecutado desde ${SCRIPT_DIR} no verá tu configuración."
+    warn "No pude crear el enlace ${SCRIPT_DIR}/.env -> ${ENV_FILE}. Un 'sudo docker compose' sin --env-file ejecutado desde ${SCRIPT_DIR} no verá tu configuración."
 
 # ── A11: si ya hay una aplicación, se PARA ahora —publique donde publique, también tras
 # ── un proxy— y no se vuelve a levantar hasta haber comprobado la contraseña. Escribir
@@ -489,7 +492,7 @@ case "${ESTADO_APP}" in
   a arrancar al final, cerrada o abierta según lo que elijas."
         docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop zascarr || die \
             "No pude parar ZascArr. Páralo a mano antes de seguir:
-  docker compose -f ${COMPOSE_FILE} stop zascarr"
+  sudo docker compose -f ${COMPOSE_FILE} stop zascarr"
         ;;
     *)
         die "No he podido comprobar si ZascArr ya está funcionando (¿Docker no responde?).
@@ -501,13 +504,13 @@ esac
 info "Levantando PostgreSQL..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d postgres || die \
-    "No pude levantar PostgreSQL. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    "No pude levantar PostgreSQL. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} logs postgres"
 
 info "Esperando a PostgreSQL..."
 MAX=60; ELAPSED=0
 until docker compose -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U comics_admin -d zascarr -q 2>/dev/null; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: sudo docker compose -f ${COMPOSE_FILE} logs postgres"
     echo -n "."; sleep 2
 done
 echo ""; success "PostgreSQL listo"
@@ -522,7 +525,7 @@ cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 # migra y se arranca con esa MISMA imagen — nunca se instala nada de
 # Python en el host, la única fuente de dependencias es la imagen Docker.
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
-    "No pude construir la imagen de ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} build zascarr"
+    "No pude construir la imagen de ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} build zascarr"
 
 info "Corriendo migraciones Alembic (dentro del contenedor)..."
 # DATABASE_URL ya lo resuelve el propio docker-compose.yml desde .env
@@ -531,7 +534,7 @@ info "Corriendo migraciones Alembic (dentro del contenedor)..."
 # a "127.0.0.1:5432"; no hace falta reconstruirlo a mano leyendo el .env.
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" run --rm zascarr \
     alembic upgrade head || die \
-    "Las migraciones de la base de datos fallaron. Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    "Las migraciones de la base de datos fallaron. Revisa con: sudo docker compose -f ${COMPOSE_FILE} logs postgres"
 success "Migraciones aplicadas"
 
 # ── A11: abrir a la red EXIGE contraseña, y se fija ahora —después de migrar y
@@ -560,7 +563,7 @@ if ! ajustar_base_url "${EXPOSICION_OPCION}" "${BASE_URL_PUBLICA}"; then
     volver_a_solo_esta_maquina
     ajustar_base_url 1 "" || die \
         "No puedo comprobar la dirección pública que usaría ZascArr, así que no lo arranco.
-  Revisa la base de datos (docker compose -f ${COMPOSE_FILE} logs postgres) y vuelve a ejecutar el instalador."
+  Revisa la base de datos (sudo docker compose -f ${COMPOSE_FILE} logs postgres) y vuelve a ejecutar el instalador."
 fi
 set_env_var "ZASCARR_BIND_ADDRESS" "${ZASCARR_BIND_ADDRESS}"
 
@@ -577,13 +580,13 @@ info "Levantando ZascArr..."
 # de configuración, `up -d` deja el contenedor en marcha con la contraseña ANTIGUA en
 # memoria (verificado en vivo: aceptaba la vieja y rechazaba la nueva).
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d --force-recreate zascarr || die \
-    "No pude arrancar ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs zascarr"
+    "No pude arrancar ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck..."
 MAX=30; ELAPSED=0
 until curl -sf http://127.0.0.1:8000/api/health >/dev/null 2>&1; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  docker compose -f ${COMPOSE_FILE} logs zascarr" && break
+    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  sudo docker compose -f ${COMPOSE_FILE} logs zascarr" && break
     echo -n "."; sleep 2
 done
 echo ""
@@ -609,7 +612,7 @@ echo "  Kavita:           http://127.0.0.1:5000  (si está instalado)"
 echo "  Prowlarr:         http://127.0.0.1:9696  (si está instalado)"
 echo ""
 echo "  Logs en tiempo real:"
-echo "    docker compose -f ${COMPOSE_FILE} logs -f zascarr"
+echo "    sudo docker compose -f ${COMPOSE_FILE} logs -f zascarr"
 echo ""
 curl -sf http://127.0.0.1:5000 >/dev/null 2>&1 || \
     warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${SCRIPT_DIR}/scripts/kavita.sh install"
