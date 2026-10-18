@@ -12,7 +12,15 @@ Bruguera. Sabe leer en Kavita o en su tablet. No sabe, ni quiere saber, qué es
 un contenedor. Su frustración actual: carpetas caóticas, duplicados, tebeos
 descargados a medias y no saber qué le falta de una saga.
 
-**Implicación de producto honesta:** el estado actual del repo es un backend
+**Objetivo vigente del MVP (actualizado el 2026-10-18; el tablero lo llama «vincular series existentes»):** adoptar y
+catalogar la biblioteca **donde ya está**. El recorrido del MVP —descubrir o crear la serie de una carpeta, revisar
+selección y números, confirmar y resolver pendientes— **no mueve, no renombra y no escribe metadatos dentro de los originales**
+(ADR 0007: «vincular en su sitio»). Mover y renombrar existe como acción explícita aparte («Organizar», #114/I8; ADR 0006) y
+escribir `ComicInfo.xml` es otra (B6, comando administrativo): ninguna forma parte del recorrido del MVP. Lo que sigue en esta
+sección («se completa sola», descargas) es la **visión de producto a largo plazo**, no lo que el MVP promete. El estado de cada
+tarjeta se lee en el tablero y en el «Mapa del tablero» de más abajo, no en esta frase.
+
+**Implicación de producto honesta — texto histórico (2026-09-21), ya no describe el repo:** el estado actual del repo era un backend
 con API REST. Para esta persona, `curl http://127.0.0.1:8000/api/series` no es
 "usable". El agujero de producto más grande del proyecto no es ningún bug del
 peer review — es la **Fase 6 (UI web)**, que para este stakeholder no es una
@@ -28,6 +36,23 @@ estimación (S < 2 días, M < 1 semana, L > 1 semana).
 rellena la ficha de referencia en `docs/design/benchmark-referencias.md` (comparar las
 referencias pertinentes y registrar adoptar/adaptar/descartar con versión y pruebas; ver
 CLAUDE.md §13). Un arreglo evidente de texto o CSS no requiere ficha.
+
+**Nomenclatura de identificadores (aclaración del 2026-10-18; no cambia ningún identificador ni enlace).** En este fichero conviven
+familias de nombres que **no son lo mismo**:
+
+| Familia | Qué es | Dónde |
+|---|---|---|
+| `A`–`E`, `U`, `V` | Épicas del backlog | secciones «Épica …» |
+| `M1`–`M9` **del tablero** (`MIT-M#`, `MIT-M#-US##`) | Features e historias del Kanban del MVP «vincular en sitio» (#104–#135, #189) | «Mapa del tablero», más abajo |
+| `M1`–`M5` **del peer review v2** | Hallazgos medios de una revisión de código (2026-09) | «Deuda técnica registrada (peer review v2…)» |
+| `F1`–`F16` | Historias del benchmarking competitivo, ronda 2 | «Benchmarking competitivo, ronda 2» |
+| `S`, `O`, `R`, `Q` | Propuesta histórica del 2026-10-02 (no vigente) | «Épicas S, O, R y Q» |
+| `BL-…` | Tarjetas del tablero que **espejan** una historia del backlog (`BL-B20` = B20, `BL-U11` = U11) | «Mapa del tablero» |
+| `BL-R`, `BL-R0`…`BL-R7` | Reconciliación de la biblioteca (patrones de Plex), #228–#236 | `docs/design/historias-reconciliacion-plex-2026-10-18.md` |
+| `H1`–`H5`, `I1`–`I8`, `D0`–`D9` | Hallazgos, tareas de #114 y decisiones de las fichas | se definen donde aparecen |
+
+Cuando una referencia diga «M3» a secas, **manda el contexto**: «Kanban M3 (#106)» es el asistente del tablero; «M3 — `bootstrap.sh`…»
+en la sección de deuda es el hallazgo del peer review v2.
 
 ### Épica A — "Lo instalo yo solo"
 
@@ -89,7 +114,7 @@ CLAUDE.md §13). Un arreglo evidente de texto o CSS no requiere ficha.
 | B11 | ~~Como coleccionista que ya tiene su tebeoteca organizada en disco, quiero que ZascArr la reconozca sola en el primer arranque, sin tener que redescargar ni mover nada — como hace Sonarr al añadir una carpeta raíz con series que ya existen~~ | ~~`LibraryAdopter` (nuevo): escanea `library_path` recursivamente, reutiliza el mismo triage+matcher que `Importer` (extraído a `_triage_and_match`, compartido), pero **registra en BD sin mover ni renombrar**. Dispara sola en el primer arranque (background task en `main.py::lifespan`) si `library_path` tiene archivos y `series` está vacía, y solo UNA vez (marcador en `runtime_settings`)~~ | ✅ Hecho | L |
 | B12 | ~~Como coleccionista, cuando el parser SÍ extrae título+número pero no hay serie que iguale (o el score queda por debajo del umbral), quiero ver una sugerencia con la que confío en un clic, en vez de rebuscar a mano en Pendientes~~ | ~~`MatchResult.candidates` (ya existía) se serializa en `File.metadata_` (`Importer` y `LibraryAdopter`, mismo helper compartido); `/ui/pendientes` muestra el mejor candidato con su score y un botón "sí es esta serie" que reutiliza el formulario de asignación ya existente — confirmación explícita, nunca autoasignación~~ | ✅ Hecho | M |
 | B13 | ~~Como coleccionista, si asigno a mano varios archivos del mismo patrón ("La Patrulla X Omnigold N (...)") a la misma serie, quiero que ZascArr deje de preguntarme para ese patrón~~ | ~~Tabla `local_aliases` (patrón de nombre → series_id), aprendida en `ReviewService.assign_to_series` (toda asignación manual desde Pendientes es por definición una corrección) y consultada por `SeriesMatcher.decide()` ANTES del fuzzy. Alias local de esta instalación, nunca una regla global — CLAUDE.md §5~~ | ✅ Hecho | M |
-| B14 | Como coleccionista con la tebeoteca ya ordenada por carpetas, quiero que ZascArr use el NOMBRE DE LA CARPETA para saber de qué serie es cada archivo, porque es justo lo que yo ya le dije al ordenarla | La carpeta es la señal más fiable de esta biblioteca y hoy se tira entera: `Comics/JSA (1999)/JSA (2004-08) 62` da serie `JSA 62`, mientras la carpeta dice `JSA` + año `1999`. Medido sobre 44 rutas reales (2026-09-25): la carpeta arregla ~la mitad de los fallos que quedan tras el fix del parser de v1.4.8 (XIII, JSA, Promethea, Superman, La Mazmorra, Monstress, Flash, WildCATS, Patrulla-X). La carpeta debe ser un CANDIDATO más que se valida contra la BD, nunca un override ciego: en `Comics/Green Lantern - Saga de Geoff Johns/03 Green Lantern Corps - Recarga.cbr` la carpeta miente y el nombre de archivo acierta. **Sigue pendiente** (la biblioteca real que motivó B14 tiene una carpeta plana de 711 archivos sueltos, ver B21 — ahí B14 no ayuda porque no hay carpeta). **Auditoría hecha (2026-10-05):** `docs/design/auditoria-b14-carpetas.md` — la carpeta no se usa hoy en ningún sitio; sobre 1.542 nombres reales el 63 % ya coincide con su carpeta y **el 8 % de la biblioteca (123 archivos) tiene una carpeta que NO es su serie** (autor, contenedor, crossover/orden de lectura, arco), incluidas carpetas que coinciden en un 89-100 % con sus archivos: **la heurística de mayoría y los umbrales ensayados (50-80 %) no garantizan ausencia de errores en ese corpus** (cifras obtenidas con el parser anterior a la PR #81, conservadas como evidencia histórica); política conservadora aceptada: la carpeta sugiere y agrupa, **no asigna sola**, y se valida contra el catálogo. Contexto comprobado en producción: 5 series, 14 archivos registrados sin Issue, 1.542 visibles y ningún marcador de adopción → el bloqueo era el registro con catálogo previo (PR #83); crear las series que faltan, con confirmación humana, queda para después **Ficha de la historia siguiente (2026-10-05):** `docs/design/ficha-propuestas-desde-carpetas.md` — propuestas de serie explicadas y confirmables desde el contexto de carpetas (Kapowarr, Sonarr, Mylar3, Suwayomi-Server y Aidoku leídos en versiones concretas); sin implementar. **Rebanada 1 (2026-10-06):** superficie de revisión de solo lectura; ficha técnica `docs/design/rebanada-1-superficie-de-revision.md`. **1a hecha** (servicio `services/revision_carpetas.py` + `GET /api/revision/carpetas`, lógica pura en `core/carpetas.py`, pruebas de aceptación sobre Postgres real); **1b hecha** (vista HTML de solo lectura `/ui/pendientes/carpetas`, sobre el mismo servicio, verificada en navegador real; sin crear series ni asignar). **Rebanada 2 (ficha, 2026-10-07):** `docs/design/rebanada-2-elegir-serie-y-vincular.md` — buscar en fuentes, elegir o crear la serie, vista previa y **vincular en su sitio** con confirmación (clasificar **no mueve** archivos: ADR 0007, Aceptado); **2a hecha** (descubrimiento contextualizado, solo lectura, PR #95); **2b hecha** (alta o reutilización de la serie, comprobante persistente en `alta_operaciones`, migración 0018; PR #97); **2c hecha** (vista previa de la vinculación, solo lectura; PR #101); **2d en PR** (vincular en su sitio: una transacción, informe inmutable en `vinculacion_operaciones`, migración 0019); 2e sin implementar. D0 y D6 decididas; D1, D3, D7, D9 aceptadas; D8 hipótesis. Hallazgo H1 (`Series.cover_url` sin lista blanca) señalado como tarea aparte. | P0 | M |
+| B14 | Como coleccionista con la tebeoteca ya ordenada por carpetas, quiero que ZascArr use el NOMBRE DE LA CARPETA para saber de qué serie es cada archivo, porque es justo lo que yo ya le dije al ordenarla | La carpeta es la señal más fiable de esta biblioteca y hoy se tira entera: `Comics/JSA (1999)/JSA (2004-08) 62` da serie `JSA 62`, mientras la carpeta dice `JSA` + año `1999`. Medido sobre 44 rutas reales (2026-09-25): la carpeta arregla ~la mitad de los fallos que quedan tras el fix del parser de v1.4.8 (XIII, JSA, Promethea, Superman, La Mazmorra, Monstress, Flash, WildCATS, Patrulla-X). La carpeta debe ser un CANDIDATO más que se valida contra la BD, nunca un override ciego: en `Comics/Green Lantern - Saga de Geoff Johns/03 Green Lantern Corps - Recarga.cbr` la carpeta miente y el nombre de archivo acierta. **Sigue pendiente** (la biblioteca real que motivó B14 tiene una carpeta plana de 711 archivos sueltos, ver B21 — ahí B14 no ayuda porque no hay carpeta). **Auditoría hecha (2026-10-05):** `docs/design/auditoria-b14-carpetas.md` — la carpeta no se usa hoy en ningún sitio; sobre 1.542 nombres reales el 63 % ya coincide con su carpeta y **el 8 % de la biblioteca (123 archivos) tiene una carpeta que NO es su serie** (autor, contenedor, crossover/orden de lectura, arco), incluidas carpetas que coinciden en un 89-100 % con sus archivos: **la heurística de mayoría y los umbrales ensayados (50-80 %) no garantizan ausencia de errores en ese corpus** (cifras obtenidas con el parser anterior a la PR #81, conservadas como evidencia histórica); política conservadora aceptada: la carpeta sugiere y agrupa, **no asigna sola**, y se valida contra el catálogo. Contexto comprobado en producción: 5 series, 14 archivos registrados sin Issue, 1.542 visibles y ningún marcador de adopción → el bloqueo era el registro con catálogo previo (PR #83); crear las series que faltan, con confirmación humana, queda para después **Ficha de la historia siguiente (2026-10-05):** `docs/design/ficha-propuestas-desde-carpetas.md` — propuestas de serie explicadas y confirmables desde el contexto de carpetas (Kapowarr, Sonarr, Mylar3, Suwayomi-Server y Aidoku leídos en versiones concretas); sin implementar. **Rebanada 1 (2026-10-06):** superficie de revisión de solo lectura; ficha técnica `docs/design/rebanada-1-superficie-de-revision.md`. **1a hecha** (servicio `services/revision_carpetas.py` + `GET /api/revision/carpetas`, lógica pura en `core/carpetas.py`, pruebas de aceptación sobre Postgres real); **1b hecha** (vista HTML de solo lectura `/ui/pendientes/carpetas`, sobre el mismo servicio, verificada en navegador real; sin crear series ni asignar). **Rebanada 2 (ficha, 2026-10-07):** `docs/design/rebanada-2-elegir-serie-y-vincular.md` — buscar en fuentes, elegir o crear la serie, vista previa y **vincular en su sitio** con confirmación (clasificar **no mueve** archivos: ADR 0007, Aceptado); **2a hecha** (descubrimiento contextualizado, solo lectura, PR #95); **2b hecha** (alta o reutilización de la serie, comprobante persistente en `alta_operaciones`, migración 0018; PR #97); **2c hecha** (vista previa de la vinculación, solo lectura; PR #101); **2d hecha** (vincular en su sitio: una transacción, informe inmutable en `vinculacion_operaciones`, migración 0019; PR #103, merge `fa91566`, 2026-10-09; **la migración 0019 no está acreditada como aplicada en producción**); **2e** (por su ficha, «vistas HTML de los cuatro pasos»): la interfaz del asistente la entregan las PRs #185–#187 (#118–#120, 2026-10-13), #190 (#189) y, después, U19 (#219) y U20 (#212) — **la equivalencia exacta 2e ↔ esas historias no está registrada** y la aceptación de M3 (#106) sigue abierta. *(Nota del 2026-10-18: este fragmento decía «2d en PR; 2e sin implementar», cierto el 2026-10-09.)* D0 y D6 decididas; D1, D3, D7, D9 aceptadas; D8 hipótesis. Hallazgo H1 (`Series.cover_url` sin lista blanca) señalado como tarea aparte. | P0 | M |
 | B21 | ~~Como coleccionista, cuando dos archivos tienen la misma forma ("42 Dreadstar...", "100 Balas...") pero uno el número es orden de lectura mío y el otro es parte del título, quiero que ZascArr lo distinga sin que yo tenga que organizarlos en carpetas~~ | ~~`core/cohort.py` (nuevo): agrupa nombres por "firma" (sin ningún token numérico, sin créditos de traductor/corchetes) y decide por EVIDENCIA — si el prefijo VARÍA en ≥3 hermanos con el resto del nombre estable, es orden de lectura y se descarta; si es CONSTANTE en toda la cohorte, es parte del título y no se toca. Nunca crea una serie (solo informa el número), nunca alimenta B13 en silencio (solo el humano aprende un alias), determinista por ciclo (cohorte congelada al principio de `scan_and_import`/`adopt`). Medido: +10 puntos de acierto poblacional (73%→83% clasifica, 76%→86% veraz) sobre la muestra oficial de 62 archivos de contenido único~~ | ✅ Hecho | M |
 | B15 | ~~Como coleccionista, quiero que las ediciones tipo Omnigold/Integral/Tomo/Vol no se queden en Pendientes para siempre~~ (la mitad "carpeta que NO es una serie" sigue abierta, ver nota) | ~~El número de un Omnigold/Integral/Tomo/Vol vuelve a capturarse como `issue_number` (revierte el "SIEMPRE a Pendientes" de RF-07) pero etiquetado con `edition_kind` en `naming.py` (`"omnigold"/"integral"/"tomo"/"volumen"`; **desde la PR #10 el matcher SÍ lo usa** para decidir la edición, vía el mapa compartido `EDITION_KIND_A_FORMAT` — antes solo informaba qué `Issue.format` correspondía en el camino manual; ver la nota de la zona B15). Al confirmar la asignación en Pendientes, `ReviewService.assign_to_series` re-parsea el nombre original y crea el `Issue` con `format=OMNIBUS` (Omnigold/Integral) o `TRADE_PAPERBACK` (Tomo/Vol) en vez del `SINGLE_ISSUE` por defecto — **sin migración**: `Issue.format`/`IssueFormat` ya existían en el modelo desde antes de B15, así que no hizo falta el `collection_number` como columna nueva que se había previsto originalmente~~ | ✅ Hecho (parcial, ver nota) | M |
 | B16 | ~~Como coleccionista, quiero saber cuándo tengo el mismo tebeo en dos carpetas, en vez de que el sistema elija una en silencio~~ | ~~`LibraryAudit` (nuevo) + `/ui/auditoria`: informe de SOLO LECTURA que agrupa *mismo contenido* (SHA256), *misma obra en otra edición*, *carpetas repetidas* y *carpetas sin ningún tebeo*. No borra, no mueve y no sugiere qué borrar. La adopción (B11) deja de dispararse sola en el primer arranque y pasa a ser un botón explícito con el informe delante~~ | ✅ Hecho | M |
@@ -491,7 +516,7 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 |---|---|---|---|---|
 | E1 | ~~Como coleccionista, quiero una pantalla de estado con semáforos ("todo bien / atención: sin VPN / error: disco lleno")~~ | ~~Dashboard sobre `/api/health` con iconos y textos en español, no JSON~~ | ✅ Hecho | M |
 | E2 | ~~Como coleccionista, quiero que haya copias de seguridad automáticas sin configurar nada por mi parte~~ | ~~Cron de `pg_dump` a segundo disco (el backup actual al mismo disco del dato era hallazgo del review)~~ | ✅ Hecho | S |
-| E3 | ~~Como coleccionista, quiero un botón "restaurar copia" si algo sale mal~~ | ~~Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo)~~ | ✅ Hecho | M |
+| E3 | Como coleccionista, quiero un botón "restaurar copia" si algo sale mal | Script de restore documentado y probado (el test del backup no es hacerlo, es restaurarlo). **Dos dimensiones, corregidas el 2026-10-18** (la fila decía «✅ Hecho», pero la nota de implementación de E3, más abajo, la declara «parcial, no cerrada»): **(1) Implementación — parcial:** `scripts/rollback.sh` existe y restaura por terminal; **no existe el botón** que la historia promete (ninguna plantilla de `web/templates/` lo ofrece). **(2) Aceptación de la restauración integrada — pendiente:** M4-10 está NOT RUN (`m4-plan-de-aceptacion-debian.md`; las restauraciones V-33/V-34 de la Pi usaron comandos explícitos, no `rollback.sh`) y la propia nota exige probarlo contra Docker + PostgreSQL reales. Que M4-10 no se haya ejecutado **no demuestra** que falte funcionalidad, y que exista un procedimiento por terminal **no demuestra** que exista el botón prometido. Pendiente: botón (alcance funcional) y #123 (aceptación) | 🟡 Parcial | M |
 | E4 | Como coleccionista, quiero un aviso al móvil cuando una descarga se importa, para no estar mirando el dashboard | Webhook configurable (Gotify/ntfy/Telegram/URL genérica) al completar descarga+import; desactivado por defecto | ✅ Hecho | S |
 
 - **E4 (2026-09-28, hecho):** webhook de importación con **entrega de mejor esfuerzo** (decisión explícita de la ficha: sin cola ni reintentos persistentes, que exigirían otro alcance). `services/notifier.py` soporta `generic`/`gotify`/`ntfy`/`telegram`, apagado por defecto (`webhook_enabled`), configurable desde `/ui/ajustes` reutilizando D11 (grupo `avisos`; `webhook_token` en `SECRET_FIELDS`). `main.py::_ejecutar_ciclo_y_avisar` avisa **después del `commit`** y solo con `report.imported` (nunca adopción ni duplicados); un fallo del webhook se registra sin URL ni token y no revierte la importación. Ficha en `docs/design/benchmark-E4-avisos.md`. Regresión: `tests/test_notifier.py` (receptor falso + orden commit/rollback).
@@ -954,13 +979,17 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 | U12 | #199 | #213 ficha (`f478295`), #214 implementación (`b912f2e`), #215 y #223 seguimientos documentales | Fusionado — pendiente de despliegue |
 | U14 | #201 | #216 ficha (`904eced`), #217 implementación (`ae74a21`) | Fusionado — pendiente de despliegue |
 | U16 | #203 | #221 corrección funcional (`0275335`), #222 precisiones (`6d89965`), #224 alcance revisado y verificación (`acd2ef8`) | Fusionado — pendiente de despliegue; **issue cerrada por aceptación del alcance revisado** (`closed / completed`); verificaciones en teléfonos reales y en la Pi: **NOT RUN, fuera del alcance exigido** |
+| U17 | #204 | #225 (merge `0a591d6`, 2026-10-17); evidencia en `docs/design/ui-u17/` | Fusionado — pendiente de despliegue *(añadida el 2026-10-18; la tabla llegaba al 2026-10-16)* |
 | U19 | #206 | #218 ficha (`a47e3b1`), #219 implementación (`57259ac`), #220 trazabilidad | Fusionado — pendiente de despliegue |
 | U20 | #207 | #212 (`fd3234d`) | Fusionado — pendiente de despliegue |
-| U10, U13, U15, U17, U18, U21 | #197, #200, #202, #204, #205, #208 | ninguna | Lista para desarrollar (U13 y U18, además, bloqueadas) |
+| U10, U13, U15, U18, U21 | #197, #200, #202, #205, #208 | ninguna | Lista para desarrollar (U13 y U18, además, bloqueadas) |
 
 Las fichas §13 de U12, U14, U19 y U20 están en `docs/design/benchmark-U*.md`; la evidencia de navegador, en `docs/design/ui-u11/`, `ui-u12/`, `ui-u14/`, `ui-u16/`, `ui-u19/` y `ui-u20/`.
 
-#### Orden de ataque sugerido
+#### Orden de ataque sugerido — **histórico (2026-10-01), NO vigente**
+
+> Superado: V1 acreditó **0 pares de texto por debajo de 4,5:1** (auditoría del 2026-10-15), U11–U20 se priorizaron por tarjeta y el orden
+> de trabajo se decide en el tablero (Scrumban, sin sprints). Se conserva solo para ver qué proponía el texto original.
 
 1. **U4** (contraste, S) y **U6** (Estado, S): correcciones objetivas, baratas y sin riesgo de producto.
 2. **U10** en paralelo: validar antes de invertir en U1 y U2.
@@ -1320,11 +1349,88 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 - **Confundir la maqueta con el producto.** La maqueta simula dos cosas que aquí **no** se implementan (deshacer tras asignar y el conmutador de tema); la tabla de traducción lo deja escrito.
 - **Estimaciones.** Revisadas en V0 con el inventario: V4, V9 y V12 suben de M a L, V7 de S a M y V6 se divide. Siguen siendo estimaciones: la verificación en navegador puede moverlas.
 
+### Mapa del tablero ↔ este backlog y estado de las entregas (2026-10-18)
+
+> **Estado: documental.** No cambia el tablero, no cierra ni mueve ninguna tarjeta y no autoriza código, ensayo ni despliegue. Lo fija
+> el responsable de producto; lo que sigue **registra** correspondencias y discrepancias con su evidencia.
+> **Fuentes:** Project 1 (`gh project item-list`, 81 elementos, todos Issues; 80 abiertas, la cerrada es #203) y este fichero en
+> `6d2b736`. Que un identificador (`MIT-`, `#nnn`) **no aparezca literalmente** aquí no prueba que el contenido falte: por eso cada
+> fila distingue **identificador explícito**, **contenido equivalente** (existe, con otro nombre o en otro documento) y **sin
+> correspondencia** (no he encontrado nada).
+
+**Cómo leer un estado.** Implementada, fusionada, validada, aceptada y desplegada son hechos distintos; ningún estado del tablero los resume todos.
+«Fusionado — pendiente de despliegue» significa solo que la PR está en `main`, y no que esté desplegada ni validada (así lo dice ya el seguimiento de U11–U21).
+
+> «Hecha» se conserva como estado registrado en el tablero. Por sí solo no acredita fusión, aceptación integrada ni despliegue. Esta reconciliación
+> documenta esas dimensiones por separado mediante evidencia enlazada.
+
+*(Redacción del responsable de producto, 2026-10-18. No reinterpreta retroactivamente ninguna tarjeta ni cambia sus estados.)*
+
+| Grupo (tarjetas) | Estado en el tablero | Correspondencia en este fichero | Evidencia |
+|---|---|---|---|
+| **M1** Operaciones coherentes — #104, #112–#114 | Hecha (4) | **Contenido equivalente, sin identificador:** solo aparece ADR 0007 (B14, U13). ADR 0009/0010 y las tareas I1–I8 de #114 viven fuera del backlog | `docs/adr/0009`, `0010`; `CHANGELOG.md` (#114); PRs #171–#177 (las de #114) |
+| **M2** Confirmación robusta — #105, #115–#117, #140–#143 | #105 En refinamiento; #115–#117, #140–#142 Hecha; #143 Lista para desarrollar | **Sin correspondencia propia.** B14 (rebanada 2d) describe vincular, no los límites ni la recuperación. «cursor», «límite» y #143 no aparecen | PRs #178 y #179; `m4-plan…` (H-5, M4-15…M4-18) |
+| **M3** Asistente completo — #106, #118–#120, #189 (M9) | #106 En refinamiento; #118–#120 y #189 Hecha | **Identificador explícito** (#106, #118–#120 en U13/U19/U20) y contenido equivalente en B14 (rebanadas 1a–2e) | PRs #185–#187, #190; `cruce-tablero-prs-2026-10-09.md` |
+| **M4** Release verificable — #107, #121–#123, y #239 (hallazgo vinculado, creado el 2026-10-18) | #107 En refinamiento; #121–#123 Lista para desarrollar; #239 En refinamiento | **Sin correspondencia** (solo «Cierra M4» del peer review v2, que es otra cosa) | `docs/design/m4-plan-de-aceptacion-debian.md` (PR #226); ver «Estado de M4» |
+| **M5** Identidad editorial — #108, #124–#126, #181–#184 | #124 Hecha; #108, #125, #126 En refinamiento; #181–#184 Lista | **Contenido equivalente, sin identificador:** B22 y ADR 0003 (Propuesto) | líneas de B22/B14; `docs/adr/0003`; PR #180 |
+| **M6** Procedencia y protección por campo — #109, #127–#129 | En refinamiento (#109, #129); Lista (#127, #128) | **Equivalente parcial:** B6 (procedencia, `locked_fields` de H3, previsualización por campo). #129 («asociar otra fuente») **sin correspondencia** | B6 y H3 |
+| **M7** Contexto reutilizable — #110, #130–#132 | #110 En refinamiento; #130–#132 Lista | **Equivalente parcial:** B13 (`local_aliases`), B14 (carpeta como candidato); R2 (propuesta histórica) | B13, B14 |
+| **M8** Contrato operativo de fuentes — #111, #133–#135 | #111, #135 En refinamiento; #133, #134 Lista | **Identificador explícito** solo #135 (U15). Equivalente: B8, E7; cortesía en CLAUDE.md §4 | U15; B8; E7 |
+| **BL-PRODUCTO** #148 y 16 espejos #149–#164; **BL-L1** #211 | Backlog | **Identificador de historia** (`BL-B20` = B20, `BL-C3` = C3, `BL-D5` = D5…); #211 = deuda «CI + lint» | títulos de las tarjetas; sección «CI + lint» |
+| **BL-U** #196–#208 | #196 En curso; #198, #199, #201, #203, #204, #206, #207 Fusionado; #197, #200, #202, #205, #208 Lista | **Identificador explícito** (tabla de seguimiento y fichas) | «Ampliación de la Épica U» |
+| **BL-R** #228–#236 | Backlog | **Sin correspondencia en este fichero.** Propuesta en un documento de diseño; las tarjetas llevan el texto anterior a su revisión | `docs/design/historias-reconciliacion-plex-2026-10-18.md` |
+
+Recuento a la fecha de la foto: 4 + 8 + 5 + 4 + 8 + 4 + 4 + 4 + 18 + 13 + 9 = **81** (más #239, creada después, que suma 82). `Estado` en el tablero: Backlog 27 · Lista para desarrollar 20 ·
+Hecha 15 · En refinamiento 11 · Fusionado — pendiente de despliegue 7 · En curso 1.
+
+**Discrepancia de agregación (M2 y M3), sin tocar ninguna tarjeta.** Las features #105 (M2) y #106 (M3) están «En refinamiento» con
+todas sus historias en «Hecha» (#115–#117 y #118–#120). No se corrige por inferencia: la suma de historias fusionadas no es la
+aceptación integrada. Antes de mover nada hay que comprobar los criterios de cada feature contra la evidencia; en M2 sigue además
+abierto el riesgo #143. Quién lo hace: ver «Trabajo asignado», más abajo.
+
+**El cruce del 2026-10-09** (`cruce-tablero-prs-2026-10-09.md`) es una **fotografía fechada** de `fa91566`: sus pantallas de M3
+figuran como nuevas porque entonces lo eran. No es el inventario vigente de implementación.
+
+#### Estado de M4 (2026-10-18)
+
+La fase 1 del plan se ejecutó sobre el candidato `0a591d6f91a6b54f8cecb1e675afc59dc0290873` (`main` al fusionarse #225) en una máquina
+virtual Debian 12 aislada. **M4-01, instalación limpia: FAIL** — terminó con RC=1 («DB_PASSWORD tiene el valor por defecto. Edita el
+.env»). **M4-02, salud y esquema: parcial** — la aplicación completó el arranque *después* de editar la contraseña a mano, con salud,
+esquema y memoria parcialmente acreditados. **Condición de fuentes: FAIL de la condición operativa del ensayo** (#239) — las cuatro fuentes de metadatos figuraban habilitadas y
+debían estar desactivadas; **el plan versionado no contiene esa cláusula** y el código declara «activas por defecto» (B8); **no se acreditaron consultas efectivas** (la red estaba cerrada), así que **no** es una fuga de tráfico
+demostrada. **`.env` en modo 644**, abierto desde cuentas locales no administrativas. **El candidato no está aceptado.** M4-03…M4-20
+siguen sin ejecutar y sin autorización. El plan (#226) se conserva como documento de preparación fechado: decía «no se ha ejecutado
+nada» y era cierto entonces; el informe y los logs se versionan aparte, como evidencia histórica, en
+`docs/evidencias/m4/2026-10-18-fase-1/` *(ubicación propuesta por el responsable; ver su README para el inventario real)*.
+
+**Decisiones del responsable (2026-10-18):**
+1. **Credenciales — una sola unidad de entrega.** Las PRs #237 (`cada61ac`) y #238 (`6a7a9fe8`) corrigen los mismos hallazgos con
+   alcances distintos; #238 añade decisiones propias (Compose, aplicación, propiedad del código) que requieren comparación y revisión.
+   No se declara que una sustituya técnicamente a la otra, ni se fusionan entre sí. Se comparan contra el **contrato único C1–C10**
+   (`docs/design/contrato-credenciales-env.md`, fijado por el responsable el mismo día: referencia de comparación, **no** aprobación de
+   ninguna solución), se elige una PR portadora y solo se trasladan las piezas justificadas de la otra. **Estado: alternativas
+   #237/#238 pendientes de consolidación y revisión. Bloquea la aceptación correspondiente de M4. Ninguna aprobada para fusión.**
+2. **Fuentes de metadatos activadas por defecto — seguimiento #239, vinculado a M4.** Registra el hallazgo y la decisión de política;
+   **no cambia ningún valor por defecto**, no consulta fuentes reales y no repite M4.
+3. **E3 — «🟡 Parcial»**, con la distinción entre implementación (falta el botón) y aceptación (M4-10 pendiente).
+4. **Esta reconciliación** es una PR documental aparte; no modifica Projects, no cierra issues, no acepta funcionalidades.
+
+#### Trabajo asignado (2026-10-18)
+
+| Trabajo | Preparación | Revisión | Decisión final |
+|---|---|---|---|
+| Aceptación integrada de M2/M3 (#105, #106) | Claude reúne criterios, evidencias y pendientes **por SHA** | Perplexity contrasta suficiencia y límites | Responsable de producto: acepta o mantiene pendiente |
+| Equivalencia de 2e (B14) con las historias de M3 | Claude reconstruye el alcance histórico y lo contrasta con código, PR y pruebas | Perplexity revisa la correspondencia | Responsable de producto: confirma equivalencia o trabajo restante |
+
+La aceptación de M2/M3 mantiene visibles las dependencias de M4 y **no se cierra por suma de historias**. Para 2e el resultado puede ser
+«equivalencia parcial» o «no acreditada»; no hay obligación de forzar una equivalencia con U19 ni con otro recorrido. Esto autoriza
+inspección y documentación: **no** reimplementar 2e, ejecutar casos pendientes ni modificar tarjetas.
+
 ### Épicas S, O, R y Q — fuentes en español, primer uso, reconocimiento y operación (propuesta del 2026-10-02)
 
 > **Estado de esta sección (2026-10-16): PROPUESTA HISTÓRICA, no política ni planificación vigente.** Se registra para no perder las ideas y
 > sus solapamientos con lo ya existente. **No** crea tarjetas, **no** acepta las prioridades (P0/P1/P2) ni las tallas, **no** fija una secuencia
-> y **no desplaza el objetivo de MVP vigente** («vincular en sitio», M1–M5). Lo que fija lo vigente es el tablero y las tarjetas de cada historia
+> y **no desplaza el objetivo de MVP vigente** («vincular en sitio», features M1–M5 **del tablero**, no los hallazgos M1–M5 del peer review v2). Lo que fija lo vigente es el tablero y las tarjetas de cada historia
 > cuando se refinen, no esta tabla. Las dos subsecciones del final —«Orden de ataque» y «Definición de hecho»— son **parte de la propuesta
 > original**: ver sus avisos. Donde el texto histórico contradice una decisión posterior (p. ej. Redis, [ADR 0011](adr/0011-retirar-redis.md)),
 > **manda la decisión posterior** y el texto se conserva marcado como superado.
@@ -1452,6 +1558,9 @@ La misma regla de CLAUDE.md, más una condición de rendimiento:
 **Riesgos principales:** S5 y S6, porque la estructura HTML de Whakoom y de las editoriales **sigue sin verificarse**; por eso llevan spike previo y pueden dividirse o descartarse (CLAUDE.md §10: no copiar scrapers sin verificar en vivo).
 
 ## Deuda técnica registrada (peer review v2, hallazgos medios)
+
+> **Aclaración (2026-10-18):** los `M1`–`M5` de esta sección son **hallazgos del peer review v2**, no las features `MIT-M1`–`MIT-M5` del
+> tablero. Se conservan los identificadores para no romper enlaces; ver «Nomenclatura de identificadores» al principio.
 
 Sin arreglar todavía — nombrados aquí a propósito para que no vuelvan a caer
 en el agujero de "estaba en el review pero nadie lo pasó al board":
