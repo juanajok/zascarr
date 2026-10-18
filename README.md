@@ -208,11 +208,18 @@ defecto de Compose encuentre el `.env` real sin tener que acordarse de
 en una instalación manual desde cero, créalo tú mismo:
 
 ```bash
-cp ../.env.example ../.env     # ajusta HOST_*_DIR y DB_PASSWORD
-ln -sf ../.env .env            # una vez — Compose ya lo encontrará solo
-docker compose up -d
-docker compose run --rm zascarr alembic upgrade head
+( umask 077; cp ../.env.example ../.env )   # nace en modo 600; ajusta HOST_*_DIR y DB_PASSWORD
+ln -sf ../.env .env                         # una vez — Compose ya lo encontrará solo
+sudo docker compose up -d
+sudo docker compose run --rm zascarr alembic upgrade head
 ```
+
+El `.env` guarda la contraseña de la base de datos, así que **solo el administrador
+puede leerlo** (modo 600, `root:root`): por eso los comandos de arriba llevan `sudo`.
+Con el instalador no tienes que hacer nada: genera la contraseña por ti la primera
+vez, **no toca una que ya hayas puesto** y deja el fichero cerrado. Si lo
+reejecutas sobre una instalación anterior con el `.env` abierto (644), lo cierra y
+te lo dice.
 
 ## Uso
 
