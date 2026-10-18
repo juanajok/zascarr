@@ -1398,10 +1398,10 @@ virtual Debian 12 aislada. **M4-01, instalación limpia: FAIL** — terminó con
 .env»). **M4-02, salud y esquema: parcial** — la aplicación completó el arranque *después* de editar la contraseña a mano, con salud,
 esquema y memoria parcialmente acreditados. **Condición de fuentes: FAIL de la condición operativa del ensayo** (#239) — las cuatro fuentes de metadatos figuraban habilitadas y
 debían estar desactivadas; **el plan versionado no contiene esa cláusula** y el código declara «activas por defecto» (B8); **no se acreditaron consultas efectivas** (la red estaba cerrada), así que **no** es una fuga de tráfico
-demostrada. **`.env` en modo 644**, abierto desde cuentas locales no administrativas. **El candidato no está aceptado.** M4-03…M4-20
+demostrada. **`.env` en modo 644** (`root:root`) dentro de `/opt/zascarr`, que pertenecía a `media:media`; lo abrían `ensayo` (sin sudo), `nobody` y `media` (se midió la apertura, **sin leer el contenido**). **El candidato no está aceptado.** M4-03…M4-20
 siguen sin ejecutar y sin autorización. El plan (#226) se conserva como documento de preparación fechado: decía «no se ha ejecutado
 nada» y era cierto entonces; el informe y los logs se versionan aparte, como evidencia histórica, en
-`docs/evidencias/m4/2026-10-18-fase-1/` *(ubicación propuesta por el responsable; ver su README para el inventario real)*.
+`docs/evidencias/m4/2026-10-18-fase-1/` (ev. 10–13 para M4-01, 14–16 para M4-02 y fuentes, 18 para el `.env`; su README da la procedencia, el manifiesto con hashes y el alcance de la verificación).
 
 **Decisiones del responsable (2026-10-18):**
 1. **Credenciales — una sola unidad de entrega.** Las PRs #237 (`cada61ac`) y #238 (`6a7a9fe8`) corrigen los mismos hallazgos con
