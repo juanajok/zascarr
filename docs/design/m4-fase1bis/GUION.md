@@ -1,6 +1,7 @@
 # M4 · Fase 1 bis — validar la instalación real y la protección de credenciales tras #238
 
-> **Estado: PROPUESTA documental y scripts, sin ejecutar.** No se ha arrancado ninguna VM, descargado nada ni cambiado el tablero.
+> **Estado: PROPUESTA documental y scripts, sin ejecutar (2.ª versión, tras la devolución de #242).** No se ha arrancado ninguna VM, descargado nada ni cambiado el tablero.
+> Decisiones ya confirmadas: construcción **con caché** (la construcción en frío queda NOT RUN) y **Ajustes** como vía efectiva de las fuentes (adaptación del ensayo, sin cambiar defaults).
 > Historia: **#121** (instalar y actualizar), feature **#107** (M4). **No cierra #121**: su contrato incluye actualización, fallos y
 > evidencia en Raspberry Pi que un Debian x86-64 no acredita. Preparación y ejecución: Claude. Revisión independiente: Perplexity.
 > La ejecución se aprobará sobre **este** guion acotado (§12), sin otra ronda de diseño.
@@ -37,27 +38,44 @@ Se reutiliza, **sin modificar**, lo de la fase 1 (se abre solo como base de solo
 Consecuencia declarada: **la rama de `bootstrap.sh` que instala Docker con `get.docker.com` queda NOT RUN** (Docker ya está
 instalado desde el repositorio APT oficial), igual que en la fase 1.
 
-## 4. Entorno, límites y ventana
+## 4. Entorno, límites y ventana — y cómo se HACEN CUMPLIR
 
-| Recurso | Límite (los de la fase 1) |
-|---|---|
-| VM | 2 vCPU · 4 GB · disco de 20 GB · QEMU/KVM sin privilegios · sin carpetas compartidas, USB ni discos físicos ni socket Docker del anfitrión · solo SSH en `127.0.0.1:2222` |
-| Anfitrión | directorio nuevo y dedicado `/mnt/Datos/ensayo-m4-f1bis` (≤ 25 GB) · ≥ 10 GB libres durante toda la fase · nada fuera de él |
-| Red | **abierta solo en `preparar`** (§5); **cerrada (`restrict=on`) en `ejecutar`**, y la propia ejecución lo comprueba (A-10) |
-| Ventana | `preparar` ≤ 45 min · `ejecutar` ≤ 60 min (cada una con `timeout`); se propone **una ventana de 2 h** que las contiene con margen |
-| Tiempo previsto | preparar ≈ 15–25 min (arranque + construcción de la imagen); ejecutar ≈ 20–30 min (instalación 1–3 min, observación de salud 5 min, identidades < 1 min, reejecución 1–3 min, fuentes ~1 min) — **estimaciones, no medidas** |
-| Al agotar tiempo o presupuesto | no se inicia ningún paso más; se apaga la VM de forma controlada y se informa. **No se borra nada ajeno para hacer sitio** |
+Un límite que solo se declara no es una garantía. Cada fila dice quién lo vigila, cuándo y qué exceso cabe (código en `lib-ensayo.sh` y
+`anfitrion.sh`; las pruebas con dobles, en `tests/test_ensayo_f1bis_arnes.py`). Unidades: **MiB/GiB** (1 MiB = 1.048.576 bytes).
+
+| Límite | Valor | Quién lo hace cumplir y con qué exceso posible |
+|---|---|---|
+| VM | 2 vCPU · 4 GiB · disco de 20 GiB · QEMU/KVM sin privilegios · sin carpetas compartidas, USB, discos físicos ni socket Docker del anfitrión · solo SSH en `127.0.0.1:2222` | opciones de QEMU en `arrancar` |
+| **Descarga** | **tope 600 MiB** | `con_limite_de_descarga` **mide los bytes recibidos mientras se construye** (cada 1 s) y **corta el grupo de procesos entero** (TERM, KILL de respaldo) al llegar al **umbral de corte = tope − margen = 500 MiB**. **Exceso posible:** lo que entre en un intervalo de 1 s después del umbral; con el margen de 100 MiB el tope se respeta mientras la velocidad no pase de 100 MiB/s. Si lo pasara, el exceso se mide y se informa, y NO se llama «tope duro» a lo que es un corte con margen acotado |
+| **Almacenamiento** | ≤ 25 GiB en `/mnt/Datos/ensayo-m4-f1bis` | `vigilante_anfitrion` (cada 2 s mientras la VM trabaja): si lo supera, escribe `.parada` y **para la VM propia**. Exceso posible: el crecimiento de un disco en 2 s |
+| **Espacio libre** | ≥ 10 GiB en el anfitrión | el mismo vigilante; el fallo ya no se descarta: `.parada` marca la fase como interrumpida y ni `preparacion.ok` ni la ejecución se dan por buenas |
+| **Ventana** | `preparar` ≤ 45 min · `ejecutar` ≤ 60 min (2 h en total con margen) | `timeout --kill-after=30` **dentro de la VM** (mata el grupo de procesos remoto, no solo el cliente SSH) y un `timeout` de respaldo en el cliente |
+| Red | **abierta solo en `preparar`**; **cerrada (`restrict=on`) en `ejecutar`** | la propia ejecución lo comprueba (A-10) y, si no es PASS, F-10 falla |
+| Tiempo previsto | preparar ≈ 15–25 min; ejecutar ≈ 20–30 min | **estimaciones, no medidas** |
+
+**Ciclo de vida de la VM:** `trap` ante salida normal, error y señal (`INT`, `TERM`, `HUP`); el comando remoto largo va en segundo plano y se espera
+con `wait`, porque bash difiere los `trap` mientras corre una orden en primer plano. La VM propia se identifica por **PID y atributos**
+(`-name m4-f1bis` y un disco bajo el directorio del ensayo): un PID que no los cumple **no se señala jamás**. El apagado es limpio por SSH
+(acotado), luego TERM, luego KILL, con esperas acotadas; **no se borra el PID ni se anuncia «apagada» hasta comprobar que el proceso ha terminado**
+(un zombi cuenta como terminado). `pgrep -x qemu-system-x86_64` **no** se usa: el nombre de proceso se trunca a 15 caracteres y esa comparación
+nunca casaría; se recorre `/proc`. Si la VM no se puede parar, se dice y se sale con error.
+
+**`ejecutar` rechaza una preparación incompleta o fallida:** exige `preparacion.ok` (escrito solo si el comando remoto terminó con RC=0, imprimió
+`PREPARACIÓN TERMINADA`, no hubo `.parada` y la VM se comprobó apagada), del mismo candidato, con el disco sin cambios desde entonces, y no
+reutiliza una ejecución previa.
+
+**Al agotar tiempo o presupuesto** no se inicia ningún paso más; se apaga la VM de forma controlada y se informa. **No se borra nada ajeno para hacer sitio.**
 
 ## 5. Descargas necesarias (a autorizar)
 
 | Qué | Cuándo | Origen | Estimación | Notas |
 |---|---|---|---|---|
-| Paquetes Debian del `Dockerfile` (`build-essential`, `libpq-dev`, `libxml2-dev`, `libxslt-dev` en la etapa de construcción; `libpq5`, `libxml2`, `libxslt1.1`, `tini` en la final) | `preparar` | `deb.debian.org`, desde dentro del contenedor de construcción | ≈ 150–200 MB | cambia `src/` respecto a la fase 1, así que la capa de `pip` **no** está en caché |
-| Dependencias de Python (`pip install .`) | `preparar` | `pypi.org` / `files.pythonhosted.org` | ≈ 50–100 MB | versiones resueltas → `pip-freeze.txt` |
+| Paquetes Debian del `Dockerfile` (`build-essential`, `libpq-dev`, `libxml2-dev`, `libxslt-dev` en la etapa de construcción; `libpq5`, `libxml2`, `libxslt1.1`, `tini` en la final) | `preparar` | `deb.debian.org`, desde dentro del contenedor de construcción | ≈ 150–200 MiB | cambia `src/` respecto a la fase 1, así que la capa de `pip` **no** está en caché |
+| Dependencias de Python (`pip install .`) | `preparar` | `pypi.org` / `files.pythonhosted.org` | ≈ 50–100 MiB | versiones resueltas → `pip-freeze.txt` |
 | **Nada más**: las dos imágenes base ya están en la VM (se comprueba su digest y **no se descarga otra**; si difiere, se detiene) | — | — | 0 | |
-| **Total** | | | **≈ 200–300 MB; tope duro 600 MB** (`vm-preparar.sh` lo mide con los bytes recibidos y aborta si lo supera) | la fase 1 recibió 374 MB entre dos imágenes y una construcción similar |
+| **Total** | | | **≈ 200–300 MiB estimados; tope 600 MiB con corte a 500 MiB** (§4: se mide y se corta mientras se descarga, con el exceso declarado) | la fase 1 recibió 374 MiB entre dos imágenes y una construcción similar |
 
-**Alternativa que se propone NO usar ahora (a decidir por el responsable): construcción en frío durante la ejecución.** El
+**Decisión confirmada: construcción con caché. La construcción en frío durante la ejecución queda NOT RUN** (alternativa descartada por ahora): El
 `bootstrap.sh` construiría la imagen con red abierta. Es más fiel, pero exige red durante la instalación, justo la fase que se
 quiere observar con la red cerrada, y QEMU no puede abrir solo tres nombres. Con la caché de `preparar`, **el resultado de la
 construcción se registrará como «con caché (NOT RUN en frío)»** (I-04); una construcción desde cero queda para una fase con ventana
@@ -85,15 +103,28 @@ $ docker compose -f docker-compose.yml --env-file <env con las cuatro a false> c
 `default=True` en `config.py`) **no** están apagadas de fábrica, y el ensayo las apaga por Ajustes y lo demuestra; *integraciones de
 descarga y foro* (Prowlarr, Transmission, aMule, foro) **sí** nacen apagadas, y se comprueba su valor efectivo dentro del contenedor.
 
-Orden en `vm-ejecutar.sh` (`seccion_fuentes`): (1) qué `*_ENABLED` recibe el contenedor → (2) **estado tal como se instala**
-(esperado: las cuatro `enabled`; se registra como el hallazgo vigente de #239, **no** como PASS ni como defecto nuevo) → (3) descarga
-efectiva → (4) POST de Ajustes → (5) `/api/health` y `runtime_settings` (sin imprimir `secret_key`) → (6) **reinicio de la aplicación
-y comprobación de que persiste** → (7) cero intentos de conexión externa en los registros de **toda** la fase.
+**Orden (corregido tras la devolución): las fuentes se apagan JUSTO tras instalar, no al final.** `seccion_fuentes_iniciales` va inmediatamente
+después de la instalación y antes de la observación de salud, las identidades y la reejecución:
 
-**Límite declarado (F-11):** la aplicación arranca una vez con los defaults antes de poder configurarla (el instalador no ofrece un
-gancho entre las migraciones y el arranque). Esa ventana dura segundos, con red cerrada y sin aceptación legal (el orquestador omite
-sus ciclos, `F-09`). **La red cerrada y la barrera legal son salvaguardas adicionales, no sustituyen apagar las fuentes.** Esta
-comprobación completa la parte operativa de #239 sin decidir un cambio de defaults.
+1. primera respuesta utilizable de `/api/health`;
+2. `F-01` qué `*_ENABLED` recibe el contenedor (solo nombres);
+3. `F-02` **estado tal como se instala** (esperado: las cuatro `enabled`; hallazgo vigente #239, ni PASS ni defecto nuevo);
+4. `F-04` apagado **inmediato** por Ajustes (`POST` con `Origin` local) y `F-05` estado efectivo en `/api/health`;
+5. `F-11` **ventana medida** (arranque de la aplicación → apagado), en segundos, con red cerrada y sin aceptación legal;
+6. `F-06` la fila de `runtime_settings`: **solo se exportan los cuatro flags** (`concat_ws` de esos cuatro valores; no se vuelca la configuración
+   de runtime, ni siquiera «excluyendo `secret_key`»);
+7. `F-03` integraciones de descarga y foro apagadas, leídas **dentro del contenedor** (`docker exec -i`: sin `-i` el programa del heredoc no se entrega).
+
+Si las fuentes no quedan apagadas, **el ensayo no continúa** (X-02): no se mide nada con fuentes activas.
+`seccion_fuentes_persistencia` va **después**, y lo dice: `F-07a` tras la reejecución del instalador (que recrea la aplicación) siguen
+`disabled`; **reinicio deliberado** de la aplicación (registrado como tal en `reinicios-deliberados.txt`, fuera de la observación de salud) y `F-07`;
+`F-08` **no observados** intentos de conexión externa ni referencias a fuentes en los registros de la aplicación (acredita ausencia *en esos
+registros*, no ausencia universal de intentos); `F-09` ciclos del orquestador omitidos por falta de aceptación legal; `F-10` solo es PASS si
+`A-10` lo fue (la red cerrada es una salvaguarda adicional, no un sustituto).
+
+**Límite declarado (F-11):** la aplicación arranca una vez con los defaults antes de poder configurarla (el instalador no ofrece un gancho entre las
+migraciones y el arranque); esa ventana **se mide** y no se mantiene el resto del ensayo con las fuentes activas. Esta comprobación completa la parte
+operativa de #239 sin decidir un cambio de defaults.
 
 ## 7. Pasos
 
@@ -105,8 +136,8 @@ bash docs/design/m4-fase1bis/anfitrion.sh cerrar      # solo lectura: sin QEMU, 
 ```
 
 `ejecutar` corre `vm-ejecutar.sh` dentro de la VM como root, en este orden: **antes** (punto de partida limpio, huella de la
-biblioteca) → **instalacion** (`bootstrap.sh` sin terminal y sin preparar `DB_PASSWORD`) → **salud** → **credenciales** →
-**reejecucion** → **originales** → **fuentes** → **cierre**. Cada comprobación escribe `PASS|FAIL|NOT_RUN id detalle` y **nunca** un
+biblioteca) → **instalacion** (`bootstrap.sh` sin terminal y sin preparar `DB_PASSWORD`) → **fuentes_iniciales** (apagado inmediato) →
+**salud** → **credenciales** → **reejecucion** → **originales** → **fuentes_persistencia** → **cierre**. Cada comprobación escribe `PASS|FAIL|NOT_RUN id detalle` y **nunca** un
 valor secreto (solo longitudes, modos y huellas).
 
 ## 8. Criterios de aceptación → comprobaciones
@@ -118,7 +149,7 @@ valor secreto (solo longitudes, modos y huellas).
 | 3 | Protección efectiva | `C-01…C-07` modo, propietario, repo de root y sin escritura ajena, enlace, contraseña generada, sin valor por defecto en el compose · `C-10…C-12` **controles positivos** · `C-20-<usuario>-*` (×2 usuarios: servicio `media` y ordinario `otroprueba`): **leer, leer por el enlace, añadir, truncar, borrar, mover, sustituir, crear junto a él, redirigir (×2), y modificar compose, Dockerfile, scripts y `bootstrap.sh`** · `C-30` intacto tras los intentos · `C-31` la credencial no aparece en salida, evidencia ni registros de contenedores |
 | 4 | Credencial conservada | `R-01…R-05`: reejecución con las mismas respuestas, `.env` **byte a byte igual**, modo intacto, la aplicación sigue conectando, no regenera. **No es una prueba de actualización desde otra versión** (`R-06`, NOT RUN) |
 | 5 | Originales intactos | `O-01` ruta, nombre, tamaño y SHA-256 de cada original antes/después · `O-02` carpetas vacías nuevas (observación: el instalador crea la estructura documentada) · `O-03` no desaparece ninguna |
-| 6 | Fuentes apagadas, sin consultas externas | `F-01…F-11` (§6) |
+| 6 | Fuentes apagadas, sin consultas externas | `F-01…F-11` (§6): apagado inmediato tras instalar, ventana medida, persistencia tras reejecución y tras reinicio deliberado, **no observados** intentos externos en los registros |
 | 7 | Informe por candidato | §10 |
 
 **Un fallo de seguridad detiene la fase** (§9).
@@ -126,11 +157,14 @@ valor secreto (solo longitudes, modos y huellas).
 ## 9. Condiciones de parada
 
 1. **Cualquier intento de lectura, modificación, sustitución o redirección que TENGA ÉXITO** por una identidad no administrativa ⇒
-   `vm-ejecutar.sh` registra `FAIL`, imprime `PARADA DE SEGURIDAD` y sale con **código 3**, **sin reparar nada ni continuar**. No se
-   corrige sobre la marcha para convertir el intento inicial en PASS; el hallazgo se informa y se decide después.
-2. Ventana o presupuesto de descarga/almacenamiento superados, o espacio libre del anfitrión < 10 GB ⇒ no se inicia más; se apaga.
-3. Un fallo del producto **no** se parchea para continuar; un fallo del arnés se clasifica primero como tal.
-4. Un requisito no previsto (un recurso que el instalador necesita y no hay) ⇒ se detiene y se clasifica **antes** de declarar FAIL.
+   `vm-ejecutar.sh` registra `FAIL`, imprime `PARADA DE SEGURIDAD` y sale con **código 3**, **sin reparar nada ni continuar**.
+2. **Una precondición fallida impide instalar** (red cerrada, candidato, espejo, punto de partida limpio, usuario ordinario sin privilegios): se
+   registra `X-00` («problema del arnés o del entorno, NO del producto»), se cierra y se sale con **código 2** sin haber ejecutado `bootstrap.sh`.
+3. **Controles positivos fallidos** (`C-10…C-12`): no se ejecutan ni se interpretan las denegaciones (`C-13`, código 2): «denegado» no demostraría nada.
+4. **La instalación falla** (`I-01`, `I-02` o `I-05` en FAIL): no se mide el resto (`X-01`); solo se comparan los originales y se cierra.
+5. **Las fuentes no quedan apagadas** tras el POST de Ajustes: no se continúa con fuentes activas (`X-02`).
+6. Ventana, presupuesto de descarga, almacenamiento o espacio libre superados (§4): se corta/para y se informa; `ejecutar` y `preparar` no se dan por buenos.
+7. Un fallo del producto **no** se parchea para continuar; un fallo del arnés se clasifica primero como tal. Un requisito no previsto ⇒ se detiene y se clasifica **antes** de declarar FAIL.
 
 ## 10. Qué entrega la ejecución (informe por candidato)
 
@@ -150,25 +184,34 @@ bibliotecas personales · cambios de defaults o de código durante el ensayo · 
 (su evidencia automatizada queda enlazada; la comprobación integrada que exija M4 sigue separada) · construcción en frío ·
 instalación de Docker por `get.docker.com` · esfuerzo humano medido · particularidad de Raspberry Pi OS con el controlador de memoria.
 
-## 12. Autorizaciones que se piden (y decisiones del responsable)
+## 12. Autorizaciones y decisiones
 
-1. **Ejecutar `preparar`**: crear `/mnt/Datos/ensayo-m4-f1bis`, arrancar la VM **con red** y descargar solo lo de §5 (tope 600 MB).
-2. **Ejecutar `ejecutar`**: nueva superposición limpia, VM **sin red**, ensayo completo, apagado.
-3. **Decisión: construcción con caché (recomendada ahora) o en frío con ventana de red propia** (§5).
-4. **Decisión: confirmar la vía de configuración efectiva de las fuentes** (Ajustes/`runtime_settings`, §6) como adaptación documentada del ensayo — no como cambio de defaults.
-5. Ventana horaria (2 h) y que la ejecución la haga Claude con revisión de Perplexity.
+**Confirmadas por el responsable (devolución de #242):** construcción con caché (la construcción en frío queda NOT RUN) · Ajustes como vía efectiva de
+configuración de las fuentes, como adaptación documentada del ensayo y sin cambiar defaults, **con apagado inmediato tras el arranque inicial** (§6) ·
+ventana de 2 h, `preparar` ≤ 45 min y `ejecutar` ≤ 60 min como presupuesto propuesto, **ahora hecho cumplir por el arnés** (§4).
+
+**Siguen sin autorizar (se piden de nuevo sobre la cabeza definitiva de esta PR):**
+1. **`preparar`**: crear `/mnt/Datos/ensayo-m4-f1bis`, arrancar la VM **con red** y descargar solo lo de §5 (tope 600 MiB, corte a 500 MiB).
+2. **`ejecutar`**: nueva superposición limpia, VM **sin red**, ensayo completo, apagado comprobado.
 
 No se pide: tocar el tablero, corregir producto, fusionar, desplegar, ni arrancar la Pi.
 
 ## 13. Qué se ha comprobado de ESTE guion (sin arrancar la VM)
 
-- `anfitrion.sh verificar` ejecutado sobre el equipo real, **solo lectura**: KVM, QEMU, repositorio con el candidato, manifiesto al día,
-  huellas de la imagen base y de `preparacion.qcow2`, VM ausente, puerto libre, 434 GB libres → **todo en orden**.
-- `bash -n` de los tres scripts.
-- `tests/escenarios/guion_f1bis.sh` (corre en la suite `test_credenciales_aisladas.py`, como root en un contenedor sin red): la
-  sección de identidades da **32 PASS y 0 FAIL** sobre una instalación hecha por el `bootstrap.sh` real, y **se para con código 3**
-  sobre una instalación heredada y expuesta, sin imprimir la credencial ni reparar. Mutaciones del guion (`negar` que da PASS siempre, el
-  intento de lectura que no intenta nada, sin controles positivos) rompen esas pruebas.
-- **No comprobado** (necesita la VM): las secciones `instalacion`, `salud`, `reejecucion`, `originales` y `fuentes` contra Docker real; la
-  construcción de la imagen; los umbrales de tiempo. Las órdenes de esas secciones usan los mismos comandos que la fase 1, pero su
-  primera ejecución real será la del ensayo; por eso, si la instalación falla, el guion no mide el resto (`X-01`, NOT RUN): solo compara los originales (un instalador que falla tampoco debe haberlos tocado) y cierra.
+- `anfitrion.sh verificar` ejecutado sobre el equipo real, **solo lectura**: todo en orden (KVM, QEMU, candidato en el repo, manifiesto al día, huellas de la
+  base y de `preparacion.qcow2`, sin QEMU, puerto libre, 434 GiB libres).
+- **El arnés se prueba con dobles y procesos controlados** (`tests/test_ensayo_f1bis_arnes.py`, 46 casos; ni QEMU, ni Docker, ni red): una «VM» de mentira cuyo
+  `argv[0]` es `qemu-system-x86_64` (`tests/_vm_falsa.py`), un contador de bytes recibidos que se mueve a voluntad y órdenes remotas sustituidas.
+  Demuestra: el presupuesto **corta** un comando que sigue «descargando» (y sus hijos) al umbral, en menos de 4 s, y respeta el código de un comando que no llega;
+  el vigilante **para la VM** por poco espacio libre o por almacenamiento y deja el motivo; la VM propia se reconoce por PID y atributos y **un proceso ajeno o
+  una VM de otro nombre jamás se señala**; el apagado escala TERM→KILL con esperas acotadas y **no borra el PID si no consigue matarla**; una **señal durante
+  `preparar` limpia al momento** (no al final de la orden remota); un límite del anfitrión marca la preparación como fallida; **`ejecutar` rechaza** la falta de
+  marcador, otro candidato, RC≠0, disco cambiado, `.parada` y ejecución previa, y no llega a arrancar la VM; una **precondición fallida impide instalar**; las
+  fuentes se apagan **justo tras instalar**; unos **controles positivos fallidos** no permiten interpretar denegaciones; `docker exec -i`. Ocho mutaciones
+  del arnés (sin corte, sin comprobar el nombre de la VM, borrar el PID sin comprobar la muerte, limpieza sin parar la VM, marcador sin RC, `wait` sin id,
+  precondición que no detiene…) rompen pruebas.
+- `tests/escenarios/guion_f1bis.sh` (en la suite de credenciales, como root en un contenedor sin red): la sección de **credenciales** del guion
+  da **41 PASS y 0 FAIL** sobre una instalación hecha por el `bootstrap.sh` real —incluidas las comprobaciones estáticas con las órdenes de **Debian 12**
+  (`stat` sobre el enlace, `find -perm`)— y **se para con código 3** sobre una instalación heredada y expuesta, sin imprimir la credencial ni reparar.
+- **No comprobado** (necesita la VM): las secciones `instalacion`, `salud`, `reejecucion`, `originales` y `fuentes_*` contra Docker real; la construcción de la imagen;
+  el comportamiento real de la red de QEMU con `restrict=on`; los tiempos. Sus órdenes reutilizan las de la fase 1, pero su primera ejecución real será el ensayo.

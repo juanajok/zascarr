@@ -49,7 +49,7 @@ CASOS_ESCRITURA = ["W01", "W02", "W03", "W04", "W05", "W06"]
 CASOS_UBICACION = [
     "U01", "U01b", "U02", "U02b", "U03", "U03b", "U04", "U05", "U06", "U07", "U08", "U08b", "U09", "U09b", "U10", "U10b", "U10c",
 ]
-CASOS_GUION = ["G01", "G01b", "G01c", "G01d", "G02", "G02b", "G02c"]
+CASOS_GUION = ["G01", "G01b", "G01c", "G01d", "G01e", "G02", "G02b", "G02c"]
 CASOS_MANUAL = ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
 CASOS_IDENTIDADES = [
     "P00", "P00b", "P01", "P02", "P02b", "P03", "P03b", "P04", "P04b", "P05", "P05b", "P06", "P06b",

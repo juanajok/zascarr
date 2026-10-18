@@ -13,8 +13,12 @@
 #   · Sin carpetas compartidas, USB ni discos físicos; sin socket Docker del anfitrión; sin puente a la LAN: solo SSH en
 #     127.0.0.1:2222.
 #   · Red ABIERTA solo en `preparar`; `ejecutar` arranca con `restrict=on` (sin salida ni DNS).
-#   · Límites: 2 vCPU · 4 GB · disco de 20 GB · ≤ $DESCARGA_MAX_MB de descarga · ≤ $ALMACEN_MAX_GB en el anfitrión · ≥ $LIBRE_MIN_GB
-#     libres en el anfitrión durante toda la fase · ventanas de $VENTANA_PREP_MIN y $VENTANA_EJEC_MIN minutos.
+#   · Límites (HACIÉNDOSE CUMPLIR, no solo declarados; mecanismos y márgenes en lib-ensayo.sh): 2 vCPU · 4 GiB · disco de 20 GiB ·
+#     descarga ≤ $DESCARGA_MAX_MIB MiB (corte a $DESCARGA_MAX_MIB − $MARGEN_MIB MiB, medido mientras se descarga) · ≤ $ALMACEN_MAX_GB GiB en
+#     el anfitrión y ≥ $LIBRE_MIN_GB GiB libres (vigilados cada pocos segundos mientras la VM trabaja; al cruzarlos se PARA la VM) ·
+#     ventanas de $VENTANA_PREP_MIN y $VENTANA_EJEC_MIN minutos (el límite se aplica también DENTRO de la VM, no solo al cliente SSH).
+#   · Ciclo de vida: `trap` ante salida normal, error o señal; la VM se identifica por PID y atributos; no se anuncia «apagada» sin
+#     comprobarlo. `ejecutar` rechaza una preparación incompleta o fallida (marcador `preparacion.ok`).
 #   · Condición de parada: se apaga la VM y se informa; NO se borran datos ajenos para hacer sitio.
 # =============================================================================
 set -uo pipefail
@@ -29,12 +33,16 @@ PREP_BASE="${FASE1}/preparacion.qcow2"
 CLAVE="${FASE1}/ensayo_key"
 SEED="${FASE1}/seed.iso"
 PUERTO="${PUERTO_SSH:-2222}"
-DESCARGA_MAX_MB="${DESCARGA_MAX_MB:-600}"
+DESCARGA_MAX_MIB="${DESCARGA_MAX_MIB:-600}"
+MARGEN_MIB="${MARGEN_MIB:-100}"
 ALMACEN_MAX_GB="${ALMACEN_MAX_GB:-25}"
 LIBRE_MIN_GB="${LIBRE_MIN_GB:-10}"
 VENTANA_PREP_MIN="${VENTANA_PREP_MIN:-45}"
 VENTANA_EJEC_MIN="${VENTANA_EJEC_MIN:-60}"
 MANIFIESTO="${AQUI}/MANIFIESTO-CANDIDATO.txt"
+PIDFILE="${DIR}/qemu.pid"
+# shellcheck source=docs/design/m4-fase1bis/lib-ensayo.sh
+source "${AQUI}/lib-ensayo.sh"
 
 info() { echo "→ $*"; }
 ok()   { echo "✓ $*"; }
@@ -43,7 +51,6 @@ die()  { mal "$*"; exit 1; }
 libre_gb() { df --output=avail -BG "$(dirname "${DIR}")" | tail -n 1 | tr -dc '0-9'; }
 SSH_ARGS=(-i "${CLAVE}" -p "${PUERTO}" -o StrictHostKeyChecking=no -o UserKnownHostsFile="${DIR}/known_hosts"
           -o ConnectTimeout=8 -o BatchMode=yes ensayo@127.0.0.1)
-ssh_vm() { ssh "${SSH_ARGS[@]}" "$@"; }
 scp_vm() { scp -q -i "${CLAVE}" -P "${PUERTO}" -o StrictHostKeyChecking=no -o UserKnownHostsFile="${DIR}/known_hosts" "$@"; }
 valor_manifiesto() { grep -E "^$1=" "${MANIFIESTO}" | head -n 1 | cut -d= -f2-; }
 
@@ -97,9 +104,9 @@ cmd_verificar() {
     chk "el repositorio tiene el candidato ${CANDIDATO:0:12}…" git -C "${REPO_HOST}" cat-file -e "${CANDIDATO}^{commit}"
     chk "el manifiesto existe" test -f "${MANIFIESTO}"
     chk "el manifiesto es el del candidato" bash -c "[[ \"\$(grep -E '^CANDIDATO=' '${MANIFIESTO}' | cut -d= -f2)\" == '${CANDIDATO}' ]]"
-    chk "el manifiesto está al día (regenerarlo no lo cambia)" bash -c "cd '${AQUI}' && diff -q '${MANIFIESTO}' <(CANDIDATO='${CANDIDATO}' bash '${BASH_SOURCE[0]}' manifiesto-stdout) "
+    chk "el manifiesto está al día (regenerarlo no lo cambia)" bash -c "diff -q '${MANIFIESTO}' <(CANDIDATO='${CANDIDATO}' bash '${AQUI}/anfitrion.sh' manifiesto-stdout)"
     for req in "${BASE_QCOW}" "${PREP_BASE}" "${CLAVE}" "${SEED}"; do chk "existe (fase 1, solo lectura): ${req}" test -e "${req}"; done
-    chk "ninguna VM en marcha" bash -c "! pgrep -x qemu-system-x86_64 >/dev/null"
+    chk "ningún proceso QEMU en marcha" test -z "$(procesos_qemu)"
     chk "el puerto ${PUERTO} está libre" bash -c "! ss -ltn | grep -q ':${PUERTO} '"
     local libre; libre="$(libre_gb)"
     chk "espacio libre en el anfitrión ${libre} GB ≥ ${LIBRE_MIN_GB} + lo previsto (${ALMACEN_MAX_GB})" test "${libre:-0}" -ge $((LIBRE_MIN_GB + ALMACEN_MAX_GB))
@@ -116,73 +123,133 @@ cmd_verificar() {
 }
 
 # ── VM ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Las acciones sobre la VM pasan por funciones pequeñas que las pruebas sustituyen por dobles (tests/test_ensayo_f1bis_arnes.py).
+ssh_remoto() {  # ssh_remoto SEGUNDOS ORDEN… : con límite de tiempo del cliente
+    local seg="$1"; shift
+    timeout --kill-after=10 "${seg}" ssh "${SSH_ARGS[@]}" "$@"
+}
+solicitar_apagado() { ssh_remoto 20 'sudo sync; sudo systemctl poweroff' >/dev/null 2>&1 || true; }
 arrancar() {  # arrancar DISCO red(abierta|cerrada)
     local red="user,id=n0,hostfwd=tcp:127.0.0.1:${PUERTO}-:22"
     [[ "$2" == "cerrada" ]] && red="${red},restrict=on"
-    qemu-system-x86_64 -name m4-f1bis -machine q35,accel=kvm -cpu host -smp 2 -m 4096 -nodefaults -display none \
-        -serial "file:${DIR}/consola-$(basename "$1" .qcow2).log" -daemonize -pidfile "${DIR}/qemu.pid" \
+    qemu-system-x86_64 -name "${NOMBRE_VM}" -machine q35,accel=kvm -cpu host -smp 2 -m 4096 -nodefaults -display none \
+        -serial "file:${DIR}/consola-$(basename "$1" .qcow2).log" -daemonize -pidfile "${PIDFILE}" \
         -drive "file=$1,if=virtio,format=qcow2,cache=writeback" \
         -drive "file=${SEED},if=virtio,format=raw,readonly=on,media=cdrom" \
         -netdev "${red}" -device virtio-net-pci,netdev=n0 -device virtio-rng-pci
 }
-esperar_ssh() { local i; for i in $(seq 1 60); do ssh_vm true 2>/dev/null && return 0; sleep 4; done; return 1; }
-apagar() {
-    ssh_vm 'sudo sync; sudo systemctl poweroff' 2>/dev/null || true
-    local i; for i in $(seq 1 40); do [[ -e "${DIR}/qemu.pid" ]] && kill -0 "$(cat "${DIR}/qemu.pid")" 2>/dev/null || break; sleep 2; done
-    if [[ -e "${DIR}/qemu.pid" ]] && kill -0 "$(cat "${DIR}/qemu.pid")" 2>/dev/null; then kill "$(cat "${DIR}/qemu.pid")" 2>/dev/null || true; fi
-    rm -f "${DIR}/qemu.pid"
-}
+esperar_ssh() { local i; for i in $(seq 1 "${INTENTOS_SSH:-60}"); do ssh_remoto 15 true 2>/dev/null && return 0; sleep "${PAUSA_SSH_S:-4}"; done; return 1; }
 cronologia() { echo "$(date -Is) $*" | tee -a "${DIR}/cronologia.txt"; }
-vigilar_espacio() { [[ "$(libre_gb)" -ge "${LIBRE_MIN_GB}" ]] || { mal "el espacio libre bajó de ${LIBRE_MIN_GB} GB: se detiene"; return 1; }; }
+
+VIGILANTE_PID=""
+iniciar_supervision() {
+    # Limpieza ante salida normal, error o señal: la VM propia no se queda viva ni el vigilante colgado.
+    trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
+    trap limpiar EXIT
+    rm -f "${DIR}/.parada"
+    vigilante_anfitrion "${DIR}" "${PIDFILE}" "${LIBRE_MIN_GB}" "${ALMACEN_MAX_GB}" "${INTERVALO_VIGILANTE_S:-2}" &
+    VIGILANTE_PID=$!
+}
+limpiar() {
+    local rc=$? estado
+    trap - EXIT INT TERM HUP
+    [[ -n "${VIGILANTE_PID}" ]] && kill "${VIGILANTE_PID}" 2>/dev/null
+    local j; for j in $(jobs -p); do kill "${j}" 2>/dev/null; done      # el comando remoto en segundo plano, si lo hubiera
+    parar_vm_propia "${DIR}" "${PIDFILE}"; estado=$?
+    case ${estado} in
+        0) cronologia "LIMPIEZA: no queda ninguna VM propia (comprobado) · rc=${rc}" ;;
+        1) mal "LA VM PROPIA SIGUE VIVA tras TERM y KILL (PID $(cat "${PIDFILE}" 2>/dev/null)): hay que pararla a mano"; rc=${rc:-1}; [[ ${rc} -eq 0 ]] && rc=1 ;;
+        3) mal "el PID de ${PIDFILE} no es la VM de este ensayo: no se ha tocado"; [[ ${rc} -eq 0 ]] && rc=1 ;;
+    esac
+    [[ -f "${DIR}/.parada" ]] && { mal "PARADA POR LÍMITE DEL ANFITRIÓN: $(cat "${DIR}/.parada")"; [[ ${rc} -eq 0 ]] && rc=1; }
+    exit "${rc}"
+}
+
+exigir_preparacion_completa() {
+    local m="${DIR}/preparacion.ok" tam mtime
+    [[ -f "${m}" ]] || { mal "no hay preparación COMPLETA (falta ${m}): 'preparar' no terminó bien o no se ejecutó"; return 1; }
+    [[ "$(sed -n 's/^CANDIDATO=//p' "${m}")" == "${CANDIDATO}" ]] || { mal "la preparación es de otro candidato"; return 1; }
+    [[ "$(sed -n 's/^RC=//p' "${m}")" == "0" ]] || { mal "la preparación terminó con error"; return 1; }
+    [[ -f "${DIR}/.parada" ]] && { mal "la preparación se interrumpió por un límite: $(cat "${DIR}/.parada")"; return 1; }
+    [[ -f "${DIR}/f1bis-prep.qcow2" ]] || { mal "falta f1bis-prep.qcow2"; return 1; }
+    tam="$(stat -c %s "${DIR}/f1bis-prep.qcow2")"; mtime="$(stat -c %Y "${DIR}/f1bis-prep.qcow2")"
+    [[ "$(sed -n 's/^PREP_BYTES=//p' "${m}")" == "${tam}" && "$(sed -n 's/^PREP_MTIME=//p' "${m}")" == "${mtime}" ]] \
+        || { mal "f1bis-prep.qcow2 cambió después de preparar (tamaño o fecha)"; return 1; }
+    [[ ! -e "${DIR}/f1bis-ejec.qcow2" ]] || { mal "ya existe f1bis-ejec.qcow2: una ejecución previa. No se reutiliza (usa un directorio nuevo)"; return 1; }
+    return 0
+}
+
+crear_bundle() {
+    git init -q --bare "${DIR}/espejo.git" && git -C "${DIR}/espejo.git" fetch -q "${REPO_HOST}" "${CANDIDATO}:refs/heads/main" || return 1
+    git -C "${DIR}/espejo.git" bundle create "${DIR}/candidato.bundle" main >/dev/null 2>&1 || return 1
+    sha256sum "${DIR}/candidato.bundle" | tee "${DIR}/candidato.bundle.sha256"
+    git -C "${REPO_HOST}" show "${CANDIDATO}:bootstrap.sh" > "${DIR}/bootstrap.sh"
+}
+
+# El comando remoto largo va EN SEGUNDO PLANO y se espera con `wait`: bash difiere los `trap` mientras corre una orden en primer
+# plano, y una señal (Ctrl-C, SIGTERM) tardaría hasta el final de la ventana en limpiar; `wait` sí se interrumpe.
+REMOTO_RC=255
+remoto_con_salida() {  # remoto_con_salida SEGUNDOS "orden" FICHERO → código en REMOTO_RC
+    local seg="$1" orden="$2" fichero="$3" rcf
+    rcf="$(mktemp)"
+    { ssh_remoto "${seg}" "${orden}"; echo $? > "${rcf}"; } 2>&1 | tee "${fichero}" &
+    wait $!
+    REMOTO_RC="$(cat "${rcf}" 2>/dev/null || echo 255)"; rm -f "${rcf}"
+}
 
 cmd_preparar() {
     cmd_verificar || die "'verificar' no pasa: no se prepara nada"
     mkdir -p "${DIR}" || die "no puedo crear ${DIR}"
-    cronologia "INICIO preparar (ventana ${VENTANA_PREP_MIN} min, descarga ≤ ${DESCARGA_MAX_MB} MB)"
-    # Bundle del candidato, desde el repositorio local (sin red).
-    git init -q --bare "${DIR}/espejo.git" && git -C "${DIR}/espejo.git" fetch -q "${REPO_HOST}" "${CANDIDATO}:refs/heads/main" || die "no pude traer el candidato"
-    git -C "${DIR}/espejo.git" bundle create "${DIR}/candidato.bundle" main >/dev/null 2>&1 || die "no pude crear el bundle"
-    sha256sum "${DIR}/candidato.bundle" | tee "${DIR}/candidato.bundle.sha256"
-    git -C "${REPO_HOST}" show "${CANDIDATO}:bootstrap.sh" > "${DIR}/bootstrap.sh"
+    iniciar_supervision
+    cronologia "INICIO preparar (ventana ${VENTANA_PREP_MIN} min; descarga ≤ ${DESCARGA_MAX_MIB} MiB con corte a $((DESCARGA_MAX_MIB - MARGEN_MIB)) MiB)"
+    crear_bundle || die "no pude crear el bundle del candidato"
     qemu-img create -q -f qcow2 -b "${PREP_BASE}" -F qcow2 "${DIR}/f1bis-prep.qcow2" 20G || die "no pude crear la superposición"
     arrancar "${DIR}/f1bis-prep.qcow2" abierta || die "no arranca la VM"
-    esperar_ssh || { apagar; die "la VM no responde por SSH"; }
+    esperar_ssh || die "la VM no responde por SSH"
     cronologia "VM arrancada (red ABIERTA, solo para esta preparación)"
-    scp_vm "${DIR}/candidato.bundle" ensayo@127.0.0.1:/tmp/candidato.bundle
-    scp_vm "${DIR}/bootstrap.sh" ensayo@127.0.0.1:/home/ensayo/bootstrap.sh
-    scp_vm "${AQUI}/vm-preparar.sh" "${AQUI}/vm-ejecutar.sh" ensayo@127.0.0.1:/home/ensayo/
-    timeout $((VENTANA_PREP_MIN * 60)) ssh "${SSH_ARGS[@]}" "sudo env CANDIDATO='${CANDIDATO}' DIGEST_POSTGRES='$(valor_manifiesto DIGEST_POSTGRES)' DIGEST_PYTHON='$(valor_manifiesto DIGEST_PYTHON)' DESCARGA_MAX_MB='${DESCARGA_MAX_MB}' bash /home/ensayo/vm-preparar.sh" \
-        | tee "${DIR}/preparacion.log"
-    local rc=${PIPESTATUS[0]}
+    scp_vm "${DIR}/candidato.bundle" ensayo@127.0.0.1:/tmp/candidato.bundle || die "no pude copiar el bundle"
+    scp_vm "${DIR}/bootstrap.sh" ensayo@127.0.0.1:/home/ensayo/bootstrap.sh || die "no pude copiar bootstrap.sh"
+    scp_vm "${AQUI}/vm-preparar.sh" "${AQUI}/vm-ejecutar.sh" "${AQUI}/lib-ensayo.sh" ensayo@127.0.0.1:/home/ensayo/ || die "no pude copiar los scripts"
+    # El límite de tiempo se aplica DENTRO de la VM (`timeout` mata el grupo de procesos entero); el del cliente es de respaldo.
+    remoto_con_salida $((VENTANA_PREP_MIN * 60 + 90)) "sudo timeout --kill-after=30 $((VENTANA_PREP_MIN * 60)) env CANDIDATO='${CANDIDATO}' DIGEST_POSTGRES='$(valor_manifiesto DIGEST_POSTGRES)' DIGEST_PYTHON='$(valor_manifiesto DIGEST_PYTHON)' DESCARGA_MAX_MIB='${DESCARGA_MAX_MIB}' MARGEN_MIB='${MARGEN_MIB}' bash /home/ensayo/vm-preparar.sh" "${DIR}/preparacion.log"
+    local rc=${REMOTO_RC}
     mkdir -p "${DIR}/evidencia-preparacion"
-    ssh_vm 'sudo tar -C /root/ensayo -czf - preparacion' > "${DIR}/evidencia-preparacion/preparacion.tar.gz" 2>/dev/null || true
-    apagar
-    vigilar_espacio || true
-    cronologia "FIN preparar rc=${rc}; VM apagada"
-    [[ ${rc} -eq 0 ]] && ok "preparación terminada" || die "la preparación falló (rc=${rc}); ver ${DIR}/preparacion.log"
+    ssh_remoto 120 'sudo tar -C /root/ensayo -czf - preparacion' > "${DIR}/evidencia-preparacion/preparacion.tar.gz" 2>/dev/null || true
+    parar_vm_propia "${DIR}" "${PIDFILE}"; local vm=$?
+    [[ ${vm} -eq 0 ]] || { mal "la VM no se pudo apagar (código ${vm})"; return 1; }
+    cronologia "FIN preparar rc=${rc}; VM apagada y comprobada"
+    [[ ${rc} -eq 0 ]] && grep -q 'PREPARACIÓN TERMINADA' "${DIR}/preparacion.log" && [[ ! -f "${DIR}/.parada" ]] || die "la preparación NO terminó bien (rc=${rc}); no se escribe preparacion.ok"
+    {
+        echo "CANDIDATO=${CANDIDATO}"; echo "RC=${rc}"; echo "FECHA=$(date -Is)"
+        echo "PREP_BYTES=$(stat -c %s "${DIR}/f1bis-prep.qcow2")"; echo "PREP_MTIME=$(stat -c %Y "${DIR}/f1bis-prep.qcow2")"
+        echo "DESCARGA_MIB=$(sed -n 's/^descargado hasta ahora: \([0-9]*\) MiB.*/\1/p' "${DIR}/preparacion.log" | tail -n 1)"
+    } > "${DIR}/preparacion.ok"
+    ok "preparación terminada y registrada (${DIR}/preparacion.ok)"
 }
 
 cmd_ejecutar() {
-    [[ -f "${DIR}/f1bis-prep.qcow2" ]] || die "primero 'preparar'"
-    [[ -n "$(pgrep -x qemu-system-x86_64)" ]] && die "hay una VM en marcha"
+    exigir_preparacion_completa || die "no se ejecuta"
+    [[ -z "$(procesos_qemu)" ]] || die "hay un proceso QEMU en marcha"
+    mkdir -p "${DIR}"
+    iniciar_supervision
     chmod a-w "${DIR}/f1bis-prep.qcow2"
     qemu-img create -q -f qcow2 -b "${DIR}/f1bis-prep.qcow2" -F qcow2 "${DIR}/f1bis-ejec.qcow2" 20G || die "no pude crear la superposición de ejecución"
     cronologia "INICIO ejecutar (ventana ${VENTANA_EJEC_MIN} min, red CERRADA)"
     arrancar "${DIR}/f1bis-ejec.qcow2" cerrada || die "no arranca la VM"
-    esperar_ssh || { apagar; die "la VM no responde por SSH"; }
-    timeout $((VENTANA_EJEC_MIN * 60)) ssh "${SSH_ARGS[@]}" "sudo env CANDIDATO='${CANDIDATO}' BOOTSTRAP_SHA256='$(valor_manifiesto BOOTSTRAP_SHA256)' ALEMBIC_ESPERADA='$(valor_manifiesto ALEMBIC_ESPERADA)' CSS_SHA256='$(valor_manifiesto CSS_SHA256)' MUESTRAS='${MUESTRAS:-5}' bash /home/ensayo/vm-ejecutar.sh" \
-        | tee "${DIR}/ejecucion.log"
-    local rc=${PIPESTATUS[0]}
+    esperar_ssh || die "la VM no responde por SSH"
+    remoto_con_salida $((VENTANA_EJEC_MIN * 60 + 90)) "sudo timeout --kill-after=30 $((VENTANA_EJEC_MIN * 60)) env CANDIDATO='${CANDIDATO}' BOOTSTRAP_SHA256='$(valor_manifiesto BOOTSTRAP_SHA256)' ALEMBIC_ESPERADA='$(valor_manifiesto ALEMBIC_ESPERADA)' CSS_SHA256='$(valor_manifiesto CSS_SHA256)' MUESTRAS='${MUESTRAS:-5}' bash /home/ensayo/vm-ejecutar.sh" "${DIR}/ejecucion.log"
+    local rc=${REMOTO_RC}
     mkdir -p "${DIR}/evidencia"
-    ssh_vm 'sudo tar -C /root/ensayo -czf - evidencia' > "${DIR}/evidencia/evidencia-vm.tar.gz" 2>/dev/null || true
-    apagar
-    cronologia "FIN ejecutar rc=${rc} (3 = PARADA DE SEGURIDAD; 124 = ventana agotada); VM apagada"
+    ssh_remoto 120 'sudo tar -C /root/ensayo -czf - evidencia' > "${DIR}/evidencia/evidencia-vm.tar.gz" 2>/dev/null || true
+    parar_vm_propia "${DIR}" "${PIDFILE}"; local vm=$?
+    [[ ${vm} -eq 0 ]] || { mal "la VM no se pudo apagar (código ${vm})"; return 1; }
+    cronologia "FIN ejecutar rc=${rc} (3 = PARADA DE SEGURIDAD; 2 = precondición del arnés; 124/137 = ventana agotada); VM apagada y comprobada"
     return "${rc}"
 }
 
 cmd_cerrar() {
     local fallos=0
-    pgrep -x qemu-system-x86_64 >/dev/null && { mal "queda un proceso QEMU"; fallos=1; } || ok "sin proceso QEMU"
+    [[ -z "$(procesos_qemu)" ]] && ok "sin proceso QEMU" || { mal "queda un proceso QEMU: $(procesos_qemu | tr '\n' ' ')"; fallos=1; }
     ss -ltn | grep -q ":${PUERTO} " && { mal "el puerto ${PUERTO} sigue abierto"; fallos=1; } || ok "puerto ${PUERTO} cerrado"
     ( cd "${DIR}" && sha256sum candidato.bundle bootstrap.sh f1bis-prep.qcow2 f1bis-ejec.qcow2 2>/dev/null ) | tee "${DIR}/huellas-finales.txt"
     du -sh "${DIR}" | tee "${DIR}/almacenamiento.txt"
@@ -190,12 +257,15 @@ cmd_cerrar() {
     return "${fallos}"
 }
 
+# Solo se ejecuta si se llama como programa (las pruebas lo cargan con `source` para probar las funciones con dobles).
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 case "${1:-}" in
     verificar) shift; cmd_verificar "$@" ;;
     manifiesto) cmd_manifiesto ;;
-    manifiesto-stdout) MANIFIESTO_SALIDA=/dev/stdout; _tmp="$(mktemp)"; MANIFIESTO="${_tmp}"; cmd_manifiesto >/dev/null; cat "${_tmp}"; rm -f "${_tmp}" ;;
+    manifiesto-stdout) _tmp="$(mktemp)"; MANIFIESTO="${_tmp}"; cmd_manifiesto >/dev/null; cat "${_tmp}"; rm -f "${_tmp}" ;;
     preparar) cmd_preparar ;;
     ejecutar) cmd_ejecutar ;;
     cerrar) cmd_cerrar ;;
     *) sed -n '2,14p' "${BASH_SOURCE[0]}"; exit 2 ;;
 esac
+fi

@@ -4,7 +4,9 @@
 #
 #     sudo bash vm-ejecutar.sh [sección ...]        # sin argumentos: todas, en orden
 #
-# Secciones: antes · instalacion · salud · credenciales · reejecucion · originales · fuentes · cierre
+# Secciones, en este orden: antes · instalacion · fuentes_iniciales · salud · credenciales · reejecucion · originales ·
+#   fuentes_persistencia · cierre.  Las fuentes se APAGAN justo tras instalar (ventana medida), no al final.
+#   Códigos de salida: 0 · 1 FAIL · 2 precondición/controles del arnés (no se mide el producto) · 3 PARADA DE SEGURIDAD
 #
 # Imprime y registra (en $EV/resultados.txt) una línea por comprobación:   PASS id detalle · FAIL id detalle ·
 # NOT_RUN id motivo. NUNCA imprime el valor de una credencial: solo estados, modos, longitudes y huellas.
@@ -89,6 +91,9 @@ seccion_antes() {
     if ! curl -sS -m 5 -o /dev/null https://github.com 2>/dev/null; then pass A-10 "red cerrada: sin salida a Internet"; else fail A-10 "HAY salida a Internet"; fi
     # Contador de bytes recibidos: toda la fase de ejecución debe ser ~0 (solo SSH).
     cat /sys/class/net/enp0s1/statistics/rx_bytes > "${EV}/rx-inicio.txt" 2>/dev/null || true
+    # Una precondición fallida es un problema del ARNÉS o del ENTORNO (no del producto) y IMPIDE empezar la instalación:
+    # medir el producto sobre un punto de partida que no es el declarado no tendría valor.
+    ! grep -q '^FAIL A-' "${RES}"
 }
 
 # ── 1. instalación nueva ──────────────────────────────────────────────────────────────────────────────────────────
@@ -198,8 +203,9 @@ seccion_credenciales() {
     local abiertos
     abiertos=$(find "${REPO}" ! -type l -perm /022 2>/dev/null | wc -l)
     [[ "${abiertos}" == "0" ]] && pass C-04 "ningún fichero ni carpeta del repositorio admite escritura de grupo u otros" || fail C-04 "${abiertos} entradas del repo admiten escritura de grupo u otros"
-    [[ "$(readlink "${REPO}/.env")" == "${ENVF}" && "$(stat -c %U -h "${REPO}/.env")" == "root" ]] \
-        && pass C-05 "el enlace del repo apunta al .env y es de root" || fail C-05 "enlace .env del repo: $(readlink "${REPO}/.env") ($(stat -c %U -h "${REPO}/.env"))"
+    # `stat` sin -L NO sigue el enlace: da el propietario del propio enlace (`-h` no existe en stat).
+    [[ "$(readlink "${REPO}/.env")" == "${ENVF}" && "$(stat -c %U "${REPO}/.env")" == "root" ]] \
+        && pass C-05 "el enlace del repo apunta al .env y es de root" || fail C-05 "enlace .env del repo: $(readlink "${REPO}/.env") ($(stat -c %U "${REPO}/.env"))"
     local longitud
     longitud=$(valor_env | wc -c)
     [[ "${longitud}" -ge 33 ]] && pass C-06 "DB_PASSWORD generada (${longitud} caracteres, no se muestra)" || fail C-06 "DB_PASSWORD ausente o corta (${longitud})"
@@ -207,7 +213,7 @@ seccion_credenciales() {
         && pass C-07 "el docker-compose.yml instalado no tiene ningún valor por defecto para DB_PASSWORD (la lista del servicio 'credenciales' es de RECHAZO)" \
         || fail C-07 "el compose conserva un valor por defecto para DB_PASSWORD"
 
-    seccion_identidades
+    seccion_identidades || return $?
     # Tras todos los intentos (todos denegados) el .env y su enlace siguen intactos.
     [[ "$(modo "${ENVF}")" == "600 root:root" && "$(readlink -f "${REPO}/.env")" == "${ENVF}" ]] \
         && pass C-30 "tras los intentos, el .env sigue 600 root:root y el enlace sigue apuntando a él" || fail C-30 "el .env o su enlace cambió"
@@ -232,6 +238,12 @@ seccion_identidades() {
     done
     afirmar C-11 "control positivo: root lee el .env" bash -c "grep -q '^DB_PASSWORD=' '${ENVF}'"
     afirmar C-12 "control positivo: ${OTRO} puede crear ficheros donde le corresponde (/tmp)" como "${OTRO}" bash -c 'f=$(mktemp) && rm -f "$f"'
+    # Si un control positivo falla, «denegado» no demuestra nada (podría ser solo que no se puede entrar en el directorio): no se
+    # interpretan las denegaciones como protección acreditada. Problema del ARNÉS o del ENTORNO, no del producto.
+    if grep -q '^FAIL C-1[0-2]' "${RES}"; then
+        nr C-13 "controles positivos fallidos: los intentos de acceso NO se ejecutan ni se interpretan (problema del arnés o del entorno)"
+        return 2
+    fi
 
     local decoy_dir="/tmp/ensayo-ajeno-$$"
     mkdir -p "${decoy_dir}"; chmod 777 "${decoy_dir}"
@@ -256,6 +268,7 @@ seccion_identidades() {
         negar "${p}-bootstrap" "${u} NO puede modificar bootstrap.sh" como "${u}" bash -c "echo '# x' >> '${REPO}/bootstrap.sh'"
     done
     rm -rf "${decoy_dir}"
+    return 0
 }
 
 # ── 4. reejecución del instalador ─────────────────────────────────────────────────────────────────────────────────
@@ -293,60 +306,92 @@ seccion_originales() {
     [[ -z "$(comm -23 "${EV}/directorios-antes.txt" "${EV}/directorios-despues.txt")" ]] && pass O-03 "no desapareció ninguna carpeta" || fail O-03 "desapareció alguna carpeta"
 }
 
-# ── 6. fuentes ────────────────────────────────────────────────────────────────────────────────────────────────────
-seccion_fuentes() {
-    sec "FUENTES: cómo llegan los flags al contenedor, estado tal como se instala, configuración efectiva y persistencia"
-    # (1) ¿Qué variables *_ENABLED recibe el contenedor? (solo nombres; los valores no son secretos pero no hacen falta)
-    docker exec zascarr-orquestador env | cut -d= -f1 | grep -E '_ENABLED$' | sort > "${EV}/env-enabled-nombres.txt"
-    echo "nombres *_ENABLED que recibe el contenedor: $(tr '\n' ' ' < "${EV}/env-enabled-nombres.txt")" | tee -a "${RES}" >/dev/null
-    [[ "$(cat "${EV}/env-enabled-nombres.txt")" == "FORUM_ENABLED" ]] \
-        && pass F-01 "DOCUMENTADO: Compose solo transmite FORUM_ENABLED; los cuatro flags de fuentes de metadatos escritos en el .env NO llegan al contenedor (inertes)" \
-        || fail F-01 "el contenedor recibe: $(tr '\n' ' ' < "${EV}/env-enabled-nombres.txt")"
-    # (2) Estado tal como se instala (hallazgo vigente: #239).
-    api "${URL}/api/health" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["fuentes"]))' > "${EV}/fuentes-instalado.json"
-    local inst; inst=$(cat "${EV}/fuentes-instalado.json")
-    nr F-02 "TAL COMO SE INSTALA (hallazgo #239, sin cambiar defaults): ${inst}"
-    # (3) Integraciones de descarga y foro: efectivas dentro del contenedor.
-    docker exec zascarr-orquestador python - <<'EOF' > "${EV}/integraciones-descarga.txt" 2>&1
+# Valor efectivo, dentro del contenedor, de los flags de las integraciones de descarga y el foro. `-i` mantiene abierta la entrada
+# estándar: sin ella `docker exec` no entrega el programa del heredoc y no ejecuta nada.
+integraciones_efectivas() {
+    docker exec -i zascarr-orquestador python - <<'PY'
 from zascarr.config import get_settings
 s = get_settings()
 for n in ("prowlarr_enabled", "transmission_enabled", "amule_enabled", "forum_enabled"):
     print(f"{n}={getattr(s, n)}")
-EOF
-    if [[ "$(grep -c '=False$' "${EV}/integraciones-descarga.txt")" == "4" ]]; then pass F-03 "las integraciones de descarga y el foro están apagadas (valor efectivo dentro del contenedor)"
-    else fail F-03 "integraciones de descarga: $(tr '\n' ' ' < "${EV}/integraciones-descarga.txt")"; fi
-    # (4) Configuración efectiva: Ajustes (override de runtime guardado en la BD), la vía soportada que SÍ llega a la aplicación.
+PY
+}
+
+# ── 6. fuentes ────────────────────────────────────────────────────────────────────────────────────────────────────
+# Las fuentes se apagan INMEDIATAMENTE tras la instalación (no al final): la ventana con los defaults es la mínima posible y se
+# MIDE. Primero el estado tal como se instala; después, por Ajustes (override de runtime guardado en la BD), la vía soportada
+# que SÍ llega a la aplicación; la persistencia se comprueba más tarde (`seccion_fuentes_persistencia`).
+estado_fuentes() {  # → JSON de /api/health → fuentes
+    api "${URL}/api/health" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["fuentes"]))'
+}
+todas_desactivadas() { [[ "$(grep -o 'disabled' <<<"$1" | wc -l)" == "4" && "$(grep -o '"enabled"' <<<"$1" | wc -l)" == "0" ]]; }
+
+seccion_fuentes_iniciales() {
+    sec "FUENTES (1/2): estado tal como se instala y apagado inmediato por Ajustes"
+    local i
+    for i in $(seq 1 30); do [[ "$(api -o /dev/null -w '%{http_code}' "${URL}/api/health" 2>/dev/null)" == "200" ]] && break; sleep 2; done
+    # (1) ¿Qué variables *_ENABLED recibe el contenedor? (solo nombres)
+    docker exec zascarr-orquestador env | cut -d= -f1 | grep -E '_ENABLED$' | sort > "${EV}/env-enabled-nombres.txt"
+    [[ "$(cat "${EV}/env-enabled-nombres.txt")" == "FORUM_ENABLED" ]] \
+        && pass F-01 "DOCUMENTADO: Compose solo transmite FORUM_ENABLED; los cuatro flags de fuentes de metadatos escritos en el .env NO llegan al contenedor (inertes)" \
+        || fail F-01 "el contenedor recibe: $(tr '\n' ' ' < "${EV}/env-enabled-nombres.txt")"
+    # (2) Estado inicial: lo primero que se registra tras la primera respuesta utilizable.
+    local inst t_inicio t_apagado
+    inst="$(estado_fuentes)"; echo "${inst}" > "${EV}/fuentes-instalado.json"
+    nr F-02 "TAL COMO SE INSTALA (hallazgo vigente #239, sin cambiar defaults): ${inst}"
+    # (3) Apagado inmediato por Ajustes (Origin local obligatorio: sin él, 403).
     local http
     http=$(api -o /dev/null -w '%{http_code}' -X POST "${URL}/ui/ajustes/guardar/fuentes" -H "Origin: ${URL}" \
         --data-urlencode "comicvine_enabled=false" --data-urlencode "anilist_enabled=false" \
         --data-urlencode "tebeosfera_enabled=false" --data-urlencode "gcd_enabled=false")
+    date +%s > "${EV}/fuentes-apagadas-epoch.txt"
     [[ "${http}" == "200" ]] && pass F-04 "POST /ui/ajustes/guardar/fuentes (Origin local) → 200" || fail F-04 "POST de Ajustes → ${http}"
-    api "${URL}/api/health" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["fuentes"]))' > "${EV}/fuentes-configuradas.json"
-    [[ "$(grep -o 'enabled' "${EV}/fuentes-configuradas.json" | wc -l)" == "0" && "$(grep -o 'disabled' "${EV}/fuentes-configuradas.json" | wc -l)" == "4" ]] \
-        && pass F-05 "configuración efectiva: las cuatro fuentes de metadatos 'disabled' en /api/health" || fail F-05 "$(cat "${EV}/fuentes-configuradas.json")"
-    # La fila de runtime (sin imprimir secret_key).
-    docker exec zascarr-db psql -U comics_admin -d zascarr -tAc "select jsonb_pretty(\"values\" - 'secret_key') from runtime_settings" > "${EV}/runtime-settings.txt" 2>&1
-    [[ "$(grep -cE '"(comicvine|anilist|tebeosfera|gcd)_enabled": false' "${EV}/runtime-settings.txt")" == "4" ]] \
-        && pass F-06 "guardado en la base de datos (runtime_settings): las cuatro a false" || fail F-06 "runtime_settings: $(tr '\n' ' ' < "${EV}/runtime-settings.txt" | head -c 200)"
-    # (5) Persisten tras reiniciar la aplicación.
+    local conf; conf="$(estado_fuentes)"; echo "${conf}" > "${EV}/fuentes-configuradas.json"
+    todas_desactivadas "${conf}" && pass F-05 "configuración efectiva: las cuatro fuentes de metadatos 'disabled' en /api/health" || fail F-05 "${conf}"
+    # Ventana con los defaults: desde que arrancó la aplicación hasta que se apagaron.
+    t_inicio=$(date -d "$(docker inspect -f '{{.State.StartedAt}}' zascarr-orquestador)" +%s 2>/dev/null || echo 0)
+    t_apagado=$(cat "${EV}/fuentes-apagadas-epoch.txt")
+    if [[ ${t_inicio} -gt 0 ]]; then
+        echo "ventana_con_defaults_segundos=$((t_apagado - t_inicio))" | tee "${EV}/ventana-fuentes.txt" >/dev/null
+        nr F-11 "VENTANA MEDIDA con las fuentes por defecto (aplicación arrancada → apagadas): $((t_apagado - t_inicio)) s, red cerrada, sin aceptación legal; el instalador no ofrece un gancho entre las migraciones y el arranque (decisión de #239)"
+    else nr F-11 "no se pudo medir la ventana con los defaults"; fi
+    # Solo los cuatro flags (no se vuelca la configuración de runtime).
+    docker exec zascarr-db psql -U comics_admin -d zascarr -tAc \
+        "select concat_ws(',', \"values\"->>'comicvine_enabled', \"values\"->>'anilist_enabled', \"values\"->>'tebeosfera_enabled', \"values\"->>'gcd_enabled') from runtime_settings" \
+        > "${EV}/runtime-cuatro-flags.txt" 2>&1
+    [[ "$(tr -d '[:space:]' < "${EV}/runtime-cuatro-flags.txt")" == "false,false,false,false" ]] \
+        && pass F-06 "guardado en la base de datos (runtime_settings): los cuatro flags a false (solo se exportan esos cuatro)" || fail F-06 "runtime_settings: $(head -c 120 "${EV}/runtime-cuatro-flags.txt" | tr '\n' ' ')"
+    # (4) Integraciones de descarga y foro: valor efectivo dentro del contenedor.
+    integraciones_efectivas > "${EV}/integraciones-descarga.txt" 2>&1
+    if [[ "$(grep -c '=False$' "${EV}/integraciones-descarga.txt")" == "4" ]]; then pass F-03 "las integraciones de descarga y el foro están apagadas (valor efectivo dentro del contenedor)"
+    else fail F-03 "integraciones de descarga: $(tr '\n' ' ' < "${EV}/integraciones-descarga.txt")"; fi
+    todas_desactivadas "${conf}"   # código de salida: si no quedaron apagadas, el resto del ensayo no tiene sentido con ese supuesto
+}
+
+seccion_fuentes_persistencia() {
+    sec "FUENTES (2/2): persistencia, reinicio deliberado y registros"
+    local fin_reejecucion
+    todas_desactivadas "$(estado_fuentes)" && pass F-07a "tras la reejecución del instalador (que recrea la aplicación) las cuatro siguen 'disabled'" \
+        || fail F-07a "tras la reejecución: $(estado_fuentes)"
+    # Reinicio DELIBERADO (identificado como tal; no cuenta como «reinicio inesperado» de la observación de salud).
+    echo "REINICIO DELIBERADO de la aplicación para comprobar la persistencia: $(date -Is)" | tee -a "${EV}/reinicios-deliberados.txt" >/dev/null
     "${COMPOSE[@]}" restart zascarr >"${EV}/restart.log" 2>&1
     local i
     for i in $(seq 1 30); do [[ "$(api -o /dev/null -w '%{http_code}' "${URL}/api/health" 2>/dev/null)" == "200" ]] && break; sleep 2; done
-    api "${URL}/api/health" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["fuentes"]))' > "${EV}/fuentes-tras-reinicio.json"
-    [[ "$(grep -o 'disabled' "${EV}/fuentes-tras-reinicio.json" | wc -l)" == "4" ]] \
-        && pass F-07 "las fuentes siguen 'disabled' tras reiniciar la aplicación (la configuración persiste)" || fail F-07 "tras reiniciar: $(cat "${EV}/fuentes-tras-reinicio.json")"
-    # (6) Ninguna consulta externa en toda la fase.
-    local app db
+    local tras; tras="$(estado_fuentes)"; echo "${tras}" > "${EV}/fuentes-tras-reinicio.json"
+    todas_desactivadas "${tras}" && pass F-07 "las fuentes siguen 'disabled' tras el reinicio deliberado (la configuración persiste)" || fail F-07 "tras reiniciar: ${tras}"
+    # Registros de la aplicación de TODA la fase. Un grep acredita «no observado en esos registros», no la ausencia universal.
+    local app intentos
     app=$(docker ps -aq --filter "label=com.docker.compose.service=zascarr" | head -n 1)
     docker logs "${app}" > "${EV}/zascarr.log" 2>&1
-    local intentos
     intentos=$(grep -ciE 'ConnectError|getaddrinfo|Temporary failure in name resolution|Name or service not known|tebeosfera|comicvine|anilist|gcd\.|ConnectTimeout' "${EV}/zascarr.log" || true)
-    [[ "${intentos}" == "0" ]] && pass F-08 "0 intentos de conexión externa ni referencias a fuentes en los registros de la aplicación (toda la fase)" \
+    [[ "${intentos}" == "0" ]] && pass F-08 "NO OBSERVADOS intentos de conexión externa ni referencias a fuentes en los registros de la aplicación (acredita ausencia en esos registros, no en general)" \
         || fail F-08 "${intentos} líneas con intentos de conexión externa o referencias a fuentes (ver zascarr.log)"
     grep -q 'skipped_no_legal_acknowledgment' "${EV}/zascarr.log" && pass F-09 "el orquestador omite sus ciclos por falta de aceptación legal (barrera adicional, NO sustituye apagar las fuentes)" \
         || nr F-09 "no se observó el aviso de ciclos omitidos"
-    pass F-10 "red cerrada durante toda la ejecución (A-10): barrera adicional, NO sustituye apagar las fuentes"
-    nr F-11 "VENTANA entre el primer arranque (fuentes por defecto) y la configuración: segundos, con red cerrada y sin aceptación legal; el instalador no permite apagarlas antes de arrancar sin cambiar su invocación o los defaults (#239)"
+    # La red cerrada es una salvaguarda adicional: solo cuenta si A-10 se comprobó.
+    if grep -q '^PASS A-10' "${RES}"; then pass F-10 "red cerrada comprobada al empezar (A-10): barrera adicional, NO sustituye apagar las fuentes"
+    else fail F-10 "A-10 no es PASS: no se puede afirmar que la red estuviera cerrada"; fi
 }
 
 # ── 7. cierre ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -364,15 +409,33 @@ seccion_cierre() {
 
 principal() {
     local SECCIONES=("$@") s rc=0
-    [[ ${#SECCIONES[@]} -gt 0 ]] || SECCIONES=(antes instalacion salud credenciales reejecucion originales fuentes cierre)
+    [[ ${#SECCIONES[@]} -gt 0 ]] || SECCIONES=(antes instalacion fuentes_iniciales salud credenciales reejecucion originales fuentes_persistencia cierre)
     for s in "${SECCIONES[@]}"; do
-        "seccion_${s}" || rc=1
+        "seccion_${s}"; local r=$?
+        [[ ${r} -eq 0 ]] || rc=1
+        # Una PRECONDICIÓN fallida (red, candidato, limpieza del entorno, identidad de prueba) impide instalar: es un problema
+        # del arnés o del entorno, no del producto, y medir sobre un punto de partida que no es el declarado no vale.
+        if [[ "${s}" == "antes" && ${r} -ne 0 ]]; then
+            nr X-00 "PRECONDICIÓN FALLIDA (problema del arnés o del entorno, NO del producto): la instalación NO se inicia"
+            seccion_cierre || true
+            return 2
+        fi
         # Si la instalación no terminó, el resto mediría un sistema que no existe: se registra y se pasa al cierre.
         if [[ "${s}" == "instalacion" ]] && grep -q '^FAIL I-0[015]' "${RES}"; then
-            nr X-01 "la instalación falló: salud, credenciales, reejecución y fuentes NO se ejecutan (medirían un sistema inexistente)"
+            nr X-01 "la instalación falló: fuentes, salud, credenciales y reejecución NO se ejecutan (medirían un sistema inexistente)"
             seccion_originales || true      # los originales sí se comparan: un instalador que falla tampoco debe haberlos tocado
             seccion_cierre || true
             return 1
+        fi
+        if [[ "${s}" == "fuentes_iniciales" && ${r} -ne 0 ]]; then
+            nr X-02 "las fuentes no quedaron apagadas: el resto del ensayo NO continúa con fuentes activas"
+            seccion_cierre || true
+            return 1
+        fi
+        if [[ "${s}" == "credenciales" && ${r} -eq 2 ]]; then
+            nr X-03 "controles positivos fallidos (arnés/entorno): se detiene antes de interpretar ninguna denegación"
+            seccion_cierre || true
+            return 2
         fi
     done
     return "${rc}"

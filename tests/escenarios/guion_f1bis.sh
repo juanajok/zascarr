@@ -16,7 +16,7 @@ ejecutar_identidades() {
     ( export EV="${W}/ev" RAIZ="${raiz}" SVC="${SVC}" OTRO="${OTRO}" BIBLIOTECA="${W}/biblioteca"
       mkdir -p "${W}/ev" "${W}/biblioteca"
       source "${GUION}"
-      seccion_identidades ) > "${W}/guion.out" 2>&1
+      PATH="${W}/bin:${PATH}" seccion_credenciales ) > "${W}/guion.out" 2>&1
     GRC=$?
 }
 
@@ -28,8 +28,8 @@ SINT="$(valor_de "${RAIZ}/.env")"
 H0="$(huella "${RAIZ}/.env")"
 ejecutar_identidades "${RAIZ}"
 NPASS="$(grep -c '^PASS' "${W}/guion.out")"; NFAIL="$(grep -c '^FAIL' "${W}/guion.out")"
-if [[ "${GRC}" -eq 0 && "${NFAIL}" -eq 0 && "${NPASS}" -ge 30 ]]; then
-    pass G01 "sobre una instalación real protegida, la sección de identidades da ${NPASS} PASS y 0 FAIL"
+if [[ "${GRC}" -eq 0 && "${NFAIL}" -eq 0 && "${NPASS}" -ge 38 ]]; then
+    pass G01 "sobre una instalación real protegida, la sección de credenciales (estáticas + identidades) da ${NPASS} PASS y 0 FAIL"
 else fail G01 "rc=${GRC} PASS=${NPASS} FAIL=${NFAIL}: $(grep '^FAIL' "${W}/guion.out" | head -n 3 | tr '\n' ';')"; fi
 if grep -q 'C-11 ' "${W}/guion.out" && grep -q 'C-10-' "${W}/guion.out"; then pass G01b "incluye los controles positivos (C-10, C-11, C-12)"
 else fail G01b "faltan controles positivos"; fi
@@ -37,6 +37,12 @@ if [[ "$(huella "${RAIZ}/.env")" == "${H0}" && "$(modo "${RAIZ}/.env")" == "600 
 else fail G01c "el .env cambió durante el guion"; fi
 if [[ -n "${SINT}" ]] && ! grep -qF -- "${SINT}" "${W}/guion.out"; then pass G01d "el guion no imprime la credencial"
 else fail G01d "la salida del guion contiene la credencial (o no había)"; fi
+
+# G01e: las comprobaciones ESTÁTICAS usan órdenes de Debian 12 que no se prueban de otro modo (p. ej. `stat` sobre el enlace)
+ESTATICAS_OK=1
+for c in C-01 C-02 C-03 C-04 C-05 C-06 C-07; do grep -q "^PASS ${c} " "${W}/guion.out" || { ESTATICAS_OK=0; echo "# falta PASS ${c}" >&2; }; done
+if [[ "${ESTATICAS_OK}" -eq 1 ]]; then pass G01e "las comprobaciones estáticas C-01…C-07 (propietario, modo, repo, enlace con stat, contraseña, compose) dan PASS en Debian 12"
+else fail G01e "alguna comprobación estática no dio PASS: $(grep -E '^(FAIL|NOT_RUN) C-0' "${W}/guion.out" | head -n 3 | tr '\n' ';')"; fi
 
 # G02: instalación heredada y expuesta (todo del usuario de servicio, .env legible por todos)
 RAIZ2="${W}/opt2/zascarr"; instalacion_heredada "${RAIZ2}" "Sint3tica-Expuesta-0006-$$"

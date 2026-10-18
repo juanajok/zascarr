@@ -14,20 +14,26 @@
 #   6. Informa de lo descargado (bytes recibidos por la VM) y aborta si supera el presupuesto.
 # =============================================================================
 set -euo pipefail
+# shellcheck source=docs/design/m4-fase1bis/lib-ensayo.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib-ensayo.sh"
 CANDIDATO="${CANDIDATO:?falta CANDIDATO}"
 DIGEST_POSTGRES="${DIGEST_POSTGRES:?falta DIGEST_POSTGRES}"
 DIGEST_PYTHON="${DIGEST_PYTHON:?falta DIGEST_PYTHON}"
-LIMITE_MB="${DESCARGA_MAX_MB:-600}"
+LIMITE_MIB="${DESCARGA_MAX_MIB:-600}"
+MARGEN_MIB="${MARGEN_MIB:-100}"
 EV="${EV:-/root/ensayo/preparacion}"
 OTRO="${OTRO:-otroprueba}"
 mkdir -p "${EV}"
-IFACE="$(ls /sys/class/net | grep -v '^lo$' | grep -v '^docker' | head -n 1)"
-rx() { cat "/sys/class/net/${IFACE}/statistics/rx_bytes"; }
-RX0="$(rx)"
+# Unidad: MiB (1 MiB = 1.048.576 bytes). El tope se HACE CUMPLIR mientras se descarga (`con_limite_de_descarga`: corta a
+# tope − margen); `presupuesto` solo informa y comprueba el total al final.
+IFACE="$(ls /sys/class/net | grep -v -e '^lo$' -e '^docker' -e '^br-' -e '^veth' | head -n 1)"
+export IFACE
+RX_BASE_BYTES="$(contador_rx_bytes)"
+export RX_BASE_BYTES
 presupuesto() {
-    local mb=$(( ($(rx) - RX0) / 1048576 ))
-    echo "descargado hasta ahora: ${mb} MB (presupuesto ${LIMITE_MB} MB)" | tee -a "${EV}/descarga.txt"
-    (( mb <= LIMITE_MB )) || { echo "PRESUPUESTO DE DESCARGA SUPERADO: se detiene"; exit 4; }
+    local mib=$(( ($(contador_rx_bytes) - RX_BASE_BYTES) / 1048576 ))
+    echo "descargado hasta ahora: ${mib} MiB (tope ${LIMITE_MIB} MiB, corte a $((LIMITE_MIB - MARGEN_MIB)) MiB)" | tee -a "${EV}/descarga.txt"
+    (( mib <= LIMITE_MIB )) || { echo "PRESUPUESTO DE DESCARGA SUPERADO (${mib} MiB > ${LIMITE_MIB} MiB): se detiene"; exit 4; }
 }
 paso() { echo; echo "── $* ──"; }
 
@@ -61,7 +67,9 @@ done
 paso "4. construcción de la imagen del candidato (con red; llena la caché que usará la ejecución sin red)"
 rm -rf /tmp/prebuild && git clone -q https://github.com/juanajok/zascarr.git /tmp/prebuild
 [[ "$(git -C /tmp/prebuild rev-parse HEAD)" == "${CANDIDATO}" ]] || { echo "el clon no es el candidato"; exit 2; }
-( cd /tmp/prebuild && docker build -q -t zascarr-prebuild:f1bis . ) | tee "${EV}/prebuild-imagen.txt"
+# Construcción con red, bajo vigilancia: si la descarga llega al umbral de corte, se mata el grupo de procesos entero.
+( cd /tmp/prebuild && con_limite_de_descarga "${LIMITE_MIB}" "${MARGEN_MIB}" -- docker build -q -t zascarr-prebuild:f1bis . ) | tee "${EV}/prebuild-imagen.txt"
+presupuesto
 docker run --rm --entrypoint pip zascarr-prebuild:f1bis freeze > "${EV}/pip-freeze.txt"
 docker image ls --digests --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}' > "${EV}/imagenes.txt"
 rm -rf /tmp/prebuild
