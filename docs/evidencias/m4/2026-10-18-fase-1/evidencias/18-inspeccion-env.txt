@@ -1,0 +1,44 @@
+### inspección 2026-10-18T09:57:25+00:00 (no se lee ni imprime el contenido; no se cambia nada)
+### ruta hasta el fichero (namei)
+f: /opt/zascarr/.env
+drwxr-xr-x root  root  /
+drwxr-xr-x root  root  opt
+drwxr-xr-x media media zascarr
+-rw-r--r-- root  root  .env
+### stat
+/opt/zascarr/.env modo=644(-rw-r--r--) dueño=root:root tamaño=4104 B
+/opt/zascarr modo=755(drwxr-xr-x) dueño=media:media tamaño=4096 B
+/opt modo=755(drwxr-xr-x) dueño=root:root tamaño=4096 B
+/opt/zascarr/zascarr modo=755(drwxr-xr-x) dueño=media:media tamaño=4096 B
+/opt/zascarr/zascarr/.env modo=777(lrwxrwxrwx) dueño=root:root tamaño=17 B
+### enlace simbólico en el repo
+  lrwxrwxrwx 1 root root 17 Oct 17 23:50 /opt/zascarr/zascarr/.env -> /opt/zascarr/.env
+  readlink -f: /opt/zascarr/.env  == /opt/zascarr/.env
+### ACL
+  getfacl no instalado (no se instala nada). Indicador '+' en ls -l:
+  drwxr-xr-x 4 root  root  4096 Oct 17 23:49 /opt
+  drwxr-xr-x 3 media media 4096 Oct 17 23:50 /opt/zascarr
+  -rw-r--r-- 1 root  root  4104 Oct 17 23:50 /opt/zascarr/.env
+### grupos e identidades
+media:999:993:/usr/sbin/nologin
+nobody:65534:65534:/usr/sbin/nologin
+ensayo:1000:1000:/bin/bash
+media:993:
+docker:994:
+sudo:27:
+adm:4:
+uid=1000(ensayo) gid=1000(ensayo) groups=1000(ensayo)
+### apertura (solo éxito/denegación, sin leer contenido)
+  ensayo (sin sudo, sesión SSH)     ABRE      (atraviesa-/opt/zascarr)
+  nobody (sin privilegios)           ABRE      (atraviesa-/opt/zascarr)
+  media (usuario de servicio)        ABRE      (atraviesa-/opt/zascarr)
+  (root y miembros de sudo/docker son identidades administrativas: se excluyen del veredicto)
+### dentro de la imagen: ¿qué hay en /app/.env? (sin leer contenido)
+  lrwxrwxrwx 1 zascarr zascarr 17 Oct 17 23:50 /app/.env -> /opt/zascarr/.env
+  no se resuelve (enlace colgante o ausente)
+### otros ficheros con la contraseña a la vista (solo permisos)
+  /var/lib/zascarr modo=755 dueño=root:root
+  /var/lib/zascarr/postgres modo=700 dueño=UNKNOWN:root
+  /var/backups modo=755 dueño=root:root
+### proceso que lee el .env hoy (por el diseño): compose CLI del que invoca; contenedores NO montan el .env
+0

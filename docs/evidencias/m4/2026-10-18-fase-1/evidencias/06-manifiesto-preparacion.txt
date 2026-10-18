@@ -1,0 +1,12 @@
+rx_final_preparacion=533614146
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+zascarr-prebuild:cache sha256:f726717bf8a70b7e5c45a5895fabf7e643b3a59cedd639a0b98715f2c71a40e4 537MB
+python:3.11-slim-bookworm sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89 210MB
+postgres:15-alpine sha256:f7d23353e1b15400d22ebe31189f4d314b87a4c129cc400c8c2d8d4ca127bf81 417MB
+12.15

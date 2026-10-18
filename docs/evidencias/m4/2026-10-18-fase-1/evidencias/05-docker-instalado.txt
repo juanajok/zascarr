@@ -1,0 +1,9 @@
+rc=0
+29.8.2 / cli 29.8.2
+Docker Compose version v5.6.0
+ Storage Driver: overlayfs
+ Cgroup Driver: systemd
+ Cgroup Version: 2
+  cgroupns
+ Total Memory: 3.836GiB
+rx=159252810

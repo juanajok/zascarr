@@ -1,0 +1,13 @@
+muestra 2026-10-17T23:51:47+00:00
+zascarr-orquestador mem=98.18MiB / 512MiB (19.17%) cpu=0.35%
+zascarr-db mem=72.45MiB / 512MiB (14.15%) cpu=0.06%
+zascarr-orquestador memory.max=536870912 oom_kill=0 reinicios=0 salud=healthy
+zascarr-db memory.max=536870912 oom_kill=0 reinicios=0 salud=healthy
+oom en dmesg: 0
+contraseña en logs de bootstrap: /home/ensayo/m4-01-bootstrap-2.log:0
+/home/ensayo/m4-01-bootstrap.log:0 ; en logs de contenedores: 0
+permisos .env: 644 root:root
+alembic_version=0019
+recuentos: 0|0
+/dev/vda1        20G  3.7G   16G  20% /
+uptime: up 2 minutes

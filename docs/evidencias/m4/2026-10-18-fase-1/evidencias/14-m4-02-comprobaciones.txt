@@ -1,0 +1,66 @@
+### commit del clon instalado
+0a591d6f91a6b54f8cecb1e675afc59dc0290873
+/opt/zascarr/zascarr
+
+### contenedores
+zascarr-orquestador	zascarr-zascarr	Up 26 seconds (health: starting)	127.0.0.1:8000->8000/tcp
+zascarr-db	postgres:15-alpine	Up 51 seconds (healthy)	127.0.0.1:5432->5432/tcp
+--- /zascarr-orquestador
+estado=running oom=false reinicios=0 inicio=2026-10-17T23:50:45.014323973Z salud=starting mem_limit=536870912 memswap=1073741824 nanocpus=0
+cgroup memory.max=536870912 memory.current=164352000 memory.events: low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0 
+--- /zascarr-db
+estado=running oom=false reinicios=0 inicio=2026-10-17T23:50:19.922025735Z salud=healthy mem_limit=536870912 memswap=1073741824 nanocpus=0
+cgroup memory.max=536870912 memory.current=129372160 memory.events: low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0 
+
+### imagenes
+zascarr-zascarr:latest d99fd7ac91ed 537MB
+zascarr-prebuild:cache f726717bf8a7 537MB
+python:3.11-slim-bookworm 0a310eeecf4e 210MB
+postgres:15-alpine f7d23353e1b1 417MB
+
+### salud
+{"status":"degraded","version":"1.15.1","checks":{"database":"ok","transmission":"unreachable","amule":"unreachable","vpn":"unknown"},"fuentes":{"comic_vine":"enabled","anilist":"enabled","tebeosfera":"enabled","gcd":"enabled"},"seguridad":{"exposicion":"local","contrasena":false,"atencion":false},"warnings":{"vpn":"fichero /run/vpn-state/wg0.json ausente — el host aún no ha escrito el estado (o el timer no corre)"}}
+
+### alembic_version en la BD
+0019
+### cabeza del codigo
+Error response from daemon: No such container: zascarr
+20261007_0018_alta_operaciones.py
+20261009_0019_vinculacion_operaciones.py
+__init__.py
+
+### puertos a la escucha en la VM
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess                                   
+LISTEN 0      4096         0.0.0.0:5355      0.0.0.0:*    users:(("systemd-resolve",pid=379,fd=12))
+LISTEN 0      4096       127.0.0.1:8000      0.0.0.0:*    users:(("docker-proxy",pid=2054,fd=8))   
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*    users:(("systemd-resolve",pid=379,fd=18))
+LISTEN 0      128          0.0.0.0:22        0.0.0.0:*    users:(("sshd",pid=437,fd=3))            
+LISTEN 0      4096       127.0.0.1:5432      0.0.0.0:*    users:(("docker-proxy",pid=1240,fd=8))   
+LISTEN 0      4096      127.0.0.54:53        0.0.0.0:*    users:(("systemd-resolve",pid=379,fd=20))
+LISTEN 0      4096            [::]:5355         [::]:*    users:(("systemd-resolve",pid=379,fd=14))
+LISTEN 0      128             [::]:22           [::]:*    users:(("sshd",pid=437,fd=4))            
+
+### env de fuentes externas en el contenedor (sin secretos)
+Error response from daemon: No such container: zascarr
+
+### OOM en dmesg
+0
+
+### huella de la biblioteca (solo ficheros)
+9e2490a9b4355a327af118d8769fe2dc0da375f759b8945435c79063c5bebe2d  -
+9e2490a9b4355a327af118d8769fe2dc0da375f759b8945435c79063c5bebe2d  -
+9
+/media/library
+/media/library/BD
+/media/library/Comics
+/media/library/Comics/_Omnibus
+/media/library/Comics/_Specials
+/media/library/Fumetti
+/media/library/Graphic Novels
+/media/library/Manga
+/media/library/Manhwa
+/media/library/Serie Sintetica Alfa
+/media/library/Serie Sintetica Beta
+/media/library/Serie Sintetica Gamma
+/media/library/Tebeos
+/media/library/_Unsorted

@@ -1,0 +1,219 @@
+<title>Informe M4 fase 1</title>
+<style>
+:root{--bg:#f6f7f5;--fg:#1d2321;--mut:#566059;--line:#d5dad4;--card:#fff;--code:#e8ece7;--acc:#1f5f4a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151a18;--fg:#e3e8e4;--mut:#9aa69f;--line:#2e3a35;--card:#1c2320;--code:#26302c;--acc:#7cc4a8;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#151a18;--fg:#e3e8e4;--mut:#9aa69f;--line:#2e3a35;--card:#1c2320;--code:#26302c;--acc:#7cc4a8;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,sans-serif;margin:0}
+main{max-width:60rem;margin:0 auto;padding-inline:16px;padding-block:24px 56px}
+h1{font-size:1.6rem;line-height:1.2;text-wrap:balance;margin:0 0 .6rem} h2{font-size:1.2rem;margin:2rem 0 .6rem;padding-top:.6rem;border-top:1px solid var(--line);color:var(--acc)} h3{font-size:1rem;margin:1.2rem 0 .4rem}
+p,li{max-width:70ch} code{background:var(--code);padding:.05em .3em;border-radius:3px;font-size:.9em;overflow-wrap:anywhere}
+.tw{overflow-x:auto;margin:.6rem 0 1rem;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.88rem} th,td{text-align:left;vertical-align:top;padding:.45rem .6rem;border-bottom:1px solid var(--line);min-width:6rem} th{color:var(--mut);font-weight:600} tr:last-child td{border-bottom:0}
+details{margin:.8rem 0;border:1px solid var(--line);border-radius:6px;background:var(--card)} summary{cursor:pointer;padding:.5rem .7rem;font-weight:600} pre{margin:0;padding:.7rem;overflow-x:auto;font-size:.8rem;line-height:1.4;border-top:1px solid var(--line)}
+.nota{color:var(--mut);font-size:.85rem}
+</style>
+<main>
+<h1>M4 — Fase 1: preparación de la VM, M4-01 y M4-02 (2026-10-18)</h1>
+<p><strong>Resultado de la fase: el candidato NO queda aceptado.</strong> M4-01 = FAIL. M4-02 = resultados parciales (no PASS global). Ninguna tarjeta se cierra por esta fase.</p>
+<p>Candidato: <code>0a591d6f91a6b54f8cecb1e675afc59dc0290873</code> (espejo Git local con <code>main</code> = candidato; no se usó el <code>main</code> actual). Plan: #226 (<code>f2c45c4b276c07dfea0a7c2baf96cc712f84fdcb</code>).</p>
+<p>Datos: exclusivamente sintéticos (9 CBZ de 3 series). Evidencias numeradas 00–16 (esta carpeta). Este informe distingue <strong>medido</strong> de <strong>no medido</strong>.</p>
+<h2>1. Consumo y aislamiento</h2>
+<div class="tw"><table><thead><tr><th>Concepto</th><th>Autorizado</th><th>Usado</th></tr></thead><tbody>
+<tr><td>Tiempo</td><td>90 min</td><td>≈10 min (01:43:38 → 01:53 CEST)</td></tr>
+<tr><td>Descarga</td><td>3 GB</td><td>≈0,9 GB (imagen Debian 349 MB + 533,6 MB recibidos por la VM)</td></tr>
+<tr><td>Almacenamiento del ensayo en el anfitrión</td><td>25 GB</td><td>4,3 GB</td></tr>
+<tr><td>Espacio libre mínimo del anfitrión</td><td>≥10 GB</td><td>434 GB (nunca por debajo)</td></tr>
+<tr><td>VM</td><td>2 vCPU / 4 GB / 20 GB + 2 GB sin usar</td><td>tal cual (ev. 09, 14)</td></tr>
+</tbody></table></div>
+<p>Aislamiento: sin carpetas compartidas, USB ni discos físicos; sin socket Docker del anfitrión; QEMU/KVM sin privilegios. En el anfitrión solo se abrió <code>127.0.0.1:2222</code> (SSH). Fase de ensayo con <code>restrict=on</code>: sin salida ni DNS (comprobado, ev. 09). No se tocó el Docker del anfitrión, ni grupos/permisos de <code>/dev/kvm</code>, ni paquetes del anfitrión. VM <strong>apagada</strong> al terminar (sin proceso qemu ni puerto abierto).</p>
+<h2>2. Manifiesto de artefactos (ev. 01, 03–09)</h2>
+<div class="tw"><table><thead><tr><th>Artefacto</th><th>Versión / identificador</th></tr></thead><tbody>
+<tr><td>Debian</td><td><code>debian-12-genericcloud-amd64.qcow2</code>, build <code>20261015-2632</code> (12.15), SHA-512 <code>56c0bd55b6623f2739f377e983d2872e7b208d0cb9c3ba4e93d3f72929026da03637c598b3bd472b29998c31c8a4c17d8e6ae1c556852a8b83a66a09bf5c2b37</code> verificado contra <code>SHA512SUMS</code> de cloud.debian.org (la URL redirige a un espejo oficial; el contenido se validó por la suma)</td></tr>
+<tr><td>Bundle del candidato</td><td>SHA-256 <code>10d107b11e5fe1a46bb5e2ba52df0afa2e88cf624da8c827e11c2c64af2f6642</code></td></tr>
+<tr><td><code>bootstrap.sh</code> entregado</td><td>SHA-256 <code>e8860ff299a72821c3caca7b663f0e9cf98a0055508f54d138937214d8344fc4</code> (idéntico a <code>git show 0a591d6:bootstrap.sh</code>)</td></tr>
+<tr><td>Docker (APT oficial, huella <code>9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88</code>)</td><td>docker-ce y docker-ce-cli <code>5:29.8.2-1~debian.12~bookworm</code>; containerd.io <code>2.4.2-2</code>; buildx <code>0.38.0-1</code>; compose <code>5.6.0-1</code> (seleccionadas y registradas antes de instalar)</td></tr>
+<tr><td>Imágenes base</td><td><code>postgres:15-alpine</code> <code>sha256:f7d23353e1b15400d22ebe31189f4d314b87a4c129cc400c8c2d8d4ca127bf81</code>; <code>python:3.11-slim-bookworm</code> <code>sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89</code></td></tr>
+<tr><td>Dependencias Python resueltas</td><td>ev. 07 (p. ej. fastapi 0.143.3, SQLAlchemy 2.1.5, alembic 1.20.0, uvicorn 0.54.0, asyncpg 0.32.0)</td></tr>
+<tr><td>Git / Python en la VM</td><td>git 2.39.5-0+deb12u3, python3 3.11.2</td></tr>
+</tbody></table></div>
+<h2>3. Adaptaciones del arnés (no son resultados del producto)</h2>
+<ol>
+<li><strong>Espejo Git local</strong>: <code>url./srv/espejo/zascarr.git.insteadOf https://github.com/juanajok/zascarr.git</code> en el git del sistema. Los scripts resuelven contra el espejo (<code>main</code> = candidato). <strong>No acredita conectividad con GitHub.</strong></li>
+<li><strong>Imagen construida desde caché</strong>: sin red no se puede ejecutar <code>apt</code>/<code>pip</code> del <code>Dockerfile</code>. En la fase con red se construyó una vez el mismo <code>Dockerfile</code> desde el espejo (etiqueta <code>zascarr-prebuild:cache</code>). <code>bootstrap.sh</code> construyó después <code>zascarr-zascarr:latest</code> con las capas de <code>apt</code>/<code>pip</code> en <code>CACHED</code> (ev. 13). <strong>M4-01 no ejercita la descarga de dependencias ni una construcción en frío.</strong></li>
+<li>Docker instalado <strong>antes</strong> por APT: la rama de <code>bootstrap.sh</code> que instala Docker con <code>get.docker.com</code> es <strong>NOT RUN</strong>.</li>
+<li>Acceso por SSH desde el anfitrión por el puerto local; biblioteca sintética creada en la VM antes del ensayo.</li>
+</ol>
+<h2>4. M4-01 — instalación limpia: <strong>FAIL</strong></h2>
+<p>Los intentos se registran por separado:</p>
+<div class="tw"><table><thead><tr><th>Ejecución</th><th>Entrada</th><th>Resultado</th></tr></thead><tbody>
+<tr><td><strong>Intento 1 — instalación limpia</strong> (ev. 10–12)</td><td>VM limpia (sin <code>/opt/zascarr</code>, sin <code>.env</code>, sin usuario <code>media</code>, sin contenedores), <code>sudo bash bootstrap.sh &lt; /dev/null</code>, sin terminal, valores por defecto, rutas <code>/media/library</code> y <code>/media/data</code> sintéticas</td><td><strong>FAIL: RC=1</strong> en ≈1 s tras crear lo previo. Copia <code>.env.example</code> a <code>/opt/zascarr/.env</code> y se detiene en «Validando .env»: <em>«DB_PASSWORD tiene el valor por defecto. Edita /opt/zascarr/.env y pon una contraseña segura.»</em></td></tr>
+<tr><td>Intento 2 — <strong>tras intervención manual</strong> (ev. 13)</td><td>Misma VM; yo sustituí <code>DB_PASSWORD</code> por una contraseña sintética generada en la VM y relancé <code>sudo bash /opt/zascarr/zascarr/bootstrap.sh &lt; /dev/null</code></td><td>RC=0 bajo <strong>condiciones modificadas</strong>. <strong>No convierte el intento 1 en PASS.</strong></td></tr>
+</tbody></table></div>
+<p>Clasificación: <strong>comportamiento del candidato, no del arnés</strong> (no faltaba ningún recurso; no depende del espejo ni de la red). El aborto es seguro frente a arrancar con una contraseña de ejemplo, pero <strong>incumple la instalación limpia sin intervención manual</strong>: el README promete «pegar una línea» y tres preguntas, y el paso manual forma parte del defecto. El mensaje es claro y en español; eso no cambia el veredicto.</p>
+<p>Salvedad de alcance: esta prueba es <strong>sin terminal</strong>; no demuestra que falle todo camino interactivo. El control de contraseña que lee el código (<code>bootstrap.sh</code>, «Validando .env») es incondicional: no hay camino en el flujo ensayado que la genere.</p>
+<p>Efectos colaterales del intento 1 (registrados): usuario/grupo <code>media</code>, clon en <code>/opt/zascarr/zascarr</code> (commit <code>0a591d6</code>, comprobado), <code>.env</code>, y carpetas <strong>vacías</strong> <code>Comics</code>, <code>Comics/_Specials</code>, <code>Comics/_Omnibus</code>, <code>Manga</code>, <code>BD</code>, <code>Tebeos</code>, <code>Fumetti</code>, <code>Manhwa</code>, <code>Graphic Novels</code>, <code>_Unsorted</code> dentro de la biblioteca. Los ficheros de la biblioteca <strong>no cambiaron</strong> (huella de ficheros idéntica antes/después: <code>9e2490a9…be2d</code>, 9 ficheros; ev. 08 y 14).</p>
+<h3>Intervenciones registradas</h3>
+<ul>
+<li>Una: edición de <code>DB_PASSWORD</code> en <code>.env</code> (sintética, 24 caracteres, no se reproduce aquí) entre los intentos 1 y 2.</li>
+<li>Ninguna otra intervención en el instalador; ningún código de producto modificado.</li>
+</ul>
+<h2>5. M4-02 — salud y esquema: resultados parciales (no PASS global)</h2>
+<p>Medidos sobre la instalación del intento 2 (condiciones modificadas por la intervención de §4):</p>
+<div class="tw"><table><thead><tr><th>Comprobación</th><th>Resultado</th><th>Evidencia</th></tr></thead><tbody>
+<tr><td>Aplicación accesible</td><td>PASS: <code>/estado</code> 200, <code>/api/health</code> 200, <code>/</code> 307</td><td>15</td></tr>
+<tr><td>CSS del candidato servido</td><td>PASS: <code>/static/web.css</code> 200, 55.828 B, SHA-256 <code>ce87a9e2…daca0f</code> = el de <code>git show 0a591d6:src/zascarr/static/web.css</code></td><td>15</td></tr>
+<tr><td>Salud de base de datos</td><td>PASS: <code>database: ok</code>, contenedor <code>healthy</code></td><td>14–16</td></tr>
+<tr><td>Esquema Alembic</td><td>PASS: <code>alembic_version=0019</code>, cabeza del código <code>0019 (head)</code></td><td>14–16</td></tr>
+<tr><td>Límite de memoria <strong>efectivo</strong></td><td>PASS: 536.870.912 B (512 M) en app y BD, en <code>docker inspect</code> <strong>y</strong> en el <code>memory.max</code> del cgroup v2</td><td>14, 16</td></tr>
+<tr><td>Reinicios / OOM</td><td>PASS en lo observado: reinicios 0, <code>oom_kill</code> 0, <code>dmesg</code> sin OOM (muestra de ≈2 min; no se provocó OOM)</td><td>14, 16</td></tr>
+<tr><td>Accesos no previstos (puertos)</td><td>PASS: <code>8000</code> y <code>5432</code> solo en <code>127.0.0.1</code>; resto: SSH y DNS local de systemd. En el anfitrión solo <code>127.0.0.1:2222</code></td><td>14</td></tr>
+<tr><td>Estado global</td><td><code>degraded</code> por Transmission/aMule/VPN ausentes en la VM: <strong>no es por sí solo un fallo del candidato en este entorno</strong></td><td>14</td></tr>
+<tr><td><strong>Fuentes externas desactivadas</strong></td><td><strong>FAIL de la condición</strong> (ver §6)</td><td>14, 15</td></tr>
+</tbody></table></div>
+<p>Memoria en reposo (informativa, sin umbral): app 98 MiB, BD 72 MiB, CPU ≈0,4 % / 0,06 %.</p>
+<p>Recuentos tras el arranque: 0 series, 0 archivos (la auditoría de biblioteca escaneó y calculó hash de 9 ficheros, sin importar).</p>
+<h2>6. Fuentes externas: <strong>FAIL de la condición operativa</strong></h2>
+<ul>
+<li><code>config.py</code> del candidato: <code>comicvine_enabled</code>, <code>anilist_enabled</code>, <code>tebeosfera_enabled</code> y <code>gcd_enabled</code> tienen <code>default=True</code>; <code>/api/health</code> los muestra como <code>enabled</code>. La instalación limpia <strong>no</strong> los deja apagados.</li>
+<li>Las integraciones de descarga/foro (Prowlarr, Transmission, aMule, foro) siguen otra política: <code>FORUM_ENABLED=false</code> (comprobado en el contenedor). No se mezclan las dos categorías.</li>
+<li>Para este ensayo se exigió que estuvieran desactivadas → <strong>FAIL de esa condición de configuración</strong>.</li>
+<li>Lo siguiente <strong>no equivale a apagarlas</strong>: red cerrada (conservada), <strong>0</strong> intentos de salida/DNS en los logs de la aplicación, y los ciclos del orquestador omitidos por falta de aceptación legal (<code>orchestrator.*_skipped_no_legal_acknowledgment</code>). <strong>Activación accidental efectiva de consultas externas: no acreditada</strong>. Tráfico externo: no observado <em>con la red cerrada</em>.</li>
+<li>Para un ensayo posterior podrán fijarse los cuatro flags a <code>false</code> por configuración soportada; sería una <strong>adaptación documentada del ensayo</strong>, no una corrección de los defaults ni prueba de que una instalación limpia los deja apagados. No se ha cambiado ningún default.</li>
+</ul>
+<h2>7. Hallazgo de seguridad separado: <code>.env</code> con permisos 0644 — alcance medido (ev. 17–18)</h2>
+<p>Inspección autorizada (30 min; misma VM y red cerrada; superposición temporal sobre <code>m4-01</code>, que quedó intacta: hash idéntico antes/después y marcada de solo lectura; VM apagada, sin QEMU ni puerto 2222; la superposición temporal se eliminó). No se leyó ni imprimió el contenido, no se ejecutó <code>bootstrap.sh</code>, no se cambió ningún permiso ni secreto y no se tocaron las fuentes. El arranque escribió en la superposición temporal, como estaba previsto.</p>
+<p><strong>Medido</strong></p>
+<div class="tw"><table><thead><tr><th>Elemento</th><th>Resultado</th></tr></thead><tbody>
+<tr><td><code>/opt/zascarr/.env</code></td><td>modo <code>644</code>, dueño <code>root:root</code>, 4.104 B, sin ACL (sin indicador <code>+</code>; <code>getfacl</code> no está instalado y no se instaló)</td></tr>
+<tr><td>Ruta de acceso</td><td><code>/</code> 755 root · <code>/opt</code> 755 root · <code>/opt/zascarr</code> 755 <code>media:media</code> · <code>/opt/zascarr/zascarr</code> 755 <code>media:media</code>: <strong>todo atravesable por cualquiera</strong></td></tr>
+<tr><td>Enlace en el repo</td><td><code>/opt/zascarr/zascarr/.env</code> → <code>/opt/zascarr/.env</code> (<code>readlink -f</code> coincide: es el mismo fichero)</td></tr>
+<tr><td>Apertura sin leer (éxito/denegación)</td><td><code>ensayo</code> (sesión sin sudo, sin grupos adicionales): <strong>ABRE</strong> · <code>nobody</code>: <strong>ABRE</strong> · <code>media</code> (usuario de servicio): <strong>ABRE</strong></td></tr>
+<tr><td>Dentro de la imagen</td><td><code>/app/.env</code> es un enlace a <code>/opt/zascarr/.env</code> que <strong>no se resuelve</strong> en el contenedor: <strong>el secreto no está incorporado a la imagen</strong> (no existe <code>.dockerignore</code>, pero el <code>COPY</code> conservó el enlace, no el fichero). Los contenedores no montan el <code>.env</code> (0 montajes)</td></tr>
+<tr><td>Otras superficies</td><td><code>/var/lib/zascarr/postgres</code> 700 (bien); <code>/var/lib/zascarr</code> y <code>/var/backups</code> 755 root. No existen copias aún: el modo de los volcados queda por medir en los casos de backup</td></tr>
+</tbody></table></div>
+<p><strong>Conclusión (medida, no inferida): exposición efectiva a cualquier identidad local sin privilegios</strong>, no solo un modo permisivo. Qué cubre y qué no: la VM no tiene más cuentas ni servicios locales; el riesgo real depende de qué otras cuentas y servicios tenga la máquina (en la Pi compartida: Transmission, aMule, Prowlarr, Kavita u otros usuarios). No se probó si algún contenedor o servicio concreto puede abrirlo.</p>
+<p><strong>Origen (por lectura del código):</strong> <code>bootstrap.sh</code> lo crea con <code>cp .env.example .env</code> y nunca ajusta el modo; el usuario de servicio no es el dueño.</p>
+<p><strong>Quién necesita leerlo (por lectura del código; no probado con cambios):</strong> <code>bootstrap.sh</code> exige <code>EUID=0</code>; los demás scripts (<code>update.sh</code>, <code>backup.sh</code>, <code>rollback.sh</code>, <code>_exposicion.sh</code>, <code>diagnostico-red.sh</code>) lo pasan con <code>--env-file</code> a <code>docker compose</code>, que lo lee <strong>el proceso del que invoca</strong> (en la práctica root con <code>sudo</code>; los scripts documentan <code>sudo</code>). La excepción a validar es <code>etiquetar.sh</code>, que solo comprueba su existencia, y cualquier uso de <code>docker compose</code> manual desde el repo mediante el enlace. El demonio de Docker y los contenedores no lo leen. <strong>Este reparto es una hipótesis de lectura</strong>: la decisión de propietario/modo debe probarse con instalación, actualización, backup y rollback en un ensayo posterior; no se ha aplicado <code>chmod</code>.</p>
+<h2>8. Límites de esta fase</h2>
+<p>Una sola instalación, un ensayo de ≈2 min de ejecución estable, tráfico nulo, biblioteca de 9 ficheros. Inspección del <code>.env</code> (§7): una sola máquina sin otras cuentas. No se ejercitó: construcción en frío, rama <code>get.docker.com</code>, instalación con <code>.env</code> preparado por el usuario (flujo interactivo), reinicio, actualización, restauración, presión de disco, #143. <strong>No hay aceptación del candidato</strong> y no se cierra ninguna tarjeta. M4-03…M4-20 siguen sin autorización; tampoco hay correcciones de producto ni más descargas.</p>
+<h2>9. Resumen de resultados</h2>
+<div class="tw"><table><thead><tr><th>Caso</th><th>Resultado</th></tr></thead><tbody>
+<tr><td>M4-01 instalación limpia</td><td><strong>FAIL</strong> (intento 1); intento 2 completa solo tras intervención manual</td></tr>
+<tr><td>M4-02 salud y esquema</td><td><strong>Parcial</strong>: PASS en app, CSS, BD, 0019, memoria efectiva, sin OOM/reinicios, puertos; <strong>FAIL</strong> «fuentes externas desactivadas»</td></tr>
+<tr><td>Hallazgo <code>.env</code> 0644</td><td><strong>Abierto</strong>; alcance medido: <strong>exposición efectiva a identidades locales sin privilegios</strong> (§7)</td></tr>
+<tr><td>M4-03…M4-20</td><td><strong>NOT RUN</strong> (no autorizado)</td></tr>
+</tbody></table></div>
+<h2>Evidencias seleccionadas (saneadas)</h2>
+<p class="nota">Salidas sin colores ni secretos. El paquete completo 00–18 está en <code>/mnt/Datos/ensayo-m4/evidencia-saneada.tar.gz</code>.</p>
+<details><summary>Evidencia 14-m4-02-comprobaciones.txt</summary><pre>### commit del clon instalado
+0a591d6f91a6b54f8cecb1e675afc59dc0290873
+/opt/zascarr/zascarr
+
+### contenedores
+zascarr-orquestador	zascarr-zascarr	Up 26 seconds (health: starting)	127.0.0.1:8000-&gt;8000/tcp
+zascarr-db	postgres:15-alpine	Up 51 seconds (healthy)	127.0.0.1:5432-&gt;5432/tcp
+--- /zascarr-orquestador
+estado=running oom=false reinicios=0 inicio=2026-10-17T23:50:45.014323973Z salud=starting mem_limit=536870912 memswap=1073741824 nanocpus=0
+cgroup memory.max=536870912 memory.current=164352000 memory.events: low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0 
+--- /zascarr-db
+estado=running oom=false reinicios=0 inicio=2026-10-17T23:50:19.922025735Z salud=healthy mem_limit=536870912 memswap=1073741824 nanocpus=0
+cgroup memory.max=536870912 memory.current=129372160 memory.events: low 0 high 0 max 0 oom 0 oom_kill 0 oom_group_kill 0 
+
+### imagenes
+zascarr-zascarr:latest d99fd7ac91ed 537MB
+zascarr-prebuild:cache f726717bf8a7 537MB
+python:3.11-slim-bookworm 0a310eeecf4e 210MB
+postgres:15-alpine f7d23353e1b1 417MB
+
+### salud
+{&quot;status&quot;:&quot;degraded&quot;,&quot;version&quot;:&quot;1.15.1&quot;,&quot;checks&quot;:{&quot;database&quot;:&quot;ok&quot;,&quot;transmission&quot;:&quot;unreachable&quot;,&quot;amule&quot;:&quot;unreachable&quot;,&quot;vpn&quot;:&quot;unknown&quot;},&quot;fuentes&quot;:{&quot;comic_vine&quot;:&quot;enabled&quot;,&quot;anilist&quot;:&quot;enabled&quot;,&quot;tebeosfera&quot;:&quot;enabled&quot;,&quot;gcd&quot;:&quot;enabled&quot;},&quot;seguridad&quot;:{&quot;exposicion&quot;:&quot;local&quot;,&quot;contrasena&quot;:false,&quot;atencion&quot;:false},&quot;warnings&quot;:{&quot;vpn&quot;:&quot;fichero /run/vpn-state/wg0.json ausente — el host aún no ha escrito el estado (o el timer no corre)&quot;}}
+
+### alembic_version en la BD
+0019
+### cabeza del codigo
+Error response from daemon: No such container: zascarr
+20261007_0018_alta_operaciones.py
+20261009_0019_vinculacion_operaciones.py
+__init__.py
+
+### puertos a la escucha en la VM
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess                                   
+LISTEN 0      4096         0.0.0.0:5355      0.0.0.0:*    users:((&quot;systemd-resolve&quot;,pid=379,fd=12))
+LISTEN 0      4096       127.0.0.1:8000      0.0.0.0:*    users:((&quot;docker-proxy&quot;,pid=2054,fd=8))   
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*    users:((&quot;systemd-resolve&quot;,pid=379,fd=18))
+LISTEN 0      128          0.0.0.0:22        0.0.0.0:*    users:((&quot;sshd&quot;,pid=437,fd=3))            
+LISTEN 0      4096       127.0.0.1:5432      0.0.0.0:*    users:((&quot;docker-proxy&quot;,pid=1240,fd=8))   
+LISTEN 0      4096      127.0.0.54:53        0.0.0.0:*    users:((&quot;systemd-resolve&quot;,pid=379,fd=20))
+LISTEN 0      4096            [::]:5355         [::]:*    users:((&quot;systemd-resolve&quot;,pid=379,fd=14))
+LISTEN 0      128             [::]:22           [::]:*    users:((&quot;sshd&quot;,pid=437,fd=4))            
+
+### env de fuentes externas en el contenedor (sin secretos)
+Error response from daemon: No such container: zascarr
+
+### OOM en dmesg
+0
+
+### huella de la biblioteca (solo ficheros)
+9e2490a9b4355a327af118d8769fe2dc0da375f759b8945435c79063c5bebe2d  -
+9e2490a9b4355a327af118d8769fe2dc0da375f759b8945435c79063c5bebe2d  -
+9
+/media/library
+/media/library/BD
+/media/library/Comics
+/media/library/Comics/_Omnibus
+/media/library/Comics/_Specials
+/media/library/Fumetti
+/media/library/Graphic Novels
+/media/library/Manga
+/media/library/Manhwa
+/media/library/Serie Sintetica Alfa
+/media/library/Serie Sintetica Beta
+/media/library/Serie Sintetica Gamma
+/media/library/Tebeos
+/media/library/_Unsorted
+</pre></details><details><summary>Evidencia 18-inspeccion-env.txt</summary><pre>### inspección 2026-10-18T09:57:25+00:00 (no se lee ni imprime el contenido; no se cambia nada)
+### ruta hasta el fichero (namei)
+f: /opt/zascarr/.env
+drwxr-xr-x root  root  /
+drwxr-xr-x root  root  opt
+drwxr-xr-x media media zascarr
+-rw-r--r-- root  root  .env
+### stat
+/opt/zascarr/.env modo=644(-rw-r--r--) dueño=root:root tamaño=4104 B
+/opt/zascarr modo=755(drwxr-xr-x) dueño=media:media tamaño=4096 B
+/opt modo=755(drwxr-xr-x) dueño=root:root tamaño=4096 B
+/opt/zascarr/zascarr modo=755(drwxr-xr-x) dueño=media:media tamaño=4096 B
+/opt/zascarr/zascarr/.env modo=777(lrwxrwxrwx) dueño=root:root tamaño=17 B
+### enlace simbólico en el repo
+  lrwxrwxrwx 1 root root 17 Oct 17 23:50 /opt/zascarr/zascarr/.env -&gt; /opt/zascarr/.env
+  readlink -f: /opt/zascarr/.env  == /opt/zascarr/.env
+### ACL
+  getfacl no instalado (no se instala nada). Indicador &#x27;+&#x27; en ls -l:
+  drwxr-xr-x 4 root  root  4096 Oct 17 23:49 /opt
+  drwxr-xr-x 3 media media 4096 Oct 17 23:50 /opt/zascarr
+  -rw-r--r-- 1 root  root  4104 Oct 17 23:50 /opt/zascarr/.env
+### grupos e identidades
+media:999:993:/usr/sbin/nologin
+nobody:65534:65534:/usr/sbin/nologin
+ensayo:1000:1000:/bin/bash
+media:993:
+docker:994:
+sudo:27:
+adm:4:
+uid=1000(ensayo) gid=1000(ensayo) groups=1000(ensayo)
+### apertura (solo éxito/denegación, sin leer contenido)
+  ensayo (sin sudo, sesión SSH)     ABRE      (atraviesa-/opt/zascarr)
+  nobody (sin privilegios)           ABRE      (atraviesa-/opt/zascarr)
+  media (usuario de servicio)        ABRE      (atraviesa-/opt/zascarr)
+  (root y miembros de sudo/docker son identidades administrativas: se excluyen del veredicto)
+### dentro de la imagen: ¿qué hay en /app/.env? (sin leer contenido)
+  lrwxrwxrwx 1 zascarr zascarr 17 Oct 17 23:50 /app/.env -&gt; /opt/zascarr/.env
+  no se resuelve (enlace colgante o ausente)
+### otros ficheros con la contraseña a la vista (solo permisos)
+  /var/lib/zascarr modo=755 dueño=root:root
+  /var/lib/zascarr/postgres modo=700 dueño=UNKNOWN:root
+  /var/backups modo=755 dueño=root:root
+### proceso que lee el .env hoy (por el diseño): compose CLI del que invoca; contenedores NO montan el .env
+0
+</pre></details>
+</main>

@@ -1,0 +1,24 @@
+== docker-ce-cli
+docker-ce-cli | 5:29.9.1-1~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+docker-ce-cli | 5:29.9.0-1~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+== containerd.io
+containerd.io | 2.4.2-2~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+containerd.io | 2.4.2-1~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+== docker-buildx-plugin
+docker-buildx-plugin | 0.38.0-1~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+docker-buildx-plugin | 0.37.1-1~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+== docker-compose-plugin
+docker-compose-plugin | 5.6.0-1~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+docker-compose-plugin | 5.5.1-1~debian.12~bookworm | https://download.docker.com/linux/debian bookworm/stable amd64 Packages
+docker-ce
+  PreDepends: init-system-helpers
+  Depends: containerd.io
+  Depends: docker-ce-cli
+  Depends: iptables
+  Depends: nftables
+  Depends: libc6
+  Depends: libsystemd0
+    libelogind0
+  Conflicts: docker.io
+  Recommends: apparmor
+  Recommends: ca-certificates

@@ -1,0 +1,129 @@
+### salud del contenedor
+/zascarr-orquestador healthy reinicios=0
+/zascarr-db healthy reinicios=0
+### alembic heads (codigo)
+0019 (head)
+### env (sin secretos)
+ALLOWED_HOSTS=
+BASE_URL=
+FORUM_ENABLED=false
+FORUM_URL=
+ZASCARR_BIND_ADDRESS=127.0.0.1
+(vacio = valor por defecto del codigo)
+### CSS servido
+href="/static/web.css"
+/static/web.css -> 200 55828 B sha256=ce87a9e25fc6469badd772072116938d6ef31a1a2ac96c0e85df0b6f70daca0f
+### GET /estado, / :
+/estado 200
+/ 307
+/api/health 200
+### texto de /estado
+ 
+ 
+ 
+ 
+ 
+ Estado — ZascArr 
+ 
+ 
+ 
+ 
+ Saltar al contenido 
+ 
+ 
+ ZascArr 
+ 
+ 
+ Mi colección 
+ ⌂ Inicio 
+ ✎ Por revisar Revisar 
+ ▤ Biblioteca 
+ ⚖ Duplicados 
+ 
+ 
+ Añadir 
+ ⌕ Descubrir 
+ ★ Deseados 
+ 
+ 
+ Sistema 
+ ♥ Estado 
+ ⚙ Ajustes 
+ 
+ 
+ ⋯ Más 
+ 
+ ▤ Biblioteca 
+ ⚖ Duplicados 
+ ⌕ Descubrir 
+ ⚙ Ajustes 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ Estado 
+ Semáforos en vez de JSON crudo — se actualiza solo cada 10s. 
+ 
+ 
+ 
+ Comprobando… 
+ 
+ 
+ 
+ 
+ Avisos 
+ 
+ 
+ 
+ — 
+ 
+ const POLL_INTERVAL_MS = 10000;
+ const CHECK_LABELS = {
+ database: "Base de datos",
+ transmission: "Transmission",
+ amule: "aMule",
+ vpn: "VPN",
+ };
+ const CHECK_TEXT = {
+ database: {
+ ok: "Conectada y migrada",
+ unreachable: "Sin conexión con PostgreSQL",
+ migration_required: "Conectada, migración pendiente",
+ schema_incompatible: "Conectada, esquema incompleto",
+ },
+ transmission: { ok: "Conectado", unreachable: "No disponible" },
+ amule: { ok: "Conectado", unreachable: "No disponible" },
+ vpn: { ok: "Activa", warning: "Sin proteger", unknown: "Sin datos" },
+ };
+ const CHECK_ACTION = {
+ unreachable: "Comprueba que PostgreSQL está corriendo y que la URL de conexión es correcta.",
+ migration_required: "Eje
+### logs de la app (ultimas 60 lineas)
+INFO:     Started server process [28]
+INFO:     Waiting for application startup.
+2026-10-18 01:50:48 [info     ] zascarr.starting               version=1.15.1
+2026-10-18 01:50:48 [info     ] zascarr.db_connected
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-10-18 01:50:48 [info     ] orchestrator.policy_cycle_skipped_no_legal_acknowledgment
+2026-10-18 01:50:48 [info     ] library_audit.starting
+2026-10-18 01:50:48 [info     ] orchestrator.cycle_skipped_no_legal_acknowledgment
+2026-10-18 01:50:48 [info     ] library_audit.done             carpetas_repetidas=0 carpetas_vacias=8 escaneados=9 hasheados=9 misma_obra=0 mismo_contenido=0
+INFO:     172.18.0.1:42756 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:42772 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:34244 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39824 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:48998 - "GET /estado HTTP/1.1" 200 OK
+INFO:     172.18.0.1:49014 - "GET /estado HTTP/1.1" 200 OK
+INFO:     172.18.0.1:49024 - "GET /static/web.css HTTP/1.1" 200 OK
+INFO:     172.18.0.1:49038 - "GET /estado HTTP/1.1" 200 OK
+INFO:     172.18.0.1:49048 - "GET / HTTP/1.1" 307 Temporary Redirect
+INFO:     172.18.0.1:49064 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:49078 - "GET /estado HTTP/1.1" 200 OK
+### intentos de salida / DNS en logs
+0
+### logs db (errores)

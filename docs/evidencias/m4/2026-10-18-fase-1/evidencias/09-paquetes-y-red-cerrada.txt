@@ -1,0 +1,15 @@
+containerd.io 2.4.2-2~debian.12~bookworm
+docker-buildx-plugin 0.38.0-1~debian.12~bookworm
+docker-ce 5:29.8.2-1~debian.12~bookworm
+docker-ce-cli 5:29.8.2-1~debian.12~bookworm
+docker-compose-plugin 5.6.0-1~debian.12~bookworm
+git 1:2.39.5-0+deb12u3
+python3 3.11.2-1+b1
+
+--- red cerrada (restrict=on):
+000
+curl: (6) Could not resolve host: pypi.org
+sin DNS externo
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+enp0s1           UP             10.0.2.15/24 metric 100 fec0::5054:ff:fe12:3456/64 fe80::5054:ff:fe12:3456/64 
+docker0          DOWN           172.17.0.1/16 

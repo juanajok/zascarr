@@ -1,0 +1,32 @@
+
+====================================
+  ZascArr — Instalador
+====================================
+
+→ Preparando /opt/zascarr...
+→ Descargando ZascArr...
+✓ Continuando la instalación...
+⚠  Sin terminal para las preguntas interactivas: usaré los valores por defecto.
+
+====================================
+  ZascArr — Bootstrap
+====================================
+
+→ Comprobando que el demonio de Docker está en marcha...
+Configuración inicial (pulsa Intro para aceptar el valor por defecto)
+
+→ Comprobando las rutas efectivas (siguiendo symlinks)...
+Rutas efectivas (con los symlinks ya resueltos):
+  biblioteca:      /media/library
+  descargas:       /media/data
+  aMule (entrada): /media/data
+
+  Sin solapamiento.
+→ Sin terminal interactiva: no pregunto por la red. Mantengo: solo esta máquina.
+✓ Biblioteca: /media/library
+✓ Descargas:  /media/data
+✓ Idioma:     es
+→ Creando estructura de directorios...
+✓ Directorios creados en /media/library
+→ Validando .env...
+✗ DB_PASSWORD tiene el valor por defecto. Edita /opt/zascarr/.env y pon una contraseña segura.

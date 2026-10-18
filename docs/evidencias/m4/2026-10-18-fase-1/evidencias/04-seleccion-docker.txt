@@ -1,0 +1,7 @@
+Seleccion (registrada ANTES de instalar), repositorio APT oficial de Docker (bookworm/stable, amd64):
+docker-ce                5:29.8.2-1~debian.12~bookworm   (autorizado)
+docker-ce-cli            5:29.8.2-1~debian.12~bookworm   (misma version que el Engine)
+containerd.io            2.4.2-2~debian.12~bookworm      (ultima del repositorio)
+docker-buildx-plugin     0.38.0-1~debian.12~bookworm     (ultima del repositorio)
+docker-compose-plugin    5.6.0-1~debian.12~bookworm      (ultima del repositorio)
+Huella de la clave del repositorio: 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88 (coincide con la publicada por Docker)
