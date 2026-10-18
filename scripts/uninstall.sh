@@ -66,6 +66,11 @@ docker compose version >/dev/null 2>&1 || die \
 [[ -f "${COMPOSE_FILE}" ]] || die \
     "No encuentro ${COMPOSE_FILE}. ¿Estás dentro del repo (scripts/uninstall.sh, no suelto)?"
 
+# Un .env que EXISTE pero no se puede leer (600 de root y no somos root) NO es un .env ausente: leerlo «a mano» más abajo
+# devolvería vacío y el script trabajaría con los valores por defecto del compose —rutas que quizá no son las tuyas—. Se
+# corta aquí, antes de preguntar ni tocar nada (ADR 0012).
+comprobar_env_legible
+
 # A diferencia de update.sh/backup.sh, un .env ausente no es motivo para
 # abortar: es exactamente el estado en el que puede estar una instalación
 # que ya falló a medias o que alguien ya empezó a desmontar a mano. Se

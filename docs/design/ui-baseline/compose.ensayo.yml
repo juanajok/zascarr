@@ -8,6 +8,10 @@
 name: zascarr-uibase
 
 services:
+  # Servicio de un solo uso que rechaza una DB_PASSWORD ausente o de ejemplo (ADR 0012). En el compose del proyecto no
+  # lleva `container_name` (para no chocar entre proyectos); `ensayo.sh` exige uno de ensayo en TODOS los servicios.
+  credenciales:
+    container_name: zascarr-uibase-credenciales
   postgres:
     container_name: zascarr-uibase-db
     ports: !reset []

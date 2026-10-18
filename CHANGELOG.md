@@ -5,7 +5,34 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Seguridad
+
+- **La contraseña de la base de datos ya no hay que ponerla a mano ni puede ser una conocida** ([ADR 0012](docs/adr/0012-credenciales-del-env.md)).
+  Una instalación nueva **ya no se detiene** pidiéndote editar el `.env`: el instalador genera una contraseña propia
+  (aleatoria, sin mostrarla) y la guarda antes de crear la base de datos. Si vuelves a ejecutarlo la conserva; si ya existía
+  una base de datos y no encuentra su contraseña, **se detiene sin cambiar nada** y te dice cómo recuperarte (no inventa otra,
+  que la dejaría inaccesible). Docker Compose se niega a crear PostgreSQL con una contraseña ausente, vacía o de ejemplo
+  —se acabó el antiguo valor por defecto publicado en el repositorio— y la aplicación no abre ninguna conexión con una conocida.
+- **El `.env` ya no lo lee ni lo cambia cualquiera.** Queda como `root`, modo 600; la carpeta que lo contiene y el repo
+  (compose, Dockerfile, scripts y el enlace `.env`) también son de `root`: el usuario de servicio, que comparte identidad
+  con Sonarr/Prowlarr/Transmission, ya no puede leerlo, editarlo, borrarlo, reemplazarlo ni redirigir su enlace. Una carpeta
+  compartida (un home, o una ruta que otra cuenta pueda cambiar: un antecesor suyo, un enlace) no se reclama y **el instalador se
+  detiene sin escribir nada** y dice cómo salir (instalar en `/opt/zascarr`): antes avisaba y seguía. La protección va **antes**
+  de escribir: la contraseña nueva nunca vive en un fichero abierto (un `.env` heredado en 644 se cierra antes, y el temporal ya
+  nace 600 de root sin heredar el modo del original) y, si no se consigue el propietario o los permisos, no se sigue. Los comandos
+  manuales de `docker compose`, `backup.sh`, `etiquetar.sh` y `uninstall.sh` piden `sudo` en español si no pueden leer el `.env`
+  (un `.env` ilegible ya no se confunde con uno ausente). La ubicación se examina con la ruta REAL (un salto de línea en el nombre de
+  una carpeta ya no hace que se compruebe otra) y las rutas con saltos de línea se rechazan. La misma regla decide si una contraseña «no vale» en el instalador,
+  en Compose y en la aplicación (la contraseña personal `change me` ya no se rechaza como `changeme`), y sin contraseña solo se
+  acepta el socket Unix local.
+  Para endurecer una instalación existente sin cambiar su contraseña: `sudo bash scripts/credenciales.sh`.
+- Escribir el `.env` es **atómico** (un fallo lo deja como estaba, sin temporales ni copias de la contraseña) y `update.sh`
+  comprueba la contraseña **antes** de hacer el backup o traer código.
+
 ### Añadido
+
+- `scripts/credenciales.sh` (`iniciar` / `comprobar`): inicialización explícita para la instalación manual y comprobación sin
+  mostrar valores.
 
 - **Crear una serie a mano, sin fuentes** (#189). Desde «Descubrir» («Crear la serie a mano») y desde el asistente de una
   carpeta puedes dar de alta una serie escribiendo solo el **título**, la **tradición** (la eliges tú) y, si quieres, el

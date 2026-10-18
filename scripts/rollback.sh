@@ -81,7 +81,7 @@ interrumpido() {
     die "Interrumpido en la fase: ${FASE}.
   NO arranques ZascArr todavía. Estado de la base de datos: puede estar a medias.
   Copia de la BD anterior: ${SEGURIDAD:-no llegó a crearse}.
-  Revisa los contenedores con: docker compose -f ${COMPOSE_FILE} ps"
+  Revisa los contenedores con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} ps"
 }
 trap interrumpido INT TERM
 
@@ -248,7 +248,7 @@ esperar_postgres 60 || die "PostgreSQL no responde tras 60s. Nada se ha tocado."
 info "Copia de seguridad de la BD actual (red de seguridad del rollback)..."
 volcar_postgres "${SEGURIDAD}" || die \
     "No pude respaldar la base de datos actual. NO sigo: sin red de seguridad, un
-  dump equivocado sería irreversible. Revisa: docker compose -f ${COMPOSE_FILE} logs postgres"
+  dump equivocado sería irreversible. Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 success "Copia de la BD actual: ${SEGURIDAD}"
 
 LOG="${BACKUP_DIR}/rollback_${TS}.log"
@@ -269,12 +269,12 @@ info "Eliminando la base de datos actual..."
 "${COMPOSE[@]}" exec -T postgres dropdb -U "${DB_USER}" --if-exists --force "${DB_NAME}" || die \
     "No pude eliminar ${DB_NAME}. La BD sigue intacta y el código NO se ha tocado.
   Copia de seguridad: ${SEGURIDAD}
-  Revisa: docker compose -f ${COMPOSE_FILE} logs postgres"
+  Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 
 info "Creando base de datos vacía..."
 "${COMPOSE[@]}" exec -T postgres createdb -U "${DB_USER}" "${DB_NAME}" || die \
     "No pude crear ${DB_NAME} vacía. La copia de la BD anterior está en ${SEGURIDAD}.
-  Revisa: docker compose -f ${COMPOSE_FILE} logs postgres"
+  Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 
 info "Restaurando ${DUMP}..."
 info "El detalle queda en ${LOG}"
@@ -285,7 +285,7 @@ if ! gunzip -c "${DUMP}" | "${COMPOSE[@]}" exec -T postgres \
     die "La restauración falló (mira ${LOG}). La BD puede estar a medias.
   La copia de la BD anterior está en: ${SEGURIDAD}
   NO arranques ZascArr hasta restaurarla:
-    gunzip -c ${SEGURIDAD} | docker compose -f ${COMPOSE_FILE} exec -T postgres psql -q -v ON_ERROR_STOP=1 -U ${DB_USER} -d ${DB_NAME}"
+    gunzip -c ${SEGURIDAD} | sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} exec -T postgres psql -q -v ON_ERROR_STOP=1 -U ${DB_USER} -d ${DB_NAME}"
 fi
 success "Base de datos restaurada"
 
@@ -343,17 +343,17 @@ FASE="arranque del servicio"
 info "Reconstruyendo la imagen (puede tardar varios minutos en una Pi)..."
 "${COMPOSE[@]}" build zascarr || die \
     "Falló la construcción de la imagen. La BD ya está restaurada y el código en ${TARGET_SHA:0:7}.
-  Reintenta: docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
+  Reintenta: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
 
 info "Arrancando ZascArr..."
 "${COMPOSE[@]}" up -d --remove-orphans zascarr || die \
-    "No pude arrancar ZascArr. Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr"
+    "No pude arrancar ZascArr. Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr"
 
 info "Verificando healthcheck (${HEALTH_URL})..."
 esperar_healthcheck "${HEALTH_TIMEOUT}" || die \
     "ZascArr no responde tras ${HEALTH_TIMEOUT}s.
   La BD ya está restaurada y el código en ${TARGET_SHA:0:7}, pero el servicio no arranca.
-  Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr"
+  Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr"
 
 # La referencia de rescate de update (REF_USADA) se CONSERVA a propósito:
 # mientras siga ahí, el commit destino seguirá siendo el actual y un rollback
@@ -379,9 +379,9 @@ fi
 echo "  Ancla para deshacer este rollback: ${RESCATE_REF}"
 echo ""
 echo "  Si quieres volver a la versión que has revertido:"
-echo "    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} stop zascarr"
-echo "    gunzip -c ${SEGURIDAD} | docker compose -f ${COMPOSE_FILE} exec -T postgres psql -q -v ON_ERROR_STOP=1 -U ${DB_USER} -d ${DB_NAME}"
+echo "    sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} stop zascarr"
+echo "    gunzip -c ${SEGURIDAD} | sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} exec -T postgres psql -q -v ON_ERROR_STOP=1 -U ${DB_USER} -d ${DB_NAME}"
 echo "    git -C ${REPO_DIR} reset --hard ${RESCATE_REF}"
-echo "    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
-echo "    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d zascarr"
+echo "    sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
+echo "    sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d zascarr"
 echo ""

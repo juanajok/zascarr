@@ -161,8 +161,9 @@ preparar() {
     mkdir -p "${DATOS}"/data/{postgres,covers,vpn-state} "${DATOS}/lib" "${DATOS}/dl"
     : > "${DATOS}/.ui-baseline"
     : > "${DATOS}/lib/.ui-baseline"          # lo exige sembrar.py dentro del contenedor
-    cat > "${DATOS}/.env" <<ENV
-DB_PASSWORD=linea_base_local_no_usar
+    # Contraseña propia de este ensayo (aleatoria, no se imprime): Compose rechaza las de ejemplo (ADR 0012).
+    (umask 077; printf 'DB_PASSWORD=%s\n' "$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')" > "${DATOS}/.env")
+    cat >> "${DATOS}/.env" <<ENV
 ZASCARR_DATA_DIR=${DATOS}/data
 HOST_LIBRARY_DIR=${DATOS}/lib
 HOST_DOWNLOADS_DIR=${DATOS}/dl
