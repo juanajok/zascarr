@@ -6,11 +6,19 @@
 #
 # Qué garantiza y con qué límites (lo que el guion presenta como garantizado):
 #
-#   · Presupuesto de descarga: `con_limite_de_descarga` MIDE mientras el comando trabaja (bytes recibidos por la interfaz, cada
-#     INTERVALO_S segundos) y lo CORTA —señal al grupo de procesos entero, KILL si no cede— al alcanzar el UMBRAL DE CORTE
-#     (= tope − margen). El exceso posible es el que entra entre dos muestras: ≤ velocidad máxima × INTERVALO_S. Con el margen por
-#     defecto (100 MiB) el tope se respeta mientras la velocidad no pase de 100 MiB/s con muestras de 1 s; si algún día lo
-#     pasara, el exceso se mide y se informa, pero no se llama «tope duro» a lo que es un corte con margen acotado.
+#   · Presupuesto de descarga, en DOS capas:
+#       1. TOPE EN EL NÚCLEO (`instalar_tope_de_red`, regla de nftables en la VM): cuenta los bytes recibidos por la interfaz
+#          (salvo el SSH de control) y DESCARTA todo lo que llegue por encima del tope. No depende de que ningún proceso
+#          coopere ni de cuándo se tome una muestra: el exceso posible es UN paquete (≈ 1,5 KB) más la diferencia entre lo que
+#          cuenta nftables (capa 3) y `rx_bytes` (capa 2, +14 B por paquete ≈ 1 %); por eso la cuota se fija al 98 % del tope.
+#          Se comprobó de forma funcional en un espacio de nombres de red real (tests/test_ensayo_f1bis_arnes.py).
+#       2. VIGILANTE (`con_limite_de_descarga`): mide cada INTERVALO_S segundos y, al llegar al UMBRAL DE CORTE (tope − margen),
+#          CORTA LA RED (`cortar_red`: descarta todo salvo el SSH, al instante) y termina el grupo de procesos entero
+#          (TERM, KILL) COMPROBANDO que no queda NINGÚN miembro del grupo vivo —no solo el líder—; si queda alguno, devuelve 5.
+#          Cortar la red primero es lo que garantiza el tope aunque el comando sea un CLIENTE de otro proceso: `docker build`
+#          lo es (BuildKit ejecuta la construcción en el servicio), y matar el cliente no prueba que el constructor haya dejado
+#          de descargar. Aquí no se supone que lo haga: deja de poder recibir. El constructor puede seguir trabajando sin red
+#          hasta que sus pasos fallen por tiempo de espera; eso no gasta descarga.
 #     Unidad: MiB (1 MiB = 1.048.576 bytes) en todo.
 #   · Almacenamiento y espacio libre del anfitrión: `vigilante_anfitrion` los mide cada pocos segundos mientras la VM trabaja y
 #     PARA la VM propia al cruzar un límite (el crecimiento posible entre muestras es el de un disco: se declara en el guion).
@@ -90,6 +98,57 @@ parar_vm_propia() {
     return 0
 }
 
+# ahora: segundos desde la época (gancho: las pruebas lo sustituyen por un reloj manejable).
+ahora() { date +%s; }
+
+# miembros_vivos_del_grupo PGID → PIDs de los procesos del grupo que NO son zombis (todos, no solo el líder).
+miembros_vivos_del_grupo() {
+    local pgid="$1" f resto estado ppid pgrp _r
+    for f in /proc/[0-9]*/stat; do
+        [[ -r "${f}" ]] || continue
+        resto="$(sed 's/^.*) //' "${f}" 2>/dev/null)" || continue          # tras el nombre: estado ppid pgrp …
+        read -r estado ppid pgrp _r <<<"${resto}"
+        [[ "${pgrp:-}" == "${pgid}" && "${estado:-Z}" != "Z" ]] && { f="${f#/proc/}"; echo "${f%%/*}"; }
+    done
+    return 0
+}
+
+# esperar_grupo_vacio PGID SEGUNDOS
+esperar_grupo_vacio() {
+    local pgid="$1" limite="$2" t=0
+    while [[ -n "$(miembros_vivos_del_grupo "${pgid}")" ]]; do
+        (( t >= limite )) && return 1
+        sleep 1; t=$((t + 1))
+    done
+    return 0
+}
+
+# cortar_red: gancho. vm-preparar.sh lo redefine con nftables; por defecto no hace nada.
+cortar_red() { :; }
+
+# instalar_tope_de_red TOPE_MIB INTERFAZ: tope en el núcleo (ver la cabecera). Todo lo que entre por INTERFAZ salvo el SSH de
+# control (tcp/22) cuenta; por encima del 98 % del tope se descarta. Verifica que la regla quedó cargada.
+instalar_tope_de_red() {
+    local tope="$1" iface="$2" cuota
+    cuota=$(( tope * 98 / 100 ))
+    nft -f - <<REGLAS || return 1
+table inet f1bis {
+  chain entrada {
+    type filter hook prerouting priority -300; policy accept;
+    iifname "${iface}" tcp dport 22 accept
+    iifname "${iface}" quota over ${cuota} mbytes drop
+  }
+}
+REGLAS
+    nft list chain inet f1bis entrada | grep -q "quota over ${cuota} mbytes" || return 1
+    echo "tope en el núcleo: ${cuota} MiB (98 % de ${tope} MiB) en ${iface}, SSH exceptuado"
+}
+
+# cortar_red_nft INTERFAZ: descarta TODO lo que entre por INTERFAZ salvo el SSH (la regla del SSH va antes).
+cortar_red_nft() {
+    nft add rule inet f1bis entrada iifname "$1" drop
+}
+
 # contador_rx_bytes: bytes recibidos por la interfaz de la VM (gancho: las pruebas lo sustituyen).
 contador_rx_bytes() {
     local i
@@ -98,9 +157,10 @@ contador_rx_bytes() {
 }
 
 # con_limite_de_descarga TOPE_MIB MARGEN_MIB -- COMANDO…
-#   Ejecuta COMANDO (en su propio grupo de procesos) y lo corta al llegar a TOPE−MARGEN MiB recibidos desde RX_BASE_BYTES (por
-#   defecto, desde ahora). Devuelve el código del comando, o 4 si lo cortó por el presupuesto (y deja dicho cuánto se había
-#   consumido y cuánto se consumió en total tras el corte: el exceso real, medido).
+#   Ejecuta COMANDO (en su propio grupo de procesos) y, al llegar a TOPE−MARGEN MiB recibidos desde RX_BASE_BYTES (por defecto,
+#   desde ahora): 1) CORTA LA RED (`cortar_red`), 2) termina el grupo ENTERO (TERM; KILL si algún miembro lo ignora) y 3)
+#   COMPRUEBA que no queda ningún miembro vivo. Devuelve el código del comando; 4 si lo cortó por el presupuesto; 5 si lo cortó
+#   pero ALGÚN miembro del grupo sigue vivo (un líder que muere con TERM no prueba que haya terminado el grupo).
 con_limite_de_descarga() {
     local tope="$1" margen="$2" pid base consumido corte
     shift 3
@@ -111,12 +171,19 @@ con_limite_de_descarga() {
     while proceso_vivo "${pid}"; do
         consumido=$(( ($(contador_rx_bytes) - base) / 1048576 ))
         if (( consumido >= corte )); then
-            echo "DESCARGA: ${consumido} MiB ≥ umbral de corte ${corte} MiB (tope ${tope} MiB − margen ${margen} MiB): SE CORTA" >&2
+            echo "DESCARGA: ${consumido} MiB ≥ umbral de corte ${corte} MiB (tope ${tope} MiB − margen ${margen} MiB): SE CORTA LA RED Y EL COMANDO" >&2
+            cortar_red || echo "DESCARGA: AVISO: no se pudo cortar la red" >&2
             kill -TERM -- "-${pid}" 2>/dev/null || true
-            esperar_muerte "${pid}" 5 || kill -KILL -- "-${pid}" 2>/dev/null || true
-            esperar_muerte "${pid}" 5 || true
-            wait "${pid}" 2>/dev/null || true
+            if ! esperar_grupo_vacio "${pid}" "${ESPERA_TERM_S:-5}"; then
+                kill -KILL -- "-${pid}" 2>/dev/null || true
+                esperar_grupo_vacio "${pid}" "${ESPERA_KILL_S:-5}" || true
+            fi
+            proceso_vivo "${pid}" || wait "${pid}" 2>/dev/null || true       # solo se espera a un líder ya muerto: `wait` no puede colgar el corte
             echo "DESCARGA: consumo tras el corte: $(( ($(contador_rx_bytes) - base) / 1048576 )) MiB (tope ${tope} MiB)" >&2
+            if [[ -n "$(miembros_vivos_del_grupo "${pid}")" ]]; then
+                echo "DESCARGA: ATENCIÓN: siguen vivos miembros del grupo ${pid}: $(miembros_vivos_del_grupo "${pid}" | tr '\n' ' ')" >&2
+                return 5
+            fi
             return 4
         fi
         sleep "${INTERVALO_S:-1}"
