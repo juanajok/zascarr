@@ -72,6 +72,19 @@ rutas de usuario) sobre el paquete y sobre las diferencias añadidas por cada co
 - Si se decidiera retirar o redactar algo, la copia resultante dejaría de ser idéntica al original: habría que **recalcular su hash** y dejar nota de la
   redacción en este README.
 
+## Notas de lectura (fechadas; no modifican los originales ni sus hashes)
+
+**2026-10-18, a raíz de la revisión de #240.** Dos afirmaciones de `INFORME.md` §7 se leen con este alcance. Se dejan aquí, aparte, y el informe y la
+evidencia 18 quedan **tal como están**:
+
+1. **«Sin ACL»** se dedujo de la ausencia del indicador `+` en la salida de `ls -l` (ev. 18, sección «ACL»). **No se inspeccionó con `getfacl`**: no
+   estaba instalado y no se instaló. Es una deducción razonable, no una comprobación directa.
+2. **«El secreto no está incorporado a la imagen»** se apoya en que `/app/.env` es un enlace que no se resuelve dentro del contenedor y en que los
+   contenedores no montan el `.env` (ev. 18). Acredita eso sobre **esa ruta**; **no se revisaron todas las capas de la imagen** ni otras rutas dentro de
+   ella.
+
+Ambas proceden del informe de la fase 1 y esta nota no las cambia: acota lo que cada una permite afirmar.
+
 ## Reglas
 
 Los resultados históricos no se reescriben; una aclaración posterior va como **nota o errata fechada y enlazada**, aparte.
