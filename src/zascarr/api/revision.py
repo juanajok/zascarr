@@ -69,6 +69,7 @@ from zascarr.services.vinculacion import (
 from zascarr.services.vinculacion import SerieYaNoExisteError as SerieDeVinculacionYaNoExisteError
 from zascarr.services.vinculacion import TokenInvalidoError as TokenDeVinculacionInvalidoError
 from zascarr.services.vinculacion_previa import (
+    LIMITE_CURSOR,
     ArchivoAjenoError,
     CursorNoValidoError,
     NumeroNoValidoError,
@@ -310,7 +311,7 @@ class PeticionPrevisualizarVinculacion(BaseModel):
     #: ids de archivo que la persona ha marcado. Vacío al principio.
     marcados: list[UUID] = Field(default_factory=list, max_length=1000)
     #: Posición de la página (el `siguiente` de la respuesta anterior). Sin cursor: la primera página.
-    cursor: str | None = Field(default=None, max_length=2000)
+    cursor: str | None = Field(default=None, max_length=LIMITE_CURSOR)
 
 
 @router.post("/vinculacion/previsualizar", response_model=RespuestaVinculacion)
