@@ -1,0 +1,197 @@
+
+====================================
+  ZascArr — Bootstrap
+====================================
+
+→ Comprobando que el demonio de Docker está en marcha...
+Configuración inicial (pulsa Intro para aceptar el valor por defecto)
+
+→ Comprobando las rutas efectivas (siguiendo symlinks)...
+Rutas efectivas (con los symlinks ya resueltos):
+  biblioteca:      /media/library
+  descargas:       /media/data
+  aMule (entrada): /media/data
+
+  Sin solapamiento.
+→ Sin terminal interactiva: no pregunto por la red. Mantengo: solo esta máquina.
+✓ Biblioteca: /media/library
+✓ Descargas:  /media/data
+✓ Idioma:     es
+→ Creando estructura de directorios...
+✓ Directorios creados en /media/library
+→ Validando .env...
+✓ .env válido
+→ Levantando PostgreSQL...
+ Network zascarr_zascarr-internal Creating 
+ Network zascarr_zascarr-internal Creating 
+ Network zascarr_zascarr-internal Created 
+ Network zascarr_zascarr-internal Created 
+ Container zascarr-db Creating 
+ Container zascarr-db Created 
+ Container zascarr-db Starting 
+ Container zascarr-db Started 
+→ Esperando a PostgreSQL...
+.
+✓ PostgreSQL listo
+→ Construyendo la imagen de ZascArr...
+ Image zascarr-zascarr Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 496B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 2.59kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/python:3.11-slim-bookworm
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [builder 1/6] FROM docker.io/library/python:3.11-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
+#5 resolve docker.io/library/python:3.11-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89 0.0s done
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 49.23MB 0.4s done
+#6 DONE 0.4s
+
+#7 [builder 3/6] WORKDIR /build
+#7 CACHED
+
+#8 [builder 6/6] RUN pip install --no-cache-dir --prefix=/install .
+#8 CACHED
+
+#9 [runtime 2/8] RUN apt-get update && apt-get install -y --no-install-recommends         libpq5 libxml2 libxslt1.1 tini     && rm -rf /var/lib/apt/lists/*
+#9 CACHED
+
+#10 [builder 4/6] COPY pyproject.toml .
+#10 CACHED
+
+#11 [runtime 3/8] RUN groupadd -g 1000 zascarr &&     useradd -u 1000 -g zascarr -m -s /bin/bash zascarr
+#11 CACHED
+
+#12 [builder 5/6] COPY src ./src
+#12 CACHED
+
+#13 [runtime 4/8] COPY --from=builder /install /usr/local
+#13 CACHED
+
+#14 [builder 2/6] RUN apt-get update && apt-get install -y --no-install-recommends         build-essential libpq-dev libxml2-dev libxslt-dev     && rm -rf /var/lib/apt/lists/*
+#14 CACHED
+
+#15 [runtime 5/8] WORKDIR /app
+#15 CACHED
+
+#16 [runtime 6/8] COPY --chown=zascarr:zascarr . .
+#16 DONE 0.2s
+
+#17 [runtime 7/8] COPY docker-entrypoint.sh /entrypoint.sh
+#17 DONE 0.0s
+
+#18 [runtime 8/8] RUN chmod +x /entrypoint.sh
+#18 DONE 0.2s
+
+#19 exporting to image
+#19 exporting layers
+#19 exporting layers 1.8s done
+#19 exporting manifest sha256:d37112fb776cc0ba4ea7d6859cd674fec7a500db407deabbd2e1835660a78134 0.0s done
+#19 exporting config sha256:7f9f16348a7dec036a002a852378e96c5c7cb3e73fbb51bbcbf9849b1c077c27 0.0s done
+#19 exporting attestation manifest sha256:8857f16954fb87e123a3be898dbf9cf22fd64a5b496fccfbaa12a8a524ba747f 0.0s done
+#19 exporting manifest list sha256:d99fd7ac91ed259223c7401c329b36effbbedd6ba2cd508d0a91ed036e0870db 0.0s done
+#19 naming to docker.io/library/zascarr-zascarr:latest
+#19 naming to docker.io/library/zascarr-zascarr:latest done
+#19 unpacking to docker.io/library/zascarr-zascarr:latest
+#19 unpacking to docker.io/library/zascarr-zascarr:latest 0.4s done
+#19 DONE 2.4s
+
+#20 resolving provenance for metadata file
+#20 DONE 0.0s
+ Image zascarr-zascarr Built 
+→ Corriendo migraciones Alembic (dentro del contenedor)...
+ Container zascarr-db Running 
+ Container zascarr-db Waiting 
+ Container zascarr-db Healthy 
+ Container zascarr-zascarr-run-5159285673e8 Creating 
+ Container zascarr-zascarr-run-5159285673e8 Created 
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Initial schema — Tebeoteca Digital v1.3.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add import_runs — historial de ciclos de Importer.scan_and_import() (B1/B3).
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Add series.anilist_id — enricher B4: fuente AniList para manga/manhwa/manhua.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add series.tebeosfera_slug — enricher B4: fuente Tebeosfera para tebeo/BD en español.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add files.review_dismissed — bandeja de pendientes (B2).
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Matcher metadata fixes — peer review v2 (H1 + H2 + H3).
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Wishlist.download_ref/download_backend — D1 (orquestador).
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, legal_acknowledgment — blindaje legal.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, fix_title_norm_search_path — restauración de pg_dump rompía f_title_norm.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add series.gcd_id — C0: descubrimiento vía Grand Comics Database.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, runtime_settings — D11: ajustes de integraciones editables desde la UI.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, local_aliases — B13: alias local de nombre de archivo aprendido de
+asignaciones manuales en Pendientes.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Wishlist.last_error — D9: por qué una búsqueda no avanza.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, File.is_missing/missing_since + ImportRun.disappeared_count — B7: un
+tebeo borrado a mano del disco deja de contar como "lo tienes".
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, D8 — política de búsqueda por serie: `Series.wishlist_policy`,
+`Wishlist.origen`/`numero` y el estado `retirado`.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Integridad — `File.original_sha256`: el hash del fichero tal como se importó.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, V6a — `asignacion_operaciones`: la operación de asignar un archivo, recuperable (ADR 0006).
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, 2b — `alta_operaciones`: el comprobante de una operación de alta de serie (rebanada 2b).
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, 2d — `vinculacion_operaciones`: el informe INMUTABLE de una vinculación en su sitio (rebanada 2d).
+✓ Migraciones aplicadas
+→ Levantando ZascArr...
+ Container zascarr-db Running 
+ Container zascarr-orquestador Creating 
+ Container zascarr-orquestador Created 
+ Container zascarr-db Waiting 
+ Container zascarr-db Healthy 
+ Container zascarr-orquestador Starting 
+ Container zascarr-orquestador Started 
+→ Verificando healthcheck...
+..
+
+Estado del sistema:
+{
+    "status": "degraded",
+    "version": "1.15.1",
+    "checks": {
+        "database": "ok",
+        "transmission": "unreachable",
+        "amule": "unreachable",
+        "vpn": "unknown"
+    },
+    "fuentes": {
+        "comic_vine": "enabled",
+        "anilist": "enabled",
+        "tebeosfera": "enabled",
+        "gcd": "enabled"
+    },
+    "seguridad": {
+        "exposicion": "local",
+        "contrasena": false,
+        "atencion": false
+    },
+    "warnings": {
+        "vpn": "fichero /run/vpn-state/wg0.json ausente \u2014 el host a\u00fan no ha escrito el estado (o el timer no corre)"
+    }
+}
+
+====================================
+  Bootstrap completado
+====================================
+
+  ZascArr:      http://127.0.0.1:8000  (E1: estado del sistema, en español)
+  Configuración efectiva: exposición=local, contraseña=no
+  Solo se puede entrar desde esta máquina. Para usarlo desde el móvil o la
+  tablet, vuelve a ejecutar este instalador y elige la opción 2.
+  API (para curiosos): http://127.0.0.1:8000/api/docs
+  Kavita:           http://127.0.0.1:5000  (si está instalado)
+  Prowlarr:         http://127.0.0.1:9696  (si está instalado)
+
+  Logs en tiempo real:
+    docker compose -f /opt/zascarr/zascarr/docker-compose.yml logs -f zascarr
+
+⚠  Kavita no detectado en :5000. Instala con:
+  sudo bash /opt/zascarr/zascarr/scripts/kavita.sh install
