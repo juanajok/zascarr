@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # =============================================================================
-# vm-preparar.sh — M4 · Fase 1 bis (#121). Se ejecuta DENTRO de la VM, como root. ÚNICA fase con red abierta.
+# vm-preparar.sh — M4 · Fase 1 bis (#121). Se ejecuta DENTRO de la VM, como root. Única fase con salida: SOLO por el proxy con presupuesto del anfitrión.
 #
-#     sudo env CANDIDATO=<sha> DIGEST_POSTGRES=sha256:… DIGEST_PYTHON=sha256:… bash vm-preparar.sh
+#     sudo env PROXY=http://10.0.2.100:3128 CANDIDATO=<sha> DIGEST_POSTGRES=sha256:… DIGEST_PYTHON=sha256:… bash vm-preparar.sh
 #
 # Qué hace (y nada más):
 #   1. Comprueba que el punto de partida está limpio (sin instalación del producto).
 #   2. Pone el espejo local de Git con main = candidato (desde /tmp/candidato.bundle) y comprueba su configuración.
 #   3. Comprueba que las dos imágenes base siguen siendo las de la fase 1 (por digest). NO descarga imágenes.
-#   4. Instala el TOPE DE DESCARGA EN EL NÚCLEO (nftables; si no se puede, aborta ANTES de descargar) y construye UNA vez la imagen del
-#      candidato desde el espejo (descarga paquetes de Debian y de PyPI), bajo el vigilante que corta la red y el grupo de procesos: deja las capas en
+#   4. Comprueba el proxy con presupuesto del anfitrión (única salida de la VM) y construye UNA vez la imagen del candidato desde el espejo
+#      (descarga paquetes de Debian y de PyPI POR el proxy): deja las capas en
 #      caché para que el bootstrap.sh de la ejecución, SIN red, pueda construir. Eso NO acredita una construcción en frío.
 #   5. Verifica la biblioteca sintética, el usuario ordinario sin privilegios y que no hay ni rastro del producto.
 #   6. Informa de lo descargado (bytes recibidos por la VM) y aborta si supera el presupuesto.
@@ -68,11 +68,25 @@ done
 paso "4. construcción de la imagen del candidato (con red; llena la caché que usará la ejecución sin red)"
 rm -rf /tmp/prebuild && git clone -q https://github.com/juanajok/zascarr.git /tmp/prebuild
 [[ "$(git -C /tmp/prebuild rev-parse HEAD)" == "${CANDIDATO}" ]] || { echo "el clon no es el candidato"; exit 2; }
-# Tope EN EL NÚCLEO antes de abrir nada: lo que entre por encima del 98 % del tope se descarta, coopere o no el constructor. Y
-# `cortar_red` (que usa el vigilante al llegar al umbral) descarta todo salvo el SSH.
+# La VM NO tiene red directa: su única salida es el proxy con presupuesto del anfitrión (PROXY). Se comprueba ANTES de construir nada:
+#   · sin proxy no hay salida (control negativo);  · con proxy se llega a Debian;  · con proxy NO se llega a un destino fuera de la lista.
+# Si algo falla, se aborta SIN haber descargado nada de importancia (unos KB de cabeceras).
+PROXY="${PROXY:?falta PROXY (http://10.0.2.100:3128)}"
+if curl -sS -m 8 -o /dev/null https://deb.debian.org 2>/dev/null; then echo "HAY salida directa a Internet sin pasar por el proxy: no es lo previsto, se detiene"; exit 4; fi
+[[ "$(curl -sS -m 40 -o /dev/null -w '%{http_code}' -x "${PROXY}" -I http://deb.debian.org/debian/dists/bookworm/Release 2>/dev/null)" == "200" ]] \
+    || { echo "el proxy con presupuesto no deja llegar a deb.debian.org: se detiene (nada descargado)"; exit 4; }
+[[ "$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -x "${PROXY}" -I https://example.com 2>/dev/null)" =~ ^(403|000)$ ]] \
+    || { echo "el proxy deja llegar a un destino FUERA de la lista: se detiene"; exit 4; }
+echo "proxy comprobado: control negativo (sin proxy no hay salida), Debian alcanzable y un destino fuera de la lista rechazado"
+# El cliente de Docker reenvía estos valores como argumentos de construcción predefinidos (HTTP_PROXY/HTTPS_PROXY): `apt` y `pip` de
+# los pasos RUN salen por el proxy, que además resuelve los nombres (no hace falta DNS en la VM).
+install -d -m 0700 /root/.docker
+cat > /root/.docker/config.json <<JSON
+{"proxies": {"default": {"httpProxy": "${PROXY}", "httpsProxy": "${PROXY}", "noProxy": "localhost,127.0.0.1"}}}
+JSON
+# Segunda defensa, dentro del invitado: al umbral corta la red del invitado y termina el grupo de procesos entero.
 cortar_red() { cortar_red_nft "${IFACE}"; }
-instalar_tope_de_red "${LIMITE_MIB}" "${IFACE}" || { echo "NO se pudo instalar el tope de red en el núcleo: no se descarga nada"; exit 4; }
-# Construcción con red, bajo vigilancia: si la descarga llega al umbral de corte, se mata el grupo de procesos entero.
+# Construcción, bajo la vigilancia del invitado (el presupuesto autorizado lo hace cumplir el proxy del anfitrión): si la descarga llega al umbral de corte, se mata el grupo de procesos entero.
 ( cd /tmp/prebuild && con_limite_de_descarga "${LIMITE_MIB}" "${MARGEN_MIB}" -- docker build -q -t zascarr-prebuild:f1bis . ) | tee "${EV}/prebuild-imagen.txt"
 presupuesto
 docker run --rm --entrypoint pip zascarr-prebuild:f1bis freeze > "${EV}/pip-freeze.txt"

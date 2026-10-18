@@ -6,19 +6,15 @@
 #
 # Qué garantiza y con qué límites (lo que el guion presenta como garantizado):
 #
-#   · Presupuesto de descarga, en DOS capas:
-#       1. TOPE EN EL NÚCLEO (`instalar_tope_de_red`, regla de nftables en la VM): cuenta los bytes recibidos por la interfaz
-#          (salvo el SSH de control) y DESCARTA todo lo que llegue por encima del tope. No depende de que ningún proceso
-#          coopere ni de cuándo se tome una muestra: el exceso posible es UN paquete (≈ 1,5 KB) más la diferencia entre lo que
-#          cuenta nftables (capa 3) y `rx_bytes` (capa 2, +14 B por paquete ≈ 1 %); por eso la cuota se fija al 98 % del tope.
-#          Se comprobó de forma funcional en un espacio de nombres de red real (tests/test_ensayo_f1bis_arnes.py).
-#       2. VIGILANTE (`con_limite_de_descarga`): mide cada INTERVALO_S segundos y, al llegar al UMBRAL DE CORTE (tope − margen),
-#          CORTA LA RED (`cortar_red`: descarta todo salvo el SSH, al instante) y termina el grupo de procesos entero
-#          (TERM, KILL) COMPROBANDO que no queda NINGÚN miembro del grupo vivo —no solo el líder—; si queda alguno, devuelve 5.
-#          Cortar la red primero es lo que garantiza el tope aunque el comando sea un CLIENTE de otro proceso: `docker build`
-#          lo es (BuildKit ejecuta la construcción en el servicio), y matar el cliente no prueba que el constructor haya dejado
-#          de descargar. Aquí no se supone que lo haga: deja de poder recibir. El constructor puede seguir trabajando sin red
-#          hasta que sus pasos fallen por tiempo de espera; eso no gasta descarga.
+#   · Presupuesto de descarga: se mide y se hace cumplir en el ANFITRIÓN, no dentro de la VM. Un tope dentro del invitado (una cuota de nftables,
+#     el contador `rx_bytes`) no acota lo que se descarga de Internet: los paquetes descartados ya entraron por la interfaz y las
+#     retransmisiones siguen contando. Por eso la VM no tiene red directa (QEMU `restrict=on`) y su ÚNICA salida es `proxy-presupuesto.py`
+#     (por `guestfwd`), que cuenta los bytes que LLEGAN de Internet, solo deja pasar a una lista de destinos y CORTA al llegar a tope − margen.
+#     Exceso residual: lo que pueda estar en el búfer del núcleo de cada conexión de subida (SO_RCVBUF efectivo + un fragmento) × MAX_CONEXIONES;
+#     el proxy se niega a arrancar si su margen no lo cubre, y las pruebas lo MIDEN con un emisor independiente (`TCP_INFO.tcpi_bytes_acked`).
+#     `con_limite_de_descarga` (abajo) es un segundo mecanismo, dentro del invitado: mira el contador de su interfaz, y al llegar al umbral corta
+#     la red del invitado y termina el grupo de procesos del comando COMPROBANDO que no queda ningún miembro vivo (no solo el líder). Es una
+#     defensa adicional, NO la garantía del presupuesto.
 #     Unidad: MiB (1 MiB = 1.048.576 bytes) en todo.
 #   · Almacenamiento y espacio libre del anfitrión: `vigilante_anfitrion` los mide cada pocos segundos mientras la VM trabaja y
 #     PARA la VM propia al cruzar un límite (el crecimiento posible entre muestras es el de un disco: se declara en el guion).
@@ -126,27 +122,34 @@ esperar_grupo_vacio() {
 # cortar_red: gancho. vm-preparar.sh lo redefine con nftables; por defecto no hace nada.
 cortar_red() { :; }
 
-# instalar_tope_de_red TOPE_MIB INTERFAZ: tope en el núcleo (ver la cabecera). Todo lo que entre por INTERFAZ salvo el SSH de
-# control (tcp/22) cuenta; por encima del 98 % del tope se descarta. Verifica que la regla quedó cargada.
-instalar_tope_de_red() {
-    local tope="$1" iface="$2" cuota
-    cuota=$(( tope * 98 / 100 ))
-    nft -f - <<REGLAS || return 1
-table inet f1bis {
-  chain entrada {
-    type filter hook prerouting priority -300; policy accept;
-    iifname "${iface}" tcp dport 22 accept
-    iifname "${iface}" quota over ${cuota} mbytes drop
-  }
-}
-REGLAS
-    nft list chain inet f1bis entrada | grep -q "quota over ${cuota} mbytes" || return 1
-    echo "tope en el núcleo: ${cuota} MiB (98 % de ${tope} MiB) en ${iface}, SSH exceptuado"
+# cortar_red_nft INTERFAZ: descarta TODO lo que entre por INTERFAZ salvo el SSH de control. Es una defensa DENTRO del invitado: impide que
+# el comando siga recibiendo datos útiles, pero NO acota lo que el anfitrión descarga de Internet (los paquetes descartados ya entraron por
+# la interfaz y las retransmisiones siguen contando en `rx_bytes`); eso lo acota el proxy con presupuesto del anfitrión.
+cortar_red_nft() {
+    local iface="$1"
+    nft add table inet f1bis
+    nft add chain inet f1bis entrada '{ type filter hook prerouting priority -300 ; policy accept ; }'
+    nft add rule inet f1bis entrada iifname "${iface}" tcp dport 22 accept
+    nft add rule inet f1bis entrada iifname "${iface}" drop
 }
 
-# cortar_red_nft INTERFAZ: descarta TODO lo que entre por INTERFAZ salvo el SSH (la regla del SSH va antes).
-cortar_red_nft() {
-    nft add rule inet f1bis entrada iifname "$1" drop
+# parar_proxy_propio DIR PIDFILE: igual que la VM, solo se señala un proceso que es NUESTRO proxy (`proxy-presupuesto.py` con el fichero
+# de estado bajo DIR). 0: ya no existe · 1: sigue vivo · 3: el PID del fichero es de otro proceso.
+parar_proxy_propio() {
+    local dir="$1" pidfile="$2" pid args
+    [[ -f "${pidfile}" ]] || return 0
+    pid="$(tr -dc '0-9' < "${pidfile}")"
+    if [[ -z "${pid}" ]] || ! proceso_vivo "${pid}"; then rm -f "${pidfile}"; return 0; fi
+    args="$(tr '\0' '\n' < "/proc/${pid}/cmdline" 2>/dev/null)" || args=""
+    if ! grep -q 'proxy-presupuesto\.py$' <<<"${args}" || ! grep -qx -- "${dir}/proxy-estado.json" <<<"${args}"; then
+        echo "AVISO: el PID ${pid} de ${pidfile} no es el proxy de este ensayo: NO se toca." >&2
+        return 3
+    fi
+    kill -TERM "${pid}" 2>/dev/null || true
+    esperar_muerte "${pid}" "${ESPERA_PROXY_S:-5}" || { kill -KILL "${pid}" 2>/dev/null || true; esperar_muerte "${pid}" 5 || true; }
+    proceso_vivo "${pid}" && return 1
+    rm -f "${pidfile}"
+    return 0
 }
 
 # contador_rx_bytes: bytes recibidos por la interfaz de la VM (gancho: las pruebas lo sustituyen).

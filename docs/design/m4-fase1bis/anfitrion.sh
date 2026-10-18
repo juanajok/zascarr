@@ -12,7 +12,9 @@
 #   · Nada fuera de $DIR. Nunca se escribe en los discos de la fase 1 (se usan solo como base de solo lectura).
 #   · Sin carpetas compartidas, USB ni discos físicos; sin socket Docker del anfitrión; sin puente a la LAN: solo SSH en
 #     127.0.0.1:2222.
-#   · Red ABIERTA solo en `preparar`; `ejecutar` arranca con `restrict=on` (sin salida ni DNS).
+#   · La VM NUNCA tiene red directa (`restrict=on`, sin salida ni DNS). En `preparar` su única salida es el proxy con presupuesto del
+#     anfitrión (proxy-presupuesto.py): el presupuesto de descarga se mide y se corta AQUÍ, donde está la conexión a Internet.
+#     `ejecutar` no tiene ni eso.
 #   · Límites (HACIÉNDOSE CUMPLIR, no solo declarados; mecanismos y márgenes en lib-ensayo.sh): 2 vCPU · 4 GiB · disco de 20 GiB ·
 #     descarga ≤ $DESCARGA_MAX_MIB MiB (corte a $DESCARGA_MAX_MIB − $MARGEN_MIB MiB, medido mientras se descarga) · ≤ $ALMACEN_MAX_GB GiB en
 #     el anfitrión y ≥ $LIBRE_MIN_GB GiB libres (vigilados cada pocos segundos mientras la VM trabaja; al cruzarlos se PARA la VM) ·
@@ -34,13 +36,16 @@ CLAVE="${FASE1}/ensayo_key"
 SEED="${FASE1}/seed.iso"
 PUERTO="${PUERTO_SSH:-2222}"
 DESCARGA_MAX_MIB="${DESCARGA_MAX_MIB:-600}"
-MARGEN_MIB="${MARGEN_MIB:-100}"
+MARGEN_MIB="${MARGEN_MIB:-8}"                 # margen del proxy: debe cubrir el residual máximo (el proxy se niega a arrancar si no)
 ALMACEN_MAX_GB="${ALMACEN_MAX_GB:-25}"
 LIBRE_MIN_GB="${LIBRE_MIN_GB:-10}"
 VENTANA_PREP_MIN="${VENTANA_PREP_MIN:-45}"
 VENTANA_EJEC_MIN="${VENTANA_EJEC_MIN:-60}"
 MANIFIESTO="${AQUI}/MANIFIESTO-CANDIDATO.txt"
 PIDFILE="${DIR}/qemu.pid"
+PROXY_PIDFILE="${DIR}/proxy.pid"
+PROXY_ESTADO="${DIR}/proxy-estado.json"
+PROXY_PUERTO=""
 # shellcheck source=docs/design/m4-fase1bis/lib-ensayo.sh
 source "${AQUI}/lib-ensayo.sh"
 
@@ -157,14 +162,39 @@ ssh_remoto() {  # ssh_remoto SEGUNDOS ORDEN… : con límite de tiempo del clien
     timeout --kill-after=10 "${seg}" ssh "${SSH_ARGS[@]}" "$@"
 }
 solicitar_apagado() { ssh_remoto 20 'sudo sync; sudo systemctl poweroff' >/dev/null 2>&1 || true; }
-arrancar() {  # arrancar DISCO red(abierta|cerrada)
-    local red="user,id=n0,hostfwd=tcp:127.0.0.1:${PUERTO}-:22"
-    [[ "$2" == "cerrada" ]] && red="${red},restrict=on"
+arrancar() {  # arrancar DISCO proxy|cerrada
+    # `restrict=on` SIEMPRE: la VM no tiene red directa. En `preparar` (modo `proxy`) su única salida es el proxy con presupuesto del
+    # anfitrión, por una reenvío explícito (`guestfwd`, que `restrict=on` no afecta) a 10.0.2.100:3128; en `ejecutar` (modo `cerrada`) no hay ninguna.
+    local red="user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:${PUERTO}-:22"
+    [[ "$2" == "proxy" ]] && red="${red},guestfwd=tcp:10.0.2.100:3128-cmd:python3 ${AQUI}/relay-proxy.py ${PROXY_PUERTO}"
     qemu-system-x86_64 -name "${NOMBRE_VM}" -machine q35,accel=kvm -cpu host -smp 2 -m 4096 -nodefaults -display none \
         -serial "file:${DIR}/consola-$(basename "$1" .qcow2).log" -daemonize -pidfile "${PIDFILE}" \
         -drive "file=$1,if=virtio,format=qcow2,cache=writeback" \
         -drive "file=${SEED},if=virtio,format=raw,readonly=on,media=cdrom" \
         -netdev "${red}" -device virtio-net-pci,netdev=n0 -device virtio-rng-pci
+}
+iniciar_proxy() {
+    PROXY_PUERTO="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
+    setsid python3 "${AQUI}/proxy-presupuesto.py" --puerto "${PROXY_PUERTO}" --tope-mib "${DESCARGA_MAX_MIB}" --margen-mib "${MARGEN_MIB}" \
+        --estado "${PROXY_ESTADO}" --registro "${DIR}/proxy.log" > "${DIR}/proxy.salida" 2>&1 &
+    echo $! > "${PROXY_PIDFILE}"
+    local i; for i in $(seq 1 50); do
+        (exec 3<>"/dev/tcp/127.0.0.1/${PROXY_PUERTO}") 2>/dev/null && return 0
+        proceso_vivo "$(cat "${PROXY_PIDFILE}")" || { mal "el proxy con presupuesto no arrancó: $(cat "${DIR}/proxy.salida")"; return 1; }
+        sleep 0.2
+    done
+    return 1
+}
+# MiB que el proxy ha visto llegar de Internet (la medida AUTORIZADA del presupuesto), y si cortó.
+leer_estado_proxy() {  # → "MIB CORTADO"
+    python3 - "${PROXY_ESTADO}" <<'PY'
+import json, sys
+try:
+    e = json.load(open(sys.argv[1]))
+    print(int(e["recibido_bytes"] // 1048576), "1" if e["cortado"] else "0")
+except Exception:
+    print("-1 1")
+PY
 }
 esperar_ssh() {
     local i
@@ -192,6 +222,7 @@ limpiar() {
     [[ -n "${VIGILANTE_PID}" ]] && kill "${VIGILANTE_PID}" 2>/dev/null
     local j; for j in $(jobs -p); do kill "${j}" 2>/dev/null; done      # el comando remoto en segundo plano, si lo hubiera
     parar_vm_propia "${DIR}" "${PIDFILE}"; estado=$?
+    parar_proxy_propio "${DIR}" "${PROXY_PIDFILE}" || mal "el proxy con presupuesto no se pudo parar (PID $(cat "${PROXY_PIDFILE}" 2>/dev/null))"
     case ${estado} in
         0) cronologia "LIMPIEZA: no queda ninguna VM propia (comprobado) · rc=${rc}" ;;
         1) mal "LA VM PROPIA SIGUE VIVA tras TERM y KILL (PID $(cat "${PIDFILE}" 2>/dev/null)): hay que pararla a mano"; rc=${rc:-1}; [[ ${rc} -eq 0 ]] && rc=1 ;;
@@ -243,10 +274,13 @@ cmd_preparar() {
     crear_bundle || die "no pude crear el bundle del candidato"
     paso_permitido "crear la superposición" || return 1
     qemu-img create -q -f qcow2 -b "${PREP_BASE}" -F qcow2 "${DIR}/f1bis-prep.qcow2" 20G || die "no pude crear la superposición"
+    paso_permitido "arrancar el proxy con presupuesto" || return 1
+    iniciar_proxy || die "no pude arrancar el proxy con presupuesto de descarga"
+    cronologia "proxy con presupuesto en 127.0.0.1:${PROXY_PUERTO}: tope ${DESCARGA_MAX_MIB} MiB, corte a $((DESCARGA_MAX_MIB - MARGEN_MIB)) MiB, solo Debian y PyPI"
     paso_permitido "arrancar la VM" || return 1
-    arrancar "${DIR}/f1bis-prep.qcow2" abierta || die "no arranca la VM"
+    arrancar "${DIR}/f1bis-prep.qcow2" proxy || die "no arranca la VM"
     esperar_ssh || { paso_permitido "esperar a SSH" || return 1; die "la VM no responde por SSH"; }
-    cronologia "VM arrancada (red ABIERTA, solo para esta preparación)"
+    cronologia "VM arrancada (sin red directa; salida solo por el proxy con presupuesto)"
     paso_permitido "copiar el bundle" || return 1
     scp_vm "${DIR}/candidato.bundle" ensayo@127.0.0.1:/tmp/candidato.bundle || die "no pude copiar el bundle"
     paso_permitido "copiar bootstrap.sh" || return 1
@@ -257,18 +291,22 @@ cmd_preparar() {
     # El límite de tiempo es el RESTANTE de la fase menos la reserva de cierre, y se aplica DENTRO de la VM (`timeout` mata el grupo
     # de procesos remoto, no solo el cliente SSH); el del cliente es de respaldo.
     local rem; rem="$(tope_de_paso $((VENTANA_PREP_MIN * 60)))"
-    remoto_con_salida $((rem + 60)) "sudo timeout --kill-after=30 $((rem - 30)) env CANDIDATO='${CANDIDATO}' DIGEST_POSTGRES='$(valor_manifiesto DIGEST_POSTGRES)' DIGEST_PYTHON='$(valor_manifiesto DIGEST_PYTHON)' DESCARGA_MAX_MIB='${DESCARGA_MAX_MIB}' MARGEN_MIB='${MARGEN_MIB}' bash /home/ensayo/vm-preparar.sh" "${DIR}/preparacion.log"
+    remoto_con_salida $((rem + 60)) "sudo timeout --kill-after=30 $((rem - 30)) env CANDIDATO='${CANDIDATO}' DIGEST_POSTGRES='$(valor_manifiesto DIGEST_POSTGRES)' DIGEST_PYTHON='$(valor_manifiesto DIGEST_PYTHON)' DESCARGA_MAX_MIB='${DESCARGA_MAX_MIB}' MARGEN_MIB='100' PROXY='http://10.0.2.100:3128' bash /home/ensayo/vm-preparar.sh" "${DIR}/preparacion.log"
     local rc=${REMOTO_RC}
     mkdir -p "${DIR}/evidencia-preparacion"
     ssh_remoto 120 'sudo tar -C /root/ensayo -czf - preparacion' > "${DIR}/evidencia-preparacion/preparacion.tar.gz" 2>/dev/null || true
     parar_vm_propia "${DIR}" "${PIDFILE}"; local vm=$?
     [[ ${vm} -eq 0 ]] || { mal "la VM no se pudo apagar (código ${vm})"; return 1; }
-    cronologia "FIN preparar rc=${rc}; VM apagada y comprobada"
+    local mib cortado; read -r mib cortado <<<"$(leer_estado_proxy)"
+    cronologia "FIN preparar rc=${rc}; VM apagada y comprobada; el proxy contó ${mib} MiB descargados (tope ${DESCARGA_MAX_MIB}; cortó=${cortado})"
+    if [[ "${cortado}" != "0" || "${mib}" -lt 0 || "${mib}" -gt "${DESCARGA_MAX_MIB}" ]]; then
+        echo "descarga: proxy contó ${mib} MiB, cortó=${cortado}" > "${DIR}/.parada"
+    fi
     [[ ${rc} -eq 0 ]] && grep -q 'PREPARACIÓN TERMINADA' "${DIR}/preparacion.log" && [[ ! -f "${DIR}/.parada" ]] || die "la preparación NO terminó bien (rc=${rc}); no se escribe preparacion.ok"
     {
         echo "CANDIDATO=${CANDIDATO}"; echo "RC=${rc}"; echo "FECHA=$(date -Is)"
         echo "PREP_BYTES=$(stat -c %s "${DIR}/f1bis-prep.qcow2")"; echo "PREP_MTIME=$(stat -c %Y "${DIR}/f1bis-prep.qcow2")"
-        echo "DESCARGA_MIB=$(sed -n 's/^descargado hasta ahora: \([0-9]*\) MiB.*/\1/p' "${DIR}/preparacion.log" | tail -n 1)"
+        echo "DESCARGA_MIB=${mib}"; echo "DESCARGA_MEDIDA_POR=proxy del anfitrión (bytes que llegan de Internet)"
     } > "${DIR}/preparacion.ok"
     ok "preparación terminada y registrada (${DIR}/preparacion.ok)"
 }
