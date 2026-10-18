@@ -47,6 +47,8 @@ COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
 [[ -f "${COMPOSE_FILE}" ]] || { echo "[backup] ERROR: no encuentro ${COMPOSE_FILE}" >&2; exit 1; }
 [[ -f "${ENV_FILE}" ]] || { echo "[backup] ERROR: no encuentro ${ENV_FILE} (se espera el .env que creó bootstrap.sh)" >&2; exit 1; }
+# El .env está en modo 600 (contraseña de la base de datos): solo lo lee el administrador.
+[[ -r "${ENV_FILE}" ]] || { echo "[backup] ERROR: no puedo leer ${ENV_FILE} (guarda la contraseña de la base de datos y solo el administrador puede abrirlo). Vuelve a ejecutarlo con sudo: sudo bash $0" >&2; exit 1; }
 
 mkdir -p "${BACKUP_DIR}" || { echo "[backup] ERROR: no puedo crear ${BACKUP_DIR}" >&2; exit 1; }
 

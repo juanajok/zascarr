@@ -8,10 +8,13 @@
 # aplicarlo hay que pedirlo explícitamente con --apply.
 #
 # Uso:
-#   bash scripts/etiquetar.sh                 # simulación (seguro)
-#   bash scripts/etiquetar.sh --limit 200
-#   bash scripts/etiquetar.sh --apply         # escribe de verdad
-#   bash scripts/etiquetar.sh --apply --no-overwrite
+#   sudo bash scripts/etiquetar.sh            # simulación (seguro)
+#   sudo bash scripts/etiquetar.sh --limit 200
+#   sudo bash scripts/etiquetar.sh --apply    # escribe de verdad
+#   sudo bash scripts/etiquetar.sh --apply --no-overwrite
+#
+# Con sudo porque el .env (contraseña de la base de datos) está en modo 600 y
+# `docker compose run` lo lee con el usuario que lo invoca.
 #
 # Python no vive en el host (la imagen lo trae), así que el comando entra por
 # `docker compose run --rm zascarr` — el mismo camino que usan update.sh y
@@ -29,6 +32,7 @@ command -v docker >/dev/null 2>&1 || die \
 
 [[ -f "${ENV_FILE}" ]] || die \
     "No encuentro ${ENV_FILE}. Copia .env.example a ${ZASCARR_ROOT}/.env y rellénalo."
+comprobar_env_legible
 
 MODO="simulación (no se escribe nada)"
 for arg in "$@"; do

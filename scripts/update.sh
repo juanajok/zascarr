@@ -59,7 +59,7 @@ mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}. ¿Permisos sobre 
 DEST="${BACKUP_DIR}/update_${TS}.sql.gz"
 volcar_postgres "${DEST}" || die \
     "El backup falló. NO se ha actualizado nada.
-  Revisa: docker compose -f ${COMPOSE_FILE} logs postgres"
+  Revisa: sudo docker compose -f ${COMPOSE_FILE} logs postgres"
 # Y se comprueba: un backup sin verificar no es un backup, es una esperanza.
 verificar_dump "${DEST}"
 success "Backup verificado: ${DEST}"
@@ -110,12 +110,12 @@ info "Reiniciando ZascArr..."
 # `--remove-orphans`: una instalación anterior a ADR 0011 tiene un contenedor `zascarr-cache` (Redis) que ya no está en el
 # compose; sin esto seguiría vivo, gastando RAM, sin que nada lo use.
 "${COMPOSE[@]}" up -d --remove-orphans zascarr || die \
-    "No pude arrancar ZascArr. Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr"
+    "No pude arrancar ZascArr. Revisa: sudo docker compose -f ${COMPOSE_FILE} logs zascarr"
 
 info "Verificando healthcheck (${HEALTH_URL})..."
 esperar_healthcheck "${HEALTH_TIMEOUT}" || die \
     "ZascArr no responde tras ${HEALTH_TIMEOUT}s.
-  Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr
+  Revisa: sudo docker compose -f ${COMPOSE_FILE} logs zascarr
   Para volver atrás:
     sudo bash scripts/rollback.sh
   (referencia de rescate: ${UPDATE_REF}; backup: ${DEST})"

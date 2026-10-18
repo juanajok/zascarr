@@ -71,6 +71,19 @@ elif [[ -f "${ENV_FILE}" ]] && [[ "$(readlink -f "${REPO_DIR}/.env" 2>/dev/null)
     ln -sf "${ENV_FILE}" "${REPO_DIR}/.env" 2>/dev/null || true
 fi
 
+# El .env guarda la contraseña de la base de datos y está en modo 600 (solo el
+# administrador lo lee; ver scripts/_credenciales.sh). Con Docker Compose, un .env
+# ilegible falla en cerrado con «permission denied» en inglés y sin decir qué
+# hacer; y un script que lo lee por su cuenta (uninstall.sh) lo trataría como
+# AUSENTE y trabajaría con valores por defecto. Se comprueba ANTES de tocar nada.
+# Un .env ausente no es cosa de esta función: cada script tiene su mensaje.
+comprobar_env_legible() {
+    if [[ -e "${ENV_FILE}" && ! -r "${ENV_FILE}" ]]; then
+        die "No puedo leer ${ENV_FILE}: guarda la contraseña de la base de datos y solo el administrador puede abrirlo.
+  Vuelve a ejecutarlo con sudo, por ejemplo: sudo bash ${0}"
+    fi
+}
+
 comprobar_requisitos() {
     command -v docker >/dev/null 2>&1 || die \
         "No encuentro Docker. Instálalo con: sudo apt-get install docker.io docker-compose-plugin"
@@ -88,6 +101,7 @@ comprobar_requisitos() {
         "No encuentro ${COMPOSE_FILE}. ¿Está el repo completo en ${REPO_DIR}?"
     [[ -f "${ENV_FILE}" ]] || die \
         "No encuentro ${ENV_FILE}. Se espera el .env que creó bootstrap.sh en ${ZASCARR_ROOT}."
+    comprobar_env_legible
 }
 
 # Los scripts se invocan con sudo (el backup va a /var/backups, que es de root),
