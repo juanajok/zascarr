@@ -47,6 +47,12 @@ COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
 [[ -f "${COMPOSE_FILE}" ]] || { echo "[backup] ERROR: no encuentro ${COMPOSE_FILE}" >&2; exit 1; }
 [[ -f "${ENV_FILE}" ]] || { echo "[backup] ERROR: no encuentro ${ENV_FILE} (se espera el .env que creó bootstrap.sh)" >&2; exit 1; }
+# El .env es 600 de root: sin permiso para leerlo se dice (con sudo) antes de volcar nada. Misma comprobación que el resto
+# de scripts (scripts/_credenciales.sh); aquí `die` lleva el prefijo de este script.
+die() { echo "[backup] ERROR: $*" >&2; exit 1; }
+# shellcheck source=scripts/_credenciales.sh
+source "${SCRIPT_DIR}/_credenciales.sh"
+comprobar_env_legible "${ENV_FILE}"
 
 mkdir -p "${BACKUP_DIR}" || { echo "[backup] ERROR: no puedo crear ${BACKUP_DIR}" >&2; exit 1; }
 

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """La aplicación se niega a servir con una contraseña de base de datos conocida (última barrera).
 
 El instalador genera una propia y Compose rechaza las de ejemplo; esto cubre la ruta que no pasa por ninguno de los dos
@@ -10,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.engine import make_url
 
+from tests._tabla_credenciales import TABLA
 from zascarr.main import app
 from zascarr.utils.credenciales import es_credencial_conocida, problema_de_credenciales
 
@@ -22,6 +24,12 @@ REAL = "postgresql+asyncpg://comics_admin:Sint3tica-App-0007@postgres:5432/zasca
 ])
 def test_es_credencial_conocida(valor, conocida):
     assert es_credencial_conocida(valor) is conocida
+
+
+@pytest.mark.parametrize("valor,no_vale", TABLA, ids=[repr(v)[:30] for v, _ in TABLA])
+def test_la_regla_unica_de_las_tres_implementaciones(valor, no_vale):
+    """Misma tabla que Bash (test_credenciales_lib) y el servicio de Compose (test_compose_credenciales)."""
+    assert es_credencial_conocida(valor) is no_vale
 
 
 @pytest.mark.parametrize("url", [
@@ -37,10 +45,31 @@ def test_problema_de_credenciales_detecta_lo_no_seguro(url):
     assert problema_de_credenciales(url)
 
 
-@pytest.mark.parametrize("url", [REAL, "postgresql://test:test@localhost:5432/zascarr_test",
-                                 "postgresql://postgres@localhost/zascarr_test"])
+@pytest.mark.parametrize("url", [REAL, "postgresql://test:test@localhost:5432/zascarr_test"])
 def test_problema_de_credenciales_deja_pasar_lo_legitimo(url):
     assert problema_de_credenciales(url) is None
+
+
+# Autenticación alternativa soportada, explícita (ADR 0012): SOLO el socket Unix local (sin host: `peer`/`trust` del
+# propio equipo, p. ej. `postgresql+asyncpg://usuario@/base?host=/var/run/postgresql`). Una conexión TCP sin contraseña
+# —ni siquiera al bucle local— no es autenticación alternativa: cualquier proceso del equipo podría usarla.
+@pytest.mark.parametrize("url", [
+    "postgresql+asyncpg://comics_admin@/zascarr?host=/var/run/postgresql",
+    "postgresql+asyncpg://comics_admin@/zascarr",
+])
+def test_el_socket_unix_sin_contrasena_es_la_unica_alternativa_soportada(url):
+    assert problema_de_credenciales(url) is None
+
+
+@pytest.mark.parametrize("url", [
+    "postgresql://postgres@localhost/zascarr_test",
+    "postgresql+asyncpg://comics_admin@127.0.0.1:5432/zascarr",
+    "postgresql+asyncpg://comics_admin:@[::1]:5432/zascarr",
+    "postgresql+asyncpg://comics_admin@postgres:5432/zascarr",
+])
+def test_una_conexion_tcp_sin_contrasena_no_es_una_alternativa_ni_en_local(url):
+    motivo = problema_de_credenciales(url)
+    assert motivo and "contraseña" in motivo
 
 
 def test_el_motivo_no_lleva_el_valor():

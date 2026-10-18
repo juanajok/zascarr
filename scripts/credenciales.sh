@@ -43,6 +43,12 @@ case "${accion}" in
     iniciar)
         [[ "$(id -u)" -eq 0 ]] || die "Hace falta ser administrador. Ejecútalo así:
   sudo bash ${SCRIPT_DIR}/credenciales.sh"
+        # Protección ANTES de escribir ningún secreto (ADR 0012): si otra cuenta puede sustituir el .env o el código que
+        # root ejecuta, no se escribe nada y se explica cómo salir.
+        proteger_configuracion "${ENV_FILE}" "${ZASCARR_ROOT}" "${REPO_DIR}" || \
+            die "No puedo garantizar que otra cuenta no pueda sustituir el .env (ver arriba). No he escrito nada.
+  Instala ZascArr en una carpeta propia de root que no cuelgue de la carpeta de nadie — por defecto /opt/zascarr
+  (variable ZASCARR_ROOT) — y vuelve a ejecutarlo."
         if [[ ! -f "${ENV_FILE}" ]]; then
             [[ -f "${REPO_DIR}/.env.example" ]] || die "No encuentro ${REPO_DIR}/.env.example. ¿Está el repo completo?"
             (umask 077; cp -- "${REPO_DIR}/.env.example" "${ENV_FILE}") || die "No pude crear ${ENV_FILE}."

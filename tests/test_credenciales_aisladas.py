@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Credenciales del `.env`: instalación, conservación y protección, probadas en un sistema aislado y desechable.
 
 Cada caso lo decide un guion de `tests/escenarios/` ejecutado como **root** (con usuarios sintéticos y un `docker`
@@ -28,7 +29,9 @@ Casos (ID → qué demuestra), también el contrato de la PR:
 | P09-P09c | modo y propietario resultantes |
 | P10 | un enlace hostil en el repo no logra que se cambie el dueño de un fichero ajeno |
 | P11-P12, P15* | compatibilidad: root opera (incl. `backup.sh`), reconfigurar conserva modo y credencial; el usuario de servicio no |
-| P14, P14b | una carpeta compartida no se reclama y se avisa |
+| P14, P14b | una carpeta compartida no se reclama y el instalador se detiene explicándolo |
+| W01-W06 | el secreto nuevo nunca vive en un fichero abierto (ni el temporal ni un `.env` heredado en 644/666) |
+| U01-U07 | ubicación insegura (carpeta de otra cuenta, antecesor, enlace, `.env` enlace, código del usuario de servicio) → se detiene sin escribir; los casos legítimos (enlace de root, raíz compartida de root) siguen |
 """
 from __future__ import annotations
 
@@ -41,6 +44,10 @@ from tests._sistema_aislado import Resultado, ejecutar
 CASOS_INSTALACION = [
     "I01", "I02", "I03", "I04", "I05", "I05b", "I06", "I07a", "I07b", "I08",
     "I09-vacia", "I09-ausente", "I09-comillas", "I09-compose", "I09-mayusculas", "I09-espacios", "I10",
+]
+CASOS_ESCRITURA = ["W01", "W02", "W03", "W04", "W05", "W06"]
+CASOS_UBICACION = [
+    "U01", "U01b", "U02", "U02b", "U03", "U03b", "U04", "U05", "U06", "U07", "U08", "U08b",
 ]
 CASOS_MANUAL = ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
 CASOS_IDENTIDADES = [
@@ -58,6 +65,16 @@ def instalacion() -> Resultado:
 @pytest.fixture(scope="module")
 def identidades() -> Resultado:
     return ejecutar("identidades.sh")
+
+
+@pytest.fixture(scope="module")
+def escritura() -> Resultado:
+    return ejecutar("escritura.sh")
+
+
+@pytest.fixture(scope="module")
+def ubicacion() -> Resultado:
+    return ejecutar("ubicacion.sh")
 
 
 @pytest.fixture(scope="module")
@@ -84,15 +101,25 @@ def test_proteccion_por_identidades(identidades, caso):
     _comprobar(identidades, caso)
 
 
+@pytest.mark.parametrize("caso", CASOS_ESCRITURA)
+def test_el_secreto_nuevo_nunca_esta_en_un_fichero_abierto(escritura, caso):
+    _comprobar(escritura, caso)
+
+
+@pytest.mark.parametrize("caso", CASOS_UBICACION)
+def test_ubicacion_insegura_detiene_el_instalador(ubicacion, caso):
+    _comprobar(ubicacion, caso)
+
+
 @pytest.mark.parametrize("caso", CASOS_MANUAL)
 def test_instalacion_manual(manual, caso):
     _comprobar(manual, caso)
 
 
-def test_los_escenarios_terminan_bien_y_no_dejan_ninguna_credencial_en_sus_salidas(instalacion, identidades, manual):
+def test_los_escenarios_terminan_bien_y_no_dejan_ninguna_credencial_en_sus_salidas(instalacion, identidades, manual, escritura, ubicacion):
     """Salidas saneadas: lo que los guiones imprimen (y lo que se publicaría como artefacto de la CI) no lleva
     ninguna credencial: ni las sintéticas de las pruebas ni una generada (48 hexadecimales)."""
-    for resultado in (instalacion, identidades, manual):
+    for resultado in (instalacion, identidades, manual, escritura, ubicacion):
         assert resultado.returncode == 0, resultado.stderr[-800:]
         todo = resultado.stdout + resultado.stderr
         assert "Sint3tica" not in todo
