@@ -70,6 +70,23 @@ for caso in 'vacia|DB_PASSWORD=' 'ausente|' 'comillas|DB_PASSWORD="cambia_esto_a
     else fail "I09-${nombre}" "valor ${nombre}: no se corrigió (rc=${RC})"; fi
 done
 
+# ── I10: un fallo al escribir el .env no deja configuración parcial ni pierde la anterior ─────────
+RF="${W}/opt_fallo"; mkdir -p "${RF}"; copiar_repo "${RF}"
+(umask 077; cp "${RF}/zascarr/.env.example" "${RF}/.env")
+ANTES_F="$(huella "${RF}/.env")"
+mkdir -p "${W}/roto"; printf '#!/bin/sh\nexit 1\n' > "${W}/roto/mv"; chmod 755 "${W}/roto/mv"
+: > "${W}/docker.log"
+printf '%s\n%s\n%s\n' "${W}/biblioteca" "${W}/descargas" es | \
+    env PATH="${W}/roto:${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" _ZASCARR_YA_ACTUALIZADO=1 \
+        ZASCARR_DATA_DIR="${W}/datos" ZASCARR_USER="${SVC}" ZASCARR_GROUP="${SVC}" \
+        bash "${RF}/zascarr/bootstrap.sh" >"${W}/salida.out" 2>"${W}/salida.err"
+RCF=$?
+SOBRAN="$(find "${RF}" -maxdepth 1 -name '.env.tmp.*' | wc -l)"
+if [[ "${RCF}" -ne 0 && "$(huella "${RF}/.env")" == "${ANTES_F}" && "${SOBRAN}" -eq 0 ]] && ! llego_a_postgres \
+   && grep -q 'No he cambiado' "${W}/salida.err"; then
+    pass I10 "si falla la escritura, el .env queda como estaba, sin temporales, y no se arranca nada"
+else fail I10 "rc=${RCF}, temporales=${SOBRAN}"; fi
+
 # ── I08: la plantilla no lleva secretos reales ───────────────────────────────────────────────────
 PL="$(grep '^DB_PASSWORD=' "${REPO}/.env.example" | cut -d= -f2-)"
 if [[ -z "${PL}" || "${PL}" == "cambia_esto_ahora" ]]; then pass I08 ".env.example: DB_PASSWORD vacío o placeholder obvio"

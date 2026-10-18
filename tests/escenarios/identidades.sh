@@ -78,8 +78,9 @@ if [[ "$(modo "${RAIZ}")" == "755 root:root" ]]; then pass P09b "la carpeta que 
 if [[ "$(stat -c %U "${RAIZ}/zascarr")" == "root" ]]; then pass P09c "el repo es de root"; else fail P09c "el repo es de $(stat -c %U "${RAIZ}/zascarr")"; fi
 
 # Un `chown -R` que siguiera enlaces habría robado el fichero de otro usuario
-if [[ "$(stat -c '%U' "${W}/ajeno.txt")" == "${ANTES_AJENO}" ]]; then pass P10 "un enlace hostil dentro del repo no hizo que se cambiara el dueño de un fichero ajeno"
-else fail P10 "el dueño del fichero ajeno cambió"; fi
+if [[ "$(stat -c '%U' "${W}/ajeno.txt")" == "${ANTES_AJENO}" && "$(stat -c '%U' "${RAIZ}/zascarr/enlace-hostil")" == "root" ]]; then
+    pass P10 "un enlace hostil dentro del repo no cambia el dueño del fichero ajeno al que apunta, y el enlace mismo pasa a root"
+else fail P10 "dueño del fichero ajeno: $(stat -c '%U' "${W}/ajeno.txt"); del enlace: $(stat -c '%U' "${RAIZ}/zascarr/enlace-hostil")"; fi
 
 # Root (administrador) sigue pudiendo operar
 afirmar P11 "root lee el .env y a través del enlace" bash -c "grep -q '^DB_PASSWORD=' '${ENV}' && grep -q '^DB_PASSWORD=' '${RAIZ}/zascarr/.env'"
@@ -88,6 +89,19 @@ if [[ -f "${RAIZ}/zascarr/scripts/credenciales.sh" ]]; then
     negar P11c "sin ser root, la herramienta se niega (sale con error) en vez de leer o escribir nada" \
         como "${SVC}" bash "${RAIZ}/zascarr/scripts/credenciales.sh" comprobar
 else fail P11c "no existe scripts/credenciales.sh"; fi
+
+# Consumidores de administración: backup.sh (el temporizador del backup diario lo ejecuta root) sigue funcionando con
+# el .env 600; con la identidad de servicio falla limpio, sin dejar un volcado.
+BACKUP="${W}/backups"; mkdir -p "${BACKUP}"; chmod 777 "${BACKUP}"
+if env PATH="${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" BACKUP_DIR="${BACKUP}" bash "${RAIZ}/zascarr/scripts/backup.sh" >/dev/null 2>&1 \
+   && ls "${BACKUP}"/backup_*.sql.gz >/dev/null 2>&1; then
+    pass P15 "backup.sh (root) sigue funcionando con el .env en 600 root:root"
+else fail P15 "backup.sh no funcionó como root"; fi
+rm -f "${BACKUP}"/backup_*.sql.gz
+if como "${SVC}" env PATH="${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" BACKUP_DIR="${BACKUP}" bash "${RAIZ}/zascarr/scripts/backup.sh" >/dev/null 2>&1; then
+    fail P15b "backup.sh funcionó con la identidad de servicio (leyó el .env)"
+else pass P15b "con la identidad de servicio, backup.sh falla y no deja ningún volcado"; fi
+ls "${BACKUP}"/backup_*.sql.gz >/dev/null 2>&1 && fail P15c "quedó un volcado" || pass P15c "sin volcado residual"
 
 # Reconfiguración: volver a ejecutar el instalador mantiene propietario/modo y la credencial
 : > "${W}/docker.log"
@@ -108,7 +122,7 @@ ejecutar_instalador "${HOGAR}"
 if [[ "$(modo "${HOGAR}")" == "${ANTES}" && "$(modo "${HOGAR}/.env")" == "600 root:root" ]]; then
     pass P14 "una carpeta compartida (home) no se reclama, y el .env queda 600 root:root"
 else fail P14 "carpeta compartida: $(modo "${HOGAR}"), .env: $(modo "${HOGAR}/.env")"; fi
-if grep -q 'no es solo de ZascArr' "${W}/salida.err"; then pass P14b "y avisa de que el .env no queda a salvo de ser reemplazado ahí"
+if grep -q 'no es solo de ZascArr' "${W}/salida.out" "${W}/salida.err"; then pass P14b "y avisa de que el .env no queda a salvo de ser reemplazado ahí"
 else fail P14b "no avisó"; fi
 
 rm -rf "${W}"

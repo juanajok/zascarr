@@ -18,7 +18,12 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -e ".[dev]"
-      - run: pytest -q
+      # Las pruebas de credenciales (ADR 0012) usan Docker real: el servicio `credenciales` de Compose necesita la imagen
+      # de PostgreSQL ya descargada, y los guiones de tests/escenarios/ corren como root en este ejecutor desechable
+      # (CI=true + sudo sin clave) con usuarios sintéticos. Sin esto se SALTAN, y una prueba saltada no es una pasada.
+      - name: Imagen de PostgreSQL para las pruebas de Compose
+        run: docker pull -q postgres:15-alpine
+      - run: pytest -q -rs
 
   postgres:
     name: Pruebas con Postgres real
