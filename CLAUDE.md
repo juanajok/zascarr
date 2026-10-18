@@ -136,6 +136,14 @@ como marco permanente.
    validada, redirecciones a mano y tope de tamaño. Un token firmado garantiza integridad,
    **no** seguridad de una URL externa. Ver `docs/design/hallazgo-h1-cover-url.md`.
 
+8. **El `.env` es un secreto: modo 600, `root:root`, desde que nace.** Se crea con `umask 077`
+   (`crear_env_protegido`) y se reescribe solo con `env_poner`, que lo vuelve a cerrar
+   (`scripts/_credenciales.sh`, ensayo M4). La contraseña de la base de datos la genera el
+   instalador; **una ya puesta no se pisa nunca** y, con una base ya creada, **no se inventa otra**.
+   Los scripts que lo leen se ejecutan con `sudo` y llaman a `comprobar_env_legible` antes de
+   tocar nada; un `.env` ilegible no puede tratarse como ausente. No se acepta un `chmod 600`
+   «a ciegas» en otro sitio: el consumidor se concilia primero.
+
 ## 6. UX
 
 - **Todo en español llano para el coleccionista**: el dashboard y las

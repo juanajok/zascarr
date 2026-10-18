@@ -17,6 +17,13 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 - PostgreSQL publica en `127.0.0.1`, nunca en `0.0.0.0`. (Redis ya no forma parte del stack: ADR 0011.)
 - Las integraciones P2P (Prowlarr, Transmission, aMule, foro) nacen
   **desactivadas** y piden activación explícita.
+- **El `.env` está cerrado** (modo 600, `root:root`) desde que se crea y tras cada
+  modificación. Guarda la contraseña de la base de datos y, si las rellenas, las claves de
+  las integraciones; ninguna otra cuenta del equipo puede abrirlo. Los scripts de
+  operación (`update.sh`, `rollback.sh`, `backup.sh`, `etiquetar.sh`, `uninstall.sh`) se
+  ejecutan con `sudo` y, si no pueden leerlo, se detienen **antes de tocar nada** y lo dicen.
+  La contraseña de la base de datos **la genera el instalador** la primera vez (192 bits
+  aleatorios del sistema); una que ya tengas puesta no se cambia nunca.
 
 ## Si quieres acceder desde fuera de la Pi
 

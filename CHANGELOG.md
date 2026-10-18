@@ -7,6 +7,19 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **El instalador genera la contraseña de la base de datos y protege el `.env`** (ensayo M4, hallazgos
+  M4-01 y «`.env` 0644»). Antes, una instalación limpia **sin editar el `.env` a mano** terminaba con un error
+  («DB_PASSWORD tiene el valor por defecto») y el fichero se creaba legible por cualquier cuenta del equipo (modo 644,
+  medido con `nobody`). Ahora, si la contraseña falta o es el marcador de la plantilla, `bootstrap.sh` genera una
+  y la guarda sin mostrarla; **una que ya esté puesta no se toca jamás**, y si ya existe una base de datos creada
+  con otra contraseña **no inventa ninguna**: te lo explica y se detiene sin tocar nada. El `.env` nace en modo 600 y
+  vuelve a 600 después de cada cambio (también corrige uno antiguo abierto, avisando). `update.sh`, `rollback.sh`,
+  `backup.sh`, `etiquetar.sh` y `uninstall.sh` comprueban antes de empezar que pueden leerlo y, si no, piden `sudo`
+  en español (con el `.env` ilegible `uninstall.sh` lo habría tratado como «ausente» y usado rutas por defecto). Los
+  comandos de ayuda que imprimen los scripts llevan `sudo`. Un `#` en el valor de una variable ya no rompe la
+  escritura del `.env`. Sin migraciones, sin cambios de la aplicación ni de los valores por defecto de las fuentes.
+  Pruebas: `tests/test_credenciales_env.py`, `tests/test_env_consumidores.py`. **No verificado** todavía en una
+  máquina limpia con Docker (el instalador real necesita root, red e imágenes).
 - **Crear una serie a mano, sin fuentes** (#189). Desde «Descubrir» («Crear la serie a mano») y desde el asistente de una
   carpeta puedes dar de alta una serie escribiendo solo el **título**, la **tradición** (la eliges tú) y, si quieres, el
   **año**. No consulta ninguna fuente ni necesita claves, no inventa editorial, país, idioma ni formato, y queda con origen
