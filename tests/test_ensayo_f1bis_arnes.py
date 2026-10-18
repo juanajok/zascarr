@@ -564,3 +564,291 @@ class TestOrdenesDelGuion:
         texto = PREPARAR.read_text()
         assert "con_limite_de_descarga" in texto and "docker build" in texto
         assert "MB" not in texto.replace("MiB", "").replace("MIB", ""), "unidades: MiB, no MB"
+
+
+# ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+# 2.ª devolución de #242
+# ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+# ── El corte termina el GRUPO entero, no solo el líder ───────────────────────────────────────────────────────────────
+
+class TestElCorteTerminaElGrupoEntero:
+    """Que el líder muera con TERM no prueba que haya terminado el grupo: un hijo que ignora TERM seguía vivo y no se enviaba el KILL."""
+
+    CONTADOR = """
+        C="{c}"; printf %s $((95 * 1048576)) > "$C"
+        contador_rx_bytes() {{ cat "$C"; }}
+        export RX_BASE_BYTES=0
+    """
+
+    def test_lider_muere_con_term_y_un_hijo_lo_ignora(self, tmp_path):
+        hijo = tmp_path / "hijo.pid"
+        r = _lib(self.CONTADOR.format(c=tmp_path / "rx") + f"""
+            ORDEN='bash -c "trap \\"\\" TERM; echo \\$\\$ > {hijo}; while :; do sleep 0.2; done" & while [ ! -s {hijo} ]; do sleep 0.1; done; wait'
+            ESPERA_TERM_S=1 INTERVALO_S=0.1 con_limite_de_descarga 100 20 -- bash -c "$ORDEN"
+            echo "rc=$?"
+        """, timeout=40)
+        assert "rc=4" in r.stdout, r.stdout + r.stderr
+        assert hijo.exists(), "el hijo que ignora TERM no llegó a arrancar: la prueba no demuestra nada"
+        assert not _vivo(int(hijo.read_text())), "el hijo que ignora TERM sigue vivo tras el corte"
+        pid_hijo = int(hijo.read_text())
+        assert _esperar(lambda: not _vivo(pid_hijo))
+
+    def test_si_algun_miembro_sobrevive_se_devuelve_5_y_no_4(self, tmp_path):
+        hijo = tmp_path / "hijo.pid"
+        r = _lib(self.CONTADOR.format(c=tmp_path / "rx") + f"""
+            kill() {{ :; }}            # nada se puede matar: el grupo sigue vivo
+            ORDEN='exec >/dev/null 2>&1 </dev/null; sleep 33.7 & echo $! > {hijo}; wait'      # sin tuberías abiertas: el test no espera al huérfano
+            ESPERA_TERM_S=1 ESPERA_KILL_S=1 INTERVALO_S=0.1 con_limite_de_descarga 100 20 -- bash -c "$ORDEN"
+            echo "rc=$?"
+        """, timeout=40)
+        try:
+            assert "rc=5" in r.stdout and "siguen vivos miembros del grupo" in r.stderr, r.stdout + r.stderr
+        finally:
+            if hijo.exists():
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(int(hijo.read_text()), signal.SIGKILL)
+
+    def test_la_red_se_corta_antes_de_matar_el_grupo(self, tmp_path):
+        orden = tmp_path / "orden.txt"
+        r = _lib(self.CONTADOR.format(c=tmp_path / "rx") + f"""
+            cortar_red() {{ echo "CORTAR_RED" >> {orden}; }}
+            kill() {{ echo "KILL $*" >> {orden}; command kill "$@"; }}
+            INTERVALO_S=0.1 con_limite_de_descarga 100 20 -- bash -c 'sleep 33.9 & wait'
+            echo "rc=$?"
+        """, timeout=40)
+        lineas = orden.read_text().splitlines()
+        assert lineas[0] == "CORTAR_RED" and any(x.startswith("KILL") for x in lineas[1:]), (lineas, r.stderr)
+
+    def test_miembros_vivos_del_grupo_ve_a_todos_y_no_cuenta_zombis(self):
+        # Un grupo con líder y dos hijos (uno de ellos en otra rama): se ven los tres.
+        p = subprocess.Popen(["setsid", "bash", "-c", "sleep 31.1 & sleep 31.2 & wait"])
+        time.sleep(0.7)
+        try:
+            vivos = _lib(f"miembros_vivos_del_grupo {p.pid}").stdout.split()
+            assert len(vivos) == 3, vivos
+        finally:
+            _lib(f"kill -KILL -- -{p.pid}")
+            p.wait()
+
+
+# ── Tope de red en el núcleo ────────────────────────────────────────────────────────────────────────────────────────
+
+class TestTopeDeRedEnElNucleo:
+
+    def test_las_reglas_cargadas_son_las_esperadas(self, tmp_path):
+        r = _lib(f"""
+            nft() {{ if [[ "$1" == "-f" ]]; then cat > "{tmp_path}/reglas.nft"; else echo 'iifname "ens3" quota over 588 mbytes drop'; fi; }}
+            instalar_tope_de_red 600 ens3; echo "rc=$?"
+        """)
+        reglas = (tmp_path / "reglas.nft").read_text()
+        assert "rc=0" in r.stdout, r.stdout + r.stderr
+        assert "hook prerouting" in reglas, "debe ver también el tráfico reenviado a los contenedores de la construcción (prerouting)"
+        assert 'iifname "ens3" tcp dport 22 accept' in reglas and reglas.index("dport 22 accept") < reglas.index("quota over")
+        assert "quota over 588 mbytes drop" in reglas, "la cuota debe ser el 98 % del tope (600 → 588)"
+
+    def test_cortar_red_añade_un_drop_total_detras_de_la_excepcion_del_ssh(self, tmp_path):
+        r = _lib(f"""nft() {{ echo "$*" >> "{tmp_path}/nft.txt"; }}
+            cortar_red_nft ens3""")
+        assert (tmp_path / "nft.txt").read_text().strip() == 'add rule inet f1bis entrada iifname ens3 drop', r.stderr
+
+    def test_si_no_se_puede_cargar_el_tope_la_preparacion_no_descarga(self):
+        texto = PREPARAR.read_text()
+        i = texto.index("instalar_tope_de_red")
+        assert i < texto.index("docker build"), "el tope se instala ANTES de construir"
+        assert "NO se pudo instalar el tope de red en el núcleo" in texto and "exit 4" in texto[i:i + 400]
+
+
+NETNS_SCRIPT = """
+set -e
+LIB="$1"; source "$LIB"
+ip link set lo up
+instalar_tope_de_red 5 veth0 >/dev/null              # cuota = 98 % de 5 MiB → 4 MiB
+unshare -n sleep 60 & B=$!
+sleep 0.5
+ip link add veth0 type veth peer name veth1
+ip link set veth1 netns $B
+ip addr add 10.9.0.1/24 dev veth0; ip link set veth0 up
+nsenter -t $B -n bash -c 'ip link set lo up; ip addr add 10.9.0.2/24 dev veth1; ip link set veth1 up'
+recibir() {  # recibir PUERTO ENVIAR_MIB → imprime los MiB recibidos
+python3 - "$1" "$2" <<'PY' &
+import socket, sys
+puerto = int(sys.argv[1])
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("10.9.0.1", puerto)); s.listen(1)
+s.settimeout(8)
+try:
+    c, _ = s.accept()
+except Exception:
+    print("RECIBIDO_MIB 0.0"); sys.exit()
+total = 0; c.settimeout(3)
+try:
+    while True:
+        d = c.recv(65536)
+        if not d: break
+        total += len(d)
+except Exception: pass
+print("RECIBIDO_MIB", round(total / 1048576, 2))
+PY
+RP=$!
+sleep 0.4
+nsenter -t $B -n python3 - "$1" "$2" <<'PY' || true
+import socket, sys
+s = socket.socket(); s.settimeout(4)
+try:
+    s.connect(("10.9.0.1", int(sys.argv[1])))
+    for _ in range(int(sys.argv[2])): s.sendall(b"x" * 1048576)
+except Exception: pass
+PY
+wait $RP
+}
+echo "A $(recibir 5000 30)"
+cortar_red_nft veth0
+echo "B $(recibir 5001 3)"
+echo "C $(recibir 22 3)"
+kill $B 2>/dev/null || true
+"""
+
+
+def _netns_disponible() -> bool:
+    if shutil.which("unshare") is None or shutil.which("nft") is None or shutil.which("ip") is None or shutil.which("nsenter") is None:
+        return False
+    r = subprocess.run(["unshare", "-Urn", "bash", "-c", "ip link add t0 type dummy && nft list ruleset >/dev/null"],
+                       capture_output=True, timeout=20, check=False)
+    return r.returncode == 0
+
+
+@pytest.mark.skipif(not _netns_disponible(), reason="NO EJECUTADA: requiere espacios de nombres de usuario y de red sin privilegios, nft, ip y nsenter")
+class TestTopeDeRedFuncional:
+    """Con el núcleo de verdad (un espacio de nombres de red con un par veth): el tope y el corte son reales, no un doble."""
+
+    def test_la_cuota_descarta_lo_que_pasa_del_tope_el_corte_lo_descarta_todo_y_el_ssh_pasa(self, tmp_path):
+        s = tmp_path / "netns.sh"
+        s.write_text(NETNS_SCRIPT)
+        r = subprocess.run(["unshare", "-Urn", "bash", str(s), str(LIB)], capture_output=True, text=True, timeout=90, check=False)
+        salida = {linea.split()[0]: float(linea.split()[-1]) for linea in r.stdout.splitlines() if linea[:2] in ("A ", "B ", "C ")}
+        assert set(salida) == {"A", "B", "C"}, r.stdout + r.stderr
+        assert 3.5 <= salida["A"] <= 4.2, f"con tope 5 MiB (cuota 4 MiB) se recibieron {salida['A']} MiB de 30 enviados"
+        assert salida["B"] == 0.0, f"con la red cortada se recibieron {salida['B']} MiB"
+        assert salida["C"] >= 2.9, f"el SSH (puerto 22) debía pasar siempre y recibió {salida['C']} MiB de 3"
+
+
+# ── Plazo único de la fase ──────────────────────────────────────────────────────────────────────────────────────────
+
+RELOJ = """
+RELOJ="${DIR}/reloj.txt"; printf 1000000 > "${RELOJ}"
+ahora() { cat "${RELOJ}"; }
+avanzar() { printf %s $(( $(cat "${RELOJ}") + $1 )) > "${RELOJ}"; }
+"""
+
+
+class TestPlazoUnicoDeLaFase:
+
+    def _correr(self, dir_ensayo, tmp_path, *, extra: str, prep: str = PREP_BIEN):
+        guion, env = _doble_anfitrion(dir_ensayo, tmp_path, prep=prep, extra=RELOJ + extra)
+        return _bash(guion, env=env, timeout=60)
+
+    def _estado(self, dir_ensayo):
+        crono = (dir_ensayo / "cronologia.txt").read_text() if (dir_ensayo / "cronologia.txt").exists() else ""
+        parada = (dir_ensayo / ".parada").read_text() if (dir_ensayo / ".parada").exists() else ""
+        return crono, parada
+
+    def test_tope_de_paso_usa_el_tiempo_restante_menos_la_reserva(self, dir_ensayo, tmp_path):
+        guion, env = _doble_anfitrion(dir_ensayo, tmp_path, prep=PREP_BIEN, orden="""
+            DIR="${DIR}"; mkdir -p "$DIR"; cronologia() { :; }
+            """ + RELOJ + """
+            iniciar_plazo 45                      # 2700 s
+            echo "a=$(tope_de_paso 120)"          # sobra: 120
+            avanzar 2500; echo "b=$(tope_de_paso 120)"   # restan 200 ≤ reserva 300 → 0
+            printf 1000000 > "$RELOJ"; iniciar_plazo 45; avanzar 2350; echo "c=$(tope_de_paso 120)"   # restan 350 − 300 = 50
+        """)
+        r = _bash(guion, env=env)
+        assert "a=120" in r.stdout and "b=0" in r.stdout and "c=50" in r.stdout, r.stdout + r.stderr
+
+    def test_un_arranque_lento_impide_el_siguiente_paso_y_se_limpia(self, dir_ensayo, tmp_path):
+        r = self._correr(dir_ensayo, tmp_path, extra='''
+            arrancar() { python3 "''' + str(FALSA) + '''" "${PIDFILE}" "${DIR}"; avanzar 2600; }       # el arranque se come el plazo
+            ssh_remoto() { echo "ORDEN_REMOTA $*" >> "${DIR}/remoto.txt"; }
+            scp_vm() { echo "SCP $*" >> "${DIR}/scp.txt"; return 0; }
+        ''')
+        crono, parada = self._estado(dir_ensayo)
+        assert r.returncode != 0
+        assert "plazo agotado" in parada and "PLAZO AGOTADO" in crono, (crono, parada, r.stderr)
+        assert "copiar el bundle" in parada, "debe pararse en el PRIMER paso que ya no tiene tiempo, no en uno posterior"
+        assert not (dir_ensayo / "scp.txt").exists(), "se copió algo con el plazo agotado"
+        assert not (dir_ensayo / "remoto.txt").exists(), "se lanzó una orden remota con el plazo agotado"
+        assert not (dir_ensayo / "preparacion.ok").exists()
+        pid = dir_ensayo / "qemu.pid"
+        assert not pid.exists() or not _vivo(int(pid.read_text())), "la VM quedó viva"
+
+    def test_una_copia_lenta_impide_lo_que_sigue(self, dir_ensayo, tmp_path):
+        r = self._correr(dir_ensayo, tmp_path, extra='''
+            scp_vm() { echo "SCP $*" >> "${DIR}/scp.txt"; avanzar 2500; return 0; }                   # la primera copia agota el plazo
+            ssh_remoto() { echo "ORDEN_REMOTA $*" >> "${DIR}/remoto.txt"; }
+        ''')
+        crono, parada = self._estado(dir_ensayo)
+        assert r.returncode != 0 and "plazo agotado" in parada, (crono, parada, r.stderr)
+        assert (dir_ensayo / "scp.txt").read_text().count("SCP") == 1, "se hizo otra copia con el plazo agotado"
+        assert not (dir_ensayo / "remoto.txt").exists()
+
+    def test_la_espera_de_ssh_la_corta_el_plazo_y_no_el_numero_de_intentos(self, dir_ensayo, tmp_path):
+        guion, env = _doble_anfitrion(dir_ensayo, tmp_path, prep=PREP_BIEN, orden="""
+            DIR="${DIR}"; mkdir -p "$DIR"; cronologia() { :; }
+            """ + RELOJ + """
+            ssh_remoto() { echo x >> "${DIR}/intentos.txt"; avanzar 100; return 1; }
+            esperar_ssh() { local i; for i in $(seq 1 "${INTENTOS_SSH:-60}"); do (( $(restante) > RESERVA_CIERRE_S )) || return 1; ssh_remoto 15 true 2>/dev/null && return 0; sleep "${PAUSA_SSH_S:-4}"; done; return 1; }
+            iniciar_plazo 45
+            esperar_ssh; echo "rc=$?"
+        """)
+        # La prueba usa la MISMA definición de esperar_ssh que el script real: se comprueba que el texto coincide.
+        real = ANFITRION.read_text()
+        assert "(( $(restante) > RESERVA_CIERRE_S )) || return 1" in real
+        r = _bash(guion, env={**env, "PAUSA_SSH_S": "0"})
+        intentos = (dir_ensayo / "intentos.txt").read_text().count("x")
+        assert "rc=1" in r.stdout and intentos < 60 and 20 <= intentos <= 25, (intentos, r.stdout, r.stderr)
+
+    def test_la_espera_real_de_ssh_se_corta_por_plazo(self, dir_ensayo, tmp_path):
+        """La función REAL de anfitrion.sh (no una copia) con un ssh que siempre falla y un reloj que avanza 100 s por intento."""
+        guion, env = _doble_anfitrion(dir_ensayo, tmp_path, prep=PREP_BIEN, orden="""
+            mkdir -p "$DIR"; cronologia() { :; }
+            ssh_remoto() { echo x >> "${DIR}/intentos.txt"; avanzar 100; return 1; }
+            unset -f esperar_ssh; source "$ANFITRION_SRC" 2>/dev/null || true
+            iniciar_plazo 45
+            esperar_ssh; echo "rc=$?"
+        """, extra=RELOJ)
+        # `source` del anfitrión redefine las funciones (incluidos los dobles): se vuelven a poner después.
+        guion = guion.replace('unset -f esperar_ssh; source "$ANFITRION_SRC" 2>/dev/null || true', "")
+        guion = guion.replace("        esperar_ssh() { return 0; }\n", "")                    # quita el doble: se usa la función real
+        r = _bash(guion, env={**env, "PAUSA_SSH_S": "0"})
+        intentos = (dir_ensayo / "intentos.txt").read_text().count("x")
+        assert "rc=1" in r.stdout and 20 <= intentos <= 25, (intentos, r.stdout, r.stderr)
+
+    def test_el_limite_de_la_orden_remota_es_lo_que_queda_menos_la_reserva(self, dir_ensayo, tmp_path):
+        r = self._correr(dir_ensayo, tmp_path, extra='''
+            scp_vm() { avanzar 100; return 0; }                                                          # 100 s ya gastados
+            ssh_remoto() { local seg=$1; shift
+                case "$*" in *vm-preparar.sh*) echo "CLIENTE=${seg} ORDEN=$*" >> "${DIR}/remoto.txt"; echo "PREPARACIÓN TERMINADA";; esac; }
+        ''')
+        assert r.returncode == 0, r.stdout + r.stderr
+        linea = (dir_ensayo / "remoto.txt").read_text()
+        import re
+        interno = int(re.search(r"timeout --kill-after=30 (\d+)", linea).group(1))
+        cliente = int(re.search(r"CLIENTE=(\d+)", linea).group(1))
+        # 2700 s de fase − 300 s de reserva − 300 s gastados por los tres scp (100 cada uno) = 2100 s; menos los 30 s de kill-after
+        assert interno <= 2700 - 300 - 300 - 30, interno
+        assert cliente == interno + 30 + 60, (cliente, interno)
+
+    def test_la_ejecucion_tambien_respeta_el_plazo(self, dir_ensayo, tmp_path):
+        prep = dir_ensayo / "f1bis-prep.qcow2"
+        prep.write_text("overlay")
+        _, env = _doble_anfitrion(dir_ensayo, tmp_path, prep=PREP_BIEN)
+        (dir_ensayo / "preparacion.ok").write_text(
+            f"CANDIDATO={env['CANDIDATO']}\nRC=0\nPREP_BYTES={prep.stat().st_size}\nPREP_MTIME={int(prep.stat().st_mtime)}\n")
+        guion, env = _doble_anfitrion(dir_ensayo, tmp_path, prep=PREP_BIEN, orden="cmd_ejecutar", extra=RELOJ + '''
+            arrancar() { python3 "''' + str(FALSA) + '''" "${PIDFILE}" "${DIR}"; avanzar 3500; }
+            ssh_remoto() { echo "ORDEN_REMOTA" >> "${DIR}/remoto.txt"; }
+        ''')
+        r = _bash(guion, env=env, timeout=60)
+        assert r.returncode != 0 and not (dir_ensayo / "remoto.txt").exists()
+        assert "plazo agotado" in (dir_ensayo / ".parada").read_text()
+        pid = dir_ensayo / "qemu.pid"
+        assert not pid.exists() or not _vivo(int(pid.read_text()))

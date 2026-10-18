@@ -8,7 +8,8 @@
 #   1. Comprueba que el punto de partida está limpio (sin instalación del producto).
 #   2. Pone el espejo local de Git con main = candidato (desde /tmp/candidato.bundle) y comprueba su configuración.
 #   3. Comprueba que las dos imágenes base siguen siendo las de la fase 1 (por digest). NO descarga imágenes.
-#   4. Construye UNA vez la imagen del candidato desde el espejo (descarga paquetes de Debian y de PyPI): deja las capas en
+#   4. Instala el TOPE DE DESCARGA EN EL NÚCLEO (nftables; si no se puede, aborta ANTES de descargar) y construye UNA vez la imagen del
+#      candidato desde el espejo (descarga paquetes de Debian y de PyPI), bajo el vigilante que corta la red y el grupo de procesos: deja las capas en
 #      caché para que el bootstrap.sh de la ejecución, SIN red, pueda construir. Eso NO acredita una construcción en frío.
 #   5. Verifica la biblioteca sintética, el usuario ordinario sin privilegios y que no hay ni rastro del producto.
 #   6. Informa de lo descargado (bytes recibidos por la VM) y aborta si supera el presupuesto.
@@ -67,6 +68,10 @@ done
 paso "4. construcción de la imagen del candidato (con red; llena la caché que usará la ejecución sin red)"
 rm -rf /tmp/prebuild && git clone -q https://github.com/juanajok/zascarr.git /tmp/prebuild
 [[ "$(git -C /tmp/prebuild rev-parse HEAD)" == "${CANDIDATO}" ]] || { echo "el clon no es el candidato"; exit 2; }
+# Tope EN EL NÚCLEO antes de abrir nada: lo que entre por encima del 98 % del tope se descarta, coopere o no el constructor. Y
+# `cortar_red` (que usa el vigilante al llegar al umbral) descarta todo salvo el SSH.
+cortar_red() { cortar_red_nft "${IFACE}"; }
+instalar_tope_de_red "${LIMITE_MIB}" "${IFACE}" || { echo "NO se pudo instalar el tope de red en el núcleo: no se descarga nada"; exit 4; }
 # Construcción con red, bajo vigilancia: si la descarga llega al umbral de corte, se mata el grupo de procesos entero.
 ( cd /tmp/prebuild && con_limite_de_descarga "${LIMITE_MIB}" "${MARGEN_MIB}" -- docker build -q -t zascarr-prebuild:f1bis . ) | tee "${EV}/prebuild-imagen.txt"
 presupuesto

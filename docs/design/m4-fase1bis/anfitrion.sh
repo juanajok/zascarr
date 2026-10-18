@@ -51,7 +51,11 @@ die()  { mal "$*"; exit 1; }
 libre_gb() { df --output=avail -BG "$(dirname "${DIR}")" | tail -n 1 | tr -dc '0-9'; }
 SSH_ARGS=(-i "${CLAVE}" -p "${PUERTO}" -o StrictHostKeyChecking=no -o UserKnownHostsFile="${DIR}/known_hosts"
           -o ConnectTimeout=8 -o BatchMode=yes ensayo@127.0.0.1)
-scp_vm() { scp -q -i "${CLAVE}" -P "${PUERTO}" -o StrictHostKeyChecking=no -o UserKnownHostsFile="${DIR}/known_hosts" "$@"; }
+scp_vm() {
+    local t; t="$(tope_de_paso "${SCP_MAX_S:-120}")"
+    (( t > 0 )) || return 1
+    timeout --kill-after=5 "${t}" scp -q -i "${CLAVE}" -P "${PUERTO}" -o StrictHostKeyChecking=no -o UserKnownHostsFile="${DIR}/known_hosts" "$@"
+}
 valor_manifiesto() { grep -E "^$1=" "${MANIFIESTO}" | head -n 1 | cut -d= -f2-; }
 
 # ── manifiesto ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -124,6 +128,30 @@ cmd_verificar() {
 
 # ── VM ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 # Las acciones sobre la VM pasan por funciones pequeñas que las pruebas sustituyen por dobles (tests/test_ensayo_f1bis_arnes.py).
+# ── PLAZO ÚNICO DE LA FASE ───────────────────────────────────────────────────────────────────────────────────────────
+# La ventana (45/60 min) cuenta desde que EMPIEZA la fase, no desde que se lanza el comando remoto: bundle, superposición, arranque,
+# espera de SSH, copias, recuperación de evidencias y apagado están DENTRO. Cada paso que no es limpieza se pregunta si hay tiempo
+# (`paso_permitido`); si no queda más que la RESERVA DE CIERRE (evidencias ≤ 120 s + apagado ≤ ~120 s + margen), no se empieza,
+# se deja constancia en `.parada` y se va a la limpieza. Los pasos largos usan el tiempo RESTANTE (`tope_de_paso`), no un número fijo.
+RESERVA_CIERRE_S="${RESERVA_CIERRE_S:-300}"
+PLAZO_FIN=0
+iniciar_plazo() { PLAZO_FIN=$(( $(ahora) + $1 * 60 )); }
+restante() { echo $(( PLAZO_FIN - $(ahora) )); }
+paso_permitido() {  # paso_permitido "descripción"
+    local r; r="$(restante)"
+    if (( r <= RESERVA_CIERRE_S )); then
+        cronologia "PLAZO AGOTADO antes de «$1»: restan ${r} s ≤ reserva de cierre ${RESERVA_CIERRE_S} s; se pasa a la limpieza"
+        echo "plazo agotado antes de «$1»" > "${DIR}/.parada"
+        return 1
+    fi
+}
+tope_de_paso() {  # tope_de_paso MÁXIMO_S → min(MÁXIMO_S, restante − reserva de cierre)
+    local r=$(( $(restante) - RESERVA_CIERRE_S ))
+    (( r > $1 )) && r="$1"
+    (( r < 0 )) && r=0
+    echo "${r}"
+}
+
 ssh_remoto() {  # ssh_remoto SEGUNDOS ORDEN… : con límite de tiempo del cliente
     local seg="$1"; shift
     timeout --kill-after=10 "${seg}" ssh "${SSH_ARGS[@]}" "$@"
@@ -138,7 +166,15 @@ arrancar() {  # arrancar DISCO red(abierta|cerrada)
         -drive "file=${SEED},if=virtio,format=raw,readonly=on,media=cdrom" \
         -netdev "${red}" -device virtio-net-pci,netdev=n0 -device virtio-rng-pci
 }
-esperar_ssh() { local i; for i in $(seq 1 "${INTENTOS_SSH:-60}"); do ssh_remoto 15 true 2>/dev/null && return 0; sleep "${PAUSA_SSH_S:-4}"; done; return 1; }
+esperar_ssh() {
+    local i
+    for i in $(seq 1 "${INTENTOS_SSH:-60}"); do
+        (( $(restante) > RESERVA_CIERRE_S )) || return 1          # el plazo manda sobre el número de intentos
+        ssh_remoto 15 true 2>/dev/null && return 0
+        sleep "${PAUSA_SSH_S:-4}"
+    done
+    return 1
+}
 cronologia() { echo "$(date -Is) $*" | tee -a "${DIR}/cronologia.txt"; }
 
 VIGILANTE_PID=""
@@ -198,20 +234,30 @@ remoto_con_salida() {  # remoto_con_salida SEGUNDOS "orden" FICHERO → código 
 }
 
 cmd_preparar() {
+    iniciar_plazo "${VENTANA_PREP_MIN}"
     cmd_verificar || die "'verificar' no pasa: no se prepara nada"
     mkdir -p "${DIR}" || die "no puedo crear ${DIR}"
     iniciar_supervision
     cronologia "INICIO preparar (ventana ${VENTANA_PREP_MIN} min; descarga ≤ ${DESCARGA_MAX_MIB} MiB con corte a $((DESCARGA_MAX_MIB - MARGEN_MIB)) MiB)"
+    paso_permitido "crear el bundle" || return 1
     crear_bundle || die "no pude crear el bundle del candidato"
+    paso_permitido "crear la superposición" || return 1
     qemu-img create -q -f qcow2 -b "${PREP_BASE}" -F qcow2 "${DIR}/f1bis-prep.qcow2" 20G || die "no pude crear la superposición"
+    paso_permitido "arrancar la VM" || return 1
     arrancar "${DIR}/f1bis-prep.qcow2" abierta || die "no arranca la VM"
-    esperar_ssh || die "la VM no responde por SSH"
+    esperar_ssh || { paso_permitido "esperar a SSH" || return 1; die "la VM no responde por SSH"; }
     cronologia "VM arrancada (red ABIERTA, solo para esta preparación)"
+    paso_permitido "copiar el bundle" || return 1
     scp_vm "${DIR}/candidato.bundle" ensayo@127.0.0.1:/tmp/candidato.bundle || die "no pude copiar el bundle"
+    paso_permitido "copiar bootstrap.sh" || return 1
     scp_vm "${DIR}/bootstrap.sh" ensayo@127.0.0.1:/home/ensayo/bootstrap.sh || die "no pude copiar bootstrap.sh"
+    paso_permitido "copiar los scripts" || return 1
     scp_vm "${AQUI}/vm-preparar.sh" "${AQUI}/vm-ejecutar.sh" "${AQUI}/lib-ensayo.sh" ensayo@127.0.0.1:/home/ensayo/ || die "no pude copiar los scripts"
-    # El límite de tiempo se aplica DENTRO de la VM (`timeout` mata el grupo de procesos entero); el del cliente es de respaldo.
-    remoto_con_salida $((VENTANA_PREP_MIN * 60 + 90)) "sudo timeout --kill-after=30 $((VENTANA_PREP_MIN * 60)) env CANDIDATO='${CANDIDATO}' DIGEST_POSTGRES='$(valor_manifiesto DIGEST_POSTGRES)' DIGEST_PYTHON='$(valor_manifiesto DIGEST_PYTHON)' DESCARGA_MAX_MIB='${DESCARGA_MAX_MIB}' MARGEN_MIB='${MARGEN_MIB}' bash /home/ensayo/vm-preparar.sh" "${DIR}/preparacion.log"
+    paso_permitido "la orden remota" || return 1
+    # El límite de tiempo es el RESTANTE de la fase menos la reserva de cierre, y se aplica DENTRO de la VM (`timeout` mata el grupo
+    # de procesos remoto, no solo el cliente SSH); el del cliente es de respaldo.
+    local rem; rem="$(tope_de_paso $((VENTANA_PREP_MIN * 60)))"
+    remoto_con_salida $((rem + 60)) "sudo timeout --kill-after=30 $((rem - 30)) env CANDIDATO='${CANDIDATO}' DIGEST_POSTGRES='$(valor_manifiesto DIGEST_POSTGRES)' DIGEST_PYTHON='$(valor_manifiesto DIGEST_PYTHON)' DESCARGA_MAX_MIB='${DESCARGA_MAX_MIB}' MARGEN_MIB='${MARGEN_MIB}' bash /home/ensayo/vm-preparar.sh" "${DIR}/preparacion.log"
     local rc=${REMOTO_RC}
     mkdir -p "${DIR}/evidencia-preparacion"
     ssh_remoto 120 'sudo tar -C /root/ensayo -czf - preparacion' > "${DIR}/evidencia-preparacion/preparacion.tar.gz" 2>/dev/null || true
@@ -228,16 +274,21 @@ cmd_preparar() {
 }
 
 cmd_ejecutar() {
+    iniciar_plazo "${VENTANA_EJEC_MIN}"
     exigir_preparacion_completa || die "no se ejecuta"
     [[ -z "$(procesos_qemu)" ]] || die "hay un proceso QEMU en marcha"
     mkdir -p "${DIR}"
     iniciar_supervision
     chmod a-w "${DIR}/f1bis-prep.qcow2"
+    paso_permitido "crear la superposición de ejecución" || return 1
     qemu-img create -q -f qcow2 -b "${DIR}/f1bis-prep.qcow2" -F qcow2 "${DIR}/f1bis-ejec.qcow2" 20G || die "no pude crear la superposición de ejecución"
     cronologia "INICIO ejecutar (ventana ${VENTANA_EJEC_MIN} min, red CERRADA)"
+    paso_permitido "arrancar la VM" || return 1
     arrancar "${DIR}/f1bis-ejec.qcow2" cerrada || die "no arranca la VM"
-    esperar_ssh || die "la VM no responde por SSH"
-    remoto_con_salida $((VENTANA_EJEC_MIN * 60 + 90)) "sudo timeout --kill-after=30 $((VENTANA_EJEC_MIN * 60)) env CANDIDATO='${CANDIDATO}' BOOTSTRAP_SHA256='$(valor_manifiesto BOOTSTRAP_SHA256)' ALEMBIC_ESPERADA='$(valor_manifiesto ALEMBIC_ESPERADA)' CSS_SHA256='$(valor_manifiesto CSS_SHA256)' MUESTRAS='${MUESTRAS:-5}' bash /home/ensayo/vm-ejecutar.sh" "${DIR}/ejecucion.log"
+    esperar_ssh || { paso_permitido "esperar a SSH" || return 1; die "la VM no responde por SSH"; }
+    paso_permitido "la orden remota" || return 1
+    local rem; rem="$(tope_de_paso $((VENTANA_EJEC_MIN * 60)))"
+    remoto_con_salida $((rem + 60)) "sudo timeout --kill-after=30 $((rem - 30)) env CANDIDATO='${CANDIDATO}' BOOTSTRAP_SHA256='$(valor_manifiesto BOOTSTRAP_SHA256)' ALEMBIC_ESPERADA='$(valor_manifiesto ALEMBIC_ESPERADA)' CSS_SHA256='$(valor_manifiesto CSS_SHA256)' MUESTRAS='${MUESTRAS:-5}' bash /home/ensayo/vm-ejecutar.sh" "${DIR}/ejecucion.log"
     local rc=${REMOTO_RC}
     mkdir -p "${DIR}/evidencia"
     ssh_remoto 120 'sudo tar -C /root/ensayo -czf - evidencia' > "${DIR}/evidencia/evidencia-vm.tar.gz" 2>/dev/null || true
