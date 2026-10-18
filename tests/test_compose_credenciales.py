@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Compose no pone en servicio el sistema con `DB_PASSWORD` ausente, vacía o conocida por defecto.
 
 Compose puede exigir una variable presente y no vacía (`${VAR:?}`), pero eso por sí solo NO rechaza un valor de
@@ -12,11 +13,14 @@ Las aserciones son booleanas: nunca se vuelca la configuración renderizada.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests._tabla_credenciales import TABLA
 
 RAIZ = Path(__file__).resolve().parents[1]
 COMPOSE = RAIZ / "docker-compose.yml"
@@ -75,6 +79,27 @@ def test_el_comprobador_rechaza_ausente_vacia_y_conocida(tmp_path, linea):
     r = _comprobar(tmp_path, linea)
     assert r.returncode != 0, "Compose dejó pasar una credencial ausente, vacía o conocida por defecto"
     assert "DB_PASSWORD" in (r.stdout + r.stderr), "el rechazo no dice cuál es la variable"
+
+
+def _comprobar_valor_literal(tmp_path: Path, valor: str) -> subprocess.CompletedProcess:
+    """El valor viaja por el ENTORNO del proceso (sin pasar por la lectura de comillas del `.env`): es el que el
+    contenedor recibe de verdad. El `.env` no lleva DB_PASSWORD, así que la interpolación usa el entorno."""
+    env = tmp_path / ".env"
+    env.write_text("TZ=Europe/Madrid\n", encoding="utf-8")
+    entorno = {**os.environ, "DB_PASSWORD": valor}
+    return subprocess.run(
+        ["docker", "compose", "-p", PROYECTO, "-f", str(COMPOSE), "--env-file", str(env),
+         "run", "--rm", "--no-deps", "-T", "credenciales"],
+        capture_output=True, text=True, timeout=120, check=False, cwd=tmp_path, env=entorno,
+    )
+
+
+@pytest.mark.parametrize("valor,no_vale", TABLA, ids=[repr(v)[:30] for v, _ in TABLA])
+def test_la_regla_unica_de_las_tres_implementaciones(tmp_path, valor, no_vale):
+    """Misma tabla que Bash y Python. El servicio borraba espacios y comillas INTERIORES para comparar: `change me`
+    (una contraseña personal) se rechazaba como `changeme`."""
+    r = _comprobar_valor_literal(tmp_path, valor)
+    assert (r.returncode != 0) is no_vale, f"{valor!r}: no_vale={no_vale}, rc={r.returncode}"
 
 
 def test_el_comprobador_acepta_una_credencial_propia(tmp_path):

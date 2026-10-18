@@ -92,6 +92,8 @@ comprobar_requisitos() {
         "No encuentro ${COMPOSE_FILE}. ¿Está el repo completo en ${REPO_DIR}?"
     [[ -f "${ENV_FILE}" ]] || die \
         "No encuentro ${ENV_FILE}. Se espera el .env que creó bootstrap.sh en ${ZASCARR_ROOT}."
+    # Existe pero no se puede leer (600 de root y no somos root): se dice antes de tocar nada (ADR 0012).
+    comprobar_env_legible
 }
 
 # Los scripts se invocan con sudo (el backup va a /var/backups, que es de root),

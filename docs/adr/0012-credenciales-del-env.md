@@ -35,7 +35,7 @@ de Compose · el arnés de validación de la Pi (`docs/design/guion-validacion-p
 | Conservación | Una credencial válida **no se toca, no se regenera y no se imprime**. La clave que firma la cookie de sesión **no está en el `.env`**: la app la genera una vez y la guarda en la base de datos (`ensure_secret_key`), así que no hay nada que inicializar ni conservar en el `.env` para ella. | ídem · `services/runtime_settings.py` |
 | Base ya creada | Si falta la credencial **y ya existe una base de datos** (`<datos>/postgres/PG_VERSION`), el instalador **se detiene sin cambiar nada** y explica cómo recuperarse. Inventar otra contraseña dejaría la base inaccesible. | ídem |
 | Compose | Servicio de un solo uso `credenciales` (imagen de PostgreSQL, sin red, sin escribir, 16 MB, termina enseguida): PostgreSQL y la aplicación esperan a que acabe bien. Rechaza ausente, vacía, solo espacios, comillas y las **conocidas** (sin distinguir mayúsculas). | `docker-compose.yml` |
-| Aplicación | Si le llega un `DATABASE_URL` con una contraseña conocida, **no abre ninguna conexión** y arranca en modo solo diagnóstico (el mismo camino de fallo cerrado que «base de datos no disponible»), con el motivo en el log y sin el valor. | `utils/credenciales.py`, `main.py` |
+| Aplicación | Si le llega un `DATABASE_URL` con una contraseña conocida, **no abre ninguna conexión** y arranca en modo solo diagnóstico (el mismo camino de fallo cerrado que «base de datos no disponible»), con el motivo en el log y sin el valor. **Sin contraseña** solo se acepta por **socket Unix local** (`peer`/`trust` del propio equipo); una conexión TCP sin contraseña —ni siquiera al bucle local— no es autenticación alternativa y se rechaza. | `utils/credenciales.py`, `main.py` |
 | `update.sh` | Comprueba la contraseña **antes** del backup y de traer código: «NO se ha actualizado nada». Avisa —sin fallar— si el `.env` sigue legible por otros. | `scripts/update.sh` |
 | Instalación manual | Inicialización explícita documentada: `sudo bash scripts/credenciales.sh` (crea el `.env`, genera, protege, idempotente). Sin ella, Compose se niega a arrancar con un mensaje en español. | `scripts/credenciales.sh`, README |
 
@@ -47,10 +47,26 @@ además hace fallar `docker compose down/logs/ps` en cuanto falta el `.env` — 
 `cambia_esto_ahora` (la plantilla), `SuperSecretPassword123` (el antiguo valor por defecto de Compose, publicado en el
 repo), `changeme`. `.env.example` conserva el placeholder: es la barrera lo que lo hace inofensivo.
 
+**Regla única de «no vale»** (la misma lista NO bastaba: los tres sitios normalizaban distinto, y el servicio de Compose
+borraba los espacios y las comillas *interiores*, así que la contraseña personal `change me` se rechazaba como `changeme`
+mientras Bash y Python la dejaban pasar). Ahora, en Bash, Python y el servicio de Compose y con la misma tabla de casos
+(`tests/_tabla_credenciales.py`): se recortan los espacios en blanco de los extremos; si el valor empieza y acaba por la
+misma comilla se quita ese par y se recorta otra vez; minúsculas ASCII; no vale si queda vacío o es **exactamente** uno de los
+conocidos. **Nunca se borra nada interior.**
+
+**Lector y escritor del `.env` comparten criterio.** `env_valor` lee como Compose: la última aparición gana, admite `export`,
+sangría, CR, comillas y comentario ` #…`. `env_escribir` sustituye **todas** las líneas que el lector consideraría de esa
+clave (antes solo reconocía `CLAVE=` pegada al margen: una línea `export CLAVE=…` posterior seguía mandando y la contraseña
+recién generada quedaba sin efecto) y escribe el valor de modo que el lector lo recupere idéntico: entrecomillado (comilla
+simple, o doble si lleva simples y nada que Compose interprete) cuando hay espacios en los extremos, un ` #` o una comilla
+inicial; si ni así se puede representar, se rechaza sin tocar el fichero.
+
 ### 2. Escribir el `.env`: atómico y sin copias
 
-`env_escribir` compone un temporal `0600` en la **misma carpeta**, le da el propietario y modo del original, hace `sync` y
-lo **renombra encima** (atómico en el mismo sistema de ficheros). Un fallo en cualquier paso borra el temporal y deja el
+`env_escribir` primero **cierra el original** (600, de root si somos root) —un secreto nuevo no entra nunca en un fichero
+abierto—, compone un temporal `0600` de root en la **misma carpeta** que **no hereda el modo ni el propietario del original**
+(antes sí: sobre un `.env` heredado en 644 la contraseña recién generada nacía legible por todos), hace `sync` y lo
+**renombra encima** (atómico en el mismo sistema de ficheros). El `chown` se comprueba, no se descarta. Un fallo en cualquier paso borra el temporal y deja el
 original intacto: ni fichero a medias ni pérdida de la configuración anterior válida. El valor viaja por el entorno de
 `awk`, no por argumentos (no sale en `ps`) y se escribe literal (`\`, `&`, `#`, `$`). **No se hacen copias de seguridad
 del `.env`**: serían más copias de un secreto. Cada escritura es atómica; no hay transacción entre variables distintas, pero
@@ -77,9 +93,25 @@ Consecuencias de implementación (todas en `proteger_configuracion`, idempotente
 - `.env`: `root:root 600`. `ZASCARR_ROOT`: `root:root 755`. Repo: `chown -hR root:root` + `chmod -R go-w` (**`-h`**: un enlace
   dentro del repo no puede hacer que se reclame un fichero ajeno).
 - **Solo si `ZASCARR_ROOT` es una carpeta dedicada** (`raiz_dedicada`: `<raíz>/zascarr`, que no es el home de nadie y solo
-  contiene entradas de ZascArr). Si es compartida —un home, `/opt`…— **no se reclama ni ella ni el repo** (podrían ser de
-  otra persona), el `.env` queda igualmente `root 600` y se **avisa** de que quien pueda escribir en esa carpeta podría
-  reemplazarlo. Reclamar por error la carpeta personal de alguien es peor que el defecto que se corrige.
+  contiene entradas de ZascArr) **se reclama**, y solo esas dos entradas. Si es compartida —un home, `/opt`…— **no se reclama
+  ni ella ni el repo** (podrían ser de otra persona) y, **si no es ya de fiar, el instalador se detiene** (antes avisaba y
+  seguía: guardar ahí una contraseña generada no la protegía). Reclamar por error la carpeta personal de alguien es peor
+  que el defecto que se corrige; pero seguir como si estuviera protegido, también.
+- **Ubicación de fiar de punta a punta, antes de escribir ningún secreto** (`ubicacion_insegura`, `proteger_configuracion`):
+  se recorre cada componente de la ruta **lógica** —no la física, que pierde los enlaces intermedios—. Cada carpeta ha de ser
+  de root y no admitir escritura de grupo ni de otros (el bit pegajoso vale en las intermedias, como `/tmp`; no en la que
+  contiene el `.env`); un enlace se admite solo si es de root, su carpeta es de fiar y su destino también (`/opt → /mnt/disco/opt`
+  es legítimo); `..`, los bucles y un `.env` que sea un enlace se rechazan. Si es una carpeta dedicada, lo que hay **por
+  encima** se comprueba **antes** de reclamar nada. Si algo falla: se para, sin haber escrito ni cambiado el `.env`, y el
+  mensaje da la salida (instalar en una carpeta propia de root, por defecto `/opt/zascarr`, y copiar el `.env` con
+  `install -m 600 -o root -g root`).
+- **El orden** en `bootstrap.sh` y `credenciales.sh iniciar`: proteger (y comprobar) → crear el `.env` con `umask 077` → generar
+  y guardar la contraseña → proteger de nuevo (idempotente).
+- **Consumidores**: `update.sh`, `rollback.sh`, `backup.sh`, `etiquetar.sh` y `uninstall.sh` comprueban con
+  `comprobar_env_legible` —antes de tocar nada— que pueden leer el `.env`, y si no piden `sudo` en español. Un `.env` ilegible
+  **no es** un `.env` ausente: `uninstall.sh`, que tolera la ausencia, lo habría tratado como vacío y calculado rutas con los
+  valores por defecto. Los comandos de ayuda que imprimen los scripts llevan `sudo` y `--env-file` explícito (Compose sin
+  permiso de lectura falla con `permission denied` en inglés, medido con Compose v5).
 - El camino en frío del instalador ya no hace `chown -R <servicio> <ZASCARR_ROOT>` (que además recorría carpetas ajenas).
 - La biblioteca y las descargas **no se tocan** (A3).
 
@@ -138,6 +170,13 @@ Sin un sistema desechable con root las pruebas de identidades **se saltan** y se
 
 - Quien está en el grupo `docker` es equivalente a root: puede leer variables con `docker inspect`. No se intenta evitarlo.
 - La heurística «ya hay base» es `PG_VERSION`; una base creada fuera de `ZASCARR_DATA_DIR` no se ve.
-- Una raíz compartida no queda a salvo de ser reemplazada (solo se avisa).
+- Una raíz compartida que no sea ya de root y cerrada **no se admite** (el instalador se detiene): no se intenta arreglar lo que podría ser de otra persona.
 - No hay bloqueo entre dos instaladores simultáneos.
 - Las **fuentes que aparecían activadas** en el informe M4 son un hallazgo separado, sin comprobar aquí.
+
+## Revisión de la consolidación (#237/#238): qué se conserva de cada una
+
+Se consolida sobre #238. De #237 se conservan **las guardas de los consumidores** (distinguir `.env` ausente de ilegible; con
+mensajes y regresiones propias) y **las pruebas que observan el modo del fichero durante la escritura**, adaptadas al sistema
+aislado. No se conserva su ayudante (un solo `_credenciales.sh`) ni su comprobador de rutas (validaba la ruta física y perdía
+los enlaces intermedios; ver `tests/test_credenciales_ubicacion.py`).

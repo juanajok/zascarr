@@ -113,17 +113,20 @@ if ! grep -qF -- "${SINT}" "${W}/salida.out" "${W}/salida.err" "${W}/docker.log"
     pass P13 "la credencial sintética no aparece en la salida del instalador ni en las órdenes a Docker"
 else fail P13 "la credencial aparece en la salida"; fi
 
-# Una carpeta que NO es solo de ZascArr (como un home) no se reclama: no se cambia su dueño ni su modo
+# Una carpeta que NO es solo de ZascArr (como un home) no se reclama: no se cambia su dueño ni su modo, y el instalador
+# SE DETIENE (antes avisaba y seguía: quien puede escribir en esa carpeta podría sustituir el .env). Más casos de
+# ubicación en el escenario «ubicacion».
 HOGAR="${W}/home/colecc"; mkdir -p "${HOGAR}/Documentos"; echo secreto-ajeno > "${HOGAR}/.bashrc"
 instalacion_heredada "${HOGAR}" "${SINT}"
 mkdir -p "${HOGAR}/Documentos"; chown -R "${SVC}:${SVC}" "${HOGAR}"; chmod 750 "${HOGAR}"
 ANTES="$(modo "${HOGAR}")"
+: > "${W}/docker.log"
 ejecutar_instalador "${HOGAR}"
-if [[ "$(modo "${HOGAR}")" == "${ANTES}" && "$(modo "${HOGAR}/.env")" == "600 root:root" ]]; then
-    pass P14 "una carpeta compartida (home) no se reclama, y el .env queda 600 root:root"
-else fail P14 "carpeta compartida: $(modo "${HOGAR}"), .env: $(modo "${HOGAR}/.env")"; fi
-if grep -q 'no es solo de ZascArr' "${W}/salida.out" "${W}/salida.err"; then pass P14b "y avisa de que el .env no queda a salvo de ser reemplazado ahí"
-else fail P14b "no avisó"; fi
+if [[ "$(modo "${HOGAR}")" == "${ANTES}" && "${RC}" -ne 0 ]] && ! llego_a_postgres; then
+    pass P14 "una carpeta compartida (home) no se reclama y el instalador se detiene en vez de seguir"
+else fail P14 "carpeta compartida: $(modo "${HOGAR}"), rc=${RC}"; fi
+if grep -q 'no es solo de ZascArr' "${W}/salida.out" "${W}/salida.err"; then pass P14b "y explica que ahí el .env no quedaría a salvo de ser reemplazado"
+else fail P14b "no lo explicó"; fi
 
 rm -rf "${W}"
 exit 0

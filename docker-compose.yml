@@ -36,7 +36,18 @@ services:
       - sh
       - -c
       - |
-        v=$$(printf '%s' "$$DB_PASSWORD" | tr -d ' \t\r\n"'"'"'' | tr 'A-Z' 'a-z')
+        # La regla única de «no vale» (scripts/_credenciales.sh y zascarr/utils/credenciales.py: tests/_tabla_credenciales.py):
+        # recortar los extremos, quitar UN par de comillas que rodee el valor, minúsculas; nunca se borra nada interior.
+        v=$$DB_PASSWORD
+        v=$${v#"$${v%%[![:space:]]*}"}; v=$${v%"$${v##*[![:space:]]}"}
+        if [ "$${#v}" -ge 2 ]; then
+          p=$${v%"$${v#?}"}; u=$${v#"$${v%?}"}
+          if [ "$$u" = "$$p" ] && { [ "$$p" = '"' ] || [ "$$p" = "'" ]; }; then
+            v=$${v#?}; v=$${v%?}
+            v=$${v#"$${v%%[![:space:]]*}"}; v=$${v%"$${v##*[![:space:]]}"}
+          fi
+        fi
+        v=$$(printf '%s' "$$v" | tr 'A-Z' 'a-z')
         case "$$v" in
           ""|cambia_esto_ahora|supersecretpassword123|changeme)
             echo "ZascArr no arranca: DB_PASSWORD falta, está vacía o conserva un valor de ejemplo." >&2

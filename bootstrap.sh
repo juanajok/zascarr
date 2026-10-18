@@ -270,6 +270,16 @@ docker info >/dev/null 2>&1 || die \
 ENV_FILE="${ZASCARR_ROOT}/.env"
 mkdir -p "${ZASCARR_ROOT}" || die \
     "No puedo crear ${ZASCARR_ROOT}. ¿Tienes permisos de escritura en el directorio padre?"
+
+# ── Protección ANTES de escribir ningún secreto (ADR 0012, C4/C5/C8). Si la ubicación del .env o el código que root
+# ── ejecuta los puede cambiar otra cuenta, aquí se PARA —no se avisa y se sigue—: guardar ahí una contraseña generada
+# ── no la protegería. Es idempotente y se repite al final. No toca el .env si la ubicación no es de fiar.
+proteger_configuracion "${ENV_FILE}" "${ZASCARR_ROOT}" "${SCRIPT_DIR}" || die \
+    "No puedo garantizar que otra cuenta del equipo no pueda sustituir el .env (ver arriba). No he escrito ninguna contraseña
+  ni he cambiado nada más.
+  Qué hacer: instala ZascArr en una carpeta propia de root que no cuelgue de la carpeta de nadie — por defecto /opt/zascarr
+  (la variable ZASCARR_ROOT la cambia) — y vuelve a ejecutar el instalador. Si ya tenías una instalación en otro sitio,
+  conserva tu .env: cópialo a la nueva carpeta con  sudo install -m 600 -o root -g root <el_antiguo> /opt/zascarr/.env"
 limpiar_temporales_env "${ENV_FILE}"
 if [[ ! -f "${ENV_FILE}" ]]; then
     # umask 077 en un subshell: el .env nace 0600 y no se toca el umask del resto del instalador.
@@ -295,7 +305,7 @@ case "${CREDENCIALES_RC}" in
       ejecutar el instalador: se creará una base nueva con una contraseña nueva." ;;
     *)  die "No pude generar o guardar la contraseña de la base de datos. No he cambiado ${ENV_FILE}." ;;
 esac
-# El .env es de root (600) y la carpeta que lo contiene y el repo no son escribibles por el usuario de servicio.
+# El .env recién creado o reescrito queda root:root 600 (idempotente; la ubicación ya se comprobó antes de escribir).
 proteger_configuracion "${ENV_FILE}" "${ZASCARR_ROOT}" "${SCRIPT_DIR}" || die \
     "No pude dejar protegido el .env (root, modo 600) ni su carpeta. Revisa los permisos de ${ZASCARR_ROOT} y vuelve a ejecutar."
 
@@ -519,7 +529,7 @@ case "${ESTADO_APP}" in
   a arrancar al final, cerrada o abierta según lo que elijas."
         docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop zascarr || die \
             "No pude parar ZascArr. Páralo a mano antes de seguir:
-  docker compose -f ${COMPOSE_FILE} stop zascarr"
+  sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} stop zascarr"
         ;;
     *)
         die "No he podido comprobar si ZascArr ya está funcionando (¿Docker no responde?).
@@ -531,13 +541,13 @@ esac
 info "Levantando PostgreSQL..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d postgres || die \
-    "No pude levantar PostgreSQL. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    "No pude levantar PostgreSQL. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 
 info "Esperando a PostgreSQL..."
 MAX=60; ELAPSED=0
 until docker compose -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U comics_admin -d zascarr -q 2>/dev/null; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
     echo -n "."; sleep 2
 done
 echo ""; success "PostgreSQL listo"
@@ -552,7 +562,7 @@ cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 # migra y se arranca con esa MISMA imagen — nunca se instala nada de
 # Python en el host, la única fuente de dependencias es la imagen Docker.
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
-    "No pude construir la imagen de ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} build zascarr"
+    "No pude construir la imagen de ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
 
 info "Corriendo migraciones Alembic (dentro del contenedor)..."
 # DATABASE_URL ya lo resuelve el propio docker-compose.yml desde .env
@@ -561,7 +571,7 @@ info "Corriendo migraciones Alembic (dentro del contenedor)..."
 # a "127.0.0.1:5432"; no hace falta reconstruirlo a mano leyendo el .env.
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" run --rm zascarr \
     alembic upgrade head || die \
-    "Las migraciones de la base de datos fallaron. Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    "Las migraciones de la base de datos fallaron. Revisa con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 success "Migraciones aplicadas"
 
 # ── A11: abrir a la red EXIGE contraseña, y se fija ahora —después de migrar y
@@ -590,7 +600,7 @@ if ! ajustar_base_url "${EXPOSICION_OPCION}" "${BASE_URL_PUBLICA}"; then
     volver_a_solo_esta_maquina
     ajustar_base_url 1 "" || die \
         "No puedo comprobar la dirección pública que usaría ZascArr, así que no lo arranco.
-  Revisa la base de datos (docker compose -f ${COMPOSE_FILE} logs postgres) y vuelve a ejecutar el instalador."
+  Revisa la base de datos (sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres) y vuelve a ejecutar el instalador."
 fi
 set_env_var "ZASCARR_BIND_ADDRESS" "${ZASCARR_BIND_ADDRESS}"
 
@@ -607,13 +617,13 @@ info "Levantando ZascArr..."
 # de configuración, `up -d` deja el contenedor en marcha con la contraseña ANTIGUA en
 # memoria (verificado en vivo: aceptaba la vieja y rechazaba la nueva).
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d --force-recreate zascarr || die \
-    "No pude arrancar ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs zascarr"
+    "No pude arrancar ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr"
 
 info "Verificando healthcheck..."
 MAX=30; ELAPSED=0
 until curl -sf http://127.0.0.1:8000/api/health >/dev/null 2>&1; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  docker compose -f ${COMPOSE_FILE} logs zascarr" && break
+    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr" && break
     echo -n "."; sleep 2
 done
 echo ""
@@ -639,7 +649,7 @@ echo "  Kavita:           http://127.0.0.1:5000  (si está instalado)"
 echo "  Prowlarr:         http://127.0.0.1:9696  (si está instalado)"
 echo ""
 echo "  Logs en tiempo real:"
-echo "    docker compose -f ${COMPOSE_FILE} logs -f zascarr"
+echo "    sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs -f zascarr"
 echo ""
 curl -sf http://127.0.0.1:5000 >/dev/null 2>&1 || \
     warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${SCRIPT_DIR}/scripts/kavita.sh install"

@@ -16,7 +16,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 - **El `.env` ya no lo lee ni lo cambia cualquiera.** Queda como `root`, modo 600; la carpeta que lo contiene y el repo
   (compose, Dockerfile, scripts y el enlace `.env`) también son de `root`: el usuario de servicio, que comparte identidad
   con Sonarr/Prowlarr/Transmission, ya no puede leerlo, editarlo, borrarlo, reemplazarlo ni redirigir su enlace. Una carpeta
-  compartida (un home) no se reclama: se avisa. Los comandos manuales de `docker compose` y `backup.sh` llevan `sudo`.
+  compartida (un home, o una ruta que otra cuenta pueda cambiar: un antecesor suyo, un enlace) no se reclama y **el instalador se
+  detiene sin escribir nada** y dice cómo salir (instalar en `/opt/zascarr`): antes avisaba y seguía. La protección va **antes**
+  de escribir: la contraseña nueva nunca vive en un fichero abierto (un `.env` heredado en 644 se cierra antes, y el temporal ya
+  nace 600 de root sin heredar el modo del original) y, si no se consigue el propietario o los permisos, no se sigue. Los comandos
+  manuales de `docker compose`, `backup.sh`, `etiquetar.sh` y `uninstall.sh` piden `sudo` en español si no pueden leer el `.env`
+  (un `.env` ilegible ya no se confunde con uno ausente). La misma regla decide si una contraseña «no vale» en el instalador,
+  en Compose y en la aplicación (la contraseña personal `change me` ya no se rechaza como `changeme`), y sin contraseña solo se
+  acepta el socket Unix local.
   Para endurecer una instalación existente sin cambiar su contraseña: `sudo bash scripts/credenciales.sh`.
 - Escribir el `.env` es **atómico** (un fallo lo deja como estaba, sin temporales ni copias de la contraseña) y `update.sh`
   comprueba la contraseña **antes** de hacer el backup o traer código.

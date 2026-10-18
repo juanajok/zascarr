@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """`scripts/_credenciales.sh`: leer, validar, generar y escribir credenciales del `.env`.
 
 Bash de verdad sobre ficheros sintéticos en `tmp_path` (no hace falta root: lo que exige root —propietarios y
@@ -14,6 +15,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+from tests._tabla_credenciales import TABLA
 
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None or shutil.which("awk") is None, reason="requiere bash y awk",
@@ -68,7 +71,15 @@ def test_env_valor_de_un_fichero_que_no_existe_es_vacio(tmp_path):
     assert _valor(tmp_path / "no-existe") == ""
 
 
-# ── credencial_invalida ───────────────────────────────────────────────────────────────────────────
+# ── credencial_invalida: la regla única (tests/_tabla_credenciales.py) ─────────────────────────────
+
+@pytest.mark.parametrize("valor,no_vale", TABLA, ids=[repr(v)[:30] for v, _ in TABLA])
+def test_la_regla_unica_de_las_tres_implementaciones(valor, no_vale):
+    r = _bash(f'credencial_invalida {_q(valor)}; echo $?')
+    assert r.stdout.strip() == ("0" if no_vale else "1"), f"{valor!r}: no_vale={no_vale}"
+
+
+# ── credencial_invalida (casos históricos) ───────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("valor,invalida", [
     ("", True), ("   ", True), ('""', True),
@@ -102,8 +113,8 @@ def test_lo_generado_no_se_confunde_con_un_valor_de_ejemplo():
 # ── env_escribir: atómico, literal, conserva propietario y modo ───────────────────────────────────
 
 @pytest.mark.parametrize("valor", [
-    "simple", "con espacios y # almohadilla", "a&b\\c", 'comillas "dobles" \'simples\'', "$(no) `se` ${expande}", "x=y=z",
-    "/media/Juan & María",
+    "simple", "a&b\\c", 'comillas "dobles" \'simples\'', "$(no) `se` ${expande}", "x=y=z",
+    "/media/Juan & María", "con#pegada",
 ])
 def test_env_escribir_guarda_el_valor_literal(tmp_path, valor):
     env = tmp_path / ".env"
@@ -111,6 +122,56 @@ def test_env_escribir_guarda_el_valor_literal(tmp_path, valor):
     r = _bash(f'env_escribir "{env}" CLAVE {_q(valor)}')
     assert r.returncode == 0, r.stderr
     assert env.read_text(encoding="utf-8") == f"A=1\nCLAVE={valor}\nB=2\n"
+
+
+# Lo que se escribe es lo que se lee: el escritor y el lector comparten las MISMAS reglas (`export`, sangría, duplicados,
+# espacios en los extremos y comentarios ` #`). Un valor que el lector no recuperaría tal cual se entrecomilla (comilla
+# simple: literal en Compose) o, si no se puede representar, se rechaza.
+@pytest.mark.parametrize("valor", [
+    "simple", "con espacios y # almohadilla", "  espacios en los extremos  ", " # empieza por comentario",
+    "'ya entre comillas'", '"dobles"', "a=b", "con#pegada", "/media/Mi biblioteca #2",
+])
+def test_lo_que_env_escribir_escribe_es_lo_que_env_valor_lee(tmp_path, valor):
+    env = tmp_path / ".env"
+    env.write_text("A=1\n", encoding="utf-8")
+    r = _bash(f'env_escribir "{env}" CLAVE {_q(valor)}')
+    assert r.returncode == 0, r.stderr
+    assert _valor(env, "CLAVE") == valor
+
+
+def test_un_valor_que_no_se_puede_representar_se_rechaza_sin_tocar_el_fichero(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("A=1\n", encoding="utf-8")
+    imposible = " con ' y # $dentro "        # espacios en los extremos + ` #` (exige comillas) + comilla simple + `$` (impide las dobles)
+    r = _bash(f'env_escribir "{env}" CLAVE {_q(imposible)}')
+    assert r.returncode != 0
+    assert env.read_text(encoding="utf-8") == "A=1\n"
+
+
+@pytest.mark.parametrize("texto", [
+    "DB_PASSWORD=ok\nexport DB_PASSWORD=changeme\n",         # la última gana en la lectura: era la ÚLTIMA la que sobrevivía
+    "export DB_PASSWORD=changeme\n",
+    "  DB_PASSWORD=changeme\n",
+    "DB_PASSWORD=a\n  export   DB_PASSWORD=b\nDB_PASSWORD=c\n",
+    "\tDB_PASSWORD='x'  # nota\n",
+])
+def test_tras_escribir_el_valor_efectivo_es_el_escrito_con_export_sangria_y_duplicados(tmp_path, texto):
+    """Antes el escritor solo reconocía `CLAVE=` en el primer carácter: una línea `export CLAVE=…` posterior seguía
+    mandando y la contraseña recién generada quedaba sin efecto."""
+    env = tmp_path / ".env"
+    env.write_text(texto, encoding="utf-8")
+    assert _bash(f'env_escribir "{env}" DB_PASSWORD NUEVO-0001').returncode == 0
+    assert _valor(env) == "NUEVO-0001"
+    activas = [x for x in env.read_text(encoding="utf-8").splitlines()
+               if re.match(r"^\s*(export\s+)?DB_PASSWORD=", x)]
+    assert activas and all(x == "DB_PASSWORD=NUEVO-0001" for x in activas), activas
+
+
+def test_escribir_no_toca_otras_claves_que_empiezan_igual(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("DB_PASSWORD_VIEJA=1\nXDB_PASSWORD=2\n", encoding="utf-8")
+    assert _bash(f'env_escribir "{env}" DB_PASSWORD n').returncode == 0
+    assert env.read_text(encoding="utf-8") == "DB_PASSWORD_VIEJA=1\nXDB_PASSWORD=2\nDB_PASSWORD=n\n"
 
 
 def test_env_escribir_anade_si_no_existe_y_sustituye_todas_las_apariciones(tmp_path):
@@ -126,13 +187,35 @@ def test_env_escribir_crea_el_fichero_con_modo_600(tmp_path):
     assert stat.S_IMODE(env.stat().st_mode) == 0o600
 
 
-@pytest.mark.parametrize("modo", [0o600, 0o640, 0o644])
-def test_env_escribir_conserva_el_modo_del_original(tmp_path, modo):
+@pytest.mark.parametrize("modo", [0o600, 0o640, 0o644, 0o666])
+def test_env_escribir_deja_siempre_600_y_no_hereda_un_modo_abierto(tmp_path, modo):
+    """Antes se copiaba el modo (y el propietario) del original al secreto nuevo: sobre un `.env` heredado en 644, la
+    contraseña recién generada nacía legible por todos. El fichero que se renombra encima es siempre 600."""
     env = tmp_path / ".env"
     env.write_text("A=1\n", encoding="utf-8")
     env.chmod(modo)
     assert _bash(f'env_escribir "{env}" K v').returncode == 0
-    assert stat.S_IMODE(env.stat().st_mode) == modo
+    assert stat.S_IMODE(env.stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize("modo", [0o644, 0o666])
+def test_en_ningun_momento_el_secreto_nuevo_esta_en_un_fichero_abierto(tmp_path, modo):
+    """Se observa el modo del temporal en el instante del renombrado (un `mv` de envoltorio lo anota): hasta
+    entonces el secreto vive solo en un fichero 600, y el original abierto nunca lo recibe."""
+    env = tmp_path / ".env"
+    env.write_text("A=1\n", encoding="utf-8")
+    env.chmod(modo)
+    registro = tmp_path / "modos.txt"
+    r = _bash(
+        f'mv() {{ for f in "$@"; do [[ -f "$f" ]] && echo "$(basename "$f") $(stat -c %a "$f")" >> "{registro}"; done; '
+        f'command mv "$@"; }}\n'
+        f'env_escribir "{env}" K v')
+    assert r.returncode == 0, r.stderr
+    anotado = dict(linea.split() for linea in registro.read_text().splitlines())
+    temporales = {n: m for n, m in anotado.items() if n.startswith(".env.tmp.")}
+    assert temporales and all(m == "600" for m in temporales.values()), anotado
+    assert anotado[".env"] == "600", f"el .env de destino seguía abierto al renombrar encima: {anotado}"
+    assert stat.S_IMODE(env.stat().st_mode) == 0o600
 
 
 def test_env_escribir_rechaza_claves_y_valores_peligrosos(tmp_path):
@@ -163,9 +246,10 @@ def _herramienta_rota(tmp_path: Path, nombre: str) -> Path:
     return d
 
 
-@pytest.mark.parametrize("herramienta", ["awk", "mv", "chmod", "chown"])
+@pytest.mark.parametrize("herramienta", ["awk", "mv", "chmod"])
 def test_si_falla_un_paso_el_original_queda_intacto_y_no_sobra_ningun_temporal(tmp_path, herramienta):
-    """Fallo durante la escritura: ni configuración a medias ni pérdida de la anterior válida."""
+    """Fallo durante la escritura: ni configuración a medias ni pérdida de la anterior válida. El contenido no cambia;
+    el modo, como mucho, se ha ENDURECIDO a 600 (el cierre previo a escribir) y nunca se afloja."""
     env = tmp_path / ".env"
     env.write_text(f"DB_PASSWORD={SINT}\nOTRA=1\n", encoding="utf-8")
     env.chmod(0o640)
@@ -173,9 +257,26 @@ def test_si_falla_un_paso_el_original_queda_intacto_y_no_sobra_ningun_temporal(t
     r = _bash(f'env_escribir "{env}" DB_PASSWORD otra-nueva', path_extra=_herramienta_rota(tmp_path, herramienta))
     assert r.returncode != 0
     assert env.read_bytes() == antes
-    assert stat.S_IMODE(env.stat().st_mode) == 0o640
+    assert stat.S_IMODE(env.stat().st_mode) == (0o640 if herramienta == "chmod" else 0o600)
     assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith(".env.tmp")) == []
     assert "otra-nueva" not in r.stdout + r.stderr
+
+
+def test_si_chown_falla_siendo_root_no_se_escribe_nada_y_no_sobra_ningun_temporal(tmp_path):
+    """Siendo root, el propietario se pide con `chown` y se propaga su fallo (no se descarta). Se simula root con un `id`
+    de pega y un `chown` que falla."""
+    env = tmp_path / ".env"
+    env.write_text(f"DB_PASSWORD={SINT}\n", encoding="utf-8")
+    env.chmod(0o640)
+    antes = env.read_bytes()
+    falso = tmp_path / "falso"
+    falso.mkdir()
+    for nombre, cuerpo in (("id", "echo 0"), ("chown", "exit 1")):
+        (falso / nombre).write_text(f"#!/bin/sh\n{cuerpo}\n", encoding="utf-8")
+        (falso / nombre).chmod(0o755)
+    r = _bash(f'env_escribir "{env}" DB_PASSWORD otra-nueva', path_extra=falso)
+    assert r.returncode != 0 and env.read_bytes() == antes
+    assert sorted(p.name for p in tmp_path.iterdir() if p.name.startswith(".env.tmp")) == []
 
 
 def test_sin_permiso_de_escritura_en_la_carpeta_falla_sin_tocar_nada(tmp_path):
