@@ -2220,6 +2220,65 @@ de naming con variables en UI (demasiada superficie para el
 coleccionista) — y, añadido en esta ronda, **OPDS-PSE** (streaming de
 contenido) por la misma razón que ya motivó que C5 fuera solo catálogo.
 
+## Benchmarking competitivo, ronda 3: Calibre (2026-10-18)
+
+> **Estado: referencia funcional para ENRIQUECER historias existentes. No crea tarjetas, no cambia prioridades ni estados, no autoriza
+> implementación y no desplaza la consolidación de credenciales (#237/#238) ni el seguimiento de la política de fuentes (#239).** Tampoco
+> aplica la ficha §13: antes de construir cualquiera de estos patrones habrá que fijarla con las referencias pertinentes (CLAUDE.md §13).
+
+**Qué se revisó y qué no (se separan cuatro cosas).**
+
+| Cosa | Estado |
+|---|---|
+| Código examinado | repositorio oficial `kovidgoyal/calibre`, commit `2c13ba75421222a1bc83279131432f321e91e313`: `src/calibre/gui2/metadata/diff.py` (comparación de metadatos), `actions/similar_books.py` (navegación por afinidad) y `actions/mark_books.py` (marcas temporales). Lectura de solo lectura |
+| Manual | documentación web de Calibre 9.15.0 consultada en la fecha de la revisión; **no es automáticamente la documentación de ese commit** |
+| Adaptaciones a ZascArr | **propuestas funcionales**, no funcionalidades acreditadas. No implican adoptar Calibre, sus dependencias ni su arquitectura |
+| Valor para el coleccionista | **hipótesis**. No se ejecutó Calibre ni se hicieron pruebas con coleccionistas |
+
+La revisión procede del equipo de producto y revisión; **no la he reproducido**. Las referencias a tarjetas sí se contrastaron con el tablero del 2026-10-18.
+
+**Conclusión.** Lo que aporta Calibre no es descargar más metadatos, sino ayudar a convertir un conjunto de archivos en un catálogo que el
+coleccionista **entiende, puede corregir y le resulta útil**, sin convertir ZascArr en un gestor de almacenamiento. Se acepta como insumo de
+refinamiento. Orden de **estudio** (no de trabajo): primero **confianza y ahorro de esfuerzo**, después **exploración y disfrute**; una colección navegable
+pero incorrecta sigue erosionando la confianza.
+
+### Cobertura que ya existe (para no duplicar)
+
+| # | Patrón de Calibre | Qué hay ya en ZascArr | Hueco real | Tratamiento |
+|---|---|---|---|---|
+| 1 | **Comparar por campo «lo que tengo» y «lo que propone la fuente»**; conservar un valor concreto sin rechazar toda la propuesta | **Total/parcial, otro objeto:** B6 ya tiene vista previa por campo y `dry-run` con **un solo plan** para `ComicInfo.xml` (hecho) y `locked_fields` protege campos (H3). **Pendiente, misma intención:** #128 (vista previa de cambios de enriquecimiento) y #127 (procedencia y bloqueo), ambas «Lista para desarrollar» | La comparación del **enriquecimiento de la BD** (no del XML) y la conservación por campo | **Referencia de refinamiento de #127/#128.** No crear otra historia |
+| 2 | **Revisión secuencial** de una tanda (anterior/siguiente, aceptar u omitir) | «Por revisar» (B2, V5–V7) recorre **archivos** sin clasificar, no **propuestas de metadatos** | Un recorrido que conserve contexto y decisiones, **no solo dos botones** | Mejora transversal a estudiar; posible ampliación de #128. **No está cubierta automáticamente por #128** |
+| 3 | **Edición masiva** de campos descriptivos | **Ninguna.** U20/#207 (marcar todo lo vinculable) es **vincular**, no editar metadatos; la asignación por lotes mueve archivos | Todo | **Única candidata a historia nueva**, tras reconciliarla con M5 (ver «Precisiones») |
+| 4 | **Navegación por relaciones** conocidas (mismo autor, serie, editorial, etiqueta) y facetas | **Parcial:** `/ui/biblioteca` filtra por tradición, editorial, personaje y saga y enlaza a la ficha (C1, C2, hechas) | Enlaces desde la ficha («qué tengo de este dibujante») y filtros combinables | Refinar sobre Biblioteca y fichas existentes. La relación mostrada debe poder **explicarse** |
+| 5 | **Vistas** (bibliotecas virtuales) que también restringen las categorías mostradas | #236 (BL-R7) cubre **vistas predefinidas**; #155 (BL-D6) agrupa **series** en colecciones con políticas; #151 (BL-C4) son **listas ordenadas**; #150 (BL-C3) trae el estado leído | Vistas guardadas por la persona y **selección personal explícita** | Primero #236 como está. La personalización se estudia **aparte**; **no se amplía #236 en silencio** |
+| 6 | **Exportar un inventario** del catálogo (CSV) | **Ninguna** para el catálogo. #149 (BL-B20) exporta **archivos** a un árbol para Kavita: otra cosa | Exportación del catálogo, acotada por búsqueda o selección | Capacidad de autonomía y portabilidad a estudiar. **No confundir con #149** |
+| 7 | **Registros sin archivo** (ejemplar físico, deseado) | Deseados (D1) modela **querer** una serie, no **poseer** un ejemplar físico | Colección física y digital conjunta | Descubrimiento de producto posterior, con confirmación de alcance |
+
+### Otras capacidades aprovechables (después del recorrido principal)
+
+| Función de Calibre | Adaptación y cautela | Encaje |
+|---|---|---|
+| Gestión y ordenación de nombres de autores; administrar categorías | Corregir variantes de nombres y editoriales con **decisiones explícitas**; **no fusionar personas o sellos por semejanza textual** | Sin tarjeta; relacionado con M5 |
+| Consulta de metadatos con preferencia por **ISBN** introducido y validación de su forma | Pegar un identificador y **mostrar qué publicación candidata** se obtiene. Un ISBN formalmente válido **no demuestra** que corresponda al archivo | #182 (discriminantes editoriales) |
+| Varios formatos asociados a un registro | Comparar los archivos vinculados a una publicación. CBZ y CBR **no demuestran** que sean la misma edición | #235 (BL-R6) |
+| Elegir la portada del catálogo (local o descargada) | Elegirla **sin modificar el archivo original**. La imagen no acredita identidad editorial | Hoy la cascada de portada es CBZ → `cover_url` → marcador (C1); no hay elección manual |
+| Marcas temporales («marcar y volver a mostrar») | «Revisar estos después». Debe decir **cuánto dura** y distinguirse de una clasificación definitiva | Distinto de «Ignorar» (V7) y de un rechazo |
+
+### Precisiones para el refinamiento
+
+1. **El campo y la entidad afectada deben quedar definidos.** «Corregir la editorial de 40 tebeos» puede significar: corregir la grafía del mismo sello; cambiar el dato de una publicación concreta; cambiar una **entidad compartida** que afecta también a registros **fuera** de la selección; o descubrir que los archivos estaban vinculados a otra publicación. La vista previa debe mostrar el **alcance real**, no solo «40 seleccionados». Cambiar una editorial **no siempre es una modificación descriptiva inocua**: puede revelar un problema de identidad bibliográfica (M5). La relación archivo → publicación y los valores descriptivos necesitan decisiones distintas, y comparar campos **no debe cambiar en silencio** la publicación a la que pertenece un archivo.
+2. **«Conservar», «proteger», «rechazar» y «posponer» no son equivalentes.** Conservar el valor actual **en esta operación**; protegerlo **frente a propuestas futuras**; rechazar **una propuesta concreta**; posponer su revisión. Rechazar una propuesta **no bloquea para siempre** esa fuente, y conservar un valor **no lo convierte** en campo protegido. Relación con #233 (BL-R4) y #236 (BL-R7), sin confundir rechazo con resolución.
+3. **Edición masiva: contrato mínimo.** Alcance y recuento explícitos; por campo, «no modificar» / «establecer» / «vaciar»; ejemplos y excepciones antes de confirmar; **comprobación de cambios concurrentes**, **resultado verificable** y comportamiento ante **respuesta perdida** (la confirmación aplica lo que se revisó, no una selección que cambió en silencio); informe de lo aplicado y lo no aplicado. **No empezar por expresiones regulares**: el manual de Calibre advierte de confusiones al combinar sustituciones con otros cambios.
+4. **Las vistas necesitan condiciones explícitas.** «Sin portada» debe precisar si es *sin portada elegida*, *sin imagen disponible* o *sin portada recuperable*. «Pendiente de identificar» **no debe mezclar** archivos sin vínculo, propuestas rechazadas y revisiones pospuestas. Conviene mantener separados **vista dinámica** (resultado de una condición), **selección personal** (elegida expresamente) y **carpeta física** (no cambia por crear o abrir una vista). Una virtual de Calibre también restringe las categorías al subconjunto, lo que evita filtros con resultados vacíos; adaptarlo requiere diseño.
+
+### Lo que no se traslada
+
+Almacenamiento **gestionado** (Calibre copia los libros a su biblioteca; ZascArr referencia los originales en sitio) · suponer que una carpeta contiene **un único** libro en varios formatos · **fusionar registros** por comodidad (necesitaría decisión bibliográfica y revisión de efectos propias) · conversión, editor de ebooks y sincronización con dispositivos · **OCR** o búsqueda dentro de páginas (viabilidad, calidad y coste no demostrados para cómics).
+
+### Cómo medir el valor (tareas, no botones)
+
+Corregir una editorial en 30 registros · revisar diez propuestas con dos errores · encontrar un tebeo sin recordar su archivo · retomar cinco excepciones pendientes. Se registran errores, ayuda necesaria, tiempo y conservación de originales. **Los umbrales se acuerdan antes de probar.**
+
 ## Fuera de alcance (parking lot honesto)
 
 Multiusuario con perfiles, sincronización de lectura entre dispositivos (es de
