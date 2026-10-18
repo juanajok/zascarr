@@ -27,13 +27,15 @@ pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="requiere b
 LIB = Path(__file__).resolve().parents[1] / "scripts" / "_credenciales.sh"
 
 
-def _bash(cuerpo: str, base: Path, *, confiables: str | None = None, cwd: Path | None = None):
+def _bash(cuerpo: str, base: Path, *, confiables: str | None = None, cwd: Path | None = None,
+          entorno: dict[str, str] | None = None):
     confiables = confiables if confiables is not None else str(os.getuid())
     guion = (
         'set -uo pipefail\nwarn() { echo "AVISO: $*" >&2; }\n'
         f'source "{LIB}"\n_CRED_UIDS_CONFIABLES="{confiables}"\nCRED_CONFIAR_DESDE="{base}"\n{cuerpo}\n'
     )
-    return subprocess.run(["bash", "-c", guion], capture_output=True, text=True, timeout=30, check=False, cwd=cwd)
+    return subprocess.run(["bash", "-c", guion], capture_output=True, text=True, timeout=30, check=False, cwd=cwd,
+                          env={**os.environ, **(entorno or {})})
 
 
 @pytest.fixture
@@ -197,3 +199,85 @@ def test_no_se_toca_nada(base):
     antes = (oct(raiz.stat().st_mode), raiz.stat().st_uid, sorted(p.name for p in raiz.iterdir()))
     _veredicto(base, raiz / ".env")
     assert antes == (oct(raiz.stat().st_mode), raiz.stat().st_uid, sorted(p.name for p in raiz.iterdir()))
+
+
+# ── Rutas con un salto de línea (C5: se examina el camino REALMENTE utilizado) ───────────────────────────────────────
+# Separar con `tr '/' '\n'` convertía también los saltos de línea del nombre en separadores: `/base/uno<LF>dos/zascarr`
+# se examinaba como `/base/uno/dos/zascarr`, y si esa segunda estructura existía y era segura, el antecesor real (abierto a
+# la escritura) pasaba. La prueba monta LAS DOS estructuras: sin la segunda, pasaría simplemente porque no encuentra nada.
+
+def _con_lf(base: Path, *, real_abierta: bool = True) -> tuple[Path, Path]:
+    """→ (ruta real con LF, ruta alternativa segura que resulta de leer el LF como `/`)."""
+    real_dir = base / "uno\ndos"
+    real_dir.mkdir(mode=0o755)
+    if real_abierta:
+        real_dir.chmod(0o777)
+    zas = real_dir / "zascarr"
+    zas.mkdir(mode=0o755)
+    (zas / ".env").write_text("DB_PASSWORD=x\n", encoding="utf-8")
+    (zas / ".env").chmod(0o600)
+    falsa = base / "uno" / "dos" / "zascarr"
+    falsa.mkdir(parents=True, mode=0o755)
+    (falsa / ".env").write_text("DB_PASSWORD=x\n", encoding="utf-8")
+    (falsa / ".env").chmod(0o600)
+    for d in (base / "uno", base / "uno" / "dos", falsa):
+        d.chmod(0o755)
+    return zas / ".env", falsa / ".env"
+
+
+def _interno(base: Path, ruta: Path, estricto: int = 1):
+    r = _bash('_cred_camino_inseguro "$RUTA" ' + str(estricto) + ' 0; echo "RC=$?"', base, entorno={"RUTA": str(ruta.parent)})
+    cuerpo, _, rc = r.stdout.rpartition("RC=")
+    return rc.strip(), cuerpo
+
+
+def test_el_antecesor_real_con_lf_se_examina_y_no_su_homonimo_con_barra(base):
+    real, falsa = _con_lf(base)
+    assert real.exists() and falsa.exists()
+    assert _interno(base, falsa)[0] == "1"                      # la alternativa es segura (control positivo)
+    rc, motivo = _interno(base, real)
+    assert rc == "0" and "escrib" in motivo and "uno\ndos" in motivo, (rc, motivo)
+
+
+def test_un_lf_en_el_nombre_no_se_confunde_con_dos_componentes_aunque_todo_sea_seguro(base):
+    """Control: con la estructura real segura, el comprobador la acepta (no rechaza por rechazar)."""
+    real, falsa = _con_lf(base, real_abierta=False)
+    assert _interno(base, real)[0] == "1" and _interno(base, falsa)[0] == "1"
+
+
+def test_un_destino_de_enlace_con_lf_tambien_se_examina_entero(base):
+    real, _ = _con_lf(base)
+    carpeta = base / "enlaces"
+    carpeta.mkdir(mode=0o755)
+    (carpeta / "atajo").symlink_to(real.parent.parent)       # → …/uno<LF>dos
+    r = _bash('_cred_camino_inseguro "$RUTA" 1 0; echo "RC=$?"', base,
+              entorno={"RUTA": str(carpeta / "atajo" / "zascarr")})
+    assert r.stdout.rpartition("RC=")[2].strip() == "0" and "escrib" in r.stdout
+
+
+def test_un_destino_de_enlace_que_acaba_en_lf_no_pierde_el_salto_al_leerlo(base):
+    """`$(readlink …)` quita los saltos de línea FINALES: el destino leído sería otra carpeta."""
+    abierta = base / "dest\n"
+    abierta.mkdir(mode=0o777)
+    abierta.chmod(0o777)
+    (abierta / "zascarr").mkdir(mode=0o755)
+    segura = base / "dest"
+    (segura / "zascarr").mkdir(parents=True, mode=0o755)
+    segura.chmod(0o755)
+    carpeta = base / "enlaces"
+    carpeta.mkdir(mode=0o755)
+    (carpeta / "atajo").symlink_to(str(abierta))
+    r = _bash('_cred_camino_inseguro "$RUTA" 1 0; echo "RC=$?"', base, entorno={"RUTA": str(carpeta / "atajo" / "zascarr")})
+    assert r.stdout.rpartition("RC=")[2].strip() == "0", r.stdout
+
+
+def test_la_entrada_publica_rechaza_cualquier_ruta_con_lf_con_un_mensaje_claro(base):
+    """Además de examinarlo bien, las funciones públicas lo rechazan: el resto del instalador captura rutas con `$(…)` (que
+    recorta saltos de línea) y recorre listados línea a línea."""
+    real, falsa = _con_lf(base, real_abierta=False)
+    for env in (real, falsa.parent / "uno\n" / ".env"):
+        r = _bash('ubicacion_insegura "$RUTA"; echo "RC=$?"', base, entorno={"RUTA": str(env)})
+        if env == real:
+            assert r.stdout.rpartition("RC=")[2].strip() == "0" and "salto de línea" in r.stdout, r.stdout
+    r = _bash('ubicacion_insegura "$RUTA"; echo "RC=$?"', base, entorno={"RUTA": str(falsa)})
+    assert r.stdout.strip().endswith("RC=1")                    # sin LF y segura: se acepta

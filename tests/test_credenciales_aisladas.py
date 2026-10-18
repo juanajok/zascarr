@@ -47,7 +47,7 @@ CASOS_INSTALACION = [
 ]
 CASOS_ESCRITURA = ["W01", "W02", "W03", "W04", "W05", "W06"]
 CASOS_UBICACION = [
-    "U01", "U01b", "U02", "U02b", "U03", "U03b", "U04", "U05", "U06", "U07", "U08", "U08b",
+    "U01", "U01b", "U02", "U02b", "U03", "U03b", "U04", "U05", "U06", "U07", "U08", "U08b", "U09", "U09b",
 ]
 CASOS_MANUAL = ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
 CASOS_IDENTIDADES = [

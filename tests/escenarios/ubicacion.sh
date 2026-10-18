@@ -54,6 +54,15 @@ instalacion_heredada "${W}/real/zascarr3" "${SINT}"
 ln -s "${W}/real/zascarr3" "${W}/enlaces_ajeno/atajo"; chown -h "${OTRO}:${OTRO}" "${W}/enlaces_ajeno/atajo"
 parar U08 "un enlace de otra cuenta en una carpeta de root" "${W}/enlaces_ajeno/atajo" "${W}/real/zascarr3/.env"
 
+# U09: una ruta con un salto de línea en el nombre, con su «homónima» segura al lado (sin la segunda estructura la
+# prueba pasaría porque no encuentra nada). Se rechaza ANTES de reclamar o escribir: ni raíz, ni repo, ni .env.
+LFDIR="${W}/pub"$'\n'"lica"; mkdir -p "${LFDIR}"; chown "${SVC}:${SVC}" "${LFDIR}"; chmod 777 "${LFDIR}"
+instalacion_heredada "${LFDIR}/zascarr" "${SINT}"
+mkdir -p "${W}/pub/lica"; chown root:root "${W}/pub" "${W}/pub/lica"; chmod 755 "${W}/pub" "${W}/pub/lica"
+instalacion_heredada "${W}/pub/lica/zascarr" "${SINT}"
+chown root:root "${W}/pub/lica/zascarr" "${W}/pub/lica/zascarr/.env"; chmod 755 "${W}/pub/lica/zascarr"; chmod 600 "${W}/pub/lica/zascarr/.env"
+parar U09 "una ruta con un salto de línea en el nombre" "${LFDIR}/zascarr"
+
 # U04 (control positivo): un enlace DE ROOT, en una carpeta de root, hacia un destino de root, es legítimo
 # (como /opt → /mnt/disco/opt) y el instalador sigue adelante.
 mkdir -p "${W}/enlaces_root"; chown root:root "${W}/enlaces_root"; chmod 755 "${W}/enlaces_root"

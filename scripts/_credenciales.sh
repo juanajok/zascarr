@@ -274,11 +274,16 @@ _cred_camino_inseguro() {
     local -a comps=()
     (( prof < 20 )) || { echo "demasiados enlaces simbólicos seguidos en ${ruta}."; return 0; }
     [[ "${ruta}" == /* ]] || ruta="${PWD}/${ruta}"
-    while IFS= read -r c; do
+    # Se separa SOLO por `/`: cualquier otro carácter, incluido un salto de línea, es parte del nombre. (Con `tr '/' '\n'` y
+    # `read -r` un `\n` dentro del nombre pasaba a ser un separador y se examinaba OTRA ruta.)
+    resto="${ruta}"
+    while [[ -n "${resto}" ]]; do
+        c="${resto%%/*}"
+        if [[ "${resto}" == */* ]]; then resto="${resto#*/}"; else resto=""; fi
         [[ -z "${c}" || "${c}" == "." ]] && continue
-        [[ "${c}" != ".." ]] || { echo "la ruta ${ruta} contiene '..': no la resuelvo."; return 0; }
+        [[ "${c}" != ".." ]] || { echo "la ruta ${ruta//$'\n'/\\n} contiene '..': no la resuelvo."; return 0; }
         comps+=("${c}")
-    done < <(tr '/' '\n' <<<"${ruta}")
+    done
     n=${#comps[@]}
     if ! _cred_bajo_corte "/"; then
         motivo="$(_cred_dir_inseguro / $(( n == 0 && estricto )))" && { echo "${motivo}"; return 0; }
@@ -290,7 +295,10 @@ _cred_camino_inseguro() {
         if [[ -L "${actual}" ]]; then
             u="$(stat -c %u -- "${actual}" 2>/dev/null)" || { echo "no puedo comprobar el enlace ${actual}."; return 0; }
             _cred_uid_confiable "${u}" || { echo "el enlace ${actual} es propiedad de otra cuenta (uid ${u}): podría reapuntarlo."; return 0; }
-            destino="$(readlink -- "${actual}")" || { echo "no puedo leer el enlace ${actual}."; return 0; }
+            # `$(…)` recorta los saltos de línea FINALES: se añade un carácter centinela y se quita después (y el único LF que
+            # añade readlink).
+            destino="$(readlink -- "${actual}" && printf x)" || { echo "no puedo leer el enlace ${actual}."; return 0; }
+            destino="${destino%x}"; destino="${destino%$'\n'}"
             if [[ "${destino}" != /* ]]; then          # relativo a la carpeta del enlace (sin enlaces: ya se comprobó)
                 resto="${padre}"
                 while [[ "${destino}" == ".." || "${destino}" == ../* ]]; do
@@ -314,11 +322,19 @@ _cred_camino_inseguro() {
     return 1
 }
 
+# Rutas con un salto de línea en el nombre: el comprobador las examina bien (separa solo por `/`), pero el resto del
+# instalador captura rutas con `$(…)` (que recorta saltos de línea finales) y recorre listados línea a línea, así que las
+# entradas públicas las RECHAZAN con un mensaje claro en vez de confiar en que todo lo demás las trate bien.
+_cred_lf_motivo() {
+    printf 'La ruta %s contiene un salto de línea en el nombre: no la admito (los scripts no pueden examinarla con garantías). Usa una carpeta con un nombre normal, por defecto /opt/zascarr.' "${1//$'\n'/\\n}"
+}
+
 # ubicacion_insegura ENV_FILE
 #   0 y el motivo por la salida estándar si otra cuenta podría sustituir o redirigir ENV_FILE; 1 (sin salida) si la
 #   ubicación es de fiar. El propio ENV_FILE no puede ser un enlace.
 ubicacion_insegura() {
     local env="$1"
+    if [[ "${env}" == *$'\n'* ]]; then echo "$(_cred_lf_motivo "${env}")"; return 0; fi
     if [[ -L "${env}" ]]; then
         echo "${env} es un enlace simbólico: otra cuenta podría apuntarlo a un fichero suyo."; return 0
     fi
@@ -352,6 +368,10 @@ comprobar_env_legible() {
 proteger_configuracion() {
     local env="$1" raiz="$2" repo="$3" motivo dedicada=0
     [[ "$(id -u)" -eq 0 ]] || { warn "Para proteger la configuración hace falta ser administrador (sudo)."; return 1; }
+    local ruta
+    for ruta in "${env}" "${raiz}" "${repo}"; do
+        [[ "${ruta}" != *$'\n'* ]] || { warn "$(_cred_lf_motivo "${ruta}")"; return 1; }
+    done
     if raiz_dedicada "${raiz}" "${repo}"; then dedicada=1; fi
     if (( dedicada == 1 )); then
         if motivo="$(_cred_camino_inseguro "${raiz}" 2 0)"; then
