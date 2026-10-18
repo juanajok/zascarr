@@ -201,6 +201,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **La vista previa de la vinculación ya no emite un cursor de página que ella misma rechaza** (#143). En un grupo de más de
+  100 archivos, si el último de una página tenía un nombre válido muy largo con caracteres de control (255 bytes), el enlace
+  a la página siguiente medía 2.100 caracteres y la petición lo rechazaba (`422`): no se podía seguir recorriendo el grupo.
+  Reproducido por HTTP. Ahora el cursor es compacto y siempre cabe en el límite; el recorrido no omite, repite ni reordena
+  archivos (mismo orden por nombre e id), sigue valiendo si el archivo se vincula entre peticiones y un cursor truncado,
+  alterado o inventado da un error claro en vez de una página. Los cursores de la versión anterior se siguen aceptando, salvo
+  los que ya no cabían en la petición. Sin migraciones y sin cambios en el límite de la petición.
+
 - **Redis ya no se publica en el host.** El `docker-compose.yml` lo exponía en `127.0.0.1:6379`, y en una instalación
   real otro proceso del equipo lo adoptó y guardó ~160 MB en él; al aplicarse el tope de memoria (128 MB) el contenedor
   entraba en bucle de reinicios. ZascArr no usa ese puerto (llega por la red interna), así que se quita. Si ya tenías
