@@ -265,11 +265,16 @@ class TestCursorQueNoSePuedeAceptar:
             self._es_error_explicito(await _pedir(serie, cursor[:n]))
 
     async def test_cada_alteracion_de_un_caracter_es_un_error(self, entorno):
+        """Toda posición con dos sustitutos, y el ÚLTIMO BLOQUE con todos los caracteres del alfabeto: allí Base64
+        admite cadenas distintas para los mismos bytes (bits de relleno), y por eso solo se acepta la representación
+        canónica, la que el sistema emitiría."""
         serie, cursor = await self._cursor_valido(entorno)
-        alfabeto = "ABCxyz09-_"
-        for i in range(len(cursor) - 4):                     # el último grupo puede llevar bits sin uso
-            sustituto = next(c for c in alfabeto if c != cursor[i])
-            self._es_error_explicito(await _pedir(serie, cursor[:i] + sustituto + cursor[i + 1:]))
+        alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_="
+        ultimo_bloque = len(cursor) - 4
+        for i in range(len(cursor)):
+            otros = [c for c in alfabeto if c != cursor[i]]
+            for sustituto in (otros if i >= ultimo_bloque else (otros[i % 7], otros[-1 - i % 5])):
+                self._es_error_explicito(await _pedir(serie, cursor[:i] + sustituto + cursor[i + 1:]))
 
     @pytest.mark.parametrize("basura", ["x", "no-es-base64!!", "inicio", "A" * 40, "====", "W10=", "ñ", "\x00\x01"])
     async def test_cursores_inventados(self, entorno, basura):
@@ -311,6 +316,59 @@ class TestCursorQueNoSePuedeAceptar:
         fabricado = base64.urlsafe_b64encode(json.dumps([base, str(uuid4())]).encode()).decode()
         r = await _pedir(serie, fabricado)
         assert r.status_code == 200 and r.json()["pagina"]["desde"] in (100, 101)
+
+
+class TestUnaSolaResolucionPorPeticion:
+    """La posición del cursor se resuelve y valida UNA vez por petición, antes de filtrar el grupo. Resolverla dentro de
+    la comprensión que recorre el grupo hacía cuadrática la búsqueda por id (1.000 registros con el cursor en el 900:
+    ≈ 901.000 visitas para devolver 100 archivos)."""
+
+    @pytest.fixture
+    def llamadas(self, monkeypatch):
+        from zascarr.services import vinculacion_previa as servicio
+        contador = {"posicion": 0, "leer": 0, "visitas": 0}
+        posicion, leer = servicio._posicion, servicio._leer_cursor
+
+        def _posicion_contada(cursor, todos):
+            contador["posicion"] += 1
+            return posicion(cursor, _Contada(todos, contador))
+
+        def _leer_contado(cursor):
+            contador["leer"] += 1
+            return leer(cursor)
+        monkeypatch.setattr(servicio, "_posicion", _posicion_contada)
+        monkeypatch.setattr(servicio, "_leer_cursor", _leer_contado)
+        return contador
+
+    @pytest.mark.parametrize("por_id", [False, True], ids=["con_nombre", "por_id"])
+    async def test_una_resolucion_y_visitas_lineales(self, entorno, llamadas, por_id):
+        largo = "z" + "😀" * 300                              # 1.201 bytes: fuera de rango → cursor por id
+        assert _bytes_utf8(largo) > 1024
+        serie = await serie_de_prueba(entorno)
+        ultimo = largo if por_id else "z" + "ñ" * 20
+        nombres = _relleno(LIMITE_ARCHIVOS - 1) + [ultimo] + [f"{ultimo}{i:03d}" for i in range(120)]
+        await _sembrar(entorno, nombres)
+        cursor = (await _pedir(serie)).json()["pagina"]["siguiente"]
+        llamadas.update(posicion=0, leer=0, visitas=0)
+
+        r = await _pedir(serie, cursor)
+        assert r.status_code == 200 and len(r.json()["archivos"]) == LIMITE_ARCHIVOS
+        assert llamadas["posicion"] == 1 and llamadas["leer"] == 1, llamadas
+        # La búsqueda por id recorre el grupo UNA vez (≤ su tamaño), no una vez por archivo.
+        assert llamadas["visitas"] <= len(nombres), llamadas
+
+
+class _Contada(list):
+    """El grupo, contando cuántos elementos se visitan al recorrerlo."""
+
+    def __init__(self, base, contador):
+        super().__init__(base)
+        self._contador = contador
+
+    def __iter__(self):
+        for x in super().__iter__():
+            self._contador["visitas"] += 1
+            yield x
 
 
 class TestFormatoDelCursor:

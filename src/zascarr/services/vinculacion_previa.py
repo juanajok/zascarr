@@ -265,7 +265,8 @@ def _dentro_de(ruta: str, biblioteca: Path) -> bool:
 # rechazaba (`max_length=2000`, #143). En bruto el nombre ocupa lo que ocupa (≤ 255 bytes en Linux, ≤ 500·4 en la
 # columna): el cursor mide ≈ 4/3·(21 + bytes del nombre), y SIEMPRE entra: por encima de `_MAX_NOMBRE_EN_CURSOR` bytes
 # no se incluye el nombre y la posición se resuelve por el id (versión 2), lo que da un error explícito si ese archivo
-# ya no está pendiente. La huella detecta truncamientos y alteraciones; no es una firma.
+# ya no está pendiente. La huella detecta truncamientos y alteraciones del contenido, y solo se acepta la cadena
+# canónica que el sistema emitiría; no es una firma (la posición no autoriza nada).
 #
 # El cursor del formato anterior (`[nombre, id]` en JSON) se sigue aceptando: es la misma posición. Si uno de ellos
 # superó 2.000 caracteres ya no se puede enviar (lo rechaza la validación de la petición, con 422).
@@ -298,6 +299,10 @@ def _leer_cursor(cursor: str) -> tuple[str | None, str]:
     Cualquier cosa que no sea un cursor íntegro es `CursorNoValidoError`: nunca se interpreta algo a medias."""
     try:
         crudo = base64.b64decode(cursor.encode("ascii"), altchars=b"-_", validate=True)
+        # Representación canónica: Base64 admite varias cadenas para los mismos bytes (los bits de relleno del último
+        # bloque). Solo vale la que el sistema habría emitido, así que cualquier cadena distinta es un error.
+        if base64.urlsafe_b64encode(crudo).decode() != cursor:
+            raise ValueError
         if crudo[:1] == b"[":                                  # formato anterior: JSON
             nombre, ident = json.loads(crudo.decode())
             if not isinstance(nombre, str) or not isinstance(ident, str):
@@ -358,7 +363,13 @@ class VistaPreviaDeVinculacion:
 
         # La página: los `LIMITE_ARCHIVOS` primeros DESPUÉS del cursor (clave de orden estable: aunque otros archivos
         # se vinculen entre petición y petición, el cursor sigue señalando el mismo punto).
-        despues = todos if not cursor else [a for a in todos if (a.nombre, a.id) > _posicion(cursor, todos)]
+        # La posición se resuelve y se valida UNA vez por petición, antes de filtrar: dentro de la comprensión, la búsqueda
+        # por id (cursor de un nombre fuera de rango) recorrería el grupo entero por cada archivo (coste cuadrático).
+        if cursor:
+            posicion = _posicion(cursor, todos)
+            despues = [a for a in todos if (a.nombre, a.id) > posicion]
+        else:
+            despues = todos
         tratados, resto = despues[:LIMITE_ARCHIVOS], despues[LIMITE_ARCHIVOS:]
         antes = len(todos) - len(despues)
         en_grupo = {a.id for a in todos}
