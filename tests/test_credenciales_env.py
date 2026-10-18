@@ -61,8 +61,27 @@ die()     { echo "ERROR: $*" >&2; exit 1; }
 """
 
 
-def _bash(cuerpo: str, *, umask: str = "022"):
-    guion = f'umask {umask}\n{PRELUDIO}\nsource "{SH}"\n{cuerpo}\n'
+_BASE: list[str] = []
+
+
+@pytest.fixture(autouse=True)
+def _carpeta_base(tmp_path_factory):
+    """Los antecesores se vigilan hasta la carpeta base de pytest (700, de quien
+    ejecuta): lo de más arriba es de la máquina, no del código bajo prueba."""
+    _BASE[:] = [str(tmp_path_factory.getbasetemp())]
+
+
+def _bash(cuerpo: str, *, umask: str = "022", admin: bool = False):
+    """`admin=False`: las pruebas no son root, así que el «propietario esperado» del
+    .env es quien las ejecuta. `admin=True`: se SIMULA ser root (la variable `EUID` es
+    de solo lectura; el ayudante pregunta por `_es_root`) con dobles de `chown` y de la
+    consulta del propietario, para probar la rama administrativa sin serlo."""
+    simulado = (
+        '_es_root() { return 0; }\n'
+        'CREDENCIAL_UID_ESPERADO=0\n'
+    ) if admin else f'CREDENCIAL_UID_ESPERADO={os.getuid()}\n'
+    simulado += f'CREDENCIAL_CONFIAR_DESDE="{_BASE[0]}"\n'
+    guion = f'umask {umask}\n{PRELUDIO}\nsource "{SH}"\n{simulado}{cuerpo}\n'
     return subprocess.run(
         ["bash", "-c", guion], capture_output=True, text=True, timeout=30, check=False,
     )
@@ -321,6 +340,239 @@ class TestEnvPoner:
         assert {p.name for p in env.parent.iterdir()} == antes
 
 
+class TestSinVentanaDeEscritura:
+    """Hallazgo 2 de la revisión: el secreto nuevo no puede escribirse en un fichero
+    todavía abierto, ni a un temporal abierto, ni «después se cierra»."""
+
+    def _observando(self, env: Path, cuerpo: str, *, umask: str = "022"):
+        """Dobles de `sed`, `cat`, `mv` y `cp` que anotan el modo del `.env` y de
+        todo lo que haya a su lado EN EL INSTANTE de cada operación."""
+        registro = env.parent / "modos.txt"
+        doble = "".join(
+            f'{f}() {{ _anota "{f}"; command {f} "$@"; _anota "{f}-despues"; }}\n'
+            for f in ("sed", "cat", "mv", "cp", "tee"))
+        guion = (
+            f'_anota() {{ for x in "{env}" "{env}".*; do [[ -e "$x" ]] && '
+            f'echo "$1 $(basename "$x") $(stat -c %a "$x")" >> "{registro}"; done; return 0; }}\n'
+            f'{doble}{cuerpo}')
+        r = _bash(guion, umask=umask)
+        lineas = registro.read_text().splitlines() if registro.exists() else []
+        return r, [linea.split() for linea in lineas]
+
+    @pytest.mark.parametrize("umask", ["022", "000"])
+    def test_fichero_antiguo_abierto_se_cierra_antes_de_escribir_nada(self, entorno, umask):
+        env = _crear_env(entorno, modo=0o644)
+        r, anotado = self._observando(
+            env, f'preparar_credenciales "{env}" "{entorno["datos"]}"', umask=umask)
+        assert r.returncode == 0, r.stderr
+        assert anotado, "el doble no anotó nada: la prueba no observó la escritura"
+        abiertos = [a for a in anotado if int(a[2], 8) & 0o077]
+        assert not abiertos, f"fichero accesible a otros durante la escritura: {abiertos}"
+        assert _modo(env) == 0o600
+
+    def test_el_temporal_nace_cerrado_y_no_queda_nada(self, entorno):
+        env = _crear_env(entorno, modo=0o600)
+        antes = {p.name for p in env.parent.iterdir()}
+        r, anotado = self._observando(env, f'env_poner "{env}" A nuevo', umask="000")
+        assert r.returncode == 0
+        temporales = [a for a in anotado if a[1] != env.name]
+        assert temporales, "el ayudante debería escribir en un temporal y renombrar"
+        assert all(a[2] == "600" for a in temporales), temporales
+        assert {p.name for p in env.parent.iterdir()} - {"modos.txt"} == antes
+
+    def test_env_poner_cierra_el_destino_antes_de_escribir(self, entorno):
+        """Llamado directamente (como hace `set_env_var`) sobre un fichero heredado."""
+        env = _crear_env(entorno, "A=1\nDB_PASSWORD=ya_puesta\n", modo=0o644)
+        r, anotado = self._observando(env, f'env_poner "{env}" B 2')
+        assert r.returncode == 0
+        assert not [a for a in anotado if int(a[2], 8) & 0o077], anotado
+
+    def test_el_fichero_nuevo_conserva_el_contenido_y_el_orden(self, entorno):
+        env = _crear_env(entorno, "# c\nA=1\nB=2\n", modo=0o600)
+        _bash(f'env_poner "{env}" B 3\nenv_poner "{env}" C 4')
+        assert env.read_text() == "# c\nA=1\nB=3\nC=4\n"
+
+    def test_añadir_a_un_fichero_sin_salto_de_linea_final(self, entorno):
+        env = _crear_env(entorno, "A=1", modo=0o600)
+        _bash(f'env_poner "{env}" B 2')
+        assert env.read_text().splitlines() == ["A=1", "B=2"]
+
+
+class TestFalloEnCerrado:
+    """Hallazgo 3: si no se consigue el propietario o el modo exigidos, NO se sigue
+    ni se anuncia una protección que no existe."""
+
+    def test_chown_que_falla_corta_antes_de_escribir_el_secreto(self, entorno):
+        env = _crear_env(entorno)
+        antes = env.read_bytes()
+        r = _bash(
+            'chown() { return 1; }\n'
+            '_propietario_de() { echo 0; }  # aísla el código de retorno de chown\n'
+            'ubicacion_env_insegura() { return 1; }\n'
+            f'preparar_credenciales "{env}" "{entorno["datos"]}"', admin=True)
+        assert r.returncode != 0
+        assert env.read_bytes() == antes, "no debe haberse escrito ninguna contraseña"
+        salida = r.stdout + r.stderr
+        assert "solo el administrador" not in salida and "listo" not in salida.lower()
+        assert "ERROR" in r.stderr
+
+    def test_chown_que_dice_ok_pero_no_cambia_el_propietario_tambien_corta(self, entorno):
+        """No se fía del código de retorno: se comprueba el resultado."""
+        env = _crear_env(entorno)
+        r = _bash(
+            'chown() { return 0; }\n'
+            '_propietario_de() { echo 1000; }\n'
+            'ubicacion_env_insegura() { return 1; }\n'
+            f'preparar_credenciales "{env}" "{entorno["datos"]}"', admin=True)
+        assert r.returncode != 0
+        assert "listo" not in (r.stdout + r.stderr).lower()
+
+    def test_con_chown_correcto_se_pide_root_root_y_se_continua(self, entorno):
+        env = _crear_env(entorno)
+        registro = entorno["env"].parent / "chown.txt"
+        r = _bash(
+            f'chown() {{ echo "$@" >> "{registro}"; return 0; }}\n'
+            '_propietario_de() { echo 0; }\n'
+            'ubicacion_env_insegura() { return 1; }  # la ubicación se prueba aparte\n'
+            f'preparar_credenciales "{env}" "{entorno["datos"]}"', admin=True)
+        assert r.returncode == 0, r.stderr
+        assert f"0:0 {env}" in registro.read_text()
+        assert re.fullmatch(r"[A-Za-z0-9]{32,}", _valor(env, "DB_PASSWORD") or "")
+
+    def test_el_temporal_tambien_se_pide_de_root_antes_de_llevar_contenido(self, entorno):
+        """El fichero que sustituye al `.env` es el temporal renombrado: su dueño ha de
+        ser root desde que existe, no solo el del `.env` que reemplaza."""
+        env = _crear_env(entorno, "A=1\n")
+        registro = entorno["env"].parent / "chown.txt"
+        r = _bash(
+            f'chown() {{ echo "$@" >> "{registro}"; return 0; }}\n'
+            '_propietario_de() { echo 0; }\n'
+            f'env_poner "{env}" A 2', admin=True)
+        assert r.returncode == 0, r.stderr
+        destinos = [linea.split()[1] for linea in registro.read_text().splitlines()]
+        assert any(d.startswith(f"{env}.") for d in destinos), destinos
+
+    def test_un_enlace_simbolico_como_env_no_se_protege_ni_se_escribe(self, entorno, tmp_path):
+        real = tmp_path / "real.env"
+        real.write_text("A=1\n")
+        real.chmod(0o644)
+        entorno["env"].symlink_to(real)
+        assert _bash(f'proteger_env "{entorno["env"]}"').returncode != 0
+        assert _bash(f'env_poner "{entorno["env"]}" A 2').returncode != 0
+        assert real.read_text() == "A=1\n" and _modo(real) == 0o644
+
+    def test_env_poner_propaga_el_fallo_de_proteccion(self, entorno):
+        env = _crear_env(entorno, "A=1\n")
+        r = _bash(f'chown() {{ return 1; }}\nenv_poner "{env}" A 2', admin=True)
+        assert r.returncode != 0
+        assert env.read_text() == "A=1\n"
+
+    def test_chmod_que_falla_corta(self, entorno):
+        env = _crear_env(entorno, modo=0o644)
+        r = _bash(
+            'chmod() { return 1; }\n'
+            f'preparar_credenciales "{env}" "{entorno["datos"]}"')
+        assert r.returncode != 0
+        assert _valor(env, "DB_PASSWORD") == MARCADOR
+
+
+class TestUbicacionDelEnv:
+    """Hallazgo 1: con el `.env` en 600 `root:root`, el dueño de la CARPETA que lo
+    contiene puede borrarlo o sustituirlo (o ponerle un enlace). La carpeta, y el
+    camino hasta ella, tienen que ser de root y no escribibles por otros."""
+
+    def _motivo(self, env: Path, *, uid: int | None = None):
+        uid = os.getuid() if uid is None else uid
+        return _bash(f'ubicacion_env_insegura "{env}" {uid}')
+
+    def test_carpeta_propia_y_cerrada_es_segura(self, entorno):
+        env = _crear_env(entorno)
+        entorno["env"].parent.chmod(0o755)
+        r = self._motivo(env)
+        assert r.returncode == 1 and r.stdout.strip() == ""
+
+    @pytest.mark.parametrize("modo", [0o775, 0o757, 0o777, 0o770 | 0o020])
+    def test_carpeta_escribible_por_otros_es_insegura(self, entorno, modo):
+        env = _crear_env(entorno)
+        entorno["env"].parent.chmod(modo)
+        r = self._motivo(env)
+        assert r.returncode == 0 and "escrib" in r.stdout
+
+    def test_carpeta_de_otra_cuenta_es_insegura(self, entorno):
+        """El caso medido: `/opt/zascarr` era de `media`."""
+        env = _crear_env(entorno)
+        r = self._motivo(env, uid=os.getuid() + 1)
+        assert r.returncode == 0 and "propiedad" in r.stdout
+
+    def test_un_enlace_simbolico_como_env_es_inseguro(self, entorno, tmp_path):
+        real = tmp_path / "otro.env"
+        real.write_text("DB_PASSWORD=x\n")
+        entorno["env"].symlink_to(real)
+        r = self._motivo(entorno["env"])
+        assert r.returncode == 0 and "enlace" in r.stdout
+
+    def test_un_antecesor_escribible_por_otros_es_inseguro(self, tmp_path):
+        abierto = tmp_path / "abierto"
+        abierto.mkdir()
+        abierto.chmod(0o777)
+        raiz = abierto / "zascarr"
+        raiz.mkdir(mode=0o755)
+        env = raiz / ".env"
+        env.write_text("A=1\n")
+        env.chmod(0o600)
+        r = self._motivo(env)
+        assert r.returncode == 0 and "abierto" in r.stdout
+
+    def test_un_antecesor_con_sticky_no_se_puede_sustituir_desde_fuera(self, tmp_path):
+        """Como `/tmp`: escribible por todos pero con el bit pegajoso."""
+        pegajoso = tmp_path / "pegajoso"
+        pegajoso.mkdir()
+        pegajoso.chmod(0o1777)
+        raiz = pegajoso / "zascarr"
+        raiz.mkdir(mode=0o755)
+        env = raiz / ".env"
+        env.write_text("A=1\n")
+        env.chmod(0o600)
+        assert self._motivo(env).returncode == 1
+
+    def test_preparar_credenciales_no_genera_nada_en_una_carpeta_insegura(self, entorno):
+        env = _crear_env(entorno)
+        entorno["env"].parent.chmod(0o777)
+        antes = env.read_bytes()
+        r = _preparar(entorno)
+        assert r.returncode != 0
+        assert env.read_bytes() == antes
+        assert "ERROR" in r.stderr and str(entorno["env"].parent) in r.stderr
+
+    def test_asegurar_cierra_la_carpeta_y_pide_root(self, entorno):
+        entorno["env"].parent.chmod(0o777)
+        registro = entorno["env"].parent / "chown.txt"
+        r = _bash(
+            f'chown() {{ echo "$@" >> "{registro}"; return 0; }}\n'
+            '_propietario_de() { echo 0; }\n'
+            f'asegurar_ubicacion_env "{entorno["env"]}"', admin=True)
+        assert r.returncode == 0, r.stderr
+        assert f"0:0 {entorno['env'].parent}" in registro.read_text()
+        assert _modo(entorno["env"].parent) & 0o022 == 0
+        assert "-R" not in registro.read_text()  # solo la carpeta, nada recursivo
+
+    def test_asegurar_falla_en_cerrado_si_chown_falla(self, entorno):
+        r = _bash(
+            'chown() { return 1; }\n'
+            f'asegurar_ubicacion_env "{entorno["env"]}"', admin=True)
+        assert r.returncode != 0
+
+    def test_crear_env_no_escribe_a_traves_de_un_enlace_colgante(self, entorno, tmp_path):
+        """`[[ -e ]]` es falso para un enlace roto: `cp` escribiría en su destino."""
+        destino = tmp_path / "fuera" / "robado.env"
+        destino.parent.mkdir()
+        entorno["env"].symlink_to(destino)
+        entorno["ejemplo"].write_text(EJEMPLO)
+        r = _bash(f'crear_env_protegido "{entorno["ejemplo"]}" "{entorno["env"]}"')
+        assert r.returncode != 0
+        assert not destino.exists()
+
+
 class TestBootstrapUsaElAyudante:
     """`bootstrap.sh` necesita root, Docker y red: no se ejecuta aquí. Se fija el
     contrato de lo que llama, para que nadie lo deshaga sin ver estas pruebas."""
@@ -351,14 +603,28 @@ class TestBootstrapUsaElAyudante:
         i_up = self.TEXTO.index("up -d postgres")
         assert i_prep < i_up
 
+    def test_no_entrega_la_carpeta_del_env_al_usuario_de_servicio(self):
+        """Hallazgo 1: el `chown -R` de la rama de instalación en frío cubría
+        `ZASCARR_ROOT` entero (y con él la carpeta que contiene el `.env`)."""
+        for linea in self.TEXTO.splitlines():
+            if "chown -R" in linea and "ZASCARR_USER" in linea and "ZASCARR_ROOT" in linea:
+                assert '${ZASCARR_ROOT}/zascarr"' in linea, linea
+
+    def test_asegura_la_ubicacion_antes_de_crear_o_escribir_el_env(self):
+        i_ubic = self.TEXTO.index("asegurar_ubicacion_env")
+        assert i_ubic < self.TEXTO.index("crear_env_protegido")
+        assert i_ubic < self.TEXTO.index("preparar_credenciales")
+
     def test_los_comandos_que_imprime_llevan_sudo(self):
         """Con el `.env` en 600, `docker compose` sin sudo da «permission denied»
         en inglés (medido con Compose v5): el instalador no puede proponer eso."""
         impresos = [
             linea for linea in self.TEXTO.splitlines()
             if "docker compose -f ${COMPOSE_FILE}" in linea
-            and "--env-file" not in linea
         ]
         assert impresos, "no encuentro los comandos de ayuda"
         for linea in impresos:
             assert "sudo docker compose" in linea, linea
+            # El enlace `repo/.env` lo puede cambiar el dueño del repo: lo que corre
+            # root lleva siempre el fichero explícito.
+            assert "--env-file ${ENV_FILE}" in linea, linea

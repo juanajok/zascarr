@@ -361,7 +361,7 @@ if [[ -z "${CONTENEDOR}" ]]; then
     mal "El contenedor de ZascArr no está arrancado (o no lo encuentro).
   Sin él no sé qué red de Docker usa de verdad, y no pienso adivinarla."
     echo "  Arranca ZascArr y vuelve a intentarlo:"
-    echo "    sudo docker compose -f ${COMPOSE_FILE} up -d zascarr"
+    echo "    sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d zascarr"
     echo ""
     exit 2
 fi
@@ -428,7 +428,7 @@ if [[ "${COINCIDENCIAS}" -eq 0 ]]; then
   arregla, así que no te propongo ninguna. La versión actual lo autocorrige al
   arrancar (docker-entrypoint.sh reescribe /etc/hosts); reinícialo con:
 
-    sudo docker compose -f ${COMPOSE_FILE} up -d --force-recreate zascarr
+    sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d --force-recreate zascarr
 
   Y si sigue igual, compruébalo con:
     docker exec ${CONTENEDOR} python3 -c \"import socket; print(socket.gethostbyname('host.docker.internal'))\""
@@ -486,7 +486,7 @@ if [[ -z "${CONFIG_ACTIVA}" ]]; then
   Dale los puertos a mano y sigo:
     sudo bash ${SCRIPT_DIR}/diagnostico-red.sh --puerto 9696 --puerto 9091 --puerto 4711
 
-  (O comprueba por qué no responde: sudo docker compose -f ${COMPOSE_FILE} logs zascarr)"
+  (O comprueba por qué no responde: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr)"
         echo ""
         exit 2
     fi
