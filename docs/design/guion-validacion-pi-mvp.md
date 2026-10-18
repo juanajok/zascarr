@@ -52,8 +52,10 @@ sí, desde #189: V-17b), fuentes reales (Comic Vine, AniList, Tebeosfera, GCD), 
 VAL=/srv/zascarr-val                         # o cualquier disco con ≥ 2 GB libres; el nombre es lo de menos
 sudo mkdir -p "$VAL"/{data,biblioteca,descargas,incoming} && sudo chown -R "$USER": "$VAL"
 
-cat > "$VAL/.env" <<'EOF'
-DB_PASSWORD=cambia_esto_ahora
+# Contraseña propia de ESTA pila (aleatoria, no se imprime): Compose rechaza la de ejemplo (ADR 0012), y un valor
+# conocido en un arnés que se queda corriendo sería una credencial publicada. El .env nace 600.
+(umask 077; printf 'DB_PASSWORD=%s\n' "$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')" > "$VAL/.env")
+cat >> "$VAL/.env" <<'EOF'
 ZASCARR_DATA_DIR=/srv/zascarr-val/data
 HOST_LIBRARY_DIR=/srv/zascarr-val/biblioteca
 HOST_DOWNLOADS_DIR=/srv/zascarr-val/descargas

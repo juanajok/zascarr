@@ -17,6 +17,13 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 - PostgreSQL publica en `127.0.0.1`, nunca en `0.0.0.0`. (Redis ya no forma parte del stack: ADR 0011.)
 - Las integraciones P2P (Prowlarr, Transmission, aMule, foro) nacen
   **desactivadas** y piden activación explícita.
+- **Sin contraseña de base de datos de fábrica.** El instalador genera una aleatoria (sin mostrarla) y la guarda en
+  el `.env`; Docker Compose se niega a crear PostgreSQL con una ausente, vacía o de ejemplo, y la aplicación no abre
+  ninguna conexión con una conocida. El `.env` es de `root` (modo 600) y el usuario de servicio —compartido con el
+  resto de la suite *arr— no puede leerlo ni reemplazarlo, ni cambiar el código que `root` ejecuta. Si ya hay una base
+  de datos y se pierde su contraseña, el instalador se detiene sin inventar otra. Contrato, matriz de identidades y
+  recuperación: [ADR 0012](docs/adr/0012-credenciales-del-env.md). `sudo bash scripts/credenciales.sh comprobar` lo
+  verifica sin mostrar valores.
 
 ## Si quieres acceder desde fuera de la Pi
 

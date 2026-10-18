@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
+from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 
 logger = structlog.get_logger()
 
@@ -196,6 +197,11 @@ async def lifespan(app: FastAPI):
     # cuya autenticación estaba activada en BD.
     app.state.db_degraded = False
     try:
+        # Credenciales por defecto: ni se intenta conectar (ADR 0012). El motivo no lleva el valor.
+        # Se mira la URL del MOTOR (con la que de verdad se conectaría), no la de los ajustes.
+        problema = problema_de_credenciales(engine.url) if hasattr(engine, "url") else None
+        if problema:
+            raise CredencialesNoSegurasError(f"{problema}; la aplicación no arranca con ella")
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
 
