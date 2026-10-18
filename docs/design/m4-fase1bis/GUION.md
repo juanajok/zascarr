@@ -1,6 +1,6 @@
 # M4 · Fase 1 bis — validar la instalación real y la protección de credenciales tras #238
 
-> **Estado: PROPUESTA documental y scripts, sin ejecutar (2.ª versión, tras la devolución de #242).** No se ha arrancado ninguna VM, descargado nada ni cambiado el tablero.
+> **Estado: PROPUESTA documental y scripts, sin ejecutar (3.ª versión, tras la 3.ª devolución de #242: el presupuesto de descarga se mide y se corta en el anfitrión).** No se ha arrancado ninguna VM, descargado nada ni cambiado el tablero.
 > Decisiones ya confirmadas: construcción **con caché** (la construcción en frío queda NOT RUN) y **Ajustes** como vía efectiva de las fuentes (adaptación del ensayo, sin cambiar defaults).
 > Historia: **#121** (instalar y actualizar), feature **#107** (M4). **No cierra #121**: su contrato incluye actualización, fallos y
 > evidencia en Raspberry Pi que un Debian x86-64 no acredita. Preparación y ejecución: Claude. Revisión independiente: Perplexity.
@@ -46,7 +46,7 @@ Un límite que solo se declara no es una garantía. Cada fila dice quién lo vig
 | Límite | Valor | Quién lo hace cumplir y con qué exceso posible |
 |---|---|---|
 | VM | 2 vCPU · 4 GiB · disco de 20 GiB · QEMU/KVM sin privilegios · sin carpetas compartidas, USB, discos físicos ni socket Docker del anfitrión · solo SSH en `127.0.0.1:2222` | opciones de QEMU en `arrancar` |
-| **Descarga** | **tope 600 MiB** | **Dos capas.** (1) **Tope en el núcleo** (`instalar_tope_de_red`, nftables en la VM, enganchado en `prerouting` para ver también el tráfico de los contenedores de la construcción): cuenta lo que entra por la interfaz —salvo el SSH de control— y **descarta** lo que pase de la cuota (**98 % del tope = 588 MiB**, por la diferencia entre lo que cuenta nftables y `rx_bytes`). No depende de ningún proceso ni de una muestra: el exceso posible es **un paquete** (≈ 1,5 KB). Comprobado de forma funcional en un espacio de nombres de red real. (2) **Vigilante** (`con_limite_de_descarga`, cada 1 s): al llegar al umbral de corte (500 MiB) **corta la red** (descarta todo salvo el SSH) y **termina el grupo de procesos entero —TERM, KILL— comprobando que no queda NINGÚN miembro vivo**, no solo el líder; si queda alguno, devuelve 5. `docker build` es un **cliente**: BuildKit construye en el servicio y matar el cliente no prueba que haya dejado de descargar; por eso el corte de **red** va primero y es lo que garantiza el tope (el constructor puede seguir sin red hasta que sus pasos fallen por tiempo de espera, sin gastar descarga) |
+| **Descarga** | **tope 600 MiB** | **La medida y el corte están en el ANFITRIÓN, no en la VM.** Un límite dentro del invitado (cuota de nftables, `rx_bytes`) no acota lo descargado: lo que descarta ya entró por la interfaz y las retransmisiones del servidor siguen contando. Por eso la VM **nunca tiene red directa** (`restrict=on`: ni salida ni DNS) y en `preparar` su **única** salida es un reenvío de QEMU (`guestfwd`, `10.0.2.100:3128`) a un **proxy con presupuesto en el anfitrión** (`proxy-presupuesto.py`, solo biblioteca estándar): permite solo `deb.debian.org`, `security.debian.org`, `pypi.org` y `files.pythonhosted.org` por los puertos 80/443, máximo 8 conexiones, y **cuenta los bytes que llegan de Internet** (el estado queda en `proxy-estado.json`). Al superar el tope menos el margen **corta**: cierra las conexiones y rechaza las nuevas (503, sin contactar con el origen). **Exceso residual declarado (no «cero»)**: lo que ya estaba en tránsito o en los búferes del núcleo de cada conexión, como máximo `conexiones × (2×SO_RCVBUF + fragmento)` = 8 × (2×128 KiB + fragmento) ≈ 1,1 MiB; el proxy **se niega a arrancar** si el margen (8 MiB) no lo cubre. Medido con un emisor independiente del cliente (`TCP_INFO.tcpi_bytes_acked`): contado 3 147 423 B, aceptado por el núcleo 3 225 361 B, **residual 77 938 B** (declarado ≤ 1 179 648 B). Si se corta, el anfitrión deja `.parada` y `preparar` no se da por bueno. **Defensa adicional dentro de la VM (no es la garantía)**: `con_limite_de_descarga` vigila `rx_bytes` cada 1 s y, al umbral (500 MiB), **corta la red** (`cortar_red_nft`: descarta todo salvo el SSH) y **termina el grupo de procesos entero —TERM, KILL— comprobando que no queda ningún miembro vivo**; si queda alguno, devuelve 5. Medido en un par veth real: tras ese corte `rx_bytes` crece unos pocos KB más (retransmisiones) y la aplicación deja de recibir, pero **lo que entró antes del corte y durante la latencia del vigilante no queda acotado por él**; por eso el presupuesto que se declara es el del proxy |
 | **Almacenamiento** | ≤ 25 GiB en `/mnt/Datos/ensayo-m4-f1bis` | `vigilante_anfitrion` (cada 2 s mientras la VM trabaja): si lo supera, escribe `.parada` y **para la VM propia**. Exceso posible: el crecimiento de un disco en 2 s |
 | **Espacio libre** | ≥ 10 GiB en el anfitrión | el mismo vigilante; el fallo ya no se descarta: `.parada` marca la fase como interrumpida y ni `preparacion.ok` ni la ejecución se dan por buenas |
 | **Ventana** | `preparar` ≤ 45 min · `ejecutar` ≤ 60 min (2 h en total con margen) | **Un plazo único por fase, desde que empieza** (bundle, superposición, arranque, espera de SSH, copias, orden remota, recuperación de evidencias y apagado están DENTRO). `paso_permitido` se pregunta antes de cada paso que no es limpieza: si no queda más que la **reserva de cierre (300 s: evidencias ≤ 120 s + apagado ≤ ~120 s + margen)**, no se empieza, se escribe `.parada` y se va a la limpieza. La espera de SSH la corta el plazo, no el número de intentos; las copias usan `min(120 s, restante − reserva)`; y la orden remota usa **lo que queda menos la reserva** (`timeout --kill-after=30` dentro de la VM, no una cifra fija) |
@@ -73,10 +73,10 @@ reutiliza una ejecución previa.
 | Paquetes Debian del `Dockerfile` (`build-essential`, `libpq-dev`, `libxml2-dev`, `libxslt-dev` en la etapa de construcción; `libpq5`, `libxml2`, `libxslt1.1`, `tini` en la final) | `preparar` | `deb.debian.org`, desde dentro del contenedor de construcción | ≈ 150–200 MiB | cambia `src/` respecto a la fase 1, así que la capa de `pip` **no** está en caché |
 | Dependencias de Python (`pip install .`) | `preparar` | `pypi.org` / `files.pythonhosted.org` | ≈ 50–100 MiB | versiones resueltas → `pip-freeze.txt` |
 | **Nada más**: las dos imágenes base ya están en la VM (se comprueba su digest y **no se descarga otra**; si difiere, se detiene) | — | — | 0 | |
-| **Total** | | | **≈ 200–300 MiB estimados; tope 600 MiB** (§4: cuota en el núcleo al 98 %, y corte de red + grupo de procesos al umbral de 500 MiB) | la fase 1 recibió 374 MiB entre dos imágenes y una construcción similar |
+| **Total** | | | **≈ 200–300 MiB estimados; tope 600 MiB** (§4: proxy con presupuesto en el anfitrión, que corta al tope menos el margen; el vigilante de la VM es defensa adicional) | la fase 1 recibió 374 MiB entre dos imágenes y una construcción similar |
 
 **Decisión confirmada: construcción con caché. La construcción en frío durante la ejecución queda NOT RUN** (alternativa descartada por ahora): El
-`bootstrap.sh` construiría la imagen con red abierta. Es más fiel, pero exige red durante la instalación, justo la fase que se
+`bootstrap.sh` construiría la imagen con salida a Internet. Es más fiel, pero exige red durante la instalación, justo la fase que se
 quiere observar con la red cerrada, y QEMU no puede abrir solo tres nombres. Con la caché de `preparar`, **el resultado de la
 construcción se registrará como «con caché (NOT RUN en frío)»** (I-04); una construcción desde cero queda para una fase con ventana
 de red propia.
@@ -130,8 +130,8 @@ operativa de #239 sin decidir un cambio de defaults.
 
 ```bash
 bash docs/design/m4-fase1bis/anfitrion.sh verificar   # solo lectura (ya ejecutado sobre esta cabeza: todo en orden)
-bash docs/design/m4-fase1bis/anfitrion.sh preparar    # PIDE AUTORIZACIÓN: red abierta, descargas §5
-bash docs/design/m4-fase1bis/anfitrion.sh ejecutar    # PIDE AUTORIZACIÓN: red cerrada, ensayo
+bash docs/design/m4-fase1bis/anfitrion.sh preparar    # PIDE AUTORIZACIÓN: salida solo por el proxy con presupuesto, descargas §5
+bash docs/design/m4-fase1bis/anfitrion.sh ejecutar    # PIDE AUTORIZACIÓN: sin red alguna, ensayo
 bash docs/design/m4-fase1bis/anfitrion.sh cerrar      # solo lectura: sin QEMU, sin puerto, huellas, almacenamiento
 ```
 
@@ -191,7 +191,7 @@ configuración de las fuentes, como adaptación documentada del ensayo y sin cam
 ventana de 2 h, `preparar` ≤ 45 min y `ejecutar` ≤ 60 min como presupuesto propuesto, **ahora hecho cumplir por el arnés** (§4).
 
 **Siguen sin autorizar (se piden de nuevo sobre la cabeza definitiva de esta PR):**
-1. **`preparar`**: crear `/mnt/Datos/ensayo-m4-f1bis`, arrancar la VM **con red** y descargar solo lo de §5 (tope 600 MiB, corte a 500 MiB).
+1. **`preparar`**: crear `/mnt/Datos/ensayo-m4-f1bis`, arrancar la VM **sin red directa, solo con la salida al proxy con presupuesto** y descargar solo lo de §5 (tope 600 MiB; el proxy corta con margen).
 2. **`ejecutar`**: nueva superposición limpia, VM **sin red**, ensayo completo, apagado comprobado.
 
 No se pide: tocar el tablero, corregir producto, fusionar, desplegar, ni arrancar la Pi.
@@ -200,19 +200,17 @@ No se pide: tocar el tablero, corregir producto, fusionar, desplegar, ni arranca
 
 - `anfitrion.sh verificar` ejecutado sobre el equipo real, **solo lectura**: todo en orden (KVM, QEMU, candidato en el repo, manifiesto al día, huellas de la
   base y de `preparacion.qcow2`, sin QEMU, puerto libre, 434 GiB libres).
-- **El arnés se prueba con dobles y procesos controlados** (`tests/test_ensayo_f1bis_arnes.py`, 61 casos; ni QEMU, ni Docker, ni red externa): una «VM» de mentira
+- **El arnés se prueba con dobles y procesos controlados** (`tests/test_ensayo_f1bis_arnes.py`, 61 casos más 11 del proxy en `tests/test_ensayo_f1bis_proxy.py`; ni QEMU, ni Docker, ni red externa): una «VM» de mentira
   cuyo `argv[0]` es `qemu-system-x86_64` (`tests/_vm_falsa.py`), un contador de bytes recibidos manejable, un **reloj manejable** y órdenes remotas sustituidas.
   Demuestra: el corte de descarga **termina el grupo entero** (un líder que muere con TERM y un hijo que lo ignora: el hijo muere; si nada se puede matar, devuelve 5,
-  no 4) y **corta la red antes** de matar; **el tope en el núcleo es real** (una prueba funcional con un par veth en un espacio de nombres de red sin privilegios: con tope
-  de 5 MiB se reciben ≈ 4 MiB de 30 enviados, tras cortar la red 0, y el puerto 22 pasa siempre); el vigilante **para la VM** por poco espacio libre o almacenamiento; la VM
+  no 4) y **corta la red antes** de matar; **el presupuesto lo corta el proxy del anfitrión** (11 pruebas con un origen local: cuenta y corta con HTTP absoluto y con CONNECT, tras el corte responde 503 sin contactar con el origen, lista de nombres y puertos —subdominios incluidos—, límite de conexiones, negativa a arrancar con un margen insuficiente, SIGTERM deja el estado, y el relé de `guestfwd`) y **se mide el residual real** (arriba: 77 938 B frente a ≤ 1 179 648 B declarados); la prueba del par veth (espacio de nombres sin privilegios, si el equipo lo permite; en la CI figura como «NO EJECUTADA») registra `rx_bytes` antes y después del corte con un emisor independiente: la aplicación deja de recibir, `rx_bytes` crece 4 542 B más, y por eso **no** se presenta como garantía; el vigilante **para la VM** por poco espacio libre o almacenamiento; la VM
   propia se reconoce por PID y atributos y **un proceso ajeno jamás se señala**; el apagado escala TERM→KILL y **no borra el PID si no consigue matarla**; una **señal durante
   `preparar` limpia al momento**; **`ejecutar` rechaza** una preparación incompleta (sin marcador, otro candidato, RC≠0, disco cambiado, `.parada`, ejecución previa); **el plazo
   es único por fase**: un arranque lento, una copia lenta o una espera de SSH lenta impiden el siguiente paso, dejan `.parada`, no lanzan la orden remota y limpian; la orden remota
   recibe lo que queda menos la reserva; una precondición fallida impide instalar; las fuentes se apagan justo tras instalar; unos controles positivos fallidos no permiten interpretar
-  denegaciones. Las mutaciones del arnés (el corte que solo mira al líder, que no corta la red, la cuota al 150 %, el SSH no exceptuado, un paso sin guarda de plazo, la espera de SSH
+  denegaciones. Las mutaciones del arnés (el corte que solo mira al líder, que no corta la red, el SSH no exceptuado, el proxy que no corta o no cuenta lo que llega, que ignora la lista de nombres o que no se niega con un margen insuficiente, `.parada` ausente cuando el proxy cortó, un paso sin guarda de plazo, la espera de SSH
   sin plazo, la orden remota con plazo fijo, borrar el PID sin comprobar la muerte, la limpieza que no para la VM…) rompen pruebas; las que sobrevivían a la primera tanda se cerraron.
 - `tests/escenarios/guion_f1bis.sh` (en la suite de credenciales, como root en un contenedor sin red): la sección de **credenciales** del guion
   da **41 PASS y 0 FAIL** sobre una instalación hecha por el `bootstrap.sh` real —incluidas las comprobaciones estáticas con las órdenes de **Debian 12**
   (`stat` sobre el enlace, `find -perm`)— y **se para con código 3** sobre una instalación heredada y expuesta, sin imprimir la credencial ni reparar.
-- **No comprobado** (necesita la VM): que la regla de nftables se cargue en el Debian de la VM (el paquete `nftables` es dependencia de `docker-ce`; `vm-preparar.sh` aborta antes de descargar si no se puede cargar); las secciones `instalacion`, `salud`, `reejecucion`, `originales` y `fuentes_*` contra Docker real; la construcción de la imagen;
-  el comportamiento real de la red de QEMU con `restrict=on`; los tiempos. Sus órdenes reutilizan las de la fase 1, pero su primera ejecución real será el ensayo.
+- **No comprobado** (necesita la VM): que el reenvío `guestfwd … cmd:` de QEMU (la sintaxis solo se validó con la VM en pausa, sin invitado) llegue al proxy y que `docker build`/APT/pip salgan por él (`vm-preparar.sh` lo comprueba **antes** de construir y aborta sin descargar si no hay proxy, si hay salida directa o si un nombre fuera de la lista no se rechaza); que la regla de nftables de `cortar_red_nft` se cargue en el Debian de la VM; las secciones `instalacion`, `salud`, `reejecucion`, `originales` y `fuentes_*` contra Docker real; la construcción de la imagen; el comportamiento real de la red de QEMU con `restrict=on`; los tiempos. El `rx_bytes` del invitado **no** es la medida autoritativa del presupuesto. Sus órdenes reutilizan las de la fase 1, pero su primera ejecución real será el ensayo.

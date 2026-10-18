@@ -304,6 +304,8 @@ def _doble_anfitrion(dir_ensayo: Path, tmp_path: Path, *, prep: str, extra: str 
     guion = f"""
         source "{ANFITRION}"
         cmd_verificar() {{ return 0; }}
+        iniciar_proxy() {{ PROXY_PUERTO=3128; return 0; }}
+        leer_estado_proxy() {{ echo "${{PROXY_DOBLE:-123 0}}"; }}
         crear_bundle() {{ : > "${{DIR}}/candidato.bundle"; : > "${{DIR}}/bootstrap.sh"; }}
         qemu-img() {{ local a=("$@"); : > "${{a[-2]}}"; }}
         arrancar() {{ python3 "{FALSA}" "${{PIDFILE}}" "${{DIR}}"; }}
@@ -353,6 +355,30 @@ class TestCicloDeVidaDelAnfitrion:
         assert r.returncode != 0
         assert not (dir_ensayo / "preparacion.ok").exists(), "un marcador de preparación completa tras una preparación fallida"
         assert self._sin_vm_viva(dir_ensayo)
+
+    @pytest.mark.parametrize("estado", ["10 1", "700 0", "-1 1"], ids=["el-proxy-corto", "contado-sobre-el-tope", "estado-ilegible"])
+    def test_si_el_proxy_corto_o_se_paso_la_preparacion_no_es_valida(self, dir_ensayo, tmp_path, estado):
+        """La medida AUTORIZADA es la del proxy del anfitrión: si cortó (o no se puede leer), queda `.parada` y no hay marcador."""
+        r, _ = self._correr(dir_ensayo, tmp_path, PREP_BIEN, extra=f'PROXY_DOBLE="{estado}"; leer_estado_proxy() {{ echo "{estado}"; }}')
+        assert r.returncode != 0, r.stdout
+        assert (dir_ensayo / ".parada").exists() and "proxy contó" in (dir_ensayo / ".parada").read_text()
+        assert not (dir_ensayo / "preparacion.ok").exists()
+        assert self._sin_vm_viva(dir_ensayo)
+
+    def test_el_marcador_registra_lo_que_midio_el_proxy_y_no_lo_que_dice_el_invitado(self, dir_ensayo, tmp_path):
+        r, _ = self._correr(dir_ensayo, tmp_path, 'echo "descargado hasta ahora: 1 MiB"; echo "PREPARACIÓN TERMINADA"; return 0',
+                            extra='leer_estado_proxy() { echo "77 0"; }')
+        assert r.returncode == 0, r.stdout + r.stderr
+        marca = (dir_ensayo / "preparacion.ok").read_text()
+        assert "DESCARGA_MIB=77" in marca and "proxy del anfitrión" in marca
+
+    def test_el_proxy_se_arranca_antes_que_la_vm_y_se_para_en_la_limpieza(self, dir_ensayo, tmp_path):
+        r, _ = self._correr(dir_ensayo, tmp_path, PREP_BIEN, extra='iniciar_proxy() { echo ARRANCA_PROXY >> "${DIR}/orden.txt"; PROXY_PUERTO=3128; }\n'
+                            'arrancar() { echo ARRANCA_VM >> "${DIR}/orden.txt"; python3 "' + str(FALSA) + '" "${PIDFILE}" "${DIR}"; }\n'
+                            'parar_proxy_propio() { echo PARA_PROXY >> "${DIR}/orden.txt"; return 0; }')
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert (dir_ensayo / "orden.txt").read_text().split() [:2] == ["ARRANCA_PROXY", "ARRANCA_VM"]
+        assert "PARA_PROXY" in (dir_ensayo / "orden.txt").read_text()
 
     def test_una_senal_durante_la_preparacion_no_deja_la_vm_viva(self, dir_ensayo, tmp_path):
         """El comando remoto largo va en segundo plano y se espera con `wait`: la señal se atiende AL MOMENTO, no al final de la ventana."""
@@ -560,9 +586,11 @@ class TestOrdenesDelGuion:
         assert texto.count("sudo timeout --kill-after=30") == 2, "preparar y ejecutar deben llevar `timeout` remoto, no solo en el cliente SSH"
         assert "wait $!" in texto, "el comando remoto va en segundo plano para que el `trap` se atienda al momento"
 
-    def test_la_construccion_va_bajo_el_limite_de_descarga(self):
+    def test_la_construccion_va_bajo_el_limite_de_descarga_y_el_proxy_se_comprueba_antes(self):
         texto = PREPARAR.read_text()
         assert "con_limite_de_descarga" in texto and "docker build" in texto
+        assert texto.index("x \"${PROXY}\"") < texto.index("docker build"), "el proxy (y el control negativo) se comprueban ANTES de construir"
+        assert "HAY salida directa" in texto and "FUERA de la lista" in texto
         assert "MB" not in texto.replace("MiB", "").replace("MIB", ""), "unidades: MiB, no MB"
 
 
@@ -632,85 +660,88 @@ class TestElCorteTerminaElGrupoEntero:
             p.wait()
 
 
-# ── Tope de red en el núcleo ────────────────────────────────────────────────────────────────────────────────────────
+# ── La defensa del invitado (cortar la red) y por qué NO es la garantía del presupuesto ──────────────────────────────
 
-class TestTopeDeRedEnElNucleo:
+class TestCortarRedEnElInvitado:
 
-    def test_las_reglas_cargadas_son_las_esperadas(self, tmp_path):
-        r = _lib(f"""
-            nft() {{ if [[ "$1" == "-f" ]]; then cat > "{tmp_path}/reglas.nft"; else echo 'iifname "ens3" quota over 588 mbytes drop'; fi; }}
-            instalar_tope_de_red 600 ens3; echo "rc=$?"
-        """)
-        reglas = (tmp_path / "reglas.nft").read_text()
-        assert "rc=0" in r.stdout, r.stdout + r.stderr
-        assert "hook prerouting" in reglas, "debe ver también el tráfico reenviado a los contenedores de la construcción (prerouting)"
-        assert 'iifname "ens3" tcp dport 22 accept' in reglas and reglas.index("dport 22 accept") < reglas.index("quota over")
-        assert "quota over 588 mbytes drop" in reglas, "la cuota debe ser el 98 % del tope (600 → 588)"
-
-    def test_cortar_red_añade_un_drop_total_detras_de_la_excepcion_del_ssh(self, tmp_path):
+    def test_cortar_red_nft_deja_pasar_el_ssh_y_descarta_el_resto(self, tmp_path):
         r = _lib(f"""nft() {{ echo "$*" >> "{tmp_path}/nft.txt"; }}
             cortar_red_nft ens3""")
-        assert (tmp_path / "nft.txt").read_text().strip() == 'add rule inet f1bis entrada iifname ens3 drop', r.stderr
+        reglas = (tmp_path / "nft.txt").read_text().splitlines()
+        assert reglas[-2].endswith("iifname ens3 tcp dport 22 accept") and reglas[-1].endswith("iifname ens3 drop"), (reglas, r.stderr)
 
-    def test_si_no_se_puede_cargar_el_tope_la_preparacion_no_descarga(self):
-        texto = PREPARAR.read_text()
-        i = texto.index("instalar_tope_de_red")
-        assert i < texto.index("docker build"), "el tope se instala ANTES de construir"
-        assert "NO se pudo instalar el tope de red en el núcleo" in texto and "exit 4" in texto[i:i + 400]
+    def test_ya_no_se_presenta_una_cuota_dentro_del_invitado_como_tope(self):
+        for f in (LIB, PREPARAR, ANFITRION):
+            assert "instalar_tope_de_red" not in f.read_text(), f"{f.name}: la cuota de nftables dentro de la VM no acota lo descargado"
+
+    def test_la_vm_no_tiene_red_directa_en_ningun_modo(self):
+        texto = ANFITRION.read_text()
+        arrancar = texto[texto.index("arrancar() {"):texto.index("iniciar_proxy() {")]
+        assert "restrict=on" in arrancar and 'red="user,id=n0,restrict=on' in arrancar, "el modo base ya lleva restrict=on"
+        assert arrancar.count("guestfwd=") == 1 and '[[ "$2" == "proxy" ]]' in arrancar, "solo el modo proxy lleva el reenvío al proxy"
+        assert "abierta" not in arrancar
 
 
 NETNS_SCRIPT = """
 set -e
 LIB="$1"; source "$LIB"
 ip link set lo up
-instalar_tope_de_red 5 veth0 >/dev/null              # cuota = 98 % de 5 MiB → 4 MiB
 unshare -n sleep 60 & B=$!
 sleep 0.5
 ip link add veth0 type veth peer name veth1
 ip link set veth1 netns $B
 ip addr add 10.9.0.1/24 dev veth0; ip link set veth0 up
 nsenter -t $B -n bash -c 'ip link set lo up; ip addr add 10.9.0.2/24 dev veth1; ip link set veth1 up'
-recibir() {  # recibir PUERTO ENVIAR_MIB → imprime los MiB recibidos
-python3 - "$1" "$2" <<'PY' &
-import socket, sys
-puerto = int(sys.argv[1])
-s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("10.9.0.1", puerto)); s.listen(1)
-s.settimeout(8)
-try:
-    c, _ = s.accept()
-except Exception:
-    print("RECIBIDO_MIB 0.0"); sys.exit()
-total = 0; c.settimeout(3)
-try:
-    while True:
+rx() { awk '/veth0:/ {sub(/.*:/, ""); print $1}' /proc/net/dev; }
+# Un EMISOR independiente del cliente: sigue enviando hasta que el núcleo le dice basta. Se mide qué cesa de verdad.
+python3 - <<'PY' &
+import socket
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("10.9.0.1", 5000)); s.listen(1)
+c, _ = s.accept(); c.settimeout(1)
+total = 0
+import time
+t0 = time.time(); ultimo = 0
+while time.time() - t0 < 6:
+    try:
         d = c.recv(65536)
-        if not d: break
-        total += len(d)
-except Exception: pass
-print("RECIBIDO_MIB", round(total / 1048576, 2))
+    except Exception:
+        d = b""
+    total += len(d)
+    if time.time() - ultimo > 0.05:
+        open("/tmp/ns_recibido.txt", "w").write(str(total)); ultimo = time.time()
+open("/tmp/ns_recibido.txt", "w").write(str(total))
 PY
 RP=$!
-sleep 0.4
-nsenter -t $B -n python3 - "$1" "$2" <<'PY' || true
-import socket, sys
-s = socket.socket(); s.settimeout(4)
-try:
-    s.connect(("10.9.0.1", int(sys.argv[1])))
-    for _ in range(int(sys.argv[2])): s.sendall(b"x" * 1048576)
-except Exception: pass
+sleep 0.5
+nsenter -t $B -n python3 - <<'PY' &
+import socket, time
+s = socket.socket(); s.connect(("10.9.0.1", 5000)); s.settimeout(0.5)
+t0 = time.time()
+while time.time() - t0 < 5.5:
+    try:
+        s.send(b"x" * 65536)
+    except Exception:
+        pass
 PY
-wait $RP
-}
-echo "A $(recibir 5000 30)"
+EM=$!
+sleep 1.5
+echo "RX_ANTES_DEL_CORTE $(rx)"
 cortar_red_nft veth0
-echo "B $(recibir 5001 3)"
-echo "C $(recibir 22 3)"
+sleep 0.3
+echo "RX_JUSTO_TRAS_EL_CORTE $(rx)"
+cat /tmp/ns_recibido.txt > /tmp/ns_en_el_corte.txt 2>/dev/null || true
+sleep 3
+echo "RX_3S_DESPUES $(rx)"
+echo "SOCKET_EN_EL_CORTE $(cat /tmp/ns_en_el_corte.txt)"
+wait $EM 2>/dev/null || true
+wait $RP 2>/dev/null || true
+echo "SOCKET_FINAL $(cat /tmp/ns_recibido.txt)"
 kill $B 2>/dev/null || true
 """
 
 
 def _netns_disponible() -> bool:
-    if shutil.which("unshare") is None or shutil.which("nft") is None or shutil.which("ip") is None or shutil.which("nsenter") is None:
+    if any(shutil.which(x) is None for x in ("unshare", "nft", "ip", "nsenter")):
         return False
     r = subprocess.run(["unshare", "-Urn", "bash", "-c", "ip link add t0 type dummy && nft list ruleset >/dev/null"],
                        capture_output=True, timeout=20, check=False)
@@ -718,18 +749,67 @@ def _netns_disponible() -> bool:
 
 
 @pytest.mark.skipif(not _netns_disponible(), reason="NO EJECUTADA: requiere espacios de nombres de usuario y de red sin privilegios, nft, ip y nsenter")
-class TestTopeDeRedFuncional:
-    """Con el núcleo de verdad (un espacio de nombres de red con un par veth): el tope y el corte son reales, no un doble."""
+class TestCortarRedFuncional:
+    """Con el núcleo de verdad (un par veth): qué cesa al cortar la red DENTRO del receptor y qué NO. Documenta por qué esa defensa no es la
+    garantía del presupuesto: la aplicación deja de recibir datos útiles, pero la interfaz sigue contando lo que le llega."""
 
-    def test_la_cuota_descarta_lo_que_pasa_del_tope_el_corte_lo_descarta_todo_y_el_ssh_pasa(self, tmp_path):
+    def test_el_socket_deja_de_recibir_pero_rx_bytes_de_la_interfaz_sigue_creciendo(self, tmp_path):
         s = tmp_path / "netns.sh"
         s.write_text(NETNS_SCRIPT)
         r = subprocess.run(["unshare", "-Urn", "bash", str(s), str(LIB)], capture_output=True, text=True, timeout=90, check=False)
-        salida = {linea.split()[0]: float(linea.split()[-1]) for linea in r.stdout.splitlines() if linea[:2] in ("A ", "B ", "C ")}
-        assert set(salida) == {"A", "B", "C"}, r.stdout + r.stderr
-        assert 3.5 <= salida["A"] <= 4.2, f"con tope 5 MiB (cuota 4 MiB) se recibieron {salida['A']} MiB de 30 enviados"
-        assert salida["B"] == 0.0, f"con la red cortada se recibieron {salida['B']} MiB"
-        assert salida["C"] >= 2.9, f"el SSH (puerto 22) debía pasar siempre y recibió {salida['C']} MiB de 3"
+        v = {linea.split()[0]: int(linea.split()[1]) for linea in r.stdout.splitlines() if linea.startswith(("RX_", "SOCKET_"))}
+        assert {"RX_ANTES_DEL_CORTE", "RX_JUSTO_TRAS_EL_CORTE", "RX_3S_DESPUES", "SOCKET_EN_EL_CORTE", "SOCKET_FINAL"} <= set(v), r.stdout + r.stderr
+        print(f"\n[red cortada dentro del invitado] {v}")
+        # La aplicación no recibe nada que la interfaz no hubiera contado ya antes del corte (las cabeceras hacen que `rx_bytes` supere a lo útil).
+        assert v["SOCKET_FINAL"] <= v["RX_JUSTO_TRAS_EL_CORTE"], "el socket recibió datos que la interfaz no había contado antes del corte"
+        # Residuo tras el corte medido en `rx_bytes`: lo que el emisor sigue empujando contra el filtro (retransmisiones). Aquí es pequeño porque el
+        # emisor es TCP y se retira; NO es una garantía (un emisor que no se retira, o la latencia del vigilante ANTES del corte, no están acotados).
+        residuo = v["RX_3S_DESPUES"] - v["RX_JUSTO_TRAS_EL_CORTE"]
+        assert 0 < residuo <= 1_000_000, f"residuo tras el corte fuera de lo esperado: {residuo} B (si es 0 el filtro no contaría ni lo que descarta; si es grande, el emisor no se retira)"
+        print(f"[residuo medido en rx_bytes tras el corte] {residuo} B; entre la lectura previa y el corte entraron {v['RX_JUSTO_TRAS_EL_CORTE'] - v['RX_ANTES_DEL_CORTE']} B (no acotados por el corte)")
+
+
+# ── El proxy con presupuesto: solo se para el PROPIO ─────────────────────────────────────────────────────────────────
+
+class TestPararElProxyPropio:
+
+    def _proxy_falso(self, d: Path, *, estado: str | None = None, nombre: str = "proxy-presupuesto.py") -> subprocess.Popen:
+        """Proceso con la línea de órdenes del proxy real (`… proxy-presupuesto.py --estado DIR/proxy-estado.json`)."""
+        script = d / nombre
+        script.write_text("import time\ntime.sleep(60)\n")
+        p = subprocess.Popen(["python3", str(script), "--estado", estado or str(d / "proxy-estado.json")], start_new_session=True)
+        (d / "proxy.pid").write_text(str(p.pid))
+        return p
+
+    def test_para_el_propio_y_quita_el_pidfile(self, dir_ensayo):
+        p = self._proxy_falso(dir_ensayo)
+        r = _lib(f'parar_proxy_propio "{dir_ensayo}" "{dir_ensayo}/proxy.pid"; echo "rc=$?"')
+        p.wait(timeout=10)
+        assert "rc=0" in r.stdout and not (dir_ensayo / "proxy.pid").exists(), r.stdout + r.stderr
+
+    @pytest.mark.parametrize("caso", ["otro-script", "otro-directorio"])
+    def test_un_proceso_ajeno_en_el_pidfile_no_se_toca(self, dir_ensayo, caso):
+        if caso == "otro-script":
+            p = self._proxy_falso(dir_ensayo, nombre="otra-cosa.py")
+        else:
+            p = self._proxy_falso(dir_ensayo, estado="/otro/dir/proxy-estado.json")
+        try:
+            r = _lib(f'parar_proxy_propio "{dir_ensayo}" "{dir_ensayo}/proxy.pid"; echo "rc=$?"')
+            assert p.poll() is None, "se mató un proceso que no es el proxy de este ensayo"
+            assert "rc=3" in r.stdout and "NO se toca" in r.stderr
+        finally:
+            p.kill()
+            p.wait()
+
+    def test_pidfile_de_un_proceso_ya_muerto_solo_se_limpia(self, dir_ensayo):
+        p = self._proxy_falso(dir_ensayo)
+        p.kill()
+        p.wait()
+        r = _lib(f'parar_proxy_propio "{dir_ensayo}" "{dir_ensayo}/proxy.pid"; echo "rc=$?"')
+        assert "rc=0" in r.stdout and not (dir_ensayo / "proxy.pid").exists()
+
+    def test_sin_pidfile_no_hace_nada(self, dir_ensayo):
+        assert "rc=0" in _lib(f'parar_proxy_propio "{dir_ensayo}" "{dir_ensayo}/no-existe.pid"; echo "rc=$?"').stdout
 
 
 # ── Plazo único de la fase ──────────────────────────────────────────────────────────────────────────────────────────
