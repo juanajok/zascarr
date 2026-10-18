@@ -208,18 +208,24 @@ defecto de Compose encuentre el `.env` real sin tener que acordarse de
 en una instalación manual desde cero, créalo tú mismo:
 
 ```bash
-( umask 077; cp ../.env.example ../.env )   # nace en modo 600; ajusta HOST_*_DIR y DB_PASSWORD
-ln -sf ../.env .env                         # una vez — Compose ya lo encontrará solo
-sudo docker compose up -d
-sudo docker compose run --rm zascarr alembic upgrade head
+# La carpeta que contiene el .env (ZASCARR_ROOT) tiene que ser de root y no escribible por otros:
+sudo chown root:root .. && sudo chmod go-w ..
+sudo sh -c 'umask 077 && cp ../.env.example ../.env'   # root:root, modo 600, desde que nace
+sudo "${EDITOR:-nano}" ../.env                         # ajusta HOST_*_DIR y DB_PASSWORD
+ln -sf ../.env .env                                    # solo para que `docker compose config` lo encuentre
+sudo docker compose --env-file ../.env up -d
+sudo docker compose --env-file ../.env run --rm zascarr alembic upgrade head
 ```
 
 El `.env` guarda la contraseña de la base de datos, así que **solo el administrador
-puede leerlo** (modo 600, `root:root`): por eso los comandos de arriba llevan `sudo`.
-Con el instalador no tienes que hacer nada: genera la contraseña por ti la primera
-vez, **no toca una que ya hayas puesto** y deja el fichero cerrado. Si lo
-reejecutas sobre una instalación anterior con el `.env` abierto (644), lo cierra y
-te lo dice.
+puede leerlo** (modo 600, `root:root`) y su carpeta **no puede estar abierta a otras
+cuentas**: si lo guardas en una carpeta que otra cuenta puede cambiar, esa cuenta podría
+sustituirlo aunque no pueda leerlo. Por eso los comandos llevan `sudo` y `--env-file`
+explícito: el enlace `zascarr/.env` está en una carpeta del usuario de servicio y no es de fiar
+cuando lo ejecuta root. Con el instalador no tienes que hacer nada: genera la contraseña por
+ti la primera vez, **no toca una que ya hayas puesto**, deja la carpeta y el fichero cerrados y
+se detiene sin escribir nada si no lo consigue. Si lo reejecutas sobre una instalación anterior
+con el `.env` abierto (644) o con la carpeta del usuario de servicio, lo corrige y te lo dice.
 
 ## Uso
 

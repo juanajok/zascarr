@@ -13,10 +13,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   medido con `nobody`). Ahora, si la contraseña falta o es el marcador de la plantilla, `bootstrap.sh` genera una
   y la guarda sin mostrarla; **una que ya esté puesta no se toca jamás**, y si ya existe una base de datos creada
   con otra contraseña **no inventa ninguna**: te lo explica y se detiene sin tocar nada. El `.env` nace en modo 600 y
-  vuelve a 600 después de cada cambio (también corrige uno antiguo abierto, avisando). `update.sh`, `rollback.sh`,
+  vuelve a 600 después de cada cambio (también corrige uno antiguo abierto, avisando), **antes de escribir
+  ningún secreto**: se reescribe en un temporal cerrado que se renombra, no en sitio. **La carpeta que lo
+  contiene** (`/opt/zascarr`) pasa a ser de root y sin escritura para otras (antes el instalador la entregaba
+  recursivamente al usuario de servicio, que podía sustituir el `.env`; ahora solo entrega el clon). Si no se
+  consigue el propietario o los permisos, el instalador **se detiene sin escribir nada** y no anuncia protección. `update.sh`, `rollback.sh`,
   `backup.sh`, `etiquetar.sh` y `uninstall.sh` comprueban antes de empezar que pueden leerlo y, si no, piden `sudo`
   en español (con el `.env` ilegible `uninstall.sh` lo habría tratado como «ausente» y usado rutas por defecto). Los
-  comandos de ayuda que imprimen los scripts llevan `sudo`. Un `#` en el valor de una variable ya no rompe la
+  comandos de ayuda que imprimen los scripts llevan `sudo` y `--env-file` explícito. Un `#` en el valor de una variable ya no rompe la
   escritura del `.env`. Sin migraciones, sin cambios de la aplicación ni de los valores por defecto de las fuentes.
   Pruebas: `tests/test_credenciales_env.py`, `tests/test_env_consumidores.py`. **No verificado** todavía en una
   máquina limpia con Docker (el instalador real necesita root, red e imágenes).

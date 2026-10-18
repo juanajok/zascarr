@@ -18,12 +18,21 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 - Las integraciones P2P (Prowlarr, Transmission, aMule, foro) nacen
   **desactivadas** y piden activación explícita.
 - **El `.env` está cerrado** (modo 600, `root:root`) desde que se crea y tras cada
-  modificación. Guarda la contraseña de la base de datos y, si las rellenas, las claves de
+  modificación, y **la carpeta que lo contiene es de root y no admite escritura de otras
+  cuentas** (`/opt/zascarr`; el clon del código sigue siendo del usuario de servicio). Sin
+  esto, el dueño de la carpeta podría borrar el `.env` y poner otro aunque no pudiera leerlo.
+  El instalador escribe en un temporal ya cerrado y lo renombra, nunca reescribe en sitio, y
+  si no consigue el propietario o los permisos exigidos **se detiene antes de guardar ninguna
+  contraseña**. Guarda la contraseña de la base de datos y, si las rellenas, las claves de
   las integraciones; ninguna otra cuenta del equipo puede abrirlo. Los scripts de
   operación (`update.sh`, `rollback.sh`, `backup.sh`, `etiquetar.sh`, `uninstall.sh`) se
   ejecutan con `sudo` y, si no pueden leerlo, se detienen **antes de tocar nada** y lo dicen.
   La contraseña de la base de datos **la genera el instalador** la primera vez (192 bits
   aleatorios del sistema); una que ya tengas puesta no se cambia nunca.
+  **Límite conocido:** el clon del código (`/opt/zascarr/zascarr`) es del usuario de servicio
+  y lo ejecutan los scripts con `sudo` (`docker-compose.yml`, `scripts/`): esa cuenta puede
+  modificarlos. Es una decisión de diseño anterior (no la cambia esta corrección) y es un
+  riesgo aparte del `.env`; está registrado para decidir si el código debe ser de root.
 
 ## Si quieres acceder desde fuera de la Pi
 

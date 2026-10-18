@@ -35,6 +35,20 @@ Docker Compose v5.5.1 (anfitrión de desarrollo, `docker compose config` con el 
 Es decir: no arranca con la contraseña por defecto del compose (`SuperSecretPassword123`); pero el mensaje es críptico y en
 inglés. Conclusión: con el `.env` cerrado, **los comandos que mostramos deben llevar `sudo`**.
 
+## 3 bis. Medido en la revisión de #237 (600 no basta)
+
+La inspección del ensayo midió `/opt/zascarr` = `media:media` 755. El dueño de una carpeta puede borrar y sustituir lo que contiene
+aunque el fichero sea `root:root` 600, y el instalador seguía entregándole `ZASCARR_ROOT` entero con `chown -R`. Tres cambios:
+
+| Hallazgo | Corrección |
+|---|---|
+| Carpeta del `.env` entregada al usuario de servicio | `chown -R` solo sobre el clon; `asegurar_ubicacion_env` deja la carpeta `root:root` y `go-w` (sin recursión) en cada ejecución; `ubicacion_env_insegura` vigila enlace, carpeta y antecesores (el bit pegajoso, como en `/tmp`, vale) y corta si no |
+| Escritura antes de cerrar un `.env` heredado | `proteger_env` antes de leer o escribir; `env_poner` escribe en un temporal 600 y lo renombra (nunca en sitio); `crear_env_protegido` rechaza también un enlace roto |
+| `chown` descartado con `|| true` | `proteger_env` propaga el fallo **y** comprueba el propietario resultante; sin ello `preparar_credenciales` se detiene antes de escribir y no anuncia protección |
+
+Las pruebas observan el modo del `.env` y del temporal en el instante de cada `sed`/`cat`/`mv` (no solo al final), simulan la rama de root con
+dobles de `chown` y de la consulta del propietario, y cada una de estas reglas se comprobó con una mutación.
+
 ## 4. Consumidores del `.env` (lectura del código)
 
 | Consumidor | Cómo lo lee | Quién lo ejecuta | Acción en esta PR |
@@ -61,7 +75,7 @@ inglés. Conclusión: con el `.env` cerrado, **los comandos que mostramos deben 
 ## 6. Decisión
 
 Adoptar (propio). `scripts/_credenciales.sh`: `generar_contrasena` (24 bytes del sistema en hexadecimal), `credencial_es_marcador`,
-`crear_env_protegido` (`umask 077`), `env_poner` (re-cierra tras `sed -i`; además escapa `#`, que el `set_env_var` anterior
+`crear_env_protegido` (`umask 077`), `env_poner` (temporal cerrado + renombrado; además escapa `#`, que el `set_env_var` anterior
 no hacía), `proteger_env`, `preparar_credenciales` y `base_de_datos_creada` (`<datos>/postgres/PG_VERSION`).
 Regresiones: `tests/test_credenciales_env.py` y `tests/test_env_consumidores.py`; cada regla se comprobó con una mutación.
 
@@ -73,6 +87,9 @@ Regresiones: `tests/test_credenciales_env.py` y `tests/test_env_consumidores.py`
 - `docker-compose.yml` conserva el valor por defecto `${DB_PASSWORD:-SuperSecretPassword123}` y el Postgres publica `127.0.0.1:5432`: no se tocan aquí
   (decisión aparte; con el `.env` legible por el invocante Compose usa su valor, con el ilegible falla en cerrado).
 - `/var/backups` es 755: el modo de los volcados se mide en los casos de backup de M4, no aquí.
+- **El clon del código es de `media` y root ejecuta sus scripts y su `docker-compose.yml`** (`sudo`): esa cuenta puede modificarlos. Riesgo preexistente y distinto del `.env`,
+  no resuelto aquí (cambiar la propiedad del código es otra decisión). El enlace `repo/.env` también está en esa carpeta: por eso las ayudas impresas llevan `--env-file` explícito.
+- Quién más escribe en `ZASCARR_ROOT` como `media` (nada conocido en el código del repo) **no se ha verificado en una instalación real**.
 - El grupo `docker` y root siguen pudiendo leer el secreto por otras vías (`docker inspect`); el objetivo es cuentas locales sin privilegios.
 - Los defaults de las fuentes (`comicvine/anilist/tebeosfera/gcd = True`) **no se cambian** (hallazgo separado).
 
