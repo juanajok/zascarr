@@ -15,7 +15,7 @@
 |---|---|---|
 | M4-01 instalación limpia, sin terminal | **FAIL** — RC=1: «DB_PASSWORD tiene el valor por defecto. Edita /opt/zascarr/.env…». El intento 2 solo completó tras **editar la contraseña a mano** y no convierte el intento 1 en PASS | 10–13, 17b |
 | M4-02 salud y esquema | **Parcial** — PASS en aplicación, CSS, base de datos, esquema `0019`, límite de memoria efectivo (512 M), sin OOM ni reinicios, puertos solo en `127.0.0.1`; `degraded` por Transmission/aMule/VPN ausentes | 14–16 |
-| Condición: fuentes externas desactivadas | **FAIL de la condición operativa del ensayo** — las cuatro figuraban `enabled` (el plan versionado no contiene esa cláusula; el código declara «activas por defecto»). **Consultas efectivas no acreditadas**: red cerrada y 0 intentos de salida/DNS en los logs de la aplicación | 14, 15 → #239 |
+| Condición: fuentes externas desactivadas | **FAIL de la condición operativa del ensayo** — las cuatro figuraban `enabled` (el plan versionado trae una cláusula sobre fuentes, §3.3, sin precisar cuáles; el código declara «activas por defecto»; ver la nota fechada de abajo). **Consultas efectivas no acreditadas**: red cerrada y 0 intentos de salida/DNS en los logs de la aplicación | 14, 15 → #239 |
 | Inspección del `.env` | **Hallazgo abierto** — `.env` en modo 644 (`root:root`) dentro de `/opt/zascarr`, que pertenece a `media:media`; **abren** `ensayo` (sin sudo), `nobody` y `media`. No se leyó el contenido | 18 → #237, #238 |
 
 ## Alcance del inventario
@@ -84,6 +84,8 @@ evidencia 18 quedan **tal como están**:
    ella.
 
 Ambas proceden del informe de la fase 1 y esta nota no las cambia: acota lo que cada una permite afirmar.
+
+**2026-10-18, errata de este README (no del informe).** Una versión anterior de la tabla de resultados decía que «el plan versionado no contiene esa cláusula» sobre las fuentes. Es incorrecto: `docs/design/m4-plan-de-aceptacion-debian.md` §3.3 (fila «Red») dice «las fuentes de tebeos permanecen apagadas (valor por defecto) y no se consulta ninguna». El plan no define si «fuentes de tebeos» son las de descarga o las de metadatos, y su premisa «(valor por defecto)» es cierta para Prowlarr, Transmission, aMule y foro (`false`) y falsa para las cuatro fuentes de metadatos (`true`, `config.py`). El informe (§6) ya formulaba el resultado como FAIL de una **condición operativa** exigida para el ensayo, que es compatible con esta lectura.
 
 ## Reglas
 
