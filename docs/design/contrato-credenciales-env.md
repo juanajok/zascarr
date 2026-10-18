@@ -44,4 +44,4 @@ propósito.
 | C9 | — | — |
 | C10 | — | — |
 
-*(Sin rellenar: la comparación es un trabajo aparte, con revisión independiente. Las cabezas indicadas son las vigentes el 2026-10-18.)*
+*(Sin rellenar. **Responsables (2026-10-18):** Perplexity rellena la matriz con lectura de código, pruebas y CI ligadas a SHA; Claude aporta reproducciones locales o salidas que falten, por peticiones acotadas; el responsable de producto decide la PR portadora y las excepciones, y solo entonces una única línea de trabajo consolida la implementación. La matriz distingue cumplimiento acreditado, parcial, incumplimiento y ausencia de evidencia; no se resuelve por número de pruebas ni por fusión mecánica de las ramas. Las cabezas indicadas son las vigentes el 2026-10-18.)*

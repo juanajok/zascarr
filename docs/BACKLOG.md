@@ -1421,6 +1421,7 @@ nada» y era cierto entonces; el informe y los logs se versionan aparte, como ev
 |---|---|---|---|
 | Aceptación integrada de M2/M3 (#105, #106) | Claude reúne criterios, evidencias y pendientes **por SHA** | Perplexity contrasta suficiencia y límites | Responsable de producto: acepta o mantiene pendiente |
 | Equivalencia de 2e (B14) con las historias de M3 | Claude reconstruye el alcance histórico y lo contrasta con código, PR y pruebas | Perplexity revisa la correspondencia | Responsable de producto: confirma equivalencia o trabajo restante |
+| Comparación #237/#238 contra C1–C10 | Perplexity rellena la matriz con lectura de código, pruebas y CI ligadas a SHA | Claude aporta reproducciones locales o salidas que falten, mediante peticiones acotadas | Responsable de producto: decide la PR portadora y las excepciones de producto; después, **una sola** línea de trabajo consolida la implementación |
 
 La aceptación de M2/M3 mantiene visibles las dependencias de M4 y **no se cierra por suma de historias**. Para 2e el resultado puede ser
 «equivalencia parcial» o «no acreditada»; no hay obligación de forzar una equivalencia con U19 ni con otro recorrido. Esto autoriza
