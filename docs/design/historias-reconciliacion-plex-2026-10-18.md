@@ -3,6 +3,11 @@
 > **Estado: propuesta para el PO. No crea tarjetas, no cambia el backlog y no autoriza código.** Cada historia está
 > escrita con el formato de las tarjetas del Kanban para poder publicarse tal cual **cuando se decida**.
 > Fecha: 2026-10-18 · `main` revisado: `f2c45c4`.
+>
+> **Revisado el 2026-10-18** (cabeza `5fe61e3`): esta versión incorpora las correcciones pedidas —criterios contradictorios o
+> demasiado abiertos en BL-R1, BL-R2, BL-R3 y BL-R5, dependencias desalineadas y nombre de BL-R7— y recoge las resoluciones
+> propuestas para D1–D7 (§6). **Las tarjetas BL-R (#228–#236) ya se habían creado en Backlog por orden del PO antes de esa
+> revisión**: llevan el texto anterior hasta que se decida actualizarlas.
 
 ## 1. De dónde sale y qué se sabe de verdad
 
@@ -34,7 +39,7 @@ Reglas que se mantienen:
 | **Identificadores externos** | Columnas únicas por proveedor (`comic_vine_id`, `anilist_id`, `tebeosfera_slug`, `gcd_id`); `Issue.isbn` **existe y nada la lee ni escribe** | #129 (otra fuente), #182 (discriminantes) | Resolver por id **antes** que por título, visible en la evidencia | **Historia nueva: BL-R5** (depende de #182) |
 | **Proveedores con capacidades declaradas** | `DiscoveryService` enruta por tradición; sin contrato de capacidades | **#133** (estados y capacidades por fuente) | — | **Sin historia nueva**: ampliar #133 (§5) |
 | **Versiones agrupadas / separar** | B16: informe de duplicados por hash; varios `File` por `Issue` posibles | M5 (identidad), B16 | Presentar **copia / variante / edición** sin confundirlas | **Historia nueva: BL-R6** (P2, tras M5) |
-| **Colecciones inteligentes** | Listas (`reading_lists`) y arcos (`story_arc_issues.reading_order`) en el modelo; vistas de trabajo: **no** | #155 (colecciones de series), #151/#163 (listas y arcos) | Consultas guardadas de **trabajo** (pendientes, conflictos…) | **Historia nueva: BL-R7** (P2) |
+| **Colecciones inteligentes** | Listas (`reading_lists`) y arcos (`story_arc_issues.reading_order`) en el modelo; vistas de trabajo: **no** | #155 (colecciones de series), #151/#163 (listas y arcos) | Vistas de **trabajo** predefinidas (pendientes, conflictos…) | **Historia nueva: BL-R7** (P2) |
 | **Órdenes alternativos** | `story_arc_issues.reading_order` | #151, #163 | — | **Sin historia nueva**: nota en esas tarjetas (§5) |
 | **Coste real de paginar** | Revisión de vinculación pagina a 100 y evalúa solo la página | #122 (coste operativo) | Medir objetos procesados, no filas devueltas | **Sin historia nueva**: se mide en BL-R0 y #122 |
 
@@ -44,20 +49,22 @@ Reglas que se mantienen:
 errores de identificación, cambios de metadatos y almacenamiento que falla. Feature padre propuesta: la nueva BL-R
 (las historias heredadas del Backlog de producto cuelgan de #148).
 
-| Orden | Historia | Prioridad | Pts | Depende de |
+| Orden de entrega | Historia | Prioridad | Pts | Depende de |
 |---|---|---|---|---|
 | 1 | **BL-R0** Ficha §13 de la reconciliación | P0 | 3 | — |
 | 2 | **BL-R2** Ver qué archivos no están disponibles y por qué | P1 | 5 | BL-R0 |
 | 3 | **BL-R1** Corregir o deshacer la vinculación de un archivo | P0 | 8 | BL-R0; ADR 0006/0007 |
-| 4 | **BL-R3** Comprobar el disco sin consultar las fuentes | P1 | 3 | BL-R0; #134 |
-| 5 | **BL-R4** Proteger una relación confirmada frente a una fuente | P1 | 5 | #127, #128, BL-R1 |
-| 6 | **BL-R5** Resolver por un identificador externo | P1 | 5 | #129, #133, #182 |
+| 4 | **BL-R3** Comprobar el disco sin consultar las fuentes | P1 | 3 | BL-R0; #133; #134 |
+| 5 | **BL-R4** Proteger una relación confirmada frente a una fuente | P1 | 5 | #127, #128, #129, BL-R1 |
+| 6 | **BL-R5** Resolver una serie por un identificador de fuente | P1 | 5 | BL-R0; #129; #133 |
 | 7 | **BL-R6** Varios archivos de una publicación | P2 | 5 | M5 (#125/#126), BL-R1 |
-| 8 | **BL-R7** Vistas guardadas de trabajo | P2 | 8 | BL-R2, BL-R4, #199, #200 |
+| 8 | **BL-R7** Vistas de trabajo predefinidas | P2 | 8 | BL-R2, BL-R4, BL-R6, #199, #200 |
 
-Total orientativo **42 puntos**, sin calibrar. El orden recomendado por el análisis (conservación → protección →
-corrección → escaneo/refresco → variantes y vistas) se respeta con un cambio: BL-R2 va antes que BL-R1 porque **B7 ya
-resolvió el núcleo** y lo que falta es barato; BL-R1 es el hueco más caro y el que más duele.
+Total **provisional de 42 puntos**, sin calibrar y **no un compromiso**: las decisiones de corrección, auditoría y persistencia
+(D1–D4) pueden cambiar el esfuerzo. El orden recomendado por el análisis (conservación → protección →
+corrección → escaneo/refresco → variantes y vistas) se respeta con un cambio: BL-R2 se **entrega** antes que BL-R1 porque
+**B7 ya resolvió el núcleo** y lo que falta es barato y da visibilidad enseguida; BL-R1 es el hueco más caro y el que más
+duele. **Es un orden de entrega, no una dependencia técnica:** BL-R1 no necesita a BL-R2.
 
 ---
 
@@ -120,32 +127,40 @@ idempotente (#103, #116, #117, #120, ADR 0006/0007). La corrección **bibliográ
 depende de M5 (#125/#126, #181–#184) y **queda fuera**: esta historia opera sobre serie + número.
 Requiere BL-R0.
 
-**Alcance.** Dos acciones sobre un archivo vinculado: **deshacer** (vuelve a Pendientes) y **corregir** (deshacer y
-elegir otra serie o número con la revisión de #119). No mueve ni renombra archivos.
+**Alcance.** **Deshacer** la vinculación de un archivo (vuelve a Pendientes) y, después, **volver a vincular** con el
+recorrido existente. Son dos operaciones separadas; «corregir» es esa secuencia, no una sustitución atómica. No mueve ni
+renombra archivos.
 
 **Criterios de aceptación**
-1. **Entrada.** Desde la ficha de la serie y la de un archivo vinculado hay «Corregir esta vinculación». No hace falta
+1. **Entrada.** Desde la ficha de la serie y la de un archivo vinculado hay «Deshacer esta vinculación». No hace falta
    pasar por el alta.
 2. **Vista previa sin escribir.** Antes de confirmar se ve: de qué serie y número sale; si ese número se queda sin
    archivos; si lo creó esa misma vinculación (`issue_creado`); si algo depende de él (lecturas, deseados, otros
    archivos); y qué se conserva (ruta, nombre, contenido y hash).
-3. **Deshacer.** `issue_id` vuelve a ser nulo, `match_status` y `review_motivo` se restauran desde el estado previo y el
-   archivo reaparece en «Por revisar». La fila no se borra y el fichero no se toca.
-4. **Número creado por esa vinculación.** Nunca se borra si tiene dependientes. Si no los tiene, la persona decide en la
-   vista previa entre conservarlo vacío o retirarlo (decisión abierta D1).
-5. **Corregir** es deshacer más una nueva elección en la **misma** sesión, con la vista previa de #119 y confirmaciones
-   separadas; nunca un reemplazo silencioso.
-6. **Historial.** Lo anterior queda anotado (que estuvo vinculado, a qué, y cuándo se corrigió) sin perder la procedencia
+3. **Deshacer.** `issue_id` vuelve a ser nulo y el archivo reaparece en «Por revisar». La fila no se borra y el fichero no
+   se toca. **El estado previo (`match_status`, `review_motivo`) se conserva como evidencia histórica; no se restaura a
+   ciegas:** el estado vigente tras desvincular cumple el contrato **actual** de Pendientes.
+4. **Se deshace lo que se revisó.** La operación comprueba que el vínculo y su versión siguen siendo los de la vista
+   previa; si han cambiado, rechaza la confirmación y exige una vista previa nueva. Nunca sobrescribe cambios posteriores
+   ni convierte una instantánea antigua en la verdad actual.
+5. **El número que creó esa vinculación se conserva siempre** (propuesta para D1). Retirarlo sería otra operación,
+   explícita y fuera de esta primera versión.
+6. **Volver a vincular** usa el recorrido existente (#119/#120) como una operación **aparte**, con su propia vista previa y
+   confirmación. **Si se cancela o falla, el archivo queda pendiente de revisión**, y la pantalla lo explica **antes** de
+   confirmar el deshacer. No se promete una reasignación atómica ni la restauración automática del vínculo anterior: si
+   se quisiera, sería otro contrato y habría que reestimar.
+7. **Historial.** Lo anterior queda anotado (que estuvo vinculado, a qué, y cuándo se corrigió) sin perder la procedencia
    original.
-7. **Recuperable.** La operación va con un token firmado y un comprobante idempotente: repetirla no duplica nada y un
-   fallo incierto se resuelve comprobando el resultado, como en #116/#120.
-8. **Límites honestos.** Si el archivo lo movió una asignación de V6a, no se devuelve a su carpeta anterior y la pantalla
+8. **Recuperable.** La operación es **idempotente y deja un comprobante duradero**: repetirla no duplica nada y un fallo
+   incierto se resuelve comprobando el resultado, como en #116/#120. Si el comprobante va en una tabla nueva o en un
+   mecanismo existente no se decide aquí (D2).
+9. **Límites honestos.** Si el archivo lo movió una asignación de V6a, no se devuelve a su carpeta anterior y la pantalla
    lo dice. Un archivo con asignación en curso se rechaza como `en_curso`; uno `is_missing` sí se puede desvincular.
-9. **Pruebas.** Postgres real, mutaciones y navegador real; PASS, FAIL y NOT RUN separados.
+10. **Pruebas.** Postgres real, mutaciones y navegador real; PASS, FAIL y NOT RUN separados.
 
-**Límites.** Fuera: corrección de edición o publicación (M5), cambios en lote, mover el archivo, aprender alias.
-Puede requerir una tabla de comprobantes (decisión abierta D2): sería una migración con su ADR, **no** autorizada por
-esta tarjeta.
+**Límites.** Fuera: corrección de edición o publicación (M5), cambios en lote, mover el archivo, aprender alias, retirar
+el número creado y reasignación atómica.
+Puede requerir una tabla de comprobantes (D2): sería una migración con su ADR, **no** autorizada por esta tarjeta.
 
 ---
 
@@ -165,20 +180,27 @@ de lectura, biblioteca no accesible, no es un archivo). Requiere BL-R0.
 **Alcance.** Hacer visible el estado de disponibilidad y su causa. No cambia cuándo se marca una baja.
 
 **Criterios de aceptación**
-1. **Cuatro estados, con palabras llanas.** Disponible · «no se encuentra» (raíz accesible, archivo ausente) · «el disco
-   no responde» (raíz inaccesible) · «sin permiso de lectura». Se reutiliza el vocabulario de causas existente.
+1. **Dos niveles, no uno.** Por un lado, el **estado conocido del archivo** (disponible, «no se encuentra»,
+   «sin permiso de lectura»); por otro, el **resultado de la última comprobación de su raíz** (accesible o «el disco no
+   responde»). Se reutiliza el vocabulario de causas existente y no se mezclan en una sola etiqueta.
 2. **El ciclo que no marca nada lo dice.** Si un guardarraíl omite las bajas, el resultado se guarda (en
-   `ImportRun.details`, sin migración) y **Estado** lo muestra con la acción: «Comprueba que el disco está montado; no se
+   `ImportRun.details`, sin migración) y **Estado** lo muestra con la acción: «No se ha podido comprobar el disco; no se
    ha marcado nada».
-3. **Lista de no disponibles** con desde cuándo (`missing_since`) y a qué serie y número estaban vinculados. No se borra
+3. **Raíz no comprobable ≠ archivos comprobados.** Cuando una raíz no puede comprobarse, se **conserva el último estado
+   conocido** de sus archivos y se muestra que su disponibilidad **actual no está verificada**, con el motivo y la fecha
+   de la última comprobación válida. Nunca se presentan como recién comprobados y disponibles.
+4. **Lista de no disponibles** con desde cuándo (`missing_since`) y a qué serie y número estaban vinculados. No se borra
    ninguna ficha ni relación (prueba explícita).
-4. **Reaparición visible.** Al volver, el archivo se restaura solo (ya ocurre) y el siguiente informe lo cuenta como
+5. **Reaparición visible.** Al volver, el archivo se restaura solo (ya ocurre) y el siguiente informe lo cuenta como
    recuperado.
-5. **Desaparición masiva.** Si salta el umbral, se informa «parecen demasiados: no se ha marcado nada», con el recuento.
-6. **Nada destructivo.** La pantalla no ofrece borrar ni «vaciar» nada; el vaciado automático de la papelera de Plex se
+6. **Desaparición masiva.** Si salta el umbral, se informa «parecen demasiados: no se ha marcado nada», con el recuento.
+   **Un guardarraíl no demuestra pérdida de archivos**, y una **raíz vacía no demuestra por sí sola** que el disco esté
+   desmontado: los mensajes no lo afirman.
+7. **Nada destructivo.** La pantalla no ofrece borrar ni «vaciar» nada; el vaciado automático de la papelera de Plex se
    descarta expresamente.
-7. **Sin red ni lectura de contenido.**
-8. **Pruebas.** Raíz desmontada, raíz vacía, permiso denegado y archivo suelto: ninguna baja falsa y mensaje correcto.
+8. **Sin red ni lectura de contenido.** Se permite comprobar acceso y existencia; se excluyen el hash, la descompresión
+   y el OCR.
+9. **Pruebas.** Raíz desmontada, raíz vacía, permiso denegado y archivo suelto: ninguna baja falsa y mensaje correcto.
 
 **Límites.** Fuera: cambiar los umbrales, borrar fichas, reintentos de montaje.
 
@@ -203,8 +225,11 @@ BL-R0, #134 (cortesía), #133 (fuentes apagadas).
 2. **«Comprobar el disco» no hace ninguna petición externa** (probado vigilando la red) y dice qué miró: archivos
    revisados, nuevos, no encontrados y cuánto tardó.
 3. **«Actualizar…» respeta la cortesía y las fuentes apagadas** y no recorre el disco.
-4. **Última y próxima ejecución** de cada una a la vista.
-5. **Una comprobación sin cambios no escribe en la base de datos** (0 escrituras medidas).
+4. **Última ejecución** de cada una a la vista, y **próxima ejecución programada** por separado: lanzar una operación
+   a mano no reprograma el ciclo automático.
+5. **Una comprobación sin cambios no modifica archivos, relaciones ni metadatos del catálogo.** Se permiten las
+   escrituras **operativas** necesarias para registrar y coordinar la ejecución (última ejecución, duración, resultado,
+   candado), **contabilizadas por separado** del catálogo.
 6. **Sin solapes.** Si ya hay una en marcha, se dice y no se lanza otra.
 7. **Coste en la Pi** medido con más de 1.000 archivos sintéticos: lecturas y tiempo (NOT RUN hasta ejecutarse allí).
 
@@ -228,13 +253,14 @@ historia se cierra como duplicada.
 **Alcance.** Garantía y visibilidad. No fusiona ni resuelve conflictos.
 
 **Criterios de aceptación**
-1. **Qué es «confirmada».** Una relación creada por una vinculación o asignación manual. Si el marcado actual no basta, se
-   decide en la ficha (decisión abierta D3).
+1. **Qué es «confirmada».** Una relación con una **aceptación explícita** de la persona y procedencia verificable de esa
+   acción (D3). `metadata_source='manual'` por sí solo no basta, y las relaciones antiguas sin esa evidencia no se marcan
+   retroactivamente.
 2. **Nunca la cambia una fuente.** Ni el enriquecimiento ni la importación modifican o quitan `issue_id` ni la serie de un
    archivo confirmado (prueba de regresión con mutación).
 3. **Discrepancia visible.** Si una fuente apunta a otra edición o identificador distinto del confirmado, se registra qué
-   dice la fuente y qué confirmó la persona, sin aplicarlo. Dónde se guarda es la decisión abierta D4.
-4. **Dos salidas, ninguna destructiva:** «Mantener lo mío» (queda recordado para no proponer lo mismo otra vez) y
+   dice la fuente y qué confirmó la persona, sin aplicarlo. Primero se define su identidad, su procedencia y su ciclo de vida; dónde se guarda se difiere (D4).
+4. **Dos salidas, ninguna destructiva:** «Mantener lo mío» (recuerda **esa propuesta concreta** para no repetirla; no silencia a la fuente) y
    «Revisar» (abre #129). No hay «aceptar» de un clic.
 5. **Sin efectos en archivos.**
 6. **Pruebas.** Una actualización con otra edición propuesta conserva la relación y deja la discrepancia; «Mantener lo mío»
@@ -253,7 +279,7 @@ depender de que el título coincida.
 
 **Trabajo existente y dependencias.** `Series` tiene `comic_vine_id`, `anilist_id`, `tebeosfera_slug` y `gcd_id`, únicos.
 La búsqueda del asistente es **por título**. `Issue.isbn` existe y **nada la lee ni la escribe**. Depende de #129, #133
-(estados por fuente), #182 (discriminantes, incluido ISBN) y BL-R0 (qué fuentes soportan consulta por id). Pasa por el
+(estados por fuente) y BL-R0 (qué fuentes soportan consulta por id). El ISBN lo trata #182, no esta historia. Pasa por el
 alta existente; no crea otro camino.
 
 **Alcance.** Entrada «pegar identificador o enlace» en el asistente de elegir serie.
@@ -265,10 +291,11 @@ alta existente; no crea otro camino.
    (#133), nunca como «ese identificador no existe».
 3. **Un solo resultado no es certeza:** la persona lo confirma; nada se elige por ella.
 4. **Validación de la forma sin red;** tráfico solo a petición.
-5. **ISBN solo si #182 lo acepta** y una fuente activa lo soporta; si no, queda fuera y se dice.
+5. **ISBN queda fuera de esta historia.** Es un identificador de **publicación** (`Issue`), no de serie: su tratamiento se
+   estudia en #182 con la entidad bibliográfica que corresponda y no se convierte implícitamente en identificador de serie.
 6. **Pasa por la candidata firmada y el alta** (vista previa y confirmación separadas).
 
-**Límites.** Fuera: nuevas fuentes, resolución automática, tratar el identificador externo como identidad principal.
+**Límites.** Fuera: nuevas fuentes, resolución automática, tratar el identificador externo como identidad principal, ISBN.
 
 ---
 
@@ -293,7 +320,7 @@ tener varios `File`. La distinción edición frente a variante exige el modelo d
 
 ---
 
-### BL-R7 — Vistas guardadas de trabajo
+### BL-R7 — Vistas de trabajo predefinidas
 
 Como coleccionista, quiero vistas que me enseñen lo que necesita mi atención (sin identificar, dudosas, con
 discrepancias, no disponibles, con varias variantes), para empezar por donde importa sin cambiar mis carpetas.
@@ -314,7 +341,7 @@ discrepancias, no disponibles, con varias variantes), para empezar por donde imp
    procesados y memoria, no solo en filas devueltas).
 5. **Sin efectos:** abrir una vista no escribe nada.
 
-**Límites.** Fuera: filtros guardados por la persona (v2), tarjetas con portadas, orden de lectura.
+**Límites.** Fuera: filtros guardados por la persona (v2) —por eso se llaman «predefinidas»—, tarjetas con portadas, orden de lectura.
 
 ---
 
@@ -329,17 +356,20 @@ discrepancias, no disponibles, con varias variantes), para empezar por donde imp
 | **#155** | Vocabulario común con BL-R7: colección editorial ≠ lista personal ≠ vista guardada. |
 | **#122** | Medir el coste real de paginación (objetos procesados), no solo el tamaño de la respuesta. |
 
-## 6. Decisiones abiertas para el PO
+## 6. Decisiones D1–D7: resolución propuesta por la revisión (pendiente de confirmar por el PO)
 
-| ID | Decisión | Afecta a |
-|---|---|---|
-| D1 | Al deshacer, ¿se retira el número que creó esa vinculación si queda vacío y sin dependientes, o se conserva siempre? | BL-R1 |
-| D2 | ¿El comprobante de la corrección va en una tabla nueva (migración + ADR) o en el historial de `metadata_`? | BL-R1 |
-| D3 | ¿Basta `metadata_source='manual'` y `metadata.vinculo` para «relación confirmada», o hace falta un campo explícito? | BL-R4 |
-| D4 | ¿Dónde se guarda una discrepancia de fuente: JSON en la serie o el número, o una tabla? | BL-R4 |
-| D5 | ¿BL-R1 lleva la etiqueta MVP? (es el hueco más caro del recorrido «vincular») | BL-R1 |
-| D6 | ¿Se crea la feature BL-R en el Kanban y con qué estados iniciales? Propuesta: BL-R0 «Lista para desarrollar»; el resto «En refinamiento» hasta tener su ficha. | todas |
-| D7 | ¿Entra el ISBN como discriminante? (lo decide #182) | BL-R5 |
+| ID | Decisión | Resolución propuesta | Afecta a |
+|---|---|---|---|
+| D1 | Número creado por la vinculación al deshacer | **Conservarlo siempre** en BL-R1; retirarlo es otra operación explícita y fuera de la primera versión | BL-R1 |
+| D2 | Comprobante de la corrección | Exigir **persistencia duradera e idempotencia**; no decidir aún tabla nueva frente a mecanismo existente (contrato técnico y ADR si procede) | BL-R1 |
+| D3 | Qué es una relación «confirmada» | Una **aceptación explícita** de la persona, con procedencia verificable de esa acción. `metadata_source='manual'` por sí solo **no basta**. Las relaciones antiguas sin evidencia **no** se marcan retroactivamente | BL-R4 |
+| D4 | Dónde se guarda una discrepancia | Definir primero su **identidad, procedencia y ciclo de vida**; diferir el almacenamiento físico. «Mantener lo mío» recuerda una **propuesta concreta**, no silencia para siempre a esa fuente | BL-R4 |
+| D5 | ¿BL-R1 con etiqueta MVP? | **Sí** para deshacer una vinculación equivocada y poder volver a vincular; no amplía a correcciones de M5, lotes ni mover archivos | BL-R1 |
+| D6 | Kanban | La revisión proponía **no crear aún** la feature ni las tarjetas. **Superada por la orden del PO** (2026-10-18): las tarjetas #228–#236 existen en Backlog con el texto anterior | todas |
+| D7 | ISBN | Estudiarlo en **#182**; **no** como identificador de serie en BL-R5 | BL-R5 |
+
+Nota sobre D3: `metadata_source='manual'` y `metadata.vinculo` son hoy solo el **punto de partida** para hablar de
+«relación manual»; la resolución propuesta exige más evidencia que eso para llamarla «confirmada».
 
 ## 7. Límites y NOT RUN
 
