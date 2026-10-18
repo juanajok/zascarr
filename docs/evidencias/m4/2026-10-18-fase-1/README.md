@@ -18,6 +18,17 @@
 | Condición: fuentes externas desactivadas | **FAIL de la condición operativa del ensayo** — las cuatro figuraban `enabled` (el plan versionado no contiene esa cláusula; el código declara «activas por defecto»). **Consultas efectivas no acreditadas**: red cerrada y 0 intentos de salida/DNS en los logs de la aplicación | 14, 15 → #239 |
 | Inspección del `.env` | **Hallazgo abierto** — `.env` en modo 644 (`root:root`) dentro de `/opt/zascarr`, que pertenece a `media:media`; **abren** `ensayo` (sin sudo), `nobody` y `media`. No se leyó el contenido | 18 → #237, #238 |
 
+## Alcance del inventario
+
+> Inventario recuperado **completo respecto de las evidencias numeradas 00–18 y 17b, más los dos informes**.
+
+Eso **no** es «aceptación de M4 completa». Los resultados históricos siguen siendo: instalación limpia **FAIL**, M4-02 **parcial** y candidato **no
+aceptado**; los casos posteriores (M4-03…M4-20) quedaron fuera de esta fase.
+
+**Qué es original y qué es documentación nueva.** `INFORME.md`, `informe-m4-fase1.html` y los 20 ficheros de `evidencias/` son los **22 originales**
+(2 informes + 20 evidencias, `01` y `17b` incluidas); `MANIFIESTO-SHA256.csv` los cubre **todos**. `README.md` y `MANIFIESTO-SHA256.csv` son
+**documentación nueva** de esta incorporación, no evidencia del ensayo, y no figuran en el manifiesto.
+
 ## Contenido y procedencia
 
 | Parte | Qué es | Procedencia |
@@ -26,10 +37,15 @@
 | `evidencias/00…18` y `17b` (20 ficheros) | evidencia numerada | 19 del mismo ZIP, idénticos byte a byte a los de `evidencia-saneada/`; **`01-bundle.sha256` no iba en el ZIP** y se tomó de `evidencia-saneada/` (idéntico, por hash, a `evidencia/01-bundle.sha256`) |
 | `MANIFIESTO-SHA256.csv` | tamaño y SHA-256 de cada fichero de esta carpeta | calculado al incorporarlo; los 21 hashes del manifiesto de recuperación del ZIP **coinciden** con los ficheros |
 
-**Comprobaciones hechas al incorporarlo (2026-10-18):** el ZIP supera `unzip -t`; los 21 hashes de su manifiesto coinciden; `evidencia-saneada.tar.gz`
-(SHA-256 `a14a95736a56f07f4c4a7a9995be039426c3a5227eabca49646aa9a8e4a2a3d1`) contiene lo mismo que la carpeta `evidencia-saneada/`;
-el contenido de `01-bundle.sha256` (`10d107b1…f6642`) coincide con el SHA-256 que el informe cita para el bundle del candidato (§2) y con el hash recalculado de
-`candidato.bundle`.
+**Comprobaciones hechas al incorporarlo (2026-10-18), tal como se ejecutaron:**
+
+- Sobre el ZIP: `unzip -t` (sin errores) y comparación de los 21 SHA-256 de su manifiesto con los ficheros extraídos (21 de 21 coinciden).
+- Sobre `evidencia-saneada.tar.gz` (SHA-256 `a14a95736a56f07f4c4a7a9995be039426c3a5227eabca49646aa9a8e4a2a3d1`): se extrajo en una carpeta temporal y se comparó
+  con la carpeta `evidencia-saneada/` (`diff -rq`, sin diferencias). Los 19 ficheros comunes con el ZIP y el HTML se compararon con `cmp` (idénticos).
+- `01-bundle.sha256`: se copió de `evidencia-saneada/`. Se calculó el SHA-256 de esa copia y el de la de `evidencia/` (la carpeta **sin sanear**) y
+  coinciden (`dcc593b6…c0409a`); de `evidencia/` **solo se listaron nombres y se calculó ese hash: no se abrió ningún otro fichero**.
+- `candidato.bundle`: **se leyó únicamente para calcular su SHA-256** (`sha256sum`); no se modificó, no se extrajo y no se incorporó al repositorio.
+  El resultado (`10d107b1…f6642`) coincide con el contenido de `01-bundle.sha256` y con el SHA-256 que el informe cita en su §2.
 
 **Alcance de esa verificación:** acredita la **transferencia y la coherencia interna** del paquete. **No es una firma del autor ni acredita por
 sí misma la procedencia histórica** de cada archivo.
@@ -42,13 +58,19 @@ cita el informe; cualquier otra comprobación no adjunta sigue pendiente.
 
 ## Revisión de contenido antes de publicar
 
-Lectura completa de los 20 ficheros de evidencia y de `INFORME.md`, y búsqueda de patrones sensibles (contraseñas, claves, tokens, correos, claves privadas,
-MAC) en todo el paquete. Resultado:
+Se hizo una **revisión manual**: lectura completa de los 20 ficheros de evidencia y de `INFORME.md` (el HTML equivale al informe más un anexo con extractos de
+esas mismas evidencias), más una **búsqueda con `grep` de patrones** sensibles (contraseñas, claves, tokens, correos, claves privadas, direcciones MAC,
+rutas de usuario) sobre el paquete y sobre las diferencias añadidas por cada commit de la rama. **No es un escaneo automatizado de secretos.**
 
-- **Sin credenciales ni valores secretos.** Aparece el **nombre** `DB_PASSWORD`; el informe declara que la contraseña usada era sintética y «no se reproduce aquí».
-- **Direcciones y nombres internos de la VM** (no sensibles): `10.0.2.x`, `172.17/18.x`, direcciones QEMU `fec0::`/`fe80::`, usuarios `ensayo`, `media`, `nobody`.
-- **Una ruta del anfitrión** en el HTML (`/mnt/Datos/ensayo-m4/evidencia-saneada.tar.gz`). Se conserva tal cual: es histórica y no hay datos personales.
-- Revisión por lectura, no por herramienta de detección de secretos. Quien publique la carpeta debe confirmarla.
+- **Sin credenciales ni valores secretos.** Aparece el **nombre** `DB_PASSWORD`; el informe declara que la contraseña era sintética y «no se reproduce aquí».
+- **Direcciones y nombres internos de la VM:** `10.0.2.x`, `172.17/18.x`, `127.0.0.1`, direcciones IPv6 de la red de usuario de QEMU (`fec0::`/`fe80::`,
+  derivadas de la MAC por defecto de QEMU, no de una interfaz real), usuarios `ensayo`, `media`, `nobody` y la ruta `/home/ensayo/…` (de la VM).
+- **Una ruta del anfitrión** en `informe-m4-fase1.html` (`/mnt/Datos/ensayo-m4/evidencia-saneada.tar.gz`). No contiene nombre de usuario ni de equipo. Se conserva
+  **sin editar** para no alterar el original y mantener su trazabilidad.
+- **Valoración:** no se ha encontrado en el paquete ningún dato que desaconseje publicarlo en este repositorio. Es una valoración de quien lo incorpora, **no
+  una certificación**; la decisión final es de quien revise la PR.
+- Si se decidiera retirar o redactar algo, la copia resultante dejaría de ser idéntica al original: habría que **recalcular su hash** y dejar nota de la
+  redacción en este README.
 
 ## Reglas
 
