@@ -21,7 +21,8 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   de escribir: la contraseña nueva nunca vive en un fichero abierto (un `.env` heredado en 644 se cierra antes, y el temporal ya
   nace 600 de root sin heredar el modo del original) y, si no se consigue el propietario o los permisos, no se sigue. Los comandos
   manuales de `docker compose`, `backup.sh`, `etiquetar.sh` y `uninstall.sh` piden `sudo` en español si no pueden leer el `.env`
-  (un `.env` ilegible ya no se confunde con uno ausente). La misma regla decide si una contraseña «no vale» en el instalador,
+  (un `.env` ilegible ya no se confunde con uno ausente). La ubicación se examina con la ruta REAL (un salto de línea en el nombre de
+  una carpeta ya no hace que se compruebe otra) y las rutas con saltos de línea se rechazan. La misma regla decide si una contraseña «no vale» en el instalador,
   en Compose y en la aplicación (la contraseña personal `change me` ya no se rechaza como `changeme`), y sin contraseña solo se
   acepta el socket Unix local.
   Para endurecer una instalación existente sin cambiar su contraseña: `sudo bash scripts/credenciales.sh`.

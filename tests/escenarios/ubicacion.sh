@@ -63,6 +63,15 @@ instalacion_heredada "${W}/pub/lica/zascarr" "${SINT}"
 chown root:root "${W}/pub/lica/zascarr" "${W}/pub/lica/zascarr/.env"; chmod 755 "${W}/pub/lica/zascarr"; chmod 600 "${W}/pub/lica/zascarr/.env"
 parar U09 "una ruta con un salto de línea en el nombre" "${LFDIR}/zascarr"
 
+# U10: la misma ruta con un salto de línea pero TODA de root y cerrada: el comprobador la examinaría bien, pero el instalador
+# la rechaza igualmente (captura rutas con `$(…)`, que recorta saltos de línea, y recorre listados línea a línea).
+LFSEG="${W}/seg"$'\n'"ura"; mkdir -p "${LFSEG}"; chown root:root "${LFSEG}"; chmod 755 "${LFSEG}"
+instalacion_heredada "${LFSEG}/zascarr" "${SINT}"
+chown root:root "${LFSEG}/zascarr" "${LFSEG}/zascarr/.env"; chmod 755 "${LFSEG}/zascarr"; chmod 600 "${LFSEG}/zascarr/.env"
+parar U10 "una ruta con un salto de línea aunque sea segura" "${LFSEG}/zascarr"
+if grep -q 'salto de línea' "${W}/salida.err" "${W}/salida.out"; then pass U10c "y el mensaje dice que el problema es el salto de línea"
+else fail U10c "el mensaje no menciona el salto de línea: $(tail -c 300 "${W}/salida.err" | tr '\n' ' ')"; fi
+
 # U04 (control positivo): un enlace DE ROOT, en una carpeta de root, hacia un destino de root, es legítimo
 # (como /opt → /mnt/disco/opt) y el instalador sigue adelante.
 mkdir -p "${W}/enlaces_root"; chown root:root "${W}/enlaces_root"; chmod 755 "${W}/enlaces_root"

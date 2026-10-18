@@ -101,7 +101,10 @@ Consecuencias de implementación (todas en `proteger_configuracion`, idempotente
   se recorre cada componente de la ruta **lógica** —no la física, que pierde los enlaces intermedios—. Cada carpeta ha de ser
   de root y no admitir escritura de grupo ni de otros (el bit pegajoso vale en las intermedias, como `/tmp`; no en la que
   contiene el `.env`); un enlace se admite solo si es de root, su carpeta es de fiar y su destino también (`/opt → /mnt/disco/opt`
-  es legítimo); `..`, los bucles y un `.env` que sea un enlace se rechazan. Si es una carpeta dedicada, lo que hay **por
+  es legítimo); `..`, los bucles y un `.env` que sea un enlace se rechazan. La ruta se separa **solo por `/`** (un salto de línea en un nombre es
+  parte del nombre: separar por líneas hacía examinar otra ruta, una «homónima» segura, mientras el antecesor real estaba
+  abierto) y el destino de un enlace conserva sus saltos de línea; además, las entradas públicas **rechazan** cualquier ruta con
+  un salto de línea, porque el resto del instalador captura rutas con `$(…)` (que los recorta). Si es una carpeta dedicada, lo que hay **por
   encima** se comprueba **antes** de reclamar nada. Si algo falla: se para, sin haber escrito ni cambiado el `.env`, y el
   mensaje da la salida (instalar en una carpeta propia de root, por defecto `/opt/zascarr`, y copiar el `.env` con
   `install -m 600 -o root -g root`).
