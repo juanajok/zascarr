@@ -125,11 +125,62 @@ seccion_instalacion() {
 }
 
 # ── 2. salud del stack real ───────────────────────────────────────────────────────────────────────────────────────
-estado_contenedor() {  # estado_contenedor SERVICIO → "estado salud reinicios oom exit"
+estado_contenedor() {  # estado_contenedor SERVICIO → "estado salud reinicios oom exit" · "inexistente" · "error-ps" (rc 1: no se pudo listar)
     local id
-    id=$(docker ps -aq --filter "label=com.docker.compose.service=$1" | head -n 1)
+    id=$(docker ps -aq --filter "label=com.docker.compose.service=$1") || { echo "error-ps"; return 1; }
+    id="${id%%$'\n'*}"
     [[ -n "${id}" ]] || { echo "inexistente"; return; }
     docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.RestartCount}} {{.State.OOMKilled}} {{.State.ExitCode}}' "${id}"
+}
+ESPERA_SANA_MAX_S="${ESPERA_SANA_MAX_S:-180}"     # el HEALTHCHECK de la imagen es interval=30s timeout=10s retries=3, sin start-period
+ESPERA_SANA_PASO_S="${ESPERA_SANA_PASO_S:-5}"
+ahora_s() { date +%s; }
+dormir_s() { sleep "$1"; }
+arranque_contenedor() {  # arranque_contenedor SERVICIO → "id12 StartedAt" (SIN `docker inspect` completo: Config.Env lleva credenciales)
+    local id
+    id=$(docker ps -aq --filter "label=com.docker.compose.service=$1" 2>/dev/null | head -n 1)
+    [[ -n "${id}" ]] && docker inspect -f '{{printf "%.12s" .Id}} {{.State.StartedAt}}' "${id}" 2>/dev/null
+}
+# esperar_sano SERVICIO: espera, con plazo, a que DOCKER declare 'running' + 'healthy' (un HTTP 200 NO lo sustituye: no se consulta la API).
+#   Registra en $EV/salud-SERVICIO.txt el arranque del contenedor, el estado inicial, cada transición y el final con el tiempo esperado.
+#   Devuelve 0 sano · 1 plazo agotado · 2 unhealthy, contenedor terminado/inexistente o sin HEALTHCHECK · 3 error al inspeccionar.
+#   Variables de salida: SANA_ESPERA_S (segundos esperados), SANA_FINAL (último estado leído).
+esperar_sano() {
+    local svc="$1" reg="${EV}/salud-$1.txt" t0 e rc prev="" estado salud
+    t0=$(ahora_s); SANA_ESPERA_S=0; SANA_FINAL=""
+    echo "arranque del contenedor (id StartedAt): $(arranque_contenedor "${svc}" || echo '?')" >> "${reg}"
+    while :; do
+        e=$(estado_contenedor "${svc}"); rc=$?
+        SANA_ESPERA_S=$(( $(ahora_s) - t0 )); SANA_FINAL="${e}"
+        if (( rc != 0 )) || [[ -z "${e}" || "${e}" == error-ps ]]; then
+            echo "T+${SANA_ESPERA_S}s ERROR DE INSPECCIÓN (rc=${rc}, salida='${e}')" >> "${reg}"; return 3
+        fi
+        [[ "${e}" == "${prev}" ]] || { echo "T+${SANA_ESPERA_S}s ${e}" >> "${reg}"; prev="${e}"; }
+        read -r estado salud _ <<<"${e}"
+        if [[ "${estado}" != running ]]; then echo "T+${SANA_ESPERA_S}s FIN: el contenedor no está en marcha (${e})" >> "${reg}"; return 2; fi
+        case "${salud}" in
+            healthy)   echo "T+${SANA_ESPERA_S}s FIN: sano según Docker tras ${SANA_ESPERA_S}s de espera" >> "${reg}"; return 0 ;;
+            unhealthy) echo "T+${SANA_ESPERA_S}s FIN: unhealthy" >> "${reg}"; return 2 ;;
+            starting)  ;;
+            *)         echo "T+${SANA_ESPERA_S}s FIN: el contenedor no declara estado de salud (${salud})" >> "${reg}"; return 2 ;;
+        esac
+        if (( SANA_ESPERA_S >= ESPERA_SANA_MAX_S )); then
+            echo "T+${SANA_ESPERA_S}s FIN: plazo de ${ESPERA_SANA_MAX_S}s agotado sin llegar a healthy (${e})" >> "${reg}"; return 1
+        fi
+        dormir_s "${ESPERA_SANA_PASO_S}"
+    done
+}
+# S-06: la aplicación está sana SEGÚN DOCKER (no basta un HTTP 200), esperando de forma acotada al primer sondeo del HEALTHCHECK.
+comprobar_aplicacion_sana() {
+    local rc e
+    esperar_sano zascarr; rc=$?
+    e=$(estado_contenedor zascarr); echo "zascarr: ${e}" >> "${EV}/contenedores.txt"
+    case "${rc}" in
+        0) pass S-06 "aplicación sana según Docker tras esperar ${SANA_ESPERA_S}s al primer sondeo (${e}; transiciones en salud-zascarr.txt)" ;;
+        1) fail S-06 "la aplicación no llegó a 'healthy' en ${ESPERA_SANA_MAX_S}s (${SANA_FINAL})" ;;
+        2) fail S-06 "aplicación no sana o no en marcha: ${SANA_FINAL}" ;;
+        *) fail S-06 "no se pudo inspeccionar la aplicación (${SANA_FINAL:-sin salida}): error del arnés o del entorno, no se interpreta como sana ni como caída" ;;
+    esac
 }
 cgroup_de() {  # cgroup_de SERVICIO → ruta del cgroup v2 del contenedor
     local id
@@ -155,8 +206,7 @@ EOF
     [[ -n "${v}" && "${v}" == "${esperada}" && "${v}" == "${ALEMBIC_ESPERADA:-?}" ]] \
         && pass S-05 "esquema = cabeza de Alembic del candidato (${v})" || fail S-05 "esquema ${v:-?} · cabeza en el contenedor ${esperada:-?} · esperada ${ALEMBIC_ESPERADA:-?}"
     local e
-    e=$(estado_contenedor zascarr); echo "zascarr: ${e}" >> "${EV}/contenedores.txt"
-    [[ "${e%% *}" == "running" && "${e}" == *" healthy "* ]] && pass S-06 "aplicación sana (${e})" || fail S-06 "aplicación: ${e}"
+    comprobar_aplicacion_sana
     e=$(estado_contenedor postgres); echo "postgres: ${e}" >> "${EV}/contenedores.txt"
     [[ "${e%% *}" == "running" && "${e}" == *" healthy "* ]] && pass S-07 "PostgreSQL sano (${e})" || fail S-07 "PostgreSQL: ${e}"
     e=$(estado_contenedor credenciales); echo "credenciales: ${e}" >> "${EV}/contenedores.txt"
