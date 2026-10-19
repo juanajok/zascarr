@@ -28,7 +28,7 @@ No se midió tráfico real saliente: es una consecuencia del diseño, no una fug
 
    La migración de datos **0020** hace lo de la primera fila: «uso previo» = alguna fila en `series`, `files`, `wishlist`, `import_runs` o `legal_acknowledgments`, o algún ajuste ya guardado; escribe las cuatro claves a `true` **sin pisar** las que existieran y añade `fuentes_heredadas = true` solo si **ninguna** de las cuatro estaba guardada.
 3. **Aviso en Ajustes** (tarjeta «Fuentes de metadatos»), **solo en estado heredado**: «Las fuentes de metadatos externas están activadas por compatibilidad con tu instalación anterior…». Guardar esa tarjeta —aunque no se cambie nada— pone `fuentes_heredadas = false` y el aviso desaparece. Guardar otra tarjeta no lo quita. El contrato HTMX del formulario no cambia.
-4. **`LEGAL.md`: pendiente de decisión del PO** (ver la PR #243). Tal como está, no se toca (su `legal_version` es el hash del fichero y cambiarlo obligaría a reaceptar): con el nuevo valor por defecto, «las fuentes que configure» pasa a ser cierto.
+4. **`LEGAL.md` se actualiza** (§3, fila del enricher de §4 y punto 2 de la aceptación) para reflejar que las fuentes son opcionales y desactivadas por defecto. Su `legal_version` es el hash del fichero, así que este cambio modifica la política de fuentes de metadatos y **requiere que el usuario vuelva a aceptar el aviso legal antes de que el orquestador reanude su funcionamiento**; no revoca un consentimiento previo: la política cambia y la aplicación pide una confirmación nueva. Decisión del PO tras la ficha de #239.
 
 ## Consecuencias
 
