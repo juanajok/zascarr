@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """#239 / ADR 0013 — fuentes de metadatos apagadas por defecto y aviso en Ajustes (sin Postgres)."""
 from __future__ import annotations
 
