@@ -37,7 +37,7 @@ La Directiva 96/9/CE, transpuesta a la LPI española (arts. 133-137), protege la
 
 Implicaciones para ZascArr:
 - El código del proyecto es GPL-3.0 (licencia de software).
-- Los **metadatos enriquecidos** que el usuario descargue (ej. de Tebeosfera, Whakoom, Comic Vine) están sujetos a las licencias o términos de uso de esas fuentes.
+- Los **metadatos enriquecidos** que la aplicación descargue de las fuentes externas que el usuario active (ej. de Tebeosfera, Whakoom, Comic Vine) están sujetos a las licencias o términos de uso de esas fuentes.
 - **No se redistribuye** ninguna base de datos pre-poblada con el software. Todo enriquecimiento es cache local del usuario final, para uso privado.
 
 ---
@@ -58,7 +58,7 @@ Implicaciones para ZascArr:
 | Componente | Estado | Notas |
 |---|---|---|
 | **Núcleo (orquestador, API, UI)** | ✅ Herramienta neutra | Análogo a Sonarr/Radarr; gestiona bibliotecas, no distribuye contenido [web:166] |
-| **Enricher de metadatos (Comic Vine, AniList, Tebeosfera)** | ⚠️ Uso bajo responsabilidad del usuario | Los metadatos se cachean localmente; no se redistribuyen. Respeta `robots.txt` y rate limits conservadores |
+| **Enricher de metadatos (Comic Vine, AniList, Tebeosfera, GCD)** | ⚠️ Opcional, desactivado por defecto; uso bajo responsabilidad del usuario | **Opcional, desactivado por defecto.** Ninguna fuente de metadatos consulta servicios externos hasta que el usuario la activa en Ajustes. Las instalaciones anteriores conservan las fuentes que tuvieran activadas y muestran un aviso en Ajustes hasta que el usuario revise y guarde esa configuración. Los metadatos se cachean localmente; no se redistribuyen. Respeta `robots.txt` y rate limits conservadores |
 | **Scraper de foros (IPB genérico)** | ⚠️ Plugin opcional, deshabilitado por defecto | El usuario aporta la URL del foro; el proyecto no incluye ni recomienda foros concretos |
 | **Integración con clientes (Transmission, aMule, Prowlarr)** | ✅ Herramienta neutra | Los clientes son software legítimo; su configuración es responsabilidad del usuario |
 | **Caché de portadas (CDN externos)** | ⚠️ Uso local, no redistribución | Las portadas se descargan una vez y se sirven desde disco; no se hotlinkean ni redistribuyen |
@@ -71,7 +71,7 @@ Implicaciones para ZascArr:
 Al usar ZascArr, el usuario acepta que:
 
 1. Es **responsable exclusivo** de verificar que posee derecho a usar el contenido que gestiona.
-2. Debe **respetar los términos de uso** de las fuentes de metadatos que configure (Tebeosfera, Whakoom, Comic Vine, etc.).
+2. Debe **respetar los términos de uso** de las fuentes de metadatos que el usuario active o configure (Tebeosfera, Whakoom, Comic Vine, etc.).
 3. Entiende que **compartir contenido protegido** en redes P2P/eD2K puede constituir infracción civil, aunque no sea delito penal [web:179].
 4. Acepta que el autor del software **no ofrece garantías** de ningún tipo, conforme a los apartados 15-16 de la licencia GPL-3.0.
 
