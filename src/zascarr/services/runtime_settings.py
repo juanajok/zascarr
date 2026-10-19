@@ -88,7 +88,7 @@ def capturar_valores_base() -> None:
 # formulario de /ui/ajustes (no está en ningún grupo de OVERRIDABLE_
 # FIELDS de arriba), pero SÍ debe pasar por apply_overrides() como los
 # demás, así que se añade a la lista blanca por separado.
-_CAMPOS_INTERNOS = {"secret_key", "auth_session_version"}
+_CAMPOS_INTERNOS = {"secret_key", "auth_session_version", "fuentes_heredadas"}
 _ALL_FIELDS = (
     {campo for campos in OVERRIDABLE_FIELDS.values() for campo in campos} | _CAMPOS_INTERNOS
 )

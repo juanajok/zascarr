@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     # enricher todavía no lo consulta — ampliarlo es otra historia (ver
     # BACKLOG E7). Apagado = ninguna consulta a GCD en Descubrir.
     gcd_enabled: bool = Field(default=False)
+    # Estado «heredado» (ADR 0013): la migración 0020 lo pone a True en las instalaciones que se actualizaron con uso
+    # previo y NUNCA guardaron las fuentes en Ajustes, y les conservó las fuentes activas. Guardar «Fuentes de
+    # metadatos» en Ajustes lo pone a False (y el aviso desaparece). Vive en `runtime_settings`, no se deduce en
+    # cada arranque. No es un ajuste editable: no está en ningún grupo de OVERRIDABLE_FIELDS.
+    fuentes_heredadas: bool = Field(default=False)
 
     # ── AniList API (manga/manhwa/manhua) ────────────────────────────
     # Sin API key: es pública. 1.5s es conservador a propósito — AniList

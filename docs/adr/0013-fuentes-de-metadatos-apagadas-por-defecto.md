@@ -17,9 +17,18 @@ No se midió tráfico real saliente: es una consecuencia del diseño, no una fug
 ## Decisión
 
 1. **Los cuatro interruptores nacen apagados** (`default=False`). Ninguna fuente de metadatos consulta Internet hasta que el coleccionista la enciende en `/ui/ajustes`.
-2. **Una actualización no apaga fuentes en silencio.** La migración de datos **0020** escribe las cuatro claves como `true` en `runtime_settings.values` en las instalaciones con **uso previo** (alguna fila en `series`, `files`, `wishlist`, `import_runs` o `legal_acknowledgments`, o algún ajuste ya guardado), **sin pisar** lo que el coleccionista ya hubiera guardado. Una instalación nueva (tablas vacías) no se toca y nace apagada.
-3. **Aviso en Ajustes** (tarjeta «Fuentes de metadatos»): con alguna fuente activa, avisa de que consulta Internet con los títulos de la biblioteca y de cómo apagarla; con todas apagadas, lo dice. El contrato HTMX del formulario no cambia.
-4. **`LEGAL.md` no se toca** (su `legal_version` es el hash del fichero y cambiarlo obligaría a reaceptar): con el nuevo valor por defecto, «las fuentes que configure» pasa a ser cierto.
+2. **Una actualización no apaga fuentes en silencio, y el estado heredado queda REGISTRADO** (no se deduce en cada arranque, no es una excepción difusa en el enricher). Tres estados persistidos en `runtime_settings.values`:
+
+   | Situación de la instalación | Tras actualizar |
+   |---|---|
+   | Nunca guardó las fuentes en Ajustes y **ya usaba la aplicación** | Las cuatro **activas** y `fuentes_heredadas = true` («por compatibilidad»); Ajustes muestra el aviso |
+   | Guardó las fuentes **activas** | Sin cambio; sin aviso |
+   | Guardó las fuentes **desactivadas** | Sin cambio; sin aviso |
+   | Instalación nueva | **Apagadas**, sin marcador, sin aviso |
+
+   La migración de datos **0020** hace lo de la primera fila: «uso previo» = alguna fila en `series`, `files`, `wishlist`, `import_runs` o `legal_acknowledgments`, o algún ajuste ya guardado; escribe las cuatro claves a `true` **sin pisar** las que existieran y añade `fuentes_heredadas = true` solo si **ninguna** de las cuatro estaba guardada.
+3. **Aviso en Ajustes** (tarjeta «Fuentes de metadatos»), **solo en estado heredado**: «Las fuentes de metadatos externas están activadas por compatibilidad con tu instalación anterior…». Guardar esa tarjeta —aunque no se cambie nada— pone `fuentes_heredadas = false` y el aviso desaparece. Guardar otra tarjeta no lo quita. El contrato HTMX del formulario no cambia.
+4. **`LEGAL.md`: pendiente de decisión del PO** (ver la PR #243). Tal como está, no se toca (su `legal_version` es el hash del fichero y cambiarlo obligaría a reaceptar): con el nuevo valor por defecto, «las fuentes que configure» pasa a ser cierto.
 
 ## Consecuencias
 
@@ -31,4 +40,4 @@ No se midió tráfico real saliente: es una consecuencia del diseño, no una fug
 
 ## Pruebas
 
-`tests/test_fuentes_apagadas_por_defecto.py` (defaults y aviso, sin Postgres) y `tests/test_migracion_fuentes_pg.py` (con Postgres real: instalación nueva no escribe; cada señal de uso previo conserva; no pisa lo guardado; recrea la fila ausente; idempotente; la bajada no toca los ajustes).
+`tests/test_fuentes_apagadas_por_defecto.py` (defaults y aviso, sin Postgres) y `tests/test_migracion_fuentes_pg.py` (con Postgres real: los cuatro casos de la tabla; cada señal de uso previo; decisión parcial respetada; recrea la fila ausente; idempotente; la bajada no toca los ajustes) y la persistencia del marcador (`apply_overrides` al arrancar, limpieza al guardar).
