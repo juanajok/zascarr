@@ -18,6 +18,8 @@
 - [ ] 0.3 CI bloqueante **en verde sobre ese SHA exacto** (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
 - [ ] 0.4 PO autoriza **desplegar en la Pi** con ese SHA (fecha/quién): ____________
 - [ ] 0.5 Ventana acordada y la persona que aceptará el aviso legal está presente (paso 4).
+- [ ] 0.6 **Ruta real de la biblioteca en la Pi fijada y anotada en la hoja de evidencia (§8)**: `RUTA_BIBLIOTECA = ____________________`. Se sustituye en 2.3 **antes** de autorizar el despliegue; no se deja por decidir el día de la ejecución.
+- [ ] 0.7 **Condición de entrada (§1.3):** la predicción de la migración 0020 está **escrita y revisada por el PO** (nombre/fecha: ____________). **No se ejecuta `update.sh` mientras esta casilla esté sin marcar.**
 
 ## 1. Estado previo (solo lectura) y qué se espera
 
@@ -36,7 +38,7 @@ sudo sha256sum /opt/zascarr/.env | cut -d' ' -f1 > "$EV/env-sha256-antes.txt"   
 
 - [ ] 1.1 `sha-antes.txt` = el SHA que la Pi ya tenía (`625a564…` en la última validación) y el árbol está limpio (`git status` sin cambios).
 - [ ] 1.2 `alembic-antes` = `0019`.
-- [ ] 1.3 **Predicción del resultado de la 0020** según `fuentes-antes.txt` (se anota antes de actualizar):
+- [ ] 1.3 **Predicción del resultado de la 0020** según `fuentes-antes.txt`. **Es condición de entrada (0.7): se escribe en `prediccion-0020.txt` y la revisa el PO antes de actualizar.**
 
 | `fuentes-antes` (heredado, 4 claves) | Es el caso | Esperado tras la 0020 |
 |---|---|---|
@@ -49,7 +51,14 @@ sudo sha256sum /opt/zascarr/.env | cut -d' ' -f1 > "$EV/env-sha256-antes.txt"   
 
 ## 2. Copias de seguridad (qué cubre `update.sh` y qué NO)
 
-`scripts/update.sh` hace **solo** una copia verificada de **PostgreSQL** (`update_<TS>.sql.gz` en `/var/backups/zascarr/postgres`, `gzip -t`) y deja la referencia de rescate `refs/zascarr/update/<TS>`. **No copia el `.env` ni la biblioteca** (garantía A3: no la toca). Por eso:
+| Qué | Cómo | Alcance |
+|---|---|---|
+| **PostgreSQL** | Copia **completa** (`pg_dump`) gestionada por `update.sh`: `update_<TS>.sql.gz` en `/var/backups/zascarr/postgres`, verificada con `gzip -t`, más la referencia de rescate `refs/zascarr/update/<TS>` | Copia real y restaurable (la usa `rollback.sh`) |
+| **`.env`** | Copia **interna en la Pi** (root, modo 600); a la evidencia va **solo su SHA-256** | Nunca sale de la Pi |
+| **Biblioteca** | **Verificación por inventario** (ruta, tamaño y SHA-256 antes y después) | **No es una copia física** |
+| **Copia física de la biblioteca** | — | **Fuera del alcance de este plan.** Requeriría tamaño, destino y autorización aparte del PO |
+
+`update.sh` **no copia el `.env` ni la biblioteca** (garantía A3: no toca la colección).
 
 - [ ] 2.1 **Base de datos:** la hace `update.sh` en el paso 3; anotar la ruta y el SHA-256 (`sha256sum`) del `.sql.gz` y comprobar que se puede leer:
   ```bash
@@ -60,9 +69,9 @@ sudo sha256sum /opt/zascarr/.env | cut -d' ' -f1 > "$EV/env-sha256-antes.txt"   
 - [ ] 2.2 **Configuración (`.env`):** es un secreto y vive solo en la Pi. Antes de actualizar: copia con `sudo install -m 600 -o root -g root /opt/zascarr/.env /var/backups/zascarr/env-antes-despliegue-243` (queda **en la Pi**, nunca en la evidencia ni en Drive) y registrar **solo su SHA-256** (`env-sha256-antes.txt`).
 - [ ] 2.3 **Biblioteca:** no se copia (el actualizador no la toca). Se toma un **inventario** antes y después (ruta, tamaño, SHA-256) para demostrar que no cambió:
   ```bash
-  ( cd /media/library && sudo find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$EV/biblioteca-antes.sha256"   # ajustar la ruta real de la biblioteca
+  ( cd "$RUTA_BIBLIOTECA" && sudo find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$EV/biblioteca-antes.sha256"   # RUTA_BIBLIOTECA = la fijada en 0.6
   ```
-  *Decisión del PO:* si además quiere una copia física de la biblioteca (tamaño y destino), es un paso aparte que este plan no asume.
+  La copia física de la biblioteca queda fuera de este plan (ver la tabla de arriba).
 - [ ] 2.4 Paquete de evidencia previa con hash: `tar -czf "$EV.tar.gz" -C /home/pi "$(basename "$EV")" && sha256sum "$EV.tar.gz" > "$EV.tar.gz.sha256"`.
 
 ## 3. Actualización (autorizada en 0.4)
@@ -84,6 +93,9 @@ sudo bash /opt/zascarr/zascarr/scripts/update.sh 2>&1 | tee "$EV/update.log"
 
 - [ ] 4.1 `curl -sS http://127.0.0.1:8000/api/legal/status` → `"accepted": false` y `legal_version` distinta de la de `legal-antes.json` (guardar como `legal-despues-actualizar.json`).
 - [ ] 4.2 El orquestador está detenido: en `docker logs zascarr-orquestador` aparece `orchestrator.cycle_skipped_no_legal_acknowledgment`. **Es lo esperado**, no un fallo.
+> **Regla (no práctica informal):** el nombre de quien acepta se registra **únicamente en la hoja de evidencia** (§8 / `aceptacion-legal.txt`).
+> **No se añade a la base de datos ni a `LEGAL.md` ningún dato personal**; `legal_acknowledgments` conserva solo `accepted_at` y `legal_version`.
+
 - [ ] 4.3 **La persona autorizada por el PO** abre `http://127.0.0.1:8000/ui/legal` y acepta (3 casillas). Anotar nombre y hora **en la hoja de evidencia** (`aceptacion-legal.txt`): ZascArr no guarda quién acepta (`legal_acknowledgments` solo tiene `accepted_at` y `legal_version`, sin usuario) y no se añade ningún dato personal.
 - [ ] 4.4 `curl … /api/legal/status` → `"accepted": true` con la `legal_version` nueva y `accepted_at` coherente con 4.3 (`legal-despues-aceptar.json`).
 - [ ] 4.5 Reanudación: tras el siguiente ciclo del orquestador (hasta `scan_interval_minutes` = 60 min; el ciclo del importador es de 15) la línea `…skipped_no_legal_acknowledgment` **deja de repetirse**. Anotar el log de ese ciclo.
@@ -127,6 +139,8 @@ Disparadores: `update.sh` falla a partir de su paso 5, la 0020 no deja el result
 | Paso | Hora | Quién | Resultado | Evidencia |
 |---|---|---|---|---|
 | 0.1 fusión autorizada | | | | |
+| 0.6 ruta de la biblioteca fijada | | | `RUTA_BIBLIOTECA` | |
+| 0.7 predicción 0020 revisada por el PO | | | | `prediccion-0020.txt` |
 | 0.4 despliegue autorizado | | | | |
 | 3 `update.sh` | | | | `update.log` |
 | 4.3 aceptación legal | | | | `aceptacion-legal.txt` |
