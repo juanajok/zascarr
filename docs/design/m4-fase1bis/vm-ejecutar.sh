@@ -174,7 +174,9 @@ esperar_sano() {
 comprobar_aplicacion_sana() {
     local rc e
     esperar_sano zascarr; rc=$?
-    e=$(estado_contenedor zascarr); echo "zascarr: ${e}" >> "${EV}/contenedores.txt"
+    # El resultado y su cita salen de la ÚNICA observación validada por esperar_sano (SANA_FINAL): una segunda consulta podría
+    # contradecir la decisión (p. ej. PASS citando 'unhealthy' o un error) y su código de salida no se comprobaría.
+    e="${SANA_FINAL}"; echo "zascarr: ${e}" >> "${EV}/contenedores.txt"
     case "${rc}" in
         0) pass S-06 "aplicación sana según Docker tras esperar ${SANA_ESPERA_S}s al primer sondeo (${e}; transiciones en salud-zascarr.txt)" ;;
         1) fail S-06 "la aplicación no llegó a 'healthy' en ${ESPERA_SANA_MAX_S}s (${SANA_FINAL})" ;;

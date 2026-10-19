@@ -107,6 +107,20 @@ class TestComprobacionS06:
         _, linea = self._s06(tmp_path, respuestas)
         assert len(linea) == 1 and linea[0].startswith("FAIL S-06") and texto in linea[0], linea
 
+    @pytest.mark.parametrize("segunda_lectura", ["running unhealthy 0 false 0", "error-ps", "exited - 0 false 1"], ids=["unhealthy", "error-ps", "terminado"])
+    def test_el_pass_no_depende_de_una_segunda_lectura_ni_la_cita(self, tmp_path, segunda_lectura):
+        """Regresión: el resultado salía de `esperar_sano` pero el mensaje repetía la consulta (sin comprobar su código), de modo que podía dar
+        PASS citando 'unhealthy' o un error. Ahora solo se usa la observación validada (SANA_FINAL) y no se vuelve a consultar."""
+        r, linea = self._s06(tmp_path, [ARRANCANDO, SANA, segunda_lectura])
+        assert len(linea) == 1 and linea[0].startswith("PASS S-06") and "running healthy" in linea[0], (linea, r.stderr)
+        assert segunda_lectura not in linea[0]
+        assert "zascarr: running healthy" in (tmp_path / "contenedores.txt").read_text()
+        assert segunda_lectura in (tmp_path / "cola").read_text(), "se hizo una consulta más de las necesarias (se consumió la lectura posterior)"
+
+    def test_el_fail_tambien_registra_la_observacion_validada(self, tmp_path):
+        self._s06(tmp_path, ["running unhealthy 0 false 0", SANA])
+        assert "zascarr: running unhealthy" in (tmp_path / "contenedores.txt").read_text()
+
     def test_el_estado_final_queda_en_contenedores_txt(self, tmp_path):
         self._s06(tmp_path, [ARRANCANDO, SANA])
         assert "zascarr: running healthy" in (tmp_path / "contenedores.txt").read_text()
