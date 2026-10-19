@@ -81,6 +81,10 @@ Sigue las guías oficiales con estas precisiones locales:
 - Integraciones P2P deshabilitadas por defecto (`FORUM_ENABLED=false` y
   análogos): el usuario opta, la app no facilita por defecto. Patrón
   explicado en `LEGAL.md`.
+- **Fuentes de metadatos (Comic Vine, AniList, Tebeosfera, GCD) apagadas por defecto**
+  (decisión del PO de 2026-10-19, ADR 0013): se encienden en Ajustes; el `.env` no las
+  gobierna. Una actualización **no apaga en silencio** las de instalaciones con uso previo
+  (migración 0020 las conserva y Ajustes avisa).
 - Healthcheck es **observacional, no bloqueante**: una VPN caída es
   WARNING, no ERROR; no congela ni el arranque ni el ciclo de descargas.
 
