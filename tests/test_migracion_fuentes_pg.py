@@ -53,12 +53,6 @@ def subir(url: str) -> None:
 
 class TestInstalacionNueva:
 
-    async def test_una_instalacion_nueva_no_escribe_nada(self):
-        """bootstrap.sh migra hasta `head` sobre tablas vacías: nace con el default de código (apagadas)."""
-        async with bd_efimera(URL) as url:
-            subir(url)
-            assert await version(url) == "0020" and await valores(url) == {}
-
     async def test_la_actualizacion_de_una_instalacion_vacia_y_sin_ajustes_tampoco(self):
         async with bd_efimera(URL) as url:
             await a_la_0019(url)
@@ -66,45 +60,88 @@ class TestInstalacionNueva:
             assert await valores(url) == {}
 
 
+SERIE = "INSERT INTO series (id, title, tradition) VALUES (gen_random_uuid(), 'Flash', 'american')"
+
+
+async def guardar(url: str, valores_json: str) -> None:
+    await consultar(url, "UPDATE runtime_settings SET \"values\" = CAST(:v AS jsonb) WHERE id = 1", v=valores_json)
+
+
+class TestLosCuatroCasosDeLaDecision:
+    """Tabla del PO (#239): qué pasa tras actualizar según lo que la instalación había decidido."""
+
+    async def test_1_nunca_guardo_las_fuentes_y_ya_usaba_la_app_quedan_activas_y_heredadas(self):
+        async with bd_efimera(URL) as url:
+            await a_la_0019(url)
+            await consultar(url, SERIE)
+            subir(url)
+            v = await valores(url)
+            assert {c: v.get(c) for c in CLAVES} == TODAS_ACTIVAS and v.get("fuentes_heredadas") is True
+
+    async def test_2_guardo_las_fuentes_activas_sin_cambio_y_sin_marcador_heredado(self):
+        async with bd_efimera(URL) as url:
+            await a_la_0019(url)
+            await consultar(url, SERIE)
+            antes = dict(TODAS_ACTIVAS, prowlarr_url="http://p")
+            await guardar(url, json.dumps(antes))
+            subir(url)
+            assert await valores(url) == antes, "se tocó una decisión explícita de activar (o se añadió el marcador heredado)"
+
+    async def test_3_guardo_las_fuentes_desactivadas_siguen_desactivadas_y_sin_marcador(self):
+        async with bd_efimera(URL) as url:
+            await a_la_0019(url)
+            await consultar(url, SERIE)
+            antes = {c: False for c in CLAVES}
+            await guardar(url, json.dumps(antes))
+            subir(url)
+            assert await valores(url) == antes, "se reactivó una fuente que el coleccionista había apagado"
+
+    async def test_4_instalacion_nueva_nace_apagada_y_sin_marcador(self):
+        async with bd_efimera(URL) as url:
+            subir(url)
+            assert await version(url) == "0020" and await valores(url) == {}
+
+
 class TestInstalacionConUso:
 
     @pytest.mark.parametrize("sql,motivo", [
-        ("INSERT INTO series (id, title, tradition) VALUES (gen_random_uuid(), 'Flash', 'american')", "una serie"),
+        (SERIE, "una serie"),
         ("INSERT INTO import_runs (id, started_at, finished_at) VALUES (gen_random_uuid(), now(), now())", "un ciclo del importador"),
         ("INSERT INTO legal_acknowledgments (legal_version) VALUES ('x')", "la aceptación legal"),
         ("UPDATE runtime_settings SET \"values\" = '{\"prowlarr_enabled\": true}'::jsonb WHERE id = 1", "un ajuste guardado que no es de fuentes"),
     ], ids=["serie", "import_run", "aceptacion-legal", "otro-ajuste"])
-    async def test_con_uso_previo_se_escriben_las_cuatro_activas(self, sql, motivo):
+    async def test_cada_senal_de_uso_previo_conserva_activas_y_marca_heredado(self, sql, motivo):
         async with bd_efimera(URL) as url:
             await a_la_0019(url)
             await consultar(url, sql)
             subir(url)
             v = await valores(url)
-            assert {c: v.get(c) for c in CLAVES} == TODAS_ACTIVAS, f"no se conservaron activas con {motivo}: {v}"
+            assert {c: v.get(c) for c in CLAVES} == TODAS_ACTIVAS and v.get("fuentes_heredadas") is True, f"{motivo}: {v}"
 
-    async def test_no_pisa_lo_que_el_coleccionista_ya_guardo(self):
+    async def test_si_solo_guardo_alguna_clave_se_respeta_y_se_completa_sin_marcar_heredado(self):
+        """Caso defensivo (el formulario guarda las cuatro a la vez): una decisión parcial no se pisa y no es «heredado»."""
         async with bd_efimera(URL) as url:
             await a_la_0019(url)
-            await consultar(url, "INSERT INTO series (id, title, tradition) VALUES (gen_random_uuid(), 'Flash', 'american')")
-            await consultar(url, "UPDATE runtime_settings SET \"values\" = '{\"tebeosfera_enabled\": false, \"prowlarr_url\": \"http://p\"}'::jsonb WHERE id = 1")
+            await consultar(url, SERIE)
+            await guardar(url, json.dumps({"tebeosfera_enabled": False, "prowlarr_url": "http://p"}))
             subir(url)
             v = await valores(url)
-            assert v["tebeosfera_enabled"] is False, "se pisó una fuente que el coleccionista había apagado"
-            assert v["prowlarr_url"] == "http://p"
+            assert v["tebeosfera_enabled"] is False and v["prowlarr_url"] == "http://p"
             assert (v["comicvine_enabled"], v["anilist_enabled"], v["gcd_enabled"]) == (True, True, True)
+            assert "fuentes_heredadas" not in v
 
     async def test_si_falta_la_fila_de_ajustes_la_crea_y_conserva(self):
         async with bd_efimera(URL) as url:
             await a_la_0019(url)
             await consultar(url, "DELETE FROM runtime_settings")
-            await consultar(url, "INSERT INTO series (id, title, tradition) VALUES (gen_random_uuid(), 'Flash', 'american')")
+            await consultar(url, SERIE)
             subir(url)
-            assert await valores(url) == TODAS_ACTIVAS
+            assert await valores(url) == dict(TODAS_ACTIVAS, fuentes_heredadas=True)
 
     async def test_es_idempotente_y_la_bajada_no_toca_los_ajustes(self):
         async with bd_efimera(URL) as url:
             await a_la_0019(url)
-            await consultar(url, "INSERT INTO series (id, title, tradition) VALUES (gen_random_uuid(), 'Flash', 'american')")
+            await consultar(url, SERIE)
             subir(url)
             antes = await valores(url)
             alembic(url, "downgrade", "0019")

@@ -15,6 +15,10 @@ Qué hace (solo datos; no cambia el esquema):
   `legal_acknowledgments`, o si `runtime_settings` ya guarda algún ajuste. En ese caso escribe las cuatro claves
   como `true` en `runtime_settings.values`, **sin pisar** las que el coleccionista ya guardó (su valor, activo o
   no, manda: `nuevas || existentes`).
+- Tres estados, no dos, y **persistidos** (ADR 0013): si además NINGUNA de las cuatro claves estaba guardada (el
+  coleccionista nunca decidió), escribe `fuentes_heredadas = true`: «activas por compatibilidad». Ajustes muestra
+  el aviso solo en ese estado y guardar «Fuentes de metadatos» lo pone a `false`. Quien ya había guardado las
+  fuentes (activas o no) no recibe el marcador: su decisión es explícita.
 - Una instalación nueva (la migración corre sobre tablas vacías, dentro de `bootstrap.sh`) no se toca: nace con el
   nuevo default, apagadas.
 - Garantiza la fila `id=1` de `runtime_settings` (la 0011 la siembra; una restauración de un backup anterior puede
@@ -51,7 +55,11 @@ def upgrade() -> None:
     )
     op.execute(
         f"""UPDATE runtime_settings
-            SET "values" = jsonb_build_object(
+            SET "values" = (CASE WHEN jsonb_exists_any("values", ARRAY['comicvine_enabled', 'anilist_enabled',
+                                                                      'tebeosfera_enabled', 'gcd_enabled'])
+                                 THEN '{{}}'::jsonb
+                                 ELSE jsonb_build_object('fuentes_heredadas', true) END)
+                || jsonb_build_object(
                     'comicvine_enabled', true, 'anilist_enabled', true,
                     'tebeosfera_enabled', true, 'gcd_enabled', true) || "values",
                 updated_at = now()
