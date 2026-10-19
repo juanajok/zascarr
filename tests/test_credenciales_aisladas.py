@@ -49,6 +49,7 @@ CASOS_ESCRITURA = ["W01", "W02", "W03", "W04", "W05", "W06"]
 CASOS_UBICACION = [
     "U01", "U01b", "U02", "U02b", "U03", "U03b", "U04", "U05", "U06", "U07", "U08", "U08b", "U09", "U09b", "U10", "U10b", "U10c",
 ]
+CASOS_GUION = ["G01", "G01b", "G01c", "G01d", "G01e", "G02", "G02b", "G02c"]
 CASOS_MANUAL = ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"]
 CASOS_IDENTIDADES = [
     "P00", "P00b", "P01", "P02", "P02b", "P03", "P03b", "P04", "P04b", "P05", "P05b", "P06", "P06b",
@@ -75,6 +76,11 @@ def escritura() -> Resultado:
 @pytest.fixture(scope="module")
 def ubicacion() -> Resultado:
     return ejecutar("ubicacion.sh")
+
+
+@pytest.fixture(scope="module")
+def guion() -> Resultado:
+    return ejecutar("guion_f1bis.sh")
 
 
 @pytest.fixture(scope="module")
@@ -111,15 +117,22 @@ def test_ubicacion_insegura_detiene_el_instalador(ubicacion, caso):
     _comprobar(ubicacion, caso)
 
 
+@pytest.mark.parametrize("caso", CASOS_GUION)
+def test_el_guion_de_la_fase_1_bis_mide_bien_la_proteccion(guion, caso):
+    """El guion del ensayo real (docs/design/m4-fase1bis/vm-ejecutar.sh) da PASS sobre una instalación protegida y SE PARA
+    sobre una expuesta: sin esto, un PASS del ensayo real no demostraría nada."""
+    _comprobar(guion, caso)
+
+
 @pytest.mark.parametrize("caso", CASOS_MANUAL)
 def test_instalacion_manual(manual, caso):
     _comprobar(manual, caso)
 
 
-def test_los_escenarios_terminan_bien_y_no_dejan_ninguna_credencial_en_sus_salidas(instalacion, identidades, manual, escritura, ubicacion):
+def test_los_escenarios_terminan_bien_y_no_dejan_ninguna_credencial_en_sus_salidas(instalacion, identidades, manual, escritura, ubicacion, guion):
     """Salidas saneadas: lo que los guiones imprimen (y lo que se publicaría como artefacto de la CI) no lleva
     ninguna credencial: ni las sintéticas de las pruebas ni una generada (48 hexadecimales)."""
-    for resultado in (instalacion, identidades, manual, escritura, ubicacion):
+    for resultado in (instalacion, identidades, manual, escritura, ubicacion, guion):
         assert resultado.returncode == 0, resultado.stderr[-800:]
         todo = resultado.stdout + resultado.stderr
         assert "Sint3tica" not in todo
