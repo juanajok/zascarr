@@ -1,0 +1,133 @@
+# Plan de despliegue — PR #243 (fuentes de metadatos desactivadas por defecto)
+
+> **Estado: PLAN, no ejecutado.** Nada de este documento se ejecuta en la Raspberry Pi hasta que el PO lo autorice **paso a paso**
+> (fusión y despliegue son decisiones separadas). Quien ejecuta marca cada casilla y anota la hora; la evidencia se guarda
+> en un paquete con su `.sha256`. Un fallo **detiene** el plan; no se improvisa.
+
+## 0. Alcance y condiciones previas
+
+- **Qué se despliega:** PR #243 (ADR 0013): `default=False` en las cuatro fuentes de metadatos, migración de datos **0020**
+  (`fuentes_heredadas`), aviso en Ajustes y cambio de `LEGAL.md` (`legal_version` nueva).
+- **Cabeza revisada de la PR:** `46bd09b969f5d9a544dc592574198d744b682f92`.
+- **SHA a desplegar:** el *merge commit* de #243 en `main` → `SHA_DESPLIEGUE = ____________________` (se rellena tras la fusión).
+- **No autorizado hasta nueva orden del PO** (cada uno es un paso separado): fusionar #243 · desplegar en la Pi · aceptar el aviso legal
+  en la Pi · ejecutar un rollback · cambiar el tablero.
+
+- [ ] 0.1 PO autoriza **fusionar** #243 (anotar fecha y quién): ____________
+- [ ] 0.2 Fusión hecha; `SHA_DESPLIEGUE` anotado y es el que contiene la migración `20261019_0020_*` y `LEGAL.md` nuevo.
+- [ ] 0.3 CI bloqueante **en verde sobre ese SHA exacto** (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
+- [ ] 0.4 PO autoriza **desplegar en la Pi** con ese SHA (fecha/quién): ____________
+- [ ] 0.5 Ventana acordada y la persona que aceptará el aviso legal está presente (paso 4).
+
+## 1. Estado previo (solo lectura) y qué se espera
+
+Se ejecuta en la Pi como el usuario habitual, **antes** de tocar nada. Las consultas devuelven **solo** estas claves; no imprimir nunca `runtime_settings.values` completo (contiene secretos).
+
+```bash
+EV=/home/pi/evidencia-despliegue-243-$(date +%Y%m%d_%H%M%S); mkdir -p "$EV"
+git -C /opt/zascarr/zascarr rev-parse HEAD  > "$EV/sha-antes.txt"
+docker exec zascarr-db psql -U comics_admin -d zascarr -tAc 'select version_num from alembic_version' > "$EV/alembic-antes.txt"
+docker exec zascarr-db psql -U comics_admin -d zascarr -tAc \
+  "select coalesce(\"values\"->>'fuentes_heredadas','(ausente)'), coalesce(\"values\"->>'comicvine_enabled','(ausente)'), coalesce(\"values\"->>'anilist_enabled','(ausente)'), coalesce(\"values\"->>'tebeosfera_enabled','(ausente)'), coalesce(\"values\"->>'gcd_enabled','(ausente)') from runtime_settings where id=1" > "$EV/fuentes-antes.txt"
+curl -sS -m 15 http://127.0.0.1:8000/api/legal/status > "$EV/legal-antes.json"
+curl -sS -m 15 http://127.0.0.1:8000/api/health   > "$EV/health-antes.json"
+sudo sha256sum /opt/zascarr/.env | cut -d' ' -f1 > "$EV/env-sha256-antes.txt"      # SOLO el hash; nunca el contenido
+```
+
+- [ ] 1.1 `sha-antes.txt` = el SHA que la Pi ya tenía (`625a564…` en la última validación) y el árbol está limpio (`git status` sin cambios).
+- [ ] 1.2 `alembic-antes` = `0019`.
+- [ ] 1.3 **Predicción del resultado de la 0020** según `fuentes-antes.txt` (se anota antes de actualizar):
+
+| `fuentes-antes` (heredado, 4 claves) | Es el caso | Esperado tras la 0020 |
+|---|---|---|
+| `(ausente)` en las cuatro | Con uso previo, sin preferencia | `fuentes_heredadas = true`; las cuatro `true` |
+| Las cuatro presentes (`true`/`false`) | Preferencia ya guardada | **Sin cambio** y sin marcador (`(ausente)`) |
+| Solo algunas presentes | Decisión parcial (no debería darse: el formulario guarda las cuatro) | Las presentes se respetan, las ausentes pasan a `true`, sin marcador |
+| *(Instalación nueva)* | **No aplica a la Pi**; lo cubren `tests/test_migracion_fuentes_pg.py` | Sin marcador, apagadas |
+
+- [ ] 1.4 Hay una instalación de la Pi con uso previo (series/ficheros/ciclos del importador) → la 0020 se aplicará en alguno de los tres primeros casos.
+
+## 2. Copias de seguridad (qué cubre `update.sh` y qué NO)
+
+`scripts/update.sh` hace **solo** una copia verificada de **PostgreSQL** (`update_<TS>.sql.gz` en `/var/backups/zascarr/postgres`, `gzip -t`) y deja la referencia de rescate `refs/zascarr/update/<TS>`. **No copia el `.env` ni la biblioteca** (garantía A3: no la toca). Por eso:
+
+- [ ] 2.1 **Base de datos:** la hace `update.sh` en el paso 3; anotar la ruta y el SHA-256 (`sha256sum`) del `.sql.gz` y comprobar que se puede leer:
+  ```bash
+  sha256sum /var/backups/zascarr/postgres/update_<TS>.sql.gz | tee -a "$EV/backup-bd.sha256"
+  gzip -t /var/backups/zascarr/postgres/update_<TS>.sql.gz && zcat /var/backups/zascarr/postgres/update_<TS>.sql.gz | head -c 2000 >/dev/null
+  zcat /var/backups/zascarr/postgres/update_<TS>.sql.gz | grep -c -E '^CREATE TABLE (public\.)?(series|files|runtime_settings|legal_acknowledgments)\b' | tee "$EV/backup-bd-tablas.txt"   # 4 esperado
+  ```
+- [ ] 2.2 **Configuración (`.env`):** es un secreto y vive solo en la Pi. Antes de actualizar: copia con `sudo install -m 600 -o root -g root /opt/zascarr/.env /var/backups/zascarr/env-antes-despliegue-243` (queda **en la Pi**, nunca en la evidencia ni en Drive) y registrar **solo su SHA-256** (`env-sha256-antes.txt`).
+- [ ] 2.3 **Biblioteca:** no se copia (el actualizador no la toca). Se toma un **inventario** antes y después (ruta, tamaño, SHA-256) para demostrar que no cambió:
+  ```bash
+  ( cd /media/library && sudo find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$EV/biblioteca-antes.sha256"   # ajustar la ruta real de la biblioteca
+  ```
+  *Decisión del PO:* si además quiere una copia física de la biblioteca (tamaño y destino), es un paso aparte que este plan no asume.
+- [ ] 2.4 Paquete de evidencia previa con hash: `tar -czf "$EV.tar.gz" -C /home/pi "$(basename "$EV")" && sha256sum "$EV.tar.gz" > "$EV.tar.gz.sha256"`.
+
+## 3. Actualización (autorizada en 0.4)
+
+```bash
+sudo bash /opt/zascarr/zascarr/scripts/update.sh 2>&1 | tee "$EV/update.log"
+```
+- [ ] 3.1 `update.sh` termina con "Actualización completada" (RC 0); `NEW_SHA` = `SHA_DESPLIEGUE`.
+- [ ] 3.2 Aparece el backup `update_<TS>.sql.gz`; cumplir 2.1 con ese `<TS>`.
+- [ ] 3.3 `alembic` tras actualizar = **`0020`**:
+  `docker exec zascarr-db psql -U comics_admin -d zascarr -tAc 'select version_num from alembic_version' | tee "$EV/alembic-despues.txt"`.
+- [ ] 3.4 `/api/health` → 200; contenedores `zascarr-orquestador` y `zascarr-db` en `healthy` (`docker ps`); `credenciales` terminado con código 0.
+- [ ] 3.5 `.env` byte a byte: `sudo sha256sum /opt/zascarr/.env` = `env-sha256-antes.txt`.
+- [ ] 3.6 Inventario de la biblioteca idéntico al de 2.3 (`diff` vacío).
+
+## 4. Reaceptación legal (consecuencia esperada del cambio de política)
+
+`LEGAL.md` cambia y su `legal_version` es el hash del fichero. **Esto no revoca un consentimiento previo:** la política de fuentes de metadatos cambia y la aplicación pide una **confirmación nueva** antes de que el orquestador reanude su funcionamiento.
+
+- [ ] 4.1 `curl -sS http://127.0.0.1:8000/api/legal/status` → `"accepted": false` y `legal_version` distinta de la de `legal-antes.json` (guardar como `legal-despues-actualizar.json`).
+- [ ] 4.2 El orquestador está detenido: en `docker logs zascarr-orquestador` aparece `orchestrator.cycle_skipped_no_legal_acknowledgment`. **Es lo esperado**, no un fallo.
+- [ ] 4.3 **La persona autorizada por el PO** abre `http://127.0.0.1:8000/ui/legal` y acepta (3 casillas). Anotar nombre y hora **en la hoja de evidencia** (`aceptacion-legal.txt`): ZascArr no guarda quién acepta (`legal_acknowledgments` solo tiene `accepted_at` y `legal_version`, sin usuario) y no se añade ningún dato personal.
+- [ ] 4.4 `curl … /api/legal/status` → `"accepted": true` con la `legal_version` nueva y `accepted_at` coherente con 4.3 (`legal-despues-aceptar.json`).
+- [ ] 4.5 Reanudación: tras el siguiente ciclo del orquestador (hasta `scan_interval_minutes` = 60 min; el ciclo del importador es de 15) la línea `…skipped_no_legal_acknowledgment` **deja de repetirse**. Anotar el log de ese ciclo.
+
+## 5. Verificación posterior específica de #243
+
+### 5.1 Migración 0020 (`fuentes_heredadas`)
+Repetir la consulta de 1 y guardar como `fuentes-despues.txt`; comparar con la **predicción de 1.3**:
+- [ ] Caso "ausentes" → `fuentes_heredadas = true` y las cuatro `true`.
+- [ ] Caso "preferencia guardada" → idéntico a `fuentes-antes.txt`, `fuentes_heredadas` = `(ausente)`.
+- [ ] Caso "parcial" → conforme a la tabla de 1.3.
+- [ ] La salida **no** contiene ninguna otra clave de `runtime_settings` (nada de secretos en la evidencia).
+
+### 5.2 Aviso de Ajustes
+- [ ] Si `fuentes_heredadas = true`: `curl -s http://127.0.0.1:8000/ui/ajustes | grep -c 'id="aviso-fuentes-heredadas"'` → **1**; la página dice «…activadas por compatibilidad con tu instalación anterior…».
+- [ ] Si no es heredado: el mismo `grep -c` → **0**.
+- [ ] (Solo si es heredado) **El PO decide** si se confirma ya: abrir Ajustes → «Fuentes de metadatos» → **Guardar** (sin cambiar nada, o apagando las que quiera). Después: `grep -c` → **0** y `fuentes_heredadas = false` en la consulta de 5.1 (`fuentes-despues-guardar.txt`). Guardar **otra** tarjeta no debe quitar el aviso.
+- [ ] Tras `docker restart zascarr-orquestador`: el aviso (si seguía) y el estado de las fuentes **persisten** (`/api/health` → `fuentes` coincide con la base).
+
+### 5.3 Que nada más cambió
+- [ ] `/api/health`: `database: ok`; `fuentes` conforme a 5.1.
+- [ ] `docker logs zascarr-orquestador --since 30m` sin tracebacks nuevos.
+- [ ] Paquete final de evidencia con `.sha256` (`$EV-final.tar.gz`), sin `.env` ni valores secretos (revisar por patrones antes de compartir).
+
+## 6. Criterios de éxito
+
+Todas las casillas de 1–5 marcadas **y**: backup verificado (2.1) · migración `0020` aplicada (3.3) con el resultado previsto (5.1) · aviso correcto (5.2) · `.env` y biblioteca intactos (3.5, 3.6) · aceptación legal registrada (4.4) · orquestador reanudado (4.5).
+
+## 7. Rollback (NO se ejecuta sin autorización explícita del PO)
+
+Disparadores: `update.sh` falla a partir de su paso 5, la 0020 no deja el resultado previsto, el aviso se comporta mal de forma persistente, o `/api/health` no vuelve a 200.
+
+1. **Parar y avisar al PO.** No reintentar ni "arreglar sobre la marcha".
+2. Con la autorización del PO: `sudo bash /opt/zascarr/zascarr/scripts/rollback.sh --dry-run` y revisar el plan (emparejado por `refs/zascarr/update/<TS>` + `update_<TS>.sql.gz`, **no** "el backup más reciente").
+3. Con una segunda confirmación del PO: `sudo bash /opt/zascarr/zascarr/scripts/rollback.sh` (restaura la base y vuelve al SHA anterior; hace antes una copia de seguridad de la BD actual).
+4. Comprobar: SHA = el de `sha-antes.txt`, `alembic` = `0019`, `/api/health` 200, `.env` y biblioteca idénticos a 3.5/3.6.
+5. Efectos a conocer: restaurar la base **deshace** la aceptación legal hecha después de actualizar y `fuentes_heredadas`; con el código anterior las claves a `true` serían inofensivas (la bajada de la 0020 no hace nada a propósito).
+
+## 8. Registro de ejecución
+
+| Paso | Hora | Quién | Resultado | Evidencia |
+|---|---|---|---|---|
+| 0.1 fusión autorizada | | | | |
+| 0.4 despliegue autorizado | | | | |
+| 3 `update.sh` | | | | `update.log` |
+| 4.3 aceptación legal | | | | `aceptacion-legal.txt` |
+| 5.2 aviso / guardar | | | | |
