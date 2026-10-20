@@ -2,7 +2,7 @@
 
 > **Estado: diseño revisado (APROBADO CON MATICES por el revisor); D8, D9 y D10 DECIDIDAS por el PO el 2026-10-20 (§4); la historia se PARTE en BL-R1a y BL-R1b (§6).
 > Sin código, sin migración, sin tocar el backlog ni el tablero.** Cierra la parte de **diseño** de la Definition of Ready de #230
-> (contratos, efectos, dependencias, riesgos y estimación) y plantea **D8–D10**. Decisión de comprobante e historial: `docs/adr/0014-deshacer-vinculacion.md` (**Propuesto**).
+> (contratos, efectos, dependencias, riesgos y estimación) y plantea **D8–D10**. Decisión de comprobante e historial: `docs/adr/0014-deshacer-vinculacion.md` (**Aceptado**).
 > Verificado sobre `main` `6001555` (2026-10-20). Benchmark: `docs/design/benchmark-reconciliacion-plex.md` (BL-R0, fusionada).
 
 ## 1. Alcance (D5, decidida por el PO)
@@ -94,4 +94,4 @@ La tarjeta propone **8 pts, L, confianza Baja**. Con lo anterior:
 
 ## 8. Qué NO autoriza este documento
 
-Código, migraciones, fuentes reales, despliegue, cambios del tablero ni la partición de la tarjeta. Pendiente: revisión final del ADR 0014 (sigue **Propuesto**) y la orden expresa para crear las tarjetas BL-R1a/b y pasar la historia a «Lista para desarrollar».
+Código, migraciones, fuentes reales, despliegue, cambios del tablero ni la partición de la tarjeta. Estado: ADR 0014 **Aceptado** tras la revisión final; las tarjetas BL-R1a (#253) y BL-R1b (#254) están creadas en «Lista para desarrollar». Sigue pendiente la orden expresa del PO para empezar a implementar #253.
