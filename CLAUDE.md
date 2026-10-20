@@ -167,6 +167,12 @@ como marco permanente.
   Cifras que se comparan (contadores, números de grapa, métricas) con
   `font-variant-numeric: tabular-nums`. Ficha y forma de actualizar en
   `static/vendor/README.md`.
+- **Marca** (decidido el 2026-10-20): el estallido «¡ZAS!» bermellón con una Z rotulada
+  dentro, en `static/brand` (ficheros, colores y reglas en su README). Sustituye al
+  cuadrado amarillo con trama. Se descartó, tras pruebas de iconos: un «¡» (se lee como
+  la «i» de información), una Z sobre cuadrado rojo (se confunde con Zabbix y YouTube),
+  el amarillo (Mylar3, Kapowarr, Radarr) y una Z que desborda el estallido (Komga). Por
+  debajo de 24 px va la versión simplificada `zascarr-favicon.svg`.
 - **Presupuesto de texto** (historia U21, decidido el 2026-10-15; los umbrales
   son provisionales hasta validarlos en U10):
   - Una frase de entrada por pantalla, de ≤ 20 palabras, que diga qué se hace aquí.
