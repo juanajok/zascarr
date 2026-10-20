@@ -6,13 +6,43 @@
      · trama halftone sutil (la "cuatricromía")
      · bordes de tinta gruesos + sombra dura (viñetas / bocadillos)
      · didascalias (cajitas amarillas de narración)
-     · rotulación de cartel en titulares (Impact del sistema, sin CDN)
+     · rotulación de cartel en titulares (Anton, servida por la propia app)
 
    Restricciones del repo respetadas:
-     · sin fuentes de CDN (system fonts; ADR-0001 y regla "sin hotlinking")
+     · sin fuentes de CDN (ADR-0001 y regla "sin hotlinking"): Anton y Archivo son
+       libres (OFL) y van en static/vendor/fonts; Impact y la fuente del sistema
+       quedan como respaldo si el fichero no llega
      · sin JS nuevo (toda la interactividad sigue en HTMX)
      · sin tocar el HTML de las plantillas: solo se reestilan las clases.
    ============================================================================= */
+
+/* ── 0. FUENTES ──────────────────────────────────────────────────────────── */
+/* Impact no existe en Android ni en Linux sin las fuentes de Microsoft: allí los titulares
+   caían a la sans del sistema. Por eso se sirven ficheros propios. Solo el subconjunto
+   latino (U+0000-00FF cubre ¡ ¿ Ñ, tildes, º y ª) y una familia por papel: Anton para
+   rotular, Archivo para leer. Los nombres llevan el prefijo «ZascArr» para que una copia
+   instalada en el equipo con otra versión no se cuele. */
+@font-face {
+  font-family: "ZascArr Anton";
+  src: url("/static/vendor/fonts/anton-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ZascArr Archivo";
+  src: url("/static/vendor/fonts/archivo-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ZascArr Archivo";
+  src: url("/static/vendor/fonts/archivo-latin-wght-italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
 
 /* ── 1. TOKENS ───────────────────────────────────────────────────────────── */
 :root {
@@ -64,8 +94,8 @@
   --radius-pill:  999px;
   --gutter: clamp(14px, 2.2vw, 24px);
 
-  --font-display: Impact, "Arial Black", "Arial Narrow Bold", "Haettenschweiler", sans-serif;
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  --font-display: "ZascArr Anton", Impact, "Arial Black", "Arial Narrow Bold", "Haettenschweiler", sans-serif;
+  --font-body: "ZascArr Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
 
   --shadow-ink:    4px 4px 0 var(--ink);
   --shadow-ink-sm: 3px 3px 0 var(--ink);
@@ -147,7 +177,8 @@ h1, h2, h3 {
   font-weight: 400;
   letter-spacing: .02em;
   text-transform: uppercase;
-  line-height: 1.08;
+  /* 1.15 y no menos: en dos líneas, las tildes de las mayúsculas («CATÁLOGO») tocan la línea de encima. */
+  line-height: 1.15;
   color: var(--ink);
 }
 
@@ -299,7 +330,7 @@ h1, h2, h3 {
    `hidden` no basta frente a `display` de autor, de ahí las reglas explícitas. */
 .badge {
   margin-left: auto; min-width: 26px; padding: 1px 8px; text-align: center;
-  font-size: .875rem; font-weight: 800;
+  font-size: .875rem; font-weight: 800; font-variant-numeric: tabular-nums;
   border: 2px solid var(--ink); border-radius: var(--radius-pill);
   background: var(--paper); color: var(--ink);
 }
@@ -528,6 +559,7 @@ button[type="submit"].neutro {
 .issue-chip {
   font-size: .875rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;   /* los números de una rejilla de grapas se alinean */
   letter-spacing: .06em;
   text-transform: uppercase;
   padding: 3px 10px;
@@ -874,6 +906,7 @@ button[type="submit"].btn-sugerencia {
   font-family: var(--font-display);
   font-size: clamp(30px, 3.4vw, 42px);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .metric-label {
   display: block;
