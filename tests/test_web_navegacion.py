@@ -36,6 +36,7 @@ from zascarr.services.auth import (
 )
 from zascarr.services.review import ReviewService
 from zascarr.services.wishlist import WishlistService
+from zascarr.web.iconos import ICONOS, icono
 from zascarr.web.menu import ENTRADAS, GRUPOS, entrada_activa
 from zascarr.web.routes import crear_templates
 
@@ -346,6 +347,24 @@ class TestMenuHtml:
         a = arbol(menu(env, "/ui/"))
         iconos = [at for t, at, _ in a.elementos if "ico" in clases(at)]
         assert iconos and all(at.get("aria-hidden") == "true" for at in iconos)
+
+    def test_cada_entrada_y_mas_llevan_un_svg_y_no_un_caracter(self, env):
+        """Los caracteres (⌂ ✎ ▤ ⚖…) los dibujaba cada sistema a su manera, con grosores
+        distintos y alguno ausente en Android: ahora cada icono es un SVG de trazo, uno por
+        entrada y «Más»."""
+        html = menu(env, "/ui/")
+        a = arbol(html)
+        svgs = [at for t, at, _ in a.elementos if t == "svg" and "ico-svg" in clases(at)]
+        # Las entradas secundarias salen dos veces (barra y panel «Más»): cuenta incluido.
+        secundarias = sum(1 for e in ENTRADAS if not e.movil_principal)
+        assert len(svgs) == len(ENTRADAS) + secundarias + 1
+        assert all(s.get("aria-hidden") == "true" and s.get("focusable") == "false" for s in svgs)
+        assert not any(c in html for c in "⌂✎▤⚖⌕★♥⚙⋯")
+
+    def test_un_icono_desconocido_falla_en_vez_de_dejar_un_hueco(self):
+        with pytest.raises(ValueError, match="Icono desconocido"):
+            icono("no-existe")
+        assert all(e.icono in ICONOS for e in ENTRADAS)
 
     def test_los_contadores_son_marcadores_ocultos_con_id(self, env):
         a = arbol(menu(env, "/ui/"))
