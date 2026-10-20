@@ -171,6 +171,9 @@ como marco permanente.
   Cifras que se comparan (contadores, números de grapa, métricas) con
   `font-variant-numeric: tabular-nums`. Ficha y forma de actualizar en
   `static/vendor/README.md`.
+- **Iconos de la interfaz** (decidido el 2026-10-20): SVG de trazo de `web/iconos.py`
+  (Lucide, ISC, con su aviso en el módulo), nunca caracteres de texto (⌂ ✎ ★…), que cada
+  sistema dibuja distinto. Un icono nuevo se copia de `lucide-static` al diccionario.
 - **Marca** (decidido el 2026-10-20): el estallido «¡ZAS!» bermellón con una Z rotulada
   dentro, en `static/brand` (ficheros, colores y reglas en su README). Sustituye al
   cuadrado amarillo con trama. Se descartó, tras pruebas de iconos: un «¡» (se lee como
