@@ -6,6 +6,7 @@
 {% set r = v.resumen %}
 {% set pasos = v.pasos %}
 {% set informe = v.informe %}
+{% set d = v.registrados %}
 
 {% macro etiqueta_paso(p) -%}
 {%- if p.estado == "hecho" -%}{{ ui.chip("ok", "Hecho") }}
@@ -38,14 +39,31 @@
 <div class="dashboard">
   <h1>Inicio</h1>
 
+  {#- Una sola cuenta que cuadra (caso real, 2026-10-20: «encontramos 1542 · registrados 1325», paso 1 «Hecho»
+      y «Revisa 1322» sin decir cómo encajaban): lo registrado y en qué punto está, con partes que suman el
+      total; debajo, de dónde sale lo del disco y por qué no coincide. -#}
+  {% if d.total %}
+  <p class="subtitle">Tienes <b>{{ d.total }}</b> {{ "tebeo registrado" if d.total == 1 else "tebeos registrados" }}
+    {%- if d.partes|length == 1 %}, {{ "" if d.total == 1 else "todos " }}{{ d.partes[0][1] }}
+    {%- else %}:
+    {%- for n, texto, enlace in d.partes %}{% if not loop.first %}{{ " y " if loop.last else "," }}{% endif %}
+      {% if enlace %}<a href="{{ enlace }}"><b>{{ n }}</b> {{ texto }}</a>{% else %}<b>{{ n }}</b> {{ texto }}{% endif %}
+    {%- endfor %}{% endif %}.
+    {%- if d.por_revisar_ausentes %} Otros <b>{{ d.por_revisar_ausentes }}</b> por revisar ya no están donde se registraron.{% endif %}</p>
+  {% elif informe %}
+  <p class="subtitle">Aún no hay ningún tebeo registrado en ZascArr.</p>
+  {% else %}
+  <p class="subtitle">Aún no hay tebeos en ZascArr. Te guiamos paso a paso.</p>
+  {% endif %}
+
   {% if informe %}
   {#- La fecha exacta da la procedencia; «hace…» dice si sigue valiendo sin hacer cuentas. Si es vieja,
       la forma de renovarla va al lado del dato, no en otra pantalla. -#}
-  <p class="subtitle">Miramos tu disco el {{ informe.fecha|fecha_llana }}{% if v.informe_hace %} ({{ v.informe_hace }}){% endif %} y encontramos <b>{{ informe.archivos_leidos }}</b> tebeos. Ahora ZascArr tiene registrados <b>{{ r.archivos_registrados }}</b>.{% if v.informe_antiguo %} <a href="/ui/auditoria">Volver a mirar el disco</a>{% endif %}</p>
-  {% elif r.archivos_registrados %}
-  <p class="subtitle">ZascArr tiene registrados <b>{{ r.archivos_registrados }}</b> tebeos. Todavía no has mirado tu disco en busca de repetidos.</p>
-  {% else %}
-  <p class="subtitle">Aún no hay tebeos en ZascArr. Te guiamos paso a paso.</p>
+  <p class="procedencia muted">En tu disco había <b>{{ informe.archivos_leidos }}</b> el {{ informe.fecha|fecha_llana }}{% if v.informe_hace %} ({{ v.informe_hace }}){% endif %}.
+    {%- if v.copias_descartadas %} Al registrarlos dejamos fuera <b>{{ v.copias_descartadas }}</b> {{ "copia idéntica" if v.copias_descartadas == 1 else "copias idénticas" }}: el mismo archivo no se registra dos veces.{% endif %}
+    {%- if v.informe_antiguo %} <a href="/ui/auditoria">Volver a mirar el disco</a>{% endif %}</p>
+  {% elif d.total %}
+  <p class="procedencia muted">Todavía no has mirado tu disco en busca de repetidos.</p>
   {% endif %}
 
   <section class="primeros-pasos" aria-labelledby="h-pasos">
@@ -78,19 +96,14 @@
   </section>
 
   {#- Sin nada registrado no hay «colección» que medir: el subtítulo ya dice lo que se encontró. -#}
-  {% if r.total_series or r.archivos_registrados %}
+  {% if r.total_series or d.total %}
   <h2 class="seccion">Tu colección ahora</h2>
   <div class="metrics-grid">
     <div class="metric-card">
-      {% if informe %}
-      <span class="metric-value">{{ informe.archivos_leidos }}</span>
-      <span class="metric-label">Tebeos encontrados</span>
-      <span class="metric-detail">al mirar tu disco el {{ informe.fecha|fecha_llana }} · {{ r.archivos_registrados }} registrados ahora</span>
-      {% else %}
-      <span class="metric-value">{{ r.archivos_registrados }}</span>
+      {#- La misma cifra que la frase de entrada: dos tarjetas no cuentan dos cosas con el mismo nombre. -#}
+      <span class="metric-value">{{ d.total }}</span>
       <span class="metric-label">Tebeos registrados</span>
-      <span class="metric-detail">en ZascArr · no hemos mirado el disco</span>
-      {% endif %}
+      <span class="metric-detail">{% if d.clasificados %}{{ d.clasificados }} ya {{ "clasificado" if d.clasificados == 1 else "clasificados" }}{% else %}ninguno clasificado todavía{% endif %}</span>
     </div>
 
     <div class="metric-card">

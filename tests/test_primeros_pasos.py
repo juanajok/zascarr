@@ -74,7 +74,7 @@ class TestAdopcionYAuditoria:
         p = paso(res, ClavePaso.BIBLIOTECA)
         assert p.estado is EstadoPaso.SIGUIENTE
         assert "Ya miraste qué hay repetido el 3 de octubre de 2026" in p.detalle
-        assert "1542 leídos, 432 comparados" in p.detalle
+        assert "había 1542 tebeos" in p.detalle and "comparados" not in p.detalle
 
     def test_sin_informe_no_se_afirma_ninguna_comparacion(self):
         res = calcular_primeros_pasos(estado(adopcion=EstadoAdopcion.PENDIENTE))
@@ -91,12 +91,25 @@ class TestAdopcionYAuditoria:
         assert "comparados" not in p.detalle
         assert p.accion == "Buscar repetidos"
 
-    def test_adopcion_hecha_con_informe_cita_fecha_y_cifra_del_informe(self):
+    def test_adopcion_hecha_con_informe_no_suma_cifras_sueltas(self):
+        """«432 revisados en busca de repetidos» era una tercera cifra junto a 1542 y 1325 que nada
+        ayudaba a cuadrar (caso real, 2026-10-20): lo del disco lo cuenta el Inicio, explicado."""
         res = calcular_primeros_pasos(estado(
             adopcion=EstadoAdopcion.HECHA, archivos_registrados=1542, informe=INFORME))
         p = paso(res, ClavePaso.BIBLIOTECA)
-        assert "432 revisados en busca de repetidos el 3 de octubre de 2026" in p.detalle
+        assert "432" not in p.detalle and "repetidos" not in p.detalle
         assert p.accion == "Ver duplicados"
+
+    def test_registrada_con_pendientes_dice_que_clasificar_es_lo_siguiente(self):
+        """«Biblioteca registrada · Hecho» con 1322 sin clasificar parecía una contradicción."""
+        con = paso(calcular_primeros_pasos(estado(
+            adopcion=EstadoAdopcion.HECHA, archivos_registrados=1325,
+            archivos_sin_clasificar=1322)),
+            ClavePaso.BIBLIOTECA)
+        sin = paso(calcular_primeros_pasos(estado(
+            adopcion=EstadoAdopcion.HECHA, archivos_registrados=1325)), ClavePaso.BIBLIOTECA)
+        assert con.detalle.endswith("· clasificarlos es el paso siguiente")
+        assert "paso siguiente" not in sin.detalle
 
     def test_adopcion_hecha_que_no_registro_nada_no_presume_de_tebeos(self):
         p = paso(calcular_primeros_pasos(estado(adopcion=EstadoAdopcion.HECHA)),

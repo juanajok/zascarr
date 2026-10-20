@@ -113,6 +113,9 @@ class _Resultado:
     def first(self):
         return None
 
+    def one(self):
+        return (self.valor,) * 5        # una fila de recuentos: la del desglose del Inicio
+
     def unique(self):
         return self
 
