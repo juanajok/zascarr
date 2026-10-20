@@ -158,6 +158,15 @@ como marco permanente.
   Documentado como limitación aceptada en B2.
 - Tarjetas con gracia de fallo: portada rota = placeholder CSS
   `.cover-missing`, no imagen rota; campo ausente con icono claro.
+- **Tipografía** (decidido el 2026-10-20): dos familias libres (OFL), servidas por la
+  app desde `static/vendor/fonts` y nunca desde un CDN: **Anton** para titulares y
+  rótulos en mayúsculas (`--font-display`), **Archivo** variable para todo lo que se
+  lee y se usa (`--font-body`). Sin tercera familia de «rotulación de cómic»: las
+  insignias usan `--font-display`. Ni fuentes comerciales (el repo es GPL y cada
+  instalación las redistribuiría) ni fuentes de cómic en controles o textos largos.
+  Cifras que se comparan (contadores, números de grapa, métricas) con
+  `font-variant-numeric: tabular-nums`. Ficha y forma de actualizar en
+  `static/vendor/README.md`.
 - **Presupuesto de texto** (historia U21, decidido el 2026-10-15; los umbrales
   son provisionales hasta validarlos en U10):
   - Una frase de entrada por pantalla, de ≤ 20 palabras, que diga qué se hace aquí.
