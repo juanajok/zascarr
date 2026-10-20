@@ -18,10 +18,10 @@
    pero **borra vínculos de archivos ausentes aunque sean manuales** (§4, escenario 3): justo lo contrario de lo que ZascArr quiere.
 5. **Hallazgo local nuevo que condiciona BL-R1:** el informe de vinculación es **inmutable** (disparador `BEFORE UPDATE` en la migración 0019,
    `vinculacion_operaciones`). Deshacer no puede reescribir ese informe; necesita **su propio registro** (probablemente tabla nueva + ADR → D2).
-6. **Casos reales:** hay casos registrados para E4, E5 y E6. **E1, E2 y E3 no tienen caso real** (§4). Por decisión del PO (2026-10-20, opción «mixta») cada uno lleva
-   un **caso DERIVADO, claramente etiquetado como NO real** (ilustrativo, construido a partir de la arquitectura y de formas reales ya documentadas), y su
-   **hueco sigue abierto**: el criterio 1 de #229 **no queda cumplido para esos tres** hasta que el PO aporte un caso real anonimizado (qué pasó, qué
-   esperaba, qué resultado tuvo). Un caso derivado **no sustituye** a uno real: sirve para fijar el escenario de prueba, no para medir un problema vivido.
+6. **Casos reales (criterio 1 de #229 reformulado con la aceptación expresa del PO, 2026-10-20):** E4, E5 y E6 tienen caso real registrado. **E1, E2 y E3 quedan como
+   «sin caso real registrado; cubierto por escenario sintético (§7)»**: el PO acepta el hueco en lugar de aportar un caso que no recuerda. Cada uno lleva un
+   **caso DERIVADO, claramente etiquetado como NO real** (ilustrativo, construido desde el código y formas reales ya documentadas) para fijar el escenario de
+   prueba. **Un caso derivado no es evidencia de un problema vivido** y no debe citarse como tal. Si más adelante aparece un caso real, sustituye al derivado.
 7. **Ninguna prueba de benchmark se ha ejecutado** (§7): están definidas con dataset y umbral *propuesto*; los umbrales son hipótesis, no mediciones.
 
 ## 1. Etiquetas de evidencia
@@ -154,6 +154,6 @@ Tres métricas comunes: **llamadas externas**, **memoria máxima** (cgroup del c
 ## 9. Límites y NOT RUN
 
 - **NOT RUN:** todas las pruebas de §7. **No leído:** los artículos de Plex (403), Mylar3, Suwayomi y Sonarr/Radarr para esta ficha.
-- **Casos reales pendientes del PO:** E1 y E2, y un incidente fechado para E3. Están cubiertos **solo con casos derivados etiquetados como no reales** (decisión «mixta» del PO, 2026-10-20). **El criterio de aceptación 1 de #229 no se da por cumplido para esos tres escenarios** hasta que haya un caso real anonimizado.
+- **Casos reales: hueco aceptado por el PO (2026-10-20).** E1, E2 y E3 no tienen caso real registrado; están cubiertos **solo con casos derivados etiquetados como no reales** y con el escenario sintético de §7. **El criterio de aceptación 1 de #229 se reformula así para esos tres escenarios:** «sin caso real registrado; cubierto por escenario sintético». Nada de lo derivado se presenta como ocurrido.
 - **Este documento no cambia el backlog ni la estimación** de BL-R1–BL-R7: la refinará quien las implemente, con esta ficha ya disponible.
 - **Definition of Ready de BL-R1–BL-R7:** esta ficha cubre el punto «benchmark pertinente (BL-R0)». Siguen pendientes los demás (casos reales, decisiones D2/D4/D5, estimación).
