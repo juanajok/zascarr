@@ -9,13 +9,18 @@
 - **Qué se despliega:** PR #243 (ADR 0013): `default=False` en las cuatro fuentes de metadatos, migración de datos **0020**
   (`fuentes_heredadas`), aviso en Ajustes y cambio de `LEGAL.md` (`legal_version` nueva).
 - **Cabeza revisada de la PR:** `46bd09b969f5d9a544dc592574198d744b682f92`.
-- **SHA a desplegar:** el *merge commit* de #243 en `main` → `SHA_DESPLIEGUE = ____________________` (se rellena tras la fusión).
+- **SHA a desplegar:** `SHA_DESPLIEGUE` = la **cabeza de `origin/main` en el momento de autorizar el despliegue** (se anota en 0.2; `git ls-remote origin refs/heads/main`).
+  - `update.sh` hace `git merge --ff-only origin/main`, así que a la Pi llega **esa cabeza**, no el *merge commit* de #243.
+  - Referencias conocidas: #243 → `4ab462b1a7d0088658f1f88abf267376c8d03b8e` (**el código desplegado**); #244 → `cdf36e9552c6f9fabd0a2062b37c93e37fc94f40` (solo documentación, CI verde). Cada PR de solo documentación que se fusione después **mueve la cabeza** (esta incluida): por eso el SHA no se fija en el texto del plan, se anota al autorizar.
+  - **Comprobación de seguridad (0.2):** `git diff --stat 4ab462b..SHA_DESPLIEGUE` debe listar **solo** ficheros de `docs/`. Si toca cualquier otra cosa (`src/`, `alembic/`, `scripts/`, `docker-compose.yml` u otros), **no se despliega**: se detiene, se informa al PO y **se reevalúa** qué cambió y si hace falta una nueva revisión y CI antes de seguir; no se continúa por inercia.
+  - Si `main` avanza entre 0.2 y 3, se rehacen 0.2–0.3 con la nueva cabeza.
+
 - **No autorizado hasta nueva orden del PO** (cada uno es un paso separado): fusionar #243 · desplegar en la Pi · aceptar el aviso legal
   en la Pi · ejecutar un rollback · cambiar el tablero.
 
 - [ ] 0.1 PO autoriza **fusionar** #243 (anotar fecha y quién): ____________
-- [ ] 0.2 Fusión hecha; `SHA_DESPLIEGUE` anotado y es el que contiene la migración `20261019_0020_*` y `LEGAL.md` nuevo.
-- [ ] 0.3 CI bloqueante **en verde sobre ese SHA exacto** (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
+- [ ] 0.2 #243 fusionada (`4ab462b`). `SHA_DESPLIEGUE` = cabeza actual de `origin/main`: `____________________`. Contiene la migración `20261019_0020_*` y el `LEGAL.md` nuevo, y `git diff --stat 4ab462b..SHA_DESPLIEGUE` lista **solo `docs/`**.
+- [ ] 0.3 CI bloqueante **en verde sobre `SHA_DESPLIEGUE` exacto** (no sobre `4ab462b` ni sobre una cabeza anterior) (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
 - [ ] 0.4 PO autoriza **desplegar en la Pi** con ese SHA (fecha/quién): ____________
 - [ ] 0.5 Ventana acordada y la persona que aceptará el aviso legal está presente (paso 4).
 - [ ] 0.6 **Ruta real de la biblioteca en la Pi fijada y anotada en la hoja de evidencia (§8)**: `RUTA_BIBLIOTECA = ____________________`. Se sustituye en 2.3 **antes** de autorizar el despliegue; no se deja por decidir el día de la ejecución.
@@ -110,6 +115,8 @@ Repetir la consulta de 1 y guardar como `fuentes-despues.txt`; comparar con la *
 - [ ] La salida **no** contiene ninguna otra clave de `runtime_settings` (nada de secretos en la evidencia).
 
 ### 5.2 Aviso de Ajustes
+> **Acceso:** si la instancia requiere autenticación, el operador debe tener una **sesión válida (cookie)** antes de ejecutar el `grep` sobre `/ui/ajustes`; en una instalación local sin autenticación no hace falta. **La cookie se comprueba al preparar la ventana (p. ej. abriendo `/ui/ajustes` en el navegador con esa sesión), no en mitad del despliegue.**
+
 - [ ] Si `fuentes_heredadas = true`: `curl -s http://127.0.0.1:8000/ui/ajustes | grep -c 'id="aviso-fuentes-heredadas"'` → **1**; la página dice «…activadas por compatibilidad con tu instalación anterior…».
 - [ ] Si no es heredado: el mismo `grep -c` → **0**.
 - [ ] (Solo si es heredado) **El PO decide** si se confirma ya: abrir Ajustes → «Fuentes de metadatos» → **Guardar** (sin cambiar nada, o apagando las que quiera). Después: `grep -c` → **0** y `fuentes_heredadas = false` en la consulta de 5.1 (`fuentes-despues-guardar.txt`). Guardar **otra** tarjeta no debe quitar el aviso.
