@@ -2,7 +2,7 @@
 {% block title %}Estado — ZascArr{% endblock %}
 {% block content %}
 <h1>Estado</h1>
-<p class="subtitle">Semáforos en vez de JSON crudo — se actualiza solo cada 10s.</p>
+<p class="subtitle">Cómo están las piezas de las que depende ZascArr. Se actualiza sola cada 10 segundos.</p>
 
 <div class="pending-card estado-summary">
   <div id="summary-dot" class="estado-dot estado-neutral"></div>
@@ -33,21 +33,35 @@
 
   const CHECK_TEXT = {
     database: {
-      ok: "Conectada y migrada",
-      unreachable: "Sin conexión con PostgreSQL",
-      migration_required: "Conectada, migración pendiente",
-      schema_incompatible: "Conectada, esquema incompleto",
+      ok: "Funciona",
+      unreachable: "No responde",
+      migration_required: "Falta terminar la actualización",
+      schema_incompatible: "Le faltan datos",
     },
-    transmission: { ok: "Conectado",  unreachable: "No disponible" },
-    amule:        { ok: "Conectado",  unreachable: "No disponible" },
-    vpn:          { ok: "Activa", warning: "Sin proteger", unknown: "Sin datos" },
+    transmission: { ok: "Conectado",  unreachable: "No responde" },
+    amule:        { ok: "Conectado",  unreachable: "No responde" },
+    vpn:          { ok: "Activa", warning: "No protege", unknown: "Sin datos" },
   };
 
+  // Qué hacer, en llano. El detalle técnico de la base de datos va en «Avisos», plegado.
   const CHECK_ACTION = {
-    unreachable: "Comprueba que PostgreSQL está corriendo y que la URL de conexión es correcta.",
-    migration_required: "Ejecuta «docker compose run --rm zascarr alembic upgrade head» (scripts/update.sh lo hace al actualizar).",
-    schema_incompatible: "El esquema no coincide con el código: revisa la restauración o el rollback.",
+    unreachable: "ZascArr no consigue hablar con su base de datos. Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización (scripts/update.sh).",
+    migration_required: "Falta un paso de la última actualización. Vuelve a ejecutarla (scripts/update.sh): lo completa sin tocar tus datos.",
+    schema_incompatible: "A la base de datos le faltan partes, seguramente por una copia de seguridad restaurada a medias. Vuelve a restaurarla o a actualizar.",
   };
+
+  // Lo que dice /api/health está escrito para quien mantiene la Pi (rutas, «timer», «stale»…): en pantalla
+  // va una frase llana y el texto original queda debajo, plegado en «Detalle técnico».
+  const VPN_TEXT = {
+    unknown: "No sabemos si la VPN está activa: la Pi no ha dejado escrito su estado. Si no usas VPN, no tienes que hacer nada.",
+    warning: "La VPN no está protegiendo las descargas, o hace rato que no sabemos de ella. Lo que se descargue por torrent iría sin esa protección.",
+  };
+
+  function warningText(key, checks, raw) {
+    if (key === "vpn") return VPN_TEXT[checks.vpn] || raw;
+    if (key === "database") return "La base de datos tiene un problema: mira qué hacer en su fila, más abajo.";
+    return raw;
+  }
 
   const CHECK_LEVEL = {
     ok: "ok", error: "bad", unreachable: "bad",
@@ -59,7 +73,7 @@
     healthy:      { level: "ok",  label: "Todo bien" },
     degraded:     { level: "warn", label: "Atención" },
     unhealthy:    { level: "bad",  label: "Error" },
-    unreachable:  { level: "neutral", label: "Sin conexión con el servidor" },
+    unreachable:  { level: "neutral", label: "ZascArr no responde" },
   };
 
   function renderHealth(data) {
@@ -93,14 +107,26 @@
       meta.level === "ok" ? "" : detailParts.join(", ");
 
     const warnings = (data && data.warnings) || {};
-    const warningMessages = Object.values(warnings);
+    const warningKeys = Object.keys(warnings);
     const warningsEl = document.getElementById("warnings");
     const warningsList = document.getElementById("warnings-list");
     warningsList.innerHTML = "";
-    if (warningMessages.length) {
-      warningMessages.forEach((msg) => {
+    if (warningKeys.length) {
+      warningKeys.forEach((key) => {
+        const raw = warnings[key];
         const li = document.createElement("li");
-        li.textContent = msg;
+        li.textContent = warningText(key, checks, raw);
+        if (li.textContent !== raw) {
+          // textContent, nunca innerHTML: el detalle puede llevar rutas o mensajes de error.
+          const det = document.createElement("details");
+          const sum = document.createElement("summary");
+          sum.textContent = "Detalle técnico";
+          const pre = document.createElement("div");
+          pre.className = "estado-detalle";
+          pre.textContent = raw;
+          det.append(sum, pre);
+          li.appendChild(det);
+        }
         warningsList.appendChild(li);
       });
       warningsEl.classList.add("visible");
