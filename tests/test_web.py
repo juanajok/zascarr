@@ -9,10 +9,9 @@ escribir estos tests, no solo supuesto.
 """
 from __future__ import annotations
 
-import fnmatch
 import re
 import tomllib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from fastapi.testclient import TestClient
 
@@ -48,16 +47,31 @@ class TestStaticAssets:
             assert r.status_code == 200, ruta
             assert r.content[:4] == b"wOF2", ruta
 
-    def test_el_paquete_instalado_incluye_las_fuentes(self):
+    def test_el_paquete_instalado_incluye_todo_static(self):
         """Mismo mecanismo que el bug de dashboard.html (E1): un fichero de `static/` que no
-        casa con `package-data` existe en el árbol pero no en la imagen de Docker."""
+        casa con `package-data` existe en el árbol pero no en la imagen de Docker. Los README
+        son para quien mantiene el repo y no viajan."""
         patrones = tomllib.loads((RAIZ / "pyproject.toml").read_text(encoding="utf-8"))[
             "tool"]["setuptools"]["package-data"]["zascarr"]
         paquete = STATIC_DIR.parent
-        for fichero in (STATIC_DIR / "vendor" / "fonts").iterdir():
-            relativa = fichero.relative_to(paquete).as_posix()
-            if fichero.suffix in {".woff2", ".txt"}:
-                assert any(fnmatch.fnmatch(relativa, p) for p in patrones), relativa
+        for fichero in STATIC_DIR.rglob("*"):
+            if fichero.is_dir() or fichero.suffix == ".md":
+                continue
+            relativa = PurePosixPath(fichero.relative_to(paquete).as_posix())
+            # Como setuptools, «*» no cruza carpetas: mismo número de tramos y cada tramo casa.
+            assert any(len(relativa.parts) == len(PurePosixPath(p).parts) and relativa.match(p)
+                       for p in patrones), relativa
+
+    def test_cada_recurso_de_la_marca_se_sirve(self):
+        """El logo va como fondo CSS y los favicons en el <head>: una ruta rota no da error
+        visible, solo un hueco donde debería ir el estallido."""
+        css = client.get("/static/web.css").text
+        cabeza = (STATIC_DIR.parent / "web" / "templates" / "base.html").read_text(encoding="utf-8")
+        rutas = set(re.findall(r'url\("(/static/brand/[^"]+)"\)', css))
+        rutas |= set(re.findall(r'href="(/static/brand/[^"]+)"', cabeza))
+        assert len(rutas) == 4, rutas
+        for ruta in rutas:
+            assert client.get(ruta).status_code == 200, ruta
 
     def test_estado_e1_sigue_funcionando_tras_montar_static_y_ui(self):
         r = client.get("/estado")

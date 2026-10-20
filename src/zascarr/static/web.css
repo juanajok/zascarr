@@ -224,18 +224,14 @@ h1, h2, h3 {
   margin-right: 8px;
 }
 
-/* Cajita de logo tipo "cabecera de tebeo" */
+/* Marca: el estallido «¡ZAS!» (static/brand). Va como fondo del ::before para no tocar el HTML;
+   el nombre lo sigue diciendo el texto del enlace, así que la imagen es decorativa. */
 .topnav a.brand::before {
   content: "";
-  width: 24px; height: 24px;
+  width: 28px; height: 28px;
   margin-right: 10px;
   flex: none;
-  border: 3px solid var(--ink);
-  border-radius: 5px;
-  background:
-    radial-gradient(var(--magenta) 1.4px, transparent 1.4px) 0 0 / 6px 6px,
-    var(--yellow);
-  transform: rotate(-4deg);
+  background: url("/static/brand/zascarr-icono.svg") center / contain no-repeat;
 }
 
 .topnav a:hover {
@@ -299,10 +295,8 @@ h1, h2, h3 {
   text-transform: uppercase; text-decoration: none; color: var(--ink);
 }
 .side .brand::before {
-  content: ""; width: 26px; height: 26px; flex: none;
-  border: 3px solid var(--ink); border-radius: 5px;
-  background: radial-gradient(var(--magenta) 1.4px, transparent 1.4px) 0 0 / 6px 6px, var(--yellow);
-  transform: rotate(-4deg);
+  content: ""; width: 32px; height: 32px; flex: none;
+  background: url("/static/brand/zascarr-icono.svg") center / contain no-repeat;
 }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
@@ -1030,7 +1024,8 @@ button[type="submit"].btn-sugerencia {
   .topnav { gap: 4px; padding: 10px 12px; }
   .topnav a { font-size: .875rem; padding: 7px 10px; }
   .topnav a.brand { font-size: 1.05rem; }
-  .topnav a.brand::before { width: 18px; height: 18px; }
+  /* A 18 px la versión completa se empasta: la de 16 px tiene la Z grande y menos contorno. */
+  .topnav a.brand::before { width: 18px; height: 18px; background-image: url("/static/brand/zascarr-favicon.svg"); }
 
   .content { padding: 16px 12px 48px; }
   .metrics-grid { grid-template-columns: 1fr 1fr; gap: 14px; }
