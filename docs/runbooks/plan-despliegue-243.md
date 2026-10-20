@@ -9,13 +9,16 @@
 - **Qué se despliega:** PR #243 (ADR 0013): `default=False` en las cuatro fuentes de metadatos, migración de datos **0020**
   (`fuentes_heredadas`), aviso en Ajustes y cambio de `LEGAL.md` (`legal_version` nueva).
 - **Cabeza revisada de la PR:** `46bd09b969f5d9a544dc592574198d744b682f92`.
-- **SHA a desplegar:** el *merge commit* de #243 en `main` → `SHA_DESPLIEGUE = ____________________` (se rellena tras la fusión).
+- **SHA a desplegar:** `SHA_DESPLIEGUE = cdf36e9552c6f9fabd0a2062b37c93e37fc94f40` (cabeza de `main` tras fusionar #244 sobre #243).
+  - `update.sh` hace `git merge --ff-only origin/main`, así que lo que llega a la Pi es **esa cabeza**, no el *merge commit* de #243 (`4ab462b1a7d0088658f1f88abf267376c8d03b8e`).
+  - **El código desplegado es el de #243**; `cdf36e9` solo añade este documento (#244, solo documentación), por lo que desplegar la cabeza de `main` es seguro.
+  - Si `main` avanza antes del despliegue, este SHA **deja de ser el que llegaría a la Pi**: se rehace 0.2–0.3 con la nueva cabeza.
 - **No autorizado hasta nueva orden del PO** (cada uno es un paso separado): fusionar #243 · desplegar en la Pi · aceptar el aviso legal
   en la Pi · ejecutar un rollback · cambiar el tablero.
 
 - [ ] 0.1 PO autoriza **fusionar** #243 (anotar fecha y quién): ____________
-- [ ] 0.2 Fusión hecha; `SHA_DESPLIEGUE` anotado y es el que contiene la migración `20261019_0020_*` y `LEGAL.md` nuevo.
-- [ ] 0.3 CI bloqueante **en verde sobre ese SHA exacto** (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
+- [ ] 0.2 Fusión hecha (#243 → `4ab462b`, #244 → `cdf36e9`); `SHA_DESPLIEGUE` = la cabeza actual de `origin/main` (`git ls-remote origin refs/heads/main`) y contiene la migración `20261019_0020_*` y el `LEGAL.md` nuevo.
+- [ ] 0.3 CI bloqueante **en verde sobre ese SHA exacto (`cdf36e9…`), no sobre `4ab462b`** (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
 - [ ] 0.4 PO autoriza **desplegar en la Pi** con ese SHA (fecha/quién): ____________
 - [ ] 0.5 Ventana acordada y la persona que aceptará el aviso legal está presente (paso 4).
 - [ ] 0.6 **Ruta real de la biblioteca en la Pi fijada y anotada en la hoja de evidencia (§8)**: `RUTA_BIBLIOTECA = ____________________`. Se sustituye en 2.3 **antes** de autorizar el despliegue; no se deja por decidir el día de la ejecución.
@@ -110,6 +113,8 @@ Repetir la consulta de 1 y guardar como `fuentes-despues.txt`; comparar con la *
 - [ ] La salida **no** contiene ninguna otra clave de `runtime_settings` (nada de secretos en la evidencia).
 
 ### 5.2 Aviso de Ajustes
+> **Acceso:** si la instancia requiere autenticación, el operador debe tener una **sesión válida (cookie)** antes de ejecutar el `grep` sobre `/ui/ajustes`; en una instalación local sin autenticación no hace falta. Comprobarlo en la preparación de la ventana (por ejemplo, abrir `/ui/ajustes` en el navegador con esa sesión) para no descubrirlo el día de la ejecución.
+
 - [ ] Si `fuentes_heredadas = true`: `curl -s http://127.0.0.1:8000/ui/ajustes | grep -c 'id="aviso-fuentes-heredadas"'` → **1**; la página dice «…activadas por compatibilidad con tu instalación anterior…».
 - [ ] Si no es heredado: el mismo `grep -c` → **0**.
 - [ ] (Solo si es heredado) **El PO decide** si se confirma ya: abrir Ajustes → «Fuentes de metadatos» → **Guardar** (sin cambiar nada, o apagando las que quiera). Después: `grep -c` → **0** y `fuentes_heredadas = false` en la consulta de 5.1 (`fuentes-despues-guardar.txt`). Guardar **otra** tarjeta no debe quitar el aviso.
