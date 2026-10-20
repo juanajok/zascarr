@@ -12,7 +12,7 @@
 - **SHA a desplegar:** `SHA_DESPLIEGUE` = la **cabeza de `origin/main` en el momento de autorizar el despliegue** (se anota en 0.2; `git ls-remote origin refs/heads/main`).
   - `update.sh` hace `git merge --ff-only origin/main`, así que a la Pi llega **esa cabeza**, no el *merge commit* de #243.
   - Referencias conocidas: #243 → `4ab462b1a7d0088658f1f88abf267376c8d03b8e` (**el código desplegado**); #244 → `cdf36e9552c6f9fabd0a2062b37c93e37fc94f40` (solo documentación, CI verde). Cada PR de solo documentación que se fusione después **mueve la cabeza** (esta incluida): por eso el SHA no se fija en el texto del plan, se anota al autorizar.
-  - **Comprobación de seguridad (0.2):** `git diff --stat 4ab462b..SHA_DESPLIEGUE` debe listar **solo** ficheros de `docs/`; si toca `src/`, `alembic/`, `scripts/`, `docker-compose.yml` u otros, se **detiene** y se vuelve a revisar.
+  - **Comprobación de seguridad (0.2):** `git diff --stat 4ab462b..SHA_DESPLIEGUE` debe listar **solo** ficheros de `docs/`. Si toca cualquier otra cosa (`src/`, `alembic/`, `scripts/`, `docker-compose.yml` u otros), **no se despliega**: se detiene, se informa al PO y **se reevalúa** qué cambió y si hace falta una nueva revisión y CI antes de seguir; no se continúa por inercia.
   - Si `main` avanza entre 0.2 y 3, se rehacen 0.2–0.3 con la nueva cabeza.
 
 - **No autorizado hasta nueva orden del PO** (cada uno es un paso separado): fusionar #243 · desplegar en la Pi · aceptar el aviso legal
@@ -115,7 +115,7 @@ Repetir la consulta de 1 y guardar como `fuentes-despues.txt`; comparar con la *
 - [ ] La salida **no** contiene ninguna otra clave de `runtime_settings` (nada de secretos en la evidencia).
 
 ### 5.2 Aviso de Ajustes
-> **Acceso:** si la instancia requiere autenticación, el operador debe tener una **sesión válida (cookie)** antes de ejecutar el `grep` sobre `/ui/ajustes`; en una instalación local sin autenticación no hace falta. Comprobarlo en la preparación de la ventana (por ejemplo, abrir `/ui/ajustes` en el navegador con esa sesión) para no descubrirlo el día de la ejecución.
+> **Acceso:** si la instancia requiere autenticación, el operador debe tener una **sesión válida (cookie)** antes de ejecutar el `grep` sobre `/ui/ajustes`; en una instalación local sin autenticación no hace falta. **La cookie se comprueba al preparar la ventana (p. ej. abriendo `/ui/ajustes` en el navegador con esa sesión), no en mitad del despliegue.**
 
 - [ ] Si `fuentes_heredadas = true`: `curl -s http://127.0.0.1:8000/ui/ajustes | grep -c 'id="aviso-fuentes-heredadas"'` → **1**; la página dice «…activadas por compatibilidad con tu instalación anterior…».
 - [ ] Si no es heredado: el mismo `grep -c` → **0**.
