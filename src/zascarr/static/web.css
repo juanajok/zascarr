@@ -1163,6 +1163,12 @@ button[type="submit"].btn-sugerencia {
   letter-spacing: .02em; padding: 0 6px;
 }
 .ajustes-desc { color: var(--ink-soft); font-size: .875rem; margin: 0 0 12px; }
+/* Lo técnico (qué dirección poner y por qué, el proxy inverso…) va plegado: la tarjeta dice en llano qué
+   hace cada cosa y quien lo necesita lo abre (presupuesto de texto, CLAUDE.md §6). */
+.ajustes-mas { margin: 0; }
+.ajustes-mas summary { cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600; }
+.ajustes-mas[open] summary { margin-bottom: 6px; }
+.ajustes-donde { font-weight: 400; color: var(--ink-soft); }
 .ajustes-hint {
   color: var(--ink-faint); font-size: .875rem; line-height: 1.4;
   margin: -4px 0 0;
@@ -1176,6 +1182,9 @@ button[type="submit"].btn-sugerencia {
   display: flex; flex-direction: column; gap: 4px;
   font-size: .875rem; font-weight: 700;
 }
+/* La casilla, a la izquierda de su texto: la regla de arriba (columna, para campo bajo etiqueta) ganaba a
+   `.legal-checkbox` y dejaba la casilla en una línea y lo que activa en la siguiente. */
+.ajustes-card label.legal-checkbox { flex-direction: row; align-items: flex-start; gap: 10px; }
 .ajustes-card input[type="text"],
 .ajustes-card input[type="password"] {
   font: inherit; padding: 8px 10px; min-height: 40px;
@@ -1243,6 +1252,10 @@ button[type="submit"].btn-sugerencia {
 .estado-warnings.visible { display: block; }
 .estado-warnings-title { font-weight: 700; margin-bottom: 6px; }
 .estado-warnings ul { margin: 6px 0 0; padding-left: 18px; }
+.estado-warnings li + li { margin-top: 8px; }
+.estado-warnings details { margin-top: 4px; font-weight: 400; }
+.estado-warnings summary { cursor: pointer; color: var(--ink-soft); font-size: .875rem; }
+.estado-detalle { font-size: .875rem; color: var(--ink-soft); overflow-wrap: anywhere; }
 
 /* ── 16c. COMPONENTES (V2) ───────────────────────────────────────────────────
    Piezas reutilizables con los nombres de la maqueta (docs/design/maqueta-ui.html), sobre los

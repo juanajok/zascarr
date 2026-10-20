@@ -223,7 +223,7 @@ async def guardar_fuentes(
         "fuentes_heredadas": False,
     })
     return templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Fuentes de metadatos"}
+        request, "_ajustes_guardado.html", {"nombre": "Fuentes de datos"}
     )
 
 
