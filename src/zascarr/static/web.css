@@ -46,6 +46,9 @@
 
 /* ── 1. TOKENS ───────────────────────────────────────────────────────────── */
 :root {
+  /* Los controles nativos (selects sin estilo, casillas, barras de desplazamiento) siguen al tema:
+     sin esto salían blancos sobre el papel oscuro. */
+  color-scheme: light;
   --paper:      #f6f3ec;
   --paper-2:    #efeadf;
   --ink:        #17171a;
@@ -104,6 +107,7 @@
 /* Tema nocturno (preferencia del sistema) */
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --paper:      #131316;
     --paper-2:    #1b1b20;
     --ink:        #f0ede4;
@@ -393,7 +397,10 @@ html { scroll-padding-bottom: 96px; }
   .nav-corto { display: inline; }
   /* El contador va a la derecha del icono, no encima. */
   .nav .badge {
-    position: absolute; top: 2px; left: calc(50% + 10px); margin: 0; min-width: 22px; padding: 0 5px;
+    position: absolute; top: 2px; left: calc(50% + 10px); margin: 0; min-width: 22px; padding: 0 4px;
+    /* El enlace parte palabras (`overflow-wrap: anywhere`) para que quepa la etiqueta; el contador lo
+       heredaba y «22» salía en dos líneas, encima de «Revisar» (caso real, 2026-10-20). */
+    white-space: nowrap; overflow-wrap: normal;
   }
   .nav .dot { position: absolute; top: 8px; left: calc(50% + 12px); margin: 0; }
 
@@ -455,19 +462,23 @@ button[type="submit"],
   transition: transform .12s, box-shadow .12s;
 }
 
-button:hover,
-button[type="submit"]:hover,
-.btn:hover,
-.btn-primary:hover,
-.series-result-item button:hover {
+/* Un botón deshabilitado (p. ej. con `hx-disabled-elt` mientras corre la petición) seguía levantándose:
+   estas reglas ganan en especificidad a la de `[disabled]`. `:where(:not([disabled]))` lo excluye SIN
+   sumar especificidad, para que las variantes que anulan el levantamiento (`.btn-ignorar:hover`…) sigan
+   ganando como antes. */
+button:where(:not([disabled])):hover,
+button[type="submit"]:where(:not([disabled])):hover,
+.btn:where(:not([disabled])):hover,
+.btn-primary:where(:not([disabled])):hover,
+.series-result-item button:where(:not([disabled])):hover {
   transform: translate(-2px, -2px);
   box-shadow: 5px 5px 0 var(--ink);
 }
 
-button:active,
-button[type="submit"]:active,
-.btn:active,
-.btn-primary:active {
+button:where(:not([disabled])):active,
+button[type="submit"]:where(:not([disabled])):active,
+.btn:where(:not([disabled])):active,
+.btn-primary:where(:not([disabled])):active {
   transform: translate(1px, 1px);
   box-shadow: 1px 1px 0 var(--ink);
 }
@@ -568,9 +579,17 @@ button[type="submit"].neutro {
   white-space: nowrap;
 }
 
-.wishlist-badge.estado-downloading,
-.wishlist-badge.estado-searching,
+/* «Por buscar»: aún no pasa nada, así que el estilo base, sin el amarillo de «en marcha». */
 .wishlist-badge.estado-wanted {
+  background: var(--paper);
+  color: var(--ink-soft);
+}
+
+/* En marcha (amarillo).
+   DOWNLOADED también dice «Descargando…» y no tenía regla: se veía distinto del mismo texto. */
+.wishlist-badge.estado-downloading,
+.wishlist-badge.estado-downloaded,
+.wishlist-badge.estado-searching {
   background: var(--caption-bg);
   color: var(--ink);
 }
@@ -633,6 +652,18 @@ button[type="submit"].neutro {
 .candidatos-vacio { color: var(--ink-soft); font-style: italic; margin: 4px 0; }
 
 /* ── 9. CAMPOS DE FORMULARIO ─────────────────────────────────────────────── */
+/* Base para los campos que no tienen regla propia (selects de Ajustes, del alta manual y del asistente):
+   salían con el aspecto del navegador, blancos en tema oscuro. `:where` no suma especificidad, así que
+   cualquier regla existente de abajo sigue mandando. */
+:where(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="file"], [type="range"]),
+       select, textarea) {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 7px 10px;
+  min-height: 40px;
+}
 .series-search,
 .issue-input,
 .filter-bar input[type="search"],
@@ -810,8 +841,12 @@ button[type="submit"].btn-sugerencia {
 .filter-search-box { position: relative; min-width: 200px; }
 .filter-search-box .series-results {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+  margin-top: 4px;
   background: var(--paper); border: 3px solid var(--ink); border-radius: var(--radius-panel);
 }
+/* Vacío no se ve: con el borde puesto, cada buscador sin escribir dejaba una barra negra de 6 px
+   bajo el campo (caso real, 2026-10-20). */
+.filter-search-box .series-results:empty { display: none; }
 .filter-search-box .series-results:not(:empty) { padding: 6px; }
 .filter-search-box .series-list a {
   display: flex; align-items: center; min-height: 40px; padding: 6px 8px; color: var(--ink); text-decoration: none; font-size: .875rem;
