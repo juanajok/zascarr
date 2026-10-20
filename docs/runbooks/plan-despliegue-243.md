@@ -23,7 +23,7 @@
 - [ ] 0.3 CI bloqueante **en verde sobre `SHA_DESPLIEGUE` exacto** (no sobre `4ab462b` ni sobre una cabeza anterior) (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
 - [ ] 0.4 PO autoriza **desplegar en la Pi** con ese SHA (fecha/quién): ____________
 - [ ] 0.5 Ventana acordada y la persona que aceptará el aviso legal está presente (paso 4).
-- [ ] 0.6 **Ruta real de la biblioteca en la Pi fijada y anotada en la hoja de evidencia (§8)**: `RUTA_BIBLIOTECA = /media/WDElements/Tebeos` (confirmada por el PO el 2026-10-20). Se usa en 2.3 y 3.6; no se deja por decidir el día de la ejecución. **Es un disco externo: comprobar que está montado** antes de cualquier inventario (`findmnt /media/WDElements` debe responder; si no, **se detiene**: un inventario de un disco no montado saldría vacío y parecería «sin cambios»).
+- [ ] 0.6 **Ruta real de la biblioteca en la Pi fijada y anotada en la hoja de evidencia (§8)**: `RUTA_BIBLIOTECA = /media/WDElements/Tebeos` (confirmada por el PO el 2026-10-20). Se usa en 2.3 y 3.6; no se deja por decidir el día de la ejecución. **Es un disco externo: comprobar que está montado** antes de cualquier inventario (`findmnt /media/WDElements` debe responder). **Un aviso de montaje obliga a parar y consultar al PO; no se continúa**: un inventario de un disco no montado saldría vacío y parecería «sin cambios».
 - [ ] 0.7 **Condición de entrada (§1.3):** la predicción de la migración 0020 está **escrita y revisada por el PO** (nombre/fecha: ____________). **No se ejecuta `update.sh` mientras esta casilla esté sin marcar.**
 
 ## 1. Estado previo (solo lectura) y qué se espera
@@ -75,7 +75,7 @@ sudo sha256sum /opt/zascarr/.env | cut -d' ' -f1 > "$EV/env-sha256-antes.txt"   
 - [ ] 2.3 **Biblioteca:** no se copia (el actualizador no la toca). Se toma un **inventario** antes y después para demostrar que no cambió: **ruta, tamaño y fecha de modificación de todos los ficheros**, y **SHA-256 de una muestra determinista** (un SHA-256 de toda la biblioteca en una Pi con disco USB puede tardar horas y aporta poco a este objetivo: tamaño y fecha detectan cualquier cambio relevante; la muestra añade comprobación de contenido).
   ```bash
   RUTA_BIBLIOTECA=/media/WDElements/Tebeos
-  findmnt /media/WDElements >/dev/null || echo "DISCO NO MONTADO: SE DETIENE EL PLAN (no continuar con los comandos siguientes)"
+  findmnt /media/WDElements >/dev/null || echo "DISCO NO MONTADO: PARAR Y CONSULTAR AL PO (no continuar con los comandos siguientes)"
   cd "$RUTA_BIBLIOTECA"
   # inventario completo: ruta <TAB> tamaño <TAB> mtime (ordenado, reproducible)
   sudo find . -type f -printf '%P\t%s\t%T@\n' | LC_ALL=C sort > "$EV/biblioteca-antes.tsv"
@@ -85,6 +85,7 @@ sudo sha256sum /opt/zascarr/.env | cut -d' ' -f1 > "$EV/env-sha256-antes.txt"   
   cut -f1 "$EV/biblioteca-antes.tsv" | awk -v k="$K" 'NR % k == 1' > "$EV/biblioteca-muestra-lista.txt"
   while IFS= read -r f; do sudo sha256sum -- "$f"; done < "$EV/biblioteca-muestra-lista.txt" > "$EV/biblioteca-muestra-antes.sha256"
   ```
+  *Cómo se genera la muestra (reproducible):* se toma el inventario ordenado con `LC_ALL=C sort`, `N` = su número de líneas, `K = N / 50 + 1` (división entera) y se eligen las líneas `1, K+1, 2K+1, …` (`awk 'NR % K == 1'`), es decir, ~50 ficheros repartidos por toda la biblioteca. El mismo inventario y el mismo `K` dan la misma muestra; se guardan `biblioteca-n-ficheros.txt` y `biblioteca-muestra-lista.txt` en la evidencia.
   *Limitación:* nombres con salto de línea romperían el TSV; si `find` y el inventario no coinciden en número (`find . -type f | wc -l` ≠ `N`), se detiene y se reevalúa.
   La copia física de la biblioteca queda fuera de este plan (ver la tabla de arriba).
 - [ ] 2.4 Paquete de evidencia previa con hash: `tar -czf "$EV.tar.gz" -C /home/pi "$(basename "$EV")" && sha256sum "$EV.tar.gz" > "$EV.tar.gz.sha256"`.
