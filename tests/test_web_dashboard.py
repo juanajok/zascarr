@@ -8,6 +8,7 @@ recalcula ni afirma de más. Las clases FakeSession/FakeResult las reutilizan ot
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from unittest.mock import patch
@@ -273,7 +274,25 @@ class TestProcedenciaDeLasCifras:
         assert "Tebeos encontrados" in html
         assert "al mirar tu disco el 3 de octubre de 2026" in html
         assert "1500 registrados ahora" in html
-        assert "432 comparados a fondo el 3 de octubre de 2026" in html
+        assert "432 revisados en busca de repetidos el 3 de octubre de 2026" in html
+
+    def test_un_informe_viejo_dice_cuanto_hace_y_ofrece_volver_a_mirar(self):
+        """Caso real (2026-10-20): «Miramos tu disco el 28 de septiembre» sin más; nada decía que
+        el dato tenía tres semanas ni cómo renovarlo desde el Inicio."""
+        informe = InformeDisco(fecha=FECHA, archivos_leidos=1542, archivos_comparados=432)
+        v = replace(vista(adopcion=EstadoAdopcion.HECHA, registrados=1325, informe=informe),
+                    informe_hace="hace 3 semanas", informe_antiguo=True)
+        html = pagina(v)
+        assert "el 3 de octubre de 2026 (hace 3 semanas) y encontramos" in html
+        assert '<a href="/ui/auditoria">Volver a mirar el disco</a>' in html
+
+    def test_un_informe_reciente_no_invita_a_repetirlo(self):
+        informe = InformeDisco(fecha=FECHA, archivos_leidos=1542, archivos_comparados=432)
+        v = replace(vista(adopcion=EstadoAdopcion.HECHA, registrados=1325, informe=informe),
+                    informe_hace="ayer", informe_antiguo=False)
+        html = pagina(v)
+        assert "(ayer)" in html
+        assert "Volver a mirar el disco" not in html
 
     def test_informe_sin_adopcion_no_dice_que_la_biblioteca_este_registrada(self):
         informe = InformeDisco(fecha=FECHA, archivos_leidos=1542, archivos_comparados=432)
