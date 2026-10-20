@@ -17,6 +17,7 @@ LEGAL.md invalida automáticamente cualquier aceptación anterior.
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -45,8 +46,22 @@ def current_legal_version() -> str:
     return hashlib.sha256(_legal_md_text().encode("utf-8")).hexdigest()[:16]
 
 
+#: Marcas de cita que quedaron en LEGAL.md («[web:168]»): no remiten a nada que se pueda abrir.
+_MARCA_DE_CITA = re.compile(r"\s*\[web:\d+\]")
+#: Un elemento de lista pegado a la línea anterior: Python-Markdown exige una línea en blanco antes
+#: de la lista y, sin ella, «Esto significa que: - Descargar…» salía como un párrafo con guiones.
+_LISTA_PEGADA = re.compile(r"^(?=[^\n]*\S)(?![ \t]*[-*] |[ \t]*\|)(.*)\n(?=[-*] )", re.MULTILINE)
+
+
+def _texto_para_pintar(texto: str) -> str:
+    """Solo la PRESENTACIÓN: el hash (`current_legal_version`) sigue saliendo del fichero tal cual,
+    así que pintarlo mejor no invalida las aceptaciones ya dadas. Corregir LEGAL.md sí lo haría."""
+    texto = _MARCA_DE_CITA.sub("", texto)
+    return _LISTA_PEGADA.sub(r"\1\n\n", texto)
+
+
 def render_legal_html() -> str:
-    return markdown.markdown(_legal_md_text(), extensions=["tables"])
+    return markdown.markdown(_texto_para_pintar(_legal_md_text()), extensions=["tables"])
 
 
 async def get_acknowledgment(db: AsyncSession) -> LegalAcknowledgment | None:

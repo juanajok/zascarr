@@ -179,6 +179,37 @@ class TestFichaSerie:
         assert "no se puede calcular huecos" in r.text
 
 
+    def test_sin_poder_calcular_huecos_no_dice_que_este_completa(self):
+        """Caso real (2026-10-20): 8 de 30 con un total que no cuenta grapas decía «Ningún hueco —
+        la tienes completa». Sin cálculo fiable no hay «completa» ni «0 te faltan»."""
+        series = make_series(total_issues=30, metadata_source=MetadataSource.ANILIST.value)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True)]),
+            acuse(), retirados(),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert "la tienes completa" not in r.text
+        assert "te faltan" not in r.text and "Te faltan" not in r.text
+        assert "30 números según la fuente — 2 en tu biblioteca." in r.text
+        assert ("No sabemos cuáles faltan: el total de la serie no consta como número de grapas"
+                in r.text)
+
+    def test_completa_solo_si_se_pudo_calcular(self):
+        series = make_series(total_issues=2)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True)]),
+            acuse(), retirados(),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert "Ningún hueco — la tienes completa." in r.text
+        assert "0 te faltan." in r.text
+
+
 class TestPoliticaBusquedaD8:
     """D8: el selector de la ficha de serie.
 
