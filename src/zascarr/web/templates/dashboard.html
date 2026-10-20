@@ -39,7 +39,9 @@
   <h1>Inicio</h1>
 
   {% if informe %}
-  <p class="subtitle">Miramos tu disco el {{ informe.fecha|fecha_llana }} y encontramos <b>{{ informe.archivos_leidos }}</b> tebeos. Ahora ZascArr tiene registrados <b>{{ r.archivos_registrados }}</b>.</p>
+  {#- La fecha exacta da la procedencia; «hace…» dice si sigue valiendo sin hacer cuentas. Si es vieja,
+      la forma de renovarla va al lado del dato, no en otra pantalla. -#}
+  <p class="subtitle">Miramos tu disco el {{ informe.fecha|fecha_llana }}{% if v.informe_hace %} ({{ v.informe_hace }}){% endif %} y encontramos <b>{{ informe.archivos_leidos }}</b> tebeos. Ahora ZascArr tiene registrados <b>{{ r.archivos_registrados }}</b>.{% if v.informe_antiguo %} <a href="/ui/auditoria">Volver a mirar el disco</a>{% endif %}</p>
   {% elif r.archivos_registrados %}
   <p class="subtitle">ZascArr tiene registrados <b>{{ r.archivos_registrados }}</b> tebeos. Todavía no has mirado tu disco en busca de repetidos.</p>
   {% else %}
