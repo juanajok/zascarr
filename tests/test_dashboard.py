@@ -27,3 +27,18 @@ class TestEstadoTemplate:
         # plantilla, este test lo detecta.
         for label in ("Base de datos", "Transmission", "aMule", "VPN"):
             assert label in html
+
+    def test_estado_habla_en_llano(self):
+        """Revisión visual (2026-10-20): «Semáforos en vez de JSON crudo», «Sin conexión con
+        PostgreSQL» o «docker compose run … alembic upgrade head» no son para el coleccionista."""
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
+        for jerga in ("JSON crudo", "Sin conexión con PostgreSQL", "alembic", "migración pendiente",
+                      "esquema incompleto"):
+            assert jerga not in html, jerga
+
+    def test_el_detalle_tecnico_se_pliega_y_se_pinta_como_texto(self):
+        """El aviso de la VPN traía una ruta y «el timer no corre»: va plegado, y con textContent
+        (el detalle puede llevar rutas o mensajes de error; nunca innerHTML)."""
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
+        assert 'sum.textContent = "Detalle técnico"' in html
+        assert "pre.textContent = raw" in html
