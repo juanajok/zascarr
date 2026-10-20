@@ -28,7 +28,6 @@ from zascarr.services.primeros_pasos import (
     calcular_primeros_pasos,
 )
 from zascarr.services.resumen import Completitud, ResumenBiblioteca
-from zascarr.web.routes import TEMPLATES_DIR
 
 
 class _FakeScalars:
@@ -246,16 +245,13 @@ class TestPasosEnLaPlantilla:
         html = pagina(vista(adopcion=EstadoAdopcion.PENDIENTE))
         assert _primarios_dentro_y_fuera_de_details(html) == ([], ["/ui/auditoria"])
 
-    def test_el_boton_de_buscar_es_secundario_y_el_css_lo_hace_neutro(self):
-        """Quitar `.primary` no basta: `button[type=submit]` es amarillo en el CSS global."""
+    def test_el_boton_de_buscar_es_secundario(self):
+        """Un envío ya no es amarillo por serlo (el amarillo es opt-in con `.primary`): el de
+        buscar, que no es la acción principal del Inicio, no lo lleva."""
         html = pagina(vista())
         assert 'class="btn sm neutro">Buscar' in html
-        css = (TEMPLATES_DIR.parent.parent / "static" / "web.css").read_text(encoding="utf-8")
-        amarillo = css.index('button[type="submit"],\n.btn-primary,\n.btn.primary {')
-        neutro = css.index('button[type="submit"].neutro {')
-        assert neutro > amarillo                      # gana por orden a igual o menor especificidad
-        regla = css[neutro:css.index("}", neutro)]
-        assert "--btn-bg: var(--paper)" in regla and "var(--yellow)" not in regla
+        inicio = html.index('id="q-inicio"')
+        assert "primary" not in html[inicio:html.index("</form>", inicio)]
 
     def test_con_algo_por_hacer_la_lista_va_abierta(self):
         html = pagina(vista(adopcion=EstadoAdopcion.PENDIENTE))
