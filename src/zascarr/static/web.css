@@ -995,6 +995,12 @@ button[type="submit"].btn-sugerencia {
   background: var(--paper-2);
 }
 .step.hecho::before { content: "✓"; background: var(--ok-bg); color: var(--ok-t); }
+/* Un paso hecho deja constancia, pero no compite con el que toca: más bajo, borde fino y sin relleno. */
+.step.hecho {
+  grid-template-columns: 32px 1fr auto; gap: 12px; padding: 8px 14px;
+  border-width: 2px; background: transparent;
+}
+.step.hecho::before { width: 30px; height: 30px; border-width: 2px; font-size: 1rem; }
 .step.siguiente { background: var(--caption-bg); box-shadow: var(--shadow-ink); }
 .step.siguiente::before { background: var(--yellow); color: var(--on-yellow); }
 .step.bloqueado { border-style: dashed; }
@@ -1003,6 +1009,8 @@ button[type="submit"].btn-sugerencia {
 .step h3 { margin: 0 0 2px; font-family: var(--font-body); font-weight: 800; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
 .step h3 .chip { margin-left: 6px; vertical-align: middle; }
 .step p { margin: 0; }
+.step.hecho h3 { font-size: .95rem; font-weight: 700; }
+.step.hecho p { font-size: .875rem; }
 .muted { color: var(--ink-soft); }
 .pasos-plegados summary { cursor: pointer; font-weight: 700; padding: 10px 0; min-height: 44px; }
 .siguiente-paso {
@@ -1017,7 +1025,10 @@ button[type="submit"].btn-sugerencia {
 .pasos-plegados .steps { margin-top: 10px; }
 @media (max-width: 768px) {
   .step { grid-template-columns: 44px 1fr; }
+  .step.hecho { grid-template-columns: 32px 1fr; }
   .step .btn { grid-column: 1 / -1; }
+  /* En un paso hecho el botón es secundario: alineado con el texto, no a todo el ancho. */
+  .step.hecho .btn { grid-column: 2; justify-self: start; }
   .siguiente-paso { grid-template-columns: 1fr; }
 }
 
