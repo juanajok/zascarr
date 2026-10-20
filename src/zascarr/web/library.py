@@ -40,6 +40,21 @@ _TRADICION_LABEL = {
 }
 
 
+
+def _etiqueta_tradicion(tradicion) -> str:
+    """La etiqueta del filtro también en la tarjeta: antes la tarjeta enseñaba el valor interno
+    («franco_belgian», «american») justo debajo de un filtro que ya decía «Franco-belga (BD)»."""
+    if not tradicion:
+        return ""
+    try:
+        return _TRADICION_LABEL[ComicTradition(tradicion)]
+    except (ValueError, KeyError):
+        return str(tradicion)
+
+
+templates.env.filters["tradicion"] = _etiqueta_tradicion
+
+
 def _uuid_or_none(value: str) -> UUID | None:
     """Los campos ocultos del filtro llegan como "" cuando no hay
     personaje/saga/editorial seleccionados — FastAPI no acepta "" para
