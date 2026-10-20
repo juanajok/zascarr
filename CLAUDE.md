@@ -107,7 +107,9 @@ Sigue las guías oficiales con estas precisiones locales:
 - **Caché local-first.** Portadas, metadatos, TODO se escribe a disco/BD
   y se sirve local después. Endpoints de imagen llevan `Cache-Control:
   private, max-age=86400` + `ETag` por mtime (`utils/cover.py::
-  cached_image_response`).
+  cached_image_response`). `/static` va con `Cache-Control: no-cache`
+  (`main.py::RevalidatedStaticFiles`): el navegador revalida con el ETag y recibe un 304
+  vacío si nada cambió. Sin ello, tras `update.sh` seguía pintando el CSS antiguo.
 - El refresco periódico del orchestrator/importer corre en el propio proceso (un solo worker), con los
   intervalos de `config.py`; no hay cola ni caché externa (ADR-0011: Redis retirado).
 
