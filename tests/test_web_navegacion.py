@@ -946,3 +946,20 @@ class TestRevisionVisual:
         for estado in (":hover", ":active"):
             assert f'button[type="submit"]:where(:not([disabled])){estado}' in css
             assert f'button[type="submit"]{estado}' not in css
+
+    def test_un_aviso_no_lleva_la_sombra_de_los_botones(self):
+        """Con la sombra dura desplazada, una caja de aviso parecía algo que pulsar."""
+        import re
+        css = re.sub(r"/\*.*?\*/", "", _css(), flags=re.S)
+        regla = css[css.index(".caption,\n.legal-notice-warn {"):]
+        regla = regla[:regla.index("}")]
+        assert "box-shadow" not in regla
+
+    def test_los_titulos_frase_van_en_archivo_y_sin_mayusculas(self):
+        css = _css()
+        regla = css[css.index(".titulo-frase,"):]
+        regla = regla[:regla.index("}")]
+        assert "var(--font-body)" in regla and "text-transform: none" in regla
+        from zascarr.web.routes import TEMPLATES_DIR
+        carpetas = (TEMPLATES_DIR / "carpetas.html").read_text(encoding="utf-8")
+        assert 'class="carpeta-titulo titulo-frase">{{ g.clave }}' in carpetas

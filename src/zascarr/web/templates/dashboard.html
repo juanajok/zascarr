@@ -70,7 +70,7 @@
     {% if pasos.completo %}
     {#- La acción recomendada se queda FUERA del bloque plegado: un botón dentro de un <details>
         cerrado existe en el HTML pero nadie lo ve ni lo alcanza con el teclado. -#}
-    <h2 id="h-pasos">Lo básico está hecho</h2>
+    <h2 id="h-pasos" class="titulo-frase">Lo básico está hecho</h2>
     {% set sig = pasos.principal %}
     {% if sig %}
     <div class="siguiente-paso">
@@ -87,7 +87,7 @@
     </details>
     {% else %}
     <div class="row-pasos">
-      <h2 id="h-pasos">Tu tebeoteca, paso a paso</h2>
+      <h2 id="h-pasos" class="titulo-frase">Tu tebeoteca, paso a paso</h2>
       <span class="muted">{{ pasos.hechos }} de {{ pasos.total }} hechos · lo «opcional» puedes saltártelo</span>
     </div>
     {{ ui.progreso(pasos.hechos, pasos.total, "Pasos hechos") }}

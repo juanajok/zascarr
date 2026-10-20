@@ -388,7 +388,13 @@ class TestCssDeLosComponentes:
 
     def test_btn_primary_comparte_regla_con_el_nombre_antiguo(self):
         regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
-        assert "button[type=\"submit\"]" in regla
+        assert "button.primary" in regla
+
+    def test_un_envio_no_es_principal_por_serlo(self):
+        """Revisión visual (2026-10-20): cualquier `type="submit"` salía amarillo y Ajustes enseñaba
+        siete «Guardar» principales. El amarillo es opt-in con `.primary`."""
+        regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
+        assert 'button[type="submit"]' not in regla
 
     def test_el_boton_pequeno_conserva_los_40_px(self):
         """`.btn.sm` solo recorta el relleno: la altura mínima la fija la regla base de V1."""

@@ -33,7 +33,7 @@
   <h2>Biblioteca registrada</h2>
   <p class="audit-why">Ni un archivo se ha movido ni renombrado.</p>
   {% else %}
-  <h2>El registro ha quedado incompleto</h2>
+  <h2 class="titulo-frase">El registro ha quedado incompleto</h2>
   {% call ui.aviso("amber") %}
     {% if reg.fase.value == "interrumpido" %}
     El registro se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba guardado.
@@ -84,7 +84,7 @@
 
 {% elif estado.value == "hecha" %}
 <section id="registro" class="audit-block">
-  <h2>Tu biblioteca ya está registrada</h2>
+  <h2 class="titulo-frase">Tu biblioteca ya está registrada</h2>
   <p class="audit-ok">No hay nada nuevo que registrar.</p>
 </section>
 
