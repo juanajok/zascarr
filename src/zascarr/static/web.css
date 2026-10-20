@@ -1011,7 +1011,7 @@ button[type="submit"].btn-sugerencia {
   border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--caption-bg);
   box-shadow: var(--shadow-ink);
 }
-.siguiente-paso h3 { margin: 0 0 2px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.siguiente-paso h3 { margin: 0 0 2px; font-family: var(--font-body); font-weight: 800; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
 .siguiente-paso h3 .chip { margin-left: 6px; vertical-align: middle; }
 .siguiente-paso p { margin: 0; }
 .pasos-plegados .steps { margin-top: 10px; }
