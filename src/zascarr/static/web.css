@@ -424,6 +424,8 @@ html { scroll-padding-bottom: 96px; }
 }
 
 .subtitle { color: var(--ink-soft); margin-top: -6px; }
+/* De dónde sale lo que dice la frase de entrada: pegado a ella y en segundo plano. */
+.procedencia { font-size: .9rem; margin-top: -10px; }
 .empty { color: var(--ink-faint); font-style: italic; }
 
 /* ── 5. BOTONES ──────────────────────────────────────────────────────────── */
