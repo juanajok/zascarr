@@ -94,6 +94,19 @@ class TestCargarInicio:
         v = await inicio.cargar_inicio(FakeSession(_cola(informe=(fecha, None, None))))
         assert (v.informe.archivos_leidos, v.informe.archivos_comparados) == (0, 0)
 
+    async def test_dice_cuanto_hace_que_se_miro_el_disco(self, adopcion, sin_fuente):
+        """Fecha muy anterior a cualquier ejecución de la suite: siempre es vieja."""
+        adopcion(EstadoAdopcion.HECHA)
+        fecha = datetime(2020, 1, 1, tzinfo=UTC)
+        v = await inicio.cargar_inicio(FakeSession(_cola(informe=(fecha, 10, "5"))))
+        assert v.informe_hace == "hace más de un año"
+        assert v.informe_antiguo is True
+
+    async def test_sin_informe_no_hay_antiguedad(self, adopcion, sin_fuente):
+        adopcion(EstadoAdopcion.HECHA)
+        v = await inicio.cargar_inicio(FakeSession(_cola()))
+        assert (v.informe_hace, v.informe_antiguo) == (None, False)
+
     async def test_las_series_seguidas_son_las_de_deseados(self, adopcion, sin_fuente):
         adopcion(EstadoAdopcion.HECHA)
         v = await inicio.cargar_inicio(FakeSession(_cola(seguidas=4)))
