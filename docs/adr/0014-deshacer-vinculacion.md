@@ -1,7 +1,7 @@
 # ADR 0014: Deshacer una vinculación — comprobante e historial (D2)
 
-- Estado: **Propuesto** · 2026-10-20. Cierra **D2** de la épica BL-R (#228) para BL-R1 (#230). **No autoriza código ni migración**: queda pendiente de la
-  revisión del revisor y de la decisión del PO. Contrato técnico: `docs/design/bl-r1-deshacer-vinculacion.md`.
+- Estado: **Aceptado** · 2026-10-20 (propuesto y aceptado el mismo día tras la revisión final del revisor/PO). Cierra **D2** de la épica BL-R (#228) para BL-R1 (#230). **No autoriza
+  código ni migración por sí mismo**: la implementación de #253 requiere además la orden expresa del PO. Contrato técnico: `docs/design/bl-r1-deshacer-vinculacion.md`.
 - Relacionado: ADR 0006 (asignación recuperable), ADR 0007 (vincular en su sitio), `docs/design/benchmark-reconciliacion-plex.md` (ficha BL-R0, §8 D1–D7).
 
 ## Contexto
