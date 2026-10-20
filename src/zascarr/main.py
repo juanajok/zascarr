@@ -27,6 +27,22 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+class RevalidatedStaticFiles(StaticFiles):
+    """Estáticos que el navegador guarda pero comprueba en cada uso.
+
+    Sin `Cache-Control`, el navegador decide por su cuenta cuánto tiempo reutiliza
+    `/static/web.css` sin preguntar: tras una actualización seguía pintando la UI
+    antigua (marca y tipografía) hasta forzar la recarga. Con `no-cache` pregunta
+    siempre con el ETag que ya manda Starlette y, si nada cambió, recibe un 304 vacío:
+    en la red de casa cuesta una petición sin cuerpo.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 async def _ejecutar_ciclo_y_avisar(notifier, session_factory, importer_cls):
     """Scan → commit → aviso (E4). El aviso va DESPUÉS del `commit` y solo con
     archivos nuevos; si el `commit` falla (rollback), la excepción se propaga y
@@ -346,7 +362,7 @@ def create_app() -> FastAPI:
     app.get("/", include_in_schema=False)(
         lambda: RedirectResponse("/ui/", status_code=307)
     )
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.exception_handler(ProgrammingError)
     async def _esquema_incompleto_handler(request: Request, exc: ProgrammingError):

@@ -36,6 +36,21 @@ class TestStaticAssets:
         r = client.get("/static/web.css")
         assert r.status_code == 200
 
+    def test_estaticos_obligan_a_revalidar_para_que_una_actualizacion_se_vea(self):
+        """Bug real (2026-10-20): tras `update.sh` el navegador seguía pintando la marca y la
+        tipografía antiguas porque reutilizaba `web.css` sin preguntar; hacía falta Ctrl+Mayús+R."""
+        r = client.get("/static/web.css")
+        assert r.headers["cache-control"] == "no-cache"
+        assert r.headers.get("etag")
+
+    def test_estatico_sin_cambios_responde_304_sin_cuerpo(self):
+        """La revalidación cuesta una petición vacía, no volver a bajar el fichero."""
+        etag = client.get("/static/web.css").headers["etag"]
+        r = client.get("/static/web.css", headers={"If-None-Match": etag})
+        assert r.status_code == 304
+        assert r.content == b""
+        assert r.headers["cache-control"] == "no-cache"
+
     def test_cada_font_face_apunta_a_un_woff2_que_se_sirve(self):
         """Una ruta de @font-face rota no da error visible: el navegador cae en silencio a
         Impact o a la fuente del sistema y en Android los titulares pierden la rotulación."""
