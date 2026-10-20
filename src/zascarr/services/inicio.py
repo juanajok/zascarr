@@ -18,6 +18,7 @@ Solo lee.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,8 @@ from zascarr.services.primeros_pasos import (
     InformeDisco,
     PrimerosPasos,
     calcular_primeros_pasos,
+    hace_cuanto,
+    informe_antiguo,
 )
 from zascarr.services.resumen import ResumenBiblioteca, resumen_biblioteca
 from zascarr.services.review import ReviewService
@@ -44,6 +47,10 @@ class VistaInicio:
     pasos: PrimerosPasos
     informe: InformeDisco | None
     archivos_sin_clasificar: int
+    #: «hace 3 semanas»: cuánto hace que se miró el disco (None sin informe).
+    informe_hace: str | None = None
+    #: Si la mirada es vieja, el Inicio ofrece repetirla junto a la fecha.
+    informe_antiguo: bool = False
 
 
 async def ultimo_informe(db: AsyncSession) -> InformeDisco | None:
@@ -85,5 +92,8 @@ async def cargar_inicio(db: AsyncSession) -> VistaInicio:
         aviso_legal_aceptado=legal,
         hay_fuente_de_busqueda=hay_fuente_de_busqueda(get_settings()),
     ))
+    ahora = datetime.now(UTC)
     return VistaInicio(resumen=resumen, pasos=pasos, informe=informe,
-                       archivos_sin_clasificar=sin_clasificar)
+                       archivos_sin_clasificar=sin_clasificar,
+                       informe_hace=hace_cuanto(informe.fecha, ahora) if informe else None,
+                       informe_antiguo=bool(informe and informe_antiguo(informe.fecha, ahora)))

@@ -8,7 +8,7 @@ afirmar cifras sin decir de dónde salen.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -20,6 +20,8 @@ from zascarr.services.primeros_pasos import (
     InformeDisco,
     calcular_primeros_pasos,
     fecha_llana,
+    hace_cuanto,
+    informe_antiguo,
 )
 
 INFORME = InformeDisco(fecha=datetime(2026, 10, 3, 12, 0, tzinfo=UTC),
@@ -93,7 +95,7 @@ class TestAdopcionYAuditoria:
         res = calcular_primeros_pasos(estado(
             adopcion=EstadoAdopcion.HECHA, archivos_registrados=1542, informe=INFORME))
         p = paso(res, ClavePaso.BIBLIOTECA)
-        assert "432 comparados a fondo el 3 de octubre de 2026" in p.detalle
+        assert "432 revisados en busca de repetidos el 3 de octubre de 2026" in p.detalle
         assert p.accion == "Ver duplicados"
 
     def test_adopcion_hecha_que_no_registro_nada_no_presume_de_tebeos(self):
@@ -241,3 +243,24 @@ class TestPureza:
 def test_fecha_llana_no_depende_del_locale():
     assert fecha_llana(datetime(2026, 1, 5, 12, 0)) == "5 de enero de 2026"
     assert fecha_llana(datetime(2026, 12, 31, 12, 0)) == "31 de diciembre de 2026"
+
+
+@pytest.mark.parametrize(("dias", "texto"), [
+    (0, "hoy"), (1, "ayer"), (5, "hace 5 días"), (13, "hace 13 días"),
+    (14, "hace 2 semanas"), (22, "hace 3 semanas"), (59, "hace 8 semanas"),
+    (60, "hace 2 meses"), (364, "hace 12 meses"), (365, "hace más de un año"),
+])
+def test_hace_cuanto_cuenta_dias_de_calendario(dias, texto):
+    mirada = datetime(2026, 1, 10, 12, 0)
+    assert hace_cuanto(mirada, mirada + timedelta(days=dias)) == texto
+
+
+def test_lo_de_anoche_es_ayer_aunque_no_hayan_pasado_24_horas():
+    assert hace_cuanto(datetime(2026, 10, 19, 23, 50), datetime(2026, 10, 20, 0, 10)) == "ayer"
+
+
+def test_el_informe_es_viejo_a_partir_de_dos_semanas():
+    """Caso real: el disco se miró el 28 de septiembre y el Inicio se abrió el 20 de octubre."""
+    mirada = datetime(2026, 9, 28, 18, 0, tzinfo=UTC)
+    assert informe_antiguo(mirada, datetime(2026, 10, 20, 18, 0, tzinfo=UTC))
+    assert not informe_antiguo(mirada, mirada + timedelta(days=13))
