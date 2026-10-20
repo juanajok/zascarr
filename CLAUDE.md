@@ -107,7 +107,9 @@ Sigue las guías oficiales con estas precisiones locales:
 - **Caché local-first.** Portadas, metadatos, TODO se escribe a disco/BD
   y se sirve local después. Endpoints de imagen llevan `Cache-Control:
   private, max-age=86400` + `ETag` por mtime (`utils/cover.py::
-  cached_image_response`).
+  cached_image_response`). `/static` va con `Cache-Control: no-cache`
+  (`main.py::RevalidatedStaticFiles`): el navegador revalida con el ETag y recibe un 304
+  vacío si nada cambió. Sin ello, tras `update.sh` seguía pintando el CSS antiguo.
 - El refresco periódico del orchestrator/importer corre en el propio proceso (un solo worker), con los
   intervalos de `config.py`; no hay cola ni caché externa (ADR-0011: Redis retirado).
 
@@ -161,8 +163,10 @@ como marco permanente.
 - **Tipografía** (decidido el 2026-10-20): dos familias libres (OFL), servidas por la
   app desde `static/vendor/fonts` y nunca desde un CDN: **Anton** para titulares y
   rótulos en mayúsculas (`--font-display`), **Archivo** variable para todo lo que se
-  lee y se usa (`--font-body`). Sin tercera familia de «rotulación de cómic»: las
-  insignias usan `--font-display`. Ni fuentes comerciales (el repo es GPL y cada
+  lee y se usa (`--font-body`). Anton **solo en mayúsculas**: una frase (los títulos de
+  paso del Inicio, por ejemplo) va en Archivo negrita, y los chips fijan su fuente en vez
+  de heredarla del titular que los contiene. Sin tercera familia de «rotulación de
+  cómic». Ni fuentes comerciales (el repo es GPL y cada
   instalación las redistribuiría) ni fuentes de cómic en controles o textos largos.
   Cifras que se comparan (contadores, números de grapa, métricas) con
   `font-variant-numeric: tabular-nums`. Ficha y forma de actualizar en

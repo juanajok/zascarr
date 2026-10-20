@@ -998,7 +998,9 @@ button[type="submit"].btn-sugerencia {
 .step.siguiente { background: var(--caption-bg); box-shadow: var(--shadow-ink); }
 .step.siguiente::before { background: var(--yellow); color: var(--on-yellow); }
 .step.bloqueado { border-style: dashed; }
-.step h3 { margin: 0 0 2px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+/* Son frases enteras, no rótulos: en Anton y en minúsculas costaban de leer, y en mayúsculas
+   romperían el límite de «mayúsculas solo en rótulos de ≤ 3 palabras». Van en la fuente de lectura. */
+.step h3 { margin: 0 0 2px; font-family: var(--font-body); font-weight: 800; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
 .step h3 .chip { margin-left: 6px; vertical-align: middle; }
 .step p { margin: 0; }
 .muted { color: var(--ink-soft); }
@@ -1009,7 +1011,7 @@ button[type="submit"].btn-sugerencia {
   border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--caption-bg);
   box-shadow: var(--shadow-ink);
 }
-.siguiente-paso h3 { margin: 0 0 2px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.siguiente-paso h3 { margin: 0 0 2px; font-family: var(--font-body); font-weight: 800; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
 .siguiente-paso h3 .chip { margin-left: 6px; vertical-align: middle; }
 .siguiente-paso p { margin: 0; }
 .pasos-plegados .steps { margin-top: 10px; }
@@ -1198,7 +1200,8 @@ button[disabled], .btn[disabled] {
 /* Chip de estado: un estado → un aspecto (web/componentes.py). El icono acompaña al color. */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  font-size: .875rem; font-weight: 700;
+  /* Fuente explícita: heredada, el mismo chip salía en Anton dentro de un titular y en Archivo fuera. */
+  font-family: var(--font-body); font-size: .875rem; font-weight: 700;
   padding: 2px 10px;
   border: 2px solid var(--ink); border-radius: var(--radius-pill);
   background: var(--paper); color: var(--ink);
