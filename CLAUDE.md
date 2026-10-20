@@ -163,8 +163,10 @@ como marco permanente.
 - **Tipografía** (decidido el 2026-10-20): dos familias libres (OFL), servidas por la
   app desde `static/vendor/fonts` y nunca desde un CDN: **Anton** para titulares y
   rótulos en mayúsculas (`--font-display`), **Archivo** variable para todo lo que se
-  lee y se usa (`--font-body`). Sin tercera familia de «rotulación de cómic»: las
-  insignias usan `--font-display`. Ni fuentes comerciales (el repo es GPL y cada
+  lee y se usa (`--font-body`). Anton **solo en mayúsculas**: una frase (los títulos de
+  paso del Inicio, por ejemplo) va en Archivo negrita, y los chips fijan su fuente en vez
+  de heredarla del titular que los contiene. Sin tercera familia de «rotulación de
+  cómic». Ni fuentes comerciales (el repo es GPL y cada
   instalación las redistribuiría) ni fuentes de cómic en controles o textos largos.
   Cifras que se comparan (contadores, números de grapa, métricas) con
   `font-variant-numeric: tabular-nums`. Ficha y forma de actualizar en
