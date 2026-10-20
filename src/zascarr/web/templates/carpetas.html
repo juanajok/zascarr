@@ -30,7 +30,7 @@
 {% for v in grupos %}
 {% set g = v.g %}
 <section class="card carpeta" aria-labelledby="carpeta-{{ loop.index }}">
-  <h2 id="carpeta-{{ loop.index }}" class="carpeta-titulo">{{ g.clave }}</h2>
+  <h2 id="carpeta-{{ loop.index }}" class="carpeta-titulo titulo-frase">{{ g.clave }}</h2>
   <p class="carpeta-estados">
     {{ ui.chip("neutro" if g.estado == "sin_serie" else "info", g.etiqueta) }}
     {% if g.por_confirmar %}{{ ui.chip("amber", "por confirmar") }}{% endif %}
@@ -59,7 +59,7 @@
   </dl>
 
   {% if v.senales %}
-  <h3 class="carpeta-subtitulo">Qué se ha observado</h3>
+  <h3 class="carpeta-subtitulo titulo-frase">Qué se ha observado</h3>
   <ul class="carpeta-senales">
     {% for x in v.senales %}
     <li>

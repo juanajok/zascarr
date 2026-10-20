@@ -11,7 +11,7 @@
 {% else %}
 {% set g = apertura.grupo %}
 <section class="card" aria-labelledby="asistente-carpeta">
-  <h2 id="asistente-carpeta">{{ g.clave }}</h2>
+  <h2 id="asistente-carpeta" class="titulo-frase">{{ g.clave }}</h2>
   <dl class="carpeta-datos">
     <dt>Registros en esta carpeta</dt><dd>{{ g.n_archivos }}</dd>
     {% if g.carpeta_contextual %}<dt>Carpeta de la serie</dt><dd>{{ g.carpeta_contextual }}</dd>{% endif %}
@@ -20,7 +20,7 @@
 </section>
 
 <section class="card" aria-labelledby="asistente-locales-titulo">
-  <h2 id="asistente-locales-titulo">¿Ya la tienes en tu biblioteca?</h2>
+  <h2 id="asistente-locales-titulo" class="titulo-frase">¿Ya la tienes en tu biblioteca?</h2>
   <p>Busca entre las series que ya tienes. No consulta ninguna fuente ni crea nada.</p>
   <form class="asistente-form" hx-get="/ui/pendientes/carpetas/asistente/locales" hx-target="#asistente-locales" hx-swap="innerHTML">
     <input type="hidden" name="clave" value="{{ g.clave }}">
@@ -32,7 +32,7 @@
 </section>
 
 <section class="card" aria-labelledby="asistente-buscar">
-  <h2 id="asistente-buscar">Buscar en las fuentes</h2>
+  <h2 id="asistente-buscar" class="titulo-frase">Buscar en las fuentes</h2>
   <form class="asistente-form" hx-post="/ui/pendientes/carpetas/asistente/buscar" hx-target="#asistente-resultados" hx-swap="innerHTML">
     <input type="hidden" name="clave" value="{{ g.clave }}">
     <label for="asistente-consulta">Qué buscar</label>
@@ -51,7 +51,7 @@
 </section>
 
 <section class="card" aria-labelledby="asistente-manual-titulo">
-  <h2 id="asistente-manual-titulo">¿No aparece? Crear la serie a mano</h2>
+  <h2 id="asistente-manual-titulo" class="titulo-frase">¿No aparece? Crear la serie a mano</h2>
   <p>No hace falta ninguna fuente ni clave: solo el título y la tradición.</p>
   <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/manual?clave={{ g.clave | urlencode }}"
      hx-get="/ui/pendientes/carpetas/asistente/manual?clave={{ g.clave | urlencode }}"

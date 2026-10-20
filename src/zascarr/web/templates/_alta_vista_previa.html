@@ -42,7 +42,7 @@
     {% for n, v in campos_origen %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="tradition" value="{{ tradicion }}">
     <div class="discovery-card-actions">
-      <button type="submit">{% if vista.accion == "crear" %}Crear serie vacía{% else %}Usar esta serie{% endif %}</button>
+      <button type="submit" class="primary">{% if vista.accion == "crear" %}Crear serie vacía{% else %}Usar esta serie{% endif %}</button>
     </div>
   </form>
   {% endif %}

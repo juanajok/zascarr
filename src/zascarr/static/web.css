@@ -186,6 +186,18 @@ h1, h2, h3 {
   color: var(--ink);
 }
 
+/* Un título que es una FRASE o una RUTA va en Archivo negrita, en su caja (CLAUDE.md §6: Anton, solo
+   rótulos de ≤ 3 palabras en mayúsculas). En mayúsculas, una ruta pierde además la caja que tiene en
+   disco. Los títulos de paso del Inicio usaban la misma corrección, escrita dos veces a mano. */
+.titulo-frase,
+.step h3,
+.siguiente-paso h3 {
+  font-family: var(--font-body);
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 /* Foco visible, siempre */
 :focus-visible {
   outline: 3px solid var(--cyan-t);
@@ -436,8 +448,9 @@ html { scroll-padding-bottom: 96px; }
 .empty { color: var(--ink-faint); font-style: italic; }
 
 /* ── 5. BOTONES ──────────────────────────────────────────────────────────── */
+/* Sin `button[type="submit"]` aquí: con su especificidad (0,1,1) el fondo base ganaba a `.btn-primary`
+   (0,1,0), que solo salía amarillo porque la regla amarilla también nombraba los envíos. */
 button,
-button[type="submit"],
 .btn,
 .btn-primary,
 .btn-ignorar,
@@ -483,7 +496,10 @@ button[type="submit"]:where(:not([disabled])):active,
   box-shadow: 1px 1px 0 var(--ink);
 }
 
-button[type="submit"],
+/* Amarillo = LA acción que hace avanzar la tarea de la pantalla, y una sola. Antes lo era cualquier
+   `type="submit"`: Ajustes enseñaba siete «Guardar» amarillos y una lista de resultados, uno por fila.
+   Un envío es neutro salvo que lleve `.primary` (revisión visual, 2026-10-20). */
+button.primary,
 .btn-primary,
 .btn.primary {
   --btn-bg: var(--yellow);
@@ -491,8 +507,8 @@ button[type="submit"],
   color: var(--on-yellow);
 }
 
-/* Un botón de envío secundario: sin esto, la regla global de arriba lo pinta de amarillo aunque no
-   lleve `.primary`. Misma especificidad que ella y va después. */
+/* `.neutro` era el parche para que un envío no saliera amarillo; ya no hace falta (el envío es neutro
+   por defecto), pero se conserva por compatibilidad de clases hasta V14. */
 button[type="submit"].neutro {
   --btn-bg: var(--paper);
   color: var(--ink);
@@ -542,7 +558,9 @@ button[type="submit"].neutro {
   display: block;
   background: var(--caption-bg);
   border: 2px solid var(--ink);
-  box-shadow: var(--shadow-ink-sm);
+  /* Sin la sombra desplazada, que es la de los botones: con ella, un aviso parecía algo que pulsar.
+     El canto redondeado es el de `.aviso`, el otro sistema de avisos. */
+  border-radius: var(--radius-panel);
   padding: 8px 14px;
   font-weight: 600;
   font-size: .9rem;
@@ -753,6 +771,10 @@ button[type="submit"].btn-sugerencia {
   background: var(--yellow); color: var(--on-yellow); font-size: .875rem;
 }
 .audit-why { font-size: .875rem; color: var(--ink-soft); margin: 0 0 10px; }
+/* Botón y explicación en una fila (que se parte en el móvil), con aire debajo: en línea, el botón de
+   40 px y su sombra se montaban sobre la línea siguiente del informe. */
+.audit-lanzar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 18px; }
+.audit-lanzar .audit-why { margin: 0; flex: 1 1 18rem; }
 .audit-item {
   padding: 8px 0;
   border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent);
@@ -1045,7 +1067,7 @@ button[type="submit"].btn-sugerencia {
 .step.bloqueado { border-style: dashed; }
 /* Son frases enteras, no rótulos: en Anton y en minúsculas costaban de leer, y en mayúsculas
    romperían el límite de «mayúsculas solo en rótulos de ≤ 3 palabras». Van en la fuente de lectura. */
-.step h3 { margin: 0 0 2px; font-family: var(--font-body); font-weight: 800; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.step h3 { margin: 0 0 2px; font-size: 1.05rem; }
 .step h3 .chip { margin-left: 6px; vertical-align: middle; }
 .step p { margin: 0; }
 .step.hecho h3 { font-size: .95rem; font-weight: 700; }
@@ -1058,7 +1080,7 @@ button[type="submit"].btn-sugerencia {
   border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--caption-bg);
   box-shadow: var(--shadow-ink);
 }
-.siguiente-paso h3 { margin: 0 0 2px; font-family: var(--font-body); font-weight: 800; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.siguiente-paso h3 { margin: 0 0 2px; font-size: 1.05rem; }
 .siguiente-paso h3 .chip { margin-left: 6px; vertical-align: middle; }
 .siguiente-paso p { margin: 0; }
 .pasos-plegados .steps { margin-top: 10px; }
