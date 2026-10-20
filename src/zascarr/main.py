@@ -7,7 +7,7 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import ProgrammingError
 
@@ -308,6 +308,8 @@ def create_app() -> FastAPI:
     # no hay peticiones cross-origin legítimas. Un allow_origins=["*"] junto a
     # allow_credentials=True es inválido e inseguro según el spec CORS.
 
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
     from zascarr.api.health import router as health_router
     from zascarr.api.legal import router as legal_router
     from zascarr.api.revision import router as revision_router
@@ -321,6 +323,7 @@ def create_app() -> FastAPI:
     from zascarr.web.auth import router as auth_router
     from zascarr.web.dashboard import router as dashboard_router
     from zascarr.web.discovery import router as discovery_router
+    from zascarr.web.errores import manejar_http, manejar_inesperado, pagina_error
     from zascarr.web.estado import router as estado_router
     from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
@@ -380,13 +383,17 @@ def create_app() -> FastAPI:
                         "detail": "Esquema de base de datos incompleto o sin migrar — consulta /api/health",
                     },
                 )
-            return HTMLResponse(
-                "<h1>Base de datos no lista</h1>"
-                "<p>El esquema está incompleto o no se ha migrado. "
-                '<a href="/estado">Consulta el estado del sistema</a>.</p>',
-                status_code=503,
+            return pagina_error(
+                request, 503,
+                mensaje="Base de datos no lista: le faltan partes o no se ha terminado de "
+                        "actualizar. En el Estado verás qué hacer.",
             )
         raise exc
+
+    # Página de error propia para quien navega (404, otros HTTPException y 500): la API y HTMX
+    # conservan su respuesta. Ver web/errores.py.
+    app.add_exception_handler(StarletteHTTPException, manejar_http)
+    app.add_exception_handler(Exception, manejar_inesperado)
 
     return app
 
