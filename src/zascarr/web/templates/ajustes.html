@@ -9,6 +9,9 @@
   <fieldset class="ajustes-card">
     <legend>Fuentes de metadatos</legend>
     <p class="ajustes-desc">Activa o desactiva cada fuente (en toda ZascArr, también en Descubrir). Desactivar no borra lo ya catalogado: solo deja de consultar esa API. En las fuentes que enriquecen (Comic Vine, AniList, Tebeosfera), al reactivar una serie ya intentada recientemente espera su plazo de reintento (30 días); no se resetea la caché. GCD, por ahora, solo busca — no enriquece.</p>
+    {% if fuentes_heredadas %}
+    <p class="ajustes-desc" id="aviso-fuentes-heredadas"><strong>Las fuentes de metadatos externas están activadas por compatibilidad con tu instalación anterior.</strong> Consultan Internet con los títulos de tu biblioteca. Las instalaciones nuevas las traen apagadas. Puedes desactivarlas aquí: pulsa Guardar para confirmar tu elección (aunque no cambies nada) y este aviso desaparecerá.</p>
+    {% endif %}
     <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
       <label class="legal-checkbox">
         <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>

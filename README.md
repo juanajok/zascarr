@@ -57,7 +57,8 @@ del producto.
 - **Enriquecimiento multi-fuente** — enruta cada serie a su fuente según la
   tradición: Comic Vine (grapa americana/británica), AniList
   (manga/manhwa/manhua) y Tebeosfera (tebeo español / franco-belga), con caché
-  negativa para no quemar rate limits.
+  negativa para no quemar rate limits. Las fuentes nacen **apagadas**: se encienden
+  en `/ui/ajustes` (ver «Integraciones»).
 - **Biblioteca web con filtros** — navega por tradición, editorial, personaje
   y saga, con portadas por cascada (primera página del CBZ → portada externa
   cacheada → placeholder) y **sin hotlinking** a CDNs externos.
@@ -387,6 +388,13 @@ sudo make uninstall-purge
 | Metadatos | [AniList](https://anilist.co) | pública, sin clave |
 | Metadatos | [Tebeosfera](https://www.tebeosfera.com) | scraping, sin clave |
 | Metadatos | [GCD](https://www.comics.org) | pública, sin clave |
+
+**Las cuatro fuentes de metadatos nacen apagadas** (ADR 0013): ZascArr no consulta Internet para completarlas hasta que las
+enciendes en `/ui/ajustes` → «Fuentes de metadatos». El `.env` no las gobierna. Si actualizas desde una versión anterior, las
+fuentes que ya tenías activas **se conservan** y Ajustes te lo indica.
+
+| Tipo | Integración | Activación |
+|---|---|---|
 | Descarga | [Prowlarr](https://prowlarr.com) | URL + clave de API desde `/ui/ajustes` |
 | Descarga | [Transmission](https://transmissionbt.com) | URL + usuario/contraseña desde `/ui/ajustes` |
 | Descarga (eD2K) | [aMule](https://www.amule.org) | URL de amuleweb + contraseña desde `/ui/ajustes` |
