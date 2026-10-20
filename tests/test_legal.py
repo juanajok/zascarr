@@ -44,6 +44,33 @@ class FakeSession:
         self.added.append(obj)
 
 
+class TestPintarElAviso:
+    """Caso real (2026-10-20): el aviso enseñaba «[web:168]» y listas como párrafos con guiones."""
+
+    def test_sin_marcas_de_cita(self):
+        from zascarr.services.legal import render_legal_html
+        assert "[web:" not in render_legal_html()
+
+    def test_las_listas_pegadas_salen_como_listas(self):
+        from zascarr.services.legal import render_legal_html
+        html = render_legal_html()
+        assert "<p>Esto significa que:</p>\n<ul>" in html
+
+    def test_pintar_no_cambia_la_version_aceptada(self):
+        """Lo que se acepta es el fichero: la versión es su hash, no el de lo pintado."""
+        import hashlib
+
+        from zascarr.services.legal import LEGAL_MD_PATH, current_legal_version
+        crudo = LEGAL_MD_PATH.read_text(encoding="utf-8")
+        assert current_legal_version() == hashlib.sha256(crudo.encode("utf-8")).hexdigest()[:16]
+
+    def test_una_lista_ya_separada_o_una_tabla_no_cambian(self):
+        from zascarr.services.legal import _texto_para_pintar
+        texto = "Intro:\n\n- a\n- b\n\n| x | y |\n|---|---|\n| 1 | 2 |\n"
+        assert _texto_para_pintar(texto) == texto
+        assert _texto_para_pintar("Intro:\n- a\n- b\n") == "Intro:\n\n- a\n- b\n"
+
+
 class TestVersion:
 
     def test_version_estable_entre_llamadas(self):

@@ -915,3 +915,34 @@ class TestBdCongelada:
         monkeypatch.setattr(corto, "PLAZO_SEGUNDOS", 2)
         monkeypatch.setattr(corto, "async_session_factory", FabricaFalsa([1, 1]))
         assert (await corto.contadores_del_menu(_peticion())).status_code == 200
+
+
+
+# ── Arreglos de la revisión visual (2026-10-20) ──────────────────────────────────────────────
+def _css() -> str:
+    from zascarr.main import STATIC_DIR
+    return (STATIC_DIR / "web.css").read_text(encoding="utf-8")
+
+
+class TestRevisionVisual:
+
+    def test_el_contador_de_la_barra_inferior_no_se_parte(self):
+        """El enlace móvil usa `overflow-wrap: anywhere`; el contador lo heredaba y «22» salía
+        en dos líneas encima de «Revisar»."""
+        css = _css()
+        regla = css[css.index("  .nav .badge {"):]
+        regla = regla[:regla.index("}")]
+        assert "white-space: nowrap" in regla and "overflow-wrap: normal" in regla
+
+    def test_los_controles_nativos_siguen_al_tema(self):
+        css = _css()
+        oscuro = css[css.index("@media (prefers-color-scheme: dark)"):]
+        assert "color-scheme: light;" in css[:css.index("@media (prefers-color-scheme: dark)")]
+        assert "color-scheme: dark;" in oscuro[:oscuro.index("}")]
+
+    def test_un_boton_deshabilitado_no_se_levanta(self):
+        """Las reglas de :hover/:active ganaban en especificidad a `button[disabled]`."""
+        css = _css()
+        for estado in (":hover", ":active"):
+            assert f'button[type="submit"]:where(:not([disabled])){estado}' in css
+            assert f'button[type="submit"]{estado}' not in css
