@@ -1,6 +1,7 @@
 # BL-R1 — Deshacer una vinculación: contrato técnico y estimación refinada (propuesta)
 
-> **Estado: PROPUESTA para el revisor y el PO. Sin código, sin migración, sin tocar el backlog.** Cierra la parte de **diseño** de la Definition of Ready de #230
+> **Estado: diseño revisado (APROBADO CON MATICES por el revisor); D8, D9 y D10 DECIDIDAS por el PO el 2026-10-20 (§4); la historia se PARTE en BL-R1a y BL-R1b (§6).
+> Sin código, sin migración, sin tocar el backlog ni el tablero.** Cierra la parte de **diseño** de la Definition of Ready de #230
 > (contratos, efectos, dependencias, riesgos y estimación) y plantea **D8–D10**. Decisión de comprobante e historial: `docs/adr/0014-deshacer-vinculacion.md` (**Propuesto**).
 > Verificado sobre `main` `6001555` (2026-10-20). Benchmark: `docs/design/benchmark-reconciliacion-plex.md` (BL-R0, fusionada).
 
@@ -48,9 +49,13 @@ Sin cambios en el servicio de 2d: el archivo ya cumple el contrato de Pendientes
 
 | # | Decisión | Opciones | Recomendación |
 |---|---|---|---|
-| **D8** | `metadata_source` tras deshacer | (a) dejar `'manual'`; (b) restaurar el previo si consta y, si no, `NULL`; (c) siempre `NULL` | **(b)**, y que la vinculación **guarde** `previo.metadata_source` en los vínculos **nuevos** (cambio aditivo en `_vincular_archivo`). Para los antiguos: `NULL` (el origen `'manual'` queda en el historial) |
-| **D9** | Qué vínculos se deshacen en v1 | (a) solo los de «vincular en su sitio» (tienen procedencia); (b) además los de V6a; (c) cualquiera con `issue_id` | **(a)** para v1: es lo que tiene procedencia verificable y el caso de MVP. Los demás se muestran **sin** el botón y con la razón. (c) exigiría una «huella» alternativa y decidir qué significa deshacer un movimiento |
-| **D10** | Dónde entra la persona | (a) añadir a `series_detail` una lista de archivos por número con «Deshacer»; (b) una ficha de archivo nueva; (c) solo desde el informe de la vinculación recién hecha | **(a)**: es donde la persona ve «tengo el #5»; (c) no cubre el caso «lo vi mal días después». Es **trabajo de UI nuevo** (ver estimación) y toca el contrato HTMX de `series_detail` (consultar `docs/design/ui-migracion.md`) |
+| **D8** (**decidida**: opción b) | `metadata_source` tras deshacer | (a) dejar `'manual'`; (b) restaurar el previo si consta y, si no, `NULL`; (c) siempre `NULL` | **(b)**, y que la vinculación **guarde** `previo.metadata_source` en los vínculos **nuevos** (cambio aditivo en `_vincular_archivo`). Para los antiguos: `NULL` (el origen `'manual'` queda en el historial) |
+| **D9** (**decidida**: opción a) | Qué vínculos se deshacen en v1 | (a) solo los de «vincular en su sitio» (tienen procedencia); (b) además los de V6a; (c) cualquiera con `issue_id` | **(a)** para v1: es lo que tiene procedencia verificable y el caso de MVP. Los demás se muestran **sin** el botón y con la razón. (c) exigiría una «huella» alternativa y decidir qué significa deshacer un movimiento |
+| **D10** (**decidida**: opción a) | Dónde entra la persona | (a) añadir a `series_detail` una lista de archivos por número con «Deshacer»; (b) una ficha de archivo nueva; (c) solo desde el informe de la vinculación recién hecha | **(a)**: es donde la persona ve «tengo el #5»; (c) no cubre el caso «lo vi mal días después». Es **trabajo de UI nuevo** (ver estimación) y toca el contrato HTMX de `series_detail` (consultar `docs/design/ui-migracion.md`) |
+
+**Decisiones del PO (2026-10-20):** D8 = **restaurar el previo si consta y, si no, `NULL`** (la vinculación guardará `previo.metadata_source` en los vínculos nuevos; los antiguos quedan en `NULL`
+y el origen `'manual'` del vínculo deshecho se conserva en el historial) · D9 = **solo los vínculos de «vincular en su sitio»** (los demás se muestran sin botón y con la razón) · D10 = **lista de archivos por
+número en `series_detail`** (UI nueva; consultar `docs/design/ui-migracion.md` antes de tocar el contrato HTMX).
 
 ## 5. Pruebas (definidas; **NOT RUN**)
 
@@ -77,7 +82,7 @@ La tarjeta propone **8 pts, L, confianza Baja**. Con lo anterior:
 | Documentación, ADR y regresiones | 1 | |
 | **Total** | **≈ 10** (rango 8–13) | Confianza **Media-Baja**: D8–D10 pueden moverlo |
 
-**Propuesta: partir en dos entregas** para no tener una historia de 10: **BL-R1a** (servicio + API + pruebas, ≈ 6) y **BL-R1b** (superficie + navegador, ≈ 4). Es una propuesta de organización, **no** se aplica al tablero sin orden.
+**Decidido por el PO (2026-10-20): se parte en dos entregas**: **BL-R1a** (servicio + API + pruebas, ≈ 6) y **BL-R1b** (superficie + navegador, ≈ 4). Esto registra la decisión; **no crea tarjetas ni toca el tablero** (se hace aparte, con orden expresa).
 
 ## 7. Riesgos
 
@@ -89,4 +94,4 @@ La tarjeta propone **8 pts, L, confianza Baja**. Con lo anterior:
 
 ## 8. Qué NO autoriza este documento
 
-Código, migraciones, fuentes reales, despliegue, cambios del tablero ni la partición de la tarjeta. Pendiente: revisión del ADR 0014 y decisión de D8–D10.
+Código, migraciones, fuentes reales, despliegue, cambios del tablero ni la partición de la tarjeta. Pendiente: revisión final del ADR 0014 (sigue **Propuesto**) y la orden expresa para crear las tarjetas BL-R1a/b y pasar la historia a «Lista para desarrollar».
