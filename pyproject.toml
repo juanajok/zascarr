@@ -44,7 +44,7 @@ where = ["src"]
 # tree, así que este bug solo se vería dentro del contenedor construido
 # (ya nos pasó una vez con dashboard.html — ver commit de E1).
 [tool.setuptools.package-data]
-zascarr = ["static/*.html", "static/*.css", "static/vendor/*.js", "web/templates/*.html", "LEGAL.md"]
+zascarr = ["static/*.html", "static/*.css", "static/vendor/*.js", "static/vendor/fonts/*.woff2", "static/vendor/fonts/*.txt", "static/brand/*.svg", "static/brand/*.png", "web/templates/*.html", "LEGAL.md"]
 
 [tool.ruff]
 target-version = "py311"
