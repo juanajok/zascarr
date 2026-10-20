@@ -318,7 +318,9 @@ h1, h2, h3 {
   background: var(--yellow); color: var(--on-yellow);
   border-color: var(--ink); box-shadow: var(--shadow-ink-sm);
 }
-.nav-enlace .ico { width: 22px; text-align: center; font-size: 1.1rem; flex: none; }
+.nav-enlace .ico { width: 22px; flex: none; display: grid; place-items: center; }
+/* SVG de trazo (web/iconos.py): toma el color del enlace, así que activo, hover y tema oscuro salen solos. */
+.ico-svg { width: 20px; height: 20px; display: block; }
 
 /* Contadores: marcadores `hidden` hasta que el fragmento los rellena (web/navegacion.py). El atributo
    `hidden` no basta frente a `display` de autor, de ahí las reglas explícitas. */

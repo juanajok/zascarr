@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from jinja2 import Environment
 
+from zascarr.web.iconos import icono
 from zascarr.web.menu import ENTRADAS, GRUPOS, entrada_activa
 
 
@@ -96,5 +97,6 @@ def registrar(env: Environment) -> None:
         "aspecto": aspecto, "tipo_aviso": tipo_aviso,
         # V3: los datos del menú (web/menu.py) tampoco son globales del entorno.
         "ENTRADAS": ENTRADAS, "GRUPOS": GRUPOS, "entrada_activa": entrada_activa,
+        "icono": icono,
     }).module
     env.globals[ESPACIO_DE_NOMBRES] = modulo
