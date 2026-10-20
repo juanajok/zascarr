@@ -92,6 +92,30 @@ La tarjeta propone **8 pts, L, confianza Baja**. Con lo anterior:
 - **R4** Superficie nueva en `series_detail`: toca un contrato HTMX documentado → revisar `docs/design/ui-migracion.md` antes.
 - **R5** `previo.metadata_source` solo existirá en vínculos nuevos → los antiguos se tratan con `NULL` (D8 b).
 
+## 9. Implementación de BL-R1a (#253) — lo que hay en el código
+
+Servicio `services/desvinculacion.py` (`DesvinculacionDeArchivo`), token `desvincular` en `services/tokens_revision.py` y dos rutas en
+`api/revision.py`. **Sin migración y sin interfaz** (la superficie es BL-R1b, #254).
+
+| Qué | Dónde | Notas |
+|---|---|---|
+| Vista previa | `POST /api/revision/desvinculacion/previsualizar` `{file_id}` | Solo `SELECT` (sin candados, sin `stat`, sin leer ficheros). `200` con `puede_deshacer`, `bloqueo{codigo,mensaje}`, `archivo` (lo que se conserva), `numero` (serie, número, si lo creó la vinculación, si se queda sin archivos, lecturas y deseados), `aviso` y `token`. `404 archivo_inexistente` si la fila no existe. |
+| Confirmación | `POST /api/revision/desvinculacion` `{token}` | Una transacción. `200` con `resultado`: `deshecho` \| `ya_deshecho` \| `omitido` (+`motivo`: `no_vinculado`, `en_curso`, `archivo_inexistente`, `cambio_desde_la_vista_previa`). `422 token_invalido`, `410 token_caducado`, `503 resultado_incierto` / `conflicto_de_bloqueo`, `500 error_inesperado`. |
+| Token | propósito `desvincular`, contexto = `file_id`, TTL 15 min | Firma `issue_id`, `serie_id`, `operacion_id` del vínculo, una **huella** SHA-256 de `(file_path, file_size_bytes, sha256_hash)` y una `operacion` nueva. Tamaño fijo (`MAX_TOKEN_DESVINCULACION`). |
+| Bloqueos de la vista previa | `no_vinculado` › `en_curso` › `sin_procedencia` | `sin_procedencia` (D9) cubre lo vinculado por «organizar» (V6a), por el importador, antes de 2d o con una procedencia incoherente con la serie del número. |
+| Comprobante | `files.metadata.vinculo_historial[]` | Cada entrada es el `vinculo` íntegro + `deshecho:{operacion_id, fecha}`. `ya_deshecho` se decide **releyendo esa entrada** (también con el token caducado). |
+| D8 | `vinculo.previo.metadata_source` (nuevo, en `_vincular_archivo`) | La **clave** existe en los vínculos nuevos aunque valga `null`; los antiguos no la tienen y se restauran a `NULL`. |
+
+Decisiones de detalle que el contrato dejaba abiertas: una serie borrada entre la vista previa y la confirmación es `omitido` (el `issue_id` ya
+quedó nulo por `ON DELETE SET NULL`), no un error; un archivo que ya no existe es `omitido archivo_inexistente`, no `404`; el `UPDATE` repite el
+vínculo en su `WHERE` y exige `rowcount == 1` como última defensa (se prueba cambiando la fila dentro de la misma transacción).
+
+Pruebas: `tests/test_desvinculacion_pg.py` (Postgres real, grupos 1–7 del §5), `tests/test_tokens_desvinculacion.py` (unidad) y el ajuste de
+`tests/test_vinculacion_pg.py` (el vínculo nuevo guarda `metadata_source`). Mutaciones comprobadas a mano (cada una hace fallar una prueba): sin
+huella, sin `match_status='unsorted'`, sin quitar `vinculo`, sustituir `metadata`, sin candado de operación, `UPDATE` sin `issue_id`, sin
+`review_dismissed=false`, D8 siempre `NULL`, sin comprobar el `issue_id` ni la operación del vínculo, sin el comprobante previo, sin `en_curso`
+y historial sustituido. **Grupo 9 (navegador real, sin JS): NO EJECUTADO** (pertenece a BL-R1b).
+
 ## 8. Qué NO autoriza este documento
 
 Código, migraciones, fuentes reales, despliegue, cambios del tablero ni la partición de la tarjeta. Estado: ADR 0014 **Aceptado** tras la revisión final; las tarjetas BL-R1a (#253) y BL-R1b (#254) están creadas en «Lista para desarrollar». Sigue pendiente la orden expresa del PO para empezar a implementar #253.

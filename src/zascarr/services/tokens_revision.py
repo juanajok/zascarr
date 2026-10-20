@@ -37,6 +37,7 @@ CLAVE_SIN_GRUPO = "\x00sin-grupo"
 PROPOSITO_CANDIDATA = "candidata"
 PROPOSITO_ALTA = "alta"
 PROPOSITO_VINCULAR = "vincular"
+PROPOSITO_DESVINCULAR = "desvincular"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
 MAX_DESCRIPCION = 1000
 
@@ -463,6 +464,59 @@ def verificar_referencia_de_resultado(ref: str, secret: str) -> ReferenciaDeResu
     return ReferenciaDeResultado(clave, d["series_id"], d["operacion"], vence)
 
 
+# ── Token de deshacer una vinculación (BL-R1a, ADR 0014) ─────────────────────────────────────────
+
+VERSION_TOKEN_DESVINCULAR = 1
+
+
+@dataclass(frozen=True)
+class DesvinculacionFirmada:
+    """Lo que la persona vio al pedir deshacer UN vínculo. El contexto firmado es el `file_id` (un token de un archivo no
+    sirve en otro). `vinculo_operacion` es el `operacion_id` del vínculo que se verá deshecho; `huella` es el SHA-256 de
+    `(file_path, file_size_bytes, sha256_hash)` en la vista previa (no se firma la ruta: el token queda de tamaño fijo)."""
+    file_id: str
+    issue_id: str
+    series_id: str
+    vinculo_operacion: str
+    huella: str
+    operacion: str
+    caduca: int = 0
+
+
+def _hex64(v: object) -> bool:
+    return isinstance(v, str) and len(v) == 64 and all(c in "0123456789abcdef" for c in v)
+
+
+def crear_token_desvinculacion(d: DesvinculacionFirmada, secret: str, *, ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_DESVINCULAR, d.file_id, {
+        "version": VERSION_TOKEN_DESVINCULAR, "issue_id": d.issue_id, "serie_id": d.series_id,
+        "vinculo_operacion": d.vinculo_operacion, "huella": d.huella, "operacion": d.operacion,
+    }, secret, ahora=ahora)
+
+
+def verificar_token_desvinculacion(token: str, secret: str, *, ahora: float | None = None,
+                                   ignorar_caducidad: bool = False) -> DesvinculacionFirmada | None:
+    """El deshacer firmado, o `None`. Firma, propósito (`desvincular`: no sirve para vincular ni dar de alta), contexto
+    (el `file_id`, leído del propio token porque la confirmación recibe solo el token) y caducidad; además el ESQUEMA: UUID
+    canónicos, `huella` de 64 hexadecimales y `version` 1."""
+    file_id = _contexto_del_token(token, secret)
+    if file_id is None or not _uuid_texto(file_id):
+        return None
+    verificado = _verificar(token, PROPOSITO_DESVINCULAR, file_id, secret, ahora=ahora, ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    version = d.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != VERSION_TOKEN_DESVINCULAR:
+        return None
+    if not all(_uuid_texto(d.get(k)) for k in ("issue_id", "serie_id", "vinculo_operacion", "operacion")):
+        return None
+    if not _hex64(d.get("huella")):
+        return None
+    return DesvinculacionFirmada(file_id, d["issue_id"], d["serie_id"], d["vinculo_operacion"], d["huella"],
+                                 d["operacion"], caduca)
+
+
 # ── Tamaño máximo del token de vinculación ───────────────────────────────────────────────────────
 
 #: Longitud máxima de la `clave` de un grupo que acepta la vista previa (`max_length` de su petición).
@@ -586,3 +640,15 @@ MAX_TOKEN_ALTA = _longitud_peor_caso_del_token_de_alta()
 #: puntos de entrada que ya existen lo aceptan.
 MAX_TOKEN_CANDIDATA_SIN_GRUPO = _longitud_peor_caso_del_token_de_candidata(CLAVE_SIN_GRUPO)
 MAX_TOKEN_ALTA_SIN_GRUPO = _longitud_peor_caso_del_token_de_alta(CLAVE_SIN_GRUPO)
+
+
+def _longitud_peor_caso_del_token_de_desvinculacion() -> int:
+    """Cota de la longitud de un token `desvincular` válido: todos los campos son de tamaño fijo (UUID canónicos y una huella
+    de 64 hexadecimales), así que sale de la serialización, la codificación y la firma reales con la época más larga."""
+    ident = "00000000-0000-4000-8000-000000000000"
+    return len(crear_token_desvinculacion(DesvinculacionFirmada(ident, ident, ident, ident, "f" * 64, ident), "x" * 32,
+                                          ahora=EPOCA_DEL_PEOR_CASO))
+
+
+#: El límite del cuerpo de `POST /api/revision/desvinculacion`: acotado e IGUAL al peor caso emitible.
+MAX_TOKEN_DESVINCULACION = _longitud_peor_caso_del_token_de_desvinculacion()
