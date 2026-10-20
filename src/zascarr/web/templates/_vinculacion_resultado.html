@@ -6,7 +6,7 @@
 {%- endmacro %}
 <div id="revision" class="vinculacion vinculacion-resultado" data-estado="{{ 'fallo' if fallo else informe.global_ }}">
   <section class="card" aria-labelledby="res-contexto">
-    <h2 id="res-contexto">{{ clave or "Carpeta" }}</h2>
+    <h2 id="res-contexto" class="titulo-frase">{{ clave or "Carpeta" }}</h2>
     <dl class="carpeta-datos">
       <dt>Serie</dt><dd>{{ titulo_serie or "(no disponible)" }}</dd>
       <dt>Carpeta</dt><dd>{{ clave or "(no disponible)" }}</dd>
@@ -16,7 +16,7 @@
 
   {% if fallo %}
   <section class="card" aria-labelledby="res-fallo">
-    <h3 id="res-fallo">{{ fallo.titulo }}</h3>
+    <h3 id="res-fallo" class="titulo-frase">{{ fallo.titulo }}</h3>
     {{ ui.aviso("warn", fallo.mensaje) }}
     <div class="vinc-acciones">
       {% if fallo.repetible and token %}
@@ -38,7 +38,7 @@
   {% else %}
   {% set t = informe.totales %}
   <section class="card" aria-labelledby="res-resultado">
-    <h3 id="res-resultado">
+    <h3 id="res-resultado" class="titulo-frase">
       {% if informe.global_ == "vinculados_todos" %}Hecho: todos los archivos quedaron vinculados
       {% elif informe.global_ == "vinculados_parcialmente" %}Vinculación parcial: quedaron archivos sin vincular
       {% else %}No se vinculó ningún archivo{% endif %}
@@ -72,7 +72,7 @@
   {% endif %}
   {% if grupos.omitido %}
   <section class="card vinc-grupo" data-grupo="omitido" aria-labelledby="res-pendientes">
-    <h3 id="res-pendientes">Pendientes: no se vincularon ({{ grupos.omitido | length }})</h3>
+    <h3 id="res-pendientes" class="titulo-frase">Pendientes: no se vincularon ({{ grupos.omitido | length }})</h3>
     <p class="caption">Siguen pendientes. Nada se ha elegido, fusionado ni resuelto por ti. Lo que puedes hacer es revisarlos de nuevo: verás su estado actual y podrás corregir el número o dejarlos como están.</p>
     <ul>{% for a in grupos.omitido %}
       <li><span class="nombre-archivo">{{ a.nombre }}</span>{% if a.numero %} (número {{ a.numero }}){% endif %} — {{ a.texto or "No se vinculó." }}</li>

@@ -180,6 +180,16 @@ como marco permanente.
   la «i» de información), una Z sobre cuadrado rojo (se confunde con Zabbix y YouTube),
   el amarillo (Mylar3, Kapowarr, Radarr) y una Z que desborda el estallido (Komga). Por
   debajo de 24 px va la versión simplificada `zascarr-favicon.svg`.
+- **Un botón principal por pantalla** (decidido el 2026-10-20): el amarillo es la acción que hace
+  avanzar la tarea de esa pantalla y se pide con `.primary` (`button.primary`, `.btn.primary`). Un
+  `type="submit"` es neutro por defecto: los botones que se repiten (uno por resultado o por tarjeta) y
+  los «Guardar» de Ajustes no son principales. Excepción con significado propio: el verde de
+  «Sí, organizar» (aceptar una sugerencia).
+- **Un aviso no parece un botón** (decidido el 2026-10-20): la sombra dura desplazada es de los botones
+  (y del rótulo girado); `.caption` y `.aviso` van sin ella, con el canto de panel.
+- **Títulos que son frases o rutas, en Archivo** (decidido el 2026-10-20): clase `.titulo-frase` para
+  cualquier título de más de 3 palabras o que muestre una ruta de carpeta (en mayúsculas perdería su
+  caja). Los `h1` de pantalla siguen siendo rótulos en Anton.
 - **Las cifras del Inicio cuadran** (decidido el 2026-10-20): la frase de entrada desglosa lo
   registrado en partes que suman el total (`services/inicio.py::Desglose`, una sola consulta; «por
   revisar» con el filtro de la lista); lo del disco va aparte, con su fecha y el porqué de la

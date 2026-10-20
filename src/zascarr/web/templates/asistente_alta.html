@@ -9,7 +9,7 @@
 <p><a class="back-link" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">← Volver a elegir la serie de esta carpeta</a>
    · <a href="/ui/pendientes/carpetas">Volver a «Pendientes por carpeta»</a></p>
 <section class="card" aria-labelledby="alta-carpeta">
-  <h2 id="alta-carpeta">{{ clave }}</h2>
+  <h2 id="alta-carpeta" class="titulo-frase">{{ clave }}</h2>
   {% if aviso %}
   {{ ui.aviso("warn", aviso) }}
   <p class="muted">«Volver a elegir» abre el asistente con tu búsqueda escrita, pero no la lanza: buscar de nuevo consulta las fuentes y lo decides tú.</p>
