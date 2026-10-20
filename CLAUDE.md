@@ -180,6 +180,10 @@ como marco permanente.
   la «i» de información), una Z sobre cuadrado rojo (se confunde con Zabbix y YouTube),
   el amarillo (Mylar3, Kapowarr, Radarr) y una Z que desborda el estallido (Komga). Por
   debajo de 24 px va la versión simplificada `zascarr-favicon.svg`.
+- **Las cifras del Inicio cuadran** (decidido el 2026-10-20): la frase de entrada desglosa lo
+  registrado en partes que suman el total (`services/inicio.py::Desglose`, una sola consulta; «por
+  revisar» con el filtro de la lista); lo del disco va aparte, con su fecha y el porqué de la
+  diferencia (copias idénticas que el registro dejó fuera). Un paso no añade cifras sueltas.
 - **Presupuesto de texto** (historia U21, decidido el 2026-10-15; los umbrales
   son provisionales hasta validarlos en U10):
   - Una frase de entrada por pantalla, de ≤ 20 palabras, que diga qué se hace aquí.
