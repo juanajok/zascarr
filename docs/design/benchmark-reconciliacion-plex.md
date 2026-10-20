@@ -18,8 +18,10 @@
    pero **borra vínculos de archivos ausentes aunque sean manuales** (§4, escenario 3): justo lo contrario de lo que ZascArr quiere.
 5. **Hallazgo local nuevo que condiciona BL-R1:** el informe de vinculación es **inmutable** (disparador `BEFORE UPDATE` en la migración 0019,
    `vinculacion_operaciones`). Deshacer no puede reescribir ese informe; necesita **su propio registro** (probablemente tabla nueva + ADR → D2).
-6. **Casos reales:** solo hay registrados casos para 3 de los 6 escenarios (§4). Para los otros 3 se marca **«NO DISPONIBLE»** y se pide al PO uno
-   anonimizado; **no se inventan**.
+6. **Casos reales:** hay casos registrados para E4, E5 y E6. **E1, E2 y E3 no tienen caso real** (§4). Por decisión del PO (2026-10-20, opción «mixta») cada uno lleva
+   un **caso DERIVADO, claramente etiquetado como NO real** (ilustrativo, construido a partir de la arquitectura y de formas reales ya documentadas), y su
+   **hueco sigue abierto**: el criterio 1 de #229 **no queda cumplido para esos tres** hasta que el PO aporte un caso real anonimizado (qué pasó, qué
+   esperaba, qué resultado tuvo). Un caso derivado **no sustituye** a uno real: sirve para fijar el escenario de prueba, no para medir un problema vivido.
 7. **Ninguna prueba de benchmark se ha ejecutado** (§7): están definidas con dataset y umbral *propuesto*; los umbrales son hipótesis, no mediciones.
 
 ## 1. Etiquetas de evidencia
@@ -63,19 +65,22 @@
 Formato: historia → caso real (anonimizado) → comportamiento actual → resultado deseado → qué dicen las referencias.
 
 ### E1 · Corregir una identificación equivocada — BL-R1 (#230)
-- **Caso real:** **NO DISPONIBLE.** No hay registrado un caso de «vinculé mal y quiero corregir». El más cercano es la revisión de la rebanada 1 (`rebanada-1-superficie-de-revision.md`): un conflicto de una saga con nueve nombres y un archivo de **año minoritario** que podría asignarse a la serie equivocada. **Se pide al PO un caso anonimizado.**
+- **Caso real:** **NO DISPONIBLE** (hueco abierto; lo aporta el PO). No hay registrado un caso de «vinculé mal y quiero corregir».
+- **Caso DERIVADO — NO REAL, ilustrativo:** un archivo de **año minoritario** (en la forma de `Serie X 03 (2011).cbz`, que la rebanada 1 documenta con la forma de la biblioteca real) queda vinculado al número equivocado de la serie del año mayoritario; la persona lo ve en la ficha de la serie y quiere devolverlo a Pendientes y vincularlo bien sin tocar el fichero. Fija el escenario de prueba de E1; no mide un problema vivido.
 - **Hoy `[ZASC]`:** `services/vinculacion.py` declara que **no desvincula ni reasigna jamás** un archivo ya vinculado (cabecera; `ya_vinculado_a_otro` → omitido). El vínculo guarda `metadata.vinculo` con `previo.match_status`/`review_motivo`; `File.issue_id` es `ON DELETE SET NULL`. El informe vive en `vinculacion_operaciones`, **inmutable** (disparador, migración 0019).
 - **Deseado:** deshacer y volver a vincular como **dos operaciones**, sin tocar el fichero, con vista previa y comprobante (BL-R1).
 - **Referencias:** Plex *Fix Match* (elegir otra entre candidatas) y *Unmatch* (volver a «sin emparejar») `[DOC-RESUMEN]`; Kapowarr permite **forzar o liberar** un vínculo (`set_file_matching`, `forced_match`) `[COD@c191dda]`. Ninguna prueba que lo hagan sin perder datos asociados: `[NV]`.
 
 ### E2 · Actualizar tras una edición manual — BL-R4 (#233)
-- **Caso real:** **NO DISPONIBLE** (no hay incidente registrado de una fuente pisando una edición manual).
+- **Caso real:** **NO DISPONIBLE** (hueco abierto; lo aporta el PO). No hay incidente registrado de una fuente pisando una edición manual.
+- **Caso DERIVADO — NO REAL, ilustrativo:** una serie creada a mano (`metadata_source='manual'`) con la descripción bloqueada (`locked_fields=['description']`) cuya fuente publica después otra descripción y otro número de números totales; la persona quiere ver qué propone la fuente sin que se aplique y conservar lo suyo. Fija el escenario de prueba de E2.
 - **Hoy `[ZASC]`:** el enricher **nunca** toca una fila con `metadata_source='manual'` y respeta `locked_fields` por campo (`services/enricher.py`, cabecera y bloque «H3»); la vinculación escribe `metadata_source='manual'` (`vinculacion.py`, UPDATE de `files`). **No hay** registro de «lo que dijo la fuente frente a lo que confirmó la persona»: la discrepancia se pierde en silencio.
 - **Deseado:** proteger la **relación** confirmada y poder ver la propuesta de la fuente sin aplicarla (D3/D4).
 - **Referencias:** Plex bloquea campos al editarlos a mano y no los actualiza en el refresco `[DOC-RESUMEN]`; Kapowarr marca vínculos como `forced` para que el reescaneo no los reemplace `[COD@c191dda]` (bandera booleana **sin procedencia**).
 
 ### E3 · Desconectar y reconectar una raíz — BL-R2 (#231)
-- **Caso real registrado:** el diseño de B7 parte de «disco de red que estuvo desmontado / punto de montaje sin desmontar de verdad» (`docs/BACKLOG.md`, B7, 2026-09-26). **No hay un incidente fechado** con datos; el despliegue en la Pi usa un disco USB externo (`/media/WDElements/Tebeos`).
+- **Caso real:** **sin incidente fechado registrado** (hueco abierto; lo aporta el PO si lo recuerda). Lo que sí existe: el diseño de B7 parte de «disco de red que estuvo desmontado / punto de montaje sin desmontar de verdad» (`docs/BACKLOG.md`, B7, 2026-09-26), y el despliegue en la Pi usa un disco USB externo, es decir, el riesgo es real aunque no haya un episodio documentado.
+- **Caso DERIVADO — NO REAL, ilustrativo:** el disco externo se desconecta durante un ciclo del importador (raíz de la biblioteca inexistente) y se vuelve a conectar horas después; la persona entra en la aplicación mientras tanto y quiere saber que sus tebeos **siguen ahí** y por qué no se pueden abrir. **Compensación mientras no haya caso real:** el escenario de prueba E3 de §7 reproduce las tres situaciones (inexistente, vacía y ausencia masiva) con un dataset sintético, que sí está definido.
 - **Hoy `[ZASC]`:** `Importer._detectar_desaparecidos`: raíz inexistente → *warning* y **no marca nada**; raíz vacía → *warning*; desaparición ≥ 50 % y ≥ 10 archivos → *error* y **no marca nada**; si no, marca `is_missing`/`missing_since` y **revierte solo** si el fichero reaparece. **Los tres guardarraíles solo escriben en el log**; `ImportRun` guarda `disappeared_count` y `details`, no la causa de una omisión.
 - **Deseado:** hacerlo **visible** (dos niveles: estado del archivo y última comprobación de su raíz), sin borrar nada (BL-R2).
 - **Referencias:** Plex manda a la papelera lo que desaparece y **no la vacía por defecto**; vaciar automáticamente tras cada escaneo es opcional y advierte de que no hay vuelta atrás `[DOC-RESUMEN]` → **descartar** el vaciado automático. **Kapowarr, por el contrario, elimina vínculos de archivos ausentes aunque fueran manuales** (`delete_bindings` incluye `file_id in manually_matched_files_missing`) y su `scan_files` tiene `del_unmatched_files=True` por defecto `[COD@c191dda]`; solo se queda quieto si la carpeta del volumen no existe (`return` temprano si `not isdir(...)`). **No es el patrón a seguir.**
@@ -142,13 +147,13 @@ Tres métricas comunes: **llamadas externas**, **memoria máxima** (cgroup del c
 | D2 | Comprobante de la corrección | Debe ser **duradero e idempotente**. **Hallazgo:** `vinculacion_operaciones` es inmutable por disparador, así que el deshacer **no puede reutilizarla**; lo probable es una tabla propia con ADR | **Diferida** al contrato técnico de BL-R1 |
 | D3 | Qué es una relación «confirmada» | **Aceptación explícita con procedencia** (no un booleano, no solo `metadata_source='manual'`). Se descarta copiar el `forced` de Kapowarr | **Respondida** (propuesta) |
 | D4 | Dónde se guarda una discrepancia | Identidad, procedencia y ciclo de vida primero; almacenamiento después | **Diferida** a BL-R4 |
-| D5 | ¿BL-R1 con etiqueta MVP? | Es decisión del **PO**, no de este spike; la evidencia (E1) la apoya pero **sin caso real registrado** | **Diferida al PO** |
+| D5 | ¿BL-R1 con etiqueta MVP? | **Decidida por el PO el 2026-10-20: SÍ, con alcance estrictamente limitado a «deshacer una vinculación equivocada y volver a vincular»**, sin ampliar a correcciones de M5 (edición/publicación), lotes ni mover archivos. Es el hueco más doloroso del recorrido «vincular en sitio» y no depende de ninguna fuente externa. Esta ficha lo **registra**; **no cambia la etiqueta en el tablero** (se hace aparte) | **Decidida** (PO) |
 | D6 | Kanban | Superada por la orden del PO (#228–#236 existen) | Cerrada |
 | D7 | ISBN | El ejemplo de Plex solo usa `imdb`/`tvdb`; **no** hay evidencia a favor del ISBN como id de serie. Estudiarlo en #182 | **Diferida** a #182 |
 
 ## 9. Límites y NOT RUN
 
 - **NOT RUN:** todas las pruebas de §7. **No leído:** los artículos de Plex (403), Mylar3, Suwayomi y Sonarr/Radarr para esta ficha.
-- **Casos reales pendientes del PO:** E1 y E2 (y un incidente fechado para E3).
+- **Casos reales pendientes del PO:** E1 y E2, y un incidente fechado para E3. Están cubiertos **solo con casos derivados etiquetados como no reales** (decisión «mixta» del PO, 2026-10-20). **El criterio de aceptación 1 de #229 no se da por cumplido para esos tres escenarios** hasta que haya un caso real anonimizado.
 - **Este documento no cambia el backlog ni la estimación** de BL-R1–BL-R7: la refinará quien las implemente, con esta ficha ya disponible.
 - **Definition of Ready de BL-R1–BL-R7:** esta ficha cubre el punto «benchmark pertinente (BL-R0)». Siguen pendientes los demás (casos reales, decisiones D2/D4/D5, estimación).
