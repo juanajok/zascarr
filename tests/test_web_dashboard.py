@@ -8,6 +8,7 @@ recalcula ni afirma de más. Las clases FakeSession/FakeResult las reutilizan ot
 """
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from datetime import UTC, datetime
 from html.parser import HTMLParser
@@ -19,7 +20,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, MetadataSource, Series
-from zascarr.services.inicio import VistaInicio
+from zascarr.services.inicio import Desglose, VistaInicio
 from zascarr.services.library_adopter import EstadoAdopcion
 from zascarr.services.primeros_pasos import (
     EstadoInicio,
@@ -128,7 +129,11 @@ def _primarios_dentro_y_fuera_de_details(html: str) -> tuple[list[str], list[str
 
 def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0, seguidas=0,
           informe=None, legal=False, fuente=False, series=0, con_archivos=0, con_recuento=0,
-          huecos=0, completitud=None, ultimas=()) -> VistaInicio:
+          huecos=0, completitud=None, ultimas=(), desglose=None, copias=0) -> VistaInicio:
+    """`desglose` por defecto: lo registrado que no está por revisar, clasificado."""
+    if desglose is None:
+        desglose = Desglose(total=registrados, clasificados=max(registrados - sin_clasificar, 0),
+                            por_revisar_presentes=min(sin_clasificar, registrados))
     pasos = calcular_primeros_pasos(EstadoInicio(
         adopcion=adopcion, archivos_registrados=registrados, archivos_sin_clasificar=sin_clasificar,
         series_seguidas=seguidas, informe=informe, aviso_legal_aceptado=legal,
@@ -138,7 +143,8 @@ def vista(*, adopcion=EstadoAdopcion.SIN_TEBEOS, registrados=0, sin_clasificar=0
         series_con_recuento=con_recuento, huecos_pendientes=huecos, completitud=completitud,
         ultimas_series=tuple(ultimas))
     return VistaInicio(resumen=resumen, pasos=pasos, informe=informe,
-                       archivos_sin_clasificar=sin_clasificar)
+                       archivos_sin_clasificar=sin_clasificar, registrados=desglose,
+                       copias_descartadas=copias)
 
 
 def pagina(v: VistaInicio) -> str:
@@ -149,6 +155,13 @@ def pagina(v: VistaInicio) -> str:
         r = client.get("/ui/")
     assert r.status_code == 200
     return r.text
+
+
+def texto(html: str, clase: str) -> str:
+    """Texto visible del primer `<p class="{clase}">`, sin etiquetas ni espacios repetidos."""
+    inicio = html.index(f'<p class="{clase}">')
+    fragmento = html[inicio:html.index("</p>", inicio)]
+    return " ".join(re.sub(r"<[^>]+>", "", fragmento).split())
 
 
 class TestLayout:
@@ -258,23 +271,23 @@ class TestProcedenciaDeLasCifras:
         html = pagina(vista(adopcion=EstadoAdopcion.PENDIENTE, informe=informe))
         assert "Tu colección ahora" not in html
         assert "nada sin clasificar" not in html
-        assert "Ahora ZascArr tiene registrados <b>0</b>" in html
+        assert texto(html, "subtitle") == "Aún no hay ningún tebeo registrado en ZascArr."
+        assert texto(html, "procedencia muted") == "En tu disco había 14 el 3 de octubre de 2026."
 
     def test_sin_informe_dice_registrados_y_que_no_se_miro_el_disco(self):
         html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=1542, series=3))
         assert "Tebeos registrados" in html
-        assert "no hemos mirado el disco" in html
         assert "Tebeos encontrados" not in html
-        assert "Todavía no has mirado tu disco" in html
+        assert texto(html, "procedencia muted") == (
+            "Todavía no has mirado tu disco en busca de repetidos.")
 
     def test_con_informe_cita_fecha_y_distingue_de_los_registrados(self):
         informe = InformeDisco(fecha=FECHA, archivos_leidos=1542, archivos_comparados=432)
         html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=1500, series=3,
                             informe=informe))
-        assert "Tebeos encontrados" in html
-        assert "al mirar tu disco el 3 de octubre de 2026" in html
-        assert "1500 registrados ahora" in html
-        assert "432 revisados en busca de repetidos el 3 de octubre de 2026" in html
+        assert texto(html, "procedencia muted") == "En tu disco había 1542 el 3 de octubre de 2026."
+        assert "Tebeos encontrados" not in html     # la tarjeta cuenta lo registrado, no el disco
+        assert "432" not in html
 
     def test_un_informe_viejo_dice_cuanto_hace_y_ofrece_volver_a_mirar(self):
         """Caso real (2026-10-20): «Miramos tu disco el 28 de septiembre» sin más; nada decía que
@@ -283,7 +296,7 @@ class TestProcedenciaDeLasCifras:
         v = replace(vista(adopcion=EstadoAdopcion.HECHA, registrados=1325, informe=informe),
                     informe_hace="hace 3 semanas", informe_antiguo=True)
         html = pagina(v)
-        assert "el 3 de octubre de 2026 (hace 3 semanas) y encontramos" in html
+        assert "había <b>1542</b> el 3 de octubre de 2026 (hace 3 semanas)." in html
         assert '<a href="/ui/auditoria">Volver a mirar el disco</a>' in html
 
     def test_un_informe_reciente_no_invita_a_repetirlo(self):
@@ -299,6 +312,67 @@ class TestProcedenciaDeLasCifras:
         html = pagina(vista(adopcion=EstadoAdopcion.PENDIENTE, informe=informe))
         assert "Tu biblioteca está registrada" not in html
         assert "Registra tu biblioteca" in html
+
+
+class TestUnaCuentaQueCuadra:
+    """Caso real (2026-10-20): «encontramos 1542 · registrados 1325», paso 1 «Hecho» y paso 2
+    «Revisa 1322», sin que nada dijera cómo encajaban. Ahora la frase de entrada desglosa lo
+    registrado en partes que suman el total, y lo del disco dice por qué no coincide."""
+
+    CASO = Desglose(total=1325, clasificados=17, por_revisar_presentes=1308,
+                    por_revisar_ausentes=14)
+
+    def _caso(self, **kw):
+        informe = InformeDisco(fecha=FECHA, archivos_leidos=1542, archivos_comparados=432)
+        return pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=1325, sin_clasificar=1322,
+                            informe=informe, desglose=self.CASO, series=3, **kw))
+
+    def test_la_frase_de_entrada_desglosa_lo_registrado(self):
+        assert texto(self._caso(), "subtitle") == (
+            "Tienes 1325 tebeos registrados: 17 clasificados y 1308 por revisar. "
+            "Otros 14 por revisar ya no están donde se registraron.")
+
+    def test_cada_parte_enlaza_a_su_lista(self):
+        html = self._caso()
+        assert '<a href="/ui/biblioteca"><b>17</b> clasificados</a>' in html
+        assert '<a href="/ui/pendientes"><b>1308</b> por revisar</a>' in html
+
+    def test_el_paso_2_cuenta_la_lista_entera(self):
+        assert "Revisa 1322 tebeos que no hemos sabido clasificar" in self._caso()
+
+    def test_lo_del_disco_explica_las_copias_que_no_se_registraron(self):
+        assert texto(self._caso(copias=217), "procedencia muted") == (
+            "En tu disco había 1542 el 3 de octubre de 2026. Al registrarlos dejamos fuera "
+            "217 copias idénticas: el mismo archivo no se registra dos veces.")
+
+    def test_sin_copias_descartadas_no_inventa_explicacion(self):
+        assert "copias idénticas" not in self._caso()
+
+    def test_la_tarjeta_de_registrados_es_la_cifra_de_la_frase(self):
+        html = self._caso()
+        tarjeta = html[html.index('<div class="metric-card">'):]
+        tarjeta = tarjeta[:tarjeta.index("</div>")]
+        assert '<span class="metric-value">1325</span>' in tarjeta
+        assert "17 ya clasificados" in tarjeta
+
+    def test_el_paso_1_dice_que_clasificar_es_lo_siguiente(self):
+        assert "clasificarlos es el paso siguiente" in self._caso()
+
+    def test_cuatro_partes_con_comas_y_la_ultima_con_y(self):
+        d = Desglose(total=10, clasificados=4, por_revisar_presentes=3, descartados=1)
+        html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=10, sin_clasificar=3,
+                            desglose=d))
+        assert texto(html, "subtitle") == (
+            "Tienes 10 tebeos registrados: 4 clasificados, 3 por revisar, "
+            "2 con serie pero sin número y 1 descartado.")
+
+    def test_una_sola_parte_dice_todos(self):
+        html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=5, sin_clasificar=5))
+        assert texto(html, "subtitle") == "Tienes 5 tebeos registrados, todos por revisar."
+
+    def test_un_solo_tebeo_en_singular(self):
+        html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=1))
+        assert texto(html, "subtitle") == "Tienes 1 tebeo registrado, clasificado."
 
 
 class TestHuecosYCompletitud:
