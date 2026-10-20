@@ -1472,3 +1472,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .back-link:not([hidden]), .page-link:not([hidden]), .topnav a.brand:not([hidden]), .side .brand:not([hidden]) { min-height: 44px; }
   .metric-detail a { display: inline-block; min-height: 24px; }
 }
+
+/* Página de error propia (web/errores.py): una salida clara, la principal primero. */
+.error-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }

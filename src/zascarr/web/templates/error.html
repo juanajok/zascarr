@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{#- Página de error propia (web/errores.py): dentro de la app, con el menú y una salida. Sin la BD. -#}
+{% block title %}{{ titulo }} — ZascArr{% endblock %}
+{% block content %}
+<h1>{{ titulo }}</h1>
+<p class="subtitle">{{ mensaje }}</p>
+{% if detalle %}<p class="muted">{{ detalle }}</p>{% endif %}
+<div class="error-acciones">
+  <a class="btn primary" href="/ui/">Ir al Inicio</a>
+  {% if enlace_estado %}<a class="btn" href="/estado">Ver el estado</a>{% endif %}
+</div>
+{% endblock %}
