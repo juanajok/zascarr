@@ -88,6 +88,23 @@ class TestStaticAssets:
         for ruta in rutas:
             assert client.get(ruta).status_code == 200, ruta
 
+    def test_el_icono_de_interfaz_no_lleva_detalles_que_se_empastan_a_32_px(self):
+        """Bug real (2026-10-21): la barra lateral pintaba a 32 px el dibujo completo y el logo no
+        se distinguía; la trama y las líneas de impacto lo ensuciaban, y la Z, de unos 10 px, se
+        veía gris. El dibujo completo queda para el icono de 180 px (static/brand/README.md)."""
+        svg = (STATIC_DIR / "brand" / "zascarr-icono.svg").read_text(encoding="utf-8")
+        assert "<pattern" not in svg and "<mask" not in svg      # sin trama
+        assert svg.count('fill="#FFFFFF"') == 1                  # la Z, que sí sigue
+        assert "<line" not in svg and "M11.0 13.9" not in svg    # sin líneas de impacto
+
+    def test_el_favicon_no_va_sobre_un_cuadrado_de_papel(self):
+        """Bug real (2026-10-21): en la pestaña, la Z blanca se fundía con el cuadrado de papel
+        y, en las pestañas claras, el cuadrado tampoco se veía. El estallido es la silueta."""
+        svg = (STATIC_DIR / "brand" / "zascarr-favicon.svg").read_text(encoding="utf-8")
+        assert "#F6F3EC" not in svg and "<rect" not in svg
+        png = (STATIC_DIR / "brand" / "zascarr-favicon-32.png").read_bytes()
+        assert png[25] == 6                                      # PNG RGBA: esquinas transparentes
+
     def test_estado_e1_sigue_funcionando_tras_montar_static_y_ui(self):
         r = client.get("/estado")
         assert r.status_code == 200
