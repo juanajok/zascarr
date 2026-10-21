@@ -92,7 +92,7 @@ class TestListaDeArchivos:
         for nombre, fid in ids.items():
             assert nombre in t and f'href="{ruta(serie, fid)}"' in t
         v = visible(t)
-        assert "Archivos por número" in v and "Deshacer esta vinculación" in v
+        assert "Archivos por número" in v and "Desvincular" in v
         assert v.index("#1") < v.index("#2") and t.count('class="archivo-fila"') == 2
 
     async def test_sin_archivos_no_hay_seccion(self, ent):
@@ -113,7 +113,9 @@ class TestListaDeArchivos:
         assert 'href="' + ruta(serie, ids[F1]) + '"' not in t and 'href="' + ruta(serie, ids[F2]) + '"' not in t
         assert 'data-razon="en_curso"' in t and 'data-razon="sin_procedencia"' in t
         v = visible(t)
-        assert "este archivo se está procesando" in v and "no lo vinculaste con «Vincular en su sitio»" in v
+        assert "Ahora mismo ZascArr está trabajando con este archivo" in v
+        # La razón de «sin procedencia» se dice UNA vez, en el desplegable, no en cada fila.
+        assert "¿Por qué algunos archivos no se pueden desvincular?" in v and v.count("Pendientes por carpeta") == 1
 
     async def test_archivo_no_disponible_se_puede_deshacer_y_se_dice_que_no_esta_verificado(self, ent):
         serie, ids = await vinculado(ent, F1)
@@ -121,9 +123,9 @@ class TestListaDeArchivos:
             await s.execute(text("UPDATE files SET is_missing = true, missing_since = now()"))
             await s.commit()
         t = (await get(f"/ui/series/{serie}")).text
-        assert f'href="{ruta(serie, ids[F1])}"' in t and "No se encuentra en el disco (sin comprobar)" in visible(t)
+        assert f'href="{ruta(serie, ids[F1])}"' in t and "Quizá no esté en el disco" in visible(t)
         p = await get(ruta(serie, ids[F1]))
-        assert "no está comprobado que haya desaparecido" in visible(p.text) and 'name="token"' in p.text
+        assert "aunque no está comprobado" in visible(p.text) and 'name="token"' in p.text
 
     async def test_la_lista_no_hace_una_consulta_por_archivo(self, ent):
         pocos, _ = await vinculado(ent, *(f"Flash {i:02d} (1987).cbz" for i in range(1, 3)))
@@ -193,12 +195,12 @@ class TestVistaPrevia:
         assert await instantanea(ent.banco) == antes
         t, v = r.text, visible(r.text)
         assert F1 in v and "Flash" in v and "#1" in v
-        assert "Qué pasará si lo confirmas" in v and "vuelve a «Por revisar»" in v
+        assert "¿Desvincular este archivo?" in v and "Qué pasará" in v and "Vuelve a «Por revisar»" in v
         assert "no se toca" in v and "no se mueve, no se renombra ni se borra" in v
-        assert "sin archivo" in v and "un hueco" in v                       # el número se queda sin archivo
-        assert "lo creó esta vinculación, pero no se elimina" in v           # D1
-        assert "otra operación aparte" in v and "puede cancelarse o fallar" in v          # advertencia de BL-R1a, criterio 2
-        assert "Hasta que pulses el botón, no cambia nada" in v
+        assert "sin archivo" in v and "entre los números que te faltan" in v                    # el número se queda sin archivo (D1: se conserva)
+        assert "Volver a vincularlo es un paso aparte" in v and "si no lo completas, el archivo se queda allí" in v    # criterio 2 de #254
+        assert "Hasta que pulses el botón, no cambia nada" in v and "Desvincular el archivo" in v
+        assert 'class="aviso amber"' not in t                                                   # sin aviso de peligro que no existe
         assert 'name="token"' in t and 'action="/ui/series/' in t and 'method="post"' in t
 
     async def test_sin_javascript_propio_y_con_el_contrato_htmx_documentado(self, ent):
@@ -235,7 +237,7 @@ class TestVistaPrevia:
             await s.commit()
         r = await get(ruta(serie, ids[F1]))
         assert r.status_code == 200 and 'name="token"' not in r.text and "<form" not in r.text
-        assert "no lo vinculaste con «Vincular en su sitio»" in visible(r.text)
+        assert "Pendientes por carpeta" in visible(r.text)
 
     async def test_ya_no_vinculado_dice_que_no_hay_nada_que_deshacer(self, ent):
         serie, ids = await vinculado(ent, F1)
@@ -262,13 +264,14 @@ class TestConfirmacion:
         r = await post(ruta(serie, fid), {"token": token_de_pagina(pagina.text)})          # lo que envía el navegador sin JS
         assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
         t, v = r.text, visible(r.text)
-        assert "<html" in t and "Hecho: el archivo ya no está vinculado" in v and "ha vuelto a «Por revisar»" in v
-        assert "El número #1 sigue existiendo" in v and "no se ha tocado" in v and "otra operación" in v
+        assert "<html" in t and "Archivo desvinculado de Flash #1" in v and "ha vuelto a «Por revisar»" in v
+        assert "No se ha movido ni borrado nada" in v and "Para vincularlo de nuevo, ve a «Por revisar»" in v
         assert 'href="/ui/pendientes"' in t and f'href="/ui/series/{serie}"' in t
         f = await fila(ent.banco, fid)
         assert f["issue_id"] is None and "vinculo" not in f["metadata"] and len(f["metadata"]["vinculo_historial"]) == 1
         assert await pendientes(ent) == 1
         assert "cambio_desde" not in t and "token_invalido" not in t and "ya_deshecho" not in t        # sin códigos en superficie
+        assert "token" not in v.lower()
 
     async def test_el_archivo_reaparece_en_por_revisar(self, ent):
         serie, ids = await vinculado(ent, F1)
@@ -289,7 +292,7 @@ class TestConfirmacion:
         await post(ruta(serie, ids[F1]), {"token": t})
         despues, n = await fila(ent.banco, ids[F1]), len(ent.banco.sentencias)
         r = await post(ruta(serie, ids[F1]), {"token": t})
-        assert "Ya estaba deshecho" in visible(r.text) and 'data-resultado="ya_deshecho"' in r.text
+        assert "Este archivo ya estaba desvinculado" in visible(r.text) and 'data-resultado="ya_deshecho"' in r.text
         assert escrituras(ent.banco, n) == [] and await fila(ent.banco, ids[F1]) == despues
 
     async def test_el_token_de_otro_archivo_no_vale_en_esta_url(self, ent):
@@ -313,8 +316,8 @@ class TestConfirmacion:
         serie, ids = await vinculado(ent, F1)
         antes = await instantanea(ent.banco)
         r = await post(ruta(serie, ids[F1]), {"token": token})
-        assert r.status_code == 200 and "La vista previa no es válida" in visible(r.text)
-        assert "Abrir de nuevo la vista previa" in visible(r.text) and await instantanea(ent.banco) == antes
+        assert r.status_code == 200 and "Esta página no es válida" in visible(r.text)
+        assert "Abrir de nuevo" in visible(r.text) and await instantanea(ent.banco) == antes
 
     async def test_peticion_sin_token_o_demasiado_larga_es_422(self, ent):
         serie, ids = await vinculado(ent, F1)
@@ -330,7 +333,7 @@ class TestConfirmacion:
                             ahora=time.time() - 3600)
         antes = await instantanea(ent.banco)
         r = await post(ruta(serie, ids[F1]), {"token": viejo})
-        assert "La vista previa caducó" in visible(r.text) and "No se ha cambiado nada" in visible(r.text)
+        assert "Esta página ha caducado" in visible(r.text) and "No se ha cambiado nada" in visible(r.text)
         assert await instantanea(ent.banco) == antes
 
     async def test_cambio_desde_la_vista_previa_dice_que_no_se_cambio_nada(self, ent):
@@ -342,7 +345,7 @@ class TestConfirmacion:
         antes = await instantanea(ent.banco)
         r = await post(ruta(serie, ids[F1]), {"token": t})
         v = visible(r.text)
-        assert "No se deshizo nada" in v and "cambió desde que abriste la vista previa" in v and "No se ha cambiado nada" in v
+        assert "No se ha desvinculado nada" in v and "ha cambiado desde que abriste esta página" in v and "No se ha cambiado nada" in v
         assert 'data-resultado="omitido"' in r.text and await instantanea(ent.banco) == antes
 
     async def test_en_curso_aparecido_despues_dice_que_espere(self, ent):
@@ -355,7 +358,7 @@ class TestConfirmacion:
                 "'/t', 1, 1, :sha, '1', CAST('single_issue' AS issue_format))"), {"f": ids[F1], "s": serie, "sha": SHA})
             await s.commit()
         r = await post(ruta(serie, ids[F1]), {"token": t})
-        assert "se está procesando ahora mismo" in visible(r.text) and "espera a que termine" in visible(r.text)
+        assert "Ahora mismo ZascArr está trabajando con este archivo" in visible(r.text) and "prueba de nuevo" in visible(r.text)
 
     async def test_resultado_incierto_ofrece_comprobar_y_repetir_lo_resuelve(self, ent, monkeypatch):
         from sqlalchemy.ext.asyncio import AsyncSession
@@ -371,13 +374,13 @@ class TestConfirmacion:
         monkeypatch.setattr(AsyncSession, "commit", commit_y_cae)
         r = await post(ruta(serie, ids[F1]), {"token": t})
         v = visible(r.text)
-        assert r.status_code == 200 and "No sabemos si se deshizo" in v and "no se ha cambiado nada" not in v.lower()
+        assert r.status_code == 200 and "No sabemos si se ha desvinculado" in v and "no se ha cambiado nada" not in v.lower()
         assert "Comprobar el resultado" in v and token_de_pagina(r.text) == t          # el mismo token, para repetir
         monkeypatch.undo()
         monkeypatch.setattr(web_desv, "get_settings", lambda: SimpleNamespace(secret_key=SECRETO))
         monkeypatch.setattr(api_revision, "get_settings", lambda: SimpleNamespace(secret_key=SECRETO))
         r2 = await post(ruta(serie, ids[F1]), {"token": t})
-        assert "Ya estaba deshecho" in visible(r2.text)
+        assert "Este archivo ya estaba desvinculado" in visible(r2.text)
 
     async def test_fallo_inesperado_no_filtra_detalles_ni_cambia_nada(self, ent, monkeypatch):
         from zascarr.services.desvinculacion import DesvinculacionDeArchivo
@@ -389,7 +392,7 @@ class TestConfirmacion:
             raise RuntimeError("detalle interno con /ruta/secreta")
         monkeypatch.setattr(DesvinculacionDeArchivo, "_gancho_con_filas_bloqueadas", staticmethod(falla))
         r = await post(ruta(serie, ids[F1]), {"token": t})
-        assert r.status_code == 200 and "No se pudo completar" in visible(r.text) and "no se ha cambiado nada" in visible(r.text)
+        assert r.status_code == 200 and "No se ha podido completar" in visible(r.text) and "No se ha cambiado nada" in visible(r.text)
         assert "detalle interno" not in r.text and "/ruta/secreta" not in r.text and "RuntimeError" not in r.text
         assert await instantanea(ent.banco) == antes
 
@@ -406,3 +409,40 @@ class TestConfirmacion:
         t = (await get(f"/ui/series/{serie}")).text
         assert "archivos-por-numero" not in t                 # ya no tiene archivos: el número es un hueco, no una fila
         assert "En tu biblioteca" not in visible(t)           # y la serie ya no lo cuenta como poseído
+
+# ── Lenguaje llano (revisión UX del squad, CLAUDE.md §6 «Presupuesto de texto») ─────────────────
+
+class TestLenguajeLlano:
+
+    async def test_la_vista_previa_cabe_en_el_presupuesto_de_texto_antes_del_boton(self, ent):
+        serie, ids = await vinculado(ent, F1)
+        v = visible((await get(ruta(serie, ids[F1]), headers=HX)).text)           # solo el panel, sin el menú
+        antes_del_boton = v[:v.index("Desvincular el archivo")]
+        assert len(antes_del_boton.split()) <= 100, len(antes_del_boton.split())          # tenía ~150; el objetivo del squad es ~60
+        assert "Pendientes por carpeta" not in v and "Vincular en su sitio" not in v         # nombres internos fuera de la vista previa
+
+    async def test_ninguna_pantalla_dice_token_ni_enseña_un_codigo(self, ent, monkeypatch):
+        import time
+        serie, ids = await vinculado(ent, F1, F2)
+        textos = [(await get(f"/ui/series/{serie}")).text, (await get(ruta(serie, ids[F1]))).text,
+                  (await post(ruta(serie, ids[F1]), {"token": "basura"})).text]
+        f = await fila(ent.banco, ids[F2])
+        v = f["metadata"]["vinculo"]
+        viejo = firmar_desv(f, file_id=ids[F2], issue_id=f["issue_id"], series_id=v["serie_id"], vinculo_operacion=v["operacion_id"],
+                            ahora=time.time() - 3600)
+        textos.append((await post(ruta(serie, ids[F2]), {"token": viejo})).text)
+        for t in textos:
+            vis = visible(t).lower()
+            assert "operacion_id" not in vis and "cambio_desde" not in vis and "token_" not in vis
+            assert "token" not in vis
+
+    async def test_los_enlaces_de_desvincular_se_distinguen_para_un_lector_de_pantalla(self, ent):
+        serie, ids = await vinculado(ent, F1, F2)
+        t = (await get(f"/ui/series/{serie}")).text
+        for nombre in (F1, F2):
+            assert re.search(r">Desvincular<span class=\"sr\"> " + re.escape(nombre) + "</span>", t)
+
+    async def test_el_resultado_tiene_un_solo_destino_para_asignarlo_de_nuevo(self, ent):
+        serie, ids = await vinculado(ent, F1)
+        t = (await post(ruta(serie, ids[F1]), {"token": await token_desv(ids[F1])}, headers=HX)).text
+        assert t.count('href="/ui/pendientes"') == 1 and "/ui/pendientes/carpetas" not in t

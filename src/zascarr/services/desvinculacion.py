@@ -61,10 +61,10 @@ _ESPACIO_OPERACION = "desv_op:"
 #: Bloqueos de la vista previa y motivos de `omitido` en la confirmación (códigos estables; el texto es para la persona).
 MENSAJES = {
     "no_vinculado": "Este archivo no está vinculado a ningún número: no hay nada que deshacer.",
-    "en_curso": "Este archivo se está procesando ahora mismo. Espera a que termine y vuelve a intentarlo.",
+    "en_curso": "Ahora mismo ZascArr está trabajando con este archivo. Prueba de nuevo en unos minutos.",
     "archivo_inexistente": "El archivo ya no está registrado en ZascArr.",
-    "sin_procedencia": "Este archivo no lo vinculaste con «Vincular en su sitio» (o fue antes de que ZascArr guardara cómo), así "
-                       "que no se puede deshacer desde aquí.",
+    "sin_procedencia": "Este archivo no se vinculó desde «Pendientes por carpeta» (o fue antes de que ZascArr guardara cómo), así "
+                       "que no se puede desvincular desde aquí.",
     "cambio_desde_la_vista_previa": "El archivo ha cambiado desde que lo revisaste. No se ha deshecho nada: abre de nuevo la vista previa.",
 }
 AVISO_REVINCULAR = (

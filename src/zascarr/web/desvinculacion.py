@@ -43,20 +43,20 @@ router = APIRouter(prefix="/ui/series/{series_id}/archivos/{file_id}", tags=["ui
 
 #: Cómo se dice, en llano y con la acción, cada fallo que el servicio puede devolver: (título, mensaje, ¿se puede repetir con el mismo token?).
 FALLOS: dict[str, tuple[str, str, bool]] = {
-    "token_invalido": ("La vista previa no es válida", "Abre de nuevo la vista previa y confírmala desde ahí. No se ha cambiado nada.", False),
-    "token_caducado": ("La vista previa caducó", f"Pasaron más de {TTL_SEGUNDOS // 60} minutos desde que la abriste. No se ha cambiado nada: ábrela de nuevo.", False),
-    "resultado_incierto": ("No sabemos si se deshizo", "Se perdió la respuesta justo al guardar. Pulsa «Comprobar el resultado»: si ya se deshizo, lo verás; si no, se deshará ahora.", True),
-    "conflicto_de_bloqueo": ("Otra operación coincidió", "Otra operación tocaba el mismo archivo a la vez. No se ha cambiado nada: pulsa «Reintentar».", True),
-    "error_inesperado": ("No se pudo completar", "Algo falló al guardar y no se ha cambiado nada. Abre de nuevo la vista previa e inténtalo otra vez; si se repite, mira el Estado.", False),
+    "token_invalido": ("Esta página no es válida", "No se ha cambiado nada: ábrela de nuevo desde la serie.", False),
+    "token_caducado": ("Esta página ha caducado", f"Han pasado más de {TTL_SEGUNDOS // 60} minutos. No se ha cambiado nada: ábrela de nuevo para ver el estado actual.", False),
+    "resultado_incierto": ("No sabemos si se ha desvinculado", "Se perdió la respuesta al guardar. Pulsa «Comprobar el resultado»: si ya estaba hecho, lo verás; si no, se hará ahora.", True),
+    "conflicto_de_bloqueo": ("Ahora no se ha podido", "ZascArr estaba haciendo otra cosa con este archivo. No se ha cambiado nada: vuelve a intentarlo.", True),
+    "error_inesperado": ("No se ha podido completar", "No se ha cambiado nada. Vuelve a intentarlo; si se repite, mira «Estado».", False),
 }
-FALLO_DESCONOCIDO = ("No se pudo deshacer", "No se ha podido completar y no sabemos más. Abre de nuevo la vista previa e inténtalo otra vez.", False)
+FALLO_DESCONOCIDO = ("No se ha podido completar", "No se ha cambiado nada que sepamos. Ábrela de nuevo e inténtalo otra vez.", False)
 
 #: Motivos de un resultado `omitido`, con la acción que le queda a la persona.
 OMITIDOS: dict[str, str] = {
-    "no_vinculado": "Este archivo ya no está vinculado a ningún número, así que no había nada que deshacer. Si lo acabas de deshacer, está en «Por revisar».",
-    "en_curso": "Este archivo se está procesando ahora mismo. No se ha cambiado nada: espera a que termine y abre de nuevo la vista previa.",
+    "no_vinculado": "Este archivo ya no está vinculado a ningún número, así que no había nada que hacer. Si lo acabas de desvincular, está en «Por revisar».",
+    "en_curso": "Ahora mismo ZascArr está trabajando con este archivo. No se ha cambiado nada: prueba de nuevo en unos minutos.",
     "archivo_inexistente": "Este archivo ya no está registrado en ZascArr. No se ha cambiado nada.",
-    "cambio_desde_la_vista_previa": "El archivo cambió desde que abriste la vista previa (por ejemplo, otra pantalla lo vinculó o lo movió). No se ha cambiado nada: ábrela de nuevo para ver cómo está ahora.",
+    "cambio_desde_la_vista_previa": "El archivo ha cambiado desde que abriste esta página (por ejemplo, otra pantalla lo vinculó o lo movió). No se ha cambiado nada: ábrela de nuevo para ver cómo está ahora.",
 }
 
 
