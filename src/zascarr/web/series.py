@@ -60,8 +60,8 @@ _POLITICAS_OFRECIDAS = {
 
 #: BL-R1b (D9): por qué un archivo no ofrece «Deshacer esta vinculación», junto al archivo.
 RAZONES_SIN_BOTON = {
-    "en_curso": "Ahora mismo ZascArr está trabajando con este archivo. Prueba de nuevo en unos minutos.",
-    "sin_procedencia": "",      # la razón se explica UNA vez, en el desplegable de la sección (no en cada fila)
+    "en_curso": "Ahora mismo ZascArr trabaja con este archivo. Prueba de nuevo en unos minutos.",
+    "sin_procedencia": "",      # se explica UNA vez, en el desplegable de la sección
 }
 
 

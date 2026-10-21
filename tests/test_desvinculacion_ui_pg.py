@@ -113,7 +113,7 @@ class TestListaDeArchivos:
         assert 'href="' + ruta(serie, ids[F1]) + '"' not in t and 'href="' + ruta(serie, ids[F2]) + '"' not in t
         assert 'data-razon="en_curso"' in t and 'data-razon="sin_procedencia"' in t
         v = visible(t)
-        assert "Ahora mismo ZascArr está trabajando con este archivo" in v
+        assert "Ahora mismo ZascArr trabaja con este archivo" in v
         # La razón de «sin procedencia» se dice UNA vez, en el desplegable, no en cada fila.
         assert "¿Por qué algunos archivos no se pueden desvincular?" in v and v.count("Pendientes por carpeta") == 1
 
