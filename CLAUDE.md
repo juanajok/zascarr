@@ -187,6 +187,14 @@ como marco permanente.
   que debe seguir viéndose (decisión del PO, 2026-10-21): así además se distingue de Komga, que
   lleva la letra dentro de un estallido. La trama y las líneas de impacto, solo en el icono de 180 px. Tamaño mínimo, espacio libre y
   versión en blanco y negro, en el README de la marca.
+- **Guiños de imprenta: trama sí, desalineamiento casi nunca** (decidido el 2026-10-21). La trama de
+  puntos va donde no hay nada que leer encima: el fondo (5 %), las tarjetas de cifras (10 %), los
+  estados vacíos (una esquina fija bajo el texto) y la página de error (un disco a la derecha, solo con
+  ancho ≥ 1100 px). Detrás de texto, como mucho al 5–10 %; sin texto encima puede llegar a ~30 %. El
+  desalineamiento de planchas (cian y magenta corridos) va **solo** en el rótulo de la página de error:
+  en texto pequeño se lee borroso y en un borde se confunde con la sombra dura de los botones. Todo se
+  apaga con `prefers-contrast: more` y `forced-colors` (bloque al final de `web.css`; una prueba exige
+  que cada trama nueva esté en él).
 - **Un botón principal por pantalla** (decidido el 2026-10-20): el amarillo es la acción que hace
   avanzar la tarea de esa pantalla y se pide con `.primary` (`button.primary`, `.btn.primary`). Un
   `type="submit"` es neutro por defecto: los botones que se repiten (uno por resultado o por tarjeta) y
