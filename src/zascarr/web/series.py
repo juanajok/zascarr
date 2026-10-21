@@ -30,6 +30,7 @@ from zascarr.models import (
     WishlistPolicy,
     WishlistStatus,
 )
+from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     MOTIVO_POLITICA_FUTUROS,
@@ -54,6 +55,13 @@ router = APIRouter(prefix="/ui/series", tags=["ui"])
 _POLITICAS_OFRECIDAS = {
     WishlistPolicy.NONE: "No buscar nada por mi cuenta",
     WishlistPolicy.MISSING: "Buscar los números que me faltan",
+}
+
+
+#: BL-R1b (D9): por qué un archivo no ofrece «Deshacer esta vinculación», junto al archivo.
+RAZONES_SIN_BOTON = {
+    "en_curso": "Ahora mismo ZascArr trabaja con este archivo. Prueba de nuevo en unos minutos.",
+    "sin_procedencia": "",      # se explica UNA vez, en el desplegable de la sección
 }
 
 
@@ -111,10 +119,14 @@ async def detalle(series_id: UUID, request: Request,
     poseidos = await numeros_poseidos(db, series.id)
     huecos = await huecos_de_serie(db, series, poseidos)
 
+    politica = await _contexto_politica(db, series)
     return templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
         "missing": huecos.faltantes, "huecos": huecos,
-        **(await _contexto_politica(db, series)),
+        **politica,
+        # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
+        "archivos_por_numero": await archivos_por_numero(db, series.id),
+        "razones_sin_boton": RAZONES_SIN_BOTON,
     })
 
 

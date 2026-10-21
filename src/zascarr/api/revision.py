@@ -437,17 +437,13 @@ async def previsualizar_desvinculacion(
         raise _error_vinculacion(404, e.codigo, str(e)) from None
 
 
-@router.post("/desvinculacion", response_model=ResultadoDesvinculacion)
-async def desvincular(
-    peticion: PeticionDesvincular, response: Response, db: AsyncSession = Depends(get_db),
-) -> ResultadoDesvinculacion:
-    """Deshace, en UNA transacción y sin tocar el fichero, lo que enseñó y firmó la vista previa. Repetir el mismo token
-    devuelve el mismo resultado (`ya_deshecho`) sin escribir. Un impedimento previsto es un `200` con `resultado: omitido` y su
-    motivo: nunca se anuncia éxito si no se deshizo."""
-    response.headers["Cache-Control"] = "no-store"
+async def ejecutar_desvinculacion(db: AsyncSession, token: str) -> ResultadoDesvinculacion:
+    """Deshace, en UNA transacción y sin tocar el fichero, lo que enseñó y firmó la vista previa. Es lo que comparten
+    `POST /desvinculacion` y la pantalla de la ficha de la serie (BL-R1b): la traducción de cada fallo a su estado y a su
+    texto vive AQUÍ, una sola vez. Levanta `HTTPException` con un `detail` con su `codigo`."""
     secret = _secreto()
     try:
-        return await DesvinculacionDeArchivo(db, secret=secret).confirmar(peticion.token)
+        return await DesvinculacionDeArchivo(db, secret=secret).confirmar(token)
     except TokenDeVinculacionInvalidoError as e:
         raise _error_vinculacion(422, e.codigo, str(e)) from None
     except TokenCaducadoError as e:
@@ -468,3 +464,14 @@ async def desvincular(
         logger.error("desvinculacion.error_inesperado", tipo=type(e).__name__)      # sin rutas ni nombres
         raise _error_vinculacion(
             500, "error_inesperado", "No se pudo completar y no se ha cambiado nada. Inténtalo de nuevo.") from None
+
+
+@router.post("/desvinculacion", response_model=ResultadoDesvinculacion)
+async def desvincular(
+    peticion: PeticionDesvincular, response: Response, db: AsyncSession = Depends(get_db),
+) -> ResultadoDesvinculacion:
+    """Deshace la vinculación de un archivo con el token de la vista previa. Repetir el mismo token devuelve el mismo
+    resultado (`ya_deshecho`) sin escribir. Un impedimento previsto es un `200` con `resultado: omitido` y su motivo: nunca
+    se anuncia éxito si no se deshizo."""
+    response.headers["Cache-Control"] = "no-store"
+    return await ejecutar_desvinculacion(db, peticion.token)
