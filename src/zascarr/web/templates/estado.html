@@ -38,8 +38,8 @@
       migration_required: "Falta terminar la actualización",
       schema_incompatible: "Le faltan datos",
     },
-    transmission: { ok: "Conectado",  unreachable: "No responde" },
-    amule:        { ok: "Conectado",  unreachable: "No responde" },
+    transmission: { ok: "Conectado",  unreachable: "No responde", disabled: "Desactivado" },
+    amule:        { ok: "Conectado",  unreachable: "No responde", disabled: "Desactivado" },
     vpn:          { ok: "Activa", warning: "No protege", unknown: "Sin datos" },
   };
 
@@ -67,6 +67,8 @@
     ok: "ok", error: "bad", unreachable: "bad",
     migration_required: "bad", schema_incompatible: "bad",
     warning: "warn", unknown: "warn",
+    // Apagado en Ajustes: gris y fuera del resumen; no es un fallo.
+    disabled: "neutral",
   };
 
   const SUMMARY_META = {
@@ -91,7 +93,7 @@
       const level = CHECK_LEVEL[raw] || "neutral";
       const text = (CHECK_TEXT[key] && CHECK_TEXT[key][raw]) || "Sin datos";
       const action = (key === "database" && CHECK_ACTION[raw]) || "";
-      if (level !== "ok") detailParts.push(CHECK_LABELS[key]);
+      if (level === "warn" || level === "bad") detailParts.push(CHECK_LABELS[key]);
 
       const row = document.createElement("div");
       row.className = "estado-check-row";
