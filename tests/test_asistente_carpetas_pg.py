@@ -245,7 +245,8 @@ class TestCriterio4Eleccion:
 
     async def test_la_sugerencia_de_la_fuente_se_distingue_y_no_esta_elegida(self, entorno):
         t = (await buscar_con_una(entorno)).text
-        assert "La fuente sugiere: Grapa americana" in visible(t) and "Tú decides" in visible(t)
+        assert "La fuente lo clasifica como Grapa americana" in visible(t)
+        assert "no de la obra: elige tú" in visible(t)
         assert not re.search(r'<option value="american"[^>]*\bselected\b', t)
 
     async def test_la_carpeta_solo_es_una_pista_y_tampoco_marca_nada(self, entorno):

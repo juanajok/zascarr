@@ -177,7 +177,8 @@ class TestBuscar:
         assert "required" in select and select.count("selected") == 1          # solo el marcador vacío
         assert 'value="" selected disabled' in select
         assert 'value="manga" selected' not in select
-        assert "La fuente sugiere: Manga" in html
+        assert "La fuente lo clasifica como Manga" in html
+        assert "no de la obra: elige tú" in html
 
     def test_la_portada_no_permitida_no_se_muestra_ni_se_firma(self):
         html = self._buscar([_resultado(cover_url="http://127.0.0.1:9091/x.jpg")])
