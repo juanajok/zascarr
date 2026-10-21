@@ -34,6 +34,7 @@ from zascarr.services.tokens_revision import (
     TTL_SEGUNDOS,
     verificar_token_desvinculacion,
 )
+from zascarr.utils.ruta_visible import ruta_visible
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
@@ -93,6 +94,7 @@ async def vista_previa(series_id: UUID, file_id: UUID, request: Request, db: Asy
         raise HTTPException(status_code=404, detail="Ese archivo no pertenece a esta serie.")
     return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
         "serie": serie, "file_id": str(file_id), "fase": "vista_previa", "p": p, "r": None, "fallo": None, "token": p.token,
+        "ruta_visible": ruta_visible(p.archivo.ruta),
         "textos_bloqueo": MENSAJES}))
 
 
