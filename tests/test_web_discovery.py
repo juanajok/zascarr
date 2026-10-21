@@ -8,7 +8,9 @@ real está en tests/test_descubrir_dos_pasos_pg.py.
 """
 from __future__ import annotations
 
+from dataclasses import MISSING
 from types import SimpleNamespace
+from typing import get_type_hints
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -177,7 +179,8 @@ class TestBuscar:
         assert "required" in select and select.count("selected") == 1          # solo el marcador vacío
         assert 'value="" selected disabled' in select
         assert 'value="manga" selected' not in select
-        assert "La fuente sugiere: Manga" in html
+        assert "La fuente lo clasifica como Manga" in html
+        assert "no de la obra: elige tú" in html
 
     def test_la_portada_no_permitida_no_se_muestra_ni_se_firma(self):
         html = self._buscar([_resultado(cover_url="http://127.0.0.1:9091/x.jpg")])
@@ -194,6 +197,67 @@ class TestBuscar:
         monkeypatch.setattr(web, "get_settings", lambda: SimpleNamespace(secret_key=""))
         html = self._buscar([_resultado()])
         assert "no tiene clave para firmar" in html and 'name="candidata"' not in html
+
+
+@pytest.mark.usefixtures("con_clave_de_firma")
+class TestEscenariosCA6DeU15:
+    """Mapeo 1:1 de los cinco escenarios de CA6 de #202.
+
+    El quinto (elección explícita de la persona) necesita Postgres real y vive en
+    `test_descubrir_dos_pasos_pg.py`. La ausencia de sugerencia no se puede representar con el contrato
+    actual: se verifica el impedimento, no se inventa un valor ni se amplía el contrato en esta PR (CA5).
+    """
+
+    def _buscar(self, resultados):
+        with use_fake_session(FakeSession()) as client, \
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+                   AsyncMock(return_value=Busqueda(resultados, [], {"comic_vine": "ok", "anilist": "ok", "tebeosfera": "ok", "gcd": "ok"}))):
+            return client.get("/ui/descubrir/buscar", params={"q": "x"}).text
+
+    @staticmethod
+    def _select(html: str) -> str:
+        return html[html.index("<select"):html.index("</select>")]
+
+    def test_dato_explicito_respaldado_se_presenta_como_pista_y_no_se_preselecciona(self):
+        """GCD puede aportar una tradición explícita; aun así no es una decisión sobre la obra."""
+        html = self._buscar([_resultado(
+            source=MetadataSource.GCD, external_id="1", title="El Jabato", start_year=1958,
+            site_url=None, tradition_guess=ComicTradition.TEBEO)])
+        select = self._select(html)
+        assert select.count("selected") == 1 and 'value="" selected disabled' in select
+        assert 'value="tebeo" selected' not in select
+        assert "La fuente lo clasifica como Tebeo español" in html
+        assert "no de la obra: elige tú" in html
+
+    def test_sugerencia_no_fiable_de_comic_vine_para_un_tebeo_es_solo_una_pista(self):
+        """El caso original: Mortadelo devuelto por Comic Vine como «Grapa americana»."""
+        html = self._buscar([_resultado(
+            source=MetadataSource.COMIC_VINE, external_id="mortadelo", title="Mortadelo y Filemón",
+            start_year=1958, site_url=None, tradition_guess=ComicTradition.AMERICAN)])
+        select = self._select(html)
+        assert select.count("selected") == 1 and 'value="" selected disabled' in select
+        assert 'value="american" selected' not in select
+        assert "La fuente lo clasifica como Grapa americana" in html
+        assert "no de la obra: elige tú" in html
+
+    def test_origen_desconocido_no_se_presenta_como_dato_confirmado(self):
+        """El contrato no expone si la pista fue explícita, transformada o por defecto.
+
+        La UI no inventa esa procedencia: la atribuye a la fuente y pide elegir.
+        """
+        html = self._buscar([_resultado(source=MetadataSource.GCD, external_id="9", title="Sin ficha", site_url=None)])
+        visible = html.lower()
+        assert "La fuente lo clasifica como Grapa americana" in html
+        assert "no de la obra: elige tú" in html
+        assert "dato confirmado" not in visible and "verificado" not in visible
+
+    def test_ausencia_de_sugerencia_es_un_impedimento_del_contrato_actual(self):
+        """CA6 pide «ausencia de sugerencia»; hoy `tradition_guess` es obligatoria y no tiene valor por defecto.
+
+        No se simula con `other` ni se amplía el contrato en esta PR: queda registrado como impedimento (CA5).
+        """
+        assert get_type_hints(DiscoveryResult)["tradition_guess"] is ComicTradition
+        assert DiscoveryResult.__dataclass_fields__["tradition_guess"].default is MISSING
 
 
 class TestLasRutasDeCreacionNoAceptanLosDatosDeLaSerie:

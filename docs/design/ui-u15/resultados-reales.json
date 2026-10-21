@@ -1,0 +1,1313 @@
+{
+  "fecha": "2026-10-21T13:12:56+00:00",
+  "commit_producto": "8589b47",
+  "commit_rama": "b540726",
+  "limit_por_fuente": 3,
+  "aviso": "Búsquedas reales contra GCD y Tebeosfera. AniList no estaba disponible (403, API deshabilitada temporalmente) y Comic Vine no tiene API key en este entorno. No se ha usado la app ni la base de datos.",
+  "fuentes": {
+    "gcd": {
+      "estado": "ok",
+      "detalle": "API pública, sin clave"
+    },
+    "tebeosfera": {
+      "estado": "ok",
+      "detalle": "scraping, límite 2,5 s"
+    },
+    "anilist": {
+      "estado": "no_disponible",
+      "detalle": "403: The AniList API has been temporarily disabled due to severe stability issues."
+    },
+    "comic_vine": {
+      "estado": "no_disponible",
+      "detalle": "sin COMICVINE_API_KEY en este entorno"
+    }
+  },
+  "consultas": [
+    {
+      "titulo": "Mortadelo y Filemón",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Mortadelo y Filemón",
+            "anio": 1987,
+            "id": 68543,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/68543/"
+          },
+          {
+            "titulo": "Mortadelo Y Filemon",
+            "anio": 1993,
+            "id": 95827,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/95827/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "ALEGRES HISTORIETAS",
+            "anio": 1980,
+            "id": "alegres_historietas_1980_bruguera",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/alegres_historietas_1980_bruguera.html"
+          },
+          {
+            "titulo": "HISTORIA DEL DINERO, LA",
+            "anio": 1989,
+            "id": "historia_del_dinero_la_1989_b",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/historia_del_dinero_la_1989_b.html"
+          },
+          {
+            "titulo": "MORTADELO Y FILEMÓN -LA GRAN AVENTURA-",
+            "anio": 2002,
+            "id": "mortadelo_y_filemon_-la_gran_aventura-_sogecable_2002",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/mortadelo_y_filemon_-la_gran_aventura-_sogecable_2002.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "Zipi y Zape",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Super Humor Zipi y Zape",
+            "anio": 1993,
+            "id": 192424,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/192424/"
+          },
+          {
+            "titulo": "Super Zipi y Zape",
+            "anio": 1973,
+            "id": 89429,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/89429/"
+          },
+          {
+            "titulo": "Zipi y Zape",
+            "anio": 1972,
+            "id": 89428,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/89428/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "COMIC ZETA",
+            "anio": 2009,
+            "id": "comic_zeta_2009_b",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/comic_zeta_2009_b.html"
+          },
+          {
+            "titulo": "ESCOBAR",
+            "anio": 2008,
+            "id": "escobar_2008_b_-el_mundo-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/escobar_2008_b_-el_mundo-.html"
+          },
+          {
+            "titulo": "SELECCIONES EXTRAS",
+            "anio": 1995,
+            "id": "selecciones_extras_1995_b_-mortadelo_zipi_y_zape-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/selecciones_extras_1995_b_-mortadelo_zipi_y_zape-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "El Capitán Trueno",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "El Capitán Trueno",
+            "anio": 1956,
+            "id": 81517,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/81517/"
+          },
+          {
+            "titulo": "El Capitan Trueno",
+            "anio": 1986,
+            "id": 195750,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/195750/"
+          },
+          {
+            "titulo": "El Capitan Trueno",
+            "anio": 1991,
+            "id": 113694,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/113694/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "AMBRÓS, MUESTRARIO DE LÁMINAS",
+            "anio": 2018,
+            "id": "ambros_muestrario_de_laminas_2018_aact",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/ambros_muestrario_de_laminas_2018_aact.html"
+          },
+          {
+            "titulo": "ANTONIO BERNAL",
+            "anio": 2015,
+            "id": "antonio_bernal_2015_aact",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/antonio_bernal_2015_aact.html"
+          },
+          {
+            "titulo": "CAPITAN TRONADO, EL",
+            "anio": 1998,
+            "id": "capitan_tronado_el_1998_la_colla",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/capitan_tronado_el_1998_la_colla.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "El Jabato",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "El Jabato",
+            "anio": 1958,
+            "id": 170849,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/170849/"
+          },
+          {
+            "titulo": "El Jabato Album Gigante",
+            "anio": 1964,
+            "id": 180348,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/180348/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "ANTONIO BERNAL",
+            "anio": 2015,
+            "id": "antonio_bernal_2015_aact",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/antonio_bernal_2015_aact.html"
+          },
+          {
+            "titulo": "COMIC ZETA",
+            "anio": 2009,
+            "id": "comic_zeta_2009_b",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/comic_zeta_2009_b.html"
+          },
+          {
+            "titulo": "JABATO",
+            "anio": 1951,
+            "id": "jabato_1951_hispano_americana",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/jabato_1951_hispano_americana.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "Superlópez",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": []
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "COMIC SUPER AVENTURAS",
+            "anio": 1987,
+            "id": "comic_super_aventuras_1987_b",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/comic_super_aventuras_1987_b.html"
+          },
+          {
+            "titulo": "SUPERLOPEZ",
+            "anio": 1980,
+            "id": "superlopez_1980_bruguera_-ole-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/superlopez_1980_bruguera_-ole-.html"
+          },
+          {
+            "titulo": "SUPERLOPEZ",
+            "anio": 1982,
+            "id": "superlopez_1982_bruguera_-super_humor-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/superlopez_1982_bruguera_-super_humor-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": null,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "Anacleto, agente secreto",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": []
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "ANACLETO, AGENTE SECRETO",
+            "anio": 2025,
+            "id": "anacleto_agente_secreto_2025_bruguera_-edicion_coleccionista-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/anacleto_agente_secreto_2025_bruguera_-edicion_coleccionista-.html"
+          },
+          {
+            "titulo": "ANACLETO, AGENTE SECRETO",
+            "anio": 1964,
+            "id": "anacleto_agente_secreto_1964_vazquez",
+            "tipo": "saga",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/sagas/anacleto_agente_secreto_1964_vazquez.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": null,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "13, Rue del Percebe",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": []
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "13 RUE DEL PERCEBE",
+            "anio": 2016,
+            "id": "13_rue_del_percebe_2016_b_-integral-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/13_rue_del_percebe_2016_b_-integral-.html"
+          },
+          {
+            "titulo": "13 RUE DEL PERCEBE",
+            "anio": 2018,
+            "id": "13_rue_del_percebe_2018_b_bruguera_-integral-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/13_rue_del_percebe_2018_b_bruguera_-integral-.html"
+          },
+          {
+            "titulo": "13 RUE DEL PERCEBE",
+            "anio": 2025,
+            "id": "13_rue_del_percebe_2025_bruguera_-busca_y_encuentra-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/13_rue_del_percebe_2025_bruguera_-busca_y_encuentra-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": null,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "Carpanta",
+      "referencia": "tebeo",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Super Carpanta",
+            "anio": 1977,
+            "id": 167952,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/167952/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "CARPANTA",
+            "anio": 2022,
+            "id": "carpanta_2022_bruguera_-75_aniversario-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/carpanta_2022_bruguera_-75_aniversario-.html"
+          },
+          {
+            "titulo": "CARPANTA, SUPER",
+            "anio": 1977,
+            "id": "carpanta_super_1977_bruguera",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/carpanta_super_1977_bruguera.html"
+          },
+          {
+            "titulo": "ESCOBAR",
+            "anio": 2008,
+            "id": "escobar_2008_b_-el_mundo-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/escobar_2008_b_-el_mundo-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": true
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": true
+      }
+    },
+    {
+      "titulo": "Astérix el Galo",
+      "referencia": "franco_belgian",
+      "gcd": {
+        "estado": "ok",
+        "resultados": []
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "ASTERIX O GALO",
+            "anio": 2022,
+            "id": "asterix_o_galo_2022_salvat_-aragones-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/asterix_o_galo_2022_salvat_-aragones-.html"
+          },
+          {
+            "titulo": "UDERZO VISTO POR SUS AMIGOS",
+            "anio": 1997,
+            "id": "uderzo_visto_por_sus_amigos_1997_norma",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/uderzo_visto_por_sus_amigos_1997_norma.html"
+          },
+          {
+            "titulo": "ASTERIX",
+            "anio": 1959,
+            "id": "asterix_1959_goscinny_uderzo",
+            "tipo": "saga",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/sagas/asterix_1959_goscinny_uderzo.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": null,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Las aventuras de Tintín",
+      "referencia": "franco_belgian",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Las Aventuras de Tintín",
+            "anio": 1958,
+            "id": 163187,
+            "idioma": "es",
+            "pais": "es",
+            "sugerencia": "tebeo",
+            "url": "https://www.comics.org/series/163187/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "TINTIN",
+            "anio": 1952,
+            "id": "tintin_1952_casterman",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/tintin_1952_casterman.html"
+          },
+          {
+            "titulo": "TINTIN",
+            "anio": 1958,
+            "id": "tintin_1958_juventud",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/tintin_1958_juventud.html"
+          },
+          {
+            "titulo": "TINTIN",
+            "anio": 1983,
+            "id": "tintin_1983_juventud_credilibro_-las_aventuras-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/tintin_1983_juventud_credilibro_-las_aventuras-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": false,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Lucky Luke",
+      "referencia": "franco_belgian",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Les aventures de Lucky Luke d'après Morris",
+            "anio": 2004,
+            "id": 74533,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/74533/"
+          },
+          {
+            "titulo": "De avonturen van Lucky Luke",
+            "anio": 2004,
+            "id": 70465,
+            "idioma": "nl",
+            "pais": "fr",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/70465/"
+          },
+          {
+            "titulo": "De avonturen van Lucky Luke naar Morris",
+            "anio": 2004,
+            "id": 136312,
+            "idioma": "nl",
+            "pais": "fr",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/136312/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "LUCKY LUKE",
+            "anio": 1963,
+            "id": "lucky_luke_1963_toray",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/lucky_luke_1963_toray.html"
+          },
+          {
+            "titulo": "LUCKY LUKE",
+            "anio": 1972,
+            "id": "lucky_luke_1972_bruguera",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/lucky_luke_1972_bruguera.html"
+          },
+          {
+            "titulo": "LUCKY LUKE",
+            "anio": 1972,
+            "id": "lucky_luke_1972_edisven",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/lucky_luke_1972_edisven.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Thorgal",
+      "referencia": "franco_belgian",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Les mondes de Thorgal  - Kriss de Valnor - La collection",
+            "anio": 2013,
+            "id": 180715,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/180715/"
+          },
+          {
+            "titulo": "Les mondes de Thorgal - Kriss de Valnor",
+            "anio": 2010,
+            "id": 64252,
+            "idioma": "fr",
+            "pais": "be",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/64252/"
+          },
+          {
+            "titulo": "Les mondes de Thorgal - La Dague du Temps",
+            "anio": 2019,
+            "id": 175593,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/175593/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "THORGAL",
+            "anio": 1981,
+            "id": "thorgal_1981_distrinovel",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/thorgal_1981_distrinovel.html"
+          },
+          {
+            "titulo": "THORGAL",
+            "anio": 1986,
+            "id": "thorgal_1986_zinco",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/thorgal_1986_zinco.html"
+          },
+          {
+            "titulo": "THORGAL",
+            "anio": 1990,
+            "id": "thorgal_1990_norma_-subcoleccion-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/thorgal_1990_norma_-subcoleccion-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Batman",
+      "referencia": "american",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "3-D Batman",
+            "anio": 1953,
+            "id": 954,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/954/"
+          },
+          {
+            "titulo": "3-D Batman",
+            "anio": 1966,
+            "id": 1728,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/1728/"
+          },
+          {
+            "titulo": "80 Years of Superman / Batman",
+            "anio": 2020,
+            "id": 152529,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/152529/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "ACADEMIA GOTHAM",
+            "anio": 2015,
+            "id": "academia_gotham_2015_ecc",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/academia_gotham_2015_ecc.html"
+          },
+          {
+            "titulo": "ACADEMIA GOTHAM",
+            "anio": 2017,
+            "id": "academia_gotham_2017_ecc",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/academia_gotham_2017_ecc.html"
+          },
+          {
+            "titulo": "ALIEN",
+            "anio": 2017,
+            "id": "alien_2017_ecc_-vs_batman_superman_predator_wildcats-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/alien_2017_ecc_-vs_batman_superman_predator_wildcats-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Spider-Man",
+      "referencia": "american",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "100% Marvel : Spider-Man",
+            "anio": 1999,
+            "id": 55729,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/55729/"
+          },
+          {
+            "titulo": "100% Marvel : Spider-Man & Fantastic Four",
+            "anio": 2011,
+            "id": 62308,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/62308/"
+          },
+          {
+            "titulo": "100% Marvel : Spider-Man - 1602",
+            "anio": 2014,
+            "id": 227323,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/227323/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "BACKLASH / SPIDERMAN",
+            "anio": 1997,
+            "id": "backlash_spiderman_1997_planeta-deagostini",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/backlash_spiderman_1997_planeta-deagostini.html"
+          },
+          {
+            "titulo": "BATMAN / SPIDERMAN",
+            "anio": 1998,
+            "id": "batman_spiderman_1998_vid",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/batman_spiderman_1998_vid.html"
+          },
+          {
+            "titulo": "DAILY BUGLE",
+            "anio": 1997,
+            "id": "daily_bugle_1997_planeta-deagostini",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/daily_bugle_1997_planeta-deagostini.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": false,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Watchmen",
+      "referencia": "american",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Absolute Watchmen",
+            "anio": 2005,
+            "id": 21965,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/21965/"
+          },
+          {
+            "titulo": "Absolute Watchmen",
+            "anio": 2016,
+            "id": 110943,
+            "idioma": "nl",
+            "pais": "nl",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/110943/"
+          },
+          {
+            "titulo": "Absolute Watchmen",
+            "anio": 2022,
+            "id": 193849,
+            "idioma": "de",
+            "pais": "de",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/193849/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "WATCHMEN",
+            "anio": 1987,
+            "id": "watchmen_1987_zinco",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/watchmen_1987_zinco.html"
+          },
+          {
+            "titulo": "WATCHMEN",
+            "anio": 1993,
+            "id": "watchmen_1993_glenat",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/watchmen_1993_glenat.html"
+          },
+          {
+            "titulo": "WATCHMEN",
+            "anio": 2000,
+            "id": "watchmen_2000_norma",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/watchmen_2000_norma.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "The Sandman",
+      "referencia": "american",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "DCE Essentials: The Sandman",
+            "anio": 2013,
+            "id": 80362,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/80362/"
+          },
+          {
+            "titulo": "The Dead Boy Detectives Omnibus (The Sandman Universe Classics)",
+            "anio": 2023,
+            "id": 204757,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/204757/"
+          },
+          {
+            "titulo": "Dollar Comics: The Sandman 23",
+            "anio": 2021,
+            "id": 166580,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/166580/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "CORINTIO, EL",
+            "anio": 2021,
+            "id": "corintio_el_2021_ecc_-muerte_en_venecia-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/corintio_el_2021_ecc_-muerte_en_venecia-.html"
+          },
+          {
+            "titulo": "SANDMAN",
+            "anio": 1991,
+            "id": "sandman_1991_zinco",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/sandman_1991_zinco.html"
+          },
+          {
+            "titulo": "SANDMAN",
+            "anio": 1993,
+            "id": "sandman_1993_zinco",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/sandman_1993_zinco.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": true,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Dragon Ball",
+      "referencia": "manga",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Dragon Ball",
+            "anio": 1993,
+            "id": 134173,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/134173/"
+          },
+          {
+            "titulo": "Dragon Ball",
+            "anio": 1995,
+            "id": 39579,
+            "idioma": "it",
+            "pais": "it",
+            "sugerencia": "fumetti",
+            "url": "https://www.comics.org/series/39579/"
+          },
+          {
+            "titulo": "Dragon Ball",
+            "anio": 1997,
+            "id": 27821,
+            "idioma": "de",
+            "pais": "de",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/27821/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "BATMAN",
+            "anio": 2009,
+            "id": "batman_2009_planeta-deagostini_-barcelona-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/batman_2009_planeta-deagostini_-barcelona-.html"
+          },
+          {
+            "titulo": "BATMAN",
+            "anio": 2014,
+            "id": "batman_2014_ecc_-en_barcelona-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/batman_2014_ecc_-en_barcelona-.html"
+          },
+          {
+            "titulo": "BOLA DE DRAC",
+            "anio": 1992,
+            "id": "bola_de_drac_1992_planeta-deagostini_-col._superior-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/bola_de_drac_1992_planeta-deagostini_-col._superior-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": false,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "One Piece",
+      "referencia": "manga",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "One Piece",
+            "anio": 1997,
+            "id": 215585,
+            "idioma": "th",
+            "pais": "th",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/215585/"
+          },
+          {
+            "titulo": "One Piece",
+            "anio": 2000,
+            "id": 134887,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/134887/"
+          },
+          {
+            "titulo": "One Piece",
+            "anio": 2001,
+            "id": 27037,
+            "idioma": "de",
+            "pais": "de",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/27037/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "ONE PIECE",
+            "anio": 1999,
+            "id": "one_piece_1999_planeta-deagostini",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/one_piece_1999_planeta-deagostini.html"
+          },
+          {
+            "titulo": "ONE PIECE",
+            "anio": 2004,
+            "id": "one_piece_2004_planeta-deagostini_planeta_comic",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/one_piece_2004_planeta-deagostini_planeta_comic.html"
+          },
+          {
+            "titulo": "ONE PIECE",
+            "anio": 2013,
+            "id": "one_piece_2013_planeta_comic_-guias-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/one_piece_2013_planeta_comic_-guias-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": false,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Naruto",
+      "referencia": "manga",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Boruto - Naruto next Generation",
+            "anio": 2017,
+            "id": 119295,
+            "idioma": "de",
+            "pais": "de",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/119295/"
+          },
+          {
+            "titulo": "Boruto - Naruto Next Generations",
+            "anio": 2017,
+            "id": 131735,
+            "idioma": "fr",
+            "pais": "fr",
+            "sugerencia": "franco_belgian",
+            "url": "https://www.comics.org/series/131735/"
+          },
+          {
+            "titulo": "Boruto: Naruto Next Generations",
+            "anio": 2016,
+            "id": 214337,
+            "idioma": "ja",
+            "pais": "jp",
+            "sugerencia": "manga",
+            "url": "https://www.comics.org/series/214337/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "BORUTO",
+            "anio": 2018,
+            "id": "boruto_2018_planeta_comic",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/boruto_2018_planeta_comic.html"
+          },
+          {
+            "titulo": "NARUTO",
+            "anio": 2002,
+            "id": "naruto_2002_glenat_edt",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/naruto_2002_glenat_edt.html"
+          },
+          {
+            "titulo": "NARUTO",
+            "anio": 2006,
+            "id": "naruto_2006_glenat_edt_-catalan-",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/naruto_2006_glenat_edt_-catalan-.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": false,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": true,
+        "tebeosfera": false
+      }
+    },
+    {
+      "titulo": "Akira",
+      "referencia": "manga",
+      "gcd": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "Akira",
+            "anio": 1988,
+            "id": 3636,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/3636/"
+          },
+          {
+            "titulo": "Akira",
+            "anio": 1990,
+            "id": 17664,
+            "idioma": "en",
+            "pais": "us",
+            "sugerencia": "american",
+            "url": "https://www.comics.org/series/17664/"
+          },
+          {
+            "titulo": "Akira",
+            "anio": 1990,
+            "id": 118458,
+            "idioma": "pt",
+            "pais": "br",
+            "sugerencia": "other",
+            "url": "https://www.comics.org/series/118458/"
+          }
+        ]
+      },
+      "tebeosfera": {
+        "estado": "ok",
+        "resultados": [
+          {
+            "titulo": "AKIRA",
+            "anio": 1990,
+            "id": "akira_1990_b",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/akira_1990_b.html"
+          },
+          {
+            "titulo": "AKIRA",
+            "anio": 1992,
+            "id": "akira_1992_b",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/akira_1992_b.html"
+          },
+          {
+            "titulo": "AKIRA",
+            "anio": 1999,
+            "id": "akira_1999_b",
+            "tipo": "collection",
+            "sugerencia": "tebeo",
+            "url": "https://www.tebeosfera.com/colecciones/akira_1999_b.html"
+          }
+        ]
+      },
+      "coincide_primero": {
+        "gcd": false,
+        "tebeosfera": false
+      },
+      "coincide_alguno": {
+        "gcd": false,
+        "tebeosfera": false
+      }
+    }
+  ]
+}
