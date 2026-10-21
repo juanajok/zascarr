@@ -1,0 +1,96 @@
+{#- BL-R1b (#254): vista previa y resultado de «Deshacer esta vinculación». Sin reglas propias: todo sale de `services/desvinculacion.py`.
+    Contrato HTMX: el panel es `#desvinculacion`; el formulario de confirmar hace `POST` normal (sin JS) y, con htmx, sustituye
+    el panel entero (`outerHTML`). Los fallos van dentro del panel con 200. -#}
+{% set volver = '/ui/series/' ~ serie.id %}
+<div id="desvinculacion" class="desvinculacion" data-fase="{{ 'fallo' if fallo else fase }}"
+     data-resultado="{{ r.resultado if r else '' }}">
+
+  {% if fallo %}
+  <section class="card" aria-labelledby="desv-fallo">
+    <h2 id="desv-fallo" class="titulo-frase">{{ fallo.titulo }}</h2>
+    {{ ui.aviso("warn", fallo.mensaje) }}
+    <div class="vinc-acciones">
+      {% if fallo.repetible and token %}
+      <form method="post" action="{{ volver }}/archivos/{{ file_id }}/deshacer"
+            hx-post="{{ volver }}/archivos/{{ file_id }}/deshacer" hx-target="#desvinculacion" hx-swap="outerHTML"
+            hx-disabled-elt="find button">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="primary">{{ "Comprobar el resultado" if fallo.codigo == "resultado_incierto" else "Reintentar" }}</button>
+      </form>
+      {% endif %}
+      <a class="btn ghost sm" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo la vista previa</a>
+      <a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>
+    </div>
+  </section>
+
+  {% elif r %}
+  <section class="card" aria-labelledby="desv-resultado">
+    {% if r.resultado == "deshecho" %}
+    {#- El menú vuelve a pedir SUS contadores (el de «Por revisar» acaba de cambiar); sin JS no hace nada y se corrige al cambiar de página. -#}
+    <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+    <h2 id="desv-resultado" class="titulo-frase">Hecho: el archivo ya no está vinculado</h2>
+    {{ ui.aviso("ok", "El archivo ha vuelto a «Por revisar».") }}
+    {% elif r.resultado == "ya_deshecho" %}
+    <h2 id="desv-resultado" class="titulo-frase">Ya estaba deshecho</h2>
+    {{ ui.aviso("info", "Esta confirmación ya se había aplicado antes: este es su resultado, no se ha repetido nada. El archivo está en «Por revisar».") }}
+    {% else %}
+    <h2 id="desv-resultado" class="titulo-frase">No se deshizo nada</h2>
+    {{ ui.aviso("warn", texto_omitido) }}
+    {% endif %}
+    {% if r.resultado in ("deshecho", "ya_deshecho") %}
+    <ul class="desv-lista">
+      {% if r.numero %}<li>El número <strong>#{{ r.numero }}</strong> sigue existiendo en la serie.</li>{% endif %}
+      <li>El fichero no se ha tocado: no se movió, no se renombró y no se borró nada.</li>
+      <li>Volver a vincularlo es <strong>otra operación</strong>: se hace desde «Por revisar», con su propia vista previa.</li>
+    </ul>
+    {% endif %}
+    <div class="vinc-acciones">
+      {% if r.resultado in ("deshecho", "ya_deshecho") %}<a class="btn-primary" href="/ui/pendientes">Ir a «Por revisar»</a>
+      <a class="btn ghost sm" href="/ui/pendientes/carpetas">Ver «Pendientes por carpeta»</a>{% else %}
+      <a class="btn ghost sm" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo la vista previa</a>{% endif %}
+      <a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>
+    </div>
+  </section>
+
+  {% else %}
+  <section class="card" aria-labelledby="desv-titulo">
+    <h2 id="desv-titulo" class="titulo-frase">Deshacer esta vinculación</h2>
+    <dl class="carpeta-datos">
+      <dt>Archivo</dt><dd class="nombre-archivo">{{ p.archivo.nombre }}</dd>
+      {% if p.numero %}<dt>Vinculado a</dt><dd>{{ p.numero.serie_titulo }}{% if p.numero.numero %} · #{{ p.numero.numero }}{% endif %}{% if p.vinculado_el %} <span class="muted">(desde el {{ p.vinculado_el[:10] }})</span>{% endif %}</dd>{% endif %}
+      <dt>Está en</dt><dd class="nombre-archivo">{{ p.archivo.ruta }}</dd>
+    </dl>
+
+    {% if p.bloqueo %}
+    {{ ui.aviso("warn", textos_bloqueo[p.bloqueo.codigo]) }}
+    <div class="vinc-acciones"><a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a></div>
+
+    {% else %}
+    {% if p.archivo.falta_en_disco %}{{ ui.aviso("amber", "ZascArr tiene este archivo marcado como no disponible: no está verificado que siga en el disco. Se puede deshacer igualmente, porque no se toca el fichero.") }}{% endif %}
+    <h3 class="titulo-frase">Qué pasará si lo confirmas</h3>
+    <ul class="desv-lista">
+      <li>El archivo vuelve a «Por revisar».</li>
+      <li>El fichero <strong>no se toca</strong>: no se mueve, no se renombra y no se borra nada.</li>
+      {% if p.numero %}
+      <li>El número <strong>#{{ p.numero.numero }}</strong> se queda en la serie{% if p.numero.creado_por_la_vinculacion %} (lo creó esta vinculación, pero no se elimina){% endif %}.
+        {% if p.numero.se_queda_sin_archivos %}Se quedará <strong>sin archivo</strong>: te aparecerá como un hueco, un número que te falta.
+        {% else %}Tiene {{ p.numero.otros_archivos }} archivo{{ "s" if p.numero.otros_archivos != 1 }} más, que no cambian.{% endif %}</li>
+      {% if p.numero.lecturas %}<li>Tu progreso de lectura de este número se conserva.</li>{% endif %}
+      {% if p.numero.deseados %}<li>Hay {{ p.numero.deseados }} deseo{{ "s" if p.numero.deseados != 1 }} de este número{% if p.numero.deseados_abiertos %}; {{ p.numero.deseados_abiertos }} sigue{{ "n" if p.numero.deseados_abiertos != 1 }} abierto{{ "s" if p.numero.deseados_abiertos != 1 }}: al quedar el número sin archivo, ZascArr podría volver a buscarlo{% endif %}.</li>{% endif %}
+      {% endif %}
+    </ul>
+    {{ ui.aviso("amber", p.aviso) }}
+    <form method="post" action="{{ volver }}/archivos/{{ file_id }}/deshacer"
+          hx-post="{{ volver }}/archivos/{{ file_id }}/deshacer" hx-target="#desvinculacion" hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <input type="hidden" name="token" value="{{ token }}">
+      <p class="caption">Hasta que pulses el botón, no cambia nada. Esta vista previa vale unos {{ 15 }} minutos.</p>
+      <div class="vinc-acciones">
+        <button type="submit" class="primary">Deshacer la vinculación</button>
+        <a class="btn ghost sm" href="{{ volver }}">Cancelar</a>
+      </div>
+    </form>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
