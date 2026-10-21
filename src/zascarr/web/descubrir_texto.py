@@ -29,6 +29,47 @@ ETIQUETAS = {
     "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera", "gcd": "GCD"}
 OTRA_FUENTE = "otra fuente"
 
+
+ETIQUETAS_PROCEDENCIA = {
+    "explicita": "dato explícito de la fuente",
+    "transformada": "deducida de otros datos de la fuente",
+    "por_defecto": "valor por defecto: la fuente no lo indica",
+    "desconocida": "origen desconocido",
+}
+
+
+def _valor_de_procedencia(procedencia) -> str:
+    return str(getattr(procedencia, "value", procedencia) or "")
+
+
+def etiqueta_procedencia(procedencia: str | None) -> str:
+    """Etiqueta corta para el contexto de una sugerencia ya mostrada (nunca un dato de la obra)."""
+    return ETIQUETAS_PROCEDENCIA.get(
+        _valor_de_procedencia(procedencia), ETIQUETAS_PROCEDENCIA["desconocida"])
+
+
+def pista_de_tradicion(etiqueta: str, procedencia: str | None) -> str:
+    """La frase que presenta una tradición sugerida SIN confirmarla.
+
+    La procedencia cambia la atribución, no la recomendación: en todos los casos la persona elige y
+    nada llega preseleccionado. Para `explicita` se conserva literalmente la copy de U15; para las
+    demás se dice de dónde sale (transformada de otros datos, valor por defecto del producto o
+    desconocida) para no presentar como clasificación de la fuente lo que no lo es. Sin
+    sugerencia no se llama a esta función: no hay pista que mostrar.
+    """
+    inicio = {
+        "explicita": f"La fuente lo clasifica como {etiqueta}.",
+        "transformada": (
+            f"La fuente no usa esta tradición: a partir de sus datos "
+            f"se sugiere {etiqueta}."
+        ),
+        "por_defecto": f"La fuente no indica tradición: se sugiere {etiqueta} por defecto.",
+        "desconocida": f"La fuente sugiere {etiqueta}, pero no consta de dónde sale.",
+    }.get(_valor_de_procedencia(procedencia) or "desconocida",
+          f"La fuente sugiere {etiqueta}, pero no consta de dónde sale.")
+    return f"{inicio} Es solo una pista de la fuente, no de la obra: elige tú."
+
+
 _BLOQUES = frozenset({
     "p", "br", "div", "li", "ul", "ol", "tr", "td", "th", "table", "blockquote", "section",
     "article", "h1", "h2", "h3", "h4", "h5", "h6"})

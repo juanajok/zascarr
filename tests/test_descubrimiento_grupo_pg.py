@@ -32,6 +32,7 @@ from zascarr.services.discovery import (
     Busqueda,
     DiscoveryResult,
     DiscoveryService,
+    ProcedenciaTradicion,
 )
 from zascarr.services.tokens_revision import (
     verificar_token,
@@ -59,6 +60,7 @@ def res(fuente: MetadataSource, id_: str, titulo: str, anio: int | None, **kw) -
         source=fuente, external_id=id_, title=titulo, start_year=anio, description=kw.get("descripcion"),
         cover_url=kw.get("cover"), site_url=kw.get("sitio", f"https://ejemplo.example/{id_}"),
         tradition_guess=kw.get("tradicion", ComicTradition.AMERICAN),
+        tradition_provenance=kw.get("procedencia", ProcedenciaTradicion.EXPLICITA),
     )
 
 
@@ -198,6 +200,28 @@ class TestNadaPreseleccionado:
         entorno.fuentes.resultados.reverse()
         api_revision.reiniciar_ritmo_para_pruebas()
         assert a == [(c["fuente"], c["titulo"]) for c in (await descubrir(carpeta)).json()["candidatas"]]
+
+
+class TestSugerenciaYProcedencia:
+    """#276: la ausencia de sugerencia y la procedencia también viajan en la candidata del grupo."""
+
+    async def test_la_ausencia_de_sugerencia_llega_como_none_y_el_token_la_conserva(self, entorno):
+        carpeta = await sembrar_flash(entorno.banco)
+        entorno.fuentes.resultados = [
+            res(MetadataSource.COMIC_VINE, "1", "Flash", 1987, tradicion=None, procedencia=None)]
+        (cand,) = (await descubrir(carpeta)).json()["candidatas"]
+        assert cand["tradicion_sugerida"] is None and cand["procedencia"] is None
+        firmada = verificar_token_candidata(cand["token"], carpeta, SECRETO)
+        assert firmada is not None and firmada.tradicion is None and firmada.procedencia is None
+
+    async def test_la_procedencia_se_expone_sin_convertirla_en_la_tradicion_elegida(self, entorno):
+        carpeta = await sembrar_flash(entorno.banco)
+        entorno.fuentes.resultados = [
+            res(MetadataSource.COMIC_VINE, "1", "Flash", 1987, procedencia=ProcedenciaTradicion.POR_DEFECTO)]
+        (cand,) = (await descubrir(carpeta)).json()["candidatas"]
+        assert cand["tradicion_sugerida"] == "american" and cand["procedencia"] == "por_defecto"
+        firmada = verificar_token_candidata(cand["token"], carpeta, SECRETO)
+        assert firmada is not None and firmada.tradicion == "american" and firmada.procedencia == "por_defecto"
 
 
 # ── Lo que se calcula en local ───────────────────────────────────────────────────────────────
@@ -432,8 +456,8 @@ class TestRespuestaYAcceso:
         assert set(c) == {"consulta", "consulta_propuesta", "grupo", "fuentes", "avisos", "candidatas"}
         assert set(c["grupo"]) == {"clave", "carpeta_contextual", "n_archivos"}
         assert set(c["candidatas"][0]) == {
-            "token", "fuente", "titulo", "anio", "tradicion_sugerida", "sitio_url", "portada", "descripcion",
-            "ya_en_biblioteca", "parecidas_locales", "coincidencia_con_la_carpeta"}
+            "token", "fuente", "titulo", "anio", "tradicion_sugerida", "procedencia", "sitio_url", "portada",
+            "descripcion", "ya_en_biblioteca", "parecidas_locales", "coincidencia_con_la_carpeta"}
         assert set(c["candidatas"][0]["coincidencia_con_la_carpeta"]) == {"en_conflicto", "senales"}
 
     async def test_un_grupo_que_no_existe_es_404_y_no_busca(self, entorno):

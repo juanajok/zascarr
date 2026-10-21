@@ -24,7 +24,7 @@ from uuid import UUID
 
 from zascarr.models import ComicTradition, IssueFormat, MetadataSource
 from zascarr.services.auth import sign_token, verify_token
-from zascarr.services.discovery import CAMPO_ID_EXTERNO
+from zascarr.services.discovery import CAMPO_ID_EXTERNO, ProcedenciaTradicion
 from zascarr.utils.url_portada import LONGITUD_MAXIMA_URL
 
 TTL_SEGUNDOS = 15 * 60
@@ -131,18 +131,33 @@ def verificar_token(token: str, proposito: str, contexto: str, secret: str, *,
 
 @dataclass(frozen=True)
 class CandidataFirmada:
-    """Lo que el servidor vio en una fuente y la persona eligió: es lo ÚNICO que se usará para dar de alta."""
+    """Lo que el servidor vio en una fuente y la persona eligió: es lo ÚNICO que se usará para dar de alta.
+
+    `tradicion` y `procedencia` pueden faltar: una fuente no tiene por qué sugerir una tradición, y una sugerencia
+    antigua no traía procedencia. No son datos de la obra, sino contexto para decidir; la tradición que se aplica
+    al alta es siempre la que elige la persona.
+    """
     fuente: str
     id_externo: str
     titulo: str
     anio: int | None
-    tradicion: str
+    tradicion: str | None
     descripcion: str | None
     cover_url: str | None
+    procedencia: str | None = None
 
 
-def candidata_firmable(fuente: str, id_externo: object, titulo: str | None, anio: int | None, tradicion: str,
-                       descripcion: str | None, cover_url: str | None) -> CandidataFirmada | None:
+def _tradicion_valida(tradicion: object) -> bool:
+    return isinstance(tradicion, str) and bool(tradicion.strip()) and tradicion in {t.value for t in ComicTradition}
+
+
+def _procedencia_valida(procedencia: object) -> bool:
+    return isinstance(procedencia, str) and procedencia in {p.value for p in ProcedenciaTradicion}
+
+
+def candidata_firmable(fuente: str, id_externo: object, titulo: str | None, anio: int | None,
+                       tradicion: str | None, descripcion: str | None, cover_url: str | None,
+                       procedencia: str | None = None) -> CandidataFirmada | None:
     """La candidata TAL COMO se firmará, o `None` si no se puede dar de alta (su título o su identificador no caben
     en lo que la base guarda, o llevan caracteres no firmables). El resto se ajusta sin descartar: el título pierde
     controles y espacios sobrantes (el alta hace lo mismo), la descripción se depura y se recorta, la portada se
@@ -154,33 +169,51 @@ def candidata_firmable(fuente: str, id_externo: object, titulo: str | None, anio
     limpio = " ".join(_depurar(titulo or "").split())
     if not limpio or len(limpio) > MAX_TITULO:
         return None
+    if tradicion is not None and not _tradicion_valida(tradicion):
+        return None
+    if procedencia is not None and (not _procedencia_valida(procedencia) or tradicion is None):
+        return None
     desc = _depurar(descripcion or "")[:MAX_DESCRIPCION]
     desc = desc if desc.strip() else None
     cover = cover_url if cover_url and len(cover_url) <= MAX_COVER_URL and texto_firmable(cover_url) else None
-    return CandidataFirmada(fuente, ident, limpio, anio if _anio_firmable(anio) else None, tradicion, desc, cover)
+    return CandidataFirmada(fuente, ident, limpio, anio if _anio_firmable(anio) else None, tradicion, desc, cover,
+                            procedencia)
 
 
 def crear_token_candidata(clave: str, c: CandidataFirmada, secret: str, *, ahora: float | None = None) -> str:
-    return crear_token(PROPOSITO_CANDIDATA, clave, {
+    datos = {
         "fuente": c.fuente, "id": c.id_externo, "titulo": c.titulo, "anio": c.anio,
-        "tradicion": c.tradicion, "descripcion": (c.descripcion or "")[:MAX_DESCRIPCION] or None,
-        "cover_url": c.cover_url,
-    }, secret, ahora=ahora)
+        "descripcion": (c.descripcion or "")[:MAX_DESCRIPCION] or None, "cover_url": c.cover_url,
+    }
+    # Se omiten cuando faltan para que los tokens anteriores a #276 sigan teniendo exactamente la misma forma:
+    # `verificar_token_candidata` los interpreta como «sin sugerencia» y «origen desconocido», respectivamente.
+    if c.tradicion is not None:
+        datos["tradicion"] = c.tradicion
+    if c.procedencia is not None:
+        datos["procedencia"] = c.procedencia
+    return crear_token(PROPOSITO_CANDIDATA, clave, datos, secret, ahora=ahora)
 
 
 def verificar_token_candidata(token: str, clave: str, secret: str, *,
                               ahora: float | None = None) -> CandidataFirmada | None:
     """La candidata firmada, o `None`. Además de la firma comprueba la FORMA de cada campo: el contenido de un
-    token válido sigue sin darse por bueno si no tiene el tipo esperado."""
+    token válido sigue sin darse por bueno si no tiene el tipo esperado. La tradición y su procedencia son
+    opcionales (ausencia de sugerencia, o token anterior a #276), pero si aparecen tienen que ser válidas."""
     d = verificar_token(token, PROPOSITO_CANDIDATA, clave, secret, ahora=ahora)
     if d is None:
         return None
-    # Cadenas REALES y no vacías (un `None` no puede convertirse en «None»), fuente y tradición dentro de sus
-    # enumeraciones, año entero (un booleano no es un año) y el resto de campos opcionales con su tipo.
-    fuente, id_externo, titulo, tradicion = d.get("fuente"), d.get("id"), d.get("titulo"), d.get("tradicion")
-    if not all(isinstance(v, str) and v.strip() for v in (fuente, id_externo, titulo, tradicion)):
+    # Cadenas REALES y no vacías (un `None` no puede convertirse en «None»), fuente dentro de su enumeración y el
+    # resto de campos opcionales con su tipo. `tradicion` puede faltar; si está, también se valida.
+    fuente, id_externo, titulo = d.get("fuente"), d.get("id"), d.get("titulo")
+    if not all(isinstance(v, str) and v.strip() for v in (fuente, id_externo, titulo)):
         return None
-    if fuente not in {f.value for f in MetadataSource} or tradicion not in {t.value for t in ComicTradition}:
+    if fuente not in {f.value for f in MetadataSource}:
+        return None
+    tradicion = d.get("tradicion")
+    if tradicion is not None and not _tradicion_valida(tradicion):
+        return None
+    procedencia = d.get("procedencia")
+    if procedencia is not None and (not _procedencia_valida(procedencia) or tradicion is None):
         return None
     anio = d.get("anio")
     if anio is not None and (not isinstance(anio, int) or isinstance(anio, bool)):
@@ -192,7 +225,7 @@ def verificar_token_candidata(token: str, clave: str, secret: str, *,
     # Las cotas de `MAX_TOKEN_CANDIDATA`: un token firmado por el servidor ya las cumple; se exigen igualmente.
     if not _anio_firmable(anio) or not _textos_acotados(titulo, id_externo, descripcion, cover):
         return None
-    return CandidataFirmada(fuente, id_externo, titulo, anio, tradicion, descripcion, cover)
+    return CandidataFirmada(fuente, id_externo, titulo, anio, tradicion, descripcion, cover, procedencia)
 
 
 # ── Token del alta (2b) ──────────────────────────────────────────────────────────────────────────
@@ -597,7 +630,7 @@ def _longitud_peor_caso_del_token_de_candidata(clave: str | None = None) -> int:
     """La longitud del MAYOR token de candidata que el servidor puede emitir y el verificador acepta (calculada, no
     elegida): cada texto en su cota y de caracteres de 4 bytes en UTF-8 (el máximo de cualquier texto firmable: el
     JSON se escribe con `ensure_ascii=False`, así que cada carácter pesa lo que su UTF-8; las comillas, las barras y
-    los saltos de línea pesan dos), año de seis caracteres (`-32768`), la tradición más larga, una de las fuentes que
+    los saltos de línea pesan dos), año de seis caracteres (`-32768`), la tradición y la procedencia más largas, una de las fuentes que
     el servidor emite (`CAMPO_ID_EXTERNO`: son las únicas que el alta puede procesar) y una `clave` de grupo de 1000
     controles de seis bytes. Sale de `crear_token_candidata`, es decir, de la serialización, la codificación y la
     firma reales. `clave` es el contexto del token; por defecto, el peor caso de un grupo (1000 controles de seis bytes);
@@ -606,8 +639,9 @@ def _longitud_peor_caso_del_token_de_candidata(clave: str | None = None) -> int:
     ch = "\U0001F600"
     fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
     tradicion = max((t.value for t in ComicTradition), key=len)
+    procedencia = max((p.value for p in ProcedenciaTradicion), key=len)
     c = CandidataFirmada(fuente, ch * MAX_ID_EXTERNO, ch * MAX_TITULO, ANIO_MIN_FIRMABLE, tradicion,
-                         ch * MAX_DESCRIPCION, ch * MAX_COVER_URL)
+                         ch * MAX_DESCRIPCION, ch * MAX_COVER_URL, procedencia)
     return len(crear_token_candidata(clave, c, "x" * 32, ahora=EPOCA_DEL_PEOR_CASO))
 
 

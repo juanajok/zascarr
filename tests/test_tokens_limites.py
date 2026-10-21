@@ -30,7 +30,7 @@ from zascarr.api.revision import (
     PeticionVincular,
 )
 from zascarr.models import ComicTradition
-from zascarr.services.discovery import CAMPO_ID_EXTERNO
+from zascarr.services.discovery import CAMPO_ID_EXTERNO, ProcedenciaTradicion
 from zascarr.services.tokens_revision import (
     ANIO_MAX_FIRMABLE,
     ANIO_MIN_FIRMABLE,
@@ -81,8 +81,9 @@ CLAVE_PESADA = CARACTER_MAS_PESADO_DE_UNA_CLAVE * MAX_CLAVE_GRUPO
 def peor_candidata(ch: str, *, anio: int | None = ANIO_MIN_FIRMABLE) -> CandidataFirmada:
     fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)      # las fuentes que el servidor emite
     tradicion = max((t.value for t in ComicTradition), key=len)
+    procedencia = max((p.value for p in ProcedenciaTradicion), key=len)
     return CandidataFirmada(fuente, ch * MAX_ID_EXTERNO, ch * MAX_TITULO, anio, tradicion,
-                            ch * MAX_DESCRIPCION, ch * MAX_COVER_URL)
+                            ch * MAX_DESCRIPCION, ch * MAX_COVER_URL, procedencia)
 
 
 def peor_alta(ch: str, *, modo: str = "crear", anio: int | None = ANIO_MIN_FIRMABLE,
@@ -196,7 +197,7 @@ class TestMaximosCalculados:
         valores se recalculan — no se editan a mano — y las pruebas anteriores comprueban que siguen siendo el peor
         caso. Las cifras estimadas antes a mano (4.625 / 5.889 y 14.625 / 15.889) no eran estos máximos, y el primer
         cálculo de esta corrección (17.649 / 23.013) suponía una clave de cuatro bytes por carácter: era menor."""
-        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20313, 25681)
+        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20353, 25681)
 
 
 # ── 2. El límite antiguo rechazaba un token legítimo (el problema) ────────────────────────────────
