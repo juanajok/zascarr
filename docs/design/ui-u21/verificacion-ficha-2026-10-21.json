@@ -1,0 +1,166 @@
+{
+  "fecha_utc": "2026-10-21T17:18:11+00:00",
+  "sha": "69fb148",
+  "base_url": "http://127.0.0.1:8767",
+  "series_id": "d844ac7b-8200-471d-bac9-ddde0a7701e5",
+  "url": "http://127.0.0.1:8767/ui/series/d844ac7b-8200-471d-bac9-ddde0a7701e5",
+  "navegador": "154.0.8037.92",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "viewport_escritorio": {
+    "width": 1280,
+    "height": 900
+  },
+  "viewport_movil": {
+    "width": 360,
+    "height": 800
+  },
+  "medida_clara": {
+    "palabras_antes": 48,
+    "palabras_intro": 29,
+    "palabras_totales": 190,
+    "textos": [
+      "Mortadelo y Filemón (fixture U21)",
+      "(1958)",
+      "Editorial Bruguera",
+      "10 números en total — 3 en tu biblioteca, 7 te faltan.",
+      "Fuentes y atribución",
+      "Consulta tus números y ajusta la búsqueda automática.",
+      "Búsqueda automática",
+      "Qué busca ZascArr por su cuenta. Lo que añadas a mano se busca siempre.",
+      "Qué buscar"
+    ],
+    "intro": "Consulta tus números y ajusta la búsqueda automática.",
+    "intro_palabras": 8,
+    "accion": "select#wishlist_policy (Qué buscar)",
+    "parrafos_mayusculas": [],
+    "scrollWidth": 1280,
+    "clientWidth": 1280
+  },
+  "medida_oscura": {
+    "palabras_antes": 48,
+    "palabras_intro": 29,
+    "palabras_totales": 190,
+    "textos": [
+      "Mortadelo y Filemón (fixture U21)",
+      "(1958)",
+      "Editorial Bruguera",
+      "10 números en total — 3 en tu biblioteca, 7 te faltan.",
+      "Fuentes y atribución",
+      "Consulta tus números y ajusta la búsqueda automática.",
+      "Búsqueda automática",
+      "Qué busca ZascArr por su cuenta. Lo que añadas a mano se busca siempre.",
+      "Qué buscar"
+    ],
+    "intro": "Consulta tus números y ajusta la búsqueda automática.",
+    "intro_palabras": 8,
+    "accion": "select#wishlist_policy (Qué buscar)",
+    "parrafos_mayusculas": [],
+    "scrollWidth": 1280,
+    "clientWidth": 1280
+  },
+  "medida_movil": {
+    "palabras_antes": 48,
+    "palabras_intro": 29,
+    "palabras_totales": 190,
+    "textos": [
+      "Mortadelo y Filemón (fixture U21)",
+      "(1958)",
+      "Editorial Bruguera",
+      "10 números en total — 3 en tu biblioteca, 7 te faltan.",
+      "Fuentes y atribución",
+      "Consulta tus números y ajusta la búsqueda automática.",
+      "Búsqueda automática",
+      "Qué busca ZascArr por su cuenta. Lo que añadas a mano se busca siempre.",
+      "Qué buscar"
+    ],
+    "intro": "Consulta tus números y ajusta la búsqueda automática.",
+    "intro_palabras": 8,
+    "accion": "select#wishlist_policy (Qué buscar)",
+    "parrafos_mayusculas": [],
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  "medida_movil_oscura": {
+    "palabras_antes": 48,
+    "palabras_intro": 29,
+    "palabras_totales": 190,
+    "textos": [
+      "Mortadelo y Filemón (fixture U21)",
+      "(1958)",
+      "Editorial Bruguera",
+      "10 números en total — 3 en tu biblioteca, 7 te faltan.",
+      "Fuentes y atribución",
+      "Consulta tus números y ajusta la búsqueda automática.",
+      "Búsqueda automática",
+      "Qué busca ZascArr por su cuenta. Lo que añadas a mano se busca siempre.",
+      "Qué buscar"
+    ],
+    "intro": "Consulta tus números y ajusta la búsqueda automática.",
+    "intro_palabras": 8,
+    "accion": "select#wishlist_policy (Qué buscar)",
+    "parrafos_mayusculas": [],
+    "scrollWidth": 360,
+    "clientWidth": 360
+  },
+  "umbral_antes_accion": 50,
+  "umbral_entrada": 20,
+  "foco": {
+    "id": "wishlist_policy",
+    "outlineStyle": "solid",
+    "outlineWidth": "3px",
+    "boxShadow": "none"
+  },
+  "teclado": [
+    {
+      "tag": "summary",
+      "id": null,
+      "texto": "Fuentes y atribución"
+    },
+    {
+      "tag": "select",
+      "id": "wishlist_policy",
+      "texto": "No buscar nada por mi cuenta Buscar los números que me faltan Números que aún no han salido (deshabi"
+    },
+    {
+      "tag": "summary",
+      "id": null,
+      "texto": "¿Por qué algunos archivos no se pueden desvincular?"
+    },
+    {
+      "tag": "a",
+      "id": null,
+      "texto": "Aviso legal"
+    },
+    {
+      "tag": "body",
+      "id": null,
+      "texto": "Saltar al contenido ZASCARR MI COLECCIÓN Inicio Por revisar Biblioteca Duplicados AÑADIR Descubrir D"
+    },
+    {
+      "tag": "a",
+      "id": null,
+      "texto": "Saltar al contenido"
+    },
+    {
+      "tag": "a",
+      "id": null,
+      "texto": "ZASCARR"
+    },
+    {
+      "tag": "a",
+      "id": null,
+      "texto": "Inicio"
+    }
+  ],
+  "aria": {
+    "combobox": "combobox \"Qué buscar\"",
+    "fuentes": "details.series-fuentes con summary «Fuentes y atribución»",
+    "snapshot": "aria-ficha.txt"
+  },
+  "capturas": [
+    "2026-10-21-ficha-1280-claro.png",
+    "2026-10-21-ficha-1280-oscuro.png",
+    "2026-10-21-ficha-360-claro.png",
+    "2026-10-21-ficha-360-oscuro.png"
+  ]
+}
