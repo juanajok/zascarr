@@ -1,25 +1,39 @@
-# Plan de despliegue — PR #243 (fuentes de metadatos desactivadas por defecto)
+# Plan de despliegue — #243 (fuentes de metadatos apagadas por defecto) y todo lo fusionado desde la versión de la Pi
 
-> **Estado: PLAN, no ejecutado.** Nada de este documento se ejecuta en la Raspberry Pi hasta que el PO lo autorice **paso a paso**
+> **Estado: PLAN, no ejecutado.** (Alcance ampliado el 2026-10-21 a todo lo fusionado desde `625a564`: ver §0.) Nada de este documento se ejecuta en la Raspberry Pi hasta que el PO lo autorice **paso a paso**
 > (fusión y despliegue son decisiones separadas). Quien ejecuta marca cada casilla y anota la hora; la evidencia se guarda
 > en un paquete con su `.sha256`. Un fallo **detiene** el plan; no se improvisa.
 
 ## 0. Alcance y condiciones previas
 
-- **Qué se despliega:** PR #243 (ADR 0013): `default=False` en las cuatro fuentes de metadatos, migración de datos **0020**
-  (`fuentes_heredadas`), aviso en Ajustes y cambio de `LEGAL.md` (`legal_version` nueva).
-- **Cabeza revisada de la PR:** `46bd09b969f5d9a544dc592574198d744b682f92`.
+- **Qué se despliega (corregido el 2026-10-21):** **todo lo fusionado en `main` desde el SHA que la Pi tiene hoy (`625a564`, #242)**, no solo #243.
+  `update.sh` hace `git merge --ff-only origin/main`: lo que llega es la cabeza, con todo lo que hay debajo. Son **14 PR con código** (de 20 fusionadas)
+  (más las de solo documentación). Por riesgo:
+
+  | Área | PR | Efecto en la Pi |
+  |---|---|---|
+  | **Datos / migración** | #243 (ADR 0013) | Migración **0020** (`fuentes_heredadas`), cuatro fuentes de metadatos con `default=False`, aviso en Ajustes. **Es la única migración** del conjunto (`alembic/versions/` solo añade `0020`). |
+  | **Legal** | #243 y #267 | `LEGAL.md` cambia **dos veces** (#243 y #267: sin marcas `[web:N]`, listas separadas). `legal_version` es el hash del fichero: lo que cuenta es el de la cabeza desplegada, y hay **una sola** reaceptación (paso 4). |
+  | **Funcionalidad nueva** | #259 (BL-R1a) y #268 (BL-R1b) | «Desvincular» un archivo: API (`/api/revision/desvinculacion*`), servicio y la sección «Archivos por número» de la ficha de la serie. **Sin migración.** No actúa por sí solo: solo si la persona confirma. |
+  | **Interfaz** | #248, #249, #251, #252, #256, #257, #258, #260, #261, #269 | Tipografía propia y marca (ficheros nuevos en `static/vendor/fonts` y `static/brand`), Inicio con cifras que cuadran, Estado y Ajustes en lenguaje llano, página de error propia, logo. Sin cambios de datos. |
+  | **Documentación / diseño** | #244–#247, #250, #255, … | Solo `docs/`. |
+
+  **Lo que NO cambia en el delta** (`git diff 625a564..<SHA> -- scripts docker-compose.yml Dockerfile alembic`): `scripts/`, `docker-compose.yml` y el `Dockerfile` no se tocan; `alembic/` solo añade `0020`; `pyproject.toml` solo amplía los ficheros de datos del paquete (`static/vendor/fonts`, `static/brand`).
+- **Cabeza revisada de la PR #243:** `46bd09b969f5d9a544dc592574198d744b682f92`.
 - **SHA a desplegar:** `SHA_DESPLIEGUE` = la **cabeza de `origin/main` en el momento de autorizar el despliegue** (se anota en 0.2; `git ls-remote origin refs/heads/main`).
   - `update.sh` hace `git merge --ff-only origin/main`, así que a la Pi llega **esa cabeza**, no el *merge commit* de #243.
   - Referencias conocidas: #243 → `4ab462b1a7d0088658f1f88abf267376c8d03b8e` (**el código desplegado**); #244 → `cdf36e9552c6f9fabd0a2062b37c93e37fc94f40` (solo documentación, CI verde). Cada PR de solo documentación que se fusione después **mueve la cabeza** (esta incluida): por eso el SHA no se fija en el texto del plan, se anota al autorizar.
-  - **Comprobación de seguridad (0.2):** `git diff --stat 4ab462b..SHA_DESPLIEGUE` debe listar **solo** ficheros de `docs/`. Si toca cualquier otra cosa (`src/`, `alembic/`, `scripts/`, `docker-compose.yml` u otros), **no se despliega**: se detiene, se informa al PO y **se reevalúa** qué cambió y si hace falta una nueva revisión y CI antes de seguir; no se continúa por inercia.
+  - **Comprobación de seguridad (0.2), reescrita:** el plan original exigía que `4ab462b..SHA_DESPLIEGUE` fuera solo `docs/`; ya no vale, porque entre medias hay código revisado y probado (arriba). En su lugar, **dos comprobaciones**:
+    1. `git diff --stat 625a564..SHA_DESPLIEGUE -- scripts docker-compose.yml Dockerfile alembic pyproject.toml` lista **solo** `alembic/versions/20261019_0020_*.py` y `pyproject.toml`. Cualquier otro fichero (otra migración, `scripts/`, `docker-compose.yml`, `Dockerfile`) → **no se despliega**: se informa al PO y se reevalúa.
+    2. `git log --first-parent --oneline 625a564..SHA_DESPLIEGUE` no contiene ninguna PR con código **que no esté en la tabla de arriba**. Si aparece una, el PO la revisa antes de seguir.
+  - Cada PR de solo documentación que se fusione después **mueve la cabeza** sin cambiar el código; basta repetir las dos comprobaciones y la CI (0.3) sobre la nueva cabeza.
   - Si `main` avanza entre 0.2 y 3, se rehacen 0.2–0.3 con la nueva cabeza.
 
 - **No autorizado hasta nueva orden del PO** (cada uno es un paso separado): fusionar #243 · desplegar en la Pi · aceptar el aviso legal
   en la Pi · ejecutar un rollback · cambiar el tablero.
 
 - [ ] 0.1 PO autoriza **fusionar** #243 (anotar fecha y quién): ____________
-- [ ] 0.2 #243 fusionada (`4ab462b`). `SHA_DESPLIEGUE` = cabeza actual de `origin/main`: `____________________`. Contiene la migración `20261019_0020_*` y el `LEGAL.md` nuevo, y `git diff --stat 4ab462b..SHA_DESPLIEGUE` lista **solo `docs/`**.
+- [ ] 0.2 #243 fusionada (`4ab462b`). `SHA_DESPLIEGUE` = cabeza actual de `origin/main`: `____________________`. Contiene la migración `20261019_0020_*` y el `LEGAL.md` de #243 **y** #267, y pasan las dos comprobaciones de seguridad de arriba (anotar la salida en la evidencia).
 - [ ] 0.3 CI bloqueante **en verde sobre `SHA_DESPLIEGUE` exacto** (no sobre `4ab462b` ni sobre una cabeza anterior) (Suite unitaria, Pruebas con Postgres real, Docker build, pip-audit; `ruff` informativo puede estar en rojo).
 - [ ] 0.4 PO autoriza **desplegar en la Pi** con ese SHA (fecha/quién): ____________
 - [ ] 0.5 Ventana acordada y la persona que aceptará el aviso legal está presente (paso 4).
@@ -138,9 +152,15 @@ Repetir la consulta de 1 y guardar como `fuentes-despues.txt`; comparar con la *
 - [ ] `docker logs zascarr-orquestador --since 30m` sin tracebacks nuevos.
 - [ ] Paquete final de evidencia con `.sha256` (`$EV-final.tar.gz`), sin `.env` ni valores secretos (revisar por patrones antes de compartir).
 
+### 5.4 Lo fusionado además de #243 (solo lectura: no se confirma nada sin orden del PO)
+- [ ] **Interfaz:** `/ui/`, `/ui/biblioteca`, `/ui/pendientes`, `/ui/wishlist`, `/ui/ajustes`, `/estado` responden 200 y se ven con la tipografía y la marca nuevas (sin peticiones a servidores externos de fuentes: son ficheros locales). Una ruta inexistente (`/ui/no-existe`) muestra la página de error propia, no JSON.
+- [ ] **BL-R1 (lista y vista previa):** abrir la ficha de una serie con archivos: aparece «Archivos por número» con «Desvincular» solo en los archivos vinculados con «Vincular en su sitio». Abrir la vista previa de **uno** (`GET`, solo lectura): se ve «¿Desvincular este archivo?» y el botón. **No se pulsa «Desvincular el archivo».**
+- [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8000/api/revision/desvinculacion/previsualizar -H 'Content-Type: application/json' -d '{"file_id":"00000000-0000-0000-0000-000000000000"}'` → **404** (archivo inexistente) y el contador de «Por revisar» no cambia.
+- [ ] **Desvincular de verdad en la biblioteca real (opcional):** solo si el PO lo autoriza **sobre un archivo concreto** que él elija (la operación es recuperable —el archivo vuelve a «Por revisar» y se puede volver a vincular— pero cambia la base real). Anotar el archivo y el resultado en la evidencia.
+
 ## 6. Criterios de éxito
 
-Todas las casillas de 1–5 marcadas **y**: backup verificado (2.1) · migración `0020` aplicada (3.3) con el resultado previsto (5.1) · aviso correcto (5.2) · `.env` y biblioteca intactos (3.5, 3.6) · aceptación legal registrada (4.4) · orquestador reanudado (4.5).
+Todas las casillas de 1–5 marcadas **y**: backup verificado (2.1) · migración `0020` aplicada (3.3) con el resultado previsto (5.1) · aviso correcto (5.2) · `.env` y biblioteca intactos (3.5, 3.6) · aceptación legal registrada (4.4) · orquestador reanudado (4.5) · interfaz y BL-R1 conforme a 5.4.
 
 ## 7. Rollback (NO se ejecuta sin autorización explícita del PO)
 
@@ -150,7 +170,7 @@ Disparadores: `update.sh` falla a partir de su paso 5, la 0020 no deja el result
 2. Con la autorización del PO: `sudo bash /opt/zascarr/zascarr/scripts/rollback.sh --dry-run` y revisar el plan (emparejado por `refs/zascarr/update/<TS>` + `update_<TS>.sql.gz`, **no** "el backup más reciente").
 3. Con una segunda confirmación del PO: `sudo bash /opt/zascarr/zascarr/scripts/rollback.sh` (restaura la base y vuelve al SHA anterior; hace antes una copia de seguridad de la BD actual).
 4. Comprobar: SHA = el de `sha-antes.txt`, `alembic` = `0019`, `/api/health` 200, `.env` y biblioteca idénticos a 3.5/3.6.
-5. Efectos a conocer: restaurar la base **deshace** la aceptación legal hecha después de actualizar y `fuentes_heredadas`; con el código anterior las claves a `true` serían inofensivas (la bajada de la 0020 no hace nada a propósito).
+5. Efectos a conocer: restaurar la base **deshace** la aceptación legal hecha después de actualizar, `fuentes_heredadas` y cualquier «Desvincular» confirmado después (BL-R1 no tiene migración: el código anterior ignora el historial `vinculo_historial` que haya quedado en `files.metadata`); con el código anterior las claves a `true` serían inofensivas (la bajada de la 0020 no hace nada a propósito).
 
 ## 8. Registro de ejecución
 

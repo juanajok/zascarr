@@ -61,14 +61,14 @@ _ESPACIO_OPERACION = "desv_op:"
 #: Bloqueos de la vista previa y motivos de `omitido` en la confirmación (códigos estables; el texto es para la persona).
 MENSAJES = {
     "no_vinculado": "Este archivo no está vinculado a ningún número: no hay nada que deshacer.",
-    "en_curso": "Hay una asignación en curso para este archivo. Espera a que termine y vuelve a intentarlo.",
+    "en_curso": "Ahora mismo ZascArr está trabajando con este archivo. Prueba de nuevo en unos minutos.",
     "archivo_inexistente": "El archivo ya no está registrado en ZascArr.",
-    "sin_procedencia": "Este archivo no se vinculó con «vincular en su sitio» (o se hizo antes de guardar cómo), así que no hay "
-                       "forma segura de deshacerlo desde aquí.",
-    "cambio_desde_la_vista_previa": "El archivo cambió desde que lo revisaste. No se ha deshecho nada: repite la vista previa.",
+    "sin_procedencia": "Este archivo no se vinculó desde «Pendientes por carpeta» (o fue antes de que ZascArr guardara cómo), así "
+                       "que no se puede desvincular desde aquí.",
+    "cambio_desde_la_vista_previa": "El archivo ha cambiado desde que lo revisaste. No se ha deshecho nada: abre de nuevo la vista previa.",
 }
 AVISO_REVINCULAR = (
-    "Deshacer solo devuelve el archivo a «Por revisar»: el fichero, su ruta y el número siguen donde estaban. Volver a "
+    "Deshacer solo devuelve el archivo a «Por revisar»: el archivo, su carpeta y el número siguen donde estaban. Volver a "
     "vincularlo es otra operación aparte, con su propia vista previa; puede cancelarse o fallar, y entonces el archivo "
     "seguirá en «Por revisar».")
 MENSAJE_CADUCADO = ("El token caducó y esta operación no llegó a aplicarse: no hay cambios. Repite la vista previa.")
