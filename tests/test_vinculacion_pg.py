@@ -188,7 +188,7 @@ class TestEjecucion:
         assert meta["otra_clave"] == 7 and meta["match_status"] == "unsorted"            # lo anterior se conserva
         assert set(v) == {"version", "operacion_id", "fecha", "serie_id", "numero", "formato", "issue_creado", "conflictos", "previo"}
         assert (v["version"], v["numero"], v["formato"], v["issue_creado"], v["serie_id"]) == (1, "1", "single_issue", True, str(serie))
-        assert v["previo"] == {"match_status": "unsorted", "review_motivo": "x"} and v["conflictos"] == []
+        assert v["previo"] == {"match_status": "unsorted", "review_motivo": "x", "metadata_source": None} and v["conflictos"] == []
         assert token not in json.dumps(meta) and "sesion" not in json.dumps(meta).lower()
 
     async def test_reutiliza_un_issue_existente_sin_archivo_de_la_misma_edicion(self, ent):
@@ -1092,7 +1092,7 @@ class TestBloqueosYSesionLimpia:
             await s.commit()
         firmado = ArchivoFirmado(str(ids["Flash 01 (1987).cbz"]), "1", "single_issue", 1, 1)
         async with ent.banco.fabrica() as s:
-            f = SimpleNamespace(metadata_={})
+            f = SimpleNamespace(metadata_={}, metadata_source=None)
             with pytest.raises(RuntimeError, match="no se pudo vincular"):
                 await VinculacionDeArchivos(s, secret=SECRETO)._vincular_archivo(firmado, f, issue.id, False, serie, uuid4())
 
