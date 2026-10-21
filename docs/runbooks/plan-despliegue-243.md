@@ -190,8 +190,8 @@ El plan se redactó para **una** actualización con comprobaciones antes y despu
 
 | Actualización (hora local) | De → a | Backup de la base (`/var/backups/zascarr/postgres`) | Qué trajo |
 |---|---|---|---|
-| 2026-10-20 20:26 | `625a564` → `8238acb` | `update_20261020_202609.sql.gz` | #243 con la migración **0020** (y las PR de documentación hasta #248) |
-| 2026-10-21 00:42 | `8238acb` → `4035dc3` | `update_20261021_004230.sql.gz` | Interfaz |
+| 2026-10-20 20:26 | `625a564` → `8238acb` | `update_20261020_202609.sql.gz` | #243 con la migración **0020**, la tipografía y marca (#248) y las PR de documentación fusionadas hasta entonces |
+| 2026-10-21 00:42 | `8238acb` → `4035dc3` | `update_20261021_004230.sql.gz` | Interfaz y documentación (#249–#258) |
 | 2026-10-21 11:27 | `4035dc3` → `8589b47` | `update_20261021_112718.sql.gz` | #267 (`LEGAL.md`), BL-R1a (#259) |
 | 2026-10-21 17:58 | `8589b47` → `134eae3` | `update_20261021_175846.sql.gz` | BL-R1b (#268), #271 (CSS y página de error) |
 
