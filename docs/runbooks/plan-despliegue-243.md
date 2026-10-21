@@ -1,6 +1,6 @@
 # Plan de despliegue — #243 (fuentes de metadatos apagadas por defecto) y todo lo fusionado desde la versión de la Pi
 
-> **Estado: PLAN, no ejecutado.** (Alcance ampliado el 2026-10-21 a todo lo fusionado desde `625a564`: ver §0.) Nada de este documento se ejecuta en la Raspberry Pi hasta que el PO lo autorice **paso a paso**
+> **Estado: EJECUTADO DE HECHO por el PO en cuatro actualizaciones (ver §9); verificación visual 5.2 y 5.4 hecha (la confirmación de «Desvincular» no se ha probado en la Pi).** El texto de abajo es el plan original (no se ejecutó paso a paso: el PO actualizó la Pi por su cuenta). (Alcance ampliado el 2026-10-21 a todo lo fusionado desde `625a564`: ver §0.) Nada de este documento se ejecuta en la Raspberry Pi hasta que el PO lo autorice **paso a paso**
 > (fusión y despliegue son decisiones separadas). Quien ejecuta marca cada casilla y anota la hora; la evidencia se guarda
 > en un paquete con su `.sha256`. Un fallo **detiene** el plan; no se improvisa.
 
@@ -183,3 +183,28 @@ Disparadores: `update.sh` falla a partir de su paso 5, la 0020 no deja el result
 | 3 `update.sh` | | | | `update.log` |
 | 4.3 aceptación legal | | | | `aceptacion-legal.txt` |
 | 5.2 aviso / guardar | | | | |
+
+## 9. Registro real (2026-10-21): lo que ocurrió, frente al plan
+
+El plan se redactó para **una** actualización con comprobaciones antes y después. En la práctica **el PO actualizó la Pi con `update.sh` cuatro veces** conforme se fusionaban PR, sin lanzar los pasos 1–3 del plan. Se descubrió al ejecutar `paso1` el 21 de octubre (la comprobación 1.1 saltó porque la Pi ya no estaba en `625a564`). Fuente: `git reflog` y `refs/zascarr/update/*` de la Pi, y `legal_acknowledgments`.
+
+| Actualización (hora local) | De → a | Backup de la base (`/var/backups/zascarr/postgres`) | Qué trajo |
+|---|---|---|---|
+| 2026-10-20 20:26 | `625a564` → `8238acb` | `update_20261020_202609.sql.gz` | #243 con la migración **0020**, la tipografía y marca (#248) y las PR de documentación fusionadas hasta entonces |
+| 2026-10-21 00:42 | `8238acb` → `4035dc3` | `update_20261021_004230.sql.gz` | Interfaz y documentación (#249–#258) |
+| 2026-10-21 11:27 | `4035dc3` → `8589b47` | `update_20261021_112718.sql.gz` | #267 (`LEGAL.md`), BL-R1a (#259) |
+| 2026-10-21 17:58 | `8589b47` → `134eae3` | `update_20261021_175846.sql.gz` | BL-R1b (#268), #271 (CSS y página de error) |
+
+- **Aviso legal:** aceptado el 2026-10-20 22:45 UTC (versión `847503505cc41f74`, la de #243) y de nuevo el 2026-10-21 09:36 UTC (**`cf5bde4f949117a1`**, la de #267). El hash de `LEGAL.md` en `134eae3` (y en `main` a `a272172`) es `cf5bde4f949117a1`: **la aceptación vigente es la actual**. Ciclos del orquestador saltados por falta de aceptación en la última hora: 0.
+- **Estado de la Pi a las 18:20 (`estado-actual.sh`, solo lectura, sin ✗):** `alembic = 0020`; fuentes `heredadas=true` y las cuatro `true` (el resultado previsto de la 0020 para una instalación con uso previo y sin preferencia guardada); `/api/health` 200; `zascarr-orquestador` y `zascarr-db` en `healthy`; 0 *tracebacks* en la última hora; copia más reciente legible (`gzip -t`, SHA-256 `e46bce5a…b817`); disco montado.
+- **Paquete de evidencia:** `evidencia-estado-actual-20261021_182058.tar.gz`, SHA-256 `4cf22124f9dfca80cc0a983a637321d81ccceeeec285ebee2b2b57c940386b94` (en la Pi; el `.env` no está, solo su hash).
+- **Lo que NO existe:** el estado «antes» de la 0020 medido con `paso1` (`fuentes-antes.txt`, inventario previo de la biblioteca, hash del `.env` previo). Queda la copia de la base de la primera actualización, de donde se podría reconstruir restaurándola en una base temporal (no hecho). Por tanto **no se puede demostrar** que la 0020 partiera del caso «ausentes»; solo que el resultado es coherente con él, ni que la biblioteca no cambió durante las actualizaciones (el actualizador no la toca, A3, pero no hay inventario previo).
+- **Biblioteca:** 1577 ficheros inventariados (el plan esperaba ≈ 1339, la cifra de `files` en la base cuando se escribió). **Sin explicar todavía**: puede ser que la biblioteca haya crecido o que haya ficheros que no son tebeos; se comprueba contra `select count(*) from files` sin tocar nada.
+- **Verificación visual por el PO (capturas del navegador contra la Pi, 2026-10-21, solo lectura):**
+  - **5.2 Ajustes:** el aviso «Las fuentes de metadatos externas están activadas por compatibilidad con tu instalación anterior…» aparece, con las cuatro fuentes marcadas (coherente con `fuentes_heredadas = true`). El PO **no ha pulsado «Guardar»** todavía (decisión suya).
+  - **5.4 ficha de una serie** (*The Wicked + The Divine*, unos 45 números): aparece «Archivos por número», con «En el disco» y «Desvincular» en cada archivo. **No se pulsó «Desvincular».**
+  - **5.4 página de error:** `/ui/no-existe` muestra «No está aquí» con «Ir al Inicio» (página propia, no JSON).
+  - El contador de «Por revisar» del menú muestra **999+** (el contador se corta a 999 a propósito).
+  - **5.4 vista previa de un archivo** (`GET …/archivos/{id}/deshacer`, el del `The Wicked + The Divine 1831.cbr`, vinculado al `#1831`): se ve «¿Desvincular este archivo?», «Qué pasará» con sus cuatro puntos (el archivo no se toca; vuelve a «Por revisar»; el `#1831` se queda sin archivo y aparecerá entre los que faltan; volver a vincularlo es un paso aparte), «Hasta que pulses el botón, no cambia nada», «Desvincular el archivo», «Cancelar» y «Dónde está el archivo» plegado. **No se pulsó «Desvincular el archivo»:** la confirmación de BL-R1 **no se ha probado en la Pi** (sí en pruebas automáticas y en un navegador contra una base de pruebas).
+- **Observaciones, no fallos:** (1) la base tiene **1339** archivos (la cifra esperada: el despliegue no la cambió), **1293** sin número asignado y **46** asignados (los de esa serie, vinculados con «Vincular en su sitio», de ahí que todos ofrezcan «Desvincular»), **14** marcados como no encontrados. (2) En el disco hay **1577** ficheros: 1542 `.cbr`/`.cbz` (1234 + 308), 21 `.rar`, 1 `.tar`, 1 `.part` y unos 12 sin extensión; unos 200 tebeos del disco no están registrados en la base. **Ajeno al despliegue** (el actualizador no toca la biblioteca): se mira con «Duplicados» (el análisis no cambia nada; «adoptar» sí) o se abre como historia aparte.
+- **Fuera de este despliegue:** `main` está en `a272172` (#273, interfaz) y **no** se ha desplegado.
