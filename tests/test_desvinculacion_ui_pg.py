@@ -113,7 +113,7 @@ class TestListaDeArchivos:
         assert 'href="' + ruta(serie, ids[F1]) + '"' not in t and 'href="' + ruta(serie, ids[F2]) + '"' not in t
         assert 'data-razon="en_curso"' in t and 'data-razon="sin_procedencia"' in t
         v = visible(t)
-        assert "hay una asignación en curso" in v and "no se vinculó con «Vincular en su sitio»" in v
+        assert "este archivo se está procesando" in v and "no lo vinculaste con «Vincular en su sitio»" in v
 
     async def test_archivo_no_disponible_se_puede_deshacer_y_se_dice_que_no_esta_verificado(self, ent):
         serie, ids = await vinculado(ent, F1)
@@ -121,9 +121,9 @@ class TestListaDeArchivos:
             await s.execute(text("UPDATE files SET is_missing = true, missing_since = now()"))
             await s.commit()
         t = (await get(f"/ui/series/{serie}")).text
-        assert f'href="{ruta(serie, ids[F1])}"' in t and "No disponible (sin verificar)" in visible(t)
+        assert f'href="{ruta(serie, ids[F1])}"' in t and "No se encuentra en el disco (sin comprobar)" in visible(t)
         p = await get(ruta(serie, ids[F1]))
-        assert "no está verificado que siga en el disco" in visible(p.text) and 'name="token"' in p.text
+        assert "no está comprobado que haya desaparecido" in visible(p.text) and 'name="token"' in p.text
 
     async def test_la_lista_no_hace_una_consulta_por_archivo(self, ent):
         pocos, _ = await vinculado(ent, *(f"Flash {i:02d} (1987).cbz" for i in range(1, 3)))
@@ -194,7 +194,7 @@ class TestVistaPrevia:
         t, v = r.text, visible(r.text)
         assert F1 in v and "Flash" in v and "#1" in v
         assert "Qué pasará si lo confirmas" in v and "vuelve a «Por revisar»" in v
-        assert "no se toca" in v and "no se mueve, no se renombra y no se borra nada" in v
+        assert "no se toca" in v and "no se mueve, no se renombra ni se borra" in v
         assert "sin archivo" in v and "un hueco" in v                       # el número se queda sin archivo
         assert "lo creó esta vinculación, pero no se elimina" in v           # D1
         assert "otra operación aparte" in v and "puede cancelarse o fallar" in v          # advertencia de BL-R1a, criterio 2
@@ -235,7 +235,7 @@ class TestVistaPrevia:
             await s.commit()
         r = await get(ruta(serie, ids[F1]))
         assert r.status_code == 200 and 'name="token"' not in r.text and "<form" not in r.text
-        assert "no se vinculó con «vincular en su sitio»" in visible(r.text).lower() or "vincular en su sitio" in visible(r.text)
+        assert "no lo vinculaste con «Vincular en su sitio»" in visible(r.text)
 
     async def test_ya_no_vinculado_dice_que_no_hay_nada_que_deshacer(self, ent):
         serie, ids = await vinculado(ent, F1)
@@ -355,7 +355,7 @@ class TestConfirmacion:
                 "'/t', 1, 1, :sha, '1', CAST('single_issue' AS issue_format))"), {"f": ids[F1], "s": serie, "sha": SHA})
             await s.commit()
         r = await post(ruta(serie, ids[F1]), {"token": t})
-        assert "asignación en curso" in visible(r.text) and "espera a que termine" in visible(r.text)
+        assert "se está procesando ahora mismo" in visible(r.text) and "espera a que termine" in visible(r.text)
 
     async def test_resultado_incierto_ofrece_comprobar_y_repetir_lo_resuelve(self, ent, monkeypatch):
         from sqlalchemy.ext.asyncio import AsyncSession

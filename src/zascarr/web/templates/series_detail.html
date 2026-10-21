@@ -55,7 +55,7 @@
 {#- BL-R1b (#254, D10): los archivos de cada número y, cuando el servicio lo permite (D9), «Deshacer esta vinculación». -#}
 <section class="archivos-serie" id="archivos-por-numero" aria-labelledby="archivos-titulo">
   <h2 id="archivos-titulo">Archivos por número</h2>
-  <p class="caption">Cada número y los archivos que tiene. «Deshacer esta vinculación» devuelve un archivo a «Por revisar» sin tocar el fichero; solo se
+  <p class="caption">Cada número y los archivos que tiene. «Deshacer esta vinculación» devuelve un archivo a «Por revisar» sin tocar el archivo; solo se
     ofrece para los archivos que se vincularon con «Vincular en su sitio». Los demás no tienen cómo deshacerse desde aquí.</p>
   <ul class="archivos-numeros">
     {% for n in archivos_por_numero %}
@@ -66,7 +66,7 @@
         <li class="archivo-fila" data-archivo="{{ a.id }}">
           <span class="nombre-archivo">{{ a.nombre }}</span>
           <span class="muted">{{ a.formato|upper }}</span>
-          {% if a.falta_en_disco %}{{ ui.chip("amber", "No disponible (sin verificar)") }}{% else %}{{ ui.chip("ok", "Disponible") }}{% endif %}
+          {% if a.falta_en_disco %}{{ ui.chip("amber", "No se encuentra en el disco (sin comprobar)") }}{% else %}{{ ui.chip("ok", "Disponible") }}{% endif %}
           {% if a.bloqueo is none %}
           <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/deshacer">Deshacer esta vinculación</a>
           {% else %}
