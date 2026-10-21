@@ -122,6 +122,9 @@ services:
       - FORUM_USERNAME=${FORUM_USERNAME:-}
       - FORUM_PASSWORD=${FORUM_PASSWORD:-}
       - LIBRARY_PATH=/media/library
+      # La ruta REAL de la biblioteca en el host: la app solo la usa para MOSTRARLA (la vista previa de «Desvincular»
+      # dice dónde está el archivo en tu disco, no en el contenedor). Vacía = se enseña la ruta del contenedor.
+      - HOST_LIBRARY_DIR=${HOST_LIBRARY_DIR:-}
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
       - COVERS_CACHE_PATH=/config/covers
       - TZ=${TZ:-Europe/Madrid}
