@@ -12,12 +12,16 @@ el blanco, así que se veía gris y empastada. Por eso hay tres dibujos de la mi
 - **Completo**, a 180 px: `apple-touch-icon.png`.
 - **De interfaz**, de 24 a 48 px: `zascarr-icono.svg`. Sin trama ni líneas, con el estallido
   más grande y el contorno más grueso, y una Z mayor con contorno fino.
-- **De favicon**, por debajo de 24 px: `zascarr-favicon.svg`.
+- **De favicon**, por debajo de 24 px: `zascarr-favicon.svg`. Sin el cuadrado de papel
+  (2026-10-21): en una pestaña clara se perdía y, en cualquier pestaña, la Z blanca se fundía
+  con el papel; además la Z tapaba casi todo el estallido y solo asomaban las puntas. Ahora
+  el estallido es la silueta, con contorno de tinta para las pestañas claras, y la Z es más
+  pequeña para que se vea el estallido alrededor.
 
 | Fichero | Uso | Notas |
 |---|---|---|
 | `zascarr-icono.svg` | Barra lateral y cabecera (fondo del `.brand::before` en `web.css`) | 80×80, fondo papel redondeado. Dibujo de interfaz: de 24 a 48 px |
-| `zascarr-favicon.svg` | Favicon y cabecera de móvil (18 px) | Versión de 16 px propia: Z grande, contorno fino, sin trama ni líneas |
+| `zascarr-favicon.svg` | Favicon y cabecera de móvil (18 px) | Versión de 16 px propia: sin fondo, el estallido es la silueta; Z blanca con sombra de tinta, sin trama ni líneas |
 | `zascarr-favicon-32.png` | Respaldo del favicon para navegadores sin SVG | Rasterizado del anterior |
 | `apple-touch-icon.png` | Icono al añadir la app a la pantalla de inicio de iOS | 180×180 cuadrado: iOS redondea las esquinas. El único con el dibujo completo |
 
