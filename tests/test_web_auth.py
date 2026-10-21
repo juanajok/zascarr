@@ -163,7 +163,21 @@ class TestLoginSubmit:
         r = client.post("/login", data={"password": "mala", "next": "/ui/"})
 
         assert r.status_code == 401
-        assert "incorrectos" in r.text.lower()
+        assert "Contraseña incorrecta." in r.text
+        assert "Usuario" not in r.text
+        assert COOKIE_NAME not in r.cookies
+
+    def test_modo_usuario_conserva_el_mensaje_con_usuario(self, restaurar_settings):
+        get_settings().auth_mode = "user_password"
+        get_settings().auth_username = "juanjo"
+        get_settings().auth_password_hash = hash_password("secreta123")
+        get_settings().secret_key = "clave-de-prueba"
+        client = TestClient(app)
+
+        r = client.post("/login", data={"username": "juanjo", "password": "mala", "next": "/ui/"})
+
+        assert r.status_code == 401
+        assert "Usuario o contraseña incorrectos." in r.text
         assert COOKIE_NAME not in r.cookies
 
     def test_next_externo_en_el_submit_tampoco_redirige_fuera(self, restaurar_settings):

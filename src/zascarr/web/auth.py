@@ -90,7 +90,9 @@ async def login_submit(
         return templates.TemplateResponse(request, "login.html", {
             "next": next,
             "pide_usuario": settings.auth_mode == "user_password",
-            "error": "Usuario o contraseña incorrectos.",
+            "error": ("Usuario o contraseña incorrectos."
+                      if settings.auth_mode == "user_password"
+                      else "Contraseña incorrecta."),
         }, status_code=401)
 
     # Rehasheo oportunista (p. ej. tras subir las iteraciones de PBKDF2): aquí es

@@ -7,7 +7,6 @@ en test_series_service.py.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -95,6 +94,27 @@ class TestIndex:
         from zascarr.main import STATIC_DIR
         css = (STATIC_DIR / "web.css").read_text(encoding="utf-8")
         assert ".filter-search-box .series-results:empty { display: none; }" in css
+
+    def test_sin_editoriales_no_pinta_el_desplegable_vacio(self):
+        """m4 de U18: sin editoriales no se ofrece un filtro que no filtra nada."""
+        session = FakeSession([FakeExecResult([]), FakeExecResult(0), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert 'id="f-publisher"' not in r.text
+        assert "Todas las editoriales" not in r.text
+
+    def test_con_editoriales_si_pinta_el_desplegable(self):
+        publisher = Publisher(id=uuid4(), name="Bruguera")
+        session = FakeSession([
+            FakeExecResult([publisher]),
+            FakeExecResult(1),
+            FakeExecResult([make_series("Mortadelo")]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert 'id="f-publisher"' in r.text
+        assert "Todas las editoriales" in r.text
+        assert "Bruguera" in r.text
 
     def test_pagina_vacia_muestra_mensaje(self):
         session = FakeSession([
