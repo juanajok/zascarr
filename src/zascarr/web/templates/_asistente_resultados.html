@@ -58,7 +58,8 @@
         </ul>
       </details>
       {% endif %}
-      {{ eleccion_form(clave, c.token, etiqueta_de_tradicion(c.tradicion_sugerida), tradiciones, pista, none, r.consulta) }}
+      {{ eleccion_form(clave, c.token, etiqueta_de_tradicion(c.tradicion_sugerida) if c.tradicion_sugerida else none,
+                       tradiciones, pista, none, r.consulta, procedencia=c.procedencia) }}
     </div>
   </li>
   {% endfor %}
