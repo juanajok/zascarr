@@ -1380,6 +1380,16 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   }
 }
 
+/* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
+   La trama es decoración: quien pide más contraste o colores forzados la ve como ruido detrás
+   del texto. Se apaga toda; cada trama nueva (un `radial-gradient` de puntos) se añade aquí
+   (lo comprueba test_web_componentes). */
+@media (prefers-contrast: more), (forced-colors: active) {
+  body::before,
+  .metric-card::before { display: none; }
+  .series-card img.cover-missing { background: var(--paper-2); }
+}
+
 /* ── Pendientes por carpeta (rebanada 1b, solo lectura) ─────────────────────
    Solo maquetación: los colores salen de los componentes (chip, aviso, card), ya comprobados. */
 .carpetas-resumen { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 12px 0; list-style: none; }
