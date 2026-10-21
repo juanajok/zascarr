@@ -961,6 +961,10 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 
 Las fichas §13 de U12, U14, U19 y U20 están en `docs/design/benchmark-U*.md`; la evidencia de navegador, en `docs/design/ui-u11/`, `ui-u12/`, `ui-u14/`, `ui-u16/`, `ui-u19/` y `ui-u20/`.
 
+**Actualización 2026-10-21 (Sprint 0 de #196).** La tabla anterior es el estado del 2026-10-16 y no se reescribe. Cambios posteriores: **U10 #197** se cierra por **aceptación explícita de la simulación con agentes**, con la deuda de la sesión real en una tarjeta aparte; no es una validación con personas. **U13 #200** deja de estar bloqueada por G1 y sigue **En refinamiento**, con los contratos de carpeta útil/sueltos, ordenación y acciones pendientes. **U15 #202** pasa a **En revisión** con el cambio de texto local y 20 búsquedas reales en GCD/Tebeosfera; Comic Vine y AniList quedan NOT RUN. **U18a #270** recoge las erratas independientes y está **En revisión**; **U18 #205** sigue bloqueada por U7. **U21 #208** está **En revisión** con «Pendientes por carpeta» reescrita y probada; la ficha de serie y el navegador real siguen pendientes. Las 7 historias fusionadas siguen **Fusionado — pendiente de despliegue**: no se ha desplegado nada en la Pi.
+
+**Deuda de proceso #275 (revisión de #273, 2026-10-21).** A partir del Sprint 1, cada PR agrupa como máximo **una historia + su documentación, pruebas y evidencia**; las historias de evidencia también van separadas. La revisión devolvió #273 por el cierre automático de #202: la PR pasa a «parte de #202» y #202 sigue abierta hasta la verificación en navegador real y la decisión sobre ausencia/procedencia de la sugerencia. El trabajo separado para representar ausencia y procedencia queda en **#276** (U15b).
+
 #### Orden de ataque sugerido
 
 1. **U4** (contraste, S) y **U6** (Estado, S): correcciones objetivas, baratas y sin riesgo de producto.
