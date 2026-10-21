@@ -17,7 +17,7 @@
       </select>
       <button type="submit">Elegir esta serie</button>
     </div>
-    <small>La fuente sugiere: {{ etiqueta_sugerida }}.{% if pista %} La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}.{% endif %} Tú decides.</small>
+    <small>La fuente lo clasifica como {{ etiqueta_sugerida }}.{% if pista %} La carpeta «{{ pista.carpeta }}» suele guardar: {{ pista.etiquetas | join(", ") }}.{% endif %} Es solo una pista de la fuente, no de la obra: elige tú.</small>
   </form>
 </div>
 {%- endmacro %}
