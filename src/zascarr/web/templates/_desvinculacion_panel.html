@@ -40,7 +40,7 @@
     {% if r.resultado in ("deshecho", "ya_deshecho") %}
     <ul class="desv-lista">
       {% if r.numero %}<li>El número <strong>#{{ r.numero }}</strong> sigue existiendo en la serie.</li>{% endif %}
-      <li>El fichero no se ha tocado: no se movió, no se renombró y no se borró nada.</li>
+      <li>El archivo no se ha tocado: no se ha movido, ni renombrado, ni borrado.</li>
       <li>Volver a vincularlo es <strong>otra operación</strong>: se hace desde «Por revisar», con su propia vista previa.</li>
     </ul>
     {% endif %}
@@ -57,7 +57,7 @@
     <h2 id="desv-titulo" class="titulo-frase">Deshacer esta vinculación</h2>
     <dl class="carpeta-datos">
       <dt>Archivo</dt><dd class="nombre-archivo">{{ p.archivo.nombre }}</dd>
-      {% if p.numero %}<dt>Vinculado a</dt><dd>{{ p.numero.serie_titulo }}{% if p.numero.numero %} · #{{ p.numero.numero }}{% endif %}{% if p.vinculado_el %} <span class="muted">(desde el {{ p.vinculado_el[:10] }})</span>{% endif %}</dd>{% endif %}
+      {% if p.numero %}<dt>Vinculado a</dt><dd>{{ p.numero.serie_titulo }}{% if p.numero.numero %} · #{{ p.numero.numero }}{% endif %}{% if p.vinculado_el %} <span class="muted">(desde el {{ p.vinculado_el[8:10] }}/{{ p.vinculado_el[5:7] }}/{{ p.vinculado_el[:4] }})</span>{% endif %}</dd>{% endif %}
       <dt>Está en</dt><dd class="nombre-archivo">{{ p.archivo.ruta }}</dd>
     </dl>
 
@@ -66,11 +66,11 @@
     <div class="vinc-acciones"><a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a></div>
 
     {% else %}
-    {% if p.archivo.falta_en_disco %}{{ ui.aviso("amber", "ZascArr tiene este archivo marcado como no disponible: no está verificado que siga en el disco. Se puede deshacer igualmente, porque no se toca el fichero.") }}{% endif %}
+    {% if p.archivo.falta_en_disco %}{{ ui.aviso("amber", "ZascArr no encuentra este archivo en el disco, aunque no está comprobado que haya desaparecido. Puedes deshacer la vinculación igualmente: el archivo no se toca.") }}{% endif %}
     <h3 class="titulo-frase">Qué pasará si lo confirmas</h3>
     <ul class="desv-lista">
       <li>El archivo vuelve a «Por revisar».</li>
-      <li>El fichero <strong>no se toca</strong>: no se mueve, no se renombra y no se borra nada.</li>
+      <li>El archivo <strong>no se toca</strong>: no se mueve, no se renombra ni se borra.</li>
       {% if p.numero %}
       <li>El número <strong>#{{ p.numero.numero }}</strong> se queda en la serie{% if p.numero.creado_por_la_vinculacion %} (lo creó esta vinculación, pero no se elimina){% endif %}.
         {% if p.numero.se_queda_sin_archivos %}Se quedará <strong>sin archivo</strong>: te aparecerá como un hueco, un número que te falta.

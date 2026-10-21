@@ -54,7 +54,7 @@ FALLO_DESCONOCIDO = ("No se pudo deshacer", "No se ha podido completar y no sabe
 #: Motivos de un resultado `omitido`, con la acción que le queda a la persona.
 OMITIDOS: dict[str, str] = {
     "no_vinculado": "Este archivo ya no está vinculado a ningún número, así que no había nada que deshacer. Si lo acabas de deshacer, está en «Por revisar».",
-    "en_curso": "Hay una asignación en curso para este archivo. No se ha cambiado nada: espera a que termine y abre de nuevo la vista previa.",
+    "en_curso": "Este archivo se está procesando ahora mismo. No se ha cambiado nada: espera a que termine y abre de nuevo la vista previa.",
     "archivo_inexistente": "Este archivo ya no está registrado en ZascArr. No se ha cambiado nada.",
     "cambio_desde_la_vista_previa": "El archivo cambió desde que abriste la vista previa (por ejemplo, otra pantalla lo vinculó o lo movió). No se ha cambiado nada: ábrela de nuevo para ver cómo está ahora.",
 }

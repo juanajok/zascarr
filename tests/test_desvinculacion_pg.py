@@ -365,7 +365,7 @@ class TestVistaPrevia:
             await s.commit()
         p = (await previa(ids[F1])).json()
         assert p["puede_deshacer"] is False and p["token"] is None
-        assert p["bloqueo"]["codigo"] == "sin_procedencia" and "vincular en su sitio" in p["bloqueo"]["mensaje"]
+        assert p["bloqueo"]["codigo"] == "sin_procedencia" and "Vincular en su sitio" in p["bloqueo"]["mensaje"]
         assert p["numero"]["numero"] == "1"                     # se ve de qué número es, aunque no se pueda deshacer
 
     async def test_vinculo_incoherente_con_la_serie_del_issue_es_sin_procedencia(self, ent):
