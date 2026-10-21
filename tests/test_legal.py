@@ -44,31 +44,32 @@ class FakeSession:
         self.added.append(obj)
 
 
-class TestPintarElAviso:
-    """Caso real (2026-10-20): el aviso enseñaba «[web:168]» y listas como párrafos con guiones."""
+class TestTextoDelAviso:
+    """Caso real (2026-10-20): el aviso enseñaba «[web:168]» y listas como párrafos con guiones.
+    Se limpió el propio LEGAL.md (no al pintarlo): cambia `legal_version` y hay que volver a
+    aceptarlo."""
 
-    def test_sin_marcas_de_cita(self):
-        from zascarr.services.legal import render_legal_html
+    def test_el_fichero_no_lleva_marcas_de_cita(self):
+        from zascarr.services.legal import LEGAL_MD_PATH, render_legal_html
+        assert "[web:" not in LEGAL_MD_PATH.read_text(encoding="utf-8")
         assert "[web:" not in render_legal_html()
 
-    def test_las_listas_pegadas_salen_como_listas(self):
-        from zascarr.services.legal import render_legal_html
-        html = render_legal_html()
-        assert "<p>Esto significa que:</p>\n<ul>" in html
+    def test_cada_lista_va_separada_de_su_frase_y_sale_como_lista(self):
+        """Python-Markdown exige una línea en blanco antes de una lista."""
+        import re
 
-    def test_pintar_no_cambia_la_version_aceptada(self):
-        """Lo que se acepta es el fichero: la versión es su hash, no el de lo pintado."""
+        from zascarr.services.legal import LEGAL_MD_PATH, render_legal_html
+        crudo = LEGAL_MD_PATH.read_text(encoding="utf-8")
+        assert not re.search(r"^(?![ \t]*[-*] |[ \t]*\|)[^\n]*\S[^\n]*\n[-*] ", crudo, re.M)
+        assert "<p>Esto significa que:</p>\n<ul>" in render_legal_html()
+
+    def test_la_version_es_el_hash_del_fichero(self):
+        """Lo que se acepta es el fichero: cambiarlo obliga a aceptar de nuevo."""
         import hashlib
 
         from zascarr.services.legal import LEGAL_MD_PATH, current_legal_version
         crudo = LEGAL_MD_PATH.read_text(encoding="utf-8")
         assert current_legal_version() == hashlib.sha256(crudo.encode("utf-8")).hexdigest()[:16]
-
-    def test_una_lista_ya_separada_o_una_tabla_no_cambian(self):
-        from zascarr.services.legal import _texto_para_pintar
-        texto = "Intro:\n\n- a\n- b\n\n| x | y |\n|---|---|\n| 1 | 2 |\n"
-        assert _texto_para_pintar(texto) == texto
-        assert _texto_para_pintar("Intro:\n- a\n- b\n") == "Intro:\n\n- a\n- b\n"
 
 
 class TestVersion:
