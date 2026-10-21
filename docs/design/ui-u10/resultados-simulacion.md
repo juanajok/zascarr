@@ -189,8 +189,8 @@ ayuda a decidir.
 3. **Tomar B como patrón de revisión dentro de A**, no como pantalla principal: selección fina, recuento de
    seleccionados, revisión antes de aplicar y confirmación.
 4. **Decisión adoptada (2026-10-21):** se acepta la simulación como evidencia suficiente para G1, con la deuda de
-   la sesión real visible. La deuda queda registrada en una tarjeta aparte y no se presenta como validación con
-   personas. G1 se desbloquea por decisión explícita, no por un PASS de los criterios originales.
+   la sesión real visible. La deuda queda registrada en **#272** y no se presenta como validación con personas. G1
+   se desbloquea por decisión explícita, no por un PASS de los criterios originales.
 
 ## 7. Evidencia y reproducibilidad
 
