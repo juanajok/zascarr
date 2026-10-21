@@ -113,6 +113,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Hay que volver a aceptar el aviso legal una vez.** Se ha limpiado su texto (quitadas unas marcas
+  de cita «[web:168]» que no llevaban a ninguna parte y separadas las listas para que se vean como
+  listas); lo que dice no cambia. La versión aceptada es la huella del fichero, así que tras actualizar
+  ZascArr vuelve a pedir la aceptación: hasta entonces **las búsquedas de Deseados quedan en pausa**,
+  como en una instalación nueva (lo que ya se esté descargando sigue). Ver la biblioteca no requiere nada.
 - **Confirmar una vinculación con un token caducado y sin informe dice qué se sabe y qué no** (#116).
   Antes respondía `410` con un texto único. Ahora, además del `codigo: token_caducado`, el detalle trae
   `informe_disponible: false` (esto **no es un informe**: no hay `resultado` ni `repetida`) y
