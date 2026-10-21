@@ -8,6 +8,7 @@ que la página los renderiza).
 """
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -408,6 +409,99 @@ class TestPoliticaBusquedaD8:
                             data={"wishlist_policy": "faltantes"})
 
         assert r.status_code == 404
+
+
+class TestPresupuestoTextoU21:
+    """U21 (#208): la ficha de serie también cumple el presupuesto de texto.
+
+    La acción principal es el selector de política, no el enlace de vuelta ni
+    el desplegable de fuentes: se mide el texto visible anterior a
+    `#wishlist_policy`. El detalle de fuentes se excluye como contenido
+    plegado.
+    """
+
+    def _render(self) -> str:
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([]),
+            FakeExecResult([]),
+            FakeExecResult([]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        main = re.search(r"<main\b[^>]*>(.*?)</main>", r.text, re.S)
+        assert main is not None
+        return main.group(1)
+
+    @staticmethod
+    def _texto(fragmento: str) -> str:
+        return re.sub(r"<[^>]+>", " ", fragmento)
+
+    def test_entrada_y_accion_principal_cumplen_el_umbral(self):
+        html = self._render()
+        entrada = re.search(r'<p class="series-intro">(.*?)</p>', html, re.S)
+        assert entrada is not None
+        assert self._texto(entrada.group(1)).strip() == (
+            "Consulta tus números y ajusta la búsqueda automática."
+        )
+        assert len(re.findall(r"\w+", self._texto(entrada.group(1)))) <= 20
+
+        antes = html.split('id="wishlist_policy"', 1)[0]
+        # El contenido de un <details> cerrado no cuenta, pero su <summary>
+        # visible sí (contrato de medición de #208).
+        antes = re.sub(
+            r"<details\b[^>]*>\s*(<summary>.*?</summary>).*?</details>",
+            r"\1",
+            antes,
+            flags=re.S,
+        )
+        palabras = re.findall(r"\w+", self._texto(antes))
+        assert len(palabras) <= 50, (len(palabras), " ".join(palabras))
+
+    def test_la_accion_va_antes_que_el_listado(self):
+        html = self._render()
+        assert html.index('id="wishlist_policy"') < html.index("Te faltan")
+
+    def test_las_fuentes_van_plegadas_y_no_se_pierden(self):
+        html = self._render()
+        detalle = re.search(
+            r'<details class="series-fuentes">(.*?)</details>', html, re.S
+        )
+        assert detalle is not None
+        assert "<summary>Fuentes y atribución</summary>" in detalle.group(1)
+        assert "Los metadatos de esta ficha proceden de fuentes de terceros" in detalle.group(1)
+        assert "Fuentes y atribución" not in html.split('id="politica-serie"', 1)[0].replace(
+            "<summary>Fuentes y atribución</summary>", ""
+        )
+
+    def test_la_garantia_va_junto_al_selector_y_no_al_final(self):
+        html = self._render()
+        pos_select = html.index('id="wishlist_policy"')
+        pos_efecto = html.index("politica-efecto")
+        pos_veredicto = html.index("politica-veredicto")
+        assert pos_select < pos_efecto < pos_veredicto
+        assert "Al cambiar el selector se guarda al momento" in html
+        assert "lo retirado deja de buscarse ya" in html
+        assert "Guardar aplica la retirada" not in html
+
+    def test_la_nota_de_futuros_va_junto_al_selector(self):
+        html = self._render()
+        assert html.index('id="wishlist_policy"') < html.index("politica-futuros")
+        assert html.index("politica-futuros") < html.index("politica-veredicto")
+        assert "todavía no se puede aplicar" in html
+
+    def test_ningun_parrafo_visible_va_en_mayusculas(self):
+        html = self._render()
+        for fragmento in re.findall(r"<p\b[^>]*>(.*?)</p>", html, re.S):
+            texto = self._texto(fragmento).strip()
+            letras = [c for c in texto if c.isalpha()]
+            if len(letras) < 3:
+                continue
+            assert not all(c.isupper() for c in letras), texto
 
 
 class TestPortada:
