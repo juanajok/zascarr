@@ -33,6 +33,7 @@ from zascarr.services.revision_carpetas import (
     PatronDeNombres,
     RespuestaCarpetas,
     Senal,
+    SerieSugerida,
     Totales,
 )
 
@@ -90,6 +91,22 @@ def visible(cuerpo: str) -> str:
     """El texto que lee la persona: sin etiquetas, con entidades resueltas y espacios normalizados."""
     sin_etiquetas = re.sub(r"<[^>]+>", " ", principal(cuerpo))
     return re.sub(r"\s+", " ", htmllib.unescape(sin_etiquetas)).strip()
+
+
+def _grupo_de_referencia(clave: str, n_archivos: int, sugerida: SerieSugerida | None = None) -> Grupo:
+    """Una tarjeta del fixture enlatado de U21; no toca la BD ni el disco."""
+    titulo = clave.rsplit("/", 1)[-1]
+    return Grupo(
+        clave=clave, carpeta_contextual=titulo, ascendentes=["Comics"],
+        carpeta_limpia=CarpetaLimpiaOut(titulo=titulo, anio=None, volumen=None, calificadores=[]),
+        estado="serie_sugerida" if sugerida else "sin_serie",
+        etiqueta=ETIQUETAS["serie_sugerida" if sugerida else "sin_serie"],
+        n_archivos=n_archivos,
+        patron_de_nombres=PatronDeNombres(titulo_dominante=titulo, proporcion=1.0, titulos_distintos=1),
+        serie_sugerida=sugerida, por_confirmar=sugerida is not None, en_conflicto=False,
+        senales=[], archivos=[ArchivoRevision(id=f"id-{clave}", nombre=f"{titulo} 01.cbz",
+                                              estado="serie_sugerida" if sugerida else "sin_serie")],
+    )
 
 
 # ── Lo que ve la persona ──────────────────────────────────────────────────────────────────────────
@@ -351,6 +368,36 @@ class TestPresupuestoTexto:
         assert "No se crea ni se asigna nada hasta que confirmes." in visible(cuerpo)
         assert "Sin serie sugerida" in antes
         assert principal_cuerpo.index('class="carpeta-accion"') < principal_cuerpo.index('class="carpeta-detalle"')
+
+    async def test_la_cifra_de_39_es_reproducible_con_el_fixture_de_referencia(self, banco, monkeypatch):
+        """La ficha mide 39 palabras con 1.308/108/14 y dos tarjetas; esta prueba enlata esa respuesta.
+
+        La prueba general de umbral siembra un solo registro y comprueba ≤ 50, no la cifra exacta.
+        """
+        enlatada = RespuestaCarpetas(
+            generado="2026-10-21T00:00:00Z",
+            totales=Totales(sin_serie=1294, serie_sugerida=14, grupos=108, candidata_inexistente=0),
+            pagina=Pagina(limite=50, desplazamiento=0),
+            grupos=[
+                _grupo_de_referencia("Comics/Flash (1987)", 155),
+                _grupo_de_referencia(
+                    "Comics/Batman (2016)", 42,
+                    SerieSugerida(series_id="id-batman", titulo="Batman", anio=2016, puntuacion=0.92)),
+            ],
+        )
+
+        async def falso(self, limite=200, desplazamiento=0):
+            return enlatada
+        monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", falso)
+
+        cuerpo = (await pagina()).text
+        principal_cuerpo = principal(cuerpo).split(">", 1)[1]
+        sin_detalles = re.sub(r"<details\b.*?</details>", " ", principal_cuerpo, flags=re.S)
+        antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
+        palabras = self._palabras(antes)
+        assert len(palabras) == 39, f"{len(palabras)} palabras: {' '.join(palabras)}"
+        assert palabras.count("i") == 1          # el icono decorativo del chip informativo
+        assert len([p for p in palabras if p != "i"]) == 38
 
     async def test_estado_vacio_tambien_cabe(self, banco):
         cuerpo = (await pagina()).text

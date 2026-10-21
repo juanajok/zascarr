@@ -60,8 +60,12 @@ plantilla real y una respuesta enlatada del servicio, sin tocar la base de datos
 | Umbral de entrada / intro | ≤ 20 / ≤ 50 |
 
 La medida de 39 es **conservadora** y se obtiene quitando los `<details>` cerrados antes de contar, como pide el
-método. La prueba `tests/test_web_carpetas_pg.py::TestPresupuestoTexto` falla si la entrada o la intro superan el
-umbral, si falta la garantía junto a la acción o si el subtítulo pasa de 20 palabras.
+método. Es reproducible con
+`tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_39_es_reproducible_con_el_fixture_de_referencia`,
+que enlata la respuesta 1.308/108/14 y dos tarjetas y exige **exactamente 39** (38 sin el icono `i` del chip
+informativo). La prueba general de umbral siembra un solo registro y comprueba ≤ 50; no pretende reproducir la cifra.
+La suite `TestPresupuestoTexto` falla si la entrada o la intro superan el umbral, si falta la garantía junto a la
+acción o si el subtítulo pasa de 20 palabras.
 
 **Límite:** es una medida sobre HTML renderizado, no sobre píxeles de un navegador. No se ha comprobado con CSS
 real, tema oscuro, 360 px ni lector de pantalla.
@@ -141,7 +145,7 @@ Decisiones concretas:
 | Criterio | Estado | Evidencia |
 |---|---|---|
 | 1. Regla en `CLAUDE.md` §6 | **PASS** | Texto vigente, umbrales provisionales |
-| 2. Suite con recuento y umbral por pantalla adaptada | **PASS (contrato HTML)** | `TestPresupuestoTexto`: 8 y 39 palabras; falla si supera 20/50. Navegador real: NOT RUN. |
+| 2. Suite con recuento y umbral por pantalla adaptada | **PASS (contrato HTML)** | `TestPresupuestoTexto`: 8 y 39 palabras, con el fixture 1.308/108/14 reproducible; falla si supera 20/50. Navegador real: NOT RUN. |
 | 3. Carpetas ≤ 20 de entrada y ≤ 50 antes de la acción | **PASS (HTML)** | Subtítulo 8; 39 antes de «Elegir la serie de esta carpeta» |
 | 4. Tarjeta con nombre, archivos, sugerencia/ausencia y estado | **PASS** | `h2`, chips, línea «N registros · Serie sugerida/Sin serie sugerida» antes de la acción |
 | 5. Garantías junto a la acción con efecto | **PASS** | «No se crea ni se asigna nada hasta que confirmes.» junto al enlace |
@@ -175,6 +179,8 @@ Prueba de contrato (requiere `TEST_DATABASE_URL` para el fixture de Postgres rea
 python -m pytest tests/test_web_carpetas_pg.py::TestPresupuestoTexto -q
 ```
 
+La cifra exacta de 39 se reproduce con
+`tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_39_es_reproducible_con_el_fixture_de_referencia`.
 La prueba usa la plantilla real, una respuesta enlatada del servicio y el mismo recuento conservador que este
 documento. Para una medida en navegador falta el ensayo aislado con Chrome, Postgres real y los datos sintéticos;
 queda **NOT RUN**.

@@ -19,6 +19,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from zascarr.models import ComicTradition
 from zascarr.services.gcd import GCDClient
 from zascarr.services.tebeosfera import TebeosferaClient
 
@@ -81,7 +82,9 @@ async def _buscar_tebeosfera(cliente: TebeosferaClient, titulo: str) -> dict:
                 "anio": r.start_year,
                 "id": r.slug,
                 "tipo": r.kind,
-                "sugerencia": "tebeo",
+                # Tebeosfera no devuelve tradición por resultado: el cliente de producto asigna
+                # TEBEO a todos. No es un valor leído de la respuesta; el 20/20 describe el diseño.
+                "sugerencia": ComicTradition.TEBEO.value,
                 "url": r.site_url,
             }
             for r in resultados
@@ -202,7 +205,11 @@ def _escribir_markdown(salida: dict) -> None:
         "",
         "- Solo se evalúa el **primer resultado** de cada fuente; la app muestra varios y la",
         "  persona elige. El recuento es descriptivo, no una tasa de acierto del producto.",
-        "- Tebeosfera asigna «tebeo» a todo por diseño del cliente; GCD asigna según idioma/país.",
+        "- Tebeosfera no devuelve una tradición por resultado: `buscar_20.py` escribe la constante",
+        "  `ComicTradition.TEBEO.value` («tebeo») para todos porque el cliente de producto asigna",
+        "  `TEBEO` a cualquier resultado de esa fuente. El 20/20 describe el diseño del cliente,",
+        "  no una clasificación leída de cada ficha. GCD sí asigna según idioma/país de la",
+        "  edición.",
         "- La referencia de tradición de `titulos.json` es provisional y no está verificada",
         "  contra un catálogo externo.",
         "- No se ha medido Comic Vine, que es la fuente del caso Mortadelo.",

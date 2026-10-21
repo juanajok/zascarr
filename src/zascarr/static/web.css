@@ -1398,6 +1398,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .senal-afectados, .carpeta-archivos { flex-basis: 100%; }
 .senal-afectados ul, .carpeta-archivos ul { margin: 6px 0 0; padding-left: 20px; }
 .nombre-archivo { overflow-wrap: anywhere; }
+/* «Carpetas 1–2 de N»: es el recuento de la página, no la navegación entre páginas. */
+.carpetas-pagina { margin: 12px 0; }
 .carpetas-paginas { display: flex; gap: 12px; margin: 18px 0; }
 .carpeta-resumen { margin: 0 0 10px; }
 .carpeta-explicacion, .carpeta-detalle { margin: 12px 0; }
