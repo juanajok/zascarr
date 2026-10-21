@@ -1,10 +1,11 @@
 # U15 — ¿La sugerencia de tradición sale de la fuente o de la obra? (2026-10-21)
 
-> **Estado: modelo reproducible + 20 búsquedas reales en GCD y Tebeosfera (2026-10-21); Comic Vine y AniList
-> siguen NOT RUN. Cambio de texto aplicado y probado. CA6 parcial: la ausencia de sugerencia es un impedimento
-> del contrato actual. #202 queda abierta, no cerrada.**
+> **Estado: modelo reproducible + 20 búsquedas reales en GCD y Tebeosfera + verificación en Chrome real
+> (2026-10-21); Comic Vine y AniList siguen NOT RUN. Cambio de texto aplicado y probado. CA6 parcial: la ausencia
+> de sugerencia es un impedimento del contrato actual. #202 queda abierta, no cerrada.**
 > `titulos.json` sigue siendo un modelo determinista; la medición real está en `resultados-reales.json` y
-> `resultados-reales.md`. No se ha usado la app ni la base de datos. La Pi no se ha tocado.
+> `resultados-reales.md`; la verificación de navegador está en `verificacion-navegador-2026-10-21.md`. La app se
+> usó solo contra una base desechable y una biblioteca temporal. La Pi no se ha tocado.
 
 ## 1. Pregunta
 
@@ -91,6 +92,9 @@ En `_resultados_descubrir.html` (origin/main `8589b47`):
 - **La persona elige:** el `select` es `required` y no tiene valor por defecto.
 - **El texto ya explica el porqué:** dice que la clasificación es de la fuente, que no es de la obra y que la
   elección es de la persona. Se aplicó en `_resultados_descubrir.html` y en `_asistente_macros.html`.
+- **Comprobado en Chrome real (2026-10-21):** búsqueda real de `Mortadelo`, 20/20 selectores vacíos y obligatorios,
+  0 preselecciones; al elegir **Manga** sobre una pista **Tebeo español**, la vista previa muestra Manga y la base
+  sigue sin series. Ver [`verificacion-navegador-2026-10-21.md`](verificacion-navegador-2026-10-21.md) §4.
 
 ## 5. Criterios de aceptación de #202 (mapeo 1:1)
 
@@ -99,9 +103,9 @@ En `_resultados_descubrir.html` (origin/main `8589b47`):
 | 1. Medición reproducible, con datos, procedencia y estado por observación; por candidata y por título, sin inflar aciertos | **PASS con límites** | `resultados-reales.json` guarda consulta, fuente, resultado, ID, fecha y sugerencia; 20 títulos × 2 fuentes = 40 consultas. Solo se evalúa el **primer resultado** de cada fuente: los recuentos son por título/fuente y no suman varias candidatas de una consulta. Comic Vine y AniList quedan NOT RUN. |
 | 2. Ficha con fecha, versión, muestra, denominadores, discrepancias y limitaciones; criterio de decisión antes de concluir | **PASS** | Ficha fechada (2026-10-21), commits `8589b47`/`b540726`, 20 títulos, denominadores 16/20 y 8/20, discrepancias por edición y límites. El protocolo y los criterios se fijaron en la issue antes de medir; la decisión está en §6. |
 | 3. Distinguir sugerencia respaldada por evidencia explícita, sugerencia no fiable y evidencia insuficiente; no declarar fiable una fuente entera por una muestra pequeña | **PASS con límites** | §2 separa el valor por defecto de Comic Vine/AniList/Tebeosfera de la transformación de GCD; §3.b mide GCD (10/16) y Tebeosfera (8/20). Comic Vine y AniList no se midieron: no se declaran fiables ni se extrapola su comportamiento. |
-| 4. No preseleccionar; explicar en español que la persona debe elegir; no sustituir su elección ni confundir tradición con formato | **PASS** | El `select` es `required` y solo tiene seleccionado el marcador vacío; el texto atribuye la pista a la fuente. Las pruebas de Postgres confirman que la tradición elegida (p. ej. Manga) manda sobre la sugerida (Americana) y que el alta guarda la elegida. No hay campo de formato en esta presentación. |
+| 4. No preseleccionar; explicar en español que la persona debe elegir; no sustituir su elección ni confundir tradición con formato | **PASS** | El `select` es `required` y solo tiene seleccionado el marcador vacío; el texto atribuye la pista a la fuente. Las pruebas de Postgres confirman que la tradición elegida (p. ej. Manga) manda sobre la sugerida (Americana) y que el alta guarda la elegida. Además, Chrome real (2026-10-21): 20/20 selectores vacíos, 0 preselecciones y texto completo; ver `verificacion-navegador-2026-10-21.md` §4.1. No hay campo de formato en esta presentación. |
 | 5. Cambio limitado y contrato vigente; si no permite representar falta de selección o procedencia, registrar impedimento y proponer trabajo separado sin ampliarlo en silencio | **PASS con impedimento** | Solo cambia el texto de presentación; no hay cambio de esquema, enrutado ni contrato. `DiscoveryResult.tradition_guess` es obligatoria y no existe un campo de procedencia: la ausencia de sugerencia y el origen explícito/transformado/por defecto **no se pueden representar** con el contrato actual. Queda registrado aquí y en #202. Trabajo separado: **#276** (U15b) para ampliar el contrato con ausencia/procedencia, fuera de esta PR. |
-| 6. Pruebas de los cinco escenarios de CA6, regresión automática y CI | **PARCIAL** | Ver tabla siguiente. Cuatro escenarios tienen prueba; la ausencia de sugerencia queda como impedimento contractual. La CI de #273 está en verde (unitaria, Postgres, Docker y pip-audit). #202 **no se cierra** con esta PR. |
+| 6. Pruebas de los cinco escenarios de CA6, regresión automática y CI | **PARCIAL** | Ver tabla siguiente. Cuatro escenarios tienen prueba; la elección explícita tiene además verificación en Chrome real; la ausencia de sugerencia queda como impedimento contractual. La CI de #273 está en verde (unitaria, Postgres, Docker y pip-audit). #202 **no se cierra** con esta PR. |
 
 | Escenario de CA6 | Prueba | Estado |
 |---|---|---|
@@ -109,7 +113,7 @@ En `_resultados_descubrir.html` (origin/main `8589b47`):
 | Sugerencia no fiable | `TestBuscar::test_la_tradicion_no_viene_preseleccionada_y_la_sugerencia_es_solo_un_texto` + `TestEscenariosCA6DeU15::test_sugerencia_no_fiable_de_comic_vine_para_un_tebeo_es_solo_una_pista`; en el asistente, `TestCriterio4Eleccion::test_la_sugerencia_de_la_fuente_se_distingue_y_no_esta_elegida` | **PASS** |
 | Origen desconocido | `TestEscenariosCA6DeU15::test_origen_desconocido_no_se_presenta_como_dato_confirmado` | **PASS con límite**: la UI no inventa procedencia; el contrato no la expone. |
 | Ausencia de sugerencia | `TestEscenariosCA6DeU15::test_ausencia_de_sugerencia_es_un_impedimento_del_contrato_actual` | **IMPEDIMENTO**: el contrato exige `tradition_guess`; no se simula con `other` ni se amplía aquí. |
-| Elección explícita de la persona | `test_descubrir_dos_pasos_pg.py::TestRevisarNoEscribeNada::test_la_vista_previa_ofrece_crear_con_la_tradicion_elegida_y_no_escribe` y `TestCrear::test_crea_la_serie_con_la_tradicion_elegida_el_identificador_protegido_y_la_procedencia` | **PASS** (Postgres real) |
+| Elección explícita de la persona | `test_descubrir_dos_pasos_pg.py::TestRevisarNoEscribeNada::test_la_vista_previa_ofrece_crear_con_la_tradicion_elegida_y_no_escribe` y `TestCrear::test_crea_la_serie_con_la_tradicion_elegida_el_identificador_protegido_y_la_procedencia`; Chrome real: `verificacion-navegador-2026-10-21.md` §4.3 | **PASS** (Postgres real y Chrome real) |
 
 ## 6. Decisión adoptada (2026-10-21)
 
@@ -120,9 +124,10 @@ En `_resultados_descubrir.html` (origin/main `8589b47`):
    No toca lógica de negocio ni esquema.
 3. **Medición real ejecutada parcialmente:** GCD y Tebeosfera respondieron; Comic Vine no tiene clave en este
    entorno y AniList devolvió 403. Las dos fuentes que faltan quedan **NOT RUN**, no PASS. No se inventan resultados.
-4. **#202 no se cierra con la PR #273.** Queda abierta hasta ejecutar la verificación de presentación en
-   navegador real con entorno, SHA y capturas, y hasta decidir el trabajo separado para la ausencia de
-   sugerencia y la procedencia. El tablero no la marca «Hecha» sin despliegue o aceptación explícita de NOT RUN.
+4. **#202 no se cierra con la PR #273.** La verificación de presentación en navegador real ya está ejecutada
+   (2026-10-21, `a2721722`, Chrome 154; ver `verificacion-navegador-2026-10-21.md`). Queda abierta hasta decidir y
+   ejecutar el trabajo separado para la ausencia de sugerencia y la procedencia (#276). El tablero no la marca
+   «Hecha» sin despliegue o aceptación explícita de NOT RUN.
 5. **No se toca la Pi.**
 
 ## 7. Reproducir
@@ -142,11 +147,23 @@ PYTHONPATH=src python3 docs/design/ui-u15/buscar_20.py
 Salida: `resultados-reales.json` y `resultados-reales.md`. Comic Vine requiere `COMICVINE_API_KEY` y AniList
 depende de que su API vuelva a estar disponible; si no, el script los registra como no disponibles.
 
+Verificación en Chrome real (requiere la app arrancada con GCD/Tebeosfera y Chrome del sistema):
+
+```bash
+pip install playwright==1.64.0
+python docs/design/ui-u15/verificar_navegador.py \
+  --base-url http://127.0.0.1:8766 \
+  --out /tmp/u15-verificacion \
+  --sha "$(git rev-parse HEAD)"
+```
+
 ## 8. Archivos
 
 - `titulos.json` — 20 fixtures y tradición de referencia.
 - `medir_u15.py` — modelo determinista del mapeo actual.
 - `buscar_20.py` — 20 búsquedas reales en GCD y Tebeosfera.
 - `resultados-reales.json` / `resultados-reales.md` — respuestas, IDs, fecha y sugerencias.
+- `verificacion-navegador-2026-10-21.md` / `verificacion-navegador.json` / `capturas/` — verificación en Chrome real.
+- `verificar_navegador.py` — script reproducible de la verificación en navegador.
 - `docs/design/auditoria-ui-2026-10-15.md` §M3 y §8 — evidencia original de Mortadelo.
 - `tests/test_web_discovery.py` y `tests/test_asistente_carpetas_pg.py` — contrato de no preselección y texto.
