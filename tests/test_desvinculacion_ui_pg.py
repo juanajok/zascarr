@@ -125,7 +125,7 @@ class TestListaDeArchivos:
         t = (await get(f"/ui/series/{serie}")).text
         assert f'href="{ruta(serie, ids[F1])}"' in t and "Quizá no esté en el disco" in visible(t)
         p = await get(ruta(serie, ids[F1]))
-        assert "aunque no está comprobado" in visible(p.text) and 'name="token"' in p.text
+        assert "aún no está confirmado" in visible(p.text) and "última revisión de la biblioteca" in visible(p.text) and 'name="token"' in p.text
 
     async def test_la_lista_no_hace_una_consulta_por_archivo(self, ent):
         pocos, _ = await vinculado(ent, *(f"Flash {i:02d} (1987).cbz" for i in range(1, 3)))
@@ -198,7 +198,7 @@ class TestVistaPrevia:
         assert "¿Desvincular este archivo?" in v and "Qué pasará" in v and "Vuelve a «Por revisar»" in v
         assert "no se toca" in v and "no se mueve, no se renombra ni se borra" in v
         assert "sin archivo" in v and "entre los números que te faltan" in v                    # el número se queda sin archivo (D1: se conserva)
-        assert "Volver a vincularlo es un paso aparte" in v and "si no lo completas, el archivo se queda allí" in v    # criterio 2 de #254
+        assert "Volver a vincularlo es un paso aparte" in v and "si lo cancelas o falla, el archivo se queda allí" in v    # criterio 2 de #254
         assert "Hasta que pulses el botón, no cambia nada" in v and "Desvincular el archivo" in v
         assert 'class="aviso amber"' not in t                                                   # sin aviso de peligro que no existe
         assert 'name="token"' in t and 'action="/ui/series/' in t and 'method="post"' in t
