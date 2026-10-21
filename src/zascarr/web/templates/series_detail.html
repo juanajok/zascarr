@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ series.title }} — ZascArr{% endblock %}
 {% block content %}
+{% from "_legal_disclaimer.html" import legal_disclaimer %}
 <a href="/ui/biblioteca" class="back-link">← Biblioteca</a>
 
 <div class="series-header">
@@ -12,8 +13,6 @@
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>
     {% endif %}
-    {% from "_legal_disclaimer.html" import legal_disclaimer %}
-    {{ legal_disclaimer("metadata") }}
     {#- «Completa» solo si los huecos se pudieron calcular: sin `computable` no hay con qué restar, y antes
         una serie de AniList con 8 de 30 decía «Ningún hueco — la tienes completa» (caso real, 2026-10-20). -#}
     <p class="subtitle">
@@ -28,8 +27,15 @@
         Número total de la serie desconocido todavía: no se puede calcular huecos.
       {% endif %}
     </p>
+    <details class="series-fuentes">
+      <summary>Fuentes y atribución</summary>
+      {{ legal_disclaimer("metadata") }}
+    </details>
   </div>
 </div>
+
+<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
+{% include "_politica_serie.html" %}
 
 {% if missing %}
 <h2>Te faltan</h2>
@@ -84,6 +90,4 @@
   </details>
 </section>
 {% endif %}
-
-{% include "_politica_serie.html" %}
 {% endblock %}
