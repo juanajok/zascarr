@@ -11,17 +11,20 @@ el blanco, así que se veía gris y empastada. Por eso hay tres dibujos de la mi
 
 - **Completo**, a 180 px: `apple-touch-icon.png`.
 - **De interfaz**, de 24 a 48 px: `zascarr-icono.svg`. Sin trama ni líneas, con el estallido
-  más grande y el contorno más grueso, y una Z mayor con contorno fino.
-- **De favicon**, por debajo de 24 px: `zascarr-favicon.svg`. Sin el cuadrado de papel
-  (2026-10-21): en una pestaña clara se perdía y, en cualquier pestaña, la Z blanca se fundía
-  con el papel; además la Z tapaba casi todo el estallido y solo asomaban las puntas. Ahora
-  el estallido es la silueta, con contorno de tinta para las pestañas claras, y la Z es más
-  pequeña para que se vea el estallido alrededor.
+  más grande y el contorno más grueso.
+- **De favicon**, por debajo de 24 px: `zascarr-favicon.svg`. Sin el cuadrado de papel: en una
+  pestaña clara se perdía y la Z blanca se fundía con él. El estallido es la silueta, con
+  contorno de tinta para las pestañas claras.
+
+En los dos pequeños, **la Z es grande y gruesa, y sobresale un poco del estallido**
+(decisión del PO, 2026-10-21): a ese tamaño lo primero es que la Z se lea, y una Z que se
+sale nos aleja de Komga (ver Reglas). Tiene trazos más
+anchos que la del dibujo completo, relleno blanco y contorno y sombra de tinta.
 
 | Fichero | Uso | Notas |
 |---|---|---|
 | `zascarr-icono.svg` | Barra lateral y cabecera (fondo del `.brand::before` en `web.css`) | 80×80, fondo papel redondeado. Dibujo de interfaz: de 24 a 48 px |
-| `zascarr-favicon.svg` | Favicon y cabecera de móvil (18 px) | Versión de 16 px propia: sin fondo, el estallido es la silueta; Z blanca con sombra de tinta, sin trama ni líneas |
+| `zascarr-favicon.svg` | Favicon y cabecera de móvil (18 px) | Versión de 16 px propia: sin fondo, el estallido es la silueta; Z gruesa blanca con contorno y sombra de tinta, sin trama ni líneas |
 | `zascarr-favicon-32.png` | Respaldo del favicon para navegadores sin SVG | Rasterizado del anterior |
 | `apple-touch-icon.png` | Icono al añadir la app a la pantalla de inicio de iOS | 180×180 cuadrado: iOS redondea las esquinas. El único con el dibujo completo |
 
@@ -33,7 +36,10 @@ Reglas:
   Radarr; en la UI el amarillo sigue siendo el color de acción.
 - **Por debajo de 24 px, siempre `zascarr-favicon.svg`**: la versión completa se empasta.
 - **La trama y las líneas de impacto, solo a partir de unos 96 px.** Más pequeñas, ensucian.
-- La Z va **dentro** del estallido: si se sale, se parece a la K de Komga.
+- La Z **sobresale un poco** del estallido, y el estallido tiene que seguir viéndose alrededor:
+  si la Z lo tapa, se pierde la marca y queda una Z suelta. Sacarla un poco además nos
+  distingue de Komga, cuyo logo lleva la letra dentro de un estallido (observación del PO,
+  2026-10-21; la regla anterior, «la Z dentro», partía de la idea contraria).
 - El nombre lo dice el texto del enlace; la imagen es decorativa y no lleva texto alternativo.
 
 Los PNG se regeneran rasterizando los SVG (cualquier navegador sin cabeza vale); no hay
