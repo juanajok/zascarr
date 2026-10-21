@@ -30,6 +30,7 @@ class TestQuienNavega:
         assert "Serie no encontrada" in r.text                 # el motivo concreto, si es una frase
         assert '<a class="btn primary" href="/ui/">Ir al Inicio</a>' in r.text
         assert '<nav class="nav"' in r.text                    # dentro de la app, con su menú
+        assert '<section class="pagina-error">' in r.text      # gancho de la trama y el rótulo
 
     def test_una_ruta_que_no_existe_tambien(self):
         r = TestClient(app).get("/ui/esto-no-existe", headers=NAVEGADOR)

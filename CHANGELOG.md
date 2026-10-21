@@ -118,6 +118,14 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   listas); lo que dice no cambia. La versión aceptada es la huella del fichero, así que tras actualizar
   ZascArr vuelve a pedir la aceptación: hasta entonces **las búsquedas de Deseados quedan en pausa**,
   como en una instalación nueva (lo que ya se esté descargando sigue). Ver la biblioteca no requiere nada.
+- **Guiños de tebeo antiguo en los estados vacíos y en la página de error.** Los avisos de «no hay
+  nada aquí» llevan una trama de puntos en la esquina, por debajo del texto. La página de error
+  lleva un disco de trama a la derecha (en pantallas anchas) y su titular tiene las tintas cian y
+  magenta un poco corridas, como un fotolito desalineado. Ese efecto no se usa en ningún otro
+  texto, para que nada se lea borroso.
+- **Con alto contraste, las tramas desaparecen.** Si el sistema pide más contraste o colores forzados,
+  se apagan todas las tramas (fondo, tarjetas de cifras, portadas que faltan, estados vacíos y
+  error) y el titular desalineado. Antes la trama del fondo seguía detrás del texto.
 - **El logo se distingue a su tamaño real.** En la barra lateral y en la pestaña del navegador se veía
   empastado: la Z, pequeña y gris, y la trama ensuciando el estallido. Ahora cada tamaño tiene su dibujo,
   con una Z grande y gruesa que sobresale un poco del estallido. La pestaña ya no lleva el cuadrado

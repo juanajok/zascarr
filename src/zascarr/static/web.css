@@ -1022,6 +1022,19 @@ button[type="submit"].btn-sugerencia {
 .empty-state {
   text-align: center; color: var(--ink-soft); padding: 44px 16px;
   background: var(--paper-2); border: 3px dashed var(--ink); border-radius: var(--radius-panel);
+  position: relative; isolation: isolate; overflow: hidden;
+}
+/* Trama de esquina (2026-10-21): un degradado de puntos que crece hacia abajo a la derecha, como
+   el fondo de una viñeta. Va DETRÁS del contenido (z-index -1 dentro de su propio contexto, así
+   que tampoco tapa el texto de un <p class="empty-state">). La elipse tiene tamaño FIJO y apenas
+   sube del relleno inferior (44 px): con un tamaño en % llegaba detrás del texto en las cajas
+   anchas y en el móvil. */
+.empty-state::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(var(--cyan) 1.7px, transparent 1.8px);
+  background-size: 8px 8px; opacity: .22;
+  -webkit-mask-image: radial-gradient(ellipse 220px 64px at 100% 100%, #000 0, transparent 100%);
+          mask-image: radial-gradient(ellipse 220px 64px at 100% 100%, #000 0, transparent 100%);
 }
 
 .discover {
@@ -1380,6 +1393,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   }
 }
 
+
 /* ── Pendientes por carpeta (rebanada 1b, solo lectura) ─────────────────────
    Solo maquetación: los colores salen de los componentes (chip, aviso, card), ya comprobados. */
 .carpetas-resumen { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 12px 0; list-style: none; }
@@ -1489,3 +1503,41 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .archivo-razon { font-size: .875rem; }
 .desv-lista { margin: 8px 0 14px 1.2em; padding: 0; }
 .desv-lista li { margin: 4px 0; }
+
+/* Los dos guiños de imprenta de la página de error (2026-10-21). Es una pantalla de paso, sin
+   nada que trabajar, y el único sitio donde el desalineamiento no estorba:
+   · el rótulo con las planchas de cian y magenta corridas. Solo aquí, en grande: en un título
+     pequeño o en texto se lee borroso, y un borde desplazado se confundiría con la sombra dura
+     de los botones («esto se pulsa»);
+   · un disco de trama magenta a la derecha, donde no hay texto. El texto se limita a 46ch y el
+     disco solo aparece con sitio de sobra (≥ 1100 px): nunca queda detrás de una frase. */
+.pagina-error { position: relative; }
+.pagina-error > p { max-width: 46ch; }
+.pagina-error h1 {
+  text-shadow: -3px -2px 0 color-mix(in srgb, var(--cyan) 85%, transparent),
+                3px  2px 0 color-mix(in srgb, var(--magenta) 80%, transparent);
+}
+@media (min-width: 1100px) {
+  .pagina-error::after {
+    content: ""; position: absolute; right: 24px; top: -10px; width: 240px; height: 240px;
+    pointer-events: none; border-radius: 50%;
+    background-image: radial-gradient(var(--magenta) 2.2px, transparent 2.3px);
+    background-size: 9px 9px; opacity: .28;
+    -webkit-mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+            mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+  }
+}
+
+/* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
+   La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
+   colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
+   puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
+   especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
+@media (prefers-contrast: more), (forced-colors: active) {
+  body::before,
+  .metric-card::before,
+  .empty-state::before,
+  .pagina-error::after { display: none; }
+  .series-card img.cover-missing { background: var(--paper-2); }
+  .pagina-error h1 { text-shadow: none; }
+}
