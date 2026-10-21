@@ -15,8 +15,10 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
+from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.main import app
 
@@ -46,7 +48,22 @@ async def _cuelga(segundos: float) -> bool:
     return True
 
 
+@pytest.fixture
+def clientes(monkeypatch):
+    """Enciende o apaga Transmission y aMule (vienen apagados por defecto)."""
+    def fijar(transmission: bool = True, amule: bool = True):
+        s = get_settings()
+        monkeypatch.setattr(s, "transmission_enabled", transmission)
+        monkeypatch.setattr(s, "amule_enabled", amule)
+    return fijar
+
+
 class TestHealthLatenciaAcotada:
+    """Con los dos clientes ENCENDIDOS: apagados ni se sondean (ver TestClientesApagados)."""
+
+    @pytest.fixture(autouse=True)
+    def _encendidos(self, clientes):
+        clientes()
 
     def test_transmission_y_amule_se_consultan_en_paralelo_no_en_serie(self):
         """Con el bug original (llamadas secuenciales), dos comprobaciones
@@ -161,3 +178,41 @@ class TestArranqueDegradado:
         assert r_health.status_code == 200
         assert r_health.json()["checks"]["database"] == "unreachable"
         assert r_ui.status_code == 503
+
+
+class TestClientesApagados:
+    """Revisión visual (2026-10-20): Transmission y aMule apagados en Ajustes salían como «No
+    disponible» con un punto rojo y ponían el semáforo en «Atención»; en una instalación nueva,
+    siempre."""
+
+    def test_apagado_es_disabled_y_ni_se_sondea(self, clientes):
+        clientes(transmission=False, amule=False)
+        sondas = AsyncMock(return_value=False)
+        with patch("zascarr.api.health._check_transmission", sondas), \
+                patch("zascarr.api.health._check_amule", sondas), \
+                patch("zascarr.api.health._database_status",
+                      AsyncMock(return_value=("ok", "Conectada y migrada."))), \
+                _fake_db_client() as client:
+            body = client.get("/api/health").json()
+        assert body["checks"]["transmission"] == "disabled"
+        assert body["checks"]["amule"] == "disabled"
+        assert body["status"] == "healthy"
+        sondas.assert_not_called()
+
+    def test_solo_cuenta_el_que_esta_encendido(self, clientes):
+        clientes(transmission=True, amule=False)
+        with patch("zascarr.api.health._check_transmission", AsyncMock(return_value=False)), \
+                patch("zascarr.api.health._database_status",
+                      AsyncMock(return_value=("ok", "Conectada y migrada."))), \
+                _fake_db_client() as client:
+            body = client.get("/api/health").json()
+        assert body["checks"] == {**body["checks"], "transmission": "unreachable",
+                                  "amule": "disabled"}
+        assert body["status"] == "degraded"
+
+    def test_estado_lo_pinta_desactivado_en_gris_y_fuera_del_resumen(self):
+        from zascarr.web.routes import TEMPLATES_DIR
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
+        assert 'disabled: "Desactivado"' in html
+        assert 'disabled: "neutral"' in html
+        assert 'if (level === "warn" || level === "bad") detailParts.push' in html
