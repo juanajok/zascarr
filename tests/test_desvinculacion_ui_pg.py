@@ -216,6 +216,20 @@ class TestVistaPrevia:
         con_otro = visible((await get(ruta(serie, ids[F1]), headers=HX)).text)
         assert "con 1 archivo más, que no cambian" in con_otro and "sin archivo" not in con_otro and "números que te faltan" not in con_otro
 
+    async def test_la_ruta_que_se_ve_es_la_real_del_host_y_no_la_del_contenedor(self, ent, monkeypatch):
+        # Caso real (Pi, 2026-10-21): la vista previa decía /media/library/…, la del contenedor; la persona tiene /media/WDElements/Tebeos.
+        from zascarr.utils import ruta_visible as modulo
+        monkeypatch.setattr(modulo, "get_settings", lambda: SimpleNamespace(library_path=ent.lib, host_library_dir="/media/WDElements/Tebeos"))
+        serie, ids = await vinculado(ent, F1)
+        v = visible((await get(ruta(serie, ids[F1]), headers=HX)).text)
+        assert "/media/WDElements/Tebeos/Comics/Flash (1987)/" + F1 in v and str(ent.lib) not in v
+
+    async def test_sin_host_la_ruta_se_ve_como_esta_guardada(self, ent, monkeypatch):
+        from zascarr.utils import ruta_visible as modulo
+        monkeypatch.setattr(modulo, "get_settings", lambda: SimpleNamespace(library_path=ent.lib, host_library_dir=""))
+        serie, ids = await vinculado(ent, F1)
+        assert str(ent.lib) in visible((await get(ruta(serie, ids[F1]), headers=HX)).text)
+
     async def test_sin_javascript_propio_y_con_el_contrato_htmx_documentado(self, ent):
         serie, ids = await vinculado(ent, F1)
         t = (await get(ruta(serie, ids[F1]))).text
