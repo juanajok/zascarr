@@ -1399,6 +1399,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .senal-afectados ul, .carpeta-archivos ul { margin: 6px 0 0; padding-left: 20px; }
 .nombre-archivo { overflow-wrap: anywhere; }
 .carpetas-paginas { display: flex; gap: 12px; margin: 18px 0; }
+.carpeta-resumen { margin: 0 0 10px; }
+.carpeta-explicacion, .carpeta-detalle { margin: 12px 0; }
+.carpeta-accion small { display: block; margin-top: 4px; font-size: .875rem; }
 @media (max-width: 600px) { .carpeta-datos { grid-template-columns: 1fr; } .carpeta-datos dd { margin-bottom: 6px; } }
 
 /* Asistente «Elegir la serie de una carpeta» (#118): campos apilados, sin tocar el resto de formularios. */
