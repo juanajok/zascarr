@@ -430,7 +430,10 @@ html { scroll-padding-bottom: 96px; }
     min-height: 48px; padding: 8px 14px; text-align: left; font-size: .95rem;
   }
 
-  .content { padding-bottom: 112px; }
+  /* Hueco para la barra inferior fija. Con `.content` a secas no se aplicaba nunca: la regla base de
+     `.content` va DESPUÉS y la de ≤ 768 px fija 48 px, así que el pie quedaba bajo la barra.
+     `main` en el selector: `.app > .content` ya existe (anchura) y así cada regla tiene el suyo. */
+  .app > main.content { padding-bottom: 112px; }
 }
 
 /* ── 4. CONTENIDO ────────────────────────────────────────────────────────── */
