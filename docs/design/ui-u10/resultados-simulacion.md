@@ -2,8 +2,11 @@
 
 > **Estado: simulación declarada, no sesión con usuarios reales.**
 > 3 perfiles interpretados por agentes (P1 María, P2 Javier, P3 Carmen). No hay personas reales, ni clics reales,
-> ni tiempos medidos, ni una muestra representativa. **U10 no queda acreditada y G1 no se desbloquea por sí sola.**
-> La decisión de aceptar esta simulación como evidencia es del responsable y debe quedar escrita en #197.
+> ni tiempos medidos, ni una muestra representativa. **La simulación no acredita U10 como validación real.**
+>
+> **Decisión posterior del responsable (2026-10-21):** se acepta como evidencia suficiente para desbloquear G1,
+> con la deuda de la sesión real visible. Ficha: [`decision-g1-2026-10-21.md`](decision-g1-2026-10-21.md).
+> Esta aceptación no convierte la simulación en una prueba con personas ni permite atribuirle representatividad.
 
 ## 1. Qué se ha hecho
 
@@ -172,7 +175,9 @@ ayuda a decidir.
 
 ## 6. Recomendación
 
-1. **No cerrar U10** con esta simulación. Mantener #197 en «En refinamiento» y #200 (U13) bloqueada.
+1. **Recomendación técnica original:** no cerrar U10 con esta simulación. **Decisión del responsable:** aceptarla
+   para G1 con deuda visible. #197 se cierra con la ficha §13 y #200 deja de estar bloqueada, pero no se declara
+   implementada ni con sus contratos cerrados.
 2. **Iterar el prototipo A** con estas correcciones mínimas antes de la sesión real:
    - Declarar el total y el desglose: «1.322 pendientes: 1.308 en 108 carpetas + 14 sueltos».
    - Sustituir el chip de sugerencia por texto secundario y un estado real «Sin serie».
@@ -183,9 +188,9 @@ ayuda a decidir.
    - Quitar o explicar el porcentaje; si se mantiene, decir qué mide y qué implica el resto.
 3. **Tomar B como patrón de revisión dentro de A**, no como pantalla principal: selección fina, recuento de
    seleccionados, revisión antes de aplicar y confirmación.
-4. **Decisión pendiente del responsable:** ¿se acepta esta simulación como evidencia suficiente para G1, con la
-   deuda de la sesión real visible, o se exige la sesión con 3–5 personas reales? Hasta que se responda, G1 no se
-   desbloquea.
+4. **Decisión adoptada (2026-10-21):** se acepta la simulación como evidencia suficiente para G1, con la deuda de
+   la sesión real visible. La deuda queda registrada en una tarjeta aparte y no se presenta como validación con
+   personas. G1 se desbloquea por decisión explícita, no por un PASS de los criterios originales.
 
 ## 7. Evidencia y reproducibilidad
 
