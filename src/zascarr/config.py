@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     # (ver docker-compose.yml); los discos en sí se configuran en .env con
     # HOST_LIBRARY_DIR / HOST_DOWNLOADS_DIR / HOST_AMULE_INCOMING_DIR.
     library_path: Path = Field(default=Path("/media/library"))
+    # Ruta REAL de la biblioteca en el host (HOST_LIBRARY_DIR del .env). No se usa para
+    # acceder a nada (eso es `library_path`): solo para MOSTRARLE a la persona dónde está
+    # su archivo (utils/ruta_visible.py).
+    host_library_dir: str = Field(default="")
     downloads_path: Path = Field(default=Path("/media/downloads"))
     # C1: caché unificada de portadas (extraídas de CBZ o descargadas de
     # fuentes externas una sola vez) — ver utils/cover.py.
