@@ -203,6 +203,19 @@ class TestVistaPrevia:
         assert 'class="aviso amber"' not in t                                                   # sin aviso de peligro que no existe
         assert 'name="token"' in t and 'action="/ui/series/' in t and 'method="post"' in t
 
+    async def test_la_vineta_del_numero_depende_de_si_se_queda_sin_archivos(self, ent):
+        # Revisión UX: «se queda sin archivo» solo cuando de verdad no le queda ninguno; si no, «con N archivos más».
+        serie, ids = await vinculado(ent, F1)
+        solo = visible((await get(ruta(serie, ids[F1]), headers=HX)).text)
+        assert "pero sin archivo: aparecerá entre los números que te faltan" in solo and "archivo más" not in solo
+        async with ent.banco.fabrica() as s:
+            iid = (await s.execute(text("SELECT issue_id FROM files WHERE id = :f"), {"f": ids[F1]})).scalar_one()
+            await s.execute(text("INSERT INTO files (id, issue_id, file_path, file_name, file_format) VALUES (:i, :n, '/otro.cbz', 'otro.cbz', 'cbz')"),
+                            {"i": uuid4(), "n": iid})
+            await s.commit()
+        con_otro = visible((await get(ruta(serie, ids[F1]), headers=HX)).text)
+        assert "con 1 archivo más, que no cambian" in con_otro and "sin archivo" not in con_otro and "números que te faltan" not in con_otro
+
     async def test_sin_javascript_propio_y_con_el_contrato_htmx_documentado(self, ent):
         serie, ids = await vinculado(ent, F1)
         t = (await get(ruta(serie, ids[F1]))).text
