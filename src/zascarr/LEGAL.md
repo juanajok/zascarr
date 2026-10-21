@@ -16,26 +16,29 @@ El software **no distribuye, aloja ni facilita el acceso** a contenido protegido
 
 ### 2.1 Copia privada (art. 31.2 LPI)
 
-El artículo 31.2 del Texto Refundido de la Ley de Propiedad Intelectual establece el límite de copia privada, pero exige que la reproducción se realice **"a partir de una fuente lícita y sin vulnerar las condiciones de acceso"** [web:168].
+El artículo 31.2 del Texto Refundido de la Ley de Propiedad Intelectual establece el límite de copia privada, pero exige que la reproducción se realice **"a partir de una fuente lícita y sin vulnerar las condiciones de acceso"**.
 
 Esto significa que:
+
 - Descargar contenido protegido desde una fuente no autorizada (ej. redes P2P sin permiso del titular) **no está cubierto** por la excepción de copia privada según la redacción vigente.
-- La doctrina académica califica estas descargas como "reproducción ilícita" desde el punto de vista civil [web:175].
+- La doctrina académica califica estas descargas como "reproducción ilícita" desde el punto de vista civil.
 
 ### 2.2 Compartir en redes P2P / eD2K
 
-Aunque **no es delito penal** descargar o compartir contenido sin ánimo de lucro (doctrina reiterada de la Fiscalía General del Estado) [web:179][web:173], puede constituir una **infracción civil** por "comunicación pública no autorizada" [web:173].
+Aunque **no es delito penal** descargar o compartir contenido sin ánimo de lucro (doctrina reiterada de la Fiscalía General del Estado), puede constituir una **infracción civil** por "comunicación pública no autorizada".
 
 En la práctica:
+
 - El usuario no enfrenta riesgo penal si no hay ánimo de lucro.
 - El usuario puede ser demandado civilmente por los titulares de derechos.
 - **ZascArr no controla ni audita** las fuentes que el usuario configure; esa elección es responsabilidad exclusiva del usuario.
 
 ### 2.3 Derecho *sui generis* sobre bases de datos (Directiva 96/9/CE)
 
-La Directiva 96/9/CE, transpuesta a la LPI española (arts. 133-137), protege las bases de datos fruto de una inversión sustancial [web:167][web:170].
+La Directiva 96/9/CE, transpuesta a la LPI española (arts. 133-137), protege las bases de datos fruto de una inversión sustancial.
 
 Implicaciones para ZascArr:
+
 - El código del proyecto es GPL-3.0 (licencia de software).
 - Los **metadatos enriquecidos** que la aplicación descargue de las fuentes externas que el usuario active (ej. de Tebeosfera, Whakoom, Comic Vine) están sujetos a las licencias o términos de uso de esas fuentes.
 - **No se redistribuye** ninguna base de datos pre-poblada con el software. Todo enriquecimiento es cache local del usuario final, para uso privado.
@@ -57,7 +60,7 @@ Implicaciones para ZascArr:
 
 | Componente | Estado | Notas |
 |---|---|---|
-| **Núcleo (orquestador, API, UI)** | ✅ Herramienta neutra | Análogo a Sonarr/Radarr; gestiona bibliotecas, no distribuye contenido [web:166] |
+| **Núcleo (orquestador, API, UI)** | ✅ Herramienta neutra | Análogo a Sonarr/Radarr; gestiona bibliotecas, no distribuye contenido |
 | **Enricher de metadatos (Comic Vine, AniList, Tebeosfera, GCD)** | ⚠️ Opcional, desactivado por defecto; uso bajo responsabilidad del usuario | **Opcional, desactivado por defecto.** Ninguna fuente de metadatos consulta servicios externos hasta que el usuario la activa en Ajustes. Las instalaciones anteriores conservan las fuentes que tuvieran activadas y muestran un aviso en Ajustes hasta que el usuario revise y guarde esa configuración. Los metadatos se cachean localmente; no se redistribuyen. Respeta `robots.txt` y rate limits conservadores |
 | **Scraper de foros (IPB genérico)** | ⚠️ Plugin opcional, deshabilitado por defecto | El usuario aporta la URL del foro; el proyecto no incluye ni recomienda foros concretos |
 | **Integración con clientes (Transmission, aMule, Prowlarr)** | ✅ Herramienta neutra | Los clientes son software legítimo; su configuración es responsabilidad del usuario |
@@ -72,16 +75,17 @@ Al usar ZascArr, el usuario acepta que:
 
 1. Es **responsable exclusivo** de verificar que posee derecho a usar el contenido que gestiona.
 2. Debe **respetar los términos de uso** de las fuentes de metadatos que el usuario active o configure (Tebeosfera, Whakoom, Comic Vine, etc.).
-3. Entiende que **compartir contenido protegido** en redes P2P/eD2K puede constituir infracción civil, aunque no sea delito penal [web:179].
+3. Entiende que **compartir contenido protegido** en redes P2P/eD2K puede constituir infracción civil, aunque no sea delito penal.
 4. Acepta que el autor del software **no ofrece garantías** de ningún tipo, conforme a los apartados 15-16 de la licencia GPL-3.0.
 
 ---
 
 ## 6. Licencia del código (GPL-3.0)
 
-El código fuente de ZascArr se distribuye bajo la licencia **GNU General Public License v3.0** (GPL-3.0) [web:157].
+El código fuente de ZascArr se distribuye bajo la licencia **GNU General Public License v3.0** (GPL-3.0).
 
 Cláusulas relevantes para este aviso:
+
 - **Sección 15 (Ausencia de garantía):** el programa se distribuye "SIN NINGUNA GARANTÍA", ni siquiera de comerciabilidad o idoneidad para un propósito particular.
 - **Sección 16 (Limitación de responsabilidad):** en ningún caso los autores o titulares de derechos serán responsables por daños derivados del uso o imposibilidad de uso del programa.
 
@@ -95,8 +99,8 @@ Algunas fuentes de metadatos usadas por ZascArr tienen licencias propias:
 
 | Fuente | Licencia / Términos | Obligaciones |
 |---|---|---|
-| **Gran Catálogo de la Historieta (Tebeosfera)** | Uso personal; base de datos protegida por derecho *sui generis* [web:167] | No redistribuir extractos; respetar `robots.txt`; uso local del usuario |
-| **Whakoom** | CC-BY-SA para contenido textual; portadas  editoriales [web:133] | Atribución requerida si se redistribuye; portadas no incluidas |
+| **Gran Catálogo de la Historieta (Tebeosfera)** | Uso personal; base de datos protegida por derecho *sui generis* | No redistribuir extractos; respetar `robots.txt`; uso local del usuario |
+| **Whakoom** | CC-BY-SA para contenido textual; portadas  editoriales | Atribución requerida si se redistribuye; portadas no incluidas |
 | **Comic Vine** | Términos de uso propios; API con rate limits | Uso conforme a sus términos; no redistribución masiva |
 | **AniList** | API pública con términos de uso | Uso conforme a sus términos |
 | **Grand Comics Database (GCD)** | CC BY-SA 4.0; API REST pública en `/api/`, anónima, con límite por hora no especificado | Atribución + enlace de vuelta a la ficha de GCD (cumplido: enlace directo en cada resultado de `/ui/descubrir`); sin redistribución masiva, solo búsqueda puntual bajo demanda del coleccionista |
@@ -134,9 +138,9 @@ Este aviso legal puede actualizarse para reflejar cambios en la legislación o e
 
 ## Referencias legales citadas
 
-- [Art. 31.2 LPI (copia privada)](https://www.boe.es/buscar/doc.php?id=BOE-A-1996-8930) [web:168]
-- [Directiva 96/9/CE (bases de datos)](https://eur-lex.europa.eu/legal-content/ES/ALL/?uri=celex:31996L0009) [web:167][web:170]
-- [Doctrina Fiscalía: descargas sin ánimo de lucro no son delito](https://computerhoy.20minutos.es/noticias/internet/descargas-animo-lucro-no-son-delito-segun-fiscalia-38663) [web:179]
-- [Circular Fiscalía sobre comunicación pública en P2P](https://www.boe.es/buscar/abrir_fiscalia.php?id=FIS-C-2006-00001.pdf) [web:173]
-- [Análisis doctrinal: reproducción ilícita en P2P](https://dialnet.unirioja.es/descarga/articulo/4898254.pdf) [web:175]
-- [Licencia GPL-3.0 (Sonarr/Radarr/Kavita)](https://github.com/Radarr/Radarr) [web:157]
+- [Art. 31.2 LPI (copia privada)](https://www.boe.es/buscar/doc.php?id=BOE-A-1996-8930)
+- [Directiva 96/9/CE (bases de datos)](https://eur-lex.europa.eu/legal-content/ES/ALL/?uri=celex:31996L0009)
+- [Doctrina Fiscalía: descargas sin ánimo de lucro no son delito](https://computerhoy.20minutos.es/noticias/internet/descargas-animo-lucro-no-son-delito-segun-fiscalia-38663)
+- [Circular Fiscalía sobre comunicación pública en P2P](https://www.boe.es/buscar/abrir_fiscalia.php?id=FIS-C-2006-00001.pdf)
+- [Análisis doctrinal: reproducción ilícita en P2P](https://dialnet.unirioja.es/descarga/articulo/4898254.pdf)
+- [Licencia GPL-3.0 (Sonarr/Radarr/Kavita)](https://github.com/Radarr/Radarr)
