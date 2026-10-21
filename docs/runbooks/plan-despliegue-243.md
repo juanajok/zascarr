@@ -1,6 +1,6 @@
 # Plan de despliegue — #243 (fuentes de metadatos apagadas por defecto) y todo lo fusionado desde la versión de la Pi
 
-> **Estado: EJECUTADO DE HECHO por el PO en cuatro actualizaciones (ver §9); verificación 5.2–5.4 pendiente.** El texto de abajo es el plan original (no se ejecutó paso a paso: el PO actualizó la Pi por su cuenta). (Alcance ampliado el 2026-10-21 a todo lo fusionado desde `625a564`: ver §0.) Nada de este documento se ejecuta en la Raspberry Pi hasta que el PO lo autorice **paso a paso**
+> **Estado: EJECUTADO DE HECHO por el PO en cuatro actualizaciones (ver §9); verificación visual 5.2 y 5.4 hecha salvo la vista previa de un archivo.** El texto de abajo es el plan original (no se ejecutó paso a paso: el PO actualizó la Pi por su cuenta). (Alcance ampliado el 2026-10-21 a todo lo fusionado desde `625a564`: ver §0.) Nada de este documento se ejecuta en la Raspberry Pi hasta que el PO lo autorice **paso a paso**
 > (fusión y despliegue son decisiones separadas). Quien ejecuta marca cada casilla y anota la hora; la evidencia se guarda
 > en un paquete con su `.sha256`. Un fallo **detiene** el plan; no se improvisa.
 
@@ -200,5 +200,10 @@ El plan se redactó para **una** actualización con comprobaciones antes y despu
 - **Paquete de evidencia:** `evidencia-estado-actual-20261021_182058.tar.gz`, SHA-256 `4cf22124f9dfca80cc0a983a637321d81ccceeeec285ebee2b2b57c940386b94` (en la Pi; el `.env` no está, solo su hash).
 - **Lo que NO existe:** el estado «antes» de la 0020 medido con `paso1` (`fuentes-antes.txt`, inventario previo de la biblioteca, hash del `.env` previo). Queda la copia de la base de la primera actualización, de donde se podría reconstruir restaurándola en una base temporal (no hecho). Por tanto **no se puede demostrar** que la 0020 partiera del caso «ausentes»; solo que el resultado es coherente con él, ni que la biblioteca no cambió durante las actualizaciones (el actualizador no la toca, A3, pero no hay inventario previo).
 - **Biblioteca:** 1577 ficheros inventariados (el plan esperaba ≈ 1339, la cifra de `files` en la base cuando se escribió). **Sin explicar todavía**: puede ser que la biblioteca haya crecido o que haya ficheros que no son tebeos; se comprueba contra `select count(*) from files` sin tocar nada.
-- **Pendiente de verificar (solo lectura, §5.2–5.4):** aviso de Ajustes (`fuentes_heredadas = true`, decide el PO si pulsa «Guardar»), la ficha con «Archivos por número», la vista previa de un archivo (**sin pulsar «Desvincular el archivo»**), la página de error propia.
+- **Verificación visual por el PO (capturas del navegador contra la Pi, 2026-10-21, solo lectura):**
+  - **5.2 Ajustes:** el aviso «Las fuentes de metadatos externas están activadas por compatibilidad con tu instalación anterior…» aparece, con las cuatro fuentes marcadas (coherente con `fuentes_heredadas = true`). El PO **no ha pulsado «Guardar»** todavía (decisión suya).
+  - **5.4 ficha de una serie** (*The Wicked + The Divine*, unos 45 números): aparece «Archivos por número», con «En el disco» y «Desvincular» en cada archivo. **No se pulsó «Desvincular».**
+  - **5.4 página de error:** `/ui/no-existe` muestra «No está aquí» con «Ir al Inicio» (página propia, no JSON).
+  - El contador de «Por revisar» del menú muestra **999+** (el contador se corta a 999 a propósito).
+- **Aún sin verificar:** la vista previa de **un** archivo (`GET`, «¿Desvincular este archivo?»; sin pulsar el botón). Observación: en esa serie salen números como `#455`, `#1373`, `#1831` o `#1923`, que parecen años u otros números del nombre del archivo y no del tebeo; son justo el caso para el que sirve «Desvincular».
 - **Fuera de este despliegue:** `main` está en `a272172` (#273, interfaz) y **no** se ha desplegado.
