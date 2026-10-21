@@ -1,0 +1,44 @@
+- main:
+  - link "← Biblioteca":
+    - /url: /ui/biblioteca
+  - heading "Mortadelo y Filemón (fixture U21) (1958)" [level=1]
+  - paragraph: Editorial Bruguera
+  - paragraph: 10 números en total — 3 en tu biblioteca, 7 te faltan.
+  - group: Fuentes y atribución
+  - paragraph: Consulta tus números y ajusta la búsqueda automática.
+  - heading "Búsqueda automática" [level=2]
+  - paragraph: Qué busca ZascArr por su cuenta. Lo que añadas a mano se busca siempre.
+  - text: Qué buscar
+  - combobox "Qué buscar":
+    - option "No buscar nada por mi cuenta"
+    - option "Buscar los números que me faltan" [selected]
+    - option "Números que aún no han salido (deshabilitado)" [disabled]
+  - paragraph: "Al cambiar el selector se guarda al momento: lo retirado deja de buscarse ya; lo que falte entra en el próximo ciclo."
+  - paragraph: "«Números que aún no han salido» está deshabilitado: la política «futuros» todavía no se puede aplicar: haría falta que la fuente publique los números que aún no han salido."
+  - paragraph: "Faltan 7 números. ZascArr genera hasta 25 por ciclo y los reparte entre todas las series con política activa, así que pueden hacer falta varios ciclos. #4 #5 #6 #7 #8 #9 #10"
+  - heading "Te faltan" [level=2]
+  - text: "#4 #5 #6 #7 #8 #9 #10"
+  - heading "En tu biblioteca" [level=2]
+  - text: "✓ #1 ✓ #2 ✓ #3"
+  - region "Archivos por número":
+    - heading "Archivos por número" [level=2]
+    - paragraph: Cada número de la serie con sus archivos.
+    - list:
+      - listitem:
+        - heading "#1" [level=3]
+        - list:
+          - listitem: Mortadelo 1.cbz CBZ En el disco
+      - listitem:
+        - heading "#2" [level=3]
+        - list:
+          - listitem: Mortadelo 2.cbz CBZ En el disco
+      - listitem:
+        - heading "#3" [level=3]
+        - list:
+          - listitem: Mortadelo 3.cbz CBZ En el disco
+    - group: ¿Por qué algunos archivos no se pueden desvincular?
+  - paragraph:
+    - text: ZascArr gestiona bibliotecas personales y no distribuye contenido.
+    - link "Aviso legal":
+      - /url: /legal
+    - text: .

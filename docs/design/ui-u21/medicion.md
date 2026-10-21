@@ -1,8 +1,9 @@
 # U21 — Presupuesto de texto: método, reescritura de Carpetas y límites (2026-10-21)
 
-> **Estado: método y umbral aceptados por el responsable; «Pendientes por carpeta» reescrita y con prueba
-> automática. La ficha de serie sigue pendiente. No hay medida en navegador real ni prueba de 5 segundos con
-> personas: quedan NOT RUN / PARCIAL. #208 no se cierra.**
+> **Estado: método y umbral aceptados por el responsable; «Pendientes por carpeta» y la ficha de serie están
+> reescritas y con prueba automática. La ficha se verificó en Chrome real (claro/oscuro, 360 px, teclado y árbol
+> de accesibilidad); Carpetas sigue sin medida en navegador. La prueba de 5 segundos con personas y el lector de
+> pantalla real siguen NOT RUN. #208 no se cierra.**
 
 ## 1. Regla vigente
 
@@ -60,7 +61,9 @@ plantilla real y una respuesta enlatada del servicio, sin tocar la base de datos
 | Umbral de entrada / intro | ≤ 20 / ≤ 50 |
 
 La medida de 39 es **conservadora** y se obtiene quitando los `<details>` cerrados antes de contar, como pide el
-método. Es reproducible con
+método. Es la cifra de #273; contaba sin el resumen visible. Con el contrato actual, el resumen «¿De dónde salen
+estos datos?» añade 5 palabras y quedaría en **44**, también por debajo de 50. No se recalcula aquí para no
+reescribir la evidencia ya fusionada; la ficha sí incluye su resumen en la medida de 48. Es reproducible con
 `tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_39_es_reproducible_con_el_fixture_de_referencia`,
 que enlata la respuesta 1.308/108/14 y dos tarjetas y exige **exactamente 39** (38 sin el icono `i` del chip
 informativo). La prueba general de umbral siembra un solo registro y comprueba ≤ 50; no pretende reproducir la cifra.
@@ -69,6 +72,28 @@ acción o si el subtítulo pasa de 20 palabras.
 
 **Límite:** es una medida sobre HTML renderizado, no sobre píxeles de un navegador. No se ha comprobado con CSS
 real, tema oscuro, 360 px ni lector de pantalla.
+
+### 3.3 Ficha de serie después de la reescritura (Chrome real, 2026-10-21)
+
+Fixture local de 10 números (3 presentes, 7 ausentes), acción principal `select#wishlist_policy` («Qué buscar»).
+Medición en Chrome 154 con la app servida desde el árbol de la rama, no desde HTML estático.
+
+| Medida | Resultado |
+|---|---:|
+| Frase de entrada | **8** |
+| Antes del selector, con datos variables y resumen visible | **48** (45 sin el resumen) |
+| Texto introductorio sin datos variables | **29** |
+| Palabras totales de `main` | 190 |
+| Párrafos con `text-transform: uppercase` | **0** |
+
+La sección «Búsqueda automática» queda antes de los listados; el efecto de guardado y la nota de futuros están
+junto al selector; «Fuentes y atribución» es un `<details>` cerrado que conserva el aviso legal. A 360 px,
+`scrollWidth = clientWidth = 360` en claro y oscuro. El foco por teclado llega al selector con anillo visible y el
+desplegable se abre y se cierra con Enter. Evidencia completa, con capturas y SHA, en
+`docs/design/ui-u21/verificacion-ficha-2026-10-21.md`.
+
+**Límite:** el árbol de accesibilidad de Chrome no sustituye a un lector de pantalla real. La prueba de cinco
+segundos con personas sigue **NOT RUN**.
 
 ## 4. Método aceptado
 
@@ -79,15 +104,19 @@ medida en navegador. Para cada pantalla:
 2. Recorrer `main` en orden de documento.
 3. Contar palabras de los nodos de texto **visibles**, excluyendo:
    - `nav`, `header`, `footer`, aviso legal;
-   - `<details>` cerrados;
+   - el **contenido** de `<details>` cerrados, pero conservando el texto visible de su `<summary>`;
    - controles (`input`, `select`, `button`, `textarea`) y sus valores;
    - texto oculto (`display:none`, `visibility:hidden`, `[hidden]`).
-4. Detener el contador en la **primera acción**: primer `a[href]`, `button`, `input[type=submit]`, `select` o
-   `form` visible dentro de `main`. Se registra el selector y el texto de la acción.
-5. Guardar `{pantalla, ruta, vista, tema, palabras_totales, palabras_antes_de_la_accion, accion, palabras_despues}`.
+4. Detener el contador en la **primera acción**: control principal habilitado que inicia la tarea de esa pantalla.
+   Se excluyen la navegación global, la ayuda y los desplegables informativos. Cada fixture identifica expresamente
+   el control. En Carpetas es «Elegir la serie de esta carpeta»; en la ficha, `select#wishlist_policy`.
+5. Guardar `{pantalla, ruta, vista, tema, palabras_totales, palabras_antes_de_la_accion, palabras_intro, accion,
+   palabras_despues}`. `palabras_intro` excluye los datos variables del catálogo (título, editorial, recuento,
+   listado); `palabras_antes_de_la_accion` es la medida conservadora con esos datos.
 
-Umbral: **PASS** si `palabras_antes_de_la_accion <= 50` y la frase de entrada (`p.subtitle` o equivalente) tiene
-≤ 20 palabras. **FAIL** si no. **NOT RUN** si no se pudo cargar.
+Umbral: **PASS** si `palabras_intro <= 50`, la frase de entrada tiene ≤ 20 palabras y la medida conservadora con
+datos tampoco supera 50 en el fixture de referencia. **FAIL** si no. **NOT RUN** si no se pudo cargar. El total
+visible se publica aparte para no ocultar el coste de lectura.
 
 La comprobación automática es una prueba de contrato: falla si una plantilla adaptada supera el umbral. Las rutas
 que necesitan BD usan el patrón de Postgres real de `tests/*_pg.py`; las que no, `TestClient` + `FakeSession`.
@@ -129,47 +158,63 @@ Decisiones concretas:
 - Los detalles y las observaciones quedan plegados; la garantía de no mover ni renombrar queda junto al enlace.
 - No se añadió JavaScript, formulario, migración ni lógica de negocio.
 
-## 6. Reescritura pendiente de la ficha de serie
+## 6. Reescritura aplicada de la ficha de serie
 
-- Frase de entrada ≤ 20 palabras: «Esta es la ficha de **{título}**. Revisa los datos y guarda si algo cambia.»
-- ≤ 50 palabras antes de «Guardar».
-- La retirada y sus consecuencias, **junto a «Guardar»** y en la confirmación, no en un párrafo en mayúsculas al
-  principio.
-- Las fuentes y la atribución, en un `<details>`.
-- Nada de mayúsculas en párrafos; solo rótulos de ≤ 3 palabras.
+La ficha actual **no tiene formulario de metadatos ni botón «Guardar»**: la acción principal es el selector de
+política, que guarda al cambiar. La reescritura se adapta a esa realidad; no se inventa un formulario.
 
-**Estado: pendiente.** No se ha modificado `series_detail.html`.
+- Frase de entrada: «Consulta tus números y ajusta la búsqueda automática.» (**8 palabras**).
+- ≤ 50 antes de la acción: **48** con datos variables y resumen visible; **29** introductorias sin datos.
+- «Búsqueda automática» sube **antes** de «Te faltan» y «En tu biblioteca»; el resumen va antes del listado.
+- El efecto de guardado y la nota de futuros van **junto al selector**, en una frase cada uno. Se elimina la
+  frase de «Guardar» del final porque el selector guarda al momento.
+- «Fuentes y atribución» pasa a un `<details>` cerrado; conserva el aviso de metadatos y el enlace «Aviso legal».
+- Nada de mayúsculas en párrafos; los rótulos de la política son de ≤ 3 palabras.
+
+Archivos: `series_detail.html`, `_politica_serie.html`, `_legal_disclaimer.html`, `web.css` y
+`tests/test_web_series.py` (`TestPresupuestoTextoU21`, 6 casos). Medición y capturas:
+`docs/design/ui-u21/verificacion-ficha-2026-10-21.md`.
+
+**Estado: PASS de presentación en Chrome real; 5 segundos y lector real NOT RUN.**
 
 ## 7. Criterios de U21
 
 | Criterio | Estado | Evidencia |
 |---|---|---|
 | 1. Regla en `CLAUDE.md` §6 | **PASS** | Texto vigente, umbrales provisionales |
-| 2. Suite con recuento y umbral por pantalla adaptada | **PASS (contrato HTML)** | `TestPresupuestoTexto`: 8 y 39 palabras, con el fixture 1.308/108/14 reproducible; falla si supera 20/50. Navegador real: NOT RUN. |
-| 3. Carpetas ≤ 20 de entrada y ≤ 50 antes de la acción | **PASS (HTML)** | Subtítulo 8; 39 antes de «Elegir la serie de esta carpeta» |
+| 2. Suite con recuento y umbral por pantalla adaptada | **PASS** | `TestPresupuestoTexto` de Carpetas (8/39) y `TestPresupuestoTextoU21` de la ficha (8/29 intro; 48 con datos); la ficha se midió además en navegador |
+| 3. Carpetas ≤ 20 de entrada y ≤ 50 antes de la acción | **PASS (HTML)** | Subtítulo 8; 39 antes de «Elegir la serie de esta carpeta». Navegador: NOT RUN |
 | 4. Tarjeta con nombre, archivos, sugerencia/ausencia y estado | **PASS** | `h2`, chips, línea «N registros · Serie sugerida/Sin serie sugerida» antes de la acción |
-| 5. Garantías junto a la acción con efecto | **PASS** | «No se crea ni se asigna nada hasta que confirmes.» junto al enlace |
-| 6. Ficha de serie sin párrafos en mayúsculas | **PENDIENTE** | `series_detail.html` sin tocar |
-| 7. Test de 5 segundos de #197 | **PARCIAL** | Simulación con agentes; no es una prueba con personas reales |
-| 8. Regresiones de teclado, detalles, temas y 360 px | **NOT RUN** | Solo pruebas HTML; sin navegador real |
+| 5. Garantías junto a la acción con efecto | **PASS** | «No se crea ni se asigna nada hasta que confirmes.» junto al enlace; en la ficha, el efecto de guardado junto al selector |
+| 6. Ficha de serie sin párrafos en mayúsculas | **PASS** | 0 párrafos con `text-transform: uppercase`; notas junto al selector |
+| 7. Test de 5 segundos de #197 | **NOT RUN** | No se ha hecho con personas; la simulación con agentes no cuenta como validación |
+| 8. Regresiones de teclado, detalles, temas y 360 px | **PARCIAL** | Ficha: PASS en Chrome real (claro/oscuro, 360, teclado, detalles y árbol de accesibilidad). Carpetas: solo HTML; navegador NOT RUN |
 
 ## 8. Decisiones adoptadas (2026-10-21)
 
-1. **Se acepta el método de recuento** de nodos de texto visibles, sin nav/footer/details/controles, y el umbral
-   de **50 palabras antes de la primera acción**.
-2. **Carpetas va primero.** La ficha de serie queda para después.
+1. **Se acepta el método de recuento** de nodos de texto visibles, sin nav/footer, sin el contenido de detalles
+   cerrados (el resumen visible sí cuenta) y sin controles; el umbral es de **50 palabras antes de la primera
+   acción**.
+2. **Carpetas fue primero; la ficha de serie va después**, ya adaptada a su acción real.
 3. **La comprobación automática se limita a las pantallas adaptadas**; Ajustes, Duplicados y Estado conservan sus
    historias y no se convierten en un falso PASS.
 4. **No se toca la Pi.** No hay despliegue ni validación en producción.
+5. **La ficha se adapta a su acción real:** no hay formulario de metadatos ni botón «Guardar»; se mide el selector
+   de política, que guarda al cambiar. No se inventa una pantalla nueva para cumplir el método.
 
 ## 9. Lo que NO está acreditado
 
-- No hay medida en navegador real de la pantalla reescrita: solo HTML renderizado y una prueba de contrato.
-- No se ha medido el tema oscuro, 360 px, teclado ni lector de pantalla.
-- La ficha de serie sigue pendiente.
-- El test de 5 segundos de U10 es una simulación con agentes, no una prueba con personas.
+- Carpetas no tiene medida en navegador real; su evidencia sigue siendo HTML renderizado y la prueba de contrato
+  de #273.
+- La ficha sí se midió en navegador (claro/oscuro, 360, teclado y detalles), pero **no con un lector de pantalla
+  real**: solo el árbol de accesibilidad de Chrome.
+- La prueba de cinco segundos con personas sigue **NOT RUN**; la simulación con agentes no es una prueba con
+  personas.
 - No se ha tocado la Pi ni se ha desplegado nada.
-- La comparación 415 → 39 no es homogénea: la baseline histórica usó otra definición y otros datos.
+- La comparación 415 → 39 no es homogénea: la baseline histórica usó otra definición y otros datos. Tampoco se
+  compara 146 → 190 en la ficha: el fixture y la definición no son los mismos.
+- El resumen visible del `<details>` de Carpetas no se recalculó en esta pasada; la cifra de 39 es la de #273. En la
+  ficha sí se incluyó el resumen («Fuentes y atribución») en la medida conservadora de 48.
 
 ## 10. Reproducir
 
@@ -177,10 +222,12 @@ Prueba de contrato (requiere `TEST_DATABASE_URL` para el fixture de Postgres rea
 
 ```bash
 python -m pytest tests/test_web_carpetas_pg.py::TestPresupuestoTexto -q
+python -m pytest tests/test_web_series.py::TestPresupuestoTextoU21 -q
 ```
 
-La cifra exacta de 39 se reproduce con
+La cifra exacta de 39 de Carpetas se reproduce con
 `tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_39_es_reproducible_con_el_fixture_de_referencia`.
 La prueba usa la plantilla real, una respuesta enlatada del servicio y el mismo recuento conservador que este
-documento. Para una medida en navegador falta el ensayo aislado con Chrome, Postgres real y los datos sintéticos;
-queda **NOT RUN**.
+documento. La ficha se mide en Chrome con
+`docs/design/ui-u21/medir_ficha.py`; el comando, el fixture y el SHA están en
+`docs/design/ui-u21/verificacion-ficha-2026-10-21.md`. Carpetas sigue sin ensayo en navegador: **NOT RUN**.
