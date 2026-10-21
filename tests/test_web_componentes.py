@@ -422,6 +422,10 @@ class TestCssDeLosComponentes:
         apagadas = {" ".join(s.split()) for s in re.findall(r"([^{}]+)\{", bloque.group(1))}
         apagadas = {p.strip() for s in apagadas for p in s.split(",")}
         assert con_trama and con_trama <= apagadas, con_trama - apagadas
+        # El desalineamiento del rótulo de error también se apaga, y el bloque va el último: con la
+        # misma especificidad gana la regla posterior (así se coló el text-shadow en la maqueta).
+        assert re.search(r"\.pagina-error h1\s*\{\s*text-shadow: none;", bloque.group(1))
+        assert CSS_SIN_COMENTARIOS.rstrip().endswith(bloque.group(0).rstrip())
 
     def test_el_foco_visible_se_conserva(self):
         assert ":focus-visible" in CSS and "outline: 3px solid var(--cyan-t)" in CSS
