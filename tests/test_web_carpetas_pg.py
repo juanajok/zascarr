@@ -332,6 +332,38 @@ class TestEscapeYSoloLectura:
         assert await huella() == antes
 
 
+class TestPresupuestoTexto:
+    """U21: la entrada y los datos de decisión caben antes de la primera acción de la tarjeta."""
+
+    @staticmethod
+    def _palabras(html: str) -> list[str]:
+        texto = re.sub(r"<[^>]+>", " ", html)
+        return re.sub(r"\s+", " ", htmllib.unescape(texto)).strip().split()
+
+    async def test_entrada_y_primera_accion_caben_en_50_palabras(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        cuerpo = (await pagina()).text
+        principal_cuerpo = principal(cuerpo).split(">", 1)[1]
+        sin_detalles = re.sub(r"<details\b.*?</details>", " ", principal_cuerpo, flags=re.S)
+        antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
+        palabras = self._palabras(antes)
+        assert len(palabras) <= 50, f"{len(palabras)} palabras antes de la acción: {' '.join(palabras)}"
+        assert "No se crea ni se asigna nada hasta que confirmes." in visible(cuerpo)
+        assert "Sin serie sugerida" in antes
+        assert principal_cuerpo.index('class="carpeta-accion"') < principal_cuerpo.index('class="carpeta-detalle"')
+
+    async def test_estado_vacio_tambien_cabe(self, banco):
+        cuerpo = (await pagina()).text
+        principal_cuerpo = principal(cuerpo).split(">", 1)[1]
+        antes = principal_cuerpo.split('<p><a class="back-link"', 1)[0]
+        assert len(self._palabras(antes)) <= 50
+
+    async def test_el_subtitulo_no_pasa_de_20_palabras(self, banco):
+        cuerpo = (await pagina()).text
+        subtitulo = re.search(r'<p class="subtitle">(.*?)</p>', cuerpo, re.S).group(1)
+        assert len(self._palabras(subtitulo)) <= 20
+
+
 class TestAccesoYEnlaces:
 
     async def test_sin_sesion_no_hay_datos(self, banco, monkeypatch):

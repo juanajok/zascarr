@@ -2,27 +2,31 @@
 {% block title %}Pendientes por carpeta — ZascArr{% endblock %}
 {% block content %}
 <h1>Pendientes por carpeta</h1>
-<p class="subtitle">Lo que sigue pendiente, agrupado por la carpeta donde está. Esta pantalla es solo para mirar: no se crea ni se asigna nada. Desde cada carpeta puedes abrir el asistente para elegir su serie; abrirlo tampoco crea nada ni consulta ninguna fuente.</p>
-
-{% call ui.aviso("info") %}
-  <strong>Son registros pendientes de verificar, no archivos confirmados.</strong>
-  Esta pantalla lee la base de datos y no comprueba el disco: un registro puede apuntar a un archivo que ya no esté donde se anotó.
-  Una carpeta o un nombre son <em>pistas</em>, no decisiones.
-{% endcall %}
+<p class="subtitle">Elige una carpeta para revisar sus archivos.</p>
 
 <p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a></p>
+
+<details class="carpeta-explicacion">
+  <summary>¿De dónde salen estos datos?</summary>
+  <p><strong>Son registros pendientes de verificar, no archivos confirmados.</strong>
+  Esta pantalla lee la base de datos y no comprueba el disco: un registro puede apuntar a un archivo que ya no esté donde se anotó.
+  Una carpeta o un nombre son <em>pistas</em>, no decisiones.</p>
+  {% if r.totales.candidata_inexistente %}
+  <p>{{ r.totales.candidata_inexistente }} registros tenían una serie sugerida que ya no existe o no se puede leer: no se muestran en ninguna carpeta.</p>
+  {% endif %}
+</details>
 
 {% if r.totales.grupos == 0 and r.totales.candidata_inexistente == 0 %}
 {{ ui.estado_vacio("Nada pendiente", "No hay registros pendientes de verificar.") }}
 {% else %}
 <ul class="carpetas-resumen" aria-label="Resumen">
   <li>{{ ui.chip("neutro", r.totales.sin_serie ~ " sin serie") }}</li>
-  <li>{{ ui.chip("info", r.totales.serie_sugerida ~ " con serie sugerida (falta confirmar número y edición)") }}</li>
+  <li>{{ ui.chip("info", r.totales.serie_sugerida ~ " con serie sugerida") }}</li>
   <li>{{ ui.chip("neutro", r.totales.grupos ~ " carpetas") }}</li>
+  {% if r.totales.candidata_inexistente %}
+  <li>{{ ui.chip("amber", r.totales.candidata_inexistente ~ " con serie borrada") }}</li>
+  {% endif %}
 </ul>
-{% if r.totales.candidata_inexistente %}
-{{ ui.aviso("amber", r.totales.candidata_inexistente ~ " registros tenían una serie sugerida que ya no existe o no se puede leer: no se muestran en ninguna carpeta.") }}
-{% endif %}
 {% if r.totales.grupos %}
 <p class="carpetas-pagina" id="pagina-actual">Carpetas {{ desde }}–{{ hasta }} de {{ r.totales.grupos }}.</p>
 {% endif %}
@@ -36,6 +40,16 @@
     {% if g.por_confirmar %}{{ ui.chip("amber", "por confirmar") }}{% endif %}
     {% if g.en_conflicto %}{{ ui.chip("warn", "en conflicto") }}{% endif %}
   </p>
+
+  <p class="carpeta-resumen">{{ g.n_archivos }} registros{% if g.serie_sugerida %} · Serie sugerida: {{ g.serie_sugerida.titulo }}{% else %} · Sin serie sugerida{% endif %}</p>
+
+  <p class="carpeta-accion">
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ g.clave | urlencode }}">Elegir la serie de esta carpeta</a>
+    <small>No se crea ni se asigna nada hasta que confirmes.</small>
+  </p>
+
+  <details class="carpeta-detalle">
+    <summary>Ver datos y observaciones</summary>
 
   <dl class="carpeta-datos">
     <dt>Registros</dt><dd>{{ g.n_archivos }}</dd>
@@ -80,8 +94,7 @@
     {% endfor %}
   </ul>
   {% endif %}
-
-  <p class="carpeta-accion"><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ g.clave | urlencode }}">Elegir la serie de esta carpeta</a></p>
+  </details>
 
   <details class="carpeta-archivos">
     <summary>Ver registros ({{ g.archivos | length }}{% if v.sin_mostrar > 0 %} de {{ g.n_archivos }}{% endif %})</summary>
