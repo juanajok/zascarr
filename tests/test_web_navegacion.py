@@ -963,3 +963,13 @@ class TestRevisionVisual:
         from zascarr.web.routes import TEMPLATES_DIR
         carpetas = (TEMPLATES_DIR / "carpetas.html").read_text(encoding="utf-8")
         assert 'class="carpeta-titulo titulo-frase">{{ g.clave }}' in carpetas
+
+    def test_el_contenido_deja_hueco_a_la_barra_inferior(self):
+        """`.content { padding-bottom: 112px }` en ≤ 860 px nunca se aplicaba: la regla base de
+        `.content` va después y la de ≤ 768 px fijaba 48 px. El pie quedaba 15 px bajo la barra fija
+        (medido en el navegador a 390 px). Con `.app > main.content` gana a las dos."""
+        css = _css()
+        movil = css[css.index("@media (max-width: 860px) {"):]
+        movil = movil[:movil.index("\n}\n")]
+        assert ".app > main.content { padding-bottom: 112px; }" in movil
+
