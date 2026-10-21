@@ -43,9 +43,10 @@
 
 ## Lectura
 
-- **Tebeosfera** devolvió **20/20** resultados con sugerencia `tebeo`. Sus 8 «coincidencias» son exactamente los
-  8 títulos cuya referencia es `tebeo`; no son 8 aciertos de búsqueda. El primer resultado a veces es otra obra
-  (p. ej. *Mortadelo* → *ALEGRES HISTORIETAS*), así que tampoco se puede leer como «encontró el título».
+- **Tebeosfera** devolvió **20/20** resultados con la constante `tebeo` (no es un valor leído de cada ficha: el
+  cliente de producto la asigna por diseño). Sus 8 «coincidencias» son exactamente los 8 títulos cuya referencia
+  es `tebeo`; no son 8 aciertos de búsqueda. El primer resultado a veces es otra obra (p. ej. *Mortadelo* →
+  *ALEGRES HISTORIETAS*), así que tampoco se puede leer como «encontró el título».
 - **GCD** acertó 10 de 16 consultas con resultados. Las 6 discrepancias no son aleatorias: Tintín sale `tebeo` por
   una edición española; Spider-Man y Dragon Ball salen `franco_belgian` por ediciones francesas; One Piece y Naruto
   salen `other`; Akira sale `american`. La sugerencia describe la **edición que GCD devolvió**, no la obra.
@@ -56,7 +57,10 @@
 
 - Solo se evalúa el **primer resultado** de cada fuente; la app muestra varios y la
   persona elige. El recuento es descriptivo, no una tasa de acierto del producto.
-- Tebeosfera asigna «tebeo» a todo por diseño del cliente; GCD asigna según idioma/país de la edición.
+- **Tebeosfera no devuelve una tradición por resultado.** `buscar_20.py` escribe la constante
+  `ComicTradition.TEBEO.value` («tebeo») para todos porque el cliente de producto asigna `TEBEO` a cualquier
+  resultado de esa fuente. El 20/20 no es una clasificación leída de cada ficha: describe el diseño del cliente.
+  GCD sí asigna según idioma/país de la edición devuelta.
 - La referencia de tradición de `titulos.json` es provisional y no está verificada
   contra un catálogo externo.
 - No se ha medido Comic Vine, que es la fuente del caso Mortadelo, ni AniList.
