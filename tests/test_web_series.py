@@ -131,7 +131,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1", "single_issue", True), ("3", "single_issue", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -146,7 +146,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1.5", "single_issue", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -159,7 +159,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("12", "omnibus", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -171,7 +171,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -186,7 +186,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -202,7 +202,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -229,7 +229,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),         # poseídos (para pintar la ficha)
             FakeExecResult([]),         # manuales vivos (predicado)
             FakeExecResult([]),         # poseídos (predicado)
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -245,7 +245,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -259,7 +259,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -276,7 +276,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -291,7 +291,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]),   # la serie
             FakeExecResult([]),         # poseídos (para pintar)
             FakeExecResult([]),         # manuales (predicado); huecos corta aquí
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -304,7 +304,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([(None, None)]),   # un item manual de serie vivo
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -321,7 +321,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
             FakeExecResult([]),   # sin acuse
-            retirados(),
+            retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -334,7 +334,7 @@ class TestPoliticaBusquedaD8:
         series = make_series(total_issues=3)
         series.wishlist_policy = WishlistPolicy.NONE
         session = FakeSession([
-            FakeExecResult([series]), FakeExecResult([]), acuse(), retirados(4),
+            FakeExecResult([series]), FakeExecResult([]), acuse(), retirados(4), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")

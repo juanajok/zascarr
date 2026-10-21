@@ -1,0 +1,91 @@
+{#- BL-R1b (#254): vista previa y resultado de «Desvincular». Sin reglas propias: todo sale de `services/desvinculacion.py`.
+    Texto según el presupuesto de CLAUDE.md §6 y la revisión UX del squad: el verbo («Desvincular»), una garantía junto al botón,
+    el resto fuera. Contrato HTMX: el panel es `#desvinculacion`; el formulario de confirmar hace `POST` normal (sin JS) y, con htmx,
+    sustituye el panel entero (`outerHTML`). Los fallos van dentro del panel con 200. -#}
+{% set volver = '/ui/series/' ~ serie.id %}
+<div id="desvinculacion" class="desvinculacion" data-fase="{{ 'fallo' if fallo else fase }}"
+     data-resultado="{{ r.resultado if r else '' }}">
+
+  {% if fallo %}
+  <section class="card" aria-labelledby="desv-fallo">
+    <h2 id="desv-fallo" class="titulo-frase">{{ fallo.titulo }}</h2>
+    {{ ui.aviso("warn", fallo.mensaje) }}
+    <div class="vinc-acciones">
+      {% if fallo.repetible and token %}
+      <form method="post" action="{{ volver }}/archivos/{{ file_id }}/deshacer"
+            hx-post="{{ volver }}/archivos/{{ file_id }}/deshacer" hx-target="#desvinculacion" hx-swap="outerHTML"
+            hx-disabled-elt="find button">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="primary">{{ "Comprobar el resultado" if fallo.codigo == "resultado_incierto" else "Reintentar" }}</button>
+      </form>
+      {% endif %}
+      {% if not fallo.repetible %}<a class="btn-primary" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo</a>{% endif %}
+      <a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>
+    </div>
+  </section>
+
+  {% elif r %}
+  <section class="card" aria-labelledby="desv-resultado">
+    {% if r.resultado == "deshecho" %}
+    {#- El menú vuelve a pedir SUS contadores (el de «Por revisar» acaba de cambiar); sin JS no hace nada y se corrige al cambiar de página. -#}
+    <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+    <h2 id="desv-resultado" class="titulo-frase">Archivo desvinculado de {{ serie.title }}{% if r.numero %} #{{ r.numero }}{% endif %}</h2>
+    {{ ui.aviso("ok", "El archivo ha vuelto a «Por revisar».") }}
+    {% elif r.resultado == "ya_deshecho" %}
+    <h2 id="desv-resultado" class="titulo-frase">Este archivo ya estaba desvinculado</h2>
+    {{ ui.aviso("info", "Ya está en «Por revisar». No se ha cambiado nada más.") }}
+    {% else %}
+    <h2 id="desv-resultado" class="titulo-frase">No se ha desvinculado nada</h2>
+    {{ ui.aviso("warn", texto_omitido) }}
+    {% endif %}
+    {% if r.resultado in ("deshecho", "ya_deshecho") %}
+    <p>No se ha movido ni borrado nada. Para vincularlo de nuevo, ve a «Por revisar».</p>
+    {% endif %}
+    <div class="vinc-acciones">
+      {% if r.resultado in ("deshecho", "ya_deshecho") %}<a class="btn-primary" href="/ui/pendientes">Ir a «Por revisar»</a>{% else %}
+      <a class="btn-primary" href="{{ volver }}/archivos/{{ file_id }}/deshacer">Abrir de nuevo</a>{% endif %}
+      <a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>
+    </div>
+  </section>
+
+  {% else %}
+  <section class="card" aria-labelledby="desv-titulo">
+    <h2 id="desv-titulo" class="titulo-frase">¿Desvincular este archivo?</h2>
+    <dl class="carpeta-datos">
+      <dt>Archivo</dt><dd class="nombre-archivo">{{ p.archivo.nombre }}</dd>
+      {% if p.numero %}<dt>Vinculado a</dt><dd>{{ p.numero.serie_titulo }}{% if p.numero.numero %} · #{{ p.numero.numero }}{% endif %}{% if p.vinculado_el %} <span class="muted">(desde el {{ p.vinculado_el[8:10] }}/{{ p.vinculado_el[5:7] }}/{{ p.vinculado_el[:4] }})</span>{% endif %}</dd>{% endif %}
+    </dl>
+
+    {% if p.bloqueo %}
+    {{ ui.aviso("warn", textos_bloqueo[p.bloqueo.codigo]) }}
+    <div class="vinc-acciones"><a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a></div>
+
+    {% else %}
+    {% if p.archivo.falta_en_disco %}{{ ui.aviso("amber", "Puede que este archivo ya no esté en el disco: ZascArr no lo encontró en su última revisión de la biblioteca y aún no está confirmado. Puedes desvincularlo igualmente.") }}{% endif %}
+    <h3 class="titulo-frase">Qué pasará</h3>
+    <ul class="desv-lista">
+      <li>El archivo <strong>no se toca</strong>: no se mueve, no se renombra ni se borra.</li>
+      <li>Vuelve a «Por revisar», la lista de archivos pendientes de asignar a una serie.</li>
+      {% if p.numero %}
+      <li>{% if p.numero.se_queda_sin_archivos %}El #{{ p.numero.numero }} se queda en la serie, pero sin archivo: aparecerá entre los números que te faltan.
+        {% else %}El #{{ p.numero.numero }} se queda en la serie con {{ p.numero.otros_archivos }} archivo{{ "s" if p.numero.otros_archivos != 1 }} más, que no cambian.{% endif %}</li>
+      {% if p.numero.lecturas %}<li>Tu progreso de lectura de este número se conserva.</li>{% endif %}
+      {% if p.numero.deseados %}<li>Hay {{ p.numero.deseados }} deseo{{ "s" if p.numero.deseados != 1 }} de este número{% if p.numero.deseados_abiertos %}; {{ p.numero.deseados_abiertos }} sigue{{ "n" if p.numero.deseados_abiertos != 1 }} abierto{{ "s" if p.numero.deseados_abiertos != 1 }}: si el número se queda sin archivo, ZascArr podría volver a buscarlo{% endif %}.</li>{% endif %}
+      {% endif %}
+      <li>Volver a vincularlo es un paso aparte, desde «Por revisar»: si lo cancelas o falla, el archivo se queda allí.</li>
+    </ul>
+    <form method="post" action="{{ volver }}/archivos/{{ file_id }}/deshacer"
+          hx-post="{{ volver }}/archivos/{{ file_id }}/deshacer" hx-target="#desvinculacion" hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <input type="hidden" name="token" value="{{ token }}">
+      <p class="caption">Hasta que pulses el botón, no cambia nada.</p>
+      <div class="vinc-acciones">
+        <button type="submit" class="primary">Desvincular el archivo</button>
+        <a class="btn ghost sm" href="{{ volver }}">Cancelar</a>
+      </div>
+    </form>
+    <details class="desv-donde"><summary>Dónde está el archivo</summary><p class="nombre-archivo">{{ p.archivo.ruta }}</p></details>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>

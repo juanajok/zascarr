@@ -55,7 +55,8 @@ def test_caduca_a_los_15_minutos_y_se_puede_leer_caducado():
 def test_otra_clave_o_manipulado_no_vale():
     t = crear_token_desvinculacion(firmada(), SECRETO, ahora=AHORA)
     assert verificar_token_desvinculacion(t, "otra-clave", ahora=AHORA) is None
-    assert verificar_token_desvinculacion(t[:-2] + "00", SECRETO, ahora=AHORA) is None
+    malo = t[:-1] + ("0" if t[-1] != "0" else "1")      # (un sufijo fijo coincidiría con la firma real 1 de cada 256 veces)
+    assert verificar_token_desvinculacion(malo, SECRETO, ahora=AHORA) is None
     assert verificar_token_desvinculacion("", SECRETO) is None and verificar_token_desvinculacion("basura", SECRETO) is None
 
 

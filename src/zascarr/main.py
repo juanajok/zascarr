@@ -322,6 +322,7 @@ def create_app() -> FastAPI:
     from zascarr.web.auditoria import router as auditoria_router
     from zascarr.web.auth import router as auth_router
     from zascarr.web.dashboard import router as dashboard_router
+    from zascarr.web.desvinculacion import router as desvinculacion_ui_router
     from zascarr.web.discovery import router as discovery_router
     from zascarr.web.errores import manejar_http, manejar_inesperado, pagina_error
     from zascarr.web.estado import router as estado_router
@@ -357,6 +358,7 @@ def create_app() -> FastAPI:
     app.include_router(asistente_vinculacion_router)
     app.include_router(pendientes_router)
     app.include_router(series_ui_router)
+    app.include_router(desvinculacion_ui_router)
     app.include_router(wishlist_ui_router)
     # Bug real (reportado): "/" mandaba a Estado (E1) en vez de a la
     # biblioteca — quien entra por primera vez esperaba ver su colección,
