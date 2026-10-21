@@ -1478,3 +1478,14 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 
 /* Página de error propia (web/errores.py): una salida clara, la principal primero. */
 .error-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+/* ── BL-R1b (#254): archivos por número y «Deshacer esta vinculación» ─────── */
+.archivos-serie { margin-top: 28px; }
+.archivos-numeros, .archivos-lista { list-style: none; margin: 0; padding: 0; }
+.archivos-numero { margin: 0 0 14px; }
+.archivos-numero-titulo { margin: 0 0 4px; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.archivo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 0; border-top: 1px solid var(--paper-2); }
+.archivo-fila .nombre-archivo { overflow-wrap: anywhere; font-weight: 600; }
+.archivo-razon { font-size: .875rem; }
+.desv-lista { margin: 8px 0 14px 1.2em; padding: 0; }
+.desv-lista li { margin: 4px 0; }
