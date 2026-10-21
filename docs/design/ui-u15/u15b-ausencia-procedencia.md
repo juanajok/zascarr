@@ -1,6 +1,6 @@
 # U15b — Ausencia de sugerencia y procedencia (#276)
 
-> **Estado: implementado en la rama `sprint0/u15b-ausencia-procedencia`; PR pendiente de revisión.
+> **Estado: implementado en la rama `sprint0/u15b-ausencia-procedencia`; PR #281 pendiente de revisión.
 > No fusionado y no desplegado. #202 sigue abierta.** Fecha: 2026-10-21.
 
 ## 1. Problema que cierra

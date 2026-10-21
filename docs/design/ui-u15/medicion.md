@@ -2,7 +2,7 @@
 
 > **Estado: modelo reproducible + 20 búsquedas reales en GCD y Tebeosfera + verificación en Chrome real
 > (2026-10-21); Comic Vine y AniList siguen NOT RUN. #276 (U15b) implementado en rama con ausencia de sugerencia y
-> procedencia; PR pendiente de revisión. #202 sigue abierta, no cerrada: el código no sustituye la evidencia que
+> procedencia; PR #281 pendiente de revisión. #202 sigue abierta, no cerrada: el código no sustituye la evidencia que
 > falta ni el despliegue.**
 > `titulos.json` sigue siendo un modelo determinista; la medición real está en `resultados-reales.json` y
 > `resultados-reales.md`; la verificación de navegador está en `verificacion-navegador-2026-10-21.md`; el contrato
