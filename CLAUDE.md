@@ -177,11 +177,16 @@ como marco permanente.
   (Lucide, ISC, con su aviso en el módulo), nunca caracteres de texto (⌂ ✎ ★…), que cada
   sistema dibuja distinto. Un icono nuevo se copia de `lucide-static` al diccionario.
 - **Marca** (decidido el 2026-10-20): el estallido «¡ZAS!» bermellón con una Z rotulada
-  dentro, en `static/brand` (ficheros, colores y reglas en su README). Sustituye al
+  encima, en `static/brand` (ficheros, colores y reglas en su README). Sustituye al
   cuadrado amarillo con trama. Se descartó, tras pruebas de iconos: un «¡» (se lee como
-  la «i» de información), una Z sobre cuadrado rojo (se confunde con Zabbix y YouTube),
-  el amarillo (Mylar3, Kapowarr, Radarr) y una Z que desborda el estallido (Komga). Por
-  debajo de 24 px va la versión simplificada `zascarr-favicon.svg`.
+  la «i» de información), una Z sobre cuadrado rojo (se confunde con Zabbix y YouTube)
+  y el amarillo (Mylar3, Kapowarr, Radarr). Por
+  debajo de 24 px va la versión simplificada `zascarr-favicon.svg` (sin fondo: el estallido es la silueta); en la interfaz (24–48 px),
+  `zascarr-icono.svg` sin trama ni líneas de impacto (2026-10-21: a 32 px la versión completa se
+  veía gris y empastada). En ambos, la Z es grande y gruesa y sobresale un poco del estallido,
+  que debe seguir viéndose (decisión del PO, 2026-10-21): así además se distingue de Komga, que
+  lleva la letra dentro de un estallido. La trama y las líneas de impacto, solo en el icono de 180 px. Tamaño mínimo, espacio libre y
+  versión en blanco y negro, en el README de la marca.
 - **Un botón principal por pantalla** (decidido el 2026-10-20): el amarillo es la acción que hace
   avanzar la tarea de esa pantalla y se pide con `.primary` (`button.primary`, `.btn.primary`). Un
   `type="submit"` es neutro por defecto: los botones que se repiten (uno por resultado o por tarjeta) y
