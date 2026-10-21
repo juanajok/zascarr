@@ -181,7 +181,7 @@ como marco permanente.
   cuadrado amarillo con trama. Se descartó, tras pruebas de iconos: un «¡» (se lee como
   la «i» de información), una Z sobre cuadrado rojo (se confunde con Zabbix y YouTube),
   el amarillo (Mylar3, Kapowarr, Radarr) y una Z que desborda el estallido (Komga). Por
-  debajo de 24 px va la versión simplificada `zascarr-favicon.svg`; en la interfaz (24–48 px),
+  debajo de 24 px va la versión simplificada `zascarr-favicon.svg` (sin fondo: el estallido es la silueta); en la interfaz (24–48 px),
   `zascarr-icono.svg` sin trama ni líneas de impacto y con la Z grande (2026-10-21: a 32 px la
   versión completa se veía gris y empastada). El dibujo completo, solo en el icono de 180 px.
 - **Un botón principal por pantalla** (decidido el 2026-10-20): el amarillo es la acción que hace

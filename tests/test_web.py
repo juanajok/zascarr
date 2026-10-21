@@ -97,6 +97,14 @@ class TestStaticAssets:
         assert svg.count('fill="#FFFFFF"') == 1                  # la Z, que sí sigue
         assert "<line" not in svg and "M11.0 13.9" not in svg    # sin líneas de impacto
 
+    def test_el_favicon_no_va_sobre_un_cuadrado_de_papel(self):
+        """Bug real (2026-10-21): en la pestaña, la Z blanca se fundía con el cuadrado de papel
+        y, en las pestañas claras, el cuadrado tampoco se veía. El estallido es la silueta."""
+        svg = (STATIC_DIR / "brand" / "zascarr-favicon.svg").read_text(encoding="utf-8")
+        assert "#F6F3EC" not in svg and "<rect" not in svg
+        png = (STATIC_DIR / "brand" / "zascarr-favicon-32.png").read_bytes()
+        assert png[25] == 6                                      # PNG RGBA: esquinas transparentes
+
     def test_estado_e1_sigue_funcionando_tras_montar_static_y_ui(self):
         r = client.get("/estado")
         assert r.status_code == 200
