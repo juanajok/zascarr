@@ -103,6 +103,15 @@ async def _check_reachable(coro) -> bool:
         return False
 
 
+async def _estado_cliente(activo: bool, sonda) -> str:
+    """`disabled` si está apagado en Ajustes: ni se sondea ni cuenta como fallo. Un cliente que el
+    coleccionista no usa ponía el semáforo en «Atención» con un punto rojo (revisión visual,
+    2026-10-20); en una instalación nueva, siempre, porque vienen apagados por defecto."""
+    if not activo:
+        return "disabled"
+    return "ok" if await _check_reachable(sonda()) else "unreachable"
+
+
 def _alembic_head() -> str | None:
     """Revisión head de Alembic, leída de `alembic/versions` (sin conectar a BD).
 
@@ -192,16 +201,16 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     # ── Servicios baremetal (no críticos para health, pero informativos).
     # En paralelo y con timeout corto: nunca deben convertir un GET
     # /api/health en una espera de hasta 60s (2 × 30s secuenciales). ──
-    transmission_ok, amule_ok = await asyncio.gather(
-        _check_reachable(_check_transmission()),
-        _check_reachable(_check_amule()),
+    transmission, amule = await asyncio.gather(
+        _estado_cliente(settings.transmission_enabled, _check_transmission),
+        _estado_cliente(settings.amule_enabled, _check_amule),
     )
 
     # ── VPN (vía fichero del host; nunca bloqueante) ──
     vpn_status, vpn_detail = _check_vpn()
 
     core_ok = db_status == "ok"
-    all_ok = core_ok and transmission_ok and amule_ok
+    all_ok = core_ok and transmission in ("ok", "disabled") and amule in ("ok", "disabled")
     status_str = "healthy" if all_ok else ("degraded" if core_ok else "unhealthy")
 
     # Si la VPN está en warning/stale, no baja el status global pero
@@ -222,8 +231,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         "version": settings.app_version,
         "checks": {
             "database":     db_status,
-            "transmission": "ok" if transmission_ok else "unreachable",
-            "amule":        "ok" if amule_ok else "unreachable",
+            "transmission": transmission,   # ok | unreachable | disabled
+            "amule":        amule,
             "vpn":          vpn_status,
         },
         # B8: estado de cada fuente de metadatos (on/off en Ajustes).

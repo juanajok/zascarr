@@ -154,7 +154,9 @@ como marco permanente.
   prohibidos en superficie de usuario: se mapean a causa y acción (historia
   A2).
 - **Semáforos visibles** para el estado del sistema (`/api/health`), texto
-  concreto sobre qué falló y qué hacer.
+  concreto sobre qué falló y qué hacer. Un servicio **apagado en Ajustes** no es un fallo: `/api/health`
+  lo da como `disabled`, no lo sondea ni cuenta para el semáforo, y Estado lo pinta
+  «Desactivado» en gris (decidido el 2026-10-21).
 - **Sin diálogos nativos ni balas invisible**: `hx-confirm` ya se sabe que
   la automatización del navegador no lo resuelve; el usuario real sí.
   Documentado como limitación aceptada en B2.
