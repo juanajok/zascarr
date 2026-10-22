@@ -36,7 +36,14 @@ from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, 
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.routes import crear_templates
 
+
+def _miles(n: int) -> str:
+    """Formato de la vista: punto para los miles (1.322), no coma."""
+    return f"{n:,}".replace(",", ".")
+
+
 templates = crear_templates()
+templates.env.filters["miles"] = _miles
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/ui/pendientes", tags=["ui"])
@@ -84,10 +91,10 @@ def _card(f: File) -> dict:
 
 
 async def contar_carpetas(db: AsyncSession) -> int:
-    """Cuántas carpetas (grupos) tienen pendientes, con la MISMA definición que la pantalla de
-    carpetas: una sola definición de «grupo» (`RevisionCarpetas`). Lee los pendientes y los
-    agrupa en memoria, igual que esa pantalla; `limite=1` evita materializar la página."""
-    return (await RevisionCarpetas(db).carpetas(limite=1)).totales.grupos
+    """Cuántas carpetas ÚTILES tienen pendientes, con la MISMA definición que la pantalla de
+    carpetas (`RevisionCarpetas`). Los grupos sin contexto son sueltos y no cuentan como
+    carpeta. `limite=1` evita materializar la página."""
+    return (await RevisionCarpetas(db).carpetas(limite=1)).totales.carpetas_utiles
 
 
 def _enlace(parametro: str, clave: ClavePendiente) -> str:
@@ -185,7 +192,8 @@ def _vista_carpetas(r: RespuestaCarpetas) -> dict:
     """Prepara lo que pinta la plantilla SIN recalcular nada: señales, estados y etiquetas
     vienen del servicio (la misma respuesta que el JSON). Aquí solo se traducen los ids de
     `senales[].archivos` a nombres, que es presentación; `grupos[].archivos` contiene siempre
-    a los afectados (contrato de 1a)."""
+    a los afectados (contrato de 1a). La vista trabaja con `carpetas_utiles`, no con `grupos`:
+    los grupos sin contexto son sueltos y no se paginan como carpetas."""
     grupos = []
     for g in r.grupos:
         nombres = {a.id: a.nombre for a in g.archivos}
@@ -199,15 +207,27 @@ def _vista_carpetas(r: RespuestaCarpetas) -> dict:
             "sin_mostrar": g.n_archivos - len(g.archivos),
         })
     p = r.pagina
+    total = r.totales.carpetas_utiles
+    # Una página deja de existir si su offset ya cae fuera del conjunto actual. La
+    # página 1 (offset 0) con cero grupos es el estado vacío normal, no una página rota.
+    pagina_invalida = p.desplazamiento > 0 and p.desplazamiento >= total
+    ultima = ((total - 1) // p.limite) * p.limite if total else 0
     desde = p.desplazamiento + 1 if r.grupos else 0
     return {
         "r": r,
         "grupos": grupos,
+        "total_visible": r.totales.sin_serie + r.totales.serie_sugerida,
+        "total_carpetas": total,
+        "pagina_invalida": pagina_invalida,
+        "ultima": ultima,
         "desde": desde,
         "hasta": p.desplazamiento + len(r.grupos),
-        "anterior": max(p.desplazamiento - p.limite, 0) if p.desplazamiento > 0 else None,
+        "anterior": (
+            max(p.desplazamiento - p.limite, 0)
+            if p.desplazamiento > 0 and not pagina_invalida else None
+        ),
         "siguiente": (
-            p.desplazamiento + p.limite if p.desplazamiento + p.limite < r.totales.grupos else None
+            p.desplazamiento + p.limite if p.desplazamiento + p.limite < total else None
         ),
         "limite": p.limite,
     }
@@ -221,9 +241,21 @@ async def carpetas(
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Rebanada 1b: lo pendiente agrupado por carpeta, SOLO LECTURA. Misma respuesta que
-    `GET /api/revision/carpetas`; no escribe, no mira el disco y no ofrece ninguna acción."""
-    servicio = RevisionCarpetas(db)
-    respuesta = await servicio.carpetas(limite=limite, desplazamiento=desplazamiento)
+    `GET /api/revision/carpetas`, con el filtro de lectura `solo_utiles`: los grupos sin
+    contexto son sueltos y no se pintan como carpetas. No escribe, no mira el disco y no
+    ofrece ninguna acción."""
+    try:
+        servicio = RevisionCarpetas(db)
+        respuesta = await servicio.carpetas(
+            limite=limite, desplazamiento=desplazamiento, solo_utiles=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — un fallo no puede dejar recuentos a medias
+        logger.warning("pendientes.carpetas_fallo", error=type(exc).__name__)
+        resp = templates.TemplateResponse(
+            request, "carpetas.html", {"error": True}, status_code=503,
+        )
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
     resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(respuesta))
     resp.headers["Cache-Control"] = "no-store"
     return resp

@@ -387,9 +387,10 @@ class TestPaginaPosteriorVaciada:
 
 
 class TestEnlaceACarpetas:
-    """Bloqueante 2: el criterio 5 pide «Verlos por carpeta (N)» y N no existía. N = número de CARPETAS, con el
-    mismo conteo de grupos que la propia pantalla de carpetas (una sola definición de «grupo»). El recuento agrupa
-    todos los pendientes en memoria (~100 ms con 1.322, medido) y por eso NO bloquea la lista: se pide al cargarse."""
+    """Bloqueante 2: el criterio 5 pide «Verlos por carpeta (N)» y N no existía. N = número de CARPETAS ÚTILES,
+    con la misma definición que la propia pantalla de carpetas: los grupos sin contexto son sueltos y no cuentan.
+    El recuento agrupa todos los pendientes en memoria (~100 ms con 1.322, medido) y por eso NO bloquea la lista:
+    se pide al cargarse."""
 
     async def _fragmento(self) -> tuple[int, str]:
         async with cliente() as c:
@@ -413,7 +414,7 @@ class TestEnlaceACarpetas:
         assert estado == 200 and texto == "Verlos por carpeta (3 carpetas)"
         from zascarr.services.revision_carpetas import RevisionCarpetas
         async with entorno.banco.fabrica() as s:
-            assert (await RevisionCarpetas(s).carpetas(limite=1)).totales.grupos == 3
+            assert (await RevisionCarpetas(s).carpetas(limite=1)).totales.carpetas_utiles == 3
 
     async def test_una_sola_carpeta_va_en_singular(self, entorno):
         await sembrar(entorno, 3)
@@ -480,9 +481,9 @@ class TestALaEscalaDeLaInstalacionDeReferencia:
             fragmento = await c.get("/ui/pendientes/carpetas/recuento")
         recuento_ms = (time.perf_counter() - t0) * 1000
         async with entorno.banco.fabrica() as s:
-            grupos = (await RevisionCarpetas(s).carpetas(limite=1)).totales.grupos
-        assert grupos == 108
+            carpetas = (await RevisionCarpetas(s).carpetas(limite=1)).totales.carpetas_utiles
+        assert carpetas == 108
         assert p.status == 200 and p.total == total and len(p.ids) == PAGINA
-        assert f"({grupos} carpetas)" in " ".join(re.sub(r"<[^>]+>", " ", fragmento.text).split())
-        print(f"\n[U12] {total} pendientes en {grupos} carpetas (local, no Pi): la lista = {lista_ms:.0f} ms y "
+        assert f"({carpetas} carpetas)" in " ".join(re.sub(r"<[^>]+>", " ", fragmento.text).split())
+        print(f"\n[U12] {total} pendientes en {carpetas} carpetas (local, no Pi): la lista = {lista_ms:.0f} ms y "
               f"el recuento de carpetas, que va aparte, = {recuento_ms:.0f} ms")
