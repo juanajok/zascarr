@@ -501,11 +501,16 @@ def verificar_referencia_de_resultado(ref: str, secret: str) -> ReferenciaDeResu
 
 VERSION_TOKEN_DESVINCULAR = 1
 
+#: BL-R1 (revisión de D9, 2026-10-23): el `vinculo_operacion` de un archivo SIN `metadata.vinculo` (importador, «Por revisar»,
+#: «organizar», anteriores a 2d). No hay `operacion_id` que firmar: se firma el UUID nulo, que mantiene el esquema (UUID canónico),
+#: la versión 1 y el tamaño fijo del token; los tokens ya emitidos siguen valiendo.
+SIN_PROCEDENCIA = "00000000-0000-0000-0000-000000000000"
+
 
 @dataclass(frozen=True)
 class DesvinculacionFirmada:
     """Lo que la persona vio al pedir deshacer UN vínculo. El contexto firmado es el `file_id` (un token de un archivo no
-    sirve en otro). `vinculo_operacion` es el `operacion_id` del vínculo que se verá deshecho; `huella` es el SHA-256 de
+    sirve en otro). `vinculo_operacion` es el `operacion_id` del vínculo que se verá deshecho (o `SIN_PROCEDENCIA` si no consta); `huella` es el SHA-256 de
     `(file_path, file_size_bytes, sha256_hash)` en la vista previa (no se firma la ruta: el token queda de tamaño fijo)."""
     file_id: str
     issue_id: str

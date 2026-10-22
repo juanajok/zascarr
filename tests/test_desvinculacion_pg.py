@@ -16,6 +16,7 @@ import os
 import re
 import socket
 import time
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -1002,6 +1003,8 @@ class TestSinProcedencia:
 
         serie, _, ids = await vinculado_sin_procedencia(ent, F1)
         ruta = Path((await fila(ent.banco, ids[F1]))["file_path"])
+        with zipfile.ZipFile(ruta, "w") as z:                          # un CBZ de verdad: el triaje solo hashea los CBZ legibles
+            z.writestr("001.jpg", b"pagina" * 50)
         async with ent.banco.fabrica() as s:
             await s.execute(text("UPDATE files SET sha256_hash = :h WHERE id = :f"), {"h": sha256_streaming(ruta), "f": ids[F1]})
             await s.commit()
