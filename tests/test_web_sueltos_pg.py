@@ -25,7 +25,7 @@ from tests.test_revision_carpetas_pg import BIB, Banco, archivo, candidatas
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.services import revision_carpetas
-from zascarr.services.revision_carpetas import RevisionCarpetas
+from zascarr.services.revision_carpetas import RevisionCarpetas, _candidata_guardada
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)")
@@ -142,6 +142,29 @@ class TestColaDeSueltos:
         assert t.count("Sugerencia guardada:") == 3
         assert ACCIONES.search(principal(r.text)) is None
 
+    async def test_candidatas_mal_formadas_no_tumban_la_cola(self, banco):
+        await banco.sembrar(
+            archivo("Comics/_Omnibus/Año no convertible.cbz", cands=[{
+                "series_id": str(uuid4()), "title": "Serie", "score": 0.9, "start_year": "²",
+            }]),
+            archivo("Comics/_Omnibus/Serie no textual.cbz", cands=[{
+                "series_id": 123, "title": "Serie", "score": 0.9,
+            }]),
+            archivo("Comics/_Omnibus/Título no textual.cbz", cands=[{
+                "series_id": str(uuid4()), "title": {"x": 1}, "score": 0.9,
+            }]),
+            archivo("Comics/_Omnibus/Puntuación booleana.cbz", cands=[{
+                "series_id": str(uuid4()), "title": "Serie", "score": True,
+            }]),
+        )
+
+        r = await pagina()
+        assert r.status_code == 200
+        t = visible(r.text)
+        assert t.count("No se pudo leer la sugerencia guardada") == 4
+        assert "No se pudieron leer los archivos sueltos" not in t
+        assert "Sugerencia guardada:" not in t
+
     async def test_el_nombre_largo_se_lee_entero_y_la_tarjeta_tiene_nombre_accesible(self, banco):
         largo = "Un nombre de archivo extraordinariamente largo que no cabe en una línea estrecha y debe partirse sin recortarse (1987).cbz"
         await banco.sembrar(archivo(f"Comics/_Omnibus/{largo}"))
@@ -168,6 +191,34 @@ class TestColaDeSueltos:
         assert "Volver a las carpetas" in t
         assert "Sueltos 0" not in t
         assert r.headers["cache-control"] == "no-store"
+
+
+class TestCandidataGuardadaMalFormada:
+    """Una candidata rota se degrada a ilegible; nunca debe propagar una excepción."""
+
+    @pytest.mark.parametrize(
+        "candidata",
+        [
+            pytest.param(
+                {"series_id": str(uuid4()), "title": "Serie", "score": 0.9, "start_year": "²"},
+                id="start-year-no-convertible",
+            ),
+            pytest.param(
+                {"series_id": 123, "title": "Serie", "score": 0.9},
+                id="series-id-no-textual",
+            ),
+            pytest.param(
+                {"series_id": str(uuid4()), "title": {"x": 1}, "score": 0.9},
+                id="title-no-textual",
+            ),
+            pytest.param(
+                {"series_id": str(uuid4()), "title": "Serie", "score": True},
+                id="score-booleano",
+            ),
+        ],
+    )
+    def test_devuelve_ilegible(self, candidata):
+        assert _candidata_guardada({"candidates": [candidata]}) == (None, True)
 
 
 # ── Cursor y ausencia de OFFSET ──────────────────────────────────────────────────────────────────
