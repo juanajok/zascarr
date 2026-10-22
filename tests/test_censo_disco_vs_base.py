@@ -93,3 +93,34 @@ class TestResumenYCli:
         d.write_text("")
         b.write_text(f"{P}a.cbz\t1\tf\tf\n")
         assert censo.main(["--disco", str(d), "--base", str(b)]) == 2
+
+
+H1, H2, H3 = "a" * 64, "b" * 64, "c" * 64
+
+
+class TestIdentidadPorContenido:
+
+    def test_lee_la_salida_de_sha256sum_y_la_de_la_base(self):
+        hd = censo.leer_hash_disco([f"{H1}  Comics/a b.cbz\n", f"{H2} *Comics/c.cbz\n", "basura\n"])
+        assert hd == {"Comics/a b.cbz": H1, "Comics/c.cbz": H2}
+        hb = censo.leer_hash_base([f"{P}Comics/x.cbz\t{H1}\t{H3}\n", f"{P}Comics/y.cbz\t\t\n"], P)
+        assert hb == {H1: "Comics/x.cbz", H3: "Comics/x.cbz"}
+
+    def test_idenicos_distintos_y_pares_de_carpetas(self):
+        c = censo.comparar(disco(("Dup/a.cbz", 1), ("Dup/b.cbz", 2), ("Nuevo/c.cbz", 3), ("Nuevo/sin_hash.cbz", 4)),
+                           base(("Orig/a.cbz", 1, "f", "t"), ("Orig/b.cbz", 2, "f", "t")))
+        hd = {"Dup/a.cbz": H1, "Dup/b.cbz": H2, "Nuevo/c.cbz": H3}
+        hb = {H1: "Orig/a.cbz", H2: "Orig/b.cbz"}
+        t = censo.confirmar_identidad(c, hd, hb)
+        assert "tebeos sin registrar: 4 · con hash calculado: 3 · sin hash: 1" in t
+        assert "2  IDÉNTICOS a un archivo registrado" in t
+        assert "1  contenido que NO está registrado" in t and "2  Dup  →  Orig" in t
+
+    def test_cli_con_los_dos_pasos(self, tmp_path, capsys):
+        d, b, hd, hb = (tmp_path / n for n in ("d", "b", "hd", "hb"))
+        d.write_text("Dup/a.cbz\t10\t1\n")
+        b.write_text(f"{P}Orig/a.cbz\t10\tf\tt\n")
+        hd.write_text(f"{H1}  Dup/a.cbz\n")
+        hb.write_text(f"{P}Orig/a.cbz\t{H1}\t\n")
+        assert censo.main(["--disco", str(d), "--base", str(b), "--hash-disco", str(hd), "--hash-base", str(hb)]) == 0
+        assert "IDÉNTICOS a un archivo registrado" in capsys.readouterr().out
