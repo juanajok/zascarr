@@ -39,7 +39,7 @@ from zascarr.core.carpetas import (
 )
 from zascarr.core.matcher import normalize_title
 from zascarr.models import File, Series
-from zascarr.services.review import ReviewService
+from zascarr.services.review import POR_PAGINA, SIN_FECHA, ClavePendiente, ReviewService
 from zascarr.utils.naming import parse_comic_filename
 
 Estado = Literal["sin_serie", "serie_sugerida", "mixto"]
@@ -142,6 +142,45 @@ class RespuestaCarpetas(BaseModel):
     grupos: list[Grupo]
 
 
+@dataclass(frozen=True)
+class CandidataGuardada:
+    """La candidata guardada en `metadata.candidates[0]`, ya validada para mostrarla.
+
+    No se comprueba si la serie existe: U13b no consulta `series` (eso es
+    `candidata_inexistente` de la vista de carpetas). La tradición sugerida no
+    interviene: una candidata sin tradición sigue siendo una candidata.
+    """
+
+    series_id: str
+    titulo: str
+    anio: int | None
+    puntuacion: int
+
+
+@dataclass(frozen=True)
+class Suelto:
+    """Un archivo de A sin carpeta contextual, con la posición de su cursor."""
+
+    clave: ClavePendiente
+    id: str
+    nombre: str
+    candidata: CandidataGuardada | None = None
+    candidata_ilegible: bool = False
+
+
+@dataclass(frozen=True)
+class PaginaSueltos:
+    """Una página de la cola de sueltos; `total_a` es el total de «Por revisar»."""
+
+    archivos: list[Suelto]
+    total: int
+    total_a: int
+    desde: int
+    hasta: int
+    hay_anterior: bool
+    hay_siguiente: bool
+
+
 # ── Lectura ───────────────────────────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -182,6 +221,57 @@ def _top_candidata(crudo: object) -> _Candidata | None:
         if mejor is None or score > mejor.puntuacion:
             mejor = _Candidata(sid, score)
     return mejor
+
+
+def _candidata_guardada(metadata: object) -> tuple[CandidataGuardada | None, bool]:
+    """Lee SOLO `metadata.candidates[0]` para la tarjeta de U13b.
+
+    Devuelve `(candidata, ilegible)`. Una lista ausente o vacía es «sin candidata»;
+    una lista que no es lista o un primer candidato sin serie/título/puntuación utilizable
+    es «no se pudo leer». No se consulta la serie ni se usa `tradition_guess`.
+    """
+    if not isinstance(metadata, dict):
+        return None, False
+    crudo = metadata.get("candidates")
+    if crudo is None:
+        return None, False
+    if not isinstance(crudo, list):
+        return None, True
+    if not crudo:
+        return None, False
+    primero = crudo[0]
+    if not isinstance(primero, dict):
+        return None, True
+    series_id = primero.get("series_id")
+    titulo = primero.get("title")
+    if not isinstance(series_id, str) or not isinstance(titulo, str):
+        return None, True
+    series_id = series_id.strip()
+    titulo = titulo.strip()
+    if not series_id or not titulo:
+        return None, True
+    puntuacion = primero.get("score")
+    if isinstance(puntuacion, bool) or not isinstance(puntuacion, (int, float)):
+        return None, True
+    if not (0 <= puntuacion <= 1):
+        return None, True
+    puntuacion = float(puntuacion)
+    anio = primero.get("start_year")
+    if isinstance(anio, bool):
+        return None, True
+    if anio is not None and not isinstance(anio, int):
+        if not isinstance(anio, str):
+            return None, True
+        try:
+            anio = int(anio)
+        except ValueError:
+            return None, True
+    return CandidataGuardada(
+        series_id=series_id,
+        titulo=titulo,
+        anio=anio,
+        puntuacion=round(puntuacion * 100),
+    ), False
 
 
 class RevisionCarpetas:
@@ -310,6 +400,77 @@ class RevisionCarpetas:
         if not del_grupo:
             return None
         return del_grupo[0][0], sorted((a for _, a in del_grupo), key=lambda a: (a.nombre, a.id))
+
+    async def pagina_de_sueltos(
+        self,
+        *,
+        despues: ClavePendiente | None = None,
+        antes: ClavePendiente | None = None,
+        limite: int = POR_PAGINA,
+    ) -> PaginaSueltos:
+        """Cola de los sueltos de A, por cursor sobre `(imported_at DESC, id DESC)` (U13b).
+
+        Lee A una vez, aplica la MISMA regla de contexto que `carpetas()` y pagina en memoria.
+        No hay `OFFSET`, no se consulta `series` (la candidata guardada se muestra tal cual) y
+        la respuesta solo lleva la página. Un cursor que ya no existe o las dos claves a la vez
+        caen en la primera página, igual que en la cola de U12.
+        """
+        limite = max(1, min(limite, POR_PAGINA))
+        filas = (await self._db.execute(
+            select(File.id, File.file_name, File.file_path, File.metadata_, File.imported_at)
+            .where(*ReviewService._condiciones_pendientes())
+        )).all()
+        # Se ordena aquí para que el cursor y la lista usen exactamente el mismo criterio,
+        # también cuando `imported_at` es NULL (se trata como la fecha más antigua).
+        filas = sorted(
+            filas,
+            key=lambda f: (f.imported_at or SIN_FECHA, f.id),
+            reverse=True,
+        )
+
+        total_a = len(filas)
+        sueltos: list[Suelto] = []
+        for fid, nombre, ruta, metadata, imported_at in filas:
+            if dividir_ruta(self._carpetas_de(ruta)).contextual is not None:
+                continue
+            candidata, ilegible = _candidata_guardada(metadata)
+            sueltos.append(Suelto(
+                clave=ClavePendiente(imported_at or SIN_FECHA, fid),
+                id=str(fid),
+                nombre=nombre,
+                candidata=candidata,
+                candidata_ilegible=ilegible,
+            ))
+
+        total = len(sueltos)
+        if not total:
+            return PaginaSueltos([], 0, total_a, 0, 0, False, False)
+
+        if despues is not None and antes is None:
+            indice = next((i for i, s in enumerate(sueltos) if s.clave == despues), None)
+            inicio = indice + 1 if indice is not None else 0
+            if inicio >= total:                 # el cursor era el último: se vuelve al principio
+                inicio = 0
+            fin = min(inicio + limite, total)
+        elif antes is not None and despues is None:
+            indice = next((i for i, s in enumerate(sueltos) if s.clave == antes), None)
+            if indice is None or indice == 0:   # no hay nada antes: primera página
+                inicio, fin = 0, min(limite, total)
+            else:
+                inicio, fin = max(0, indice - limite), indice
+        else:
+            inicio, fin = 0, min(limite, total)
+
+        pagina = sueltos[inicio:fin]
+        return PaginaSueltos(
+            archivos=pagina,
+            total=total,
+            total_a=total_a,
+            desde=inicio + 1 if pagina else 0,
+            hasta=fin,
+            hay_anterior=inicio > 0,
+            hay_siguiente=fin < total,
+        )
 
     async def _leer(self) -> list[_Archivo]:
         """UNA consulta para A ∪ B, columnas mínimas. A reutiliza el filtro de «Por revisar».
