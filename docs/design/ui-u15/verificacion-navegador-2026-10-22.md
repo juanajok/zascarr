@@ -88,6 +88,16 @@ con pista «Tebeo español» y pulsa «Revisar». **No pulsa «Crear serie vací
 - **1 tarjeta sin pista**: «Mortadelo e Salaminho (1969)», de GCD. Es una tarjeta con
   `tradition_guess: None`; no se muestra ningún `<small>` ni texto de pista.
 
+Comprobación directa de la API de GCD el mismo día (no forma parte de la app):
+
+| Tarjeta | `language` | `country` | Mapeo en `gcd.py` |
+|---|---|---|---|
+| Mortadelo e Salaminho (1969) | `pt` | `br` | Ninguno: `pt` no está en `_LANGUAGE_TRADITION` → `None` |
+| De avonturen van Lucky Luke (2004) | `nl` | `fr` | Ninguno: `nl` no está en `_LANGUAGE_TRADITION` → `None` |
+
+Así, la ausencia viene de un idioma/país real no reconocido, no de sustituir `other` por `None` en la
+presentación.
+
 ![Tarjeta GCD sin sugerencia en Mortadelo](capturas/2026-10-22-descubrir-mortadelo-gcd-sin-sugerencia-1280.png)
 
 ### 4.2 Móvil: 360 px sin desbordamiento
