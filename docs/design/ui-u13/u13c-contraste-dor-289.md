@@ -1,6 +1,7 @@
 # U13c (#289) — Contraste de DoR: revisar una carpeta mixta antes de vincular
 
 > **Estado: CONTRASTE ACTUALIZADO PARA RE-REVISIÓN. No declara la historia Ready.**
+> **PR de contraste:** #310 (documento + pruebas fijas; CI funcional en verde).
 > **SHA de contraste:** `b59b00c436fc5067f3d752f3ddd76c201335fab4` (`main`, merge de #306; incluye #293 y #299).
 > **Fecha:** 2026-10-22.
 > **Decisiones de producto:** D1, D2 y D3 cerradas (ver §8).
@@ -260,7 +261,7 @@ Justificación y límites:
 2. **Reconciliación administrativa**: #206/#119/#207 cerradas por el PO con casillas abiertas; #118/#120 abiertas con código presente. No bloquea #289; se tratará en la próxima pasada de cierre de #196.
 3. **D1 fijada**: no se invalida el token; `test_e7_serie_destino_visible_al_confirmar_un_token_antiguo` comprueba que la confirmación y el resultado muestran la serie de origen.
 4. **D2 fijada**: el masivo incluye al ajeno marcable; `test_d2_marcar_todos...` comprueba que el conflicto sigue visible y no se añade exclusión automática.
-5. **Evidencia de aceptación**: pruebas fijas PASS; navegador real, 360 px, teclado, lector y cinco segundos siguen `NOT RUN` para #289. No se hereda la evidencia de U13a/U13b.
+5. **Evidencia de aceptación**: pruebas fijas PASS y CI funcional de #310 en verde; navegador real, 360 px, teclado, lector y cinco segundos siguen `NOT RUN` para #289. No se hereda la evidencia de U13a/U13b.
 6. **Presupuesto**: propuesta 1.500/900 ms p95; **no medida**. La medición es DoD. El 5/M queda como antecedente.
 
 ## 8. Decisiones de producto (cerradas)
@@ -382,4 +383,4 @@ Las pruebas fijan D1 y D2 tal como quedaron aprobadas; no presentan la no-invali
 - Servicios: `descubrimiento_grupo.py`, `revision_carpetas.py`, `vinculacion_previa.py`, `vinculacion.py`, `tokens_revision.py`.
 - Pruebas: `test_u13c_carpeta_mixta_pg.py` (nueva), `test_vinculacion_previa_pg.py`, `test_asistente_vinculacion_pg.py`, `test_asistente_vinculacion_masivo_pg.py`, `test_asistente_confirmar_pg.py`, `test_u19_continuidad_pg.py`, `test_u19_recorrido_pg.py`, `test_asistente_carpetas_pg.py`.
 - Documentos: `docs/design/ui-u13/verificacion-navegador-u13a-u13b-2026-10-22.md`, `docs/design/benchmark-U19-recorrido-vincular.md`, `docs/design/ui-u19/README.md`, `docs/design/rebanada-2-elegir-serie-y-vincular.md`, `docs/design/ficha-propuestas-desde-carpetas.md`.
-- PRs: #293 (#287) fusionada en `704844c`; #299 (#288) fusionada en `17f0da9`; #309 registra la evidencia de navegador de ambas. La PR de contraste de #289 se abrirá sobre `b59b00c`.
+- PRs: #293 (#287) fusionada en `704844c`; #299 (#288) fusionada en `17f0da9`; #309 registra la evidencia de navegador de ambas; **#310** es la PR de contraste de #289 sobre `b59b00c`, con CI funcional en verde y `ruff` informativo preexistente en rojo.
