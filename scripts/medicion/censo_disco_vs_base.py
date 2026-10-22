@@ -198,9 +198,11 @@ def confirmar_identidad(c: Censo, hash_disco: dict[str, str], hash_base: dict[st
     identicos = [r for r in con_hash if hash_disco[r] in hash_base]
     distintos = [r for r in con_hash if hash_disco[r] not in hash_base]
     pares = Counter((carpeta(r), carpeta(hash_base[hash_disco[r]])) for r in identicos)
+    movidos = [r for r in identicos if c.solo_base.get(hash_base[hash_disco[r]]) is True]      # el «original» está marcado is_missing
     out = [f"POR CONTENIDO (SHA-256): tebeos sin registrar: {len(tebeos)} · con hash calculado: {len(con_hash)} · sin hash: {len(tebeos) - len(con_hash)}",
            f"  {len(identicos):>5}  IDÉNTICOS a un archivo registrado (misma huella: son copias exactas)",
            f"  {len(distintos):>5}  contenido que NO está registrado (tebeos distintos de los que ya tienes)"]
+    out.append(f"  {len(movidos):>5}  de los idénticos corresponden a una fila marcada is_missing: el fichero se MOVIÓ, no es una copia")
     if pares:
         out.append("  Carpeta sin registrar  →  carpeta donde está el original registrado:")
         for (a, b), n in pares.most_common(15):
