@@ -97,6 +97,22 @@ async def vinculado(ent, *nombres, serie=None, metadata_source=None, numeros=Non
     return serie, ids
 
 
+async def vinculado_sin_procedencia(ent, *nombres, serie=None, numero="1", metadata=None, metadata_source=None):
+    """Archivos con `issue_id` pero SIN `metadata.vinculo`: lo que dejan el importador, «Por revisar» (uno a uno), «organizar»
+    (V6a) o una vinculación anterior a 2d. Devuelve (serie, issue_id, ids)."""
+    serie = serie or await serie_de_prueba(ent)
+    ids = await archivos(ent, *nombres)
+    iid = uuid4()
+    async with ent.banco.fabrica() as s:
+        await s.execute(text("INSERT INTO issues (id, series_id, issue_number, volume, format) VALUES (:i, :s, :n, 1, 'single_issue')"),
+                        {"i": iid, "s": serie, "n": numero})
+        await s.execute(text("UPDATE files SET issue_id = :i, metadata_source = :m, metadata = CAST(:d AS jsonb)"),
+                        {"i": iid, "m": metadata_source, "d": json.dumps(metadata or {"match_status": "matched", "match_score": 0.93,
+                                                                                    "notes": "coincidencia por nombre", "candidates": []})})
+        await s.commit()
+    return serie, iid, ids
+
+
 async def api_previa_vinculacion(serie, marcados, **extra) -> httpx.Response:
     from tests.test_vinculacion_previa_pg import previsualizar
     return await previsualizar(serie, marcados=list(marcados), **extra)
@@ -353,37 +369,35 @@ class TestVistaPrevia:
         assert p["puede_deshacer"] is False and p["token"] is None and p["numero"] is None
         assert p["bloqueo"]["codigo"] == "no_vinculado" and "ningún número" in p["bloqueo"]["mensaje"]
 
-    async def test_vinculo_sin_procedencia_d9_bloquea_con_la_razon(self, ent):
-        # Un archivo con `issue_id` pero SIN `metadata.vinculo` (organizar V6a, importador, o anterior a 2d): sin botón.
-        serie = await serie_de_prueba(ent)
-        ids = await archivos(ent, F1)
-        async with ent.banco.fabrica() as s:
-            iid = uuid4()
-            await s.execute(text("INSERT INTO issues (id, series_id, issue_number, volume, format) VALUES (:i, :s, '1', 1, 'single_issue')"),
-                            {"i": iid, "s": serie})
-            await s.execute(text("UPDATE files SET issue_id = :i"), {"i": iid})
-            await s.commit()
+    async def test_sin_procedencia_ya_no_bloquea_cualquier_vinculo_se_puede_deshacer(self, ent):
+        # BL-R1 (revisión de D9, 2026-10-23): da igual por dónde se vinculó (importador, «Por revisar», «organizar» o antes de 2d).
+        _, _, ids = await vinculado_sin_procedencia(ent, F1)
         p = (await previa(ids[F1])).json()
-        assert p["puede_deshacer"] is False and p["token"] is None
-        assert p["bloqueo"]["codigo"] == "sin_procedencia" and "Pendientes por carpeta" in p["bloqueo"]["mensaje"]
-        assert p["numero"]["numero"] == "1"                     # se ve de qué número es, aunque no se pueda deshacer
+        assert p["puede_deshacer"] is True and p["bloqueo"] is None and p["token"]
+        assert p["procedencia"] == "desconocida" and p["vinculado_el"] is None
+        assert p["numero"]["numero"] == "1" and p["numero"]["creado_por_la_vinculacion"] is False   # de qué número es, y que no consta que lo creara
 
-    async def test_vinculo_incoherente_con_la_serie_del_issue_es_sin_procedencia(self, ent):
+    async def test_con_procedencia_registrada_la_vista_previa_lo_dice(self, ent):
+        _, ids = await vinculado(ent, F1)
+        assert (await previa(ids[F1])).json()["procedencia"] == "registrada"
+
+    async def test_vinculo_incoherente_con_la_serie_del_issue_cuenta_como_procedencia_desconocida(self, ent):
         _, ids = await vinculado(ent, F1)
         async with ent.banco.fabrica() as s:
             await s.execute(text("UPDATE files SET metadata = jsonb_set(metadata, '{vinculo,serie_id}', to_jsonb(CAST(:o AS text)))"),
                             {"o": str(uuid4())})
             await s.commit()
-        assert (await previa(ids[F1])).json()["bloqueo"]["codigo"] == "sin_procedencia"
+        p = (await previa(ids[F1])).json()
+        assert p["puede_deshacer"] is True and p["procedencia"] == "desconocida" and p["token"]
 
     @pytest.mark.parametrize("vinculo", ["null", '"texto"', "[]", "{}", '{"operacion_id": "no-uuid", "serie_id": "x"}'])
-    async def test_vinculo_malformado_es_sin_procedencia_sin_romper(self, ent, vinculo):
+    async def test_vinculo_malformado_cuenta_como_procedencia_desconocida_sin_romper(self, ent, vinculo):
         _, ids = await vinculado(ent, F1)
         async with ent.banco.fabrica() as s:
             await s.execute(text("UPDATE files SET metadata = jsonb_set(metadata, '{vinculo}', CAST(:v AS jsonb))"), {"v": vinculo})
             await s.commit()
         r = await previa(ids[F1])
-        assert r.status_code == 200 and r.json()["bloqueo"]["codigo"] == "sin_procedencia" and r.json()["token"] is None
+        assert r.status_code == 200 and r.json()["puede_deshacer"] is True and r.json()["procedencia"] == "desconocida" and r.json()["token"]
 
     @pytest.mark.parametrize("estado", ["preparada", "confirmada"])
     async def test_asignacion_viva_bloquea_en_curso(self, ent, estado):
@@ -868,6 +882,136 @@ class TestHistorialIntacto:
 
 
 # ── Grupo 7: efectos colaterales ────────────────────────────────────────────────────────────────
+
+# ── Grupo 10: vínculos SIN procedencia (BL-R1, revisión de D9, 2026-10-23) ─────────────────────────
+
+class TestSinProcedencia:
+    """«Desvincular debería ser posible desde cualquier sitio, se vinculara como se vinculara»: importador, «Por revisar» (uno a
+    uno), «organizar» (V6a) o una vinculación anterior a 2d. Sin `metadata.vinculo` no hay procedencia que restaurar, pero sí
+    un estado ACTUAL que firmar (`issue_id` + huella) y una entrada de historial que lo deja dicho."""
+
+    async def test_deshace_un_vinculo_del_importador_y_lo_deja_dicho_en_el_historial(self, ent):
+        serie, iid, ids = await vinculado_sin_procedencia(ent, F1, metadata_source="comicvine")
+        fid = ids[F1]
+        antes = await fila(ent.banco, fid)
+        disco, issues_antes = huella_disco(ent.lib), await issues_de(ent.banco)
+
+        c = (await deshacer(await token_desv(fid))).json()
+        assert (c["resultado"], c["motivo"], c["serie_id"], c["numero"]) == ("deshecho", None, str(serie), "1")
+
+        despues = await fila(ent.banco, fid)
+        assert despues["issue_id"] is None and despues["review_dismissed"] is False
+        assert despues["metadata"]["match_status"] == "unsorted" and "vinculo" not in despues["metadata"]
+        assert despues["metadata_source"] is None                                  # D8: no consta lo anterior → NULL
+        assert despues["metadata"]["match_score"] == 0.93                          # fusión: el resto de metadata no se pierde
+        (entrada,) = despues["metadata"]["vinculo_historial"]
+        assert entrada["procedencia"] == "desconocida"
+        assert (entrada["serie_id"], entrada["issue_id"], entrada["numero"]) == (str(serie), str(iid), "1")
+        assert entrada["previo"] == {"match_status": "matched", "metadata_source": "comicvine"}     # lo que había, como evidencia
+        assert entrada["deshecho"]["operacion_id"] == c["operacion_id"] and entrada["deshecho"]["fecha"] == c["fecha"]
+        for k in ("file_path", "file_name", "file_size_bytes", "sha256_hash", "is_missing"):
+            assert despues[k] == antes[k], k
+        assert huella_disco(ent.lib) == disco and await issues_de(ent.banco) == issues_antes      # ni el fichero ni el Issue (D1)
+        assert await pendientes(ent) == 1                                                             # vuelve a «Por revisar»
+
+    async def test_repetir_el_mismo_token_devuelve_lo_mismo_y_no_escribe(self, ent):
+        _, _, ids = await vinculado_sin_procedencia(ent, F1)
+        t = await token_desv(ids[F1])
+        primero = (await deshacer(t)).json()
+        antes, n = await instantanea(ent.banco), len(ent.banco.sentencias)
+        segundo = (await deshacer(t)).json()
+        assert (primero["resultado"], segundo["resultado"]) == ("deshecho", "ya_deshecho")
+        assert escrituras(ent.banco, n) == [] and await instantanea(ent.banco) == antes
+        assert len((await fila(ent.banco, ids[F1]))["metadata"]["vinculo_historial"]) == 1
+
+    async def test_un_vinculo_no_valido_se_conserva_como_evidencia_y_se_quita(self, ent):
+        _, ids = await vinculado(ent, F1)
+        async with ent.banco.fabrica() as s:
+            await s.execute(text("UPDATE files SET metadata = jsonb_set(metadata, '{vinculo,serie_id}', to_jsonb(CAST(:o AS text)))"),
+                            {"o": str(uuid4())})
+            await s.commit()
+        c = (await deshacer(await token_desv(ids[F1]))).json()
+        assert c["resultado"] == "deshecho"
+        despues = await fila(ent.banco, ids[F1])
+        assert "vinculo" not in despues["metadata"]
+        (entrada,) = despues["metadata"]["vinculo_historial"]
+        assert entrada["procedencia"] == "desconocida" and entrada["vinculo_no_valido"]["operacion_id"]
+
+    async def test_si_aparece_una_procedencia_despues_de_la_vista_previa_es_un_cambio(self, ent):
+        # Se vio «sin procedencia» y, antes de confirmar, alguien vinculó el archivo con el recorrido de «vincular en su sitio».
+        serie, iid, ids = await vinculado_sin_procedencia(ent, F1)
+        t = await token_desv(ids[F1])
+        async with ent.banco.fabrica() as s:
+            await s.execute(text("UPDATE files SET metadata = metadata || jsonb_build_object('vinculo', jsonb_build_object("
+                                 "'operacion_id', CAST(:o AS text), 'serie_id', CAST(:s AS text), 'numero', '1'))"),
+                            {"o": str(uuid4()), "s": str(serie)})
+            await s.commit()
+        antes = await fila(ent.banco, ids[F1])
+        c = (await deshacer(t)).json()
+        assert (c["resultado"], c["motivo"]) == ("omitido", "cambio_desde_la_vista_previa")
+        assert await fila(ent.banco, ids[F1]) == antes
+
+    async def test_si_se_reasigna_a_otro_numero_despues_de_la_vista_previa_es_un_cambio(self, ent):
+        serie, _, ids = await vinculado_sin_procedencia(ent, F1)
+        t = await token_desv(ids[F1])
+        otro = uuid4()
+        async with ent.banco.fabrica() as s:
+            await s.execute(text("INSERT INTO issues (id, series_id, issue_number, volume, format) VALUES (:i, :s, '9', 1, 'single_issue')"),
+                            {"i": otro, "s": serie})
+            await s.execute(text("UPDATE files SET issue_id = :i"), {"i": otro})
+            await s.commit()
+        c = (await deshacer(t)).json()
+        assert (c["resultado"], c["motivo"]) == ("omitido", "cambio_desde_la_vista_previa")
+        assert str((await fila(ent.banco, ids[F1]))["issue_id"]) == str(otro)
+
+    async def test_si_el_numero_cambia_de_serie_despues_de_la_vista_previa_es_un_cambio(self, ent):
+        serie, iid, ids = await vinculado_sin_procedencia(ent, F1)
+        t = await token_desv(ids[F1])
+        otra = await serie_de_prueba(ent, "Otra", 1990)
+        async with ent.banco.fabrica() as s:
+            await s.execute(text("UPDATE issues SET series_id = :s WHERE id = :i"), {"s": otra, "i": iid})
+            await s.commit()
+        c = (await deshacer(t)).json()
+        assert (c["resultado"], c["motivo"]) == ("omitido", "cambio_desde_la_vista_previa")
+        assert (await fila(ent.banco, ids[F1]))["issue_id"] is not None
+
+    async def test_una_asignacion_viva_sigue_bloqueando_aunque_no_haya_procedencia(self, ent):
+        serie, _, ids = await vinculado_sin_procedencia(ent, F1)
+        async with ent.banco.fabrica() as s:
+            await s.execute(text(
+                "INSERT INTO asignacion_operaciones (file_id, series_id, estado, origen, destino, temporal, size_bytes, "
+                "mtime_ns, sha256, issue_number, formato) VALUES (:f, :s, CAST('preparada' AS asignacion_estado), '/o', '/d', "
+                "'/t', 1, 1, :sha, '1', CAST('single_issue' AS issue_format))"), {"f": ids[F1], "s": serie, "sha": SHA})
+            await s.commit()
+        p = (await previa(ids[F1])).json()
+        assert p["puede_deshacer"] is False and p["bloqueo"]["codigo"] == "en_curso" and p["token"] is None
+
+    async def test_un_token_de_un_vinculo_sin_procedencia_no_sirve_para_otro_archivo(self, ent):
+        _, _, ids = await vinculado_sin_procedencia(ent, F1, F2)
+        t = await token_desv(ids[F1])
+        assert (await fila(ent.banco, ids[F2]))["issue_id"] is not None
+        await deshacer(t)
+        assert (await fila(ent.banco, ids[F2]))["issue_id"] is not None          # solo se deshizo el suyo
+
+    async def test_el_importador_no_lo_vuelve_a_vincular_un_archivo_desvinculado_es_un_duplicado_de_si_mismo(self, ent):
+        """El riesgo de abrir D9: que un vínculo AUTOMÁTICO desvinculado vuelva a quedar vinculado en el siguiente ciclo. El
+        importador solo crea filas para contenido NUEVO; con el mismo contenido y el fichero presente, el archivo ya
+        registrado cuenta como copia presente y se descarta como duplicado: nunca se re-vincula."""
+        from zascarr.core.importer_triage import sha256_streaming
+        from zascarr.services.importer import _triage_and_match
+
+        serie, _, ids = await vinculado_sin_procedencia(ent, F1)
+        ruta = Path((await fila(ent.banco, ids[F1]))["file_path"])
+        async with ent.banco.fabrica() as s:
+            await s.execute(text("UPDATE files SET sha256_hash = :h WHERE id = :f"), {"h": sha256_streaming(ruta), "f": ids[F1]})
+            await s.commit()
+        assert (await deshacer(await token_desv(ids[F1]))).json()["resultado"] == "deshecho"
+
+        async with ent.banco.fabrica() as s:
+            resultado = await _triage_and_match(s, ruta)
+        assert resultado.duplicate_of == F1 and resultado.result is None and resultado.recuperar is None
+        assert (await fila(ent.banco, ids[F1]))["issue_id"] is None
+
 
 class TestEfectosColaterales:
 
