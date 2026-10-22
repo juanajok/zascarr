@@ -23,7 +23,7 @@ desplegar en la Pi ni sustituye la validación con personas de U21.
 ### 2.1. Lo que sí está cubierto por código y pruebas
 
 - **Medición real de 20 títulos** en las dos fuentes públicas disponibles: GCD y Tebeosfera. Registra
-  consulta, resultado, ID, fecha y sugerencia; GCD 16/20 con resultados y Tebeosfera 20/20. El detalle
+  consulta, resultado, ID, fecha y sugerencia; GCD devolvió resultados en 16/20 y Tebeosfera en 20/20. El detalle
   está en `resultados-reales.json` y `resultados-reales.md`.
 - **Contrato de presentación de #276:** `tradition_guess` opcional, procedencia con cuatro valores
   (`explicita`, `transformada`, `por_defecto`, `desconocida`), token retrocompatible, ausencia sin
