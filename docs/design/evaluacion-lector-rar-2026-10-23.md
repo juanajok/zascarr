@@ -77,7 +77,7 @@ RAR = m01…m10. Cada celda: celdas que pasan / celdas ejecutadas.
 - **Sin topes probados** (entradas, tamaño descomprimido): `unar`/`lsar` no se ejercitaron con una bomba; la regla de ZascArr (`MAX_ZIP_ENTRIES`, `MAX_ZIP_UNCOMPRESSED`) es solo para ZIP.
 - **Tamaño de la imagen:** medido solo **en conjunto**: `zascarr-zascarr:latest` 593 MB → imagen de evaluación 636 MB (**+43 MB**, un 7 %), con `unar`, `libarchive-tools`, `unrar` y `rarfile` juntos. **No es el coste de adoptar `unar` ni acredita por sí solo el criterio de dependencia.** El desglose por herramienta (lo que costaría solo `unar` con sus dependencias) **no está medido**.
 - **Trazabilidad:** una ejecución anterior (00:01) se **descartó**: el banco pasaba mal los nombres con corchetes de `m07` a `unar` y `bsdtar` (fallo del banco, no de las herramientas). Se corrigió y se repitió entera; esta ficha usa solo la segunda.
-- El kit de medición (banco, Dockerfile, pasos) sigue **fuera del repositorio**, en la carpeta de trabajo de la sesión. Si se quiere repetir, se puede añadir en una PR aparte.
+- El kit de medición (banco, Dockerfile, pasos) está ahora en `scripts/medicion/evaluacion_rar/` (se añadió con la 2ª tanda); `muestras.ejemplo.txt` sustituye a la lista real de muestras, que lleva nombres de ficheros del PO.
 
 ## 7. Criterios de §7 del protocolo
 | Criterio | `unar` | `bsdtar` | `unrar` | Nota |
