@@ -330,4 +330,3 @@ cinco segundos; esas comprobaciones siguen **NOT RUN** y la fusión/despliegue s
   sin escrituras y sin despliegue.
 - **Pendiente antes de fusionar:** CI sobre el SHA exacto, revisión y decisión de #196. Navegador
   real, lector de pantalla y cinco segundos: **NOT RUN**.
-

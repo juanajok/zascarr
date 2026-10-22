@@ -337,6 +337,19 @@ class TestU13aCarpetasUtilesYSueltos:
         assert 'href="/ui/pendientes"' in r.text and ">1 suelto</a>" in r.text
         assert "No hay carpetas con contexto" not in t
 
+    async def test_la_api_sin_filtro_incluye_el_grupo_sin_contexto_y_la_vista_lo_excluye(self, banco):
+        await banco.sembrar(
+            archivo("Comics/G/Cosa 01.cbz"),
+            archivo("Comics/Suelto 01.cbz"),
+        )
+        async with cliente() as c:
+            datos = (await c.get("/api/revision/carpetas")).json()
+            html = (await c.get(RUTA)).text
+        grupos = {g["clave"]: g for g in datos["grupos"]}
+        assert grupos["Comics"]["carpeta_contextual"] is None
+        assert [a["nombre"] for a in grupos["Comics"]["archivos"]] == ["Suelto 01.cbz"]
+        assert "Comics/Suelto" not in visible(html)
+
     async def test_el_recuento_del_enlace_no_cuenta_sueltos(self, banco):
         await banco.sembrar(
             archivo("Comics/G/Cosa 01.cbz"),
