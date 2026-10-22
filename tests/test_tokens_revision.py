@@ -13,6 +13,7 @@ import time
 import pytest
 
 from zascarr.models import ComicTradition, MetadataSource
+from zascarr.services.discovery import ProcedenciaTradicion
 from zascarr.services.tokens_revision import (
     MAX_DESCRIPCION,
     PROPOSITO_CANDIDATA,
@@ -48,15 +49,47 @@ class TestContenidoConFirmaValida:
         assert c == CandidataFirmada("comic_vine", "42", "Flash", 1987, "american", "algo",
                                      "https://comicvine.gamespot.com/a/x.jpg")
 
-    @pytest.mark.parametrize("campo", ["fuente", "id", "titulo", "tradicion"])
+    @pytest.mark.parametrize("campo", ["fuente", "id", "titulo"])
     @pytest.mark.parametrize("valor", [None, "", "   ", "\t\n", 5, 5.0, True, [], {}, ["x"]])
-    def test_fuente_id_titulo_y_tradicion_exigen_una_cadena_real_y_no_vacia(self, campo, valor):
+    def test_fuente_id_y_titulo_exigen_una_cadena_real_y_no_vacia(self, campo, valor):
         """Antes se hacía `str(...)`: un `None` pasaba a ser la serie «None»."""
         assert verificar_token_candidata(firmado(**{campo: valor}), CLAVE, SECRETO) is None
 
-    @pytest.mark.parametrize("campo", ["fuente", "id", "titulo", "tradicion"])
+    @pytest.mark.parametrize("campo", ["fuente", "id", "titulo"])
     def test_un_campo_obligatorio_ausente_se_rechaza(self, campo):
         assert verificar_token_candidata(sin(campo), CLAVE, SECRETO) is None
+
+    def test_la_tradicion_puede_faltar_y_entonces_no_hay_sugerencia(self):
+        """Ausencia de sugerencia (CA6): no se usa `other` ni un valor ficticio."""
+        c = verificar_token_candidata(sin("tradicion"), CLAVE, SECRETO)
+        assert c is not None and c.tradicion is None and c.procedencia is None
+        c = verificar_token_candidata(firmado(tradicion=None), CLAVE, SECRETO)
+        assert c is not None and c.tradicion is None and c.procedencia is None
+
+    @pytest.mark.parametrize("valor", ["", "   ", "\t\n", 5, 5.0, True, [], {}, ["x"]])
+    def test_si_la_tradicion_aparece_tiene_que_ser_valida(self, valor):
+        assert verificar_token_candidata(firmado(tradicion=valor), CLAVE, SECRETO) is None
+
+    @pytest.mark.parametrize("p", list(ProcedenciaTradicion))
+    def test_la_procedencia_valida_se_conserva(self, p):
+        c = verificar_token_candidata(firmado(procedencia=p.value), CLAVE, SECRETO)
+        assert c is not None and c.procedencia == p.value
+
+    @pytest.mark.parametrize("procedencia", ["inventada", "EXPLICITA", "por defecto", 5, True, [], {}])
+    def test_la_procedencia_invalida_se_rechaza(self, procedencia):
+        assert verificar_token_candidata(firmado(procedencia=procedencia), CLAVE, SECRETO) is None
+
+    def test_la_procedencia_no_puede_ir_sin_tradicion(self):
+        assert verificar_token_candidata(
+            firmado(tradicion=None, procedencia="explicita"), CLAVE, SECRETO) is None
+
+    def test_un_token_antiguo_sin_procedencia_sigue_valiendo_y_queda_como_desconocida(self):
+        """Retrocompatibilidad de #276: `VALIDO` tiene la forma anterior, sin `procedencia`.
+
+        La UI lo trata como origen desconocido, nunca como dato explícito.
+        """
+        c = verificar_token_candidata(firmado(), CLAVE, SECRETO)
+        assert c is not None and c.tradicion == "american" and c.procedencia is None
 
     @pytest.mark.parametrize("fuente", ["inventada", "COMIC_VINE", "comic vine", "manual-ish"])
     def test_la_fuente_debe_estar_en_la_enumeracion(self, fuente):

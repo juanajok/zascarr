@@ -11,6 +11,10 @@ Requiere una app ZascArr arrancada con GCD y/o Tebeosfera activos y Playwright:
 
 No crea ninguna serie: busca, comprueba la presentación y pulsa «Revisar» (la vista previa no
 escribe). Las capturas y el resumen quedan en ``--out``.
+
+La copy que exige este script es la de U15 (anterior a #276): las fuentes por defecto usan ahora
+la frase con procedencia. La evidencia de 2026-10-21 sigue siendo válida para el contrato vigente
+entonces; #276 tiene sus propias pruebas automáticas.
 """
 
 from __future__ import annotations

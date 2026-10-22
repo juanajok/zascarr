@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from enum import StrEnum
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,6 +68,21 @@ class Busqueda:
     fuentes: dict[str, str]
 
 
+class ProcedenciaTradicion(StrEnum):
+    """De dónde sale la tradición que sugiere una fuente.
+
+    No dice si la sugerencia es correcta: solo permite presentarla como lo que es. `EXPLICITA`
+    cuando la fuente declara la tradición (AniList solo indexa manga), `TRANSFORMADA` cuando se
+    deduce de otro dato suyo (GCD da idioma/país), `POR_DEFECTO` cuando la fuente no la da y el
+    producto aplica un valor de partida, y `DESCONOCIDA` cuando hay sugerencia pero no consta su
+    origen (también para tokens anteriores a este contrato).
+    """
+    EXPLICITA = "explicita"
+    TRANSFORMADA = "transformada"
+    POR_DEFECTO = "por_defecto"
+    DESCONOCIDA = "desconocida"
+
+
 @dataclass
 class DiscoveryResult:
     source: MetadataSource
@@ -83,7 +99,20 @@ class DiscoveryResult:
     # Punto de partida editable en el formulario de alta, NO una asignación
     # definitiva: Comic Vine también indexa BRITISH, Tebeosfera también
     # indexa FRANCO_BELGIAN. El coleccionista corrige antes de confirmar.
-    tradition_guess: ComicTradition
+    # Puede faltar: una fuente puede no sugerir ninguna tradición (CA6 de #202).
+    tradition_guess: ComicTradition | None = None
+    # Solo tiene sentido si hay sugerencia. Si falta con una sugerencia, se trata como
+    # `DESCONOCIDA`; es lo que ocurre con los tokens emitidos antes de #276, que no llevaban
+    # procedencia.
+    tradition_provenance: ProcedenciaTradicion | None = None
+
+    @property
+    def procedencia(self) -> ProcedenciaTradicion | None:
+        """La procedencia que se firma y se muestra: sin sugerencia no hay procedencia; con
+        sugerencia y sin dato, el origen es desconocido (nunca se inventa una explicación)."""
+        if self.tradition_guess is None:
+            return None
+        return self.tradition_provenance or ProcedenciaTradicion.DESCONOCIDA
 
 
 class DiscoveryService:
@@ -157,6 +186,8 @@ class DiscoveryService:
                 title=h.name, start_year=h.start_year, description=h.description,
                 cover_url=h.image_url, site_url=h.site_url,
                 tradition_guess=ComicTradition.AMERICAN,
+                # Comic Vine no devuelve una tradición: es el valor de partida del producto.
+                tradition_provenance=ProcedenciaTradicion.POR_DEFECTO,
             )
             for h in hits
         ]
@@ -170,7 +201,9 @@ class DiscoveryService:
                 title=h.title_romaji or h.title_english or "?",
                 start_year=h.start_year, description=h.description,
                 cover_url=h.cover_url, site_url=h.site_url,
+                # AniList solo indexa manga: la propia fuente declara el tipo al buscarlo.
                 tradition_guess=ComicTradition.MANGA,
+                tradition_provenance=ProcedenciaTradicion.EXPLICITA,
             )
             for h in hits
         ]
@@ -183,7 +216,10 @@ class DiscoveryService:
                 source=MetadataSource.TEBEOSFERA, external_id=h.slug,
                 title=h.title, start_year=h.start_year, description=h.description,
                 cover_url=h.cover_url, site_url=h.site_url,
+                # Tebeosfera es una base de tebeo español, pero el resultado no trae una tradición
+                # por ficha.
                 tradition_guess=ComicTradition.TEBEO,
+                tradition_provenance=ProcedenciaTradicion.POR_DEFECTO,
             )
             for h in hits
         ]
@@ -200,7 +236,12 @@ class DiscoveryService:
                 # portada de serie; si la API expone una URL de imagen
                 # aprovechable está pendiente de evaluar (ver BACKLOG E7).
                 description=None, cover_url=None, site_url=h.site_url,
-                tradition_guess=ComicTradition(h.tradition_guess),
+                # GCD indexa por idioma/país; la tradición se deduce de ese dato, no viene como
+                # tal. Si no reconoce ninguno, no hay sugerencia (CA6): `None`, no `other`.
+                tradition_guess=(None if h.tradition_guess is None
+                                 else ComicTradition(h.tradition_guess)),
+                tradition_provenance=(None if h.tradition_guess is None
+                                      else ProcedenciaTradicion.TRANSFORMADA),
             )
             for h in hits
         ]

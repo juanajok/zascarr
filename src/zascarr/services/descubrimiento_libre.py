@@ -31,7 +31,8 @@ class ResultadoFirmado:
     descripcion: str | None
     portada: str | None             # la URL del proxy con lista blanca; nunca la del CDN externo
     sitio_url: str | None
-    sugerida: ComicTradition        # la suposición de la fuente: una pista, nunca un valor elegido
+    sugerida: ComicTradition | None  # la suposición de la fuente: una pista, nunca un valor elegido
+    procedencia: str | None          # de dónde sale la sugerencia; sin sugerencia, no hay procedencia
 
 
 def firmar_resultados(resultados: list[DiscoveryResult], secret: str, *,
@@ -46,5 +47,6 @@ def firmar_resultados(resultados: list[DiscoveryResult], secret: str, *,
         firmados.append(ResultadoFirmado(
             token=crear_token_candidata(CLAVE_SIN_GRUPO, f, secret, ahora=ahora), fuente=f.fuente, titulo=f.titulo,
             anio=f.anio, descripcion=f.descripcion, portada=portada, sitio_url=p.sitio_url,
-            sugerida=ComicTradition(f.tradicion)))
+            sugerida=None if f.tradicion is None else ComicTradition(f.tradicion),
+            procedencia=f.procedencia))
     return firmados, omitidas

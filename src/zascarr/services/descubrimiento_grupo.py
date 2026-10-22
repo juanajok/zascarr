@@ -75,7 +75,10 @@ class Candidata(BaseModel):
     fuente: str
     titulo: str
     anio: int | None
-    tradicion_sugerida: str
+    # Puede faltar: la fuente no siempre sugiere una tradición (CA6 de #202). `procedencia` dice de dónde sale la
+    # sugerencia; sin sugerencia no hay procedencia.
+    tradicion_sugerida: str | None
+    procedencia: str | None
     sitio_url: str | None
     portada: str | None
     descripcion: str | None
@@ -218,8 +221,10 @@ class DescubrimientoDeGrupo:
         for r in resultados:
             portada_ok = bool(r.cover_url) and es_url_de_portada_permitida(r.cover_url or "")
             firmable = candidata_firmable(
-                r.source.value, r.external_id, r.title, r.start_year, r.tradition_guess.value, r.description,
-                r.cover_url if portada_ok else None)
+                r.source.value, r.external_id, r.title, r.start_year,
+                None if r.tradition_guess is None else r.tradition_guess.value, r.description,
+                r.cover_url if portada_ok else None,
+                None if r.procedencia is None else r.procedencia.value)
             if firmable is None:
                 continue
             sitio = r.site_url if r.site_url is None or texto_firmable(r.site_url) else None
@@ -277,7 +282,8 @@ class DescubrimientoDeGrupo:
         token = crear_token_candidata(clave, firmable, self._secret, ahora=self._ahora)
         return Candidata(
             token=token, fuente=r.source.value, titulo=firmable.titulo, anio=firmable.anio,
-            tradicion_sugerida=r.tradition_guess.value, sitio_url=p.sitio_url,
+            tradicion_sugerida=None if r.tradition_guess is None else r.tradition_guess.value,
+            procedencia=None if r.procedencia is None else r.procedencia.value, sitio_url=p.sitio_url,
             portada=None if cover is None else "/ui/descubrir/portada?" + urlencode({"url": cover, "source": r.source.value}),
             descripcion=(firmable.descripcion or "")[:MAX_DESCRIPCION_VISTA] or None,
             ya_en_biblioteca=_a_serie_local(ya) if ya is not None else None,

@@ -15,7 +15,7 @@ import pytest
 from zascarr.models import MetadataSource, Series
 from zascarr.services.anilist import AniListResult
 from zascarr.services.comic_vine import CVResult
-from zascarr.services.discovery import DiscoveryService
+from zascarr.services.discovery import DiscoveryService, ProcedenciaTradicion
 from zascarr.services.gcd import GCDResult
 from zascarr.services.tebeosfera import TebeosferaResult
 
@@ -83,6 +83,28 @@ class TestSearch:
         }
         assert len(resultados) == 4
         assert avisos == []
+        procedencias = {r.source: r.procedencia for r in resultados}
+        assert procedencias == {
+            MetadataSource.COMIC_VINE: ProcedenciaTradicion.POR_DEFECTO,
+            MetadataSource.ANILIST: ProcedenciaTradicion.EXPLICITA,
+            MetadataSource.TEBEOSFERA: ProcedenciaTradicion.POR_DEFECTO,
+            MetadataSource.GCD: ProcedenciaTradicion.TRANSFORMADA,
+        }
+
+    @pytest.mark.asyncio
+    async def test_gcd_sin_idioma_ni_pais_no_sugiere_other_ni_inventa_procedencia(
+            self, monkeypatch):
+        """CA6: si GCD no reconoce el idioma/país no sugiere nada; no se inventa `other`."""
+        monkeypatch.setattr("zascarr.services.discovery.get_settings",
+                            lambda: MagicMock(comicvine_api_key="una-key"))
+        gcd = [GCDResult(gcd_id=3, name="Desconocido", language=None, country=None)]
+        with patch("zascarr.services.discovery.ComicVineClient", _client_ctx([])), \
+             patch("zascarr.services.discovery.AniListClient", _client_ctx([])), \
+             patch("zascarr.services.discovery.TebeosferaClient", _client_ctx([])), \
+             patch("zascarr.services.discovery.GCDClient", _client_ctx(gcd)):
+            resultados, _ = await DiscoveryService(db=FakeSession()).search("algo")
+        (r,) = resultados
+        assert r.tradition_guess is None and r.procedencia is None
 
     @pytest.mark.asyncio
     async def test_sin_api_key_de_comic_vine_avisa_y_no_lo_intenta(self, monkeypatch):
@@ -116,7 +138,8 @@ class TestSearch:
         tebeo_roto.__aenter__.side_effect = RuntimeError("tebeosfera caída")
 
         with patch("zascarr.services.discovery.AniListClient", _client_ctx(anilist)), \
-             patch("zascarr.services.discovery.TebeosferaClient", MagicMock(return_value=tebeo_roto)), \
+             patch("zascarr.services.discovery.TebeosferaClient",
+                   MagicMock(return_value=tebeo_roto)), \
              patch("zascarr.services.discovery.GCDClient", _client_ctx([])):
             service = DiscoveryService(db=FakeSession())
             resultados, avisos = await service.search("algo")

@@ -37,9 +37,9 @@ logger = structlog.get_logger()
 _BASE_URL = "https://www.comics.org/api"
 
 # GCD indexa por país/idioma, no por una "tradición" ZascArr — mapeo
-# best-effort para preseleccionar algo razonable en el formulario de alta;
-# el coleccionista lo corrige antes de confirmar (mismo criterio que las
-# otras tres fuentes, ver DiscoveryResult.tradition_guess).
+# best-effort para sugerir una pista en el formulario de alta; no se
+# preselecciona y el coleccionista elige antes de confirmar (mismo criterio
+# que las otras tres fuentes, ver DiscoveryResult.tradition_guess).
 _LANGUAGE_TRADITION = {
     "en": "american",
     "fr": "franco_belgian",
@@ -64,10 +64,15 @@ class GCDResult:
     raw: dict | None = None
 
     @property
-    def tradition_guess(self) -> str:
+    def tradition_guess(self) -> str | None:
+        """La tradición que se deduce de país/idioma, o `None` si GCD no reconoce ninguno.
+
+        `None` no es un valor ficticio: representa que la fuente no sugiere tradición. No se
+        usa `other`.
+        """
         if (self.country or "").lower() in _BRITISH_COUNTRIES:
             return "british"
-        return _LANGUAGE_TRADITION.get((self.language or "").lower(), "other")
+        return _LANGUAGE_TRADITION.get((self.language or "").lower())
 
 
 class GCDClient:
