@@ -45,6 +45,17 @@ def test_ida_y_vuelta():
         d.file_id, d.issue_id, d.series_id, d.vinculo_operacion, d.huella, d.operacion)
 
 
+def test_un_vinculo_sin_procedencia_se_firma_con_el_uuid_nulo_y_el_token_sigue_valiendo():
+    """BL-R1 (revisión de D9, 2026-10-23): sin `metadata.vinculo` no hay `operacion_id` que firmar; se firma el UUID nulo
+    (`SIN_PROCEDENCIA`), que mantiene el esquema (UUID canónico), la versión 1 y el tamaño fijo del token."""
+    from zascarr.services.tokens_revision import SIN_PROCEDENCIA
+    assert SIN_PROCEDENCIA == "00000000-0000-0000-0000-000000000000"
+    d = firmada(vinculo_operacion=SIN_PROCEDENCIA)
+    v = verificar_token_desvinculacion(crear_token_desvinculacion(d, SECRETO, ahora=AHORA), SECRETO, ahora=AHORA)
+    assert v is not None and v.vinculo_operacion == SIN_PROCEDENCIA
+    assert len(crear_token_desvinculacion(d, SECRETO, ahora=AHORA)) == len(crear_token_desvinculacion(firmada(), SECRETO, ahora=AHORA))
+
+
 def test_caduca_a_los_15_minutos_y_se_puede_leer_caducado():
     t = crear_token_desvinculacion(firmada(), SECRETO, ahora=AHORA)
     assert verificar_token_desvinculacion(t, SECRETO, ahora=AHORA + 900 - 1) is not None
