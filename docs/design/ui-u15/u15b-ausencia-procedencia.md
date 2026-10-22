@@ -1,7 +1,8 @@
 # U15b — Ausencia de sugerencia y procedencia (#276)
 
 > **Estado: fusionado en `bf67699` (PR #281); no desplegado. Verificado en Chrome real el 2026-10-22
-> (`verificacion-navegador-2026-10-22.md`). #202 sigue abierta hasta la firma de la decisión de los NOT RUN.**
+> (`verificacion-navegador-2026-10-22.md`). #202 pasa a «Fusionado — pendiente de despliegue» con la firma de la
+> decisión de los NOT RUN el 2026-10-22.**
 > Fecha de la ficha: 2026-10-21.
 
 ## 1. Problema que cierra
@@ -117,7 +118,8 @@ TEST_DATABASE_URL='postgresql://test:test@127.0.0.1:15450/zascarr_test' \
 
 - Esta ficha documenta la implementación, las pruebas locales y la verificación en Chrome real del 2026-10-22;
   #276 está fusionada en `bf67699`, pero **no desplegada**. La Pi no se ha tocado.
-- #202 sigue abierta: Comic Vine y AniList siguen **NOT RUN** y el cierre depende de la firma de
-  `decision-u15-not-run-2026-10-22.md` y de la evidencia del Sprint 0. #276 no convierte esos NOT RUN en PASS.
+- #202 pasa a «Fusionado — pendiente de despliegue» con la firma de
+  `decision-u15-not-run-2026-10-22.md` el 2026-10-22. Comic Vine y AniList siguen **NOT RUN**; #276 no convierte
+  esos NOT RUN en PASS.
 - La prueba de cinco segundos con personas y el lector de pantalla real pertenecen a #208/U21 y siguen **NOT RUN**;
   no se sustituyen por pruebas automáticas.

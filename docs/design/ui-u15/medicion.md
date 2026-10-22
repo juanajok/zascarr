@@ -2,12 +2,12 @@
 
 > **Estado: modelo reproducible + 20 búsquedas reales en GCD y Tebeosfera + verificación en Chrome real
 > (2026-10-21) + verificación del contrato #276 en Chrome real (2026-10-22); Comic Vine y AniList siguen NOT RUN.
-> #276 (U15b) está fusionada en `bf67699` (PR #281). La decisión sobre los NOT RUN está redactada y **pendiente de
-> firma**; #202 sigue abierta, no cerrada.**
+> #276 (U15b) está fusionada en `bf67699` (PR #281). La decisión sobre los NOT RUN fue **firmada** el 2026-10-22;
+> #202 pasa a «Fusionado — pendiente de despliegue», no a «Hecha».**
 > `titulos.json` sigue siendo un modelo determinista; la medición real está en `resultados-reales.json` y
 > `resultados-reales.md`; las verificaciones de navegador están en `verificacion-navegador-2026-10-21.md` y
-> `verificacion-navegador-2026-10-22.md`; el contrato de #276 está en `u15b-ausencia-procedencia.md`; la propuesta
-> de decisión de los NOT RUN, en `decision-u15-not-run-2026-10-22.md`. La app se usó solo contra una base desechable
+> `verificacion-navegador-2026-10-22.md`; el contrato de #276 está en `u15b-ausencia-procedencia.md`; la decisión
+> firmada de los NOT RUN, en `decision-u15-not-run-2026-10-22.md`. La app se usó solo contra una base desechable
 > y una biblioteca temporal. La Pi no se ha tocado.
 
 ## 1. Pregunta
@@ -123,7 +123,7 @@ están en [`u15b-ausencia-procedencia.md`](u15b-ausencia-procedencia.md) §4.
 | 3. Distinguir sugerencia respaldada por evidencia explícita, sugerencia no fiable y evidencia insuficiente; no declarar fiable una fuente entera por una muestra pequeña | **PASS con límites** | §2 separa el valor por defecto de Comic Vine/AniList/Tebeosfera de la transformación de GCD; §3.b mide GCD (10/16) y Tebeosfera (8/20). Comic Vine y AniList no se midieron: no se declaran fiables ni se extrapola su comportamiento. |
 | 4. No preseleccionar; explicar en español que la persona debe elegir; no sustituir su elección ni confundir tradición con formato | **PASS** | El `select` es `required` y solo tiene seleccionado el marcador vacío; el texto atribuye la pista a la fuente. Las pruebas de Postgres confirman que la tradición elegida (p. ej. Manga) manda sobre la sugerida (Americana) y que el alta guarda la elegida. Además, Chrome real (2026-10-21 y 2026-10-22): 20/20 selectores vacíos, 0 preselecciones y texto completo; ver `verificacion-navegador-2026-10-22.md` §4.1. No hay campo de formato en esta presentación. |
 | 5. Cambio limitado y contrato vigente; si no permite representar falta de selección o procedencia, registrar impedimento y proponer trabajo separado sin ampliarlo en silencio | **PASS** | #273 registró el impedimento y abrió **#276** (U15b). #276 amplía el contrato de forma explícita: `tradition_guess` opcional, procedencia con cuatro valores, token retrocompatible y copy diferenciada. No cambia el enrutado del enriquecedor ni añade fuentes. |
-| 6. Pruebas de los cinco escenarios de CA6, regresión automática y CI | **PASS en local; #202 sigue abierta** | Ver tabla siguiente. Los cinco escenarios tienen prueba automática; la elección explícita se completa contra Postgres real. La suite completa pasa (5363 tests con Postgres; 3968 no-Postgres) y la CI de #281 está verde. Además, la verificación en Chrome con la procedencia nueva está hecha (`bf67699`, 2026-10-22). #202 no se cierra hasta la firma de la decisión de los NOT RUN y el Sprint 0. |
+| 6. Pruebas de los cinco escenarios de CA6, regresión automática y CI | **PASS en local; #202 fusionada, pendiente de despliegue** | Ver tabla siguiente. Los cinco escenarios tienen prueba automática; la elección explícita se completa contra Postgres real. La suite completa pasa (5363 tests con Postgres; 3968 no-Postgres) y la CI de #281 está verde. Además, la verificación en Chrome con la procedencia nueva está hecha (`bf67699`, 2026-10-22). #202 se cierra con la firma del 2026-10-22; no se marca «Hecha» hasta el despliegue y el DoD del Sprint 0. |
 
 | Escenario de CA6 | Prueba | Estado |
 |---|---|---|
@@ -144,9 +144,9 @@ están en [`u15b-ausencia-procedencia.md`](u15b-ausencia-procedencia.md) §4.
    entorno y AniList devolvió 403. Las dos fuentes que faltan quedan **NOT RUN**, no PASS. No se inventan resultados.
 4. **#276 (U15b) fusionada** en `bf67699` (PR #281): ausencia de sugerencia, procedencia y token retrocompatible.
    La verificación de Chrome con el contrato nuevo está hecha (`verificacion-navegador-2026-10-22.md`).
-5. **#202 no se cierra todavía.** La decisión de aceptar los NOT RUN está redactada en
-   `decision-u15-not-run-2026-10-22.md` y **pendiente de firma** del responsable. El tablero no marca «Hecha» sin
-   esa firma, sin el DoD del Sprint 0 y sin despliegue.
+5. **#202 se cierra con la firma del 2026-10-22.** La decisión de aceptar los NOT RUN está firmada en
+   `decision-u15-not-run-2026-10-22.md`; el tablero pasa a «Fusionado — pendiente de despliegue», no a «Hecha».
+   El cierre no autoriza desplegar ni sustituye el DoD del Sprint 0.
 6. **No se toca la Pi.** El despliegue no está autorizado.
 
 ## 7. Reproducir
@@ -188,6 +188,6 @@ python docs/design/ui-u15/verificar_navegador.py \
   Chrome del contrato #276, con tarjeta GCD `None`.
 - `verificar_navegador.py` — script reproducible de la verificación en navegador, adaptado a #276.
 - `u15b-ausencia-procedencia.md` — contrato, copy y pruebas de #276 (ausencia y procedencia).
-- `decision-u15-not-run-2026-10-22.md` — propuesta de decisión de los NOT RUN, pendiente de firma.
+- `decision-u15-not-run-2026-10-22.md` — decisión firmada de los NOT RUN el 2026-10-22.
 - `docs/design/auditoria-ui-2026-10-15.md` §M3 y §8 — evidencia original de Mortadelo.
 - `tests/test_web_discovery.py` y `tests/test_asistente_carpetas_pg.py` — contrato de no preselección y texto.
