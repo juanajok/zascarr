@@ -357,11 +357,20 @@ class TestPresupuestoTexto:
         texto = re.sub(r"<[^>]+>", " ", html)
         return re.sub(r"\s+", " ", htmllib.unescape(texto)).strip().split()
 
+    @staticmethod
+    def _sin_contenido_de_detalles(html: str) -> str:
+        """Quita el contenido de <details>, pero conserva el texto visible del <summary>."""
+        def resumen(bloque: re.Match[str]) -> str:
+            encontrado = re.search(r"<summary\b[^>]*>(.*?)</summary>", bloque.group(0), re.S)
+            return encontrado.group(1) if encontrado else " "
+
+        return re.sub(r"<details\b.*?</details>", resumen, html, flags=re.S)
+
     async def test_entrada_y_primera_accion_caben_en_50_palabras(self, banco):
         await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
         cuerpo = (await pagina()).text
         principal_cuerpo = principal(cuerpo).split(">", 1)[1]
-        sin_detalles = re.sub(r"<details\b.*?</details>", " ", principal_cuerpo, flags=re.S)
+        sin_detalles = self._sin_contenido_de_detalles(principal_cuerpo)
         antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
         palabras = self._palabras(antes)
         assert len(palabras) <= 50, f"{len(palabras)} palabras antes de la acción: {' '.join(palabras)}"
@@ -369,10 +378,12 @@ class TestPresupuestoTexto:
         assert "Sin serie sugerida" in antes
         assert principal_cuerpo.index('class="carpeta-accion"') < principal_cuerpo.index('class="carpeta-detalle"')
 
-    async def test_la_cifra_de_39_es_reproducible_con_el_fixture_de_referencia(self, banco, monkeypatch):
-        """La ficha mide 39 palabras con 1.308/108/14 y dos tarjetas; esta prueba enlata esa respuesta.
+    async def test_la_cifra_de_44_es_reproducible_con_el_fixture_de_referencia(self, banco, monkeypatch):
+        """La ficha mide 44 palabras con 1.308/108/14 y dos tarjetas; esta prueba enlata esa respuesta.
 
-        La prueba general de umbral siembra un solo registro y comprueba ≤ 50, no la cifra exacta.
+        39 palabras son de #273, que no contaba el resumen visible; el resumen «¿De dónde salen
+        estos datos?» añade 5. La prueba general de umbral siembra un solo registro y comprueba
+        ≤ 50, no la cifra exacta.
         """
         enlatada = RespuestaCarpetas(
             generado="2026-10-21T00:00:00Z",
@@ -392,12 +403,12 @@ class TestPresupuestoTexto:
 
         cuerpo = (await pagina()).text
         principal_cuerpo = principal(cuerpo).split(">", 1)[1]
-        sin_detalles = re.sub(r"<details\b.*?</details>", " ", principal_cuerpo, flags=re.S)
+        sin_detalles = self._sin_contenido_de_detalles(principal_cuerpo)
         antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
         palabras = self._palabras(antes)
-        assert len(palabras) == 39, f"{len(palabras)} palabras: {' '.join(palabras)}"
+        assert len(palabras) == 44, f"{len(palabras)} palabras: {' '.join(palabras)}"
         assert palabras.count("i") == 1          # el icono decorativo del chip informativo
-        assert len([p for p in palabras if p != "i"]) == 38
+        assert len([p for p in palabras if p != "i"]) == 43
 
     async def test_estado_vacio_tambien_cabe(self, banco):
         cuerpo = (await pagina()).text
