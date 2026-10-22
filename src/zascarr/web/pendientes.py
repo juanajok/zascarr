@@ -31,6 +31,7 @@ from zascarr.services.revision_carpetas import (
     LIMITE_MAXIMO,
     RespuestaCarpetas,
     RevisionCarpetas,
+    Suelto,
 )
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, puede_tener_portada
 from zascarr.utils.naming import parse_comic_filename
@@ -99,6 +100,15 @@ async def contar_carpetas(db: AsyncSession) -> int:
 
 def _enlace(parametro: str, clave: ClavePendiente) -> str:
     return f"/ui/pendientes?{urlencode({parametro: clave.a_texto()})}"
+
+
+def _enlace_sueltos(parametro: str, clave: ClavePendiente) -> str:
+    return f"/ui/pendientes/sueltos?{urlencode({parametro: clave.a_texto()})}"
+
+
+def _card_suelto(s: Suelto) -> dict:
+    """La tarjeta de U13b: el parser del nombre se comparte con la tarjeta existente."""
+    return {"s": s, "detectado": _detected_label(s.nombre)}
 
 
 def _rango(desde: int, hasta: int, total: int) -> dict:
@@ -257,6 +267,62 @@ async def carpetas(
         resp.headers["Cache-Control"] = "no-store"
         return resp
     resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(respuesta))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.get("/sueltos", response_class=HTMLResponse)
+async def sueltos(
+    request: Request,
+    despues: str = Query(default=""),
+    antes: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Cola de sueltos de A, solo lectura, por cursor (U13b).
+
+    Muestra `metadata.candidates[0]` como sugerencia guardada, no aplicada. No usa
+    `tradition_guess`, no consulta la serie candidata y no ofrece ninguna acción de escritura.
+    Una clave inválida o las dos a la vez dan la primera página; un fallo de lectura devuelve
+    503 sin recuentos parciales.
+    """
+    k_despues, k_antes = ClavePendiente.desde_texto(despues), ClavePendiente.desde_texto(antes)
+    if k_despues and k_antes:
+        k_despues = k_antes = None
+    try:
+        pagina = await RevisionCarpetas(db).pagina_de_sueltos(
+            despues=k_despues, antes=k_antes,
+        )
+    except Exception as exc:  # noqa: BLE001 — un fallo no puede dejar recuentos a medias
+        logger.warning("pendientes.sueltos_fallo", error=type(exc).__name__)
+        resp = templates.TemplateResponse(
+            request, "sueltos.html", {"error": True}, status_code=503,
+        )
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    for s in pagina.archivos:
+        if s.candidata_ilegible:
+            # Sin ruta ni nombre: el aviso no debe filtrar datos de la biblioteca al log.
+            logger.warning("pendientes.sueltos_candidata_ilegible")
+    contexto = {
+        "error": False,
+        "sueltos": [_card_suelto(s) for s in pagina.archivos],
+        "total": pagina.total,
+        "total_texto": f"{pagina.total:,}".replace(",", "."),
+        "total_a": pagina.total_a,
+        "total_a_texto": f"{pagina.total_a:,}".replace(",", "."),
+        "desde": pagina.desde,
+        "hasta": pagina.hasta,
+        "anterior": None,
+        "siguiente": None,
+    }
+    if pagina.archivos:
+        primero, ultimo = pagina.archivos[0].clave, pagina.archivos[-1].clave
+        if pagina.hay_anterior:
+            contexto["anterior"] = _enlace_sueltos("antes", primero)
+        if pagina.hay_siguiente:
+            contexto["siguiente"] = _enlace_sueltos("despues", ultimo)
+    resp = templates.TemplateResponse(request, "sueltos.html", contexto)
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
