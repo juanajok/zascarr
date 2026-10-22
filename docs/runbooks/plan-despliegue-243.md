@@ -237,7 +237,7 @@ A diferencia de la primera tanda (§9), esta vez **sí se siguió un plan con pa
 
 ### 10.1 «Desvincular» sobre un archivo real de la Pi (2026-10-22)
 
-El PO desvinculó **un** archivo de su biblioteca real desde la ficha de la serie: `The Wicked + The Divine - 1923 IC.cbr` (que estaba vinculado al `#1923`; el «1923» sale del título del nombre del archivo, no es un número del tebeo). Las capturas de pantalla (resultado «Archivo desvinculado de The Wicked + The Divine #1923» y la ficha sin ese número) las vio el revisor; **la evidencia de que se hizo bien es la lectura de la base y del disco**, solo lectura, a las 14:4x locales:
+El PO desvinculó **un** archivo de su biblioteca real desde la ficha de la serie: `The Wicked + The Divine - 1923 IC.cbr` (que estaba vinculado al `#1923`; el «1923» sale del título del nombre del archivo, no es un número del tebeo). Las capturas de pantalla (resultado «Archivo desvinculado de The Wicked + The Divine #1923» y la ficha sin ese número) las vio el revisor; **la evidencia de que se hizo bien es la lectura de la base y del disco**, solo lectura, el mismo día:
 
 | Comprobación | Resultado |
 |---|---|
