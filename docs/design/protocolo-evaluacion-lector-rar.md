@@ -31,9 +31,9 @@ Se evalúan **dentro de un contenedor desechable basado en la misma imagen que Z
 
 | Candidata | Origen (Debian bookworm) | Notas que hay que **verificar**, no suponer |
 |---|---|---|
-| `unar` / `lsar` | `main`, 1.10.7+ds1+really1.10.1-2 | soporte de RAR5, sólido, memoria; tamaño del paquete y sus dependencias |
-| `bsdtar` (`libarchive-tools`) | `main`, 3.6.2-1+deb12u5 | la propia documentación de `rarfile` dice que su soporte de RAR es «muy limitado»: confirmar con las muestras |
-| `unrar` | **`non-free`**, 1:6.2.6-1+deb12u1 | solo como referencia de comparación; su licencia y redistribución se revisan aparte antes de plantear incluirlo en una imagen |
+| `unar` / `lsar` | `main`, 1.10.7+ds1+really1.10.1-2 (**paquete `arm64` disponible**: 1.10.7+ds1+really1.10.1-2+b2, 1,2 MB de descarga) | soporte de RAR5, sólido, memoria; tamaño del paquete y sus dependencias |
+| `bsdtar` (`libarchive-tools`) | `main`, 3.6.2-1+deb12u5 (paquete `arm64` disponible: 268 kB instalado) | la propia documentación de `rarfile` dice que su soporte de RAR es «muy limitado»: confirmar con las muestras |
+| `unrar` | **`non-free`**, 1:6.2.6-1+deb12u1 (paquete `arm64` disponible, 131 kB de descarga) | solo como referencia de comparación; su licencia y redistribución se revisan aparte antes de plantear incluirlo en una imagen |
 | `rarfile` (Python) | PyPI | necesita una herramienta de las anteriores como motor; revisar su licencia y qué hace por sí solo (la lectura de datos sin comprimir) |
 
 Para cada candidata se anota: **paquete exacto y versión, sección/licencia, tamaño instalado y dependencias, y quién la distribuye**. La decisión de licencia es del PO.
@@ -54,7 +54,7 @@ Para cada candidata se anota: **paquete exacto y versión, sección/licencia, ta
 | Entorno | Para qué | Se presenta como |
 |---|---|---|
 | PC del PO o de desarrollo | iterar el procedimiento | «medido en PC» (no sustituye a la Pi) |
-| **Pi del PO** (arquitectura y versión de Docker por anotar: `uname -m`, `docker version`) | **las cifras que cuentan** | «medido en la Pi» |
+| **Pi del PO** (**aarch64**, confirmado por el PO el 2026-10-22 con `uname -m`; versión de Docker por anotar: `docker version`) | **las cifras que cuentan** | «medido en la Pi» |
 
 Si algo solo se midió en PC, la tabla final lo dice así y el criterio de coste en Pi queda **NOT RUN**.
 
@@ -81,7 +81,8 @@ Una ficha `docs/design/evaluacion-lector-rar-<fecha>.md` con: muestras (formato,
 5. **Retirar** el contenedor y el directorio de pruebas.
 
 ## 10. Preguntas abiertas para el PO
-- ¿Arquitectura de la Pi (`uname -m`) y versión de Docker? ¿Está ya la imagen base `python:3.11-slim-bookworm` en la Pi?
+- **Respondida:** la Pi es **aarch64** (2026-10-22). Consecuencia: el contenedor de pruebas debe ser `arm64`, los tres paquetes candidatos existen para `arm64` en bookworm, y las cifras de un PC `x86_64` son aún menos comparables; los binarios `rar` que lleva Kapowarr en su repositorio son una referencia de diseño, no algo utilizable aquí.
+- ¿Versión de Docker de la Pi? ¿Está ya la imagen base `python:3.11-slim-bookworm` (arm64) en la Pi?
 - ¿Se acepta un paso con red en un contenedor desechable para instalar `unar` y `libarchive-tools` (unos pocos MB) y, aparte, `unrar` solo como comparación?
 - ¿Qué muestras prefiere el PO (§3) y si hay alguna que **no** quiera copiar?
 - ¿Umbrales de §7 conformes?
