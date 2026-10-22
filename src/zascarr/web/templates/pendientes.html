@@ -10,7 +10,8 @@
 {#- El recuento se pide al cargarse (agrupar todos los pendientes cuesta; no bloquea la lista). Sin él, el enlace
     funciona igual. -#}
 <p><a class="btn ghost pend-carpetas" href="/ui/pendientes/carpetas"
-      hx-get="/ui/pendientes/carpetas/recuento" hx-trigger="load" hx-swap="outerHTML">Verlos por carpeta</a></p>
+      hx-get="/ui/pendientes/carpetas/recuento" hx-trigger="load" hx-swap="outerHTML">Verlos por carpeta</a>
+   <a class="btn ghost" href="/ui/pendientes/sueltos">Ver los archivos sueltos</a></p>
 {% include "_pendientes_rango.html" %}
 {#- Las claves de los extremos de la página: el refresco tras resolver una tarjeta las envía para recalcular el rango. -#}
 <div id="pend-clave" hidden>
