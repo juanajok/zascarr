@@ -13,9 +13,7 @@ es un fallo.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from html.parser import HTMLParser
 
 from zascarr.services.discovery import (
     FUENTE_ERROR,
@@ -23,6 +21,7 @@ from zascarr.services.discovery import (
     FUENTE_SIN_CLAVE,
     ORDEN_DE_FUENTES,
 )
+from zascarr.utils.texto_html import texto_plano  # noqa: F401  (se reexporta: la usan Descubrir y sus pruebas)
 
 #: Cómo se llama cada fuente: los mismos nombres que usa el servicio en sus avisos.
 ETIQUETAS = {
@@ -70,62 +69,9 @@ def pista_de_tradicion(etiqueta: str, procedencia: str | None) -> str:
     return f"{inicio} Es solo una pista de la fuente, no de la obra: elige tú."
 
 
-_BLOQUES = frozenset({
-    "p", "br", "div", "li", "ul", "ol", "tr", "td", "th", "table", "blockquote", "section",
-    "article", "h1", "h2", "h3", "h4", "h5", "h6"})
-_OCULTOS = frozenset({"script", "style"})
-
-
 def etiqueta_fuente(valor: str | None) -> str:
     """El nombre de la fuente; un valor que no se conoce NO se enseña (sería un identificador)."""
     return ETIQUETAS.get(str(valor or ""), OTRA_FUENTE)
-
-
-class _APlano(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.partes: list[str] = []
-        self._ocultos = 0
-
-    def handle_starttag(self, tag, attrs):
-        if tag in _OCULTOS:
-            self._ocultos += 1
-        elif tag in _BLOQUES:
-            self.partes.append(" ")
-
-    def handle_startendtag(self, tag, attrs):
-        if tag in _BLOQUES:
-            self.partes.append(" ")
-
-    def handle_endtag(self, tag):
-        if tag in _OCULTOS:
-            self._ocultos = max(0, self._ocultos - 1)
-        elif tag in _BLOQUES:
-            self.partes.append(" ")
-
-    def handle_data(self, data):
-        if not self._ocultos:
-            self.partes.append(data)
-
-
-_ETIQUETA_CORTADA = re.compile(r"<[^>]*$")
-_ETIQUETAS = re.compile(r"<[^>]*>")
-
-
-def texto_plano(crudo: str | None) -> str:
-    """El HTML de la fuente como texto: sin etiquetas, sin el contenido de `script`/`style`, con las
-    entidades decodificadas y los espacios colapsados. Nunca interpreta el HTML (se escapa)."""
-    if not crudo:
-        return ""
-    p = _APlano()
-    try:
-        p.feed(crudo)
-        p.close()
-        texto = "".join(p.partes)
-    except Exception:  # noqa: BLE001 — un HTML que el analizador no admite no puede tumbar la búsqueda
-        texto = _ETIQUETAS.sub(" ", crudo)
-    texto = " ".join(texto.split())
-    return _ETIQUETA_CORTADA.sub("", texto).strip()
 
 
 def enumerar(nombres: list[str]) -> str:

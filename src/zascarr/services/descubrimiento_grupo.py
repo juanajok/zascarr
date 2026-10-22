@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.core.carpetas import analizar_carpeta
 from zascarr.core.matcher import normalize_title
 from zascarr.models import ComicTradition, Series
+from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.discovery import (
     CAMPO_ID_EXTERNO,
     CAMPOS_ID_DE_TEXTO,
@@ -38,6 +39,7 @@ from zascarr.services.tokens_revision import (
     crear_token_candidata,
     texto_firmable,
 )
+from zascarr.utils.texto_html import texto_plano
 from zascarr.utils.url_portada import es_url_de_portada_permitida
 
 MAX_DESCRIPCION_VISTA = 300
@@ -219,7 +221,9 @@ class DescubrimientoDeGrupo:
         proxy con lista blanca, nunca `src` externo); la URL de la ficha se muestra solo si es texto firmable."""
         preparados: list[_Preparado] = []
         for r in resultados:
-            portada_ok = bool(r.cover_url) and es_url_de_portada_permitida(r.cover_url or "")
+            # #311: la imagen de relleno de Comic Vine («Blank!») no es una portada: ni se ofrece ni se firma.
+            portada_ok = (bool(r.cover_url) and es_url_de_portada_permitida(r.cover_url or "")
+                          and not es_portada_de_relleno(r.cover_url))
             firmable = candidata_firmable(
                 r.source.value, r.external_id, r.title, r.start_year,
                 None if r.tradition_guess is None else r.tradition_guess.value, r.description,
@@ -285,7 +289,8 @@ class DescubrimientoDeGrupo:
             tradicion_sugerida=None if r.tradition_guess is None else r.tradition_guess.value,
             procedencia=None if r.procedencia is None else r.procedencia.value, sitio_url=p.sitio_url,
             portada=None if cover is None else "/ui/descubrir/portada?" + urlencode({"url": cover, "source": r.source.value}),
-            descripcion=(firmable.descripcion or "")[:MAX_DESCRIPCION_VISTA] or None,
+            # #311: se limpia ANTES de recortar (recortar el HTML dejaba poco o nada visible y etiquetas partidas).
+            descripcion=texto_plano(firmable.descripcion)[:MAX_DESCRIPCION_VISTA] or None,
             ya_en_biblioteca=_a_serie_local(ya) if ya is not None else None,
             parecidas_locales=parecidas,
             coincidencia_con_la_carpeta=Coincidencia(
