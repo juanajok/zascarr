@@ -1,9 +1,11 @@
 # U13c (#289) — Contraste de DoR: revisar una carpeta mixta antes de vincular
 
-> **Estado: BORRADOR para re-revisión. No declara la historia Ready.**
+> **Estado: CONTRASTE PUBLICABLE. No declara la historia Ready.**
 > **SHA de contraste:** `245402e78a6357cfc79e726a4484662ba9ef8151` (`main`, merge de #285).
 > **Fecha:** 2026-10-22.
-> **Alcance:** documento de evidencia y decisiones; no implementa #289, no modifica contratos, no toca #289 en GitHub, no mide en la Pi, no despliega y no toca staging ni biblioteca real.
+> **Decisiones de producto:** D1 y D2 cerradas el 2026-10-22 (ver §8).
+> **Estimación:** 3 puntos / S (reestimada; 5/M queda como antecedente).
+> **Alcance:** documento de evidencia y decisiones; no implementa #289, no modifica contratos, no mide en la Pi, no despliega y no toca staging ni biblioteca real.
 
 ## 0. Veredicto corto
 
@@ -15,15 +17,15 @@ El recorrido que pide #289 **ya existe en gran parte** en `245402e`:
 - el marcado masivo de #207 ya existe;
 - la confirmación, el resultado y la vuelta a la carpeta ya existen.
 
-Lo que **no** está resuelto es la semántica fina que #289 necesita para una carpeta mixta:
+Lo que hay que **fijar, probar o documentar** para una carpeta mixta:
 
-1. **No hay una acción «Revisar archivos» separada de «Elegir serie»**: la revisión se abre después de elegir una serie local. La etiqueta existente es «Preparar los archivos de esta carpeta para esa serie», no «Revisar archivos».
-2. **«Marcar todos» no distingue un archivo ajeno**: marca todo lo que el servicio da por `marcable`, aunque tenga un conflicto de título con la serie elegida. La protección de #289 es manual (marcar solo los dos correctos), no automática.
-3. **«Elegir otra serie» no revoca el token anterior**: abre una revisión limpia, pero el token firmado de la preparación anterior sigue siendo válido hasta sus 15 minutos. La invalidación no está implementada y el propio test la declara pendiente de decisión.
+1. **No hay una acción «Revisar archivos» separada de «Elegir serie»**: la revisión se abre después de elegir una serie local. D3 mantiene la revisión existente; si se ajusta el copy, entra en los 3/S y no cambia el flujo.
+2. **«Marcar todos» no distingue un archivo ajeno**: marca todo lo que el servicio da por `marcable`, aunque tenga un conflicto de título. D2 acepta ese comportamiento, con la condición de que el conflicto siga visible dentro de la revisión. La protección es manual, no automática.
+3. **«Elegir otra serie» no revoca el token anterior**: abre una revisión limpia, pero el token firmado de la preparación anterior sigue siendo válido hasta sus 15 minutos. D1 acepta esa semántica, con la condición de que la confirmación muestre siempre la serie destino.
 4. **No hay prueba de aceptación específica de tres archivos con uno ajeno** en el repositorio. Se ha comprobado con dos pruebas temporales, pero no forman parte de la suite.
 5. **No hay navegador real, lector de pantalla, 360 px ni cinco segundos para #289.** Todo eso sigue `NOT RUN`.
 
-Por tanto: **DoR no cerrada**, y la estimación **5/M no está sostenida por el delta actual**. Si #289 se limita a verificar, probar y ajustar textos sobre lo existente, es una historia menor; si incluye invalidación de token o exclusión automática de archivos ajenos, cambia contratos y no cabe en 5/M sin trocear.
+Por tanto: **DoR no cerrada** y **estimación reestimada a 3/S**. El 5/M queda como antecedente. D1 y D2 están cerradas por producto: no se introduce invalidación activa de tokens ni exclusión automática de ajenos. El trabajo de #289 es verificar, probar y ajustar textos, con dos condiciones: la serie destino siempre visible en la confirmación (D1) y el conflicto visible dentro de la revisión (D2).
 
 ## 1. Alcance real: qué hay y qué falta
 
@@ -46,8 +48,8 @@ Por tanto: **DoR no cerrada**, y la estimación **5/M no está sostenida por el 
 
 - **No existe una etiqueta/acción «Revisar archivos»** en la tarjeta. Sí existe la frase «Preparar los archivos de esta carpeta para esa serie» en `_asistente_locales.html:13`, y «Revisar los archivos de esta carpeta» en los resultados de alta (`_alta_resultado.html:26`, `asistente_alta_resultado.html:27`). La semántica propuesta en el borrador de DoR no es literal en la entrada.
 - **No hay clasificación automática de «archivo ajeno»**. El servicio calcula señales (`con_conflicto_de_carpeta`, número repetido, etc.) y `marcable`, pero no una pertenencia a la serie elegida. La persona decide. La garantía existente es negativa: lo no marcado no entra en el token.
-- **«Marcar todos» incluye un archivo con conflicto de título si es `marcable`**. No es un fallo de #207: su contrato es marcar todo lo marcable. Pero contradice una lectura fuerte del objetivo de #289.
-- **No hay revocación de tokens**. El test `tests/test_vinculacion_previa_pg.py:655-664` documenta que emitir un token nuevo **no invalida** los anteriores; cada uno es una fotografía firmada de 15 minutos. La invalidación exigiría persistencia y está pendiente de decisión.
+- **«Marcar todos» incluye un archivo con conflicto de título si es `marcable`; D2 lo acepta**. No es un fallo de #207: su contrato es marcar todo lo marcable. La condición de D2 es que el conflicto siga visible dentro de la revisión y no se convierta en invisible al marcar; la exclusión automática queda como hipótesis futura.
+- **No hay revocación de tokens; D1 la acepta**. El test `tests/test_vinculacion_previa_pg.py:655-664` documenta que emitir un token nuevo **no invalida** los anteriores; cada uno es una fotografía firmada de 15 minutos. La condición de D1 es que la confirmación muestre siempre la serie destino de la preparación que se confirma.
 - **No hay prueba de tres archivos con uno ajeno** en la suite. Las pruebas existentes cubren subconjuntos, bloqueados, repetidos, conflictos y páginas, pero no el caso concreto de la CA3.
 - **No hay presupuesto aprobado ni medición de #289**. La propuesta 2.000/1.000 ms no está medida y las cifras de #287/#288 no son evidencia de #289.
 - **No hay evidencia de navegador real, teclado, 360 px, lector de pantalla ni cinco segundos para #289.** U19 tiene evidencia de Chrome headless para su recorrido, pero no cubre esta historia ni el lector.
@@ -120,13 +122,13 @@ Consecuencia: un archivo marcado pero bloqueado se muestra como «Marcado, pero 
 
 - El enlace está en `asistente_vinculacion.html:6`: vuelve a `/asistente?clave=…`, sin `series_id`.
 - La nueva revisión empieza limpia: sin marcas y sin token. Prueba: `tests/test_u19_continuidad_pg.py:445-455` (T12: cambiar de serie descarta los números borrador de la anterior).
-- **No se revoca el token anterior.** Emitir un token nuevo no invalida los anteriores en el servidor; cada uno caduca a los 15 minutos. Prueba/documentación: `tests/test_vinculacion_previa_pg.py:655-664` («La invalidación del anterior exigiría persistencia y está pendiente de decisión para 2d»).
+- **No se revoca el token anterior.** Emitir un token nuevo no invalida los anteriores en el servidor; cada uno caduca a los 15 minutos. Prueba/documentación: `tests/test_vinculacion_previa_pg.py:655-664`; D1 acepta esta semántica y no introduce invalidación activa.
 - Por tanto:
   - la **selección visible** no se reutiliza silenciosamente: la nueva página está limpia;
   - el **token anterior** sigue siendo verificable si se conserva la página o se reenvía su formulario;
   - no hay una invalidación explícita de la preparación previa.
 
-Esto es seguro para no mezclar series distintas (el token está atado a `series_id`), pero **no es** la semántica de «invalidar» en sentido estricto. Es la decisión D1 de §8.
+Esto es seguro para no mezclar series distintas (el token está atado a `series_id`), pero **no es** la semántica de «invalidar» en sentido estricto. D1 acepta esa semántica; la condición es que la confirmación muestre la serie de origen (§4.8).
 
 ### 4.6. Volver, cancelar y resultado
 
@@ -141,6 +143,25 @@ Esto es seguro para no mezclar series distintas (el token está atado a `series_
 - **No hay «Ignorar» ni descarte en esta historia**: no existe botón, ruta ni campo de descarte en el asistente. Desmarcar un archivo solo lo saca del token; no cambia `issue_id`, no toca `review_dismissed` y el archivo sigue pendiente al recargar. La garantía es «no se incluye», no «se descarta».
 - El contrato de solo lectura está cubierto por `TestSoloLectura` y `test_no_crea_issues_ni_aprende_alias_ni_toca_files` (`tests/test_vinculacion_previa_pg.py`), además de la comprobación de cero efectos de la revisión.
 
+### 4.8. Condiciones de copy de D1 y D2
+
+**D1 — serie destino visible al confirmar.** La condición se cumple en el código vigente y debe conservarse:
+
+- la revisión muestra «Serie elegida» con título y año antes de confirmar (`_vinculacion_revision.html:20-27`);
+- el bloque «Listo para vincular» repite la serie en el texto de la acción: «quedarán vinculados a «{{ s.titulo }}»» (`_vinculacion_revision.html:157-159`);
+- el resultado vuelve a mostrar «Serie» con el título (`_vinculacion_resultado.html:11`);
+- al confirmar, `confirmar()` deriva `titulo_serie` del token (`asistente_vinculacion.py:519`), no de la elección que hubiera en otra pestaña o del estado de la página.
+
+No hace falta cambiar el contrato: hay que **fijarlo con una prueba** de que un token antiguo, reenviado desde una página anterior, sigue mostrando su serie de origen en la confirmación y en el resultado.
+
+**D2 — conflicto visible en la revisión.** La condición también se cumple y debe conservarse:
+
+- cada fila lleva `data-estado` (incluido `con_conflicto_de_carpeta`) en `_vinculacion_revision.html:62`;
+- el texto legible del conflicto se muestra en la fila (`_vinculacion_revision.html:95`) y el detalle «Qué dice la carpeta frente a esta serie» en `:107-112`;
+- el conflicto no impide marcar, pero no desaparece al pulsar «Marcar todos»: la fila se vuelve a evaluar y se pinta con su estado.
+
+La prueba de #289 debe comprobar que, después de «Marcar todos», el archivo conflictivo sigue mostrando su conflicto y que el token lo incluye solo porque la persona lo marcó. No se añade exclusión automática.
+
 ## 5. Siete ejemplos de carpeta mixta
 
 Los ejemplos usan la misma clave `Comics/Flash (1987)` y una serie local `Flash (1987)`. «Ajeno» significa un archivo de otra serie dentro de la misma carpeta; el sistema no lo clasifica automáticamente, solo lo muestra con sus señales.
@@ -153,17 +174,15 @@ Los ejemplos usan la misma clave `Comics/Flash (1987)` y una serie local `Flash 
 | E4 | `Flash 01`, `Flash 02`, un tercero ya vinculado. | Marcar los dos pendientes. | Token con 2; el ya vinculado se muestra, no es editable y no entra. | `tests/test_vinculacion_previa_pg.py:411-425`; PASS local. |
 | E5 | 9 Flash coherentes + `Flash 10 (1999)` con conflicto. | Marcar el conflictivo. | Es `marcable`; se incluye si se marca, con el conflicto visible. No se excluye automáticamente. | `tests/test_vinculacion_previa_pg.py:573-590`; PASS local. |
 | E6 | 155 archivos: página 1 (100) y página 2 (55). | Marcar en página 1 y pasar a la 2. | La página 2 empieza sin token; lo de la 1 no se presenta como evaluado ni entra en el token de la 2; los borradores se conservan solo dentro del formulario. | `tests/test_asistente_vinculacion_pg.py:245-263`; `tests/test_vinculacion_previa_pg.py:671-687`; PASS local. |
-| E7 | Preparar Flash, marcar, y pulsar «Elegir otra serie» (Flash 1959). | Abrir la otra serie. | Revisión nueva limpia, sin marcas/token; no se escribe. El token anterior **no se revoca** y sigue válido hasta 15 min. | T12 `tests/test_u19_continuidad_pg.py:445-455`; tokens independientes `tests/test_vinculacion_previa_pg.py:655-664`; PASS local. **Decisión D1.** |
+| E7 | Preparar Flash, marcar, y pulsar «Elegir otra serie» (Flash 1959). | Abrir la otra serie. | Revisión nueva limpia, sin marcas/token; no se escribe. El token anterior **no se revoca** y sigue válido hasta 15 min. | T12 `tests/test_u19_continuidad_pg.py:445-455`; tokens independientes `tests/test_vinculacion_previa_pg.py:655-664`; PASS local. **D1 aceptada.** |
 
-### 5.1. El riesgo del marcado masivo en E1
+### 5.1. D2 aceptada: el masivo incluye al ajeno, pero el conflicto debe seguir visible
 
-Con `Green Lantern 99` (número distinto, `marcable=True`), «Marcar todos los que se pueden vincular» marca **los tres**, incluido el ajeno con conflicto. Comprobación temporal PASS. No es un fallo de #207: su contrato es marcar todo lo marcable de la página. Pero deja claro que:
+Con `Green Lantern 99` (número distinto, `marcable=True`), «Marcar todos los que se pueden vincular» marca **los tres**, incluido el ajeno con conflicto. Comprobación temporal PASS.
 
-- la protección de #289 es **manual**;
-- el masivo no implementa «no asignar archivos de una carpeta mixta» si la persona lo pulsa sin revisar;
-- si #289 debe impedir ese caso, hay que decidir entre excluir conflictos del masivo, pedir una confirmación adicional o mantener el masivo como acción explícita y aceptar el riesgo.
+D2 acepta ese comportamiento: la protección de H6 es la **revisión selectiva**. La persona ve la selección, excluye el ajeno y confirma. No se añade exclusión automática en U13c. La condición es que el conflicto sea visible dentro de la revisión —no solo en la tarjeta— y que «Marcar todos» no lo convierta en invisible. El código actual lo muestra en `_vinculacion_revision.html:95,107-112`; la prueba fija debe conservarlo.
 
-Esta es la decisión D2 de §8. No se cambia #207 en este documento.
+La exclusión automática de ajenos queda como **hipótesis para una historia futura** si la evidencia de uso la justifica; no se decide en #289. No se cambia #207 en este documento.
 
 ## 6. Reconciliación con #206 / #118–#120 / #207 / #287–#288
 
@@ -201,57 +220,58 @@ Si se mantiene el alcance estricto del cuerpo («acción de tarjeta → asistent
 4. documentar que «Otra serie» limpia la revisión pero no revoca el token;
 5. revisar textos y evidencia de accesibilidad/navegador.
 
-Nada de eso exige, por sí solo, 5 puntos. Si se añade revocación de token o exclusión automática de ajenos, el delta cambia de naturaleza.
+Con D1 y D2 cerradas, el delta se reestima en **3 puntos / S**. No incluye revocación de tokens ni exclusión automática de ajenos; si alguna de esas dos cosas entrara, el delta cambiaría de naturaleza y habría que trocear. El 5/M queda como antecedente en la issue.
 
 ## 7. DoR: casillas y qué falta
 
-> En la tarjeta de #289 la primera casilla ya está marcada. Este documento **no modifica** el issue ni marca ninguna casilla nueva.
+> Las cinco casillas de la DoR quedan **sin marcar**. Este documento no las marca; la re-revisión y la implementación aportarán el SHA y las pruebas.
 
 | # | Casilla de la DoR (texto de #289) | Estado | Evidencia disponible | Qué falta para cerrarla |
 |---|---|---|---|---|
-| 1 | Slice de integración y reparto de responsabilidades delimitados. | Marcada en la tarjeta; alcance en revisión. | El título actual («Revisar una carpeta mixta…») y el cuerpo («Acción de carpeta y revisión selectiva») no coinciden; el delta real es menor de lo que sugiere 5/M. | Fijar el alcance y la estimación antes de Ready. |
+| 1 | Slice de integración y reparto de responsabilidades delimitados. | **Sin marcar**; alcance en revisión. | El título actual («Revisar una carpeta mixta…») y el cuerpo («Acción de carpeta y revisión selectiva») no coinciden; el delta real es 3/S, no 5/M. | Registrar el alcance y la reestimación 3/S antes de Ready. |
 | 2 | #287 disponible y contratos de #206/#118–#120/#207 contrastados en un SHA completo. | **Pendiente** | Mapa de §3; matriz de §6; 81 pruebas existentes PASS en local. | #287 no fusionada; #118/#120 abiertas; #206/#119/#207 cerradas con DoR incompleta. La decisión del PO debe registrarse, no deducirse. |
-| 3 | Mapeo de acciones, selección, cancelación y resultado cerrado con ejemplos de carpeta mixta. | **Parcial** | §3 y §4; E1–E7; dos comprobaciones temporales. | Añadir prueba fija de tres archivos con uno ajeno; decidir etiqueta de entrada y semántica de «Otra serie»/cancelar. |
-| 4 | Solapamientos reconciliados; sin cambios encubiertos del servicio. | **Parcial** | §6; no se propone tocar servicios existentes si se elige el alcance A. | Decidir el riesgo del masivo (D2) y si la invalidación de token entra o se difiere. |
-| 5 | Entorno y presupuesto numérico aprobados; estimación calibrada y re-revisión favorable. | **Pendiente** | No hay medición de #289; 2.000/1.000 ms es propuesta; no hay navegador/lector/5 s. | Aprobar entorno y umbrales, medir con protocolo, calibrar 5/M y re-revisar. |
+| 3 | Mapeo de acciones, selección, cancelación y resultado cerrado con ejemplos de carpeta mixta. | **Parcial** | §3 y §4; E1–E7; dos comprobaciones temporales; D1/D2 cerradas y sus condiciones de copy verificadas en el código. | Añadir prueba fija de tres archivos con uno ajeno, de la serie visible al confirmar y del conflicto visible tras «Marcar todos». |
+| 4 | Solapamientos reconciliados; sin cambios encubiertos del servicio. | **Parcial** | §6; con D1/D2 no se toca el servicio; 3/S. | Confirmar que la implementación no introduce invalidación ni exclusión automática; registrar el 5/M como antecedente. |
+| 5 | Entorno y presupuesto numérico aprobados; estimación calibrada y re-revisión favorable. | **Pendiente** | 3/S aprobada como reestimación; 5/M queda como antecedente; no hay medición de #289 ni navegador/lector/5 s. | Aprobar entorno y umbrales, medir con protocolo y re-revisar; no marcar la casilla hasta que la implementación aporte SHA y pruebas. |
 
-### 7.1. Bloqueos de Ready (no de implementación)
+### 7.1. Pendientes para Ready (no de implementación)
 
 1. **#287 no fusionada** y #289 sigue detrás de ella por decisión de coherencia. La acción ya existe en `245402e`; el bloqueo es de secuencia/QA, no de código de entrada.
-2. **Reconciliación administrativa**: #206/#119/#207 cerradas por el PO con casillas abiertas; #118/#120 abiertas con código presente. Hay que decidir si se acepta la evidencia de código/pruebas o se reabre/cierra formalmente.
-3. **Semántica de invalidación**: «Otra serie» no revoca el token anterior. Si la CA6 exige invalidación, no está cubierta.
-4. **Carpeta mixta y masivo**: el masivo puede incluir un ajeno marcable. Si la CA3/objetivo exige protección automática, no está cubierta.
+2. **Reconciliación administrativa**: #206/#119/#207 cerradas por el PO con casillas abiertas; #118/#120 abiertas con código presente. No bloquea #289; se tratará en la próxima pasada de cierre de #196.
+3. **D1 aceptada**: no se invalida el token. La condición de copy (serie destino siempre visible) está cubierta por el código actual, pero falta la prueba fija.
+4. **D2 aceptada**: el masivo incluye al ajeno marcable. La condición de conflicto visible está cubierta por el código actual, pero falta la prueba fija y no se añade exclusión automática.
 5. **Evidencia de aceptación**: falta prueba fija, navegador real, 360 px, teclado, lector y cinco segundos. Todo `NOT RUN` para #289.
-6. **Presupuesto/estimación**: 5/M sin calibración; no hay medición de #289.
+6. **Presupuesto**: 3/S es la estimación reestimada; el 5/M queda como antecedente. No hay medición de #289 ni aprobación de umbrales.
 
-## 8. Decisiones para el squad
+## 8. Decisiones de producto (cerradas)
 
-### D1. ¿Se acepta que «Otra serie» no revoque el token anterior?
+### D1 — Token de preparación: comportamiento vigente aceptado
 
-- **Opción A (mínima, recomendada para el alcance actual):** aceptar la semántica vigente. La revisión nueva está limpia; el token anterior caduca a los 15 min y está atado a su serie. Documentarlo como «no hay invalidación explícita».
-- **Opción B (contrato nuevo):** persistir una revisión/preparación y revocar tokens anteriores al cambiar de serie. Requiere almacenamiento, invalidación y pruebas de idempotencia/seguridad; **no cabe en 5/M** sin trocear.
-- **Opción C:** impedir volver a una preparación anterior desde la UI, sin cambiar el servidor. No revoca el token, solo reduce la exposición; no cumple «invalidar» en sentido estricto.
+**Decisión:** «Elegir otra serie» abre una revisión limpia sin revocar el token anterior, que caduca a los 15 minutos. Se acepta como comportamiento vigente.
 
-### D2. ¿Qué hace «Marcar todos» en una carpeta mixta?
+**Condición de copy:** la vista previa de confirmación debe mostrar siempre la serie destino de la preparación que se está confirmando, de forma que confirmar un token antiguo nunca pueda confundirse con la elección nueva.
 
-- **A:** dejarlo como está (marca todo lo marcable) y confiar en la revisión humana. Es el contrato de #207.
-- **B:** excluir del masivo los archivos con `con_conflicto_de_carpeta`; cambia #207 y puede dejar fuera archivos que la persona sí querría.
-- **C:** mantener el masivo, pero añadir un aviso/confirmación cuando haya conflictos. Cambio de UI/contrato.
-- **D:** no usar el masivo en #289; la historia solo garantiza la selección manual. Es la opción más pequeña y compatible con el código actual.
+**Verificación:** la revisión muestra «Serie elegida» (`_vinculacion_revision.html:20-27`) y el bloque de confirmación repite «quedarán vinculados a «{{ s.titulo }}»» (`:157-159`); el resultado muestra «Serie» (`_vinculacion_resultado.html:11`) y `confirmar()` toma `titulo_serie` del token (`asistente_vinculacion.py:519`). No hace falta cambiar el contrato; falta fijarlo con prueba.
 
-### D3. ¿Qué es «Revisar archivos»?
+**No entra:** invalidación activa de tokens. Es un cambio de contrato del asistente no justificado por un incidente; la ventana de riesgo queda cubierta por la confirmación explícita y por la visibilidad de la serie.
 
-- **A:** la revisión existente tras elegir una serie local; no se añade una pantalla nueva. Solo se ajusta el texto si hace falta.
-- **B:** una acción directa desde la tarjeta, antes de elegir serie; no tiene sentido sin una serie de destino y sería una pantalla nueva.
-- **C:** una etiqueta de la acción de la tarjeta que sustituya «Elegir la serie…»; cambio de copy, no de flujo.
+### D2 — «Marcar todos»: exclusión manual y conflicto visible
 
-### D4. Estimación
+**Decisión:** el masivo marca todo lo marcable, incluido el archivo con conflicto de título. La protección de H6 es la revisión selectiva: la persona ve la selección, excluye el ajeno y confirma.
 
-- **A (verificación + pruebas + copy):** 2–3 puntos; no 5/M.
-- **B (A + invalidación de token):** contrato nuevo; trocear y estimar aparte.
-- **C (A + exclusión automática de ajenos/masivo):** cambio de #207/UI; trocear y estimar aparte.
+**Condición:** el archivo con conflicto debe ser visible como tal **dentro de la revisión**, no solo en la tarjeta, de modo que «Marcar todos» no convierta el conflicto en invisible.
 
-> Recomendación: no declarar Ready con 5/M hasta que el squad elija A/B/C y se vea qué trabajo nuevo llena la estimación. La historia puede ser valiosa como aceptación, pero no debe ocultar un cambio de contrato bajo la etiqueta «reutiliza».
+**Verificación:** la fila lleva `data-estado` (`_vinculacion_revision.html:62`), el texto del conflicto se pinta en `:95` y el detalle «Qué dice la carpeta frente a esta serie» en `:107-112`. La prueba fija debe comprobar que sigue visible después de «Marcar todos».
+
+**No entra:** exclusión automática de ajenos. Queda como hipótesis para una historia futura si la evidencia de uso la justifica; no se decide en U13c.
+
+### D3 — «Revisar archivos» y alcance de copy
+
+No se añade una pantalla nueva ni una acción directa antes de elegir serie. La revisión existente tras elegir una serie local es la revisión selectiva; si se ajusta el copy de entrada, entra dentro de los 3/S y no cambia el flujo. La condición de D1 (serie visible) y la de D2 (conflicto visible) son las únicas correcciones de lectura exigidas.
+
+### D4 — Estimación
+
+**3 puntos / S**, con el desglose de verificación, pruebas, copy y evidencia de aceptación. El 5/M queda como antecedente en la issue. No se declara Ready hasta que el contraste publicado esté contrastado con el código del SHA vigente y la estimación esté registrada/recalibrada.
 
 ## 9. Pruebas y evidencia local
 
@@ -301,7 +321,7 @@ Total: **81 pruebas existentes PASS en local**. No es CI de #289 y no sustituye 
 Se ejecutaron dos pruebas temporales, no incluidas en el repositorio, con la misma base:
 
 1. `test_dos_de_tres_entran_en_el_token_y_el_ajeno_no`: tres archivos (`Flash 01`, `Flash 02`, `Green Lantern 99`), marcar solo los dos Flash. Resultado: **PASS**. Token con 2; el ajeno sin marcar y fuera del token.
-2. `test_marcar_todos_si_incluye_al_ajeno_si_es_marcable`: los mismos tres, pulsar «Marcar todos». Resultado: **PASS** (confirma el riesgo): el ajeno con conflicto y número distinto también se marca y entra en el token.
+2. `test_marcar_todos_si_incluye_al_ajeno_si_es_marcable`: los mismos tres, pulsar «Marcar todos». Resultado: **PASS** (confirma el comportamiento aceptado por D2): el ajeno con conflicto y número distinto también se marca y entra en el token.
 
 Estas pruebas deben convertirse en pruebas fijas de #289, con nombres y fixtures del repo, antes de aceptar la CA3.
 
@@ -318,7 +338,7 @@ Estas pruebas deben convertirse en pruebas fijas de #289, con nombres y fixtures
 
 U19 tiene evidencia propia de Chrome headless y teclado para su recorrido (`docs/design/ui-u19/README.md`), pero **no** acredita #289, la carpeta mixta con un tercero ajeno, el lector de pantalla ni los cinco segundos. No se hereda como PASS de #289.
 
-## 10. Anexo: prueba fija propuesta para E1/E7
+## 10. Anexo: pruebas fijas propuestas para E1/E7 y condiciones D1/D2
 
 La prueba debe vivir en `tests/test_asistente_vinculacion_pg.py` o en un módulo de aceptación de #289, usar la clave `Comics/Flash (1987)` y una serie local `Flash (1987)`, y comprobar:
 
@@ -328,9 +348,11 @@ La prueba debe vivir en `tests/test_asistente_vinculacion_pg.py` o en un módulo
 - el tercero con `marcado=False`, `incluido_en_token=False`;
 - cero escrituras en base y disco (reutilizar `instantanea`/`huella_disco`);
 - después, pulsar «Elegir otra serie» y comprobar que la nueva página no tiene marcas ni token;
-- si se decide D1-B, comprobar además que el token anterior ya no verifica; si se decide D1-A, documentar que sigue verificando hasta su caducidad y **no** presentarlo como invalidado.
+- reenviar el token anterior y comprobar que **sigue verificando** hasta su caducidad (D1), pero que la confirmación y el resultado muestran la serie de origen, no la serie nueva;
+- con «Marcar todos», comprobar que el ajeno conflictivo se marca y entra en el token (D2), pero que su conflicto sigue visible en la fila y en el detalle de la revisión;
+- comprobar que no se ha añadido ninguna exclusión automática ni descarte.
 
-Para el masivo, la prueba debe fijar la decisión D2: o el ajeno conflictivo no se marca, o se marca y el test lo declara explícitamente como riesgo aceptado.
+La prueba debe fijar D1 y D2 tal como quedaron aprobadas; no debe presentar la no-invalidación como un fallo ni la inclusión del conflictivo como un éxito silencioso.
 
 ## 11. Referencias
 
