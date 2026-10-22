@@ -234,3 +234,17 @@ A diferencia de la primera tanda (§9), esta vez **sí se siguió un plan con pa
 - **Login en modo contraseña (#273): VERIFICADO.** «Introduce tu contraseña para continuar.» con un solo campo, «Contraseña» (ya no habla de «usuario»).
 
 **Lo que sigue sin hacerse:** confirmar «Desvincular» sobre un archivo real de la Pi (no se ha probado fuera de pruebas automáticas y de un navegador contra una base de pruebas), por lo que **no** se cierran #253, #254 ni #230 y no se pasan #243, #253, #254 ni #229 a «Hecha». Quedan además sin desplegar las PR que se fusionen después de `245402e`.
+
+### 10.1 «Desvincular» sobre un archivo real de la Pi (2026-10-22)
+
+El PO desvinculó **un** archivo de su biblioteca real desde la ficha de la serie: `The Wicked + The Divine - 1923 IC.cbr` (que estaba vinculado al `#1923`; el «1923» sale del título del nombre del archivo, no es un número del tebeo). Las capturas de pantalla (resultado «Archivo desvinculado de The Wicked + The Divine #1923» y la ficha sin ese número) las vio el revisor; **la evidencia de que se hizo bien es la lectura de la base y del disco**, solo lectura, el mismo día:
+
+| Comprobación | Resultado |
+|---|---|
+| Fila del archivo | `issue_id` nulo, `review_dismissed = false`, `match_status = unsorted` (vuelve a «Por revisar») |
+| Procedencia | `vinculo` quitado; `vinculo_historial` con **1** entrada, con `deshecho.fecha = 2026-10-22T12:39:58Z` |
+| `metadata_source` | nulo, como se esperaba: ese vínculo es anterior a que el servicio guardara `previo.metadata_source` (D8: los antiguos se restauran a `NULL`) |
+| Fichero | Inventario de la biblioteca (ruta, tamaño y fecha de 1577 ficheros) **idéntico** al tomado antes de la actualización del mismo día: el fichero no se tocó |
+| Errores | 0 *tracebacks* en la última hora |
+
+Queda sin comprobar en la Pi: la **idempotencia** (repetir el mismo token) y **volver a vincular** el archivo (se probaron con pruebas automáticas y en un navegador contra una base de pruebas). El PO no ha vuelto a vincular el archivo en esta tanda; no se hizo ninguna otra desvinculación.
