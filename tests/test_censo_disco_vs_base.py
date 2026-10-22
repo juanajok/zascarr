@@ -124,3 +124,12 @@ class TestIdentidadPorContenido:
         hb.write_text(f"{P}Orig/a.cbz\t{H1}\t\n")
         assert censo.main(["--disco", str(d), "--base", str(b), "--hash-disco", str(hd), "--hash-base", str(hb)]) == 0
         assert "IDÉNTICOS a un archivo registrado" in capsys.readouterr().out
+
+    def test_un_identico_cuyo_original_esta_marcado_is_missing_es_un_movimiento_no_una_copia(self):
+        c = censo.comparar(disco(("Nueva/a.cbz", 1), ("Nueva/b.cbz", 2)),
+                           base(("Vieja/a.cbz", 1, "t", "f"), ("Vieja/b.cbz", 2, "f", "t")))
+        hd = {"Nueva/a.cbz": H1, "Nueva/b.cbz": H2}
+        hb = {H1: "Vieja/a.cbz", H2: "Vieja/b.cbz"}
+        t = censo.confirmar_identidad(c, hd, hb)
+        assert "2  IDÉNTICOS a un archivo registrado" in t
+        assert "1  de los idénticos corresponden a una fila marcada is_missing" in t
