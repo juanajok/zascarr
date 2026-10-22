@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, MetadataSource
-from zascarr.services.discovery import Busqueda, DiscoveryResult
+from zascarr.services.discovery import Busqueda, DiscoveryResult, ProcedenciaTradicion
 
 OK, ERR, OFF, SINCLAVE = "ok", "error", "apagada", "sin_clave"
 
@@ -29,7 +29,8 @@ OK, ERR, OFF, SINCLAVE = "ok", "error", "apagada", "sin_clave"
 def res(fuente, titulo, descripcion, n):
     return DiscoveryResult(
         source=fuente, external_id=str(n), title=titulo, start_year=1958, description=descripcion, cover_url=None,
-        site_url=f"https://comicvine.gamespot.com/{n}/", tradition_guess=ComicTradition.AMERICAN)
+        site_url=f"https://comicvine.gamespot.com/{n}/", tradition_guess=ComicTradition.AMERICAN,
+        tradition_provenance=ProcedenciaTradicion.POR_DEFECTO)
 
 
 ESCENARIOS = {

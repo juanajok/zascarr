@@ -39,7 +39,13 @@ from tests.test_descubrimiento_grupo_pg import (  # noqa: F401  (fixtures y ayud
 from tests.test_revision_carpetas_pg import archivo
 from zascarr.api import revision as api_revision
 from zascarr.models import ComicTradition, MetadataSource
-from zascarr.services.discovery import FUENTE_APAGADA, FUENTE_ERROR, FUENTE_OK, FUENTE_SIN_CLAVE
+from zascarr.services.discovery import (
+    FUENTE_APAGADA,
+    FUENTE_ERROR,
+    FUENTE_OK,
+    FUENTE_SIN_CLAVE,
+    ProcedenciaTradicion,
+)
 from zascarr.services.tokens_revision import verificar_token_candidata
 from zascarr.web import asistente_carpetas, discovery
 
@@ -226,6 +232,38 @@ class TestCriterio3SinPreseleccion:
         assert "discovery-card-desc" not in t and "↗" not in t                    # sin descripción ni ficha
         assert 'class="cover cover-missing"' in t                                  # portada ausente = marcador CSS
 
+    async def test_sin_sugerencia_no_hay_texto_de_pista_y_el_selector_sigue_vacio(self, entorno):
+        await sembrar_flash(entorno.banco)
+        entorno.fuentes.resultados = [
+            res(MetadataSource.COMIC_VINE, "1", "Flash", 1987, tradicion=None, procedencia=None)]
+        t = (await buscar()).text
+        v = visible(t)
+        assert "La fuente lo clasifica" not in v and "La fuente no indica tradición" not in v
+        assert "La fuente sugiere" not in v and "no de la obra: elige tú" not in v
+        assert 'value="" selected disabled' in t and "required" in re.search(r"<select[^>]*>", t).group(0)
+        (token,) = tokens_de(t)
+        firmada = verificar_token_candidata(token, CARPETA, SECRETO)
+        assert firmada is not None and firmada.tradicion is None and firmada.procedencia is None
+
+    async def test_la_procedencia_por_defecto_se_dice_y_no_se_preselecciona(self, entorno):
+        await sembrar_flash(entorno.banco)
+        entorno.fuentes.resultados = [
+            res(MetadataSource.COMIC_VINE, "1", "Flash", 1987,
+                procedencia=ProcedenciaTradicion.POR_DEFECTO)]
+        t = (await buscar()).text
+        assert "La fuente no indica tradición: se sugiere Grapa americana por defecto." in visible(t)
+        assert "no de la obra: elige tú" in visible(t)
+        assert 'value="american" selected' not in t
+
+    async def test_la_procedencia_desconocida_no_se_presenta_como_explicita(self, entorno):
+        await sembrar_flash(entorno.banco)
+        entorno.fuentes.resultados = [
+            res(MetadataSource.GCD, "9", "Flash", 1987, tradicion=ComicTradition.TEBEO, procedencia=None)]
+        t = (await buscar()).text
+        assert "La fuente sugiere Tebeo español, pero no consta de dónde sale." in visible(t)
+        assert "La fuente lo clasifica" not in visible(t)
+        assert "no de la obra: elige tú" in visible(t)
+
     async def test_el_orden_es_el_de_las_fuentes_y_no_depende_del_orden_de_llegada(self, entorno):
         await sembrar_flash(entorno.banco)
         entorno.fuentes.resultados = [res(MetadataSource.GCD, "9", "Zeta", 1990),
@@ -273,6 +311,7 @@ class TestCriterio4Eleccion:
         assert "Flash (1987)" in v and "Comic Vine" in v
         assert re.search(r"Tradición elegida\s*Británico", v)                      # la elegida, no la sugerida
         assert "La fuente sugería Grapa americana (era solo una sugerencia)" in v
+        assert "Procedencia de la sugerencia" in v and "dato explícito de la fuente" in v
         assert await estado_de_la_base(entorno.banco) == antes
 
     async def test_el_titulo_sale_de_lo_firmado_no_de_lo_que_reenvia_el_navegador(self, entorno):

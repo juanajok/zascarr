@@ -20,7 +20,7 @@ from zascarr.api.revision import PeticionConfirmarAlta, PeticionPrevisualizarAlt
 from zascarr.models import ComicTradition
 from zascarr.services import tokens_revision as t
 from zascarr.services.alta_serie import AltaDeSerie, DatosManuales, GrupoNoEncontradoError
-from zascarr.services.discovery import CAMPO_ID_EXTERNO
+from zascarr.services.discovery import CAMPO_ID_EXTERNO, ProcedenciaTradicion
 from zascarr.services.tokens_revision import (
     ANIO_MIN_FIRMABLE,
     CLAVE_SIN_GRUPO,
@@ -51,8 +51,9 @@ CH = "\U0001F600"
 def candidata_maxima() -> CandidataFirmada:
     fuente = max((m.value for m in CAMPO_ID_EXTERNO), key=len)
     tradicion = max((c.value for c in ComicTradition), key=len)
+    procedencia = max((p.value for p in ProcedenciaTradicion), key=len)
     return CandidataFirmada(fuente, CH * MAX_ID_EXTERNO, CH * MAX_TITULO, ANIO_MIN_FIRMABLE, tradicion,
-                            CH * MAX_DESCRIPCION, CH * MAX_COVER_URL)
+                            CH * MAX_DESCRIPCION, CH * MAX_COVER_URL, procedencia)
 
 
 def alta_maxima(clave: str, **kw) -> AltaFirmada:
@@ -97,8 +98,8 @@ class TestLosLimitesRecalculados:
     def test_los_valores_exactos(self):
         """Documentan el cálculo: el contexto pasa de 1000 controles de seis bytes a diez caracteres (uno de ellos de seis
         bytes), y el token baja `(6000 - 15) * 4 / 3 = 7.980` caracteres."""
-        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20313, 25681)                       # con grupo: NO han cambiado
-        assert (MAX_TOKEN_CANDIDATA_SIN_GRUPO, MAX_TOKEN_ALTA_SIN_GRUPO) == (12333, 17701)
+        assert (MAX_TOKEN_CANDIDATA, MAX_TOKEN_ALTA) == (20353, 25681)                       # +40 por la procedencia de #276
+        assert (MAX_TOKEN_CANDIDATA_SIN_GRUPO, MAX_TOKEN_ALTA_SIN_GRUPO) == (12373, 17701)
         assert MAX_TOKEN_CANDIDATA - MAX_TOKEN_CANDIDATA_SIN_GRUPO == MAX_TOKEN_ALTA - MAX_TOKEN_ALTA_SIN_GRUPO == 7980
 
     def test_un_token_sin_grupo_cabe_siempre_en_los_limites_que_ya_tienen_los_puntos_de_entrada(self):

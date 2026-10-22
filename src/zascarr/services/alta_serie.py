@@ -177,6 +177,9 @@ class VistaPreviaAlta(BaseModel):
     resumen: str
     efectos: dict[str, int]
     token: str | None
+    #: Procedencia de la tradición sugerida (`explicita`, `transformada`, `por_defecto`, `desconocida`). Es contexto
+    #: para la persona, no un dato de la obra: no se guarda como tradición ni se aplica al alta.
+    procedencia_sugerida: str | None = None
 
 
 class ResultadoAlta(BaseModel):
@@ -298,10 +301,11 @@ class AltaDeSerie:
             descripcion = c.descripcion
             cover = c.cover_url if c.cover_url and es_url_de_portada_permitida(c.cover_url) else None
             sugerida: str | None = c.tradicion
+            procedencia: str | None = c.procedencia
         elif manual is not None:
             origen, fuente, id_externo = "manual", None, None
             titulo, anio = _limpiar_titulo(manual.titulo), manual.anio
-            descripcion = cover = sugerida = None
+            descripcion = cover = sugerida = procedencia = None
         if anio is not None and not (ANIO_MIN <= anio <= ANIO_MAX):
             raise DatosInvalidosError("El año no es válido.")
 
@@ -318,11 +322,12 @@ class AltaDeSerie:
                                      self._secret, ahora=self._ahora)
             return self._vista(origen, fuente, titulo, anio, tradicion, sugerida, "reutilizar", _a_serie_local(existente), [],
                                None, token, "Ya existe una serie con ese identificador: se usará tal cual, "
-                                            "sin modificarla.")
+                                            "sin modificarla.", procedencia=procedencia)
 
         if parecidas and decision is None:
             return self._vista(origen, fuente, titulo, anio, tradicion, sugerida, "elegir", None, parecidas, None,
-                               None, "Hay series que se parecen: elige si es la misma o si es distinta.")
+                               None, "Hay series que se parecen: elige si es la misma o si es distinta.",
+                               procedencia=procedencia)
         if decision == "reutilizar":
             elegida = next((p for p in parecidas if serie_id is not None and p.series_id == str(serie_id)), None)
             if elegida is None:
@@ -333,7 +338,8 @@ class AltaDeSerie:
             return self._vista(origen, fuente, titulo, anio, tradicion, sugerida, "reutilizar",
                                SerieLocal(series_id=elegida.series_id, titulo=elegida.titulo, anio=elegida.anio,
                                           tradicion=elegida.tradicion),
-                               parecidas, decision, token, "Se usará la serie existente que elegiste, sin modificarla.")
+                               parecidas, decision, token, "Se usará la serie existente que elegiste, sin modificarla.",
+                               procedencia=procedencia)
         if decision is not None and decision != "crear_igualmente":
             raise DecisionInvalidaError("Decisión desconocida.")
         if decision == "crear_igualmente" and not parecidas:
@@ -347,15 +353,16 @@ class AltaDeSerie:
             self._secret, ahora=self._ahora)
         return self._vista(origen, fuente, titulo, anio, tradicion, sugerida, "crear", None, parecidas, decision,
                            token, "Se creará una serie vacía: sin números ni archivos. Vincular archivos es "
-                                  "otro paso, con su propia confirmación.")
+                                  "otro paso, con su propia confirmación.", procedencia=procedencia)
 
     @staticmethod
     def _vista(origen, fuente, titulo, anio, tradicion, sugerida, accion, existente, parecidas, decision, token,
-               resumen) -> VistaPreviaAlta:
+               resumen, *, procedencia=None) -> VistaPreviaAlta:
         return VistaPreviaAlta(
             accion=accion, origen=origen, fuente=fuente, titulo=titulo, anio=anio, tradicion=tradicion.value,
-            tradicion_sugerida=sugerida, existente=existente, parecidas=parecidas, decision=decision,
-            resumen=resumen, efectos={"series_nuevas": 1 if accion == "crear" else 0, "numeros": 0, "archivos": 0},
+            tradicion_sugerida=sugerida, procedencia_sugerida=procedencia, existente=existente, parecidas=parecidas,
+            decision=decision, resumen=resumen,
+            efectos={"series_nuevas": 1 if accion == "crear" else 0, "numeros": 0, "archivos": 0},
             token=token)
 
     # ── Confirmación ─────────────────────────────────────────────────────────────────────────────

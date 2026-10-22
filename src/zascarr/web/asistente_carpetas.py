@@ -216,7 +216,8 @@ async def elegir(
     if tradicion is None:
         return _sin_cache(templates.TemplateResponse(request, "_asistente_paso.html", {
             "clave": clave, "token": candidata, "sugerida": firmada.tradicion, "consulta": consulta,
-            "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion),
+            "etiqueta_sugerida": _etiqueta_de_tradicion(firmada.tradicion) if firmada.tradicion else None,
+            "procedencia": firmada.procedencia,
             "error": MENSAJE_FALTA_TRADICION, "tradiciones": _tradiciones(), "pista": pista}))
     plantilla, contexto = await preparar_vista_previa(
         request, db, candidata=candidata, titulo=None, anio=None, clave=clave, tradition=tradicion, consulta=consulta)
@@ -227,7 +228,7 @@ async def elegir(
         "tradition": tradicion.value, "consulta": consulta,
         "eleccion_fuente": _NOMBRE_FUENTE.get(firmada.fuente, firmada.fuente), "eleccion_titulo": firmada.titulo,
         "eleccion_anio": firmada.anio, "eleccion_tradicion": _TRADICION_LABEL[tradicion],
-        "eleccion_sugerida": _etiqueta_de_tradicion(firmada.tradicion)}))
+        "eleccion_sugerida": _etiqueta_de_tradicion(firmada.tradicion) if firmada.tradicion else None}))
 
 
 # ── U19: volver sin perder la elección (ficha §6.4) ──────────────────────────────────────────────
