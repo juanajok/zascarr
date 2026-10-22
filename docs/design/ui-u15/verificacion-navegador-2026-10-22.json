@@ -1,0 +1,93 @@
+{
+  "fecha_utc": "2026-10-22T09:50:42+00:00",
+  "sha": "bf6769967ccbed8f6f229eb586b28edb32576c23",
+  "base_url": "http://127.0.0.1:8768",
+  "consulta": "Mortadelo",
+  "consulta_sin_sugerencia": "Lucky Luke",
+  "navegador": "154.0.8037.92",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "viewport_escritorio": {
+    "width": 1280,
+    "height": 900
+  },
+  "viewport_movil": {
+    "viewport": 360,
+    "clientWidth": 360,
+    "scrollWidth": 360,
+    "bodyScrollWidth": 360
+  },
+  "n_tarjetas": 20,
+  "selects": {
+    "total": 20,
+    "obligatorios": 20,
+    "vacios": 20,
+    "con_tradicion_preseleccionada": 0
+  },
+  "pistas_por_procedencia": {
+    "por_defecto": 10,
+    "transformada": 9,
+    "sin_sugerencia": 1
+  },
+  "pistas_por_valor": {
+    "Tebeo español": 19
+  },
+  "tarjetas_sin_pista": [
+    {
+      "titulo": "Mortadelo e Salaminho (1969) GCD ↗",
+      "fuente": "GCD"
+    }
+  ],
+  "captura_gcd_sin_pista": "2026-10-22-descubrir-mortadelo-gcd-sin-sugerencia-1280.png",
+  "eleccion": {
+    "tarjeta": "ALEGRES HISTORIETAS (1980) TEBEOSFERA ↗",
+    "procedencia": "por_defecto",
+    "sugerencia": "Tebeo español",
+    "elegida": "Manga",
+    "vista_previa": "Se guardará como «ALEGRES HISTORIETAS» (1980). Tradición elegida: Manga.\n\nProcedencia de la sugerencia: valor por defecto: la fuente no lo indica. La tradición aplicada es la que elegiste.\n\ni\nSe creará una serie vacía: sin números ni archivos. Vincular archivos es otro paso, con su propia confirmación.\nCrear serie vacía\nGrapa americana\nFranco-belga (BD)\nManga\nTebeo español\nFumetti\nManhwa\nManhua\nBritánico\nOtra\nCambiar y revisar"
+  },
+  "sin_sugerencia": {
+    "consulta": "Lucky Luke",
+    "n_tarjetas": 20,
+    "tarjetas_gcd": 10,
+    "gcd_sin_pista": [
+      {
+        "titulo": "De avonturen van Lucky Luke (2004) GCD ↗",
+        "fuente": "GCD"
+      },
+      {
+        "titulo": "De avonturen van Lucky Luke naar Morris (2004) GCD ↗",
+        "fuente": "GCD"
+      },
+      {
+        "titulo": "Et ekstraordinært eventyr med Lucky Luke (2016) GCD ↗",
+        "fuente": "GCD"
+      },
+      {
+        "titulo": "Ett extraordinärt äventyr med Lucky Luke / Ett extraordinärt Lucky Luke-äventyr av... (2016) GCD ↗",
+        "fuente": "GCD"
+      },
+      {
+        "titulo": "Jag Lucky Luke (1982) GCD ↗",
+        "fuente": "GCD"
+      },
+      {
+        "titulo": "Jag Lucky Luke (1986) GCD ↗",
+        "fuente": "GCD"
+      },
+      {
+        "titulo": "Jeg, Lucky Luke (1983) GCD ↗",
+        "fuente": "GCD"
+      }
+    ],
+    "selects_vacios": true,
+    "sin_texto_de_pista": true,
+    "captura": "2026-10-22-descubrir-lucky-luke-gcd-sin-sugerencia-1280.png"
+  },
+  "capturas": [
+    "2026-10-22-descubrir-mortadelo-1280.png",
+    "2026-10-22-descubrir-mortadelo-360.png",
+    "2026-10-22-descubrir-revision-manga-1280.png",
+    "2026-10-22-descubrir-lucky-luke-gcd-sin-sugerencia-1280.png",
+    "2026-10-22-descubrir-mortadelo-gcd-sin-sugerencia-1280.png"
+  ]
+}
