@@ -56,16 +56,16 @@ RAR = m01…m10. Cada celda: celdas que pasan / celdas ejecutadas.
 | `rarfile` + `unrar` | 10/10 | 9/9 | 9/9 | 23,9 | 0,13 | 0,81 |
 | `rarfile` + `bsdtar` | 10/10 | **0/9** | **3/9** | 23,3 | — | FAIL |
 
-¹ Incluye `m04`, donde `bsdtar` enumera otras entradas (§5.4). Para los demás motores `m04` es un paquete y «primera/última» es NOT RUN («sin entrada aplicable»), no PASS. De las 18 lecturas de página con `rarfile`+`bsdtar` fallan 15.
+¹ Incluye `m04`, donde `bsdtar` enumera otras entradas (§5.4); los fallos son 9 de «primera» y 6 de «última». Para los demás motores `m04` es un paquete y «primera/última» es NOT RUN («sin entrada aplicable»), no PASS. De las 18 lecturas de página con `rarfile`+`bsdtar` fallan 15.
 
 1. **Memoria.** Ningún pico supera 25,3 MiB (el 10 % del umbral de 256) y no hubo ninguna muerte por memoria en las 264 celdas. El RAR **sólido** (57 MB) también cabe: 25,3 MiB con `unar`.
 2. **Tiempo.** Primera página ≤ 0,2 s en todas las muestras, también en la de 173 MB. La **última** página de un RAR sólido cuesta ~1 s (hay que descomprimir hasta ella; en los no sólidos, ≤ 0,05 s con las herramientas directas y ≤ 0,2 s con `rarfile`). Para portadas (la primera) no importa; sí para cualquier idea de «leer una página cualquiera».
 3. **Escrituras.** `unar` no escribe a la salida estándar: extrae al `tmpfs` (de 0,06 a 1,1 MB por página en los RAR, 2 MB en el ZIP; el tamaño de la página). Los demás motores, 0 bytes. Quien integre `unar` necesita un directorio temporal acotado.
-4. **`m04` es un paquete.** Cinco de los seis motores listan 12 entradas, con ficheros de extensión de contenedor dentro (varios números en uno), y la regla «paquete» (idea adaptada de Kapowarr) lo marca. **`bsdtar` enumera `m04` de otra forma** (no marca paquete y extrae «páginas»): discrepancia **no investigada**; no se sabe aún cuál de las dos listas es la buena. Hasta aclararla, `m04` solo vale como «listar».
+4. **`m04` es un paquete.** `lsar` lista 11 ficheros `.cbr` (un tomo con sus capítulos) más su carpeta: 12 entradas, que es lo que ven `unar`, `unrar` y `rarfile` con los tres motores; la regla «paquete» (idea adaptada de Kapowarr) lo marca, y por eso «primera/última» es NOT RUN. **`bsdtar` lista otra cosa**: 27 nombres de páginas (`00.png` … `36.jpg`) que no son ninguna de esas 12 entradas. El mecanismo no se ha investigado, pero el resultado es que `bsdtar` **no ve el paquete** y ofrecería como «primera página» una imagen que no es la del fichero externo. Un motivo más para no usarlo como lector.
 5. **RAR5.** Las dos muestras (m06, m07) pasan con `unar`, `bsdtar` y `unrar`.
 6. **Sólido.** `bsdtar` falla al listar (`RAR solid archive support unavailable`, estado FAIL con causa en la herramienta, no en el fichero). `unar` y `unrar` lo leen.
 7. **`m11` (ZIP con extensión `.cbr`).** `unrar`, `rarfile`+(`unar`|`bsdtar`|`unrar`): FAIL («no es RAR»); `unar` y `bsdtar`: PASS. Este FAIL es esperable para herramientas solo-RAR; lo relevante es que **la extensión no sirve para elegir lector**.
-8. **`rarfile` + `bsdtar`.** Falla con «Failed the read enough data … got=51» (la herramienta devuelve 51 bytes en vez de la página, probablemente un mensaje de error). Mismas celdas que en la ejecución anterior, cuyo log sí tenía el texto; no investigado más porque `bsdtar` ya falla por sí mismo en el sólido y no es candidato.
+8. **`rarfile` + `bsdtar`.** Falla con `BadRarFile: Failed the read enough data … got=51` (recibe 51 bytes en vez de la página; probablemente un mensaje de error de `bsdtar`, no comprobado). Texto confirmado en el `resultados.jsonl` de la ejecución final; no investigado más porque `bsdtar` ya falla por sí mismo en el sólido y no es candidato.
 9. **`rarfile` frente a la herramienta directa.** Añade ~0,1–0,15 s por operación (primera página: 0,05 → 0,19 s) y una dependencia de PyPI, sin ampliar lo que se puede leer; la memoria es del mismo orden (19–25 MiB).
 
 ## 6. Límites de lo medido (leer antes de concluir nada)
@@ -75,8 +75,7 @@ RAR = m01…m10. Cada celda: celdas que pasan / celdas ejecutadas.
 - **Sin `ComicInfo.xml`:** ninguna de las 11 muestras lo trae → la operación «leer ComicInfo» es **NOT RUN** en las 66 celdas.
 - **Sin RAR corrupto ni cifrado** (no hay con qué crearlos; el protocolo lo preveía): «fallo controlado» **NOT RUN**.
 - **Sin topes probados** (entradas, tamaño descomprimido): `unar`/`lsar` no se ejercitaron con una bomba; la regla de ZascArr (`MAX_ZIP_ENTRIES`, `MAX_ZIP_UNCOMPRESSED`) es solo para ZIP.
-- **Tamaño de la imagen y dependencias:** no medido (`docker images` antes/después). NOT RUN.
-- **Textos de error.** Los mensajes citados (`bsdtar`: «RAR solid archive support unavailable»; `rarfile`+`bsdtar`: «got=51») proceden del log de la ejecución anterior; la final marca **las mismas celdas** como FAIL, pero su log no se ha leído. Pendiente de confirmar con el `resultados.jsonl` final.
+- **Tamaño de la imagen:** medido solo **en conjunto**: `zascarr-zascarr:latest` 593 MB → imagen de evaluación 636 MB (**+43 MB**, un 7 %), con `unar`, `libarchive-tools`, `unrar` y `rarfile` juntos. El desglose por herramienta (lo que costaría solo `unar` con sus dependencias) **no está medido**.
 - **Trazabilidad:** una ejecución anterior (00:01) se **descartó**: el banco pasaba mal los nombres con corchetes de `m07` a `unar` y `bsdtar` (fallo del banco, no de las herramientas). Se corrigió y se repitió entera; esta ficha usa solo la segunda.
 - El kit de medición (banco, Dockerfile, pasos) sigue **fuera del repositorio**, en la carpeta de trabajo de la sesión. Si se quiere repetir, se puede añadir en una PR aparte.
 
@@ -88,7 +87,7 @@ RAR = m01…m10. Cada celda: celdas que pasan / celdas ejecutadas.
 | Tiempo, primera página ≤ 5 s (~200 MB) | **PASS** en caliente (≤ 0,2 s) | **PASS** | **PASS** | en frío: **NOT RUN** |
 | Seguridad (solo `tmpfs`; topes; corrupto/cifrado) | **NOT RUN** | **NOT RUN** | **NOT RUN** | solo se midió lo que escribe cada motor |
 | Licencia (Debian `main` o aceptación del PO) | **PASS** (main, LGPL-2.1+) | **PASS** (main) | **requiere aceptación** (non-free) | `rarfile` es de PyPI: también requiere aceptación |
-| Dependencia (coste en imagen y superficie) | **NOT RUN** | **NOT RUN** | **NOT RUN** | tamaño sin medir; decisión del PO |
+| Dependencia (coste en imagen y superficie) | **NOT RUN** | **NOT RUN** | **NOT RUN** | +43 MB en conjunto (593 → 636 MB); desglose sin medir; decisión del PO |
 
 Regla de §7: hay NOT RUN en criterios clave → **seguir investigando**.
 
@@ -97,9 +96,9 @@ Regla de §7: hay NOT RUN en criterios clave → **seguir investigando**.
 
 Para poder pasar a «adoptar» (o a «descartar») faltan, en este orden:
 1. **Seguridad:** comportamiento ante un RAR truncado/alterado (se puede fabricar con una copia) y un cifrado (si el PO tiene uno), y qué topes de entradas/tamaño se pueden aplicar con el **listado** de `lsar` antes de extraer.
-2. **Dependencia:** tamaño de la imagen con y sin `unar`, a decidir por el PO (CLAUDE.md §2).
+2. **Dependencia:** tamaño de la imagen con **solo** `unar` (hoy sabemos +43 MB con las cuatro piezas), a decidir por el PO (CLAUDE.md §2).
 3. **Medición en frío** (`DROP_CACHES=1`) y desde el disco de la biblioteca, no desde el disco del sistema.
 4. **Comprobar la página de verdad** (`Image.load()` y tamaño/CRC contra el listado) y una muestra con `ComicInfo.xml`.
-5. Aclarar la discrepancia de `m04` (12 frente a lo que lista `bsdtar`) y, si se puede, **más muestras sólidas** de otro tamaño.
+5. **Más muestras sólidas** de otro tamaño y, si se quiere, más paquetes como `m04` (la discrepancia de `bsdtar` está descrita, no explicada).
 
 Esta ficha **no decide** la implementación ni autoriza renombrar, convertir, mover o adoptar ningún fichero de la biblioteca. Los 1234 `.cbr` siguen sin abrirse hoy; lo que cambiaría una implementación futura (portada y metadatos para esos ficheros) **no está medido** y depende de que cada fichero contenga imágenes legibles.
