@@ -1,4 +1,4 @@
-# Ficha §13 — Decisión sobre los NOT RUN de U15 (#202) (2026-10-22)
+# Ficha §13 — Decisión sobre los NOT RUN de U15 (#202) — firmada el 2026-10-22
 
 - **Feature:** #196 Auditoría de UI del 2026-10-15.
 - **Historia:** #202 BL-U15, «Que la tradición sugerida en Descubrir no me lleve a error».
@@ -7,15 +7,16 @@
   (merge de #281).
 - **Responsable de la decisión:** juanajok.
 - **Fecha de la propuesta:** 2026-10-22.
-- **Estado:** **propuesta para firma**; no se declara adoptada hasta que el responsable la firme.
+- **Fecha de firma:** 2026-10-22.
+- **Estado:** **firmada** por el responsable el 2026-10-22; decisión adoptada.
 
-## 1. Decisión propuesta
+## 1. Decisión adoptada
 
 Se **aceptan como límite declarado** los dos NOT RUN de U15 —Comic Vine sin clave y AniList con la API
-no disponible— y se propone cerrar #202 con la evidencia del producto, **sin convertir esos NOT RUN en
+no disponible— y se **acuerda cerrar #202** con la evidencia del producto, **sin convertir esos NOT RUN en
 PASS** y sin afirmar nada sobre el comportamiento real de esas dos fuentes.
 
-La historia pasaría a **«Fusionado — pendiente de despliegue»**, no a «Hecha». El cierre no autoriza
+La historia pasa a **«Fusionado — pendiente de despliegue»**, no a «Hecha». El cierre no autoriza
 desplegar en la Pi ni sustituye la validación con personas de U21.
 
 ## 2. Qué se acepta
@@ -63,7 +64,7 @@ completas en las cuatro fuentes.
 
 ## 4. Consecuencias
 
-1. **#202 puede pasar a «Fusionado — pendiente de despliegue»** una vez firmada esta ficha. No pasa a
+1. **#202 pasa a «Fusionado — pendiente de despliegue»** con la firma de esta ficha (2026-10-22). No pasa a
    «Hecha».
 2. **#276 ya está fusionada** en `bf67699`; su tarjeta está en «Fusionado — pendiente de despliegue».
 3. **#196 sigue abierta.** El cierre de #202 no cierra el Sprint 0: quedan #208 (condiciones humanas y
@@ -99,13 +100,16 @@ completas en las cuatro fuentes.
 4. **Chrome nuevo:** `docs/design/ui-u15/verificacion-navegador-2026-10-22.md` y
    `verificacion-navegador-2026-10-22.json` (`bf67699`, 2026-10-22); copy con procedencia, tarjeta GCD
    `None`, elección explícita y 360 px.
-5. **Esta ficha:** decisión propuesta sobre los NOT RUN, pendiente de firma.
+5. **Esta ficha:** decisión firmada sobre los NOT RUN el 2026-10-22.
 
 ## 7. Firma
 
-**Decisión propuesta:** aceptar los NOT RUN de Comic Vine y AniList como límite declarado y cerrar
+**Decisión adoptada:** aceptar los NOT RUN de Comic Vine y AniList como límite declarado y cerrar
 #202 con la evidencia del producto, sin declarar PASS de esas dos fuentes ni desplegar.
 
 **Responsable:** juanajok — fecha de la propuesta: 2026-10-22.
 
-**Firma:** ______________________________  **Fecha de firma:** __________________
+**Firma:** juanajok — **Fecha de firma:** 2026-10-22.
+
+Firma registrada tras la fusión de la PR #282 (`06de148`) y antes de la transición de #202 a
+«Fusionado — pendiente de despliegue».

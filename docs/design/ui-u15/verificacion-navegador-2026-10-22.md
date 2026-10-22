@@ -2,8 +2,8 @@
 
 > **Estado: PASS de presentación en Chrome real para la copy con procedencia y para la ausencia de
 > sugerencia.** Se ejecutó contra `origin/main` `bf67699` (merge de #281), con GCD y Tebeosfera reales.
-> No es una validación con personas ni sustituye los NOT RUN de Comic Vine y AniList. #202 sigue abierta
-> hasta que el responsable firme la decisión de los NOT RUN y se proponga su cierre.
+> No es una validación con personas ni sustituye los NOT RUN de Comic Vine y AniList. #202 pasa a
+> «Fusionado — pendiente de despliegue» con la firma de la decisión de los NOT RUN el 2026-10-22; no se marca «Hecha».
 
 ## 1. Qué se comprueba
 
@@ -153,8 +153,8 @@ prueba de Postgres citada en §1.
   pruebas automáticas. No se extrapola el comportamiento de esas fuentes.
 - **Sin lector de pantalla ni teclado**: esta pasada no sustituye las comprobaciones de accesibilidad de
   U21; solo mide presentación y flujo de elección de U15.
-- **Sin despliegue**: no se toca la Pi. #202 no se marca «Hecha» por esta verificación; el cierre exige
-  la decisión firmada sobre los NOT RUN.
+- **Sin despliegue**: no se toca la Pi. #202 no se marca «Hecha» por esta verificación; la decisión firmada
+  sobre los NOT RUN el 2026-10-22 la deja en «Fusionado — pendiente de despliegue».
 
 ## 7. Archivos
 
@@ -166,4 +166,4 @@ prueba de Postgres citada en §1.
 - `capturas/2026-10-22-descubrir-revision-manga-1280.png` — vista previa tras elegir Manga.
 - `capturas/2026-10-22-descubrir-mortadelo-gcd-sin-sugerencia-1280.png` — tarjeta GCD sin pista.
 - `capturas/2026-10-22-descubrir-lucky-luke-gcd-sin-sugerencia-1280.png` — siete tarjetas GCD sin pista.
-- `decision-u15-not-run-2026-10-22.md` — propuesta de decisión de los NOT RUN para firma del responsable.
+- `decision-u15-not-run-2026-10-22.md` — decisión firmada de los NOT RUN el 2026-10-22.
