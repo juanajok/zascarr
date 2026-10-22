@@ -22,6 +22,8 @@ SEGUNDO PASO (opcional, también solo lectura): confirmar por CONTENIDO si esos 
     "select file_path, coalesce(sha256_hash,''), coalesce(original_sha256,'') from files" > /tmp/hash-base.tsv
   python3 censo_disco_vs_base.py --disco /tmp/disco.tsv --base /tmp/base.tsv \\
     --hash-disco /tmp/hash-sin-registrar.txt --hash-base /tmp/hash-base.tsv
+  (para incluir también los «sin extensión» y los `.rar`/`.tar`, calcula sus huellas igual y concaténalas en el mismo fichero de hashes:
+   awk -F'\\t' '$2=="sin_extension" || $2=="formato_no_soportado"{print $1}' /tmp/sin-registrar.tsv | while IFS= read -r f; do sudo ionice -c3 nice -n19 sha256sum -- "$f"; done >> /tmp/hash-sin-registrar.txt)
 
 Uso (en la Pi, como `pi`; los dos comandos solo leen):
   cd /media/WDElements/Tebeos && sudo find . -type f -printf '%P\\t%s\\t%T@\\n' | LC_ALL=C sort > /tmp/disco.tsv
@@ -209,6 +211,17 @@ def confirmar_identidad(c: Censo, hash_disco: dict[str, str], hash_base: dict[st
             out.append(f"    {n:>4}  {a}  →  {b}")
     if distintos:
         out.append("  (los distintos pueden ser tebeos nuevos de verdad o registrados SIN hash en la base: miralo antes de decidir nada)")
+    # Otros contenedores (sin extensión, .rar, .tar…): ¿son copias de algo registrado o contenido que ZascArr no conoce?
+    for cat, titulo in (("sin_extension", "sin extensión"), ("formato_no_soportado", "formato que ZascArr no lee (.rar, .tar…)")):
+        rutas = [r for r, k in c.solo_disco.items() if k == cat]
+        if not rutas:
+            continue
+        hechas = [r for r in rutas if r in hash_disco]
+        ident = [r for r in hechas if hash_disco[r] in hash_base]
+        out.append("")
+        out.append(f"{titulo[0].upper() + titulo[1:]} (por contenido): {len(rutas)} ficheros · con hash calculado: {len(hechas)} · sin hash: {len(rutas) - len(hechas)}")
+        out.append(f"  {len(ident):>5}  IDÉNTICOS a un archivo registrado (copia exacta)")
+        out.append(f"  {len(hechas) - len(ident):>5}  contenido que NO está registrado (el contenedor puede ser un tebeo que ZascArr no ve por su extensión)")
     return "\n".join(out)
 
 

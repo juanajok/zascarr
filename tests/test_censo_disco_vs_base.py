@@ -133,3 +133,13 @@ class TestIdentidadPorContenido:
         t = censo.confirmar_identidad(c, hd, hb)
         assert "2  IDÉNTICOS a un archivo registrado" in t
         assert "1  de los idénticos corresponden a una fila marcada is_missing" in t
+
+    def test_otros_contenedores_sin_extension_y_rar_por_contenido(self):
+        c = censo.comparar(disco(("G/novela", 5), ("G/otra", 6), ("G/x.rar", 7), ("G/y.rar", 8)),
+                           base(("Orig/novela.cbr", 5, "f", "t")))
+        hd = {"G/novela": H1, "G/otra": H2, "G/x.rar": H3}
+        hb = {H1: "Orig/novela.cbr", H3: "Orig/x.cbr"}
+        t = censo.confirmar_identidad(c, hd, hb)
+        assert "Sin extensión (por contenido): 2 ficheros · con hash calculado: 2 · sin hash: 0" in t
+        assert "1  IDÉNTICOS a un archivo registrado (copia exacta)" in t and "1  contenido que NO está registrado" in t
+        assert "Formato que ZascArr no lee (.rar, .tar…) (por contenido): 2 ficheros · con hash calculado: 1 · sin hash: 1" in t
