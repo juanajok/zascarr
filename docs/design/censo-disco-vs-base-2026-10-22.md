@@ -22,18 +22,34 @@ El inventario del disco da **1577** ficheros y la base tiene **1339** archivos. 
 
 | Carpeta sin registrar | Copias | Carpeta donde está el original registrado |
 |---|---|---|
-| `Comics/Superman Vol2 (Ed.Zinco)(1987-96)` | 136 (+1) | `Comics/Superman (1987)` (+1 en `Comics/Flash (1987)`) |
+| `Comics/Superman Vol2 (Ed.Zinco)(1987-96)` | 136 | `Comics/Superman (1987)` |
+| `Comics/Superman Vol2 (Ed.Zinco)(1987-96)` | 1 | `Comics/Flash (1987)` |
 | `Comics/Nuevos Mutantes Vol3 (Panini)(2020-23)` | 30 | `Comics/Nuevos Mutantes (2019)` |
 | `Tebeos/Carlos Giménez` | 26 | `Graphic Novels/Carlos Gimenez` |
 | `Comics/_Omnibus` | 12 | `Comics/Patrulla-X (Panini)` |
 | `Comics/La Liga de los Hombres Extraordinarios (1999)` | 7 | la **misma** carpeta (copias con otro nombre) |
 | `Comics/Patrulla-X (Panini)` | 4 | `Comics/Inferno (2021)` |
 | `Comics/Superman (1987)` | 1 | `Comics/Flash (1987)` |
+| **Total** | **217** (136 + 1 + 30 + 26 + 12 + 7 + 4 + 1) | |
+
+Por carpeta de origen, `Superman Vol2 (Ed.Zinco)` tiene **137** (136 + 1), que es el recuento por carpeta de la primera salida del censo; aquí van separadas porque su original está en dos carpetas distintas.
+
+### Cómo cuadran las cifras
+Los números no son equivalentes entre sí; cada uno cuenta una cosa distinta:
+
+| Cuenta | Operación | Resultado |
+|---|---|---|
+| Ficheros del disco con fila en la base (misma ruta) | — | **1325** |
+| Filas de la base sin fichero (todas `is_missing`) | 1339 − 1325 | **14** |
+| Ficheros del disco **sin fila** | 1577 − 1325 | **252** = 217 tebeos + 22 formato no soportado + 12 sin extensión + 1 `.part` |
+| Diferencia «a ojo» entre disco y base | 1577 − 1339 | **238** = 252 − 14 |
+
+Los **238** (diferencia de totales) **no** son las 217 copias: mezclan los 252 ficheros sin fila con las 14 filas sin fichero. La cifra que importa para las copias es **217**.
 
 ## Interpretación (lo que se sabe y lo que no)
 - **Se sabe:** son copias byte a byte (mismo SHA-256) de ficheros registrados. El importador no registra la segunda copia de algo que ya conoce (deduplicación por huella), de ahí que no aparezcan. No es un fallo de la actualización del 22 de octubre (el actualizador no toca la biblioteca; la base tiene las mismas 1339 filas que antes).
 - **Dos grupos son carpetas enteras duplicadas** (Superman Zinco y Carlos Giménez) y los demás son ejemplares sueltos en otras carpetas. Que un archivo de `Superman` o de `Patrulla-X` sea idéntico a uno de `Flash` o `Inferno` sugiere ejemplares **mal ubicados** en su carpeta (no se verificó a mano).
-- **No se sabe:** (1) cuántos GB ocupan las 217 copias; (2) qué son los 12 ficheros sin extensión (carpetas `Graphic Novels/…`); (3) por qué las 14 filas `is_missing` no tienen fichero (la herramienta cuenta cuántos «idénticos» apuntan a una fila `is_missing`, que serían movimientos y no copias: no se había incluido en la primera ejecución); (4) si los `.rar`/`.tar` son tebeos en otro contenedor.
+- **No se sabe:** (1) cuántos GB ocupan las 217 copias, **y cuánto de eso sería recuperable**: si algunas comparten el mismo almacenamiento por enlaces duros (mismo inodo), borrar una no libera espacio. Antes de afirmar un ahorro hay que mirar el inodo (`stat -c '%i %h'`) de original y copia; (2) qué son los 12 ficheros sin extensión (carpetas `Graphic Novels/…`); (3) por qué las 14 filas `is_missing` no tienen fichero (la herramienta cuenta cuántos «idénticos» apuntan a una fila `is_missing`, que serían movimientos y no copias: no se había incluido en la primera ejecución); (4) si los `.rar`/`.tar` son tebeos en otro contenedor.
 - Corrección de una lectura previa: al ver 1577 frente a 1339 se habló de «unos 200 tebeos sin registrar» como si faltaran en la colección; la medición por contenido dice que **no**: son duplicados.
 
 ## Decisiones propuestas (NO ejecutadas; del PO)
