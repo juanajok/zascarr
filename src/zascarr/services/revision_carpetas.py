@@ -118,6 +118,16 @@ class Totales(BaseModel):
     grupos: int
     #: Archivos con serie sugerida cuya serie ya no existe: no se muestran en ningún grupo, se cuentan.
     candidata_inexistente: int
+    #: Grupos con contexto (A+B válidos) y su desglose por población.
+    carpetas_utiles: int
+    carpetas_utiles_sin_serie: int
+    carpetas_utiles_serie_sugerida: int
+    #: Partición de cada población entre carpetas útiles y sueltos (contexto ausente).
+    sin_serie_en_carpetas: int
+    sin_serie_sueltos: int
+    serie_sugerida_en_carpetas: int
+    serie_sugerida_sueltos: int
+    sueltos: int
 
 
 class Pagina(BaseModel):
@@ -199,6 +209,7 @@ class RevisionCarpetas:
 
     async def carpetas(
         self, limite: int = LIMITE_POR_DEFECTO, desplazamiento: int = 0,
+        solo_utiles: bool = False,
     ) -> RespuestaCarpetas:
         limite = max(1, min(limite, LIMITE_MAXIMO))
         desplazamiento = max(0, desplazamiento)
@@ -232,14 +243,62 @@ class RevisionCarpetas:
         ]
         grupos.sort(key=lambda g: (not g.en_conflicto, -g.n_archivos, g.clave))
 
+        # La paginación se aplica DESPUÉS de filtrar: una página de la vista contiene
+        # 50 carpetas útiles, no 50 claves de las que algunas son sueltos.
+        utiles = [g for g in grupos if g.carpeta_contextual is not None]
+        lista = utiles if solo_utiles else grupos
+        desglose = {
+            clave: (
+                sum(1 for a in acum.archivos if a.sin_serie),
+                sum(1 for a in acum.archivos if not a.sin_serie),
+            )
+            for clave, acum in grupos_por_clave.items()
+        }
+        totales = self._totales(
+            grupos, {g.clave for g in utiles}, desglose,
+            sin_serie_total, sugeridas_total, huerfanas,
+        )
+
         return RespuestaCarpetas(
             generado=self._ahora().astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            totales=Totales(
-                sin_serie=sin_serie_total, serie_sugerida=sugeridas_total,
-                grupos=len(grupos), candidata_inexistente=huerfanas,
-            ),
+            totales=totales,
             pagina=Pagina(limite=limite, desplazamiento=desplazamiento),
-            grupos=grupos[desplazamiento:desplazamiento + limite],
+            grupos=lista[desplazamiento:desplazamiento + limite],
+        )
+
+    @staticmethod
+    def _totales(
+        grupos: list[Grupo], utiles: set[str], desglose: dict[str, tuple[int, int]],
+        sin_serie_total: int, sugeridas_total: int, huerfanas: int,
+    ) -> Totales:
+        """Recuentos de A/B, de grupos y de la partición carpeta/suelto.
+
+        `carpetas_utiles` no se fija a las 108 de la referencia: se calcula sobre A+B
+        válidos. `grupos` conserva su significado (todas las claves, incluidas las que
+        no tienen contexto). `candidata_inexistente` queda fuera de las sumas.
+
+        El desglose sale de los acumulados completos, no de `Grupo.archivos`: esa
+        lista es una muestra de hasta 20 y no permite distinguir A de B en un grupo
+        mixto grande."""
+        todas = set(desglose)
+        sueltas = todas - utiles
+        sin_serie_en_carpetas = sum(desglose[c][0] for c in utiles)
+        sin_serie_sueltos = sum(desglose[c][0] for c in sueltas)
+        serie_sugerida_en_carpetas = sum(desglose[c][1] for c in utiles)
+        serie_sugerida_sueltos = sum(desglose[c][1] for c in sueltas)
+        return Totales(
+            sin_serie=sin_serie_total,
+            serie_sugerida=sugeridas_total,
+            grupos=len(grupos),
+            candidata_inexistente=huerfanas,
+            carpetas_utiles=len(utiles),
+            carpetas_utiles_sin_serie=sum(1 for c in utiles if desglose[c][0]),
+            carpetas_utiles_serie_sugerida=sum(1 for c in utiles if desglose[c][1]),
+            sin_serie_en_carpetas=sin_serie_en_carpetas,
+            sin_serie_sueltos=sin_serie_sueltos,
+            serie_sugerida_en_carpetas=serie_sugerida_en_carpetas,
+            serie_sugerida_sueltos=serie_sugerida_sueltos,
+            sueltos=sin_serie_sueltos + serie_sugerida_sueltos,
         )
 
     async def archivos_del_grupo(self, clave: str):

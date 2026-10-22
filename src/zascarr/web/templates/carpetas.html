@@ -2,7 +2,16 @@
 {% block title %}Pendientes por carpeta — ZascArr{% endblock %}
 {% block content %}
 <h1>Pendientes por carpeta</h1>
-<p class="subtitle">Elige una carpeta para revisar sus archivos.</p>
+
+{% if error %}
+<p class="subtitle">No se han podido leer los pendientes.</p>
+<p class="caption" role="alert">No se muestran recuentos parciales. Vuelve a intentarlo en unos segundos.</p>
+<p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a></p>
+<p><a class="btn primary" href="/ui/pendientes/carpetas">Reintentar</a></p>
+{% else %}
+{% if total_visible or r.totales.candidata_inexistente %}
+<p class="subtitle">{{ r.totales.sin_serie | miles }} por revisar: {{ r.totales.sin_serie_en_carpetas | miles }} en {{ r.totales.carpetas_utiles_sin_serie | miles }} carpeta{{ "s" if r.totales.carpetas_utiles_sin_serie != 1 }} + {% if r.totales.sin_serie_sueltos %}<a href="/ui/pendientes">{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}</a>{% else %}{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}{% endif %}. {{ r.totales.serie_sugerida | miles }} con serie sugerida, aparte. {{ total_visible | miles }} registro{{ "s" if total_visible != 1 }} visible{{ "s" if total_visible != 1 }}.</p>
+{% endif %}
 
 <p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a></p>
 
@@ -11,24 +20,37 @@
   <p><strong>Son registros pendientes de verificar, no archivos confirmados.</strong>
   Esta pantalla lee la base de datos y no comprueba el disco: un registro puede apuntar a un archivo que ya no esté donde se anotó.
   Una carpeta o un nombre son <em>pistas</em>, no decisiones.</p>
+  <p>Solo se listan carpetas con una pista de contexto. Los archivos de la raíz, de la tradición o dentro de contenedores se cuentan como sueltos y se revisan en «Por revisar».</p>
+  <p>El orden es: primero las carpetas con algún conflicto, después las de más registros y, a igualdad, por nombre.</p>
+  {% if r.totales.serie_sugerida_sueltos %}
+  <p>{{ r.totales.serie_sugerida_sueltos }} registros con serie sugerida no tienen carpeta contextual: se cuentan aparte y su cola no forma parte de esta entrada.</p>
+  {% endif %}
   {% if r.totales.candidata_inexistente %}
   <p>{{ r.totales.candidata_inexistente }} registros tenían una serie sugerida que ya no existe o no se puede leer: no se muestran en ninguna carpeta.</p>
   {% endif %}
 </details>
 
-{% if r.totales.grupos == 0 and r.totales.candidata_inexistente == 0 %}
+{% if total_visible == 0 and r.totales.candidata_inexistente == 0 %}
 {{ ui.estado_vacio("Nada pendiente", "No hay registros pendientes de verificar.") }}
 {% else %}
-<ul class="carpetas-resumen" aria-label="Resumen">
-  <li>{{ ui.chip("neutro", r.totales.sin_serie ~ " sin serie") }}</li>
-  <li>{{ ui.chip("info", r.totales.serie_sugerida ~ " con serie sugerida") }}</li>
-  <li>{{ ui.chip("neutro", r.totales.grupos ~ " carpetas") }}</li>
-  {% if r.totales.candidata_inexistente %}
-  <li>{{ ui.chip("amber", r.totales.candidata_inexistente ~ " con serie borrada") }}</li>
-  {% endif %}
-</ul>
-{% if r.totales.grupos %}
-<p class="carpetas-pagina" id="pagina-actual">Carpetas {{ desde }}–{{ hasta }} de {{ r.totales.grupos }}.</p>
+{% if pagina_invalida %}
+<div class="empty-state" role="status">
+  <h3>Esta página ya no existe</h3>
+  <p>La lista de carpetas cambió desde que abriste este enlace. No se muestra una lista vacía como si fuera normal.</p>
+  <p>
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas?limite={{ limite }}">Ir a la primera página</a>
+    {% if total_carpetas and ultima %}
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ ultima }}">Ir a la última página válida</a>
+    {% endif %}
+  </p>
+</div>
+{% else %}
+{% if total_carpetas %}
+<p class="carpetas-pagina" id="pagina-actual">Carpetas {{ desde }}–{{ hasta }} de {{ total_carpetas | miles }}.</p>
+{% endif %}
+
+{% if not grupos %}
+<p class="empty">No hay carpetas con contexto. Los sueltos se revisan en «Por revisar».</p>
 {% endif %}
 
 {% for v in grupos %}
@@ -113,6 +135,8 @@
   {% if anterior is not none %}<a class="btn ghost sm" rel="prev" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ anterior }}">← Anteriores</a>{% endif %}
   {% if siguiente is not none %}<a class="btn ghost sm" rel="next" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ siguiente }}">Siguientes →</a>{% endif %}
 </nav>
+{% endif %}
+{% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}
