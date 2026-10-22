@@ -3,6 +3,7 @@
 - Estado: **Aceptado** · 2026-10-20 (propuesto y aceptado el mismo día tras la revisión final del revisor/PO). Cierra **D2** de la épica BL-R (#228) para BL-R1 (#230). **No autoriza
   código ni migración por sí mismo**: la implementación de #253 requiere además la orden expresa del PO. Contrato técnico: `docs/design/bl-r1-deshacer-vinculacion.md`.
 - Relacionado: ADR 0006 (asignación recuperable), ADR 0007 (vincular en su sitio), `docs/design/benchmark-reconciliacion-plex.md` (ficha BL-R0, §8 D1–D7).
+- **Enmienda 2026-10-23 (D9 revisada por el PO):** se deshace **cualquier** vínculo, conste o no cómo se hizo (ver «Enmienda: D9» al final). El comprobante (opción C) no cambia.
 
 ## Contexto
 
@@ -55,3 +56,20 @@ una entrada por acción humana (despreciable); no se pone tope en v1 (**sub-deci
 - Sin migración: BL-R1 no toca el esquema ni exige despliegue de base de datos.
 - El historial es **datos del usuario en `files.metadata`**: lo copian los backups de PostgreSQL como cualquier otro dato del archivo.
 - Reversible: pasar a una tabla (A) más tarde es solo añadirla y copiar `vinculo_historial`; no se pierde nada.
+
+## Enmienda: D9 revisada (2026-10-23)
+
+**Qué se decidió el 2026-10-20 (D9, opción a):** deshacer solo los vínculos de «vincular en su sitio» (los que llevan `metadata.vinculo`); el resto salía sin botón y con una explicación.
+
+**Qué se decide ahora (PO, a la vista de la ficha de serie con 10 archivos «En el disco» de los que unos tenían botón y otros no):** se deshace **cualquier** archivo vinculado, **conste o no cómo se vinculó** (opción c de D9). Para quien colecciona, el origen del vínculo es un detalle interno; que dos archivos de la misma serie se comporten distinto parecía un fallo. Un vínculo equivocado del importador o hecho uno a uno desde «Por revisar» es justo el que más se quiere corregir.
+
+**Qué cambia en el mecanismo (sin migración, sin tabla nueva):**
+- La vista previa ya no bloquea con `sin_procedencia` (el código desaparece). Solo bloquean `no_vinculado` y `en_curso`. La respuesta añade `procedencia` (`registrada` | `desconocida`) y `aviso_procedencia`.
+- Sin `metadata.vinculo` no hay `operacion_id` que firmar: el token firma el **UUID nulo** (`SIN_PROCEDENCIA`); versión 1 y tamaño fijo intactos, los tokens ya emitidos valen. Un `vinculo` **mal formado o de otra serie** cuenta como procedencia desconocida.
+- Lo que se firma y se vuelve a comprobar con las filas bloqueadas es el **estado actual**: `issue_id`, huella `(ruta, tamaño, hash)`, la serie del número y que la procedencia sea la vista (registrada con su `operacion_id`, o ausente). Si cambia cualquier cosa (también si aparece una procedencia que no había) → `cambio_desde_la_vista_previa`.
+- El comprobante sigue siendo una entrada de `vinculo_historial`. Sin procedencia es `{procedencia: "desconocida", serie_id, issue_id, numero, formato, previo: {match_status, metadata_source}, vinculo_no_valido?, deshecho: {operacion_id, fecha}}`: queda dicho **qué había** aunque no hubiera procedencia. D8: `metadata_source` vuelve a `NULL` (no consta lo anterior); el valor que tenía queda en `previo`.
+- `en_curso` (asignación V6a viva) **sigue bloqueando**. Un archivo que movió V6a se puede desvincular pero **no se devuelve a su carpeta anterior** (como ya decía D9).
+
+**Riesgo que se abrió y cómo se acotó.** Un vínculo **automático** desvinculado podría volver a vincularse solo. El importador y el adoptador solo crean filas para contenido **nuevo**: con el mismo contenido y el fichero presente, la fila ya registrada cuenta como copia presente y el archivo se descarta como duplicado (`_triage_and_match` → `duplicate_of`); no hay otro camino que ponga `File.issue_id` fuera de la vinculación, la asignación y la revisión manual. Una prueba con Postgres real lo fija (`test_el_importador_no_lo_vuelve_a_vincular…`).
+
+**No cambia:** una sola operación por archivo, sin lotes; el número creado por la vinculación se conserva (D1); el fichero no se toca; nada vuelve a vincularse solo.

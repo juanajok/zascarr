@@ -61,6 +61,7 @@
     <div class="vinc-acciones"><a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a></div>
 
     {% else %}
+    {% if p.aviso_procedencia %}{{ ui.aviso("info", p.aviso_procedencia) }}{% endif %}
     {% if p.archivo.falta_en_disco %}{{ ui.aviso("amber", "Puede que este archivo ya no esté en el disco: ZascArr no lo encontró en su última revisión de la biblioteca y aún no está confirmado. Puedes desvincularlo igualmente.") }}{% endif %}
     <h3 class="titulo-frase">Qué pasará</h3>
     <ul class="desv-lista">

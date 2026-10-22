@@ -74,20 +74,15 @@
           {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
           {% if a.bloqueo is none %}
           <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/deshacer">Desvincular<span class="sr"> {{ a.nombre }}</span></a>
-          {% elif a.bloqueo == "en_curso" %}
-          <span class="muted archivo-razon" data-razon="en_curso">{{ razones_sin_boton["en_curso"] }}</span>
-          {% else %}<span data-razon="{{ a.bloqueo }}" hidden></span>{% endif %}
+          {% else %}
+          <span class="muted archivo-razon" data-razon="{{ a.bloqueo }}">{{ razones_sin_boton[a.bloqueo] }}</span>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
     </li>
     {% endfor %}
   </ul>
-  <details class="archivos-por-que">
-    <summary>¿Por qué algunos archivos no se pueden desvincular?</summary>
-    <p>Solo se pueden desvincular desde aquí los archivos que vinculaste desde «Pendientes por carpeta». Los que se vincularon de otra
-      forma (uno a uno desde «Por revisar» o de forma automática al importar) no se pueden deshacer desde esta pantalla.</p>
-  </details>
 </section>
 {% endif %}
 {% endblock %}
