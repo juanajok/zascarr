@@ -745,6 +745,13 @@ button[type="submit"].neutro {
 }
 .suggestion-label { font-size: .875rem; font-weight: 700; color: var(--ok-t); }
 .suggestion-score { font-size: .875rem; color: var(--ink-faint); }
+
+/* U13b: cola de sueltos. Se reutiliza la tarjeta de pendientes; el nombre se lee entero y
+   los controles de navegación conservan el área táctil de `.pend-paginas`. */
+.sueltos-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gutter); }
+.suelto-card .filename { margin: 0; font-size: 1rem; }
+.suelto-sugerencia .series-name { overflow-wrap: anywhere; }
+.suelto-sin-candidata { margin: 0; }
 button[type="submit"].btn-sugerencia {
   --btn-bg: var(--ok-solid); color: var(--on-ok-solid); border-color: var(--ok-solid);
 }
