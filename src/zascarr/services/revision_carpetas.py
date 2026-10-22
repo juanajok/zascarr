@@ -242,19 +242,30 @@ def _candidata_guardada(metadata: object) -> tuple[CandidataGuardada | None, boo
     primero = crudo[0]
     if not isinstance(primero, dict):
         return None, True
-    series_id = str(primero.get("series_id") or "").strip()
-    titulo = str(primero.get("title") or "").strip()
-    try:
-        puntuacion = float(primero["score"])
-    except (KeyError, TypeError, ValueError):
+    series_id = primero.get("series_id")
+    titulo = primero.get("title")
+    if not isinstance(series_id, str) or not isinstance(titulo, str):
         return None, True
-    if not series_id or not titulo or not (0.0 <= puntuacion <= 1.0):
+    series_id = series_id.strip()
+    titulo = titulo.strip()
+    if not series_id or not titulo:
         return None, True
+    puntuacion = primero.get("score")
+    if isinstance(puntuacion, bool) or not isinstance(puntuacion, (int, float)):
+        return None, True
+    if not (0 <= puntuacion <= 1):
+        return None, True
+    puntuacion = float(puntuacion)
     anio = primero.get("start_year")
-    if isinstance(anio, bool) or not isinstance(anio, (int, str)):
-        anio = None
-    elif isinstance(anio, str):
-        anio = int(anio) if anio.isdigit() else None
+    if isinstance(anio, bool):
+        return None, True
+    if anio is not None and not isinstance(anio, int):
+        if not isinstance(anio, str):
+            return None, True
+        try:
+            anio = int(anio)
+        except ValueError:
+            return None, True
     return CandidataGuardada(
         series_id=series_id,
         titulo=titulo,
