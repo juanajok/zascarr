@@ -15,6 +15,14 @@ Qué responde, por orden:
   3. en qué carpetas se concentran.
 No decide nada ni propone adoptar: eso es del PO (la ficha del spike lo recoge).
 
+SEGUNDO PASO (opcional, también solo lectura): confirmar por CONTENIDO si esos tebeos sin registrar son copias de uno registrado.
+  cd /media/WDElements/Tebeos && awk -F'\\t' '$2=="tebeo_sin_registrar"{print $1}' /tmp/sin-registrar.tsv \\
+    | while IFS= read -r f; do sudo ionice -c3 nice -n19 sha256sum -- "$f"; done > /tmp/hash-sin-registrar.txt
+  docker exec zascarr-db psql -U comics_admin -d zascarr -At -F "$(printf '\\t')" -c \\
+    "select file_path, coalesce(sha256_hash,''), coalesce(original_sha256,'') from files" > /tmp/hash-base.tsv
+  python3 censo_disco_vs_base.py --disco /tmp/disco.tsv --base /tmp/base.tsv \\
+    --hash-disco /tmp/hash-sin-registrar.txt --hash-base /tmp/hash-base.tsv
+
 Uso (en la Pi, como `pi`; los dos comandos solo leen):
   cd /media/WDElements/Tebeos && sudo find . -type f -printf '%P\\t%s\\t%T@\\n' | LC_ALL=C sort > /tmp/disco.tsv
   docker exec zascarr-db psql -U comics_admin -d zascarr -At -F "$(printf '\\t')" -c \\
@@ -157,12 +165,59 @@ def resumen(c: Censo, top: int = 15) -> str:
     return "\n".join(out)
 
 
+def leer_hash_disco(lineas) -> dict[str, str]:
+    """Salida de `sha256sum`: `<hash>␣␣<ruta>` (o `<hash>␣*<ruta>`) → {ruta: hash}."""
+    out: dict[str, str] = {}
+    for linea in lineas:
+        linea = linea.rstrip("\n")
+        if len(linea) < 67 or linea[64] != " ":
+            continue
+        out[linea[66:]] = linea[:64].lower()
+    return out
+
+
+def leer_hash_base(lineas, prefijo: str = PREFIJO_POR_DEFECTO) -> dict[str, str]:
+    """`file_path<TAB>sha256<TAB>original_sha256` → {hash: ruta relativa} (cada hash conocido de la base, el actual y el original)."""
+    out: dict[str, str] = {}
+    for linea in lineas:
+        partes = linea.rstrip("\n").split("\t")
+        if len(partes) < 3 or not partes[0]:
+            continue
+        ruta = partes[0][len(prefijo):] if partes[0].startswith(prefijo) else partes[0]
+        for h in partes[1:3]:
+            h = h.strip().lower()
+            if len(h) == 64:
+                out.setdefault(h, ruta)
+    return out
+
+
+def confirmar_identidad(c: Censo, hash_disco: dict[str, str], hash_base: dict[str, str]) -> str:
+    """Por CONTENIDO: de los tebeos sin registrar cuyo hash se calculó, ¿cuántos son idénticos a uno registrado?"""
+    tebeos = [r for r, k in c.solo_disco.items() if k == "tebeo_sin_registrar"]
+    con_hash = [r for r in tebeos if r in hash_disco]
+    identicos = [r for r in con_hash if hash_disco[r] in hash_base]
+    distintos = [r for r in con_hash if hash_disco[r] not in hash_base]
+    pares = Counter((carpeta(r), carpeta(hash_base[hash_disco[r]])) for r in identicos)
+    out = [f"POR CONTENIDO (SHA-256): tebeos sin registrar: {len(tebeos)} · con hash calculado: {len(con_hash)} · sin hash: {len(tebeos) - len(con_hash)}",
+           f"  {len(identicos):>5}  IDÉNTICOS a un archivo registrado (misma huella: son copias exactas)",
+           f"  {len(distintos):>5}  contenido que NO está registrado (tebeos distintos de los que ya tienes)"]
+    if pares:
+        out.append("  Carpeta sin registrar  →  carpeta donde está el original registrado:")
+        for (a, b), n in pares.most_common(15):
+            out.append(f"    {n:>4}  {a}  →  {b}")
+    if distintos:
+        out.append("  (los distintos pueden ser tebeos nuevos de verdad o registrados SIN hash en la base: miralo antes de decidir nada)")
+    return "\n".join(out)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--disco", required=True)
     ap.add_argument("--base", required=True)
     ap.add_argument("--prefijo", default=PREFIJO_POR_DEFECTO, help="prefijo de la biblioteca DENTRO del contenedor (por defecto /media/library/)")
     ap.add_argument("--top", type=int, default=15)
+    ap.add_argument("--hash-disco", help="salida de `sha256sum` de los tebeos sin registrar (segundo paso)")
+    ap.add_argument("--hash-base", help="`file_path<TAB>sha256<TAB>original_sha256` de la tabla files (segundo paso)")
     ap.add_argument("--lista", help="escribe aquí `ruta<TAB>categoría<TAB>mismo_tamaño` de los ficheros sin registrar (no se imprime)")
     a = ap.parse_args(argv)
     with open(a.disco, encoding="utf-8", errors="replace") as f:
@@ -175,6 +230,15 @@ def main(argv: list[str] | None = None) -> int:
     sin_prefijo = sum(1 for fila in base if "/" not in fila.ruta and not disco.get(fila.ruta))
     c = comparar(disco, base)
     print(resumen(c, a.top))
+    if a.hash_disco and a.hash_base:
+        pref = a.prefijo if a.prefijo.endswith("/") else a.prefijo + "/"
+        with open(a.hash_disco, encoding="utf-8", errors="replace") as f:
+            hd = leer_hash_disco(f)
+        with open(a.hash_base, encoding="utf-8", errors="replace") as f:
+            hb = leer_hash_base(f, pref)
+        print("\n" + confirmar_identidad(c, hd, hb))
+    elif a.hash_disco or a.hash_base:
+        print("\n! Para confirmar por contenido hacen falta las dos opciones: --hash-disco y --hash-base.", file=sys.stderr)
     if sin_prefijo > len(base) // 2:
         print("\n! Más de la mitad de la base no cuelga del prefijo: ¿es correcto --prefijo?", file=sys.stderr)
     if a.lista:
