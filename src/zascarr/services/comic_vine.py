@@ -7,6 +7,7 @@ Documentación: https://comicvine.gamespot.com/api/documentation
 import asyncio
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -16,6 +17,27 @@ from zascarr.config import get_settings
 logger = structlog.get_logger()
 
 _MAX_RETRIES = 3
+
+#: #311 — la imagen que Comic Vine pone en `image.*_url` cuando una serie o un número NO
+#: tiene portada (se ve como «Blank!»). Mismo nombre de fichero en todos los tamaños
+#: (`original`, `scale_medium`, `square_avatar`…); se compara el nombre y no el servidor
+#: porque las imágenes también se sirvieron desde `comicvine1.cbsistatic.com`. Evidencia
+#: sin consultar la fuente: varios proyectos públicos la detectan por este nombre y los
+#: datos simulados de un cliente de la API la llevan en `image.*_url`.
+PORTADA_DE_RELLENO = "6373148-blank.png"
+
+
+def es_portada_de_relleno(url: str | None) -> bool:
+    """¿Es la imagen de relleno de Comic Vine (= «sin portada»)? Una URL ausente no lo es."""
+    if not url:
+        return False
+    return urlparse(url).path.rsplit("/", 1)[-1] == PORTADA_DE_RELLENO
+
+
+def _portada(item: dict) -> str | None:
+    """La portada de un resultado, o `None` si no hay o si es la imagen de relleno."""
+    url = (item.get("image") or {}).get("medium_url")
+    return None if es_portada_de_relleno(url) else url
 
 
 @dataclass
@@ -112,7 +134,7 @@ class ComicVineClient:
         return [CVResult(
             cv_id=item["id"], name=item.get("name", ""),
             description=item.get("description"),
-            image_url=item.get("image", {}).get("medium_url"),
+            image_url=_portada(item),
             start_year=_safe_int(item.get("start_year")),
             count_of_issues=item.get("count_of_issues"),
             site_url=item.get("site_detail_url"),
@@ -153,7 +175,7 @@ def _parse_issue(item: dict) -> CVIssueResult:
         cv_id=item["id"],
         issue_number=item.get("issue_number"),
         description=item.get("description"),
-        image_url=(item.get("image") or {}).get("medium_url"),
+        image_url=_portada(item),
         cover_date=item.get("cover_date"),
         credits=credits,
         raw=item,
