@@ -48,10 +48,11 @@ En `carpetas.html` (`origin/main` `8589b47`) había, antes de la primera acción
 **Estimación:** > 100 palabras antes de la primera acción. La garantía y la explicación del contrato estaban en la
 cabecera, no junto a la acción.
 
-### 3.2 Después de la reescritura (HTML renderizado, 2026-10-21)
+### 3.2 Después de la reescritura de #208 (HTML renderizado, 2026-10-21; histórico)
 
 Fixture usado: 1.308 pendientes en 108 carpetas + 14 con serie sugerida, dos tarjetas visibles. Renderizado con la
-plantilla real y una respuesta enlatada del servicio, sin tocar la base de datos ni la Pi.
+plantilla real y una respuesta enlatada del servicio, sin tocar la base de datos ni la Pi. Esta es la composición
+de #208; U13a la sustituye sin borrar la cifra histórica (ver §3.2.1).
 
 | Medida | Resultado |
 |---|---:|
@@ -62,12 +63,31 @@ plantilla real y una respuesta enlatada del servicio, sin tocar la base de datos
 
 La medida de **44** es **conservadora** y se obtiene quitando el contenido de los `<details>` cerrados pero
 conservando el texto visible de su `<summary>`, como pide el método. Las 39 de #273 no contaban el resumen; el
-resumen «¿De dónde salen estos datos?» añade 5 palabras. Es reproducible con
-`tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_44_es_reproducible_con_el_fixture_de_referencia`,
-que enlata la respuesta 1.308/108/14 y dos tarjetas y exige **exactamente 44** (43 sin el icono `i` del chip
-informativo). La prueba general de umbral siembra un solo registro y comprueba ≤ 50; no pretende reproducir la cifra.
+resumen «¿De dónde salen estos datos?» añade 5 palabras. La prueba histórica enlataba la respuesta 1.308/108/14 y
+dos tarjetas y exigía **exactamente 44** (43 sin el icono `i` del chip informativo); U13a la sustituyó por
+`test_la_cifra_de_46_es_reproducible_con_el_fixture_de_referencia` (§3.2.1). La prueba general de umbral siembra
+un solo registro y comprueba ≤ 50; no pretende reproducir la cifra.
 La suite `TestPresupuestoTexto` falla si la entrada o la intro superan el umbral, si falta la garantía junto a la
 acción o si el subtítulo pasa de 20 palabras.
+
+### 3.2.1 U13a sustituye los chips por la frase de resumen (2026-10-22)
+
+U13a cambia la entrada de Carpetas: la frase de 18 palabras sustituye el subtítulo de 8 y los chips de resumen,
+y el contador de sueltos es un enlace a la vista individual. El orden se explica dentro de «¿De dónde salen estos
+datos?», por lo que sigue fuera de la medida conservadora. La cifra vigente es **46**; 44 queda como histórico de
+#208 y no se presenta como una regresión.
+
+| Medida U13a | Resultado |
+|---|---:|
+| Palabras de la frase de entrada (`p.subtitle`) | **18** |
+| Palabras antes de «Elegir la serie de esta carpeta» | **46** |
+| Fixture | 1.322 A (1.308/108 + 14) + 17 B; dos tarjetas |
+| Umbral de entrada / intro | ≤ 20 / ≤ 50 |
+
+Se reproduce con
+`tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_46_es_reproducible_con_el_fixture_de_referencia`,
+que enlata la respuesta U13a y exige exactamente **46**. La prueba general de umbral y la de subtítulo exacto de 18
+siguen en la misma suite. No hay medición de navegador nuevo para esta composición: **NOT RUN**.
 
 **Límite:** es una medida sobre HTML renderizado, no sobre píxeles de un navegador. No se ha comprobado con CSS
 real, tema oscuro, 360 px ni lector de pantalla.
@@ -181,8 +201,8 @@ Archivos: `series_detail.html`, `_politica_serie.html`, `_legal_disclaimer.html`
 | Criterio | Estado | Evidencia |
 |---|---|---|
 | 1. Regla en `CLAUDE.md` §6 | **PASS** | Texto vigente, umbrales provisionales |
-| 2. Suite con recuento y umbral por pantalla adaptada | **PASS** | `TestPresupuestoTexto` de Carpetas (8/44) y `TestPresupuestoTextoU21` de la ficha (8/29 intro; 48 con datos); la ficha se midió además en navegador |
-| 3. Carpetas ≤ 20 de entrada y ≤ 50 antes de la acción | **PASS (HTML)** | Subtítulo 8; 44 antes de «Elegir la serie de esta carpeta». Navegador: NOT RUN |
+| 2. Suite con recuento y umbral por pantalla adaptada | **PASS** | `TestPresupuestoTexto` de Carpetas (44 en #208; 18/46 con U13a) y `TestPresupuestoTextoU21` de la ficha (8/29 intro; 48 con datos); la ficha se midió además en navegador |
+| 3. Carpetas ≤ 20 de entrada y ≤ 50 antes de la acción | **PASS (HTML)** | U13a: frase de 18; 46 antes de «Elegir la serie de esta carpeta». Navegador: NOT RUN |
 | 4. Tarjeta con nombre, archivos, sugerencia/ausencia y estado | **PASS** | `h2`, chips, línea «N registros · Serie sugerida/Sin serie sugerida» antes de la acción |
 | 5. Garantías junto a la acción con efecto | **PASS** | «No se crea ni se asigna nada hasta que confirmes.» junto al enlace; en la ficha, el efecto de guardado junto al selector |
 | 6. Ficha de serie sin párrafos en mayúsculas | **PASS** | 0 párrafos con `text-transform: uppercase`; notas junto al selector |
@@ -210,10 +230,11 @@ Archivos: `series_detail.html`, `_politica_serie.html`, `_legal_disclaimer.html`
 - La prueba de cinco segundos con personas sigue **NOT RUN**; la simulación con agentes no es una prueba con
   personas.
 - No se ha tocado la Pi ni se ha desplegado nada.
-- La comparación 415 → 44 no es homogénea: la baseline histórica usó otra definición y otros datos. Tampoco se
-  compara 146 → 190 en la ficha: el fixture y la definición no son los mismos.
-- La cifra de 44 incluye el resumen visible del `<details>` de Carpetas; las 39 de #273 no lo incluían. En la ficha
-  también se incluyó el resumen («Fuentes y atribución») en la medida conservadora de 48.
+- La comparación 415 → 44 no es homogénea: la baseline histórica usó otra definición y otros datos. U13a deja la
+  cifra vigente en 46; 44 es la composición de #208. Tampoco se compara 146 → 190 en la ficha: el fixture y la
+  definición no son los mismos.
+- La cifra de 44 (y la vigente de 46) incluye el resumen visible del `<details>` de Carpetas; las 39 de #273 no lo
+  incluían. En la ficha también se incluyó el resumen («Fuentes y atribución») en la medida conservadora de 48.
 
 ## 10. Reproducir
 
@@ -224,9 +245,9 @@ python -m pytest tests/test_web_carpetas_pg.py::TestPresupuestoTexto -q
 python -m pytest tests/test_web_series.py::TestPresupuestoTextoU21 -q
 ```
 
-La cifra exacta de 44 de Carpetas se reproduce con
-`tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_44_es_reproducible_con_el_fixture_de_referencia`.
+La cifra vigente de 46 de Carpetas (U13a) se reproduce con
+`tests/test_web_carpetas_pg.py::TestPresupuestoTexto::test_la_cifra_de_46_es_reproducible_con_el_fixture_de_referencia`.
 La prueba usa la plantilla real, una respuesta enlatada del servicio y el mismo recuento conservador que este
-documento. La ficha se mide en Chrome con
+documento; la cifra histórica de 44 de #208 queda documentada en §3.2. La ficha se mide en Chrome con
 `docs/design/ui-u21/medir_ficha.py`; el comando, el fixture y el SHA están en
 `docs/design/ui-u21/verificacion-ficha-2026-10-21.md`. Carpetas sigue sin ensayo en navegador: **NOT RUN**.
