@@ -208,3 +208,26 @@ El plan se redactó para **una** actualización con comprobaciones antes y despu
   - **5.4 vista previa de un archivo** (`GET …/archivos/{id}/deshacer`, el del `The Wicked + The Divine 1831.cbr`, vinculado al `#1831`): se ve «¿Desvincular este archivo?», «Qué pasará» con sus cuatro puntos (el archivo no se toca; vuelve a «Por revisar»; el `#1831` se queda sin archivo y aparecerá entre los que faltan; volver a vincularlo es un paso aparte), «Hasta que pulses el botón, no cambia nada», «Desvincular el archivo», «Cancelar» y «Dónde está el archivo» plegado. **No se pulsó «Desvincular el archivo»:** la confirmación de BL-R1 **no se ha probado en la Pi** (sí en pruebas automáticas y en un navegador contra una base de pruebas).
 - **Observaciones, no fallos:** (1) la base tiene **1339** archivos (la cifra esperada: el despliegue no la cambió), **1293** sin número asignado y **46** asignados (los de esa serie, vinculados con «Vincular en su sitio», de ahí que todos ofrezcan «Desvincular»), **14** marcados como no encontrados. (2) En el disco hay **1577** ficheros: 1542 `.cbr`/`.cbz` (1234 + 308), 21 `.rar`, 1 `.tar`, 1 `.part` y unos 12 sin extensión; unos 200 tebeos del disco no están registrados en la base. **Ajeno al despliegue** (el actualizador no toca la biblioteca): se mira con «Duplicados» (el análisis no cambia nada; «adoptar» sí) o se abre como historia aparte.
 - **Fuera de este despliegue:** `main` está en `a272172` (#273, interfaz) y **no** se ha desplegado.
+
+## 10. Actualización conjunta del 2026-10-22 (SHA `245402e`): #273, #279 y las PR de Sprint 0 posteriores
+
+A diferencia de la primera tanda (§9), esta vez **sí se siguió un plan con pasos y comprobaciones** (scripts `paso1-antes.sh` y `paso2-actualizar.sh`, fuera del repositorio) y el PO **autorizó el SHA en el chat** antes de ejecutar.
+
+| Qué | Resultado |
+|---|---|
+| Versión de la Pi | `134eae3` → **`245402e78a6357cfc79e726a4484662ba9ef8151`** (14:19 local; copia de la base `update_20261022_141926.sql.gz`, SHA-256 `573bc16b…ea02`, `gzip -t` OK) |
+| Qué trajo | #273 (interfaz: Pendientes por carpeta, login en modo contraseña, editorial vacía, pista de tradición), #277/#278/#282/#285 (solo documentación), #279 (**`HOST_LIBRARY_DIR` al contenedor**: la vista previa de «Desvincular» enseña la ruta real del host), #280 (ficha de serie con texto breve) y #281 (U15b: la sugerencia de tradición puede faltar y se muestra su procedencia; cambia el formato del token de alta/candidata) |
+| Migración | **Ninguna**: `alembic` sigue en `0020` |
+| Infraestructura | Solo `docker-compose.yml` (+3 líneas, `HOST_LIBRARY_DIR`); `scripts/`, `Dockerfile` y `alembic/` no cambian |
+| Aviso legal | `LEGAL.md` no cambia: la aceptación vigente (`cf5bde4f949117a1`) sigue siéndolo; no se aceptó nada |
+| Estado tras actualizar | `/api/health` 200; `zascarr-db` `healthy`; `zascarr-orquestador` pasó de `starting` a **`healthy` a las 14:23:01** (la única comprobación en ✗ del script, por tardar en arrancar tras recrear el contenedor; no es un fallo); 0 *tracebacks* en los 10 minutos siguientes |
+| `HOST_LIBRARY_DIR` | Vacío dentro del contenedor antes; **`/media/WDElements/Tebeos`** después; el montaje `/media/WDElements/Tebeos -> /media/library` no cambió |
+| `.env` | Hash idéntico antes y después (el contenido nunca sale de la Pi) |
+| Biblioteca | Inventario idéntico (ruta, tamaño y fecha de **1577** ficheros) antes y después |
+| Evidencia | Paquete previo SHA-256 `c918a1be477b20fcb511b60ca79c9df0d3dedd44e8576c8e3207ff49d5b2ef9f`; paquete final SHA-256 `4f1d94f10246773448374e0d9aceb6c64359dd4099007d162a2f41d20f4321db` (en la Pi; sin `.env`) |
+
+**Verificación visual por el PO (solo lectura):**
+- **Ruta real en la vista previa de «Desvincular» (#279): VERIFICADO.** En la ficha de *AIDP* (`#1`, vinculado el 21/10/2026), «Dónde está el archivo» dice `/media/WDElements/Tebeos/Comics/AIDP (2004)/AIDP 01 - Las Tierras Huecas […].cbr`, la ruta real del host y no `/media/library/…`. **No se pulsó «Desvincular el archivo».**
+- **Sin verificar todavía** (el PO no ha informado): «Pendientes por carpeta» con menos texto (#273), la ficha de serie con la política antes del listado (#280), la pista de tradición y su procedencia en Descubrir (#281) y el mensaje de login sin «usuario» (#273).
+
+**Lo que sigue sin hacerse:** confirmar «Desvincular» sobre un archivo real de la Pi (no se ha probado fuera de pruebas automáticas y de un navegador contra una base de pruebas), por lo que **no** se cierran #253, #254 ni #230 y no se pasan #243, #253, #254 ni #229 a «Hecha». Quedan además sin desplegar las PR que se fusionen después de `245402e`.
