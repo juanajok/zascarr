@@ -1,6 +1,10 @@
 # U15 — Verificación de presentación en navegador real (2026-10-21)
 
-> **Estado: PASS de presentación en Chrome real para CA4 y para el escenario «elección explícita» de CA6.**
+> **Nota (2026-10-22): esta ficha es histórica.** Documenta el contrato anterior a #276 (copy única, sin
+> procedencia ni ausencia). La verificación del contrato nuevo está en
+> [`verificacion-navegador-2026-10-22.md`](verificacion-navegador-2026-10-22.md); no se reescribe esta evidencia.
+>
+> **Estado original: PASS de presentación en Chrome real para CA4 y para el escenario «elección explícita» de CA6.**
 > Esta comprobación **no cierra #202**: la ausencia de sugerencia y la procedencia siguen bloqueadas por el contrato
 > actual y se trabajan en **#276 (U15b)**. Tampoco es una validación con personas: es una verificación de renderizado y
 > comportamiento en un navegador, con datos reales de GCD y Tebeosfera.

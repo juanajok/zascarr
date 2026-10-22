@@ -1,7 +1,8 @@
 # U15b — Ausencia de sugerencia y procedencia (#276)
 
-> **Estado: implementado en la rama `sprint0/u15b-ausencia-procedencia`; PR #281 pendiente de revisión.
-> No fusionado y no desplegado. #202 sigue abierta.** Fecha: 2026-10-21.
+> **Estado: fusionado en `bf67699` (PR #281); no desplegado. Verificado en Chrome real el 2026-10-22
+> (`verificacion-navegador-2026-10-22.md`). #202 sigue abierta hasta la firma de la decisión de los NOT RUN.**
+> Fecha de la ficha: 2026-10-21.
 
 ## 1. Problema que cierra
 
@@ -97,12 +98,12 @@ persona es la que se aplica al alta.
 | Escenario | Prueba | Estado |
 |---|---|---|
 | Dato explícito respaldado | `TestEscenariosCA6DeU15::test_dato_explicito_respaldado_se_presenta_como_pista_y_no_se_preselecciona` | PASS |
-| Sugerencia no fiable | `TestEscenariosCA6DeU15::test_sugerencia_no_fiable_de_comic_vine_para_un_tebeo_es_solo_una_pista` y `TestCriterio4Eleccion::test_la_sugerencia_de_la_fuente_se_distingue_y_no_esta_elegida` | PASS |
+| Sugerencia no fiable | `TestEscenariosCA6DeU15::test_sugerencia_no_fiable_de_comic_vine_para_un_tebeo_es_solo_una_pista` y `TestCriterio4Eleccion::test_la_sugerencia_de_la_fuente_se_distingue_y_no_esta_elegida` | PASS; Chrome 2026-10-22: 10 `por_defecto` y 9 `transformada` |
 | Origen desconocido | `TestEscenariosCA6DeU15::test_origen_desconocido_no_se_presenta_como_dato_confirmado`; token antiguo en `test_tokens_revision.py` | PASS |
-| Ausencia de sugerencia | `TestEscenariosCA6DeU15::test_ausencia_de_sugerencia_no_muestra_texto_de_pista`; GCD sin idioma/país en `test_discovery_service.py`; asistente en `TestCriterio3SinPreseleccion::test_sin_sugerencia_no_hay_texto_de_pista_y_el_selector_sigue_vacio` | PASS |
-| Elección explícita de la persona | `test_descubrir_dos_pasos_pg.py::TestRevisarNoEscribeNada::test_la_vista_previa_ofrece_crear_con_la_tradicion_elegida_y_no_escribe` y `TestCrear::test_crea_la_serie_con_la_tradicion_elegida_el_identificador_protegido_y_la_procedencia` | PASS (Postgres real) |
+| Ausencia de sugerencia | `TestEscenariosCA6DeU15::test_ausencia_de_sugerencia_no_muestra_texto_de_pista`; GCD sin idioma/país en `test_discovery_service.py`; asistente en `TestCriterio3SinPreseleccion::test_sin_sugerencia_no_hay_texto_de_pista_y_el_selector_sigue_vacio` | PASS; Chrome 2026-10-22: 1 tarjeta GCD sin pista en `Mortadelo` y 7 en `Lucky Luke` |
+| Elección explícita de la persona | `test_descubrir_dos_pasos_pg.py::TestRevisarNoEscribeNada::test_la_vista_previa_ofrece_crear_con_la_tradicion_elegida_y_no_escribe` y `TestCrear::test_crea_la_serie_con_la_tradicion_elegida_el_identificador_protegido_y_la_procedencia` | PASS (Postgres real y Chrome 2026-10-22) |
 
-Comandos ejecutados en esta rama:
+Comandos ejecutados en esta rama (resultado: 5363 tests con Postgres y 3968 no-Postgres):
 
 ```bash
 PYTHONPATH=src ../zascarr-venv/bin/pytest -q -m 'not integration'
@@ -114,9 +115,9 @@ TEST_DATABASE_URL='postgresql://test:test@127.0.0.1:15450/zascarr_test' \
 
 ## 6. Límites y estado de #202
 
-- Esta ficha documenta la implementación y las pruebas locales; **no** afirma que la PR esté fusionada ni
-  desplegada. La Pi no se ha tocado.
-- #202 sigue abierta: Comic Vine y AniList siguen **NOT RUN** y el cierre depende de su DoD y de la evidencia del
-  Sprint 0. #276 no convierte esos NOT RUN en PASS.
+- Esta ficha documenta la implementación, las pruebas locales y la verificación en Chrome real del 2026-10-22;
+  #276 está fusionada en `bf67699`, pero **no desplegada**. La Pi no se ha tocado.
+- #202 sigue abierta: Comic Vine y AniList siguen **NOT RUN** y el cierre depende de la firma de
+  `decision-u15-not-run-2026-10-22.md` y de la evidencia del Sprint 0. #276 no convierte esos NOT RUN en PASS.
 - La prueba de cinco segundos con personas y el lector de pantalla real pertenecen a #208/U21 y siguen **NOT RUN**;
   no se sustituyen por pruebas automáticas.
