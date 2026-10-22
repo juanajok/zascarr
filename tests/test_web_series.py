@@ -524,3 +524,29 @@ class TestPortada:
 
         assert r.status_code == 404
         assert "is_missing" in session.statements[0]
+
+
+class TestPortadaDeRelleno:
+    """#311: una serie que guardó la imagen de relleno de Comic Vine como `cover_url` (antes del arreglo)
+    no la descarga ni la muestra: la tarjeta cae a su hueco propio (404 → `.cover-missing`)."""
+
+    def test_el_relleno_guardado_no_se_descarga_ni_se_sirve(self, tmp_path, monkeypatch):
+        from zascarr.config import get_settings
+
+        series = make_series()
+        series.cover_url = "https://comicvine.gamespot.com/a/uploads/scale_medium/11122/111222211/6373148-blank.png"
+        settings = get_settings().model_copy(update={"covers_cache_path": tmp_path})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        descargas = []
+
+        async def falsa(url, destino):
+            descargas.append(url)
+            return True
+        monkeypatch.setattr("zascarr.web.series.fetch_and_cache_cover", falsa)
+
+        session = CapturingSession([FakeExecResult([])], series=series)
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 404
+        assert descargas == []

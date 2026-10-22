@@ -232,6 +232,20 @@ class TestCriterio3SinPreseleccion:
         assert "discovery-card-desc" not in t and "↗" not in t                    # sin descripción ni ficha
         assert 'class="cover cover-missing"' in t                                  # portada ausente = marcador CSS
 
+    async def test_la_descripcion_html_y_la_portada_de_relleno_no_parecen_un_fallo(self, entorno):
+        """#311: la tarjeta enseñaba `<p>…<a href=…>` y la imagen «Blank!» de Comic Vine; parecía que ZascArr
+        estaba roto cuando la fuente había respondido. Ahora: texto plano y hueco propio."""
+        await sembrar_flash(entorno.banco)
+        relleno = "https://comicvine.gamespot.com/a/uploads/scale_medium/11122/111222211/6373148-blank.png"
+        html_fuente = '<p>Series of Russian hardcovers translating <a href="/the-flash/4050-91750/">The Flash</a> (2016).</p>'
+        entorno.fuentes.resultados = [res(MetadataSource.COMIC_VINE, "1", "Flash", 2018,
+                                          descripcion=html_fuente, cover=relleno)]
+        t = (await buscar()).text
+        desc = re.search(r'<div class="discovery-card-desc">(.*?)</div>', t, re.S).group(1)
+        assert desc.strip() == "Series of Russian hardcovers translating The Flash (2016)."
+        assert "&lt;" not in t and "4050-91750" not in t
+        assert 'class="cover cover-missing"' in t and "6373148" not in t
+
     async def test_sin_sugerencia_no_hay_texto_de_pista_y_el_selector_sigue_vacio(self, entorno):
         await sembrar_flash(entorno.banco)
         entorno.fuentes.resultados = [
