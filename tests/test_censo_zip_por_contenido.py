@@ -106,6 +106,27 @@ class TestLoQueImportaSiSoloSeLeeUnaPagina:
         assert "SUPERAN los topes de hoy" in r and "cómo son: imágenes mín 30 / máx 30" in r and "entrada mayor máx 0 KiB" in r
 
 
+class TestElIndiceQueCargaZipFile:
+
+    def test_mide_el_directorio_central_igual_que_zipfile(self, tmp_path):
+        z = zip_de(tmp_path / "a.cbz", paginas(40))
+        m = c.medir(z)
+        assert 0 < m.indice < 8192 and m.indice == c.tam_indice(z)
+
+    def test_el_resumen_cuenta_los_que_superarian_el_tope_de_1_mib(self, tmp_path):
+        grande = tmp_path / "grande.cbz"
+        with zipfile.ZipFile(grande, "w", zipfile.ZIP_STORED) as zf:
+            for i in range(30_000):
+                zf.writestr(f"p{i:05d}.jpg", b"")
+        filas = [("cbz_control", Path("grande.cbz"), 1, c.medir(grande, max_entradas=50_000)), ("cbz_control", Path("a.cbz"), 1, c.medir(zip_de(tmp_path / "a.cbz", paginas(40))))]
+        r = c.resumen(filas, 5, 0.8)
+        assert "superan 1 MiB (el tope de ZascArr): 1 de 2" in r
+
+    def test_un_fichero_que_no_es_zip_da_cero(self, tmp_path):
+        (tmp_path / "x").write_bytes(b"hola")
+        assert c.tam_indice(tmp_path / "x") == 0 and c.tam_indice(tmp_path / "no_existe") == 0
+
+
 class TestLimitesYErrores:
 
     def test_demasiadas_entradas_y_demasiado_grande(self, tmp_path):

@@ -506,3 +506,101 @@ class TestCoherenciaConLoQueAbreZipFile:
     def test_el_lector_privado_de_la_biblioteca_estandar_sigue_existiendo(self):
         """Si una versión de Python lo renombrara, el módulo ya no se importaría (ruidoso); esta prueba lo deja dicho."""
         assert callable(zipfile._EndRecData) and zipfile._ECD_ENTRIES_TOTAL == 4 and zipfile._ECD_SIZE == 5
+
+
+class TestElLimiteDelIndiceEsUnLimiteDeProcesamiento:
+    """Revisión de #325 sobre el tope del directorio central: (1) el rechazo ocurre ANTES de construir el índice costoso; (2) un índice malformado no evita la
+    comprobación ni acaba en una lectura sin cota; (3) los límites se complementan (ninguno sustituye a otro); (4) el mensaje habla de procesamiento, no de corrupción."""
+
+    @staticmethod
+    def _zip_con_indice_grande(tmp_path, entradas=30_000):
+        ruta = tmp_path / "indice.zip"
+        with zipfile.ZipFile(ruta, "w", zipfile.ZIP_STORED) as zf:
+            for i in range(entradas):
+                zf.writestr(f"p{i:05d}.jpg", b"")
+        return ruta
+
+    def test_rechazar_cuesta_casi_nada_frente_a_abrir(self, tmp_path):
+        """Medido: abrir un ZIP de 30 000 entradas cuesta decenas de MiB y segundos; comprobar el límite lee solo el final del fichero."""
+        import time
+        import tracemalloc
+        ruta = self._zip_con_indice_grande(tmp_path)
+        tracemalloc.start()
+        t0 = time.perf_counter()
+        motivo = fc.motivo_fuera_de_limite(ruta)
+        coste_control = (tracemalloc.get_traced_memory()[1], time.perf_counter() - t0)
+        tracemalloc.stop()
+        tracemalloc.start()
+        t0 = time.perf_counter()
+        with zipfile.ZipFile(ruta) as zf:
+            n = len(zf.infolist())
+        coste_abrir = (tracemalloc.get_traced_memory()[1], time.perf_counter() - t0)
+        tracemalloc.stop()
+        assert motivo in ("entradas", "directorio") and n == 30_000
+        assert coste_control[0] < 256 * 1024                          # < 256 KiB para decidir
+        assert coste_abrir[0] > 20 * coste_control[0]                 # abrirlo cuesta MUCHO más (en esta máquina: ~16 MiB frente a unos KiB)
+
+    def test_un_indice_con_tamano_declarado_menor_que_el_real_no_da_una_lectura_sin_cota(self, tmp_path):
+        """El registro dice que el índice mide 4 KiB, pero el real mide ~1,6 MiB: `ZipFile` solo lee los bytes que declara (acotado) y, a lo sumo, falla."""
+        import tracemalloc
+        ruta = self._zip_con_indice_grande(tmp_path)
+        b = bytearray(ruta.read_bytes())
+        i = b.rfind(b"PK\x05\x06")
+        b[i + 10:i + 12] = struct.pack("<H", 5)
+        b[i + 12:i + 16] = struct.pack("<I", 4096)
+        ruta.write_bytes(bytes(b))
+        assert fc.motivo_fuera_de_limite(ruta) is None                 # el control acepta lo que DECLARA caber...
+        tracemalloc.start()
+        try:
+            with zipfile.ZipFile(ruta) as zf:
+                zf.infolist()
+        except zipfile.BadZipFile:
+            pass                                                       # ...y `ZipFile` falla o abre solo lo declarado:
+        pico = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        assert pico < 2 * 1024 * 1024                                  # nunca lee más de lo que declara el registro
+
+    def test_un_indice_mayor_que_el_fichero_no_se_lee_entero_ni_se_abre(self, tmp_path, monkeypatch):
+        z = zip_de(tmp_path / "x.zip", paginas(12))
+        b = bytearray(z.read_bytes())
+        i = b.rfind(b"PK\x05\x06")
+        b[i + 12:i + 16] = struct.pack("<I", 0xFFFFFFF0)               # ~4 GiB de índice declarados en un fichero de unos KiB
+        z.write_bytes(bytes(b))
+        monkeypatch.setattr(zipfile, "ZipFile", lambda *a, **k: (_ for _ in ()).throw(AssertionError("se abrió")))
+        assert fc.motivo_fuera_de_limite(z) == "directorio"
+
+    def test_cada_limite_salta_por_si_solo_y_ninguno_sustituye_a_otro(self, tmp_path):
+        """Se fabrica, para cada límite, un ZIP que incumple SOLO ese; los demás lo dejarían pasar."""
+        import random
+
+        from zascarr.core.importer_triage import triage
+        from zascarr.utils.cover import extract_cover_thumbnail
+        aleatorio = random.Random(1).randbytes
+
+        # entradas: declara 3000 (índice pequeño, entrada pequeña, ratio 1)
+        a = zip_de(tmp_path / "entradas.zip", paginas(12))
+        b = bytearray(a.read_bytes()); i = b.rfind(b"PK\x05\x06"); b[i + 10:i + 12] = struct.pack("<H", 3000); a.write_bytes(bytes(b))
+        assert fc.motivo_fuera_de_limite(a) == "entradas"
+        # índice: pocas entradas declaradas pero índice declarado de 2 MiB
+        d = zip_de(tmp_path / "indice.zip", paginas(12))
+        b = bytearray(d.read_bytes()); i = b.rfind(b"PK\x05\x06"); b[i + 12:i + 16] = struct.pack("<I", 2 * 1024 * 1024); d.write_bytes(bytes(b))
+        assert fc.motivo_fuera_de_limite(d) == "directorio"
+        # entrada leída > 32 MiB, ratio 1 (aleatoria: incomprimible), pocas entradas, índice minúsculo
+        g = tmp_path / "grande.zip"
+        with zipfile.ZipFile(g, "w", zipfile.ZIP_STORED) as zf:
+            zf.writestr("001.jpg", aleatorio(fc.MAX_ENTRADA_LEIDA + 1024))
+        assert fc.motivo_fuera_de_limite(g) is None and fc.clasificar_zip(g).clase is ClaseZip.NO_TEBEO         # el control del índice no la ve...
+        with zipfile.ZipFile(g) as zf, pytest.raises(fc.EntradaNoLegible, match="demasiado grande"):          # ...la ve el tope de la entrada leída
+            fc.leer_acotado(zf, zf.getinfo("001.jpg"))
+        assert extract_cover_thumbnail(g) is None                                                                # la portada también se rechaza
+        assert triage(g).width_px is None and any("primera página" in w and "demasiado grande" in w for w in triage(g).warnings)
+        # ratio > 100 con la entrada por debajo de 32 MiB
+        r = zip_de(tmp_path / "ratio.zip", {"001.jpg": b"\0" * 5_000_000})
+        assert fc.motivo_fuera_de_limite(r) is None
+        with zipfile.ZipFile(r) as zf, pytest.raises(fc.EntradaNoLegible, match="bomba"):
+            fc.leer_acotado(zf, zf.getinfo("001.jpg"))
+
+    def test_el_mensaje_habla_de_procesamiento_no_de_corrupcion(self):
+        for texto in (fc.AVISO_CLASE[ClaseZip.LIMITE], fc.AVISO_LIMITE_DIRECTORIO):
+            assert "por precaución" in texto
+            assert not any(p in texto.lower() for p in ("dañado", "corrupto", "incompleto", "roto", "no es válido"))
