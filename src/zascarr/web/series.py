@@ -206,7 +206,7 @@ async def portada(series_id: UUID, request: Request,
     # fallar) extraer de un CBZ borrado en vez de probar el siguiente
     # número disponible o caer al cover_url externo.
     row = (await db.execute(
-        select(File.file_path)
+        select(File.file_path, File.metadata_)
         .join(Issue, File.issue_id == Issue.id)
         .where(Issue.series_id == series_id)
         .where(File.is_missing.is_(False))
@@ -214,7 +214,7 @@ async def portada(series_id: UUID, request: Request,
         .limit(1)
     )).first()
     if row:
-        result = await asyncio.to_thread(extract_cover_thumbnail, Path(row[0]))
+        result = await asyncio.to_thread(extract_cover_thumbnail, Path(row[0]), (row[1] or {}).get("formato_contenido"))
         if result:
             data, content_type = result
             await asyncio.to_thread(write_cover_cache, cache_path, data)

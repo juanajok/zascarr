@@ -16,7 +16,17 @@ import structlog
 from fastapi import Request, Response
 from PIL import Image
 
-from zascarr.core.importer_triage import IMAGE_EXTS, natural_key
+from zascarr.core.formato_contenedor import (
+    IMAGE_EXTS,
+    EntradaNoLegible,
+    clasificar_infos,
+    firma_de,
+    leer_acotado,
+    natural_key,
+    puede_dar_portada,
+    se_lee_como_zip,
+)
+from zascarr.models import ClaseZip
 from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_imagen, host_para_log
 
 logger = structlog.get_logger()
@@ -33,11 +43,13 @@ _THUMB_MAX_WIDTH = 240
 EXTENSIONES_CON_PORTADA = frozenset({".cbz", ".zip"})
 
 
-def puede_tener_portada(ruta: str | Path) -> bool:
-    """¿Tiene sentido pedir la portada de este archivo? Solo mira la extensión: ni abre el
-    archivo ni lo busca en disco. `False` = ausencia CONOCIDA; `True` = disponibilidad
-    desconocida (solo abriéndolo se sabe)."""
-    return Path(str(ruta)).suffix.lower() in EXTENSIONES_CON_PORTADA
+def puede_tener_portada(ruta: str | Path, formato_contenido: dict | None = None) -> bool:
+    """¿Tiene sentido pedir la portada de este archivo? Ni abre el archivo ni lo busca en disco (se llama en listados): decide con el
+    `formato_contenido` ya guardado en la base (#307) y, si no hay nada guardado, solo por la extensión. `False` = ausencia CONOCIDA;
+    `True` = disponibilidad desconocida (solo abriéndolo se sabe)."""
+    ext = Path(str(ruta)).suffix.lower()
+    guardado = puede_dar_portada(ext, formato_contenido)
+    return guardado if guardado is not None else ext in EXTENSIONES_CON_PORTADA
 
 # Portada de biblioteca: algo más grande que la miniatura de revisión de
 # B2 (se ve en una tarjeta de la rejilla, no en una lista compacta).
@@ -49,24 +61,34 @@ _COVER_MAX_WIDTH = 320
 _COVER_FETCH_SEMAPHORE = asyncio.Semaphore(2)
 
 
-def extract_cover_thumbnail(path: Path) -> tuple[bytes, str] | None:
-    """(bytes JPEG, content-type) de una miniatura de la primera página en
-    orden natural, o None si el archivo no es un zip legible o no tiene
-    páginas de imagen (CBR, por ejemplo: requeriría unrar, fuera de
-    alcance — ver importer_triage.py)."""
-    if not puede_tener_portada(path) or not path.exists():
+def extract_cover_thumbnail(path: Path, formato_contenido: dict | None = None) -> tuple[bytes, str] | None:
+    """(bytes JPEG, content-type) de una miniatura de la primera página en orden natural, o None si el archivo no es un ZIP legible, no
+    tiene páginas de imagen o su primera página supera los topes (CBR real: requeriría una herramienta que no está; ver #308).
+
+    #307: un `.cbr`/`.cb7` cuyo CONTENIDO es un ZIP se lee igual que un `.cbz`, siempre que sea un tebeo comprobado. Con el
+    `formato_contenido` guardado en la base no se lee la firma; sin él (fila aún sin rellenar, fichero suelto) se decide aquí por el
+    contenido. La lectura está ACOTADA: ni el tamaño declarado ni el ratio de la página pueden pasar de los topes."""
+    if not path.exists():
+        return None
+    ext = path.suffix.lower()
+    sin_guardar = not formato_contenido
+    if sin_guardar:
+        if not se_lee_como_zip(ext, firma_de(path)):
+            return None
+    elif not puede_dar_portada(ext, formato_contenido):
         return None
 
     try:
         with zipfile.ZipFile(path) as zf:
-            pages = sorted(
-                (n for n in zf.namelist() if Path(n).suffix.lower() in IMAGE_EXTS),
-                key=natural_key,
-            )
+            infos = zf.infolist()
+            if sin_guardar and ext not in (".cbz", ".zip") and clasificar_infos(infos).clase is not ClaseZip.TEBEO:
+                return None
+            por_nombre = {i.filename: i for i in infos if not i.is_dir()}
+            pages = sorted((n for n in por_nombre if Path(n).suffix.lower() in IMAGE_EXTS), key=natural_key)
             if not pages:
                 return None
-            data = zf.read(pages[0])
-    except (OSError, zipfile.BadZipFile):
+            data = leer_acotado(zf, por_nombre[pages[0]])
+    except (OSError, zipfile.BadZipFile, EntradaNoLegible):
         return None
 
     try:

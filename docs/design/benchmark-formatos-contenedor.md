@@ -29,7 +29,7 @@ Hechos (todos verificados en el código `245402e`):
 - Incongruencia: `triage` y la portada aceptan `.zip`, pero el importador **no lo recorre** (`.zip` no está en `COMIC_EXTS`).
 - La auditoría (B16, RF-02) ya avisa de `.rar`/`.7z` y de la doble extensión, pero **no** del `.tar`, de los `.cbt` ni de los archivos **sin extensión**.
 - La imagen de producción (`Dockerfile`, `python:3.11-slim-bookworm`) solo instala `libpq5 libxml2 libxslt1.1 tini`: **no hay `unrar`, `7z`, `bsdtar` ni `unar`**. Leer RAR o 7z es una dependencia de sistema nueva.
-- Protecciones contra bombas ZIP: solo para ZIP (`MAX_ZIP_ENTRIES = 1000`, `MAX_ZIP_UNCOMPRESSED = 500 MiB`). Cualquier otro formato necesitaría las suyas.
+- Protecciones contra bombas ZIP: solo para ZIP. *(Actualizado por #307, ver `contrato-307-formato-por-contenido.md` §6: hasta entonces eran `MAX_ZIP_ENTRIES = 1000` y `MAX_ZIP_UNCOMPRESSED = 500 MiB` en total; ahora son 2000 entradas y topes por entrada leída.)* Cualquier otro formato necesitaría las suyas.
 
 ## 3. Coste (PC, sintético; la Pi es NOT RUN)
 Banco: `scripts/medicion/banco_formatos_coste.py` (400 páginas de ~1 MB de bytes aleatorios ≈ 400 MB por empaquetado; 100 páginas dan los mismos órdenes de magnitud). Pico de memoria (MiB) / tiempo:

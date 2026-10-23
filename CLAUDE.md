@@ -297,6 +297,7 @@ como marco permanente.
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
 | `docs/design/benchmark-referencias.md` | Procedimiento y ficha para comparar referencias antes de features P0/P1 (ver §13) |
+| `docs/design/contrato-307-formato-por-contenido.md` | Contrato de **formato por contenido** (#307): un único punto de decisión (`core/formato_contenedor.py`); `file_format` es la extensión **declarada**, el formato real va en `files.metadata["formato_contenido"]`. **Consultar antes de tocar `triage`, la portada o la auditoría de formatos** |
 
 ## 12. Principios de arquitectura del propio código (confirmados por
 benchmarking ronda 2)
