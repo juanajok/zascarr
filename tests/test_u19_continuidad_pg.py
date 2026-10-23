@@ -76,6 +76,12 @@ pytestmark = [
 SERIE_CON_4050_EN_EL_ID = UUID("0b4050aa-0000-4000-8000-000000000001")
 
 
+def sin_el_id_local(enlace: str, sid) -> str:
+    """El enlace SIN el UUID de la serie local. El UUID es aleatorio y a veces contiene «4050» por azar; lo que se
+    comprueba es que no viaje el identificador EXTERNO, así que el id local se quita antes de buscarlo."""
+    return enlace.replace(str(sid), "")
+
+
 async def elegir(**datos) -> httpx.Response:
     async with cliente() as c:
         return await c.post(f"{A}/elegir", data={"clave": CLAVE, **datos}, headers={"HX-Request": "true"})
@@ -203,7 +209,7 @@ class TestContinuidadDesdeCandidata:
         assert "ya estaba en tu biblioteca" in visible(c.text)
         enlace = re.search(r'href="[^"]*vinculacion\?clave=[^"]+series_id=([^"&]+)"', c.text)
         assert enlace and enlace.group(1) == str(sid)                                   # a la revisión va el id LOCAL
-        assert "4050" not in enlace.group(0)                                            # nunca el identificador externo
+        assert "4050" not in sin_el_id_local(enlace.group(0), sid)                      # nunca el identificador externo
         assert (await numero_de("series", ent.banco)) == 1
 
     async def test_t5_elegir_una_parecida_del_asistente_conserva_la_carpeta_y_no_duplica(self, ent):
@@ -225,7 +231,7 @@ class TestContinuidadDesdeCandidata:
         c = await crear_alta(ent)
         sid = (await series(ent))[0][0]
         enlace = re.search(r'href="([^"]*vinculacion\?clave=[^"]+series_id=([^"&]+))"', c.text)
-        assert enlace and enlace.group(2) == str(sid) and "4050" not in enlace.group(1)
+        assert enlace and enlace.group(2) == str(sid) and "4050" not in sin_el_id_local(enlace.group(1), sid)
         async with cliente() as k:
             assert (await k.get(html.unescape(enlace.group(1)))).status_code == 200
 
