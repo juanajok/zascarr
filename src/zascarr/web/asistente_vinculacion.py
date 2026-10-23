@@ -62,6 +62,7 @@ from zascarr.services.vinculacion import (
 )
 from zascarr.services.vinculacion_previa import (
     LIMITE_ARCHIVOS,
+    LIMITE_CURSOR,
     ArchivoAjenoError,
     CursorNoValidoError,
     NumeroNoValidoError,
@@ -79,7 +80,8 @@ router = APIRouter(prefix="/ui/pendientes/carpetas/asistente/vinculacion", tags=
 RUTA = "/ui/pendientes/carpetas/asistente/vinculacion"
 
 #: Cursor de la primera página en el formulario (el servicio no tiene cursor para ella). Un cursor real es base64 de un
-#: JSON que empieza por «WyI», así que no puede coincidir con esta palabra.
+#: dato que empieza por el byte 1 o 2 («A…» / «Ag…») o, el formato anterior, por «[» («WyI…»): ninguno puede coincidir con
+#: esta palabra.
 INICIO = "inicio"
 MAX_PAGINAS_CON_BORRADOR = 100
 MAX_IDS_POR_BORRADOR = 1000
@@ -382,7 +384,7 @@ async def abrir(
     request: Request,
     clave: str = Query(..., min_length=1, max_length=MAX_CLAVE_GRUPO),
     series_id: str = Query(default="", max_length=64),
-    cursor: str = Query(default="", max_length=2000),
+    cursor: str = Query(default="", max_length=LIMITE_CURSOR),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Abre la preparación para un grupo y una serie LOCAL. Todo empieza sin marcar; no escribe nada. `cursor` (opcional)
@@ -503,7 +505,7 @@ async def _titulo_de_la_serie(db: AsyncSession, series_id: str) -> str | None:
 async def confirmar(
     request: Request,
     token: str = Form(..., min_length=1, max_length=MAX_TOKEN_VINCULACION),
-    cursor_actual: str = Form(default=INICIO, max_length=2000),
+    cursor_actual: str = Form(default=INICIO, max_length=LIMITE_CURSOR),
     pagina_desde: str = Form(default="", max_length=10),
     pagina_hasta: str = Form(default="", max_length=10),
     db: AsyncSession = Depends(get_db),

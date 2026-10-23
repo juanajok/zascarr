@@ -141,3 +141,17 @@ class TestRegistroEnLaPagina:
         assert r.status_code == 200
         assert "ya está registrada" in r.text
         assert not registro_biblioteca.estado_actual().en_marcha
+
+
+class TestCabeceraDeNoReconocidos:
+    """UX (2026-10-23): la garantía va una vez en la cabecera y habla de la lista; el único camino verificado para arreglar un fichero es la carpeta de
+    descargas (`tests/test_importer_recorrido_de_descargas_pg.py`), y la frase habla de la COPIA para no contradecir «no mueve ninguno»."""
+
+    def test_la_cabecera_dice_la_garantia_una_vez_y_el_camino_verificado(self):
+        from pathlib import Path
+        t = (Path(__file__).resolve().parents[1] / "src/zascarr/web/templates/_auditoria_informe.html").read_text(encoding="utf-8")
+        t = " ".join(t.split())
+        assert "No cambia, mueve ni borra ninguno de esta lista." in t
+        assert ("Si arreglas una copia (por ejemplo, la descomprimes o pones .cbz al final de su nombre) y la dejas en tu carpeta de descargas, "
+                "ZascArr intentará importarla; el original seguirá aquí.") in t
+        assert "hasta que los conviertas" not in t                       # la cabecera antigua, que decía que ninguno de estos archivos contaba

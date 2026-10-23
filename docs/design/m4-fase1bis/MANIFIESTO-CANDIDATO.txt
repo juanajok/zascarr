@@ -1,0 +1,37 @@
+# Manifiesto del candidato — M4 fase 1 bis (#121). Generado por: anfitrion.sh manifiesto. Solo lectura.
+# Formato CLAVE=valor para lo que consumen los scripts; el resto son tablas informativas.
+CANDIDATO=f2c04212476d7ec1ed8a69cedc8130b4a7b4b9e9
+ARBOL=4095134df827875bc35d6a0f25d9bee487eacad0
+PADRES=97f6acf505554d419854daa22eba46553ba0faa7 0df8946ad7aa130fb3a86fef61a1e2dfeae69e34
+ASUNTO=Merge pull request #238 from juanajok/claude/credenciales-env-inicializacion
+FECHA_COMMIT=2026-10-18T19:10:54+02:00
+BOOTSTRAP_SHA256=d5d3fdd5001d7ff70bc948f8e8dc091e1ec7de15fe7a4bd525aee29c2faba0af
+CSS_SHA256=ce87a9e25fc6469badd772072116938d6ef31a1a2ac96c0e85df0b6f70daca0f
+ALEMBIC_FICHERO=20261009_0019_vinculacion_operaciones.py
+ALEMBIC_ESPERADA=0019
+MEMORIA_COMPOSE=2 servicios con 512M (aplicación y PostgreSQL); servicio credenciales 16M
+FLAGS_FUENTES_QUE_COMPOSE_TRANSMITE=FORUM_ENABLED 
+DEFAULTS_FUENTES_CONFIG=comicvine_enabled: bool = Field(default=True);anilist_enabled: bool = Field(default=True);tebeosfera_enabled: bool = Field(default=True);gcd_enabled: bool = Field(default=True);
+# Punto de partida de la VM (fase 1, solo lectura): se comprueban con 'verificar'
+BASE_QCOW_SHA512=56c0bd55b6623f2739f377e983d2872e7b208d0cb9c3ba4e93d3f72929026da03637c598b3bd472b29998c31c8a4c17d8e6ae1c556852a8b83a66a09bf5c2b37
+PREPARACION_QCOW_SHA256=6ed7f684335940ba294dbdacd91f5c5e4632c24b9d7aaed975fbefea9a0f28b9
+PREPARACION_QCOW_CONTENIDO=Debian 12 + Docker 5:29.8.2 + imágenes postgres:15-alpine y python:3.11-slim-bookworm (por digest) + git + python3; SIN instalación del producto (fase 1)
+BASE_QCOW_ORIGEN=debian-12-genericcloud-amd64.qcow2, build 20261015-2632 (cloud.debian.org, verificado en la fase 1)
+DIGEST_POSTGRES=sha256:f7d23353e1b15400d22ebe31189f4d314b87a4c129cc400c8c2d8d4ca127bf81
+DIGEST_PYTHON=sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
+DOCKER_VERSIONES=docker-ce/cli 5:29.8.2-1~debian.12~bookworm · containerd.io 2.4.2-2 · buildx 0.38.0-1 · compose 5.6.0-1 (APT oficial, fase 1)
+# Huellas SHA-256 de ficheros del candidato (git show COMMIT:ruta | sha256sum)
+SHA256 d5d3fdd5001d7ff70bc948f8e8dc091e1ec7de15fe7a4bd525aee29c2faba0af  bootstrap.sh
+SHA256 0168585fc395150016cedb272d175c5c343b31da20b903cf5f840d78a98e2e7b  docker-compose.yml
+SHA256 9fe0af941770ab08a1ba54063983b0862b06f7821b52f4a52c1d482e83d794c2  Dockerfile
+SHA256 c158e01b4b49287536373dec0bae0c477f4e2bec5f8a9f2208ed482f7e043a3a  .env.example
+SHA256 b4f4bbe04dcf44c2d4f0427f51282f2fa7b33c2388b733e5af0156fa408cd097  pyproject.toml
+SHA256 f3478d4a41756792643ae5b9a1723e6d7d4a0c7c14e4ac82cb800e7d5a0625be  scripts/_credenciales.sh
+SHA256 05c74b8b4b052a451a65938484609f1e19204ee75a132eb06c5e143caead81ec  scripts/credenciales.sh
+SHA256 84b09b4d6f019567b50a9dfe2cb6a61fc8d82d107d5b9a33db7bc3fba4cd282d  scripts/_comun.sh
+SHA256 0e7743390402c4f070e69214a6634062be64dcc5e224ef32e46c3bb30411c97d  scripts/update.sh
+SHA256 f4f17d36365e1997c535ee0ea09baecc67ee8876e5aacca7e0615a1cae3c0897  scripts/backup.sh
+SHA256 198636cccba728205fe5ec30c16ab18ef17fe8f9570fe8f2c06d04a7045fbb45  scripts/rollback.sh
+SHA256 5515ab106ff34e71483739f4033106f01131300e92dc8dbedd71dab3d10c5feb  scripts/uninstall.sh
+SHA256 a182b0ffeb19ea2a9ff29f0e09df0839cd01eaa3b7cedbca16795538fa60ad32  src/zascarr/utils/credenciales.py
+SHA256 f0d1036132e35dc2e396f5d42eadb0f17bfde8011caaaacc1c9c20cf130995ea  src/zascarr/config.py

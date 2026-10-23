@@ -33,6 +33,7 @@ import base64
 import json
 import os
 import stat as _stat
+import zlib
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -68,6 +69,10 @@ from zascarr.utils.naming import parse_comic_filename
 
 #: Hipótesis inicial conservadora (D8): no validada ni garantía de duración. Acota los `stat` y, en 2d, la transacción.
 LIMITE_ARCHIVOS = 100
+
+#: Longitud máxima, en caracteres, del cursor que acepta la petición (`cursor` en la API y en el asistente web). Lo que se
+#: EMITE cabe siempre aquí por construcción (ver `_cursor_de`); no se sube el límite para acomodar cursores mayores.
+LIMITE_CURSOR = 2000
 
 #: Impedimentos, por orden de precedencia. Un registro con cualquiera de ellos NO se puede marcar.
 BLOQUEOS = ("ya_vinculado", "en_curso", "origen_no_encontrado", "origen_no_verificable", "requiere_numero",
@@ -250,20 +255,86 @@ def _dentro_de(ruta: str, biblioteca: Path) -> bool:
 
 # ── Cursor de página ─────────────────────────────────────────────────────────────────────────────
 
+# El cursor es la posición `(nombre, id)` del último archivo de la página, en el orden estable del grupo. Es solo una
+# posición: no autoriza nada ni va firmada. Formato actual (binario, en Base64 URL):
+#
+#     versión (1 byte) · id del archivo (16 bytes, el UUID) · huella CRC-32 (4 bytes) · nombre en UTF-8 (resto)
+#
+# Por qué binario: el formato anterior era JSON en Base64, y JSON escribe cada carácter de control con seis bytes
+# (`\u0001`). Un nombre válido de 255 bytes de control daba 2.100 caracteres: el sistema emitía un cursor que él mismo
+# rechazaba (`max_length=2000`, #143). En bruto el nombre ocupa lo que ocupa (≤ 255 bytes en Linux, ≤ 500·4 en la
+# columna): el cursor mide ≈ 4/3·(21 + bytes del nombre), y SIEMPRE entra: por encima de `_MAX_NOMBRE_EN_CURSOR` bytes
+# no se incluye el nombre y la posición se resuelve por el id (versión 2), lo que da un error explícito si ese archivo
+# ya no está pendiente. La huella detecta truncamientos y alteraciones del contenido, y solo se acepta la cadena
+# canónica que el sistema emitiría; no es una firma (la posición no autoriza nada).
+#
+# El cursor del formato anterior (`[nombre, id]` en JSON) se sigue aceptando: es la misma posición. Si uno de ellos
+# superó 2.000 caracteres ya no se puede enviar (lo rechaza la validación de la petición, con 422).
+_CURSOR_CON_NOMBRE = 1
+_CURSOR_POR_ID = 2
+_MAX_NOMBRE_EN_CURSOR = 1024
+
+
+def _huella(cabecera_y_nombre: bytes) -> bytes:
+    return zlib.crc32(cabecera_y_nombre).to_bytes(4, "big")
+
+
 def _cursor_de(a) -> str:
-    """Posición en el orden estable del grupo (nombre, id). Es solo una posición: no autoriza nada ni va firmada."""
-    return base64.urlsafe_b64encode(json.dumps([a.nombre, a.id], ensure_ascii=False).encode()).decode()
+    """Cursor de la página POSTERIOR a `a` (su último archivo). Acotado por diseño: ver arriba."""
+    ident = UUID(a.id).bytes
+    nombre = a.nombre.encode("utf-8")
+    if len(nombre) <= _MAX_NOMBRE_EN_CURSOR:
+        cabeza = bytes([_CURSOR_CON_NOMBRE]) + ident
+        crudo = cabeza + _huella(cabeza + nombre) + nombre
+    else:
+        cabeza = bytes([_CURSOR_POR_ID]) + ident
+        crudo = cabeza + _huella(cabeza)
+    cursor = base64.urlsafe_b64encode(crudo).decode()
+    assert len(cursor) <= LIMITE_CURSOR      # por construcción: 4/3·(21 + 1024) ≈ 1.394
+    return cursor
 
 
-def _leer_cursor(cursor: str) -> tuple[str, str]:
+def _leer_cursor(cursor: str) -> tuple[str | None, str]:
+    """→ `(nombre, id)`. `nombre` es `None` si el cursor solo lleva el id (nombre demasiado largo para incluirlo).
+    Cualquier cosa que no sea un cursor íntegro es `CursorNoValidoError`: nunca se interpreta algo a medias."""
     try:
-        nombre, ident = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
-        if not isinstance(nombre, str) or not isinstance(ident, str):
+        crudo = base64.b64decode(cursor.encode("ascii"), altchars=b"-_", validate=True)
+        # Representación canónica: Base64 admite varias cadenas para los mismos bytes (los bits de relleno del último
+        # bloque). Solo vale la que el sistema habría emitido, así que cualquier cadena distinta es un error.
+        if base64.urlsafe_b64encode(crudo).decode() != cursor:
             raise ValueError
-        UUID(ident)
-        return nombre, ident
-    except (ValueError, TypeError, UnicodeError):
+        if crudo[:1] == b"[":                                  # formato anterior: JSON
+            nombre, ident = json.loads(crudo.decode())
+            if not isinstance(nombre, str) or not isinstance(ident, str):
+                raise ValueError
+            UUID(ident)
+            return nombre, ident
+        version, ident, huella, nombre = crudo[0], crudo[1:17], crudo[17:21], crudo[21:]
+        if len(crudo) < 21 or version not in (_CURSOR_CON_NOMBRE, _CURSOR_POR_ID):
+            raise ValueError
+        if huella != _huella(crudo[:17] + nombre):
+            raise ValueError
+        if version == _CURSOR_POR_ID:
+            if nombre:
+                raise ValueError
+            return None, str(UUID(bytes=ident))
+        return nombre.decode("utf-8"), str(UUID(bytes=ident))
+    except (ValueError, TypeError, UnicodeError, IndexError):
         raise CursorNoValidoError("El cursor de la página no es válido.") from None
+
+
+def _posicion(cursor: str, todos: list) -> tuple[str, str]:
+    """La clave de orden `(nombre, id)` a la que apunta el cursor. Con nombre incluido es exacta aunque el archivo ya
+    no esté pendiente (por ejemplo, porque se acaba de vincular); sin nombre (poco probable) hace falta que siga en el
+    grupo, y si no está se dice."""
+    nombre, ident = _leer_cursor(cursor)
+    if nombre is not None:
+        return nombre, ident
+    for a in todos:
+        if a.id == ident:
+            return a.nombre, a.id
+    raise CursorNoValidoError(
+        "La posición de la página ya no existe (ese archivo ya no está pendiente). Vuelve a la primera página.")
 
 
 class VistaPreviaDeVinculacion:
@@ -292,7 +363,13 @@ class VistaPreviaDeVinculacion:
 
         # La página: los `LIMITE_ARCHIVOS` primeros DESPUÉS del cursor (clave de orden estable: aunque otros archivos
         # se vinculen entre petición y petición, el cursor sigue señalando el mismo punto).
-        despues = todos if not cursor else [a for a in todos if (a.nombre, a.id) > _leer_cursor(cursor)]
+        # La posición se resuelve y se valida UNA vez por petición, antes de filtrar: dentro de la comprensión, la búsqueda
+        # por id (cursor de un nombre fuera de rango) recorrería el grupo entero por cada archivo (coste cuadrático).
+        if cursor:
+            posicion = _posicion(cursor, todos)
+            despues = [a for a in todos if (a.nombre, a.id) > posicion]
+        else:
+            despues = todos
         tratados, resto = despues[:LIMITE_ARCHIVOS], despues[LIMITE_ARCHIVOS:]
         antes = len(todos) - len(despues)
         en_grupo = {a.id for a in todos}

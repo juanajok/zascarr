@@ -13,9 +13,7 @@ es un fallo.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from html.parser import HTMLParser
 
 from zascarr.services.discovery import (
     FUENTE_ERROR,
@@ -23,68 +21,57 @@ from zascarr.services.discovery import (
     FUENTE_SIN_CLAVE,
     ORDEN_DE_FUENTES,
 )
+from zascarr.utils.texto_html import texto_plano  # noqa: F401  (se reexporta: la usan Descubrir y sus pruebas)
 
 #: Cómo se llama cada fuente: los mismos nombres que usa el servicio en sus avisos.
 ETIQUETAS = {
     "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera", "gcd": "GCD"}
 OTRA_FUENTE = "otra fuente"
 
-_BLOQUES = frozenset({
-    "p", "br", "div", "li", "ul", "ol", "tr", "td", "th", "table", "blockquote", "section",
-    "article", "h1", "h2", "h3", "h4", "h5", "h6"})
-_OCULTOS = frozenset({"script", "style"})
+
+ETIQUETAS_PROCEDENCIA = {
+    "explicita": "dato explícito de la fuente",
+    "transformada": "deducida de otros datos de la fuente",
+    "por_defecto": "valor por defecto: la fuente no lo indica",
+    "desconocida": "origen desconocido",
+}
+
+
+def _valor_de_procedencia(procedencia) -> str:
+    return str(getattr(procedencia, "value", procedencia) or "")
+
+
+def etiqueta_procedencia(procedencia: str | None) -> str:
+    """Etiqueta corta para el contexto de una sugerencia ya mostrada (nunca un dato de la obra)."""
+    return ETIQUETAS_PROCEDENCIA.get(
+        _valor_de_procedencia(procedencia), ETIQUETAS_PROCEDENCIA["desconocida"])
+
+
+def pista_de_tradicion(etiqueta: str, procedencia: str | None) -> str:
+    """La frase que presenta una tradición sugerida SIN confirmarla.
+
+    La procedencia cambia la atribución, no la recomendación: en todos los casos la persona elige y
+    nada llega preseleccionado. Para `explicita` se conserva literalmente la copy de U15; para las
+    demás se dice de dónde sale (transformada de otros datos, valor por defecto del producto o
+    desconocida) para no presentar como clasificación de la fuente lo que no lo es. Sin
+    sugerencia no se llama a esta función: no hay pista que mostrar.
+    """
+    inicio = {
+        "explicita": f"La fuente lo clasifica como {etiqueta}.",
+        "transformada": (
+            f"La fuente no usa esta tradición: a partir de sus datos "
+            f"se sugiere {etiqueta}."
+        ),
+        "por_defecto": f"La fuente no indica tradición: se sugiere {etiqueta} por defecto.",
+        "desconocida": f"La fuente sugiere {etiqueta}, pero no consta de dónde sale.",
+    }.get(_valor_de_procedencia(procedencia) or "desconocida",
+          f"La fuente sugiere {etiqueta}, pero no consta de dónde sale.")
+    return f"{inicio} Es solo una pista de la fuente, no de la obra: elige tú."
 
 
 def etiqueta_fuente(valor: str | None) -> str:
     """El nombre de la fuente; un valor que no se conoce NO se enseña (sería un identificador)."""
     return ETIQUETAS.get(str(valor or ""), OTRA_FUENTE)
-
-
-class _APlano(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.partes: list[str] = []
-        self._ocultos = 0
-
-    def handle_starttag(self, tag, attrs):
-        if tag in _OCULTOS:
-            self._ocultos += 1
-        elif tag in _BLOQUES:
-            self.partes.append(" ")
-
-    def handle_startendtag(self, tag, attrs):
-        if tag in _BLOQUES:
-            self.partes.append(" ")
-
-    def handle_endtag(self, tag):
-        if tag in _OCULTOS:
-            self._ocultos = max(0, self._ocultos - 1)
-        elif tag in _BLOQUES:
-            self.partes.append(" ")
-
-    def handle_data(self, data):
-        if not self._ocultos:
-            self.partes.append(data)
-
-
-_ETIQUETA_CORTADA = re.compile(r"<[^>]*$")
-_ETIQUETAS = re.compile(r"<[^>]*>")
-
-
-def texto_plano(crudo: str | None) -> str:
-    """El HTML de la fuente como texto: sin etiquetas, sin el contenido de `script`/`style`, con las
-    entidades decodificadas y los espacios colapsados. Nunca interpreta el HTML (se escapa)."""
-    if not crudo:
-        return ""
-    p = _APlano()
-    try:
-        p.feed(crudo)
-        p.close()
-        texto = "".join(p.partes)
-    except Exception:  # noqa: BLE001 — un HTML que el analizador no admite no puede tumbar la búsqueda
-        texto = _ETIQUETAS.sub(" ", crudo)
-    texto = " ".join(texto.split())
-    return _ETIQUETA_CORTADA.sub("", texto).strip()
 
 
 def enumerar(nombres: list[str]) -> str:

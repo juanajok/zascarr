@@ -325,10 +325,10 @@ class TestCriterio7Accesibilidad:
 
     async def test_la_confirmacion_y_el_resultado_usan_controles_nativos_titulos_y_avisos_con_rol(self, ent):
         p = await listo(ent, UNO, DOS)
-        assert re.search(r'<button type="submit">Vincular 2 archivos</button>', p.t)
+        assert re.search(r'<button type="submit" class="primary">Vincular 2 archivos</button>', p.t)
         assert 'aria-labelledby="vinc-lote"' in p.t and '<h3 id="vinc-lote">' in p.t
         r = await confirmar(p)
-        assert re.search(r'<h2 id="res-contexto">', r.t) and re.search(r'<h3 id="res-resultado">', r.t)
+        assert re.search(r'<h2 id="res-contexto"[^>]*>', r.t) and re.search(r'<h3 id="res-resultado"[^>]*>', r.t)
         assert 'role="status"' in r.t or 'role="alert"' in r.t
         assert 'aria-label="Totales"' in r.t
         assert "<a class=\"btn ghost sm\"" in r.t                   # los accesos son enlaces reales

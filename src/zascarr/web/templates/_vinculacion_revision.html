@@ -18,7 +18,7 @@
   <input type="hidden" name="borradores" value="{{ borradores_json }}">
 
   <section class="card" aria-labelledby="vinc-contexto">
-    <h2 id="vinc-contexto">{{ r.clave }}</h2>
+    <h2 id="vinc-contexto" class="titulo-frase">{{ r.clave }}</h2>
     <dl class="carpeta-datos">
       <dt>Serie elegida</dt><dd>{{ s.titulo }}{% if s.anio %} ({{ s.anio }}){% endif %}</dd>
       <dt>Archivos en la carpeta</dt><dd>{{ r.pagina.en_el_grupo }}</dd>
@@ -33,7 +33,7 @@
 
   {% if pendientes %}
   <section class="card" aria-labelledby="vinc-borradores">
-    <h3 id="vinc-borradores">Trabajo guardado en otras páginas</h3>
+    <h3 id="vinc-borradores" class="titulo-frase">Trabajo guardado en otras páginas</h3>
     <p class="vinc-alcance">Son borradores: se vuelven a revisar cuando regreses a cada página.</p>
     <details class="vinc-detalle"><summary>Más detalle de los borradores</summary><p>No forman parte de lo que se va a vincular ahora y se pierden si recargas la página.</p></details>
     <ul>
@@ -122,7 +122,7 @@
   {% endif %}
 
   <section class="card vinculacion-resumen" aria-labelledby="vinc-resumen">
-    <h3 id="vinc-resumen">Resumen de esta página</h3>
+    <h3 id="vinc-resumen" class="titulo-frase">Resumen de esta página</h3>
     <ul class="carpetas-resumen">
       <li data-total="marcados">{{ ui.chip("neutro", r.totales.marcados ~ " marcados") }}</li>
       <li data-total="a_vincular">{{ ui.chip("ok" if r.totales.a_vincular else "neutro", r.totales.a_vincular ~ " a vincular") }}</li>
@@ -157,7 +157,7 @@
     <p class="caption">Al pulsar «Vincular», estos {{ incluidos | length }} archivo{{ "s" if incluidos | length != 1 }} quedarán vinculados a
       «{{ s.titulo }}» <strong>en su sitio</strong>: conservan su nombre y su carpeta, no se mueve ni se renombra nada y no
       se crea ninguna serie. Es una acción distinta de revisar: hasta que la pulses, no cambia nada.</p>
-    <button type="submit">Vincular {{ incluidos | length }} archivo{{ "s" if incluidos | length != 1 }}</button>
+    <button type="submit" class="primary">Vincular {{ incluidos | length }} archivo{{ "s" if incluidos | length != 1 }}</button>
   </form>
 </section>
 {% endif %}

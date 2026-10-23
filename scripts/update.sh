@@ -37,6 +37,25 @@ comprobar_git_utilizable
 [[ "${BRANCH}" != "HEAD" ]] || die \
     "El repo está en HEAD desacoplado. Ve a una rama (git checkout main) antes de actualizar."
 
+# ── 1b. Credenciales (ADR 0012) ──────────────────────────────────────────────
+# Sin una DB_PASSWORD propia, el servicio `credenciales` de Compose pararía el arranque DESPUÉS de haber hecho el
+# backup y traído el código; se comprueba ya, antes de tocar nada.
+validar_credenciales "${ENV_FILE}" || die \
+    "La configuración no tiene una contraseña de base de datos válida. NO se ha actualizado nada.
+  Ejecuta: sudo bash ${REPO_DIR}/scripts/credenciales.sh   (si ya existe una base de datos, se detendrá
+  sin inventar otra contraseña y te dirá qué hacer)."
+# Protección del .env: solo se AVISA (una instalación anterior lo dejó legible por otros usuarios y esta
+# actualización no debe fallar por eso); la corrige credenciales.sh o volver a ejecutar bootstrap.sh.
+if (( ENV_FILE_EXPLICITO == 0 )); then
+    PROTECCION_RC=0
+    PROTECCION_AVISOS="$(comprobar_proteccion "${ENV_FILE}" "${ZASCARR_ROOT}" "${REPO_DIR}")" || PROTECCION_RC=$?
+    if [[ "${PROTECCION_RC}" -eq 1 ]]; then
+        warn "El .env no está bien protegido:
+${PROTECCION_AVISOS}
+  Corrígelo (no cambia tu contraseña): sudo bash ${REPO_DIR}/scripts/credenciales.sh"
+    fi
+fi
+
 # ── 2. Árbol limpio ──────────────────────────────────────────────────────────
 if ! git -C "${REPO_DIR}" diff --quiet || ! git -C "${REPO_DIR}" diff --cached --quiet; then
     die "Hay cambios locales sin guardar en ${REPO_DIR}.
@@ -59,7 +78,7 @@ mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}. ¿Permisos sobre 
 DEST="${BACKUP_DIR}/update_${TS}.sql.gz"
 volcar_postgres "${DEST}" || die \
     "El backup falló. NO se ha actualizado nada.
-  Revisa: docker compose -f ${COMPOSE_FILE} logs postgres"
+  Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 # Y se comprueba: un backup sin verificar no es un backup, es una esperanza.
 verificar_dump "${DEST}"
 success "Backup verificado: ${DEST}"
@@ -110,12 +129,12 @@ info "Reiniciando ZascArr..."
 # `--remove-orphans`: una instalación anterior a ADR 0011 tiene un contenedor `zascarr-cache` (Redis) que ya no está en el
 # compose; sin esto seguiría vivo, gastando RAM, sin que nada lo use.
 "${COMPOSE[@]}" up -d --remove-orphans zascarr || die \
-    "No pude arrancar ZascArr. Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr"
+    "No pude arrancar ZascArr. Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr"
 
 info "Verificando healthcheck (${HEALTH_URL})..."
 esperar_healthcheck "${HEALTH_TIMEOUT}" || die \
     "ZascArr no responde tras ${HEALTH_TIMEOUT}s.
-  Revisa: docker compose -f ${COMPOSE_FILE} logs zascarr
+  Revisa: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr
   Para volver atrás:
     sudo bash scripts/rollback.sh
   (referencia de rescate: ${UPDATE_REF}; backup: ${DEST})"

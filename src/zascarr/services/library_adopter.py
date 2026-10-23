@@ -454,6 +454,8 @@ class LibraryAdopter:
             metadata["cohorte"] = outcome.cohorte_explicacion
         if outcome.edition_kind:
             metadata["edicion"] = outcome.edition_kind
+        if tr.formato_contenido:                                  # #307: formato REAL por contenido (file_format sigue siendo la extensión)
+            metadata["formato_contenido"] = tr.formato_contenido
 
         # Nunca se mueve: file_path es la ruta real donde el coleccionista
         # ya tenía el archivo, no un destino calculado (a diferencia de

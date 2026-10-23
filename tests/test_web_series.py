@@ -8,6 +8,7 @@ que la página los renderiza).
 """
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -131,7 +132,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1", "single_issue", True), ("3", "single_issue", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -146,7 +147,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("1.5", "single_issue", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -159,7 +160,7 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([("12", "omnibus", True)]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -171,12 +172,43 @@ class TestFichaSerie:
         session = FakeSession([
             FakeExecResult([series]),
             FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
         assert r.status_code == 200
         assert "no se puede calcular huecos" in r.text
+
+
+    def test_sin_poder_calcular_huecos_no_dice_que_este_completa(self):
+        """Caso real (2026-10-20): 8 de 30 con un total que no cuenta grapas decía «Ningún hueco —
+        la tienes completa». Sin cálculo fiable no hay «completa» ni «0 te faltan»."""
+        series = make_series(total_issues=30, metadata_source=MetadataSource.ANILIST.value)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True)]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert "la tienes completa" not in r.text
+        assert "te faltan" not in r.text and "Te faltan" not in r.text
+        assert "30 números según la fuente — 2 en tu biblioteca." in r.text
+        assert ("No sabemos cuáles faltan: el total de la serie no consta como número de grapas"
+                in r.text)
+
+    def test_completa_solo_si_se_pudo_calcular(self):
+        series = make_series(total_issues=2)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([("1", "single_issue", True), ("2", "single_issue", True)]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert "Ningún hueco — la tienes completa." in r.text
+        assert "0 te faltan." in r.text
 
 
 class TestPoliticaBusquedaD8:
@@ -198,7 +230,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),         # poseídos (para pintar la ficha)
             FakeExecResult([]),         # manuales vivos (predicado)
             FakeExecResult([]),         # poseídos (predicado)
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -214,7 +246,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -228,7 +260,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -245,7 +277,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -260,7 +292,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]),   # la serie
             FakeExecResult([]),         # poseídos (para pintar)
             FakeExecResult([]),         # manuales (predicado); huecos corta aquí
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -273,7 +305,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([(None, None)]),   # un item manual de serie vivo
-            acuse(), retirados(),
+            acuse(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -290,7 +322,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
             FakeExecResult([]),   # sin acuse
-            retirados(),
+            retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -303,7 +335,7 @@ class TestPoliticaBusquedaD8:
         series = make_series(total_issues=3)
         series.wishlist_policy = WishlistPolicy.NONE
         session = FakeSession([
-            FakeExecResult([series]), FakeExecResult([]), acuse(), retirados(4),
+            FakeExecResult([series]), FakeExecResult([]), acuse(), retirados(4), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -379,6 +411,99 @@ class TestPoliticaBusquedaD8:
         assert r.status_code == 404
 
 
+class TestPresupuestoTextoU21:
+    """U21 (#208): la ficha de serie también cumple el presupuesto de texto.
+
+    La acción principal es el selector de política, no el enlace de vuelta ni
+    el desplegable de fuentes: se mide el texto visible anterior a
+    `#wishlist_policy`. El detalle de fuentes se excluye como contenido
+    plegado.
+    """
+
+    def _render(self) -> str:
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([]),
+            FakeExecResult([]),
+            FakeExecResult([]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        main = re.search(r"<main\b[^>]*>(.*?)</main>", r.text, re.S)
+        assert main is not None
+        return main.group(1)
+
+    @staticmethod
+    def _texto(fragmento: str) -> str:
+        return re.sub(r"<[^>]+>", " ", fragmento)
+
+    def test_entrada_y_accion_principal_cumplen_el_umbral(self):
+        html = self._render()
+        entrada = re.search(r'<p class="series-intro">(.*?)</p>', html, re.S)
+        assert entrada is not None
+        assert self._texto(entrada.group(1)).strip() == (
+            "Consulta tus números y ajusta la búsqueda automática."
+        )
+        assert len(re.findall(r"\w+", self._texto(entrada.group(1)))) <= 20
+
+        antes = html.split('id="wishlist_policy"', 1)[0]
+        # El contenido de un <details> cerrado no cuenta, pero su <summary>
+        # visible sí (contrato de medición de #208).
+        antes = re.sub(
+            r"<details\b[^>]*>\s*(<summary>.*?</summary>).*?</details>",
+            r"\1",
+            antes,
+            flags=re.S,
+        )
+        palabras = re.findall(r"\w+", self._texto(antes))
+        assert len(palabras) <= 50, (len(palabras), " ".join(palabras))
+
+    def test_la_accion_va_antes_que_el_listado(self):
+        html = self._render()
+        assert html.index('id="wishlist_policy"') < html.index("Te faltan")
+
+    def test_las_fuentes_van_plegadas_y_no_se_pierden(self):
+        html = self._render()
+        detalle = re.search(
+            r'<details class="series-fuentes">(.*?)</details>', html, re.S
+        )
+        assert detalle is not None
+        assert "<summary>Fuentes y atribución</summary>" in detalle.group(1)
+        assert "Los metadatos de esta ficha proceden de fuentes de terceros" in detalle.group(1)
+        assert "Fuentes y atribución" not in html.split('id="politica-serie"', 1)[0].replace(
+            "<summary>Fuentes y atribución</summary>", ""
+        )
+
+    def test_la_garantia_va_junto_al_selector_y_no_al_final(self):
+        html = self._render()
+        pos_select = html.index('id="wishlist_policy"')
+        pos_efecto = html.index("politica-efecto")
+        pos_veredicto = html.index("politica-veredicto")
+        assert pos_select < pos_efecto < pos_veredicto
+        assert "Al cambiar el selector se guarda al momento" in html
+        assert "lo retirado deja de buscarse ya" in html
+        assert "Guardar aplica la retirada" not in html
+
+    def test_la_nota_de_futuros_va_junto_al_selector(self):
+        html = self._render()
+        assert html.index('id="wishlist_policy"') < html.index("politica-futuros")
+        assert html.index("politica-futuros") < html.index("politica-veredicto")
+        assert "todavía no se puede aplicar" in html
+
+    def test_ningun_parrafo_visible_va_en_mayusculas(self):
+        html = self._render()
+        for fragmento in re.findall(r"<p\b[^>]*>(.*?)</p>", html, re.S):
+            texto = self._texto(fragmento).strip()
+            letras = [c for c in texto if c.isalpha()]
+            if len(letras) < 3:
+                continue
+            assert not all(c.isupper() for c in letras), texto
+
+
 class TestPortada:
     """B7 (revisión de PR, 2026-09-26): la cascada de portada elegía el
     primer File por sort_order sin comprobar is_missing — podía intentar
@@ -399,3 +524,29 @@ class TestPortada:
 
         assert r.status_code == 404
         assert "is_missing" in session.statements[0]
+
+
+class TestPortadaDeRelleno:
+    """#311: una serie que guardó la imagen de relleno de Comic Vine como `cover_url` (antes del arreglo)
+    no la descarga ni la muestra: la tarjeta cae a su hueco propio (404 → `.cover-missing`)."""
+
+    def test_el_relleno_guardado_no_se_descarga_ni_se_sirve(self, tmp_path, monkeypatch):
+        from zascarr.config import get_settings
+
+        series = make_series()
+        series.cover_url = "https://comicvine.gamespot.com/a/uploads/scale_medium/11122/111222211/6373148-blank.png"
+        settings = get_settings().model_copy(update={"covers_cache_path": tmp_path})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        descargas = []
+
+        async def falsa(url, destino):
+            descargas.append(url)
+            return True
+        monkeypatch.setattr("zascarr.web.series.fetch_and_cache_cover", falsa)
+
+        session = CapturingSession([FakeExecResult([])], series=series)
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 404
+        assert descargas == []

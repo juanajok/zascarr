@@ -49,6 +49,23 @@ from xml.etree import ElementTree
 
 from PIL import Image
 
+from zascarr.core.formato_contenedor import (  # noqa: F401  (IMAGE_EXTS y natural_key se reexportan: otros módulos los importan de aquí)
+    AVISO_CLASE,
+    IMAGE_EXTS,
+    MAX_ENTRADAS,
+    EntradaNoLegible,
+    aviso_de_clase,
+    aviso_de_formato,
+    clasificar_infos,
+    firma_de,
+    formato_contenido,
+    leer_acotado,
+    motivo_fuera_de_limite,
+    natural_key,
+    tratamiento,
+)
+from zascarr.models import ClaseZip, Firma, Tratamiento
+
 # ── Heurística de source_tag ─────────────────────────────────────────────────
 # Solo miramos el SUFIJO de release (último bloque entre paréntesis antes de
 # la extensión). Así "(Digital)" del equipo no colisiona con "Digital" en el
@@ -58,14 +75,14 @@ _TAG_PATTERNS: list[tuple[str, str]] = [
     (r"(?i)\b(scan|scanned|c2c)\b", "scan"),
     (r"(?i)\b(hd|uhd|4k)\b", "scan_hq"),
 ]
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
 _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 
 # DoS: un ComicInfo.xml real mide pocos KB. Rechazar los enormes ANTES de
 # descomprimirlos en memoria (una ZIP bomb no debe reventar una Pi).
 MAX_COMICINFO_BYTES = 1 * 1024 * 1024   # 1 MiB
-MAX_ZIP_ENTRIES = 1000                  # entradas máximas por CBZ
-MAX_ZIP_UNCOMPRESSED = 500 * 1024 * 1024  # descompresión total máxima (500 MiB)
+MAX_ZIP_ENTRIES = MAX_ENTRADAS          # entradas máximas por ZIP (antes 1000; el máximo medido en la biblioteca real es 941)
+# El tope de 500 MiB descomprimidos EN TOTAL desapareció (#307, D3): dejaba sin ComicInfo ni anchura a los ZIP grandes aunque solo se
+# lee una página. Ahora se acota la ENTRADA QUE SE LEE (`formato_contenedor.MAX_ENTRADA_LEIDA` / `MAX_RATIO_LEIDA`).
 
 
 def guess_source_tag(filename: str) -> str | None:
@@ -157,17 +174,12 @@ def parse_comic_info(data: bytes) -> ComicInfo:
 
 # ── Triaje ───────────────────────────────────────────────────────────────────
 
-def natural_key(name: str) -> list:
-    """Orden natural para que página2 < página10."""
-    return [int(t) if t.isdigit() else t.lower()
-            for t in re.split(r"(\d+)", name)]
-
-
 @dataclass
 class TriageResult:
     path: Path
     sha256: str | None = None
-    file_format: str | None = None          # cbz | cbr | pdf | cb7
+    file_format: str | None = None          # cbz | cbr | pdf | cb7 (la extensión DECLARADA)
+    formato_contenido: dict | None = None   # el formato REAL por contenido (#307); va a files.metadata
     comic_info: ComicInfo | None = None
     width_px: int | None = None
     source_tag: str | None = None
@@ -201,80 +213,88 @@ def triage(path: Path) -> TriageResult:
     ext = path.suffix.lower()
     result.file_format = ext.lstrip(".")
 
-    if ext not in {".cbz", ".zip"}:
-        # CBR requeriría rarfile+unrar (dependencia externa opcional).
-        # Decisión: NO instalar unrar solo por ComicInfo. CBR → Capa 1.
-        #
-        # Bug real encontrado en vivo (2026-09-25, B16): este return
-        # salía SIN calcular el sha256, así que ningún .cbr tenía hash y
-        # la deduplicación de B3 no funcionaba para ellos — en una
-        # biblioteca española típica, que es casi toda CBR, eso significa
-        # que no funcionaba casi nunca, en silencio. Leer ComicInfo.xml
-        # sí exige descomprimir el RAR; hashear NO: son los bytes del
-        # fichero, da igual el formato. Se calcula en streaming (sin
-        # cargarlo en RAM).
+    # #307: la decisión de qué hacer con el fichero sale de un único sitio (`formato_contenedor`), por contenido y no solo por extensión.
+    firma = firma_de(path)
+    trat = tratamiento(ext, firma)
+    # Una firma ILEGIBLE (fallo pasajero de lectura) NO se guarda: quedaría fijada en la base y suprimiría la portada de un fichero sano.
+    result.formato_contenido = None if firma is Firma.ILEGIBLE else formato_contenido(firma)
+
+    if trat is Tratamiento.AVISAR and ext in (".cbz", ".zip") and firma is Firma.OTRO:
+        # Declarado ZIP, pero el contenido no es ningún contenedor conocido: es un fichero ROTO o una descarga incompleta. Como siempre: sin hash
+        # (dos descargas incompletas casi nunca cortan en el mismo byte; un hash sugeriría una identidad de contenido que no existe).
+        result.warnings.append("zip ilegible: el contenido no es un ZIP válido")
+        return result
+
+    if trat is not Tratamiento.LEER_COMO_ZIP:
+        # Bug real encontrado en vivo (2026-09-25, B16): este return salía SIN calcular el sha256, así que ningún .cbr tenía hash y la
+        # deduplicación de B3 no funcionaba para ellos. Hashear NO exige descomprimir: son los bytes del fichero. En streaming.
         try:
             result.sha256 = sha256_streaming(path)
         except OSError as exc:
             result.warnings.append(f"ilegible para hash: {exc}")
         result.warnings.append(f"formato {ext}: triaje solo por filename")
+        if trat is Tratamiento.AVISAR:
+            result.warnings.append(aviso_de_formato(ext, firma))
         return result
 
-    # Hash en streaming y zip abierto DESDE LA RUTA: la memoria no depende del
-    # tamaño del fichero. Antes se cargaba el CBZ entero en un BytesIO para leer
-    # el disco una sola vez; con integrales de 1,2 GB (biblioteca real, ensayo
-    # 2026-10-01) y un contenedor de 512 MB, el kernel mataba el proceso. El
-    # ZipFile solo lee el directorio central y las pocas entradas que se piden
-    # (ComicInfo.xml y la primera página), un coste de lectura despreciable
-    # frente a la pasada completa del hash.
+    # Hash en streaming y zip abierto DESDE LA RUTA: la memoria no depende del tamaño del fichero (integrales de 1,2 GB, ensayo 2026-10-01).
+    # El ZipFile solo lee el directorio central y las pocas entradas que se piden.
     try:
         sha256 = sha256_streaming(path)
+        motivo = motivo_fuera_de_limite(path)
+        if motivo:                                       # sin abrirlo: `ZipFile()` cargaría el directorio central entero en memoria
+            result.sha256 = sha256
+            result.formato_contenido = formato_contenido(firma, ClaseZip.LIMITE, motivo)
+            result.warnings.append(aviso_de_clase(ClaseZip.LIMITE, motivo) + " (ignorado)")
+            return result
         zf = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as exc:
-        # sha256 se deja sin asignar a propósito: el hash de basura binaria
-        # de un zip roto no sirve para dedupe (dos descargas incompletas
-        # del mismo origen casi nunca cortan en el mismo byte) y dejarlo
-        # puesto sugeriría una identidad de contenido que no existe.
+        # sha256 sin asignar a propósito: el hash de basura binaria de un zip roto no sirve para dedupe.
         result.warnings.append(f"zip ilegible: {exc}")
+        result.formato_contenido = formato_contenido(firma, ClaseZip.INVALIDO)
         return result
     result.sha256 = sha256
 
     with zf:
-        names = zf.namelist()
+        infos = zf.infolist()
+        cls = clasificar_infos(infos)
+        result.formato_contenido = formato_contenido(firma, cls.clase, cls.motivo_limite)
+        declarado_tebeo = ext in (".cbz", ".zip")        # el usuario lo declara tebeo: la clase no bloquea la lectura (sí los topes)
+        if cls.clase in (ClaseZip.LIMITE, ClaseZip.CIFRADO):
+            result.warnings.append(aviso_de_clase(cls.clase, cls.motivo_limite) + " (ignorado)")
+            return result
+        if not declarado_tebeo and cls.clase is not ClaseZip.TEBEO:
+            # Un .cbr/.cb7 que es un ZIP pero no un tebeo comprobado: se queda con hash, sin portada ni ComicInfo, y se dice por qué.
+            result.warnings.append(AVISO_CLASE.get(cls.clase, "No se pudo comprobar que sea un tebeo."))
+            return result
+        # Un .cbz/.zip declarado se lee como siempre y NO recibe aviso por su clase (un especial de 8 páginas o un pack no son un error): la clase
+        # queda guardada en `formato_contenido` para quien la necesite.
 
-        # DoS (ZIP bomb): rechazar antes de descomprimir nada.
-        if len(names) > MAX_ZIP_ENTRIES:
-            result.warnings.append("ZIP con demasiadas entradas (ignorado)")
-            return result
-        total_uncompressed = sum(i.file_size for i in zf.infolist())
-        if total_uncompressed > MAX_ZIP_UNCOMPRESSED:
-            result.warnings.append("ZIP demasiado grande descomprimido (ignorado)")
-            return result
+        names = [i.filename for i in infos]
+        por_nombre = {i.filename: i for i in infos}
 
         # ComicInfo.xml: convención: en la raíz del zip.
-        entry = next(
-            (n for n in names if n.lower().endswith("comicinfo.xml")),
-            None,
-        )
+        entry = next((n for n in names if n.lower().endswith("comicinfo.xml")), None)
         if entry:
-            info = zf.getinfo(entry)
+            info = por_nombre[entry]
             if info.file_size > MAX_COMICINFO_BYTES:
                 result.warnings.append("ComicInfo.xml demasiado grande (ignorado)")
             else:
                 try:
-                    result.comic_info = parse_comic_info(zf.read(entry))
+                    result.comic_info = parse_comic_info(leer_acotado(zf, info, tope=MAX_COMICINFO_BYTES))
+                except EntradaNoLegible as exc:
+                    result.warnings.append(f"ComicInfo.xml {exc} (ignorado)")
                 except ElementTree.ParseError as exc:
                     result.warnings.append(f"ComicInfo.xml malformado: {exc}")
 
         # width_px: primera página en orden natural.
-        pages = sorted(
-            (n for n in names if Path(n).suffix.lower() in IMAGE_EXTS),
-            key=natural_key,
-        )
+        pages = sorted((n for n in names if Path(n).suffix.lower() in IMAGE_EXTS), key=natural_key)
         if pages:
             try:
-                with Image.open(io.BytesIO(zf.read(pages[0]))) as img:
+                with Image.open(io.BytesIO(leer_acotado(zf, por_nombre[pages[0]]))) as img:
                     result.width_px = img.width
+            except EntradaNoLegible as exc:
+                result.warnings.append(f"la primera página {exc} (ignorada)")
             except Exception as exc:
                 result.warnings.append(f"portada ilegible: {exc}")
         else:

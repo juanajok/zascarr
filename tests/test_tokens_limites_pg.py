@@ -41,7 +41,7 @@ from tests.test_descubrimiento_grupo_pg import FuentesFalsas, res
 from tests.test_revision_carpetas_pg import BIB, archivo
 from zascarr.api import revision as api_revision
 from zascarr.models import ComicTradition, MetadataSource, Series
-from zascarr.services.discovery import CAMPO_ID_EXTERNO, DiscoveryService
+from zascarr.services.discovery import CAMPO_ID_EXTERNO, DiscoveryService, ProcedenciaTradicion
 from zascarr.services.tokens_revision import (
     ANIO_MIN_FIRMABLE,
     CARACTER_MAS_PESADO_DE_UNA_CLAVE,
@@ -102,8 +102,9 @@ async def sembrar_grupo(banco, carpeta: str, n: int = 3) -> str:
 
 def holgura_de(clave: str, prefijo_de_portada: str) -> int:
     """Cuánto menos que el máximo calculado puede medir un token real: lo que le falta a la clave para 1000 caracteres de
-    seis bytes, lo que ahorra el host ASCII de la portada (tres bytes por carácter) y algún dígito de caducidad o año."""
-    return (MAX_CLAVE_GRUPO - len(clave)) * 6 * 4 // 3 + len(prefijo_de_portada) * 3 * 4 // 3 + 16
+    seis bytes, lo que ahorra el host ASCII de la portada (tres bytes por carácter), algún dígito de caducidad o año y
+    el redondeo de base64 que introduce el campo de procedencia de #276."""
+    return (MAX_CLAVE_GRUPO - len(clave)) * 6 * 4 // 3 + len(prefijo_de_portada) * 3 * 4 // 3 + 20
 
 
 def carpeta_mas_larga() -> str:
@@ -149,7 +150,8 @@ class TestRecorridoConElMayorContenidoPosible:
         await sembrar_parecidas_de(entorno.banco, MAX_PARECIDAS_FIRMADAS, titulo, ComicTradition.TEBEO, 1987)
         fuentes.resultados = [res(MetadataSource.TEBEOSFERA, ident, titulo, 1987,
                                   descripcion=LETRA_4_BYTES * (MAX_DESCRIPCION + 500), cover=cover,
-                                  tradicion=ComicTradition.TEBEO)]
+                                  tradicion=ComicTradition.TEBEO,
+                                  procedencia=ProcedenciaTradicion.POR_DEFECTO)]
 
         d = await post(DESCUBRIR, {"clave": clave, "consulta": "Flash"})
         assert d.status_code == 200, d.text
@@ -231,9 +233,11 @@ class TestFronteraExacta:
         clave = await sembrar_carpeta_larga(entorno.banco)
         fuente = "tebeosfera"            # tan larga como la que más (10) y la única con identificador de texto
         tradicion = max((t.value for t in ComicTradition), key=len)
+        procedencia = max((p.value for p in ProcedenciaTradicion), key=len)
         c = CandidataFirmada(fuente, LETRA_4_BYTES * MAX_ID_EXTERNO, LETRA_4_BYTES * MAX_TITULO, 2100, tradicion,
                              LETRA_4_BYTES * MAX_DESCRIPCION,
-                             "https://www.tebeosfera.com/" + LETRA_4_BYTES * (MAX_COVER_URL - len("https://www.tebeosfera.com/")))
+                             "https://www.tebeosfera.com/" + LETRA_4_BYTES * (MAX_COVER_URL - len("https://www.tebeosfera.com/")),
+                             procedencia)
         token = crear_token_candidata(clave, c, SECRETO, ahora=EPOCA_DEL_PEOR_CASO)
         assert 0 <= MAX_TOKEN_CANDIDATA - len(token) <= holgura_de(clave, "https://www.tebeosfera.com/")
         v = await post(PREV, {"clave": clave, "candidata": token, "tradicion": tradicion})

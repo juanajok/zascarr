@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Iniciar sesión — ZascArr</title>
 <link rel="stylesheet" href="/static/web.css">
+<link rel="icon" href="/static/brand/zascarr-favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/brand/zascarr-favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">
 </head>
 <body>
   <main class="content login-content">
@@ -24,7 +27,7 @@
       {% if error %}
       <p class="login-error">{{ error }}</p>
       {% endif %}
-      <button type="submit">Entrar</button>
+      <button type="submit" class="primary">Entrar</button>
     </form>
   </main>
 </body>

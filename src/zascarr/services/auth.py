@@ -36,7 +36,7 @@ from urllib.parse import quote, urlsplit
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from zascarr.config import Settings, get_settings
 
@@ -639,11 +639,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     status_code=503,
                     content={"detail": "Base de datos no disponible — consulta /api/health"},
                 )
-            return HTMLResponse(
-                "<h1>Base de datos no lista</h1>"
-                "<p>El arranque no pudo conectar con PostgreSQL o el esquema no está migrado. "
-                '<a href="/estado">Consulta el estado del sistema</a>.</p>',
-                status_code=503,
+            # Import tardío: web/ importa services/ al cargar; al revés sería un ciclo.
+            from zascarr.web.errores import pagina_error
+            return pagina_error(
+                request, 503,
+                mensaje="Base de datos no lista: ZascArr ha arrancado sin poder usarla. "
+                        "En el Estado verás qué hacer.",
             )
 
         settings = get_settings()

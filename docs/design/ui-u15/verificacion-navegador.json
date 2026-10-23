@@ -1,0 +1,40 @@
+{
+  "fecha_utc": "2026-10-21T16:57:57+00:00",
+  "sha": "a2721722a0cff54dfe7a4e878a528f43b21a602e",
+  "base_url": "http://127.0.0.1:8766",
+  "consulta": "Mortadelo",
+  "navegador": "154.0.8037.92",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36",
+  "viewport_escritorio": {
+    "width": 1280,
+    "height": 900
+  },
+  "viewport_movil": {
+    "viewport": 360,
+    "clientWidth": 360,
+    "scrollWidth": 360,
+    "bodyScrollWidth": 360
+  },
+  "n_tarjetas": 20,
+  "selects": {
+    "total": 20,
+    "obligatorios": 20,
+    "vacios": 20,
+    "con_tradicion_preseleccionada": 0
+  },
+  "pistas_por_valor": {
+    "Tebeo español": 19,
+    "Otra": 1
+  },
+  "eleccion": {
+    "tarjeta": "ALEGRES HISTORIETAS (1980) TEBEOSFERA ↗",
+    "sugerencia": "Tebeo español",
+    "elegida": "Manga",
+    "vista_previa": "Se guardará como «ALEGRES HISTORIETAS» (1980). Tradición elegida: Manga.\n\ni\nSe creará una serie vacía: sin números ni archivos. Vincular archivos es otro paso, con su propia confirmación.\nCrear serie vacía\nGrapa americana\nFranco-belga (BD)\nManga\nTebeo español\nFumetti\nManhwa\nManhua\nBritánico\nOtra\nCambiar y revisar"
+  },
+  "capturas": [
+    "2026-10-21-descubrir-mortadelo-1280.png",
+    "2026-10-21-descubrir-mortadelo-360.png",
+    "2026-10-21-descubrir-revision-manga-1280.png"
+  ]
+}

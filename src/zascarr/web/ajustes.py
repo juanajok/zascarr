@@ -92,6 +92,7 @@ def _contexto() -> dict:
         "anilist_enabled": s.anilist_enabled,
         "tebeosfera_enabled": s.tebeosfera_enabled,
         "gcd_enabled": s.gcd_enabled,
+        "fuentes_heredadas": s.fuentes_heredadas,
         "prowlarr_url": s.prowlarr_url,
         "prowlarr_api_key_configurada": bool(s.prowlarr_api_key),
         "prowlarr_enabled": s.prowlarr_enabled,
@@ -218,9 +219,11 @@ async def guardar_fuentes(
         "anilist_enabled": anilist_enabled,
         "tebeosfera_enabled": tebeosfera_enabled,
         "gcd_enabled": gcd_enabled,
+        # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser «heredado».
+        "fuentes_heredadas": False,
     })
     return templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Fuentes de metadatos"}
+        request, "_ajustes_guardado.html", {"nombre": "Fuentes de datos"}
     )
 
 

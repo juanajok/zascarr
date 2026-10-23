@@ -138,6 +138,7 @@ componentes). «JS» marca JavaScript propio dentro de la plantilla.
 | `_fila_wishlist.html` | 1342 | — | — | POST /ui/wishlist/anadir ; POST /ui/wishlist/{item_id}/reintentar ; POST /ui/wishlist/{item_id}/enviar-candidato | `/ui/wishlist/{…}/buscar-ahora`<br>`/ui/wishlist/{…}/quitar`<br>`/ui/wishlist/{…}/reintentar` | 9 | — |
 | `_legal_disclaimer.html` | 874 | — | — | (incluida) | — | 4 | — |
 | `_politica_serie.html` | 3867 | — | — | POST /ui/series/{series_id}/politica | `/ui/series/{…}/politica` | 11 | — |
+| `_desvinculacion_panel.html` | — | — | — | GET/POST /ui/series/{series_id}/archivos/{file_id}/deshacer | `…/deshacer` (`#desvinculacion`) | — | — |
 | `_rejilla_biblioteca.html` | 1356 | — | — | GET /ui/biblioteca/resultados | `{…}` | 12 | `onerror` |
 | `_resultados_descubrir.html` | 2171 | — | — | GET /ui/descubrir/buscar | `/ui/descubrir/crear` | 10 | `onerror` |
 | `_resultados_personaje.html` | 243 | — | — | GET /ui/biblioteca/buscar-personaje | — | 2 | — |
@@ -228,6 +229,8 @@ códigos HTTP que el handler lanza o devuelve. «Gate legal» = lleva `Depends(r
 | series | GET | `/ui/series/{series_id}` | — | series_detail.html | 404 | — |
 | series | POST | `/ui/series/{series_id}/politica` | wishlist_policy* | _politica_serie.html | 404,422 | — |
 | series | GET | `/ui/series/{series_id}/portada` | — | (otra) | 404 | — |
+| series | GET | `/ui/series/{series_id}/archivos/{file_id}/deshacer` | — | desvinculacion.html / _desvinculacion_panel.html | 404,503 | — |
+| series | POST | `/ui/series/{series_id}/archivos/{file_id}/deshacer` | token* | desvinculacion.html / _desvinculacion_panel.html | 422 | — |
 | wishlist | GET | `/ui/wishlist` | — | wishlist.html | — | — |
 | wishlist | GET | `/ui/wishlist/buscar-serie` | q | _resultados_series_wishlist.html | — | — |
 | wishlist | POST | `/ui/wishlist/anadir` | series_id* | _fila_wishlist.html | 400 | sí |
@@ -262,6 +265,16 @@ campos y forma del fragmento hasta que otra los sustituya y esté escrito en su 
 `tests/test_web_library.py` (l.118: el fragmento no repite el layout), más unas 140 referencias al
 `.text` de las respuestas repartidas en `test_web_*.py` y `test_pendientes.py`. **V3 romperá a propósito las dos primeras**:
 su ficha debe decir que se actualizan, no que se esquivan.
+
+### 4.x BL-R1b (#254): «Deshacer esta vinculación» en la ficha de la serie
+
+Contrato **añadido** (no cambia ninguno existente; los de `series_detail` siguen igual: solo se suma la sección «Archivos por número»):
+
+- **Lista:** `GET /ui/series/{id}` pinta `#archivos-por-numero` con los archivos de cada número (`services/archivos_por_numero.py`, **dos consultas fijas**, no una por archivo). «Desvincular» (con el nombre del archivo en un `<span class="sr">`) es un **enlace** (`<a href>`) a la vista previa para **todo** archivo vinculado salvo uno con una asignación en curso (`data-razon="en_curso"`, con su texto en la fila). Revisión de D9 (2026-10-23): ya no hay `sin_procedencia` ni el `<details>` «¿Por qué algunos archivos no se pueden desvincular?»; la vista previa añade un aviso informativo cuando no consta cómo se vinculó el archivo. Texto según CLAUDE.md §6 (presupuesto de texto) y la revisión UX del squad: se mantiene «vincular», verbo «Desvincular», sin aviso ámbar y una sola línea sobre «volver a vincular».
+- **Vista previa:** `GET …/archivos/{file_id}/deshacer` — página completa (o `#desvinculacion` si llega `HX-Request`). Solo lectura; `Cache-Control: no-store`. 404 si la serie o el archivo no existen o el archivo es de otra serie.
+- **Confirmación:** `POST …/archivos/{file_id}/deshacer` con `token`. **Sin JS** es un envío normal que devuelve la página completa; **con htmx** (`hx-post`, `hx-target="#desvinculacion"`, `hx-swap="outerHTML"`, `hx-disabled-elt="find button"`) sustituye solo el panel. Los fallos recuperables (token inválido o caducado, cambio desde la vista previa, resultado incierto, error inesperado) se pintan **dentro del panel con `200`** (htmx 4 sustituye cualquier estado salvo 204/304 y la persona no debe ver JSON); `422` solo si el formulario viene sin `token` o con uno demasiado largo.
+- El panel de resultado incluye `<span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none">` para refrescar el contador de «Por revisar» (como `pendientes`); sin JS no hace nada.
+- **Sin JavaScript propio nuevo** (ADR 0005): ni `onclick` ni `onerror` en estas plantillas.
 
 ## 5. La maqueta frente a la realidad
 

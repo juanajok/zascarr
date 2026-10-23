@@ -226,7 +226,7 @@ class TestParesDeLaHoja:
         for nombre, tema in _temas().items():
             assert contraste(resolver("var(--on-yellow)", tema),
                              resolver("var(--yellow)", tema)) >= TEXTO, nombre
-        regla = next(d for s, d in _reglas() if s.startswith('button[type="submit"],'))
+        regla = next(d for s, d in _reglas() if s.startswith('button.primary,'))
         assert regla["color"] == "var(--on-yellow)"
 
 

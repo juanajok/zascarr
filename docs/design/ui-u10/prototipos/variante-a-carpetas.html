@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Variante A · carpetas primero · prototipo U10</title><style>
+:root{--paper:#f6f3ec;--card:#fffdf8;--ink:#17171a;--soft:#4a4a50;--line:#17171a;--yellow:#f2c500;--blue:#0a6a96}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+header{border-bottom:3px solid var(--line);padding:14px 24px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+header strong{font-size:22px}header nav{display:flex;gap:14px;flex-wrap:wrap}header a{color:inherit;font-weight:600}
+main{max-width:1000px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:34px;margin:0 0 6px}h2{font-size:19px;margin:0 0 4px}h3{font-size:16px;margin:18px 0 6px}
+.lead{color:var(--soft);max-width:70ch}.summary{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+.chip{border:2px solid var(--line);border-radius:999px;padding:2px 10px;font-size:14px;font-weight:700;background:var(--card)}
+.primary,button.primary{display:inline-block;background:var(--yellow);border:3px solid var(--line);padding:10px 16px;font-weight:800;text-decoration:none;color:var(--ink);box-shadow:3px 3px 0 var(--line)}
+.btn{display:inline-block;border:2px solid var(--line);padding:7px 12px;text-decoration:none;color:var(--ink);font-weight:700;background:var(--card)}
+.muted{color:var(--soft);font-size:14px}
+.folders{list-style:none;padding:0;display:grid;gap:12px}
+.folder{background:var(--card);border:3px solid var(--line);padding:16px;box-shadow:4px 4px 0 var(--line)}
+.folder p{margin:6px 0}.row-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.files{width:100%;border-collapse:collapse;background:var(--card);border:3px solid var(--line)}
+.files th,.files td{border-bottom:2px solid var(--line);padding:8px;text-align:left;vertical-align:top}
+.files th{background:#efeadf}.files tr:last-child td{border-bottom:0}
+.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0;padding:12px;border:2px dashed var(--line)}
+.pagination{display:flex;gap:12px;align-items:center;margin-top:18px}
+details{margin-top:10px}summary{cursor:pointer;font-weight:700}
+@media(max-width:600px){h1{font-size:28px}.files th:nth-child(3),.files td:nth-child(3){display:none}}
+</style></head>
+<body>
+<header><strong>ZascArr</strong><nav aria-label="Navegación principal">
+<a href="#">Inicio</a><a href="#" aria-current="page">Por revisar</a><a href="#">Biblioteca</a><a href="#">Deseados</a><a href="#">Estado</a>
+</nav></header>
+<main>
+<h1>Por revisar</h1>
+<p class="lead">1,322 pendientes en 108 carpetas. Empieza por una carpeta: eliges su serie y revisas sus archivos juntos.</p>
+<div class="summary"><span class="chip">1,322 pendientes</span><span class="chip">108 carpetas</span><span class="chip">14 archivos sueltos</span></div>
+<p><a class="btn" href="#">Ver los 14 archivos sueltos</a></p>
+<ul class="folders">
+<li class="folder">
+  <h2>Flash (1987)</h2>
+  <p><b>155</b> archivos · <span class="chip">Serie sugerida: Flash (1987) · 94%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Mortadelo y Filemón</h2>
+  <p><b>128</b> archivos · <span class="chip">Serie sugerida: Mortadelo y Filemón (1958) · 91%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Dragon Ball</h2>
+  <p><b>96</b> archivos · <span class="chip">Serie sugerida: Dragon Ball (1984) · 97%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Batman</h2>
+  <p><b>84</b> archivos · <span class="chip">Serie sugerida: Batman (1940) · 88%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Astérix</h2>
+  <p><b>72</b> archivos · <span class="chip">Serie sugerida: Astérix el Galo (1961) · 93%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Tintín</h2>
+  <p><b>64</b> archivos · <span class="chip">Serie sugerida: Las aventuras de Tintín (1929) · 90%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>One Piece</h2>
+  <p><b>61</b> archivos · <span class="chip">Serie sugerida: One Piece (1997) · 96%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Spider-Man</h2>
+  <p><b>58</b> archivos · <span class="chip">Serie sugerida: The Amazing Spider-Man (1963) · 87%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Watchmen</h2>
+  <p><b>42</b> archivos · <span class="chip">Serie sugerida: Watchmen (1986) · 95%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Mafalda</h2>
+  <p><b>38</b> archivos · <span class="chip">Serie sugerida: Mafalda (1964) · 92%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Corto Maltés</h2>
+  <p><b>35</b> archivos · <span class="chip">Serie sugerida: Corto Maltés (1967) · 89%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Blueberry</h2>
+  <p><b>33</b> archivos · <span class="chip">Serie sugerida: Blueberry (1963) · 86%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Judge Dredd</h2>
+  <p><b>31</b> archivos · <span class="chip">Serie sugerida: Judge Dredd (1977) · 84%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Hellboy</h2>
+  <p><b>29</b> archivos · <span class="chip">Serie sugerida: Hellboy (1993) · 90%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Spawn</h2>
+  <p><b>27</b> archivos · <span class="chip">Serie sugerida: Spawn (1992) · 83%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>The Sandman</h2>
+  <p><b>25</b> archivos · <span class="chip">Serie sugerida: The Sandman (1989) · 91%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Preacher</h2>
+  <p><b>23</b> archivos · <span class="chip">Serie sugerida: Preacher (1995) · 88%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Sin City</h2>
+  <p><b>21</b> archivos · <span class="chip">Serie sugerida: Sin City (1991) · 92%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Scott Pilgrim</h2>
+  <p><b>19</b> archivos · <span class="chip">Serie sugerida: Scott Pilgrim (2004) · 94%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li>
+<li class="folder">
+  <h2>Saga</h2>
+  <p><b>18</b> archivos · <span class="chip">Serie sugerida: Saga (2012) · 85%</span></p>
+  <p class="muted">Es una sugerencia: no está elegida ni asignada.</p>
+  <div class="row-actions">
+    <a class="primary" href="#">Elegir la serie de esta carpeta</a>
+    <a class="btn" href="#">Ver archivos</a>
+  </div>
+</li></ul>
+<div class="pagination"><span class="muted">Carpetas 1–20 de 108</span><a class="btn" href="#">Siguientes →</a></div>
+</main>
+</body></html>

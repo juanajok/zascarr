@@ -716,7 +716,8 @@ cd "$UT/zascarr"
 V2="$(git rev-parse HEAD)"
 git reset -q --hard HEAD~1                    # dejamos el clon UNA versión por detrás
 V1="$(git rev-parse HEAD)"
-printf 'DB_PASSWORD=SuperSecretPassword123\n' > "$UT/.env"
+# contraseña propia por ensayo: Compose rechaza las de ejemplo (ADR 0012); no se imprime
+(umask 077; printf 'DB_PASSWORD=%s\n' "$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')" > "$UT/.env")
 export ZASCARR_ROOT="$UT" BACKUP_DIR="$UT/backups"
 PCOMPOSE=(docker compose -f "$UT/zascarr/docker-compose.yml" --env-file "$UT/.env")
 

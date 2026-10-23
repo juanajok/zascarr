@@ -1,0 +1,16 @@
+# Imagen DESECHABLE de evaluación (no es la de producción). Parte de la imagen de ZascArr que ya hay en la Pi (misma base y mismo Python/Pillow)
+# y añade SOLO las herramientas candidatas. Se construye con red; después se ejecuta sin red.
+ARG BASE=zascarr-zascarr:latest
+FROM ${BASE}
+USER root
+ARG CON_UNRAR=1
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends unar libarchive-tools \
+ && if [ "$CON_UNRAR" = "1" ]; then \
+      sed -i 's/^Components: main$/Components: main non-free/' /etc/apt/sources.list.d/debian.sources \
+      && apt-get update && apt-get install -y --no-install-recommends unrar; fi \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir rarfile
+RUN { echo "# herramientas"; dpkg -l unar libarchive-tools unrar 2>/dev/null | awk '/^ii/{print $2, $3, $4}'; \
+      echo "# python"; python --version; pip show rarfile | grep -E '^(Name|Version|License)'; \
+      echo "# arquitectura"; dpkg --print-architecture; } > /herramientas.txt

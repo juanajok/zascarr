@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, MetadataSource
-from zascarr.services.discovery import Busqueda, DiscoveryResult
+from zascarr.services.discovery import Busqueda, DiscoveryResult, ProcedenciaTradicion
 from zascarr.services.tokens_revision import (
     CLAVE_SIN_GRUPO,
     MAX_TOKEN_ALTA,
@@ -116,7 +116,8 @@ def _resultado(**kw):
     base = dict(
         source=MetadataSource.COMIC_VINE, external_id="1234", title="Batman", start_year=2011, description=None,
         cover_url=None, site_url="https://comicvine.gamespot.com/batman/4050-1234/",
-        tradition_guess=ComicTradition.AMERICAN)
+        tradition_guess=ComicTradition.AMERICAN,
+        tradition_provenance=ProcedenciaTradicion.POR_DEFECTO)
     return DiscoveryResult(**{**base, **kw})
 
 
@@ -172,12 +173,14 @@ class TestBuscar:
         assert verificar_token_candidata(token, "Comics/Flash (1987)", SECRETO) is None     # no vale en un grupo
 
     def test_la_tradicion_no_viene_preseleccionada_y_la_sugerencia_es_solo_un_texto(self):
-        html = self._buscar([_resultado(tradition_guess=ComicTradition.MANGA)])
+        html = self._buscar([_resultado(tradition_guess=ComicTradition.MANGA,
+                                        tradition_provenance=ProcedenciaTradicion.EXPLICITA)])
         select = html[html.index("<select"):html.index("</select>")]
         assert "required" in select and select.count("selected") == 1          # solo el marcador vacío
         assert 'value="" selected disabled' in select
         assert 'value="manga" selected' not in select
-        assert "La fuente sugiere: Manga" in html
+        assert "La fuente lo clasifica como Manga" in html
+        assert "no de la obra: elige tú" in html
 
     def test_la_portada_no_permitida_no_se_muestra_ni_se_firma(self):
         html = self._buscar([_resultado(cover_url="http://127.0.0.1:9091/x.jpg")])
@@ -194,6 +197,83 @@ class TestBuscar:
         monkeypatch.setattr(web, "get_settings", lambda: SimpleNamespace(secret_key=""))
         html = self._buscar([_resultado()])
         assert "no tiene clave para firmar" in html and 'name="candidata"' not in html
+
+
+@pytest.mark.usefixtures("con_clave_de_firma")
+class TestEscenariosCA6DeU15:
+    """Mapeo 1:1 de los cinco escenarios de CA6 de #202 (#276).
+
+    Los cuatro primeros se comprueban en el HTML de Descubrir; el quinto, la elección explícita de la persona,
+    se completa en `test_descubrir_dos_pasos_pg.py::TestRevisarNoEscribeNada` y
+    `TestCrear::test_crea_la_serie_con_la_tradicion_elegida...`, donde la tradición elegida manda sobre la sugerida.
+    """
+
+    def _buscar(self, resultados):
+        with use_fake_session(FakeSession()) as client, \
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+                   AsyncMock(return_value=Busqueda(resultados, [], {"comic_vine": "ok", "anilist": "ok", "tebeosfera": "ok", "gcd": "ok"}))):
+            return client.get("/ui/descubrir/buscar", params={"q": "x"}).text
+
+    @staticmethod
+    def _select(html: str) -> str:
+        return html[html.index("<select"):html.index("</select>")]
+
+    def test_dato_explicito_respaldado_se_presenta_como_pista_y_no_se_preselecciona(self):
+        """AniList declara el tipo manga: se conserva la copy original de U15 y no se preselecciona."""
+        html = self._buscar([_resultado(
+            source=MetadataSource.ANILIST, external_id="1", title="One Piece", start_year=1997,
+            site_url=None, tradition_guess=ComicTradition.MANGA,
+            tradition_provenance=ProcedenciaTradicion.EXPLICITA)])
+        select = self._select(html)
+        assert select.count("selected") == 1 and 'value="" selected disabled' in select
+        assert 'value="manga" selected' not in select
+        assert "La fuente lo clasifica como Manga" in html
+        assert "no de la obra: elige tú" in html
+
+    def test_sugerencia_no_fiable_de_comic_vine_para_un_tebeo_es_solo_una_pista(self):
+        """El caso original: Mortadelo devuelto por Comic Vine como «Grapa americana»."""
+        html = self._buscar([_resultado(
+            source=MetadataSource.COMIC_VINE, external_id="mortadelo", title="Mortadelo y Filemón",
+            start_year=1958, site_url=None, tradition_guess=ComicTradition.AMERICAN,
+            tradition_provenance=ProcedenciaTradicion.POR_DEFECTO)])
+        select = self._select(html)
+        assert select.count("selected") == 1 and 'value="" selected disabled' in select
+        assert 'value="american" selected' not in select
+        assert "La fuente no indica tradición: se sugiere Grapa americana por defecto." in html
+        assert "no de la obra: elige tú" in html
+
+    def test_la_procedencia_transformada_se_atribuye_a_los_datos_de_la_fuente(self):
+        """GCD deduce la tradición de idioma/país: se dice que no viene como tradición de la ficha."""
+        html = self._buscar([_resultado(
+            source=MetadataSource.GCD, external_id="7", title="El Jabato", start_year=1958,
+            site_url=None, tradition_guess=ComicTradition.TEBEO,
+            tradition_provenance=ProcedenciaTradicion.TRANSFORMADA)])
+        assert ("La fuente no usa esta tradición: a partir de sus datos "
+                "se sugiere Tebeo español.") in html
+        assert "no de la obra: elige tú" in html
+
+    def test_origen_desconocido_no_se_presenta_como_dato_confirmado(self):
+        """Sin procedencia no se inventa una explicación: se dice que no consta de dónde sale."""
+        html = self._buscar([_resultado(
+            source=MetadataSource.GCD, external_id="9", title="Sin ficha", site_url=None,
+            tradition_guess=ComicTradition.TEBEO, tradition_provenance=None)])
+        visible = html.lower()
+        assert "La fuente sugiere Tebeo español, pero no consta de dónde sale." in html
+        assert "no de la obra: elige tú" in html
+        assert "dato confirmado" not in visible and "verificado" not in visible
+
+    def test_ausencia_de_sugerencia_no_muestra_texto_de_pista(self):
+        """El contrato representa la ausencia con `None`; no se usa `other` ni se inventa una pista."""
+        html = self._buscar([_resultado(
+            source=MetadataSource.GCD, external_id="10", title="Sin sugerencia", site_url=None,
+            tradition_guess=None, tradition_provenance=None)])
+        select = self._select(html)
+        assert select.count("selected") == 1 and 'value="" selected disabled' in select
+        assert "Sin sugerencia" in html
+        assert "La fuente lo clasifica" not in html
+        assert "La fuente no indica tradición" not in html
+        assert "La fuente sugiere" not in html
+        assert "no de la obra: elige tú" not in html
 
 
 class TestLasRutasDeCreacionNoAceptanLosDatosDeLaSerie:

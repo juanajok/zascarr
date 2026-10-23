@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ series.title }} — ZascArr{% endblock %}
 {% block content %}
+{% from "_legal_disclaimer.html" import legal_disclaimer %}
 <a href="/ui/biblioteca" class="back-link">← Biblioteca</a>
 
 <div class="series-header">
@@ -12,19 +13,29 @@
     {% if series.genres %}
     <p class="series-meta">{{ series.genres|map(attribute="name")|join(", ") }}</p>
     {% endif %}
-    {% from "_legal_disclaimer.html" import legal_disclaimer %}
-    {{ legal_disclaimer("metadata") }}
+    {#- «Completa» solo si los huecos se pudieron calcular: sin `computable` no hay con qué restar, y antes
+        una serie de AniList con 8 de 30 decía «Ningún hueco — la tienes completa» (caso real, 2026-10-20). -#}
     <p class="subtitle">
-      {% if series.total_issues %}
+      {% if huecos.computable %}
         {{ series.total_issues }} números en total —
         {{ present|length }} en tu biblioteca,
-        {{ missing|length }} pendientes.
+        {{ missing|length }} te {{ "falta" if missing|length == 1 else "faltan" }}.
+      {% elif series.total_issues %}
+        {{ series.total_issues }} números según la fuente — {{ present|length }} en tu biblioteca.
+        No sabemos cuáles faltan: {{ huecos.motivo }}.
       {% else %}
         Número total de la serie desconocido todavía: no se puede calcular huecos.
       {% endif %}
     </p>
+    <details class="series-fuentes">
+      <summary>Fuentes y atribución</summary>
+      {{ legal_disclaimer("metadata") }}
+    </details>
   </div>
 </div>
+
+<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
+{% include "_politica_serie.html" %}
 
 {% if missing %}
 <h2>Te faltan</h2>
@@ -33,7 +44,7 @@
   <span class="issue-chip issue-missing">#{{ n }}</span>
   {% endfor %}
 </div>
-{% elif series.total_issues %}
+{% elif huecos.computable %}
 <p class="empty">Ningún hueco — la tienes completa.</p>
 {% endif %}
 
@@ -46,5 +57,32 @@
 </div>
 {% endif %}
 
-{% include "_politica_serie.html" %}
+{% if archivos_por_numero %}
+{#- BL-R1b (#254, D10): los archivos de cada número y, cuando el servicio lo permite (D9), «Deshacer esta vinculación». -#}
+<section class="archivos-serie" id="archivos-por-numero" aria-labelledby="archivos-titulo">
+  <h2 id="archivos-titulo">Archivos por número</h2>
+  <p>Cada número de la serie con sus archivos.</p>
+  <ul class="archivos-numeros">
+    {% for n in archivos_por_numero %}
+    <li class="archivos-numero" data-numero="{{ n.numero }}">
+      <h3 class="archivos-numero-titulo">#{{ n.numero }}</h3>
+      <ul class="archivos-lista">
+        {% for a in n.archivos %}
+        <li class="archivo-fila" data-archivo="{{ a.id }}">
+          <span class="nombre-archivo">{{ a.nombre }}</span>
+          <span class="muted">{{ a.formato|upper }}</span>
+          {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
+          {% if a.bloqueo is none %}
+          <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/deshacer">Desvincular<span class="sr"> {{ a.nombre }}</span></a>
+          {% else %}
+          <span class="muted archivo-razon" data-razon="{{ a.bloqueo }}">{{ razones_sin_boton[a.bloqueo] }}</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 {% endblock %}

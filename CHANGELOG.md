@@ -5,7 +5,34 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Seguridad
+
+- **La contraseña de la base de datos ya no hay que ponerla a mano ni puede ser una conocida** ([ADR 0012](docs/adr/0012-credenciales-del-env.md)).
+  Una instalación nueva **ya no se detiene** pidiéndote editar el `.env`: el instalador genera una contraseña propia
+  (aleatoria, sin mostrarla) y la guarda antes de crear la base de datos. Si vuelves a ejecutarlo la conserva; si ya existía
+  una base de datos y no encuentra su contraseña, **se detiene sin cambiar nada** y te dice cómo recuperarte (no inventa otra,
+  que la dejaría inaccesible). Docker Compose se niega a crear PostgreSQL con una contraseña ausente, vacía o de ejemplo
+  —se acabó el antiguo valor por defecto publicado en el repositorio— y la aplicación no abre ninguna conexión con una conocida.
+- **El `.env` ya no lo lee ni lo cambia cualquiera.** Queda como `root`, modo 600; la carpeta que lo contiene y el repo
+  (compose, Dockerfile, scripts y el enlace `.env`) también son de `root`: el usuario de servicio, que comparte identidad
+  con Sonarr/Prowlarr/Transmission, ya no puede leerlo, editarlo, borrarlo, reemplazarlo ni redirigir su enlace. Una carpeta
+  compartida (un home, o una ruta que otra cuenta pueda cambiar: un antecesor suyo, un enlace) no se reclama y **el instalador se
+  detiene sin escribir nada** y dice cómo salir (instalar en `/opt/zascarr`): antes avisaba y seguía. La protección va **antes**
+  de escribir: la contraseña nueva nunca vive en un fichero abierto (un `.env` heredado en 644 se cierra antes, y el temporal ya
+  nace 600 de root sin heredar el modo del original) y, si no se consigue el propietario o los permisos, no se sigue. Los comandos
+  manuales de `docker compose`, `backup.sh`, `etiquetar.sh` y `uninstall.sh` piden `sudo` en español si no pueden leer el `.env`
+  (un `.env` ilegible ya no se confunde con uno ausente). La ubicación se examina con la ruta REAL (un salto de línea en el nombre de
+  una carpeta ya no hace que se compruebe otra) y las rutas con saltos de línea se rechazan. La misma regla decide si una contraseña «no vale» en el instalador,
+  en Compose y en la aplicación (la contraseña personal `change me` ya no se rechaza como `changeme`), y sin contraseña solo se
+  acepta el socket Unix local.
+  Para endurecer una instalación existente sin cambiar su contraseña: `sudo bash scripts/credenciales.sh`.
+- Escribir el `.env` es **atómico** (un fallo lo deja como estaba, sin temporales ni copias de la contraseña) y `update.sh`
+  comprueba la contraseña **antes** de hacer el backup o traer código.
+
 ### Añadido
+
+- `scripts/credenciales.sh` (`iniciar` / `comprobar`): inicialización explícita para la instalación manual y comprobación sin
+  mostrar valores.
 
 - **Crear una serie a mano, sin fuentes** (#189). Desde «Descubrir» («Crear la serie a mano») y desde el asistente de una
   carpeta puedes dar de alta una serie escribiendo solo el **título**, la **tradición** (la eliges tú) y, si quieres, el
@@ -86,6 +113,28 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Desvincular ya no depende de cómo se vinculó el archivo** (BL-R1, revisión de D9). En la ficha de una serie, antes solo tenían «Desvincular»
+  los archivos vinculados desde «Pendientes por carpeta»; los vinculados uno a uno desde «Por revisar», al importar o con «organizar» salían sin botón y
+  con una explicación. Ahora **todos** lo tienen. Si no consta cómo se vinculó, la pantalla lo dice («No consta cómo se vinculó este archivo…») y ZascArr
+  deja anotado qué había. Un archivo con una operación en curso sigue sin botón, con su motivo. No se toca el fichero, el número se conserva y el importador
+  no vuelve a vincular lo que desvincules (un archivo ya registrado con el mismo contenido se descarta como duplicado).
+- **Hay que volver a aceptar el aviso legal una vez.** Se ha limpiado su texto (quitadas unas marcas
+  de cita «[web:168]» que no llevaban a ninguna parte y separadas las listas para que se vean como
+  listas); lo que dice no cambia. La versión aceptada es la huella del fichero, así que tras actualizar
+  ZascArr vuelve a pedir la aceptación: hasta entonces **las búsquedas de Deseados quedan en pausa**,
+  como en una instalación nueva (lo que ya se esté descargando sigue). Ver la biblioteca no requiere nada.
+- **Guiños de tebeo antiguo en los estados vacíos y en la página de error.** Los avisos de «no hay
+  nada aquí» llevan una trama de puntos en la esquina, por debajo del texto. La página de error
+  lleva un disco de trama a la derecha (en pantallas anchas) y su titular tiene las tintas cian y
+  magenta un poco corridas, como un fotolito desalineado. Ese efecto no se usa en ningún otro
+  texto, para que nada se lea borroso.
+- **Con alto contraste, las tramas desaparecen.** Si el sistema pide más contraste o colores forzados,
+  se apagan todas las tramas (fondo, tarjetas de cifras, portadas que faltan, estados vacíos y
+  error) y el titular desalineado. Antes la trama del fondo seguía detrás del texto.
+- **El logo se distingue a su tamaño real.** En la barra lateral y en la pestaña del navegador se veía
+  empastado: la Z, pequeña y gris, y la trama ensuciando el estallido. Ahora cada tamaño tiene su dibujo,
+  con una Z grande y gruesa que sobresale un poco del estallido. La pestaña ya no lleva el cuadrado
+  claro de fondo, que se perdía en los navegadores con tema claro. El icono de iOS lleva la misma Z.
 - **Confirmar una vinculación con un token caducado y sin informe dice qué se sabe y qué no** (#116).
   Antes respondía `410` con un texto único. Ahora, además del `codigo: token_caducado`, el detalle trae
   `informe_disponible: false` (esto **no es un informe**: no hay `resultado` ni `repetida`) y
@@ -200,6 +249,20 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
   antes de que se retire.
 
 ### Corregido
+
+- **Las candidatas de Comic Vine ya no parecen un fallo de ZascArr** (#311). En el asistente de una carpeta la
+  descripción salía con su HTML crudo (`<p>… <a href=…>`): ahora se ve como texto, igual que en Descubrir, y se limpia
+  **antes** de recortarla (recortar primero dejaba etiquetas partidas o nada visible). Y la imagen de relleno que Comic
+  Vine devuelve cuando una serie no tiene portada («Blank!») ya no se enseña como si fuera la portada del tebeo: se ve el
+  hueco propio, no se guarda como portada nueva al enriquecer y, si una serie ya la tenía guardada, no se descarga. Una
+  portada de relleno que ya estuviera en la caché de disco se rehará con BL-PORT1 (#300).
+- **La vista previa de la vinculación ya no emite un cursor de página que ella misma rechaza** (#143). En un grupo de más de
+  100 archivos, si el último de una página tenía un nombre válido muy largo con caracteres de control (255 bytes), el enlace
+  a la página siguiente medía 2.100 caracteres y la petición lo rechazaba (`422`): no se podía seguir recorriendo el grupo.
+  Reproducido por HTTP. Ahora el cursor es compacto y siempre cabe en el límite; el recorrido no omite, repite ni reordena
+  archivos (mismo orden por nombre e id), sigue valiendo si el archivo se vincula entre peticiones y un cursor truncado,
+  alterado o inventado da un error claro en vez de una página. Los cursores de la versión anterior se siguen aceptando, salvo
+  los que ya no cabían en la petición. Sin migraciones y sin cambios en el límite de la petición.
 
 - **Redis ya no se publica en el host.** El `docker-compose.yml` lo exponía en `127.0.0.1:6379`, y en una instalación
   real otro proceso del equipo lo adoptó y guardó ~160 MB en él; al aplicarse el tope de memoria (128 MB) el contenedor

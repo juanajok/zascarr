@@ -7,11 +7,12 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
+from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 
 logger = structlog.get_logger()
 
@@ -24,6 +25,22 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    """Estáticos que el navegador guarda pero comprueba en cada uso.
+
+    Sin `Cache-Control`, el navegador decide por su cuenta cuánto tiempo reutiliza
+    `/static/web.css` sin preguntar: tras una actualización seguía pintando la UI
+    antigua (marca y tipografía) hasta forzar la recarga. Con `no-cache` pregunta
+    siempre con el ETag que ya manda Starlette y, si nada cambió, recibe un 304 vacío:
+    en la red de casa cuesta una petición sin cuerpo.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 async def _ejecutar_ciclo_y_avisar(notifier, session_factory, importer_cls):
@@ -196,6 +213,11 @@ async def lifespan(app: FastAPI):
     # cuya autenticación estaba activada en BD.
     app.state.db_degraded = False
     try:
+        # Credenciales por defecto: ni se intenta conectar (ADR 0012). El motivo no lleva el valor.
+        # Se mira la URL del MOTOR (con la que de verdad se conectaría), no la de los ajustes.
+        problema = problema_de_credenciales(engine.url) if hasattr(engine, "url") else None
+        if problema:
+            raise CredencialesNoSegurasError(f"{problema}; la aplicación no arranca con ella")
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
 
@@ -286,6 +308,8 @@ def create_app() -> FastAPI:
     # no hay peticiones cross-origin legítimas. Un allow_origins=["*"] junto a
     # allow_credentials=True es inválido e inseguro según el spec CORS.
 
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
     from zascarr.api.health import router as health_router
     from zascarr.api.legal import router as legal_router
     from zascarr.api.revision import router as revision_router
@@ -298,7 +322,9 @@ def create_app() -> FastAPI:
     from zascarr.web.auditoria import router as auditoria_router
     from zascarr.web.auth import router as auth_router
     from zascarr.web.dashboard import router as dashboard_router
+    from zascarr.web.desvinculacion import router as desvinculacion_ui_router
     from zascarr.web.discovery import router as discovery_router
+    from zascarr.web.errores import manejar_http, manejar_inesperado, pagina_error
     from zascarr.web.estado import router as estado_router
     from zascarr.web.legal import router as legal_ui_router
     from zascarr.web.library import router as library_router
@@ -332,6 +358,7 @@ def create_app() -> FastAPI:
     app.include_router(asistente_vinculacion_router)
     app.include_router(pendientes_router)
     app.include_router(series_ui_router)
+    app.include_router(desvinculacion_ui_router)
     app.include_router(wishlist_ui_router)
     # Bug real (reportado): "/" mandaba a Estado (E1) en vez de a la
     # biblioteca — quien entra por primera vez esperaba ver su colección,
@@ -340,7 +367,7 @@ def create_app() -> FastAPI:
     app.get("/", include_in_schema=False)(
         lambda: RedirectResponse("/ui/", status_code=307)
     )
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.exception_handler(ProgrammingError)
     async def _esquema_incompleto_handler(request: Request, exc: ProgrammingError):
@@ -358,13 +385,17 @@ def create_app() -> FastAPI:
                         "detail": "Esquema de base de datos incompleto o sin migrar — consulta /api/health",
                     },
                 )
-            return HTMLResponse(
-                "<h1>Base de datos no lista</h1>"
-                "<p>El esquema está incompleto o no se ha migrado. "
-                '<a href="/estado">Consulta el estado del sistema</a>.</p>',
-                status_code=503,
+            return pagina_error(
+                request, 503,
+                mensaje="Base de datos no lista: le faltan partes o no se ha terminado de "
+                        "actualizar. En el Estado verás qué hacer.",
             )
         raise exc
+
+    # Página de error propia para quien navega (404, otros HTTPException y 500): la API y HTMX
+    # conservan su respuesta. Ver web/errores.py.
+    app.add_exception_handler(StarletteHTTPException, manejar_http)
+    app.add_exception_handler(Exception, manejar_inesperado)
 
     return app
 

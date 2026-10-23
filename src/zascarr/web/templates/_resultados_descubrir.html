@@ -50,7 +50,10 @@
           </select>
           <button type="submit">Revisar</button>
         </div>
-        <small>La fuente sugiere: {{ tradiciones | selectattr(0, "equalto", r.sugerida.value) | map(attribute=1) | first }}. Tú decides.</small>
+        {% if r.sugerida %}
+        {% set etiqueta = tradiciones | selectattr(0, "equalto", r.sugerida.value) | map(attribute=1) | first %}
+        <small>{{ etiqueta | pista_de_tradicion(r.procedencia) }}</small>
+        {% endif %}
       </form>
       </div>
     </div>

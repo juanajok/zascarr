@@ -9,8 +9,10 @@ Reglas que se miden contra el coleccionista, no contra el desarrollador:
 - **Auditoría ≠ adopción.** El informe de duplicados acredita que alguien MIRÓ el disco en una
   fecha; no que la biblioteca esté registrada. Son estados distintos con fuente distinta
   (`InformeDisco` frente a `EstadoAdopcion`) y ninguno implica al otro.
-- **Cada cifra dice de dónde sale** («comparados a fondo el 3 de octubre», «registrados»); nunca se
-  afirma un escaneo del disco que no ocurrió.
+- **Cada cifra dice de dónde sale** («había 1542 cuando miraste el disco el 3 de octubre»,
+  «registrados»), en palabras del coleccionista; nunca se afirma un escaneo del disco que no ocurrió.
+- **Pocas cifras y que encajen**: el desglose de lo registrado lo da el Inicio (`services/inicio.py`);
+  un paso no añade números sueltos que el coleccionista tenga que cuadrar con los demás.
 - **Una sola acción principal**: el primer paso `SIGUIENTE` o, si no queda ninguno obligatorio, el
   primer paso opcional por hacer.
 
@@ -28,10 +30,46 @@ MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto
          "septiembre", "octubre", "noviembre", "diciembre")
 
 
+#: Desde cuántos días la última mirada al disco se da por vieja y el Inicio ofrece repetirla.
+DIAS_INFORME_ANTIGUO = 14
+
+
+def _local(fecha: datetime) -> datetime:
+    return fecha.astimezone() if fecha.tzinfo else fecha
+
+
 def fecha_llana(fecha: datetime) -> str:
     """«3 de octubre de 2026»: sin locale del sistema (la Pi puede no tener es_ES)."""
-    local = fecha.astimezone() if fecha.tzinfo else fecha
+    local = _local(fecha)
     return f"{local.day} de {MESES[local.month - 1]} de {local.year}"
+
+
+def _dias_desde(fecha: datetime, ahora: datetime) -> int:
+    """Días de calendario (no bloques de 24 h): lo de anoche es «ayer», no «hoy»."""
+    return (_local(ahora).date() - _local(fecha).date()).days
+
+
+def hace_cuanto(fecha: datetime, ahora: datetime) -> str:
+    """«hoy», «ayer», «hace 5 días», «hace 3 semanas», «hace 2 meses» o «hace más de un año».
+
+    La fecha exacta ya la dice `fecha_llana`; esto dice si es reciente sin hacer cuentas."""
+    dias = _dias_desde(fecha, ahora)
+    if dias <= 0:
+        return "hoy"
+    if dias == 1:
+        return "ayer"
+    if dias < 14:
+        return f"hace {dias} días"
+    if dias < 60:
+        return f"hace {dias // 7} semanas"
+    if dias < 365:
+        return f"hace {dias // 30} meses"
+    return "hace más de un año"
+
+
+def informe_antiguo(fecha: datetime, ahora: datetime) -> bool:
+    """¿Conviene volver a mirar el disco? Desde `DIAS_INFORME_ANTIGUO` días."""
+    return _dias_desde(fecha, ahora) >= DIAS_INFORME_ANTIGUO
 
 
 class EstadoPaso(StrEnum):
@@ -120,11 +158,12 @@ def _paso_biblioteca(e: EstadoInicio) -> Paso | None:
             n = e.archivos_registrados
             detalle = (f"{n} {_plural(n, 'tebeo registrado', 'tebeos registrados')}"
                        " · no se movió ni se renombró nada")
+            # «Hecho» con 1322 sin clasificar parecía una contradicción (caso real, 2026-10-20):
+            # registrar no es clasificar, y lo que queda tiene su propio paso.
+            if e.archivos_sin_clasificar:
+                detalle += " · clasificarlos es el paso siguiente"
         else:
             detalle = "Se leyó la carpeta, pero no se registró ningún tebeo."
-        if informe:
-            detalle += (f" · {informe.archivos_comparados} comparados a fondo "
-                        f"el {fecha_llana(informe.fecha)}")
         return Paso(ClavePaso.BIBLIOTECA, "Tu biblioteca está registrada", detalle,
                     EstadoPaso.HECHO, True, "/ui/auditoria",
                     "Ver duplicados" if informe else "Buscar repetidos")
@@ -132,9 +171,8 @@ def _paso_biblioteca(e: EstadoInicio) -> Paso | None:
         detalle = ("Hay tebeos en la carpeta de tu biblioteca que ZascArr aún no conoce. "
                    "Registrarlos no mueve, renombra ni borra nada.")
         if informe:
-            detalle += (f" Ya miraste qué hay repetido el {fecha_llana(informe.fecha)} "
-                        f"({informe.archivos_leidos} leídos, "
-                        f"{informe.archivos_comparados} comparados).")
+            detalle += (f" Ya miraste qué hay repetido el {fecha_llana(informe.fecha)}: "
+                        f"había {informe.archivos_leidos} tebeos.")
         else:
             detalle += " Antes puedes ver qué hay repetido en tu disco; tampoco cambia nada."
         return Paso(ClavePaso.BIBLIOTECA, "Registra tu biblioteca", detalle,

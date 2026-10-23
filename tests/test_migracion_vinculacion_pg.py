@@ -48,10 +48,6 @@ async def objetos(url: str) -> dict[str, bool]:
     }
 
 
-def cabeza() -> str:
-    return alembic(URL, "heads").stdout.split()[0]
-
-
 TODO = {"tabla": True, "funcion": True, "disparador": True, "indice": True}
 NADA = {k: False for k in TODO}
 
@@ -64,8 +60,8 @@ class TestEsquema:
             assert await objetos(url) == NADA
             alembic(url, "upgrade", "0019")
             assert await version(url) == "0019" and await objetos(url) == TODO
-            alembic(url, "upgrade", "head")                                        # idempotente
-            assert await objetos(url) == TODO and cabeza() == "0019"
+            alembic(url, "upgrade", "head")                                        # idempotente (la cabeza ya no es la 0019: ver la 0020)
+            assert await objetos(url) == TODO
 
     async def test_columnas_clave_e_indice(self):
         async with bd_efimera(URL) as url:
@@ -150,7 +146,7 @@ class TestBajada:
 
     async def test_con_un_token_vigente_se_niega_y_conserva_todo(self):
         async with bd_efimera(URL) as url:
-            alembic(url, "upgrade", "head")
+            alembic(url, "upgrade", "0019")
             await consultar(url, INSERT, o=str(uuid4()), s=str(uuid4()), r="{}", m=10)
             r = alembic(url, "downgrade", "0018", estricto=False)
             assert r.returncode != 0 and "token todavía válido" in r.stderr
@@ -159,22 +155,22 @@ class TestBajada:
 
     async def test_con_los_tokens_ya_caducados_baja(self):
         async with bd_efimera(URL) as url:
-            alembic(url, "upgrade", "head")
+            alembic(url, "upgrade", "0019")
             await consultar(url, INSERT, o=str(uuid4()), s=str(uuid4()), r="{}", m=-5)
             alembic(url, "downgrade", "0018")
             assert await objetos(url) == NADA
 
     async def test_bajar_dos_versiones_atraviesa_la_0019_y_la_0018(self):
         async with bd_efimera(URL) as url:
-            alembic(url, "upgrade", "head")
+            alembic(url, "upgrade", "0019")
             alembic(url, "downgrade", "0017")
             assert await version(url) == "0017"
-            alembic(url, "upgrade", "head")
+            alembic(url, "upgrade", "0019")
             assert await version(url) == "0019" and await objetos(url) == TODO
 
     async def test_una_insercion_durante_la_bajada_la_hace_negarse(self):
         async with bd_efimera(URL) as url:
-            alembic(url, "upgrade", "head")
+            alembic(url, "upgrade", "0019")
             motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
             try:
                 async with motor.connect() as c:
