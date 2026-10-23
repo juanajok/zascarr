@@ -1,6 +1,6 @@
 # Contrato de #307 — reconocer un ZIP por su contenido (un solo punto de decisión)
 
-> **Estado: IMPLEMENTADO en la rama `claude/307-formato-por-contenido` (PR #325, EN BORRADOR hasta completar la revisión técnica y la CI sobre el SHA final; esto NO autoriza fusión ni despliegue). Sin migración y sin tocar ningún fichero del PO.** **D1–D5 DECIDIDAS por el PO el 2026-10-23** (§8), con reservas técnicas que este contrato recoge: D3 se aprueba como contrato objetivo y no como garantía ya acreditada, D4 sin afirmar «varios tebeos» y D5 a demanda. **No forma parte de ningún candidato de despliegue.** Hallazgos y desviaciones: §12.
+> **Estado: IMPLEMENTADO en la rama `claude/307-formato-por-contenido` (PR #325, EN BORRADOR hasta completar la revisión técnica y la CI sobre el SHA final; esto NO autoriza fusión, despliegue ni ejecución del relleno en la Pi). Sin migración y sin tocar ningún fichero del PO.** **Procedencia de D1–D5:** llegaron como texto en un mensaje del usuario `juanajok` (2026-10-23), no como contenido pegado de otro revisor; el revisor externo ha dicho que no las redactó ni las decidió. Se recogen como *decisiones recibidas del usuario* y **no se dan por confirmadas por silencio**: lo que necesita aceptación expresa está marcado en §8. Hallazgos y desviaciones: §12. **No forma parte de ningún candidato de despliegue.**
 
 ## 1. Qué cambia respecto a la tarjeta (datos del censo de cabeceras, 2026-10-23)
 La tarjeta partía de **2 ZIP sin extensión** (*Paul Pope*, *Barrio*). El censo de la Pi (1267 ficheros `.cbr`/`.rar`/sin extensión, solo 4 KiB de cada uno) dice otra cosa:
@@ -91,6 +91,14 @@ Una carrera (el fichero cambia entre la firma y la apertura) acaba en `BadZipFil
 
 **Por qué 1 MiB y no 16 MiB (corrección técnica, no cambio de producto).** `ZipFile()` recorre el directorio central por su **tamaño en bytes**, no por el nº de entradas que declara el registro, y reserva ~10 B de memoria por byte de índice. **Medido** (Python 3.14, x86): 2000 entradas = 109 KiB → 1,0 MiB de pico; 20 000 = 1,1 MiB → 10,8 MiB; 60 000 = 3,3 MiB → 33 MiB y 2,4 s. Con 16 MiB serían ~170 MiB y ~12 s (en la Pi, bastante más) dentro de un contenedor de 512 MiB: el tope de entradas **declaradas** no protege si el índice real es mayor. 1 MiB cubre de sobra 2000 entradas con nombres largos (~0,3 MiB) y acota el coste a ~11 MiB. La tabla aprobada decía 16 MiB; **se cambia por esta razón y se deja dicho**.
 
+**Acreditación del valor (qué está medido y qué no).**
+- *Medición:* Python **3.14.4**, x86_64, `tracemalloc`; ZIP sintéticos en memoria de entradas vacías (STORED) con nombres `pNNNNN.jpg`; se abre con `ZipFile(BytesIO)` y se anota el pico de memoria y el tiempo de pared. Resultados (esa máquina): 2000 entradas = 109 KiB de índice → 1,0 MiB de pico, 0,08 s; 20 000 = 1,1 MiB → 10,8 MiB, 0,76 s; 60 000 = 3,3 MiB → 33,4 MiB, 2,40 s (≈ 500–585 B por entrada). **Es el coste observado en ese entorno, no una ley universal de «10 B por byte de índice»**; con nombres más largos o ZipInfo más pesados cambiará. **NOT RUN en la Pi y en Python 3.11** (la versión del producto).
+- *Cuántos ZIP legítimos de la muestra quedarían excluidos con 1 MiB:* **cota, no medición:** los 366 ZIP medidos tienen ≤ 941 entradas; con nombres de hasta 255 bytes un índice de 941 entradas mide < 0,3 MiB, así que ninguno debería superar 1 MiB. **La medición real está en el censo (`censo_zip_por_contenido.py` ahora informa «ÍNDICE… superan 1 MiB…») y NO se ha ejecutado todavía sobre la biblioteca.**
+- *El rechazo ocurre antes de construir el índice:* probado (`test_rechazar_cuesta_casi_nada_frente_a_abrir`: comprobar el límite en un ZIP de 30 000 entradas usa < 256 KiB; abrirlo cuesta más de 20 veces eso) y con `ZipFile` sustituido por una función que falla si se llama.
+- *Un índice malformado no evita la comprobación ni acaba en lectura sin cota:* si el registro declara un índice **menor** que el real, `ZipFile` solo lee los bytes declarados (pico < 2 MiB, falla o abre lo declarado); si declara uno **mayor que el fichero** (~4 GiB), se rechaza sin abrir.
+- *Los límites se complementan:* una prueba fabrica, por cada uno (entradas, índice, entrada leída > 32 MiB incomprimible, ratio > 100, píxeles > 40 Mpx), un ZIP que incumple **solo ese** y comprueba que los demás lo dejarían pasar y que ese lo para. **Ninguno sustituye a otro.**
+- *El mensaje es de procesamiento, no de corrupción:* «…no lo abre, por precaución»; una prueba prohíbe «dañado», «corrupto», «incompleto» o «roto» en los textos de `LIMITE`.
+
 **Coherencia entre el control previo y el lector que abre el ZIP** (condición del PO sobre D3): el control **no reimplementa** el registro final; llama al mismo `zipfile._EndRecData` que usa `ZipFile`. Una firma EOCD falsa dentro del comentario, un localizador ZIP64 que el EOCD normal no refleja o un registro truncado se interpretan igual en los dos. Pruebas: `TestCoherenciaConLoQueAbreZipFile` compara, para cada variante, lo que ve el control con lo que `ZipFile` realmente usa (espiando la función). Es una función privada de la biblioteca estándar: si una versión de Python la cambiara, el módulo **no se importa** (falla ruidoso, no deja pasar en silencio) y una prueba lo deja dicho. **Límite honesto:** se ha probado con Python 3.14 en local; la CI usa 3.11, que es la versión de la imagen.
 
 **Causa dicha = causa que saltó** (condición del PO): `LIMITE` lleva un motivo, «entradas» o «directorio»; el aviso de «más de 2000 archivos» solo sale por entradas.
@@ -118,12 +126,20 @@ La garantía y el **único camino verificado** van **una vez**, en la cabecera d
 | `.rar` / `.7z` por el nombre | «Es un archivo .rar: ZascArr no lo registra como tebeo, aunque dentro haya uno.» |
 | `.tar` / `.cbt` | «ZascArr no usa este formato (TAR), así que no lo registra como tebeo.» |
 
+**Alcance de la cabecera:** «intentará importarla» se refiere **solo a la carpeta de descargas**, el único recorrido que existe y está probado; **no promete** que ZascArr incorpore ficheros que el usuario deje dentro de la biblioteca (eso es justo el hueco que documenta #326).
+
 **Recorrido verificado** (`tests/test_importer_recorrido_de_descargas_pg.py`, importador real + Postgres real + ficheros sintéticos): (a) el importador recorre las carpetas de **descargas** (`transmission_download_dir`, `amule_incoming_dir`, `downloads_path`), de forma recursiva; (b) una copia buena **entra aunque el dañado siga en la biblioteca** (el dañado no tiene hash, así que la deduplicación por SHA-256 no los confunde) y el dañado **no se toca**; (c) va a **su serie y número** si casan y, si no, a `_Unsorted` («Por revisar»). Además: una copia con el nombre arreglado (`.cbz`) dejada en descargas **se importa y se mueve** a la biblioteca; un fichero sin extensión dejado en descargas **no** se importa; una copia idéntica a un fichero ya registrado se descarta como duplicado y **se queda en descargas**; un pack descomprimido en descargas se importa número a número. **Matices que el coleccionista debe poder entender:** el original no se toca ni se registra, así que quedan **dos copias en disco** (la auditoría las verá como «mismo contenido»); ZascArr **nunca sugiere borrar**.
 
 **Abierto (no resuelto aquí):** el **aviso informativo** para un `.cbr` que se lee como ZIP («Se lee como un .cbz aunque se llame .cbr. Todo bien…»; UX pide chip neutro y solo en Auditoría). El texto está en `INFO_CBR_ES_ZIP` pero **no se muestra**: exige una categoría nueva en el informe y su plantilla (**no entregado**).
 
-## 8. Decisiones del PO (DECIDIDAS el 2026-10-23, con sus reservas)
-| # | Decisión | Qué se decidió | Consecuencias y reservas |
+## 8. D1–D5: decisiones recibidas del usuario (2026-10-23) y su procedencia
+**Procedencia, por separado** (para no confundir quién propuso, quién recomendó y quién decidió):
+- **Propuestas del implementador:** las opciones de cada decisión y las recomendaciones originales (D1a, D2a, D3b, D4a, D5a) de la versión anterior de este contrato.
+- **Recomendaciones del revisor externo:** condiciones técnicas sobre D3 (causa dicha, coherencia con `ZipFile`), D4 (no afirmar «varios tebeos») y D5 (sin escrituras automáticas); y la revisión del límite y de la dependencia de `zipfile._EndRecData`.
+- **Decisiones recibidas del usuario `juanajok`:** el texto de D1–D5 de la tabla, recibido en el chat el 2026-10-23, en primera persona («Elijo la opción (b)»…). **El revisor externo ha indicado que no las decidió él.** Se implementan tal cual se recibieron, **sin darlas por aceptadas por interpretación de un silencio**.
+- **Necesitan aceptación expresa del usuario** (pendiente): (1) los recortes de alcance de **D1** y **D2** (documentarlos no resuelve la compatibilidad excluida); (2) el valor de **1 MiB** del directorio central, que cambia el 16 MiB de la tabla que se aprobó (§6).
+
+| # | Decisión | Qué recibió la implementación | Consecuencias y reservas |
 |---|---|---|---|
 | **D1** | Sin extensión y doble extensión | **(a) avisar, sin registrar.** Detectar y explicar el contenido en Auditoría; sin nuevos formatos declarados, sin migraciones, sin renombrar originales ni hacerlos pasar por CBZ para permitir escrituras | **Recorte respecto al objetivo inicial de la tarjeta** (reconocer e incorporar ZIP sin extensión): queda registrado así. **Reconocer el contenido no equivale a registrarlo en el catálogo**; la tarjeta y su aceptación deben decirlo |
 | **D2** | `.zip` | **(a) no ampliar el recorrido del importador** | **La incoherencia queda reconocida, no resuelta:** los lectores procesan un ZIP ya registrado, mientras el importador no descubre archivos nuevos por esa extensión. **No es «soporte completo de ZIP».** Su incorporación futura necesitará casos de tebeo individual, anidados, duplicado y contenido no utilizable |
@@ -181,6 +197,12 @@ Todas salen de `scripts/medicion/censo_zip_por_contenido.py` y del censo de cabe
 | **20** superan el tope **antiguo** (500 MiB totales) | **10 de los 308** `.cbz` + **10 de los 56** `.cbr` ZIP | mismo censo, estado `demasiado_grande`; 575 MiB–1,3 GiB |
 | **«los 10 `.cbz` grandes»** | los 10 `.cbz` de esos 20 (**ya están registrados sin ComicInfo/anchura**; la portada sí sale) | |
 | **«los 10 ZIP grandes» (portadas)** | los **10 `.cbr` ZIP** de esos 20 | son conjuntos **distintos**: 10 + 10 = 20 |
+
+### 12.1b Riesgo explícito: `zipfile._EndRecData` es una función privada
+- **Qué es:** el control previo del límite llama a `zipfile._EndRecData` (y lee `_ECD_ENTRIES_TOTAL`/`_ECD_SIZE`) para interpretar el registro final **igual que `ZipFile`**. Está **encapsulado en un solo punto** (`core/formato_contenedor.py::leer_cabecera_zip`; el script de censo la usa solo para medir).
+- **Qué pasa si cambia en una versión de Python:** el módulo **falla al importarse** (ruidoso) en vez de dejar pasar todo en silencio; `test_el_lector_privado_de_la_biblioteca_estandar_sigue_existiendo` y `TestCoherenciaConLoQueAbreZipFile` (que compara lo que ve el control con lo que `ZipFile` realmente usa, espiando la función) lo detectarían.
+- **Evidencia que falta:** probado con Python **3.14** en local. La versión del producto es **3.11**: la CI debe **ejecutar** esas pruebas (no omitirlas) y quedar registrado cuáles; un check verde general no basta.
+- **Alternativa si el riesgo no se acepta:** reimplementar el registro final (más código y más superficie de divergencia con `ZipFile`, que es justo lo que se quiere evitar) o aceptar el coste de abrir el ZIP antes de contar (no acotado).
 
 ### 12.2 Garantías del relleno (D5: a demanda)
 Probadas con **Postgres real** en `tests/test_formato_contenido_relleno_pg.py` (27 pruebas con las de integración):

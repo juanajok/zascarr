@@ -45,6 +45,7 @@ class Medida:
     mayor_entrada: int = 0              # bytes descomprimidos de la entrada más grande (lo que importa si solo se lee UNA página)
     pagina1_bytes: int = 0              # primera imagen en orden natural (la que daría la portada)
     pagina1_ratio: float = 0.0
+    indice: int = 0                     # bytes del directorio central (el que `ZipFile` carga entero en memoria): el tope de ZascArr es 1 MiB
 
 
 def natural(s: str):
@@ -62,6 +63,16 @@ def grupo_de(ruta: Path) -> str | None:
     if ext == "" and not ruta.name.startswith("."):
         return "sin_extension"
     return None
+
+
+def tam_indice(ruta: Path) -> int:
+    """Tamaño del directorio central tal como lo ve `ZipFile` (mismo lector del registro final que usa ZascArr). 0 si no se puede leer."""
+    try:
+        with open(ruta, "rb") as fh:
+            rec = zipfile._EndRecData(fh)
+        return int(rec[zipfile._ECD_SIZE]) if rec else 0
+    except (OSError, zipfile.BadZipFile):
+        return 0
 
 
 def es_zip(ruta: Path) -> bool:
@@ -104,6 +115,7 @@ def medir(ruta: Path, max_entradas: int = MAX_ENTRADAS, max_descomprimido: int =
             mayor_entrada=max((i.file_size for i in ficheros), default=0),
             pagina1_bytes=p1.file_size if p1 else 0,
             pagina1_ratio=round(p1.file_size / p1.compress_size, 2) if p1 and p1.compress_size else 0.0,
+            indice=tam_indice(ruta),
         )
 
 
@@ -149,6 +161,10 @@ def resumen(filas: list[tuple[str, Path, int, Medida]], min_imagenes: int, fracc
             out.append(f"  con ComicInfo.xml: {sum(m.comicinfo for m in ok)} de {len(ok)}; con anidados: {sum(1 for m in ok if m.anidados)}; cifrados: {sum(m.cifrado for m in ok)}")
             out.append(f"  ratio de compresión máximo (por entrada): {max(m.ratio_max for m in ok)}; descomprimido máx: {max(m.descomprimido for m in ok) >> 20} MiB; entradas máx: {max(m.entradas for m in ok)}")
             out.append(f"  entrada mayor (KiB): mediana {int(statistics.median(m.mayor_entrada for m in ok)) >> 10}, máx {max(m.mayor_entrada for m in ok) >> 10}; primera página (KiB): mediana {int(statistics.median(m.pagina1_bytes for m in ok)) >> 10}, máx {max(m.pagina1_bytes for m in ok) >> 10}; su ratio máx {max(m.pagina1_ratio for m in ok)}")
+        con_indice = [m.indice for m in (f[3] for f in fs) if m.indice]
+        if con_indice:
+            out.append(f"  ÍNDICE (directorio central): máx {max(con_indice) >> 10} KiB, mediana {int(statistics.median(con_indice)) >> 10} KiB; "
+                       f"superan 1 MiB (el tope de ZascArr): {sum(1 for i in con_indice if i > (1 << 20))} de {len(con_indice)}")
         lim = [f[3] for f in fs if f[3].estado in ("demasiadas_entradas", "demasiado_grande")]
         if lim:
             out.append(f"  SUPERAN los topes de hoy (1000 entradas / 500 MiB descomprimidos): {len(lim)} de {len(fs)} ({Counter(m.estado for m in lim).most_common()})")
@@ -171,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     filas = list(recorrer(raiz))
     if a.tsv:
         Path(a.tsv).write_text("".join(
-            f"{g}\t{r}\t{t}\t{clasificar(m, a.min_imagenes, a.fraccion)}\t{m.estado}\t{m.entradas}\t{m.imagenes}\t{m.anidados}\t{int(m.comicinfo)}\t{m.descomprimido}\t{m.ratio_max}\t{int(m.cifrado)}\t{m.mayor_entrada}\t{m.pagina1_bytes}\t{m.pagina1_ratio}\n"
+            f"{g}\t{r}\t{t}\t{clasificar(m, a.min_imagenes, a.fraccion)}\t{m.estado}\t{m.entradas}\t{m.imagenes}\t{m.anidados}\t{int(m.comicinfo)}\t{m.descomprimido}\t{m.ratio_max}\t{int(m.cifrado)}\t{m.mayor_entrada}\t{m.pagina1_bytes}\t{m.pagina1_ratio}\t{m.indice}\n"
             for g, r, t, m in filas), encoding="utf-8")
     print(resumen(filas, a.min_imagenes, a.fraccion))
     return 0
