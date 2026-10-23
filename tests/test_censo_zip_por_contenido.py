@@ -102,7 +102,8 @@ class TestLoQueImportaSiSoloSeLeeUnaPagina:
     def test_el_resumen_cuenta_los_que_superan_los_topes(self, tmp_path):
         z = zip_de(tmp_path / "t.cbz", paginas(30))
         fila = ("cbz_control", Path("t.cbz"), 1, c.medir(z, max_descomprimido=2000))
-        assert "SUPERAN los topes de hoy" in c.resumen([fila], 5, 0.8)
+        r = c.resumen([fila], 5, 0.8)
+        assert "SUPERAN los topes de hoy" in r and "cómo son: imágenes mín 30 / máx 30" in r and "entrada mayor máx 0 KiB" in r
 
 
 class TestLimitesYErrores:
@@ -112,6 +113,15 @@ class TestLimitesYErrores:
         assert c.clasificar(c.medir(z, max_entradas=10)) == "limite" and c.medir(z, max_entradas=10).estado == "demasiadas_entradas"
         grande = zip_de(tmp_path / "h.zip", {"a.jpg": b"0" * 5000})
         assert c.medir(grande, max_descomprimido=1000).estado == "demasiado_grande"
+
+    def test_los_que_superan_los_topes_se_miden_igual(self, tmp_path):
+        """Hace falta saber CÓMO son los que superan el tope de hoy para decidir topes por entrada."""
+        z = zip_de(tmp_path / "l.cbz", {**paginas(30), "ComicInfo.xml": b"<c/>"})
+        m = c.medir(z, max_descomprimido=2000)
+        assert (m.estado, m.imagenes, m.comicinfo, m.mayor_entrada, m.pagina1_bytes) == ("demasiado_grande", 30, True, 100, 100)
+        m2 = c.medir(z, max_entradas=10)
+        assert m2.estado == "demasiadas_entradas" and m2.imagenes == 30
+        assert c.clasificar(m) == c.clasificar(m2) == "limite"
 
     def test_bomba_se_ve_por_el_ratio_sin_descomprimir(self, tmp_path):
         z = zip_de(tmp_path / "b.zip", {"a.jpg": b"\0" * 5_000_000})
