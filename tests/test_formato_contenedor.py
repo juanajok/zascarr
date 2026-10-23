@@ -228,7 +228,7 @@ class TestFormatoGuardado:
         (".cbr", {"firma": "rar"}, False),
         (".cbz", {"firma": "zip", "clase": "no_tebeo"}, True),                     # un .cbz declarado y corto sigue dando su primera página
         (".cbz", {"firma": "zip", "clase": "paquete"}, True),
-        (".cbz", {"firma": "zip", "clase": "cifrado"}, False),
+        (".cbz", {"firma": "zip", "clase": "cifrado"}, True),                      # solo cuenta la firma: la clase guardada puede quedar vieja si el fichero se sustituye
         (".cbz", {"firma": "rar"}, False),                                          # un .cbz que es RAR: sin portada
         (".cbr", None, None),                                                       # nada guardado → decide la extensión
         (".cbr", {}, None),
@@ -239,13 +239,11 @@ class TestFormatoGuardado:
     def test_los_avisos_dicen_causa_y_accion(self):
         assert fc.aviso_de_formato(".cbz", Firma.RAR) == ("Se llama .cbz, pero por dentro es un .cbr (RAR). "
                                                           "Sigue en tu biblioteca, aunque por ahora ZascArr no puede sacarle la portada.")
-        assert "su nombre no acaba en .cbz" in fc.aviso_de_formato("", Firma.ZIP) and "desde tu ordenador" in fc.aviso_de_formato("", Firma.ZIP)
-        assert "cambia el final del nombre a .cbr" in fc.aviso_de_formato("", Firma.RAR)
-        assert "cambia el final del nombre a .cb7" in fc.aviso_de_formato("", Firma.SIETE_Z)
+        assert fc.aviso_de_formato("", Firma.ZIP) == "Parece un tebeo, pero su nombre no acaba en .cbz, así que ZascArr no lo registra."
+        assert "no acaba en .cbr" in fc.aviso_de_formato("", Firma.RAR) and "no acaba en .cb7" in fc.aviso_de_formato("", Firma.SIETE_Z)
         assert "(TAR) que ZascArr no usa" in fc.aviso_de_formato("", Firma.TAR)
-        assert fc.aviso_de_extension(".rar").startswith("Es un archivo .rar.") and "descomprímelo" in fc.aviso_de_extension(".rar")
-        assert "cambia el final del nombre a .cb7" in fc.aviso_de_extension(".7z")
-        assert fc.aviso_de_extension(".cbt") == "ZascArr no usa este formato (CBT). Para conservarlo como tebeo, conviértelo a .cbz con otro programa."
+        assert fc.aviso_de_extension(".rar") == "Es un archivo .rar: ZascArr no lo registra como tebeo, aunque dentro haya uno."
+        assert fc.aviso_de_extension(".cbt") == "ZascArr no usa este formato (CBT), así que no lo registra como tebeo."
 
     def test_todos_los_textos_siguen_las_reglas_de_ux(self):
         """Revisión de UX (2026-10-23): ≤ 2 frases; sin jerga (entradas, firma, contenedor, nombres de clase); «desde tu ordenador», nunca «fuera de ZascArr»;
@@ -256,9 +254,102 @@ class TestFormatoGuardado:
             for firma in (Firma.ZIP, Firma.RAR, Firma.SIETE_Z, Firma.TAR, Firma.OTRO):
                 textos.append(fc.aviso_de_formato(ext, firma))
         textos += [fc.aviso_de_extension(e) for e in (".rar", ".7z", ".tar", ".cbt")]
+        # «descomprímelo» / «cambia el final del nombre» están prohibidos hasta que exista un recorrido VERIFICADO que recoja el fichero (hoy, tras la
+        # adopción inicial, nada registra ficheros nuevos de la biblioteca: ver TestNadaRecogeFicherosNuevosDeLaBiblioteca).
         prohibido = ("entradas", "firma", "contenedor", "PAQUETE", "INVALIDO", "NO_TEBEO", "fuera de ZascArr", "No se ha cambiado", "no se trata como tal",
-                     "formato no soportado", "sin descomprimir")
+                     "formato no soportado", "sin descomprimir", "descomprímelo", "cambia el final", "conviértelo")
         for t in textos:
             assert len(re.findall(r"[.?!](?:\s|$)", t)) <= 2, t
             assert not [p for p in prohibido if p.lower() in t.lower()], t
             assert t.strip() and t[0].isupper(), t
+
+
+class TestLimitesSinAbrirElZip:
+    """Revisión de #325: qué límites hay para LISTAR y procesar muchas entradas. `zipfile.ZipFile()` carga el directorio central entero en memoria
+    antes de que se pueda contar: se mira el registro final (EOCD / ZIP64) y un ZIP que DECLARA demasiado ni siquiera se abre."""
+
+    @staticmethod
+    def _sin_abrir(monkeypatch):
+        def prohibido(*a, **k):
+            raise AssertionError("se abrió el ZIP")
+        monkeypatch.setattr(zipfile, "ZipFile", prohibido)
+
+    def test_cabecera_de_un_zip_normal(self, tmp_path):
+        c = fc.leer_cabecera_zip(zip_de(tmp_path / "a.zip", paginas(12)))
+        assert c is not None and c.entradas == 12 and 0 < c.tam_directorio < 4096
+
+    def test_un_registro_final_que_declara_millones_de_entradas_no_se_abre(self, tmp_path, monkeypatch):
+        z = zip_de(tmp_path / "m.zip", paginas(12))
+        b = bytearray(z.read_bytes())
+        i = b.rfind(b"PK\x05\x06")
+        b[i + 10:i + 12] = struct.pack("<H", 60000)                   # entradas declaradas en el EOCD
+        z.write_bytes(bytes(b))
+        self._sin_abrir(monkeypatch)
+        assert fc.zip_fuera_de_limite(z) and fc.clasificar_zip(z).clase is ClaseZip.LIMITE
+
+    def test_un_directorio_central_enorme_no_se_abre(self, tmp_path, monkeypatch):
+        z = zip_de(tmp_path / "d.zip", paginas(12))
+        b = bytearray(z.read_bytes())
+        i = b.rfind(b"PK\x05\x06")
+        b[i + 12:i + 16] = struct.pack("<I", 400 * 1024 * 1024)       # tamaño del directorio central declarado
+        z.write_bytes(bytes(b))
+        self._sin_abrir(monkeypatch)
+        assert fc.zip_fuera_de_limite(z)
+
+    def test_zip64_con_70000_entradas_se_detecta_sin_abrirlo(self, tmp_path, monkeypatch):
+        ruta = tmp_path / "grande.zip"
+        with zipfile.ZipFile(ruta, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
+            for i in range(70_000):
+                zf.writestr(f"p{i:05d}.jpg", b"")
+        c = fc.leer_cabecera_zip(ruta)
+        assert c is not None and c.entradas == 70_000                                 # el registro ampliado, no el EOCD saturado a 0xFFFF
+        self._sin_abrir(monkeypatch)
+        assert fc.zip_fuera_de_limite(ruta) and fc.clasificar_zip(ruta).clase is ClaseZip.LIMITE
+
+    def test_triage_y_portada_tampoco_abren_un_zip_fuera_de_limite(self, tmp_path, monkeypatch):
+        from zascarr.core.importer_triage import triage
+        from zascarr.utils.cover import extract_cover_thumbnail
+        z = zip_de(tmp_path / "m.cbr", paginas(12))
+        b = bytearray(z.read_bytes())
+        i = b.rfind(b"PK\x05\x06")
+        b[i + 10:i + 12] = struct.pack("<H", 60000)
+        z.write_bytes(bytes(b))
+        self._sin_abrir(monkeypatch)
+        r = triage(z)
+        assert r.sha256 and r.formato_contenido["clase"] == "limite" and any("demasiados archivos dentro" in w for w in r.warnings)
+        assert extract_cover_thumbnail(z) is None
+
+    def test_un_fichero_que_no_es_zip_no_tiene_cabecera(self, tmp_path):
+        (tmp_path / "x").write_bytes(b"hola" * 100)
+        assert fc.leer_cabecera_zip(tmp_path / "x") is None and fc.leer_cabecera_zip(tmp_path / "no_existe") is None
+
+
+class TestMiniaturaAcotadaEnPixeles:
+
+    @staticmethod
+    def _png_declarado(ancho: int, alto: int) -> bytes:
+        """Un PNG cuya CABECERA declara ancho×alto y cuyos datos no existen: Pillow lo abre (lee solo la cabecera) pero no debe decodificarlo."""
+        import zlib
+
+        def chunk(tipo: bytes, datos: bytes) -> bytes:
+            return struct.pack(">I", len(datos)) + tipo + datos + struct.pack(">I", zlib.crc32(tipo + datos) & 0xFFFFFFFF)
+        return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", ancho, alto, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(b"\0")) + chunk(b"IEND", b""))
+
+    def test_una_imagen_de_cientos_de_megapixeles_no_se_decodifica(self, tmp_path):
+        from zascarr.utils.cover import extract_cover_thumbnail
+        z = tmp_path / "enorme.cbz"
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("001.png", self._png_declarado(20000, 20000))           # 400 Mpx declarados en unos 70 bytes
+        assert extract_cover_thumbnail(z) is None
+
+    def test_una_pagina_normal_si_se_decodifica(self, tmp_path):
+        from PIL import Image
+
+        from zascarr.utils.cover import extract_cover_thumbnail
+        buf = io.BytesIO()
+        Image.new("RGB", (3000, 4500), (10, 20, 30)).save(buf, "JPEG")           # 13,5 Mpx: una página de tebeo real
+        z = tmp_path / "normal.cbz"
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("001.jpg", buf.getvalue())
+        assert extract_cover_thumbnail(z) is not None

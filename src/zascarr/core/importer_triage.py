@@ -61,6 +61,7 @@ from zascarr.core.formato_contenedor import (  # noqa: F401  (IMAGE_EXTS y natur
     leer_acotado,
     natural_key,
     tratamiento,
+    zip_fuera_de_limite,
 )
 from zascarr.models import ClaseZip, Firma, Tratamiento
 
@@ -238,6 +239,11 @@ def triage(path: Path) -> TriageResult:
     # El ZipFile solo lee el directorio central y las pocas entradas que se piden.
     try:
         sha256 = sha256_streaming(path)
+        if zip_fuera_de_limite(path):                    # sin abrirlo: `ZipFile()` cargaría el directorio central entero en memoria
+            result.sha256 = sha256
+            result.formato_contenido = formato_contenido(firma, ClaseZip.LIMITE)
+            result.warnings.append(AVISO_CLASE[ClaseZip.LIMITE] + " (ignorado)")
+            return result
         zf = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as exc:
         # sha256 sin asignar a propósito: el hash de basura binaria de un zip roto no sirve para dedupe.

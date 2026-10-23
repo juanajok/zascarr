@@ -21,10 +21,12 @@ from zascarr.core.formato_contenedor import (
     EntradaNoLegible,
     clasificar_infos,
     firma_de,
+    MAX_PIXELES_PORTADA,
     leer_acotado,
     natural_key,
     puede_dar_portada,
     se_lee_como_zip,
+    zip_fuera_de_limite,
 )
 from zascarr.models import ClaseZip
 from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_imagen, host_para_log
@@ -78,6 +80,8 @@ def extract_cover_thumbnail(path: Path, formato_contenido: dict | None = None) -
     elif not puede_dar_portada(ext, formato_contenido):
         return None
 
+    if zip_fuera_de_limite(path):               # declara demasiadas entradas o un directorio enorme: ni se abre
+        return None
     try:
         with zipfile.ZipFile(path) as zf:
             infos = zf.infolist()
@@ -93,6 +97,8 @@ def extract_cover_thumbnail(path: Path, formato_contenido: dict | None = None) -
 
     try:
         with Image.open(io.BytesIO(data)) as img:
+            if img.width * img.height > MAX_PIXELES_PORTADA:     # `open` solo lee la cabecera: se rechaza SIN decodificar
+                return None
             img.thumbnail((_THUMB_MAX_WIDTH, _THUMB_MAX_WIDTH * 2))
             buf = io.BytesIO()
             img.convert("RGB").save(buf, format="JPEG", quality=80)
