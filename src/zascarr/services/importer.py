@@ -20,17 +20,24 @@ ciclo de las 03:00?" sin depender solo de los logs.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import cast, func, literal, or_, select, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.core.cohort import PistaDeCohorte, detectar_ordenes_de_lectura, quitar_prefijo_de_cohorte
+from zascarr.core.cohort import (
+    PistaDeCohorte,
+    detectar_ordenes_de_lectura,
+    quitar_prefijo_de_cohorte,
+)
+from zascarr.core.formato_contenedor import formato_real_de
 from zascarr.core.importer_triage import TriageResult, triage
 from zascarr.core.matcher import MatchResult, MatchStatus, SeriesHit, SeriesMatcher
 from zascarr.models import (
@@ -57,6 +64,7 @@ COMIC_EXTS = {".cbz", ".cbr", ".cb7", ".pdf", ".epub"}
 # montaje que un vaciado real a mano.
 UMBRAL_DESAPARICION_MASIVA_FRACCION = 0.5
 UMBRAL_DESAPARICION_MASIVA_MINIMO = 10
+LOTE_FORMATO_CONTENIDO = 100     # #307: filas por ciclo del relleno del formato real (cada una lee ≤ 512 B y, si es ZIP, su directorio central); ver contrato §12.2
 
 TRADITION_MAP = {
     "american":       "Comics",
@@ -214,11 +222,29 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     fila.is_missing = False
     fila.missing_since = None
     fila.imported_at = datetime.now(UTC)
+    meta = dict(fila.metadata_ or {})
+    if tr.formato_contenido:                                  # #307: el formato REAL del fichero que ahora está en `dest`
+        meta["formato_contenido"] = tr.formato_contenido
     if fila.original_sha256 is not None and tr.sha256 == fila.original_sha256:
-        meta = dict(fila.metadata_ or {})
         meta.pop("comicinfo_estado", None)
         meta.pop("comicinfo_propio", None)
-        fila.metadata_ = meta
+    fila.metadata_ = meta
+
+
+@dataclass(frozen=True)
+class ResultadoRelleno:
+    """Resultado identificable de una ejecución del relleno de `formato_contenido`."""
+    limite: int
+    pendientes_antes: int
+    leidas: int
+    rellenadas: int
+    ilegibles: int           # no se marcan: siguen pendientes y se reintentan
+    pendientes_despues: int
+
+
+def _sin_formato_contenido():
+    """`metadata` sin la clave. Ojo: con `metadata` NULL, `NOT (metadata ? 'clave')` vale NULL (no verdadero) y la fila no se elegiría nunca."""
+    return or_(File.metadata_.is_(None), ~File.metadata_.has_key("formato_contenido"))
 
 
 async def _triage_sin_bloquear(path: Path) -> TriageResult:
@@ -354,6 +380,60 @@ class Importer:
         await self._persist_run(report)
         return report
 
+    async def rellenar_formato_contenido(self, limite: int = LOTE_FORMATO_CONTENIDO) -> ResultadoRelleno:
+        """#307 (D5, decidida a demanda): guarda en `files.metadata["formato_contenido"]` el formato REAL de los `.cbr`/`.cb7` ya registrados que aún no
+        lo tienen (solo lectura del fichero: ≤ 512 bytes y, si es un ZIP, su directorio central). Sin migración.
+
+        **NO se ejecuta sola**: ni `scan_and_import` ni ningún bucle la llaman. Se pide explícitamente (`python -m zascarr.cli.rellenar_formato --apply`,
+        o `scripts/rellenar-formato.sh`) y devuelve un resultado identificable. Automatizarla exigiría antes medir su coste de lectura en el USB y aprobar su presupuesto.
+
+        Garantías (pruebas con Postgres real en `tests/test_formato_contenido_relleno_pg.py`):
+          · **Conserva las demás claves** de `metadata` aunque otro proceso las escriba entre la lectura y la escritura: no se reescribe el diccionario
+            entero, se FUSIONA en la base (`metadata || {...}`) en una sola sentencia atómica por fila.
+          · **No sobrescribe**: la sentencia solo actúa si la clave aún no existe (`metadata IS NULL OR NOT metadata ? 'formato_contenido'`), así que dos
+            ejecuciones solapadas no se pisan y una fila rellena no se lee otra vez.
+          · **Acotado**: como máximo `limite` filas por ejecución, ELEGIDAS AL AZAR entre las pendientes (si fueran siempre las mismas, un grupo de ficheros
+            ilegibles ocuparía el lote para siempre; el azar reduce ese riesgo pero NO garantiza un plazo de finalización).
+          · Un fichero ilegible (disco desmontado, permisos) no se marca: queda pendiente y se reintenta, no se clasifica como «sin contenido»."""
+        pendientes_antes = await self.contar_pendientes_formato()
+        candidatas = await self._candidatas_formato(limite)
+        if not candidatas:
+            return ResultadoRelleno(limite=limite, pendientes_antes=pendientes_antes, leidas=0, rellenadas=0, ilegibles=0, pendientes_despues=pendientes_antes)
+        formatos = await asyncio.to_thread(lambda: [formato_real_de(Path(ruta)) for _id, ruta in candidatas])
+        rellenadas = await self._aplicar_formato(candidatas, formatos)
+        ilegibles = sum(1 for fc in formatos if fc is None)
+        pendientes_despues = await self.contar_pendientes_formato()
+        logger.info("importer.formato_contenido_rellenado", filas=rellenadas, leidas=len(candidatas), ilegibles=ilegibles, pendientes=pendientes_despues)
+        return ResultadoRelleno(limite=limite, pendientes_antes=pendientes_antes, leidas=len(candidatas), rellenadas=rellenadas, ilegibles=ilegibles,
+                                pendientes_despues=pendientes_despues)
+
+    async def contar_pendientes_formato(self) -> int:
+        """Cuántas filas `.cbr`/`.cb7` presentes aún no tienen `formato_contenido` (no lee ningún fichero)."""
+        return (await self._db.execute(
+            select(func.count(File.id)).where(File.file_format.in_([FileFormat.CBR, FileFormat.CB7]), File.is_missing.is_(False), _sin_formato_contenido())
+        )).scalar_one()
+
+    async def _candidatas_formato(self, limite: int) -> list[tuple]:
+        filas = (await self._db.execute(
+            select(File.id, File.file_path)
+            .where(File.file_format.in_([FileFormat.CBR, FileFormat.CB7]), File.is_missing.is_(False), _sin_formato_contenido())
+            .order_by(func.random()).limit(limite)
+        )).all()
+        return [(f.id, f.file_path) for f in filas]
+
+    async def _aplicar_formato(self, candidatas: list[tuple], formatos: list[dict | None]) -> int:
+        rellenadas = 0
+        for (fid, _ruta), fc in zip(candidatas, formatos, strict=True):
+            if fc is None:
+                continue
+            nuevo = func.coalesce(File.metadata_, cast(literal("{}"), JSONB)).op("||")(
+                cast(literal(json.dumps({"formato_contenido": fc})), JSONB))
+            res = await self._db.execute(
+                update(File).where(File.id == fid, _sin_formato_contenido())
+                .values(metadata_=nuevo).execution_options(synchronize_session=False))
+            rellenadas += res.rowcount or 0
+        return rellenadas
+
     async def _detectar_desaparecidos(self) -> tuple[list[str], list[str]]:
         """B7: un tebeo borrado a mano del disco (fuera de ZascArr) deja
         de contar como "lo tienes" sin que nadie tenga que avisar.
@@ -463,6 +543,8 @@ class Importer:
             metadata["cohorte"] = outcome.cohorte_explicacion
         if outcome.edition_kind:
             metadata["edicion"] = outcome.edition_kind
+        if tr.formato_contenido:                                  # #307: formato REAL por contenido (file_format sigue siendo la extensión)
+            metadata["formato_contenido"] = tr.formato_contenido
 
         file_rec = File(
             issue_id=str(result.issue_id) if result.issue_id else None,
