@@ -1,17 +1,17 @@
-# Ficha §13 — Decisión de cierre de U21 (#208) — propuesta sin firma
+# Ficha §13 — Decisión de cierre de U21 (#208) — firmada el 2026-10-23
 
 - **Feature:** #196 Auditoría de UI del 2026-10-15.
 - **Historia:** #208 BL-U21, «Que Carpetas y la ficha de serie me digan en una frase qué puedo hacer».
 - **Alcance de la decisión:** aceptación explícita de los límites de validación de U21 y cierre de #208.
-- **Código de producto de referencia:** `origin/main` `245402e78a6357cfc79e726a4484662ba9ef8151` (U21 Carpetas y ficha, desplegado por el responsable el 2026-10-22). La prueba 39 → 44 se fusionó después en `0fb10f09` (#291), sin cambio de `src/`.
+- **Código de producto de referencia:** `origin/main` `245402e78a6357cfc79e726a4484662ba9ef8151` (U21 Carpetas y ficha, desplegado por el responsable el 2026-10-22). La prueba 39 → 44 se fusionó después en `0fb10f09` (#291), sin cambio de `src/`. El copy de U13b se fusionó en `81c87a5c` (#320), pendiente de despliegue.
 - **Responsable de la decisión:** juanajok.
 - **Fecha de la propuesta:** 2026-10-23.
-- **Fecha de firma:** ____________________.
-- **Estado:** **propuesta, sin firma**. No cierra #208 por sí sola.
+- **Fecha de firma:** 2026-10-23.
+- **Estado:** **firmada** por el responsable el 2026-10-23; decisión adoptada.
 
-## 1. Decisión propuesta
+## 1. Decisión adoptada
 
-Se propone **cerrar #208 como `Hecha`** con estos límites declarados:
+Se **cierra #208 como `Hecha`** con estos límites declarados:
 
 1. La **prueba de cinco segundos con personas** sigue `NOT RUN`. La validación sintética con agentes (5/5 en Carpetas y 5/5 en ficha) se acepta solo como **evidencia complementaria** de comprensión de la acción principal; **no es validación con personas** y no sustituye la sesión humana.
 2. El **lector de pantalla real** de Carpetas y ficha sigue `NOT RUN`; queda como deuda de #196.
@@ -35,7 +35,7 @@ Se propone **cerrar #208 como `Hecha`** con estos límites declarados:
 
 ## 4. Hallazgos y erratas
 
-- **U13b (fuera de #208):** 2/5 agentes creyeron que podían ignorar pendientes en «Archivos sueltos». Se corrige el copy en la PR #320 y se registra en #196; no se usa para cerrar #208.
+- **U13b (fuera de #208):** 2/5 agentes creyeron que podían ignorar pendientes en «Archivos sueltos». El copy se corrigió y se fusionó en `81c87a5c` (PR #320); queda pendiente de despliegue. Se registra en #196; no se usa para cerrar #208.
 - **B4 (evidencia sintética):** la respuesta B4 dijo «nueve» faltantes donde hay **7**. Se conserva la transcripción literal de la respuesta y se anota la errata; no es copy de la aplicación. El dato correcto de la ficha es 3 presentes y 7 ausentes.
 - **Carpetas:** 4/5 respuestas usan «confirmar» en vez del CTA literal «Elegir la serie»; se considera comprensión suficiente de la tarea, no una cita literal.
 
@@ -53,14 +53,16 @@ Se propone **cerrar #208 como `Hecha`** con estos límites declarados:
 3. **#309:** `docs/design/ui-u13/verificacion-navegador-u13a-u13b-2026-10-22.md`; Carpetas en 1280/360 y teclado.
 4. **#280:** `docs/design/ui-u21/verificacion-ficha-2026-10-21.md`; ficha en 1280/360, claro/oscuro y teclado.
 5. **#291:** PR y CI; `TestPresupuestoTexto` 39 → 44.
-6. **Esta ficha:** decisión propuesta; no válida hasta la firma del responsable.
+6. **Esta ficha:** decisión firmada por el responsable el 2026-10-23.
 
 ## 7. Firma
 
-**Decisión propuesta:** aceptar los límites de §1 y cerrar #208 como `Hecha`, sin declarar validación con personas ni lector de pantalla real.
+**Decisión adoptada:** aceptar los límites de §1 y cerrar #208 como `Hecha`, sin declarar validación con personas ni lector de pantalla real.
 
 **Responsable:** juanajok — fecha de la propuesta: 2026-10-23.
 
-**Firma:** ____________________ — **Fecha de firma:** ____________________.
+**Aprobación de Producto:** registrada el 2026-10-23 en la revisión de la PR #321; autoriza la firma de esta ficha y el cierre de #208 con los límites de §1. No autoriza ningún despliegue nuevo.
 
-> Sin la firma de este apartado, #208 permanece abierta en `IN REVIEW` / `En revisión` y esta ficha es solo una propuesta.
+**Firma:** juanajok — **Fecha de firma:** 2026-10-23.
+
+> Firma registrada a partir de la aprobación explícita del responsable en la revisión de esta PR del 2026-10-23. No se atribuye a una sesión presencial. Con esta firma, #208 puede cerrarse como `Hecha` con los límites de §1.
