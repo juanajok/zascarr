@@ -383,6 +383,33 @@ class TestDatosExternos:
         assert len(cand["descripcion"]) == 300
         assert len(verificar_token_candidata(cand["token"], carpeta, SECRETO).descripcion) == 1000
 
+    async def test_la_descripcion_html_de_la_fuente_se_ve_como_texto(self, entorno):
+        """#311: el asistente enseñaba `<p>…<a href=…>` tal cual (Descubrir ya lo limpiaba desde U14)."""
+        carpeta = await sembrar_flash(entorno.banco)
+        html = '<p>Series of Russian hardcovers translating <a href="/the-flash/4050-91750/">The Flash</a> &amp; more.</p>'
+        entorno.fuentes.resultados = [res(MetadataSource.COMIC_VINE, "1", "Flash", 1987, descripcion=html)]
+        (cand,) = (await descubrir(carpeta)).json()["candidatas"]
+        assert cand["descripcion"] == "Series of Russian hardcovers translating The Flash & more."
+
+    async def test_se_limpia_antes_de_recortar_y_no_queda_vacia_ni_partida(self, entorno):
+        """Recortar el HTML a 300 caracteres y luego limpiarlo dejaba poco o nada visible: una descripción que
+        empieza con etiquetas largas se quedaba en blanco o con restos de una etiqueta partida."""
+        carpeta = await sembrar_flash(entorno.banco)
+        html = '<p><a href="/' + "x" * 400 + '">Flash</a> ' + "texto " * 100 + "</p>"
+        entorno.fuentes.resultados = [res(MetadataSource.COMIC_VINE, "1", "Flash", 1987, descripcion=html)]
+        (cand,) = (await descubrir(carpeta)).json()["candidatas"]
+        assert cand["descripcion"].startswith("Flash texto texto")
+        assert "<" not in cand["descripcion"] and len(cand["descripcion"]) <= 300
+
+    async def test_la_imagen_de_relleno_de_comic_vine_no_se_ofrece_como_portada(self, entorno):
+        """#311: aunque llegue de la fuente, la imagen «Blank!» no es una portada: hueco propio."""
+        carpeta = await sembrar_flash(entorno.banco)
+        relleno = "https://comicvine.gamespot.com/a/uploads/scale_medium/11122/111222211/6373148-blank.png"
+        entorno.fuentes.resultados = [res(MetadataSource.COMIC_VINE, "1", "Flash", 1987, cover=relleno)]
+        (cand,) = (await descubrir(carpeta)).json()["candidatas"]
+        assert cand["portada"] is None
+        assert verificar_token_candidata(cand["token"], carpeta, SECRETO).cover_url is None
+
     async def test_un_titulo_con_html_viaja_como_dato_sin_interpretarse(self, entorno):
         carpeta = await sembrar_flash(entorno.banco)
         malo = "<img src=x onerror=alert(1)>"

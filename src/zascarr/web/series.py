@@ -31,6 +31,7 @@ from zascarr.models import (
     WishlistStatus,
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
+from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     MOTIVO_POLITICA_FUTUROS,
@@ -219,7 +220,9 @@ async def portada(series_id: UUID, request: Request,
             await asyncio.to_thread(write_cover_cache, cache_path, data)
             return cached_image_response(request, data, content_type, _etag_for(cache_path))
 
-    if series.cover_url and await fetch_and_cache_cover(series.cover_url, cache_path):
+    # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
+    if (series.cover_url and not es_portada_de_relleno(series.cover_url)
+            and await fetch_and_cache_cover(series.cover_url, cache_path)):
         data = await asyncio.to_thread(cache_path.read_bytes)
         return cached_image_response(request, data, "image/jpeg", _etag_for(cache_path))
 
