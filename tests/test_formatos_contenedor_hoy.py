@@ -38,7 +38,7 @@ class TestHoy:
         c = filas["c_sin_ext"]      # D1 del contrato: no se registra (exigiría migrar el enum y dejaría al tagger escribir en él); se AVISA
         assert (c.lo_lista_el_importador, c.lee_comicinfo, c.da_portada) == (False, False, False)
         assert c.file_format == "" and any("triaje solo por filename" in w for w in c.avisos_triaje)
-        assert "cambia el final del nombre a .cbz desde tu ordenador" in c.auditoria
+        assert "no acaba en .cbz, así que ZascArr no lo registra" in c.auditoria
 
     def test_un_cbr_que_por_dentro_es_un_zip_con_imagenes_se_lee_sin_tocarlo(self, filas):
         """El caso principal de #307 (56 ficheros en la biblioteca real): la extensión dice RAR, el contenido es un ZIP."""
@@ -58,7 +58,7 @@ class TestHoy:
         assert (j.lo_lista_el_importador, j.tiene_hash, j.lee_comicinfo) == (False, True, False)
 
     def test_la_auditoria_avisa_de_rar_7z_tar_cbt_doble_extension_y_contenedores_sin_extension(self, filas):
-        assert filas["j.rar"].auditoria.startswith("Es un archivo .rar.")
+        assert filas["j.rar"].auditoria.startswith("Es un archivo .rar: ZascArr no lo registra")
         assert filas["d.cbz.rar"].auditoria.startswith("doble extensión (.cbz.rar)")
         assert filas["g.tar"].auditoria.startswith("ZascArr no usa este formato (TAR)")
         assert filas["i.cbt"].auditoria.startswith("ZascArr no usa este formato (CBT)")
@@ -67,8 +67,8 @@ class TestHoy:
 
     @pytest.mark.skipif(not banco.hay_7z(), reason="requiere `7z`")
     def test_7z_se_avisa_con_extension_y_no_sin_ella(self, filas):
-        assert filas["e.7z"].auditoria.startswith("Es un archivo .7z.")
-        assert "cambia el final del nombre a .cb7" in filas["f_7z_sin_ext"].auditoria and not filas["f_7z_sin_ext"].lo_lista_el_importador
+        assert filas["e.7z"].auditoria.startswith("Es un archivo .7z: ZascArr no lo registra")
+        assert "no acaba en .cb7" in filas["f_7z_sin_ext"].auditoria and not filas["f_7z_sin_ext"].lo_lista_el_importador
 
     def test_ningun_contenedor_que_no_sea_zip_da_portada_ni_comicinfo(self, filas):
         for nombre, f in filas.items():

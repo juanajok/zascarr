@@ -102,7 +102,7 @@ class TestTriageDeUnCbrQueEsUnZip:                                              
     def test_un_zip_sin_extension_no_se_lee_y_se_avisa(self, tmp_path):
         f = zip_de(tmp_path / "sin_extension")
         r = triage(f)                                                                         # D1: no se registra; la auditoría lo avisa
-        assert r.comic_info is None and r.sha256 and any("cambia el final del nombre a .cbz desde tu ordenador" in w for w in r.warnings)
+        assert r.comic_info is None and r.sha256 and any("no acaba en .cbz, así que ZascArr no lo registra" in w for w in r.warnings)
 
     def test_un_zip_corrupto_con_extension_cbr_no_lanza_y_no_tiene_hash(self, tmp_path):
         f = tmp_path / "Roto.cbr"
@@ -163,10 +163,10 @@ class TestElTaggerNoEscribeEnUnZipQueSeLlamaCbr:                                
 
 
 class _SesionFalsa:
-    """Lo mínimo de una AsyncSession para `rellenar_formato_contenido`: devuelve las filas dadas y cuenta los `flush`."""
+    """Lo mínimo de una AsyncSession para `scan_and_import` con un listado vacío."""
 
     def __init__(self, filas):
-        self.filas, self.flushes = filas, 0
+        self.filas = filas
 
     async def execute(self, _stmt):
         return self
@@ -178,53 +178,13 @@ class _SesionFalsa:
         return list(self.filas)
 
     async def flush(self):
-        self.flushes += 1
+        return None
 
 
-def _fila(ruta: Path, formato=FileFormat.CBR, meta=None, ausente=False):
-    return SimpleNamespace(file_path=str(ruta), file_format=formato, is_missing=ausente, metadata_=dict(meta or {}))
-
-
-class TestRellenoDeLosYaRegistrados:                                                        # T10
-
-    def _importer(self, filas):
-        imp = Importer.__new__(Importer)
-        imp._db = _SesionFalsa(filas)
-        return imp
+class TestUnErrorDelRellenoNoTumbaElCiclo:                                                  # T10 (el relleno en sí: tests/test_formato_contenido_relleno_pg.py)
 
     @pytest.mark.asyncio
-    async def test_rellena_una_vez_y_no_toca_los_ficheros(self, tmp_path):
-        zipf, rar = zip_de(tmp_path / "A.cbr"), tmp_path / "B.cbr"
-        rar.write_bytes(RAR5)
-        fa, fb = _fila(zipf), _fila(rar, meta={"match_status": "matched"})
-        antes = (huella(zipf), huella(rar))
-        imp = self._importer([fa, fb])
-        assert await imp.rellenar_formato_contenido() == 2
-        assert fa.metadata_["formato_contenido"] == {"firma": "zip", "contrato": 1, "clase": "tebeo"}
-        assert fb.metadata_ == {"match_status": "matched", "formato_contenido": {"firma": "rar", "contrato": 1}}      # conserva lo que había
-        assert (huella(zipf), huella(rar)) == antes
-        # Idempotente: la segunda pasada no lee ni escribe nada.
-        assert await imp.rellenar_formato_contenido() == 0 and imp._db.flushes == 1
-
-    @pytest.mark.asyncio
-    async def test_por_lotes(self, tmp_path):
-        filas = [_fila(zip_de(tmp_path / f"{i}.cbr", paginas=10, comicinfo=False)) for i in range(5)]
-        imp = self._importer(filas)
-        assert await imp.rellenar_formato_contenido(limite=2) == 2
-        assert await imp.rellenar_formato_contenido(limite=2) == 2
-        assert await imp.rellenar_formato_contenido(limite=2) == 1
-        assert await imp.rellenar_formato_contenido(limite=2) == 0
-
-    @pytest.mark.asyncio
-    async def test_un_fichero_ilegible_no_se_marca_y_se_reintenta(self, tmp_path):
-        ausente = _fila(tmp_path / "no_esta.cbr")
-        imp = self._importer([ausente])
-        assert await imp.rellenar_formato_contenido() == 0 and "formato_contenido" not in ausente.metadata_
-        zip_de(tmp_path / "no_esta.cbr")                                   # reaparece (p. ej. el disco vuelve a montarse)
-        assert await imp.rellenar_formato_contenido() == 1
-
-    @pytest.mark.asyncio
-    async def test_un_error_del_relleno_no_tumba_el_ciclo(self, tmp_path, monkeypatch):
+    async def test_scan_and_import_lo_llama_dentro_de_un_try(self, tmp_path, monkeypatch):
         """`scan_and_import` lo llama dentro de try/except: un fallo se registra y el ciclo termina."""
         from zascarr.services import importer as mod
         imp = Importer.__new__(Importer)
@@ -268,3 +228,34 @@ class TestTarjetaDePendientes:                                                  
         cbr_rar = SimpleNamespace(**base, metadata_={"candidates": [], "formato_contenido": {"firma": "rar"}})
         sin = SimpleNamespace(**base, metadata_={"candidates": []})
         assert _card(cbr_zip)["con_portada"] is True and _card(cbr_rar)["con_portada"] is False and _card(sin)["con_portada"] is False
+
+
+class TestNadaRecogeFicherosNuevosDeLaBiblioteca:
+    """Hallazgo de la revisión de #325, comprobado con ficheros sintéticos: por eso los avisos NO dicen «descomprímelo» ni «cambia el final del
+    nombre». Un fichero que aparece DENTRO de la biblioteca después de la adopción inicial no lo registra nada automático."""
+
+    def test_el_importador_solo_recorre_las_carpetas_de_descarga_no_la_biblioteca(self, tmp_path, monkeypatch):
+        from zascarr.services import importer as mod
+        from zascarr.utils.fs import listar_comics
+        biblioteca, descargas = tmp_path / "biblioteca", tmp_path / "descargas"
+        (biblioteca / "Pack").mkdir(parents=True)
+        descargas.mkdir()
+        zip_de(biblioteca / "Pack" / "Numero 01.cbz")                         # lo que saldría de descomprimir un pack en la biblioteca
+        zip_de(descargas / "Numero 02.cbz")
+        monkeypatch.setattr(mod, "get_settings", lambda: SimpleNamespace(
+            library_path=biblioteca, transmission_download_dir=str(tmp_path / "t"), amule_incoming_dir=str(tmp_path / "a"), downloads_path=descargas))
+        imp = Importer(db=None)
+        vistos = {p.name for p in listar_comics(imp._scan_dirs, mod.COMIC_EXTS)}
+        assert vistos == {"Numero 02.cbz"}
+
+    @pytest.mark.asyncio
+    async def test_con_la_adopcion_hecha_registrar_la_biblioteca_ya_no_se_ofrece(self, tmp_path, monkeypatch):
+        from zascarr.services import library_adopter as mod
+        from zascarr.services.runtime_settings import RuntimeSettingsService
+
+        async def hecha(_self, clave, *a, **k):
+            return clave == mod._MARCADOR_HECHO
+        monkeypatch.setattr(RuntimeSettingsService, "get_flag", hecha)
+        monkeypatch.setattr(mod, "get_settings", lambda: SimpleNamespace(library_path=tmp_path))
+        adopter = mod.LibraryAdopter(db=None)
+        assert await adopter.estado() is mod.EstadoAdopcion.HECHA and await adopter.puede_registrar() is False

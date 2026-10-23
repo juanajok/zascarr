@@ -14,6 +14,7 @@ ZIP reales, primera página ≤ 7,1 MiB con ratio ≤ 1,77. Son parámetros revi
 from __future__ import annotations
 
 import re
+import struct
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,11 @@ FRACCION_IMAGENES = 0.8                  # mín. observado: 0,95
 #: Tope de la ENTRADA QUE SE LEE (primera página, ComicInfo.xml), no del total: lo que importa es lo que de verdad se descomprime.
 MAX_ENTRADA_LEIDA = 32 * 1024 * 1024     # primera página mayor observada: 7,1 MiB
 MAX_RATIO_LEIDA = 100                    # primera página observada: ≤ 1,77
+#: `zipfile.ZipFile()` carga el directorio central ENTERO en memoria antes de que se pueda contar nada: un ZIP que declare millones de entradas
+#: no debe llegar a abrirse. Se mira el registro final (EOCD) —o el ZIP64— leyendo solo el final del fichero.
+MAX_DIRECTORIO_CENTRAL = 16 * 1024 * 1024    # 2000 entradas ocupan ~0,3 MiB
+#: Decodificar una miniatura de una imagen enorme (aunque pese poco comprimida) puede agotar la memoria de un contenedor de 512 MiB.
+MAX_PIXELES_PORTADA = 40_000_000             # una página de tebeo de 3000×4500 son 13,5 Mpx
 
 CONTRATO = 1                             # versión de lo que se guarda en `metadata["formato_contenido"]`
 
@@ -72,6 +78,47 @@ def firma_de(path: Path) -> Firma:
             return firma_de_bytes(fh.read(512))
     except OSError:
         return Firma.ILEGIBLE
+
+
+# ── 1b. Cabecera de un ZIP sin abrirlo (registro EOCD / ZIP64) ──────────────────────────────────────
+@dataclass(frozen=True)
+class CabeceraZip:
+    entradas: int
+    tam_directorio: int
+
+
+def leer_cabecera_zip(path: Path) -> CabeceraZip | None:
+    """Entradas y tamaño del directorio central tal como las DECLARA el registro final del ZIP, leyendo solo el final del fichero (≤ ~64 KiB).
+    `None` si no se reconoce (que decida `zipfile`). Maneja ZIP64."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, 2)
+            tam = fh.tell()
+            ini = max(0, tam - (65535 + 22 + 20))
+            fh.seek(ini)
+            cola = fh.read()
+            i = cola.rfind(b"PK\x05\x06")
+            if i < 0 or len(cola) < i + 22:
+                return None
+            entradas, tam_cd, _offset = struct.unpack_from("<HII", cola, i + 10)
+            if entradas == 0xFFFF or tam_cd == 0xFFFFFFFF:                       # ZIP64: los valores reales están en el registro ampliado
+                if i < 20 or cola[i - 20:i - 16] != b"PK\x06\x07":
+                    return None
+                off64 = struct.unpack_from("<Q", cola, i - 20 + 8)[0]
+                fh.seek(off64)
+                reg = fh.read(56)
+                if len(reg) < 56 or reg[:4] != b"PK\x06\x06":
+                    return None
+                entradas, tam_cd = struct.unpack_from("<QQ", reg, 32)
+            return CabeceraZip(entradas, tam_cd)
+    except (OSError, struct.error):
+        return None
+
+
+def zip_fuera_de_limite(path: Path) -> bool:
+    """¿Declara más entradas o un directorio central mayor que los topes? Sin abrir el ZIP."""
+    c = leer_cabecera_zip(path)
+    return bool(c and (c.entradas > MAX_ENTRADAS or c.tam_directorio > MAX_DIRECTORIO_CENTRAL))
 
 
 # ── 2. Qué hacer con cada combinación extensión × firma (función PURA) ──────────────────────────────
@@ -133,7 +180,10 @@ def clasificar_infos(infos: list[zipfile.ZipInfo], *, min_imagenes: int = MIN_IM
 
 
 def clasificar_zip(path: Path, **kw) -> Clasificacion:
-    """Abre el ZIP y lee solo su directorio central. Nunca lanza: lo que no se abre es `INVALIDO`."""
+    """Abre el ZIP y lee solo su directorio central. Nunca lanza: lo que no se abre es `INVALIDO`. Un ZIP que DECLARA demasiadas entradas (o un
+    directorio central enorme) es `LIMITE` sin llegar a abrirse."""
+    if zip_fuera_de_limite(path):
+        return Clasificacion(ClaseZip.LIMITE)
     try:
         with zipfile.ZipFile(path) as zf:
             return clasificar_infos(zf.infolist(), **kw)
@@ -190,7 +240,7 @@ def puede_dar_portada(ext: str, fc: dict | None) -> bool | None:
     if fc.get("firma") != Firma.ZIP.value:
         return False
     if ext in (".cbz", ".zip"):
-        return fc.get("clase") not in (ClaseZip.CIFRADO.value, ClaseZip.INVALIDO.value, ClaseZip.VACIO.value, ClaseZip.LIMITE.value)
+        return True            # solo cuenta la firma: la clase guardada es una foto del momento del registro y puede quedar vieja si el fichero se sustituye
     return fc.get("clase") == ClaseZip.TEBEO.value
 
 
@@ -198,12 +248,12 @@ def puede_dar_portada(ext: str, fc: dict | None) -> bool | None:
 # (.cbz/.cbr) y con lo técnico entre paréntesis. La garantía «no cambia, mueve ni borra nada» va UNA vez, en la cabecera de la sección de la auditoría.
 # Sin «entradas», «firma», «contenedor» ni nombres de clase. «Pack» es palabra del coleccionista (no confundir con «lote», interno).
 AVISO_CLASE = {
-    ClaseZip.PAQUETE: "Es un pack con varios tebeos dentro. ZascArr no lo trata como uno solo: descomprímelo si quieres cada número por separado.",
+    ClaseZip.PAQUETE: "Es un pack con varios tebeos dentro. ZascArr no lo trata como uno solo ni los separa.",
     ClaseZip.NO_TEBEO: "Es un archivo comprimido, pero no parece un tebeo: tiene pocas imágenes o están mezcladas con otros archivos.",
-    ClaseZip.CIFRADO: "Tiene contraseña, así que ZascArr no puede abrirlo. Si la conoces, guárdalo de nuevo sin contraseña desde tu ordenador.",
+    ClaseZip.CIFRADO: "Tiene contraseña, así que ZascArr no puede abrirlo.",
     ClaseZip.INVALIDO: "Está dañado o incompleto; quizá la descarga no terminó. Prueba a descargarlo de nuevo.",
     ClaseZip.VACIO: "Está vacío: no tiene ninguna página. Prueba a descargarlo de nuevo.",
-    ClaseZip.LIMITE: f"Tiene demasiados archivos dentro (más de {MAX_ENTRADAS}) y ZascArr no lo abre, por precaución. Si es un pack, descomprímelo.",
+    ClaseZip.LIMITE: f"Tiene demasiados archivos dentro (más de {MAX_ENTRADAS}) y ZascArr no lo abre, por precaución.",
 }
 
 #: Cómo se llama, para el coleccionista, lo que hay por dentro.
@@ -221,14 +271,12 @@ def aviso_de_formato(ext: str, firma: Firma) -> str:
                 "Sigue en tu biblioteca, aunque por ahora ZascArr no puede sacarle la portada.")
     sug = _FINAL_SUGERIDO.get(firma)
     if sug:
-        return f"Parece un tebeo, pero su nombre no acaba en {sug}. Para que ZascArr lo tenga en cuenta, cambia el final del nombre a {sug} desde tu ordenador."
-    return "Parece un tebeo, pero está guardado en un formato (TAR) que ZascArr no usa. Para conservarlo, conviértelo a .cbz con otro programa."
+        return f"Parece un tebeo, pero su nombre no acaba en {sug}, así que ZascArr no lo registra."
+    return "Parece un tebeo, pero está guardado en un formato (TAR) que ZascArr no usa."
 
 
 def aviso_de_extension(ext: str) -> str:
     """Los contenedores que se reconocen solo por el final del nombre (.rar, .7z, .tar, .cbt)."""
-    if ext == ".rar":
-        return "Es un archivo .rar. Si dentro hay un tebeo, cambia el final del nombre a .cbr; si hay varios, descomprímelo."
-    if ext == ".7z":
-        return "Es un archivo .7z. Si dentro hay un tebeo, cambia el final del nombre a .cb7; si hay varios, descomprímelo."
-    return f"ZascArr no usa este formato ({ext.lstrip('.').upper()}). Para conservarlo como tebeo, conviértelo a .cbz con otro programa."
+    if ext in (".rar", ".7z"):
+        return f"Es un archivo {ext}: ZascArr no lo registra como tebeo, aunque dentro haya uno."
+    return f"ZascArr no usa este formato ({ext.lstrip('.').upper()}), así que no lo registra como tebeo."
