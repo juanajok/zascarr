@@ -1,9 +1,9 @@
 # U13c (#289) — Aceptación: criterio → prueba
 
-> **Estado: evidencia de implementación. No declara la historia Ready ni cerrada.** No cambia `src/`: el comportamiento que pide #289
-> **ya existía** en el SHA de contraste (`b59b00c`, ver `u13c-contraste-dor-289.md`), y lo que faltaba era acreditarlo criterio a criterio.
-> La entrega de #289 es, por tanto, **verificación + pruebas fijas + este documento**, que es exactamente el delta de 3 puntos / S que fijó el contraste.
-> **Base:** rama de la PR #310 (`5c33bf0`), que trae el contraste y las pruebas E1/D2/E7. **Decisiones D1/D2/D3:** sin cambios; el copy no se toca.
+> **Estado: evidencia de implementación de #289.** La historia está lista para desarrollar (3/S); esta evidencia no la cierra ni declara despliegue. No cambia `src/`: el comportamiento que pide #289
+> **ya existía** en el SHA de contraste (`b59b00c`, ver `u13c-contraste-dor-289.md`), y lo que faltaba era acreditarlo criterio a criterio, con navegador y medición local.
+> La entrega de #289 es, por tanto, **verificación + pruebas fijas + evidencia de navegador + medición local + este documento**, que es exactamente el delta de 3 puntos / S que fijó el contraste.
+> **Base:** commit `b7bcc8f` (pruebas y aceptación) sobre el contraste de #310, integrado con `main` en `a5d45c5` (incluye `f520aba`). **Decisiones D1/D2/D3:** sin cambios; el copy no se toca.
 
 ## Criterios de aceptación
 
@@ -17,7 +17,7 @@
 | 6 | Cancelar o volver no vincula nada y conserva lo válido; si ya se vinculó, no se repite ni se ofrece un deshacer inexistente | **Nuevas:** `test_ca6_volver_sin_confirmar_no_vincula_nada_y_no_consume_la_preparacion`, `test_ca6_tras_vincular_repetir_no_vincula_otra_vez_ni_ofrece_deshacer`; `test_asistente_confirmar_pg.py::…test_repetir_el_token_viejo_devuelve_su_informe_y_no_vincula_otra_vez` |
 | 7 | Preparación caducada, grupo desaparecido, serie inexistente o resultado desconocido: causa y acción, sin éxito ficticio ni reintento ciego | `test_asistente_confirmar_pg.py`: caducado dentro y fuera de la retención, resultado incierto, fallo definitivo/reintentable; `test_asistente_vinculacion_masivo_pg.py`: `test_serie_borrada_antes_de_confirmar_habla_en_llano`; `test_asistente_carpetas_pg.py`: `test_un_grupo_que_ya_no_existe_es_404_y_no_consulta`; `test_asistente_vinculacion_pg.py`: `test_una_serie_que_no_existe_o_un_grupo_que_no_existe_se_dicen_y_no_preparan` |
 | 8 | Con cero seleccionados no se ejecuta una vinculación vacía y se explica | **Nuevas:** `test_ca8_con_cero_marcados_no_hay_preparacion_y_se_explica`, `test_ca8_confirmar_sin_token_no_ejecuta_ninguna_vinculacion_vacia`; `test_asistente_vinculacion_pg.py::test_si_ninguno_se_puede_incluir_no_hay_token_y_se_explica` |
-| 9 | Ambos temas, 360 px, teclado, sin jerga ni desplazamiento horizontal | **NOT RUN.** Requiere navegador real y lector de pantalla. Hay pruebas de plantilla (controles nativos, sin jerga, sin script propio), que **no sustituyen** esa verificación |
+| 9 | Ambos temas, 360 px, teclado, sin jerga ni desplazamiento horizontal | **PASS local de navegador:** Chromium real, 1280×900 y 360×800, temas claro y oscuro, sin desplazamiento horizontal; el teclado llega a casillas, números y botones. Sin jerga visible: no aparecen `token`, `series_id`, `payload`, `endpoint`, `UUID`, `hash` ni `cursor` en el texto de la revisión. Detalle en `verificacion-u13c-2026-10-23.md`. **Lector de pantalla y cinco segundos: NOT RUN** |
 
 ## Un hallazgo de la verificación (CA5)
 
@@ -34,10 +34,18 @@ archivos» separada (D3), sin «Ignorar», sin JavaScript propio ni servicios nu
 ## Ejecución
 
 Postgres 15 desechable (contenedor aislado) y `TEST_DATABASE_URL` apuntando a una base de pruebas; `pytest` sobre los ocho módulos de aceptación y
-relacionados: **257 passed**. Sensibilidad comprobada con una mutación temporal del texto de CA8 en el servicio: la prueba nueva falló, y se revirtió.
+relacionados: **258 passed** en el árbol integrado con `main` (`a5d45c5`; 257 en la base de la PR, más el test incorporado por #311). Sensibilidad
+comprobada con una mutación temporal del texto de CA8 en el servicio: la prueba nueva falló, y se revirtió.
+
+## Navegador y medición local
+
+- **Navegador:** PASS local del recorrido de carpeta mixta, 1280×900 y 360×800, temas claro/oscuro, teclado y sin desplazamiento horizontal. Ver
+  `verificacion-u13c-2026-10-23.md` y sus capturas.
+- **Medición local del presupuesto:** p95 56,5 ms en P1 y 44,3 ms en P2, con fixture de 155 archivos, 2 calentamientos + 20 medidas y fría aparte.
+  Ver `medicion-u13c-2026-10-23.md`. **No es la medición DoD de la Pi.**
+- **Copy:** no hizo falta cambiarlo; el recorrido existente ya distingue elegir serie, preparar y vincular, sin una acción nueva antes de elegir (D3).
 
 ## NOT RUN (sin PASS declarado)
 
-Navegador real de #289, 360 px y teclado de esta pantalla, lector de pantalla, prueba de cinco segundos, **rendimiento P1/P2** (p95 ≤ 1.500 ms y
-≤ 900 ms, propuestos en el contraste §6.4 y **sin aprobar**; la medición ASGI de #310 no es la medición DoD) y despliegue. La evidencia de navegador
-de U13a/U13b (#309) no se hereda como PASS de #289.
+Lector de pantalla, prueba de cinco segundos, **rendimiento DoD en la Pi 4/5 y su LAN**, y despliegue. La medición local no sustituye la de referencia
+y no se declara `PASS` de rendimiento DoD. La verificación de navegador de U13a/U13b (#309) no se hereda como PASS de #289: la de esta ficha es propia.
