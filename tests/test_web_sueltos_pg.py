@@ -32,7 +32,7 @@ pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Pos
 
 RUTA = "/ui/pendientes/sueltos"
 ACCIONES = re.compile(
-    r"<form\b|<button\b|hx-(?:post|delete|put|patch)=|type=[\"']submit[\"']|\bIgnorar\b",
+    r"<form\b|<button\b|hx-(?:post|delete|put|patch)=|type=[\"']submit[\"']|>\s*Ignorar\s*<",
     re.IGNORECASE,
 )
 
@@ -116,6 +116,14 @@ class TestColaDeSueltos:
         assert "Sueltos 1–3 de 3" in t
         assert "3 de 4 por revisar" in t
         assert ACCIONES.search(principal(r.text)) is None
+
+    async def test_el_subtitulo_aclara_que_no_se_puede_ignorar_y_remite_a_por_revisar(self, banco):
+        await banco.sembrar(archivo("Comics/_Omnibus/Suelto.cbz"))
+        r = await pagina()
+        assert r.status_code == 200
+        t = visible(r.text)
+        assert "Solo lectura: desde aquí no se asigna, crea, mueve ni ignora nada." in t
+        assert "Para ignorar un pendiente, ábrelo en «Por revisar»." in t
 
     async def test_candidata_guardada_sin_tradicion_y_sin_comprobar_la_serie(self, banco):
         con_tradicion = archivo("Comics/_Omnibus/Con tradición 01.cbz",
