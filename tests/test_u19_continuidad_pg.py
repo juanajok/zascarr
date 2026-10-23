@@ -20,7 +20,7 @@ import os
 import re
 from types import SimpleNamespace
 from urllib.parse import quote, urlencode
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -58,7 +58,7 @@ from tests.test_u19_recorrido_pg import (  # noqa: F401  (fixtures, vigilancia d
 )
 from tests.test_vinculacion_pg import ent  # noqa: F401
 from tests.test_vinculacion_previa_pg import escrituras, huella_disco, instantanea
-from zascarr.models import ComicTradition
+from zascarr.models import ComicTradition, Series
 from zascarr.services.tokens_revision import (
     MAX_TOKEN_CANDIDATA_SIN_GRUPO,
     candidata_firmable,
@@ -71,6 +71,15 @@ pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)"),
 ]
+
+#: Un UUID local que contiene `4050` (el id externo de Comic Vine que usan estas pruebas).
+SERIE_CON_4050_EN_EL_ID = UUID("0b4050aa-0000-4000-8000-000000000001")
+
+
+def sin_el_id_local(enlace: str, sid) -> str:
+    """El enlace SIN el UUID de la serie local. El UUID es aleatorio y a veces contiene «4050» por azar; lo que se
+    comprueba es que no viaje el identificador EXTERNO, así que el id local se quita antes de buscarlo."""
+    return enlace.replace(str(sid), "")
 
 
 async def elegir(**datos) -> httpx.Response:
@@ -186,7 +195,12 @@ class TestContinuidadDesdeCandidata:
 
     async def test_t5_una_candidata_ya_existente_se_reutiliza_y_no_se_duplica(self, ent):
         await archivos(ent, UNO)
-        sid = await serie_de_prueba(ent, comic_vine_id=4050)
+        # El id local lo fijamos con un `4050` DENTRO (como el UUID aleatorio que, por azar, rompió la CI de `main` el
+        # 2026-10-23): la comprobación de abajo no puede confundir un trozo del id local con el identificador externo.
+        sid = SERIE_CON_4050_EN_EL_ID
+        async with ent.banco.fabrica() as s:
+            s.add(Series(id=sid, title="Flash", start_year=1987, tradition=ComicTradition.AMERICAN, comic_vine_id=4050))
+            await s.commit()
         r = await elegir(candidata=candidata(), tradition="american")
         v = visible(r.text)
         assert "Ya existe una serie con ese identificador" in v and "Usar esta serie" in v and "Crear serie vacía" not in v
@@ -195,7 +209,7 @@ class TestContinuidadDesdeCandidata:
         assert "ya estaba en tu biblioteca" in visible(c.text)
         enlace = re.search(r'href="[^"]*vinculacion\?clave=[^"]+series_id=([^"&]+)"', c.text)
         assert enlace and enlace.group(1) == str(sid)                                   # a la revisión va el id LOCAL
-        assert "4050" not in enlace.group(0)                                            # nunca el identificador externo
+        assert "4050" not in sin_el_id_local(enlace.group(0), sid)                      # nunca el identificador externo
         assert (await numero_de("series", ent.banco)) == 1
 
     async def test_t5_elegir_una_parecida_del_asistente_conserva_la_carpeta_y_no_duplica(self, ent):
@@ -217,7 +231,7 @@ class TestContinuidadDesdeCandidata:
         c = await crear_alta(ent)
         sid = (await series(ent))[0][0]
         enlace = re.search(r'href="([^"]*vinculacion\?clave=[^"]+series_id=([^"&]+))"', c.text)
-        assert enlace and enlace.group(2) == str(sid) and "4050" not in enlace.group(1)
+        assert enlace and enlace.group(2) == str(sid) and "4050" not in sin_el_id_local(enlace.group(1), sid)
         async with cliente() as k:
             assert (await k.get(html.unescape(enlace.group(1)))).status_code == 200
 
