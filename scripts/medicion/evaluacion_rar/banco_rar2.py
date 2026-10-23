@@ -65,7 +65,8 @@ def hijo_ejecutar(cmd: list[str], timeout: float, rlimits: dict[str, int], stdou
     if stdout_a:
         Path(stdout_a).write_bytes(out)
     sys.stdout.write(json.dumps({"rc": p.returncode, "seg": round(seg, 3), "pico_kib": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss, "timeout": vencido,
-                                 "bytes_stdout": len(out), "stderr": err[:300].decode(errors="replace")}))
+                                 "bytes_stdout": len(out), "stderr": err[:300].decode(errors="replace"),
+                                 "stdout_cabeza": "" if stdout_a else out[:300].decode(errors="replace")}))     # `unar` escribe sus mensajes en la salida estándar
 
 
 def ejecutar(cmd: list[str], timeout: float = TIMEOUT, rlimits: dict[str, int] | None = None, stdout_a: str | None = None) -> dict:
@@ -154,7 +155,12 @@ def clasificar_salida(r: dict, valida: bool, oom: bool = False, hay_datos: bool 
         if not hay_datos:
             return "SIN_SALIDA_CON_RC_0 (dice que fue bien y no escribió nada)"
         return "OK_SIN_DANO_EN_LA_PAGINA" if valida else "SILENCIOSO (rc 0 con página no válida)"
-    return "ERROR_CLARO" if (r.get("stderr") or "").strip() else "ERROR_SIN_MENSAJE"
+    return "ERROR_CLARO" if mensaje(r) else "ERROR_SIN_MENSAJE"
+
+
+def mensaje(r: dict) -> str:
+    """El texto con que la herramienta explica un fallo: lo que haya en la salida de errores o, si no, el principio de la salida estándar (`unar`)."""
+    return ((r.get("stderr") or "").strip() or (r.get("stdout_cabeza") or "").strip())[:110]
 
 
 ACEPTABLES = ("OK_SIN_DANO_EN_LA_PAGINA", "ERROR_CLARO", "SIN_PAGINA_QUE_PEDIR")
@@ -227,7 +233,7 @@ def fila(modo: str, muestra: str, variante: str, motor: str, op: str, resultado:
     r = r or {}
     return {"modo": modo, "muestra": muestra, "variante": variante, "motor": motor, "op": op, "resultado": resultado, "estado": estado, "seg": r.get("seg"),
             "pico_mib": round(r["pico_kib"] / 1024, 1) if r.get("pico_kib") else None, "rc": r.get("rc"), "tmpfs_b": r.get("bytes_escritos_tmpfs"),
-            "detalle": (detalle or (r.get("stderr") or ""))[:110].replace("\n", " ").replace("|", "/")}
+            "detalle": (detalle or mensaje(r))[:110].replace("\n", " ").replace("|", "/")}
 
 
 FILAS: list[dict] = []
@@ -400,8 +406,12 @@ def modo_cifrado(ms) -> None:
         return
     for p, c in cif:
         entradas, _m, r = listar(str(p))
-        res = clasificar_salida(r, valida=False)
-        anotar(fila("cifrado", p.name, c.cifrado, "lsar", "listar", res, "PASS" if res in ("ERROR_CLARO", "OK_SIN_DANO_EN_LA_PAGINA", "SILENCIOSO (rc 0 con página no válida)") and not r["timeout"] else "FAIL", r, f"{len(entradas)} entradas"))
+        res = clasificar_salida(r, valida=True)
+        if res.startswith("OK") and not entradas:
+            res = "LISTADO_VACIO_CON_RC_0 (no se ve dentro y no lo dice)"
+        elif res.startswith("OK"):
+            res = "LISTADO_CON_RC_0"
+        anotar(fila("cifrado", p.name, c.cifrado, "lsar", "listar", res, "PASS" if (res.startswith(("ERROR_CLARO", "LISTADO")) and not r["timeout"]) else "FAIL", r, f"{len(entradas)} entradas"))
         pr, _ul = paginas(entradas)
         for motor in ("unar", "unrar"):
             if not pr:
