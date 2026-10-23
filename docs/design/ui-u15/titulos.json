@@ -1,0 +1,25 @@
+{
+  "aviso": "Fixtures sintéticos para el modelo de presentación de U15. NO son resultados de fuentes reales. La columna 'fuente' representa qué fuente devolvió el título en el modelo; la sugerencia se calcula con el mapeo actual del código (Comic Vine -> americana, AniList -> manga, Tebeosfera -> tebeo, GCD -> tradition_guess).",
+  "titulos": [
+    {"titulo": "Mortadelo y Filemón", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "Zipi y Zape", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "El Capitán Trueno", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "El Jabato", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "Superlópez", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "Anacleto, agente secreto", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "13, Rue del Percebe", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "Carpanta", "referencia": "tebeo", "fuente": "comic_vine"},
+    {"titulo": "Astérix el Galo", "referencia": "franco_belgian", "fuente": "comic_vine"},
+    {"titulo": "Las aventuras de Tintín", "referencia": "franco_belgian", "fuente": "comic_vine"},
+    {"titulo": "Lucky Luke", "referencia": "franco_belgian", "fuente": "comic_vine"},
+    {"titulo": "Thorgal", "referencia": "franco_belgian", "fuente": "comic_vine"},
+    {"titulo": "Batman", "referencia": "american", "fuente": "comic_vine"},
+    {"titulo": "Spider-Man", "referencia": "american", "fuente": "comic_vine"},
+    {"titulo": "Watchmen", "referencia": "american", "fuente": "comic_vine"},
+    {"titulo": "The Sandman", "referencia": "american", "fuente": "comic_vine"},
+    {"titulo": "Dragon Ball", "referencia": "manga", "fuente": "anilist"},
+    {"titulo": "One Piece", "referencia": "manga", "fuente": "anilist"},
+    {"titulo": "Naruto", "referencia": "manga", "fuente": "anilist"},
+    {"titulo": "Akira", "referencia": "manga", "fuente": "anilist"}
+  ]
+}

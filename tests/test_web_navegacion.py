@@ -36,6 +36,7 @@ from zascarr.services.auth import (
 )
 from zascarr.services.review import ReviewService
 from zascarr.services.wishlist import WishlistService
+from zascarr.web.iconos import ICONOS, icono
 from zascarr.web.menu import ENTRADAS, GRUPOS, entrada_activa
 from zascarr.web.routes import crear_templates
 
@@ -111,6 +112,9 @@ class _Resultado:
 
     def first(self):
         return None
+
+    def one(self):
+        return (self.valor,) * 5        # una fila de recuentos: la del desglose del Inicio
 
     def unique(self):
         return self
@@ -346,6 +350,24 @@ class TestMenuHtml:
         a = arbol(menu(env, "/ui/"))
         iconos = [at for t, at, _ in a.elementos if "ico" in clases(at)]
         assert iconos and all(at.get("aria-hidden") == "true" for at in iconos)
+
+    def test_cada_entrada_y_mas_llevan_un_svg_y_no_un_caracter(self, env):
+        """Los caracteres (⌂ ✎ ▤ ⚖…) los dibujaba cada sistema a su manera, con grosores
+        distintos y alguno ausente en Android: ahora cada icono es un SVG de trazo, uno por
+        entrada y «Más»."""
+        html = menu(env, "/ui/")
+        a = arbol(html)
+        svgs = [at for t, at, _ in a.elementos if t == "svg" and "ico-svg" in clases(at)]
+        # Las entradas secundarias salen dos veces (barra y panel «Más»): cuenta incluido.
+        secundarias = sum(1 for e in ENTRADAS if not e.movil_principal)
+        assert len(svgs) == len(ENTRADAS) + secundarias + 1
+        assert all(s.get("aria-hidden") == "true" and s.get("focusable") == "false" for s in svgs)
+        assert not any(c in html for c in "⌂✎▤⚖⌕★♥⚙⋯")
+
+    def test_un_icono_desconocido_falla_en_vez_de_dejar_un_hueco(self):
+        with pytest.raises(ValueError, match="Icono desconocido"):
+            icono("no-existe")
+        assert all(e.icono in ICONOS for e in ENTRADAS)
 
     def test_los_contadores_son_marcadores_ocultos_con_id(self, env):
         a = arbol(menu(env, "/ui/"))
@@ -893,3 +915,61 @@ class TestBdCongelada:
         monkeypatch.setattr(corto, "PLAZO_SEGUNDOS", 2)
         monkeypatch.setattr(corto, "async_session_factory", FabricaFalsa([1, 1]))
         assert (await corto.contadores_del_menu(_peticion())).status_code == 200
+
+
+
+# ── Arreglos de la revisión visual (2026-10-20) ──────────────────────────────────────────────
+def _css() -> str:
+    from zascarr.main import STATIC_DIR
+    return (STATIC_DIR / "web.css").read_text(encoding="utf-8")
+
+
+class TestRevisionVisual:
+
+    def test_el_contador_de_la_barra_inferior_no_se_parte(self):
+        """El enlace móvil usa `overflow-wrap: anywhere`; el contador lo heredaba y «22» salía
+        en dos líneas encima de «Revisar»."""
+        css = _css()
+        regla = css[css.index("  .nav .badge {"):]
+        regla = regla[:regla.index("}")]
+        assert "white-space: nowrap" in regla and "overflow-wrap: normal" in regla
+
+    def test_los_controles_nativos_siguen_al_tema(self):
+        css = _css()
+        oscuro = css[css.index("@media (prefers-color-scheme: dark)"):]
+        assert "color-scheme: light;" in css[:css.index("@media (prefers-color-scheme: dark)")]
+        assert "color-scheme: dark;" in oscuro[:oscuro.index("}")]
+
+    def test_un_boton_deshabilitado_no_se_levanta(self):
+        """Las reglas de :hover/:active ganaban en especificidad a `button[disabled]`."""
+        css = _css()
+        for estado in (":hover", ":active"):
+            assert f'button[type="submit"]:where(:not([disabled])){estado}' in css
+            assert f'button[type="submit"]{estado}' not in css
+
+    def test_un_aviso_no_lleva_la_sombra_de_los_botones(self):
+        """Con la sombra dura desplazada, una caja de aviso parecía algo que pulsar."""
+        import re
+        css = re.sub(r"/\*.*?\*/", "", _css(), flags=re.S)
+        regla = css[css.index(".caption,\n.legal-notice-warn {"):]
+        regla = regla[:regla.index("}")]
+        assert "box-shadow" not in regla
+
+    def test_los_titulos_frase_van_en_archivo_y_sin_mayusculas(self):
+        css = _css()
+        regla = css[css.index(".titulo-frase,"):]
+        regla = regla[:regla.index("}")]
+        assert "var(--font-body)" in regla and "text-transform: none" in regla
+        from zascarr.web.routes import TEMPLATES_DIR
+        carpetas = (TEMPLATES_DIR / "carpetas.html").read_text(encoding="utf-8")
+        assert 'class="carpeta-titulo titulo-frase">{{ g.clave }}' in carpetas
+
+    def test_el_contenido_deja_hueco_a_la_barra_inferior(self):
+        """`.content { padding-bottom: 112px }` en ≤ 860 px nunca se aplicaba: la regla base de
+        `.content` va después y la de ≤ 768 px fijaba 48 px. El pie quedaba 15 px bajo la barra fija
+        (medido en el navegador a 390 px). Con `.app > main.content` gana a las dos."""
+        css = _css()
+        movil = css[css.index("@media (max-width: 860px) {"):]
+        movil = movil[:movil.index("\n}\n")]
+        assert ".app > main.content { padding-bottom: 112px; }" in movil
+

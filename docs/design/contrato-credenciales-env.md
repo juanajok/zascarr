@@ -5,6 +5,8 @@
 > fase 1 del ensayo M4 (candidato `0a591d6f91a6b54f8cecb1e675afc59dc0290873`): instalación limpia que no termina y `.env` abierto a
 > cuentas no administrativas. Enlazado desde `docs/BACKLOG.md` («Mapa del tablero», «Estado de M4»).
 
+> **Actualización 2026-10-23:** #237 se cerró sin fusionar y se consolidó en #238 (`76efaa0`), fusionada el 2026-10-18 (`f2c0421`). El contrato sigue siendo la referencia de comparación; la tabla del final **no está rellena** en este documento.
+
 ## Requisitos
 
 | ID | Requisito |

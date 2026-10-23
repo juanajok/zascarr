@@ -45,6 +45,12 @@ from zascarr.services.descubrimiento_grupo import (
     GrupoNoEncontradoError,
     RespuestaDescubrir,
 )
+from zascarr.services.desvinculacion import (
+    ArchivoInexistenteError,
+    DesvinculacionDeArchivo,
+    ResultadoDesvinculacion,
+    VistaPreviaDesvinculacion,
+)
 from zascarr.services.revision_carpetas import (
     LIMITE_MAXIMO,
     LIMITE_POR_DEFECTO,
@@ -57,6 +63,7 @@ from zascarr.services.tokens_revision import (
     MAX_TOKEN_ALTA,
     MAX_TOKEN_CANDIDATA,
     MAX_TOKEN_CANDIDATA_SIN_GRUPO,
+    MAX_TOKEN_DESVINCULACION,
     MAX_TOKEN_VINCULACION,
 )
 from zascarr.services.vinculacion import (
@@ -69,6 +76,7 @@ from zascarr.services.vinculacion import (
 from zascarr.services.vinculacion import SerieYaNoExisteError as SerieDeVinculacionYaNoExisteError
 from zascarr.services.vinculacion import TokenInvalidoError as TokenDeVinculacionInvalidoError
 from zascarr.services.vinculacion_previa import (
+    LIMITE_CURSOR,
     ArchivoAjenoError,
     CursorNoValidoError,
     NumeroNoValidoError,
@@ -310,7 +318,7 @@ class PeticionPrevisualizarVinculacion(BaseModel):
     #: ids de archivo que la persona ha marcado. Vacío al principio.
     marcados: list[UUID] = Field(default_factory=list, max_length=1000)
     #: Posición de la página (el `siguiente` de la respuesta anterior). Sin cursor: la primera página.
-    cursor: str | None = Field(default=None, max_length=2000)
+    cursor: str | None = Field(default=None, max_length=LIMITE_CURSOR)
 
 
 @router.post("/vinculacion/previsualizar", response_model=RespuestaVinculacion)
@@ -399,3 +407,71 @@ async def vincular(
 
 def _error_vinculacion(estado: int, codigo: str, mensaje: str) -> HTTPException:
     return HTTPException(status_code=estado, detail={"codigo": codigo, "mensaje": mensaje})
+
+
+# ── BL-R1a: deshacer la vinculación de un archivo ─────────────────────────────────────────────
+
+class PeticionPrevisualizarDesvinculacion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: UUID
+
+
+class PeticionDesvincular(BaseModel):
+    """La confirmación recibe SOLO el token (propósito `desvincular`): ni archivo ni número ni serie."""
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(..., min_length=1, max_length=MAX_TOKEN_DESVINCULACION)
+
+
+@router.post("/desvinculacion/previsualizar", response_model=VistaPreviaDesvinculacion)
+async def previsualizar_desvinculacion(
+    peticion: PeticionPrevisualizarDesvinculacion, response: Response, db: AsyncSession = Depends(get_db),
+) -> VistaPreviaDesvinculacion:
+    """Qué pasaría si se deshiciera la vinculación de este archivo, SIN hacerlo: solo `SELECT` (sin `stat`, sin leer ficheros,
+    sin red, sin candados). Emite el token `desvincular` solo si se puede deshacer; si no, dice por qué (`bloqueo`)."""
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return await DesvinculacionDeArchivo(db, secret=_secreto()).previsualizar(peticion.file_id)
+    except ArchivoInexistenteError as e:
+        raise _error_vinculacion(404, e.codigo, str(e)) from None
+
+
+async def ejecutar_desvinculacion(db: AsyncSession, token: str) -> ResultadoDesvinculacion:
+    """Deshace, en UNA transacción y sin tocar el fichero, lo que enseñó y firmó la vista previa. Es lo que comparten
+    `POST /desvinculacion` y la pantalla de la ficha de la serie (BL-R1b): la traducción de cada fallo a su estado y a su
+    texto vive AQUÍ, una sola vez. Levanta `HTTPException` con un `detail` con su `codigo`."""
+    secret = _secreto()
+    try:
+        return await DesvinculacionDeArchivo(db, secret=secret).confirmar(token)
+    except TokenDeVinculacionInvalidoError as e:
+        raise _error_vinculacion(422, e.codigo, str(e)) from None
+    except TokenCaducadoError as e:
+        raise HTTPException(status_code=410, detail={
+            "codigo": e.codigo, "mensaje": str(e), "puede_haberse_aplicado": e.puede_haberse_aplicado}) from None
+    except ConflictoDeBloqueoError as e:
+        raise HTTPException(status_code=503, headers={"Retry-After": "1"},
+                            detail={"codigo": e.codigo, "mensaje": str(e)}) from None
+    except ResultadoInciertoError as e:
+        # Falló DESPUÉS de pedir el commit: no se afirma que no haya cambios. Repetir el token lo aclara (relee el comprobante).
+        raise HTTPException(
+            status_code=503, headers={"Retry-After": "1"},
+            detail={"codigo": e.codigo, "mensaje": "No se pudo confirmar si se deshizo. Repite la confirmación con el mismo "
+                    "token: si ya se deshizo, verás el mismo resultado; si no, se deshará."}) from None
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("desvinculacion.error_inesperado", tipo=type(e).__name__)      # sin rutas ni nombres
+        raise _error_vinculacion(
+            500, "error_inesperado", "No se pudo completar y no se ha cambiado nada. Inténtalo de nuevo.") from None
+
+
+@router.post("/desvinculacion", response_model=ResultadoDesvinculacion)
+async def desvincular(
+    peticion: PeticionDesvincular, response: Response, db: AsyncSession = Depends(get_db),
+) -> ResultadoDesvinculacion:
+    """Deshace la vinculación de un archivo con el token de la vista previa. Repetir el mismo token devuelve el mismo
+    resultado (`ya_deshecho`) sin escribir. Un impedimento previsto es un `200` con `resultado: omitido` y su motivo: nunca
+    se anuncia éxito si no se deshizo."""
+    response.headers["Cache-Control"] = "no-store"
+    return await ejecutar_desvinculacion(db, peticion.token)

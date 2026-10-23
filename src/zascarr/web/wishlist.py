@@ -34,7 +34,9 @@ templates = crear_templates()
 router = APIRouter(prefix="/ui/wishlist", tags=["ui"])
 
 _ESTADO_LABEL = {
-    WishlistStatus.WANTED: "Buscando…",
+    # «Buscando…» solo mientras se busca de verdad: un deseo que espera al ciclo (o al aviso legal,
+    # que pausa las búsquedas) decía «Buscando…» bajo «búsquedas en pausa» (caso real, 2026-10-20).
+    WishlistStatus.WANTED: "Por buscar",
     WishlistStatus.SEARCHING: "Buscando…",
     WishlistStatus.DOWNLOADING: "Descargando…",
     WishlistStatus.DOWNLOADED: "Descargando…",

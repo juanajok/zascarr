@@ -256,7 +256,7 @@ class VinculacionDeArchivos:
 
         # 5. Archivos `FOR UPDATE`, por id; con la fila bloqueada se relee la ruta y se mira la operación viva.
         filas = {str(f.id): f for f in (await db.execute(
-            select(File.id, File.file_path, File.issue_id, File.review_dismissed, File.metadata_)
+            select(File.id, File.file_path, File.issue_id, File.review_dismissed, File.metadata_, File.metadata_source)
             .where(File.id.in_(ids)).order_by(File.id).with_for_update())).all()}
         en_curso = {str(i) for (i,) in (await db.execute(select(AsignacionOperacion.file_id).where(
             AsignacionOperacion.file_id.in_(ids), AsignacionOperacion.estado.in_(ASIGNACION_ESTADOS_VIVOS)))).all()}
@@ -377,7 +377,10 @@ class VinculacionDeArchivos:
         vinculo = {
             "version": 1, "operacion_id": str(operacion), "fecha": self._fecha(), "serie_id": str(serie_id),
             "numero": a.numero, "formato": a.formato, "issue_creado": creado, "conflictos": list(a.conflictos),
-            "previo": {"match_status": meta.get("match_status"), "review_motivo": meta.get("review_motivo")},
+            "previo": {"match_status": meta.get("match_status"), "review_motivo": meta.get("review_motivo"),
+                       # BL-R1a (D8): lo que `deshacer` restaura. La CLAVE presente (aunque valga `null`) distingue los
+                       # vínculos nuevos de los antiguos, que no la tienen y se restauran a `NULL`.
+                       "metadata_source": f.metadata_source},
         }
         r = await self._db.execute(text(
             "UPDATE files SET issue_id = :i, metadata_source = 'manual', "

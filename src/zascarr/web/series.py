@@ -30,6 +30,8 @@ from zascarr.models import (
     WishlistPolicy,
     WishlistStatus,
 )
+from zascarr.services.archivos_por_numero import archivos_por_numero
+from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     MOTIVO_POLITICA_FUTUROS,
@@ -54,6 +56,13 @@ router = APIRouter(prefix="/ui/series", tags=["ui"])
 _POLITICAS_OFRECIDAS = {
     WishlistPolicy.NONE: "No buscar nada por mi cuenta",
     WishlistPolicy.MISSING: "Buscar los números que me faltan",
+}
+
+
+#: BL-R1b: por qué un archivo no ofrece «Deshacer esta vinculación», junto al archivo. Desde la
+#: revisión de D9 (2026-10-23) solo queda `en_curso`: se desvincula cualquier archivo.
+RAZONES_SIN_BOTON = {
+    "en_curso": "Ahora mismo ZascArr trabaja con este archivo. Prueba de nuevo en unos minutos.",
 }
 
 
@@ -111,10 +120,14 @@ async def detalle(series_id: UUID, request: Request,
     poseidos = await numeros_poseidos(db, series.id)
     huecos = await huecos_de_serie(db, series, poseidos)
 
+    politica = await _contexto_politica(db, series)
     return templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
         "missing": huecos.faltantes, "huecos": huecos,
-        **(await _contexto_politica(db, series)),
+        **politica,
+        # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
+        "archivos_por_numero": await archivos_por_numero(db, series.id),
+        "razones_sin_boton": RAZONES_SIN_BOTON,
     })
 
 
@@ -193,7 +206,7 @@ async def portada(series_id: UUID, request: Request,
     # fallar) extraer de un CBZ borrado en vez de probar el siguiente
     # número disponible o caer al cover_url externo.
     row = (await db.execute(
-        select(File.file_path)
+        select(File.file_path, File.metadata_)
         .join(Issue, File.issue_id == Issue.id)
         .where(Issue.series_id == series_id)
         .where(File.is_missing.is_(False))
@@ -201,13 +214,15 @@ async def portada(series_id: UUID, request: Request,
         .limit(1)
     )).first()
     if row:
-        result = await asyncio.to_thread(extract_cover_thumbnail, Path(row[0]))
+        result = await asyncio.to_thread(extract_cover_thumbnail, Path(row[0]), (row[1] or {}).get("formato_contenido"))
         if result:
             data, content_type = result
             await asyncio.to_thread(write_cover_cache, cache_path, data)
             return cached_image_response(request, data, content_type, _etag_for(cache_path))
 
-    if series.cover_url and await fetch_and_cache_cover(series.cover_url, cache_path):
+    # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
+    if (series.cover_url and not es_portada_de_relleno(series.cover_url)
+            and await fetch_and_cache_cover(series.cover_url, cache_path)):
         data = await asyncio.to_thread(cache_path.read_bytes)
         return cached_image_response(request, data, "image/jpeg", _etag_for(cache_path))
 

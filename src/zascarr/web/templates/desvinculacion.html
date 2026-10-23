@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Desvincular un archivo — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ serie.id }}">← {{ serie.title }}</a>
+{% include "_desvinculacion_panel.html" %}
+{% endblock %}

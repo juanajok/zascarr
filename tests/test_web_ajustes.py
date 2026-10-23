@@ -65,6 +65,24 @@ class TestIndex:
         r = client.get("/ui/ajustes")
         assert "Seguridad" in r.text
 
+    def test_lo_visible_va_en_llano_y_lo_tecnico_plegado(self):
+        """Revisión visual (2026-10-20): Ajustes hablaba de .env, API, enricher, eD2k/Kad, nginx,
+        403 y «entrega de mejor esfuerzo». Lo técnico sigue disponible, dentro de un <details>."""
+        import re
+        r = TestClient(app).get("/ui/ajustes")
+        main = r.text[r.text.index("<h1>Ajustes</h1>"):r.text.index("</main>")]
+        visible = re.sub(r"<details.*?</details>", "", main, flags=re.S)
+        visible = re.sub(r"<[^>]+>", " ", visible)
+        for jerga in (".env", "API", "enricher", "eD2k", "nginx", "403", "proxy", "mejor esfuerzo",
+                      "URL"):
+            assert jerga not in visible, jerga
+        assert "BASE_URL" in main and "127.0.0.1" in main          # plegado, no perdido
+
+    def test_cada_casilla_va_junto_a_su_texto(self):
+        from zascarr.main import STATIC_DIR
+        css = (STATIC_DIR / "web.css").read_text(encoding="utf-8")
+        assert ".ajustes-card label.legal-checkbox { flex-direction: row;" in css
+
 
 class TestGuardar:
 

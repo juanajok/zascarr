@@ -54,7 +54,8 @@ Descubrir, y por eso el camino está cortado en `_asistente_eleccion.html`. **Co
 no necesita lógica de negocio nueva, sino que la ruta pase `clave` cuando hay candidata y la vista previa la lleve.
 
 **H2 — Un posible problema que NO existe (descartado midiendo).** Sospeché que el límite de longitud del campo
-`candidata` de `/ui/descubrir/revisar` y `/crear` (`MAX_TOKEN_CANDIDATA_SIN_GRUPO` = 12 333) rechazaría un token con
+`candidata` de `/ui/descubrir/revisar` y `/crear` (`MAX_TOKEN_CANDIDATA_SIN_GRUPO` = 12 373 hoy; 12 333 en la
+medición de 2026-10-16) rechazaría un token con
 grupo largo. Medido: con una clave de 1000 caracteres el token mide 1 625. Cabe de sobra. No hace falta cambiar ese
 límite (sí conviene una prueba de que no se rompe).
 

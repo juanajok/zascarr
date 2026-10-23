@@ -15,7 +15,7 @@
       <div class="library-card-meta">
         {{ series.start_year or "" }}
         {% if series.start_year %}·{% endif %}
-        {{ series.tradition.value if series.tradition else "" }}
+        {{ series.tradition|tradicion }}
       </div>
     </div>
   </a>

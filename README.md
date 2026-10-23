@@ -57,7 +57,8 @@ del producto.
 - **Enriquecimiento multi-fuente** — enruta cada serie a su fuente según la
   tradición: Comic Vine (grapa americana/británica), AniList
   (manga/manhwa/manhua) y Tebeosfera (tebeo español / franco-belga), con caché
-  negativa para no quemar rate limits.
+  negativa para no quemar rate limits. Las fuentes nacen **apagadas**: se encienden
+  en `/ui/ajustes` (ver «Integraciones»).
 - **Biblioteca web con filtros** — navega por tradición, editorial, personaje
   y saga, con portadas por cascada (primera página del CBZ → portada externa
   cacheada → placeholder) y **sin hotlinking** a CDNs externos.
@@ -142,9 +143,11 @@ cuando quieras: es idempotente (no duplica nada) y nunca toca los archivos
 de tu colección.
 
 > **¿Ya tienes el resto de la suite *arr en otra ruta?** El código va en
-> `ZASCARR_ROOT` (por defecto `/opt/zascarr`), los datos de los
+> `ZASCARR_ROOT` (por defecto `/opt/zascarr`, a nombre de `root`), los datos de los
 > contenedores en `ZASCARR_DATA_DIR` (por defecto `/var/lib/zascarr`), y el
-> propietario en `ZASCARR_USER`/`ZASCARR_GROUP` (por defecto `media`).
+> usuario de servicio —dueño de las carpetas de datos de los contenedores (portadas, estado
+> de la VPN)— en `ZASCARR_USER`/`ZASCARR_GROUP` (por defecto `media`). Ese usuario **no** es
+> dueño del código ni de la configuración.
 > Cambia lo que necesites antes de instalar:
 > ```bash
 > export ZASCARR_ROOT=/opt/Zascarr ZASCARR_DATA_DIR=/var/lib/zascarr ZASCARR_USER=media ZASCARR_GROUP=media
@@ -173,14 +176,19 @@ sudo useradd --system --no-create-home --shell /usr/sbin/nologin media   # si no
 
 sudo mkdir -p /opt/zascarr && cd /opt/zascarr
 sudo git clone https://github.com/juanajok/zascarr.git
-sudo chown -R media:media /opt/zascarr
 sudo bash zascarr/bootstrap.sh
 ```
 
 ### Qué hace el instalador
 
-- Crea el usuario de servicio `media` si no existe, y deja el código y los
-  datos a su nombre — no al tuyo personal ni a `root`.
+- Crea el usuario de servicio `media` si no existe. Los **datos de los contenedores**
+  (portadas, estado de la VPN) quedan a su nombre; el **código y la configuración**
+  quedan a nombre de `root`, para que ningún otro programa de la Pi (Sonarr,
+  Transmission…, que comparten ese usuario) pueda cambiar lo que `root` ejecuta.
+- **Crea la contraseña de la base de datos él mismo** (aleatoria, sin mostrarla) y la guarda
+  en el `.env`, que queda legible solo para `root`. No tienes que editar nada. Si vuelves a
+  ejecutarlo, la conserva. Si ya había una base de datos y no encuentra su contraseña, **se
+  detiene sin cambiar nada** y te dice qué hacer (`docs/adr/0012-credenciales-del-env.md`).
 - Comprueba, antes de tocar nada, que la carpeta de la biblioteca y las de
   descargas **no sean la misma** ni una esté **dentro** de la otra, siguiendo
   los symlinks. Si se solapan te enseña las rutas ya resueltas y espera a que
@@ -197,22 +205,27 @@ por defecto), no junto a `docker-compose.yml` — así el reset de código de un
 rollback nunca puede tocarlo por accidente. Docker Compose, por defecto,
 solo busca `.env` en el directorio desde el que se invoca — sin esto, un
 `docker compose up -d` a secas ejecutado dentro del repo lo ignoraría en
-silencio y arrancaría con los valores por defecto (incluida la contraseña
-de la BD): exactamente el fallo real que dejó un contenedor en bucle de
-reinicio la primera vez que alguien lo hizo así.
+silencio y arrancaría con los valores por defecto (antes, incluida una
+contraseña de BD publicada en este repositorio y un contenedor en bucle de
+reinicio; ahora el servicio `credenciales` de Compose lo rechaza).
 
 El instalador ya deja resuelto esto con un enlace simbólico
 (`zascarr/.env -> ../.env`, no versionado) para que el descubrimiento por
 defecto de Compose encuentre el `.env` real sin tener que acordarse de
 `--env-file` cada vez. Si instalaste con `bootstrap.sh`, esto ya existe;
-en una instalación manual desde cero, créalo tú mismo:
+en una instalación manual desde cero, lo crea `scripts/credenciales.sh`:
 
 ```bash
-cp ../.env.example ../.env     # ajusta HOST_*_DIR y DB_PASSWORD
-ln -sf ../.env .env            # una vez — Compose ya lo encontrará solo
-docker compose up -d
-docker compose run --rm zascarr alembic upgrade head
+sudo bash scripts/credenciales.sh   # crea ../.env, genera una DB_PASSWORD propia (no la muestra) y lo protege
+sudo nano ../.env                   # ajusta HOST_*_DIR (la contraseña ya está puesta)
+sudo docker compose up -d
+sudo docker compose run --rm zascarr alembic upgrade head
 ```
+
+El `.env` es de `root` (modo 600): por eso los comandos de `docker compose` llevan `sudo`. Si te saltas
+`credenciales.sh` y dejas la contraseña de ejemplo, `docker compose up` **se niega a arrancar** con un
+mensaje en español (servicio `credenciales`): nunca crea una base de datos con una contraseña conocida.
+`credenciales.sh comprobar` te dice, sin mostrar valores, si algo está mal.
 
 ## Uso
 
@@ -301,7 +314,7 @@ dentro:
 
 ```bash
 cd /opt/zascarr/zascarr
-COMPOSE="docker compose -f docker-compose.yml --env-file ../.env"
+COMPOSE="sudo docker compose -f docker-compose.yml --env-file ../.env"
 
 # 1. Copia de la base de datos ACTUAL antes de destruirla. No te la saltes.
 $COMPOSE exec -T postgres pg_dump -U comics_admin zascarr | gzip > /tmp/antes.sql.gz
@@ -335,7 +348,7 @@ en cualquier momento, usa el script de backup del proyecto (atómico y con
 retención):
 
 ```bash
-BACKUP_DIR=/var/backups/zascarr/postgres bash scripts/backup.sh
+sudo BACKUP_DIR=/var/backups/zascarr/postgres bash scripts/backup.sh
 ```
 
 ## Desinstalar ZascArr
@@ -375,6 +388,13 @@ sudo make uninstall-purge
 | Metadatos | [AniList](https://anilist.co) | pública, sin clave |
 | Metadatos | [Tebeosfera](https://www.tebeosfera.com) | scraping, sin clave |
 | Metadatos | [GCD](https://www.comics.org) | pública, sin clave |
+
+**Las cuatro fuentes de metadatos nacen apagadas** (ADR 0013): ZascArr no consulta Internet para completarlas hasta que las
+enciendes en `/ui/ajustes` → «Fuentes de metadatos». El `.env` no las gobierna. Si actualizas desde una versión anterior, las
+fuentes que ya tenías activas **se conservan** y Ajustes te lo indica.
+
+| Tipo | Integración | Activación |
+|---|---|---|
 | Descarga | [Prowlarr](https://prowlarr.com) | URL + clave de API desde `/ui/ajustes` |
 | Descarga | [Transmission](https://transmissionbt.com) | URL + usuario/contraseña desde `/ui/ajustes` |
 | Descarga (eD2K) | [aMule](https://www.amule.org) | URL de amuleweb + contraseña desde `/ui/ajustes` |

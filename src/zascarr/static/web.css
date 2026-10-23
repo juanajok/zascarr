@@ -6,16 +6,49 @@
      · trama halftone sutil (la "cuatricromía")
      · bordes de tinta gruesos + sombra dura (viñetas / bocadillos)
      · didascalias (cajitas amarillas de narración)
-     · rotulación de cartel en titulares (Impact del sistema, sin CDN)
+     · rotulación de cartel en titulares (Anton, servida por la propia app)
 
    Restricciones del repo respetadas:
-     · sin fuentes de CDN (system fonts; ADR-0001 y regla "sin hotlinking")
+     · sin fuentes de CDN (ADR-0001 y regla "sin hotlinking"): Anton y Archivo son
+       libres (OFL) y van en static/vendor/fonts; Impact y la fuente del sistema
+       quedan como respaldo si el fichero no llega
      · sin JS nuevo (toda la interactividad sigue en HTMX)
      · sin tocar el HTML de las plantillas: solo se reestilan las clases.
    ============================================================================= */
 
+/* ── 0. FUENTES ──────────────────────────────────────────────────────────── */
+/* Impact no existe en Android ni en Linux sin las fuentes de Microsoft: allí los titulares
+   caían a la sans del sistema. Por eso se sirven ficheros propios. Solo el subconjunto
+   latino (U+0000-00FF cubre ¡ ¿ Ñ, tildes, º y ª) y una familia por papel: Anton para
+   rotular, Archivo para leer. Los nombres llevan el prefijo «ZascArr» para que una copia
+   instalada en el equipo con otra versión no se cuele. */
+@font-face {
+  font-family: "ZascArr Anton";
+  src: url("/static/vendor/fonts/anton-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ZascArr Archivo";
+  src: url("/static/vendor/fonts/archivo-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "ZascArr Archivo";
+  src: url("/static/vendor/fonts/archivo-latin-wght-italic.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* ── 1. TOKENS ───────────────────────────────────────────────────────────── */
 :root {
+  /* Los controles nativos (selects sin estilo, casillas, barras de desplazamiento) siguen al tema:
+     sin esto salían blancos sobre el papel oscuro. */
+  color-scheme: light;
   --paper:      #f6f3ec;
   --paper-2:    #efeadf;
   --ink:        #17171a;
@@ -64,8 +97,8 @@
   --radius-pill:  999px;
   --gutter: clamp(14px, 2.2vw, 24px);
 
-  --font-display: Impact, "Arial Black", "Arial Narrow Bold", "Haettenschweiler", sans-serif;
-  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  --font-display: "ZascArr Anton", Impact, "Arial Black", "Arial Narrow Bold", "Haettenschweiler", sans-serif;
+  --font-body: "ZascArr Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
 
   --shadow-ink:    4px 4px 0 var(--ink);
   --shadow-ink-sm: 3px 3px 0 var(--ink);
@@ -74,6 +107,7 @@
 /* Tema nocturno (preferencia del sistema) */
 @media (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --paper:      #131316;
     --paper-2:    #1b1b20;
     --ink:        #f0ede4;
@@ -147,8 +181,21 @@ h1, h2, h3 {
   font-weight: 400;
   letter-spacing: .02em;
   text-transform: uppercase;
-  line-height: 1.08;
+  /* 1.15 y no menos: en dos líneas, las tildes de las mayúsculas («CATÁLOGO») tocan la línea de encima. */
+  line-height: 1.15;
   color: var(--ink);
+}
+
+/* Un título que es una FRASE o una RUTA va en Archivo negrita, en su caja (CLAUDE.md §6: Anton, solo
+   rótulos de ≤ 3 palabras en mayúsculas). En mayúsculas, una ruta pierde además la caja que tiene en
+   disco. Los títulos de paso del Inicio usaban la misma corrección, escrita dos veces a mano. */
+.titulo-frase,
+.step h3,
+.siguiente-paso h3 {
+  font-family: var(--font-body);
+  font-weight: 800;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* Foco visible, siempre */
@@ -193,18 +240,14 @@ h1, h2, h3 {
   margin-right: 8px;
 }
 
-/* Cajita de logo tipo "cabecera de tebeo" */
+/* Marca: el estallido «¡ZAS!» (static/brand). Va como fondo del ::before para no tocar el HTML;
+   el nombre lo sigue diciendo el texto del enlace, así que la imagen es decorativa. */
 .topnav a.brand::before {
   content: "";
-  width: 24px; height: 24px;
+  width: 28px; height: 28px;
   margin-right: 10px;
   flex: none;
-  border: 3px solid var(--ink);
-  border-radius: 5px;
-  background:
-    radial-gradient(var(--magenta) 1.4px, transparent 1.4px) 0 0 / 6px 6px,
-    var(--yellow);
-  transform: rotate(-4deg);
+  background: url("/static/brand/zascarr-icono.svg") center / contain no-repeat;
 }
 
 .topnav a:hover {
@@ -268,10 +311,8 @@ h1, h2, h3 {
   text-transform: uppercase; text-decoration: none; color: var(--ink);
 }
 .side .brand::before {
-  content: ""; width: 26px; height: 26px; flex: none;
-  border: 3px solid var(--ink); border-radius: 5px;
-  background: radial-gradient(var(--magenta) 1.4px, transparent 1.4px) 0 0 / 6px 6px, var(--yellow);
-  transform: rotate(-4deg);
+  content: ""; width: 32px; height: 32px; flex: none;
+  background: url("/static/brand/zascarr-icono.svg") center / contain no-repeat;
 }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
@@ -293,13 +334,15 @@ h1, h2, h3 {
   background: var(--yellow); color: var(--on-yellow);
   border-color: var(--ink); box-shadow: var(--shadow-ink-sm);
 }
-.nav-enlace .ico { width: 22px; text-align: center; font-size: 1.1rem; flex: none; }
+.nav-enlace .ico { width: 22px; flex: none; display: grid; place-items: center; }
+/* SVG de trazo (web/iconos.py): toma el color del enlace, así que activo, hover y tema oscuro salen solos. */
+.ico-svg { width: 20px; height: 20px; display: block; }
 
 /* Contadores: marcadores `hidden` hasta que el fragmento los rellena (web/navegacion.py). El atributo
    `hidden` no basta frente a `display` de autor, de ahí las reglas explícitas. */
 .badge {
   margin-left: auto; min-width: 26px; padding: 1px 8px; text-align: center;
-  font-size: .875rem; font-weight: 800;
+  font-size: .875rem; font-weight: 800; font-variant-numeric: tabular-nums;
   border: 2px solid var(--ink); border-radius: var(--radius-pill);
   background: var(--paper); color: var(--ink);
 }
@@ -366,7 +409,10 @@ html { scroll-padding-bottom: 96px; }
   .nav-corto { display: inline; }
   /* El contador va a la derecha del icono, no encima. */
   .nav .badge {
-    position: absolute; top: 2px; left: calc(50% + 10px); margin: 0; min-width: 22px; padding: 0 5px;
+    position: absolute; top: 2px; left: calc(50% + 10px); margin: 0; min-width: 22px; padding: 0 4px;
+    /* El enlace parte palabras (`overflow-wrap: anywhere`) para que quepa la etiqueta; el contador lo
+       heredaba y «22» salía en dos líneas, encima de «Revisar» (caso real, 2026-10-20). */
+    white-space: nowrap; overflow-wrap: normal;
   }
   .nav .dot { position: absolute; top: 8px; left: calc(50% + 12px); margin: 0; }
 
@@ -384,7 +430,10 @@ html { scroll-padding-bottom: 96px; }
     min-height: 48px; padding: 8px 14px; text-align: left; font-size: .95rem;
   }
 
-  .content { padding-bottom: 112px; }
+  /* Hueco para la barra inferior fija. Con `.content` a secas no se aplicaba nunca: la regla base de
+     `.content` va DESPUÉS y la de ≤ 768 px fija 48 px, así que el pie quedaba bajo la barra.
+     `main` en el selector: `.app > .content` ya existe (anchura) y así cada regla tiene el suyo. */
+  .app > main.content { padding-bottom: 112px; }
 }
 
 /* ── 4. CONTENIDO ────────────────────────────────────────────────────────── */
@@ -397,11 +446,14 @@ html { scroll-padding-bottom: 96px; }
 }
 
 .subtitle { color: var(--ink-soft); margin-top: -6px; }
+/* De dónde sale lo que dice la frase de entrada: pegado a ella y en segundo plano. */
+.procedencia { font-size: .9rem; margin-top: -10px; }
 .empty { color: var(--ink-faint); font-style: italic; }
 
 /* ── 5. BOTONES ──────────────────────────────────────────────────────────── */
+/* Sin `button[type="submit"]` aquí: con su especificidad (0,1,1) el fondo base ganaba a `.btn-primary`
+   (0,1,0), que solo salía amarillo porque la regla amarilla también nombraba los envíos. */
 button,
-button[type="submit"],
 .btn,
 .btn-primary,
 .btn-ignorar,
@@ -426,24 +478,31 @@ button[type="submit"],
   transition: transform .12s, box-shadow .12s;
 }
 
-button:hover,
-button[type="submit"]:hover,
-.btn:hover,
-.btn-primary:hover,
-.series-result-item button:hover {
+/* Un botón deshabilitado (p. ej. con `hx-disabled-elt` mientras corre la petición) seguía levantándose:
+   estas reglas ganan en especificidad a la de `[disabled]`. `:where(:not([disabled]))` lo excluye SIN
+   sumar especificidad, para que las variantes que anulan el levantamiento (`.btn-ignorar:hover`…) sigan
+   ganando como antes. */
+button:where(:not([disabled])):hover,
+button[type="submit"]:where(:not([disabled])):hover,
+.btn:where(:not([disabled])):hover,
+.btn-primary:where(:not([disabled])):hover,
+.series-result-item button:where(:not([disabled])):hover {
   transform: translate(-2px, -2px);
   box-shadow: 5px 5px 0 var(--ink);
 }
 
-button:active,
-button[type="submit"]:active,
-.btn:active,
-.btn-primary:active {
+button:where(:not([disabled])):active,
+button[type="submit"]:where(:not([disabled])):active,
+.btn:where(:not([disabled])):active,
+.btn-primary:where(:not([disabled])):active {
   transform: translate(1px, 1px);
   box-shadow: 1px 1px 0 var(--ink);
 }
 
-button[type="submit"],
+/* Amarillo = LA acción que hace avanzar la tarea de la pantalla, y una sola. Antes lo era cualquier
+   `type="submit"`: Ajustes enseñaba siete «Guardar» amarillos y una lista de resultados, uno por fila.
+   Un envío es neutro salvo que lleve `.primary` (revisión visual, 2026-10-20). */
+button.primary,
 .btn-primary,
 .btn.primary {
   --btn-bg: var(--yellow);
@@ -451,8 +510,8 @@ button[type="submit"],
   color: var(--on-yellow);
 }
 
-/* Un botón de envío secundario: sin esto, la regla global de arriba lo pinta de amarillo aunque no
-   lleve `.primary`. Misma especificidad que ella y va después. */
+/* `.neutro` era el parche para que un envío no saliera amarillo; ya no hace falta (el envío es neutro
+   por defecto), pero se conserva por compatibilidad de clases hasta V14. */
 button[type="submit"].neutro {
   --btn-bg: var(--paper);
   color: var(--ink);
@@ -502,7 +561,9 @@ button[type="submit"].neutro {
   display: block;
   background: var(--caption-bg);
   border: 2px solid var(--ink);
-  box-shadow: var(--shadow-ink-sm);
+  /* Sin la sombra desplazada, que es la de los botones: con ella, un aviso parecía algo que pulsar.
+     El canto redondeado es el de `.aviso`, el otro sistema de avisos. */
+  border-radius: var(--radius-panel);
   padding: 8px 14px;
   font-weight: 600;
   font-size: .9rem;
@@ -528,6 +589,7 @@ button[type="submit"].neutro {
 .issue-chip {
   font-size: .875rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;   /* los números de una rejilla de grapas se alinean */
   letter-spacing: .06em;
   text-transform: uppercase;
   padding: 3px 10px;
@@ -538,9 +600,17 @@ button[type="submit"].neutro {
   white-space: nowrap;
 }
 
-.wishlist-badge.estado-downloading,
-.wishlist-badge.estado-searching,
+/* «Por buscar»: aún no pasa nada, así que el estilo base, sin el amarillo de «en marcha». */
 .wishlist-badge.estado-wanted {
+  background: var(--paper);
+  color: var(--ink-soft);
+}
+
+/* En marcha (amarillo).
+   DOWNLOADED también dice «Descargando…» y no tenía regla: se veía distinto del mismo texto. */
+.wishlist-badge.estado-downloading,
+.wishlist-badge.estado-downloaded,
+.wishlist-badge.estado-searching {
   background: var(--caption-bg);
   color: var(--ink);
 }
@@ -603,6 +673,18 @@ button[type="submit"].neutro {
 .candidatos-vacio { color: var(--ink-soft); font-style: italic; margin: 4px 0; }
 
 /* ── 9. CAMPOS DE FORMULARIO ─────────────────────────────────────────────── */
+/* Base para los campos que no tienen regla propia (selects de Ajustes, del alta manual y del asistente):
+   salían con el aspecto del navegador, blancos en tema oscuro. `:where` no suma especificidad, así que
+   cualquier regla existente de abajo sigue mandando. */
+:where(input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="file"], [type="range"]),
+       select, textarea) {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  color: var(--ink);
+  padding: 7px 10px;
+  min-height: 40px;
+}
 .series-search,
 .issue-input,
 .filter-bar input[type="search"],
@@ -663,6 +745,13 @@ button[type="submit"].neutro {
 }
 .suggestion-label { font-size: .875rem; font-weight: 700; color: var(--ok-t); }
 .suggestion-score { font-size: .875rem; color: var(--ink-faint); }
+
+/* U13b: cola de sueltos. Se reutiliza la tarjeta de pendientes; el nombre se lee entero y
+   los controles de navegación conservan el área táctil de `.pend-paginas`. */
+.sueltos-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--gutter); }
+.suelto-card .filename { margin: 0; font-size: 1rem; }
+.suelto-sugerencia .series-name { overflow-wrap: anywhere; }
+.suelto-sin-candidata { margin: 0; }
 button[type="submit"].btn-sugerencia {
   --btn-bg: var(--ok-solid); color: var(--on-ok-solid); border-color: var(--ok-solid);
 }
@@ -692,6 +781,10 @@ button[type="submit"].btn-sugerencia {
   background: var(--yellow); color: var(--on-yellow); font-size: .875rem;
 }
 .audit-why { font-size: .875rem; color: var(--ink-soft); margin: 0 0 10px; }
+/* Botón y explicación en una fila (que se parte en el móvil), con aire debajo: en línea, el botón de
+   40 px y su sombra se montaban sobre la línea siguiente del informe. */
+.audit-lanzar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 18px; }
+.audit-lanzar .audit-why { margin: 0; flex: 1 1 18rem; }
 .audit-item {
   padding: 8px 0;
   border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent);
@@ -774,14 +867,25 @@ button[type="submit"].btn-sugerencia {
   background: var(--paper-2); flex-shrink: 0;
 }
 .series-meta { color: var(--ink-soft); font-size: .9rem; margin: 2px 0; }
+.series-intro { margin: 0 0 6px; font-weight: 600; }
+.series-fuentes { margin-top: 8px; }
+.series-fuentes summary {
+  cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
+  padding: 8px 0; min-height: 40px;
+}
+.series-fuentes .legal-notice { margin-top: 8px; }
 
 .filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
 .filter-bar-secondary { margin-bottom: 24px; }
 .filter-search-box { position: relative; min-width: 200px; }
 .filter-search-box .series-results {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+  margin-top: 4px;
   background: var(--paper); border: 3px solid var(--ink); border-radius: var(--radius-panel);
 }
+/* Vacío no se ve: con el borde puesto, cada buscador sin escribir dejaba una barra negra de 6 px
+   bajo el campo (caso real, 2026-10-20). */
+.filter-search-box .series-results:empty { display: none; }
 .filter-search-box .series-results:not(:empty) { padding: 6px; }
 .filter-search-box .series-list a {
   display: flex; align-items: center; min-height: 40px; padding: 6px 8px; color: var(--ink); text-decoration: none; font-size: .875rem;
@@ -874,6 +978,7 @@ button[type="submit"].btn-sugerencia {
   font-family: var(--font-display);
   font-size: clamp(30px, 3.4vw, 42px);
   line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .metric-label {
   display: block;
@@ -931,6 +1036,19 @@ button[type="submit"].btn-sugerencia {
 .empty-state {
   text-align: center; color: var(--ink-soft); padding: 44px 16px;
   background: var(--paper-2); border: 3px dashed var(--ink); border-radius: var(--radius-panel);
+  position: relative; isolation: isolate; overflow: hidden;
+}
+/* Trama de esquina (2026-10-21): un degradado de puntos que crece hacia abajo a la derecha, como
+   el fondo de una viñeta. Va DETRÁS del contenido (z-index -1 dentro de su propio contexto, así
+   que tampoco tapa el texto de un <p class="empty-state">). La elipse tiene tamaño FIJO y apenas
+   sube del relleno inferior (44 px): con un tamaño en % llegaba detrás del texto en las cajas
+   anchas y en el móvil. */
+.empty-state::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(var(--cyan) 1.7px, transparent 1.8px);
+  background-size: 8px 8px; opacity: .22;
+  -webkit-mask-image: radial-gradient(ellipse 220px 64px at 100% 100%, #000 0, transparent 100%);
+          mask-image: radial-gradient(ellipse 220px 64px at 100% 100%, #000 0, transparent 100%);
 }
 
 .discover {
@@ -968,12 +1086,22 @@ button[type="submit"].btn-sugerencia {
   background: var(--paper-2);
 }
 .step.hecho::before { content: "✓"; background: var(--ok-bg); color: var(--ok-t); }
+/* Un paso hecho deja constancia, pero no compite con el que toca: más bajo, borde fino y sin relleno. */
+.step.hecho {
+  grid-template-columns: 32px 1fr auto; gap: 12px; padding: 8px 14px;
+  border-width: 2px; background: transparent;
+}
+.step.hecho::before { width: 30px; height: 30px; border-width: 2px; font-size: 1rem; }
 .step.siguiente { background: var(--caption-bg); box-shadow: var(--shadow-ink); }
 .step.siguiente::before { background: var(--yellow); color: var(--on-yellow); }
 .step.bloqueado { border-style: dashed; }
-.step h3 { margin: 0 0 2px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+/* Son frases enteras, no rótulos: en Anton y en minúsculas costaban de leer, y en mayúsculas
+   romperían el límite de «mayúsculas solo en rótulos de ≤ 3 palabras». Van en la fuente de lectura. */
+.step h3 { margin: 0 0 2px; font-size: 1.05rem; }
 .step h3 .chip { margin-left: 6px; vertical-align: middle; }
 .step p { margin: 0; }
+.step.hecho h3 { font-size: .95rem; font-weight: 700; }
+.step.hecho p { font-size: .875rem; }
 .muted { color: var(--ink-soft); }
 .pasos-plegados summary { cursor: pointer; font-weight: 700; padding: 10px 0; min-height: 44px; }
 .siguiente-paso {
@@ -982,13 +1110,16 @@ button[type="submit"].btn-sugerencia {
   border: 3px solid var(--ink); border-radius: var(--radius-panel); background: var(--caption-bg);
   box-shadow: var(--shadow-ink);
 }
-.siguiente-paso h3 { margin: 0 0 2px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.siguiente-paso h3 { margin: 0 0 2px; font-size: 1.05rem; }
 .siguiente-paso h3 .chip { margin-left: 6px; vertical-align: middle; }
 .siguiente-paso p { margin: 0; }
 .pasos-plegados .steps { margin-top: 10px; }
 @media (max-width: 768px) {
   .step { grid-template-columns: 44px 1fr; }
+  .step.hecho { grid-template-columns: 32px 1fr; }
   .step .btn { grid-column: 1 / -1; }
+  /* En un paso hecho el botón es secundario: alineado con el texto, no a todo el ancho. */
+  .step.hecho .btn { grid-column: 2; justify-self: start; }
   .siguiente-paso { grid-template-columns: 1fr; }
 }
 
@@ -997,7 +1128,8 @@ button[type="submit"].btn-sugerencia {
   .topnav { gap: 4px; padding: 10px 12px; }
   .topnav a { font-size: .875rem; padding: 7px 10px; }
   .topnav a.brand { font-size: 1.05rem; }
-  .topnav a.brand::before { width: 18px; height: 18px; }
+  /* A 18 px la versión completa se empasta: la de 16 px tiene la Z grande y menos contorno. */
+  .topnav a.brand::before { width: 18px; height: 18px; background-image: url("/static/brand/zascarr-favicon.svg"); }
 
   .content { padding: 16px 12px 48px; }
   .metrics-grid { grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -1061,6 +1193,12 @@ button[type="submit"].btn-sugerencia {
   letter-spacing: .02em; padding: 0 6px;
 }
 .ajustes-desc { color: var(--ink-soft); font-size: .875rem; margin: 0 0 12px; }
+/* Lo técnico (qué dirección poner y por qué, el proxy inverso…) va plegado: la tarjeta dice en llano qué
+   hace cada cosa y quien lo necesita lo abre (presupuesto de texto, CLAUDE.md §6). */
+.ajustes-mas { margin: 0; }
+.ajustes-mas summary { cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600; }
+.ajustes-mas[open] summary { margin-bottom: 6px; }
+.ajustes-donde { font-weight: 400; color: var(--ink-soft); }
 .ajustes-hint {
   color: var(--ink-faint); font-size: .875rem; line-height: 1.4;
   margin: -4px 0 0;
@@ -1074,6 +1212,9 @@ button[type="submit"].btn-sugerencia {
   display: flex; flex-direction: column; gap: 4px;
   font-size: .875rem; font-weight: 700;
 }
+/* La casilla, a la izquierda de su texto: la regla de arriba (columna, para campo bajo etiqueta) ganaba a
+   `.legal-checkbox` y dejaba la casilla en una línea y lo que activa en la siguiente. */
+.ajustes-card label.legal-checkbox { flex-direction: row; align-items: flex-start; gap: 10px; }
 .ajustes-card input[type="text"],
 .ajustes-card input[type="password"] {
   font: inherit; padding: 8px 10px; min-height: 40px;
@@ -1141,6 +1282,10 @@ button[type="submit"].btn-sugerencia {
 .estado-warnings.visible { display: block; }
 .estado-warnings-title { font-weight: 700; margin-bottom: 6px; }
 .estado-warnings ul { margin: 6px 0 0; padding-left: 18px; }
+.estado-warnings li + li { margin-top: 8px; }
+.estado-warnings details { margin-top: 4px; font-weight: 400; }
+.estado-warnings summary { cursor: pointer; color: var(--ink-soft); font-size: .875rem; }
+.estado-detalle { font-size: .875rem; color: var(--ink-soft); overflow-wrap: anywhere; }
 
 /* ── 16c. COMPONENTES (V2) ───────────────────────────────────────────────────
    Piezas reutilizables con los nombres de la maqueta (docs/design/maqueta-ui.html), sobre los
@@ -1170,7 +1315,8 @@ button[disabled], .btn[disabled] {
 /* Chip de estado: un estado → un aspecto (web/componentes.py). El icono acompaña al color. */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  font-size: .875rem; font-weight: 700;
+  /* Fuente explícita: heredada, el mismo chip salía en Anton dentro de un titular y en Archivo fuera. */
+  font-family: var(--font-body); font-size: .875rem; font-weight: 700;
   padding: 2px 10px;
   border: 2px solid var(--ink); border-radius: var(--radius-pill);
   background: var(--paper); color: var(--ink);
@@ -1261,6 +1407,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   }
 }
 
+
 /* ── Pendientes por carpeta (rebanada 1b, solo lectura) ─────────────────────
    Solo maquetación: los colores salen de los componentes (chip, aviso, card), ya comprobados. */
 .carpetas-resumen { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 12px 0; list-style: none; }
@@ -1279,7 +1426,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .senal-afectados, .carpeta-archivos { flex-basis: 100%; }
 .senal-afectados ul, .carpeta-archivos ul { margin: 6px 0 0; padding-left: 20px; }
 .nombre-archivo { overflow-wrap: anywhere; }
+/* «Carpetas 1–2 de N»: es el recuento de la página, no la navegación entre páginas. */
+.carpetas-pagina { margin: 12px 0; }
 .carpetas-paginas { display: flex; gap: 12px; margin: 18px 0; }
+.carpeta-resumen { margin: 0 0 10px; }
+.carpeta-explicacion, .carpeta-detalle { margin: 12px 0; }
+.carpeta-accion small { display: block; margin-top: 4px; font-size: .875rem; }
 @media (max-width: 600px) { .carpeta-datos { grid-template-columns: 1fr; } .carpeta-datos dd { margin-bottom: 6px; } }
 
 /* Asistente «Elegir la serie de una carpeta» (#118): campos apilados, sin tocar el resto de formularios. */
@@ -1355,4 +1507,56 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   button:not([hidden]):not([data-u16]), .btn:not([hidden]), summary:not([hidden]), .pend-paginas a:not([hidden]),
   .back-link:not([hidden]), .page-link:not([hidden]), .topnav a.brand:not([hidden]), .side .brand:not([hidden]) { min-height: 44px; }
   .metric-detail a { display: inline-block; min-height: 24px; }
+}
+
+/* Página de error propia (web/errores.py): una salida clara, la principal primero. */
+.error-acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+/* ── BL-R1b (#254): archivos por número y «Deshacer esta vinculación» ─────── */
+.archivos-serie { margin-top: 28px; }
+.archivos-numeros, .archivos-lista { list-style: none; margin: 0; padding: 0; }
+.archivos-numero { margin: 0 0 14px; }
+.archivos-numero-titulo { margin: 0 0 4px; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.archivo-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 0; border-top: 1px solid var(--paper-2); }
+.archivo-fila .nombre-archivo { overflow-wrap: anywhere; font-weight: 600; }
+.archivo-razon { font-size: .875rem; }
+.desv-lista { margin: 8px 0 14px 1.2em; padding: 0; }
+.desv-lista li { margin: 4px 0; }
+
+/* Los dos guiños de imprenta de la página de error (2026-10-21). Es una pantalla de paso, sin
+   nada que trabajar, y el único sitio donde el desalineamiento no estorba:
+   · el rótulo con las planchas de cian y magenta corridas. Solo aquí, en grande: en un título
+     pequeño o en texto se lee borroso, y un borde desplazado se confundiría con la sombra dura
+     de los botones («esto se pulsa»);
+   · un disco de trama magenta a la derecha, donde no hay texto. El texto se limita a 46ch y el
+     disco solo aparece con sitio de sobra (≥ 1100 px): nunca queda detrás de una frase. */
+.pagina-error { position: relative; }
+.pagina-error > p { max-width: 46ch; }
+.pagina-error h1 {
+  text-shadow: -3px -2px 0 color-mix(in srgb, var(--cyan) 85%, transparent),
+                3px  2px 0 color-mix(in srgb, var(--magenta) 80%, transparent);
+}
+@media (min-width: 1100px) {
+  .pagina-error::after {
+    content: ""; position: absolute; right: 24px; top: -10px; width: 240px; height: 240px;
+    pointer-events: none; border-radius: 50%;
+    background-image: radial-gradient(var(--magenta) 2.2px, transparent 2.3px);
+    background-size: 9px 9px; opacity: .28;
+    -webkit-mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+            mask-image: radial-gradient(circle, #000 25%, transparent 70%);
+  }
+}
+
+/* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
+   La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
+   colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
+   puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
+   especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
+@media (prefers-contrast: more), (forced-colors: active) {
+  body::before,
+  .metric-card::before,
+  .empty-state::before,
+  .pagina-error::after { display: none; }
+  .series-card img.cover-missing { background: var(--paper-2); }
+  .pagina-error h1 { text-shadow: none; }
 }

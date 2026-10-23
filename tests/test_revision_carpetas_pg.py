@@ -99,6 +99,30 @@ def archivo(ruta: str, *, estado: str = "unsorted", cands=None, issue_id=None, d
     )
 
 
+async def sembrar_referencia_u13a(banco: Banco) -> None:
+    """Fixture estable de U13a: 1.322 A (1.308 en 108 carpetas + 14 sueltos) y 17 B.
+
+    Los 17 B viven en 17 de las 108 carpetas útiles, así que no añaden una carpeta
+    nueva; el grupo sin contexto de los 14 sueltos sí suma a `grupos`, pero no a
+    `carpetas_utiles`."""
+    sid = await banco.serie("Serie sugerida", 2024)
+    archivos: list[File] = []
+    for i in range(108):
+        n = 12 if i < 107 else 24
+        archivos.extend(
+            archivo(f"Comics/Serie {i:03d}/Cosa {k:03d}.cbz") for k in range(n)
+        )
+    archivos.extend(archivo(f"Comics/Suelto {i:02d}.cbz") for i in range(14))
+    archivos.extend(
+        archivo(
+            f"Comics/Serie {i:03d}/Sugerida {i:02d}.cbz", estado="direct",
+            cands=candidatas(sid, "Serie sugerida", 2024),
+        )
+        for i in range(17)
+    )
+    await banco.sembrar(*archivos)
+
+
 @pytest.fixture
 async def banco(url_bd, monkeypatch):
     b = Banco(url_bd)
@@ -501,6 +525,110 @@ class TestDatosIncomodos:
         assert p == {"titulo_dominante": "Flash", "proporcion": 0.75, "titulos_distintos": 2}
 
 
+# ── U13a: carpetas útiles, sueltos y recuentos ───────────────────────────────────────────────────
+
+class TestU13aCarpetasYSuelos:
+
+    async def test_particion_a_b_y_sueltos(self, banco):
+        sid = await banco.serie("Batman", 2016)
+        await banco.sembrar(
+            archivo("Comics/Flash (1987)/Flash 01.cbz"),
+            archivo("Comics/Flash (1987)/Flash 02.cbz"),
+            archivo("Comics/Suelto 01.cbz"),
+            archivo("Raiz 01.cbz"),
+            archivo("Comics/Batman (2016)/Batman 01.cbz", estado="direct",
+                    cands=candidatas(sid, "Batman", 2016)),
+            archivo("Comics/Batman suelto 01.cbz", estado="direct",
+                    cands=candidatas(sid, "Batman", 2016)),
+            archivo("Comics/Huerfana 01.cbz", estado="direct",
+                    cands=candidatas(uuid4(), "Borrada", 2000)),
+        )
+        r = await consultar()
+        t = r["totales"]
+        assert t["sin_serie"] == 4 and t["serie_sugerida"] == 2
+        assert t["candidata_inexistente"] == 1
+        assert t["grupos"] == 4                    # incluye Comics y la raíz, que son sueltos
+        assert t["carpetas_utiles"] == 2            # Flash (1987) y Batman (2016)
+        assert t["carpetas_utiles_sin_serie"] == 1
+        assert t["carpetas_utiles_serie_sugerida"] == 1
+        assert t["sin_serie_en_carpetas"] == 2
+        assert t["sin_serie_sueltos"] == 2
+        assert t["serie_sugerida_en_carpetas"] == 1
+        assert t["serie_sugerida_sueltos"] == 1
+        assert t["sueltos"] == 3
+        assert t["sin_serie"] == t["sin_serie_en_carpetas"] + t["sin_serie_sueltos"]
+        assert t["serie_sugerida"] == (
+            t["serie_sugerida_en_carpetas"] + t["serie_sugerida_sueltos"])
+        assert t["sueltos"] == t["sin_serie_sueltos"] + t["serie_sugerida_sueltos"]
+        assert t["carpetas_utiles"] <= t["grupos"]
+
+    async def test_api_default_conserva_todos_los_grupos_y_solo_utiles_filtra(self, banco):
+        await banco.sembrar(
+            archivo("Comics/G/Cosa 01.cbz"),
+            archivo("Comics/Suelto 01.cbz"),
+        )
+        r = await consultar()
+        assert sorted(g["clave"] for g in r["grupos"]) == ["Comics", "Comics/G"]
+        assert r["totales"]["grupos"] == 2 and r["totales"]["carpetas_utiles"] == 1
+
+        async with banco.fabrica() as s:
+            solo = await revision_carpetas.RevisionCarpetas(s).carpetas(
+                limite=10, solo_utiles=True)
+        assert [g.clave for g in solo.grupos] == ["Comics/G"]
+        assert solo.totales.carpetas_utiles == 1 and solo.totales.grupos == 2
+
+    async def test_solo_utiles_pagina_despues_de_filtrar(self, banco):
+        await banco.sembrar(
+            *(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(5)),
+            *(archivo(f"Comics/_Suelto {i}/Cosa 01.cbz") for i in range(5)),
+        )
+        async with banco.fabrica() as s:
+            pagina = await revision_carpetas.RevisionCarpetas(s).carpetas(
+                limite=2, desplazamiento=2, solo_utiles=True)
+        assert pagina.totales.carpetas_utiles == 5
+        assert pagina.totales.grupos == 10
+        assert len(pagina.grupos) == 2
+        assert all(g.carpeta_contextual is not None for g in pagina.grupos)
+        assert [g.clave for g in pagina.grupos] == ["Comics/G2", "Comics/G3"]
+
+    async def test_medicion_local_1322_a_y_17_b_dos_consultas(self, banco):
+        """DoD U13a: lectura A∪B con 1.322 A + 17 B, dos consultas y página 50.
+
+        Es una medición local del servicio, no la carga completa en navegador ni la
+        Pi: P1/P1b/P4 siguen NOT RUN. El p95 se calcula sobre 20 lecturas en caliente.
+        """
+        import time
+
+        await sembrar_referencia_u13a(banco)
+        async with banco.fabrica() as s:
+            servicio = revision_carpetas.RevisionCarpetas(s)
+            await servicio.carpetas(limite=50, solo_utiles=True)      # calienta
+            banco.sentencias.clear()
+            r = await servicio.carpetas(limite=50, solo_utiles=True)
+            consultas = len(banco.sentencias)
+
+        t = r.totales
+        assert consultas == 2, [s[:80] for s in banco.sentencias]
+        assert (t.sin_serie, t.serie_sugerida, t.candidata_inexistente) == (1322, 17, 0)
+        assert (t.carpetas_utiles, t.grupos) == (108, 109)
+        assert (t.sin_serie_en_carpetas, t.sin_serie_sueltos) == (1308, 14)
+        assert (t.serie_sugerida_en_carpetas, t.serie_sugerida_sueltos) == (17, 0)
+        assert t.sueltos == 14
+        assert r.pagina.limite == 50 and len(r.grupos) == 50
+
+        tiempos: list[float] = []
+        for _ in range(20):
+            inicio = time.perf_counter()
+            async with banco.fabrica() as s:
+                await revision_carpetas.RevisionCarpetas(s).carpetas(
+                    limite=50, solo_utiles=True)
+            tiempos.append((time.perf_counter() - inicio) * 1000)
+        p95 = sorted(tiempos)[18]
+        assert p95 <= 2000, f"p95 local {p95:.0f} ms"
+        print(f"\n[U13a] lectura A∪B 1.322+17: {consultas} consultas, "
+              f"p95 local {p95:.0f} ms (servicio, no navegador/Pi)")
+
+
 # ── Orden, paginación y determinismo (13) ─────────────────────────────────────────────────────────
 
 class TestOrdenYPaginacion:
@@ -676,7 +804,12 @@ class TestSoloLecturaYCoste:
 # ── Contrato y seguridad (14-16) ──────────────────────────────────────────────────────────────────
 
 CLAVES_RESPUESTA = {"generado", "totales", "pagina", "grupos"}
-CLAVES_TOTALES = {"sin_serie", "serie_sugerida", "grupos", "candidata_inexistente"}
+CLAVES_TOTALES = {
+    "sin_serie", "serie_sugerida", "grupos", "candidata_inexistente",
+    "carpetas_utiles", "carpetas_utiles_sin_serie", "carpetas_utiles_serie_sugerida",
+    "sin_serie_en_carpetas", "sin_serie_sueltos", "serie_sugerida_en_carpetas",
+    "serie_sugerida_sueltos", "sueltos",
+}
 CLAVES_GRUPO = {
     "clave", "carpeta_contextual", "ascendentes", "carpeta_limpia", "estado", "etiqueta", "n_archivos",
     "patron_de_nombres", "serie_sugerida", "por_confirmar", "en_conflicto", "senales", "archivos",
@@ -700,6 +833,13 @@ class TestContratoYSeguridad:
         assert set(cuerpo) == CLAVES_RESPUESTA and set(cuerpo["totales"]) == CLAVES_TOTALES
         assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", cuerpo["generado"])
         assert all(type(v) is int for v in cuerpo["totales"].values())
+        t = cuerpo["totales"]
+        assert t["sin_serie"] == t["sin_serie_en_carpetas"] + t["sin_serie_sueltos"]
+        assert t["serie_sugerida"] == (
+            t["serie_sugerida_en_carpetas"] + t["serie_sugerida_sueltos"])
+        assert t["sueltos"] == t["sin_serie_sueltos"] + t["serie_sugerida_sueltos"]
+        assert t["carpetas_utiles"] <= t["grupos"]
+        assert t["carpetas_utiles_sin_serie"] <= t["carpetas_utiles"]
         for g in cuerpo["grupos"]:
             assert set(g) == CLAVES_GRUPO
             assert isinstance(g["clave"], str) and isinstance(g["ascendentes"], list)

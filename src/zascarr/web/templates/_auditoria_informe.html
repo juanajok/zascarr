@@ -41,7 +41,7 @@
 
 {% if informe.mismo_contenido %}
 <section class="audit-block">
-  <h2>El mismo tebeo, dos veces <span class="audit-count">{{ informe.mismo_contenido|length }}</span></h2>
+  <h2 class="titulo-frase">El mismo tebeo, dos veces <span class="audit-count">{{ informe.mismo_contenido|length }}</span></h2>
   <p class="audit-why">Archivos idénticos en sitios distintos. Borrar los que sobran liberaría
     {{ informe.bytes_recuperables | tamano }} — pero eso lo haces tú en tu disco, no ZascArr.</p>
   {% for d in informe.mismo_contenido %}
@@ -55,7 +55,7 @@
 
 {% if informe.misma_obra %}
 <section class="audit-block">
-  <h2>El mismo número, en dos ediciones <span class="audit-count">{{ informe.misma_obra|length }}</span></h2>
+  <h2 class="titulo-frase">El mismo número, en dos ediciones <span class="audit-count">{{ informe.misma_obra|length }}</span></h2>
   <p class="audit-why">Mismo título y número, pero archivos distintos: otra calidad, otro idioma u otra
     edición. <strong>Puede que los quieras los dos</strong> — esto es solo para que lo sepas.</p>
   {% for d in informe.misma_obra %}
@@ -69,7 +69,7 @@
 
 {% if informe.carpetas_vacias %}
 <section class="audit-block">
-  <h2>Carpetas sin ningún tebeo <span class="audit-count">{{ informe.carpetas_vacias|length }}</span></h2>
+  <h2 class="titulo-frase">Carpetas sin ningún tebeo <span class="audit-count">{{ informe.carpetas_vacias|length }}</span></h2>
   <p class="audit-why">Están creadas pero no tienen nada dentro. Si esperabas contenido aquí, puede que
     falte un disco por montar o que quedaran a medias de una mudanza de archivos.</p>
   {% for c in informe.carpetas_vacias %}
@@ -83,10 +83,10 @@
 
 {% if informe.no_reconocidos %}
 <section class="audit-block">
-  <h2>Archivos que ZascArr no reconoce <span class="audit-count">{{ informe.no_reconocidos|length }}</span></h2>
-  <p class="audit-why">Parecen tebeos pero el sistema no los trata como tales — no se importan, ni se
-    adoptan, ni cuentan en tu biblioteca hasta que los conviertas al formato que sí reconoce
-    (CBZ, CBR, CB7, PDF o EPUB).</p>
+  <h2 class="titulo-frase">Archivos que ZascArr no reconoce <span class="audit-count">{{ informe.no_reconocidos|length }}</span></h2>
+  <p class="audit-why">Archivos que ZascArr no puede usar como tebeo. No cambia, mueve ni borra ninguno de esta lista.
+    Si arreglas una copia (por ejemplo, la descomprimes o pones .cbz al final de su nombre) y la dejas en tu
+    carpeta de descargas, ZascArr intentará importarla; el original seguirá aquí.</p>
   {% for n in informe.no_reconocidos %}
   <div class="audit-item">
     <div class="audit-path">{{ n.ruta }}</div>

@@ -12,8 +12,8 @@
 #      levanta PostgreSQL, migra y arranca ZascArr. Idempotente.
 #
 # Garantía (A3): este instalador NUNCA borra ni modifica los ficheros de tu
-# colección. Solo crea directorios, copia .env.example a .env y levanta
-# contenedores. No hay ningún `rm`, ni movimiento ni sobreescritura de ficheros
+# colección. Solo crea directorios, crea el .env (con una contraseña propia que
+# genera él mismo y que no muestra) y levanta contenedores. No hay ningún `rm`, ni movimiento ni sobreescritura de ficheros
 # de la colección, y los únicos `chown` van a directorios que ESTE script acaba
 # de crear (nunca a los tebeos que ya tenías). Si algo falla, la colección
 # queda exactamente como estaba.
@@ -137,8 +137,12 @@ if [[ ! -f "${_SD}/docker-compose.yml" ]]; then
         git clone -q https://github.com/juanajok/zascarr.git "${ZASCARR_ROOT}/zascarr" || die \
             "No pude clonar el repositorio. ¿Hay conexión a internet?"
     fi
-    chown -R "${ZASCARR_USER}:${ZASCARR_GROUP}" "${ZASCARR_ROOT}" 2>/dev/null || \
-        warn "No pude ajustar el propietario de ${ZASCARR_ROOT} a ${ZASCARR_USER}."
+    # El código (docker-compose.yml, Dockerfile, scripts) y el enlace .env lo ejecuta/sigue root: si fueran del
+    # usuario de servicio —que comparte identidad con Sonarr, Prowlarr, Transmission…— cualquiera de ellos podría
+    # cambiarlos o redirigir el .env. Son de root; al usuario de servicio solo le pertenecen los datos de sus
+    # contenedores (covers, vpn-state). `-h`: nunca se sigue un enlace del repo. Docs: ADR 0012.
+    chown -hR root:root "${ZASCARR_ROOT}/zascarr" 2>/dev/null && chmod -R go-w "${ZASCARR_ROOT}/zascarr" || \
+        warn "No pude dejar ${ZASCARR_ROOT}/zascarr a nombre de root."
 
     success "Continuando la instalación..."
     # Bug real (reproducido): tras "curl | sudo bash", el stdin de ESTE
@@ -197,6 +201,14 @@ fi
 # shellcheck source=scripts/_exposicion.sh
 source "${EXPOSICION_SH}"
 
+# Credenciales del .env: generar, validar, escribir de forma atómica y proteger (ADR 0012).
+CREDENCIALES_SH="${SCRIPT_DIR}/scripts/_credenciales.sh"
+if [[ ! -f "${CREDENCIALES_SH}" ]]; then
+    die "No encuentro ${CREDENCIALES_SH}. ¿Está el repo completo clonado?"
+fi
+# shellcheck source=scripts/_credenciales.sh
+source "${CREDENCIALES_SH}"
+
 [[ "${EUID}" -eq 0 ]] || die \
     "Este instalador necesita permisos de administrador. Ejecútalo así:
   sudo bash ${SCRIPT_DIR}/bootstrap.sh"
@@ -228,20 +240,13 @@ if [[ -z "${_ZASCARR_YA_ACTUALIZADO:-}" ]]; then
     export _ZASCARR_YA_ACTUALIZADO=1
 fi
 
-# Actualiza (o añade si no existe) una variable en .env. Idempotente:
-# volver a ejecutar el bootstrap no duplica líneas.
+# Actualiza (o añade si no existe) una variable en .env. Idempotente: volver a ejecutar el bootstrap no duplica
+# líneas. La escritura es ATÓMICA (temporal 0600 en la misma carpeta + rename, ver env_escribir): si falla, el
+# .env queda como estaba y no se deja ningún temporal. M7: el valor se escribe literal ('\', '&', '#' no se
+# interpretan).
 set_env_var() {
-    local key="$1" value="$2" escaped
-    # M7: escapar '\' y '&' para sed, y usar '#' como delimitador (menos
-    # frecuente en rutas que '|'). Así "/media/Juan & María" se escribe
-    # literal y no se expande como comando de reemplazo de sed.
-    escaped="${value//\\/\\\\}"
-    escaped="${escaped//&/\\&}"
-    if grep -q "^${key}=" "${ENV_FILE}" 2>/dev/null; then
-        sed -i "s#^${key}=.*#${key}=${escaped}#" "${ENV_FILE}"
-    else
-        echo "${key}=${value}" >> "${ENV_FILE}"
-    fi
+    env_escribir "${ENV_FILE}" "$1" "$2" || die \
+        "No pude escribir ${1} en ${ENV_FILE}. No he cambiado el fichero: sigue como estaba."
 }
 
 # Valor actual de una clave del .env (vacío si no está). Solo lectura.
@@ -265,10 +270,44 @@ docker info >/dev/null 2>&1 || die \
 ENV_FILE="${ZASCARR_ROOT}/.env"
 mkdir -p "${ZASCARR_ROOT}" || die \
     "No puedo crear ${ZASCARR_ROOT}. ¿Tienes permisos de escritura en el directorio padre?"
+
+# ── Protección ANTES de escribir ningún secreto (ADR 0012, C4/C5/C8). Si la ubicación del .env o el código que root
+# ── ejecuta los puede cambiar otra cuenta, aquí se PARA —no se avisa y se sigue—: guardar ahí una contraseña generada
+# ── no la protegería. Es idempotente y se repite al final. No toca el .env si la ubicación no es de fiar.
+proteger_configuracion "${ENV_FILE}" "${ZASCARR_ROOT}" "${SCRIPT_DIR}" || die \
+    "No puedo garantizar que otra cuenta del equipo no pueda sustituir el .env (ver arriba). No he escrito ninguna contraseña
+  ni he cambiado nada más.
+  Qué hacer: instala ZascArr en una carpeta propia de root que no cuelgue de la carpeta de nadie — por defecto /opt/zascarr
+  (la variable ZASCARR_ROOT la cambia) — y vuelve a ejecutar el instalador. Si ya tenías una instalación en otro sitio,
+  conserva tu .env: cópialo a la nueva carpeta con  sudo install -m 600 -o root -g root <el_antiguo> /opt/zascarr/.env"
+limpiar_temporales_env "${ENV_FILE}"
 if [[ ! -f "${ENV_FILE}" ]]; then
-    cp "${SCRIPT_DIR}/.env.example" "${ENV_FILE}" 2>/dev/null || \
+    # umask 077 en un subshell: el .env nace 0600 y no se toca el umask del resto del instalador.
+    (umask 077; cp "${SCRIPT_DIR}/.env.example" "${ENV_FILE}") 2>/dev/null || \
         die "No encuentro .env.example en ${SCRIPT_DIR}/. ¿Está el repo completo clonado?"
 fi
+
+# ── Credenciales (ADR 0012). ANTES de preguntar nada y mucho antes de crear PostgreSQL: la contraseña con la que
+# ── se inicializa la base tiene que estar ya guardada, o una reejecución no la encontraría. Una DB_PASSWORD
+# ── ausente, vacía o de ejemplo se sustituye por una generada aquí (sin mostrarla); una válida no se toca. Si YA
+# ── hay una base de datos y no se conoce su contraseña, se PARA: inventar otra la dejaría inaccesible.
+CREDENCIALES_RC=0
+asegurar_credenciales "${ENV_FILE}" "${ZASCARR_DATA_DIR}" || CREDENCIALES_RC=$?
+case "${CREDENCIALES_RC}" in
+    0)  ;;
+    10) success "He generado una contraseña propia para la base de datos y la he guardado en ${ENV_FILE} (no se muestra)." ;;
+    20) die "Ya existe una base de datos de ZascArr en ${ZASCARR_DATA_DIR}/postgres, pero no encuentro su contraseña
+  en ${ENV_FILE} (falta, está vacía o conserva el valor de ejemplo).
+  No he cambiado ninguna contraseña ni he tocado la base: inventar otra la dejaría inaccesible.
+  Qué hacer (detalle en docs/adr/0012-credenciales-del-env.md):
+    · Si tienes copia del .env, restáurala en ${ENV_FILE} y vuelve a ejecutar el instalador.
+    · Si no hay datos que conservar, aparta (no la borro yo) la carpeta ${ZASCARR_DATA_DIR}/postgres y vuelve a
+      ejecutar el instalador: se creará una base nueva con una contraseña nueva." ;;
+    *)  die "No pude generar o guardar la contraseña de la base de datos. No he cambiado ${ENV_FILE}." ;;
+esac
+# El .env recién creado o reescrito queda root:root 600 (idempotente; la ubicación ya se comprobó antes de escribir).
+proteger_configuracion "${ENV_FILE}" "${ZASCARR_ROOT}" "${SCRIPT_DIR}" || die \
+    "No pude dejar protegido el .env (root, modo 600) ni su carpeta. Revisa los permisos de ${ZASCARR_ROOT} y vuelve a ejecutar."
 
 # ── A1: 3 preguntas, nada más. El resto se deduce o tiene un valor
 # ── razonable por defecto (Intro acepta lo que hay entre corchetes). ──
@@ -447,8 +486,9 @@ chown -R "${RESOLVED_UID}:${RESOLVED_GID}" "${ZASCARR_DATA_DIR}/covers" 2>/dev/n
 success "Directorios creados en ${LIBRARY}"
 
 info "Validando .env..."
-grep -q "DB_PASSWORD=cambia_esto_ahora" "${ENV_FILE}" && \
-    die "DB_PASSWORD tiene el valor por defecto. Edita ${ENV_FILE} y pon una contraseña segura."
+# Defensa en profundidad: tras asegurar_credenciales esto no debería fallar nunca; si falla, no se arranca nada.
+validar_credenciales "${ENV_FILE}" || die \
+    "DB_PASSWORD no es válida (ver arriba). Edita ${ENV_FILE} o ejecuta: sudo bash ${SCRIPT_DIR}/scripts/credenciales.sh"
 success ".env válido"
 
 # Bug real (reportado): el .env vive en ZASCARR_ROOT (el padre), pero Docker
@@ -489,7 +529,7 @@ case "${ESTADO_APP}" in
   a arrancar al final, cerrada o abierta según lo que elijas."
         docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" stop zascarr || die \
             "No pude parar ZascArr. Páralo a mano antes de seguir:
-  docker compose -f ${COMPOSE_FILE} stop zascarr"
+  sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} stop zascarr"
         ;;
     *)
         die "No he podido comprobar si ZascArr ya está funcionando (¿Docker no responde?).
@@ -501,13 +541,13 @@ esac
 info "Levantando PostgreSQL..."
 cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d postgres || die \
-    "No pude levantar PostgreSQL. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    "No pude levantar PostgreSQL. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 
 info "Esperando a PostgreSQL..."
 MAX=60; ELAPSED=0
 until docker compose -f "${COMPOSE_FILE}" exec -T postgres pg_isready -U comics_admin -d zascarr -q 2>/dev/null; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    [[ $ELAPSED -ge $MAX ]] && die "PostgreSQL no responde tras ${MAX}s.\n  Revisa con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
     echo -n "."; sleep 2
 done
 echo ""; success "PostgreSQL listo"
@@ -522,7 +562,7 @@ cd "${SCRIPT_DIR}" || die "No puedo entrar en el repo (${SCRIPT_DIR})."
 # migra y se arranca con esa MISMA imagen — nunca se instala nada de
 # Python en el host, la única fuente de dependencias es la imagen Docker.
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" build zascarr || die \
-    "No pude construir la imagen de ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} build zascarr"
+    "No pude construir la imagen de ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build zascarr"
 
 info "Corriendo migraciones Alembic (dentro del contenedor)..."
 # DATABASE_URL ya lo resuelve el propio docker-compose.yml desde .env
@@ -531,7 +571,7 @@ info "Corriendo migraciones Alembic (dentro del contenedor)..."
 # a "127.0.0.1:5432"; no hace falta reconstruirlo a mano leyendo el .env.
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" run --rm zascarr \
     alembic upgrade head || die \
-    "Las migraciones de la base de datos fallaron. Revisa con: docker compose -f ${COMPOSE_FILE} logs postgres"
+    "Las migraciones de la base de datos fallaron. Revisa con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres"
 success "Migraciones aplicadas"
 
 # ── A11: abrir a la red EXIGE contraseña, y se fija ahora —después de migrar y
@@ -560,7 +600,7 @@ if ! ajustar_base_url "${EXPOSICION_OPCION}" "${BASE_URL_PUBLICA}"; then
     volver_a_solo_esta_maquina
     ajustar_base_url 1 "" || die \
         "No puedo comprobar la dirección pública que usaría ZascArr, así que no lo arranco.
-  Revisa la base de datos (docker compose -f ${COMPOSE_FILE} logs postgres) y vuelve a ejecutar el instalador."
+  Revisa la base de datos (sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs postgres) y vuelve a ejecutar el instalador."
 fi
 set_env_var "ZASCARR_BIND_ADDRESS" "${ZASCARR_BIND_ADDRESS}"
 
@@ -577,13 +617,13 @@ info "Levantando ZascArr..."
 # de configuración, `up -d` deja el contenedor en marcha con la contraseña ANTIGUA en
 # memoria (verificado en vivo: aceptaba la vieja y rechazaba la nueva).
 docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" up -d --force-recreate zascarr || die \
-    "No pude arrancar ZascArr. Revisa el detalle con: docker compose -f ${COMPOSE_FILE} logs zascarr"
+    "No pude arrancar ZascArr. Revisa el detalle con: sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr"
 
 info "Verificando healthcheck..."
 MAX=30; ELAPSED=0
 until curl -sf http://127.0.0.1:8000/api/health >/dev/null 2>&1; do
     ELAPSED=$((ELAPSED+2))
-    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  docker compose -f ${COMPOSE_FILE} logs zascarr" && break
+    [[ $ELAPSED -ge $MAX ]] && warn "ZascArr aún no responde. Revisa:\n  sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs zascarr" && break
     echo -n "."; sleep 2
 done
 echo ""
@@ -609,7 +649,7 @@ echo "  Kavita:           http://127.0.0.1:5000  (si está instalado)"
 echo "  Prowlarr:         http://127.0.0.1:9696  (si está instalado)"
 echo ""
 echo "  Logs en tiempo real:"
-echo "    docker compose -f ${COMPOSE_FILE} logs -f zascarr"
+echo "    sudo docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs -f zascarr"
 echo ""
 curl -sf http://127.0.0.1:5000 >/dev/null 2>&1 || \
     warn "Kavita no detectado en :5000. Instala con:\n  sudo bash ${SCRIPT_DIR}/scripts/kavita.sh install"

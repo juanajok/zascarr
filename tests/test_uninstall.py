@@ -32,6 +32,7 @@ SCRIPT = REPO / "scripts" / "uninstall.sh"
 FICHEROS_DEL_SCRIPT = (
     "docker-compose.yml",
     "scripts/_comun.sh",
+    "scripts/_credenciales.sh",       # _comun.sh la carga (ADR 0012)
     "scripts/_rutas.sh",
     "scripts/uninstall.sh",
 )

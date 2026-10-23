@@ -126,6 +126,25 @@ class TestIndex:
         assert "Aviso legal pendiente" in r.text
 
 
+    def test_un_deseo_que_espera_no_dice_buscando(self):
+        """Caso real (2026-10-20): «Buscando…» en filas que nadie busca, con búsquedas en pausa."""
+        series = Series(id=uuid4(), title="Sandman", tradition=ComicTradition.AMERICAN)
+        item = make_wishlist_item(series, status=WishlistStatus.WANTED)
+        item.series = series
+        item.issue = None
+        sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
+        with use_fake_session(sesion) as client:
+            r = client.get("/ui/wishlist")
+        assert '<span class="wishlist-badge estado-wanted">Por buscar</span>' in r.text
+        assert '<span class="wishlist-badge estado-wanted">Buscando…' not in r.text
+
+    def test_cada_estado_con_etiqueta_comparte_estilo_con_los_suyos(self):
+        """DOWNLOADED dice lo mismo que DOWNLOADING; sin regla propia se pintaba distinto."""
+        from zascarr.main import STATIC_DIR
+        css = (STATIC_DIR / "web.css").read_text(encoding="utf-8")
+        assert ".wishlist-badge.estado-downloaded" in css
+
+
 class CapturingSession(FakeSession):
     """Como FakeSession, pero guarda cada SELECT compilado con sus literales —
     para fijar el `WHERE` de verdad, no solo lo que el endpoint hace con una

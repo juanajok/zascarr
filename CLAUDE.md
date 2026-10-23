@@ -73,9 +73,18 @@ Sigue las guías oficiales con estas precisiones locales:
   docker-compose lo inyecta.
 - **Nada de datos reales en `.env.example`/defaults.** Valores por defecto:
   o vacío, o placeholder obvio (`cambia_esto_ahora`).
+- **Credenciales (ADR 0012):** ninguna ruta de arranque soportada pone en servicio el sistema con una credencial
+  obligatoria ausente, vacía o conocida por defecto. `DB_PASSWORD` la genera el instalador (`scripts/_credenciales.sh`)
+  y la rechazan el servicio `credenciales` de Compose y la propia app; **nunca** un `:-valor` real en el compose. El `.env`
+  se escribe SOLO con `env_escribir` (atómico, sin copias) y es de root `600`; el usuario de servicio no es dueño del
+  código ni de la carpeta del `.env`. Los scripts de operación no imprimen credenciales.
 - Integraciones P2P deshabilitadas por defecto (`FORUM_ENABLED=false` y
   análogos): el usuario opta, la app no facilita por defecto. Patrón
   explicado en `LEGAL.md`.
+- **Fuentes de metadatos (Comic Vine, AniList, Tebeosfera, GCD) apagadas por defecto**
+  (decisión del PO de 2026-10-19, ADR 0013): se encienden en Ajustes; el `.env` no las
+  gobierna. Una actualización **no apaga en silencio** las de instalaciones con uso previo
+  (migración 0020 las conserva y Ajustes avisa).
 - Healthcheck es **observacional, no bloqueante**: una VPN caída es
   WARNING, no ERROR; no congela ni el arranque ni el ciclo de descargas.
 
@@ -98,7 +107,9 @@ Sigue las guías oficiales con estas precisiones locales:
 - **Caché local-first.** Portadas, metadatos, TODO se escribe a disco/BD
   y se sirve local después. Endpoints de imagen llevan `Cache-Control:
   private, max-age=86400` + `ETag` por mtime (`utils/cover.py::
-  cached_image_response`).
+  cached_image_response`). `/static` va con `Cache-Control: no-cache`
+  (`main.py::RevalidatedStaticFiles`): el navegador revalida con el ETag y recibe un 304
+  vacío si nada cambió. Sin ello, tras `update.sh` seguía pintando el CSS antiguo.
 - El refresco periódico del orchestrator/importer corre en el propio proceso (un solo worker), con los
   intervalos de `config.py`; no hay cola ni caché externa (ADR-0011: Redis retirado).
 
@@ -143,12 +154,61 @@ como marco permanente.
   prohibidos en superficie de usuario: se mapean a causa y acción (historia
   A2).
 - **Semáforos visibles** para el estado del sistema (`/api/health`), texto
-  concreto sobre qué falló y qué hacer.
+  concreto sobre qué falló y qué hacer. Un servicio **apagado en Ajustes** no es un fallo: `/api/health`
+  lo da como `disabled`, no lo sondea ni cuenta para el semáforo, y Estado lo pinta
+  «Desactivado» en gris (decidido el 2026-10-21).
 - **Sin diálogos nativos ni balas invisible**: `hx-confirm` ya se sabe que
   la automatización del navegador no lo resuelve; el usuario real sí.
   Documentado como limitación aceptada en B2.
 - Tarjetas con gracia de fallo: portada rota = placeholder CSS
   `.cover-missing`, no imagen rota; campo ausente con icono claro.
+- **Tipografía** (decidido el 2026-10-20): dos familias libres (OFL), servidas por la
+  app desde `static/vendor/fonts` y nunca desde un CDN: **Anton** para titulares y
+  rótulos en mayúsculas (`--font-display`), **Archivo** variable para todo lo que se
+  lee y se usa (`--font-body`). Anton **solo en mayúsculas**: una frase (los títulos de
+  paso del Inicio, por ejemplo) va en Archivo negrita, y los chips fijan su fuente en vez
+  de heredarla del titular que los contiene. Sin tercera familia de «rotulación de
+  cómic». Ni fuentes comerciales (el repo es GPL y cada
+  instalación las redistribuiría) ni fuentes de cómic en controles o textos largos.
+  Cifras que se comparan (contadores, números de grapa, métricas) con
+  `font-variant-numeric: tabular-nums`. Ficha y forma de actualizar en
+  `static/vendor/README.md`.
+- **Iconos de la interfaz** (decidido el 2026-10-20): SVG de trazo de `web/iconos.py`
+  (Lucide, ISC, con su aviso en el módulo), nunca caracteres de texto (⌂ ✎ ★…), que cada
+  sistema dibuja distinto. Un icono nuevo se copia de `lucide-static` al diccionario.
+- **Marca** (decidido el 2026-10-20): el estallido «¡ZAS!» bermellón con una Z rotulada
+  encima, en `static/brand` (ficheros, colores y reglas en su README). Sustituye al
+  cuadrado amarillo con trama. Se descartó, tras pruebas de iconos: un «¡» (se lee como
+  la «i» de información), una Z sobre cuadrado rojo (se confunde con Zabbix y YouTube)
+  y el amarillo (Mylar3, Kapowarr, Radarr). Por
+  debajo de 24 px va la versión simplificada `zascarr-favicon.svg` (sin fondo: el estallido es la silueta); en la interfaz (24–48 px),
+  `zascarr-icono.svg` sin trama ni líneas de impacto (2026-10-21: a 32 px la versión completa se
+  veía gris y empastada). En ambos, la Z es grande y gruesa y sobresale un poco del estallido,
+  que debe seguir viéndose (decisión del PO, 2026-10-21): así además se distingue de Komga, que
+  lleva la letra dentro de un estallido. La trama y las líneas de impacto, solo en el icono de 180 px. Tamaño mínimo, espacio libre y
+  versión en blanco y negro, en el README de la marca.
+- **Guiños de imprenta: trama sí, desalineamiento casi nunca** (decidido el 2026-10-21). La trama de
+  puntos va donde no hay nada que leer encima: el fondo (5 %), las tarjetas de cifras (10 %), los
+  estados vacíos (una esquina fija bajo el texto) y la página de error (un disco a la derecha, solo con
+  ancho ≥ 1100 px). Detrás de texto, como mucho al 5–10 %; sin texto encima puede llegar a ~30 %. El
+  desalineamiento de planchas (cian y magenta corridos) va **solo** en el rótulo de la página de error:
+  en texto pequeño se lee borroso y en un borde se confunde con la sombra dura de los botones. Todo se
+  apaga con `prefers-contrast: more` y `forced-colors` (bloque al final de `web.css`; una prueba exige
+  que cada trama nueva esté en él).
+- **Un botón principal por pantalla** (decidido el 2026-10-20): el amarillo es la acción que hace
+  avanzar la tarea de esa pantalla y se pide con `.primary` (`button.primary`, `.btn.primary`). Un
+  `type="submit"` es neutro por defecto: los botones que se repiten (uno por resultado o por tarjeta) y
+  los «Guardar» de Ajustes no son principales. Excepción con significado propio: el verde de
+  «Sí, organizar» (aceptar una sugerencia).
+- **Un aviso no parece un botón** (decidido el 2026-10-20): la sombra dura desplazada es de los botones
+  (y del rótulo girado); `.caption` y `.aviso` van sin ella, con el canto de panel.
+- **Títulos que son frases o rutas, en Archivo** (decidido el 2026-10-20): clase `.titulo-frase` para
+  cualquier título de más de 3 palabras o que muestre una ruta de carpeta (en mayúsculas perdería su
+  caja). Los `h1` de pantalla siguen siendo rótulos en Anton.
+- **Las cifras del Inicio cuadran** (decidido el 2026-10-20): la frase de entrada desglosa lo
+  registrado en partes que suman el total (`services/inicio.py::Desglose`, una sola consulta; «por
+  revisar» con el filtro de la lista); lo del disco va aparte, con su fecha y el porqué de la
+  diferencia (copias idénticas que el registro dejó fuera). Un paso no añade cifras sueltas.
 - **Presupuesto de texto** (historia U21, decidido el 2026-10-15; los umbrales
   son provisionales hasta validarlos en U10):
   - Una frase de entrada por pantalla, de ≤ 20 palabras, que diga qué se hace aquí.
@@ -232,11 +292,12 @@ como marco permanente.
 | Doc | Rol |
 |---|---|
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
-| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis; 0006–0010 en el propio directorio) |
+| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`; 0006–0010 en el propio directorio) |
 | `docs/design/ui-migracion.md` | Inventario de la UI (plantillas, rutas, contratos HTMX), maqueta frente a la realidad y estimaciones de la Épica V. **Consultar antes de tocar una plantilla o un contrato `hx-*`** |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
 | `docs/design/benchmark-referencias.md` | Procedimiento y ficha para comparar referencias antes de features P0/P1 (ver §13) |
+| `docs/design/contrato-307-formato-por-contenido.md` | Contrato de **formato por contenido** (#307): un único punto de decisión (`core/formato_contenedor.py`); `file_format` es la extensión **declarada**, el formato real va en `files.metadata["formato_contenido"]`. **Consultar antes de tocar `triage`, la portada o la auditoría de formatos** |
 
 ## 12. Principios de arquitectura del propio código (confirmados por
 benchmarking ronda 2)

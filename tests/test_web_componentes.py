@@ -388,7 +388,13 @@ class TestCssDeLosComponentes:
 
     def test_btn_primary_comparte_regla_con_el_nombre_antiguo(self):
         regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
-        assert "button[type=\"submit\"]" in regla
+        assert "button.primary" in regla
+
+    def test_un_envio_no_es_principal_por_serlo(self):
+        """Revisión visual (2026-10-20): cualquier `type="submit"` salía amarillo y Ajustes enseñaba
+        siete «Guardar» principales. El amarillo es opt-in con `.primary`."""
+        regla = next(s for s in _selectores() if ".btn.primary" in s and ".btn-primary" in s)
+        assert 'button[type="submit"]' not in regla
 
     def test_el_boton_pequeno_conserva_los_40_px(self):
         """`.btn.sm` solo recorta el relleno: la altura mínima la fija la regla base de V1."""
@@ -403,6 +409,23 @@ class TestCssDeLosComponentes:
         bloque = re.search(r"@media \(prefers-reduced-motion: reduce\)\s*\{(.*?)\n\}", CSS, re.S)
         assert bloque and "animation: none !important" in bloque.group(1)
         assert "animation: toast-sale" in CSS and "@keyframes toast-sale" in CSS
+
+    def test_las_tramas_se_apagan_con_contraste_alto(self):
+        """Hueco real (2026-10-21): la trama de fondo seguía detrás del texto aunque el sistema
+        pidiera más contraste o colores forzados. Cada regla con trama tiene que apagarse allí."""
+        cabecera = r"@media \(prefers-contrast: more\), \(forced-colors: active\)"
+        bloque = re.search(cabecera + r"\s*\{(.*?)\n\}", CSS_SIN_COMENTARIOS, re.S)
+        assert bloque
+        fuera = CSS_SIN_COMENTARIOS.replace(bloque.group(0), "")
+        con_trama = {" ".join(s.split()) for s, d in re.findall(r"([^{}@]+)\{([^{}]*)\}", fuera)
+                     if "radial-gradient(" in d}
+        apagadas = {" ".join(s.split()) for s in re.findall(r"([^{}]+)\{", bloque.group(1))}
+        apagadas = {p.strip() for s in apagadas for p in s.split(",")}
+        assert con_trama and con_trama <= apagadas, con_trama - apagadas
+        # El desalineamiento del rótulo de error también se apaga, y el bloque va el último: con la
+        # misma especificidad gana la regla posterior (así se coló el text-shadow en la maqueta).
+        assert re.search(r"\.pagina-error h1\s*\{\s*text-shadow: none;", bloque.group(1))
+        assert CSS_SIN_COMENTARIOS.rstrip().endswith(bloque.group(0).rstrip())
 
     def test_el_foco_visible_se_conserva(self):
         assert ":focus-visible" in CSS and "outline: 3px solid var(--cyan-t)" in CSS

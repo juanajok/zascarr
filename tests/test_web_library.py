@@ -7,7 +7,6 @@ en test_series_service.py.
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -78,6 +77,44 @@ class TestIndex:
             r = client.get("/ui/biblioteca")
         assert r.status_code == 200
         assert "Batman" in r.text
+
+    def test_la_tarjeta_dice_la_tradicion_como_el_filtro(self):
+        """Caso real (2026-10-20): la tarjeta decía «franco_belgian»; el filtro, «Franco-belga»."""
+        series = make_series("Thorgal")
+        series.tradition = ComicTradition.FRANCO_BELGIAN
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        tarjeta = r.text[r.text.index('class="library-card-meta"'):]
+        tarjeta = tarjeta[:tarjeta.index("</div>")]
+        assert "Franco-belga (BD)" in tarjeta and "franco_belgian" not in tarjeta
+
+    def test_los_buscadores_vacios_no_pintan_su_borde(self):
+        """El desplegable vacío con borde dejaba una barra negra bajo «Buscar personaje / saga»."""
+        from zascarr.main import STATIC_DIR
+        css = (STATIC_DIR / "web.css").read_text(encoding="utf-8")
+        assert ".filter-search-box .series-results:empty { display: none; }" in css
+
+    def test_sin_editoriales_no_pinta_el_desplegable_vacio(self):
+        """m4 de U18: sin editoriales no se ofrece un filtro que no filtra nada."""
+        session = FakeSession([FakeExecResult([]), FakeExecResult(0), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert 'id="f-publisher"' not in r.text
+        assert "Todas las editoriales" not in r.text
+
+    def test_con_editoriales_si_pinta_el_desplegable(self):
+        publisher = Publisher(id=uuid4(), name="Bruguera")
+        session = FakeSession([
+            FakeExecResult([publisher]),
+            FakeExecResult(1),
+            FakeExecResult([make_series("Mortadelo")]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert 'id="f-publisher"' in r.text
+        assert "Todas las editoriales" in r.text
+        assert "Bruguera" in r.text
 
     def test_pagina_vacia_muestra_mensaje(self):
         session = FakeSession([

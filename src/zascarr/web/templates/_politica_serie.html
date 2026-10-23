@@ -11,8 +11,7 @@
 <div id="politica-serie" class="politica-serie">
   <h2>Búsqueda automática</h2>
   <p class="subtitle">
-    Qué números de esta serie busca ZascArr por su cuenta. Lo que añadas a mano
-    a la lista de deseos se sigue buscando siempre, elijas lo que elijas aquí.
+    Qué busca ZascArr por su cuenta. Lo que añadas a mano se busca siempre.
   </p>
   <form class="politica-form">
     <label for="wishlist_policy">Qué buscar</label>
@@ -37,8 +36,14 @@
     <span class="htmx-indicator">Guardando…</span>
   </form>
 
-  <p class="caption">
-    «Números que aún no han salido» está deshabilitado: {{ motivo_futuros }}.
+  <p class="caption politica-efecto">
+    Al cambiar el selector se guarda al momento: lo retirado deja de buscarse ya;
+    lo que falte entra en el próximo ciclo.
+  </p>
+
+  <p class="caption politica-futuros">
+    «Números que aún no han salido» está deshabilitado:
+    {{ motivo_futuros[0]|lower }}{{ motivo_futuros[1:] }}.
   </p>
 
   <p class="politica-veredicto">
@@ -91,9 +96,4 @@
     Se conservan como registro, no se borran.
   </p>
   {% endif %}
-
-  <p class="caption">
-    Guardar aplica la retirada al momento (lo que sobra deja de buscarse). Los
-    números que falten entran en el próximo ciclo de búsqueda.
-  </p>
 </div>

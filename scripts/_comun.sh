@@ -52,6 +52,10 @@ die()     { echo -e "${R}✗${N} $*" >&2; exit 1; }
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
+# Credenciales del .env (validar, comprobar protección): ADR 0012.
+# shellcheck source=scripts/_credenciales.sh
+source "${SCRIPT_DIR}/_credenciales.sh"
+
 # bootstrap.sh deja un symlink REPO_DIR/.env -> ENV_FILE para que un
 # "docker compose" manual (sin --env-file) invocado desde el repo también
 # encuentre la configuración real, en vez de arrancar en silencio con los
@@ -88,6 +92,8 @@ comprobar_requisitos() {
         "No encuentro ${COMPOSE_FILE}. ¿Está el repo completo en ${REPO_DIR}?"
     [[ -f "${ENV_FILE}" ]] || die \
         "No encuentro ${ENV_FILE}. Se espera el .env que creó bootstrap.sh en ${ZASCARR_ROOT}."
+    # Existe pero no se puede leer (600 de root y no somos root): se dice antes de tocar nada (ADR 0012).
+    comprobar_env_legible
 }
 
 # Los scripts se invocan con sudo (el backup va a /var/backups, que es de root),

@@ -32,7 +32,12 @@ from tests.test_alta_serie_pg import (  # noqa: F401  (BD efímera y entorno sin
     url_bd,
 )
 from zascarr.models import AltaOperacion, ComicTradition, Issue, MetadataSource, Series
-from zascarr.services.discovery import Busqueda, DiscoveryResult, DiscoveryService
+from zascarr.services.discovery import (
+    Busqueda,
+    DiscoveryResult,
+    DiscoveryService,
+    ProcedenciaTradicion,
+)
 
 URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)")
@@ -46,7 +51,8 @@ def _clave_de_firma_web(monkeypatch, entorno):
 
 def resultado(**kw) -> DiscoveryResult:
     base = dict(source=MetadataSource.COMIC_VINE, external_id="796", title="Flash", start_year=1987,
-                description="Velocista.", cover_url=CV_OK, site_url=None, tradition_guess=ComicTradition.AMERICAN)
+                description="Velocista.", cover_url=CV_OK, site_url=None, tradition_guess=ComicTradition.AMERICAN,
+                tradition_provenance=ProcedenciaTradicion.POR_DEFECTO)
     return DiscoveryResult(**{**base, **kw})
 
 
@@ -94,6 +100,8 @@ class TestRevisarNoEscribeNada:
         v = await revisar(valor(html, "candidata"), "manga")                 # la persona elige MANGA, la fuente sugería americana
         assert v.status_code == 200
         assert "Crear serie vacía" in v.text and "Tradición elegida: <strong>Manga</strong>" in v.text
+        assert "Procedencia de la sugerencia: valor por defecto: la fuente no lo indica." in v.text
+        assert "La tradición aplicada es la que elegiste." in v.text
         assert "sin números ni archivos" in v.text
         assert await numero_de_series(entorno.banco) == 0 and await comprobantes(entorno.banco) == 0
 

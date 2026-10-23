@@ -20,7 +20,13 @@ import pytest
 from sqlalchemy import text
 
 from tests._pg import bd_efimera_sync, migrar_a_head
-from tests.test_revision_carpetas_pg import BIB, Banco, archivo, candidatas
+from tests.test_revision_carpetas_pg import (
+    BIB,
+    Banco,
+    archivo,
+    candidatas,
+    sembrar_referencia_u13a,
+)
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.services import revision_carpetas
@@ -33,6 +39,7 @@ from zascarr.services.revision_carpetas import (
     PatronDeNombres,
     RespuestaCarpetas,
     Senal,
+    SerieSugerida,
     Totales,
 )
 
@@ -90,6 +97,27 @@ def visible(cuerpo: str) -> str:
     """El texto que lee la persona: sin etiquetas, con entidades resueltas y espacios normalizados."""
     sin_etiquetas = re.sub(r"<[^>]+>", " ", principal(cuerpo))
     return re.sub(r"\s+", " ", htmllib.unescape(sin_etiquetas)).strip()
+
+
+def miles(n: int) -> str:
+    """El formato de la vista: punto para los miles (1.322), no coma."""
+    return f"{n:,}".replace(",", ".")
+
+
+def _grupo_de_referencia(clave: str, n_archivos: int, sugerida: SerieSugerida | None = None) -> Grupo:
+    """Una tarjeta del fixture enlatado de U21; no toca la BD ni el disco."""
+    titulo = clave.rsplit("/", 1)[-1]
+    return Grupo(
+        clave=clave, carpeta_contextual=titulo, ascendentes=["Comics"],
+        carpeta_limpia=CarpetaLimpiaOut(titulo=titulo, anio=None, volumen=None, calificadores=[]),
+        estado="serie_sugerida" if sugerida else "sin_serie",
+        etiqueta=ETIQUETAS["serie_sugerida" if sugerida else "sin_serie"],
+        n_archivos=n_archivos,
+        patron_de_nombres=PatronDeNombres(titulo_dominante=titulo, proporcion=1.0, titulos_distintos=1),
+        serie_sugerida=sugerida, por_confirmar=sugerida is not None, en_conflicto=False,
+        senales=[], archivos=[ArchivoRevision(id=f"id-{clave}", nombre=f"{titulo} 01.cbz",
+                                              estado="serie_sugerida" if sugerida else "sin_serie")],
+    )
 
 
 # ── Lo que ve la persona ──────────────────────────────────────────────────────────────────────────
@@ -215,14 +243,24 @@ class TestSinLogicaPropia:
                 assert s["texto"] in t, s["texto"]
             for a in g["archivos"]:
                 assert a["nombre"] in t
-        assert f"{datos['totales']['sin_serie']} sin serie" in t
-        assert f"{datos['totales']['grupos']} carpetas" in t
+        assert f"{miles(datos['totales']['sin_serie'])} por revisar" in t
+        assert (
+            f"{miles(datos['totales']['sin_serie_en_carpetas'])} en "
+            f"{miles(datos['totales']['carpetas_utiles_sin_serie'])} carpeta" in t
+        )
+        assert f"de {miles(datos['totales']['carpetas_utiles'])}" in t
 
     async def test_la_vista_pinta_lo_que_devuelve_el_servicio_sin_recalcular(self, banco, monkeypatch):
         """Una respuesta ENLATADA con un texto de señal inventado: si la vista lo recalculara, no saldría."""
         enlatada = RespuestaCarpetas(
             generado="2026-10-07T00:00:00Z",
-            totales=Totales(sin_serie=0, serie_sugerida=1, grupos=1, candidata_inexistente=0),
+            totales=Totales(
+                sin_serie=0, serie_sugerida=1, grupos=1, candidata_inexistente=0,
+                carpetas_utiles=1, carpetas_utiles_sin_serie=0,
+                carpetas_utiles_serie_sugerida=1, sin_serie_en_carpetas=0,
+                sin_serie_sueltos=0, serie_sugerida_en_carpetas=1,
+                serie_sugerida_sueltos=0, sueltos=0,
+            ),
             pagina=Pagina(limite=50, desplazamiento=0),
             grupos=[Grupo(
                 clave="Comics/Inventada", carpeta_contextual="Inventada", ascendentes=["Comics"],
@@ -235,7 +273,7 @@ class TestSinLogicaPropia:
             )],
         )
 
-        async def falso(self, limite=200, desplazamiento=0):
+        async def falso(self, limite=200, desplazamiento=0, solo_utiles=False):
             return enlatada
         monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", falso)
         t = visible((await pagina()).text)
@@ -281,6 +319,123 @@ class TestPaginacion:
     @pytest.mark.parametrize("params", [{"limite": 0}, {"limite": 1001}, {"desplazamiento": -1}, {"limite": "x"}])
     async def test_parametros_invalidos_son_422(self, banco, params):
         assert (await pagina(params)).status_code == 422
+
+
+class TestU13aCarpetasUtilesYSueltos:
+    """La vista lista solo grupos con contexto y deja los sueltos accesibles."""
+
+    async def test_solo_pinta_carpetas_utiles_y_enlaza_los_sueltos(self, banco):
+        await banco.sembrar(
+            archivo("Comics/G/Cosa 01.cbz"),
+            archivo("Comics/Suelto 01.cbz"),
+        )
+        r = await pagina()
+        t = visible(r.text)
+        assert "Comics/G" in t
+        assert "Comics/Suelto" not in t
+        assert re.search(r"2 por revisar: 1 en 1 carpeta \+ 1 suelto\s*\.", t)
+        assert 'href="/ui/pendientes"' in r.text and ">1 suelto</a>" in r.text
+        assert "No hay carpetas con contexto" not in t
+
+    async def test_la_api_sin_filtro_incluye_el_grupo_sin_contexto_y_la_vista_lo_excluye(self, banco):
+        await banco.sembrar(
+            archivo("Comics/G/Cosa 01.cbz"),
+            archivo("Comics/Suelto 01.cbz"),
+        )
+        async with cliente() as c:
+            datos = (await c.get("/api/revision/carpetas")).json()
+            html = (await c.get(RUTA)).text
+        grupos = {g["clave"]: g for g in datos["grupos"]}
+        assert grupos["Comics"]["carpeta_contextual"] is None
+        assert [a["nombre"] for a in grupos["Comics"]["archivos"]] == ["Suelto 01.cbz"]
+        assert "Comics/Suelto" not in visible(html)
+
+    async def test_el_recuento_del_enlace_no_cuenta_sueltos(self, banco):
+        await banco.sembrar(
+            archivo("Comics/G/Cosa 01.cbz"),
+            archivo("Comics/Suelto 01.cbz"),
+            archivo("Raiz 01.cbz"),
+        )
+        async with cliente() as c:
+            r = await c.get("/ui/pendientes/carpetas/recuento")
+        texto = " ".join(htmllib.unescape(re.sub(r"<[^>]+>", " ", r.text)).split())
+        assert r.status_code == 200
+        assert texto == "Verlos por carpeta (1 carpeta)"
+
+    async def test_una_pagina_que_ya_no_existe_tiene_salida(self, banco):
+        await banco.sembrar(*(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(5)))
+        r = await pagina({"limite": 2, "desplazamiento": 99})
+        t = visible(r.text)
+        assert "Esta página ya no existe" in t
+        assert "Ir a la primera página" in t and "Ir a la última página válida" in t
+        assert "Carpetas 99–99" not in t
+        assert 'href="/ui/pendientes/carpetas?limite=2"' in r.text
+        assert "desplazamiento=4" in r.text
+
+    async def test_solo_sueltos_dice_que_no_hay_carpetas_y_deja_la_salida(self, banco):
+        await banco.sembrar(archivo("Comics/Suelto 01.cbz"), archivo("Raiz 01.cbz"))
+        r = await pagina()
+        t = visible(r.text)
+        assert re.search(r"2 por revisar: 0 en 0 carpetas \+ 2 sueltos\s*\.", t)
+        assert "No hay carpetas con contexto" in t
+        assert 'href="/ui/pendientes"' in r.text and ">2 sueltos</a>" in r.text
+        assert "Nada pendiente" not in t
+
+    async def test_un_fallo_no_pinta_recuentos_parciales(self, banco, monkeypatch):
+        await banco.sembrar(archivo("Comics/G/CosaSecretaQ9 01.cbz"))
+
+        async def roto(self, *args, **kwargs):
+            raise RuntimeError("fallo de lectura")
+
+        monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", roto)
+        r = await pagina()
+        t = visible(r.text)
+        assert r.status_code == 503
+        assert "No se han podido leer los pendientes" in t
+        assert "No se muestran recuentos parciales" in t
+        assert "CosaSecretaQ9" not in t and "1 por revisar" not in t
+        assert 'href="/ui/pendientes/carpetas">Reintentar</a>' in r.text
+
+    async def test_medicion_local_de_carga_y_cambio_de_pagina(self, banco):
+        """P1/P1b locales en ASGI con 1.322 A + 17 B, página 50.
+
+        No es la medición de navegador real ni de la Pi: P1/P1b/P4 siguen NOT RUN.
+        """
+        import time
+
+        await sembrar_referencia_u13a(banco)
+        async with cliente() as c:
+            await c.get(RUTA, params={"limite": 50})             # calienta
+
+            banco.sentencias.clear()
+            primera = await c.get(RUTA, params={"limite": 50})
+            consultas = len(banco.sentencias)
+            assert primera.status_code == 200
+            assert primera.text.count('class="card carpeta"') == 50
+
+            tiempos_primera: list[float] = []
+            for _ in range(20):
+                inicio = time.perf_counter()
+                await c.get(RUTA, params={"limite": 50})
+                tiempos_primera.append((time.perf_counter() - inicio) * 1000)
+
+            cambio = await c.get(RUTA, params={"limite": 50, "desplazamiento": 50})
+            assert cambio.status_code == 200
+            assert cambio.text.count('class="card carpeta"') == 50
+            tiempos_cambio: list[float] = []
+            for _ in range(20):
+                inicio = time.perf_counter()
+                await c.get(RUTA, params={"limite": 50, "desplazamiento": 50})
+                tiempos_cambio.append((time.perf_counter() - inicio) * 1000)
+
+        p95_primera = sorted(tiempos_primera)[18]
+        p95_cambio = sorted(tiempos_cambio)[18]
+        assert consultas <= 3, consultas
+        assert p95_primera <= 2000, f"p95 primera {p95_primera:.0f} ms"
+        assert p95_cambio <= 1000, f"p95 cambio {p95_cambio:.0f} ms"
+        print(f"\n[U13a] HTML local 1.322+17, página 50: {consultas} consultas; "
+              f"p95 primera {p95_primera:.0f} ms, p95 cambio {p95_cambio:.0f} ms "
+              f"(ASGI, no navegador/Pi)")
 
 
 class TestEscapeYSoloLectura:
@@ -330,6 +485,84 @@ class TestEscapeYSoloLectura:
         assert banco.sentencias and all(s.lstrip().upper().startswith(("SELECT", "WITH")) for s in banco.sentencias)
         assert len(banco.sentencias) <= 3
         assert await huella() == antes
+
+
+class TestPresupuestoTexto:
+    """U21: la entrada y los datos de decisión caben antes de la primera acción de la tarjeta."""
+
+    @staticmethod
+    def _palabras(html: str) -> list[str]:
+        texto = re.sub(r"<[^>]+>", " ", html)
+        return re.sub(r"\s+", " ", htmllib.unescape(texto)).strip().split()
+
+    @staticmethod
+    def _sin_contenido_de_detalles(html: str) -> str:
+        """Quita el contenido de <details>, pero conserva el texto visible del <summary>."""
+        def resumen(bloque: re.Match[str]) -> str:
+            encontrado = re.search(r"<summary\b[^>]*>(.*?)</summary>", bloque.group(0), re.S)
+            return encontrado.group(1) if encontrado else " "
+
+        return re.sub(r"<details\b.*?</details>", resumen, html, flags=re.S)
+
+    async def test_entrada_y_primera_accion_caben_en_50_palabras(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        cuerpo = (await pagina()).text
+        principal_cuerpo = principal(cuerpo).split(">", 1)[1]
+        sin_detalles = self._sin_contenido_de_detalles(principal_cuerpo)
+        antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
+        palabras = self._palabras(antes)
+        assert len(palabras) <= 50, f"{len(palabras)} palabras antes de la acción: {' '.join(palabras)}"
+        assert "No se crea ni se asigna nada hasta que confirmes." in visible(cuerpo)
+        assert "Sin serie sugerida" in antes
+        assert principal_cuerpo.index('class="carpeta-accion"') < principal_cuerpo.index('class="carpeta-detalle"')
+
+    async def test_la_cifra_de_46_es_reproducible_con_el_fixture_de_referencia(self, banco, monkeypatch):
+        """U13a mide 46 palabras con 1.322/108/14 + 17 y dos tarjetas; esta prueba enlata esa respuesta.
+
+        44 era la composición de #208 antes de U13a. U13a sustituye los chips por la frase de
+        resumen (18 palabras) y enlaza los sueltos; el subtítulo sigue por debajo de 20. La prueba
+        general de umbral siembra un solo registro y comprueba ≤ 50, no la cifra exacta.
+        """
+        enlatada = RespuestaCarpetas(
+            generado="2026-10-21T00:00:00Z",
+            totales=Totales(
+                sin_serie=1322, serie_sugerida=17, grupos=108, candidata_inexistente=0,
+                carpetas_utiles=108, carpetas_utiles_sin_serie=108,
+                carpetas_utiles_serie_sugerida=1, sin_serie_en_carpetas=1308,
+                sin_serie_sueltos=14, serie_sugerida_en_carpetas=17,
+                serie_sugerida_sueltos=0, sueltos=14,
+            ),
+            pagina=Pagina(limite=50, desplazamiento=0),
+            grupos=[
+                _grupo_de_referencia("Comics/Flash (1987)", 155),
+                _grupo_de_referencia(
+                    "Comics/Batman (2016)", 42,
+                    SerieSugerida(series_id="id-batman", titulo="Batman", anio=2016, puntuacion=0.92)),
+            ],
+        )
+
+        async def falso(self, limite=200, desplazamiento=0, solo_utiles=False):
+            return enlatada
+        monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", falso)
+
+        cuerpo = (await pagina()).text
+        principal_cuerpo = principal(cuerpo).split(">", 1)[1]
+        sin_detalles = self._sin_contenido_de_detalles(principal_cuerpo)
+        antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
+        palabras = self._palabras(antes)
+        assert len(palabras) == 46, f"{len(palabras)} palabras: {' '.join(palabras)}"
+
+    async def test_estado_vacio_tambien_cabe(self, banco):
+        cuerpo = (await pagina()).text
+        principal_cuerpo = principal(cuerpo).split(">", 1)[1]
+        antes = principal_cuerpo.split('<p><a class="back-link"', 1)[0]
+        assert len(self._palabras(antes)) <= 50
+
+    async def test_el_subtitulo_no_pasa_de_20_palabras(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        cuerpo = (await pagina()).text
+        subtitulo = re.search(r'<p class="subtitle">(.*?)</p>', cuerpo, re.S).group(1)
+        assert len(self._palabras(subtitulo)) == 18      # la frase aprobada, ≤ 20
 
 
 class TestAccesoYEnlaces:

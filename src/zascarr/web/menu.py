@@ -19,7 +19,7 @@ class Entrada:
     etiqueta: str
     url: str
     grupo: str
-    icono: str                      # carácter decorativo (aria-hidden)
+    icono: str                      # nombre en `web/iconos.py::ICONOS` (SVG decorativo)
     corta: str | None = None        # etiqueta de la barra inferior, si la larga no cabe
     movil_principal: bool = False   # ¿va en la barra inferior? (si no, en «Más»)
     contador: str | None = None     # id del contador que muestra: pendientes | deseados | estado
@@ -28,17 +28,17 @@ class Entrada:
 GRUPOS = ("Mi colección", "Añadir", "Sistema")
 
 ENTRADAS: tuple[Entrada, ...] = (
-    Entrada("inicio", "Inicio", "/ui/", "Mi colección", "⌂", movil_principal=True),
-    Entrada("revisar", "Por revisar", "/ui/pendientes", "Mi colección", "✎",
+    Entrada("inicio", "Inicio", "/ui/", "Mi colección", "inicio", movil_principal=True),
+    Entrada("revisar", "Por revisar", "/ui/pendientes", "Mi colección", "revisar",
             corta="Revisar", movil_principal=True, contador="pendientes"),
-    Entrada("biblioteca", "Biblioteca", "/ui/biblioteca", "Mi colección", "▤"),
-    Entrada("duplicados", "Duplicados", "/ui/auditoria", "Mi colección", "⚖"),
-    Entrada("descubrir", "Descubrir", "/ui/descubrir", "Añadir", "⌕"),
-    Entrada("deseados", "Deseados", "/ui/wishlist", "Añadir", "★",
+    Entrada("biblioteca", "Biblioteca", "/ui/biblioteca", "Mi colección", "biblioteca"),
+    Entrada("duplicados", "Duplicados", "/ui/auditoria", "Mi colección", "duplicados"),
+    Entrada("descubrir", "Descubrir", "/ui/descubrir", "Añadir", "descubrir"),
+    Entrada("deseados", "Deseados", "/ui/wishlist", "Añadir", "deseados",
             movil_principal=True, contador="deseados"),
-    Entrada("estado", "Estado", "/estado", "Sistema", "♥",
+    Entrada("estado", "Estado", "/estado", "Sistema", "estado",
             movil_principal=True, contador="estado"),
-    Entrada("ajustes", "Ajustes", "/ui/ajustes", "Sistema", "⚙"),
+    Entrada("ajustes", "Ajustes", "/ui/ajustes", "Sistema", "ajustes"),
 )
 
 #: prefijo de ruta → entrada. Se compara por segmentos (`/ui/pendientes` y `/ui/pendientes/x`, no
