@@ -207,6 +207,11 @@ def danar(origen: Path, destino: Path, tipo: str, param: int) -> None:
 def listar(f: str, extra: dict | None = None) -> tuple[list[Entrada], dict, dict]:
     r = ejecutar(["lsar", "-j", f], stdout_a=str(WORK / "lsar.json"), **(extra or {}))
     entradas, meta = [], {}
+    if r["rc"] != 0 and not (r.get("stderr") or "").strip():          # con `-j` la salida (también el mensaje de error) va al fichero redirigido
+        try:
+            r["stderr"] = (WORK / "lsar.json").read_text(errors="replace")[:300]
+        except OSError:
+            pass
     if r["rc"] == 0:
         try:
             entradas, meta = parsear_lsar_json((WORK / "lsar.json").read_text(errors="replace"))
@@ -332,17 +337,20 @@ def modo_corrupto(ms) -> None:
                 por_nombre = {e.nombre: e for e in ent2}
                 pedidas = [(f"pag{i}", por_nombre.get(imgs[i].nombre)) for i in range(max(0, k - 2), min(len(imgs), k + 3))]
             for motor in ("unar", "unrar"):
-                clases, ultima_r, ok = [], {}, 0
+                clases, medidas, ok = [], [], 0
                 for op, e2 in pedidas:
                     if e2 is None:
                         clases.append("SIN_PAGINA_QUE_PEDIR")
+                        medidas.append({})
                         continue
-                    cl, ultima_r = _evaluar(motor, str(v), e2, orig.get(e2.nombre, e2))
+                    cl, r_pag = _evaluar(motor, str(v), e2, orig.get(e2.nombre, e2))
                     clases.append(cl)
+                    medidas.append(r_pag)
                     ok += cl.startswith("OK")
+                ultima_r = next((m for m in reversed(medidas) if m), {})
                 if objetivo == "extremos":
-                    for (op, _e), cl in zip(pedidas, clases):
-                        anotar(fila("corrupto", tag, nombre, motor, op, cl, "PASS" if cl in ACEPTABLES else "FAIL", ultima_r))
+                    for (op, _e), cl, m in zip(pedidas, clases, medidas):
+                        anotar(fila("corrupto", tag, nombre, motor, op, cl, "PASS" if cl in ACEPTABLES else "FAIL", m))
                 else:
                     res = f"peor: {peor(clases)} ({ok} de {len(clases)} páginas bien; {sum(c2.startswith('ERROR_CLARO') for c2 in clases)} con error claro; {sum(e is None for _o, e in pedidas)} ausentes del listado)"
                     anotar(fila("corrupto", tag, nombre, motor, "ventana", res, "PASS" if peor(clases) in ACEPTABLES or peor(clases).startswith("OK") else "FAIL", ultima_r))
@@ -388,8 +396,10 @@ def modo_topes(ms) -> None:
     anotar(fila("topes", p.name, f"FSIZE={tope}B", "unar", "ultima", f"rc={r1['rc']}; escribió {escrito} B (tope {tope}); {nota}", "PASS" if (r1["rc"] != 0 and escrito <= tope and not r1["timeout"]) else "FAIL", r1))
     # 2) memoria virtual máxima
     r2, d2 = extraer("unar", str(p), ul, rlimits={"RLIMIT_AS": 96 << 20})
-    anotar(fila("topes", p.name, "AS=96MiB", "unar", "ultima", f"rc={r2['rc']}; {'página entera' if d2 else 'sin página'}; {nota}", "PASS" if (not r2["timeout"] and r2["rc"] != -998) else "FAIL", r2,
-                "informativo: dice si la memoria virtual sirve como tope"))
+    cl2 = clasificar_salida(r2, valida=bool(d2), hay_datos=bool(d2))
+    util = d2 is not None and r2["rc"] == 0
+    anotar(fila("topes", p.name, "AS=96MiB", "unar", "ultima", f"{cl2}; {'página entera' if d2 else 'sin página'}; {nota}" + ("" if util else " → RLIMIT_AS NO sirve como tope: usar el límite de memoria del contenedor"),
+                "PASS" if util else "INFO", r2, "informativo: la memoria virtual de unar es muy superior a la residente"))
     # 3) tiempo: orden vencida y sin procesos huérfanos
     r3, _ = extraer("unar", str(p), ul, timeout=0.01)
     time.sleep(0.3)
