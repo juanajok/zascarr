@@ -1,0 +1,10 @@
+# Imagen DESECHABLE solo para medir lo que cuesta `unar` AISLADO (sin libarchive-tools, unrar ni rarfile). No es la de producción.
+ARG BASE=zascarr-zascarr:latest
+FROM ${BASE}
+USER root
+RUN dpkg-query -W -f='${Installed-Size}\t${Package}\n' | LC_ALL=C sort -k2 > /pk-antes.txt \
+ && apt-get update && apt-get install -y --no-install-recommends unar \
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg-query -W -f='${Installed-Size}\t${Package}\n' | LC_ALL=C sort -k2 > /pk-despues.txt \
+ && { echo "# paquetes añadidos por unar (KiB instalados, paquete)"; LC_ALL=C join -1 2 -2 2 -v 2 /pk-antes.txt /pk-despues.txt | awk '{print $2"\t"$1}' | sort -rn; \
+      echo "# total KiB:"; LC_ALL=C join -1 2 -2 2 -v 2 /pk-antes.txt /pk-despues.txt | awk '{s+=$2} END{print s}'; } > /anadidos.txt
