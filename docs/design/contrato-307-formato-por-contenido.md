@@ -1,6 +1,6 @@
 # Contrato de #307 — reconocer un ZIP por su contenido (un solo punto de decisión)
 
-> **Estado: IMPLEMENTADO en la rama `claude/307-formato-por-contenido` (PR #325, EN BORRADOR: no fusionable hasta que el PO decida D1–D5). Sin migración y sin tocar ningún fichero del PO.** **D1–D5 (§8) son PROPUESTAS, no decisiones:** la rama aplica mis recomendaciones solo para que se puedan ver funcionando, y cada una dice qué pasa si el PO elige otra cosa. Desviaciones y hallazgos al implementar y probar: ver §12. **No forma parte de ningún candidato de despliegue.** Cierra el contrato que la tarjeta pedía «antes de pasar a Lista para desarrollar» (`benchmark-formatos-contenedor.md` §6.1). Umbrales y topes se han **medido en la Pi** el 2026-10-23 con `scripts/medicion/censo_zip_por_contenido.py` (§9); los 20 ficheros que superan el tope de hoy también están medidos. Las decisiones que son del PO están en §8 con una recomendación.
+> **Estado: IMPLEMENTADO en la rama `claude/307-formato-por-contenido` (PR #325, EN BORRADOR hasta completar la revisión técnica y la CI sobre el SHA final; esto NO autoriza fusión ni despliegue). Sin migración y sin tocar ningún fichero del PO.** **D1–D5 DECIDIDAS por el PO el 2026-10-23** (§8), con reservas técnicas que este contrato recoge: D3 se aprueba como contrato objetivo y no como garantía ya acreditada, D4 sin afirmar «varios tebeos» y D5 a demanda. **No forma parte de ningún candidato de despliegue.** Hallazgos y desviaciones: §12.
 
 ## 1. Qué cambia respecto a la tarjeta (datos del censo de cabeceras, 2026-10-23)
 La tarjeta partía de **2 ZIP sin extensión** (*Paul Pope*, *Barrio*). El censo de la Pi (1267 ficheros `.cbr`/`.rar`/sin extensión, solo 4 KiB de cada uno) dice otra cosa:
@@ -32,7 +32,7 @@ firma_de(path) -> Firma                  # ≤ 512 bytes. ZIP | RAR | SIETE_Z | 
 tratamiento(declarada: FileFormat | None, firma: Firma) -> Tratamiento   # PURA, sin E/S: la matriz de §4
 clasificar_zip(path) -> ClaseZip         # solo directorio central, con topes (§5, §6)
 ```
-`ClaseZip`: `TEBEO | PAQUETE | NO_TEBEO | CIFRADO | INVALIDO | VACIO | LIMITE`. `Tratamiento`: `LEER_COMO_ZIP | SOLO_HASH | AVISAR`.
+`ClaseZip`: `TEBEO | ANIDADOS | NO_TEBEO | CIFRADO | INVALIDO | VACIO | LIMITE`. `Tratamiento`: `LEER_COMO_ZIP | SOLO_HASH | AVISAR`.
 
 **Quién lo usa** (hoy cada uno decide por su cuenta):
 
@@ -64,13 +64,13 @@ Una carrera (el fichero cambia entre la firma y la apertura) acaba en `BadZipFil
 | Clase | Regla | Efecto |
 |---|---|---|
 | `TEBEO` | ≥ **N** imágenes, esas imágenes ≥ **F** del contenido (sin `Thumbs.db`, `.DS_Store`, `ComicInfo.xml`), sin contenedores anidados | portada + `ComicInfo` |
-| `PAQUETE` | alguna entrada con extensión de contenedor (`.cbz .zip .cbr .rar .cb7 .7z .tar .epub .pdf`…) | **se marca**, no se extrae portada ni se trata como un tebeo (idea de Kapowarr) |
+| `ANIDADOS` | alguna entrada con extensión de contenedor (`.cbz .zip .cbr .rar .cb7 .7z .tar .epub .pdf`…) | **no se interpreta automáticamente como un tebeo** (ni se extrae su portada) y **no se afirma que contenga «varios tebeos»**: once imágenes y un PDF podrían ser un tebeo con un suplemento (D4) |
 | `NO_TEBEO` | pocas imágenes o poca fracción | aviso |
 | `CIFRADO` | alguna entrada cifrada | aviso: «necesita contraseña; ZascArr no la pide» |
 | `INVALIDO` / `VACIO` | no se abre / sin entradas | aviso |
 | `LIMITE` | supera los topes (§6) | aviso con el motivo |
 
-**Decisión que se hereda del ensayo:** un `.pdf` o `.epub` dentro de un ZIP cuenta como contenedor y lo hace `PAQUETE` (conservador: se marca, no se registra).
+**D4 (decidida):** un `.pdf` o `.epub` —o cualquier otro comprimido— dentro de un ZIP impide clasificarlo automáticamente como un tebeo individual para el reconocimiento de `.cbr`/`.cb7`; la clase se llama `ANIDADOS` precisamente para **no afirmar** «pack» ni «varios tebeos». Casos de prueba: imágenes + PDF, imágenes + EPUB y varios CBZ anidados. No se abren esos documentos. Un `.cbz` declarado con anidados se lee como siempre.
 **Umbrales, con datos reales de esta biblioteca:** imágenes por fichero **mín 21** (control), **22** (`.cbr`-ZIP) y **62** (sin extensión); fracción de imágenes sobre las entradas **mín 0,95** (control) y **1,00** (ocultos). Cualquier N ≤ 20 y F ≤ 0,9 da **0 falsos negativos**. **Se propone N = 10 y F = 0,8** (margen ×2 sobre el mínimo observado). Límite honesto: **en esta biblioteca no hay ningún ZIP que no sea un tebeo** (298/298 y 46/46 salen `TEBEO`), así que los umbrales **no se han contrastado contra falsos positivos con datos reales**; eso lo cubren solo las pruebas sintéticas (T3). Son parámetros revisables.
 
 ## 6. Topes
@@ -83,31 +83,38 @@ Una carrera (el fichero cambia entre la firma y la apertura) acaba en `BadZipFil
 | Límite | Valor | A qué se aplica | Qué ocurre al superarlo |
 |---|---|---|---|
 | Entradas por ZIP | ≤ **2000** (máx. medido 941) | se mira en el **registro final del ZIP (EOCD, o ZIP64)** leyendo solo el final del fichero; si declara más, **ni se abre** (`ZipFile()` carga el directorio central entero en memoria antes de poder contar) | clase `LIMITE`; aviso; sin ComicInfo ni portada |
-| Directorio central | ≤ **16 MiB** (2000 entradas ≈ 0,3 MiB) | igual: se lee del EOCD/ZIP64 | `LIMITE` |
+| Directorio central | ≤ **1 MiB** *(corrección técnica del 16 MiB aprobado: ver abajo)* | igual: se lee con **el mismo lector del registro final que usa `ZipFile`** (`zipfile._EndRecData`: última firma, comentario, localizador y registro ZIP64) | `LIMITE` (motivo «directorio»): «Su índice interno es demasiado grande y ZascArr no lo abre, por precaución.» |
 | Entrada **que se lee** | ≤ **32 MiB** descomprimidos | el tamaño **declarado de esa entrada** (la primera página; `ComicInfo.xml` tiene su propio tope de 1 MiB) y, además, la lectura **no pasa de `tope + 1` bytes** aunque la cabecera mienta (`zf.open(...).read(tope + 1)`) | `EntradaNoLegible`; la página se ignora con aviso |
 | Ratio de compresión | ≤ **100** | `tamaño descomprimido / tamaño comprimido` **de esa misma entrada** (la primera página observada: ≤ 1,77) | `EntradaNoLegible` (posible bomba) |
 | Píxeles de la miniatura | ≤ **40 Mpx** | `ancho × alto` que declara la cabecera de la imagen (`Image.open` lee solo la cabecera); una página de tebeo de 3000×4500 son 13,5 Mpx | sin miniatura, **sin decodificar** |
 | Total descomprimido | **ya no hay** | — | — (era el tope de 500 MiB que dejaba sin `ComicInfo`/anchura a 20 de 366 ZIP) |
 
+**Por qué 1 MiB y no 16 MiB (corrección técnica, no cambio de producto).** `ZipFile()` recorre el directorio central por su **tamaño en bytes**, no por el nº de entradas que declara el registro, y reserva ~10 B de memoria por byte de índice. **Medido** (Python 3.14, x86): 2000 entradas = 109 KiB → 1,0 MiB de pico; 20 000 = 1,1 MiB → 10,8 MiB; 60 000 = 3,3 MiB → 33 MiB y 2,4 s. Con 16 MiB serían ~170 MiB y ~12 s (en la Pi, bastante más) dentro de un contenedor de 512 MiB: el tope de entradas **declaradas** no protege si el índice real es mayor. 1 MiB cubre de sobra 2000 entradas con nombres largos (~0,3 MiB) y acota el coste a ~11 MiB. La tabla aprobada decía 16 MiB; **se cambia por esta razón y se deja dicho**.
+
+**Coherencia entre el control previo y el lector que abre el ZIP** (condición del PO sobre D3): el control **no reimplementa** el registro final; llama al mismo `zipfile._EndRecData` que usa `ZipFile`. Una firma EOCD falsa dentro del comentario, un localizador ZIP64 que el EOCD normal no refleja o un registro truncado se interpretan igual en los dos. Pruebas: `TestCoherenciaConLoQueAbreZipFile` compara, para cada variante, lo que ve el control con lo que `ZipFile` realmente usa (espiando la función). Es una función privada de la biblioteca estándar: si una versión de Python la cambiara, el módulo **no se importa** (falla ruidoso, no deja pasar en silencio) y una prueba lo deja dicho. **Límite honesto:** se ha probado con Python 3.14 en local; la CI usa 3.11, que es la versión de la imagen.
+
+**Causa dicha = causa que saltó** (condición del PO): `LIMITE` lleva un motivo, «entradas» o «directorio»; el aviso de «más de 2000 archivos» solo sale por entradas.
+
 **Qué NO acota esto:** el total de lo que contiene un ZIP (solo se lee **una página** y `ComicInfo.xml`); el tiempo de lectura de un disco lento; ni la decodificación de formatos que Pillow lea más despacio de lo que su tamaño sugiere (se acota por píxeles y por bytes, no por tiempo). Cambia el comportamiento de los `.cbz` existentes (los 10 grandes ganan `ComicInfo` y anchura): `tests/test_formatos_contenedor_hoy.py` se actualiza **a propósito**.
 
 ## 7. Qué se guarda y qué se avisa
-**Persistencia (sin migración):** `files.metadata.formato_contenido = {"firma": "zip", "clase": "tebeo", "contrato": 1}`. `file_format` **no cambia** (sigue la extensión declarada). El importador rellena el campo al triar; para los **56 ya registrados** hace falta un **relleno idempotente** en el ciclo del importer (leer 4 bytes de los `.cbr` sin `formato_contenido`).
+**Persistencia (sin migración):** `files.metadata.formato_contenido = {"firma": "zip", "clase": "tebeo", "contrato": 1}`. `file_format` **no cambia** (sigue la extensión declarada). El importador rellena el campo al triar; para los **56 ya registrados** hay un **relleno idempotente A DEMANDA** (D5: `python -m zascarr.cli.rellenar_formato --apply`; **no** lo lanza ningún ciclo). Mientras no se ejecute, esas filas no tienen `formato_contenido` y su portada se decide leyendo el contenido en el momento de pedirla (`extract_cover_thumbnail` sin formato guardado), y `puede_tener_portada` cae a la extensión (sin `<img>` para un `.cbr` aún sin rellenar).
 
 **Avisos.** Redacción revisada por UX el 2026-10-23 (≤ 2 frases, lo técnico entre paréntesis, sin jerga), **con un cambio posterior mío**: se quitaron todas las instrucciones del tipo «descomprímelo» o «cambia el final del nombre a .cbz» porque **el recorrido no está verificado y, comprobado, no existe** (§12.4): tras la adopción inicial, nada registra ficheros nuevos de la biblioteca. Una prueba (`test_todos_los_textos_siguen_las_reglas_de_ux`) impide reintroducirlas por fila.
-La garantía y el **único camino verificado** van **una vez**, en la cabecera de la sección «Archivos que ZascArr no reconoce»: *«Archivos que ZascArr no puede usar como tebeo. No cambia, mueve ni borra ninguno de esta lista. Si arreglas una copia (por ejemplo, la descomprimes o pones .cbz al final de su nombre) y la dejas en tu carpeta de descargas, ZascArr la importará; el original seguirá aquí.»* (Redacción final de UX.) La frase habla de la **copia** para no contradecir «no mueve ninguno»: el importador sí **mueve** a la biblioteca lo que encuentra en descargas, pero eso es la copia, no el original de la lista; «el original seguirá aquí» anticipa que la auditoría verá las dos. «Pones .cbz al final de su nombre» es lo concreto que hace falta: sin renombrar, un fichero sin extensión no se importa. (La cabecera antigua decía que *ninguno* contaba en la biblioteca: ya no es cierto, p. ej. un `.cbz` que es RAR sí está registrado.)
+La garantía y el **único camino verificado** van **una vez**, en la cabecera de la sección «Archivos que ZascArr no reconoce»: *«Archivos que ZascArr no puede usar como tebeo. No cambia, mueve ni borra ninguno de esta lista. Si arreglas una copia (por ejemplo, la descomprimes o pones .cbz al final de su nombre) y la dejas en tu carpeta de descargas, ZascArr intentará importarla; el original seguirá aquí.»* (Redacción final de UX; el PO cambió «importará» por «intentará importarla» porque la propia prueba de duplicados muestra que una copia idéntica a algo ya registrado se descarta y se queda en descargas: la promesa no es absoluta.) La frase habla de la **copia** para no contradecir «no mueve ninguno»: el importador sí **mueve** a la biblioteca lo que encuentra en descargas, pero eso es la copia, no el original de la lista; «el original seguirá aquí» anticipa que la auditoría verá las dos. «Pones .cbz al final de su nombre» solo vale para una **copia cuyo contenido ya es un ZIP** (un ZIP sin extensión): no convierte ningún otro formato por cambiarle el nombre. Sin renombrar, un fichero sin extensión no se importa. (La cabecera antigua decía que *ninguno* contaba en la biblioteca: ya no es cierto, p. ej. un `.cbz` que es RAR sí está registrado.)
 
 | Situación | Texto |
 |---|---|
 | `.cbz` (o `.cbr`/`.cb7`/`.zip`) cuyo contenido no concuerda | «Se llama .cbz, pero por dentro es un .cbr (RAR). Sigue en tu biblioteca, aunque por ahora ZascArr no puede sacarle la portada.» |
 | Sin final de tebeo, contenido ZIP / RAR / 7z | «Parece un tebeo, pero su nombre no acaba en .cbz (.cbr / .cb7), así que ZascArr no lo registra.» |
 | Sin final de tebeo, contenido TAR | «Parece un tebeo, pero está guardado en un formato (TAR) que ZascArr no usa.» |
-| ZIP «pack» | «Es un pack con varios tebeos dentro. ZascArr no lo trata como uno solo ni los separa.» |
+| ZIP con otros comprimidos / PDF / EPUB dentro | «Contiene otros archivos comprimidos, PDF o EPUB. ZascArr no lo interpreta automáticamente como un solo tebeo ni separa su contenido.» |
 | ZIP «no es un tebeo» | «Es un archivo comprimido, pero no parece un tebeo: tiene pocas imágenes o están mezcladas con otros archivos.» |
 | Con contraseña | «Tiene contraseña, así que ZascArr no puede abrirlo.» |
 | Dañado | «Está dañado o incompleto; quizá la descarga no terminó. Prueba a descargarlo de nuevo.» *(recorrido verificado: ver abajo)* |
 | Vacío | «Está vacío: no tiene ninguna página. Prueba a descargarlo de nuevo.» *(ídem)* |
 | Demasiados archivos | «Tiene demasiados archivos dentro (más de 2000) y ZascArr no lo abre, por precaución.» |
+| Índice interno demasiado grande | «Su índice interno es demasiado grande y ZascArr no lo abre, por precaución.» |
 | `.rar` / `.7z` por el nombre | «Es un archivo .rar: ZascArr no lo registra como tebeo, aunque dentro haya uno.» |
 | `.tar` / `.cbt` | «ZascArr no usa este formato (TAR), así que no lo registra como tebeo.» |
 
@@ -115,14 +122,14 @@ La garantía y el **único camino verificado** van **una vez**, en la cabecera d
 
 **Abierto (no resuelto aquí):** el **aviso informativo** para un `.cbr` que se lee como ZIP («Se lee como un .cbz aunque se llame .cbr. Todo bien…»; UX pide chip neutro y solo en Auditoría). El texto está en `INFO_CBR_ES_ZIP` pero **no se muestra**: exige una categoría nueva en el informe y su plantilla (**no entregado**).
 
-## 8. Decisiones del PO (PROPUESTAS PENDIENTES; la rama aplica la recomendada solo para poder verla)
-| # | Decisión | Opciones y consecuencias | Recomendación (aplicada en la rama, **sin aprobar**) |
+## 8. Decisiones del PO (DECIDIDAS el 2026-10-23, con sus reservas)
+| # | Decisión | Qué se decidió | Consecuencias y reservas |
 |---|---|---|---|
-| **D1** | **Sin extensión y doble extensión** (2 ZIP + 1 7z hoy) | (a) solo **avisar**: el fichero no entra en la biblioteca de ZascArr; es un **recorte** respecto a «reconocer un ZIP sin extensión» (la tarjeta). (b) registrarlos: exige valor nuevo del enum `file_format` (**migración**) y, si se registran como CBZ, el tagger podría **escribir** en un fichero sin extensión | (a) |
-| **D2** | **`.zip`** (hoy `triage`/portada lo leen pero el importador no lo recorre: la incoherencia que motivó el spike) | (a) no listarlo (el escaneo sigue sin recorrer `.zip`; `triage` y portada lo siguen leyendo si ya está en la base): **la incoherencia lector/importador se mantiene, ahora documentada**. (b) listarlo si es `TEBEO`: cambia el tamaño de la biblioteca y la deduplicación | (a) en esta tarjeta |
-| **D3** | **Topes** (§6) | (a) conservar el total de 500 MiB y la portada sin tope: 20 de 366 ZIP sin ComicInfo/anchura y lectura de portada sin acotar. (b) topes por entrada leída + límites del registro final + píxeles | (b); **necesita revisión técnica del conjunto de límites** (§6, «Qué NO acota esto») |
-| **D4** | `.pdf`/`.epub` dentro de un ZIP | (a) pack: se marca y no se registra. (b) ignorarlos. **Casos mixtos no definidos:** hoy cualquier contenedor anidado (aunque sean 11 imágenes y 1 PDF) vuelve `PAQUETE`; «paquete» y «contenido no admitido» no se distinguen | (a), conservador; pide definir los casos mixtos antes de fusionar |
-| **D5** | **Relleno** automático de `formato_contenido` en los `.cbr`/`.cb7` ya registrados | (a) en el ciclo del importer: **escribe automáticamente en `files.metadata` de filas existentes**; (b) a demanda (sin escrituras automáticas). Alcance, conservación y concurrencia: §12.2 | (a), con las garantías de §12.2 |
+| **D1** | Sin extensión y doble extensión | **(a) avisar, sin registrar.** Detectar y explicar el contenido en Auditoría; sin nuevos formatos declarados, sin migraciones, sin renombrar originales ni hacerlos pasar por CBZ para permitir escrituras | **Recorte respecto al objetivo inicial de la tarjeta** (reconocer e incorporar ZIP sin extensión): queda registrado así. **Reconocer el contenido no equivale a registrarlo en el catálogo**; la tarjeta y su aceptación deben decirlo |
+| **D2** | `.zip` | **(a) no ampliar el recorrido del importador** | **La incoherencia queda reconocida, no resuelta:** los lectores procesan un ZIP ya registrado, mientras el importador no descubre archivos nuevos por esa extensión. **No es «soporte completo de ZIP».** Su incorporación futura necesitará casos de tebeo individual, anidados, duplicado y contenido no utilizable |
+| **D3** | Topes | **Aprobados como contrato objetivo, NO como garantía técnica ya acreditada.** Entradas 2000, entrada de imagen leída 32 MiB, `ComicInfo.xml` 1 MiB, ratio 100, miniatura 40 Mpx; directorio central: ver §6 | La aprobación de producto no sustituye la revisión técnica. **Dos puntos del diff debían resolverse antes de aprobar la PR: causa dicha = causa que saltó, y coherencia con `ZipFile` (§6) — resueltos con pruebas.** El valor del directorio central pasó de 16 a **1 MiB** por una razón técnica medida (§6), no de producto: queda para que el PO lo confirme. No acotan el tiempo de un disco lento ni toda la duración de la decodificación |
+| **D4** | PDF/EPUB o comprimidos anidados | **Exclusión conservadora, sin afirmar «varios tebeos».** Impide clasificar automáticamente el ZIP como un tebeo individual para el reconocimiento de `.cbr`/`.cb7` | Clase `ANIDADOS`; texto neutro; fixtures imágenes + PDF, imágenes + EPUB y varios CBZ anidados (§5) |
+| **D5** | Relleno de `formato_contenido` | **(b) a demanda en esta entrega; automático, diferido.** Se retira su invocación desde `scan_and_import` | Mecanismo operativo: `python -m zascarr.cli.rellenar_formato [--apply] [--limite N] [--json]` o `scripts/rellenar-formato.sh`. Por defecto **solo cuenta** (no lee ni escribe); con `--apply` ejecuta un lote acotado y devuelve un resultado identificable (leídas, rellenadas, ilegibles, pendientes antes y después); código de salida 1 si hubo ilegibles. Conserva la fusión atómica, no sobrescribe, los ilegibles quedan pendientes. **No se ejecuta sobre la Pi ni la biblioteca real por esta decisión.** Automatizarlo exige antes medir su coste de lectura en el USB y aprobar su presupuesto |
 
 ## 9. Medición
 `scripts/medicion/censo_zip_por_contenido.py` (solo lectura; directorio central; **no imprime nombres**, solo recuentos; los nombres van a un TSV que es tuyo). Cuatro grupos (**`cbz_control`**, **`cbr_zip`**, **`sin_extension`**, **`zip`**) y, por fichero: entradas, imágenes, anidados, `ComicInfo`, descomprimido, ratio máximo, cifrado, entrada mayor y primera página (tamaño y ratio).
@@ -141,7 +148,7 @@ python3 censo_zip_por_contenido.py /media/WDElements/Tebeos --tsv ~/eval-rar/sal
 |---|---|---|
 | T1 | `firma_de` con ZIP, ZIP vacío, ZIP partido, RAR4, RAR5, 7z, TAR, texto, fichero vacío, ilegible | enum correcto, ≤ 8 bytes leídos |
 | T2 | `tratamiento` para todas las celdas de §4 | tabla exacta (función pura) |
-| T3 | `clasificar_zip`: tebeo, paquete, no-tebeo, cifrado, vacío, corrupto, límite, `.pdf` dentro | clase de §5 |
+| T3 | `clasificar_zip`: tebeo, anidados, no-tebeo, cifrado, vacío, corrupto, límite; imágenes+PDF, imágenes+EPUB, varios CBZ anidados | clase de §5 (D4) |
 | T4 | **Sin descomprimir** (se prohíbe `ZipFile.read/open` en la clasificación) | pasa |
 | T5 | Un `.cbr` ZIP con imágenes + `ComicInfo.xml` | `triage` devuelve `ComicInfo` y `width_px`; la portada sale; **hash y mtime del original iguales** |
 | T6 | El mismo fichero y el **tagger** | lo salta («solo CBZ declarado») |
@@ -149,7 +156,9 @@ python3 censo_zip_por_contenido.py /media/WDElements/Tebeos --tsv ~/eval-rar/sal
 | T8 | ZIP bomba (entradas, tamaño, ratio), **tamaño declarado falso** (declara 10 KB, expande mucho) y corrupto, **también en la portada** | rechazados con aviso, sin extraer; la memoria no pasa del tope |
 | T13 | Un ZIP > 500 MiB declarados con una sola página grande ≤ 32 MiB | `triage` devuelve `ComicInfo` y anchura (hoy: «ignorado»); la portada sale |
 | T9 | `puede_tener_portada` con `formato_contenido` guardado y sin él | **cero E/S** en ambos casos |
-| T10 | Relleno de los registrados: idempotente (segunda pasada no escribe) | pasa |
+| T10 | Relleno **a demanda** de los registrados: idempotente, conserva claves (también con un escritor concurrente), `metadata` NULL, ilegibles pendientes, resultado identificable, CLI que por defecto no escribe | pasa (Postgres real) |
+| T14 | El ciclo **no** lanza el relleno | pasa |
+| T15 | Causa dicha = causa que saltó; control previo coherente con `ZipFile` (firma falsa en el comentario, ZIP64 no reflejado, índice real enorme) | pasa |
 | T11 | Auditoría: `.tar`, `.cbt`, `.7z` y sin extensión que son contenedores | aviso en lenguaje llano; no registra |
 | T12 | Regresión: `tests/test_formatos_contenedor_hoy.py` | se actualiza **a propósito** |
 | NOT RUN | Los 58 reales | hasta ejecutar el script en la Pi; **no** se presenta ningún resultado de PC como de la Pi |
@@ -173,14 +182,14 @@ Todas salen de `scripts/medicion/censo_zip_por_contenido.py` y del censo de cabe
 | **«los 10 `.cbz` grandes»** | los 10 `.cbz` de esos 20 (**ya están registrados sin ComicInfo/anchura**; la portada sí sale) | |
 | **«los 10 ZIP grandes» (portadas)** | los **10 `.cbr` ZIP** de esos 20 | son conjuntos **distintos**: 10 + 10 = 20 |
 
-### 12.2 Garantías del relleno (D5)
+### 12.2 Garantías del relleno (D5: a demanda)
 Probadas con **Postgres real** en `tests/test_formato_contenido_relleno_pg.py` (27 pruebas con las de integración):
 - **Conserva las demás claves de `files.metadata`, también frente a un escritor concurrente.** Una primera versión leía el diccionario, añadía la clave y lo reescribía entero: eso **pierde** cualquier clave escrita por otro proceso entre la lectura y la escritura (p. ej. el `vinculo` de BL-R1). Ahora es **una sola sentencia atómica por fila**: `metadata = coalesce(metadata,'{}') || {"formato_contenido": …}` y solo `WHERE` la clave aún no existe. Prueba: se lee la fila, otro proceso escribe `vinculo`, y después se aplica el relleno: **ambas claves sobreviven**.
 - **Metadata `NULL`:** la prueba descubrió que `NOT (metadata ? 'clave')` vale `NULL` y la fila **nunca** se elegía. Corregido (`metadata IS NULL OR …`), con prueba.
 - **Sin dobles ni reproceso:** dos rellenos solapados rellenan cada fila **exactamente una vez** (8 filas → 8 en total); una fila ya rellena no se lee otra vez; una clave existente no se sobrescribe.
-- **Lote acotado y sin inanición:** como máximo **100** filas por ciclo (cada una lee ≤ 512 B y, si es ZIP, su directorio central), **elegidas al azar** entre las pendientes: con una selección fija, un grupo de ficheros ilegibles ocuparía el lote para siempre. Una biblioteca de ~1,2 k `.cbr` se rellena en ≥ 13 ciclos (15 min cada uno). **Coste de lectura NO medido**: el censo equivalente (4 KiB de 1267 ficheros + directorio central de 366 ZIP) «tarda un par de minutos» en el USB de la Pi (sin cronometrar con precisión); el lote de 100 es una cota prudente, **a medir tras desplegar**.
+- **Lote acotado:** como máximo **100** filas por ejecución (cada una lee ≤ 512 B y, si es ZIP, su directorio central), **elegidas al azar** entre las pendientes: con una selección fija, un grupo de ficheros ilegibles ocuparía el lote para siempre. **El azar reduce ese riesgo pero no garantiza un plazo de finalización.** Una biblioteca de ~1,2 k `.cbr` necesita ≥ 13 ejecuciones. **Coste de lectura NO medido**: el censo equivalente (4 KiB de 1267 ficheros + directorio central de 366 ZIP) «tarda un par de minutos» en el USB de la Pi (sin cronometrar con precisión); el lote de 100 es una cota prudente, **a medir tras desplegar**.
 - Un fichero ilegible (disco desmontado) no se marca: se reintenta. Los ficheros **no se tocan** (hash y mtime iguales, probado).
-- **Sigue siendo una escritura automática sobre filas existentes** (la decisión D5 es del PO): si se prefiere (b), basta quitar la llamada de `scan_and_import`.
+- **Ya no es automática** (D5 decidida): ningún ciclo ni bucle la llama (prueba que lo comprueba). Ver §8 para el mecanismo.
 
 ### 12.3 «Sin escritura del original», en todos los consumidores
 Quién puede escribir o mover un fichero de tebeo (revisado con `grep` sobre `src/`):

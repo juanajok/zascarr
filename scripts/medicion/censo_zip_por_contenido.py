@@ -108,7 +108,7 @@ def medir(ruta: Path, max_entradas: int = MAX_ENTRADAS, max_descomprimido: int =
 
 
 def clasificar(m: Medida, min_imagenes: int = 5, fraccion: float = 0.8) -> str:
-    """Clase PROVISIONAL (se fija con los datos): tebeo | paquete | no_tebeo | cifrado | invalido | vacio | limite."""
+    """Clase PROVISIONAL (se fija con los datos): tebeo | anidados | no_tebeo | cifrado | invalido | vacio | limite."""
     if m.estado in ("demasiadas_entradas", "demasiado_grande"):
         return "limite"
     if m.estado != "ok":
@@ -116,7 +116,7 @@ def clasificar(m: Medida, min_imagenes: int = 5, fraccion: float = 0.8) -> str:
     if m.cifrado:
         return "cifrado"
     if m.anidados:
-        return "paquete"
+        return "anidados"
     if m.imagenes >= min_imagenes and m.contenido and m.imagenes / m.contenido >= fraccion:
         return "tebeo"
     return "no_tebeo"

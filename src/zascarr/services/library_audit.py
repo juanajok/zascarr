@@ -46,7 +46,12 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.core.formato_contenedor import aviso_de_extension, aviso_de_formato, firma_de, tratamiento
+from zascarr.core.formato_contenedor import (
+    aviso_de_extension,
+    aviso_de_formato,
+    firma_de,
+    tratamiento,
+)
 from zascarr.core.importer_triage import sha256_streaming
 from zascarr.core.matcher import normalize_title
 from zascarr.models import ImportRun, Tratamiento

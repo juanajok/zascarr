@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 from PIL import Image
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import Banco

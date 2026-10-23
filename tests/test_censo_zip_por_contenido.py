@@ -43,18 +43,18 @@ class TestClasificacion:
         assert (m.estado, m.entradas, m.imagenes, m.anidados, m.comicinfo) == ("ok", 13, 12, 0, True)
         assert c.clasificar(m) == "tebeo"
 
-    def test_paquete_con_un_contenedor_anidado(self, tmp_path):
+    def test_con_un_contenedor_anidado(self, tmp_path):
         m = c.medir(zip_de(tmp_path / "p.zip", {**paginas(20), "Extras/otro.cbz": b"PK"}))
-        assert m.anidados == 1 and c.clasificar(m) == "paquete"
+        assert m.anidados == 1 and c.clasificar(m) == "anidados"
 
     def test_zip_de_documentos_no_es_un_tebeo(self, tmp_path):
         m = c.medir(zip_de(tmp_path / "d.zip", {"a.txt": b"1", "b.docx": b"2", "c.mp3": b"3", **paginas(2)}))
         assert c.clasificar(m) == "no_tebeo"
 
-    def test_un_pdf_o_epub_dentro_cuenta_como_contenedor_y_lo_hace_paquete(self, tmp_path):
-        """Decisión conservadora (idea de Kapowarr): se MARCA como paquete, no se registra como un tebeo."""
-        assert c.clasificar(c.medir(zip_de(tmp_path / "p.zip", {**paginas(10), "extra.pdf": b"%PDF"}))) == "paquete"
-        assert c.clasificar(c.medir(zip_de(tmp_path / "q.zip", {**paginas(10), "extra.epub": b"PK"}))) == "paquete"
+    def test_un_pdf_o_epub_dentro_cuenta_como_contenedor_anidado(self, tmp_path):
+        """Decisión conservadora (D4): se MARCA como «anidados» —no se afirma que sean varios tebeos—, no se registra como un tebeo."""
+        assert c.clasificar(c.medir(zip_de(tmp_path / "p.zip", {**paginas(10), "extra.pdf": b"%PDF"}))) == "anidados"
+        assert c.clasificar(c.medir(zip_de(tmp_path / "q.zip", {**paginas(10), "extra.epub": b"PK"}))) == "anidados"
 
     @pytest.mark.parametrize("n,esperado", [(4, "no_tebeo"), (5, "tebeo"), (6, "tebeo")])
     def test_minimo_de_imagenes(self, tmp_path, n, esperado):

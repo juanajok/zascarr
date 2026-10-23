@@ -54,14 +54,15 @@ from zascarr.core.formato_contenedor import (  # noqa: F401  (IMAGE_EXTS y natur
     IMAGE_EXTS,
     MAX_ENTRADAS,
     EntradaNoLegible,
+    aviso_de_clase,
     aviso_de_formato,
     clasificar_infos,
     firma_de,
     formato_contenido,
     leer_acotado,
+    motivo_fuera_de_limite,
     natural_key,
     tratamiento,
-    zip_fuera_de_limite,
 )
 from zascarr.models import ClaseZip, Firma, Tratamiento
 
@@ -239,10 +240,11 @@ def triage(path: Path) -> TriageResult:
     # El ZipFile solo lee el directorio central y las pocas entradas que se piden.
     try:
         sha256 = sha256_streaming(path)
-        if zip_fuera_de_limite(path):                    # sin abrirlo: `ZipFile()` cargaría el directorio central entero en memoria
+        motivo = motivo_fuera_de_limite(path)
+        if motivo:                                       # sin abrirlo: `ZipFile()` cargaría el directorio central entero en memoria
             result.sha256 = sha256
-            result.formato_contenido = formato_contenido(firma, ClaseZip.LIMITE)
-            result.warnings.append(AVISO_CLASE[ClaseZip.LIMITE] + " (ignorado)")
+            result.formato_contenido = formato_contenido(firma, ClaseZip.LIMITE, motivo)
+            result.warnings.append(aviso_de_clase(ClaseZip.LIMITE, motivo) + " (ignorado)")
             return result
         zf = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as exc:
@@ -255,10 +257,10 @@ def triage(path: Path) -> TriageResult:
     with zf:
         infos = zf.infolist()
         cls = clasificar_infos(infos)
-        result.formato_contenido = formato_contenido(firma, cls.clase)
+        result.formato_contenido = formato_contenido(firma, cls.clase, cls.motivo_limite)
         declarado_tebeo = ext in (".cbz", ".zip")        # el usuario lo declara tebeo: la clase no bloquea la lectura (sí los topes)
         if cls.clase in (ClaseZip.LIMITE, ClaseZip.CIFRADO):
-            result.warnings.append(AVISO_CLASE[cls.clase] + " (ignorado)")
+            result.warnings.append(aviso_de_clase(cls.clase, cls.motivo_limite) + " (ignorado)")
             return result
         if not declarado_tebeo and cls.clase is not ClaseZip.TEBEO:
             # Un .cbr/.cb7 que es un ZIP pero no un tebeo comprobado: se queda con hash, sin portada ni ComicInfo, y se dice por qué.

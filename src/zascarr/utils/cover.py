@@ -18,10 +18,10 @@ from PIL import Image
 
 from zascarr.core.formato_contenedor import (
     IMAGE_EXTS,
+    MAX_PIXELES_PORTADA,
     EntradaNoLegible,
     clasificar_infos,
     firma_de,
-    MAX_PIXELES_PORTADA,
     leer_acotado,
     natural_key,
     puede_dar_portada,

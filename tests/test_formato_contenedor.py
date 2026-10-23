@@ -3,6 +3,7 @@
 clasificación de un ZIP, lectura acotada. Sintético: ZIP/TAR/RAR fabricados en un directorio temporal; ni biblioteca real ni red."""
 from __future__ import annotations
 
+import contextlib
 import io
 import struct
 import tarfile
@@ -121,9 +122,9 @@ class TestMatriz:                                                               
 
 class TestClasificarZip:                                                                    # T3 y T4
 
-    def test_tebeo_paquete_no_tebeo_cifrado_vacio_invalido_limite(self, tmp_path):
+    def test_tebeo_anidados_no_tebeo_cifrado_vacio_invalido_limite(self, tmp_path):
         assert fc.clasificar_zip(zip_de(tmp_path / "t.zip", {**paginas(12), "ComicInfo.xml": b"<c/>"})).clase is ClaseZip.TEBEO
-        assert fc.clasificar_zip(zip_de(tmp_path / "p.zip", {**paginas(20), "extra/otro.cbz": b"PK"})).clase is ClaseZip.PAQUETE
+        assert fc.clasificar_zip(zip_de(tmp_path / "p.zip", {**paginas(20), "extra/otro.cbz": b"PK"})).clase is ClaseZip.ANIDADOS
         assert fc.clasificar_zip(zip_de(tmp_path / "n.zip", {"a.txt": b"1", "b.docx": b"2", **paginas(2)})).clase is ClaseZip.NO_TEBEO
         assert fc.clasificar_zip(zip_de(tmp_path / "c.zip", paginas(12), cifrado=True)).clase is ClaseZip.CIFRADO
         with zipfile.ZipFile(tmp_path / "v.zip", "w"):
@@ -134,9 +135,17 @@ class TestClasificarZip:                                                        
         assert fc.clasificar_zip(tmp_path / "no_existe.zip").clase is ClaseZip.INVALIDO
         assert fc.clasificar_zip(zip_de(tmp_path / "l.zip", paginas(30)), max_entradas=10).clase is ClaseZip.LIMITE
 
-    def test_pdf_y_epub_dentro_hacen_paquete(self, tmp_path):                              # D4
-        assert fc.clasificar_zip(zip_de(tmp_path / "a.zip", {**paginas(12), "x.pdf": b"%PDF"})).clase is ClaseZip.PAQUETE
-        assert fc.clasificar_zip(zip_de(tmp_path / "b.zip", {**paginas(12), "x.epub": b"PK"})).clase is ClaseZip.PAQUETE
+    def test_d4_pdf_epub_o_varios_cbz_dentro_no_se_interpretan_como_un_tebeo(self, tmp_path):        # D4 (PO, 2026-10-23)
+        """Once imágenes y un PDF podrían ser un tebeo con un suplemento: NO se afirma «varios tebeos»; solo se deja de interpretarlo automáticamente como UN
+        tebeo. No hace falta abrir esos documentos."""
+        casos = {"imagenes_y_pdf": {**paginas(11), "suplemento.pdf": b"%PDF"}, "imagenes_y_epub": {**paginas(11), "extra.epub": b"PK"},
+                 "varios_cbz": {"Serie 01.cbz": b"PK", "Serie 02.cbz": b"PK", "Serie 03.cbz": b"PK"}}
+        for nombre, entradas in casos.items():
+            c = fc.clasificar_zip(zip_de(tmp_path / f"{nombre}.zip", entradas))
+            assert c.clase is ClaseZip.ANIDADOS and c.anidados >= 1, nombre
+            assert "varios tebeos" not in fc.AVISO_CLASE[c.clase] and "pack" not in fc.AVISO_CLASE[c.clase].lower()
+        assert fc.AVISO_CLASE[ClaseZip.ANIDADOS] == ("Contiene otros archivos comprimidos, PDF o EPUB. "
+                                                     "ZascArr no lo interpreta automáticamente como un solo tebeo ni separa su contenido.")
 
     @pytest.mark.parametrize("n,esperado", [(fc.MIN_IMAGENES - 1, ClaseZip.NO_TEBEO), (fc.MIN_IMAGENES, ClaseZip.TEBEO)])
     def test_minimo_de_imagenes(self, tmp_path, n, esperado):
@@ -223,11 +232,11 @@ class TestFormatoGuardado:
 
     @pytest.mark.parametrize("ext,guardado,esperado", [
         (".cbr", {"firma": "zip", "clase": "tebeo"}, True),
-        (".cbr", {"firma": "zip", "clase": "paquete"}, False),
+        (".cbr", {"firma": "zip", "clase": "anidados"}, False),
         (".cbr", {"firma": "zip", "clase": "no_tebeo"}, False),
         (".cbr", {"firma": "rar"}, False),
         (".cbz", {"firma": "zip", "clase": "no_tebeo"}, True),                     # un .cbz declarado y corto sigue dando su primera página
-        (".cbz", {"firma": "zip", "clase": "paquete"}, True),
+        (".cbz", {"firma": "zip", "clase": "anidados"}, True),
         (".cbz", {"firma": "zip", "clase": "cifrado"}, True),                      # solo cuenta la firma: la clase guardada puede quedar vieja si el fichero se sustituye
         (".cbz", {"firma": "rar"}, False),                                          # un .cbz que es RAR: sin portada
         (".cbr", None, None),                                                       # nada guardado → decide la extensión
@@ -249,14 +258,14 @@ class TestFormatoGuardado:
         """Revisión de UX (2026-10-23): ≤ 2 frases; sin jerga (entradas, firma, contenedor, nombres de clase); «desde tu ordenador», nunca «fuera de ZascArr»;
         la garantía «no cambia nada» va una sola vez en la cabecera de la sección, no en cada fila; nunca «formato no soportado» a secas."""
         import re
-        textos = list(fc.AVISO_CLASE.values()) + [fc.INFO_CBR_ES_ZIP]
+        textos = list(fc.AVISO_CLASE.values()) + [fc.INFO_CBR_ES_ZIP, fc.AVISO_LIMITE_DIRECTORIO]
         for ext in (".cbz", ".zip", ".cbr", ".cb7", ""):
             for firma in (Firma.ZIP, Firma.RAR, Firma.SIETE_Z, Firma.TAR, Firma.OTRO):
                 textos.append(fc.aviso_de_formato(ext, firma))
         textos += [fc.aviso_de_extension(e) for e in (".rar", ".7z", ".tar", ".cbt")]
         # «descomprímelo» / «cambia el final del nombre» están prohibidos hasta que exista un recorrido VERIFICADO que recoja el fichero (hoy, tras la
         # adopción inicial, nada registra ficheros nuevos de la biblioteca: ver TestNadaRecogeFicherosNuevosDeLaBiblioteca).
-        prohibido = ("entradas", "firma", "contenedor", "PAQUETE", "INVALIDO", "NO_TEBEO", "fuera de ZascArr", "No se ha cambiado", "no se trata como tal",
+        prohibido = ("entradas", "firma", "contenedor", "PAQUETE", "ANIDADOS", "INVALIDO", "NO_TEBEO", "pack", "fuera de ZascArr", "No se ha cambiado", "no se trata como tal",
                      "formato no soportado", "sin descomprimir", "descomprímelo", "cambia el final", "conviértelo")
         for t in textos:
             assert len(re.findall(r"[.?!](?:\s|$)", t)) <= 2, t
@@ -353,3 +362,147 @@ class TestMiniaturaAcotadaEnPixeles:
         with zipfile.ZipFile(z, "w") as zf:
             zf.writestr("001.jpg", buf.getvalue())
         assert extract_cover_thumbnail(z) is not None
+
+
+class TestLaCausaDichaEsLaQueSalto:
+    """Condición 1 del PO sobre D3: un ZIP rechazado por el tamaño de su directorio central no puede decir «más de 2000 archivos»."""
+
+    @staticmethod
+    def _con_registro(tmp_path, nombre, *, entradas=None, tam_directorio=None, ext=".zip"):
+        z = zip_de(tmp_path / f"{nombre}{ext}", paginas(12))
+        b = bytearray(z.read_bytes())
+        i = b.rfind(b"PK\x05\x06")
+        if entradas is not None:
+            b[i + 10:i + 12] = struct.pack("<H", entradas)
+        if tam_directorio is not None:
+            b[i + 12:i + 16] = struct.pack("<I", tam_directorio)
+        z.write_bytes(bytes(b))
+        return z
+
+    def test_motivo_directorio_con_pocas_entradas(self, tmp_path):
+        z = self._con_registro(tmp_path, "d", entradas=500, tam_directorio=5 * 1024 * 1024)       # 500 entradas, pero un índice de 5 MiB
+        assert fc.motivo_fuera_de_limite(z) == "directorio"
+        c = fc.clasificar_zip(z)
+        assert c.clase is ClaseZip.LIMITE and c.motivo_limite == "directorio"
+        assert fc.aviso_de_clase(c.clase, c.motivo_limite) == fc.AVISO_LIMITE_DIRECTORIO
+        assert "2000" not in fc.AVISO_LIMITE_DIRECTORIO and "demasiados archivos" not in fc.AVISO_LIMITE_DIRECTORIO
+
+    def test_motivo_entradas(self, tmp_path):
+        z = self._con_registro(tmp_path, "e", entradas=3000)
+        assert fc.motivo_fuera_de_limite(z) == "entradas"
+        c = fc.clasificar_zip(z)
+        assert fc.aviso_de_clase(c.clase, c.motivo_limite) == fc.AVISO_CLASE[ClaseZip.LIMITE] and "más de 2000" in fc.AVISO_CLASE[ClaseZip.LIMITE]
+
+    def test_si_saltan_los_dos_se_dice_el_del_tamano_del_indice(self, tmp_path):
+        assert fc.motivo_fuera_de_limite(self._con_registro(tmp_path, "ambos", entradas=60000, tam_directorio=9 * 1024 * 1024)) == "directorio"
+
+    def test_triage_dice_y_guarda_la_causa_correcta(self, tmp_path):
+        from zascarr.core.importer_triage import triage
+        d = triage(self._con_registro(tmp_path, "d", entradas=500, tam_directorio=5 * 1024 * 1024, ext=".cbr"))
+        e = triage(self._con_registro(tmp_path, "e", entradas=3000, ext=".cbr"))
+        assert d.formato_contenido == {"firma": "zip", "contrato": 1, "clase": "limite", "motivo": "directorio"}
+        assert e.formato_contenido == {"firma": "zip", "contrato": 1, "clase": "limite", "motivo": "entradas"}
+        assert any("índice interno es demasiado grande" in w for w in d.warnings) and not any("más de 2000" in w for w in d.warnings)
+        assert any("más de 2000" in w for w in e.warnings) and not any("índice interno" in w for w in e.warnings)
+
+    def test_el_limite_tras_abrir_tambien_dice_entradas(self, tmp_path):
+        c = fc.clasificar_zip(zip_de(tmp_path / "l.zip", paginas(30)), max_entradas=10)
+        assert c.clase is ClaseZip.LIMITE and c.motivo_limite == "entradas"
+
+
+class TestCoherenciaConLoQueAbreZipFile:
+    """Condición 2 del PO sobre D3: el control previo y el lector que abre el ZIP deben interpretar el MISMO registro final; si no, se eludiría haciendo que
+    ambos vean registros distintos (firmas falsas en el comentario, localizador ZIP64…). Se comprueba contra lo que `ZipFile` realmente usa."""
+
+    @staticmethod
+    def _eocd_falso(entradas: int, tam: int) -> bytes:
+        return b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, entradas, entradas, tam, 0, 0)
+
+    @staticmethod
+    def _lo_que_usa_zipfile(ruta, monkeypatch):
+        vistos = []
+        original = zipfile._EndRecData
+
+        def espia(fp):
+            r = original(fp)
+            vistos.append(r)
+            return r
+        monkeypatch.setattr(zipfile, "_EndRecData", espia)
+        with contextlib.suppress(zipfile.BadZipFile, OSError):
+            zipfile.ZipFile(ruta).close()
+        monkeypatch.setattr(zipfile, "_EndRecData", original)
+        return vistos
+
+    def _variantes(self, tmp_path):
+        base = zip_de(tmp_path / "base.zip", paginas(12)).read_bytes()
+        eocd = base.rfind(b"PK\x05\x06")
+        v = {"normal": base}
+        # comentario con una firma EOCD falsa al final: `ZipFile` toma la ÚLTIMA firma
+        comentario = b"nota " + self._eocd_falso(60000, 90 * 1024 * 1024)
+        real = bytearray(base)
+        real[eocd + 20:eocd + 22] = struct.pack("<H", len(comentario))
+        v["firma_falsa_en_el_comentario"] = bytes(real) + comentario
+        # localizador + registro ZIP64 que el EOCD normal no refleja (EOCD con 12 entradas; el ZIP64 dice 60000)
+        cd_tam = struct.unpack_from("<I", base, eocd + 12)[0]
+        cd_off = struct.unpack_from("<I", base, eocd + 16)[0]
+        z64 = b"PK\x06\x06" + struct.pack("<QHHIIQQQQ", 44, 45, 45, 0, 0, 60000, 60000, cd_tam, cd_off)
+        loc = b"PK\x06\x07" + struct.pack("<IQI", 0, eocd + len(z64) - len(z64), 1)
+        v["zip64_no_reflejado_por_el_eocd"] = base[:eocd] + z64 + loc + base[eocd:]
+        # registro final truncado
+        v["eocd_truncado"] = base[:eocd + 10]
+        # basura al final del fichero tras el registro (no es comentario)
+        v["basura_final"] = base + b"\0" * 300
+        return v
+
+    def test_el_control_ve_lo_mismo_que_zipfile(self, tmp_path, monkeypatch):
+        for nombre, datos in self._variantes(tmp_path).items():
+            ruta = tmp_path / f"{nombre}.zip"
+            ruta.write_bytes(datos)
+            nuestro = fc.leer_cabecera_zip(ruta)
+            vistos = self._lo_que_usa_zipfile(ruta, monkeypatch)
+            if vistos and vistos[0]:
+                esperado = (vistos[0][zipfile._ECD_ENTRIES_TOTAL], vistos[0][zipfile._ECD_SIZE])
+                assert nuestro is not None and (nuestro.entradas, nuestro.tam_directorio) == esperado, nombre
+            else:
+                assert nuestro is None, nombre                      # ZipFile no encontró registro: nosotros tampoco inventamos uno
+
+    def test_una_firma_falsa_en_el_comentario_no_elude_el_control(self, tmp_path):
+        ruta = tmp_path / "f.zip"
+        ruta.write_bytes(self._variantes(tmp_path)["firma_falsa_en_el_comentario"])
+        assert fc.zip_fuera_de_limite(ruta)                       # la ve igual que ZipFile: 60000 entradas y 90 MiB de índice
+
+    def test_un_zip64_que_el_eocd_no_refleja_tampoco_la_elude(self, tmp_path):
+        ruta = tmp_path / "z.zip"
+        ruta.write_bytes(self._variantes(tmp_path)["zip64_no_reflejado_por_el_eocd"])
+        c = fc.leer_cabecera_zip(ruta)
+        assert c is not None and c.entradas == 60000 and fc.motivo_fuera_de_limite(ruta) == "entradas"
+
+    def test_un_indice_real_enorme_con_un_registro_que_declara_pocas_entradas_se_rechaza_sin_abrir(self, tmp_path, monkeypatch):
+        """La carga de memoria de `ZipFile` es proporcional al TAMAÑO del índice (lo recorre por bytes, no por el nº de entradas declarado)."""
+        ruta = tmp_path / "indice.zip"
+        with zipfile.ZipFile(ruta, "w", zipfile.ZIP_STORED) as zf:
+            for i in range(30_000):
+                zf.writestr(f"p{i:05d}.jpg", b"")
+        b = bytearray(ruta.read_bytes())
+        i = b.rfind(b"PK\x05\x06")
+        b[i + 10:i + 12] = struct.pack("<H", 5)                       # el registro dice 5 entradas; el índice real mide ~1,6 MiB
+        ruta.write_bytes(bytes(b))
+        c = fc.leer_cabecera_zip(ruta)
+        assert c.entradas == 5 and c.tam_directorio > fc.MAX_DIRECTORIO_CENTRAL
+        monkeypatch.setattr(zipfile, "ZipFile", lambda *a, **k: (_ for _ in ()).throw(AssertionError("se abrió el ZIP")))
+        assert fc.motivo_fuera_de_limite(ruta) == "directorio" and fc.clasificar_zip(ruta).motivo_limite == "directorio"
+
+    def test_lo_que_se_acepta_se_abre_con_poca_memoria(self, tmp_path):
+        import tracemalloc
+        ruta = zip_de(tmp_path / "ok.zip", {f"p{i:04d}.jpg": b"x" for i in range(fc.MAX_ENTRADAS)})
+        assert fc.motivo_fuera_de_limite(ruta) is None            # justo en el límite de entradas
+        tracemalloc.start()
+        with zipfile.ZipFile(ruta) as zf:
+            assert len(zf.infolist()) == fc.MAX_ENTRADAS
+        pico = tracemalloc.get_traced_memory()[1]
+        tracemalloc.stop()
+        assert pico < 5 * 1024 * 1024                              # medido: ~1 MiB con 2000 entradas
+
+    def test_el_lector_privado_de_la_biblioteca_estandar_sigue_existiendo(self):
+        """Si una versión de Python lo renombrara, el módulo ya no se importaría (ruidoso); esta prueba lo deja dicho."""
+        assert callable(zipfile._EndRecData) and zipfile._ECD_ENTRIES_TOTAL == 4 and zipfile._ECD_SIZE == 5

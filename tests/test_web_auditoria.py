@@ -153,5 +153,5 @@ class TestCabeceraDeNoReconocidos:
         t = " ".join(t.split())
         assert "No cambia, mueve ni borra ninguno de esta lista." in t
         assert ("Si arreglas una copia (por ejemplo, la descomprimes o pones .cbz al final de su nombre) y la dejas en tu carpeta de descargas, "
-                "ZascArr la importará; el original seguirá aquí.") in t
+                "ZascArr intentará importarla; el original seguirá aquí.") in t
         assert "hasta que los conviertas" not in t                       # la cabecera antigua, que decía que ninguno de estos archivos contaba

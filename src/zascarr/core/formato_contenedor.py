@@ -14,12 +14,16 @@ ZIP reales, primera página ≤ 7,1 MiB con ratio ≤ 1,77. Son parámetros revi
 from __future__ import annotations
 
 import re
-import struct
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from zascarr.models import ClaseZip, Firma, Tratamiento
+
+# Lector del registro final de `zipfile` (ver `leer_cabecera_zip`). Falla al importar si la biblioteca estándar lo cambiara.
+_END_REC_DATA = zipfile._EndRecData
+_ECD_ENTRIES_TOTAL = zipfile._ECD_ENTRIES_TOTAL
+_ECD_SIZE = zipfile._ECD_SIZE
 
 #: Las imágenes que cuentan como «página» y el orden natural de las páginas (antes en `importer_triage`).
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"}
@@ -30,7 +34,7 @@ def natural_key(name: str) -> list:
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
 
 
-#: Extensiones de contenedor: una entrada así dentro de un ZIP lo hace un «paquete» (idea de Kapowarr). `.pdf` y `.epub` cuentan (D4).
+#: Extensiones de contenedor: una entrada así dentro de un ZIP lo clasifica `ANIDADOS` (idea de Kapowarr). `.pdf` y `.epub` cuentan (D4).
 EXT_CONTENEDOR = {".cbz", ".zip", ".cbr", ".rar", ".cb7", ".7z", ".cbt", ".tar", ".gz", ".epub", ".pdf"}
 #: Ficheros que no son «contenido» para la fracción de imágenes.
 RUIDO = {"thumbs.db", ".ds_store", "desktop.ini", "comicinfo.xml"}
@@ -42,9 +46,11 @@ FRACCION_IMAGENES = 0.8                  # mín. observado: 0,95
 #: Tope de la ENTRADA QUE SE LEE (primera página, ComicInfo.xml), no del total: lo que importa es lo que de verdad se descomprime.
 MAX_ENTRADA_LEIDA = 32 * 1024 * 1024     # primera página mayor observada: 7,1 MiB
 MAX_RATIO_LEIDA = 100                    # primera página observada: ≤ 1,77
-#: `zipfile.ZipFile()` carga el directorio central ENTERO en memoria antes de que se pueda contar nada: un ZIP que declare millones de entradas
-#: no debe llegar a abrirse. Se mira el registro final (EOCD) —o el ZIP64— leyendo solo el final del fichero.
-MAX_DIRECTORIO_CENTRAL = 16 * 1024 * 1024    # 2000 entradas ocupan ~0,3 MiB
+#: `zipfile.ZipFile()` carga el directorio central ENTERO en memoria y lo recorre por su TAMAÑO (no por el nº de entradas que declara el registro):
+#: un ZIP no debe llegar a abrirse si su directorio es mayor que esto. MEDIDO (Python 3.14, x86): abrir cuesta ~10 B de memoria por byte de directorio
+#: (2000 entradas = 109 KiB → 1,0 MiB de pico; 20 000 = 1,1 MiB → 10,8 MiB; 60 000 = 3,3 MiB → 33 MiB, 2,4 s), así que 16 MiB serían ~170 MiB y ~12 s en un
+#: contenedor de 512 MiB. 1 MiB cubre de sobra 2000 entradas con nombres largos y limita el coste a ~11 MiB y < 1 s.
+MAX_DIRECTORIO_CENTRAL = 1 * 1024 * 1024
 #: Decodificar una miniatura de una imagen enorme (aunque pese poco comprimida) puede agotar la memoria de un contenedor de 512 MiB.
 MAX_PIXELES_PORTADA = 40_000_000             # una página de tebeo de 3000×4500 son 13,5 Mpx
 
@@ -88,37 +94,37 @@ class CabeceraZip:
 
 
 def leer_cabecera_zip(path: Path) -> CabeceraZip | None:
-    """Entradas y tamaño del directorio central tal como las DECLARA el registro final del ZIP, leyendo solo el final del fichero (≤ ~64 KiB).
-    `None` si no se reconoce (que decida `zipfile`). Maneja ZIP64."""
+    """Entradas y tamaño del directorio central tal como los interpretará `zipfile.ZipFile`, leyendo solo el final del fichero.
+
+    Usa el MISMO lector del registro final que `ZipFile` (`zipfile._EndRecData`: localización por la última firma, comentario, localizador y registro
+    ZIP64), en vez de reimplementarlo: si el control previo y el que abre el ZIP interpretaran registros distintos (una firma falsa dentro del comentario,
+    un localizador ZIP64 que el EOCD no refleja…), el control se podría eludir. Es una función privada de la biblioteca estándar: si desapareciera, este
+    módulo falla al importarse (ruidoso) en lugar de dejar pasar todo en silencio. `None` si no es un ZIP legible (que decida `ZipFile`, que no reserva nada)."""
     try:
         with open(path, "rb") as fh:
-            fh.seek(0, 2)
-            tam = fh.tell()
-            ini = max(0, tam - (65535 + 22 + 20))
-            fh.seek(ini)
-            cola = fh.read()
-            i = cola.rfind(b"PK\x05\x06")
-            if i < 0 or len(cola) < i + 22:
-                return None
-            entradas, tam_cd, _offset = struct.unpack_from("<HII", cola, i + 10)
-            if entradas == 0xFFFF or tam_cd == 0xFFFFFFFF:                       # ZIP64: los valores reales están en el registro ampliado
-                if i < 20 or cola[i - 20:i - 16] != b"PK\x06\x07":
-                    return None
-                off64 = struct.unpack_from("<Q", cola, i - 20 + 8)[0]
-                fh.seek(off64)
-                reg = fh.read(56)
-                if len(reg) < 56 or reg[:4] != b"PK\x06\x06":
-                    return None
-                entradas, tam_cd = struct.unpack_from("<QQ", reg, 32)
-            return CabeceraZip(entradas, tam_cd)
-    except (OSError, struct.error):
+            rec = _END_REC_DATA(fh)
+    except (OSError, zipfile.BadZipFile):
         return None
+    if not rec:
+        return None
+    return CabeceraZip(int(rec[_ECD_ENTRIES_TOTAL]), int(rec[_ECD_SIZE]))
+
+
+def motivo_fuera_de_limite(path: Path) -> str | None:
+    """`"entradas"` o `"directorio"` si el ZIP declara más de lo permitido (sin abrirlo); `None` si cabe o no se puede saber. Distingue la causa para
+    poder decirla bien: un ZIP con 500 entradas pero un directorio de 5 MiB no tiene «demasiados archivos»."""
+    c = leer_cabecera_zip(path)
+    if c is None:
+        return None
+    if c.tam_directorio > MAX_DIRECTORIO_CENTRAL:
+        return "directorio"
+    if c.entradas > MAX_ENTRADAS:
+        return "entradas"
+    return None
 
 
 def zip_fuera_de_limite(path: Path) -> bool:
-    """¿Declara más entradas o un directorio central mayor que los topes? Sin abrir el ZIP."""
-    c = leer_cabecera_zip(path)
-    return bool(c and (c.entradas > MAX_ENTRADAS or c.tam_directorio > MAX_DIRECTORIO_CENTRAL))
+    return motivo_fuera_de_limite(path) is not None
 
 
 # ── 2. Qué hacer con cada combinación extensión × firma (función PURA) ──────────────────────────────
@@ -154,6 +160,7 @@ class Clasificacion:
     imagenes: int = 0
     anidados: int = 0
     primera_pagina: str | None = None      # nombre, en orden natural
+    motivo_limite: str | None = None       # solo en LIMITE: «entradas» o «directorio»
 
 
 def clasificar_infos(infos: list[zipfile.ZipInfo], *, min_imagenes: int = MIN_IMAGENES, fraccion: float = FRACCION_IMAGENES,
@@ -168,11 +175,11 @@ def clasificar_infos(infos: list[zipfile.ZipInfo], *, min_imagenes: int = MIN_IM
     anidados = sum(1 for _i, n in nombres if n.suffix.lower() in EXT_CONTENEDOR)
     base = dict(entradas=len(ficheros), imagenes=len(imgs), anidados=anidados, primera_pagina=primera)
     if len(infos) > max_entradas:
-        return Clasificacion(ClaseZip.LIMITE, **base)
+        return Clasificacion(ClaseZip.LIMITE, motivo_limite="entradas", **base)
     if any(i.flag_bits & 0x1 for i in ficheros):
         return Clasificacion(ClaseZip.CIFRADO, **base)
     if anidados:
-        return Clasificacion(ClaseZip.PAQUETE, **base)
+        return Clasificacion(ClaseZip.ANIDADOS, **base)
     contenido = sum(1 for _i, n in nombres if n.name.lower() not in RUIDO)
     if len(imgs) >= min_imagenes and contenido and len(imgs) / contenido >= fraccion:
         return Clasificacion(ClaseZip.TEBEO, **base)
@@ -182,8 +189,9 @@ def clasificar_infos(infos: list[zipfile.ZipInfo], *, min_imagenes: int = MIN_IM
 def clasificar_zip(path: Path, **kw) -> Clasificacion:
     """Abre el ZIP y lee solo su directorio central. Nunca lanza: lo que no se abre es `INVALIDO`. Un ZIP que DECLARA demasiadas entradas (o un
     directorio central enorme) es `LIMITE` sin llegar a abrirse."""
-    if zip_fuera_de_limite(path):
-        return Clasificacion(ClaseZip.LIMITE)
+    motivo = motivo_fuera_de_limite(path)
+    if motivo:
+        return Clasificacion(ClaseZip.LIMITE, motivo_limite=motivo)
     try:
         with zipfile.ZipFile(path) as zf:
             return clasificar_infos(zf.infolist(), **kw)
@@ -214,11 +222,13 @@ def leer_acotado(zf: zipfile.ZipFile, info: zipfile.ZipInfo, *, tope: int | None
 
 
 # ── 5. Lo que se guarda y lo que se dice ────────────────────────────────────────────────────────────
-def formato_contenido(firma: Firma, clase: ClaseZip | None = None) -> dict:
+def formato_contenido(firma: Firma, clase: ClaseZip | None = None, motivo_limite: str | None = None) -> dict:
     """Lo que va a `files.metadata["formato_contenido"]` (JSON plano, sin migración)."""
     d: dict = {"firma": firma.value, "contrato": CONTRATO}
     if clase is not None:
         d["clase"] = clase.value
+    if clase is ClaseZip.LIMITE and motivo_limite:
+        d["motivo"] = motivo_limite
     return d
 
 
@@ -228,7 +238,10 @@ def formato_real_de(path: Path) -> dict | None:
     firma = firma_de(path)
     if firma is Firma.ILEGIBLE:
         return None
-    return formato_contenido(firma, clasificar_zip(path).clase if firma is Firma.ZIP else None)
+    if firma is not Firma.ZIP:
+        return formato_contenido(firma)
+    c = clasificar_zip(path)
+    return formato_contenido(firma, c.clase, c.motivo_limite)
 
 
 def puede_dar_portada(ext: str, fc: dict | None) -> bool | None:
@@ -248,13 +261,24 @@ def puede_dar_portada(ext: str, fc: dict | None) -> bool | None:
 # (.cbz/.cbr) y con lo técnico entre paréntesis. La garantía «no cambia, mueve ni borra nada» va UNA vez, en la cabecera de la sección de la auditoría.
 # Sin «entradas», «firma», «contenedor» ni nombres de clase. «Pack» es palabra del coleccionista (no confundir con «lote», interno).
 AVISO_CLASE = {
-    ClaseZip.PAQUETE: "Es un pack con varios tebeos dentro. ZascArr no lo trata como uno solo ni los separa.",
+    ClaseZip.ANIDADOS: "Contiene otros archivos comprimidos, PDF o EPUB. ZascArr no lo interpreta automáticamente como un solo tebeo ni separa su contenido.",
     ClaseZip.NO_TEBEO: "Es un archivo comprimido, pero no parece un tebeo: tiene pocas imágenes o están mezcladas con otros archivos.",
     ClaseZip.CIFRADO: "Tiene contraseña, así que ZascArr no puede abrirlo.",
     ClaseZip.INVALIDO: "Está dañado o incompleto; quizá la descarga no terminó. Prueba a descargarlo de nuevo.",
     ClaseZip.VACIO: "Está vacío: no tiene ninguna página. Prueba a descargarlo de nuevo.",
     ClaseZip.LIMITE: f"Tiene demasiados archivos dentro (más de {MAX_ENTRADAS}) y ZascArr no lo abre, por precaución.",
 }
+
+#: El límite también puede saltar por el tamaño del índice interno (directorio central): la causa que se dice es la que de verdad saltó.
+AVISO_LIMITE_DIRECTORIO = "Su índice interno es demasiado grande y ZascArr no lo abre, por precaución."
+
+
+def aviso_de_clase(clase: ClaseZip, motivo_limite: str | None = None) -> str:
+    """El texto de una clase de ZIP no utilizable; para `LIMITE` distingue entradas de directorio."""
+    if clase is ClaseZip.LIMITE and motivo_limite == "directorio":
+        return AVISO_LIMITE_DIRECTORIO
+    return AVISO_CLASE[clase]
+
 
 #: Cómo se llama, para el coleccionista, lo que hay por dentro.
 _POR_DENTRO = {Firma.ZIP: "un .cbz (ZIP)", Firma.RAR: "un .cbr (RAR)", Firma.SIETE_Z: "un .cb7 (7z)", Firma.TAR: "un TAR", Firma.OTRO: "otro formato"}
