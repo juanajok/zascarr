@@ -245,6 +245,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Las candidatas de Comic Vine ya no parecen un fallo de ZascArr** (#311). En el asistente de una carpeta la
+  descripción salía con su HTML crudo (`<p>… <a href=…>`): ahora se ve como texto, igual que en Descubrir, y se limpia
+  **antes** de recortarla (recortar primero dejaba etiquetas partidas o nada visible). Y la imagen de relleno que Comic
+  Vine devuelve cuando una serie no tiene portada («Blank!») ya no se enseña como si fuera la portada del tebeo: se ve el
+  hueco propio, no se guarda como portada nueva al enriquecer y, si una serie ya la tenía guardada, no se descarga. Una
+  portada de relleno que ya estuviera en la caché de disco se rehará con BL-PORT1 (#300).
 - **La vista previa de la vinculación ya no emite un cursor de página que ella misma rechaza** (#143). En un grupo de más de
   100 archivos, si el último de una página tenía un nombre válido muy largo con caracteres de control (255 bytes), el enlace
   a la página siguiente medía 2.100 caracteres y la petición lo rechazaba (`422`): no se podía seguir recorriendo el grupo.
