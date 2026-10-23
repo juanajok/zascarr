@@ -100,22 +100,29 @@ class TestListaDeArchivos:
         r = await get(f"/ui/series/{serie}")
         assert r.status_code == 200 and "archivos-por-numero" not in r.text
 
-    async def test_sin_boton_y_con_la_razon_d9_y_en_curso(self, ent):
+    async def test_todos_los_archivos_ofrecen_desvincular_aunque_no_conste_como_se_vincularon(self, ent):
+        # BL-R1 (revisión de D9, 2026-10-23): importador, «Por revisar» (uno a uno) o «organizar»: da igual, se puede desvincular.
         serie, ids = await vinculado(ent, F1, F2)
         async with ent.banco.fabrica() as s:        # F2: vinculado SIN procedencia (como los de «organizar» o el importador)
             await s.execute(text("UPDATE files SET metadata = metadata - 'vinculo' WHERE id = :f"), {"f": ids[F2]})
+            await s.commit()
+        t = (await get(f"/ui/series/{serie}")).text
+        assert 'href="' + ruta(serie, ids[F1]) + '"' in t and 'href="' + ruta(serie, ids[F2]) + '"' in t
+        v = visible(t)
+        assert "¿Por qué algunos archivos no se pueden desvincular?" not in v and "Pendientes por carpeta" not in v
+        assert 'data-razon="sin_procedencia"' not in t
+
+    async def test_solo_un_archivo_en_curso_se_queda_sin_boton_y_dice_por_que(self, ent):
+        serie, ids = await vinculado(ent, F1, F2)
+        async with ent.banco.fabrica() as s:
             await s.execute(text(
                 "INSERT INTO asignacion_operaciones (file_id, series_id, estado, origen, destino, temporal, size_bytes, "
                 "mtime_ns, sha256, issue_number, formato) VALUES (:f, :s, CAST('preparada' AS asignacion_estado), '/o', '/d', "
                 "'/t', 1, 1, :sha, '1', CAST('single_issue' AS issue_format))"), {"f": ids[F1], "s": serie, "sha": SHA})
             await s.commit()
         t = (await get(f"/ui/series/{serie}")).text
-        assert 'href="' + ruta(serie, ids[F1]) + '"' not in t and 'href="' + ruta(serie, ids[F2]) + '"' not in t
-        assert 'data-razon="en_curso"' in t and 'data-razon="sin_procedencia"' in t
-        v = visible(t)
-        assert "Ahora mismo ZascArr trabaja con este archivo" in v
-        # La razón de «sin procedencia» se dice UNA vez, en el desplegable, no en cada fila.
-        assert "¿Por qué algunos archivos no se pueden desvincular?" in v and v.count("Pendientes por carpeta") == 1
+        assert 'href="' + ruta(serie, ids[F1]) + '"' not in t and 'href="' + ruta(serie, ids[F2]) + '"' in t
+        assert 'data-razon="en_curso"' in t and "Ahora mismo ZascArr trabaja con este archivo" in visible(t)
 
     async def test_archivo_no_disponible_se_puede_deshacer_y_se_dice_que_no_esta_verificado(self, ent):
         serie, ids = await vinculado(ent, F1)
@@ -257,14 +264,31 @@ class TestVistaPrevia:
         otra = await serie_de_prueba(ent, "Otra", 1990)
         assert (await get(ruta(otra, ids[F1]))).status_code == 404
 
-    async def test_bloqueado_dice_la_razon_y_no_ofrece_el_formulario(self, ent):
+    async def test_sin_procedencia_ofrece_el_formulario_y_lo_dice_en_llano(self, ent):
         serie, ids = await vinculado(ent, F1)
         async with ent.banco.fabrica() as s:
             await s.execute(text("UPDATE files SET metadata = metadata - 'vinculo'"))
             await s.commit()
         r = await get(ruta(serie, ids[F1]))
+        v = visible(r.text)
+        assert r.status_code == 200 and 'name="token"' in r.text and "<form" in r.text and "Desvincular el archivo" in v
+        assert "No consta cómo se vinculó" in v and "Pendientes por carpeta" not in v
+
+    async def test_con_procedencia_no_aparece_el_aviso_de_procedencia_desconocida(self, ent):
+        serie, ids = await vinculado(ent, F1)
+        assert "No consta cómo se vinculó" not in visible((await get(ruta(serie, ids[F1]))).text)
+
+    async def test_en_curso_dice_la_razon_y_no_ofrece_el_formulario(self, ent):
+        serie, ids = await vinculado(ent, F1)
+        async with ent.banco.fabrica() as s:
+            await s.execute(text(
+                "INSERT INTO asignacion_operaciones (file_id, series_id, estado, origen, destino, temporal, size_bytes, "
+                "mtime_ns, sha256, issue_number, formato) VALUES (:f, :s, CAST('preparada' AS asignacion_estado), '/o', '/d', "
+                "'/t', 1, 1, :sha, '1', CAST('single_issue' AS issue_format))"), {"f": ids[F1], "s": serie, "sha": SHA})
+            await s.commit()
+        r = await get(ruta(serie, ids[F1]))
         assert r.status_code == 200 and 'name="token"' not in r.text and "<form" not in r.text
-        assert "Pendientes por carpeta" in visible(r.text)
+        assert "Ahora mismo ZascArr está trabajando con este archivo" in visible(r.text)
 
     async def test_ya_no_vinculado_dice_que_no_hay_nada_que_deshacer(self, ent):
         serie, ids = await vinculado(ent, F1)

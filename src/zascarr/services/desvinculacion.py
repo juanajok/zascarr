@@ -3,7 +3,10 @@
 
 Contrato: `docs/design/bl-r1-deshacer-vinculacion.md` (§3) y ADR 0014. Decisiones del PO (2026-10-20): D1 el número que creó la
 vinculación **se conserva siempre**; D8 `metadata_source` vuelve a lo que había si consta (vínculos nuevos) y, si no, a `NULL`;
-D9 solo se deshacen los vínculos de «vincular en su sitio» (los que llevan procedencia en `metadata.vinculo`).
+D9 (REVISADA el 2026-10-23, también por el PO) se deshace CUALQUIER vínculo, conste o no cómo se hizo: el importador, «Por revisar»
+uno a uno, «organizar» (V6a) y los anteriores a 2d no llevan `metadata.vinculo`, y para quien colecciona el origen es un detalle
+interno. Sin procedencia no hay nada que restaurar, pero sí un estado ACTUAL que firmar (`issue_id`, huella, serie) y una entrada
+de historial que deja dicho que la procedencia era desconocida y qué había (`previo`). El resto del contrato no cambia.
 
 Qué hace la confirmación (recibe SOLO el token, una transacción): `issue_id` nulo; **quita** `metadata.vinculo` y **añade** su
 procedencia íntegra a `metadata.vinculo_historial` con `deshecho:{operacion_id, fecha}`; `match_status='unsorted'` y
@@ -42,6 +45,7 @@ from zascarr.models import (
     WishlistStatus,
 )
 from zascarr.services.tokens_revision import (
+    SIN_PROCEDENCIA,
     DesvinculacionFirmada,
     crear_token_desvinculacion,
     verificar_token_desvinculacion,
@@ -63,10 +67,11 @@ MENSAJES = {
     "no_vinculado": "Este archivo no está vinculado a ningún número: no hay nada que deshacer.",
     "en_curso": "Ahora mismo ZascArr está trabajando con este archivo. Prueba de nuevo en unos minutos.",
     "archivo_inexistente": "El archivo ya no está registrado en ZascArr.",
-    "sin_procedencia": "Este archivo no se vinculó desde «Pendientes por carpeta» (o fue antes de que ZascArr guardara cómo), así "
-                       "que no se puede desvincular desde aquí.",
     "cambio_desde_la_vista_previa": "El archivo ha cambiado desde que lo revisaste. No se ha deshecho nada: abre de nuevo la vista previa.",
 }
+AVISO_PROCEDENCIA_DESCONOCIDA = (
+    "No consta cómo se vinculó este archivo (por ejemplo, lo vinculó ZascArr al importarlo). Se puede desvincular igualmente; "
+    "ZascArr dejará anotado que se hizo.")
 AVISO_REVINCULAR = (
     "Deshacer solo devuelve el archivo a «Por revisar»: el archivo, su carpeta y el número siguen donde estaban. Volver a "
     "vincularlo es otra operación aparte, con su propia vista previa; puede cancelarse o fallar, y entonces el archivo "
@@ -116,7 +121,10 @@ class VistaPreviaDesvinculacion(BaseModel):
     archivo: ArchivoConservado
     numero: NumeroAfectado | None
     vinculado_el: str | None
+    #: `registrada` = consta cómo se vinculó (`metadata.vinculo`); `desconocida` = no consta (se desvincula igual).
+    procedencia: Literal["registrada", "desconocida"]
     aviso: str
+    aviso_procedencia: str | None
     token: str | None
 
 
@@ -150,11 +158,19 @@ def _uuid(v: object) -> str | None:
 
 
 def _vinculo_valido(meta: dict | None) -> dict | None:
-    """El `metadata.vinculo` si tiene la procedencia mínima (operación y serie), o `None`: sin él no hay D9."""
+    """El `metadata.vinculo` si tiene la procedencia mínima (operación y serie), o `None`."""
     v = (meta or {}).get("vinculo")
     if isinstance(v, dict) and _uuid(v.get("operacion_id")) and _uuid(v.get("serie_id")):
         return v
     return None
+
+
+def procedencia_de(meta: dict | None, series_id: object) -> dict | None:
+    """El `metadata.vinculo` si es VÁLIDO **y** coherente con la serie del número al que está vinculado el archivo; si no
+    (no existe, está mal formado o es de otra serie), `None` = procedencia desconocida. Una procedencia incoherente no se
+    toma como cierta: se conserva como evidencia en el historial (`vinculo_no_valido`) y se quita al deshacer."""
+    v = _vinculo_valido(meta)
+    return v if v is not None and _uuid(v["serie_id"]) == _uuid(str(series_id)) else None
 
 
 def _entrada_de(meta: dict | None, operacion: str) -> dict | None:
@@ -200,31 +216,31 @@ class DesvinculacionDeArchivo:
             raise ArchivoInexistenteError(MENSAJES["archivo_inexistente"])
         archivo = ArchivoConservado(ruta=f.file_path, nombre=f.file_name, tamano=f.file_size_bytes, sha256=f.sha256_hash,
                                     falta_en_disco=bool(f.is_missing))
-        vinculo = _vinculo_valido(f.metadata_)
         numero = None
         bloqueo = None
         issue = None
+        vinculo = None
         if f.issue_id is not None:
             issue = (await db.execute(select(Issue.id, Issue.series_id, Issue.issue_number, Issue.format)
                                       .where(Issue.id == f.issue_id))).first()
             serie = None if issue is None else (await db.execute(
                 select(Series.title).where(Series.id == issue.series_id))).scalar_one_or_none()
+            if issue is not None:
+                vinculo = procedencia_de(f.metadata_, issue.series_id)
             if issue is not None and serie is not None:
                 numero = await self._numero_afectado(f, issue, serie, vinculo)
 
-        if f.issue_id is None:
+        if f.issue_id is None or issue is None:
             bloqueo = "no_vinculado"
         elif await _asignacion_viva(db, file_id):
             bloqueo = "en_curso"
-        elif vinculo is None or issue is None or str(issue.series_id) != _uuid(vinculo["serie_id"]):
-            bloqueo = "sin_procedencia"      # D9: sin procedencia verificable (otro camino, antiguo o incoherente)
 
         token = None
         if bloqueo is None:
-            assert issue is not None and vinculo is not None
+            assert issue is not None
             token = crear_token_desvinculacion(DesvinculacionFirmada(
                 file_id=str(file_id), issue_id=str(issue.id), series_id=str(issue.series_id),
-                vinculo_operacion=_uuid(vinculo["operacion_id"]) or "",
+                vinculo_operacion=_uuid(vinculo["operacion_id"]) if vinculo is not None else SIN_PROCEDENCIA,
                 huella=huella_de(f.file_path, f.file_size_bytes, f.sha256_hash), operacion=str(uuid4())),
                 self._secret, ahora=self._ahora)
         return VistaPreviaDesvinculacion(
@@ -232,7 +248,8 @@ class DesvinculacionDeArchivo:
             bloqueo=None if bloqueo is None else Bloqueo(codigo=bloqueo, mensaje=MENSAJES[bloqueo]),
             archivo=archivo, numero=numero,
             vinculado_el=vinculo.get("fecha") if vinculo and isinstance(vinculo.get("fecha"), str) else None,
-            aviso=AVISO_REVINCULAR, token=token)
+            procedencia="registrada" if vinculo is not None else "desconocida",
+            aviso=AVISO_REVINCULAR, aviso_procedencia=None if vinculo is not None else AVISO_PROCEDENCIA_DESCONOCIDA, token=token)
 
     async def _numero_afectado(self, f, issue, serie_titulo: str, vinculo: dict | None) -> NumeroAfectado:
         db = self._db
@@ -304,37 +321,57 @@ class DesvinculacionDeArchivo:
             return await self._omitir(firmado, "no_vinculado")
         if await _asignacion_viva(db, file_id):
             return await self._omitir(firmado, "en_curso")
-        vinculo = _vinculo_valido(f.metadata_)
-        if (str(f.issue_id) != firmado.issue_id or vinculo is None
-                or _uuid(vinculo["operacion_id"]) != firmado.vinculo_operacion
-                or huella_de(f.file_path, f.file_size_bytes, f.sha256_hash) != firmado.huella):
+        if str(f.issue_id) != firmado.issue_id or huella_de(f.file_path, f.file_size_bytes, f.sha256_hash) != firmado.huella:
             return await self._omitir(firmado, "cambio_desde_la_vista_previa")
 
-        # 5. Issue `FOR SHARE` (no puede desaparecer mientras se desvincula).
-        if (await db.execute(select(Issue.id).where(Issue.id == f.issue_id).with_for_update(read=True))).first() is None:
+        # 5. Issue `FOR SHARE` (no puede desaparecer mientras se desvincula). Con él bloqueado se comprueba que sigue siendo del
+        #    número y la serie que se vieron y que la procedencia es la que se vio (registrada, o ausente = `SIN_PROCEDENCIA`).
+        issue = (await db.execute(select(Issue.series_id, Issue.issue_number, Issue.format).where(Issue.id == f.issue_id)
+                                  .with_for_update(read=True))).first()
+        if issue is None or str(issue.series_id) != firmado.series_id:
+            return await self._omitir(firmado, "cambio_desde_la_vista_previa")
+        vinculo = procedencia_de(f.metadata_, issue.series_id)
+        if (_uuid(vinculo["operacion_id"]) if vinculo is not None else SIN_PROCEDENCIA) != firmado.vinculo_operacion:
             return await self._omitir(firmado, "cambio_desde_la_vista_previa")
 
         # 6. Una sola sentencia, con el vínculo comprobado en el WHERE. Todo por fusión JSONB.
         fecha = self._fecha()
-        previo_vinculo = vinculo.get("previo")
-        fuente = previo_vinculo.get("metadata_source") if isinstance(previo_vinculo, dict) else None      # D8
-        comprobante = {**vinculo, "deshecho": {"operacion_id": firmado.operacion, "fecha": fecha}}
+        bruto = (f.metadata_ or {}).get("vinculo")                    # lo que haya ahora (puede ser una procedencia no válida)
+        operacion_actual = bruto.get("operacion_id") if isinstance(bruto, dict) and isinstance(bruto.get("operacion_id"), str) else None
+        if vinculo is not None:
+            previo_vinculo = vinculo.get("previo")
+            fuente = previo_vinculo.get("metadata_source") if isinstance(previo_vinculo, dict) else None      # D8
+            comprobante = {**vinculo, "deshecho": {"operacion_id": firmado.operacion, "fecha": fecha}}
+            numero = vinculo.get("numero") if isinstance(vinculo.get("numero"), str) else None
+        else:
+            # Sin procedencia (BL-R1, revisión de D9): no hay nada que restaurar (D8 → NULL), pero se deja dicho qué había.
+            fuente = None
+            estado_previo = (f.metadata_ or {}).get("match_status")
+            comprobante = {
+                "procedencia": "desconocida", "serie_id": firmado.series_id, "issue_id": firmado.issue_id,
+                "numero": issue.issue_number, "formato": issue.format.value,
+                "previo": {"match_status": estado_previo if isinstance(estado_previo, str) else None,
+                           "metadata_source": f.metadata_source},
+                "deshecho": {"operacion_id": firmado.operacion, "fecha": fecha}}
+            if bruto is not None:
+                comprobante["vinculo_no_valido"] = bruto              # una procedencia incoherente o mal formada: evidencia
+            numero = issue.issue_number
         r = await db.execute(text(
             "UPDATE files SET issue_id = NULL, review_dismissed = false, metadata_source = CAST(:src AS varchar), "
             "metadata = (coalesce(metadata, '{}'::jsonb) - 'vinculo') || jsonb_build_object("
             " 'match_status', 'unsorted',"
             " 'vinculo_historial', CASE WHEN jsonb_typeof(metadata -> 'vinculo_historial') = 'array'"
             "   THEN metadata -> 'vinculo_historial' ELSE '[]'::jsonb END || jsonb_build_array(CAST(:e AS jsonb))) "
-            "WHERE id = :f AND issue_id = :i AND metadata -> 'vinculo' ->> 'operacion_id' = :vop"),
+            "WHERE id = :f AND issue_id = :i AND (metadata -> 'vinculo' ->> 'operacion_id') IS NOT DISTINCT FROM CAST(:vop AS text)"),
             {"src": fuente if isinstance(fuente, str) else None, "e": json.dumps(comprobante, ensure_ascii=False),
-             "f": file_id, "i": f.issue_id, "vop": firmado.vinculo_operacion})
+             "f": file_id, "i": f.issue_id, "vop": operacion_actual})
         if r.rowcount != 1:
             raise RuntimeError("la fila bloqueada no se pudo desvincular")
 
         resultado = ResultadoDesvinculacion(
             version=VERSION_RESULTADO, operacion_id=firmado.operacion, file_id=firmado.file_id, resultado="deshecho",
             motivo=None, mensaje="Listo: el archivo ha vuelto a «Por revisar».", serie_id=firmado.series_id,
-            numero=vinculo.get("numero") if isinstance(vinculo.get("numero"), str) else None, fecha=fecha)
+            numero=numero, fecha=fecha)
         self._commit_pedido = True
         await db.commit()
         return resultado

@@ -113,6 +113,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Desvincular ya no depende de cómo se vinculó el archivo** (BL-R1, revisión de D9). En la ficha de una serie, antes solo tenían «Desvincular»
+  los archivos vinculados desde «Pendientes por carpeta»; los vinculados uno a uno desde «Por revisar», al importar o con «organizar» salían sin botón y
+  con una explicación. Ahora **todos** lo tienen. Si no consta cómo se vinculó, la pantalla lo dice («No consta cómo se vinculó este archivo…») y ZascArr
+  deja anotado qué había. Un archivo con una operación en curso sigue sin botón, con su motivo. No se toca el fichero, el número se conserva y el importador
+  no vuelve a vincular lo que desvincules (un archivo ya registrado con el mismo contenido se descarta como duplicado).
 - **Hay que volver a aceptar el aviso legal una vez.** Se ha limpiado su texto (quitadas unas marcas
   de cita «[web:168]» que no llevaban a ninguna parte y separadas las listas para que se vean como
   listas); lo que dice no cambia. La versión aceptada es la huella del fichero, así que tras actualizar

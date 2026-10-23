@@ -59,10 +59,10 @@ _POLITICAS_OFRECIDAS = {
 }
 
 
-#: BL-R1b (D9): por qué un archivo no ofrece «Deshacer esta vinculación», junto al archivo.
+#: BL-R1b: por qué un archivo no ofrece «Deshacer esta vinculación», junto al archivo. Desde la
+#: revisión de D9 (2026-10-23) solo queda `en_curso`: se desvincula cualquier archivo.
 RAZONES_SIN_BOTON = {
     "en_curso": "Ahora mismo ZascArr trabaja con este archivo. Prueba de nuevo en unos minutos.",
-    "sin_procedencia": "",      # se explica UNA vez, en el desplegable de la sección
 }
 
 
