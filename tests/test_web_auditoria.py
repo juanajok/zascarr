@@ -151,6 +151,7 @@ class TestCabeceraDeNoReconocidos:
         from pathlib import Path
         t = (Path(__file__).resolve().parents[1] / "src/zascarr/web/templates/_auditoria_informe.html").read_text(encoding="utf-8")
         t = " ".join(t.split())
-        assert "ZascArr no cambia, mueve ni borra ninguno de esta lista." in t
-        assert "pon la copia arreglada en tu carpeta de descargas y ZascArr la importará como cualquier descarga." in t
+        assert "No cambia, mueve ni borra ninguno de esta lista." in t
+        assert ("Si arreglas una copia (por ejemplo, la descomprimes o pones .cbz al final de su nombre) y la dejas en tu carpeta de descargas, "
+                "ZascArr la importará; el original seguirá aquí.") in t
         assert "hasta que los conviertas" not in t                       # la cabecera antigua, que decía que ninguno de estos archivos contaba
