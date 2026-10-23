@@ -14,7 +14,7 @@ import pytest
 from PIL import Image
 
 from zascarr.core.importer_triage import triage
-from zascarr.models import FileFormat
+from zascarr.models import FileFormat, Firma
 from zascarr.services.importer import Importer, _reenlazar_fila
 from zascarr.services.tagger import SALTADO, TaggerService
 from zascarr.utils.cover import extract_cover_thumbnail, puede_tener_portada
@@ -119,6 +119,15 @@ class TestPortada:                                                              
         for fc in (guardado, None):                                                           # con la base rellena y con la fila aún sin rellenar
             data, tipo = extract_cover_thumbnail(f, fc)
             assert tipo == "image/jpeg" and Image.open(io.BytesIO(data)).width <= 240
+
+    def test_una_firma_ilegible_no_se_guarda_ni_quita_la_portada_de_un_cbz_sano(self, tmp_path):
+        """Regresión (revisión de #325): un fallo pasajero al leer la firma no debe fijarse en la base como `firma: ilegible` y suprimir para siempre la portada."""
+        f = zip_de(tmp_path / "Serie 01.cbz")
+        assert puede_tener_portada(f, {"firma": "ilegible", "contrato": 1}) is True       # decide la extensión, no la lectura fallida
+        assert extract_cover_thumbnail(f, {"firma": "ilegible", "contrato": 1})[1] == "image/jpeg"
+        from unittest import mock
+        with mock.patch("zascarr.core.importer_triage.firma_de", return_value=Firma.ILEGIBLE):
+            assert triage(f).formato_contenido is None                                    # no se guarda nada: se podrá decidir después
 
     def test_un_cbr_zip_con_anidados_o_un_rar_no_dan_portada(self, tmp_path):
         paquete = zip_de(tmp_path / "Pack.cbr", extra={"x/y.cbz": b"PK"})

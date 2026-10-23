@@ -216,7 +216,8 @@ def triage(path: Path) -> TriageResult:
     # #307: la decisión de qué hacer con el fichero sale de un único sitio (`formato_contenedor`), por contenido y no solo por extensión.
     firma = firma_de(path)
     trat = tratamiento(ext, firma)
-    result.formato_contenido = formato_contenido(firma)
+    # Una firma ILEGIBLE (fallo pasajero de lectura) NO se guarda: quedaría fijada en la base y suprimiría la portada de un fichero sano.
+    result.formato_contenido = None if firma is Firma.ILEGIBLE else formato_contenido(firma)
 
     if trat is Tratamiento.AVISAR and ext in (".cbz", ".zip") and firma is Firma.OTRO:
         # Declarado ZIP, pero el contenido no es ningún contenedor conocido: es un fichero ROTO o una descarga incompleta. Como siempre: sin hash

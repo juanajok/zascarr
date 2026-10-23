@@ -73,11 +73,12 @@ def extract_cover_thumbnail(path: Path, formato_contenido: dict | None = None) -
     if not path.exists():
         return None
     ext = path.suffix.lower()
-    sin_guardar = not formato_contenido
+    guardado = puede_dar_portada(ext, formato_contenido)
+    sin_guardar = guardado is None                      # nada utilizable guardado (fila sin rellenar, fichero suelto, lectura fallida antigua)
     if sin_guardar:
         if not se_lee_como_zip(ext, firma_de(path)):
             return None
-    elif not puede_dar_portada(ext, formato_contenido):
+    elif not guardado:
         return None
 
     if zip_fuera_de_limite(path):               # declara demasiadas entradas o un directorio enorme: ni se abre
