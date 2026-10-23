@@ -1,0 +1,22 @@
+# Muestras elegidas por Claude con el resultado del paso 0 (criterio del PO: «a tu criterio»). Rutas relativas a la biblioteca.
+# Solo se COPIAN (cp); el original no se toca. Las copias se guardan con nombre neutro (m01, m02…): no se copia el nombre real.
+# RAR v2.0 (formato antiguo)
+<ruta relativa a la biblioteca>
+# RAR v4 pequeño
+<ruta relativa a la biblioteca>
+# RAR v4 típico de manga
+<ruta relativa a la biblioteca>
+# RAR v4 grande: prueba de memoria (el mayor RAR v4, 189 MB)
+<ruta relativa a la biblioteca>
+# RAR v4 grande de novela gráfica (173 MB)
+<ruta relativa a la biblioteca>
+# RAR v5 (dos muestras)
+<ruta relativa a la biblioteca>
+<ruta relativa a la biblioteca>
+# RAR v4 SÓLIDO real (`file` marca «Solid»): ya registrado como .cbr
+<ruta relativa a la biblioteca>
+# RAR v4 típicos ya registrados como .cbr
+<ruta relativa a la biblioteca>
+<ruta relativa a la biblioteca>
+# CONTROL: un .cbr registrado que `file` identifica como ZIP (extensión que miente)
+<ruta relativa a la biblioteca>
