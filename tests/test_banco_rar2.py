@@ -99,6 +99,12 @@ class TestClasificarSalida:
     def test_casos(self, r, valida, esperado):
         assert b.clasificar_salida(r, valida) == esperado
 
+    def test_el_mensaje_puede_venir_por_la_salida_estandar(self):
+        """En la Pi, `unar` falló con rc≠0 y stderr vacío: sus mensajes van por stdout."""
+        assert b.clasificar_salida({"rc": 1, "stderr": "", "stdout_cabeza": "x.png: Failed! (Checksum error)"}, False) == "ERROR_CLARO"
+        assert b.clasificar_salida({"rc": 1, "stderr": "", "stdout_cabeza": ""}, False) == "ERROR_SIN_MENSAJE"
+        assert b.mensaje({"stderr": "", "stdout_cabeza": "texto"}) == "texto"
+
     def test_rc_0_sin_escribir_nada_no_es_exito(self):
         """Hallazgo de la prueba corta en la Pi: `unar` devuelve 0 cuando la entrada pedida no existe y no escribe nada."""
         assert b.clasificar_salida({"rc": 0}, valida=False, hay_datos=False).startswith("SIN_SALIDA_CON_RC_0")
