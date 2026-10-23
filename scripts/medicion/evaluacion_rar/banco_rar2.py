@@ -95,6 +95,7 @@ class Entrada:
     directorio: bool
     cifrada: bool | None
     crc: int | None
+    comprimido: int | None = None
 
 
 def _entero(v) -> int | None:
@@ -111,7 +112,7 @@ def parsear_lsar_json(texto: str) -> tuple[list[Entrada], dict]:
         crc = next((v for k, v in e.items() if "crc" in k.lower() and _entero(v) is not None), None)
         idx = _entero(e.get("XADIndex"))
         out.append(Entrada(idx if idx is not None else i, str(e.get("XADFileName", "")), _entero(e.get("XADFileSize")),
-                           bool(e.get("XADIsDirectory", False)), e.get("XADIsEncrypted") if isinstance(e.get("XADIsEncrypted"), bool) else None, crc))
+                           bool(e.get("XADIsDirectory", False)), e.get("XADIsEncrypted") if isinstance(e.get("XADIsEncrypted"), bool) else None, crc, _entero(e.get("XADCompressedSize"))))
     meta = {"formato": d.get("lsarFormatName"), "claves": sorted(crudas[0].keys()) if crudas else []}
     return out, meta
 
@@ -138,23 +139,41 @@ def validar(data: bytes, e: Entrada) -> dict:
     return r
 
 
-def clasificar_salida(r: dict, valida: bool, oom: bool = False) -> str:
+def clasificar_salida(r: dict, valida: bool, oom: bool = False, hay_datos: bool = True) -> str:
     """Qué pasó con una orden sobre un fichero posiblemente dañado o cifrado."""
     if r.get("timeout"):
         return "TIMEOUT"
     if oom or r.get("rc") in (-9, 137):
         return "OOM"
     rc = r.get("rc", -998)
-    if rc == -998:
+    if rc in (-998, -997):
         return "ERROR_DEL_BANCO"
     if rc < 0 or rc >= 128:
         return f"CRASH (señal {abs(rc) if rc < 0 else rc - 128})"
     if rc == 0:
+        if not hay_datos:
+            return "SIN_SALIDA_CON_RC_0 (dice que fue bien y no escribió nada)"
         return "OK_SIN_DANO_EN_LA_PAGINA" if valida else "SILENCIOSO (rc 0 con página no válida)"
     return "ERROR_CLARO" if (r.get("stderr") or "").strip() else "ERROR_SIN_MENSAJE"
 
 
-ACEPTABLES = ("OK_SIN_DANO_EN_LA_PAGINA", "ERROR_CLARO")
+ACEPTABLES = ("OK_SIN_DANO_EN_LA_PAGINA", "ERROR_CLARO", "SIN_PAGINA_QUE_PEDIR")
+GRAVEDAD = ("CRASH", "TIMEOUT", "OOM", "ERROR_DEL_BANCO", "SILENCIOSO", "SIN_SALIDA", "ERROR_SIN_MENSAJE", "ERROR_CLARO", "SIN_PAGINA", "OK")
+
+
+def peor(clases: list[str]) -> str:
+    """La peor de varias clases de salida (la más arriba en GRAVEDAD)."""
+    return min(clases, key=lambda c: next((i for i, g in enumerate(GRAVEDAD) if c.startswith(g)), len(GRAVEDAD)))
+
+
+def offset_en_pagina(entradas: list[Entrada], k: int, cabecera_estimada: int = 64) -> int:
+    """Posición aproximada, en un archivo SIN sólido, de la MITAD de los datos comprimidos de la entrada k (orden del listado = orden en el fichero).
+    Estima 64 B de cabecera por entrada más el nombre; el error acumulado es de KB frente a páginas de cientos de KB."""
+    pos = 20                                                  # firma + cabecera principal
+    for e in entradas[:k]:
+        pos += cabecera_estimada + len(e.nombre) + (e.comprimido or 0)
+    e = entradas[k]
+    return pos + cabecera_estimada + len(e.nombre) + (e.comprimido or 0) // 2
 
 
 def variantes(n: int) -> list[tuple[str, str, int]]:
@@ -195,11 +214,11 @@ def extraer(motor: str, f: str, e: Entrada, timeout: float = TIMEOUT, rlimits: d
     shutil.rmtree(WORK / "x", ignore_errors=True)
     (WORK / "p.bin").unlink(missing_ok=True)
     if motor == "unar":
-        r = ejecutar(["unar", "-q", "-D", "-f", "-i", "-o", str(WORK / "x"), f, str(e.indice)], timeout, rlimits)
+        r = ejecutar(["unar", "-D", "-f", "-i", "-o", str(WORK / "x"), f, str(e.indice)], timeout, rlimits)
         ficheros = [p for p in (WORK / "x").rglob("*") if p.is_file()] if (WORK / "x").exists() else []
         r["bytes_escritos_tmpfs"] = sum(p.stat().st_size for p in ficheros)
         return r, (ficheros[0].read_bytes() if ficheros else None)
-    r = ejecutar(["unrar", "p", "-inul", "-p-", f, e.nombre], timeout, rlimits, stdout_a=str(WORK / "p.bin"))
+    r = ejecutar(["unrar", "p", "-idq", "-p-", f, e.nombre], timeout, rlimits, stdout_a=str(WORK / "p.bin"))
     p = WORK / "p.bin"
     return r, (p.read_bytes() if p.exists() else None)
 
@@ -267,29 +286,60 @@ def _bases_para_danar(ms):
     return list(elegidas.values())
 
 
+def _evaluar(motor: str, f: str, e_danada: Entrada, e_original: Entrada) -> tuple[str, dict]:
+    """Pide una página a un fichero posiblemente dañado y la compara con la ORIGINAL (tamaño, CRC, decodificación)."""
+    oom0 = oom_kills()
+    r, data = extraer(motor, f, e_danada)
+    hay = bool(data)
+    valida = validar(data, e_original)["ok"] if hay else False
+    return clasificar_salida(r, valida, oom=oom_kills() > oom0 >= 0, hay_datos=hay), r
+
+
 def modo_corrupto(ms) -> None:
+    """Como lo haría ZascArr: se LISTA el fichero dañado y se pide LA PÁGINA QUE EL LISTADO DIGA (no el índice del original). Se compara con la página original."""
     print("== corrupto (copias dañadas en /work; las muestras no se tocan)", flush=True)
     for p, c in _bases_para_danar(ms):
         entradas, _meta, r = listar(str(p))
-        pr, ul = paginas(entradas)
-        if r["rc"] != 0 or not pr:
-            anotar(fila("corrupto", p.name, "", "lsar", "base", "NOT RUN (la muestra base no se lista)", "NOT RUN", r))
+        imgs = sorted((e for e in entradas if not e.directorio and Path(e.nombre).suffix.lower() in IMG), key=lambda e: natural(e.nombre))
+        if r["rc"] != 0 or len(imgs) < 3:
+            anotar(fila("corrupto", p.name, "", "lsar", "base", "NOT RUN (la muestra base no se lista o tiene menos de 3 páginas)", "NOT RUN", r))
             continue
-        for nombre, tipo, param in variantes(p.stat().st_size):
+        orig = {e.nombre: e for e in entradas}
+        k = len(imgs) // 2
+        pos_k = offset_en_pagina(entradas, entradas.index(imgs[k])) if not c.solido else None
+        plan = [(n, t, q, "extremos") for n, t, q in variantes(p.stat().st_size)]
+        if pos_k is not None:
+            plan += [("byte_en_pagina", "byte", pos_k, "ventana"), ("ceros_en_pagina", "ceros", pos_k, "ventana")]
+        tag = f"{p.name}:{'sólido' if c.solido else c.firma}"
+        for nombre, tipo, param, objetivo in plan:
             v = WORK / "v.rar"
             danar(p, v, tipo, param)
-            tag = f"{p.name}:{'sólido' if c.solido else c.firma}"
             oom0 = oom_kills()
             ent2, _m2, r2 = listar(str(v))
             res = clasificar_salida(r2, valida=True, oom=oom_kills() > oom0 >= 0)
-            anotar(fila("corrupto", tag, nombre, "lsar", "listar", res, "PASS" if res in ACEPTABLES else "FAIL", r2, f"{len(ent2)} entradas"))
+            anotar(fila("corrupto", tag, nombre, "lsar", "listar", res.replace("OK_SIN_DANO_EN_LA_PAGINA", "LISTADO_CON_RC_0"), "PASS" if res in ACEPTABLES else "FAIL", r2,
+                        f"{len(ent2)} de {len(entradas)} entradas" + (" (¡faltan! y el código de salida no lo avisa)" if r2["rc"] == 0 and len(ent2) < len(entradas) else "")))
+            if objetivo == "extremos":
+                pr2, ul2 = paginas(ent2)
+                pedidas = [("primera", pr2), ("ultima", ul2)]
+            else:
+                por_nombre = {e.nombre: e for e in ent2}
+                pedidas = [(f"pag{i}", por_nombre.get(imgs[i].nombre)) for i in range(max(0, k - 2), min(len(imgs), k + 3))]
             for motor in ("unar", "unrar"):
-                for op, e in (("primera", pr), ("ultima", ul)):
-                    oom0 = oom_kills()
-                    r3, data = extraer(motor, str(v), e)
-                    val = validar(data, e)["ok"] if data else False
-                    res = clasificar_salida(r3, valida=val, oom=oom_kills() > oom0 >= 0)
-                    anotar(fila("corrupto", tag, nombre, motor, op, res, "PASS" if res in ACEPTABLES else "FAIL", r3))
+                clases, ultima_r, ok = [], {}, 0
+                for op, e2 in pedidas:
+                    if e2 is None:
+                        clases.append("SIN_PAGINA_QUE_PEDIR")
+                        continue
+                    cl, ultima_r = _evaluar(motor, str(v), e2, orig.get(e2.nombre, e2))
+                    clases.append(cl)
+                    ok += cl.startswith("OK")
+                if objetivo == "extremos":
+                    for (op, _e), cl in zip(pedidas, clases):
+                        anotar(fila("corrupto", tag, nombre, motor, op, cl, "PASS" if cl in ACEPTABLES else "FAIL", ultima_r))
+                else:
+                    res = f"peor: {peor(clases)} ({ok} de {len(clases)} páginas bien; {sum(c2.startswith('ERROR_CLARO') for c2 in clases)} con error claro; {sum(e is None for _o, e in pedidas)} ausentes del listado)"
+                    anotar(fila("corrupto", tag, nombre, motor, "ventana", res, "PASS" if peor(clases) in ACEPTABLES or peor(clases).startswith("OK") else "FAIL", ultima_r))
             v.unlink(missing_ok=True)
 
 

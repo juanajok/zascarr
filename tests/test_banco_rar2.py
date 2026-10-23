@@ -94,15 +94,27 @@ class TestClasificarSalida:
         ({"rc": -9}, False, "OOM"),
         ({"rc": 1, "timeout": True}, False, "TIMEOUT"),
         ({"rc": -998}, False, "ERROR_DEL_BANCO"),
+        ({"rc": -997}, False, "ERROR_DEL_BANCO"),
     ])
     def test_casos(self, r, valida, esperado):
         assert b.clasificar_salida(r, valida) == esperado
 
+    def test_rc_0_sin_escribir_nada_no_es_exito(self):
+        """Hallazgo de la prueba corta en la Pi: `unar` devuelve 0 cuando la entrada pedida no existe y no escribe nada."""
+        assert b.clasificar_salida({"rc": 0}, valida=False, hay_datos=False).startswith("SIN_SALIDA_CON_RC_0")
+        assert b.clasificar_salida({"rc": 0}, valida=False, hay_datos=False) not in b.ACEPTABLES
+
     def test_oom_del_cgroup_gana_a_un_error_normal(self):
         assert b.clasificar_salida({"rc": 2, "stderr": "x"}, False, oom=True) == "OOM"
 
-    def test_solo_error_claro_y_sin_dano_son_aceptables(self):
-        assert b.ACEPTABLES == ("OK_SIN_DANO_EN_LA_PAGINA", "ERROR_CLARO")
+    def test_solo_error_claro_sin_dano_y_nada_que_pedir_son_aceptables(self):
+        assert b.ACEPTABLES == ("OK_SIN_DANO_EN_LA_PAGINA", "ERROR_CLARO", "SIN_PAGINA_QUE_PEDIR")
+
+    def test_la_peor_de_varias_clases(self):
+        assert b.peor(["OK_SIN_DANO_EN_LA_PAGINA", "ERROR_CLARO"]) == "ERROR_CLARO"
+        assert b.peor(["ERROR_CLARO", "SILENCIOSO (rc 0 con página no válida)", "SIN_PAGINA_QUE_PEDIR"]).startswith("SILENCIOSO")
+        assert b.peor(["SIN_SALIDA_CON_RC_0 (x)", "ERROR_SIN_MENSAJE"]).startswith("SIN_SALIDA")
+        assert b.peor(["OK_SIN_DANO_EN_LA_PAGINA", "CRASH (señal 11)", "TIMEOUT"]).startswith("CRASH")
 
 
 class TestDanos:
@@ -123,6 +135,30 @@ class TestDanos:
             assert o.read_bytes() == antes
         assert (tmp_path / "d_truncado_50").stat().st_size == len(antes) // 2
         assert (tmp_path / "d_ceros_medio").read_bytes()[len(antes) // 2: len(antes) // 2 + 4096] == b"\0" * 4096
+
+
+class TestDanoEnPagina:
+
+    def test_la_comprimida_se_lee_del_listado(self):
+        j = json.dumps({"lsarContents": [{"XADFileName": "a.png", "XADFileSize": 9, "XADCompressedSize": 5}]})
+        assert b.parsear_lsar_json(j)[0][0].comprimido == 5
+
+    def test_offset_cae_en_la_mitad_de_los_datos_de_esa_entrada(self):
+        es = [b.Entrada(i, f"{i:02d}.png", 1000, False, None, None, comprimido=1000) for i in range(10)]
+        for k in (0, 4, 9):
+            o = b.offset_en_pagina(es, k)
+            inicio = 20 + k * (64 + 6 + 1000) + 64 + 6              # ver la fórmula: cabecera estimada + nombre (6) + datos
+            assert inicio <= o <= inicio + 1000                       # dentro de los datos de la entrada k
+        assert b.offset_en_pagina(es, 5) > b.offset_en_pagina(es, 4)
+
+    def test_el_dano_en_esa_posicion_cambia_los_bytes_de_esa_zona(self, tmp_path):
+        es = [b.Entrada(i, f"{i:02d}.png", 100, False, None, None, comprimido=100) for i in range(5)]
+        o = tmp_path / "o"
+        o.write_bytes(bytes(range(256)) * 10)
+        d = tmp_path / "d"
+        pos = b.offset_en_pagina(es, 2)
+        b.danar(o, d, "ceros", pos)
+        assert d.read_bytes()[pos:pos + 100] == b"\0" * 100 and d.read_bytes()[:pos] == o.read_bytes()[:pos]
 
 
 class TestEjecutar:
