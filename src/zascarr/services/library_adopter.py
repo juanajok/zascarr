@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -111,6 +112,15 @@ class AdoptionReport:
     #: solo existe si el commit se aplicó). Fila REENLAZADA (ya existía) → su estado previo completo (ruta y
     #: `is_missing`, que en una referencia obsoleta es False): «sigue como estaba» es ese estado, no otro.
     added_rows: list[tuple[UUID, str, str | None, bool]] = field(default_factory=list)
+    #: #326: filas que ya existían (desaparecidas) y se REENLAZARON a esta ruta. También constan en `registered` (compatibilidad);
+    #: aquí se cuentan aparte porque un reenlace no crea una fila nueva.
+    relinked: int = 0
+    #: #326 (solo registro incremental): su contenido coincide con VARIAS filas desaparecidas y no hay una elección inequívoca:
+    #: no se reenlaza ninguna, no se crea fila y se informa para que decida una persona.
+    ambiguous: list[str] = field(default_factory=list)
+    #: #326 (solo registro incremental): rutas del alcance confirmado que ya no estaban pendientes al empezar (desaparecieron o
+    #: otra ejecución las registró entre la revisión y la confirmación).
+    out_of_scope_gone: int = 0
 
     def absorb(self, lote: AdoptionReport) -> None:
         """Pasa a este informe lo de un lote YA CONFIRMADO."""
@@ -119,6 +129,8 @@ class AdoptionReport:
         self.duplicates += lote.duplicates
         self.errors += lote.errors
         self.by_other_run += lote.by_other_run
+        self.relinked += lote.relinked
+        self.ambiguous += lote.ambiguous
 
     @property
     def registered_count(self) -> int:
@@ -155,16 +167,27 @@ class InventarioBiblioteca:
     ya_registrados: int
     nuevos: int
     registrados_sin_fichero: int   # filas bajo la biblioteca cuyo archivo ya no está: hay que revisarlas
+    #: #326: la carpeta de la biblioteca existe y es legible. Si no, «0 nuevos» no significa «no hay nada nuevo»: no se vio nada.
+    carpeta_accesible: bool = True
+    #: #326: las rutas NUEVAS vistas (alcance de una confirmación). No se compara ni se imprime.
+    rutas_nuevas: frozenset[str] = field(default=frozenset(), repr=False, compare=False)
 
     @property
     def hay_que_registrar(self) -> bool:
         return self.nuevos > 0
+
+    @property
+    def huella(self) -> str:
+        """Resumen estable de QUÉ rutas nuevas se enseñaron (solo nombres, ningún archivo se lee). La confirmación la lleva consigo:
+        si al confirmar la carpeta ya no da la misma huella, no se registra nada y se vuelve a enseñar lo que hay ahora."""
+        return hashlib.sha256("\n".join(sorted(self.rutas_nuevas)).encode()).hexdigest()
 
 
 class LibraryAdopter:
     def __init__(self, db: AsyncSession):
         self._db = db
         self._library: Path = get_settings().library_path
+        self._incremental = False      # #326: lo fija `adopt(alcance=...)`; cambia cómo se trata una coincidencia ambigua de contenido
 
     async def estado(self) -> EstadoAdopcion:
         """Por qué la adopción corre o no (V4: el Inicio necesita distinguirlo; `should_run` solo
@@ -195,6 +218,11 @@ class LibraryAdopter:
         HAYA O NO catálogo previo. Es lo que decide la interfaz; no dispara nada."""
         return await self.estado() in (EstadoAdopcion.PENDIENTE, EstadoAdopcion.CATALOGO_PREVIO)
 
+    async def ofrece_registro_incremental(self) -> bool:
+        """#326: ¿se ofrece buscar y registrar archivos NUEVOS? Solo cuando el registro inicial ya consta (marcador): antes de eso
+        la oferta es el registro completo (`puede_registrar`). No lee el disco ni escribe nada. El marcador no se toca nunca desde aquí."""
+        return await self.estado() is EstadoAdopcion.HECHA
+
     async def _ya_registrada(self, path: Path) -> bool:
         """¿Consta ya esta ruta? Se vuelve a preguntar por archivo: la lista de «nuevos» es una foto de
         antes de empezar y otra ejecución puede haberla adelantado."""
@@ -211,7 +239,10 @@ class LibraryAdopter:
         registradas = await self._rutas_registradas()
         en_disco = {str(a) for a in archivos}
         prefijo = str(self._library).rstrip("/") + "/"
+        accesible = await asyncio.to_thread(self._library.is_dir)
         return InventarioBiblioteca(
+            carpeta_accesible=accesible,
+            rutas_nuevas=frozenset(a for a in en_disco if a not in registradas),
             en_disco=len(archivos),
             cbz=sum(1 for a in archivos if a.suffix.lower() == ".cbz"),
             cbr=sum(1 for a in archivos if a.suffix.lower() == ".cbr"),
@@ -232,6 +263,7 @@ class LibraryAdopter:
 
     async def adopt(
         self, *, progreso: Callable[[AdoptionReport], None] | None = None, lote: int = _LOTE_POR_DEFECTO,
+        alcance: frozenset[str] | None = None,
     ) -> AdoptionReport:
         """Registra, sin mover nada, los archivos cuya RUTA aún no está en el catálogo.
 
@@ -242,6 +274,9 @@ class LibraryAdopter:
           último. `progreso` se llama tras cada archivo.
         - **El marcador de «hecho» solo se pone si no hubo errores.** Con errores queda sin poner y el
           estado sigue ofreciendo continuar; un marcador no puede esconder lo pendiente.
+
+        #326, registro INCREMENTAL: con `alcance` (las rutas que la persona vio y confirmó) solo se tratan esas rutas, aunque hayan
+        aparecido más después; el marcador no se toca y el informe se guarda con otro `kind` (no pisa el de la adopción inicial).
         """
         from zascarr.services.runtime_settings import RuntimeSettingsService
 
@@ -253,6 +288,10 @@ class LibraryAdopter:
         registradas = await self._rutas_registradas()
         nuevos = sorted(f for f in files if str(f) not in registradas)
         report.already_registered = len(files) - len(nuevos)
+        incremental = self._incremental = alcance is not None
+        if incremental:
+            report.out_of_scope_gone = len(alcance - {str(f) for f in nuevos})
+            nuevos = [f for f in nuevos if str(f) in alcance]
         report.to_process = len(nuevos)
 
         # Evidencia de cohorte (core/cohort.py): calculada UNA VEZ sobre la
@@ -301,13 +340,13 @@ class LibraryAdopter:
         provisional = AdoptionReport(started_at=report.started_at, finished_at=report.finished_at,
                                      files_scanned=report.files_scanned,
                                      already_registered=report.already_registered, to_process=report.to_process,
-                                     processed=report.processed)
+                                     processed=report.processed, out_of_scope_gone=report.out_of_scope_gone)
         provisional.absorb(report)
         provisional.absorb(en_lote)
-        run_id = await self._persist_run(provisional)
+        run_id = await self._persist_run(provisional, kind="registro_incremental" if incremental else "adoption")
         # El marcador dice «el registro terminó». Con errores NO terminó: no se pone, y lo que
         # quedó sin registrar sigue a la vista (`inventario`) y se puede continuar repitiendo.
-        if not provisional.errors:
+        if not provisional.errors and not incremental:
             await RuntimeSettingsService(self._db).set_flag(_MARCADOR_HECHO, True)
         await self._confirmar_lote(en_lote, report, report.processed - confirmados, progreso, run_id)
         report.pending_count = 0
@@ -425,6 +464,11 @@ class LibraryAdopter:
         self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
     ) -> None:
         outcome = await _triage_and_match(self._db, path, pista)
+        if outcome.recuperar is not None and self._incremental and outcome.n_recuperables > 1:
+            # Varias filas desaparecidas tienen este mismo contenido: reenlazar la «más antigua» sería elegir por azar a cuál
+            # pertenece. No se toca ninguna, no se crea una fila nueva y se informa.
+            report.ambiguous.append(f"{path.name} — su contenido coincide con {outcome.n_recuperables} archivos que ya no están")
+            return
         if outcome.recuperar is not None:
             # El fichero ya está en su sitio (la adopción nunca mueve): reenlaza
             # la fila desaparecida a ESTA ruta en vez de descartar. Si se
@@ -435,6 +479,7 @@ class LibraryAdopter:
             await self._db.flush()
             report.added_rows.append((outcome.recuperar.id, str(path), ruta_previa, previa_ausente))
             report.registered.append(f"{path.name} — reenlazado (recuperado)")
+            report.relinked += 1
             logger.info("library_adopter.reenlazado", path=str(path))
             return
         if outcome.duplicate_of:
@@ -484,7 +529,7 @@ class LibraryAdopter:
             report.registered.append(f"{path.name} — serie sugerida, falta confirmar número y edición")
         logger.info("library_adopter.registered", path=str(path), status=result.status)
 
-    async def _persist_run(self, report: AdoptionReport) -> UUID:
+    async def _persist_run(self, report: AdoptionReport, kind: str = "adoption") -> UUID:
         run = ImportRun(
             started_at=report.started_at,
             finished_at=report.finished_at,
@@ -494,13 +539,16 @@ class LibraryAdopter:
             unsorted_count=report.unsorted_count,
             error_count=report.error_count,
             details={
-                "kind": "adoption",
+                "kind": kind,
                 "registered": report.registered,
                 "duplicates": report.duplicates,
                 "unsorted": report.unsorted,
                 "errors": report.errors,
                 "already_registered": report.already_registered,
                 "by_other_run": report.by_other_run,
+                "relinked": report.relinked,
+                "ambiguous": report.ambiguous,
+                "out_of_scope_gone": report.out_of_scope_gone,
             },
         )
         self._db.add(run)

@@ -298,6 +298,7 @@ como marco permanente.
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |
 | `docs/design/benchmark-referencias.md` | Procedimiento y ficha para comparar referencias antes de features P0/P1 (ver §13) |
 | `docs/design/contrato-307-formato-por-contenido.md` | Contrato de **formato por contenido** (#307): un único punto de decisión (`core/formato_contenedor.py`); `file_format` es la extensión **declarada**, el formato real va en `files.metadata["formato_contenido"]`. **Consultar antes de tocar `triage`, la portada o la auditoría de formatos** |
+| `docs/design/registro-incremental-326.md` | **Registro incremental** (#326): buscar y registrar archivos nuevos de una biblioteca ya registrada, a mano y con confirmación; «nuevo» = ruta sin fila; sin automatismo. **Consultar antes de tocar `LibraryAdopter.adopt`, `registro_biblioteca` o el bloque «Registro» de la Auditoría** |
 
 ## 12. Principios de arquitectura del propio código (confirmados por
 benchmarking ronda 2)

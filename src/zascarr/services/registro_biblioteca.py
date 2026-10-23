@@ -57,6 +57,14 @@ class EstadoRegistro:
     por_comprobar: int = 0
     errores: list[str] = field(default_factory=list)
     causa: str | None = None          # solo si INTERRUMPIDO: el TIPO de error, nunca el mensaje
+    #: #326: registro INCREMENTAL (solo las rutas nuevas que la persona vio y confirmó), no el registro inicial
+    incremental: bool = False
+    #: de los «registrados», cuántos fueron un REENLACE de una fila que ya existía (no una fila nueva)
+    reenlazados: int = 0
+    #: su contenido coincide con varias filas desaparecidas: no se tocó ninguna ni se creó fila
+    ambiguos: list[str] = field(default_factory=list)
+    #: del alcance confirmado, rutas que al empezar ya no estaban pendientes (desaparecieron u otra ejecución las registró)
+    ya_no_pendientes: int = 0
 
     @property
     def completo(self) -> bool:
@@ -67,6 +75,11 @@ class EstadoRegistro:
     def anadidos(self) -> int:
         """Lo que REALMENTE entró en el catálogo: no es lo mismo que lo procesado (hubo repetidos, errores…)."""
         return self.registrados + self.sin_identificar
+
+    @property
+    def filas_nuevas(self) -> int:
+        """Filas CREADAS en el catálogo (sin contar los reenlaces, que reutilizan una fila existente)."""
+        return self.registrados - self.reenlazados + self.sin_identificar
 
     @property
     def en_marcha(self) -> bool:
@@ -93,12 +106,16 @@ def _volcar(report: AdoptionReport) -> None:
     _estado.no_guardados = report.reverted
     _estado.por_comprobar = report.unknown
     _estado.errores = list(report.errors)
+    _estado.reenlazados = report.relinked
+    _estado.ambiguos = list(report.ambiguous)
+    _estado.ya_no_pendientes = report.out_of_scope_gone
 
 
-async def _ejecutar(fabrica: Callable) -> None:
+async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) -> None:
     try:
         async with fabrica() as sesion:
-            informe = await LibraryAdopter(sesion).adopt(progreso=_volcar)
+            extra = {} if alcance is None else {"alcance": alcance}       # el registro inicial se llama exactamente como siempre
+            informe = await LibraryAdopter(sesion).adopt(progreso=_volcar, **extra)
         _volcar(informe)
         _estado.fase = FaseRegistro.TERMINADO
     except asyncio.CancelledError:
@@ -113,13 +130,14 @@ async def _ejecutar(fabrica: Callable) -> None:
         _estado.terminado = datetime.now(UTC)
 
 
-def iniciar(fabrica: Callable) -> bool:
-    """Lanza el registro. Devuelve False si ya hay uno en marcha (y no hace nada)."""
+def iniciar(fabrica: Callable, alcance: frozenset[str] | None = None) -> bool:
+    """Lanza el registro. Devuelve False si ya hay uno en marcha (y no hace nada). Con `alcance` (#326) es el registro INCREMENTAL de
+    esas rutas y no otro: comparte la exclusión con el registro inicial, así que no pueden solaparse en este proceso."""
     global _estado, _tarea
     if _estado.en_marcha and _tarea is not None and not _tarea.done():
         return False
-    _estado = EstadoRegistro(fase=FaseRegistro.CORRIENDO, iniciado=datetime.now(UTC))
-    _tarea = asyncio.create_task(_ejecutar(fabrica))
+    _estado = EstadoRegistro(fase=FaseRegistro.CORRIENDO, iniciado=datetime.now(UTC), incremental=alcance is not None)
+    _tarea = asyncio.create_task(_ejecutar(fabrica, alcance))
     return True
 
 

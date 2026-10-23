@@ -138,6 +138,9 @@ class _Outcome:
     # es el mismo contenido que una fila desaparecida — se reenlaza esa fila en
     # vez de crear otra o descartar. Lleva la fila a reenlazar.
     recuperar: File | None = None
+    #: cuántas filas desaparecidas tenían ese contenido (si > 1, `recuperar` es una elección
+    #: arbitraria: la más antigua)
+    n_recuperables: int = 0
     # Explicación de core/cohort.py (2026-09-26) SOLO si de verdad se usó
     # para este archivo — no si se calculó una pista que resultó ser un
     # no-op (formato ya cubierto por SORT_PREFIX_PATTERN). Se guarda en
@@ -282,7 +285,8 @@ async def _triage_and_match(
                 logger.info("importer.referencia_obsoleta", fila=str(fila.id))  # sin ruta (§5.4)
             # Ninguna coincidencia tiene su fichero (desaparecidas o con la ruta obsoleta):
             # recuperar la más antigua en vez de descartar o crear una fila nueva.
-            return _Outcome(tr=tr, result=None, recuperar=coincidencias[0])
+            return _Outcome(
+                tr=tr, result=None, recuperar=coincidencias[0], n_recuperables=len(coincidencias))
 
     matcher = SeriesMatcher(db)
 
