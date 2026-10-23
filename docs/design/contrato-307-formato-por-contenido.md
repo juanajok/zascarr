@@ -1,6 +1,6 @@
 # Contrato de #307 — reconocer un ZIP por su contenido (un solo punto de decisión)
 
-> **Estado: PROPUESTA PARA REVISIÓN. No se ha implementado nada**, no hay migración y no se toca ningún fichero del PO. Cierra el contrato que la tarjeta pedía «antes de pasar a Lista para desarrollar» (`benchmark-formatos-contenedor.md` §6.1). Umbrales y topes se han **medido en la Pi** el 2026-10-23 con `scripts/medicion/censo_zip_por_contenido.py` (§9); queda **una repetición corta** para describir los 20 ficheros que superan el tope de hoy. Las decisiones que son del PO están en §8 con una recomendación.
+> **Estado: PROPUESTA PARA REVISIÓN. No se ha implementado nada**, no hay migración y no se toca ningún fichero del PO. Cierra el contrato que la tarjeta pedía «antes de pasar a Lista para desarrollar» (`benchmark-formatos-contenedor.md` §6.1). Umbrales y topes se han **medido en la Pi** el 2026-10-23 con `scripts/medicion/censo_zip_por_contenido.py` (§9); los 20 ficheros que superan el tope de hoy también están medidos. Las decisiones que son del PO están en §8 con una recomendación.
 
 ## 1. Qué cambia respecto a la tarjeta (datos del censo de cabeceras, 2026-10-23)
 La tarjeta partía de **2 ZIP sin extensión** (*Paul Pope*, *Barrio*). El censo de la Pi (1267 ficheros `.cbr`/`.rar`/sin extensión, solo 4 KiB de cada uno) dice otra cosa:
@@ -14,7 +14,7 @@ La tarjeta partía de **2 ZIP sin extensión** (*Paul Pope*, *Barrio*). El censo
 
 **Reencuadre:** la mayor parte del valor de #307 es **leer mejor lo que ya está registrado** (56 ficheros), no registrar ficheros nuevos.
 
-**Medido en la Pi (2026-10-23, solo directorio central):** 308 `.cbz` de control (298 tebeos + 10 sobre el tope de hoy), 56 `.cbr` que son ZIP (46 + 10 sobre el tope) y 2 sin extensión (2 tebeos). **`ComicInfo.xml`: 76 de 298 (25 %) en los `.cbz` de control, 0 de 46 en los `.cbr`-ZIP legibles y 0 de 2 sin extensión** → para los ocultos el beneficio medido es la **portada**, no los metadatos (los 10 sobre el tope se describen en la repetición pendiente).
+**Medido en la Pi (2026-10-23, solo directorio central):** 308 `.cbz` de control (298 tebeos + 10 sobre el tope de hoy), 56 `.cbr` que son ZIP (46 + 10 sobre el tope) y 2 sin extensión (2 tebeos). **`ComicInfo.xml`: 76 de 298 (25 %) en los `.cbz` de control, 0 de 46 en los `.cbr`-ZIP legibles y 0 de 2 sin extensión** → **ninguno de los 56 `.cbr`-ZIP (46 + los 10 grandes) trae `ComicInfo.xml`, y son la población completa, no una muestra**: para los ocultos el beneficio es la **portada** (y la anchura), no los metadatos. Tampoco lo traen los 10 `.cbz` grandes. **Uno de los 10 `.cbr`-ZIP grandes contiene un contenedor anidado: es un paquete**, escondido hoy bajo «límite».
 
 ## 2. Invariantes (no negociables)
 1. **Nunca se renombra, mueve, convierte ni escribe el original.** Todo es lectura.
@@ -76,9 +76,9 @@ Una carrera (el fichero cambia entre la firma y la apertura) acaba en `BadZipFil
 ## 6. Topes
 - **Hoy:** `MAX_ZIP_ENTRIES = 1000` y `MAX_ZIP_UNCOMPRESSED = 500 MiB` **en total**, solo en `triage` (afecta a `ComicInfo.xml` y `width_px`). **La portada no tiene ningún tope.**
 - **Medido:** **20 de 366 ZIP** superan el tope total: **10 de 308 `.cbz` de control y 10 de 56 `.cbr`-ZIP** (575 MiB – 1,3 GiB descomprimidos, 138–941 entradas). Los 10 `.cbz` grandes **ya están registrados sin `ComicInfo` ni anchura** por ese tope (la portada sí sale, porque no hay tope); a los 10 `.cbr`-ZIP grandes les pasaría igual.
-- **Lo que de verdad se lee es poco:** una página y `ComicInfo.xml`. Entrada mayor de todo el censo (los 346 que no superan el tope): **5,2 MiB**; primera página **≤ 5,2 MiB** con **ratio de compresión ≤ 1,77** (JPEG/PNG ya comprimidos). Hay entradas con ratio > 20 (3 + 2 + 1 ficheros) pero **nunca la primera página**.
+- **Lo que de verdad se lee es poco:** una página y `ComicInfo.xml`. Sobre los 366 ZIP: primera página **≤ 7,1 MiB** con **ratio de compresión ≤ 1,77** (JPEG/PNG ya comprimidos); la entrada mayor de todas llega a 20 MiB pero **no es la que se lee**. Hay entradas con ratio > 20 (en 6 ficheros) y hasta 82 en un `.cbz` y 293 en un `.cbr`-ZIP, **nunca la primera página**.
 - **Entradas:** el máximo observado es **941** de 1000 (en los que superan el tope): **margen del 6 %**, escaso para un integral mayor.
-- **Propuesta (decisión D3):** (1) **topes por entrada leída**, en `triage` **y en la portada**: tamaño descomprimido declarado ≤ **32 MiB** (6× lo observado) y ratio ≤ **100** (la primera página observada: 1,77); (2) la lectura se acota con `zf.open(entrada).read(tope + 1)`, de modo que un tamaño declarado falso tampoco ocupa memoria (probado en T8); (3) entradas ≤ **2000**; (4) el total de 500 MiB deja de ser un tope de lectura. Cambia el comportamiento de los `.cbz` existentes (los 10 grandes ganan `ComicInfo` y anchura): `tests/test_formatos_contenedor_hoy.py` se actualiza **a propósito**.
+- **Propuesta (decisión D3):** (1) **topes por entrada leída**, en `triage` **y en la portada**: tamaño descomprimido declarado de la entrada **leída** ≤ **32 MiB** (×4,5 sobre la primera página mayor, 7,1 MiB) y ratio ≤ **100** (primera página observada: ≤ 1,77); (2) la lectura se acota con `zf.open(entrada).read(tope + 1)`, de modo que un tamaño declarado falso tampoco ocupa memoria (probado en T8); (3) entradas ≤ **2000**; (4) el total de 500 MiB deja de ser un tope de lectura. Cambia el comportamiento de los `.cbz` existentes (los 10 grandes ganan `ComicInfo` y anchura): `tests/test_formatos_contenedor_hoy.py` se actualiza **a propósito**.
 
 ## 7. Qué se guarda y qué se avisa
 **Persistencia (sin migración):** `files.metadata.formato_contenido = {"firma": "zip", "clase": "tebeo", "contrato": 1}`. `file_format` **no cambia** (sigue la extensión declarada). El importador rellena el campo al triar; para los **56 ya registrados** hace falta un **relleno idempotente** en el ciclo del importer (leer 4 bytes de los `.cbr` sin `formato_contenido`).
@@ -105,7 +105,9 @@ Una carrera (el fichero cambia entre la firma y la apertura) acaba en `BadZipFil
 `scripts/medicion/censo_zip_por_contenido.py` (solo lectura; directorio central; **no imprime nombres**, solo recuentos; los nombres van a un TSV que es tuyo). Cuatro grupos (**`cbz_control`**, **`cbr_zip`**, **`sin_extension`**, **`zip`**) y, por fichero: entradas, imágenes, anidados, `ComicInfo`, descomprimido, ratio máximo, cifrado, entrada mayor y primera página (tamaño y ratio).
 
 - **Ejecutado en la Pi (2026-10-23):** 366 ZIP (308 + 56 + 2); no había ningún `.zip`. Resultados citados en §1, §5 y §6.
-- **Pendiente (repetición de 2 min):** la versión inicial del script no medía los ficheros que superaban el tope (solo su total). Ya los mide; repitiéndolo se sabrá si esos 20 traen `ComicInfo.xml`, su primera página y su ratio, para confirmar los topes de §6 con los casos que más importan.
+- **Repetición hecha** (2026-10-23): ya mide también los 20 ficheros que superan el tope de hoy. Resultado en §1 y §6: ninguno trae `ComicInfo.xml`, primera página ≤ 7,1 MiB, un paquete entre los grandes.
+
+Comando (solo lectura, ~2 min en el disco USB):
 
 ```bash
 python3 censo_zip_por_contenido.py /media/WDElements/Tebeos --tsv ~/eval-rar/salida/zip-por-contenido.tsv
