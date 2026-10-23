@@ -248,8 +248,8 @@ def puede_dar_portada(ext: str, fc: dict | None) -> bool | None:
     """¿Lo guardado en `formato_contenido` permite una portada? `None` = no hay nada guardado (decide la extensión). SIN E/S.
     Un `.cbz`/`.zip` declarado se intenta leer siempre que el contenido sea un ZIP (el usuario lo declara tebeo: un tebeo corto o un
     pack siguen dando su primera página, como hoy); un `.cbr`/`.cb7` que resulta ser ZIP solo si es un `TEBEO` comprobado."""
-    if not fc:
-        return None
+    if not fc or fc.get("firma") == Firma.ILEGIBLE.value:
+        return None            # nada utilizable guardado (o una lectura fallida de otra versión): decide la extensión
     if fc.get("firma") != Firma.ZIP.value:
         return False
     if ext in (".cbz", ".zip"):
