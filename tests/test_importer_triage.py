@@ -17,9 +17,12 @@ from xml.etree import ElementTree
 
 import pytest
 
-from zascarr.core import importer_triage
+from zascarr.core import importer_triage  # noqa: F401
 from zascarr.core.importer_triage import (
-    MAX_COMICINFO_BYTES, MAX_ZIP_ENTRIES, parse_comic_info, triage,
+    MAX_COMICINFO_BYTES,
+    MAX_ZIP_ENTRIES,
+    parse_comic_info,
+    triage,
 )
 
 
@@ -72,18 +75,27 @@ class TestTriageLimiteTamano:
 
         result = triage(cbz)
 
-        assert any("demasiadas entradas" in w for w in result.warnings)
+        assert any("demasiados archivos dentro" in w for w in result.warnings)
 
-    def test_zip_demasiado_grande_descomprimido_se_ignora(self, tmp_path, monkeypatch):
-        # Reducir el umbral para no materializar 500 MiB en el test.
-        monkeypatch.setattr(importer_triage, "MAX_ZIP_UNCOMPRESSED", 10)
+    def test_el_tope_ya_no_es_el_total_descomprimido_sino_la_entrada_que_se_lee(self, tmp_path, monkeypatch):
+        """CAMBIO A PROPÓSITO (#307, D3): antes un ZIP con más de 500 MiB descomprimidos EN TOTAL se ignoraba entero (sin ComicInfo ni
+        anchura) aunque solo se lee una página; en la biblioteca real eran 20 de 366. Ahora se acota la entrada que se lee."""
+        from zascarr.core import formato_contenedor
         cbz = tmp_path / "big.cbz"
         with zipfile.ZipFile(cbz, "w", zipfile.ZIP_DEFLATED) as z:
-            z.writestr("page001.jpg", b"x" * 100)
+            z.writestr("ComicInfo.xml", "<ComicInfo><Series>X</Series><Number>1</Number></ComicInfo>")
+            for i in range(30):
+                z.writestr(f"page{i:03d}.jpg", b"x" * 100)
 
-        result = triage(cbz)
+        # Un total «enorme» ya no bloquea: se lee ComicInfo y se intenta la primera página.
+        monkeypatch.setattr(formato_contenedor, "MAX_ENTRADA_LEIDA", 1_000_000)
+        ok = triage(cbz)
+        assert ok.comic_info is not None and not any("demasiado grande" in w for w in ok.warnings)
 
-        assert any("demasiado grande descomprimido" in w for w in result.warnings)
+        # La entrada que SÍ se lee es la que se acota.
+        monkeypatch.setattr(formato_contenedor, "MAX_ENTRADA_LEIDA", 10)
+        pequeno = triage(cbz)
+        assert any("primera página" in w and "demasiado grande" in w for w in pequeno.warnings)
 
 
 class TestHashPorFormato:

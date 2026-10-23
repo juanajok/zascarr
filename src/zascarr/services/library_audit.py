@@ -46,9 +46,10 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
+from zascarr.core.formato_contenedor import aviso_de_extension, aviso_de_formato, firma_de, tratamiento
 from zascarr.core.importer_triage import sha256_streaming
 from zascarr.core.matcher import normalize_title
-from zascarr.models import ImportRun
+from zascarr.models import ImportRun, Tratamiento
 from zascarr.services.importer import COMIC_EXTS
 from zascarr.utils.naming import parse_comic_filename
 
@@ -119,7 +120,8 @@ class NoReconocido:
 # haberlo re-empaquetado a un formato reconocido. `.rar` es el caso real
 # más frecuente (packs de la escena que no llegaron a re-encapsularse
 # como .cbr); `.7z` aparece con menos frecuencia pero con el mismo motivo.
-CONTENEDORES_NO_SOPORTADOS = {".rar", ".7z"}
+CONTENEDORES_NO_SOPORTADOS = {".rar", ".7z", ".tar", ".cbt"}      # #307: `.tar` y `.cbt` también se avisan (antes: silencio)
+
 
 
 @dataclass
@@ -313,7 +315,7 @@ class LibraryAudit:
             for f in self._library.rglob(f"*{ext}"):
                 hallados.append(NoReconocido(
                     ruta=str(f),
-                    motivo=f"formato no soportado ({ext.lstrip('.').upper()} sin descomprimir)",
+                    motivo=aviso_de_extension(ext),
                 ))
 
         comic_exts_lower = {e.lower() for e in COMIC_EXTS}
@@ -331,6 +333,21 @@ class LibraryAudit:
                     ruta=str(f),
                     motivo=f"doble extensión ({''.join(f.suffixes[-2:])}), sin descomprimir",
                 ))
+
+        # #307: por CONTENIDO (≤ 512 B de cada fichero, solo lectura). Nunca se renombra ni se registra nada.
+        #  · un .cbz/.cbr/.cb7 cuyo contenido no concuerda con su nombre (p. ej. un .cbz que es un RAR);
+        #  · un fichero SIN extensión que por dentro es un contenedor (ZIP, RAR, 7z, TAR): parece un tebeo y ZascArr no lo trata como tal.
+        # Un .cbr que es un ZIP NO se avisa aquí: desde #307 ZascArr sí lo lee (portada y ComicInfo).
+        ya = {h.ruta for h in hallados}
+        for f in self._library.rglob("*"):
+            if not f.is_file() or f.name.startswith(".") or str(f) in ya:
+                continue
+            ext = f.suffix.lower()
+            if ext not in ("", ".cbz", ".cbr", ".cb7"):
+                continue
+            firma = firma_de(f)
+            if tratamiento(ext, firma) is Tratamiento.AVISAR:
+                hallados.append(NoReconocido(ruta=str(f), motivo=aviso_de_formato(ext, firma)))
 
         report.no_reconocidos = sorted(hallados, key=lambda n: n.ruta)
 

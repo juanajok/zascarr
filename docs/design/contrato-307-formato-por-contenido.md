@@ -1,6 +1,6 @@
 # Contrato de #307 — reconocer un ZIP por su contenido (un solo punto de decisión)
 
-> **Estado: PROPUESTA PARA REVISIÓN. No se ha implementado nada**, no hay migración y no se toca ningún fichero del PO. Cierra el contrato que la tarjeta pedía «antes de pasar a Lista para desarrollar» (`benchmark-formatos-contenedor.md` §6.1). Umbrales y topes se han **medido en la Pi** el 2026-10-23 con `scripts/medicion/censo_zip_por_contenido.py` (§9); los 20 ficheros que superan el tope de hoy también están medidos. Las decisiones que son del PO están en §8 con una recomendación.
+> **Estado: IMPLEMENTADO (rama `claude/307-formato-por-contenido`, pendiente de revisión). Sin migración y sin tocar ningún fichero del PO.** Se aplicaron las recomendaciones de §8 como valores por defecto (D1a, D2a, D3b, D4a, D5a); el PO no las había contestado, así que **siguen siendo revisables**. Desviaciones respecto a la propuesta, todas descubiertas al implementar y probar: ver §12. Cierra el contrato que la tarjeta pedía «antes de pasar a Lista para desarrollar» (`benchmark-formatos-contenedor.md` §6.1). Umbrales y topes se han **medido en la Pi** el 2026-10-23 con `scripts/medicion/censo_zip_por_contenido.py` (§9); los 20 ficheros que superan el tope de hoy también están medidos. Las decisiones que son del PO están en §8 con una recomendación.
 
 ## 1. Qué cambia respecto a la tarjeta (datos del censo de cabeceras, 2026-10-23)
 La tarjeta partía de **2 ZIP sin extensión** (*Paul Pope*, *Barrio*). El censo de la Pi (1267 ficheros `.cbr`/`.rar`/sin extensión, solo 4 KiB de cada uno) dice otra cosa:
@@ -18,7 +18,7 @@ La tarjeta partía de **2 ZIP sin extensión** (*Paul Pope*, *Barrio*). El censo
 
 ## 2. Invariantes (no negociables)
 1. **Nunca se renombra, mueve, convierte ni escribe el original.** Todo es lectura.
-2. Lectura acotada: la firma son **≤ 8 bytes**; clasificar un ZIP lee **solo el directorio central** (nunca descomprime).
+2. Lectura acotada: la firma son **≤ 512 bytes** (los 8 primeros bastan para ZIP/RAR/7z; el TAR lleva `ustar` en el byte 257); clasificar un ZIP lee **solo el directorio central** (nunca descomprime).
 3. Sin dependencias nuevas (stdlib: `zipfile`).
 4. Sin migración: el formato real se guarda en `files.metadata` (JSONB).
 5. Causa y acción en español llano; nunca «formato no soportado» a secas (CLAUDE.md §6).
@@ -28,7 +28,7 @@ La tarjeta partía de **2 ZIP sin extensión** (*Paul Pope*, *Barrio*). El censo
 Módulo nuevo `src/zascarr/core/formato_contenedor.py` (puro, sin base de datos):
 
 ```python
-firma_de(path) -> Firma                  # ≤ 8 bytes. ZIP | RAR | SIETE_Z | TAR | OTRO | ILEGIBLE
+firma_de(path) -> Firma                  # ≤ 512 bytes. ZIP | RAR | SIETE_Z | TAR | OTRO | ILEGIBLE
 tratamiento(declarada: FileFormat | None, firma: Firma) -> Tratamiento   # PURA, sin E/S: la matriz de §4
 clasificar_zip(path) -> ClaseZip         # solo directorio central, con topes (§5, §6)
 ```
@@ -83,14 +83,26 @@ Una carrera (el fichero cambia entre la firma y la apertura) acaba en `BadZipFil
 ## 7. Qué se guarda y qué se avisa
 **Persistencia (sin migración):** `files.metadata.formato_contenido = {"firma": "zip", "clase": "tebeo", "contrato": 1}`. `file_format` **no cambia** (sigue la extensión declarada). El importador rellena el campo al triar; para los **56 ya registrados** hace falta un **relleno idempotente** en el ciclo del importer (leer 4 bytes de los `.cbr` sin `formato_contenido`).
 
-**Avisos (causa y acción; redacción final con el experto de UX):**
-| Situación | Mensaje |
+**Avisos (redacción revisada por UX el 2026-10-23; ≤ 2 frases: qué es + qué hacer; lo técnico entre paréntesis; «desde tu ordenador»; sin jerga):**
+La garantía va **una vez**, en la cabecera de la sección «Archivos que ZascArr no reconoce» de la auditoría: *«Archivos que ZascArr no puede usar como tebeo. No cambia, mueve ni borra ninguno: si quieres arreglar alguno, hazlo desde tu ordenador.»* (Sustituye a la antigua, que decía que *ninguno* contaba en la biblioteca: ya no es cierto, p. ej. un `.cbz` que es RAR sí está registrado.)
+
+| Situación | Texto |
 |---|---|
-| `.cbr` que es ZIP y `TEBEO` | *(sin aviso; informativo en auditoría)* «Se lee igual que un .cbz aunque se llame .cbr. No se ha cambiado el nombre.» |
-| `.cbz` que es RAR | «Se llama .cbz pero por dentro es un RAR. ZascArr todavía no lo abre; sigue en tu biblioteca, solo sin portada.» |
-| ZIP `PAQUETE` | «Contiene varios archivos comprimidos (parece un pack de varios números). No se trata como un solo tebeo.» |
-| ZIP `NO_TEBEO` / `CIFRADO` / `INVALIDO` / `LIMITE` | una frase de causa + qué hacer, por clase |
-| `.tar`, `.cbt`, `.7z` o sin extensión que son contenedores | «Parece un tebeo guardado en otro formato. ZascArr no lo trata como tal y no lo modifica.» |
+| `.cbz` (o `.cbr`/`.cb7`/`.zip`) cuyo contenido no concuerda | «Se llama .cbz, pero por dentro es un .cbr (RAR). Sigue en tu biblioteca, aunque por ahora ZascArr no puede sacarle la portada.» |
+| Sin final de tebeo, contenido ZIP / RAR / 7z | «Parece un tebeo, pero su nombre no acaba en .cbz (.cbr / .cb7). Para que ZascArr lo tenga en cuenta, cambia el final del nombre a .cbz (.cbr / .cb7) desde tu ordenador.» |
+| Sin final de tebeo, contenido TAR | «Parece un tebeo, pero está guardado en un formato (TAR) que ZascArr no usa. Para conservarlo, conviértelo a .cbz con otro programa.» |
+| ZIP «pack» | «Es un pack con varios tebeos dentro. ZascArr no lo trata como uno solo: descomprímelo si quieres cada número por separado.» |
+| ZIP «no es un tebeo» | «Es un archivo comprimido, pero no parece un tebeo: tiene pocas imágenes o están mezcladas con otros archivos.» |
+| Con contraseña | «Tiene contraseña, así que ZascArr no puede abrirlo. Si la conoces, guárdalo de nuevo sin contraseña desde tu ordenador.» |
+| Dañado | «Está dañado o incompleto; quizá la descarga no terminó. Prueba a descargarlo de nuevo.» |
+| Vacío | «Está vacío: no tiene ninguna página. Prueba a descargarlo de nuevo.» |
+| Demasiados archivos | «Tiene demasiados archivos dentro (más de 2000) y ZascArr no lo abre, por precaución. Si es un pack, descomprímelo.» |
+| `.rar` / `.7z` por el nombre | «Es un archivo .rar. Si dentro hay un tebeo, cambia el final del nombre a .cbr; si hay varios, descomprímelo.» (`.7z` → `.cb7`) |
+| `.tar` / `.cbt` | «ZascArr no usa este formato (TAR). Para conservarlo como tebeo, conviértelo a .cbz con otro programa.» |
+
+**Dos cuestiones que la revisión dejó abiertas (no resueltas aquí):**
+1. **Aviso positivo** para un `.cbr` que se lee como ZIP («Se lee como un .cbz aunque se llame .cbr. Todo bien: no hace falta hacer nada.»): UX pide un chip **informativo, neutro (nunca ámbar), solo en Auditoría** y no en los avisos del importador. El texto está en `INFO_CBR_ES_ZIP`, pero **la pantalla no lo muestra todavía**: exige una categoría nueva en el informe de auditoría y en su plantilla (tarjeta aparte).
+2. **«Descomprímelo»** para un pack: hay que **verificar** que, tras descomprimirlo en la misma carpeta de la biblioteca, algo recoge los números sueltos (el importador recorre las carpetas de descargas, no la biblioteca; la adopción de la biblioteca es otra ruta). Si hace falta dejarlo en la carpeta de descargas, el texto debe decirlo.
 
 ## 8. Decisiones del PO (con recomendación)
 | # | Decisión | Opciones | Recomendación |
@@ -133,3 +145,18 @@ python3 censo_zip_por_contenido.py /media/WDElements/Tebeos --tsv ~/eval-rar/sal
 
 ## 11. Fuera de alcance
 Leer RAR/7z/TAR (#308: `unar` queda como candidato con decisión pendiente; el mismo `firma_de` y `tratamiento` servirán, añadiendo `LEER_COMO_RAR`); renombrar, mover o convertir ficheros; registrar ficheros sin extensión (D1); cambiar el esquema.
+
+## 12. Implementación y desviaciones (descubiertas al implementar)
+**Dónde está:** `core/formato_contenedor.py` (el único punto de decisión), enums `Firma`/`ClaseZip`/`Tratamiento` en `models/__init__.py`, `core/importer_triage.py::triage`, `utils/cover.py`, `services/importer.py` (`formato_contenido` al importar, al reenlazar y `rellenar_formato_contenido`), `services/library_adopter.py`, `services/library_audit.py`, `web/series.py` y `web/pendientes.py`.
+
+**Desviaciones respecto a lo propuesto (con su motivo):**
+1. **La clase no bloquea la lectura de un `.cbz`/`.zip` declarado.** La clase `TEBEO` (≥ 10 imágenes, ≥ 80 %) solo es condición para un `.cbr`/`.cb7` que *resulta ser* un ZIP. Un `.cbz` declarado con pocas páginas (un especial de 8) o un pack se lee **como siempre y sin aviso**; su clase queda guardada. Lo detectó `test_naming_core` (el aviso era una regresión).
+2. **Un `.cbz`/`.zip` cuyo contenido no es ningún contenedor conocido** (basura, descarga incompleta) sigue **sin hash** y con «zip ilegible», como siempre. El hash es solo para contenedores válidos con otro nombre (un RAR llamado `.cbz`). Lo detectó `test_naming_core`.
+3. **`puede_tener_portada` ya conoce la extensión declarada**: un `.cbz` guardado como `no_tebeo`/`paquete` sigue dando portada (como hoy); un `.cbr` ZIP solo si es `tebeo`.
+4. **`extract_cover_thumbnail` también acota la lectura** (antes: `zf.read(pages[0])` sin tope): topes de §6 en la portada y en `triage`.
+5. **La auditoría** avisa ahora de `.tar`/`.cbt`, de `.cbz`/`.cbr`/`.cb7` cuyo contenido no concuerda y de contenedores sin extensión (el filtro de tamaño mínimo se descartó: se leen ≤ 512 B de todos modos).
+6. `natural_key` e `IMAGE_EXTS` se movieron a `formato_contenedor` (se reexportan desde `importer_triage`).
+
+**Pruebas:** `tests/test_formato_contenedor.py` (T1–T4, T8), `tests/test_formato_por_contenido_integracion.py` (T5, T6, T9, T10 y regresiones), `tests/test_formatos_contenedor_hoy.py` y `tests/test_importer_triage.py` (T12 y T13, actualizadas **a propósito**). T7 y T11 están en la caracterización (`.cbz` que es RAR; `.tar`/`.cbt`/sin extensión).
+
+**NOT RUN:** los ficheros reales de la Pi (el relleno de los 56 y las portadas de los 10 ZIP grandes se comprobarán tras el despliegue, que **no** está autorizado aquí); una medición de coste del relleno sobre el USB.

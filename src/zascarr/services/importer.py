@@ -30,7 +30,12 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.core.cohort import PistaDeCohorte, detectar_ordenes_de_lectura, quitar_prefijo_de_cohorte
+from zascarr.core.cohort import (
+    PistaDeCohorte,
+    detectar_ordenes_de_lectura,
+    quitar_prefijo_de_cohorte,
+)
+from zascarr.core.formato_contenedor import formato_real_de
 from zascarr.core.importer_triage import TriageResult, triage
 from zascarr.core.matcher import MatchResult, MatchStatus, SeriesHit, SeriesMatcher
 from zascarr.models import (
@@ -57,6 +62,7 @@ COMIC_EXTS = {".cbz", ".cbr", ".cb7", ".pdf", ".epub"}
 # montaje que un vaciado real a mano.
 UMBRAL_DESAPARICION_MASIVA_FRACCION = 0.5
 UMBRAL_DESAPARICION_MASIVA_MINIMO = 10
+LOTE_FORMATO_CONTENIDO = 300     # #307: filas por ciclo del relleno del formato real (7 ciclos para ~1.2 k .cbr; cada una lee ≤ 512 B)
 
 TRADITION_MAP = {
     "american":       "Comics",
@@ -214,11 +220,13 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     fila.is_missing = False
     fila.missing_since = None
     fila.imported_at = datetime.now(UTC)
+    meta = dict(fila.metadata_ or {})
+    if tr.formato_contenido:                                  # #307: el formato REAL del fichero que ahora está en `dest`
+        meta["formato_contenido"] = tr.formato_contenido
     if fila.original_sha256 is not None and tr.sha256 == fila.original_sha256:
-        meta = dict(fila.metadata_ or {})
         meta.pop("comicinfo_estado", None)
         meta.pop("comicinfo_propio", None)
-        fila.metadata_ = meta
+    fila.metadata_ = meta
 
 
 async def _triage_sin_bloquear(path: Path) -> TriageResult:
@@ -350,9 +358,38 @@ class Importer:
         except Exception:
             logger.exception("importer.deteccion_desaparecidos_fallida")
 
+        # #307 (D5): relleno idempotente del formato REAL de los .cbr/.cb7 ya registrados. Un fallo aquí nunca tumba el ciclo.
+        try:
+            await self.rellenar_formato_contenido()
+        except Exception:
+            logger.exception("importer.relleno_formato_contenido_fallido")
+
         report.finished_at = datetime.now(UTC)
         await self._persist_run(report)
         return report
+
+    async def rellenar_formato_contenido(self, limite: int = LOTE_FORMATO_CONTENIDO) -> int:
+        """#307 (D5): guarda en `files.metadata["formato_contenido"]` el formato REAL de los `.cbr`/`.cb7` ya registrados que aún no lo
+        tienen (solo lectura del fichero: ≤ 512 bytes y, si es un ZIP, su directorio central). Sin migración. Idempotente: una fila con
+        el campo no se vuelve a leer. Por lotes, para no cargar el disco (en una Pi, con una biblioteca en USB). Un fichero ilegible
+        (disco desmontado) no se marca: se reintenta en el ciclo siguiente. Devuelve cuántas filas rellenó."""
+        filas = (await self._db.execute(
+            select(File).where(File.file_format.in_([FileFormat.CBR, FileFormat.CB7]), File.is_missing.is_(False))
+        )).scalars().all()
+        pendientes = [f for f in filas if "formato_contenido" not in (f.metadata_ or {})][:limite]
+        if not pendientes:
+            return 0
+        formatos = await asyncio.to_thread(lambda: [formato_real_de(Path(f.file_path)) for f in pendientes])
+        rellenadas = 0
+        for fila, fc in zip(pendientes, formatos, strict=True):
+            if fc is None:
+                continue
+            fila.metadata_ = {**(fila.metadata_ or {}), "formato_contenido": fc}
+            rellenadas += 1
+        if rellenadas:
+            await self._db.flush()
+            logger.info("importer.formato_contenido_rellenado", filas=rellenadas, pendientes_restantes=max(0, len(pendientes) - rellenadas))
+        return rellenadas
 
     async def _detectar_desaparecidos(self) -> tuple[list[str], list[str]]:
         """B7: un tebeo borrado a mano del disco (fuera de ZascArr) deja
@@ -463,6 +500,8 @@ class Importer:
             metadata["cohorte"] = outcome.cohorte_explicacion
         if outcome.edition_kind:
             metadata["edicion"] = outcome.edition_kind
+        if tr.formato_contenido:                                  # #307: formato REAL por contenido (file_format sigue siendo la extensión)
+            metadata["formato_contenido"] = tr.formato_contenido
 
         file_rec = File(
             issue_id=str(result.issue_id) if result.issue_id else None,
