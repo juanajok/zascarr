@@ -167,7 +167,6 @@ class TestElImportadorNoCongelaLaApp:
 
         monkeypatch.setattr("zascarr.services.importer.listar_comics", listado_lento)
         importer = Importer(AsyncMock())
-        monkeypatch.setattr(importer, "rellenar_formato_contenido", AsyncMock(return_value=0))      # #307: el relleno no es lo que se mide aquí
 
         hueco = await _con_latido(importer.scan_and_import())
 

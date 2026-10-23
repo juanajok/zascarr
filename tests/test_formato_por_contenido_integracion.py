@@ -57,11 +57,11 @@ class TestTriageDeUnCbrQueEsUnZip:                                              
         assert not any("solo por filename" in w for w in r.warnings)
         assert huella(f) == antes
 
-    def test_un_cbr_zip_que_es_un_paquete_no_se_trata_como_tebeo(self, tmp_path):
+    def test_un_cbr_zip_con_otros_comprimidos_dentro_no_se_trata_como_tebeo(self, tmp_path):
         f = zip_de(tmp_path / "Pack.cbr", extra={"Extras/otro.cbz": b"PK"})
         r = triage(f)
         assert r.comic_info is None and r.width_px is None and r.sha256
-        assert r.formato_contenido["clase"] == "paquete" and any("pack con varios tebeos" in w for w in r.warnings)
+        assert r.formato_contenido["clase"] == "anidados" and any("Contiene otros archivos comprimidos, PDF o EPUB" in w for w in r.warnings)
 
     def test_un_cbr_zip_con_pocas_imagenes_no_es_un_tebeo_comprobado(self, tmp_path):
         r = triage(zip_de(tmp_path / "Corto.cbr", paginas=3))
@@ -120,12 +120,12 @@ class TestPortada:                                                              
             data, tipo = extract_cover_thumbnail(f, fc)
             assert tipo == "image/jpeg" and Image.open(io.BytesIO(data)).width <= 240
 
-    def test_un_cbr_zip_paquete_o_un_rar_no_dan_portada(self, tmp_path):
+    def test_un_cbr_zip_con_anidados_o_un_rar_no_dan_portada(self, tmp_path):
         paquete = zip_de(tmp_path / "Pack.cbr", extra={"x/y.cbz": b"PK"})
         rar = tmp_path / "R.cbr"
         rar.write_bytes(RAR5)
         assert extract_cover_thumbnail(paquete) is None and extract_cover_thumbnail(rar) is None
-        assert extract_cover_thumbnail(paquete, {"firma": "zip", "clase": "paquete"}) is None
+        assert extract_cover_thumbnail(paquete, {"firma": "zip", "clase": "anidados"}) is None
 
     def test_un_cbz_que_es_un_rar_no_da_portada_y_no_explota(self, tmp_path):
         f = tmp_path / "Mentira.cbz"
@@ -181,11 +181,11 @@ class _SesionFalsa:
         return None
 
 
-class TestUnErrorDelRellenoNoTumbaElCiclo:                                                  # T10 (el relleno en sí: tests/test_formato_contenido_relleno_pg.py)
+class TestElRellenoNoSeLanzaSolo:                                                           # D5 (PO, 2026-10-23): a demanda
 
     @pytest.mark.asyncio
-    async def test_scan_and_import_lo_llama_dentro_de_un_try(self, tmp_path, monkeypatch):
-        """`scan_and_import` lo llama dentro de try/except: un fallo se registra y el ciclo termina."""
+    async def test_scan_and_import_no_llama_al_relleno(self, tmp_path, monkeypatch):
+        """El relleno de `formato_contenido` es una operación explícita (CLI): ni `scan_and_import` ni ningún ciclo la lanzan."""
         from zascarr.services import importer as mod
         imp = Importer.__new__(Importer)
         imp._db = _SesionFalsa([])
@@ -193,9 +193,15 @@ class TestUnErrorDelRellenoNoTumbaElCiclo:                                      
         imp._scan_dirs = []
         monkeypatch.setattr(mod, "listar_comics", lambda *a, **k: [])
         monkeypatch.setattr(imp, "_persist_run", _async_nada)
-        monkeypatch.setattr(imp, "rellenar_formato_contenido", _async_error)
+        monkeypatch.setattr(imp, "rellenar_formato_contenido", _async_error)          # si el ciclo lo llamara, fallaría
         informe = await imp.scan_and_import()
-        assert informe.finished_at is not None
+        assert informe.finished_at is not None and not informe.errors
+
+    def test_ningun_modulo_de_ciclo_lo_referencia(self):
+        """Ni `main.py` ni los bucles: solo el CLI (y el propio servicio) conocen `rellenar_formato_contenido`."""
+        raiz = Path(__file__).resolve().parents[1] / "src" / "zascarr"
+        usuarios = sorted(str(p.relative_to(raiz)) for p in raiz.rglob("*.py") if "rellenar_formato_contenido" in p.read_text(encoding="utf-8"))
+        assert usuarios == ["cli/rellenar_formato.py", "services/importer.py"]
 
 
 async def _async_nada(*_a, **_k):
@@ -203,7 +209,7 @@ async def _async_nada(*_a, **_k):
 
 
 async def _async_error(*_a, **_k):
-    raise RuntimeError("fallo simulado")
+    raise RuntimeError("el ciclo no debe llamar al relleno")
 
 
 class TestReenlazarConservaElFormato:

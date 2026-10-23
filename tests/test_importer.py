@@ -210,7 +210,6 @@ class TestScanDedupePorInodo:
         )
 
         importer = Importer(AsyncMock())
-        importer.rellenar_formato_contenido = AsyncMock(return_value=0)      # #307: el relleno tiene sus propias pruebas (Postgres real)
 
         vistos = []
         async def fake_import_file(path, rep, pista=None):
@@ -248,7 +247,6 @@ class TestScanPasaLaPistaDeCohorte:
         )
 
         importer = Importer(AsyncMock())
-        importer.rellenar_formato_contenido = AsyncMock(return_value=0)      # #307: el relleno tiene sus propias pruebas (Postgres real)
         recibidas: dict[str, object] = {}
 
         async def fake_import_file(path, rep, pista=None):

@@ -97,7 +97,7 @@ class Firma(str, enum.Enum):
 
 class ClaseZip(str, enum.Enum):
     TEBEO    = "tebeo"         # imágenes suficientes, sin contenedores anidados
-    PAQUETE  = "paquete"       # lleva contenedores dentro (varios números): se marca, no se trata como un tebeo
+    ANIDADOS = "anidados"      # lleva otros comprimidos, PDF o EPUB dentro: no se interpreta como UN tebeo (no se afirma que sean varios)
     NO_TEBEO = "no_tebeo"
     CIFRADO  = "cifrado"
     INVALIDO = "invalido"

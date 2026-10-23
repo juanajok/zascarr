@@ -68,10 +68,15 @@ async def metadata_de(banco, fid: UUID) -> dict:
 
 
 async def rellenar(banco, **kw) -> int:
+    """Rellenadas en esta ejecución (el resultado completo, en `ejecutar`)."""
+    return (await ejecutar(banco, **kw)).rellenadas
+
+
+async def ejecutar(banco, **kw):
     async with banco.fabrica() as s:
-        n = await Importer(s).rellenar_formato_contenido(**kw)
+        r = await Importer(s).rellenar_formato_contenido(**kw)
         await s.commit()
-        return n
+        return r
 
 
 @pytest.fixture(autouse=True)
@@ -168,3 +173,57 @@ class TestConcurrencia:
         fid = await registrar(banco, un_zip(tmp_path / "D.cbr"), meta={"formato_contenido": {"firma": "rar", "contrato": 1}})
         assert await rellenar(banco) == 0
         assert (await metadata_de(banco, fid))["formato_contenido"] == {"firma": "rar", "contrato": 1}
+
+
+class TestOperacionADemanda:
+    """D5 (PO, 2026-10-23): a demanda, acotada y con resultado identificable; sin automatismo."""
+
+    @pytest.mark.asyncio
+    async def test_el_resultado_es_identificable(self, banco, tmp_path):
+        for i in range(3):
+            await registrar(banco, un_zip(tmp_path / f"{i}.cbr"))
+        for i in range(2):
+            await registrar(banco, tmp_path / f"falta{i}.cbr")                       # ilegibles: no existen
+        r = await ejecutar(banco, limite=10)
+        assert (r.limite, r.pendientes_antes, r.leidas, r.rellenadas, r.ilegibles, r.pendientes_despues) == (10, 5, 5, 3, 2, 2)
+        r2 = await ejecutar(banco, limite=10)                                         # los ilegibles siguen pendientes y se reintentan
+        assert (r2.leidas, r2.rellenadas, r2.ilegibles, r2.pendientes_despues) == (2, 0, 2, 2)
+
+    @pytest.mark.asyncio
+    async def test_contar_pendientes_no_lee_ningun_fichero(self, banco, tmp_path, monkeypatch):
+        await registrar(banco, un_zip(tmp_path / "a.cbr"))
+        import zascarr.services.importer as mod
+        monkeypatch.setattr(mod, "formato_real_de", lambda *a, **k: (_ for _ in ()).throw(AssertionError("leyó un fichero")))
+        async with banco.fabrica() as s:
+            assert await Importer(s).contar_pendientes_formato() == 1
+
+    @pytest.mark.asyncio
+    async def test_el_cli_por_defecto_solo_cuenta_y_no_escribe(self, banco, tmp_path, monkeypatch):
+        from argparse import Namespace
+
+        from zascarr.cli import rellenar_formato as cli
+        monkeypatch.setattr(cli, "async_session_factory", banco.fabrica)
+        fid = await registrar(banco, un_zip(tmp_path / "a.cbr"))
+        res, codigo = await cli._ejecutar(Namespace(apply=False, limite=100, json=False))
+        assert res == {"modo": "solo_cuenta", "pendientes": 1} and codigo == 0
+        assert await metadata_de(banco, fid) == {}                                      # no escribió nada
+        assert "No se ha leído ni escrito nada" in cli._texto(res)
+
+    @pytest.mark.asyncio
+    async def test_el_cli_con_apply_rellena_un_lote_y_el_codigo_de_salida_avisa_de_los_ilegibles(self, banco, tmp_path, monkeypatch):
+        from argparse import Namespace
+
+        from zascarr.cli import rellenar_formato as cli
+        monkeypatch.setattr(cli, "async_session_factory", banco.fabrica)
+        bueno = await registrar(banco, un_zip(tmp_path / "ok.cbr"))
+        res, codigo = await cli._ejecutar(Namespace(apply=True, limite=100, json=False))
+        assert res["modo"] == "aplicado" and res["rellenadas"] == 1 and res["ilegibles"] == 0 and codigo == 0
+        assert "clase" in (await metadata_de(banco, bueno))["formato_contenido"]
+        await registrar(banco, tmp_path / "no_esta.cbr")
+        res2, codigo2 = await cli._ejecutar(Namespace(apply=True, limite=100, json=False))
+        assert res2["ilegibles"] == 1 and res2["pendientes_despues"] == 1 and codigo2 == 1        # un cron no lo da por completo
+        assert "ilegibles 1 (siguen pendientes)" in cli._texto(res2)
+
+    def test_un_limite_invalido_se_rechaza_antes_de_tocar_nada(self):
+        from zascarr.cli import rellenar_formato as cli
+        assert cli.main(["--apply", "--limite", "0"]) == 2
