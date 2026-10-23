@@ -85,18 +85,16 @@ def medir(ruta: Path, max_entradas: int = MAX_ENTRADAS, max_descomprimido: int =
             return Medida("invalido")
         if not infos:
             return Medida("vacio")
-        if len(infos) > max_entradas:
-            return Medida("demasiadas_entradas", entradas=len(infos))
         ficheros = [i for i in infos if not i.is_dir()]
         total = sum(i.file_size for i in ficheros)
-        if total > max_descomprimido:
-            return Medida("demasiado_grande", entradas=len(ficheros), descomprimido=total)
+        # Los topes marcan el ESTADO pero las medidas se rellenan igual (solo directorio central): hace falta saber cómo son los que los superan.
+        estado = "demasiadas_entradas" if len(infos) > max_entradas else ("demasiado_grande" if total > max_descomprimido else "ok")
         nombres = [Path(i.filename) for i in ficheros]
         imgs = sorted((i for i in ficheros if Path(i.filename).suffix.lower() in IMAGENES), key=lambda i: natural(i.filename))
         p1 = imgs[0] if imgs else None
         ratios = [i.file_size / i.compress_size for i in ficheros if i.compress_size > 0]
         return Medida(
-            "ok", entradas=len(ficheros),
+            estado, entradas=len(ficheros),
             imagenes=sum(1 for n in nombres if n.suffix.lower() in IMAGENES),
             anidados=sum(1 for n in nombres if n.suffix.lower() in CONTENEDORES),
             comicinfo=any(n.name.lower() == "comicinfo.xml" for n in nombres),
@@ -154,6 +152,8 @@ def resumen(filas: list[tuple[str, Path, int, Medida]], min_imagenes: int, fracc
         lim = [f[3] for f in fs if f[3].estado in ("demasiadas_entradas", "demasiado_grande")]
         if lim:
             out.append(f"  SUPERAN los topes de hoy (1000 entradas / 500 MiB descomprimidos): {len(lim)} de {len(fs)} ({Counter(m.estado for m in lim).most_common()})")
+            out.append(f"    cómo son: imágenes mín {min(m.imagenes for m in lim)} / máx {max(m.imagenes for m in lim)}; con ComicInfo.xml: {sum(m.comicinfo for m in lim)} de {len(lim)}; anidados: {sum(1 for m in lim if m.anidados)}; cifrados: {sum(m.cifrado for m in lim)}")
+            out.append(f"    entrada mayor máx {max(m.mayor_entrada for m in lim) >> 10} KiB; primera página máx {max(m.pagina1_bytes for m in lim) >> 10} KiB, ratio máx {max(m.pagina1_ratio for m in lim)}; ratio por entrada máx {max(m.ratio_max for m in lim)}; descomprimido {min(m.descomprimido for m in lim) >> 20}–{max(m.descomprimido for m in lim) >> 20} MiB")
     return "\n".join(out)
 
 
