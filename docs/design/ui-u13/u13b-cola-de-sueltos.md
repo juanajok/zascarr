@@ -126,7 +126,7 @@ La cabecera enlaza a «Por revisar» y a «Pendientes por carpeta». La paginaci
 
 ## 7. Solo lectura y accesibilidad
 
-- No hay `<form>`, `<button>`, `hx-post`, `hx-delete`, `hx-put` ni `type="submit"`.
+- No hay `<form>`, `<button>`, `hx-post`, `hx-delete`, `hx-put` ni `type="submit"`, ni ningún control «Ignorar». El subtítulo menciona la palabra para aclarar que la acción no existe aquí y remite a «Por revisar».
 - No se llama a `dismiss()`, `asignar()` ni a ningún servicio de escritura.
 - Una prueba con oyente SQL comprueba que solo hay `SELECT` y que la consulta no usa `OFFSET`.
 - El estado se transmite con texto, no solo con color; cada tarjeta tiene nombre accesible y el
@@ -147,7 +147,7 @@ Archivos:
 
 Evidencia local (PostgreSQL 15 real, ASGI, sin navegador):
 
-- **12 passed** en `tests/test_web_sueltos_pg.py`.
+- **18 passed** en `tests/test_web_sueltos_pg.py` (2026-10-23, tras añadir la prueba del subtítulo).
 - **122 passed** al repetir la suite de U13b junto con `test_pendientes_navegacion_pg.py`,
   `test_web_carpetas_pg.py`, `test_revision_carpetas_pg.py` y
   `test_web_componentes.py::TestCompatibilidad`.
@@ -162,7 +162,7 @@ Evidencia local (PostgreSQL 15 real, ASGI, sin navegador):
 
 1. Solo entran los sueltos de A; el agrupado sin sugerencia y los B quedan fuera.
 2. Los 14 están dentro de 1.322 y el texto no dice 1.336.
-3. Solo enlaces GET; no hay «Ignorar» ni escritura.
+3. Solo enlaces GET; no hay control «Ignorar» ni escritura. El copy aclara que ignorar se hace desde «Por revisar».
 4. La candidata se muestra como «no aplicada», sin botón ni número prefijado.
 5. La ausencia se dice explícitamente y no se deduce de la tradición.
 6. Candidata guardada sin tradición visible; `tradition_guess` no participa.
