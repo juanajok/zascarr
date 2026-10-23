@@ -856,10 +856,13 @@ class TestHistorialIntacto:
             TaggerService._poner_marca(SimpleNamespace(), f, ctx, st, "x" * 64, "etiquetado")
             # importer: reenlaza la fila de un fichero que reaparece (limpia solo `comicinfo_*`)
             f.original_sha256 = "c" * 64
-            await _reenlazar_fila(f, SimpleNamespace(sha256="c" * 64), Path(f.file_path))
+            # #307: el reenlace también guarda el formato REAL del fichero (`formato_contenido`) y NO debe borrar el historial.
+            fc = {"firma": "zip", "contrato": 1, "clase": "tebeo"}
+            await _reenlazar_fila(f, SimpleNamespace(sha256="c" * 64, formato_contenido=fc), Path(f.file_path))
             await s.commit()
         meta = (await fila(ent.banco, fid))["metadata"]
         assert meta["vinculo_historial"] == historial and meta["match_status"] == "unsorted"
+        assert meta["formato_contenido"] == {"firma": "zip", "contrato": 1, "clase": "tebeo"}
 
     async def test_review_service_al_colisionar_edicion_no_borra_el_historial(self, ent):
         _, ids = await vinculado(ent, F1)

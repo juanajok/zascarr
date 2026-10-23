@@ -193,7 +193,7 @@ class TestNoReconocidos:
 
         assert len(report.no_reconocidos) == 1
         assert report.no_reconocidos[0].ruta.endswith(".rar")
-        assert "RAR" in report.no_reconocidos[0].motivo
+        assert ".rar" in report.no_reconocidos[0].motivo and "no lo registra como tebeo" in report.no_reconocidos[0].motivo
         # No se cuela como si fuera un tebeo de verdad:
         assert report.files_scanned == 0
 

@@ -54,6 +54,13 @@ def crear_zip(ruta: Path, _tmp: Path) -> None:
             z.writestr(n, d)
 
 
+def crear_zip_largo(ruta: Path, _tmp: Path) -> None:
+    """Un ZIP que SÍ es un tebeo por contenido (≥ 10 páginas, sin contenedores anidados)."""
+    with zipfile.ZipFile(ruta, "w", zipfile.ZIP_STORED) as z:
+        for i in range(12):
+            z.writestr(f"q{i:03d}.jpg", _jpeg(i))
+
+
 def crear_tar(ruta: Path, _tmp: Path) -> None:
     with tarfile.open(ruta, "w") as t:
         for n, d in PAGINAS:
@@ -89,6 +96,8 @@ CASOS = [  # (nombre, creador, qué es de verdad, ¿necesita 7z?)
     ("i.cbt", crear_tar, "TAR llamado .cbt", False),
     ("j.rar", crear_rar_firma, "firma RAR sintética (no legible)", False),
     ("k.cbr", crear_rar_firma, "firma RAR sintética como .cbr (no legible)", False),
+    ("l.cbr", crear_zip_largo, "ZIP con imágenes llamado .cbr (el caso de #307)", False),
+    ("m.cbz", crear_rar_firma, "firma RAR sintética llamada .cbz", False),
 ]
 
 
