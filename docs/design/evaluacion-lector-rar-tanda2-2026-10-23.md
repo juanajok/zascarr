@@ -4,7 +4,7 @@
 
 ## 1. Veredicto en pocas líneas
 - **`unar` leyó íntegra la página en las 35 muestras RAR evaluadas (34 distintas)** (RAR4, 6 RAR5 distintos, 4 sólidos hasta 215 MB): tamaño y **CRC32 del listado** coinciden y `Image.load()` decodifica (140 de 140 con `unar` y `unrar`). Pico de memoria **≤ 25,8 MiB**; primera página **≤ 0,09 s** en caliente y **≤ ~0,33 s en frío** (listar + primera, copias en el disco del sistema).
-- **Con ficheros dañados, ninguna herramienta devolvió datos erróneos en silencio, ni se colgó, ni cayó, ni se pasó de memoria** (3 bases × 6–8 daños). El daño en los datos de una página se detecta con código de salida ≠ 0.
+- **Con los daños ensayados, ninguna herramienta devolvió datos erróneos en silencio, ni se colgó, ni cayó, ni se pasó de memoria** (3 bases × 6–8 daños fabricados). Es un resultado favorable **para esos daños y esas muestras, no una validación completa de seguridad**. El daño en los datos de una página se detectó con código de salida ≠ 0.
 - **Dos trampas que una integración debe cubrir:** `lsar` lista un fichero **truncado con código 0** y menos entradas; `unar` devuelve **0 sin escribir nada** si el índice pedido no existe. Hay que comprobar siempre existencia, tamaño y CRC contra el listado.
 - **Coste de dependencia medido:** `unar` solo añade **+22,5 MiB (+4 %)** a la imagen y **12 paquetes** (incluido el runtime de GNUstep). La decisión de aceptarlo es del PO.
 - **Lo que sigue sin medir:** una bomba de descompresión real y un RAR cifrado (no hay con qué crearlos; **la biblioteca no tiene ningún RAR cifrado**), y la lectura en frío desde el disco USB de la biblioteca.
@@ -25,6 +25,8 @@ Raspberry Pi 5 `aarch64` (Linux 6.18.50+rpt-rpi-2712), 4 GB, Docker 29.9.1. Mism
 - **Los sólidos son ~7 %** (88 de 1208 RAR) y **RAR5 un 13 %** (158): ninguno es un caso marginal. **No hay ningún RAR cifrado** (0 de 1208).
 - **58 `.cbr` son en realidad ZIP**: legibles con la biblioteca estándar, sin dependencias nuevas (#307).
 - El intérprete de cabeceras es propio y sus pruebas usan cabeceras sintéticas; **se contrastó con la realidad**: marcó como sólida solo `m08` entre las 10 muestras RAR de la 1.ª tanda (el único sólido que se conocía), `unar` rotuló como «RAR 5» las marcadas RAR5, y la última página tarda segundos en los sólidos grandes.
+
+**Unidades (para no mezclar recuentos):** hay **36 muestras RAR** (`m01`–`m10` y `s01`–`s26`; `m11` es el ZIP). De ellas, **35 «casos RAR»** tienen páginas evaluadas (`m04` es un paquete y solo se lista), y como `s14` y `s15` son el mismo fichero, son **34 archivos RAR distintos con páginas evaluadas** (35 archivos distintos en total contando `m04`). La comprobación de `ComicInfo.xml` se hizo sobre las 36 muestras RAR.
 
 **Muestras:** las 11 de la 1.ª tanda (`m01`–`m11`) más 26 elegidas **por regla fija** (`s01`–`s26`: el sólido mayor ≤ 300 MB, uno mediano, y 24 `.cbr` típicos 1 de cada 30 en orden alfabético). 36 son RAR (`m04` es un paquete: solo se lista); `m11` es el ZIP. `s14` y `s15` son **el mismo fichero** (mismo hash). Sólidos: `m08` (57 MB), `s01` (215 MB), `s02` (48 MB), `s09`.
 
@@ -71,7 +73,7 @@ Bases: un RAR4 (35 MB), un RAR5 (67 MB) y un sólido (57 MB). Se **vuelve a list
 
 ### 4.5 Cifrado y ComicInfo
 - **Cifrado: NOT RUN**, no por el banco sino porque el censo no encontró ningún RAR cifrado (0 de 1208): no hay nada que probar en esta biblioteca.
-- **`ComicInfo.xml`: 0 de 36 muestras RAR lo traen.** Sobre las 24 tomadas por regla fija (1 de cada 30), la prevalencia queda **por debajo de ~12 %** (regla de tres); las otras 12 las elegí yo y no cuentan para esa cota. Para estos ficheros lo que se ganaría es la **portada**, no los metadatos.
+- **`ComicInfo.xml`: 0 de 36 muestras RAR lo traen.** Sobre las 24 tomadas por regla fija (1 de cada 30), la prevalencia queda **por debajo de ~12 %** (regla de tres); las otras 12 las elegí yo y no cuentan para esa cota. **Esto no demuestra que el resto de la biblioteca carezca de `ComicInfo.xml`.** Conclusión respaldada: *en las muestras examinadas no se acreditó ganancia de metadatos mediante `ComicInfo.xml`; sí se acreditó la extracción de páginas.*
 
 ### 4.6 Coste de dependencia
 | Imagen | Tamaño (bytes) | Diferencia |
@@ -88,14 +90,14 @@ Bases: un RAR4 (35 MB), un RAR5 (67 MB) y un sólido (57 MB). Se **vuelve a list
 | Compatibilidad (RAR4, RAR5, sólido) | **PASS** — 35/35 por CRC; `m04` solo se lista |
 | Memoria ≤ 256 MiB, sin muertes | **PASS** — 25,8 MiB; 0 OOM |
 | Primera página ≤ 5 s | **PASS** — ≤ 0,09 s caliente, ≤ ~0,33 s frío (disco del sistema); USB **NOT RUN** |
-| Seguridad | **PASS parcial** — daños sin datos erróneos ni caídas; topes de tamaño de fichero y tiempo operativos; memoria virtual descartada como tope. **NOT RUN:** bomba real; cifrado (no hay muestras) |
+| Seguridad | **PASS parcial** — para los daños ensayados, sin datos erróneos ni caídas (no es una validación completa); topes de tamaño de fichero y tiempo operativos; memoria virtual descartada como tope. **NOT RUN:** bomba real; cifrado (no hay muestras) |
 | Licencia (Debian `main` o aceptación del PO) | **PASS** — `main`, LGPL-2.1+ |
 | Dependencia | **medida, decisión del PO** — +22,5 MiB / 12 paquetes (GNUstep, avahi-client, dbus); historial de vulnerabilidades sin revisar |
 
 ## 6. Recomendación
 La evidencia técnica pasa de «seguir investigando» a **«candidato a adopción condicionada»**: `unar` invocado directamente (sin `rarfile` ni `unrar`) cubre todo lo que la biblioteca tiene. Formalmente el protocolo conserva dos NOT RUN de seguridad (bomba real y cifrado) que no se pueden ejecutar aquí; se proponen cubrir con topes **antes** de extraer, no con una prueba.
 
-**La decisión es del PO** y no se ha tomado: aceptar +22,5 MiB y 12 paquetes (con GNUstep) frente a una oportunidad de portada para ~1208 RAR (con poco `ComicInfo` que esperar), además de decidir si los 58 ZIP con extensión `.cbr` (#307, sin dependencias) van antes.
+**La decisión es del PO** y no se ha tomado: aceptar +22,5 MiB y 12 paquetes (con GNUstep) frente a la posibilidad de extraer páginas (portada) de ~1208 RAR; en las muestras examinadas no se acreditó ganancia de metadatos por `ComicInfo.xml`, además de decidir si los 58 ZIP con extensión `.cbr` (#307, sin dependencias) van antes.
 
 ### Condiciones de diseño que se deducen (no implementadas)
 1. Decidir el lector por **firma**, no por extensión (58 ZIP `.cbr`, 12 ficheros sin extensión).
