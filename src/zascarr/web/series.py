@@ -214,7 +214,8 @@ async def portada(series_id: UUID, request: Request,
         .limit(1)
     )).first()
     if row:
-        result = await asyncio.to_thread(extract_cover_thumbnail, Path(row[0]), (row[1] or {}).get("formato_contenido"))
+        result = await asyncio.to_thread(extract_cover_thumbnail, Path(row[0]),
+                                         (row[1] or {}).get("formato_contenido"))
         if result:
             data, content_type = result
             await asyncio.to_thread(write_cover_cache, cache_path, data)

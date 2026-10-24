@@ -84,9 +84,10 @@ class FileFormat(str, enum.Enum):
 
 
 # #307 — formato REAL de un fichero, por su contenido. No son tipos de Postgres (no hay migración):
-# se guardan como texto dentro de `files.metadata["formato_contenido"]`. `FileFormat` sigue siendo la
+# se guardan como texto dentro de `files.metadata["formato_contenido"]`. `FileFormat` sigue siendo
+# la
 # extensión DECLARADA (lo que dice el nombre); estas dos cosas pueden no coincidir.
-class Firma(str, enum.Enum):
+class Firma(enum.StrEnum):
     ZIP      = "zip"
     RAR      = "rar"
     SIETE_Z  = "7z"
@@ -95,9 +96,11 @@ class Firma(str, enum.Enum):
     ILEGIBLE = "ilegible"      # no se pudo leer (permisos, disco desmontado)
 
 
-class ClaseZip(str, enum.Enum):
+class ClaseZip(enum.StrEnum):
     TEBEO    = "tebeo"         # imágenes suficientes, sin contenedores anidados
-    ANIDADOS = "anidados"      # lleva otros comprimidos, PDF o EPUB dentro: no se interpreta como UN tebeo (no se afirma que sean varios)
+    ANIDADOS = "anidados"
+    # lleva otros comprimidos, PDF o EPUB dentro: no se interpreta como UN tebeo (no se afirma que
+    # sean varios)
     NO_TEBEO = "no_tebeo"
     CIFRADO  = "cifrado"
     INVALIDO = "invalido"
@@ -105,8 +108,9 @@ class ClaseZip(str, enum.Enum):
     LIMITE   = "limite"        # demasiadas entradas
 
 
-class Tratamiento(str, enum.Enum):
-    LEER_COMO_ZIP = "leer_como_zip"   # ComicInfo, anchura y portada con el lector ZIP; nunca se escribe
+class Tratamiento(enum.StrEnum):
+    LEER_COMO_ZIP = "leer_como_zip"
+    # ComicInfo, anchura y portada con el lector ZIP; nunca se escribe
     SOLO_HASH     = "solo_hash"       # como hoy: se hashea y no se abre
     AVISAR        = "avisar"          # SOLO_HASH + aviso con causa y acción
 
