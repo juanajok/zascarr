@@ -84,7 +84,8 @@ def _card(f: File) -> dict:
         "detected": _detected_label(f.file_name),
         "suggestion": _suggestion(f),
         # U12: ausencia CONOCIDA (por la extensión, sin I/O): ni `<img>` ni petición ni bloque.
-        "con_portada": puede_tener_portada(f.file_path, (f.metadata_ or {}).get("formato_contenido")),
+        "con_portada": puede_tener_portada(f.file_path,
+                                           (f.metadata_ or {}).get("formato_contenido")),
         # B15: motivo de por qué este archivo sigue en revisión (p.ej. un
         # número compartido entre ediciones rechazado en una asignación).
         "motivo": (f.metadata_ or {}).get("review_motivo"),
@@ -335,7 +336,8 @@ async def portada(file_id: UUID, request: Request, db: AsyncSession = Depends(ge
     path = Path(file.file_path)
     # extract_cover_thumbnail es zipfile+Pillow, síncrono y bloqueante:
     # se manda a un hilo aparte para no congelar el event loop (M4).
-    result = await asyncio.to_thread(extract_cover_thumbnail, path, (file.metadata_ or {}).get("formato_contenido"))
+    result = await asyncio.to_thread(extract_cover_thumbnail, path,
+                                     (file.metadata_ or {}).get("formato_contenido"))
     if result is None:
         raise HTTPException(status_code=404, detail="Sin miniatura disponible")
     data, content_type = result
