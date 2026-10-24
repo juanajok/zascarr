@@ -81,8 +81,8 @@ _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 # DoS: un ComicInfo.xml real mide pocos KB. Rechazar los enormes ANTES de
 # descomprimirlos en memoria (una ZIP bomb no debe reventar una Pi).
 MAX_COMICINFO_BYTES = 1 * 1024 * 1024   # 1 MiB
-MAX_ZIP_ENTRIES = MAX_ENTRADAS
 # entradas máximas por ZIP (antes 1000; el máximo medido en la biblioteca real es 941)
+MAX_ZIP_ENTRIES = MAX_ENTRADAS
 # El tope de 500 MiB descomprimidos EN TOTAL desapareció (#307, D3): dejaba sin ComicInfo ni
 # anchura a los ZIP grandes aunque solo se
 # lee una página. Ahora se acota la ENTRADA QUE SE LEE (`formato_contenedor.MAX_ENTRADA_LEIDA` /
@@ -183,8 +183,8 @@ class TriageResult:
     path: Path
     sha256: str | None = None
     file_format: str | None = None          # cbz | cbr | pdf | cb7 (la extensión DECLARADA)
-    formato_contenido: dict | None = None
     # el formato REAL por contenido (#307); va a files.metadata
+    formato_contenido: dict | None = None
     comic_info: ComicInfo | None = None
     width_px: int | None = None
     source_tag: str | None = None
@@ -254,8 +254,8 @@ def triage(path: Path) -> TriageResult:
     try:
         sha256 = sha256_streaming(path)
         motivo = motivo_fuera_de_limite(path)
-        if motivo:
         # sin abrirlo: `ZipFile()` cargaría el directorio central entero en memoria
+        if motivo:
             result.sha256 = sha256
             result.formato_contenido = formato_contenido(firma, ClaseZip.LIMITE, motivo)
             result.warnings.append(aviso_de_clase(ClaseZip.LIMITE, motivo) + " (ignorado)")
@@ -273,8 +273,8 @@ def triage(path: Path) -> TriageResult:
         infos = zf.infolist()
         cls = clasificar_infos(infos)
         result.formato_contenido = formato_contenido(firma, cls.clase, cls.motivo_limite)
-        declarado_tebeo = ext in (".cbz", ".zip")
         # el usuario lo declara tebeo: la clase no bloquea la lectura (sí los topes)
+        declarado_tebeo = ext in (".cbz", ".zip")
         if cls.clase in (ClaseZip.LIMITE, ClaseZip.CIFRADO):
             result.warnings.append(aviso_de_clase(cls.clase, cls.motivo_limite) + " (ignorado)")
             return result

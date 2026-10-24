@@ -125,8 +125,8 @@ class NoReconocido:
 # haberlo re-empaquetado a un formato reconocido. `.rar` es el caso real
 # más frecuente (packs de la escena que no llegaron a re-encapsularse
 # como .cbr); `.7z` aparece con menos frecuencia pero con el mismo motivo.
-CONTENEDORES_NO_SOPORTADOS = {".rar", ".7z", ".tar", ".cbt"}
 # #307: `.tar` y `.cbt` también se avisan (antes: silencio)
+CONTENEDORES_NO_SOPORTADOS = {".rar", ".7z", ".tar", ".cbt"}
 
 
 

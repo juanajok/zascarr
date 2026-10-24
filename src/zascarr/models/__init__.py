@@ -98,9 +98,9 @@ class Firma(str, enum.Enum):
 
 class ClaseZip(str, enum.Enum):
     TEBEO    = "tebeo"         # imágenes suficientes, sin contenedores anidados
-    ANIDADOS = "anidados"
     # lleva otros comprimidos, PDF o EPUB dentro: no se interpreta como UN tebeo (no se afirma que
     # sean varios)
+    ANIDADOS = "anidados"
     NO_TEBEO = "no_tebeo"
     CIFRADO  = "cifrado"
     INVALIDO = "invalido"
@@ -109,8 +109,8 @@ class ClaseZip(str, enum.Enum):
 
 
 class Tratamiento(str, enum.Enum):
-    LEER_COMO_ZIP = "leer_como_zip"
     # ComicInfo, anchura y portada con el lector ZIP; nunca se escribe
+    LEER_COMO_ZIP = "leer_como_zip"
     SOLO_HASH     = "solo_hash"       # como hoy: se hashea y no se abre
     AVISAR        = "avisar"          # SOLO_HASH + aviso con causa y acción
 

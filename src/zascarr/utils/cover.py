@@ -82,16 +82,16 @@ def extract_cover_thumbnail(path: Path,
         return None
     ext = path.suffix.lower()
     guardado = puede_dar_portada(ext, formato_contenido)
-    sin_guardar = guardado is None
     # nada utilizable guardado (fila sin rellenar, fichero suelto, lectura fallida antigua)
+    sin_guardar = guardado is None
     if sin_guardar:
         if not se_lee_como_zip(ext, firma_de(path)):
             return None
     elif not guardado:
         return None
 
-    if zip_fuera_de_limite(path):
     # declara demasiadas entradas o un directorio enorme: ni se abre
+    if zip_fuera_de_limite(path):
         return None
     try:
         with zipfile.ZipFile(path) as zf:
@@ -110,8 +110,8 @@ def extract_cover_thumbnail(path: Path,
 
     try:
         with Image.open(io.BytesIO(data)) as img:
-            if img.width * img.height > MAX_PIXELES_PORTADA:
             # `open` solo lee la cabecera: se rechaza SIN decodificar
+            if img.width * img.height > MAX_PIXELES_PORTADA:
                 return None
             img.thumbnail((_THUMB_MAX_WIDTH, _THUMB_MAX_WIDTH * 2))
             buf = io.BytesIO()
