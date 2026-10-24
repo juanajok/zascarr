@@ -46,8 +46,10 @@ EXTENSIONES_CON_PORTADA = frozenset({".cbz", ".zip"})
 
 
 def puede_tener_portada(ruta: str | Path, formato_contenido: dict | None = None) -> bool:
-    """¿Tiene sentido pedir la portada de este archivo? Ni abre el archivo ni lo busca en disco (se llama en listados): decide con el
-    `formato_contenido` ya guardado en la base (#307) y, si no hay nada guardado, solo por la extensión. `False` = ausencia CONOCIDA;
+    """¿Tiene sentido pedir la portada de este archivo? Ni abre el archivo ni lo busca en disco
+    (se llama en listados): decide con el
+    `formato_contenido` ya guardado en la base (#307) y, si no hay nada guardado, solo por la
+    extensión. `False` = ausencia CONOCIDA;
     `True` = disponibilidad desconocida (solo abriéndolo se sabe)."""
     ext = Path(str(ruta)).suffix.lower()
     guardado = puede_dar_portada(ext, formato_contenido)
@@ -63,33 +65,43 @@ _COVER_MAX_WIDTH = 320
 _COVER_FETCH_SEMAPHORE = asyncio.Semaphore(2)
 
 
-def extract_cover_thumbnail(path: Path, formato_contenido: dict | None = None) -> tuple[bytes, str] | None:
-    """(bytes JPEG, content-type) de una miniatura de la primera página en orden natural, o None si el archivo no es un ZIP legible, no
-    tiene páginas de imagen o su primera página supera los topes (CBR real: requeriría una herramienta que no está; ver #308).
+def extract_cover_thumbnail(path: Path,
+                            formato_contenido: dict | None = None) -> tuple[bytes, str] | None:
+    """(bytes JPEG, content-type) de una miniatura de la primera página en orden natural, o None
+    si el archivo no es un ZIP legible, no
+    tiene páginas de imagen o su primera página supera los topes (CBR real: requeriría una
+    herramienta que no está; ver #308).
 
-    #307: un `.cbr`/`.cb7` cuyo CONTENIDO es un ZIP se lee igual que un `.cbz`, siempre que sea un tebeo comprobado. Con el
-    `formato_contenido` guardado en la base no se lee la firma; sin él (fila aún sin rellenar, fichero suelto) se decide aquí por el
-    contenido. La lectura está ACOTADA: ni el tamaño declarado ni el ratio de la página pueden pasar de los topes."""
+    #307: un `.cbr`/`.cb7` cuyo CONTENIDO es un ZIP se lee igual que un `.cbz`, siempre que sea un
+    tebeo comprobado. Con el
+    `formato_contenido` guardado en la base no se lee la firma; sin él (fila aún sin rellenar,
+    fichero suelto) se decide aquí por el
+    contenido. La lectura está ACOTADA: ni el tamaño declarado ni el ratio de la página pueden
+    pasar de los topes."""
     if not path.exists():
         return None
     ext = path.suffix.lower()
     guardado = puede_dar_portada(ext, formato_contenido)
-    sin_guardar = guardado is None                      # nada utilizable guardado (fila sin rellenar, fichero suelto, lectura fallida antigua)
+    # nada utilizable guardado (fila sin rellenar, fichero suelto, lectura fallida antigua)
+    sin_guardar = guardado is None
     if sin_guardar:
         if not se_lee_como_zip(ext, firma_de(path)):
             return None
     elif not guardado:
         return None
 
-    if zip_fuera_de_limite(path):               # declara demasiadas entradas o un directorio enorme: ni se abre
+    # declara demasiadas entradas o un directorio enorme: ni se abre
+    if zip_fuera_de_limite(path):
         return None
     try:
         with zipfile.ZipFile(path) as zf:
             infos = zf.infolist()
-            if sin_guardar and ext not in (".cbz", ".zip") and clasificar_infos(infos).clase is not ClaseZip.TEBEO:
+            if (sin_guardar and ext not in (".cbz", ".zip")
+                    and clasificar_infos(infos).clase is not ClaseZip.TEBEO):
                 return None
             por_nombre = {i.filename: i for i in infos if not i.is_dir()}
-            pages = sorted((n for n in por_nombre if Path(n).suffix.lower() in IMAGE_EXTS), key=natural_key)
+            pages = sorted((n for n in por_nombre if Path(n).suffix.lower() in IMAGE_EXTS),
+                           key=natural_key)
             if not pages:
                 return None
             data = leer_acotado(zf, por_nombre[pages[0]])
@@ -98,7 +110,8 @@ def extract_cover_thumbnail(path: Path, formato_contenido: dict | None = None) -
 
     try:
         with Image.open(io.BytesIO(data)) as img:
-            if img.width * img.height > MAX_PIXELES_PORTADA:     # `open` solo lee la cabecera: se rechaza SIN decodificar
+            # `open` solo lee la cabecera: se rechaza SIN decodificar
+            if img.width * img.height > MAX_PIXELES_PORTADA:
                 return None
             img.thumbnail((_THUMB_MAX_WIDTH, _THUMB_MAX_WIDTH * 2))
             buf = io.BytesIO()
