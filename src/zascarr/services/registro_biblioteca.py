@@ -9,6 +9,8 @@ tarea con su propia sesión, confirma por lotes (`LibraryAdopter.adopt`) y la in
 Contrato:
   · Una sola ejecución a la vez por proceso (la imagen corre con `--workers 1`). Dos peticiones seguidas no
     lanzan dos registros; la segunda ve el progreso de la primera.
+  · #326: y una sola entre PROCESOS: un cerrojo consultivo de Postgres (`pg_try_advisory_lock`) en una conexión propia mientras dura el
+    registro. Si no se obtiene, no se hace nada (fase «ocupado»). Si el proceso muere, Postgres suelta el cerrojo al cerrarse su conexión.
   · NO se reanuda sola al reiniciar (no hay escrituras inesperadas al arrancar): quien quiera continuar lo
     pide, y como el registro es idempotente por ruta, continúa donde se quedó.
   · Un fallo general (BD caída, etc.) deja el estado en «interrumpido» con una causa SANEADA (el tipo de error,
@@ -18,12 +20,14 @@ Contrato:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+import contextlib
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
 import structlog
+from sqlalchemy import text
 
 from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
 
@@ -35,6 +39,7 @@ class FaseRegistro(StrEnum):
     CORRIENDO = "corriendo"
     TERMINADO = "terminado"          # el recorrido acabó (puede haber errores por archivo)
     INTERRUMPIDO = "interrumpido"    # cayó antes de acabar: lo ya confirmado se conserva
+    OCUPADO = "ocupado"              # #326: otro proceso (o ventana) tiene un registro en marcha: no se hizo nada
 
 
 @dataclass
@@ -111,9 +116,37 @@ def _volcar(report: AdoptionReport) -> None:
     _estado.ya_no_pendientes = report.out_of_scope_gone
 
 
+#: Clave del cerrojo consultivo de Postgres que serializa los registros de la biblioteca (inicial e incremental) entre procesos.
+_CLAVE_CERROJO = 326_000_001
+
+
+@contextlib.asynccontextmanager
+async def _cerrojo_de_registro(sesion) -> AsyncIterator[bool]:
+    """Cerrojo entre procesos: `True` si este registro es el único en marcha, `False` si otro proceso ya tiene el cerrojo.
+
+    Va en una conexión PROPIA (no en la de la sesión de trabajo, que confirma por lotes y vuelve al pool): un cerrojo de sesión de Postgres vive
+    mientras viva su conexión, así que se suelta explícitamente antes de devolverla; si el proceso muere, Postgres lo suelta al cerrarse la conexión."""
+    conexion = await sesion.bind.connect()
+    obtenido = False
+    try:
+        obtenido = bool((await conexion.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _CLAVE_CERROJO})).scalar())
+        yield obtenido
+    finally:
+        try:
+            if obtenido:
+                await conexion.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _CLAVE_CERROJO})
+            await conexion.close()
+        except Exception:  # noqa: BLE001 — una conexión rota no debe volver al pool con el cerrojo puesto
+            with contextlib.suppress(Exception):
+                await conexion.invalidate()
+
+
 async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) -> None:
     try:
-        async with fabrica() as sesion:
+        async with fabrica() as sesion, _cerrojo_de_registro(sesion) as libre:
+            if not libre:
+                _estado.fase = FaseRegistro.OCUPADO
+                return
             extra = {} if alcance is None else {"alcance": alcance}       # el registro inicial se llama exactamente como siempre
             informe = await LibraryAdopter(sesion).adopt(progreso=_volcar, **extra)
         _volcar(informe)

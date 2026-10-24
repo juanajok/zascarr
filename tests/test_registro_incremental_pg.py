@@ -285,11 +285,12 @@ class TestEnSegundoPlanoYPantalla:
         n, runs = len(await _filas(mundo)), await _n_runs(mundo, "registro_incremental")
         async with cliente as c:
             r = await c.get("/ui/auditoria/registro")
-            assert "Tu biblioteca ya está registrada" in r.text and "Buscar archivos nuevos" in r.text
+            assert "Tu biblioteca ya está registrada" in r.text and "Buscar archivos sin registrar" in r.text
             r2 = await c.get("/ui/auditoria/nuevos")
-        assert "<strong>1</strong> en una ruta que ZascArr aún no conoce" in r2.text
-        assert "Registrar los 1 archivos nuevos" in r2.text and 'name="huella"' in r2.text
-        assert "no se ha abierto ninguno" in r2.text and "ninguna fuente de internet" in r2.text
+        assert "<strong>1</strong> en una ruta sin registrar" in r2.text
+        assert "Registrar los 1 archivos sin registrar" in r2.text and 'name="huella"' in r2.text
+        plano = " ".join(r2.text.split())
+        assert "no se ha abierto ninguno" in plano and "ninguna fuente de internet" in plano
         assert len(await _filas(mundo)) == n and await _n_runs(mundo, "registro_incremental") == runs
 
     async def test_confirmar_con_la_huella_vista_registra_y_el_resultado_separa_categorias(self, mundo, cliente):
@@ -300,14 +301,14 @@ class TestEnSegundoPlanoYPantalla:
         inv = await _inventario(mundo)
         async with cliente as c:
             r = await c.post("/ui/auditoria/registrar-nuevos", data={"huella": inv.huella})
-            assert "Registrando los archivos nuevos" in r.text and 'hx-trigger="every 2s"' in r.text
+            assert "Registrando los archivos encontrados" in r.text and 'hx-trigger="every 2s"' in r.text
             await asyncio.wait_for(registro_biblioteca._tarea, 60)
             r2 = await c.get("/ui/auditoria/registro")
-        assert "Archivos nuevos revisados" in r2.text and "every 2s" not in r2.text
-        assert "<strong>2</strong> de <strong>2</strong> archivos nuevos mirados" in r2.text
+        assert "Archivos sin registrar revisados" in r2.text and "every 2s" not in r2.text
+        assert "<strong>2</strong> de <strong>2</strong> archivos mirados" in r2.text
         assert "<strong>1</strong> filas nuevas en el catálogo" in r2.text
         assert "<strong>1</strong> repetidos" in r2.text and "No se ha borrado ni movido ninguna copia" in r2.text
-        assert "Buscar archivos nuevos otra vez" in r2.text and "Continuar el registro" not in r2.text
+        assert "Buscar archivos sin registrar otra vez" in r2.text and "Continuar el registro" not in r2.text
         assert await mundo.marcador() is True
 
     async def test_si_la_carpeta_cambio_tras_revisar_no_se_registra_nada(self, mundo, cliente):
@@ -317,7 +318,7 @@ class TestEnSegundoPlanoYPantalla:
         n = len(await _filas(mundo))
         async with cliente as c:
             r = await c.post("/ui/auditoria/registrar-nuevos", data={"huella": visto.huella})
-        assert "ha cambiado desde que lo revisaste" in r.text and "Registrar los 2 archivos nuevos" in r.text
+        assert "ha cambiado desde que lo revisaste" in r.text and "Registrar los 2 archivos sin registrar" in r.text
         assert not registro_biblioteca.estado_actual().en_marcha and len(await _filas(mundo)) == n
 
     async def test_sin_registro_inicial_o_con_otra_en_marcha_no_lanza_nada(self, mundo, cliente):
@@ -370,3 +371,205 @@ def test_el_unico_que_lanza_el_registro_incremental_es_la_pantalla():
     llamadores = sorted(str(p.relative_to(raiz)) for p in raiz.rglob("*.py")
                         if "registro_biblioteca.iniciar(" in p.read_text() or "alcance=" in p.read_text() and ".adopt(" in p.read_text())
     assert llamadores == ["web/auditoria.py"]
+
+
+class TestRecorridoIncompleto:
+
+    @pytest.fixture
+    def carpeta_cerrada(self, mundo):
+        cerrada = mundo.lib / "Cerrada"
+        cerrada.mkdir()
+        _cbz(cerrada / "Escondido 01.cbz", "h")
+        cerrada.chmod(0)
+        if os.access(cerrada, os.R_OK):
+            cerrada.chmod(0o755)
+            pytest.skip("se ejecuta como root: los permisos no impiden listar")
+        yield cerrada
+        cerrada.chmod(0o755)
+
+    async def test_el_inventario_distingue_completo_de_incompleto_y_no_fabrica_bajas(self, mundo, carpeta_cerrada):
+        _nuevo(mundo, "Nuevo 01.cbz", "x")
+        inv = await _inventario(mundo)
+        assert inv.ilegibles >= 1 and not inv.recorrido_completo and not inv.se_puede_confirmar
+        assert inv.nuevos == 1 and inv.registrados_sin_fichero == 0
+
+    async def test_la_pantalla_avisa_y_no_deja_confirmar_ni_aunque_se_fuerce_la_peticion(self, mundo, carpeta_cerrada):
+        _nuevo(mundo, "Nuevo 01.cbz", "x")
+        visto = await _inventario(mundo)
+        n = len(await _filas(mundo))
+
+        async def _get_db():
+            async with mundo.fabrica() as s:
+                yield s
+        app.dependency_overrides[get_db] = _get_db
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"Origin": "http://localhost"}) as c:
+            r = await c.get("/ui/auditoria/nuevos")
+            r2 = await c.post("/ui/auditoria/registrar-nuevos", data={"huella": visto.huella})   # con la huella correcta
+        plano = " ".join(r.text.split())
+        assert "puede estar incompleta" in plano and "Registrar los" not in plano
+        assert not registro_biblioteca.estado_actual().en_marcha and len(await _filas(mundo)) == n
+        assert "Registrar los" not in r2.text
+
+
+class TestExclusionEntreProcesos:
+
+    async def _otro_proceso_con_el_cerrojo(self, mundo):
+        """Otra conexión (como la de otro proceso) que ya tiene el cerrojo del registro."""
+        conexion = await mundo.motor.connect()
+        ok = (await conexion.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": registro_biblioteca._CLAVE_CERROJO})).scalar()
+        assert ok
+        return conexion
+
+    async def test_si_otro_proceso_tiene_el_cerrojo_no_se_hace_nada(self, mundo):
+        _nuevo(mundo, "Nuevo 01.cbz", "x")
+        inv = await _inventario(mundo)
+        n, runs = len(await _filas(mundo)), await _n_runs(mundo, "registro_incremental")
+        ajeno = await self._otro_proceso_con_el_cerrojo(mundo)
+        try:
+            assert registro_biblioteca.iniciar(mundo.fabrica, alcance=inv.rutas_nuevas) is True
+            await asyncio.wait_for(registro_biblioteca._tarea, 60)
+            e = registro_biblioteca.estado_actual()
+            assert e.fase.value == "ocupado" and not e.completo and not e.en_marcha
+            assert len(await _filas(mundo)) == n and await _n_runs(mundo, "registro_incremental") == runs
+        finally:
+            await ajeno.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": registro_biblioteca._CLAVE_CERROJO})
+            await ajeno.close()
+        # Soltado el cerrojo ajeno, el mismo alcance se registra sin problema.
+        assert registro_biblioteca.iniciar(mundo.fabrica, alcance=inv.rutas_nuevas) is True
+        await asyncio.wait_for(registro_biblioteca._tarea, 60)
+        assert registro_biblioteca.estado_actual().completo and len(await _filas(mundo)) == n + 1
+
+    async def test_el_cerrojo_se_suelta_al_terminar_y_tambien_si_el_registro_falla(self, mundo, monkeypatch):
+        async def libre() -> bool:
+            async with mundo.motor.connect() as c:
+                ok = (await c.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": registro_biblioteca._CLAVE_CERROJO})).scalar()
+                if ok:
+                    await c.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": registro_biblioteca._CLAVE_CERROJO})
+                return bool(ok)
+        _nuevo(mundo, "Nuevo 01.cbz", "x")
+        inv = await _inventario(mundo)
+        registro_biblioteca.iniciar(mundo.fabrica, alcance=inv.rutas_nuevas)
+        await asyncio.wait_for(registro_biblioteca._tarea, 60)
+        assert await libre()
+
+        async def explota(self, *, progreso=None, lote=25, alcance=None):
+            raise ConnectionError("x")
+        monkeypatch.setattr(LibraryAdopter, "adopt", explota)
+        registro_biblioteca.iniciar(mundo.fabrica, alcance=frozenset())
+        await asyncio.wait_for(registro_biblioteca._tarea, 60)
+        assert registro_biblioteca.estado_actual().fase.value == "interrumpido" and await libre()
+
+    async def test_la_pantalla_dice_que_hay_otro_registro_en_marcha(self, mundo):
+        _nuevo(mundo, "Nuevo 01.cbz", "x")
+        inv = await _inventario(mundo)
+        ajeno = await self._otro_proceso_con_el_cerrojo(mundo)
+
+        async def _get_db():
+            async with mundo.fabrica() as s:
+                yield s
+        app.dependency_overrides[get_db] = _get_db
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"Origin": "http://localhost"}) as c:
+                await c.post("/ui/auditoria/registrar-nuevos", data={"huella": inv.huella})
+                await asyncio.wait_for(registro_biblioteca._tarea, 60)
+                r = await c.get("/ui/auditoria/registro")
+        finally:
+            await ajeno.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": registro_biblioteca._CLAVE_CERROJO})
+            await ajeno.close()
+        assert "Ya hay un registro en marcha" in r.text and "No se ha hecho nada" in " ".join(r.text.split())
+
+
+class TestArchivoQueCambiaOSeVa:
+
+    async def test_si_cambia_mientras_se_lee_no_se_registra_un_hash_que_ya_no_le_corresponde(self, mundo, monkeypatch):
+        destino = _nuevo(mundo, "Nuevo 01.cbz", "x")
+        import zascarr.services.library_adopter as la
+        original = la._triage_and_match
+
+        async def cambia_tras_leer(db, path, pista=None):
+            salida = await original(db, path, pista)
+            if path == destino:
+                with open(path, "ab") as f:
+                    f.write(b"mas bytes")                                # alguien lo modifica después de haberlo hasheado
+            return salida
+        monkeypatch.setattr(la, "_triage_and_match", cambia_tras_leer)
+        n = len(await _filas(mundo))
+        informe = await _incremental(mundo, await _inventario(mundo))
+        assert informe.added_count == 0 and informe.error_count == 1 and "cambió mientras se leía" in informe.errors[0]
+        assert len(await _filas(mundo)) == n                              # no se guardó nada con ese hash
+        monkeypatch.setattr(la, "_triage_and_match", original)
+        despues = await _incremental(mundo, await _inventario(mundo))      # al buscar de nuevo, se registra lo que hay AHORA
+        assert despues.added_count == 1 and despues.error_count == 0
+        fila = (await _filas(mundo))[str(destino)]
+        assert fila.sha256_hash == hashlib.sha256(destino.read_bytes()).hexdigest() and fila.file_size_bytes == destino.stat().st_size
+
+    async def test_si_desaparece_entre_la_busqueda_y_la_lectura_no_es_un_error(self, mundo, monkeypatch):
+        fantasma = mundo.lib / "Nuevos" / "Fantasma.cbz"
+        import zascarr.services.library_adopter as la
+        from zascarr.utils.fs import Recorrido, recorrer_comics
+
+        def con_fantasma(dirs, exts):
+            r = recorrer_comics(dirs, exts)
+            return Recorrido([*r.archivos, fantasma], r.ilegibles)
+        monkeypatch.setattr(la, "recorrer_comics", con_fantasma)
+        informe = await _incremental(mundo, SimpleAlcance({str(fantasma)}))
+        assert informe.error_count == 0 and informe.out_of_scope_gone == 1 and informe.added_count == 0
+
+
+class SimpleAlcance:
+    def __init__(self, rutas):
+        self.rutas_nuevas = frozenset(rutas)
+
+
+class TestReenlaceExigeAusenciaDelOriginal:
+
+    async def test_si_la_ruta_anterior_sigue_teniendo_el_archivo_no_se_reenlaza(self, mundo):
+        """La fila quedó marcada como desaparecida (p. ej. por un fallo pasajero) pero su archivo sigue en su sitio: una copia en otra ruta NO le roba la ficha."""
+        viejo = _nuevo(mundo, "Original.cbz", "o", sub="Viejo")
+        copia = mundo.lib / "Copias" / "Original.cbz"
+        copia.parent.mkdir(parents=True)
+        shutil.copyfile(viejo, copia)
+        sha = hashlib.sha256(viejo.read_bytes()).hexdigest()
+        fila_id = uuid4()
+        async with mundo.fabrica() as s:
+            s.add(File(id=fila_id, file_path=str(viejo), file_name=viejo.name, file_format=FileFormat.CBZ, sha256_hash=sha, original_sha256=sha,
+                       is_missing=True, metadata_={"ajuste_manual": "conservar"}))
+            await s.commit()
+        inv = SimpleAlcance({str(copia)})
+        informe = await _incremental(mundo, inv)
+        filas = await _filas(mundo)
+        assert informe.relinked == 0 and informe.added_count == 0 and len(informe.ambiguous) == 1
+        assert "no ha podido dar por desaparecido" in informe.ambiguous[0]
+        fila = filas[str(viejo)]
+        assert fila.id == fila_id and fila.is_missing is True and fila.metadata_["ajuste_manual"] == "conservar"
+        assert str(copia) not in filas
+
+
+class TestFalloParcialYRecuperacion:
+
+    async def test_si_falla_un_lote_lo_confirmado_se_conserva_y_buscar_de_nuevo_completa_sin_duplicar(self, mundo, monkeypatch):
+        from sqlalchemy.ext.asyncio import AsyncSession
+        for i in range(4):
+            _nuevo(mundo, f"Nuevo {i}.cbz", f"n{i}")
+        inv = await _inventario(mundo)
+        original = AsyncSession.commit
+        llamadas = {"n": 0}
+
+        async def commit(self):
+            llamadas["n"] += 1
+            if llamadas["n"] == 2:
+                raise ConnectionError("password=secreta")
+            return await original(self)
+        monkeypatch.setattr(AsyncSession, "commit", commit)
+        antes = len(await _filas(mundo))
+        with pytest.raises(ConnectionError):
+            await _incremental(mundo, inv, lote=2)
+        monkeypatch.setattr(AsyncSession, "commit", original)
+        assert len(await _filas(mundo)) == antes + 2                        # el primer lote quedó confirmado; el segundo, no
+        again = await _inventario(mundo)
+        assert again.nuevos == 2                                            # lo que falta sale de nuevo en la búsqueda
+        informe = await _incremental(mundo, again)
+        assert informe.added_count == 2 and len(await _filas(mundo)) == antes + 4
+        async with mundo.fabrica() as s:
+            dobles = (await s.execute(text("SELECT count(*) FROM (SELECT file_path FROM files GROUP BY file_path HAVING count(*) > 1) t"))).scalar()
+        assert dobles == 0 and await mundo.marcador() is True

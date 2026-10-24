@@ -15,7 +15,7 @@
 {% if reg.en_marcha %}
 <section id="registro" class="audit-block audit-adoptar" hx-get="/ui/auditoria/registro"
          hx-trigger="every 2s" hx-swap="outerHTML">
-  <h2>{{ "Registrando los archivos nuevos…" if reg.incremental else "Registrando tu biblioteca…" }}</h2>
+  <h2>{{ "Registrando los archivos encontrados…" if reg.incremental else "Registrando tu biblioteca…" }}</h2>
   {% if reg.total %}
   <progress class="progress" value="{{ reg.procesados }}" max="{{ reg.total }}">
     {{ reg.procesados }} de {{ reg.total }}</progress>
@@ -30,7 +30,7 @@
 
 {% elif inc %}
 <section id="registro" class="audit-block audit-adoptar">
-  <h2 class="titulo-frase">Archivos nuevos en tu biblioteca</h2>
+  <h2 class="titulo-frase">Archivos encontrados sin registrar</h2>
   {% if cambio %}{% call ui.aviso("amber") %}Lo que hay en la carpeta ha cambiado desde que lo revisaste, así que no se ha registrado
     nada. Esta es la lista de ahora: míralo y confirma de nuevo.{% endcall %}{% endif %}
   {% if not inc.carpeta_accesible %}
@@ -38,33 +38,48 @@
     no se da por nuevo ni por perdido ningún archivo. Cuando vuelva a estar disponible, busca de nuevo.{% endcall %}
   {% else %}
   <p class="audit-why">Solo se ha mirado la lista de archivos de la carpeta (nombres y rutas): no se ha abierto ninguno ni se ha escrito
-    nada. Se buscan archivos .cbz, .cbr, .cb7, .pdf y .epub; los de otros formatos (por ejemplo .rar) no se cuentan aquí:
-    «Revisar mi biblioteca», más arriba, los enseña.</p>
+    nada, así que aún no se sabe si son tebeos distintos de los que ya tienes. Se buscan archivos .cbz, .cbr, .cb7, .pdf y .epub; los de
+    otros formatos (por ejemplo .rar) no se cuentan aquí: «Revisar mi biblioteca», más arriba, los enseña.</p>
+  {% if inc.ilegibles %}
+  {% call ui.aviso("amber") %}No se ha podido leer {{ inc.ilegibles }} {{ "carpeta o archivo" if inc.ilegibles == 1 else "carpetas o archivos" }}
+    de tu biblioteca (permisos o un fallo del disco). La lista de abajo puede estar incompleta, así que no se ofrece registrarla.
+    Arregla el acceso y busca de nuevo. No se da por perdido ningún archivo.{% endcall %}
+  {% endif %}
   <ul class="audit-resumen">
-    <li><strong>{{ inc.en_disco }}</strong> tebeos en la carpeta</li>
-    <li><strong>{{ inc.ya_registrados }}</strong> ya registrados: no se tocan</li>
-    <li><strong>{{ inc.nuevos }}</strong> en una ruta que ZascArr aún no conoce (si alguno es idéntico a otro ya registrado, no se añade dos
+    <li><strong>{{ inc.en_disco }}</strong> tebeos encontrados en la carpeta</li>
+    <li><strong>{{ inc.ya_registrados }}</strong> ya registrados: no se tocan. Esto incluye los que tienes sin clasificar, descartados o de
+      una serie retirada: no se vuelven a registrar ni se reactivan</li>
+    <li><strong>{{ inc.nuevos }}</strong> en una ruta sin registrar (si alguno es idéntico a otro ya registrado, no se añade dos
       veces: seguirá saliendo aquí mientras esa copia esté en la carpeta)</li>
     {% if inc.registrados_sin_fichero %}<li><strong>{{ inc.registrados_sin_fichero }}</strong> registrados cuyo archivo ya no está donde se
-      guardó: no se cambia ni se borra nada. Si el mismo contenido aparece entre los nuevos, se reenlaza su ficha</li>{% endif %}
+      guardó: no se cambia ni se borra nada. Si el mismo contenido aparece entre los encontrados, se reenlaza su ficha</li>{% endif %}
   </ul>
-  {% if inc.en_disco == 0 %}
+  {% if inc.en_disco == 0 and not inc.ilegibles %}
   {% call ui.aviso("amber") %}No hemos visto ningún tebeo en la carpeta. Si esperabas verlos, comprueba que el disco está montado. No se ha dado
     ningún archivo por perdido.{% endcall %}
   {% endif %}
-  {% if inc.hay_que_registrar %}
-  <p class="audit-why">Al registrarlos se lee cada archivo nuevo para reconocerlo (en una colección grande puede tardar). Cada uno acabará
-    como una ficha nueva (con serie sugerida o en <a href="/ui/pendientes">Por revisar</a>), como repetido de otro que ya tienes (no se
-    añade) o como el reenlace de uno que ya conocías y que ha cambiado de sitio. No se mueve, renombra ni borra ningún archivo, no se
-    consulta ninguna fuente de internet y no se vincula nada solo por el nombre de su carpeta.</p>
+  {% if inc.se_puede_confirmar %}
+  <p class="audit-why">Al registrarlos se <strong>lee cada archivo</strong> para reconocerlo, y en una colección grande o en un disco lento puede
+    tardar. Sigue en segundo plano: puedes cerrar la página. Cada uno acabará como una ficha nueva (con serie sugerida o en
+    <a href="/ui/pendientes">Por revisar</a>), como repetido de otro que ya tienes (no se añade) o como el reenlace de uno que ya conocías y que ha
+    cambiado de sitio. Si alguno cambia mientras se lee, no se registra. No se mueve, renombra ni borra ningún archivo, no se consulta ninguna
+    fuente de internet y no se vincula nada solo por el nombre de su carpeta.</p>
   <form hx-post="/ui/auditoria/registrar-nuevos" hx-target="#registro" hx-swap="outerHTML" hx-disabled-elt="find button">
     <input type="hidden" name="huella" value="{{ inc.huella }}">
-    <button type="submit" class="btn-primary">Registrar los {{ inc.nuevos }} archivos nuevos</button>
+    <button type="submit" class="btn-primary">Registrar los {{ inc.nuevos }} archivos sin registrar</button>
   </form>
-  {% elif inc.carpeta_accesible and inc.en_disco %}
-  <p class="audit-ok">No hay archivos nuevos: todo lo que hay en la carpeta ya está registrado.</p>
+  {% elif inc.recorrido_completo and inc.en_disco %}
+  <p class="audit-ok">No hay archivos sin registrar: todo lo que hay en la carpeta ya está registrado.</p>
   {% endif %}
   {% endif %}
+</section>
+
+{% elif reg.fase.value == "ocupado" %}
+<section id="registro" class="audit-block audit-adoptar">
+  <h2 class="titulo-frase">Ya hay un registro en marcha</h2>
+  {% call ui.aviso("amber") %}Otro registro de la biblioteca está funcionando ahora mismo (en otra ventana u otro proceso). No se ha hecho nada
+    desde aquí. Espera a que termine y busca de nuevo.{% endcall %}
+  {{ buscar("Buscar archivos sin registrar") }}
 </section>
 
 {% elif reg.fase.value in ("terminado", "interrumpido") and reg.incremental %}
@@ -72,10 +87,10 @@
   <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
   {#- Registro de archivos NUEVOS (#326). Cada archivo cae en UNA sola categoría; «mirados» no es «añadidos». -#}
   {% if reg.completo %}
-  <h2>Archivos nuevos revisados</h2>
+  <h2>Archivos sin registrar revisados</h2>
   <p class="audit-why">Ni un archivo se ha movido, renombrado ni borrado.</p>
   {% else %}
-  <h2 class="titulo-frase">El registro de archivos nuevos ha quedado incompleto</h2>
+  <h2 class="titulo-frase">El registro de los archivos encontrados ha quedado incompleto</h2>
   {% call ui.aviso("amber") %}
     {% if reg.fase.value == "interrumpido" %}
     Se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba guardado.
@@ -86,7 +101,7 @@
   {% endcall %}
   {% endif %}
   <ul class="audit-resumen">
-    <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> archivos nuevos mirados{% if reg.ya_no_pendientes %}
+    <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> archivos mirados{% if reg.ya_no_pendientes %}
       (otros <strong>{{ reg.ya_no_pendientes }}</strong> de la lista que confirmaste ya no estaban pendientes al empezar: no se ha hecho nada con ellos){% endif %}</li>
     <li><strong>{{ reg.filas_nuevas }}</strong> filas nuevas en el catálogo:
       <strong>{{ reg.registrados - reg.reenlazados }}</strong> con serie sugerida (falta confirmar número y edición) y
@@ -94,8 +109,8 @@
     {% if reg.reenlazados %}<li><strong>{{ reg.reenlazados }}</strong> eran un archivo que ya conocías y que ha cambiado de sitio: se ha reenlazado su ficha
       (su serie, su historial y tus decisiones se conservan; no son filas nuevas)</li>{% endif %}
     <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro que ya tienes registrado): no se añaden. No se ha borrado ni movido ninguna copia</li>
-    {% if reg.ambiguos %}<li><strong>{{ reg.ambiguos | length }}</strong> con un contenido que coincide con varios archivos que ya no están:
-      no se ha tocado ninguno ni se ha creado ficha, porque ZascArr no sabe a cuál pertenece</li>{% endif %}
+    {% if reg.ambiguos %}<li><strong>{{ reg.ambiguos | length }}</strong> que ZascArr no ha podido atribuir con seguridad a un archivo
+      que ya conocía: no se ha tocado ninguna ficha ni se ha creado otra (abajo, cuáles y por qué)</li>{% endif %}
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
     {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
     {% if reg.no_guardados %}<li><strong>{{ reg.no_guardados }}</strong> del último grupo no llegaron a guardarse
@@ -104,22 +119,22 @@
       No se cuentan como añadidos; al buscar de nuevo se comprueba</li>{% endif %}
   </ul>
   {% if reg.ambiguos %}
-  <details><summary>Ver los que no se han podido atribuir</summary>
+  <details><summary>Ver cuáles no se han podido atribuir y por qué</summary>
     <ul class="audit-resumen">
-      {% for a in reg.ambiguos[:10] %}<li>{{ a }}</li>{% endfor %}
-      {% if reg.ambiguos | length > 10 %}<li>… y {{ reg.ambiguos | length - 10 }} más.</li>{% endif %}
+      {% for a in reg.ambiguos[:50] %}<li>{{ a }}</li>{% endfor %}
+      {% if reg.ambiguos | length > 50 %}<li>… y {{ reg.ambiguos | length - 50 }} más.</li>{% endif %}
     </ul>
   </details>
   {% endif %}
   {% if reg.errores %}
-  <details><summary>Ver los que han dado error</summary>
+  <details><summary>Ver los que no se han podido registrar y por qué</summary>
     <ul class="audit-resumen">
-      {% for e in reg.errores[:10] %}<li>{{ e }}</li>{% endfor %}
-      {% if reg.errores | length > 10 %}<li>… y {{ reg.errores | length - 10 }} más.</li>{% endif %}
+      {% for e in reg.errores[:50] %}<li>{{ e }}</li>{% endfor %}
+      {% if reg.errores | length > 50 %}<li>… y {{ reg.errores | length - 50 }} más.</li>{% endif %}
     </ul>
   </details>
   {% endif %}
-  {{ buscar("Buscar archivos nuevos otra vez") }}
+  {{ buscar("Buscar archivos sin registrar otra vez") }}
 </section>
 
 {% elif reg.fase.value in ("terminado", "interrumpido") %}
@@ -184,9 +199,9 @@
 {% elif estado.value == "hecha" %}
 <section id="registro" class="audit-block">
   <h2 class="titulo-frase">Tu biblioteca ya está registrada</h2>
-  <p class="audit-why">Si has añadido tebeos a tus carpetas después, ZascArr no los ve solo: pídele que busque los nuevos. Buscar solo mira
+  <p class="audit-why">Si has añadido tebeos a tus carpetas después, ZascArr no los ve solo: pídele que busque los que aún no tiene registrados. Buscar solo mira
     nombres y rutas; no cambia nada.</p>
-  {{ buscar("Buscar archivos nuevos") }}
+  {{ buscar("Buscar archivos sin registrar") }}
 </section>
 
 {% else %}
