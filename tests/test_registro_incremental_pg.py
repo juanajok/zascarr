@@ -630,6 +630,13 @@ class TestCarreraConElImportadorDeDescargas:
         repetidas = informe_reg.duplicate_count + len(informe_imp.duplicates)
         assert creadas == 1 and repetidas == 1                              # uno la incorporó y el otro lo informó como repetido
         assert informe_reg.error_count == 0 and not informe_imp.errors
+        # Ninguno de los dos informes describe «nada»: el que perdió dice de cuál es copia; el que ganó, lo que registró.
+        if informe_reg.duplicate_count:
+            assert "duplicado de" in informe_reg.duplicates[0] and "Carrera" in informe_reg.duplicates[0]
+            assert len(informe_imp.imported) + len(informe_imp.unsorted) == 1
+        else:
+            assert "duplicado de" in informe_imp.duplicates[0] and "Carrera" in informe_imp.duplicates[0]
+            assert informe_reg.added_count == 1 and informe_reg.registered + informe_reg.unsorted
 
     async def test_control_negativo_sin_el_cerrojo_el_mismo_escenario_si_duplica(self, mundo, descargas, monkeypatch):
         """Demuestra que la carrera era real: la misma prueba, sin el cerrojo, deja dos filas."""
@@ -667,15 +674,65 @@ class TestCarreraConElImportadorDeDescargas:
         import zascarr.services.importer as imp
         monkeypatch.setattr(imp, "ESPERA_MAXIMA_CERROJO_CONTENIDO_S", 0.3)
         _en_biblioteca, en_descargas, _sha = self._preparar(mundo, descargas)
+        otra = descargas / "Otra descarga.cbz"
+        _cbz(otra, "J")
         n = len(await _filas(mundo))
         async with mundo.fabrica() as registro:
             await imp.tomar_cerrojo_de_contenido(registro)
+            t0 = asyncio.get_running_loop().time()
             informe = await _ciclo_del_importador(mundo)
-            assert informe.errors and "se reintentará en el próximo ciclo" in informe.errors[0]
-            assert en_descargas.exists() and len(await _filas(mundo)) == n    # el archivo no se movió ni se registró
+            assert asyncio.get_running_loop().time() - t0 < 2.5               # una sola espera: el ciclo se corta, no espera por cada archivo
+            assert "se reintentará en el próximo ciclo" in informe.errors[0] and "se detuvo antes de mirar el resto" in informe.errors[1]
+            assert en_descargas.exists() and otra.exists() and len(await _filas(mundo)) == n     # nada se movió ni se registró
             await registro.rollback()
-        siguiente = await _ciclo_del_importador(mundo)                        # sin el cerrojo ocupado, el siguiente ciclo lo incorpora
-        assert not siguiente.errors and len(await _filas(mundo)) == n + 1
+        siguiente = await _ciclo_del_importador(mundo)                        # sin el cerrojo ocupado, el siguiente ciclo los incorpora
+        assert not siguiente.errors and len(await _filas(mundo)) == n + 2
+
+    async def test_el_cerrojo_se_toma_antes_de_buscar_por_contenido_y_se_suelta_tras_el_commit_del_ciclo(self, mundo, descargas, monkeypatch):
+        import zascarr.services.importer as imp
+        _en_biblioteca, _en_descargas, _sha = self._preparar(mundo, descargas)
+        pasos: list[str] = []
+        original_cerrojo, original_busqueda = imp.tomar_cerrojo_de_contenido, imp._coincidencias_de_hash
+
+        async def cerrojo(db):
+            pasos.append("cerrojo")
+            await original_cerrojo(db)
+
+        async def busqueda(db, sha):
+            pasos.append("busqueda")
+            return await original_busqueda(db, sha)
+        monkeypatch.setattr(imp, "tomar_cerrojo_de_contenido", cerrojo)
+        monkeypatch.setattr(imp, "_coincidencias_de_hash", busqueda)
+        from zascarr.services.importer import Importer
+        async with mundo.fabrica() as s:
+            await Importer(s).scan_and_import()
+            assert pasos[:2] == ["cerrojo", "busqueda"]                       # primero el cerrojo, después la búsqueda por contenido
+            monkeypatch.setattr(imp, "ESPERA_MAXIMA_CERROJO_CONTENIDO_S", 0.3)
+            async with mundo.fabrica() as otro:
+                with pytest.raises(imp.CerrojoDeContenidoOcupado):            # ANTES del commit sigue tomado
+                    await original_cerrojo(otro)
+                await otro.rollback()
+            await s.commit()
+        async with mundo.fabrica() as otro:
+            await original_cerrojo(otro)                                      # TRAS el commit, libre
+            await otro.rollback()
+
+    async def test_si_el_ciclo_del_importador_falla_a_medias_el_cerrojo_se_suelta_al_cerrar_la_sesion(self, mundo, descargas, monkeypatch):
+        import zascarr.services.importer as imp
+        self._preparar(mundo, descargas)
+        original = imp.Importer._persist_run
+
+        async def explota(self, report):
+            raise RuntimeError("fallo al guardar el informe del ciclo")
+        monkeypatch.setattr(imp.Importer, "_persist_run", explota)
+        with pytest.raises(RuntimeError):
+            async with mundo.fabrica() as s:
+                await imp.Importer(s).scan_and_import()
+                await s.commit()
+        monkeypatch.setattr(imp.Importer, "_persist_run", original)
+        async with mundo.fabrica() as otro:
+            await imp.tomar_cerrojo_de_contenido(otro)                        # la sesión se cerró con rollback: no queda tomado
+            await otro.rollback()
 
     async def test_el_cerrojo_se_libera_al_acabar_la_transaccion_aunque_falle(self, mundo):
         import zascarr.services.importer as imp
