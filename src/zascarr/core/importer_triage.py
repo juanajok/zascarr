@@ -49,7 +49,8 @@ from xml.etree import ElementTree
 
 from PIL import Image
 
-from zascarr.core.formato_contenedor import (  # noqa: F401  (IMAGE_EXTS y natural_key se reexportan: otros módulos los importan de aquí)
+# IMAGE_EXTS y natural_key se reexportan: otros módulos los importan de aquí.
+from zascarr.core.formato_contenedor import (  # noqa: F401
     AVISO_CLASE,
     IMAGE_EXTS,
     MAX_ENTRADAS,
@@ -80,9 +81,12 @@ _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 # DoS: un ComicInfo.xml real mide pocos KB. Rechazar los enormes ANTES de
 # descomprimirlos en memoria (una ZIP bomb no debe reventar una Pi).
 MAX_COMICINFO_BYTES = 1 * 1024 * 1024   # 1 MiB
-MAX_ZIP_ENTRIES = MAX_ENTRADAS          # entradas máximas por ZIP (antes 1000; el máximo medido en la biblioteca real es 941)
-# El tope de 500 MiB descomprimidos EN TOTAL desapareció (#307, D3): dejaba sin ComicInfo ni anchura a los ZIP grandes aunque solo se
-# lee una página. Ahora se acota la ENTRADA QUE SE LEE (`formato_contenedor.MAX_ENTRADA_LEIDA` / `MAX_RATIO_LEIDA`).
+MAX_ZIP_ENTRIES = MAX_ENTRADAS
+# entradas máximas por ZIP (antes 1000; el máximo medido en la biblioteca real es 941)
+# El tope de 500 MiB descomprimidos EN TOTAL desapareció (#307, D3): dejaba sin ComicInfo ni
+# anchura a los ZIP grandes aunque solo se
+# lee una página. Ahora se acota la ENTRADA QUE SE LEE (`formato_contenedor.MAX_ENTRADA_LEIDA` /
+# `MAX_RATIO_LEIDA`).
 
 
 def guess_source_tag(filename: str) -> str | None:
@@ -179,7 +183,8 @@ class TriageResult:
     path: Path
     sha256: str | None = None
     file_format: str | None = None          # cbz | cbr | pdf | cb7 (la extensión DECLARADA)
-    formato_contenido: dict | None = None   # el formato REAL por contenido (#307); va a files.metadata
+    formato_contenido: dict | None = None
+    # el formato REAL por contenido (#307); va a files.metadata
     comic_info: ComicInfo | None = None
     width_px: int | None = None
     source_tag: str | None = None
@@ -213,21 +218,27 @@ def triage(path: Path) -> TriageResult:
     ext = path.suffix.lower()
     result.file_format = ext.lstrip(".")
 
-    # #307: la decisión de qué hacer con el fichero sale de un único sitio (`formato_contenedor`), por contenido y no solo por extensión.
+    # #307: la decisión de qué hacer con el fichero sale de un único sitio (`formato_contenedor`),
+    # por contenido y no solo por extensión.
     firma = firma_de(path)
     trat = tratamiento(ext, firma)
-    # Una firma ILEGIBLE (fallo pasajero de lectura) NO se guarda: quedaría fijada en la base y suprimiría la portada de un fichero sano.
+    # Una firma ILEGIBLE (fallo pasajero de lectura) NO se guarda: quedaría fijada en la base y
+    # suprimiría la portada de un fichero sano.
     result.formato_contenido = None if firma is Firma.ILEGIBLE else formato_contenido(firma)
 
     if trat is Tratamiento.AVISAR and ext in (".cbz", ".zip") and firma is Firma.OTRO:
-        # Declarado ZIP, pero el contenido no es ningún contenedor conocido: es un fichero ROTO o una descarga incompleta. Como siempre: sin hash
-        # (dos descargas incompletas casi nunca cortan en el mismo byte; un hash sugeriría una identidad de contenido que no existe).
+        # Declarado ZIP, pero el contenido no es ningún contenedor conocido: es un fichero ROTO o
+        # una descarga incompleta. Como siempre: sin hash
+        # (dos descargas incompletas casi nunca cortan en el mismo byte; un hash sugeriría una
+        # identidad de contenido que no existe).
         result.warnings.append("zip ilegible: el contenido no es un ZIP válido")
         return result
 
     if trat is not Tratamiento.LEER_COMO_ZIP:
-        # Bug real encontrado en vivo (2026-09-25, B16): este return salía SIN calcular el sha256, así que ningún .cbr tenía hash y la
-        # deduplicación de B3 no funcionaba para ellos. Hashear NO exige descomprimir: son los bytes del fichero. En streaming.
+        # Bug real encontrado en vivo (2026-09-25, B16): este return salía SIN calcular el sha256,
+        # así que ningún .cbr tenía hash y la
+        # deduplicación de B3 no funcionaba para ellos. Hashear NO exige descomprimir: son los
+        # bytes del fichero. En streaming.
         try:
             result.sha256 = sha256_streaming(path)
         except OSError as exc:
@@ -237,19 +248,22 @@ def triage(path: Path) -> TriageResult:
             result.warnings.append(aviso_de_formato(ext, firma))
         return result
 
-    # Hash en streaming y zip abierto DESDE LA RUTA: la memoria no depende del tamaño del fichero (integrales de 1,2 GB, ensayo 2026-10-01).
+    # Hash en streaming y zip abierto DESDE LA RUTA: la memoria no depende del tamaño del fichero
+    # (integrales de 1,2 GB, ensayo 2026-10-01).
     # El ZipFile solo lee el directorio central y las pocas entradas que se piden.
     try:
         sha256 = sha256_streaming(path)
         motivo = motivo_fuera_de_limite(path)
-        if motivo:                                       # sin abrirlo: `ZipFile()` cargaría el directorio central entero en memoria
+        if motivo:
+        # sin abrirlo: `ZipFile()` cargaría el directorio central entero en memoria
             result.sha256 = sha256
             result.formato_contenido = formato_contenido(firma, ClaseZip.LIMITE, motivo)
             result.warnings.append(aviso_de_clase(ClaseZip.LIMITE, motivo) + " (ignorado)")
             return result
         zf = zipfile.ZipFile(path)
     except (OSError, zipfile.BadZipFile) as exc:
-        # sha256 sin asignar a propósito: el hash de basura binaria de un zip roto no sirve para dedupe.
+        # sha256 sin asignar a propósito: el hash de basura binaria de un zip roto no sirve para
+        # dedupe.
         result.warnings.append(f"zip ilegible: {exc}")
         result.formato_contenido = formato_contenido(firma, ClaseZip.INVALIDO)
         return result
@@ -259,15 +273,19 @@ def triage(path: Path) -> TriageResult:
         infos = zf.infolist()
         cls = clasificar_infos(infos)
         result.formato_contenido = formato_contenido(firma, cls.clase, cls.motivo_limite)
-        declarado_tebeo = ext in (".cbz", ".zip")        # el usuario lo declara tebeo: la clase no bloquea la lectura (sí los topes)
+        declarado_tebeo = ext in (".cbz", ".zip")
+        # el usuario lo declara tebeo: la clase no bloquea la lectura (sí los topes)
         if cls.clase in (ClaseZip.LIMITE, ClaseZip.CIFRADO):
             result.warnings.append(aviso_de_clase(cls.clase, cls.motivo_limite) + " (ignorado)")
             return result
         if not declarado_tebeo and cls.clase is not ClaseZip.TEBEO:
-            # Un .cbr/.cb7 que es un ZIP pero no un tebeo comprobado: se queda con hash, sin portada ni ComicInfo, y se dice por qué.
-            result.warnings.append(AVISO_CLASE.get(cls.clase, "No se pudo comprobar que sea un tebeo."))
+            # Un .cbr/.cb7 que es un ZIP pero no un tebeo comprobado: se queda con hash, sin
+            # portada ni ComicInfo, y se dice por qué.
+            result.warnings.append(
+                AVISO_CLASE.get(cls.clase, "No se pudo comprobar que sea un tebeo."))
             return result
-        # Un .cbz/.zip declarado se lee como siempre y NO recibe aviso por su clase (un especial de 8 páginas o un pack no son un error): la clase
+        # Un .cbz/.zip declarado se lee como siempre y NO recibe aviso por su clase (un especial
+        # de 8 páginas o un pack no son un error): la clase
         # queda guardada en `formato_contenido` para quien la necesite.
 
         names = [i.filename for i in infos]
@@ -281,7 +299,8 @@ def triage(path: Path) -> TriageResult:
                 result.warnings.append("ComicInfo.xml demasiado grande (ignorado)")
             else:
                 try:
-                    result.comic_info = parse_comic_info(leer_acotado(zf, info, tope=MAX_COMICINFO_BYTES))
+                    result.comic_info = parse_comic_info(
+                        leer_acotado(zf, info, tope=MAX_COMICINFO_BYTES))
                 except EntradaNoLegible as exc:
                     result.warnings.append(f"ComicInfo.xml {exc} (ignorado)")
                 except ElementTree.ParseError as exc:

@@ -64,7 +64,9 @@ COMIC_EXTS = {".cbz", ".cbr", ".cb7", ".pdf", ".epub"}
 # montaje que un vaciado real a mano.
 UMBRAL_DESAPARICION_MASIVA_FRACCION = 0.5
 UMBRAL_DESAPARICION_MASIVA_MINIMO = 10
-LOTE_FORMATO_CONTENIDO = 100     # #307: filas por ciclo del relleno del formato real (cada una lee ≤ 512 B y, si es ZIP, su directorio central); ver contrato §12.2
+LOTE_FORMATO_CONTENIDO = 100
+# #307: filas por ciclo del relleno del formato real (cada una lee ≤ 512 B y, si es ZIP, su
+# directorio central); ver contrato §12.2
 
 TRADITION_MAP = {
     "american":       "Comics",
@@ -223,7 +225,8 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     fila.missing_since = None
     fila.imported_at = datetime.now(UTC)
     meta = dict(fila.metadata_ or {})
-    if tr.formato_contenido:                                  # #307: el formato REAL del fichero que ahora está en `dest`
+    if tr.formato_contenido:
+    # #307: el formato REAL del fichero que ahora está en `dest`
         meta["formato_contenido"] = tr.formato_contenido
     if fila.original_sha256 is not None and tr.sha256 == fila.original_sha256:
         meta.pop("comicinfo_estado", None)
@@ -243,7 +246,8 @@ class ResultadoRelleno:
 
 
 def _sin_formato_contenido():
-    """`metadata` sin la clave. Ojo: con `metadata` NULL, `NOT (metadata ? 'clave')` vale NULL (no verdadero) y la fila no se elegiría nunca."""
+    """`metadata` sin la clave. Ojo: con `metadata` NULL, `NOT (metadata ? 'clave')` vale NULL (no
+    verdadero) y la fila no se elegiría nunca."""
     return or_(File.metadata_.is_(None), ~File.metadata_.has_key("formato_contenido"))
 
 
@@ -380,43 +384,65 @@ class Importer:
         await self._persist_run(report)
         return report
 
-    async def rellenar_formato_contenido(self, limite: int = LOTE_FORMATO_CONTENIDO) -> ResultadoRelleno:
-        """#307 (D5, decidida a demanda): guarda en `files.metadata["formato_contenido"]` el formato REAL de los `.cbr`/`.cb7` ya registrados que aún no
-        lo tienen (solo lectura del fichero: ≤ 512 bytes y, si es un ZIP, su directorio central). Sin migración.
+    async def rellenar_formato_contenido(
+        self, limite: int = LOTE_FORMATO_CONTENIDO
+    ) -> ResultadoRelleno:
+        """#307 (D5, decidida a demanda): guarda en `files.metadata["formato_contenido"]` el
+        formato REAL de los `.cbr`/`.cb7` ya registrados que aún no
+        lo tienen (solo lectura del fichero: ≤ 512 bytes y, si es un ZIP, su directorio central).
+        Sin migración.
 
-        **NO se ejecuta sola**: ni `scan_and_import` ni ningún bucle la llaman. Se pide explícitamente (`python -m zascarr.cli.rellenar_formato --apply`,
-        o `scripts/rellenar-formato.sh`) y devuelve un resultado identificable. Automatizarla exigiría antes medir su coste de lectura en el USB y aprobar su presupuesto.
+        **NO se ejecuta sola**: ni `scan_and_import` ni ningún bucle la llaman. Se pide
+        explícitamente (`python -m zascarr.cli.rellenar_formato --apply`,
+        o `scripts/rellenar-formato.sh`) y devuelve un resultado identificable. Automatizarla
+        exigiría antes medir su coste de lectura en el USB y aprobar su presupuesto.
 
         Garantías (pruebas con Postgres real en `tests/test_formato_contenido_relleno_pg.py`):
-          · **Conserva las demás claves** de `metadata` aunque otro proceso las escriba entre la lectura y la escritura: no se reescribe el diccionario
-            entero, se FUSIONA en la base (`metadata || {...}`) en una sola sentencia atómica por fila.
-          · **No sobrescribe**: la sentencia solo actúa si la clave aún no existe (`metadata IS NULL OR NOT metadata ? 'formato_contenido'`), así que dos
+          · **Conserva las demás claves** de `metadata` aunque otro proceso las escriba entre la
+          lectura y la escritura: no se reescribe el diccionario
+            entero, se FUSIONA en la base (`metadata || {...}`) en una sola sentencia atómica por
+            fila.
+          · **No sobrescribe**: la sentencia solo actúa si la clave aún no existe (`metadata IS
+          NULL OR NOT metadata ? 'formato_contenido'`), así que dos
             ejecuciones solapadas no se pisan y una fila rellena no se lee otra vez.
-          · **Acotado**: como máximo `limite` filas por ejecución, ELEGIDAS AL AZAR entre las pendientes (si fueran siempre las mismas, un grupo de ficheros
-            ilegibles ocuparía el lote para siempre; el azar reduce ese riesgo pero NO garantiza un plazo de finalización).
-          · Un fichero ilegible (disco desmontado, permisos) no se marca: queda pendiente y se reintenta, no se clasifica como «sin contenido»."""
+          · **Acotado**: como máximo `limite` filas por ejecución, ELEGIDAS AL AZAR entre las
+          pendientes (si fueran siempre las mismas, un grupo de ficheros
+            ilegibles ocuparía el lote para siempre; el azar reduce ese riesgo pero NO garantiza
+            un plazo de finalización).
+          · Un fichero ilegible (disco desmontado, permisos) no se marca: queda pendiente y se
+          reintenta, no se clasifica como «sin contenido»."""
         pendientes_antes = await self.contar_pendientes_formato()
         candidatas = await self._candidatas_formato(limite)
         if not candidatas:
-            return ResultadoRelleno(limite=limite, pendientes_antes=pendientes_antes, leidas=0, rellenadas=0, ilegibles=0, pendientes_despues=pendientes_antes)
-        formatos = await asyncio.to_thread(lambda: [formato_real_de(Path(ruta)) for _id, ruta in candidatas])
+            return ResultadoRelleno(limite=limite, pendientes_antes=pendientes_antes,
+                                    leidas=0, rellenadas=0, ilegibles=0,
+                                    pendientes_despues=pendientes_antes)
+        formatos = await asyncio.to_thread(
+            lambda: [formato_real_de(Path(ruta)) for _id, ruta in candidatas])
         rellenadas = await self._aplicar_formato(candidatas, formatos)
         ilegibles = sum(1 for fc in formatos if fc is None)
         pendientes_despues = await self.contar_pendientes_formato()
-        logger.info("importer.formato_contenido_rellenado", filas=rellenadas, leidas=len(candidatas), ilegibles=ilegibles, pendientes=pendientes_despues)
-        return ResultadoRelleno(limite=limite, pendientes_antes=pendientes_antes, leidas=len(candidatas), rellenadas=rellenadas, ilegibles=ilegibles,
-                                pendientes_despues=pendientes_despues)
+        logger.info("importer.formato_contenido_rellenado", filas=rellenadas,
+                    leidas=len(candidatas), ilegibles=ilegibles,
+                    pendientes=pendientes_despues)
+        return ResultadoRelleno(limite=limite, pendientes_antes=pendientes_antes,
+                                leidas=len(candidatas), rellenadas=rellenadas,
+                                ilegibles=ilegibles, pendientes_despues=pendientes_despues)
 
     async def contar_pendientes_formato(self) -> int:
-        """Cuántas filas `.cbr`/`.cb7` presentes aún no tienen `formato_contenido` (no lee ningún fichero)."""
+        """Cuántas filas `.cbr`/`.cb7` presentes aún no tienen `formato_contenido` (no lee ningún
+        fichero)."""
         return (await self._db.execute(
-            select(func.count(File.id)).where(File.file_format.in_([FileFormat.CBR, FileFormat.CB7]), File.is_missing.is_(False), _sin_formato_contenido())
+            select(func.count(File.id)).where(
+                File.file_format.in_([FileFormat.CBR, FileFormat.CB7]),
+                File.is_missing.is_(False), _sin_formato_contenido())
         )).scalar_one()
 
     async def _candidatas_formato(self, limite: int) -> list[tuple]:
         filas = (await self._db.execute(
             select(File.id, File.file_path)
-            .where(File.file_format.in_([FileFormat.CBR, FileFormat.CB7]), File.is_missing.is_(False), _sin_formato_contenido())
+            .where(File.file_format.in_([FileFormat.CBR, FileFormat.CB7]),
+                   File.is_missing.is_(False), _sin_formato_contenido())
             .order_by(func.random()).limit(limite)
         )).all()
         return [(f.id, f.file_path) for f in filas]
@@ -543,7 +569,8 @@ class Importer:
             metadata["cohorte"] = outcome.cohorte_explicacion
         if outcome.edition_kind:
             metadata["edicion"] = outcome.edition_kind
-        if tr.formato_contenido:                                  # #307: formato REAL por contenido (file_format sigue siendo la extensión)
+        if tr.formato_contenido:
+        # #307: formato REAL por contenido (file_format sigue siendo la extensión)
             metadata["formato_contenido"] = tr.formato_contenido
 
         file_rec = File(
