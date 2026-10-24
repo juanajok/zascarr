@@ -414,6 +414,10 @@ class Importer:
                 report.errors.append(
                     f"{path.name}: otra operación estaba registrando contenido; "
                     "se reintentará en el próximo ciclo")
+                # Los demás esperarían lo mismo (60 s cada uno): se corta el recorrido. Siguen en
+                # descargas, intactos, y el próximo ciclo los retoma.
+                report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
+                break
             except Exception as exc:
                 logger.exception("importer.file_failed", path=str(path))
                 report.errors.append(f"{path.name}: {exc}")

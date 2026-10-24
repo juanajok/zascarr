@@ -96,11 +96,17 @@ pantalla dice el total y que el listado está limitado. Una copia que sigue en l
 ### 6.5 Concurrencia con el importador de descargas
 Los dos crean filas buscando antes por contenido y la columna `sha256_hash` no es única, así que podían leer «nadie tiene esto» a la vez e insertar uno cada uno.
 Ahora ambos pasan por `tomar_cerrojo_de_contenido` en `_triage_and_match`:
-- **Quién espera a quién:** el registro confirma por lotes (≤ 25 archivos), el importador al final de su ciclo. Quien llega con el cerrojo ocupado reintenta cada 0,25 s hasta 60 s.
-- **Si se agota la espera:** el **importador** deja el archivo en descargas y anota «se reintentará en el próximo ciclo»; el **registro** se detiene (fase «ocupado»: el catálogo estaba ocupado,
-  lo ya confirmado se conserva, el lote en curso no se guarda) y se pide buscar de nuevo. No se inserta nada sin el cerrojo.
-- **Liberación:** es un cerrojo de transacción: se suelta con el `commit` o el `rollback`, también si algo falla. Es de una sola clave, así que un ciclo largo del importador ocupa una
-  única entrada de la tabla de cerrojos y no una por archivo.
+- **Dónde se toma y cuándo se suelta:** en `_triage_and_match`, justo después de calcular el hash del archivo y **antes de cualquier búsqueda por contenido** (prueba del orden: primero el cerrojo, luego la búsqueda).
+  Se suelta al terminar **la transacción de quien lo tiene**: el registro confirma por lotes (≤ 25 archivos); el importador, al hacer `commit` el llamador al acabar el ciclo (`main._ejecutar_ciclo_y_avisar`). Un fallo de un
+  archivo suelto no lo suelta (la transacción sigue); un fallo del ciclo entero cierra la sesión con *rollback* y lo suelta (pruebas: tras el commit está libre y antes no; tras un fallo a medias queda libre).
+- **Qué ocurre durante la espera de 60 s:** quien llega con el cerrojo ocupado **no abre otra transacción ni aborta la suya**: reintenta la misma consulta cada 0,25 s (sin bloquear el bucle de eventos).
+  Si pasan 60 s lanza `CerrojoDeContenidoOcupado` **antes de insertar nada**:
+  - **importador:** anota «otra operación estaba registrando contenido; se reintentará en el próximo ciclo» **y corta el recorrido** («El ciclo se detuvo antes de mirar el resto de las descargas»), para no esperar 60 s por
+    cada archivo. Los archivos siguen en descargas, intactos; el siguiente ciclo (cada `import_interval_minutes`) los retoma. Lo ya procesado en ese ciclo se confirma como siempre. Queda visible en el informe del ciclo
+    (`errors`), no es un fallo silencioso.
+  - **registro:** se detiene en la fase «El catálogo estaba ocupado» (lo confirmado se conserva, el lote en curso no se guarda) y la pantalla pide buscar de nuevo; no se crea el informe `registro_incremental` de un registro que no terminó.
+  Si la ocupación se repite, cada ciclo/intento vuelve a fallar visiblemente con el mismo mensaje; ninguna operación queda esperando indefinidamente.
+- **Informes de los dos lados:** el que perdió la carrera lo cuenta como repetido y nombra el archivo del que es copia («duplicado de …»); el que ganó cuenta lo que registró. Ninguno dice «nada» ni queda sin explicar (prueba).
 - **Coste:** mientras un ciclo del importador tiene una transacción abierta, un registro de la biblioteca espera (hasta 60 s por archivo y luego se detiene). Es un reparto asumido:
   no hay carrera y nada se pierde, a cambio de que los dos no avancen a la vez cuando coinciden. No hay restricción única nueva (habría que revisar los datos existentes).
 - **Otros escritores:** el etiquetado y las asignaciones no crean filas por contenido; no pasan por el cerrojo.
@@ -109,6 +115,8 @@ Ahora ambos pasan por `tomar_cerrojo_de_contenido` en `_triage_and_match`:
 
 - **Cobertura del cerrojo de contenido:** lo toman el importador y los registros de la biblioteca (los escritores que crean filas por contenido). Si en el futuro aparece otro, debe pasar también por `_triage_and_match`.
 - **El cerrojo no sustituye a una restricción única:** si algo insertara filas sin pasar por ahí, la base no lo impediría (revisarlo es otra decisión).
+- **Deriva de nombre o formato:** la guarda de coherencia mira tamaño y fecha, no el contenido: un archivo sustituido por otro de **otro formato o estructura interna** conservando ambos pasaría. Un mismo nombre con contenido en otro formato se trata por
+  el triaje de #307 en el momento de leer (`triage` decide por contenido); este flujo no amplía eso. Si se amplía el flujo (p. ej. a otros contenedores), hay que revisar esta guarda.
 - **Cambios que conservan tamaño y fecha** no se detectan al leer (§6.1).
 - **Un contenido distinto en una ruta ya registrada** (archivo sustituido) no se detecta: es otro problema, no una alta.
 - **Los formatos fuera de `COMIC_EXTS`** (`.rar`, `.tar`…) no se cuentan aquí: los enseña «Revisar mi biblioteca».
@@ -134,7 +142,9 @@ Ahora ambos pasan por `tomar_cerrojo_de_contenido` en `_triage_and_match`:
 | Registro incremental e importación del MISMO contenido a la vez: una sola fila y ambos resultados fieles | `TestCarreraConElImportadorDeDescargas::test_con_el_cerrojo_hay_una_sola_fila…` |
 | La carrera era real (el mismo escenario sin el cerrojo duplica) | `…::test_control_negativo_sin_el_cerrojo_el_mismo_escenario_si_duplica` |
 | Cerrojo ocupado por el importador → el registro se detiene en «ocupado» sin insertar; por el registro → el importador deja el archivo y reintenta | `…::test_si_el_importador_tiene_el_cerrojo…`, `…::test_si_el_registro_tiene_el_cerrojo…` |
-| El cerrojo se libera aunque falle quien lo tenía | `…::test_el_cerrojo_se_libera_al_acabar_la_transaccion_aunque_falle` |
+| El cerrojo se libera aunque falle quien lo tenía | `…::test_el_cerrojo_se_libera_al_acabar_la_transaccion_aunque_falle`, `…::test_si_el_ciclo_del_importador_falla_a_medias…` |
+| El importador toma el cerrojo antes de buscar por contenido y lo suelta tras el commit del ciclo | `…::test_el_cerrojo_se_toma_antes_de_buscar_por_contenido_y_se_suelta_tras_el_commit_del_ciclo` |
+| Con el cerrojo ocupado el importador espera una sola vez, corta el ciclo, deja las descargas y las incorpora en el siguiente | `…::test_si_el_registro_tiene_el_cerrojo_el_importador_deja_el_archivo_y_lo_reintenta` |
 | Cada archivo mirado cae en una categoría y el total cuadra; omitidos con su causa | `TestContabilidadYRecuperacion::test_cada_archivo_del_alcance_cae_en_una_categoria…` |
 | Commit aplicado con la respuesta perdida: se acredita sin duplicar ni decir «no se hizo nada» | `TestContabilidadYRecuperacion::test_commit_aplicado_con_la_respuesta_perdida…` |
 | El límite de 50 incidencias dice el total | `test_registro_incremental::TestLimiteVisibleDeIncidencias` |
