@@ -76,9 +76,10 @@
 
 {% elif reg.fase.value == "ocupado" %}
 <section id="registro" class="audit-block audit-adoptar">
-  <h2 class="titulo-frase">Ya hay un registro en marcha</h2>
-  {% call ui.aviso("amber") %}Otro registro de la biblioteca está funcionando ahora mismo (en otra ventana u otro proceso). No se ha hecho nada
-    desde aquí. Espera a que termine y busca de nuevo.{% endcall %}
+  <h2 class="titulo-frase">El catálogo estaba ocupado</h2>
+  {% call ui.aviso("amber") %}Otro registro de la biblioteca, o una importación de descargas, estaba usando el catálogo y no ha terminado a tiempo.
+    El registro se ha detenido sin esperar más. Lo que ya estuviera guardado se conserva; el resto no se ha registrado. Espera a que termine
+    y busca de nuevo: solo se intentará lo que falte, sin duplicar nada.{% endcall %}
   {{ buscar("Buscar archivos sin registrar") }}
 </section>
 
@@ -101,8 +102,9 @@
   {% endcall %}
   {% endif %}
   <ul class="audit-resumen">
-    <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> archivos mirados{% if reg.ya_no_pendientes %}
-      (otros <strong>{{ reg.ya_no_pendientes }}</strong> de la lista que confirmaste ya no estaban pendientes al empezar: no se ha hecho nada con ellos){% endif %}</li>
+    <li><strong>{{ reg.procesados }}</strong> de <strong>{{ reg.total }}</strong> archivos mirados</li>
+    {% if reg.omitidos %}<li><strong>{{ reg.omitidos | length }}</strong> de la lista que confirmaste no se han tratado: ya no estaban pendientes
+      o desaparecieron antes de leerlos. No son un error, pero tampoco están registrados (abajo, cuáles y por qué)</li>{% endif %}
     <li><strong>{{ reg.filas_nuevas }}</strong> filas nuevas en el catálogo:
       <strong>{{ reg.registrados - reg.reenlazados }}</strong> con serie sugerida (falta confirmar número y edición) y
       <strong>{{ reg.sin_identificar }}</strong> sin identificar, que te esperan en <a href="/ui/pendientes">Por revisar</a></li>
@@ -119,18 +121,26 @@
       No se cuentan como añadidos; al buscar de nuevo se comprueba</li>{% endif %}
   </ul>
   {% if reg.ambiguos %}
-  <details><summary>Ver cuáles no se han podido atribuir y por qué</summary>
+  <details><summary>Ver cuáles no se han podido atribuir y por qué ({{ reg.ambiguos | length }})</summary>
     <ul class="audit-resumen">
       {% for a in reg.ambiguos[:50] %}<li>{{ a }}</li>{% endfor %}
-      {% if reg.ambiguos | length > 50 %}<li>… y {{ reg.ambiguos | length - 50 }} más.</li>{% endif %}
+      {% if reg.ambiguos | length > 50 %}<li>Se muestran los 50 primeros de {{ reg.ambiguos | length }}; el resto no se lista aquí.</li>{% endif %}
+    </ul>
+  </details>
+  {% endif %}
+  {% if reg.omitidos %}
+  <details><summary>Ver cuáles no se han tratado y por qué ({{ reg.omitidos | length }})</summary>
+    <ul class="audit-resumen">
+      {% for o in reg.omitidos[:50] %}<li>{{ o }}</li>{% endfor %}
+      {% if reg.omitidos | length > 50 %}<li>Se muestran los 50 primeros de {{ reg.omitidos | length }}; el resto no se lista aquí.</li>{% endif %}
     </ul>
   </details>
   {% endif %}
   {% if reg.errores %}
-  <details><summary>Ver los que no se han podido registrar y por qué</summary>
+  <details><summary>Ver los que no se han podido registrar y por qué ({{ reg.errores | length }})</summary>
     <ul class="audit-resumen">
       {% for e in reg.errores[:50] %}<li>{{ e }}</li>{% endfor %}
-      {% if reg.errores | length > 50 %}<li>… y {{ reg.errores | length - 50 }} más.</li>{% endif %}
+      {% if reg.errores | length > 50 %}<li>Se muestran los 50 primeros de {{ reg.errores | length }}; el resto no se lista aquí.</li>{% endif %}
     </ul>
   </details>
   {% endif %}

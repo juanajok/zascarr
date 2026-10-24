@@ -1,6 +1,6 @@
 # Registro incremental de la biblioteca (#326)
 
-> Estado: **implementado en una PR en borrador; revisión 1 atendida** (recorrido incompleto, exclusión entre procesos, archivo que cambia, reenlace con original presente). Parte del refinamiento v1 de #326 (2026-10-23). Las decisiones marcadas «por defecto»
+> Estado: **implementado en una PR en borrador; revisiones 1 y 2 atendidas** (recorrido incompleto, exclusión entre procesos, carrera con el importador de descargas, archivo que cambia, reenlace con original presente, contabilidad de omitidos). Parte del refinamiento v1 de #326 (2026-10-23). Las decisiones marcadas «por defecto»
 > las tomó el implementador porque el refinamiento las dejaba abiertas; **están por ratificar** y se pueden cambiar sin tocar el resto.
 
 ## 1. Problema local (CLAUDE.md §13)
@@ -30,6 +30,7 @@ implementación ni se infiere de su UI cómo funcionan por dentro** (§13). Deci
 | `registro_biblioteca.iniciar(…, alcance)` | La misma exclusión (una ejecución a la vez) para el inicial y el incremental. |
 | `utils/fs.recorrer_comics` | Como `listar_comics`, pero **cuenta lo que no pudo leer** (`ilegibles`): `rglob` saltaba en silencio una subcarpeta sin permisos. Lo usan el inventario y `adopt`. |
 | `registro_biblioteca._cerrojo_de_registro` | Cerrojo consultivo de Postgres (`pg_try_advisory_lock`) en una conexión propia: **un solo registro (inicial o incremental) en marcha entre procesos**. Si no se obtiene, fase `ocupado` y no se hace nada. |
+| `importer.tomar_cerrojo_de_contenido` | **Sección crítica compartida «buscar por contenido → insertar»**: un cerrojo de transacción de Postgres (`pg_try_advisory_xact_lock`, una sola clave) que toma `_triage_and_match` —el punto común del importador y del registro— antes de buscar por hash y conserva hasta el fin de su transacción. El segundo escritor espera (máx. 60 s) y, al entrar, ya ve lo que el primero confirmó: lo trata como repetido. Sin migración. |
 | `LibraryAdopter._adopt_file` | Compara tamaño y fecha del archivo antes y después de leerlo: si cambió, **no se registra** un hash que ya no le corresponde. En incremental, un reenlace exige poder afirmar que la ruta anterior **ya no tiene** el archivo (`_fichero_de_la_fila_existe`). |
 | `GET /ui/auditoria/nuevos` | Busca (solo lectura: nombres y rutas). |
 | `POST /ui/auditoria/registrar-nuevos` | Registra **solo** las rutas que la persona vio: lleva la `huella`; si la carpeta ya no la da, no registra nada y enseña la lista actual. |
@@ -65,7 +66,7 @@ La huella resume **el conjunto de rutas** que la persona vio. Garantiza «regist
 desapareció una ruta), no se registra nada y se enseña la lista de ahora; además `adopt(alcance=…)` solo trata esas rutas aunque hayan aparecido más.
 **No protege el contenido**: el hash se calcula al registrar. Para que no se guarde un hash que ya no corresponda al archivo:
 - **Cambia manteniendo su ruta** mientras se lee: se compara (tamaño, fecha) antes y después de leerlo; si difieren, **no se registra**, se cuenta como error con causa y
-  vuelve a salir en la siguiente búsqueda. *Límite:* un cambio que conserve tamaño **y** fecha no se detecta.
+  vuelve a salir en la siguiente búsqueda. *Límite:* un cambio que conserve tamaño **y** fecha no se detecta. Es una **guarda**, no una instantánea inmutable del contenido.
 - **Desaparece** entre la búsqueda y la lectura: no es un error; se cuenta como «ya no estaba pendiente».
 - **Se sustituye** antes de leerlo: se registra lo que hay en ese momento (el hash describe esos bytes).
 
@@ -78,7 +79,9 @@ mismo criterio conservador del importador: si sigue ahí, o está en otro disco 
 - **Transacciones:** cada archivo en su savepoint; confirmación cada **25** archivos (valor provisional: ni garantía de coste ni de plazo). Lo confirmado se conserva.
 - **Si falla un lote:** el commit se acredita con otra sesión (`_contrastar`): guardado → se cuenta; no guardado → «no guardados»; incierto → «por comprobar». Nunca se presenta
   como añadido lo que no se acreditó.
-- **Si se pierde la respuesta o se cierra la página:** el registro sigue en segundo plano y la pantalla recupera el estado en curso. *Límite:* el estado vive en memoria (se pierde
+- **Si el `commit` termina pero se pierde la respuesta:** se acredita con otra sesión por **identidad** de lo que escribió esa transacción (`_contrastar`): si estaba todo, se cuenta y se sigue sin
+  lanzar; si no estaba nada, «no guardados»; si no se puede saber, «por comprobar». El informe persistido (`registro_incremental`) cuenta lo que pasó y buscar de nuevo no encuentra nada pendiente.
+- **Si se pierde la respuesta HTTP o se cierra la página:** el registro sigue en segundo plano y la pantalla recupera el estado en curso. *Límite:* el estado vive en memoria (se pierde
   al reiniciar el proceso); el informe persistido (`registro_incremental`) se escribe al terminar. Tras un reinicio se busca de nuevo y lo ya confirmado consta.
 - **Continuar:** «Buscar archivos sin registrar otra vez» vuelve a calcular qué falta; es idempotente por ruta (`files.file_path` es único), así que repetir no duplica.
 - **Pulsar confirmar dos veces / dos pestañas / dos procesos:** el botón se deshabilita; en el proceso, una sola ejecución; entre procesos, el cerrojo de Postgres.
@@ -86,14 +89,26 @@ mismo criterio conservador del importador: si sigue ahí, o está en otro disco 
 
 ### 6.4 «Sin registrar» no es «tebeo nuevo»
 La búsqueda no lee contenido, así que la pantalla habla de **rutas sin registrar** («archivos encontrados sin registrar») y lo dice: aún no se sabe si son tebeos distintos de los
-que ya tienes. El resultado separa fichas nuevas, reenlaces, repetidos, no atribuidos, errores y de otra ejecución; los errores y los no atribuidos se listan **uno a uno con su causa**
-(hasta 50 en pantalla). Una copia que sigue en la carpeta vuelve a salir en cada búsqueda y se informa como repetida; nunca crea una segunda fila.
+que ya tienes. El resultado separa fichas nuevas, reenlaces, repetidos, no atribuidos, errores, de otra ejecución y **omitidos** (ya no estaban pendientes al empezar, o desaparecieron antes de leerlos: no son un
+error, pero tampoco quedan registrados, así que constan con su causa). Cada archivo mirado cae en **una** categoría y el total cuadra (prueba). Los errores, los no atribuidos y los omitidos se listan **uno a uno con su causa**; si hay más de 50, la
+pantalla dice el total y que el listado está limitado. Una copia que sigue en la carpeta vuelve a salir en cada búsqueda y se informa como repetida; nunca crea una segunda fila.
+
+### 6.5 Concurrencia con el importador de descargas
+Los dos crean filas buscando antes por contenido y la columna `sha256_hash` no es única, así que podían leer «nadie tiene esto» a la vez e insertar uno cada uno.
+Ahora ambos pasan por `tomar_cerrojo_de_contenido` en `_triage_and_match`:
+- **Quién espera a quién:** el registro confirma por lotes (≤ 25 archivos), el importador al final de su ciclo. Quien llega con el cerrojo ocupado reintenta cada 0,25 s hasta 60 s.
+- **Si se agota la espera:** el **importador** deja el archivo en descargas y anota «se reintentará en el próximo ciclo»; el **registro** se detiene (fase «ocupado»: el catálogo estaba ocupado,
+  lo ya confirmado se conserva, el lote en curso no se guarda) y se pide buscar de nuevo. No se inserta nada sin el cerrojo.
+- **Liberación:** es un cerrojo de transacción: se suelta con el `commit` o el `rollback`, también si algo falla. Es de una sola clave, así que un ciclo largo del importador ocupa una
+  única entrada de la tabla de cerrojos y no una por archivo.
+- **Coste:** mientras un ciclo del importador tiene una transacción abierta, un registro de la biblioteca espera (hasta 60 s por archivo y luego se detiene). Es un reparto asumido:
+  no hay carrera y nada se pierde, a cambio de que los dos no avancen a la vez cuando coinciden. No hay restricción única nueva (habría que revisar los datos existentes).
+- **Otros escritores:** el etiquetado y las asignaciones no crean filas por contenido; no pasan por el cerrojo.
 
 ## 7. Límites conocidos (no resueltos)
 
-- **Cobertura del cerrojo:** protege los registros de `LibraryAdopter` (inicial e incremental) entre procesos. **No** lo toma el importador de descargas: un archivo con el mismo
-  contenido que llegue por descargas mientras se registra desde la biblioteca podría, en teoría, crear dos filas (no hay restricción única por contenido en la base; ambos
-  comprueban el hash antes de insertar, así que la ventana es mínima). Cerrarlo exige una restricción única o que el importador también tome el cerrojo (decisión pendiente).
+- **Cobertura del cerrojo de contenido:** lo toman el importador y los registros de la biblioteca (los escritores que crean filas por contenido). Si en el futuro aparece otro, debe pasar también por `_triage_and_match`.
+- **El cerrojo no sustituye a una restricción única:** si algo insertara filas sin pasar por ahí, la base no lo impediría (revisarlo es otra decisión).
 - **Cambios que conservan tamaño y fecha** no se detectan al leer (§6.1).
 - **Un contenido distinto en una ruta ya registrada** (archivo sustituido) no se detecta: es otro problema, no una alta.
 - **Los formatos fuera de `COMIC_EXTS`** (`.rar`, `.tar`…) no se cuentan aquí: los enseña «Revisar mi biblioteca».
@@ -116,6 +131,13 @@ que ya tienes. El resultado separa fichas nuevas, reenlaces, repetidos, no atrib
 | Copia idéntica: sin segunda fila, ni tocar la copia (también repetida) | `test_una_copia_identica_*` (2 pruebas) |
 | Dos confirmaciones a la vez / mismo proceso | `test_dos_confirmaciones_a_la_vez_lanzan_una_sola_ejecucion`, `test_el_registro_incremental_comparte_la_exclusion_con_el_inicial` |
 | Exclusión entre procesos (cerrojo ajeno → «ocupado», sin efectos; se suelta al terminar y al fallar) | `TestExclusionEntreProcesos` (3 pruebas) |
+| Registro incremental e importación del MISMO contenido a la vez: una sola fila y ambos resultados fieles | `TestCarreraConElImportadorDeDescargas::test_con_el_cerrojo_hay_una_sola_fila…` |
+| La carrera era real (el mismo escenario sin el cerrojo duplica) | `…::test_control_negativo_sin_el_cerrojo_el_mismo_escenario_si_duplica` |
+| Cerrojo ocupado por el importador → el registro se detiene en «ocupado» sin insertar; por el registro → el importador deja el archivo y reintenta | `…::test_si_el_importador_tiene_el_cerrojo…`, `…::test_si_el_registro_tiene_el_cerrojo…` |
+| El cerrojo se libera aunque falle quien lo tenía | `…::test_el_cerrojo_se_libera_al_acabar_la_transaccion_aunque_falle` |
+| Cada archivo mirado cae en una categoría y el total cuadra; omitidos con su causa | `TestContabilidadYRecuperacion::test_cada_archivo_del_alcance_cae_en_una_categoria…` |
+| Commit aplicado con la respuesta perdida: se acredita sin duplicar ni decir «no se hizo nada» | `TestContabilidadYRecuperacion::test_commit_aplicado_con_la_respuesta_perdida…` |
+| El límite de 50 incidencias dice el total | `test_registro_incremental::TestLimiteVisibleDeIncidencias` |
 | Fallo de un lote: lo confirmado se conserva; buscar de nuevo completa sin duplicar | `TestFalloParcialYRecuperacion` |
 | Un fallo no toca el marcador y el resto se registra | `test_un_fallo_no_toca_el_marcador_y_el_resto_se_registra` |
 | Sin automatismo | `test_el_unico_que_lanza_el_registro_incremental_es_la_pantalla` |

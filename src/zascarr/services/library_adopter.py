@@ -59,6 +59,7 @@ from zascarr.models import File, FileFormat, ImportRun, Series
 from zascarr.services.asignacion import _restriccion
 from zascarr.services.importer import (
     COMIC_EXTS,
+    CerrojoDeContenidoOcupado,
     _fichero_de_la_fila_existe,
     _reenlazar_fila,
     _triage_and_match,
@@ -123,9 +124,15 @@ class AdoptionReport:
     #: #326 (solo registro incremental): su contenido coincide con VARIAS filas desaparecidas y no hay una elección inequívoca:
     #: no se reenlaza ninguna, no se crea fila y se informa para que decida una persona.
     ambiguous: list[str] = field(default_factory=list)
-    #: #326 (solo registro incremental): rutas del alcance confirmado que ya no estaban pendientes al empezar (desaparecieron o
-    #: otra ejecución las registró entre la revisión y la confirmación).
-    out_of_scope_gone: int = 0
+    #: #326 (solo registro incremental): archivos del alcance confirmado que NO se trataron, cada uno con su causa: ya no estaban pendientes al
+    #: empezar (desaparecieron o ya constaban) o desaparecieron antes de leerlos. No son errores, pero tampoco quedan registrados: constan aquí.
+    omitted: list[str] = field(default_factory=list)
+    #: de los `omitted`, los que desaparecieron DURANTE el recorrido (están contados en `processed`; los de antes de empezar, no)
+    vanished: int = 0
+
+    @property
+    def out_of_scope_gone(self) -> int:
+        return len(self.omitted)
 
     def absorb(self, lote: AdoptionReport) -> None:
         """Pasa a este informe lo de un lote YA CONFIRMADO."""
@@ -136,7 +143,8 @@ class AdoptionReport:
         self.by_other_run += lote.by_other_run
         self.relinked += lote.relinked
         self.ambiguous += lote.ambiguous
-        self.out_of_scope_gone += lote.out_of_scope_gone
+        self.omitted += lote.omitted
+        self.vanished += lote.vanished
 
     @property
     def registered_count(self) -> int:
@@ -311,7 +319,9 @@ class LibraryAdopter:
         report.already_registered = len(files) - len(nuevos)
         incremental = self._incremental = alcance is not None
         if incremental:
-            report.out_of_scope_gone = len(alcance - {str(f) for f in nuevos})
+            ahora = {str(f) for f in nuevos}
+            report.omitted = [f"{Path(r).name} — ya no estaba pendiente al empezar (desapareció o ya constaba)"
+                              for r in sorted(alcance - ahora)]
             nuevos = [f for f in nuevos if str(f) in alcance]
         report.to_process = len(nuevos)
 
@@ -343,8 +353,12 @@ class LibraryAdopter:
                 else:
                     logger.warning("library_adopter.file_failed", error=type(exc).__name__)
                     en_lote.errors.append(f"{path.name}: no se pudo registrar ({type(exc).__name__})")
+            except CerrojoDeContenidoOcupado:
+                raise                                           # otra operación tiene el catálogo ocupado: se detiene todo, no se reintenta archivo a archivo
             except FileNotFoundError:
-                en_lote.out_of_scope_gone += 1                  # desapareció entre la búsqueda y la lectura: no era un fallo de ZascArr
+                # desapareció entre la búsqueda y la lectura: no es un fallo de ZascArr, pero consta como omitido con su causa
+                en_lote.omitted.append(f"{path.name} — desapareció antes de leerlo")
+                en_lote.vanished += 1
             except ArchivoCambiado:
                 en_lote.errors.append(f"{path.name}: cambió mientras se leía, así que no se ha registrado. Búscalo de nuevo")
             except Exception as exc:
@@ -586,7 +600,7 @@ class LibraryAdopter:
                 "by_other_run": report.by_other_run,
                 "relinked": report.relinked,
                 "ambiguous": report.ambiguous,
-                "out_of_scope_gone": report.out_of_scope_gone,
+                "omitted": report.omitted,
             },
         )
         self._db.add(run)
