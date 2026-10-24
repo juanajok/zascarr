@@ -1,6 +1,6 @@
 # Registro incremental de la biblioteca (#326)
 
-> Estado: **implementado en una PR, pendiente de revisión**. Parte del refinamiento v1 de #326 (2026-10-23). Las decisiones marcadas «por defecto»
+> Estado: **implementado en una PR en borrador; revisión 1 atendida** (recorrido incompleto, exclusión entre procesos, archivo que cambia, reenlace con original presente). Parte del refinamiento v1 de #326 (2026-10-23). Las decisiones marcadas «por defecto»
 > las tomó el implementador porque el refinamiento las dejaba abiertas; **están por ratificar** y se pueden cambiar sin tocar el resto.
 
 ## 1. Problema local (CLAUDE.md §13)
@@ -28,6 +28,9 @@ implementación ni se infiere de su UI cómo funcionan por dentro** (§13). Deci
 | `LibraryAdopter.adopt(alcance=…)` | Con `alcance` solo trata esas rutas; no toca el marcador; guarda el informe con `kind = "registro_incremental"` (el de la adopción inicial, que usa Inicio, no se pisa). |
 | Ambigüedad | Solo en incremental: si el contenido coincide con **varias** filas desaparecidas, no se reenlaza ninguna ni se crea fila: se informa (`ambiguous`). El importador y el registro inicial siguen reenlazando la más antigua, como siempre. |
 | `registro_biblioteca.iniciar(…, alcance)` | La misma exclusión (una ejecución a la vez) para el inicial y el incremental. |
+| `utils/fs.recorrer_comics` | Como `listar_comics`, pero **cuenta lo que no pudo leer** (`ilegibles`): `rglob` saltaba en silencio una subcarpeta sin permisos. Lo usan el inventario y `adopt`. |
+| `registro_biblioteca._cerrojo_de_registro` | Cerrojo consultivo de Postgres (`pg_try_advisory_lock`) en una conexión propia: **un solo registro (inicial o incremental) en marcha entre procesos**. Si no se obtiene, fase `ocupado` y no se hace nada. |
+| `LibraryAdopter._adopt_file` | Compara tamaño y fecha del archivo antes y después de leerlo: si cambió, **no se registra** un hash que ya no le corresponde. En incremental, un reenlace exige poder afirmar que la ruta anterior **ya no tiene** el archivo (`_fichero_de_la_fila_existe`). |
 | `GET /ui/auditoria/nuevos` | Busca (solo lectura: nombres y rutas). |
 | `POST /ui/auditoria/registrar-nuevos` | Registra **solo** las rutas que la persona vio: lleva la `huella`; si la carpeta ya no la da, no registra nada y enseña la lista actual. |
 
@@ -42,7 +45,7 @@ Sin migración, sin dependencias nuevas, sin red, sin automatismo (un test compr
 4. **Al registrar**, cada archivo acaba en UNA categoría: ficha nueva (con serie sugerida o sin identificar → «Por revisar»), repetido de otro presente (no se añade,
    no se toca ninguna copia), reenlace de una fila desaparecida (misma fila, vínculo e historial conservados), ambiguo (no se toca nada), error, de otra ejecución.
 5. **Nunca se vincula por el nombre de la carpeta** y no se crean series: es el mismo emparejamiento del adoptador (`_triage_and_match`), que no mira carpetas.
-6. **Carpeta ilegible:** `carpeta_accesible = False` → no se ofrece registrar y no se da nada por nuevo ni por perdido. Este flujo **nunca** marca filas como desaparecidas.
+6. **Carpeta o recorrido ilegible:** si la carpeta no es accesible **o** el recorrido no pudo leer alguna carpeta/archivo (`ilegibles > 0`), la búsqueda lo dice y **no ofrece confirmación global** (el servidor tampoco la acepta aunque se fuerce la petición); no cuenta «registrados sin fichero» (sería fabricar bajas). Este flujo **nunca** marca filas como desaparecidas.
 7. **Resultado honesto:** «mirados» ≠ «añadidos»; con errores no se anuncia éxito; un commit incierto queda «por comprobar» (mecanismo existente de `_confirmar_lote`).
 8. **Formatos (#307):** los archivos nuevos se triarán con el mismo punto de decisión; lo no utilizable queda registrado/avisado como hoy (no se amplía el universo).
 
@@ -53,20 +56,72 @@ Sin migración, sin dependencias nuevas, sin red, sin automatismo (un test compr
 | a | **Punto de entrada: la pantalla de Auditoría**, donde ya vive el registro. #232 («Comprobar el disco») no está implementada. Cuando lo esté, «Buscar archivos nuevos» pasa a ser su continuación. | Evita esperar a #232 sin crear una acción que la duplique. |
 | b | **Ignorados / retirados (#303): ninguna regla de reaparición.** Una fila nunca vuelve a ser «nueva». Un archivo con contenido ya conocido se trata por contenido (repetido o reenlace), sin reactivar descartes. | No hay un concepto de «ignorar» que inferir; no se borran decisiones por inferencia. |
 | c | **Hash solo al confirmar**; lote existente de 25; sin tope nuevo. | El coste de leer el USB no está medido (§7). |
-| d | **Informe con las categorías de §4.4** (sin categoría «no utilizables» propia: remite a «Revisar mi biblioteca», que ya las enseña con su causa). | No duplicar la auditoría. |
+| d | **Informe con las categorías de §4.4**; sin categoría «no utilizables» propia, pero **cada archivo que no se pudo registrar o atribuir se lista con su causa** (§6.4); los formatos fuera de `COMIC_EXTS` los enseña «Revisar mi biblioteca». | No duplicar la auditoría sin ocultar fallos. |
 
-## 6. Límites conocidos (no resueltos)
+## 6. Contratos
 
-- **Una copia idéntica de un archivo registrado vuelve a salir como «nueva» en cada búsqueda** (su ruta no tiene fila y su contenido no se registra dos veces). Cada
-  vez se informa como repetida. Cerrarlo exige una política de copias (BL-DUP) o una marca de «ignorada» (#303); aquí no se inventa.
-- **Exclusión solo dentro del proceso** (`--workers 1`). Entre procesos, la unicidad de `files.file_path` evita la fila doble **por ruta**; **por contenido no hay
-  restricción única** en la base.
-- **Un recorrido parcial** (una subcarpeta ilegible) no se detecta: `rglob`/`stat` saltan lo que no pueden leer. Como solo se actúa sobre lo visto, no fabrica altas
-  ni bajas falsas, pero puede no ver algo.
+### 6.1 Qué protege la huella de confirmación (y qué no)
+La huella resume **el conjunto de rutas** que la persona vio. Garantiza «registrar solo lo revisado»: si al confirmar la carpeta ya no da la misma huella (apareció o
+desapareció una ruta), no se registra nada y se enseña la lista de ahora; además `adopt(alcance=…)` solo trata esas rutas aunque hayan aparecido más.
+**No protege el contenido**: el hash se calcula al registrar. Para que no se guarde un hash que ya no corresponda al archivo:
+- **Cambia manteniendo su ruta** mientras se lee: se compara (tamaño, fecha) antes y después de leerlo; si difieren, **no se registra**, se cuenta como error con causa y
+  vuelve a salir en la siguiente búsqueda. *Límite:* un cambio que conserve tamaño **y** fecha no se detecta.
+- **Desaparece** entre la búsqueda y la lectura: no es un error; se cuenta como «ya no estaba pendiente».
+- **Se sustituye** antes de leerlo: se registra lo que hay en ese momento (el hash describe esos bytes).
+
+### 6.2 Reenlace de una ficha existente
+Solo si (1) hay **una única** fila desaparecida con ese contenido (con varias, no se toca ninguna), y (2) se puede afirmar que su ruta anterior **ya no tiene** el archivo (el
+mismo criterio conservador del importador: si sigue ahí, o está en otro disco que podría estar desmontado, o falla la consulta, **no se reenlaza**). Entonces se reutiliza la
+**misma fila** (id, vínculo, `original_sha256` y `metadata` se conservan). En los demás casos se informa «no se ha podido atribuir» y no se modifica ninguna ficha.
+
+### 6.3 Repetición, fallo parcial y recuperación
+- **Transacciones:** cada archivo en su savepoint; confirmación cada **25** archivos (valor provisional: ni garantía de coste ni de plazo). Lo confirmado se conserva.
+- **Si falla un lote:** el commit se acredita con otra sesión (`_contrastar`): guardado → se cuenta; no guardado → «no guardados»; incierto → «por comprobar». Nunca se presenta
+  como añadido lo que no se acreditó.
+- **Si se pierde la respuesta o se cierra la página:** el registro sigue en segundo plano y la pantalla recupera el estado en curso. *Límite:* el estado vive en memoria (se pierde
+  al reiniciar el proceso); el informe persistido (`registro_incremental`) se escribe al terminar. Tras un reinicio se busca de nuevo y lo ya confirmado consta.
+- **Continuar:** «Buscar archivos sin registrar otra vez» vuelve a calcular qué falta; es idempotente por ruta (`files.file_path` es único), así que repetir no duplica.
+- **Pulsar confirmar dos veces / dos pestañas / dos procesos:** el botón se deshabilita; en el proceso, una sola ejecución; entre procesos, el cerrojo de Postgres.
+- **Cancelación:** no hay botón de cancelar. Parar el proceso deja lo confirmado y el cerrojo se suelta solo (Postgres lo libera al cerrarse la conexión).
+
+### 6.4 «Sin registrar» no es «tebeo nuevo»
+La búsqueda no lee contenido, así que la pantalla habla de **rutas sin registrar** («archivos encontrados sin registrar») y lo dice: aún no se sabe si son tebeos distintos de los
+que ya tienes. El resultado separa fichas nuevas, reenlaces, repetidos, no atribuidos, errores y de otra ejecución; los errores y los no atribuidos se listan **uno a uno con su causa**
+(hasta 50 en pantalla). Una copia que sigue en la carpeta vuelve a salir en cada búsqueda y se informa como repetida; nunca crea una segunda fila.
+
+## 7. Límites conocidos (no resueltos)
+
+- **Cobertura del cerrojo:** protege los registros de `LibraryAdopter` (inicial e incremental) entre procesos. **No** lo toma el importador de descargas: un archivo con el mismo
+  contenido que llegue por descargas mientras se registra desde la biblioteca podría, en teoría, crear dos filas (no hay restricción única por contenido en la base; ambos
+  comprueban el hash antes de insertar, así que la ventana es mínima). Cerrarlo exige una restricción única o que el importador también tome el cerrojo (decisión pendiente).
+- **Cambios que conservan tamaño y fecha** no se detectan al leer (§6.1).
 - **Un contenido distinto en una ruta ya registrada** (archivo sustituido) no se detecta: es otro problema, no una alta.
 - **Los formatos fuera de `COMIC_EXTS`** (`.rar`, `.tar`…) no se cuentan aquí: los enseña «Revisar mi biblioteca».
+- **Rutas anteriores en otro disco:** un reenlace cuya ruta vieja cuelga de otro disco no se hace (no se puede afirmar que falte).
 
-## 7. Pruebas y lo que NO se ha ejecutado
+## 8. Garantías ↔ pruebas
+
+| Garantía | Prueba |
+|---|---|
+| El inventario no abre archivos ni escribe | `test_registro_incremental_pg::TestInventarioIncremental::test_enseña_lo_nuevo_por_ruta_sin_abrir_ni_escribir_nada` |
+| Recorrido incompleto: se distingue, no se confirma (ni forzando la petición), no fabrica bajas | `TestRecorridoIncompleto` (2 pruebas); `test_registro_incremental::TestRecorrerComics`, `TestPantallaRecorridoIncompleto` |
+| Carpeta inaccesible no fabrica nuevos ni bajas | `test_carpeta_inaccesible_no_fabrica_nuevos_ni_bajas` |
+| Solo se registra lo confirmado (huella, aparece/desaparece algo) | `test_solo_se_registra_lo_que_la_persona_vio_y_confirmó`, `test_si_la_carpeta_cambio_tras_revisar_no_se_registra_nada` |
+| Archivo que cambia mientras se lee: no se registra su hash; luego sí | `TestArchivoQueCambiaOSeVa::test_si_cambia_mientras_se_lee…` |
+| Desaparece entre búsqueda y lectura: no es error | `test_si_desaparece_entre_la_busqueda_y_la_lectura_no_es_un_error` |
+| Conserva lo existente; marcador e informe inicial intactos | `test_registra_solo_lo_nuevo_y_conserva_lo_existente` |
+| Reenlace conserva fila, vínculo y decisiones | `test_un_archivo_movido_reenlaza_su_ficha…` |
+| Reenlace exige que la ruta anterior ya no tenga el archivo | `TestReenlaceExigeAusenciaDelOriginal` |
+| Coincidencia ambigua no modifica ninguna ficha | `test_un_contenido_que_coincide_con_varias_filas_desaparecidas…` |
+| Copia idéntica: sin segunda fila, ni tocar la copia (también repetida) | `test_una_copia_identica_*` (2 pruebas) |
+| Dos confirmaciones a la vez / mismo proceso | `test_dos_confirmaciones_a_la_vez_lanzan_una_sola_ejecucion`, `test_el_registro_incremental_comparte_la_exclusion_con_el_inicial` |
+| Exclusión entre procesos (cerrojo ajeno → «ocupado», sin efectos; se suelta al terminar y al fallar) | `TestExclusionEntreProcesos` (3 pruebas) |
+| Fallo de un lote: lo confirmado se conserva; buscar de nuevo completa sin duplicar | `TestFalloParcialYRecuperacion` |
+| Un fallo no toca el marcador y el resto se registra | `test_un_fallo_no_toca_el_marcador_y_el_resto_se_registra` |
+| Sin automatismo | `test_el_unico_que_lanza_el_registro_incremental_es_la_pantalla` |
+| Textos: rutas sin registrar, aviso de lectura, ignorados no se reactivan, sin palabras internas | `test_registro_incremental::TestPantallaIncremental`, `TestPantallaRecorridoIncompleto` |
+
+## 9. Pruebas y lo que NO se ha ejecutado
 
 - `tests/test_registro_incremental_pg.py` (Postgres y ficheros reales): inventario sin leer ni escribir; huella; carpeta inaccesible; registrar solo lo nuevo
   conservando lo existente (ids, metadata, originales intactos, marcador y informe inicial sin tocar); repetir; alcance confirmado; copia idéntica (también repetida);

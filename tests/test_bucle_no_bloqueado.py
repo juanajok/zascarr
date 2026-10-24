@@ -34,6 +34,7 @@ from zascarr.core.importer_triage import TriageResult
 from zascarr.services.importer import Importer, _triage_sin_bloquear
 from zascarr.services.library_adopter import LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
+from zascarr.utils.fs import Recorrido
 
 BLOQUEO_S = 0.4
 # Un hilo aparte deja el bucle libre: el peor hueco entre latidos es de
@@ -109,9 +110,9 @@ class TestLaAdopcionNoCongelaLaApp:
 
         def listado_lento(*_a, **_k):
             time.sleep(BLOQUEO_S)
-            return []
+            return Recorrido([])
 
-        monkeypatch.setattr("zascarr.services.library_adopter.listar_comics", listado_lento)
+        monkeypatch.setattr("zascarr.services.library_adopter.recorrer_comics", listado_lento)
         monkeypatch.setattr(
             "zascarr.services.runtime_settings.RuntimeSettingsService.set_flag", AsyncMock()
         )
@@ -136,9 +137,9 @@ class TestLaAdopcionNoCongelaLaApp:
 
         def listado_lento(*_a, **_k):
             time.sleep(BLOQUEO_S)
-            return []
+            return Recorrido([])
 
-        monkeypatch.setattr("zascarr.services.library_adopter.listar_comics", listado_lento)
+        monkeypatch.setattr("zascarr.services.library_adopter.recorrer_comics", listado_lento)
         adopter = LibraryAdopter(db=MagicMock())
         monkeypatch.setattr(adopter, "_rutas_registradas", AsyncMock(return_value=set()))
 

@@ -136,7 +136,7 @@ async def registrar_nuevos(request: Request, huella: str = Form(...), db: AsyncS
     if not await adopter.ofrece_registro_incremental():
         return await _fragmento_registro(request, db)
     inv = await adopter.inventario()
-    if not inv.carpeta_accesible or not inv.hay_que_registrar:
+    if not inv.se_puede_confirmar:       # carpeta ilegible, recorrido incompleto o nada que registrar: no se confirma nada global
         return await _fragmento_registro(request, db, inc=inv)
     if inv.huella != huella:
         return await _fragmento_registro(request, db, inc=inv, cambio=True)

@@ -59,17 +59,22 @@ from zascarr.models import File, FileFormat, ImportRun, Series
 from zascarr.services.asignacion import _restriccion
 from zascarr.services.importer import (
     COMIC_EXTS,
+    _fichero_de_la_fila_existe,
     _reenlazar_fila,
     _triage_and_match,
     serialize_candidates,
 )
-from zascarr.utils.fs import listar_comics
+from zascarr.utils.fs import recorrer_comics
 
 logger = structlog.get_logger()
 
 _MARCADOR_HECHO = "_library_adoption_done"
 #: cuántos archivos se registran entre confirmaciones en la BD
 _LOTE_POR_DEFECTO = 25
+
+
+class ArchivoCambiado(Exception):  # noqa: N818  (nombre de dominio en español, como el resto del proyecto)
+    """El archivo cambió (tamaño o fecha) mientras se leía para registrarlo: el hash leído ya no describe lo que hay en disco."""
 
 
 class EstadoAdopcion(StrEnum):
@@ -131,6 +136,7 @@ class AdoptionReport:
         self.by_other_run += lote.by_other_run
         self.relinked += lote.relinked
         self.ambiguous += lote.ambiguous
+        self.out_of_scope_gone += lote.out_of_scope_gone
 
     @property
     def registered_count(self) -> int:
@@ -169,12 +175,24 @@ class InventarioBiblioteca:
     registrados_sin_fichero: int   # filas bajo la biblioteca cuyo archivo ya no está: hay que revisarlas
     #: #326: la carpeta de la biblioteca existe y es legible. Si no, «0 nuevos» no significa «no hay nada nuevo»: no se vio nada.
     carpeta_accesible: bool = True
+    #: #326: cuántas carpetas o archivos NO se pudieron leer al recorrer. Con `> 0` el recorrido es INCOMPLETO: no acredita haber visto toda la
+    #: biblioteca, así que no se ofrece una confirmación global ni se cuentan «registrados sin fichero» (sería fabricar bajas).
+    ilegibles: int = 0
     #: #326: las rutas NUEVAS vistas (alcance de una confirmación). No se compara ni se imprime.
     rutas_nuevas: frozenset[str] = field(default=frozenset(), repr=False, compare=False)
 
     @property
     def hay_que_registrar(self) -> bool:
         return self.nuevos > 0
+
+    @property
+    def recorrido_completo(self) -> bool:
+        return self.carpeta_accesible and self.ilegibles == 0
+
+    @property
+    def se_puede_confirmar(self) -> bool:
+        """Solo se confirma un registro global si se acredita haber visto TODA la carpeta."""
+        return self.recorrido_completo and self.hay_que_registrar
 
     @property
     def huella(self) -> str:
@@ -235,13 +253,15 @@ class LibraryAdopter:
 
     async def inventario(self) -> InventarioBiblioteca:
         """Qué hay en la carpeta frente a lo ya registrado, sin leer el contenido de ningún archivo."""
-        archivos = await asyncio.to_thread(listar_comics, [self._library], COMIC_EXTS)
+        recorrido = await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)
+        archivos = recorrido.archivos
         registradas = await self._rutas_registradas()
         en_disco = {str(a) for a in archivos}
         prefijo = str(self._library).rstrip("/") + "/"
         accesible = await asyncio.to_thread(self._library.is_dir)
         return InventarioBiblioteca(
             carpeta_accesible=accesible,
+            ilegibles=recorrido.ilegibles,
             rutas_nuevas=frozenset(a for a in en_disco if a not in registradas),
             en_disco=len(archivos),
             cbz=sum(1 for a in archivos if a.suffix.lower() == ".cbz"),
@@ -249,7 +269,8 @@ class LibraryAdopter:
             otros_formatos=sum(1 for a in archivos if a.suffix.lower() not in (".cbz", ".cbr")),
             ya_registrados=sum(1 for a in en_disco if a in registradas),
             nuevos=sum(1 for a in en_disco if a not in registradas),
-            registrados_sin_fichero=sum(
+            # Con un recorrido incompleto «no la veo» no es «ya no está»: no se fabrican bajas.
+            registrados_sin_fichero=0 if recorrido.ilegibles else sum(
                 1 for r in registradas if r.startswith(prefijo) and r not in en_disco),
         )
 
@@ -282,8 +303,8 @@ class LibraryAdopter:
 
         report = AdoptionReport(started_at=datetime.now(UTC))
 
-        # Dedupe por inodo y recorrido en un hilo: ver `listar_comics`.
-        files = await asyncio.to_thread(listar_comics, [self._library], COMIC_EXTS)
+        # Dedupe por inodo y recorrido en un hilo: ver `recorrer_comics`.
+        files = (await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)).archivos
         report.files_scanned = len(files)
         registradas = await self._rutas_registradas()
         nuevos = sorted(f for f in files if str(f) not in registradas)
@@ -322,6 +343,10 @@ class LibraryAdopter:
                 else:
                     logger.warning("library_adopter.file_failed", error=type(exc).__name__)
                     en_lote.errors.append(f"{path.name}: no se pudo registrar ({type(exc).__name__})")
+            except FileNotFoundError:
+                en_lote.out_of_scope_gone += 1                  # desapareció entre la búsqueda y la lectura: no era un fallo de ZascArr
+            except ArchivoCambiado:
+                en_lote.errors.append(f"{path.name}: cambió mientras se leía, así que no se ha registrado. Búscalo de nuevo")
             except Exception as exc:
                 logger.warning("library_adopter.file_failed", error=type(exc).__name__)   # sin ruta ni mensaje (§5.4)
                 en_lote.errors.append(f"{path.name}: no se pudo registrar ({type(exc).__name__})")
@@ -340,7 +365,7 @@ class LibraryAdopter:
         provisional = AdoptionReport(started_at=report.started_at, finished_at=report.finished_at,
                                      files_scanned=report.files_scanned,
                                      already_registered=report.already_registered, to_process=report.to_process,
-                                     processed=report.processed, out_of_scope_gone=report.out_of_scope_gone)
+                                     processed=report.processed)
         provisional.absorb(report)
         provisional.absorb(en_lote)
         run_id = await self._persist_run(provisional, kind="registro_incremental" if incremental else "adoption")
@@ -463,11 +488,24 @@ class LibraryAdopter:
     async def _adopt_file(
         self, path: Path, report: AdoptionReport, pista: PistaDeCohorte | None = None
     ) -> None:
+        # El hash se lee de los bytes que hay AHORA: si el archivo cambia mientras se lee, ese hash ya no lo describe y NO se registra (se
+        # compara tamaño y fecha antes y después; un cambio que conserve ambos no se detecta, ver docs/design/registro-incremental-326.md).
+        antes = await asyncio.to_thread(path.stat)
         outcome = await _triage_and_match(self._db, path, pista)
+        despues = await asyncio.to_thread(path.stat)
+        if (antes.st_size, antes.st_mtime_ns) != (despues.st_size, despues.st_mtime_ns):
+            raise ArchivoCambiado(path.name)
         if outcome.recuperar is not None and self._incremental and outcome.n_recuperables > 1:
             # Varias filas desaparecidas tienen este mismo contenido: reenlazar la «más antigua» sería elegir por azar a cuál
             # pertenece. No se toca ninguna, no se crea una fila nueva y se informa.
             report.ambiguous.append(f"{path.name} — su contenido coincide con {outcome.n_recuperables} archivos que ya no están")
+            return
+        if (outcome.recuperar is not None and self._incremental
+                and await asyncio.to_thread(_fichero_de_la_fila_existe, outcome.recuperar.file_path, path)):
+            # Reenlazar mueve la ficha a esta ruta: solo si se puede afirmar que su ruta anterior YA no tiene el archivo. Si sigue ahí (la fila
+            # quedó marcada como desaparecida por un fallo pasajero) o no se puede comprobar (otro disco, error al consultar), no se toca nada.
+            report.ambiguous.append(
+                f"{path.name} — su contenido coincide con un archivo registrado que ZascArr no ha podido dar por desaparecido")
             return
         if outcome.recuperar is not None:
             # El fichero ya está en su sitio (la adopción nunca mueve): reenlaza
@@ -510,7 +548,7 @@ class LibraryAdopter:
             file_path=str(path),
             file_name=path.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
-            file_size_bytes=(await asyncio.to_thread(path.stat)).st_size,
+            file_size_bytes=antes.st_size,
             sha256_hash=tr.sha256,
             source_tag=tr.source_tag,
             width_px=tr.width_px,
