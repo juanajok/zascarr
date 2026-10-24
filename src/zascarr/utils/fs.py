@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 # Límite por componente de ruta en ext4 (y la mayoría de filesystems): 255
@@ -200,3 +201,53 @@ def listar_comics(dirs, extensiones) -> list[Path]:
                     vistos.add(clave)
                     archivos.append(f)
     return archivos
+
+
+@dataclass(frozen=True)
+class Recorrido:
+    """Resultado de `recorrer_comics`: los cómics vistos y cuántas carpetas o archivos NO se
+    pudieron leer. Con `ilegibles > 0` el recorrido no acredita haber visto toda la carpeta."""
+    archivos: list[Path]
+    ilegibles: int = 0
+
+    @property
+    def completo(self) -> bool:
+        return self.ilegibles == 0
+
+
+def recorrer_comics(dirs, extensiones) -> Recorrido:
+    """Como `listar_comics` (nombre que acaba en la extensión, sin repetir el inodo, sin seguir
+    enlaces a carpetas), pero DICE lo que no pudo mirar. `Path.rglob` salta en silencio una
+    subcarpeta sin permisos o un disco que falla a mitad; aquí cada carpeta que no se puede
+    listar, cada archivo que no se puede consultar y cada raíz que no existe suman a `ilegibles`.
+
+    Bloquea (E/S de disco): llamarla siempre con `asyncio.to_thread` desde código async
+    (CLAUDE.md §4)."""
+    exts = tuple(extensiones)
+    vistos: set[tuple[int, int]] = set()
+    archivos: list[Path] = []
+    ilegibles = 0
+
+    def _fallo(_exc: OSError) -> None:
+        nonlocal ilegibles
+        ilegibles += 1
+
+    for d in dirs:
+        if not d.is_dir():
+            ilegibles += 1
+            continue
+        for carpeta, _subcarpetas, nombres in os.walk(d, onerror=_fallo):
+            for nombre in nombres:
+                if not nombre.endswith(exts):
+                    continue
+                f = Path(carpeta) / nombre
+                try:
+                    st = f.stat()
+                except OSError:
+                    ilegibles += 1
+                    continue
+                clave = (st.st_dev, st.st_ino)
+                if clave not in vistos:
+                    vistos.add(clave)
+                    archivos.append(f)
+    return Recorrido(archivos, ilegibles)
