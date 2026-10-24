@@ -125,7 +125,8 @@ class NoReconocido:
 # haberlo re-empaquetado a un formato reconocido. `.rar` es el caso real
 # más frecuente (packs de la escena que no llegaron a re-encapsularse
 # como .cbr); `.7z` aparece con menos frecuencia pero con el mismo motivo.
-CONTENEDORES_NO_SOPORTADOS = {".rar", ".7z", ".tar", ".cbt"}      # #307: `.tar` y `.cbt` también se avisan (antes: silencio)
+# #307: `.tar` y `.cbt` también se avisan (antes: silencio)
+CONTENEDORES_NO_SOPORTADOS = {".rar", ".7z", ".tar", ".cbt"}
 
 
 
@@ -339,10 +340,14 @@ class LibraryAudit:
                     motivo=f"doble extensión ({''.join(f.suffixes[-2:])}), sin descomprimir",
                 ))
 
-        # #307: por CONTENIDO (≤ 512 B de cada fichero, solo lectura). Nunca se renombra ni se registra nada.
-        #  · un .cbz/.cbr/.cb7 cuyo contenido no concuerda con su nombre (p. ej. un .cbz que es un RAR);
-        #  · un fichero SIN extensión que por dentro es un contenedor (ZIP, RAR, 7z, TAR): parece un tebeo y ZascArr no lo trata como tal.
-        # Un .cbr que es un ZIP NO se avisa aquí: desde #307 ZascArr sí lo lee (portada y ComicInfo).
+        # #307: por CONTENIDO (≤ 512 B de cada fichero, solo lectura). Nunca se renombra ni se
+        # registra nada.
+        # · un .cbz/.cbr/.cb7 cuyo contenido no concuerda con su nombre (p. ej. un .cbz que es un
+        # RAR);
+        # · un fichero SIN extensión que por dentro es un contenedor (ZIP, RAR, 7z, TAR): parece
+        # un tebeo y ZascArr no lo trata como tal.
+        # Un .cbr que es un ZIP NO se avisa aquí: desde #307 ZascArr sí lo lee (portada y
+        # ComicInfo).
         ya = {h.ruta for h in hallados}
         for f in self._library.rglob("*"):
             if not f.is_file() or f.name.startswith(".") or str(f) in ya:
