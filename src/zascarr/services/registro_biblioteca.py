@@ -9,6 +9,8 @@ tarea con su propia sesión, confirma por lotes (`LibraryAdopter.adopt`) y la in
 Contrato:
   · Una sola ejecución a la vez por proceso (la imagen corre con `--workers 1`). Dos peticiones seguidas no
     lanzan dos registros; la segunda ve el progreso de la primera.
+  · #326: y una sola entre PROCESOS: un cerrojo consultivo de Postgres (`pg_try_advisory_lock`) en una conexión propia mientras dura el
+    registro. Si no se obtiene, no se hace nada (fase «ocupado»). Si el proceso muere, Postgres suelta el cerrojo al cerrarse su conexión.
   · NO se reanuda sola al reiniciar (no hay escrituras inesperadas al arrancar): quien quiera continuar lo
     pide, y como el registro es idempotente por ruta, continúa donde se quedó.
   · Un fallo general (BD caída, etc.) deja el estado en «interrumpido» con una causa SANEADA (el tipo de error,
@@ -18,13 +20,16 @@ Contrato:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+import contextlib
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 
 import structlog
+from sqlalchemy import text
 
+from zascarr.services.importer import CerrojoDeContenidoOcupado
 from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
 
 logger = structlog.get_logger()
@@ -35,6 +40,7 @@ class FaseRegistro(StrEnum):
     CORRIENDO = "corriendo"
     TERMINADO = "terminado"          # el recorrido acabó (puede haber errores por archivo)
     INTERRUMPIDO = "interrumpido"    # cayó antes de acabar: lo ya confirmado se conserva
+    OCUPADO = "ocupado"              # #326: otro registro, u otra importación de descargas, tenía ocupado el catálogo: se detuvo (lo confirmado se conserva)
 
 
 @dataclass
@@ -57,6 +63,16 @@ class EstadoRegistro:
     por_comprobar: int = 0
     errores: list[str] = field(default_factory=list)
     causa: str | None = None          # solo si INTERRUMPIDO: el TIPO de error, nunca el mensaje
+    #: #326: registro INCREMENTAL (solo las rutas nuevas que la persona vio y confirmó), no el registro inicial
+    incremental: bool = False
+    #: de los «registrados», cuántos fueron un REENLACE de una fila que ya existía (no una fila nueva)
+    reenlazados: int = 0
+    #: su contenido coincide con varias filas desaparecidas: no se tocó ninguna ni se creó fila
+    ambiguos: list[str] = field(default_factory=list)
+    #: del alcance confirmado, archivos que no se trataron (ya no estaban pendientes o desaparecieron antes de leerlos), cada uno con su causa
+    omitidos: list[str] = field(default_factory=list)
+    #: de los omitidos, los que desaparecieron durante el recorrido (están contados dentro de `procesados`)
+    desaparecidos_al_leer: int = 0
 
     @property
     def completo(self) -> bool:
@@ -67,6 +83,11 @@ class EstadoRegistro:
     def anadidos(self) -> int:
         """Lo que REALMENTE entró en el catálogo: no es lo mismo que lo procesado (hubo repetidos, errores…)."""
         return self.registrados + self.sin_identificar
+
+    @property
+    def filas_nuevas(self) -> int:
+        """Filas CREADAS en el catálogo (sin contar los reenlaces, que reutilizan una fila existente)."""
+        return self.registrados - self.reenlazados + self.sin_identificar
 
     @property
     def en_marcha(self) -> bool:
@@ -93,14 +114,49 @@ def _volcar(report: AdoptionReport) -> None:
     _estado.no_guardados = report.reverted
     _estado.por_comprobar = report.unknown
     _estado.errores = list(report.errors)
+    _estado.reenlazados = report.relinked
+    _estado.ambiguos = list(report.ambiguous)
+    _estado.omitidos = list(report.omitted)
+    _estado.desaparecidos_al_leer = report.vanished
 
 
-async def _ejecutar(fabrica: Callable) -> None:
+#: Clave del cerrojo consultivo de Postgres que serializa los registros de la biblioteca (inicial e incremental) entre procesos.
+_CLAVE_CERROJO = 326_000_001
+
+
+@contextlib.asynccontextmanager
+async def _cerrojo_de_registro(sesion) -> AsyncIterator[bool]:
+    """Cerrojo entre procesos: `True` si este registro es el único en marcha, `False` si otro proceso ya tiene el cerrojo.
+
+    Va en una conexión PROPIA (no en la de la sesión de trabajo, que confirma por lotes y vuelve al pool): un cerrojo de sesión de Postgres vive
+    mientras viva su conexión, así que se suelta explícitamente antes de devolverla; si el proceso muere, Postgres lo suelta al cerrarse la conexión."""
+    conexion = await sesion.bind.connect()
+    obtenido = False
     try:
-        async with fabrica() as sesion:
-            informe = await LibraryAdopter(sesion).adopt(progreso=_volcar)
+        obtenido = bool((await conexion.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": _CLAVE_CERROJO})).scalar())
+        yield obtenido
+    finally:
+        try:
+            if obtenido:
+                await conexion.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": _CLAVE_CERROJO})
+            await conexion.close()
+        except Exception:  # noqa: BLE001 — una conexión rota no debe volver al pool con el cerrojo puesto
+            with contextlib.suppress(Exception):
+                await conexion.invalidate()
+
+
+async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) -> None:
+    try:
+        async with fabrica() as sesion, _cerrojo_de_registro(sesion) as libre:
+            if not libre:
+                _estado.fase = FaseRegistro.OCUPADO
+                return
+            extra = {} if alcance is None else {"alcance": alcance}       # el registro inicial se llama exactamente como siempre
+            informe = await LibraryAdopter(sesion).adopt(progreso=_volcar, **extra)
         _volcar(informe)
         _estado.fase = FaseRegistro.TERMINADO
+    except CerrojoDeContenidoOcupado:
+        _estado.fase = FaseRegistro.OCUPADO       # el importador (o otro registro) llevaba demasiado con el cerrojo de contenido
     except asyncio.CancelledError:
         _estado.fase = FaseRegistro.INTERRUMPIDO
         _estado.causa = "CancelledError"
@@ -113,13 +169,14 @@ async def _ejecutar(fabrica: Callable) -> None:
         _estado.terminado = datetime.now(UTC)
 
 
-def iniciar(fabrica: Callable) -> bool:
-    """Lanza el registro. Devuelve False si ya hay uno en marcha (y no hace nada)."""
+def iniciar(fabrica: Callable, alcance: frozenset[str] | None = None) -> bool:
+    """Lanza el registro. Devuelve False si ya hay uno en marcha (y no hace nada). Con `alcance` (#326) es el registro INCREMENTAL de
+    esas rutas y no otro: comparte la exclusión con el registro inicial, así que no pueden solaparse en este proceso."""
     global _estado, _tarea
     if _estado.en_marcha and _tarea is not None and not _tarea.done():
         return False
-    _estado = EstadoRegistro(fase=FaseRegistro.CORRIENDO, iniciado=datetime.now(UTC))
-    _tarea = asyncio.create_task(_ejecutar(fabrica))
+    _estado = EstadoRegistro(fase=FaseRegistro.CORRIENDO, iniciado=datetime.now(UTC), incremental=alcance is not None)
+    _tarea = asyncio.create_task(_ejecutar(fabrica, alcance))
     return True
 
 

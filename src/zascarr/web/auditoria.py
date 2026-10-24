@@ -16,7 +16,7 @@ decisión irreversible que la historia se propone no tomar sola.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +25,7 @@ from zascarr import database
 from zascarr.database import get_db
 from zascarr.models import ImportRun, Series
 from zascarr.services import registro_biblioteca
-from zascarr.services.library_adopter import EstadoAdopcion, LibraryAdopter
+from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
 from zascarr.web.routes import crear_templates
 
@@ -81,10 +81,13 @@ async def analizar(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
     return templates.TemplateResponse(request, "_auditoria_informe.html", {"informe": informe})
 
 
-async def _fragmento_registro(request: Request, db: AsyncSession) -> HTMLResponse:
-    """Lo que el coleccionista debe ver del registro AHORA: progreso, resultado o inventario previo."""
+async def _fragmento_registro(request: Request, db: AsyncSession, *, inc: InventarioBiblioteca | None = None,
+                              cambio: bool = False) -> HTMLResponse:
+    """Lo que el coleccionista debe ver del registro AHORA: progreso, resultado o inventario previo.
+    `inc` (#326) es el inventario de archivos NUEVOS que se acaba de calcular a petición suya; `cambio`, que al confirmar la carpeta
+    ya no era la que revisó."""
     reg = registro_biblioteca.estado_actual()
-    contexto: dict = {"reg": reg, "estado": EstadoAdopcion.HECHA, "inv": None, "series": 0}
+    contexto: dict = {"reg": reg, "estado": EstadoAdopcion.HECHA, "inv": None, "series": 0, "inc": inc, "cambio": cambio}
     if reg.fase is registro_biblioteca.FaseRegistro.INACTIVO:
         adopter = LibraryAdopter(db)
         contexto["estado"] = await adopter.estado()
@@ -110,4 +113,32 @@ async def adoptar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     en_marcha = registro_biblioteca.estado_actual().fase is registro_biblioteca.FaseRegistro.CORRIENDO
     if not en_marcha and await LibraryAdopter(db).puede_registrar():
         registro_biblioteca.iniciar(database.async_session_factory)
+    return await _fragmento_registro(request, db)
+
+
+@router.get("/nuevos", response_class=HTMLResponse)
+async def nuevos(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """#326: busca los archivos NUEVOS de la biblioteca ya registrada. Solo lectura: recorre nombres y rutas de la carpeta y las cruza con las
+    registradas; no abre ningún archivo, no escribe en el catálogo y no pide nada a internet. Registrarlos es otro paso, con confirmación."""
+    if registro_biblioteca.estado_actual().en_marcha or not await LibraryAdopter(db).ofrece_registro_incremental():
+        return await _fragmento_registro(request, db)
+    return await _fragmento_registro(request, db, inc=await LibraryAdopter(db).inventario())
+
+
+@router.post("/registrar-nuevos", response_class=HTMLResponse)
+async def registrar_nuevos(request: Request, huella: str = Form(...), db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """#326, explícito: registra SOLO los archivos nuevos que la persona vio y confirmó (la `huella` de esa lista). Si la carpeta ya no da la
+    misma huella —apareció o desapareció algo desde que la revisó— no registra nada y enseña la lista de ahora. Sin mover ni renombrar nada,
+    sin tocar lo ya registrado y sin repetir el registro inicial. Una sola ejecución a la vez, compartida con el registro inicial."""
+    if registro_biblioteca.estado_actual().en_marcha:
+        return await _fragmento_registro(request, db)
+    adopter = LibraryAdopter(db)
+    if not await adopter.ofrece_registro_incremental():
+        return await _fragmento_registro(request, db)
+    inv = await adopter.inventario()
+    if not inv.se_puede_confirmar:       # carpeta ilegible, recorrido incompleto o nada que registrar: no se confirma nada global
+        return await _fragmento_registro(request, db, inc=inv)
+    if inv.huella != huella:
+        return await _fragmento_registro(request, db, inc=inv, cambio=True)
+    registro_biblioteca.iniciar(database.async_session_factory, alcance=inv.rutas_nuevas)
     return await _fragmento_registro(request, db)
