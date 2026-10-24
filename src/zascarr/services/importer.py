@@ -22,12 +22,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import cast, func, literal, or_, select, update
+from sqlalchemy import cast, func, literal, or_, select, text, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -138,6 +139,8 @@ class _Outcome:
     # es el mismo contenido que una fila desaparecida — se reenlaza esa fila en
     # vez de crear otra o descartar. Lleva la fila a reenlazar.
     recuperar: File | None = None
+    #: cuántas filas desaparecidas tenían ese contenido (si > 1, `recuperar` es arbitraria)
+    n_recuperables: int = 0
     # Explicación de core/cohort.py (2026-09-26) SOLO si de verdad se usó
     # para este archivo — no si se calculó una pista que resultó ser un
     # no-op (formato ya cubierto por SORT_PREFIX_PATTERN). Se guarda en
@@ -190,6 +193,42 @@ def _fichero_de_la_fila_existe(ruta_fila: str, nuevo: Path) -> bool:
         except OSError:
             return True
     return True
+
+
+#: #326: cerrojo de transacción de Postgres que serializa «buscar por contenido -> insertar» entre
+#: TODOS los que crean filas por contenido (el importador y el registro de la biblioteca). Una sola
+#: clave: una transacción larga (el ciclo del importador) ocupa UNA entrada de la tabla de cerrojos.
+_CERROJO_CONTENIDO = (326, 1)
+#: Cuánto espera un escritor a que otro termine su transacción antes de rendirse.
+ESPERA_MAXIMA_CERROJO_CONTENIDO_S = 60.0
+_PAUSA_CERROJO_S = 0.25
+
+
+class CerrojoDeContenidoOcupado(Exception):  # noqa: N818  (nombre de dominio, como el resto)
+    """Otra operación (importador o registro) lleva demasiado con el cerrojo."""
+
+
+async def tomar_cerrojo_de_contenido(db: AsyncSession) -> None:
+    """Espera (con tope) a ser el ÚNICO que busca por contenido e inserta; lo conserva hasta el
+    fin de SU transacción.
+
+    Sin esto, el importador y el registro podían leer «no hay nadie con este contenido» a la vez e
+    insertar cada uno su fila (la columna no es única). Con él, el segundo, al entrar, ya ve lo que
+    el primero CONFIRMÓ y lo trata como repetido. Solo actúa con una sesión real de Postgres; con
+    dobles de prueba no hace nada. Es re-entrante dentro de una transacción. Si no se obtiene a
+    tiempo lanza `CerrojoDeContenidoOcupado`: quien llama no debe insertar."""
+    if not isinstance(db, AsyncSession):
+        return
+    limite = time.monotonic() + ESPERA_MAXIMA_CERROJO_CONTENIDO_S
+    clase, objeto = _CERROJO_CONTENIDO
+    while True:
+        obtenido = (await db.execute(
+            text("SELECT pg_try_advisory_xact_lock(:c, :o)"), {"c": clase, "o": objeto})).scalar()
+        if obtenido:
+            return
+        if time.monotonic() >= limite:
+            raise CerrojoDeContenidoOcupado
+        await asyncio.sleep(_PAUSA_CERROJO_S)
 
 
 async def _coincidencias_de_hash(db: AsyncSession, sha256: str) -> list[File]:
@@ -261,6 +300,8 @@ async def _triage_and_match(
     tr: TriageResult = await _triage_sin_bloquear(path)
 
     if tr.sha256:
+        # #326: hasta el fin de la transacción nadie más busca-e-inserta por contenido
+        await tomar_cerrojo_de_contenido(db)
         coincidencias = await _coincidencias_de_hash(db, tr.sha256)
         if coincidencias:
             if len(coincidencias) > 1:
@@ -282,7 +323,8 @@ async def _triage_and_match(
                 logger.info("importer.referencia_obsoleta", fila=str(fila.id))  # sin ruta (§5.4)
             # Ninguna coincidencia tiene su fichero (desaparecidas o con la ruta obsoleta):
             # recuperar la más antigua en vez de descartar o crear una fila nueva.
-            return _Outcome(tr=tr, result=None, recuperar=coincidencias[0])
+            return _Outcome(
+                tr=tr, result=None, recuperar=coincidencias[0], n_recuperables=len(coincidencias))
 
     matcher = SeriesMatcher(db)
 
@@ -365,6 +407,17 @@ class Importer:
         for path in sorted(files):
             try:
                 await self._import_file(path, report, pistas.get(path.name))
+            except CerrojoDeContenidoOcupado:
+                # Otra operación (p. ej. un registro de la biblioteca) lleva mucho con el cerrojo:
+                # el archivo se queda donde está y se reintenta.
+                logger.warning("importer.cerrojo_de_contenido_ocupado")
+                report.errors.append(
+                    f"{path.name}: otra operación estaba registrando contenido; "
+                    "se reintentará en el próximo ciclo")
+                # Los demás esperarían lo mismo (60 s cada uno): se corta el recorrido. Siguen en
+                # descargas, intactos, y el próximo ciclo los retoma.
+                report.errors.append("El ciclo se detuvo antes de mirar el resto de las descargas")
+                break
             except Exception as exc:
                 logger.exception("importer.file_failed", path=str(path))
                 report.errors.append(f"{path.name}: {exc}")
