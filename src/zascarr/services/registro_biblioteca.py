@@ -29,6 +29,7 @@ from enum import StrEnum
 import structlog
 from sqlalchemy import text
 
+from zascarr.services.importer import CerrojoDeContenidoOcupado
 from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
 
 logger = structlog.get_logger()
@@ -39,7 +40,7 @@ class FaseRegistro(StrEnum):
     CORRIENDO = "corriendo"
     TERMINADO = "terminado"          # el recorrido acabó (puede haber errores por archivo)
     INTERRUMPIDO = "interrumpido"    # cayó antes de acabar: lo ya confirmado se conserva
-    OCUPADO = "ocupado"              # #326: otro proceso (o ventana) tiene un registro en marcha: no se hizo nada
+    OCUPADO = "ocupado"              # #326: otro registro, u otra importación de descargas, tenía ocupado el catálogo: se detuvo (lo confirmado se conserva)
 
 
 @dataclass
@@ -68,8 +69,10 @@ class EstadoRegistro:
     reenlazados: int = 0
     #: su contenido coincide con varias filas desaparecidas: no se tocó ninguna ni se creó fila
     ambiguos: list[str] = field(default_factory=list)
-    #: del alcance confirmado, rutas que al empezar ya no estaban pendientes (desaparecieron u otra ejecución las registró)
-    ya_no_pendientes: int = 0
+    #: del alcance confirmado, archivos que no se trataron (ya no estaban pendientes o desaparecieron antes de leerlos), cada uno con su causa
+    omitidos: list[str] = field(default_factory=list)
+    #: de los omitidos, los que desaparecieron durante el recorrido (están contados dentro de `procesados`)
+    desaparecidos_al_leer: int = 0
 
     @property
     def completo(self) -> bool:
@@ -113,7 +116,8 @@ def _volcar(report: AdoptionReport) -> None:
     _estado.errores = list(report.errors)
     _estado.reenlazados = report.relinked
     _estado.ambiguos = list(report.ambiguous)
-    _estado.ya_no_pendientes = report.out_of_scope_gone
+    _estado.omitidos = list(report.omitted)
+    _estado.desaparecidos_al_leer = report.vanished
 
 
 #: Clave del cerrojo consultivo de Postgres que serializa los registros de la biblioteca (inicial e incremental) entre procesos.
@@ -151,6 +155,8 @@ async def _ejecutar(fabrica: Callable, alcance: frozenset[str] | None = None) ->
             informe = await LibraryAdopter(sesion).adopt(progreso=_volcar, **extra)
         _volcar(informe)
         _estado.fase = FaseRegistro.TERMINADO
+    except CerrojoDeContenidoOcupado:
+        _estado.fase = FaseRegistro.OCUPADO       # el importador (o otro registro) llevaba demasiado con el cerrojo de contenido
     except asyncio.CancelledError:
         _estado.fase = FaseRegistro.INTERRUMPIDO
         _estado.causa = "CancelledError"

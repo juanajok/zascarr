@@ -80,14 +80,14 @@ class TestPantallaIncremental:
 
     def test_el_resultado_separa_las_categorias_y_no_llama_nueva_a_una_ficha_reenlazada(self):
         reg = EstadoRegistro(fase=FaseRegistro.TERMINADO, incremental=True, total=10, procesados=10, registrados=4, reenlazados=1, sin_identificar=2,
-                             repetidos=2, ambiguos=["X.cbz — su contenido coincide con 2 archivos que ya no están"], ya_no_pendientes=1)
+                             repetidos=2, ambiguos=["X.cbz — su contenido coincide con 2 archivos que ya no están"], omitidos=["Y.cbz — desapareció antes de leerlo"])
         t = _texto(_render(reg=reg))
         assert "<strong>5</strong> filas nuevas" not in t and "5 filas nuevas" in t        # 4 - 1 + 2
         assert "3 con serie sugerida" in t and "2 sin identificar" in t
         assert "1 eran un archivo que ya conocías" in t and "no son filas nuevas" in t
         assert "2 repetidos" in t and "No se ha borrado ni movido ninguna copia" in t
         assert "1 que ZascArr no ha podido atribuir con seguridad" in t
-        assert "otros 1 de la lista que confirmaste ya no estaban pendientes" in t
+        assert "1 de la lista que confirmaste no se han tratado" in t and "no son un error, pero tampoco están registrados" in t.lower()
         assert "Buscar archivos sin registrar otra vez" in t and "Continuar el registro" not in t
 
     def test_con_errores_no_se_dice_revisados_a_secas(self):
@@ -125,7 +125,7 @@ class TestPantallaRecorridoIncompleto:
 
     def test_otro_registro_en_marcha_lo_dice_y_no_hace_nada(self):
         t = _texto(_render(reg=EstadoRegistro(fase=FaseRegistro.OCUPADO)))
-        assert "Ya hay un registro en marcha" in t and "No se ha hecho nada" in t
+        assert "El catálogo estaba ocupado" in t and "una importación de descargas" in t and "Lo que ya estuviera guardado se conserva" in t
 
 
 class TestRecorrerComics:
@@ -168,3 +168,20 @@ class TestRecorrerComics:
         def inodos(archivos):
             return sorted(p.stat().st_ino for p in archivos)       # qué ficheros, no qué nombre elige cada uno de los dos al deduplicar el enlace
         assert inodos(recorrer_comics([tmp_path], exts).archivos) == inodos(listar_comics([tmp_path], exts))
+
+
+class TestLimiteVisibleDeIncidencias:
+    """Si solo se listan 50, la pantalla dice cuántas hay en total y que el listado está limitado."""
+
+    def test_con_mas_de_50_incidencias_dice_el_total_y_que_se_limita(self):
+        errores = [f"F{i}.cbz: no se pudo registrar (RuntimeError)" for i in range(73)]
+        omitidos = [f"G{i}.cbz — desapareció antes de leerlo" for i in range(51)]
+        reg = EstadoRegistro(fase=FaseRegistro.TERMINADO, incremental=True, total=130, procesados=130, errores=errores, omitidos=omitidos)
+        t = _texto(_render(reg=reg))
+        assert "(73)" in t and "Se muestran los 50 primeros de 73" in t
+        assert "(51)" in t and "Se muestran los 50 primeros de 51" in t
+        assert "F49.cbz" in t and "F50.cbz" not in t
+
+    def test_con_pocas_incidencias_no_hay_aviso_de_limite(self):
+        reg = EstadoRegistro(fase=FaseRegistro.TERMINADO, incremental=True, total=3, procesados=3, errores=["F0.cbz: x"], omitidos=["G0.cbz — x"])
+        assert "Se muestran los 50 primeros" not in _texto(_render(reg=reg))

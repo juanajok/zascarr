@@ -476,7 +476,7 @@ class TestExclusionEntreProcesos:
         finally:
             await ajeno.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": registro_biblioteca._CLAVE_CERROJO})
             await ajeno.close()
-        assert "Ya hay un registro en marcha" in r.text and "No se ha hecho nada" in " ".join(r.text.split())
+        assert "El catálogo estaba ocupado" in r.text
 
 
 class TestArchivoQueCambiaOSeVa:
@@ -573,3 +573,182 @@ class TestFalloParcialYRecuperacion:
         async with mundo.fabrica() as s:
             dobles = (await s.execute(text("SELECT count(*) FROM (SELECT file_path FROM files GROUP BY file_path HAVING count(*) > 1) t"))).scalar()
         assert dobles == 0 and await mundo.marcador() is True
+
+
+@pytest.fixture
+def descargas(mundo, tmp_path, monkeypatch):
+    """Carpeta de descargas del importador REAL (junto a la biblioteca de `Mundo`)."""
+    from types import SimpleNamespace
+    d = tmp_path / "descargas"
+    d.mkdir()
+    monkeypatch.setattr("zascarr.services.importer.get_settings", lambda: SimpleNamespace(
+        library_path=mundo.lib, transmission_download_dir=str(tmp_path / "transmission"),
+        amule_incoming_dir=str(tmp_path / "amule"), downloads_path=d))
+    return d
+
+
+async def _ciclo_del_importador(m: Mundo):
+    from zascarr.services.importer import Importer
+    async with m.fabrica() as s:
+        informe = await Importer(s).scan_and_import()
+        await s.commit()
+    return informe
+
+
+class TestCarreraConElImportadorDeDescargas:
+    """El mismo contenido llega a la vez por la biblioteca (registro incremental) y por descargas (importador): no puede haber dos filas."""
+
+    def _preparar(self, mundo, descargas):
+        en_biblioteca = _nuevo(mundo, "Carrera.cbz", "K")
+        en_descargas = descargas / "Carrera (descargada).cbz"
+        shutil.copyfile(en_biblioteca, en_descargas)
+        return en_biblioteca, en_descargas, hashlib.sha256(en_biblioteca.read_bytes()).hexdigest()
+
+    @staticmethod
+    def _retraso_en_la_busqueda_por_contenido(monkeypatch):
+        """Fuerza el solapamiento: ambos leen «no hay nadie con este contenido» antes de que el otro inserte."""
+        import zascarr.services.importer as imp
+        original = imp._coincidencias_de_hash
+
+        async def lenta(db, sha):
+            salida = await original(db, sha)
+            await asyncio.sleep(0.4)
+            return salida
+        monkeypatch.setattr(imp, "_coincidencias_de_hash", lenta)
+
+    async def _filas_con(self, m: Mundo, sha: str) -> int:
+        async with m.fabrica() as s:
+            return (await s.execute(select(func.count(File.id)).where(File.sha256_hash == sha))).scalar()
+
+    async def test_con_el_cerrojo_hay_una_sola_fila_y_ambos_resultados_reflejan_lo_sucedido(self, mundo, descargas, monkeypatch):
+        en_biblioteca, en_descargas, sha = self._preparar(mundo, descargas)
+        inv = await _inventario(mundo)
+        self._retraso_en_la_busqueda_por_contenido(monkeypatch)
+        informe_imp, informe_reg = await asyncio.gather(_ciclo_del_importador(mundo), _incremental(mundo, inv))
+        assert await self._filas_con(mundo, sha) == 1                       # una sola fila por el mismo contenido
+        creadas = informe_reg.added_count + len(informe_imp.imported) + len(informe_imp.unsorted)
+        repetidas = informe_reg.duplicate_count + len(informe_imp.duplicates)
+        assert creadas == 1 and repetidas == 1                              # uno la incorporó y el otro lo informó como repetido
+        assert informe_reg.error_count == 0 and not informe_imp.errors
+
+    async def test_control_negativo_sin_el_cerrojo_el_mismo_escenario_si_duplica(self, mundo, descargas, monkeypatch):
+        """Demuestra que la carrera era real: la misma prueba, sin el cerrojo, deja dos filas."""
+        import zascarr.services.importer as imp
+
+        async def sin_cerrojo(db):
+            return None
+        monkeypatch.setattr(imp, "tomar_cerrojo_de_contenido", sin_cerrojo)
+        _en_biblioteca, _en_descargas, sha = self._preparar(mundo, descargas)
+        inv = await _inventario(mundo)
+        self._retraso_en_la_busqueda_por_contenido(monkeypatch)
+        await asyncio.gather(_ciclo_del_importador(mundo), _incremental(mundo, inv))
+        assert await self._filas_con(mundo, sha) == 2
+
+    async def test_si_el_importador_tiene_el_cerrojo_el_registro_se_detiene_con_ocupado_y_no_inserta(self, mundo, descargas, monkeypatch):
+        import zascarr.services.importer as imp
+        monkeypatch.setattr(imp, "ESPERA_MAXIMA_CERROJO_CONTENIDO_S", 0.3)
+        _nuevo(mundo, "Nuevo 01.cbz", "x")
+        inv = await _inventario(mundo)
+        n = len(await _filas(mundo))
+        async with mundo.fabrica() as importador:                            # transacción larga del importador, con el cerrojo
+            await imp.tomar_cerrojo_de_contenido(importador)
+            registro_biblioteca.iniciar(mundo.fabrica, alcance=inv.rutas_nuevas)
+            await asyncio.wait_for(registro_biblioteca._tarea, 60)
+            e = registro_biblioteca.estado_actual()
+            assert e.fase.value == "ocupado" and not e.completo
+            await importador.rollback()
+        assert len(await _filas(mundo)) == n                                  # nada insertado
+        assert await _n_runs(mundo, "registro_incremental") == 0              # y ningún informe de un registro que no terminó
+        registro_biblioteca.iniciar(mundo.fabrica, alcance=inv.rutas_nuevas)  # liberado el cerrojo, se completa
+        await asyncio.wait_for(registro_biblioteca._tarea, 60)
+        assert registro_biblioteca.estado_actual().completo and len(await _filas(mundo)) == n + 1
+
+    async def test_si_el_registro_tiene_el_cerrojo_el_importador_deja_el_archivo_y_lo_reintenta(self, mundo, descargas, monkeypatch):
+        import zascarr.services.importer as imp
+        monkeypatch.setattr(imp, "ESPERA_MAXIMA_CERROJO_CONTENIDO_S", 0.3)
+        _en_biblioteca, en_descargas, _sha = self._preparar(mundo, descargas)
+        n = len(await _filas(mundo))
+        async with mundo.fabrica() as registro:
+            await imp.tomar_cerrojo_de_contenido(registro)
+            informe = await _ciclo_del_importador(mundo)
+            assert informe.errors and "se reintentará en el próximo ciclo" in informe.errors[0]
+            assert en_descargas.exists() and len(await _filas(mundo)) == n    # el archivo no se movió ni se registró
+            await registro.rollback()
+        siguiente = await _ciclo_del_importador(mundo)                        # sin el cerrojo ocupado, el siguiente ciclo lo incorpora
+        assert not siguiente.errors and len(await _filas(mundo)) == n + 1
+
+    async def test_el_cerrojo_se_libera_al_acabar_la_transaccion_aunque_falle(self, mundo):
+        import zascarr.services.importer as imp
+        async with mundo.fabrica() as a:
+            await imp.tomar_cerrojo_de_contenido(a)
+            await a.rollback()                                                # el fallo de quien lo tenía
+        async with mundo.fabrica() as b:
+            await imp.tomar_cerrojo_de_contenido(b)                           # no espera ni lanza: estaba libre
+            await b.rollback()
+
+
+class TestContabilidadYRecuperacion:
+
+    async def test_cada_archivo_del_alcance_cae_en_una_categoria_y_el_total_cuadra(self, mundo, monkeypatch):
+        import zascarr.services.library_adopter as la
+        from zascarr.utils.fs import Recorrido, recorrer_comics
+        nuevo = _nuevo(mundo, "Fresco.cbz", "Q")
+        copia = mundo.lib / "Copias" / "Copia.cbz"
+        copia.parent.mkdir(parents=True)
+        shutil.copyfile(next(iter(mundo.contenido)), copia)
+        movido = _nuevo(mundo, "Movido.cbz", "W", sub="Reorganizado")
+        sha_m = hashlib.sha256(movido.read_bytes()).hexdigest()
+        ambiguo = _nuevo(mundo, "Ambiguo.cbz", "Z", sub="Reorganizado")
+        sha_a = hashlib.sha256(ambiguo.read_bytes()).hexdigest()
+        async with mundo.fabrica() as s:
+            s.add(File(id=uuid4(), file_path=str(mundo.lib / "Viejo" / "M.cbz"), file_name="M.cbz", file_format=FileFormat.CBZ,
+                       sha256_hash=sha_m, original_sha256=sha_m, is_missing=True))
+            for k in (1, 2):
+                s.add(File(id=uuid4(), file_path=str(mundo.lib / "Viejo" / f"A{k}.cbz"), file_name=f"A{k}.cbz", file_format=FileFormat.CBZ,
+                           sha256_hash=sha_a, original_sha256=sha_a, is_missing=True))
+            await s.commit()
+        fantasma = mundo.lib / "Nuevos" / "Fantasma.cbz"
+        se_fue_antes = _nuevo(mundo, "SeFueAntes.cbz", "V")
+        inv = await _inventario(mundo)                                         # lo que la persona confirma
+        se_fue_antes.unlink()                                                  # y desaparece antes de empezar
+
+        def con_fantasma(dirs, exts):
+            r = recorrer_comics(dirs, exts)
+            return Recorrido([*r.archivos, fantasma], r.ilegibles)             # …y otro desaparece justo al leerlo
+        monkeypatch.setattr(la, "recorrer_comics", con_fantasma)
+        alcance = SimpleAlcance({*inv.rutas_nuevas, str(fantasma)})
+        informe = await _incremental(mundo, alcance)
+
+        categorias = (informe.added_count + informe.duplicate_count + len(informe.ambiguous) + informe.by_other_run
+                      + informe.error_count + informe.vanished + informe.reverted + informe.unknown)
+        assert informe.processed == categorias == informe.to_process           # cada archivo mirado cae en UNA categoría y el total cuadra
+        assert (informe.added_count, informe.relinked, informe.duplicate_count, len(informe.ambiguous), informe.vanished) == (2, 1, 1, 1, 1)
+        assert len(informe.omitted) == 2                                       # el que se fue antes de empezar y el que se fue al leerlo
+        assert any("ya no estaba pendiente al empezar" in o for o in informe.omitted) and any("desapareció antes de leerlo" in o for o in informe.omitted)
+        assert nuevo.name in " ".join(informe.unsorted) and "Movido.cbz" in " ".join(informe.registered)
+
+    async def test_commit_aplicado_con_la_respuesta_perdida_se_acredita_sin_duplicar_ni_decir_que_no_se_hizo_nada(self, mundo, monkeypatch):
+        from sqlalchemy.ext.asyncio import AsyncSession
+        for i in range(4):
+            _nuevo(mundo, f"Nuevo {i}.cbz", f"n{i}")
+        inv = await _inventario(mundo)
+        original = AsyncSession.commit
+        llamadas = {"n": 0}
+
+        async def commit(self):
+            llamadas["n"] += 1
+            if llamadas["n"] == 1:
+                await original(self)                                           # el commit SÍ termina…
+                raise ConnectionError("password=secreta")                      # …pero la respuesta se pierde
+            return await original(self)
+        monkeypatch.setattr(AsyncSession, "commit", commit)
+        antes = len(await _filas(mundo))
+        informe = await _incremental(mundo, inv, lote=2)                       # no lanza: se acredita contra otra sesión
+        monkeypatch.setattr(AsyncSession, "commit", original)
+        assert informe.added_count == 4 and informe.reverted == 0 and informe.unknown == 0
+        assert len(await _filas(mundo)) == antes + 4
+        async with mundo.fabrica() as s:
+            dobles = (await s.execute(text("SELECT count(*) FROM (SELECT file_path FROM files GROUP BY file_path HAVING count(*) > 1) t"))).scalar()
+            guardado = (await s.execute(text("SELECT details FROM import_runs WHERE details->>'kind' = 'registro_incremental'"))).scalar()
+        assert dobles == 0 and len(guardado["registered"]) + len(guardado["unsorted"]) == 4     # el informe persistido cuenta lo que pasó
+        assert (await _inventario(mundo)).nuevos == 0                          # y buscar de nuevo no encuentra nada pendiente
