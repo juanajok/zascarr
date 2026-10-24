@@ -71,8 +71,8 @@ MAX_DIRECTORIO_CENTRAL = 1 * 1024 * 1024
 # memoria de un contenedor de 512 MiB.
 MAX_PIXELES_PORTADA = 40_000_000             # una página de tebeo de 3000×4500 son 13,5 Mpx
 
-CONTRATO = 1
 # versión de lo que se guarda en `metadata["formato_contenido"]`
+CONTRATO = 1
 
 _ZIP = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")      # normal, vacío, partido
 
@@ -298,15 +298,15 @@ def puede_dar_portada(ext: str, fc: dict | None) -> bool | None:
     declara tebeo: un tebeo corto o un
     pack siguen dando su primera página, como hoy); un `.cbr`/`.cb7` que resulta ser ZIP solo si
     es un `TEBEO` comprobado."""
+    # nada utilizable guardado (o una lectura fallida de otra versión): decide la extensión
     if not fc or fc.get("firma") == Firma.ILEGIBLE.value:
         return None
-        # nada utilizable guardado (o una lectura fallida de otra versión): decide la extensión
     if fc.get("firma") != Firma.ZIP.value:
         return False
+    # solo cuenta la firma: la clase guardada es una foto del momento del registro y puede
+    # quedar vieja si el fichero se sustituye
     if ext in (".cbz", ".zip"):
         return True
-        # solo cuenta la firma: la clase guardada es una foto del momento del registro y puede
-        # quedar vieja si el fichero se sustituye
     return fc.get("clase") == ClaseZip.TEBEO.value
 
 

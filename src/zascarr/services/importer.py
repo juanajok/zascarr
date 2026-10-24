@@ -64,9 +64,9 @@ COMIC_EXTS = {".cbz", ".cbr", ".cb7", ".pdf", ".epub"}
 # montaje que un vaciado real a mano.
 UMBRAL_DESAPARICION_MASIVA_FRACCION = 0.5
 UMBRAL_DESAPARICION_MASIVA_MINIMO = 10
-LOTE_FORMATO_CONTENIDO = 100
 # #307: filas por ciclo del relleno del formato real (cada una lee ≤ 512 B y, si es ZIP, su
 # directorio central); ver contrato §12.2
+LOTE_FORMATO_CONTENIDO = 100
 
 TRADITION_MAP = {
     "american":       "Comics",
@@ -225,8 +225,8 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     fila.missing_since = None
     fila.imported_at = datetime.now(UTC)
     meta = dict(fila.metadata_ or {})
-    if tr.formato_contenido:
     # #307: el formato REAL del fichero que ahora está en `dest`
+    if tr.formato_contenido:
         meta["formato_contenido"] = tr.formato_contenido
     if fila.original_sha256 is not None and tr.sha256 == fila.original_sha256:
         meta.pop("comicinfo_estado", None)
@@ -569,8 +569,8 @@ class Importer:
             metadata["cohorte"] = outcome.cohorte_explicacion
         if outcome.edition_kind:
             metadata["edicion"] = outcome.edition_kind
-        if tr.formato_contenido:
         # #307: formato REAL por contenido (file_format sigue siendo la extensión)
+        if tr.formato_contenido:
             metadata["formato_contenido"] = tr.formato_contenido
 
         file_rec = File(
