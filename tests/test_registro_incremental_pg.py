@@ -630,13 +630,15 @@ class TestCarreraConElImportadorDeDescargas:
         repetidas = informe_reg.duplicate_count + len(informe_imp.duplicates)
         assert creadas == 1 and repetidas == 1                              # uno la incorporó y el otro lo informó como repetido
         assert informe_reg.error_count == 0 and not informe_imp.errors
-        # Ninguno de los dos informes describe «nada»: el que perdió dice de cuál es copia; el que ganó, lo que registró.
-        if informe_reg.duplicate_count:
-            assert "duplicado de" in informe_reg.duplicates[0] and "Carrera" in informe_reg.duplicates[0]
-            assert len(informe_imp.imported) + len(informe_imp.unsorted) == 1
-        else:
-            assert "duplicado de" in informe_imp.duplicates[0] and "Carrera" in informe_imp.duplicates[0]
-            assert informe_reg.added_count == 1 and informe_reg.registered + informe_reg.unsorted
+        # Ninguno de los dos informes describe «nada»: el que perdió nombra EXACTAMENTE el archivo de la fila ganadora; el que ganó, lo que registró.
+        async with mundo.fabrica() as s:
+            ganadora = (await s.execute(select(File).where(File.sha256_hash == sha))).scalar_one()
+        if informe_reg.duplicate_count:                                     # ganó el importador
+            assert informe_reg.duplicates == [f"{en_biblioteca.name} — duplicado de {ganadora.file_name}, descartado"]
+            assert len(informe_imp.imported) + len(informe_imp.unsorted) == 1 and informe_imp.duplicates == []
+        else:                                                               # ganó el registro
+            assert informe_imp.duplicates == [f"{en_descargas.name} — duplicado de {ganadora.file_name}, descartado"]
+            assert informe_reg.added_count == 1 and ganadora.file_path == str(en_biblioteca) and informe_reg.duplicates == []
 
     async def test_control_negativo_sin_el_cerrojo_el_mismo_escenario_si_duplica(self, mundo, descargas, monkeypatch):
         """Demuestra que la carrera era real: la misma prueba, sin el cerrojo, deja dos filas."""
