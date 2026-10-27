@@ -129,6 +129,9 @@ class AdoptionReport:
     omitted: list[str] = field(default_factory=list)
     #: de los `omitted`, los que desaparecieron DURANTE el recorrido (están contados en `processed`; los de antes de empezar, no)
     vanished: int = 0
+    #: #332 (residual 2 de #329): carpetas o archivos que el recorrido NO pudo leer (`Recorrido.ilegibles`). Con `> 0` el recorrido no acredita haber
+    #: visto toda la biblioteca: la ejecución no se da por completa, no pone el marcador de «hecho» y lo dice, igual que la búsqueda del incremental.
+    unreadable: int = 0
 
     @property
     def out_of_scope_gone(self) -> int:
@@ -312,7 +315,9 @@ class LibraryAdopter:
         report = AdoptionReport(started_at=datetime.now(UTC))
 
         # Dedupe por inodo y recorrido en un hilo: ver `recorrer_comics`.
-        files = (await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)).archivos
+        recorrido = await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)
+        files = recorrido.archivos
+        report.unreadable = recorrido.ilegibles
         report.files_scanned = len(files)
         registradas = await self._rutas_registradas()
         nuevos = sorted(f for f in files if str(f) not in registradas)
@@ -320,8 +325,9 @@ class LibraryAdopter:
         incremental = self._incremental = alcance is not None
         if incremental:
             ahora = {str(f) for f in nuevos}
-            report.omitted = [f"{Path(r).name} — ya no estaba pendiente al empezar (desapareció o ya constaba)"
-                              for r in sorted(alcance - ahora)]
+            causa = ("ya no estaba pendiente al empezar (desapareció o ya constaba)" if not report.unreadable
+                     else "no se vio al empezar: desapareció, ya constaba o su carpeta no se pudo leer")
+            report.omitted = [f"{Path(r).name} — {causa}" for r in sorted(alcance - ahora)]
             nuevos = [f for f in nuevos if str(f) in alcance]
         report.to_process = len(nuevos)
 
@@ -379,13 +385,14 @@ class LibraryAdopter:
         provisional = AdoptionReport(started_at=report.started_at, finished_at=report.finished_at,
                                      files_scanned=report.files_scanned,
                                      already_registered=report.already_registered, to_process=report.to_process,
-                                     processed=report.processed)
+                                     processed=report.processed, unreadable=report.unreadable)
         provisional.absorb(report)
         provisional.absorb(en_lote)
         run_id = await self._persist_run(provisional, kind="registro_incremental" if incremental else "adoption")
         # El marcador dice «el registro terminó». Con errores NO terminó: no se pone, y lo que
         # quedó sin registrar sigue a la vista (`inventario`) y se puede continuar repitiendo.
-        if not provisional.errors and not incremental:
+        # Tampoco con un recorrido parcial (#332): lo que no se pudo leer sigue sin registrar y el marcador cerraría la puerta a repetir.
+        if not provisional.errors and not incremental and not report.unreadable:
             await RuntimeSettingsService(self._db).set_flag(_MARCADOR_HECHO, True)
         await self._confirmar_lote(en_lote, report, report.processed - confirmados, progreso, run_id)
         report.pending_count = 0
@@ -601,6 +608,7 @@ class LibraryAdopter:
                 "relinked": report.relinked,
                 "ambiguous": report.ambiguous,
                 "omitted": report.omitted,
+                "unreadable": report.unreadable,
             },
         )
         self._db.add(run)
