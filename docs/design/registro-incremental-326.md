@@ -111,6 +111,12 @@ Ahora ambos pasan por `tomar_cerrojo_de_contenido` en `_triage_and_match`:
   no hay carrera y nada se pierde, a cambio de que los dos no avancen a la vez cuando coinciden. No hay restricción única nueva (habría que revisar los datos existentes).
 - **Otros escritores:** el etiquetado y las asignaciones no crean filas por contenido; no pasan por el cerrojo.
 
+### 6.6 Recorrido parcial en `adopt` (#332, residual 2 de #329)
+La búsqueda ya bloqueaba la confirmación con un recorrido incompleto, pero `adopt` ignoraba `Recorrido.ilegibles`: una adopción inicial podía terminar «completa» y poner `_library_adoption_done` sin haber visto
+toda la carpeta. Ahora `adopt` guarda `unreadable` en su informe (y en el `ImportRun`): con `unreadable > 0` **no pone el marcador**, el estado del registro **no es «completo»**, la pantalla lo dice
+(«No se ha podido leer N carpetas o archivos… Arregla el acceso y continúa») y ofrece continuar. Es el mismo criterio que usa `inventario()` (ambos cuentan con `recorrer_comics`). En el registro **incremental**,
+los archivos del alcance que no se vieron constan como omitidos con la causa «su carpeta no se pudo leer» en lugar de «desapareció».
+
 ## 7. Límites conocidos (no resueltos)
 
 - **Cobertura del cerrojo de contenido:** lo toman el importador y los registros de la biblioteca (los escritores que crean filas por contenido). Si en el futuro aparece otro, debe pasar también por `_triage_and_match`.
@@ -150,6 +156,7 @@ Ahora ambos pasan por `tomar_cerrojo_de_contenido` en `_triage_and_match`:
 | El límite de 50 incidencias dice el total | `test_registro_incremental::TestLimiteVisibleDeIncidencias` |
 | Fallo de un lote: lo confirmado se conserva; buscar de nuevo completa sin duplicar | `TestFalloParcialYRecuperacion` |
 | Un fallo no toca el marcador y el resto se registra | `test_un_fallo_no_toca_el_marcador_y_el_resto_se_registra` |
+| La adopción no se da por completa tras un recorrido parcial (sin marcador, no «completo», pantalla, continúa) | `tests/test_adopt_recorrido_parcial_pg.py` (7 pruebas) y `test_registro_incremental::TestEstadoConRecorridoIlegible` |
 | Sin automatismo | `test_el_unico_que_lanza_el_registro_incremental_es_la_pantalla` |
 | Textos: rutas sin registrar, aviso de lectura, ignorados no se reactivan, sin palabras internas | `test_registro_incremental::TestPantallaIncremental`, `TestPantallaRecorridoIncompleto` |
 
