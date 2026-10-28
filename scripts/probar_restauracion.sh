@@ -224,7 +224,9 @@ if ! gzip -dc "${DUMP}" | "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" 
     die "La restauración falló."
 fi
 
-TABLAS_REST="$(psql_temp "select count(*) from information_schema.tables where table_schema='public'")"
+# `relkind r/p` = tablas normales y particionadas, que es justo lo que pg_dump
+# escribe como `CREATE TABLE`. information_schema incluiría vistas y foráneas.
+TABLAS_REST="$(psql_temp "select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r', 'p')")"
 for tabla in alembic_version series files wishlist; do
     # `to_regclass` imprime `alembic_version` o `public.alembic_version` según
     # el search_path; la pregunta es solo si existe.
@@ -243,7 +245,7 @@ WISHLIST_REST="$(psql_temp "select count(*) from wishlist")"
 if [[ "${TABLAS_REST}" != "${TABLAS_DUMP}" ]]; then
     escribir_restore_estado "failed" "tablas_distintas" \
         "dump=${TABLAS_DUMP} restaurada=${TABLAS_REST}" || true
-    die "El número de tablas no coincide."
+    die "El número de tablas no coincide (dump=${TABLAS_DUMP}, restaurada=${TABLAS_REST})."
 fi
 for par in "files:${FILES_DUMP}:${FILES_REST}" "series:${SERIES_DUMP}:${SERIES_REST}" \
            "issues:${ISSUES_DUMP}:${ISSUES_REST}" "wishlist:${WISHLIST_DUMP}:${WISHLIST_REST}"; do

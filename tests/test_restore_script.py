@@ -31,7 +31,7 @@ case "$*" in
   *"psql"*)
     if [[ "$*" == *" -c "* ]]; then
       case "$*" in
-        *"information_schema.tables"*) echo "${FAKE_TABLES:-28}" ;;
+        *"from pg_class"*) echo "${FAKE_TABLES:-28}" ;;
         *"to_regclass"*) echo "t" ;;
         *"version_num"*) echo "${FAKE_ALEMBIC:-0020}" ;;
         *"count(*) from files"*) echo "${FAKE_FILES:-3}" ;;
