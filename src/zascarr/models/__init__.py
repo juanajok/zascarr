@@ -114,6 +114,18 @@ class Tratamiento(enum.StrEnum):
     SOLO_HASH     = "solo_hash"       # como hoy: se hashea y no se abre
     AVISAR        = "avisar"          # SOLO_HASH + aviso con causa y acción
 
+
+class ResultadoComprobacion(enum.StrEnum):
+    """#231 (BL-R2): qué observó el ciclo del importador al revisar si los archivos registrados
+    siguen en disco. Vive en `import_runs.details["comprobacion_biblioteca"]["resultado"]`.
+    Describe lo observado, no una causa: ninguno afirma «disco desmontado» ni «pérdida»."""
+    COMPROBADA          = "comprobada"           # se miró cada ruta registrada
+    RAIZ_INACCESIBLE    = "raiz_inaccesible"     # la raíz no existe o no es una carpeta
+    RAIZ_VACIA          = "raiz_vacia"           # la raíz existe y no tiene nada dentro
+    DESAPARICION_MASIVA = "desaparicion_masiva"  # faltaba más de la mitad: no se marcó ninguna baja
+    FALLO_DETECCION     = "fallo_deteccion"      # la comprobación lanzó una excepción
+
+
 class WishlistStatus(str, enum.Enum):
     WANTED      = "wanted"
     SEARCHING   = "searching"

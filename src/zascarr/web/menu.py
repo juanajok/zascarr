@@ -52,6 +52,7 @@ _PREFIJOS: tuple[tuple[str, str], ...] = (
     ("/ui/wishlist", "deseados"),
     ("/ui/ajustes", "ajustes"),
     ("/estado", "estado"),
+    ("/ui/no-disponibles", "estado"),  # #231: cuelga de Estado
 )
 
 
