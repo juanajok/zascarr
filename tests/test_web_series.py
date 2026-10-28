@@ -484,8 +484,8 @@ class TestPresupuestoTextoU21:
         pos_efecto = html.index("politica-efecto")
         pos_veredicto = html.index("politica-veredicto")
         assert pos_select < pos_efecto < pos_veredicto
-        assert "Al cambiar el selector se guarda al momento" in html
-        assert "lo retirado deja de buscarse ya" in html
+        assert "Se guarda al momento: lo retirado deja de buscarse ya." in html
+        assert "Lo que falte entra en el próximo ciclo." in html
         assert "Guardar aplica la retirada" not in html
 
     def test_la_nota_de_futuros_va_junto_al_selector(self):
@@ -493,6 +493,44 @@ class TestPresupuestoTextoU21:
         assert html.index('id="wishlist_policy"') < html.index("politica-futuros")
         assert html.index("politica-futuros") < html.index("politica-veredicto")
         assert "todavía no se puede aplicar" in html
+
+    def _bloque_politica(self) -> str:
+        html = self._render()
+        inicio = html.index('id="politica-serie"')
+        return html[inicio:html.index("politica-veredicto", inicio)]
+
+    def test_u21_una_sola_linea_visible_junto_al_selector_y_el_resto_plegado(self):
+        """#296, criterio 1: entre el selector y el veredicto solo hay UNA nota fuera del `<details>`."""
+        bloque = self._bloque_politica()
+        fuera = re.sub(r"<details\b.*?</details>", "", bloque, flags=re.S)
+        notas = re.findall(r'<p class="caption[^"]*">(.*?)</p>', fuera, re.S)
+        assert len(notas) == 1, notas
+        linea = self._texto(notas[0]).strip()
+        assert linea == "Se guarda al momento: lo retirado deja de buscarse ya."
+        assert len(linea) <= 60  # cabe en una línea del móvil junto al selector, sin partirla en dos avisos
+        assert "politica-futuros" not in fuera
+
+    def test_u21_el_detalle_plegado_lleva_el_resto_con_un_resumen_que_lo_nombra(self):
+        bloque = self._bloque_politica()
+        detalle = re.search(r'<details class="politica-detalles">(.*?)</details>', bloque, re.S)
+        assert detalle is not None and "<summary>Más detalles</summary>" in detalle.group(1)
+        assert "<details class=\"politica-detalles\" open" not in bloque   # plegado de entrada
+        plano = " ".join(self._texto(detalle.group(1)).split())
+        assert "Lo que falte entra en el próximo ciclo." in plano
+        assert "«Números que aún no han salido» está deshabilitado:" in plano
+        assert "todavía no se puede aplicar" in plano
+
+    def test_u21_futuros_sigue_deshabilitado_con_su_motivo_accesible(self):
+        """#296, criterio 2: la opción no se puede elegir y su motivo está en el `title` y en el detalle."""
+        bloque = self._bloque_politica()
+        opcion = re.search(r'<option value="futuros"[^>]*>', bloque)
+        assert opcion is not None and " disabled" in opcion.group(0)
+        assert 'title="' in opcion.group(0) and "todavía no se puede aplicar" in opcion.group(0)
+        assert 'id="politica-futuros"' in bloque
+
+    def test_u21_no_se_pierde_que_guardar_es_inmediato(self):
+        plano = " ".join(self._texto(self._bloque_politica()).split())
+        assert "Se guarda al momento" in plano and "lo retirado deja de buscarse ya" in plano
 
     def test_ningun_parrafo_visible_va_en_mayusculas(self):
         html = self._render()
