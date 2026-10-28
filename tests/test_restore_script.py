@@ -32,9 +32,7 @@ case "$*" in
     if [[ "$*" == *" -c "* ]]; then
       case "$*" in
         *"information_schema.tables"*) echo "${FAKE_TABLES:-28}" ;;
-        *"to_regclass"*)
-          tabla="$(printf '%s' "$*" | sed -E "s/.*to_regclass\('public\.([^']+)'\).*/\1/")"
-          echo "public.${tabla}" ;;
+        *"to_regclass"*) echo "t" ;;
         *"version_num"*) echo "${FAKE_ALEMBIC:-0020}" ;;
         *"count(*) from files"*) echo "${FAKE_FILES:-3}" ;;
         *"count(*) from series"*) echo "${FAKE_SERIES:-2}" ;;

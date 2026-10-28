@@ -226,8 +226,10 @@ fi
 
 TABLAS_REST="$(psql_temp "select count(*) from information_schema.tables where table_schema='public'")"
 for tabla in alembic_version series files wishlist; do
-    presente="$(psql_temp "select to_regclass('public.${tabla}')")"
-    [[ "${presente}" == "public.${tabla}" ]] || {
+    # `to_regclass` imprime `alembic_version` o `public.alembic_version` según
+    # el search_path; la pregunta es solo si existe.
+    presente="$(psql_temp "select to_regclass('public.${tabla}') is not null")"
+    [[ "${presente}" == "t" ]] || {
         escribir_restore_estado "failed" "tabla_ausente" "falta ${tabla}" || true
         die "Falta la tabla ${tabla} en la restauración."
     }
