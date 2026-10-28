@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import tracemalloc
 import zipfile
+from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
@@ -190,4 +191,71 @@ class TestTriageNoCargaElCbzEnRam:
         result = triage(roto)
 
         assert result.sha256 is None
+        assert result.error_lectura is None          # contenido inválido, no fallo de lectura
         assert any("zip ilegible" in w for w in result.warnings)
+
+
+class TestLecturaIlegible:
+    """#332 (residual 1 de #329): un fichero que se puede `stat` pero no leer no es un ZIP roto."""
+
+    def _cbz(self, ruta):
+        with zipfile.ZipFile(ruta, "w", zipfile.ZIP_STORED) as zf:
+            zf.writestr("001.jpg", b"x" * 2048)
+
+    def test_fichero_que_se_puede_stat_pero_no_leer_es_ilegible(self, tmp_path, monkeypatch):
+        cbz = tmp_path / "Serie 01.cbz"
+        self._cbz(cbz)
+        real_open = open
+
+        def open_que_falla(path, *args, **kwargs):
+            if isinstance(path, (str, Path)) and Path(path) == cbz:
+                raise PermissionError(13, "Permission denied")
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr("builtins.open", open_que_falla)
+        result = triage(cbz)
+
+        assert result.sha256 is None
+        assert result.error_lectura == "PermissionError: Permission denied"
+        assert result.formato_contenido is None       # una firma ilegible no se fija en la base
+        assert any("ilegible" in w for w in result.warnings)
+
+    def test_una_caida_a_mitad_de_lectura_no_deja_hash_parcial(self, tmp_path, monkeypatch):
+        cbz = tmp_path / "Serie 01.cbz"
+        self._cbz(cbz)
+        real_open = open
+
+        class SeCae:
+            """Deja leer el primer bloque y falla en el segundo, como un USB que se desconecta."""
+
+            def __init__(self, fh):
+                self._fh = fh
+                self._lecturas = 0
+
+            def read(self, n=-1):
+                self._lecturas += 1
+                if self._lecturas >= 2:
+                    raise OSError(5, "Input/output error")
+                return self._fh.read(n)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                self._fh.close()
+
+            def __getattr__(self, nombre):
+                return getattr(self._fh, nombre)
+
+        def open_que_se_cae(path, *args, **kwargs):
+            fh = real_open(path, *args, **kwargs)
+            if isinstance(path, (str, Path)) and Path(path) == cbz:
+                return SeCae(fh)
+            return fh
+
+        monkeypatch.setattr("builtins.open", open_que_se_cae)
+        result = triage(cbz)
+
+        assert result.sha256 is None                  # no se publica el hash de media lectura
+        assert result.error_lectura == "OSError: Input/output error"
+        assert result.formato_contenido is None
