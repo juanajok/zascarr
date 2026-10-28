@@ -537,9 +537,8 @@ class TestPresupuestoTextoU21:
         assert 'id="politica-futuros"' in bloque and "Todavía no se puede elegir" in bloque
 
     def test_u21_el_selector_esta_descrito_por_la_garantia_y_por_el_motivo(self):
-        """Accesibilidad (validación del 2026-10-28): al enfocar el selector, un lector de pantalla debe leer la garantía de
-        guardado y el motivo de la opción no elegible; `aria-describedby` apunta a ids que EXISTEN (también si el detalle va
-        plegado, que un lector sí lee)."""
+        """Comprueba que aria-describedby referencia la garantía y el motivo mediante ids existentes y únicos.
+        El anuncio efectivo con el detalle plegado requiere validación con lector de pantalla y sigue como NOT RUN."""
         bloque = self._bloque_politica()
         selector = re.search(r'<select\b[^>]*>', bloque)
         assert selector is not None
