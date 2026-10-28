@@ -51,7 +51,7 @@ def _update(repo: Path, bin_: Path, log: Path, entorno: dict, tmp_path: Path):
     return subprocess.run(
         ["bash", str(repo / "scripts" / "update.sh")], capture_output=True, text=True, timeout=120, check=False,
         env={**entorno, "PATH": f"{bin_}:{os.environ['PATH']}", "STUB_LOG": str(log),
-             "BACKUP_DIR": str(tmp_path / "backups"), "HEALTH_TIMEOUT": "2"},
+             "BACKUP_DIR": str(tmp_path / "backups"), "HEALTH_TIMEOUT": "2", "BRANCH": "main"},
     )
 
 
@@ -88,3 +88,53 @@ def test_update_avisa_pero_no_falla_si_el_env_sigue_legible_por_otros(tmp_path):
     assert "no está bien protegido" in salida and "credenciales.sh" in salida
     assert "pg_dump" in log.read_text(encoding="utf-8"), "el aviso no debe detener la actualización"
     assert "Sint3tica-Update-0006" not in salida
+
+
+# --- #307/#231: la rama es obligatoria ---------------------------------------------------------------------------
+
+def _update_sin_rama(repo: Path, bin_: Path, log: Path, entorno: dict, tmp_path: Path, *args: str, **extra_env: str):
+    # sin BRANCH heredada del entorno de quien lanza las pruebas: solo la que se pase a propósito
+    env = {**{k: v for k, v in entorno.items() if k != "BRANCH"}, "PATH": f"{bin_}:{os.environ['PATH']}",
+           "STUB_LOG": str(log), "BACKUP_DIR": str(tmp_path / "backups"), "HEALTH_TIMEOUT": "2", **extra_env}
+    return subprocess.run(["bash", str(repo / "scripts" / "update.sh"), *args], capture_output=True, text=True,
+                          timeout=120, check=False, env=env)
+
+
+def _no_toco_nada(repo: Path, log: Path, tmp_path: Path):
+    orden = log.read_text(encoding="utf-8")
+    assert "pg_dump" not in orden and " build" not in orden and " up " not in orden
+    refs = subprocess.run(["git", "-C", str(repo), "for-each-ref", "refs/zascarr"], capture_output=True, text=True)
+    assert refs.stdout.strip() == "", "creó una referencia de rescate sin saber qué rama instalar"
+    assert not (tmp_path / "backups").exists(), "hizo un backup sin saber qué rama instalar"
+
+
+def test_update_sin_rama_se_detiene_antes_de_tocar_nada(tmp_path):
+    repo, _, bin_, log, entorno = _preparar(tmp_path, "DB_PASSWORD=Sint3tica-Update-0007\n")
+    r = _update_sin_rama(repo, bin_, log, entorno, tmp_path)
+    assert r.returncode != 0
+    assert "NO se ha actualizado nada" in r.stderr and "--rama main" in r.stderr
+    _no_toco_nada(repo, log, tmp_path)
+
+
+@pytest.mark.parametrize("rama", ["", "HEAD", "-x", "main; rm -rf /", "con espacio"])
+def test_update_con_una_rama_invalida_no_toca_nada(tmp_path, rama):
+    repo, _, bin_, log, entorno = _preparar(tmp_path, "DB_PASSWORD=Sint3tica-Update-0008\n")
+    argumentos = ("--rama", rama) if rama else ("--rama",)   # «--rama» sin valor también cuenta como rama vacía
+    r = _update_sin_rama(repo, bin_, log, entorno, tmp_path, *argumentos)
+    assert r.returncode != 0 and "NO se ha actualizado nada" in r.stderr
+    _no_toco_nada(repo, log, tmp_path)
+
+
+def test_update_acepta_la_rama_por_argumento_y_por_entorno(tmp_path):
+    for variante in ("argumento", "igual", "entorno"):
+        sub = tmp_path / variante
+        sub.mkdir()
+        repo, _, bin_, log, entorno = _preparar(sub, "DB_PASSWORD=Sint3tica-Update-0009\n")
+        if variante == "argumento":
+            r = _update_sin_rama(repo, bin_, log, entorno, sub, "--rama", "main")
+        elif variante == "igual":
+            r = _update_sin_rama(repo, bin_, log, entorno, sub, "--rama=main")
+        else:
+            r = _update_sin_rama(repo, bin_, log, entorno, sub, BRANCH="main")
+        assert "NO se ha actualizado nada" not in r.stderr, (variante, r.stderr)
+        assert "pg_dump" in log.read_text(encoding="utf-8"), f"{variante}: no llegó al backup"
