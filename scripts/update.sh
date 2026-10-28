@@ -82,12 +82,6 @@ volcar_postgres "${DEST}" || die \
 # Y se comprueba: un backup sin verificar no es un backup, es una esperanza.
 verificar_dump "${DEST}"
 success "Backup verificado: ${DEST}"
-# #334: el manifiesto asocia el dump a la ref de rescate y al candidato.
-UPDATE_EXTRA="$(jq -n --arg destino "${PREV_SHA}" --arg ref "${UPDATE_REF}" \
-    '{codigo_destino_sha_completo: $destino, referencia_emparejada: $ref,
-      cubre_rollback_de_codigo: true}')"
-escribir_manifiesto "${DEST}" "update.sh (crea ref y dump con el HEAD previo al merge)" \
-    "update-${TS}" "${UPDATE_EXTRA}" >/dev/null
 aplicar_retencion
 
 # ── 5. Actualizar código (fast-forward, sin merges sucios) ───────────────────
@@ -112,6 +106,15 @@ else
     if ! git -C "${REPO_DIR}" diff --quiet "${PREV_SHA}" "${NEW_SHA}" -- .env.example; then
         warn "Ha cambiado .env.example: revisa ${ENV_FILE} por si hay variables nuevas."
     fi
+    # #334: el manifiesto se escribe DESPUÉS del fast-forward: `codigo_destino`
+    # es el commit anterior y `codigo_desplegado` el que acaba de quedar.
+    UPDATE_EXTRA="$(jq -n --arg destino "${PREV_SHA}" --arg desplegado "${NEW_SHA}" \
+        --arg ref "${UPDATE_REF}" \
+        '{codigo_destino_sha_completo: $destino,
+          codigo_desplegado_sha_completo: $desplegado,
+          referencia_emparejada: $ref, cubre_rollback_de_codigo: true}')"
+    escribir_manifiesto "${DEST}" "update.sh (dump previo y código desplegado)" \
+        "update-${TS}" "${UPDATE_EXTRA}" >/dev/null
 fi
 
 # ── 6. Rebuild de la imagen (las dependencias viven en la imagen) ────────────
