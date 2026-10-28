@@ -201,8 +201,8 @@ fi
 TABLAS_DUMP="$(gzip -dc "${DUMP}" | grep -c '^CREATE TABLE public\.' || true)"
 ALEMBIC_DUMP="$(gzip -dc "${DUMP}" | awk '
     /^COPY public\.alembic_version / { en=1; next }
-    en && $0 == "\\." { exit }
-    en { print; exit }
+    en && $0 == "\\." { en=0 }
+    en && !visto { print; visto=1 }
 ')"
 FILES_DUMP="$(contar_copy "${DUMP}" files)"
 SERIES_DUMP="$(contar_copy "${DUMP}" series)"
