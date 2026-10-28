@@ -21,9 +21,15 @@ if [[ -n "${_ZASCARR_COMUN_CARGADO:-}" ]]; then
 fi
 _ZASCARR_COMUN_CARGADO=1
 
-# SCRIPT_DIR es el del script que hace `source`, no el de este fichero.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
-REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# SCRIPT_DIR es el del script que hace `source`, no el de este fichero. Si el
+# llamador ya fijó REPO_DIR (backup.sh instalado fuera del repo), se respeta:
+# así el script copiado a /usr/local/bin también encuentra el repo real.
+if [[ -z "${REPO_DIR:-}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)"
+    REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+else
+    SCRIPT_DIR="${REPO_DIR}/scripts"
+fi
 ZASCARR_ROOT="${ZASCARR_ROOT:-$(cd "${REPO_DIR}/.." && pwd)}"
 COMPOSE_FILE="${REPO_DIR}/docker-compose.yml"
 # El `.env` puede venir **explícito** en el entorno (las pruebas, o un
@@ -86,6 +92,8 @@ comprobar_requisitos() {
         "No encuentro curl. Instálalo con: sudo apt-get install curl"
     command -v gzip >/dev/null 2>&1 || die \
         "No encuentro gzip. Instálalo con: sudo apt-get install gzip"
+    command -v jq >/dev/null 2>&1 || die \
+        "No encuentro jq. Instálalo con: sudo apt-get install jq"
     docker info >/dev/null 2>&1 || die \
         "El demonio de Docker no responde. Arranca el servicio con: sudo systemctl start docker"
     [[ -f "${COMPOSE_FILE}" ]] || die \
@@ -121,8 +129,28 @@ refs_rescate() {
         --format='%(refname) %(objectname)' refs/zascarr/update 2>/dev/null || true
 }
 
+refs_rescate_rollback() {
+    git -C "${REPO_DIR}" for-each-ref --sort=-refname \
+        --format='%(refname) %(objectname)' refs/zascarr/rollback-rescue 2>/dev/null || true
+}
+
 ts_de_ref()   { local r="$1"; r="${r##*/}"; printf '%s' "${r}"; }
 dump_de_ref() { printf '%s/update_%s.sql.gz' "${BACKUP_DIR}" "$(ts_de_ref "$1")"; }
+
+# Un dump con una referencia de rescate viva no se borra por edad: la ref es la
+# que permite volver y, si el dump desaparece, podar_refs_* se lleva también la
+# ref. La regla es por referencia, no por fecha ni por posición en la lista.
+dumps_protegidos_por_ref() {
+    local ref _sha
+    while read -r ref _sha; do
+        [[ -n "${ref:-}" ]] || continue
+        printf 'update_%s.sql.gz\n' "$(ts_de_ref "${ref}")"
+    done < <(refs_rescate)
+    while read -r ref _sha; do
+        [[ -n "${ref:-}" ]] || continue
+        printf 'rollback-safety_%s.sql.gz\n' "$(ts_de_ref "${ref}")"
+    done < <(refs_rescate_rollback)
+}
 
 # Una referencia de rescate sin su dump no sirve para nada (rollback.sh no
 # tendría qué restaurar), así que se poda sola. Nunca toca la que se acaba de
@@ -148,8 +176,7 @@ podar_refs_rescate_rollback() {
         if [[ "${ref}" == "${conservar}" ]]; then continue; fi
         if [[ -f "${BACKUP_DIR}/rollback-safety_$(ts_de_ref "${ref}").sql.gz" ]]; then continue; fi
         git -C "${REPO_DIR}" update-ref -d "${ref}" 2>/dev/null || true
-    done < <(git -C "${REPO_DIR}" for-each-ref --sort=-refname \
-        --format='%(refname) %(objectname)' refs/zascarr/rollback-rescue 2>/dev/null || true)
+    done < <(refs_rescate_rollback)
 }
 
 # Espera a que PostgreSQL acepte conexiones. Devuelve 1 si se agota el tiempo.
@@ -176,16 +203,54 @@ esperar_healthcheck() {
     return 0
 }
 
-# Comprueba que un .sql.gz es un gzip íntegro y no está vacío. Es la diferencia
-# entre "tengo un backup" y "tengo algo con nombre de backup".
+# Comprueba que un .sql.gz es un gzip íntegro, tiene cabecera de pg_dump y las
+# tablas que rollback.sh necesita. Devuelve 1 (no `die`) para que backup.sh
+# pueda dejar un estado visible; update.sh aborta igual con `set -e`.
+# Deja la causa en VERIFY_ERROR_CODE.
+VERIFY_ERROR_CODE=""
 verificar_dump() {
-    local dump="$1"
-    [[ -f "${dump}" ]] || die "No existe el backup: ${dump}"
-    [[ -s "${dump}" ]] || die "El backup está vacío (0 bytes): ${dump}"
-    gzip -t "${dump}" 2>/dev/null || die \
-        "El backup está corrupto (gzip -t falla): ${dump}
-  No lo uso: restaurarlo dejaría la base de datos a medias. Busca otro dump o
-  revisa por qué se truncó antes de seguir."
+    local dump="$1" tmp tabla
+    VERIFY_ERROR_CODE=""
+    [[ -f "${dump}" ]] || {
+        VERIFY_ERROR_CODE="not_found"
+        echo "[dump] ERROR: no existe ${dump}" >&2
+        return 1
+    }
+    [[ -s "${dump}" ]] || {
+        VERIFY_ERROR_CODE="empty"
+        echo "[dump] ERROR: está vacío (0 bytes): ${dump}" >&2
+        return 1
+    }
+    gzip -t "${dump}" 2>/dev/null || {
+        VERIFY_ERROR_CODE="gzip_invalid"
+        echo "[dump] ERROR: gzip -t falla; no lo uso: ${dump}" >&2
+        return 1
+    }
+    tmp="$(mktemp "${TMPDIR:-/tmp}/zascarr-verify.XXXXXX")" || {
+        VERIFY_ERROR_CODE="decompress_failed"
+        return 1
+    }
+    if ! gzip -dc "${dump}" > "${tmp}"; then
+        rm -f "${tmp}"
+        VERIFY_ERROR_CODE="decompress_failed"
+        echo "[dump] ERROR: no se pudo descomprimir: ${dump}" >&2
+        return 1
+    fi
+    if ! grep -q 'PostgreSQL database dump' "${tmp}"; then
+        rm -f "${tmp}"
+        VERIFY_ERROR_CODE="header_missing"
+        echo "[dump] ERROR: no tiene cabecera de pg_dump: ${dump}" >&2
+        return 1
+    fi
+    for tabla in alembic_version series files wishlist; do
+        if ! grep -q "^COPY public\.${tabla} " "${tmp}"; then
+            rm -f "${tmp}"
+            VERIFY_ERROR_CODE="tables_missing"
+            echo "[dump] ERROR: falta la tabla ${tabla}: ${dump}" >&2
+            return 1
+        fi
+    done
+    rm -f "${tmp}"
     return 0
 }
 
@@ -203,16 +268,68 @@ volcar_postgres() {
         return 1
     fi
     mv "${tmp}" "${destino}"
+    chmod 600 "${destino}" 2>/dev/null || true
     return 0
 }
 
-# Aplica la retención a los tres tipos de dump: los diarios (backup_<TS>), los
-# emparejados con una actualización (update_<TS>) y la red de seguridad del
-# rollback (rollback-safety_<TS>). Todos caducan a los RETENTION_DAYS.
+# Manifiesto de una copia: identidad del candidato + integridad. Atómico y 0600.
+# `extra` es un objeto JSON con campos adicionales (offsite, ref emparejada...).
+# Devuelve la ruta del manifiesto por stdout; 1 si no se pudo escribir.
+escribir_manifiesto() {
+    local dump="$1" origen="$2" id="$3"
+    local extra="${4:-}"
+    local base stem dir manifest tmp sha bytes created commit alembic
+    [[ -n "${extra}" ]] || extra="{}"
+    [[ -f "${dump}" ]] || { echo "[manifiesto] ERROR: no existe ${dump}" >&2; return 1; }
+    command -v jq >/dev/null 2>&1 || { echo "[manifiesto] ERROR: falta jq" >&2; return 1; }
+    base="$(basename "${dump}")"
+    stem="${base%.sql.gz}"
+    dir="$(dirname "${dump}")"
+    manifest="${dir}/MANIFIESTO-${stem}.json"
+    tmp="${manifest}.tmp.$$"
+    sha="$(sha256sum "${dump}" | awk '{print $1}')" || return 1
+    bytes="$(stat -c %s "${dump}")" || return 1
+    created="$(date -Iseconds)"
+    commit="$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
+    alembic="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${DB_NAME}" -At \
+        -c "select version_num from alembic_version" 2>/dev/null | tr -d '[:space:]' || true)"
+    if ! jq -n \
+        --arg backup "${base}" \
+        --arg sha256 "${sha}" \
+        --argjson bytes "${bytes}" \
+        --arg commit "${commit}" \
+        --arg alembic "${alembic}" \
+        --arg created "${created}" \
+        --arg origin "${origen}" \
+        --arg id "${id}" \
+        --argjson extra "${extra}" \
+        '{schema: 1, backup: $backup, sha256: $sha256, bytes: $bytes,
+          codigo_desplegado_sha_completo: $commit, alembic: $alembic,
+          created_at: $created, origin: $origin, id: $id} + $extra' \
+        > "${tmp}"; then
+        rm -f "${tmp}"
+        echo "[manifiesto] ERROR: jq no pudo escribir ${manifest}" >&2
+        return 1
+    fi
+    chmod 600 "${tmp}" || { rm -f "${tmp}"; return 1; }
+    mv "${tmp}" "${manifest}" || { rm -f "${tmp}"; return 1; }
+    printf '%s\n' "${manifest}"
+    return 0
+}
+
+# Aplica la retención a los tres tipos de dump en un directorio (por defecto,
+# BACKUP_DIR). Un dump con una ref de rescate viva no se borra por edad; el
+# resto caduca a los RETENTION_DAYS. La regla es por referencia, no por fecha.
 aplicar_retencion() {
-    find "${BACKUP_DIR}" -maxdepth 1 \( \
+    local dir="${1:-${BACKUP_DIR}}"
+    local protegidos=() p args=()
+    mapfile -t protegidos < <(dumps_protegidos_por_ref)
+    for p in "${protegidos[@]}"; do
+        args+=(! -name "${p}")
+    done
+    find "${dir}" -maxdepth 1 \( \
         -name 'backup_*.sql.gz' -o \
         -name 'update_*.sql.gz' -o \
         -name 'rollback-safety_*.sql.gz' \
-    \) -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
+    \) -mtime "+${RETENTION_DAYS}" "${args[@]}" -delete 2>/dev/null || true
 }
