@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
-# update.sh — Actualiza ZascArr a la última versión de su rama.
+# update.sh — Actualiza ZascArr a la última versión de la rama que TÚ indiques.
+#
+# La rama es OBLIGATORIA y explícita (#307/#231): sin ella no se actualiza nada.
+#
+#     sudo bash scripts/update.sh --rama main
+#     sudo BRANCH=deploy/<candidato> bash scripts/update.sh        # equivalente
+#
+# Antes elegía por su cuenta la rama en la que estuviera el repo, así que cualquiera con acceso podía desplegar la
+# cabeza de `main` sin decidir qué versión instalaba (ocurrió dos veces, sin ventana ni registro).
 #
 # Orden (importa, y no es el obvio):
 #   1. Comprobar requisitos (docker, compose, git, curl, gzip) y localizar .env.
@@ -25,17 +33,31 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_comun.sh"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_exposicion.sh"
 
-BRANCH="${BRANCH:-$(git -C "${REPO_DIR}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)}"
+# Rama: `--rama <nombre>` o la variable BRANCH. Sin ninguna de las dos, se para ANTES de tocar nada.
+# (`--rama` existe porque `sudo` no siempre deja pasar variables de entorno.)
+if [[ "${1:-}" == "--rama" ]]; then
+    BRANCH="${2:-}"
+elif [[ "${1:-}" == --rama=* ]]; then
+    BRANCH="${1#--rama=}"
+fi
+BRANCH="${BRANCH:-}"
 
 echo -e "\n${B}====================================${N}"
 echo -e "${B}  ZascArr — Actualización${N}"
 echo -e "${B}====================================${N}\n"
 
+# ── 0. La rama la decide quien actualiza ─────────────────────────────────────
+[[ -n "${BRANCH}" ]] || die \
+    "Dime qué rama quieres instalar. NO se ha actualizado nada.
+  Este script ya no elige por su cuenta la versión que se instala: tienes que indicarla tú.
+  Para la última versión estable:   sudo bash ${REPO_DIR}/scripts/update.sh --rama main
+  Para una versión concreta:        sudo bash ${REPO_DIR}/scripts/update.sh --rama <nombre-de-la-rama>"
+[[ "${BRANCH}" =~ ^[A-Za-z0-9._/-]+$ && "${BRANCH}" != -* && "${BRANCH}" != "HEAD" ]] || die \
+    "El nombre de la rama no es válido. NO se ha actualizado nada."
+
 # ── 1. Requisitos ────────────────────────────────────────────────────────────
 comprobar_requisitos
 comprobar_git_utilizable
-[[ "${BRANCH}" != "HEAD" ]] || die \
-    "El repo está en HEAD desacoplado. Ve a una rama (git checkout main) antes de actualizar."
 
 # ── 1b. Credenciales (ADR 0012) ──────────────────────────────────────────────
 # Sin una DB_PASSWORD propia, el servicio `credenciales` de Compose pararía el arranque DESPUÉS de haber hecho el
