@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import errno
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -270,6 +271,29 @@ class TestMensajes:
         html = _html(EstadoComprobacion(resultado=R.COMPROBADA, fecha=AHORA, archivos_registrados=120, ausentes=3))
         assert "120 rutas" in html and "3 no estaban" in html
         assert "sin verificar" not in html
+
+
+class TestPulidoVisual:
+    """Hallazgos de la validación en navegador real (2026-10-28): paréntesis anidados, una caja dentro de otra caja y un
+    enlace suelto de 16 px de alto."""
+
+    @pytest.mark.parametrize("resultado", [R.RAIZ_INACCESIBLE, R.RAIZ_VACIA, R.DESAPARICION_MASIVA, R.FALLO_DETECCION])
+    def test_la_fecha_no_queda_entre_parentesis_dentro_de_otros(self, resultado):
+        html = _html(EstadoComprobacion(resultado=resultado, fecha=AHORA, archivos_registrados=20, ausentes=15,
+                                        ultima_valida=AHORA))
+        plano = " ".join(re.sub(r"<[^>]+>", " ", html).split())
+        assert "(hoy))" not in plano and "((" not in plano
+        assert not re.search(r"\([^()]*\([^()]*\)", plano), plano
+
+    def test_el_aviso_no_mete_una_caja_dentro_de_otra(self):
+        html = _html(EstadoComprobacion(resultado=R.RAIZ_VACIA, fecha=AHORA, ultima_valida=AHORA))
+        assert 'class="caption' not in html   # `.caption` es una caja con borde: dentro de un aviso era caja en caja
+        assert "Última comprobación válida:" in html
+
+    def test_el_enlace_a_la_lista_en_estado_es_un_objetivo_tactil_y_no_texto_suelto(self):
+        plantilla = Path(__file__).resolve().parents[1] / "src/zascarr/web/templates/estado.html"
+        enlaces = re.findall(r'<a class="([^"]*)" href="/ui/no-disponibles">', plantilla.read_text(encoding="utf-8"))
+        assert enlaces and all("btn" in c.split() for c in enlaces)   # `.btn` mide ≥ 44 px (test_web_movil)
 
 
 # --- Rutas (sesión falsa) ---------------------------------------------------------------------------------------------
