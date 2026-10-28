@@ -131,6 +131,7 @@ def test_manifiesto_del_dump_de_rescate_lleva_el_commit_nuevo(tmp_path):
             "FIXTURE_SQL": str(fixture),
             "BACKUP_DIR": str(backup),
             "HEALTH_TIMEOUT": "2",
+            "BRANCH": "main",   # desde #351 update.sh exige la rama; este es el despliegue de `main` del origen sintético
         },
     )
     assert r.returncode == 0, r.stdout + r.stderr
