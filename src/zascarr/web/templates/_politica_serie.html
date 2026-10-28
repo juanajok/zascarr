@@ -22,8 +22,8 @@
       <option value="{{ valor.value }}"
               {% if politica_actual == valor %}selected{% endif %}>{{ etiqueta }}</option>
       {% endfor %}
-      <option value="futuros" disabled title="{{ motivo_futuros }}">
-        Números que aún no han salido (deshabilitado)
+      <option value="futuros" disabled title="Todavía no se puede: {{ motivo_futuros }}.">
+        Números que aún no han salido (todavía no disponible)
       </option>
       {% if politica_actual.value in ("futuros", "todos") %}
       {# Defensa: un valor reservado que llegara por otra vía (BD antigua) no
@@ -36,15 +36,20 @@
     <span class="htmx-indicator">Guardando…</span>
   </form>
 
-  <p class="caption politica-efecto">
-    Al cambiar el selector se guarda al momento: lo retirado deja de buscarse ya;
-    lo que falte entra en el próximo ciclo.
+  {# U21 (#296), revisado por el experto UX: UNA nota junto al selector (la garantía de que guardar es inmediato,
+     dicha con la acción de la persona) y el motivo de la opción no elegible plegado. El PORTADOR del motivo es el
+     `<details>`: el `title` de la `<option>` NO se muestra en los selectores nativos del móvil ni lo anuncian de forma
+     fiable los lectores de pantalla; se deja porque no estorba, no porque cuente como accesible. #}
+  <p class="muted politica-efecto">
+    Se guarda al elegir. Si dejas de buscar, se para al momento.
   </p>
 
-  <p class="caption politica-futuros">
-    «Números que aún no han salido» está deshabilitado:
-    {{ motivo_futuros[0]|lower }}{{ motivo_futuros[1:] }}.
-  </p>
+  <details class="politica-detalles">
+    <summary>¿Por qué una opción no se puede elegir?</summary>
+    <p class="caption politica-futuros" id="politica-futuros">
+      Todavía no se puede elegir «Números que aún no han salido»: {{ motivo_futuros }}.
+    </p>
+  </details>
 
   <p class="politica-veredicto">
     {% if querer.motivo %}
