@@ -839,6 +839,7 @@ button[type="submit"].btn-sugerencia {
   background: var(--paper); color: var(--ink);
 }
 .politica-veredicto { margin: 12px 0 6px; }
+.politica-efecto { font-size: .875rem; margin: 4px 0; }   /* U21: la ayuda junto al selector es texto atenuado (.muted), no una caja de aviso */
 .politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .politica-aviso { color: var(--warn-t); }
 .politica-retirados-ahora { color: var(--ok-t); font-weight: 700; }
@@ -868,8 +869,8 @@ button[type="submit"].btn-sugerencia {
 }
 .series-meta { color: var(--ink-soft); font-size: .9rem; margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
-.series-fuentes { margin-top: 8px; }
-.series-fuentes summary {
+.series-fuentes, .politica-detalles { margin-top: 8px; }
+.series-fuentes summary, .politica-detalles summary {
   cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
   padding: 8px 0; min-height: 40px;
 }
