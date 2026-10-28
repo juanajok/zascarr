@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import pytest
 
+from zascarr.core import importer_triage
 from zascarr.core.matcher import MatchResult, MatchStatus, SeriesHit
 from zascarr.models import ComicTradition, File, ImportRun, Series
 from zascarr.services.importer import (
@@ -175,6 +176,41 @@ class TestImportFileDuplicado:
         assert report.imported == []
         assert src.exists()          # nunca se movió
         assert session.queries == 1  # nunca llegó a consultar el matcher
+
+
+class TestImportFileIlegible:
+    """#332 (residual 1 de #329): si se puede `stat` pero no leer, no se mueve ni se crea fila."""
+
+    @pytest.mark.asyncio
+    async def test_archivo_ilegible_no_se_mueve_y_se_informa_con_causa(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "zascarr.services.importer.get_settings",
+            lambda: MagicMock(
+                library_path=tmp_path / "library",
+                transmission_download_dir=str(tmp_path / "downloads"),
+                amule_incoming_dir=str(tmp_path / "amule"),
+                downloads_path=tmp_path / "downloads",
+            ),
+        )
+        src = tmp_path / "Batman 001.cbz"
+        make_cbz(src)
+        real = importer_triage.sha256_streaming
+
+        def se_cae(ruta):
+            if Path(ruta) == src:
+                raise OSError(5, "Input/output error")
+            return real(ruta)
+
+        monkeypatch.setattr(importer_triage, "sha256_streaming", se_cae)
+        importer = Importer(FakeDedupeSession(None))
+        report = ImportReport(started_at=datetime.now(timezone.utc))
+
+        await importer._import_file(src, report)
+
+        assert report.errors == ["Batman 001.cbz: no se pudo leer (OSError: Input/output error)"]
+        assert report.imported == [] and report.unsorted == []
+        assert src.exists()                  # no se movió
+        assert importer._db.queries == 0     # no llegó a consultar dedupe ni matcher
 
 
 class TestScanDedupePorInodo:

@@ -189,6 +189,10 @@ class TriageResult:
     width_px: int | None = None
     source_tag: str | None = None
     warnings: list[str] = field(default_factory=list)
+    #: causa si el fichero se pudo `stat` pero NO se pudo leer (`OSError`): no hay
+    #: identidad de contenido ni fila. Un ZIP roto (`BadZipFile`) no es esto:
+    #: conserva `sha256=None` a propósito y no rellena `error_lectura`.
+    error_lectura: str | None = None
 
     @property
     def strong_candidate(self) -> bool:
@@ -198,6 +202,12 @@ class TriageResult:
             and self.comic_info.series
             and self.comic_info.number
         )
+
+
+def _causa_de_lectura(exc: OSError) -> str:
+    """Causa legible y sin ruta: tipo del error y descripción del sistema."""
+    detalle = getattr(exc, "strerror", None)
+    return f"{type(exc).__name__}: {detalle}" if detalle else type(exc).__name__
 
 
 def sha256_streaming(path: Path) -> str:
@@ -242,7 +252,11 @@ def triage(path: Path) -> TriageResult:
         try:
             result.sha256 = sha256_streaming(path)
         except OSError as exc:
-            result.warnings.append(f"ilegible para hash: {exc}")
+            # Se pudo `stat`, pero no leer: no hay hash ni fila. La causa va sin ruta.
+            result.error_lectura = _causa_de_lectura(exc)
+            result.formato_contenido = None
+            result.warnings.append(f"ilegible: {result.error_lectura}")
+            return result
         result.warnings.append(f"formato {ext}: triaje solo por filename")
         if trat is Tratamiento.AVISAR:
             result.warnings.append(aviso_de_formato(ext, firma))
@@ -261,11 +275,19 @@ def triage(path: Path) -> TriageResult:
             result.warnings.append(aviso_de_clase(ClaseZip.LIMITE, motivo) + " (ignorado)")
             return result
         zf = zipfile.ZipFile(path)
-    except (OSError, zipfile.BadZipFile) as exc:
-        # sha256 sin asignar a propósito: el hash de basura binaria de un zip roto no sirve para
-        # dedupe.
+    except zipfile.BadZipFile as exc:
+        # Contenido inválido a propósito: sha256 sin asignar (dos descargas incompletas casi
+        # nunca cortan en el mismo byte; un hash sugeriría una identidad que no existe) y
+        # clase `invalido`. No es un fallo de lectura: no rellena `error_lectura`.
         result.warnings.append(f"zip ilegible: {exc}")
         result.formato_contenido = formato_contenido(firma, ClaseZip.INVALIDO)
+        return result
+    except OSError as exc:
+        # Se pudo `stat` (y leer la firma), pero falló la lectura del hash o del ZIP: no hay
+        # identidad de contenido ni hash parcial que guardar.
+        result.error_lectura = _causa_de_lectura(exc)
+        result.formato_contenido = None
+        result.warnings.append(f"ilegible: {result.error_lectura}")
         return result
     result.sha256 = sha256
 

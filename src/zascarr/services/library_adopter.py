@@ -513,6 +513,12 @@ class LibraryAdopter:
         # compara tamaño y fecha antes y después; un cambio que conserve ambos no se detecta, ver docs/design/registro-incremental-326.md).
         antes = await asyncio.to_thread(path.stat)
         outcome = await _triage_and_match(self._db, path, pista)
+        if outcome.error_lectura:
+            # Se pudo `stat` pero no leer: no se crea fila, no se mueve y no se pone el marcador
+            # (es un error, no una omisión silenciosa). Se comprueba ANTES del segundo `stat`: si el
+            # USB se cae y la ruta deja de estar, sigue siendo un error de lectura, no un «desapareció».
+            report.errors.append(f"{path.name}: no se pudo leer ({outcome.error_lectura})")
+            return
         despues = await asyncio.to_thread(path.stat)
         if (antes.st_size, antes.st_mtime_ns) != (despues.st_size, despues.st_mtime_ns):
             raise ArchivoCambiado(path.name)
