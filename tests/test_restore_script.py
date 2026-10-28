@@ -150,6 +150,19 @@ def _estado(ctx: dict) -> dict:
     return json.loads((ctx["status"] / "restore-status.json").read_text(encoding="utf-8"))
 
 
+def _reescribir_dump(ctx: dict, sql: str) -> None:
+    dump = ctx["dump"]
+    dump.write_bytes(gzip.compress(sql.encode("utf-8")))
+    sha = hashlib.sha256(dump.read_bytes()).hexdigest()
+    datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+    datos["sha256"] = sha
+    datos["bytes"] = dump.stat().st_size
+    ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+    dump.with_name(f"{dump.name}.sha256").write_text(
+        f"{sha}  {dump.name}\n", encoding="utf-8"
+    )
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
 class TestRestoreScript:
 
@@ -173,6 +186,23 @@ class TestRestoreScript:
         stub = ctx["stub"].read_text(encoding="utf-8")
         assert "zascarr" not in stub.replace("zascarr_restore_", "")
         assert ctx["restore"].read_text(encoding="utf-8")
+
+    def test_dump_grande_no_muere_por_sigpipe(self, tmp_path):
+        """Regresión de la ventana: `awk` salía tras la primera fila de
+        `alembic_version`; `gzip -dc` recibía SIGPIPE y `pipefail` mataba el
+        script con 141 antes de restaurar."""
+        ctx = _preparar(tmp_path)
+        lineas = _sql_fixture().splitlines()
+        lineas += ["COPY public.tabla_00 (id) FROM stdin;"]
+        lineas += [str(i) for i in range(200_000)]
+        lineas += ["\\."]
+        _reescribir_dump(ctx, "\n".join(lineas) + "\n")
+
+        r = _ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        estado = _estado(ctx)
+        assert estado["status"] == "ok"
+        assert estado["alembic"] == "0020"
 
     def test_dump_truncado_no_crea_base(self, tmp_path):
         ctx = _preparar(tmp_path)
