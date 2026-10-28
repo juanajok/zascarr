@@ -125,6 +125,9 @@ def test_restaura_en_base_desechable_sin_arrancar_la_app(tmp_path):
     ctx = _preparar(tmp_path)
     env = {
         **os.environ, **ctx["pg"],
+        # El script usa DB_USER (no PGUSER) para -U; en la Pi coincide con el
+        # usuario del compose, en CI es el usuario de TEST_DATABASE_URL.
+        "DB_USER": ctx["pg"]["PGUSER"],
         "PATH": f"{ctx['bin']}:{os.environ['PATH']}",
         "ZASCARR_REPO": str(ctx["repo"]),
         "ZASCARR_ROOT": str(ctx["root"]),
