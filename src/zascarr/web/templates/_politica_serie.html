@@ -36,15 +36,23 @@
     <span class="htmx-indicator">Guardando…</span>
   </form>
 
+  {# U21 (#296): UNA línea junto al selector (la garantía de que guardar es inmediato); el resto, plegado. El motivo
+     de la opción deshabilitada sigue en el DOM (en el `<details>`, que el lector de pantalla anuncia con su
+     `<summary>`) y también en el `title` de la propia opción. #}
   <p class="caption politica-efecto">
-    Al cambiar el selector se guarda al momento: lo retirado deja de buscarse ya;
-    lo que falte entra en el próximo ciclo.
+    Se guarda al momento: lo retirado deja de buscarse ya.
   </p>
 
-  <p class="caption politica-futuros">
-    «Números que aún no han salido» está deshabilitado:
-    {{ motivo_futuros[0]|lower }}{{ motivo_futuros[1:] }}.
-  </p>
+  <details class="politica-detalles">
+    <summary>Más detalles</summary>
+    <p class="caption politica-efecto-resto">
+      Lo que falte entra en el próximo ciclo.
+    </p>
+    <p class="caption politica-futuros" id="politica-futuros">
+      «Números que aún no han salido» está deshabilitado:
+      {{ motivo_futuros[0]|lower }}{{ motivo_futuros[1:] }}.
+    </p>
+  </details>
 
   <p class="politica-veredicto">
     {% if querer.motivo %}

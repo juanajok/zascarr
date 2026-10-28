@@ -839,6 +839,8 @@ button[type="submit"].btn-sugerencia {
   background: var(--paper); color: var(--ink);
 }
 .politica-veredicto { margin: 12px 0 6px; }
+.politica-detalles { margin: 2px 0 4px; }
+.politica-detalles summary { cursor: pointer; font-size: .875rem; font-weight: 700; }
 .politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .politica-aviso { color: var(--warn-t); }
 .politica-retirados-ahora { color: var(--ok-t); font-weight: 700; }
