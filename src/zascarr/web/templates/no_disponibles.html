@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Archivos no disponibles — ZascArr{% endblock %}
+{% block content %}
+<h1>Archivos no disponibles</h1>
+<p class="subtitle">
+  Archivos registrados que ZascArr no encontró en su ruta la última vez que lo comprobó. <strong>Solo informa: no borra,
+  no desvincula y no vuelve a mirar el disco al abrir esta página.</strong> Si un archivo reaparece, se recupera solo en la
+  siguiente revisión.
+</p>
+
+{% if error %}
+  {% call ui.aviso("warn") %}
+    <strong>No se ha podido leer la lista.</strong> Esto no significa que todo esté disponible ni que falte nada: solo que
+    ZascArr no ha conseguido consultar sus datos. <a href="/ui/no-disponibles">Volver a intentarlo</a>
+  {% endcall %}
+{% else %}
+  {% set no_disponibles = pagina.total %}
+  {% include "_disponibilidad_aviso.html" %}
+
+  {% if pagina.total == 0 %}
+    {% if d.comprobada %}
+      {{ ui.estado_vacio("Ningún archivo figura como no disponible", "La última revisión encontró todos los archivos registrados en su ruta.") }}
+    {% else %}
+      {{ ui.estado_vacio("Ningún archivo figura como no disponible", "Es lo último que ZascArr tiene anotado; no es una comprobación nueva.") }}
+    {% endif %}
+  {% else %}
+    <p class="caption">
+      {{ pagina.total }} {{ "archivo" if pagina.total == 1 else "archivos" }} no {{ "disponible" if pagina.total == 1 else "disponibles" }}.
+      Primero los que dejaron de encontrarse hace menos; al final, los que no tienen fecha.
+    </p>
+    {% call ui.grupo("No disponibles", pagina.total) %}
+    <ul>
+      {% for a in pagina.archivos %}
+      <li>
+        <strong>{{ a.nombre }}</strong>
+        {% if a.serie %}
+          — {{ a.serie }}{% if a.numero %} n.º {{ a.numero }}{% endif %}
+        {% else %}
+          — <em>sin vincular a ninguna serie</em>
+        {% endif %}
+        <div class="caption">
+          {% if a.desde %}No encontrado desde el {{ a.desde | fecha_con_antiguedad }}.{% else %}Sin fecha de cuándo dejó de encontrarse.{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endcall %}
+    <nav class="pagination" aria-label="Páginas de archivos no disponibles">
+      {% if not primera %}<a class="page-link" href="/ui/no-disponibles">Volver al principio</a>{% endif %}
+      {% if pagina.siguiente %}<a class="page-link" rel="next" href="/ui/no-disponibles?despues={{ pagina.siguiente }}">Ver los siguientes</a>{% endif %}
+    </nav>
+  {% endif %}
+{% endif %}
+<p><a class="back-link" href="/estado">← Volver a Estado</a></p>
+{% endblock %}
