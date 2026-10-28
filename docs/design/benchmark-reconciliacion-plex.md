@@ -49,7 +49,8 @@
 | Kapowarr (Casvt) | `c191dda6617929c81292483a8cc07f631111dae2` (v1.3.2, 2026-09-14), GPL-3.0 | 2026-10-20 | `gh api` (código al commit) | `backend/implementations/file_matching.py` (`scan_files`, `get/set_file_matching`) |
 | Mylar3 | `cdc94a4` (v0.8.3, 2025-08-17), GPL-3.0 (fijado en `benchmark-identidad-editorial.md`) | — | **No inspeccionado en este spike** | No se afirma nada sobre su reconciliación |
 | Suwayomi | — | — | **No inspeccionado** | Distinguiría «actualizar biblioteca» de «refrescar» pero `[NV]` |
-| Sonarr/Radarr | — | 2026-10-20 | Un intento sobre la FAQ de Servarr devolvió solo el título; **sin contenido** | `[NV]` (candidatas naturales para «rescan» vs «refresh» y raíz ausente; leer antes de BL-R3) |
+| Sonarr (GPL-3.0) | `58fe69664800283237cbca06ace87766dfc66615` (`develop`, 2026-10-28) | 2026-10-28 | `gh api` (código al commit) | **Leído para BL-R2 (#231)**: `DiskScanService.Scan`, `SeriesScanSkippedEvent`, `SeriesScannedHandler`, `MediaFileTableCleanupService`, `RootFolderCheck` (§10) |
+| Radarr (GPL-3.0) | `c0a0be6dde11ec4c9576366a7623322ea2a08775` (`develop`, 2026-10-27) | 2026-10-28 | `gh api` (código al commit) | **Leído solo `DiskScanService.cs`** (mismo patrón que Sonarr: `MovieScanSkippedReason.RootFolderDoesNotExist/RootFolderIsEmpty`); el resto `[NV]` |
 
 ## 3. Qué demuestra el ejemplo oficial de Plex (y qué no)
 
@@ -153,7 +154,32 @@ Tres métricas comunes: **llamadas externas**, **memoria máxima** (cgroup del c
 
 ## 9. Límites y NOT RUN
 
-- **NOT RUN:** todas las pruebas de §7. **No leído:** los artículos de Plex (403), Mylar3, Suwayomi y Sonarr/Radarr para esta ficha.
+- **NOT RUN:** todas las pruebas de §7. **No leído:** los artículos de Plex (403), Mylar3 y Suwayomi para esta ficha. Sonarr/Radarr se leyeron después, solo para BL-R2 (§10).
 - **Casos reales: hueco aceptado por el PO (2026-10-20).** E1, E2 y E3 no tienen caso real registrado; están cubiertos **solo con casos derivados etiquetados como no reales** y con el escenario sintético de §7. **El criterio de aceptación 1 de #229 se reformula así para esos tres escenarios:** «sin caso real registrado; cubierto por escenario sintético». Nada de lo derivado se presenta como ocurrido.
 - **Este documento no cambia el backlog ni la estimación** de BL-R1–BL-R7: la refinará quien las implemente, con esta ficha ya disponible.
 - **Definition of Ready de BL-R1–BL-R7:** esta ficha cubre el punto «benchmark pertinente (BL-R0)». Siguen pendientes los demás (casos reales, decisiones D2/D4/D5, estimación).
+
+## 10. Anexo BL-R2 (#231): Sonarr y Radarr, leídos el 2026-10-28
+
+Cierra el hueco `[NV]` de Sonarr/Radarr para E3 (raíz ausente), a petición del PO («leer antes Sonarr/Radarr»). Evidencia `[COD@sha]` de los commits fijados en §2. No se ha ejecutado ni Sonarr ni Radarr; no se copia código (ambos GPL-3.0; solo se toma el patrón, §6).
+
+**Qué hacen** (`DiskScanService.Scan`, Sonarr `58fe696`; Radarr `c0a0be6` tiene el mismo esqueleto con `MovieScanSkippedReason`):
+
+1. Si la carpeta de **la serie** no existe, comprueban la **raíz**: raíz inexistente → *warning* y evento `ScanSkipped(RootFolderDoesNotExist)`; raíz vacía → *warning* y `ScanSkipped(RootFolderIsEmpty)`. En ambos casos **no se limpia nada**. Es el mismo par de guardarraíles que ya tiene `_detectar_desaparecidos`.
+2. El motivo del salto es un **evento en memoria**, no un registro duradero: su único consumidor (`SeriesScannedHandler`) lo trata como «escaneo terminado» para seguir con monitorización y búsqueda. No hay lista de «escaneos omitidos» que la persona pueda consultar.
+3. La visibilidad de «raíz ausente/vacía» es **otro mecanismo**: `RootFolderCheck`, una comprobación de salud que **vuelve a mirar el disco** (`FolderExists`/`FolderEmpty`) cuando se dispara; Error si falta la raíz, Warning si está vacía.
+4. Si la carpeta de la serie **sí existe** (o la raíz existe y no está vacía), `MediaFileTableCleanupService.Clean` **borra de la base** los archivos que ya no están en disco (`DeleteMediaFileReason.MissingFromDisk`). **No conserva** lo ausente.
+
+**Decisiones** (adoptar / adaptar / descartar):
+
+| Patrón | Decisión | Motivo |
+|---|---|---|
+| Omitir la limpieza si la raíz no existe o está vacía | **Ya adoptado** (B7) | Coincide con los dos primeros guardarraíles locales; `[ZASC]` añade un tercero (desaparición masiva) que Sonarr/Radarr no tienen en lo leído |
+| Motivo del salto como evento efímero | **Descartar** | Es exactamente la carencia que #231 corrige: hoy el motivo solo va al log. ZascArr lo persiste en `ImportRun.details` |
+| Comprobación de salud que relee el disco al consultar | **Descartar para esta entrega** | Decisión del PO (2026-10-24): consultar no accede al disco (USB/NAS, Pi). Se muestra el **resultado del último ciclo** y su fecha |
+| Borrar de la base lo ausente (`MissingFromDisk`) | **Descartar** | Contradice «conservar y hacer visible» (BL-R0 §5); coincide con lo ya descartado de Kapowarr |
+| Distinguir «raíz ausente» (Error) de «raíz vacía» (Warning) | **Adaptar** | Se conservan como resultados distintos (`raiz_inaccesible`, `raiz_vacia`) con redacción que no afirma causa |
+
+**Supuestos suyos que no valen aquí:** Sonarr/Radarr gestionan **carpetas de serie** bajo una raíz; ZascArr registra **archivos sueltos** por ruta absoluta, así que el guardarraíl es global a la biblioteca, no por serie. Una raíz ausente en Sonarr es un fallo de configuración; en ZascArr es el caso normal de un USB desconectado.
+
+**Límites:** no se ha leído el resto de Radarr (`MediaFileTableCleanupService` de Radarr se asume análogo: `[NV]`), ni cómo muestran la salud en la interfaz, ni versiones publicadas (se leyó `develop`). «No lo encontré» no equivale a «no existe».
