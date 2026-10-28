@@ -134,6 +134,9 @@ class _Outcome:
     exactamente el mismo pipeline de triaje/deduplicación/matching en
     los dos casos; solo cambia qué se hace DESPUÉS del match."""
     tr: TriageResult
+    #: causa si el fichero se pudo `stat` pero no leer: no hay match ni duplicado
+    #: posible. Lo informa el consumidor; nunca se crea fila ni se mueve nada.
+    error_lectura: str | None = None
     result: MatchResult | None = None  # None si es un duplicado o una recuperación
     duplicate_of: str | None = None
     # Integridad (benchmark-integridad-hash-dedupe): cuando TODAS las
@@ -302,6 +305,11 @@ async def _triage_and_match(
     db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None
 ) -> _Outcome:
     tr: TriageResult = await _triage_sin_bloquear(path)
+
+    if tr.error_lectura:
+        # Sin lectura no hay hash ni match: ni duplicado, ni reenlace, ni fila. Se corta aquí,
+        # antes de deduplicar o buscar serie, y cada consumidor lo informa como error.
+        return _Outcome(tr=tr, error_lectura=tr.error_lectura)
 
     if tr.sha256:
         # #326: hasta el fin de la transacción nadie más busca-e-inserta por contenido
@@ -589,6 +597,10 @@ class Importer:
         self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
     ) -> None:
         outcome = await _triage_and_match(self._db, path, pista)
+        if outcome.error_lectura:
+            # Se pudo `stat` pero no leer: no se mueve, no se crea fila y se informa con la causa.
+            report.errors.append(f"{path.name}: no se pudo leer ({outcome.error_lectura})")
+            return
         if outcome.recuperar is not None:
             await self._reenlazar(outcome.recuperar, path, outcome.tr, report)
             return
