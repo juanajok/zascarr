@@ -505,12 +505,12 @@ class TestPresupuestoTextoU21:
         entiende como «una sola nota»: en el móvil (≈ 40 caracteres por renglón) puede ocupar dos renglones."""
         bloque = self._bloque_politica()
         fuera = re.sub(r"<details\b.*?</details>", "", bloque, flags=re.S)
-        notas = re.findall(r'<p class="[^"]*\bpolitica-efecto\b[^"]*">(.*?)</p>', fuera, re.S)
+        notas = re.findall(r'<p\b[^>]*\bclass="[^"]*\bpolitica-efecto\b[^"]*"[^>]*>(.*?)</p>', fuera, re.S)
         assert len(notas) == 1, notas
         linea = " ".join(self._texto(notas[0]).split())
         assert linea == "Se guarda al elegir. Si dejas de buscar, se para al momento."
         assert len(linea) <= 60
-        assert "politica-futuros" not in fuera
+        assert 'id="politica-futuros"' not in fuera   # el motivo va plegado (el selector solo lo referencia por aria-describedby)
         assert 'class="caption' not in fuera   # ya no hay cajas de aviso junto al selector (era el problema de #296)
 
     def test_u21_el_detalle_plegado_nombra_lo_que_contiene_y_lleva_el_motivo(self):
@@ -535,6 +535,18 @@ class TestPresupuestoTextoU21:
         assert "Números que aún no han salido (todavía no disponible)" in " ".join(opcion.group(1).split())
         assert "deshabilitado" not in opcion.group(0)
         assert 'id="politica-futuros"' in bloque and "Todavía no se puede elegir" in bloque
+
+    def test_u21_el_selector_esta_descrito_por_la_garantia_y_por_el_motivo(self):
+        """Accesibilidad (validación del 2026-10-28): al enfocar el selector, un lector de pantalla debe leer la garantía de
+        guardado y el motivo de la opción no elegible; `aria-describedby` apunta a ids que EXISTEN (también si el detalle va
+        plegado, que un lector sí lee)."""
+        bloque = self._bloque_politica()
+        selector = re.search(r'<select\b[^>]*>', bloque)
+        assert selector is not None
+        ids = re.search(r'aria-describedby="([^"]+)"', selector.group(0)).group(1).split()
+        assert set(ids) == {"politica-efecto", "politica-futuros"}
+        for i in ids:
+            assert len(re.findall(rf'\bid="{i}"', bloque)) == 1, f"el id {i} falta o está duplicado"
 
     def test_u21_no_se_pierde_que_guardar_es_inmediato(self):
         plano = " ".join(self._texto(self._bloque_politica()).split())

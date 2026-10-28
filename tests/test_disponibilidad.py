@@ -296,6 +296,40 @@ class TestPulidoVisual:
         assert enlaces and all("btn" in c.split() for c in enlaces)   # `.btn` mide ≥ 44 px (test_web_movil)
 
 
+class TestListaAccesible:
+    """Validación con el árbol de accesibilidad (2026-10-28): una `<nav>` sin enlaces es una región vacía para un lector."""
+
+    @staticmethod
+    def _lista(monkeypatch, *, despues: str | None, siguiente: str | None) -> str:
+        from zascarr.services import disponibilidad as servicio
+        from zascarr.services.disponibilidad import ArchivoNoDisponible, PaginaNoDisponibles
+        pagina = PaginaNoDisponibles(
+            archivos=[ArchivoNoDisponible(id="1", nombre="A.cbz", desde=AHORA, serie="Serie", numero="1")],
+            total=1, siguiente=siguiente)
+        d = EstadoComprobacion(resultado=R.COMPROBADA, fecha=AHORA, archivos_registrados=5, ausentes=1, ultima_valida=AHORA)
+
+        async def ultima(_db):
+            return d
+
+        async def listar(_db, _despues=None, limite=100):
+            return pagina
+
+        monkeypatch.setattr(servicio, "ultima_comprobacion", ultima)
+        monkeypatch.setattr(servicio, "listar_no_disponibles", listar)
+        cliente = _cliente(SesionSoloLectura(MagicMock()))
+        return cliente.get("/ui/no-disponibles", params={"despues": despues} if despues else None).text
+
+    def test_una_sola_pagina_no_pinta_la_nav_de_paginacion(self, monkeypatch):
+        html = self._lista(monkeypatch, despues=None, siguiente=None)
+        assert "A.cbz" in html and "<nav class=\"pagination\"" not in html
+
+    def test_con_siguiente_o_en_otra_pagina_si_hay_nav_con_enlaces(self, monkeypatch):
+        con_siguiente = self._lista(monkeypatch, despues=None, siguiente="tok")
+        assert '<nav class="pagination"' in con_siguiente and 'rel="next"' in con_siguiente
+        otra = self._lista(monkeypatch, despues="x", siguiente=None)
+        assert '<nav class="pagination"' in otra and "Volver al principio" in otra
+
+
 # --- Rutas (sesión falsa) ---------------------------------------------------------------------------------------------
 
 class SesionQueFalla:
