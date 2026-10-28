@@ -208,7 +208,11 @@ fi
 
 # ── Sincronización de las anclas vivas ───────────────────────────────────────
 if (( OFFSITE_OK == 1 )); then
-    while IFS= read -r nombre; do
+    # Los nombres se leen ANTES del bucle: `escribir_manifiesto` ejecuta
+    # `docker compose exec`, que consume stdin; con un `while read` se perdían
+    # las anclas restantes.
+    mapfile -t nombres_ancla < <(dumps_protegidos_por_ref)
+    for nombre in "${nombres_ancla[@]}"; do
         [[ -n "${nombre}" ]] || continue
         local_dump="${BACKUP_DIR}/${nombre}"
         [[ -f "${local_dump}" ]] || continue
@@ -242,12 +246,12 @@ if (( OFFSITE_OK == 1 )); then
             fi
         elif [[ ! -f "${off_manifest}" ]]; then
             if ! escribir_manifiesto "${off_dump}" "backup.sh (sincronización de ancla)" \
-                    "ancla-${nombre%.sql.gz}" '{}' >/dev/null; then
+                    "ancla-${nombre%.sql.gz}" '{}' >/dev/null </dev/null; then
                 ANCHOR_ERROR="anchor_sync_failed"
                 break
             fi
         fi
-    done < <(dumps_protegidos_por_ref)
+    done
 fi
 
 # ── Retención ────────────────────────────────────────────────────────────────

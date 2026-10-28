@@ -37,6 +37,9 @@ if [[ "$*" == *"pg_dump"* ]]; then
     esac
 fi
 if [[ "$*" == *"psql"* ]]; then
+    # Como `docker compose exec`: consume stdin. Sin esto, el stub no reproduce
+    # el bucle que pierde nombres al llamar a escribir_manifiesto.
+    cat >/dev/null 2>&1 || true
     echo "0020"
     exit 0
 fi
@@ -136,6 +139,7 @@ def _ejecutar(ctx: dict, *, mode: str = "ok", mount: str = "/",
     return subprocess.run(
         ["bash", str(ctx["repo"] / "scripts" / "backup.sh")],
         env=env, capture_output=True, text=True, timeout=60,
+        stdin=subprocess.DEVNULL,
     )
 
 
@@ -226,3 +230,25 @@ class TestBackupScript:
         assert estado["error"] == "offsite_verify_failed"
         assert len(list(ctx["backup"].glob("backup_*.sql.gz"))) == 1
         assert not list(ctx["offsite"].glob("backup_*.sql.gz"))
+
+    def test_sincroniza_todas_las_anclas_al_offsite(self, tmp_path):
+        """Regresión: el bucle de anclas no puede perder nombres porque
+        `escribir_manifiesto` (docker compose exec) consuma su stdin."""
+        ctx = _preparar(tmp_path)
+        sha = _git(ctx["repo"], "rev-parse", "HEAD").stdout.strip()
+        anclas = [f"2026100{d}_000000" for d in range(1, 6)]
+        for ts in anclas:
+            _git(ctx["repo"], "update-ref", f"refs/zascarr/update/{ts}", sha)
+            (ctx["backup"] / f"update_{ts}.sql.gz").write_bytes(f"ancla-{ts}".encode())
+
+        r = _ejecutar(ctx)
+        assert r.returncode == 0, r.stdout + r.stderr
+
+        fuera = sorted(p.name for p in ctx["offsite"].glob("update_*.sql.gz"))
+        assert fuera == sorted(f"update_{ts}.sql.gz" for ts in anclas)
+        for ts in anclas:
+            assert (ctx["offsite"] / f"MANIFIESTO-update_{ts}.json").is_file()
+
+        estado = _estado(ctx)
+        assert estado["status"] == "ok"
+        assert len(estado["retencion_protegida"]) == len(anclas)
