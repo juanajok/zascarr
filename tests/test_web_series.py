@@ -266,8 +266,10 @@ class TestPoliticaBusquedaD8:
             r = client.get(f"/ui/series/{series.id}")
 
         assert "Números que aún no han salido" in r.text
-        assert "deshabilitado" in r.text
-        assert "todavía no se puede aplicar" in r.text   # el motivo, visible
+        assert "todavía no disponible" in r.text   # la propia opción avisa, en llano
+        assert "Todavía no se puede elegir" in r.text   # el motivo, en el detalle plegado
+        visible = re.sub(r"<[^>]+>", " ", r.text.split('id="politica-serie"', 1)[1].split("politica-veredicto", 1)[0])
+        assert "futuros" not in visible   # sin el valor interno a la vista
 
     def test_todos_no_se_ofrece(self):
         """Reservado hasta que D3 le dé significado: no es una opción que
@@ -484,53 +486,59 @@ class TestPresupuestoTextoU21:
         pos_efecto = html.index("politica-efecto")
         pos_veredicto = html.index("politica-veredicto")
         assert pos_select < pos_efecto < pos_veredicto
-        assert "Se guarda al momento: lo retirado deja de buscarse ya." in html
-        assert "Lo que falte entra en el próximo ciclo." in html
+        assert "Se guarda al elegir. Si dejas de buscar, se para al momento." in html
         assert "Guardar aplica la retirada" not in html
 
     def test_la_nota_de_futuros_va_junto_al_selector(self):
         html = self._render()
         assert html.index('id="wishlist_policy"') < html.index("politica-futuros")
         assert html.index("politica-futuros") < html.index("politica-veredicto")
-        assert "todavía no se puede aplicar" in html
+        assert "Todavía no se puede elegir" in html
 
     def _bloque_politica(self) -> str:
         html = self._render()
         inicio = html.index('id="politica-serie"')
         return html[inicio:html.index("politica-veredicto", inicio)]
 
-    def test_u21_una_sola_linea_visible_junto_al_selector_y_el_resto_plegado(self):
-        """#296, criterio 1: entre el selector y el veredicto solo hay UNA nota fuera del `<details>`."""
+    def test_u21_una_sola_nota_visible_junto_al_selector_y_el_resto_plegado(self):
+        """#296, criterio 1: entre el selector y el veredicto solo hay UNA nota fuera del `<details>`. «Una línea» se
+        entiende como «una sola nota»: en el móvil (≈ 40 caracteres por renglón) puede ocupar dos renglones."""
         bloque = self._bloque_politica()
         fuera = re.sub(r"<details\b.*?</details>", "", bloque, flags=re.S)
-        notas = re.findall(r'<p class="caption[^"]*">(.*?)</p>', fuera, re.S)
+        notas = re.findall(r'<p class="[^"]*\bpolitica-efecto\b[^"]*">(.*?)</p>', fuera, re.S)
         assert len(notas) == 1, notas
-        linea = self._texto(notas[0]).strip()
-        assert linea == "Se guarda al momento: lo retirado deja de buscarse ya."
-        assert len(linea) <= 60  # cabe en una línea del móvil junto al selector, sin partirla en dos avisos
+        linea = " ".join(self._texto(notas[0]).split())
+        assert linea == "Se guarda al elegir. Si dejas de buscar, se para al momento."
+        assert len(linea) <= 60
         assert "politica-futuros" not in fuera
+        assert 'class="caption' not in fuera   # ya no hay cajas de aviso junto al selector (era el problema de #296)
 
-    def test_u21_el_detalle_plegado_lleva_el_resto_con_un_resumen_que_lo_nombra(self):
+    def test_u21_el_detalle_plegado_nombra_lo_que_contiene_y_lleva_el_motivo(self):
         bloque = self._bloque_politica()
         detalle = re.search(r'<details class="politica-detalles">(.*?)</details>', bloque, re.S)
-        assert detalle is not None and "<summary>Más detalles</summary>" in detalle.group(1)
-        assert "<details class=\"politica-detalles\" open" not in bloque   # plegado de entrada
+        assert detalle is not None
+        assert "<summary>¿Por qué una opción no se puede elegir?</summary>" in detalle.group(1)
+        assert 'class="politica-detalles" open' not in bloque   # plegado de entrada
         plano = " ".join(self._texto(detalle.group(1)).split())
-        assert "Lo que falte entra en el próximo ciclo." in plano
-        assert "«Números que aún no han salido» está deshabilitado:" in plano
-        assert "todavía no se puede aplicar" in plano
+        assert ("Todavía no se puede elegir «Números que aún no han salido»: las fuentes de datos no avisan de los "
+                "números antes de que salgan.") in plano
+        assert plano.count(":") == 1   # un solo «:» en la frase (antes había dos encadenados)
+        assert "futuros" not in plano and "política" not in plano   # ni el valor interno ni jerga
 
-    def test_u21_futuros_sigue_deshabilitado_con_su_motivo_accesible(self):
-        """#296, criterio 2: la opción no se puede elegir y su motivo está en el `title` y en el detalle."""
+    def test_u21_futuros_sigue_deshabilitado_y_su_motivo_esta_en_el_detalle(self):
+        """#296, criterio 2. El portador accesible del motivo es el `<details>`: el `title` de la `<option>` no se muestra
+        en los selectores nativos del móvil ni lo anuncian de forma fiable los lectores de pantalla; se conserva por si
+        ayuda, pero la prueba no lo da por suficiente."""
         bloque = self._bloque_politica()
-        opcion = re.search(r'<option value="futuros"[^>]*>', bloque)
+        opcion = re.search(r'<option value="futuros"[^>]*>\s*(.*?)\s*</option>', bloque, re.S)
         assert opcion is not None and " disabled" in opcion.group(0)
-        assert 'title="' in opcion.group(0) and "todavía no se puede aplicar" in opcion.group(0)
-        assert 'id="politica-futuros"' in bloque
+        assert "Números que aún no han salido (todavía no disponible)" in " ".join(opcion.group(1).split())
+        assert "deshabilitado" not in opcion.group(0)
+        assert 'id="politica-futuros"' in bloque and "Todavía no se puede elegir" in bloque
 
     def test_u21_no_se_pierde_que_guardar_es_inmediato(self):
         plano = " ".join(self._texto(self._bloque_politica()).split())
-        assert "Se guarda al momento" in plano and "lo retirado deja de buscarse ya" in plano
+        assert "Se guarda al elegir" in plano and "se para al momento" in plano
 
     def test_ningun_parrafo_visible_va_en_mayusculas(self):
         html = self._render()

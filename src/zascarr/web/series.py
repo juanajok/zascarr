@@ -34,7 +34,6 @@ from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
-    MOTIVO_POLITICA_FUTUROS,
     querer_de_serie,
     retirar_de_serie,
 )
@@ -49,6 +48,14 @@ from zascarr.web.routes import crear_templates
 templates = crear_templates()
 
 router = APIRouter(prefix="/ui/series", tags=["ui"])
+
+# U21 (#296): lo que lee la persona junto a la opción «Números que aún no han salido». Texto
+# PROPIO de la interfaz, en español llano y sin el valor interno `futuros`;
+# `services/politica.py::MOTIVO_POLITICA_FUTUROS` es el motivo técnico del orquestador y de sus
+# pruebas, y no se toca.
+MOTIVO_FUTUROS_EN_PANTALLA = (
+    "las fuentes de datos no avisan de los números antes de que salgan"
+)
 
 # D8: lo que el selector OFRECE. `todos` no aparece (reservado hasta que D3 le
 # dé significado, ver ficha) y `futuros` se pinta deshabilitado con su motivo —
@@ -96,7 +103,7 @@ async def _contexto_politica(db: AsyncSession, series: Series,
         "querer": querer,
         "politica_actual": series.wishlist_policy or WishlistPolicy.NONE,
         "politicas_ofrecidas": _POLITICAS_OFRECIDAS,
-        "motivo_futuros": MOTIVO_POLITICA_FUTUROS,
+        "motivo_futuros": MOTIVO_FUTUROS_EN_PANTALLA,
         "lote": get_settings().orchestrator_politica_lote,
         # D8 + blindaje legal: el ciclo no genera ni busca sin acuse, así que
         # prometer búsquedas sin decirlo sería engañar.
