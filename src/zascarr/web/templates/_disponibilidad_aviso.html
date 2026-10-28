@@ -19,21 +19,21 @@
   {% call ui.aviso("amber") %}
     <strong>Disponibilidad actual sin verificar.</strong>
     {% if d.resultado.value == "raiz_inaccesible" -%}
-      En la última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) la carpeta de la
+      En la última revisión, {{ d.fecha | fecha_con_antiguedad if d.fecha else "de fecha desconocida" }}, la carpeta de la
       biblioteca no existía o no era una carpeta.
     {%- elif d.resultado.value == "raiz_vacia" -%}
-      En la última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) la carpeta de la
+      En la última revisión, {{ d.fecha | fecha_con_antiguedad if d.fecha else "de fecha desconocida" }}, la carpeta de la
       biblioteca estaba vacía.
     {%- elif d.resultado.value == "desaparicion_masiva" -%}
-      En la última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) no se encontraron
+      En la última revisión, {{ d.fecha | fecha_con_antiguedad if d.fecha else "de fecha desconocida" }}, no se encontraron
       {{ d.ausentes if d.ausentes is not none else "muchos" }} de los {{ d.archivos_registrados if d.archivos_registrados is not none else "" }}
       archivos registrados: más de la mitad.
     {%- else -%}
-      La última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) no se pudo completar.
+      La última revisión, {{ d.fecha | fecha_con_antiguedad if d.fecha else "de fecha desconocida" }}, no se pudo completar.
     {%- endif %}
     <strong>No se han marcado archivos como no encontrados en esta comprobación.</strong>
     Lo que ya figuraba como no disponible se conserva tal como estaba.
-    <div class="caption">
+    <div class="aviso-aparte">
       {% if d.ultima_valida %}Última comprobación válida: {{ d.ultima_valida | fecha_con_antiguedad }}.{% else %}{{ sin_dato_valida }}{% endif %}
     </div>
   {% endcall %}

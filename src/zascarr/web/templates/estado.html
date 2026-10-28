@@ -21,13 +21,12 @@
     {% endcall %}
   {% else %}
     {% include "_disponibilidad_aviso.html" %}
-    <p class="caption">
-      {% if no_disponibles %}
-        <a href="/ui/no-disponibles">Ver los {{ no_disponibles }} {{ "archivo" if no_disponibles == 1 else "archivos" }} no {{ "disponible" if no_disponibles == 1 else "disponibles" }}</a>
-      {% else %}
-        Ningún archivo figura como no disponible. <a href="/ui/no-disponibles">Ver la lista</a>
-      {% endif %}
-    </p>
+    {% if no_disponibles %}
+      <p><a class="btn ghost sm" href="/ui/no-disponibles">Ver los {{ no_disponibles }} {{ "archivo" if no_disponibles == 1 else "archivos" }} no {{ "disponible" if no_disponibles == 1 else "disponibles" }}</a></p>
+    {% else %}
+      <p class="muted">Ningún archivo figura como no disponible.</p>
+      <p><a class="btn ghost sm" href="/ui/no-disponibles">Ver la lista</a></p>
+    {% endif %}
   {% endif %}
 </section>
 
