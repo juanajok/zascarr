@@ -141,6 +141,10 @@ class Settings(BaseSettings):
     # /api/health lo lee para avisar de copias atrasadas o fallidas (#334).
     backup_status_file: str = Field(default="/run/backup-status/status.json")
 
+    # Fichero JSON escrito por scripts/probar_restauracion.sh (host) y montado
+    # read-only. /api/health avisa de restauraciones atrasadas o fallidas (#334 B2).
+    restore_status_file: str = Field(default="/run/backup-status/restore-status.json")
+
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60
     import_interval_minutes: int = 15
