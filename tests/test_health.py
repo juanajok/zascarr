@@ -316,3 +316,87 @@ class TestHealthBackup:
         assert 'backup: "Copias de seguridad"' in html
         assert "Copia reciente verificada" in html
         assert "La última copia falló" in html
+
+
+class TestHealthRestore:
+    """#334 B2: la restauración de comprobación se lee del fichero del host."""
+
+    @pytest.fixture(autouse=True)
+    def _encendidos(self, clientes):
+        clientes()
+
+    def _estado(self, tmp_path, monkeypatch, **datos):
+        ruta = tmp_path / "restore-status.json"
+        ruta.write_text(json.dumps(datos), encoding="utf-8")
+        monkeypatch.setattr(get_settings(), "restore_status_file", str(ruta))
+        return ruta
+
+    def _pedir(self, db=("ok", "Conectada y migrada.")):
+        with (
+            patch("zascarr.api.health._check_transmission", AsyncMock(return_value=True)),
+            patch("zascarr.api.health._check_amule", AsyncMock(return_value=True)),
+            patch("zascarr.api.health._database_status", AsyncMock(return_value=db)),
+            _fake_db_client() as client,
+        ):
+            return client.get("/api/health").json()
+
+    def test_ok_fresco(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="ok", error=None,
+                     last_ok_at_epoch=time.time())
+        body = self._pedir()
+        assert body["checks"]["restore"] == "ok"
+        assert body["status"] == "healthy"
+
+    def test_failed_es_error_y_deja_el_global_en_degraded(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="failed", error="restore_failed",
+                     last_ok_at_epoch=time.time())
+        body = self._pedir()
+        assert body["checks"]["restore"] == "error"
+        assert body["status"] == "degraded"
+        assert "restauración" in body["warnings"]["restore"].lower()
+
+    def test_warning_por_manifiesto(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="warning", error="manifest_ausente",
+                     last_ok_at_epoch=time.time())
+        body = self._pedir()
+        assert body["checks"]["restore"] == "warning"
+        assert body["status"] == "degraded"
+        assert "manifiesto" in body["warnings"]["restore"]
+
+    @pytest.mark.parametrize("dias, esperado", [(40, "warning"), (80, "error")])
+    def test_antiguedad_de_la_ultima_restauracion(self, tmp_path, monkeypatch, dias, esperado):
+        self._estado(tmp_path, monkeypatch, status="ok", error=None,
+                     last_ok_at_epoch=time.time() - dias * 86400)
+        body = self._pedir()
+        assert body["checks"]["restore"] == esperado
+        assert body["status"] == "degraded"
+
+    def test_fichero_ausente_es_error_sin_500(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(get_settings(), "restore_status_file",
+                            str(tmp_path / "no-existe.json"))
+        body = self._pedir()
+        assert body["checks"]["restore"] == "error"
+        assert body["status"] == "degraded"
+        assert "No hay registro" in body["warnings"]["restore"]
+
+    def test_json_invalido_es_error_sin_500(self, tmp_path, monkeypatch):
+        ruta = tmp_path / "restore-status.json"
+        ruta.write_text("no es json", encoding="utf-8")
+        monkeypatch.setattr(get_settings(), "restore_status_file", str(ruta))
+        body = self._pedir()
+        assert body["checks"]["restore"] == "error"
+        assert body["status"] == "degraded"
+
+    def test_bd_caida_sigue_siendo_unhealthy(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="failed", error="restore_failed",
+                     last_ok_at_epoch=time.time())
+        body = self._pedir(db=("unreachable", "No se puede conectar con PostgreSQL."))
+        assert body["checks"]["restore"] == "error"
+        assert body["status"] == "unhealthy"
+
+    def test_estado_pinta_la_fila_de_restauracion(self):
+        from zascarr.web.routes import TEMPLATES_DIR
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
+        assert 'restore: "Restauración"' in html
+        assert "Restauración reciente verificada" in html
+        assert "La última restauración falló" in html

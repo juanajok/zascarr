@@ -87,6 +87,7 @@ BACKUP_DIR=${BACKUP_DIR}
 BACKUP_OFFSITE_DIR=${BACKUP_OFFSITE_DIR}
 BACKUP_OFFSITE_MOUNT=${BACKUP_OFFSITE_MOUNT}
 BACKUP_STATUS_DIR=${BACKUP_STATUS_DIR}
+RESTORE_STATUS_FILE=${BACKUP_STATUS_DIR}/restore-status.json
 RETENTION_DAYS=${RETENTION_DAYS}
 EOF
 
@@ -97,11 +98,15 @@ run install -m 600 "${DEFAULTS}" /etc/default/zascarr
 run install -m 755 "${REPO_DIR}/deploy/systemd/backup-wrapper.sh" /usr/local/bin/backup.sh
 run install -m 644 "${REPO_DIR}/deploy/systemd/zascarr-backup.service" /etc/systemd/system/zascarr-backup.service
 run install -m 644 "${REPO_DIR}/deploy/systemd/zascarr-backup.timer" /etc/systemd/system/zascarr-backup.timer
+run install -m 755 "${REPO_DIR}/deploy/systemd/restore-wrapper.sh" /usr/local/bin/restore-check.sh
+run install -m 644 "${REPO_DIR}/deploy/systemd/zascarr-restore.service" /etc/systemd/system/zascarr-restore.service
+run install -m 644 "${REPO_DIR}/deploy/systemd/zascarr-restore.timer" /etc/systemd/system/zascarr-restore.timer
 run systemctl daemon-reload
 run systemctl enable --now zascarr-backup.timer
+run systemctl enable --now zascarr-restore.timer
 
 if (( DRY_RUN )); then
-    say "[dry-run] La primera copia y la verificación no se ejecutan."
+    say "[dry-run] La primera copia, la restauración y la verificación no se ejecutan."
     exit 0
 fi
 
@@ -120,4 +125,16 @@ say "--- copias locales ---"
 ls -l "${BACKUP_DIR}" | tail -4 || true
 say "--- copias fuera del disco ---"
 ls -l "${BACKUP_OFFSITE_DIR}" | tail -4 || true
-say "Instalación completada. El aviso en /estado requiere desplegar B1."
+
+say "Primera restauración de comprobación (base desechable; la app no se arranca)..."
+if ! systemctl start zascarr-restore.service; then
+    echo "La primera restauración falló. Revisa: journalctl -u zascarr-restore.service -n 80" >&2
+    systemctl status zascarr-restore.service --no-pager -l || true
+    exit 1
+fi
+say "Resultado del servicio: $(systemctl show -p Result --value zascarr-restore.service)"
+say "--- estado de restauración ---"
+jq . "${BACKUP_STATUS_DIR}/restore-status.json" 2>/dev/null || true
+say "--- timer de restauración ---"
+systemctl list-timers zascarr-restore.timer --no-pager | head -3
+say "Instalación completada. El aviso en /estado requiere desplegar B1/B2."

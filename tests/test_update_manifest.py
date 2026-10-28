@@ -121,7 +121,7 @@ def test_manifiesto_del_dump_de_rescate_lleva_el_commit_nuevo(tmp_path):
 
     backup = tmp_path / "backups"
     r = subprocess.run(
-        ["bash", str(repo / "scripts" / "update.sh")],
+        ["bash", str(repo / "scripts" / "update.sh"), "--rama", "main"],
         capture_output=True, text=True, timeout=180, check=False,
         stdin=subprocess.DEVNULL,
         env={
