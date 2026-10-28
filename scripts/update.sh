@@ -116,6 +116,7 @@ if ! git -C "${REPO_DIR}" merge --ff-only "origin/${BRANCH}"; then
 fi
 NEW_SHA="$(git -C "${REPO_DIR}" rev-parse HEAD)"
 
+HIZO_UPDATE=0
 if [[ "${NEW_SHA}" == "${PREV_SHA}" ]]; then
     info "Ya estabas en la última versión (${NEW_SHA:0:7}). Re-creo el servicio igualmente."
     # No hay actualización que revertir, así que el ancla, el dump y su
@@ -124,6 +125,7 @@ if [[ "${NEW_SHA}" == "${PREV_SHA}" ]]; then
     git -C "${REPO_DIR}" update-ref -d "${UPDATE_REF}" 2>/dev/null || true
     info "Sin cambios que aplicar: descarto el backup y la referencia que había creado."
 else
+    HIZO_UPDATE=1
     success "Código actualizado: ${PREV_SHA:0:7} → ${NEW_SHA:0:7}"
     if ! git -C "${REPO_DIR}" diff --quiet "${PREV_SHA}" "${NEW_SHA}" -- .env.example; then
         warn "Ha cambiado .env.example: revisa ${ENV_FILE} por si hay variables nuevas."
@@ -170,6 +172,16 @@ esperar_healthcheck "${HEALTH_TIMEOUT}" || die \
     sudo bash scripts/rollback.sh
   (referencia de rescate: ${UPDATE_REF}; backup: ${DEST})"
 success "ZascArr responde en ${HEALTH_URL}"
+
+# #334 B2: solo tras una actualización real (no en el no-op). El despliegue se
+# invocó con --rama <BRANCH>; la restauración no necesita rama. Lee el manifiesto
+# que se acaba de escribir después del fast-forward.
+if (( HIZO_UPDATE == 1 )); then
+    info "Comprobando que la copia de rescate restaura..."
+    if ! "${REPO_DIR}/scripts/probar_restauracion.sh" --dump "${DEST}"; then
+        warn "La restauración post-despliegue no pasó; la app sigue arriba. Revisa el estado de restauración (fila del panel y registro)."
+    fi
+fi
 
 # La referencia de rescate NO se borra: es el ancla que permite revertir esta
 # actualización si el problema aparece dentro de unos días ("la actualización

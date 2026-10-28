@@ -1,0 +1,11 @@
+[Unit]
+Description=Ejecuta la restauración de comprobación de ZascArr una vez al mes
+
+[Timer]
+OnCalendar=*-*-01 05:00:00
+Persistent=true
+RandomizedDelaySec=15min
+Unit=zascarr-restore.service
+
+[Install]
+WantedBy=timers.target
