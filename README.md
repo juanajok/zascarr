@@ -243,8 +243,12 @@ instalaste ZascArr:
 
 ```bash
 cd /opt/zascarr/zascarr     # o la carpeta donde clonaste el repo
-sudo bash scripts/update.sh
+sudo bash scripts/update.sh --rama main
 ```
+
+**La rama hay que indicarla siempre** (`--rama main` para la última versión estable; otra rama para una versión
+concreta). Sin ella, el script se detiene antes de tocar nada y te lo dice: ya no elige por su cuenta qué versión se
+instala. Es lo mismo que fijar `BRANCH=<rama>` en el entorno.
 
 El script hace, **en este orden** (el orden importa):
 
