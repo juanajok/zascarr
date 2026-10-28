@@ -9,19 +9,21 @@ from __future__ import annotations
 
 import zipfile
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
+from zascarr.core.importer_triage import TriageResult
 from zascarr.models import File, ImportRun
+from zascarr.services.importer import _Outcome
 from zascarr.services.library_adopter import (
+    _MARCADOR_HECHO,
     AdoptionReport,
     EstadoAdopcion,
     LibraryAdopter,
-    _MARCADOR_HECHO,
 )
 
 
@@ -315,6 +317,42 @@ class TestAdopt:
         assert report.error_count == 1
         assert "disco roto" not in report.errors[0]          # sin mensajes del sistema
         assert _MARCADOR_HECHO not in fila_settings.values
+
+    @pytest.mark.asyncio
+    async def test_si_el_stat_posterior_falla_el_fallo_de_lectura_sigue_siendo_error(
+            self, monkeypatch, tmp_path):
+        """Un USB que se cae puede hacer que la ruta deje de existir después de leerla: no debe
+        degradarse a «desapareció» (omisión) ni dejar que el marcador tape lo pendiente."""
+        original = tmp_path / "Serie 01.cbz"
+        make_cbz(original)
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter.get_settings",
+            lambda: MagicMock(library_path=tmp_path),
+        )
+        llamadas = {"stat": 0}
+        stat_real = Path.stat
+
+        def stat_que_solo_funciona_una_vez(self, *args, **kwargs):
+            llamadas["stat"] += 1
+            if llamadas["stat"] > 1:
+                raise FileNotFoundError(self)
+            return stat_real(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", stat_que_solo_funciona_una_vez)
+        monkeypatch.setattr(
+            "zascarr.services.library_adopter._triage_and_match",
+            AsyncMock(return_value=_Outcome(
+                tr=TriageResult(path=original),
+                error_lectura="OSError: Input/output error",
+            )),
+        )
+        report = AdoptionReport(started_at=datetime.now(UTC))
+
+        await LibraryAdopter(db=FakeSession([]))._adopt_file(original, report)
+
+        assert report.errors == ["Serie 01.cbz: no se pudo leer (OSError: Input/output error)"]
+        assert report.vanished == 0
+        assert llamadas["stat"] == 1          # no se intenta el segundo stat
 
     @pytest.mark.asyncio
     async def test_persiste_import_run_con_kind_adoption(self, monkeypatch, tmp_path):
