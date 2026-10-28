@@ -21,6 +21,12 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 SCRIPTS = RAIZ / "scripts"
 
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permisos POSIX")
+def test_el_script_es_ejecutable():
+    """El hook y el wrapper del timer lo ejecutan directamente, no con `bash`."""
+    assert os.access(SCRIPTS / "probar_restauracion.sh", os.X_OK)
+
 DOCKER_FALSO = r"""#!/usr/bin/env bash
 set -euo pipefail
 echo "docker $*" >> "$STUB_LOG"
