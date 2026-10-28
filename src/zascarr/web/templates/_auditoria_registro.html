@@ -95,6 +95,9 @@
   {% call ui.aviso("amber") %}
     {% if reg.fase.value == "interrumpido" %}
     Se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba guardado.
+    {% elif reg.ilegibles and not reg.errores %}
+    No se ha podido leer {{ reg.ilegibles }} {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} de tu biblioteca (permisos o un fallo
+    del disco), así que puede haber tebeos que no se han visto. Lo que sí se vio está registrado. Arregla el acceso y continúa.
     {% else %}
     No se pudo registrar {{ reg.errores | length }} {{ "tebeo" if reg.errores | length == 1 else "tebeos" }}. El resto sí está registrado.
     {% endif %}
@@ -114,6 +117,8 @@
     {% if reg.ambiguos %}<li><strong>{{ reg.ambiguos | length }}</strong> que ZascArr no ha podido atribuir con seguridad a un archivo
       que ya conocía: no se ha tocado ninguna ficha ni se ha creado otra (abajo, cuáles y por qué)</li>{% endif %}
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
+    {% if reg.ilegibles %}<li><strong>{{ reg.ilegibles }}</strong> {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} que no se
+      {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver. No se da por registrada la biblioteca</li>{% endif %}
     {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
     {% if reg.no_guardados %}<li><strong>{{ reg.no_guardados }}</strong> del último grupo no llegaron a guardarse
       (se comprobó que no quedaron): no se han añadido</li>{% endif %}
@@ -161,6 +166,9 @@
   {% call ui.aviso("amber") %}
     {% if reg.fase.value == "interrumpido" %}
     El registro se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba guardado.
+    {% elif reg.ilegibles and not reg.errores %}
+    No se ha podido leer {{ reg.ilegibles }} {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} de tu biblioteca (permisos o un fallo
+    del disco), así que puede haber tebeos que no se han visto. Lo que sí se vio está registrado. Arregla el acceso y continúa.
     {% else %}
     No se pudo registrar {{ reg.errores | length }} {{ "tebeo" if reg.errores | length == 1 else "tebeos" }}.
     El resto sí está registrado.
@@ -179,6 +187,8 @@
       identificar, que te esperan en <a href="/ui/pendientes">Por revisar</a> para que los asignes tú</li>
     <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro ya registrado): no se añaden dos veces</li>
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
+    {% if reg.ilegibles %}<li><strong>{{ reg.ilegibles }}</strong> {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} que no se
+      {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver. No se da por registrada la biblioteca</li>{% endif %}
     {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
     {% if reg.no_guardados %}<li><strong>{{ reg.no_guardados }}</strong> del último grupo no llegaron a guardarse
       (se comprobó que no quedaron): no se han añadido</li>{% endif %}

@@ -73,11 +73,13 @@ class EstadoRegistro:
     omitidos: list[str] = field(default_factory=list)
     #: de los omitidos, los que desaparecieron durante el recorrido (están contados dentro de `procesados`)
     desaparecidos_al_leer: int = 0
+    #: #332: carpetas o archivos que el recorrido no pudo leer; con `> 0` la ejecución no es «completa» aunque no haya errores por archivo
+    ilegibles: int = 0
 
     @property
     def completo(self) -> bool:
-        """Terminó, sin errores y sin interrupción: el único caso en el que se puede decir «registrada»."""
-        return self.fase is FaseRegistro.TERMINADO and not self.errores
+        """Terminó, sin errores, sin interrupción y habiendo visto TODA la carpeta: el único caso en el que se puede decir «registrada»."""
+        return self.fase is FaseRegistro.TERMINADO and not self.errores and not self.ilegibles
 
     @property
     def anadidos(self) -> int:
@@ -118,6 +120,7 @@ def _volcar(report: AdoptionReport) -> None:
     _estado.ambiguos = list(report.ambiguous)
     _estado.omitidos = list(report.omitted)
     _estado.desaparecidos_al_leer = report.vanished
+    _estado.ilegibles = report.unreadable
 
 
 #: Clave del cerrojo consultivo de Postgres que serializa los registros de la biblioteca (inicial e incremental) entre procesos.

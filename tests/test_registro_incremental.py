@@ -185,3 +185,24 @@ class TestLimiteVisibleDeIncidencias:
     def test_con_pocas_incidencias_no_hay_aviso_de_limite(self):
         reg = EstadoRegistro(fase=FaseRegistro.TERMINADO, incremental=True, total=3, procesados=3, errores=["F0.cbz: x"], omitidos=["G0.cbz — x"])
         assert "Se muestran los 50 primeros" not in _texto(_render(reg=reg))
+
+
+class TestEstadoConRecorridoIlegible:
+    """#332: un registro que no pudo leer parte de la carpeta no es «completo» aunque no haya errores por archivo."""
+
+    def test_completo_exige_no_tener_ilegibles(self):
+        base = dict(fase=FaseRegistro.TERMINADO)
+        assert EstadoRegistro(**base).completo is True
+        assert EstadoRegistro(**base, ilegibles=1).completo is False
+        assert EstadoRegistro(**base, errores=["x"]).completo is False
+
+    def test_la_pantalla_inicial_con_ilegibles_no_dice_registrada_y_no_inventa_errores(self):
+        t = _texto(_render(reg=EstadoRegistro(fase=FaseRegistro.TERMINADO, total=5, procesados=5, ilegibles=2)))
+        assert "El registro ha quedado incompleto" in t and "No se ha podido leer 2 carpetas o archivos" in t
+        assert "Biblioteca registrada" not in t and "Continuar el registro" in t and "No se pudo registrar 0" not in t
+        assert "2 carpetas o archivos que no se han podido leer" in t
+
+    def test_la_pantalla_incremental_con_ilegibles_tampoco_dice_revisados_a_secas(self):
+        t = _texto(_render(reg=EstadoRegistro(fase=FaseRegistro.TERMINADO, incremental=True, total=5, procesados=5, ilegibles=1)))
+        assert "ha quedado incompleto" in t and "No se ha podido leer 1 carpeta o archivo" in t
+        assert "Archivos sin registrar revisados" not in t and "No se pudo registrar 0" not in t
