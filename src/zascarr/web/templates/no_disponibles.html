@@ -45,10 +45,13 @@
       {% endfor %}
     </ul>
     {% endcall %}
+    {#- Solo si hay a dónde ir: una <nav> vacía la anuncia un lector de pantalla como una región sin contenido. -#}
+    {% if not primera or pagina.siguiente %}
     <nav class="pagination" aria-label="Páginas de archivos no disponibles">
       {% if not primera %}<a class="page-link" href="/ui/no-disponibles">Volver al principio</a>{% endif %}
       {% if pagina.siguiente %}<a class="page-link" rel="next" href="/ui/no-disponibles?despues={{ pagina.siguiente }}">Ver los siguientes</a>{% endif %}
     </nav>
+    {% endif %}
   {% endif %}
 {% endif %}
 <p><a class="back-link" href="/estado">← Volver a Estado</a></p>
