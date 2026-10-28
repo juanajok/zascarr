@@ -167,5 +167,10 @@ Implementada en la misma tarjeta (#334):
 - No se toca la biblioteca de tebeos.
 - Las copias contienen rutas y nombres reales: se quedan en la Pi y su disco de
   respaldo; en GitHub solo se publican recuentos, identificadores, estados y hashes.
+- El oráculo de `contar_copy` y las comprobaciones de tablas asumen el esquema
+  `public.`, que es lo que produce hoy `pg_dump`. Si el dump cambiara de
+  esquema, hay que ajustar `contar_copy`, `to_regclass` y el recuento con
+  `pg_class`; no es un supuesto silencioso: los recuentos dejarían de cuadrar
+  y la restauración fallaría, no pasaría en falso.
 - `docs/BACKLOG.md` no se toca en B1; el cierre de E2 se actualiza cuando #334
   esté completa (B1 + B2).
