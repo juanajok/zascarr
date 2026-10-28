@@ -63,7 +63,7 @@ se cubren con las historias nuevas y con los criterios que se añaden a D5 (F10)
 
 | Historia | Viene de | Por qué le sirve al coleccionista | P propuesta |
 |---|---|---|---|
-| **S5 (refinada)** Importar mi exportación de Whakoom | Importación, F23 | Quien ya cataloga en Whakoom no vuelve a teclear qué sigue ni qué busca. **Cambia el spike de S5:** la guía documenta una exportación propia (Excel de comicteca y buscados, CSV de listas), así que se importa **el fichero del usuario** en vez de leer el HTML de Whakoom: sin peticiones a su web, sin cortesía que respetar y con datos que son del propio usuario | P1 |
+| **S5 (refinada)** Importar mi exportación de Whakoom | Importación, F23 | Quien ya cataloga en Whakoom no vuelve a teclear qué sigue ni qué busca. **Cambia el spike de S5:** la guía documenta una exportación propia (Excel de comicteca y buscados, CSV de listas), así que se importa **el fichero del usuario** en vez de leer el HTML de Whakoom: sin peticiones a su web, sin cortesía que respetar y con datos que son del propio usuario. **Exportar exige Whakoom PRO** (ver «Formato verificado») | P2 *(era P1)* |
 | **WK1** «Lo tengo en papel» | F02/F04 | Muchos coleccionistas españoles combinan papel y digital. Hoy un número que tienes en papel aparece como «te falta» y una política de búsqueda lo pediría | P2 |
 | **WK2** Estado de colección por serie | F07, F21–F22 | Separar «la tengo completa», «me faltan N» y «decidí no completarla» (Whakoom: «separar decisiones deliberadas de olvidos») y filtrar la Biblioteca por eso | P1 |
 | **WK3** Exportar mi colección | F23–F24 | Sacar los datos a una hoja de cálculo: lista de la compra, inventario, salida del sistema. La copia de la BD no sirve para eso | P2 |
@@ -98,12 +98,46 @@ en el BACKLOG: **fusionar S6 en D5**.
 
 ## Casos de prueba antes de implementar
 
-- **S5:** un fichero real exportado de Whakoom por el responsable (comicteca y buscados), con tildes, eñes y
-  una serie con varias ediciones; medir cuántas filas casan solas, cuántas quedan dudosas y cuántas no casan.
+- **S5:** un fichero real exportado de Whakoom (comicteca y buscados) por un coleccionista con PRO, con tildes,
+  eñes y una serie con varias ediciones; medir cuántas filas casan solas, cuántas quedan dudosas y cuántas no
+  casan. **Hoy no hay ese fichero:** el responsable no tiene datos en Whakoom (2026-10-28).
 - **WK1:** una serie con números en papel y en digital; los huecos y la política de búsqueda no deben
   contar el papel como falta salvo que la persona lo pida.
 - **WK2:** una serie sin recuento (no se puede decir «completa») y una que decidiste no completar con huecos
   reales: ninguna debe aparecer como «te faltan N».
+
+## Formato verificado de la exportación (2026-10-28)
+
+Comprobado en el centro de ayuda oficial de Whakoom (no en la guía), sin ningún fichero real a mano:
+
+- **Comicteca y buscados:** fichero **Excel**, solo con **cuenta PRO** y solo **desde la web** (sección
+  Utilidades). Columnas documentadas: Nombre de colección, Tipo de edición, Número de cómic, Título del cómic,
+  Editorial, Idioma, Fecha de publicación, Estado, Lugar, Notas y Fecha de lectura, más un **enlace a la ficha**
+  de cada cómic en Whakoom. **Sin ISBN ni autores** (un comentario oficial de 2021 confirma que los autores
+  no se incluyen y que por eso se añadió el enlace).
+  Fuente: <https://whakoom.zendesk.com/hc/es/articles/205791332> y
+  <https://whakoom.zendesk.com/hc/es/community/posts/360010869120-Datos-exportables>.
+- **Listas:** fichero **CSV**, también solo PRO. Columnas: ISBN, Colección, Número, Edición y Editorial.
+  Fuente: <https://whakoom.zendesk.com/hc/es/articles/207723745>.
+- **Sin confirmar** (hace falta un fichero real): los encabezados exactos (la propia ayuda no coincide: el
+  artículo actual incluye «Título del cómic» y el comentario de 2021 no), si comicteca y buscados van en hojas
+  o ficheros separados, el formato de las fechas, el separador y la codificación del CSV de listas, el
+  significado de «Estado» (probablemente la conservación física) y los valores de «Tipo de edición».
+- No se encontró ningún ejemplo público del fichero (búsqueda en la web y en GitHub, 2026-10-28): solo hay
+  scrapers de la web de Whakoom, que S5 evita a propósito.
+
+**Consecuencias para S5:**
+
+1. **Solo sirve a quien paga PRO**, y hoy no hay ningún usuario real que lo pruebe. Por «medir antes de
+   automatizar», S5 baja a **P2** hasta que un coleccionista con PRO quiera importar y aporte su fichero.
+2. **Se casa por nombre, no por ISBN:** colección + editorial + idioma + número. Eso hace imprescindible la
+   vista previa con «dudoso». El enlace a la ficha sirve como procedencia y como identificador estable del
+   cómic en Whakoom.
+3. **El lector busca las columnas por su nombre normalizado, nunca por posición,** y acepta Excel y CSV. Así
+   aguanta que Whakoom reordene o renombre columnas.
+4. **No se construye sobre un fichero inventado:** un fichero de prueba sintético con estas columnas puede
+   servir para las pruebas unitarias, pero el lector queda marcado como «contrato no verificado» hasta la
+   primera importación real.
 
 ## Decisión
 
