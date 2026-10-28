@@ -44,7 +44,9 @@ command -v flock >/dev/null 2>&1 || die "No encuentro flock (util-linux)."
 command -v mountpoint >/dev/null 2>&1 || die "No encuentro mountpoint (util-linux)."
 
 comprobar_requisitos
-comprobar_git_utilizable
+# Sin comprobar_git_utilizable: el volcado no necesita git. En una copia sin
+# `.git` el manifiesto deja el commit vacío y la retención no ve refs; en la Pi
+# el repo sí lo tiene y se rellena. update.sh/rollback.sh sí lo exigen.
 comprobar_env_legible "${ENV_FILE}"
 
 mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}."

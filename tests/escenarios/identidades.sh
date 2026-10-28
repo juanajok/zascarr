@@ -92,8 +92,12 @@ else fail P11c "no existe scripts/credenciales.sh"; fi
 
 # Consumidores de administración: backup.sh (el temporizador del backup diario lo ejecuta root) sigue funcionando con
 # el .env 600; con la identidad de servicio falla limpio, sin dejar un volcado.
-BACKUP="${W}/backups"; mkdir -p "${BACKUP}"; chmod 777 "${BACKUP}"
-if env PATH="${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" BACKUP_DIR="${BACKUP}" bash "${RAIZ}/zascarr/scripts/backup.sh" >/dev/null 2>&1 \
+BACKUP="${W}/backups"; OFFSITE="${W}/backups-offsite"; STATUS="${W}/backup-status"
+mkdir -p "${BACKUP}" "${OFFSITE}" "${STATUS}"; chmod 777 "${BACKUP}" "${OFFSITE}" "${STATUS}"
+if env PATH="${W}/bin:${PATH}" STUB_LOG="${W}/docker.log" BACKUP_DIR="${BACKUP}" \
+    BACKUP_OFFSITE_DIR="${OFFSITE}" BACKUP_OFFSITE_MOUNT="/" BACKUP_SKIP_DEVICE_CHECK=1 \
+    BACKUP_STATUS_DIR="${STATUS}" BACKUP_LOCK_FILE="${W}/backup.lock" \
+    bash "${RAIZ}/zascarr/scripts/backup.sh" >/dev/null 2>&1 \
    && ls "${BACKUP}"/backup_*.sql.gz >/dev/null 2>&1; then
     pass P15 "backup.sh (root) sigue funcionando con el .env en 600 root:root"
 else fail P15 "backup.sh no funcionó como root"; fi
