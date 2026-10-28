@@ -335,18 +335,22 @@ class TestPersistRun:
 
 
 class FakeSessionArchivos:
-    """Una sola consulta esperada (SELECT File...), devuelve la lista de
-    File ya construida a mano — mismo patrón que FakeDedupeSession."""
+    """Devuelve la lista de File ya construida a mano — mismo patrón que FakeDedupeSession. Atiende
+    el `SELECT File` de la comprobación y, desde #231, el `COUNT(*)` con el que se guarda cuántos
+    archivos había cuando la raíz no era accesible (`scalar_one`)."""
 
     def __init__(self, files):
         self._files = files
         self.flush = AsyncMock()
         self.consultada = False
+        self.consultas = 0
 
     async def execute(self, _statement):
         self.consultada = True
+        self.consultas += 1
         result = MagicMock()
         result.scalars.return_value.all.return_value = self._files
+        result.scalar_one.return_value = len(self._files)
         return result
 
 
@@ -447,7 +451,8 @@ class TestDetectarDesaparecidos:
         assert desaparecidos == []
         assert reaparecidos == []
         assert f.is_missing is False
-        assert session.consultada is False  # ni se llegó a mirar la BD
+        # #231: ya no se lee ningún File (solo se cuenta cuántos hay para dejarlo en el informe)
+        assert session.consultas == 1
 
     @pytest.mark.asyncio
     async def test_punto_de_montaje_vacio_no_marca_nada(self, tmp_path):
