@@ -5,6 +5,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Cambiado
+
+- **`scripts/update.sh` exige indicar la rama** (`--rama main` o `BRANCH=<rama>`). Antes instalaba por su cuenta la rama en la que
+  estuviera el repo —en la práctica, la cabeza de `main`— y cualquiera con acceso podía actualizar sin decidir qué versión instalaba.
+  Sin rama, se detiene **antes de tocar nada** (ni copia de seguridad, ni referencia de rescate, ni Docker) y explica el comando.
+  El resto del flujo (backup verificado, `--ff-only`, migraciones, healthcheck) no cambia.
+
 ### Seguridad
 
 - **La contraseña de la base de datos ya no hay que ponerla a mano ni puede ser una conocida** ([ADR 0012](docs/adr/0012-credenciales-del-env.md)).

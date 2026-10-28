@@ -66,8 +66,8 @@
 
   // Qué hacer, en llano. El detalle técnico de la base de datos va en «Avisos», plegado.
   const CHECK_ACTION = {
-    unreachable: "ZascArr no consigue hablar con su base de datos. Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización (scripts/update.sh).",
-    migration_required: "Falta un paso de la última actualización. Vuelve a ejecutarla (scripts/update.sh): lo completa sin tocar tus datos.",
+    unreachable: "ZascArr no consigue hablar con su base de datos. Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización (sudo bash scripts/update.sh --rama main).",
+    migration_required: "Falta un paso de la última actualización. Vuelve a ejecutarla (sudo bash scripts/update.sh --rama main): lo completa sin tocar tus datos.",
     schema_incompatible: "A la base de datos le faltan partes, seguramente por una copia de seguridad restaurada a medias. Vuelve a restaurarla o a actualizar.",
   };
 
