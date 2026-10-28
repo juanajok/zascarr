@@ -71,9 +71,16 @@ sido elegible) y la de `6ffd855` (`20261028_130600`), además de cualquier futur
 }
 ```
 
-`update.sh` usa la misma función para su `update_<TS>` y añade
-`codigo_destino_sha_completo`, `referencia_emparejada` y `cubre_rollback_de_codigo`.
+`update.sh` usa la misma función para su `update_<TS>`, **después del
+fast-forward**: `codigo_destino_sha_completo` es el commit anterior y
+`codigo_desplegado_sha_completo` el que acaba de quedar; añade
+`referencia_emparejada` y `cubre_rollback_de_codigo`. El manifiesto se escribe
+una vez conocido el commit nuevo, no antes del `merge`.
 El manifiesto del offsite añade `origen_copia` y `sha256_origen`.
+
+> Corrección puntual (2026-10-28): la pareja `20261028_154503`, creada antes de
+> este arreglo, se corrigió con un backfill manual de su manifiesto. No es un
+> procedimiento nuevo ni se repite en cada despliegue.
 
 ## Verificación
 
