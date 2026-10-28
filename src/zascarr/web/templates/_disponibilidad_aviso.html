@@ -1,0 +1,40 @@
+{#- Aviso de la última comprobación de la biblioteca (BL-R2, #231). Lo comparten Estado y la lista de no
+    disponibles. Variables: `d` (services.disponibilidad.EstadoComprobacion) y `no_disponibles` (int o None).
+    Dice lo OBSERVADO en el último ciclo; no afirma causas (ni «disco desmontado» ni «archivos perdidos») y no
+    vuelve a mirar el disco al mostrarse. -#}
+{% set sin_dato_valida = "Sin dato de última comprobación válida." %}
+{% if d.sin_dato %}
+  {% call ui.aviso("nota") %}
+    <strong>{{ sin_dato_valida }}</strong> ZascArr todavía no ha guardado el resultado de ninguna revisión de tu
+    biblioteca (los ciclos anteriores a esta versión no lo anotaban). Se guardará en el próximo ciclo.
+    {% if no_disponibles %}Los archivos que ya figuraban como no disponibles se conservan.{% endif %}
+  {% endcall %}
+{% elif d.comprobada %}
+  {% call ui.aviso("ok") %}
+    <strong>Última revisión de la biblioteca:</strong> {{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}.
+    Se miraron las {{ d.archivos_registrados if d.archivos_registrados is not none else "?" }} rutas registradas
+    {%- if d.ausentes %}; {{ d.ausentes }} no estaban{% endif %}.
+  {% endcall %}
+{% else %}
+  {% call ui.aviso("amber") %}
+    <strong>Disponibilidad actual sin verificar.</strong>
+    {% if d.resultado.value == "raiz_inaccesible" -%}
+      En la última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) la carpeta de la
+      biblioteca no existía o no era una carpeta.
+    {%- elif d.resultado.value == "raiz_vacia" -%}
+      En la última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) la carpeta de la
+      biblioteca estaba vacía.
+    {%- elif d.resultado.value == "desaparicion_masiva" -%}
+      En la última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) no se encontraron
+      {{ d.ausentes if d.ausentes is not none else "muchos" }} de los {{ d.archivos_registrados if d.archivos_registrados is not none else "" }}
+      archivos registrados: más de la mitad.
+    {%- else -%}
+      La última revisión ({{ d.fecha | fecha_con_antiguedad if d.fecha else "fecha desconocida" }}) no se pudo completar.
+    {%- endif %}
+    <strong>No se han marcado archivos como no encontrados en esta comprobación.</strong>
+    Lo que ya figuraba como no disponible se conserva tal como estaba.
+    <div class="caption">
+      {% if d.ultima_valida %}Última comprobación válida: {{ d.ultima_valida | fecha_con_antiguedad }}.{% else %}{{ sin_dato_valida }}{% endif %}
+    </div>
+  {% endcall %}
+{% endif %}

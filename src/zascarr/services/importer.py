@@ -20,6 +20,7 @@ ciclo de las 03:00?" sin depender solo de los logs.
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import os
 import time
@@ -48,6 +49,7 @@ from zascarr.models import (
     ImportRun,
     Issue,
     IssueFormat,
+    ResultadoComprobacion,
     Series,
 )
 from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
@@ -82,6 +84,62 @@ TRADITION_MAP = {
 }
 
 
+# #231: errores de `stat` que significan «esa ruta no está». Cualquier otro (permiso, E/S, red) NO
+# prueba ausencia: hace fallar la comprobación en vez de dar de baja. Es lo que hacía
+# `Path.exists()` hasta Python 3.13; desde 3.14 se traga todos los errores y habría tratado un
+# EACCES como «ausente»
+# (el proyecto admite >=3.11, así que no se deja a la versión del intérprete).
+_ERRNOS_DE_AUSENCIA = frozenset({errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP})
+
+
+def _existe(ruta: str) -> bool:
+    try:
+        os.stat(ruta)
+    except OSError as exc:
+        if exc.errno in _ERRNOS_DE_AUSENCIA:
+            return False
+        raise
+    except ValueError:  # ruta con caracteres que el sistema no admite: no puede existir
+        return False
+    return True
+
+
+# #231 (BL-R2): clave de `import_runs.details` con lo que observó la revisión de la biblioteca
+# de ESE ciclo. Los ciclos anteriores no la traen y se leen como «sin dato».
+CLAVE_COMPROBACION = "comprobacion_biblioteca"
+
+
+@dataclass
+class ComprobacionBiblioteca:
+    """Lo que observó `_comprobar_biblioteca` en un ciclo: ámbito, resultado, recuentos y fecha.
+
+    No decide nada por sí misma: `desaparecidos`/`reaparecidos` son las bajas y altas que el ciclo
+    SÍ aplicó (vacías si un guardarraíl las omitió). Solo `como_dict()` se persiste (sin las listas,
+    que ya viajan en `details["disappeared"]`/`["reappeared"]`)."""
+    resultado: ResultadoComprobacion
+    fecha: datetime
+    ambito: str = "biblioteca"
+    archivos_registrados: int | None = None  # None: no se pudo contar
+    ausentes: int | None = None  # rutas registradas que no estaban (solo si se llegó a mirarlas)
+    desaparecidos: list[str] = field(default_factory=list)
+    reaparecidos: list[str] = field(default_factory=list)
+
+    @property
+    def bajas_omitidas(self) -> bool:
+        """Si el ciclo NO miró (o no se fió de) las rutas: no se marcó ninguna baja ni alta."""
+        return self.resultado is not ResultadoComprobacion.COMPROBADA
+
+    def como_dict(self) -> dict:
+        return {
+            "ambito": self.ambito,
+            "resultado": self.resultado.value,
+            "archivos_registrados": self.archivos_registrados,
+            "ausentes": self.ausentes,
+            "bajas_omitidas": self.bajas_omitidas,
+            "fecha": self.fecha.isoformat(),
+        }
+
+
 @dataclass
 class ImportReport:
     """Resultado de un ciclo de scan_and_import(), en líneas legibles.
@@ -103,6 +161,8 @@ class ImportReport:
     # un fichero marcado desaparecido que ha vuelto a aparecer.
     disappeared: list[str] = field(default_factory=list)
     reappeared: list[str] = field(default_factory=list)
+    # #231: resultado de esa revisión; None solo si el ciclo ni llegó a ella
+    comprobacion: ComprobacionBiblioteca | None = None
 
     @property
     def imported_count(self) -> int:
@@ -437,9 +497,16 @@ class Importer:
         # B7: revisión de la biblioteca YA importada, no de lo nuevo que
         # acaba de llegar — un paso independiente del bucle de arriba.
         try:
-            report.disappeared, report.reappeared = await self._detectar_desaparecidos()
+            comprobacion = await self._comprobar_biblioteca()
         except Exception:
+            # Un fallo no marca ninguna baja, pero tampoco puede pasar por «no pasó nada»: queda
+            # escrito en el informe (#231, criterio 11), sin afirmar causa.
             logger.exception("importer.deteccion_desaparecidos_fallida")
+            comprobacion = ComprobacionBiblioteca(
+                resultado=ResultadoComprobacion.FALLO_DETECCION, fecha=datetime.now(UTC))
+        report.comprobacion = comprobacion
+        report.disappeared = comprobacion.desaparecidos
+        report.reappeared = comprobacion.reaparecidos
 
         report.finished_at = datetime.now(UTC)
         await self._persist_run(report)
@@ -544,27 +611,44 @@ class Importer:
            tocar nada y se avisa, en vez de convertir esto en cientos de
            cambios de estado silenciosos.
         """
+        comprobacion = await self._comprobar_biblioteca()
+        return comprobacion.desaparecidos, comprobacion.reaparecidos
+
+    async def _comprobar_biblioteca(self) -> ComprobacionBiblioteca:
+        """Misma revisión que describe `_detectar_desaparecidos` (B7), pero devolviendo también
+        QUÉ observó (#231): el motivo de cada guardarraíl deja de ir solo al log. No cambia cuándo
+        se marca una baja ni los umbrales. Una excepción NO se captura aquí: la recoge
+        `scan_and_import` y la registra como `FALLO_DETECCION`."""
+        fecha = datetime.now(UTC)
+
+        def omitida(resultado, registrados=None, ausentes=None):
+            return ComprobacionBiblioteca(resultado=resultado, fecha=fecha,
+                                          archivos_registrados=registrados, ausentes=ausentes)
+
         if not self._library.exists() or not self._library.is_dir():
             logger.warning(
                 "importer.biblioteca_inaccesible_omitiendo_desaparecidos", ruta=str(self._library)
             )
-            return [], []
+            registrados = (await self._db.execute(
+                select(func.count()).select_from(File))).scalar_one()
+            return omitida(ResultadoComprobacion.RAIZ_INACCESIBLE, registrados)
 
         files = list((await self._db.execute(select(File))).scalars().all())
         if not files:
-            return [], []
+            return ComprobacionBiblioteca(resultado=ResultadoComprobacion.COMPROBADA, fecha=fecha,
+                                          archivos_registrados=0, ausentes=0)
 
         biblioteca_vacia = await asyncio.to_thread(lambda: not any(self._library.iterdir()))
         if biblioteca_vacia:
             logger.warning(
                 "importer.biblioteca_vacia_omitiendo_desaparecidos", ruta=str(self._library)
             )
-            return [], []
+            return omitida(ResultadoComprobacion.RAIZ_VACIA, len(files))
 
         rutas = [f.file_path for f in files]
         # Un único hop a un hilo para todo el lote, no uno por fichero —
-        # Path.exists() es síncrono (I/O bloqueante, CLAUDE.md §4).
-        ausentes = await asyncio.to_thread(lambda: {r for r in rutas if not Path(r).exists()})
+        # `stat` es síncrono (I/O bloqueante, CLAUDE.md §4).
+        ausentes = await asyncio.to_thread(lambda: {r for r in rutas if not _existe(r)})
 
         if (
             len(files) >= UMBRAL_DESAPARICION_MASIVA_MINIMO
@@ -574,7 +658,7 @@ class Importer:
                 "importer.desaparicion_masiva_anomala_abortando",
                 ausentes=len(ausentes), total_files=len(files), ruta=str(self._library),
             )
-            return [], []
+            return omitida(ResultadoComprobacion.DESAPARICION_MASIVA, len(files), len(ausentes))
 
         desaparecidos: list[str] = []
         reaparecidos: list[str] = []
@@ -591,7 +675,10 @@ class Importer:
 
         if desaparecidos or reaparecidos:
             await self._db.flush()
-        return desaparecidos, reaparecidos
+        return ComprobacionBiblioteca(
+            resultado=ResultadoComprobacion.COMPROBADA, fecha=fecha,
+            archivos_registrados=len(files), ausentes=len(ausentes),
+            desaparecidos=desaparecidos, reaparecidos=reaparecidos)
 
     async def _import_file(
         self, path: Path, report: ImportReport, pista: PistaDeCohorte | None = None
@@ -728,6 +815,8 @@ class Importer:
                 "reappeared": report.reappeared,
             },
         )
+        if report.comprobacion is not None:
+            run.details[CLAVE_COMPROBACION] = report.comprobacion.como_dict()
         self._db.add(run)
         await self._db.flush()
 

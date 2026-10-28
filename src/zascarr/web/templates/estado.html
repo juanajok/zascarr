@@ -12,6 +12,25 @@
   </div>
 </div>
 
+<section id="disponibilidad" aria-labelledby="disponibilidad-titulo">
+  <h2 id="disponibilidad-titulo" class="seccion">Tu biblioteca en disco</h2>
+  {% if disponibilidad_error %}
+    {% call ui.aviso("warn") %}
+      <strong>No se ha podido leer el resultado de la última revisión de la biblioteca.</strong>
+      Esto no significa que todo esté disponible: solo que ZascArr no ha conseguido consultar sus datos.
+    {% endcall %}
+  {% else %}
+    {% include "_disponibilidad_aviso.html" %}
+    <p class="caption">
+      {% if no_disponibles %}
+        <a href="/ui/no-disponibles">Ver los {{ no_disponibles }} {{ "archivo" if no_disponibles == 1 else "archivos" }} no {{ "disponible" if no_disponibles == 1 else "disponibles" }}</a>
+      {% else %}
+        Ningún archivo figura como no disponible. <a href="/ui/no-disponibles">Ver la lista</a>
+      {% endif %}
+    </p>
+  {% endif %}
+</section>
+
 <div id="warnings" class="caption estado-warnings">
   <div class="estado-warnings-title">Avisos</div>
   <ul id="warnings-list"></ul>
