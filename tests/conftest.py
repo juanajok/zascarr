@@ -58,6 +58,30 @@ def _testclient_en_localhost(monkeypatch, request):
     monkeypatch.setattr(TestClient, "__init__", _init)
 
 
+@pytest.fixture(autouse=True)
+def _backup_reciente(tmp_path_factory, monkeypatch):
+    """#334: /api/health incluye la copia de seguridad. Sin fichero de estado,
+    cualquier instalación sin timer quedaría en `degraded`; las pruebas que no
+    son de backups parten de una copia reciente. `TestHealthBackup` sustituye
+    el fichero por el caso que prueba.
+
+    Va en un directorio propio (no en `tmp_path`): hay pruebas que comprueban
+    que su `tmp_path` solo contiene lo que crearon ellas.
+    """
+    import json
+    import time
+
+    from zascarr.config import get_settings
+
+    ruta = tmp_path_factory.mktemp("backup-status") / "status.json"
+    ruta.write_text(
+        json.dumps({"status": "ok", "error": None,
+                    "last_success_at_epoch": time.time()}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(get_settings(), "backup_status_file", str(ruta))
+
+
 @pytest.fixture(scope="session")
 def _bd_de_pruebas_al_dia():
     """La BD de `TEST_DATABASE_URL` se migra a `head` UNA vez por sesión.

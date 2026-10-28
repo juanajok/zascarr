@@ -126,6 +126,7 @@ services:
       # dice dónde está el archivo en tu disco, no en el contenedor). Vacía = se enseña la ruta del contenedor.
       - HOST_LIBRARY_DIR=${HOST_LIBRARY_DIR:-}
       - VPN_STATE_FILE=/run/vpn-state/wg0.json
+      - BACKUP_STATUS_FILE=/run/backup-status/status.json
       - COVERS_CACHE_PATH=/config/covers
       - TZ=${TZ:-Europe/Madrid}
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
@@ -149,6 +150,7 @@ services:
       - ${HOST_AMULE_INCOMING_DIR:-/media/data/aMule/Incoming}:/media/incoming
       - ${HOST_LIBRARY_DIR:-/media/library}:/media/library
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/vpn-state:/run/vpn-state:ro
+      - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/backup-status:/run/backup-status:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
     depends_on:
       credenciales:

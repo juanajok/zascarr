@@ -52,6 +52,27 @@ _EXTERNAL_CHECK_TIMEOUT_S = 3.0
 # "stale": el script del host probablemente ha muerto sin avisar.
 VPN_STALE_AFTER_S = 300  # 5 minutos (el timer corre cada minuto)
 
+# #334: la copia diaria corre una vez al día. 26 h tolera un ciclo perdido;
+# 48 h ya es un fallo visible (dos ciclos sin copia completa).
+BACKUP_WARN_AFTER_S = 26 * 3600
+BACKUP_FAIL_AFTER_S = 48 * 3600
+
+_BACKUP_ERRORES = {
+    "offsite_mount_missing": "el disco de respaldo no está montado",
+    "offsite_same_device": "la copia no está en un dispositivo distinto",
+    "pg_dump_failed": "pg_dump falló",
+    "gzip_invalid": "el volcado no pasa gzip -t",
+    "header_missing": "el volcado no tiene cabecera de pg_dump",
+    "tables_missing": "al volcado le faltan tablas requeridas",
+    "decompress_failed": "el volcado no se puede descomprimir",
+    "manifest_failed": "no se pudo escribir el manifiesto",
+    "offsite_copy_failed": "la copia fuera del disco falló",
+    "offsite_verify_failed": "la copia fuera del disco no coincide",
+    "anchor_sync_failed": "no se pudieron sincronizar las anclas",
+    "status_write_failed": "no se pudo escribir el registro de estado",
+    "unexpected": "error inesperado",
+}
+
 # Tablas de dominio que deben existir si el esquema está íntegro (E6). Si una
 # falta tras haber migrado, es señal de restauración/rollback a medias.
 _DOMAIN_TABLES = ("series", "issues", "files", "wishlist")
@@ -82,6 +103,52 @@ def _check_vpn() -> tuple[str, str]:
 
     return "warning", (f"túnel {state.get('interface', 'wg0')} NO activo "
                        "— las descargas torrent irán en claro")
+
+
+def _backup_status() -> tuple[str, str]:
+    """Lee el estado que escribe scripts/backup.sh. Devuelve (status, detail).
+
+    El fichero lo escribe el host y el compose lo monta read-only; si falta, el
+    timer no está instalado o nunca ha corrido. El detalle no lleva rutas ni
+    datos de la biblioteca: /api/health es público.
+    """
+    settings = get_settings()
+    state_path = Path(settings.backup_status_file)
+
+    if not state_path.exists():
+        return "error", ("No hay registro de copias: el timer no ha corrido "
+                         "o no está instalado.")
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return "error", f"Registro de copias ilegible: {type(exc).__name__}."
+
+    status = state.get("status")
+    error = state.get("error")
+    causa = _BACKUP_ERRORES.get(error, error or "causa desconocida")
+
+    if status == "failed":
+        return "error", f"La última copia falló: {causa}."
+    if status == "degraded":
+        return "warning", ("La copia diaria es correcta, pero hay un aviso: "
+                           f"{causa}.")
+    if status != "ok":
+        return "error", "El registro de copias no tiene un estado reconocible."
+
+    last = state.get("last_success_at_epoch") or 0
+    if not last:
+        return "error", "El registro de copias no tiene una copia completa."
+    try:
+        age = time.time() - float(last)
+    except (TypeError, ValueError):
+        return "error", "El registro de copias no tiene una fecha válida."
+
+    if age > BACKUP_FAIL_AFTER_S:
+        return "error", f"Sin copia completa desde hace {age / 3600:.0f} h."
+    if age > BACKUP_WARN_AFTER_S:
+        return "warning", f"La última copia completa es de hace {age / 3600:.0f} h."
+    return "ok", "Copia reciente verificada."
 
 
 async def _check_transmission() -> bool:
@@ -209,8 +276,17 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     # ── VPN (vía fichero del host; nunca bloqueante) ──
     vpn_status, vpn_detail = _check_vpn()
 
+    # ── Copias de seguridad (fichero del host; no bloqueante) ──
+    backup_status, backup_detail = _backup_status()
+
     core_ok = db_status == "ok"
-    all_ok = core_ok and transmission in ("ok", "disabled") and amule in ("ok", "disabled")
+    backup_ok = backup_status == "ok"
+    all_ok = (
+        core_ok
+        and transmission in ("ok", "disabled")
+        and amule in ("ok", "disabled")
+        and backup_ok
+    )
     status_str = "healthy" if all_ok else ("degraded" if core_ok else "unhealthy")
 
     # Si la VPN está en warning/stale, no baja el status global pero
@@ -220,6 +296,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         warnings["vpn"] = vpn_detail
     if db_status != "ok":
         warnings["database"] = db_detail
+    if backup_status != "ok":
+        warnings["backup"] = backup_detail
     # A11: puerto abierto (o dirección pública) y ninguna contraseña. Solo avisa:
     # nunca bloquea ni cambia el estado, igual que la VPN.
     exposicion = aviso_de_exposicion(settings)
@@ -234,6 +312,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "transmission": transmission,   # ok | unreachable | disabled
             "amule":        amule,
             "vpn":          vpn_status,
+            "backup":       backup_status,
         },
         # B8: estado de cada fuente de metadatos (on/off en Ajustes).
         # GCD hoy solo participa en Descubrir (el enricher no lo consulta).
