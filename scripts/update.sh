@@ -82,6 +82,12 @@ volcar_postgres "${DEST}" || die \
 # Y se comprueba: un backup sin verificar no es un backup, es una esperanza.
 verificar_dump "${DEST}"
 success "Backup verificado: ${DEST}"
+# #334: el manifiesto asocia el dump a la ref de rescate y al candidato.
+UPDATE_EXTRA="$(jq -n --arg destino "${PREV_SHA}" --arg ref "${UPDATE_REF}" \
+    '{codigo_destino_sha_completo: $destino, referencia_emparejada: $ref,
+      cubre_rollback_de_codigo: true}')"
+escribir_manifiesto "${DEST}" "update.sh (crea ref y dump con el HEAD previo al merge)" \
+    "update-${TS}" "${UPDATE_EXTRA}" >/dev/null
 aplicar_retencion
 
 # ── 5. Actualizar código (fast-forward, sin merges sucios) ───────────────────
@@ -96,9 +102,9 @@ NEW_SHA="$(git -C "${REPO_DIR}" rev-parse HEAD)"
 
 if [[ "${NEW_SHA}" == "${PREV_SHA}" ]]; then
     info "Ya estabas en la última versión (${NEW_SHA:0:7}). Re-creo el servicio igualmente."
-    # No hay actualización que revertir, así que el ancla y el dump recién
-    # creados solo ocuparían disco y ensuciarían la lista de referencias.
-    rm -f "${DEST}"
+    # No hay actualización que revertir, así que el ancla, el dump y su
+    # manifiesto recién creados solo ocuparían disco y ensuciarían la lista.
+    rm -f "${DEST}" "${BACKUP_DIR}/MANIFIESTO-update_${TS}.json"
     git -C "${REPO_DIR}" update-ref -d "${UPDATE_REF}" 2>/dev/null || true
     info "Sin cambios que aplicar: descarto el backup y la referencia que había creado."
 else

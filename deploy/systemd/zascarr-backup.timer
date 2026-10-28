@@ -1,0 +1,11 @@
+[Unit]
+Description=Ejecuta la copia de seguridad de ZascArr una vez al día
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=15min
+Unit=zascarr-backup.service
+
+[Install]
+WantedBy=timers.target

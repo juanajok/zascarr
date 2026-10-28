@@ -12,6 +12,7 @@ permanente. Ahora corren en paralelo con un timeout corto propio.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from unittest.mock import AsyncMock, patch
 
@@ -56,6 +57,20 @@ def clientes(monkeypatch):
         monkeypatch.setattr(s, "transmission_enabled", transmission)
         monkeypatch.setattr(s, "amule_enabled", amule)
     return fijar
+
+
+@pytest.fixture(autouse=True)
+def _backup_reciente(tmp_path_factory, monkeypatch):
+    """#334: sin el fichero de estado, la copia ausente deja el health en
+    `degraded`. Las pruebas que no son de backups parten de una copia reciente;
+    las de TestHealthBackup sustituyen el fichero por el caso que prueban."""
+    ruta = tmp_path_factory.mktemp("backup-status") / "status.json"
+    ruta.write_text(
+        json.dumps({"status": "ok", "error": None,
+                    "last_success_at_epoch": time.time()}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(get_settings(), "backup_status_file", str(ruta))
 
 
 class TestHealthLatenciaAcotada:
@@ -216,3 +231,88 @@ class TestClientesApagados:
         assert 'disabled: "Desactivado"' in html
         assert 'disabled: "neutral"' in html
         assert 'if (level === "warn" || level === "bad") detailParts.push' in html
+
+
+class TestHealthBackup:
+    """#334: el aviso de copias se lee del fichero del host y no tumba /api/health."""
+
+    @pytest.fixture(autouse=True)
+    def _encendidos(self, clientes):
+        clientes()
+
+    def _estado(self, tmp_path, monkeypatch, **datos):
+        ruta = tmp_path / "status.json"
+        ruta.write_text(json.dumps(datos), encoding="utf-8")
+        monkeypatch.setattr(get_settings(), "backup_status_file", str(ruta))
+        return ruta
+
+    def _pedir(self, db=("ok", "Conectada y migrada.")):
+        with (
+            patch("zascarr.api.health._check_transmission", AsyncMock(return_value=True)),
+            patch("zascarr.api.health._check_amule", AsyncMock(return_value=True)),
+            patch("zascarr.api.health._database_status", AsyncMock(return_value=db)),
+            _fake_db_client() as client,
+        ):
+            return client.get("/api/health").json()
+
+    def test_ok_fresco(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="ok", error=None,
+                     last_success_at_epoch=time.time())
+        body = self._pedir()
+        assert body["checks"]["backup"] == "ok"
+        assert body["status"] == "healthy"
+
+    def test_failed_es_error_y_deja_el_global_en_degraded(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="failed", error="pg_dump_failed",
+                     last_success_at_epoch=time.time())
+        body = self._pedir()
+        assert body["checks"]["backup"] == "error"
+        assert body["status"] == "degraded"
+        assert "pg_dump" in body["warnings"]["backup"]
+
+    def test_degraded_anclas_es_warning(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="degraded",
+                     error="anchor_sync_failed",
+                     last_success_at_epoch=time.time())
+        body = self._pedir()
+        assert body["checks"]["backup"] == "warning"
+        assert body["status"] == "degraded"
+        assert "anclas" in body["warnings"]["backup"]
+
+    @pytest.mark.parametrize("horas, esperado", [(30, "warning"), (50, "error")])
+    def test_antiguedad_de_la_ultima_copia(self, tmp_path, monkeypatch, horas, esperado):
+        self._estado(tmp_path, monkeypatch, status="ok", error=None,
+                     last_success_at_epoch=time.time() - horas * 3600)
+        body = self._pedir()
+        assert body["checks"]["backup"] == esperado
+        assert body["status"] == "degraded"
+
+    def test_fichero_ausente_es_error_sin_500(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(get_settings(), "backup_status_file",
+                            str(tmp_path / "no-existe.json"))
+        body = self._pedir()
+        assert body["checks"]["backup"] == "error"
+        assert body["status"] == "degraded"
+        assert "No hay registro" in body["warnings"]["backup"]
+
+    def test_json_invalido_es_error_sin_500(self, tmp_path, monkeypatch):
+        ruta = tmp_path / "status.json"
+        ruta.write_text("no es json", encoding="utf-8")
+        monkeypatch.setattr(get_settings(), "backup_status_file", str(ruta))
+        body = self._pedir()
+        assert body["checks"]["backup"] == "error"
+        assert body["status"] == "degraded"
+
+    def test_bd_caida_sigue_siendo_unhealthy(self, tmp_path, monkeypatch):
+        self._estado(tmp_path, monkeypatch, status="failed", error="pg_dump_failed",
+                     last_success_at_epoch=time.time())
+        body = self._pedir(db=("unreachable", "No se puede conectar con PostgreSQL."))
+        assert body["checks"]["backup"] == "error"
+        assert body["status"] == "unhealthy"
+
+    def test_estado_pinta_la_fila_de_copias(self):
+        from zascarr.web.routes import TEMPLATES_DIR
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
+        assert 'backup: "Copias de seguridad"' in html
+        assert "Copia reciente verificada" in html
+        assert "La última copia falló" in html

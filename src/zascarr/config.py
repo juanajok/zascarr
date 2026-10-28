@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     # contenedor) y montado read-only. Ver fix C2 del peer review.
     vpn_state_file: str = Field(default="/run/vpn-state/wg0.json")
 
+    # Fichero JSON escrito por scripts/backup.sh (host) y montado read-only.
+    # /api/health lo lee para avisar de copias atrasadas o fallidas (#334).
+    backup_status_file: str = Field(default="/run/backup-status/status.json")
+
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60
     import_interval_minutes: int = 15
