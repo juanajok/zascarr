@@ -127,6 +127,8 @@ los archivos del alcance que no se vieron constan como omitidos con la causa «s
 - **Un contenido distinto en una ruta ya registrada** (archivo sustituido) no se detecta: es otro problema, no una alta.
 - **Los formatos fuera de `COMIC_EXTS`** (`.rar`, `.tar`…) no se cuentan aquí: los enseña «Revisar mi biblioteca».
 - **Rutas anteriores en otro disco:** un reenlace cuya ruta vieja cuelga de otro disco no se hace (no se puede afirmar que falte).
+- **Carpeta ilegible permanente:** si una carpeta no se puede leer y la causa no se corrige, la adopción inicial no se da por completa y el marcador no se pone nunca; como el registro incremental exige el marcador, tampoco se ofrece. `completo` exige `ilegibles == 0`. No hay hoy una salida «completar con N ilegibles»: aceptar explícitamente esa exclusión es el residual 4 de #332.
+- **Ilegibles ajenos al alcance confirmado:** el registro incremental recorre toda la biblioteca y cuenta `Recorrido.ilegibles` antes de filtrar por `alcance`; una carpeta ilegible que no tiene nada que ver con lo confirmado marca la ejecución como incompleta. Es conservador (no se puede afirmar que lo confirmado esté completo si el recorrido no vio todo), pero se documenta para que no se lea como un fallo del alcance.
 
 ## 8. Garantías ↔ pruebas
 

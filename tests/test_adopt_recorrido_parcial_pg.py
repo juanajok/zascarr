@@ -140,3 +140,29 @@ class TestRegistroIncrementalConRecorridoParcial:
         assert informe.unreadable >= 1 and informe.added_count == 0
         assert any("su carpeta no se pudo leer" in o for o in informe.omitted)    # no se afirma que «desapareció»
         assert await mundo.marcador() is True
+
+    async def test_ilegible_ajena_al_alcance_marca_el_incremental_incompleto_sin_errores(self, mundo):
+        await _adopt(mundo)                                                       # adopción inicial completa
+        assert await mundo.marcador() is True
+        destino = mundo.lib / "Nuevos" / "Nuevo 01.cbz"                           # lo confirmado: visible
+        _cbz(destino, "x")
+        async with mundo.fabrica() as s:
+            inv = await LibraryAdopter(s).inventario()
+        assert str(destino) in inv.rutas_nuevas
+        ajena = mundo.lib / "Ajena"                                               # fuera del alcance confirmado
+        ajena.mkdir()
+        _cbz(ajena / "Escondido 01.cbz", "h")
+        ajena.chmod(0)
+        try:
+            if os.access(ajena, os.R_OK):
+                pytest.skip("se ejecuta como root: los permisos no impiden listar")
+            assert registro_biblioteca.iniciar(mundo.fabrica, alcance=inv.rutas_nuevas) is True
+            import asyncio
+            await asyncio.wait_for(registro_biblioteca._tarea, 60)
+        finally:
+            ajena.chmod(0o755)
+        e = registro_biblioteca.estado_actual()
+        assert e.incremental is True
+        assert e.fase.value == "terminado"
+        assert e.errores == [] and e.ilegibles >= 1 and e.completo is False       # incompleto, pero sin errores
+        assert await mundo.marcador() is True                                     # el incremental no toca el marcador
