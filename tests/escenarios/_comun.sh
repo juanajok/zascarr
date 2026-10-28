@@ -77,6 +77,22 @@ for a in "$@"; do
     prev="$a"
 done
 case "$*" in
+  *pg_dump*)
+    cat <<'SQL'
+--
+-- PostgreSQL database dump
+--
+COPY public.alembic_version (version_num) FROM stdin;
+0020
+\.
+COPY public.series (id) FROM stdin;
+\.
+COPY public.files (id) FROM stdin;
+\.
+COPY public.wishlist (id) FROM stdin;
+\.
+SQL
+    exit 0 ;;
   *"up -d postgres"*)
     f=""; prev=""
     for a in "$@"; do [ "$prev" = "--env-file" ] && f="$a"; prev="$a"; done
