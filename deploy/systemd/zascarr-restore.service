@@ -1,0 +1,15 @@
+[Unit]
+Description=Restauración de comprobación de ZascArr en base desechable
+Documentation=https://github.com/juanajok/zascarr
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/zascarr
+ExecStart=/usr/local/bin/restore-check.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=30min

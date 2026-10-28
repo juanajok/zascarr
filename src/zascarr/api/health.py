@@ -73,6 +73,28 @@ _BACKUP_ERRORES = {
     "unexpected": "error inesperado",
 }
 
+# #334 B2: la restauración de comprobación es mensual. 35 días da margen sobre
+# la cadencia; 70 es el doble, para que un fallo no pase desapercibido.
+RESTORE_WARN_AFTER_S = 35 * 86400
+RESTORE_FAIL_AFTER_S = 70 * 86400
+
+_RESTORE_ERRORES = {
+    "manifest_ausente": "no hay manifiesto del dump",
+    "manifest_sin_codigo_desplegado": "el manifiesto no acredita el commit desplegado",
+    "manifest_no_coincide": "el manifiesto no coincide con el dump",
+    "sha256_no_coincide": "el .sha256 no coincide con el dump",
+    "gzip_invalid": "el dump no pasa gzip -t",
+    "header_missing": "el dump no tiene cabecera de pg_dump",
+    "tables_missing": "al dump le faltan tablas requeridas",
+    "createdb_failed": "no se pudo crear la base desechable",
+    "restore_failed": "la restauración falló",
+    "tabla_ausente": "falta una tabla en la restauración",
+    "tablas_distintas": "el número de tablas no coincide",
+    "recuento_distinto": "un recuento no coincide",
+    "alembic_distinto": "la revisión de Alembic no coincide",
+    "unexpected": "error inesperado",
+}
+
 # Tablas de dominio que deben existir si el esquema está íntegro (E6). Si una
 # falta tras haber migrado, es señal de restauración/rollback a medias.
 _DOMAIN_TABLES = ("series", "issues", "files", "wishlist")
@@ -149,6 +171,46 @@ def _backup_status() -> tuple[str, str]:
     if age > BACKUP_WARN_AFTER_S:
         return "warning", f"La última copia completa es de hace {age / 3600:.0f} h."
     return "ok", "Copia reciente verificada."
+
+
+def _restore_status() -> tuple[str, str]:
+    """Lee el estado que escribe scripts/probar_restauracion.sh (#334 B2)."""
+    settings = get_settings()
+    state_path = Path(settings.restore_status_file)
+
+    if not state_path.exists():
+        return "error", ("No hay registro de restauración: el timer no ha "
+                         "corrido o no está instalado.")
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return "error", f"Registro de restauración ilegible: {type(exc).__name__}."
+
+    status = state.get("status")
+    error = state.get("error")
+    causa = _RESTORE_ERRORES.get(error, error or "causa desconocida")
+
+    if status == "failed":
+        return "error", f"La última restauración falló: {causa}."
+    if status == "warning":
+        return "warning", f"La restauración se completó con un aviso: {causa}."
+    if status != "ok":
+        return "error", "El registro de restauración no tiene un estado reconocible."
+
+    last = state.get("last_ok_at_epoch") or 0
+    if not last:
+        return "error", "El registro de restauración no tiene una restauración correcta."
+    try:
+        age = time.time() - float(last)
+    except (TypeError, ValueError):
+        return "error", "El registro de restauración no tiene una fecha válida."
+
+    if age > RESTORE_FAIL_AFTER_S:
+        return "error", f"Sin restauración correcta desde hace {age / 86400:.0f} días."
+    if age > RESTORE_WARN_AFTER_S:
+        return "warning", f"La última restauración correcta es de hace {age / 86400:.0f} días."
+    return "ok", "Restauración reciente verificada."
 
 
 async def _check_transmission() -> bool:
@@ -279,13 +341,18 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     # ── Copias de seguridad (fichero del host; no bloqueante) ──
     backup_status, backup_detail = _backup_status()
 
+    # ── Restauración de comprobación (fichero del host; no bloqueante) ──
+    restore_status, restore_detail = _restore_status()
+
     core_ok = db_status == "ok"
     backup_ok = backup_status == "ok"
+    restore_ok = restore_status == "ok"
     all_ok = (
         core_ok
         and transmission in ("ok", "disabled")
         and amule in ("ok", "disabled")
         and backup_ok
+        and restore_ok
     )
     status_str = "healthy" if all_ok else ("degraded" if core_ok else "unhealthy")
 
@@ -298,6 +365,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         warnings["database"] = db_detail
     if backup_status != "ok":
         warnings["backup"] = backup_detail
+    if restore_status != "ok":
+        warnings["restore"] = restore_detail
     # A11: puerto abierto (o dirección pública) y ninguna contraseña. Solo avisa:
     # nunca bloquea ni cambia el estado, igual que la VPN.
     exposicion = aviso_de_exposicion(settings)
@@ -313,6 +382,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "amule":        amule,
             "vpn":          vpn_status,
             "backup":       backup_status,
+            "restore":      restore_status,
         },
         # B8: estado de cada fuente de metadatos (on/off en Ajustes).
         # GCD hoy solo participa en Descubrir (el enricher no lo consulta).

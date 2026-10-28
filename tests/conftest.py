@@ -82,6 +82,26 @@ def _backup_reciente(tmp_path_factory, monkeypatch):
     monkeypatch.setattr(get_settings(), "backup_status_file", str(ruta))
 
 
+@pytest.fixture(autouse=True)
+def _restauracion_reciente(tmp_path_factory, monkeypatch):
+    """#334 B2: /api/health incluye la restauración de comprobación. Las pruebas
+    que no son de restauración parten de una restauración reciente;
+    `TestHealthRestore` sustituye el fichero por el caso que prueba.
+    """
+    import json
+    import time
+
+    from zascarr.config import get_settings
+
+    ruta = tmp_path_factory.mktemp("restore-status") / "restore-status.json"
+    ruta.write_text(
+        json.dumps({"status": "ok", "error": None,
+                    "last_ok_at_epoch": time.time()}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(get_settings(), "restore_status_file", str(ruta))
+
+
 @pytest.fixture(scope="session")
 def _bd_de_pruebas_al_dia():
     """La BD de `TEST_DATABASE_URL` se migra a `head` UNA vez por sesión.

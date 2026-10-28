@@ -49,6 +49,7 @@
     amule: "aMule",
     vpn: "VPN",
     backup: "Copias de seguridad",
+    restore: "Restauración",
   };
 
   const CHECK_TEXT = {
@@ -62,6 +63,7 @@
     amule:        { ok: "Conectado",  unreachable: "No responde", disabled: "Desactivado" },
     vpn:          { ok: "Activa", warning: "No protege", unknown: "Sin datos" },
     backup:       { ok: "Copia reciente verificada", warning: "Copia atrasada o incompleta", error: "La última copia falló" },
+    restore:      { ok: "Restauración reciente verificada", warning: "Restauración atrasada o con aviso", error: "La última restauración falló" },
   };
 
   // Qué hacer, en llano. El detalle técnico de la base de datos va en «Avisos», plegado.
@@ -82,6 +84,7 @@
     if (key === "vpn") return VPN_TEXT[checks.vpn] || raw;
     if (key === "database") return "La base de datos tiene un problema: mira qué hacer en su fila, más abajo.";
     if (key === "backup") return "La copia de seguridad tiene un problema: revisa el aviso técnico y el disco de respaldo.";
+    if (key === "restore") return "La restauración de la copia tiene un problema: revisa el aviso técnico.";
     return raw;
   }
 

@@ -141,10 +141,26 @@ fila y el detalle en «Avisos».
 - `tests/conftest.py`: las pruebas que no son de backups parten de una copia
   reciente, para no convertir cada `/api/health` en `degraded`.
 
-## B2 (pendiente)
+## B2 — restauración en base desechable
 
-Restauración mensual y tras cada despliegue en una base desechable, sin arrancar
-la aplicación: recuentos, `alembic_version` y esquema. Criterio 3 de #334.
+Implementada en la misma tarjeta (#334):
+
+- `scripts/probar_restauracion.sh`: `--dump` (por defecto el `backup_*` más
+  reciente), verificación + manifiesto + `sha256sum -c`, base
+  `zascarr_restore_<TS>_<pid>`, `psql --ON_ERROR_STOP`, `dropdb --force` con
+  `trap`; solo el contenedor `postgres`, nunca la app.
+- Oráculo: recuentos de los bloques `COPY` del dump frente a los restaurados;
+  28 tablas; 4 de dominio; `alembic` del manifiesto. El fixture real (13 MB,
+  28 tablas, 1.339 `files`) no es un número fijo en el código.
+- `restore-status.json` separado; `checks.restore`/`warnings.restore`; fila
+  «Restauración» en el panel; 35/70 días; `degraded`, HTTP 200.
+- `zascarr-restore.service`/`.timer` (día 1, 05:00 + jitter); instalador de B1
+  extendido; primera restauración.
+- Hook en `update.sh`: solo `HIZO_UPDATE=1` (no-op excluido), después del
+  healthcheck y del manifiesto post-fast-forward; si falla, `warn` + estado,
+  sin rollback de la app. El despliegue se invoca con `--rama main` (#351).
+- Pruebas: `test_restore_script.py` (adversas), `test_restore_pg.py` (Postgres
+  real), `TestHealthRestore`; `test_update_manifest.py` con `--rama main`.
 
 ## Límites
 
