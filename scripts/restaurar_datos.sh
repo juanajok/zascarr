@@ -120,9 +120,17 @@ jq -e . "$MANIFEST" >/dev/null 2>&1 || die "El manifiesto no es JSON válido."
 
 M_SHA="$(jq -r '.sha256 // empty' "$MANIFEST")"
 M_BYTES="$(jq -r '.bytes // empty' "$MANIFEST")"
+M_SCHEMA="$(jq -r '.schema // empty' "$MANIFEST")"
 M_ALEMBIC="$(jq -r '.alembic // empty' "$MANIFEST")"
 M_DESTINO="$(jq -r '.codigo_destino_sha_completo // empty' "$MANIFEST")"
 M_DESPLEGADO="$(jq -r '.codigo_desplegado_sha_completo // empty' "$MANIFEST")"
+
+if [[ -n "$M_SCHEMA" && "$M_SCHEMA" != "1" ]]; then
+    die "El manifiesto declara schema '$M_SCHEMA'; este script solo entiende el schema 1."
+fi
+if [[ -z "$M_SCHEMA" ]]; then
+    warn "El manifiesto no declara schema; se asume el esquema 1."
+fi
 
 [[ -n "$M_SHA" ]] || die "El manifiesto no declara sha256."
 [[ -n "$M_BYTES" && "$M_BYTES" =~ ^[0-9]+$ ]] || die "El manifiesto no declara bytes válidos."

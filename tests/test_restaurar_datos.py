@@ -366,6 +366,36 @@ class TestRestaurarDatos:
         assert r.returncode != 0
         _sin_destructivos(ctx)
 
+    def test_manifiesto_con_schema_desconocido_aborta(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+        datos["schema"] = 2
+        ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        r = _ejecutar(ctx)
+        assert r.returncode != 0
+        _sin_destructivos(ctx)
+        assert "schema" in r.stderr.lower()
+
+    def test_manifiesto_sin_schema_avisa(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+        datos.pop("schema", None)
+        ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        r = _ejecutar(
+            ctx,
+            args=[
+                "--dump",
+                str(ctx["dump"]),
+                "--manifest",
+                str(ctx["manifest"]),
+                "--sha",
+                ctx["head"],
+                "--dry-run",
+            ],
+        )
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "schema" in (r.stdout + r.stderr).lower()
+
     def test_manifiesto_de_otro_codigo_aborta(self, tmp_path):
         ctx = _preparar(tmp_path)
         datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))

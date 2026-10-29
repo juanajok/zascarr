@@ -204,8 +204,15 @@ python3 scripts/aceptacion/preparar_fixture_123a.py \
   --aplicar --database-url "postgresql://comics_admin:<password>@127.0.0.1:15432/zascarr"
 ```
 
+`--aplicar` exige **host local** (`127.0.0.1`, `localhost` o `::1`) y **puerto
+15432**. Una URL sin puerto (5432 por defecto), con otro puerto o con host remoto
+se rechaza **antes de llamar a `psql`**, incluso con `--reset`/`--force`. Es una
+guardia contra el error humano; la compuerta real sigue siendo
+`verificar_aislamiento_123a.sh`.
+
 Si no hay `psql` en el host, aplicar `seed.sql` con `psql` dentro del contenedor
-`postgres`; el fichero está en `$VAL/fixture/seed.sql`.
+`postgres`; el fichero está en `$VAL/fixture/seed.sql`. El test PG real de la PR
+aplica ese `seed.sql` con `ON_ERROR_STOP=1` sobre una base migrada a head.
 
 Comprobar antes de crear el dump:
 
