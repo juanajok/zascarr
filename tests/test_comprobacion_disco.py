@@ -181,3 +181,38 @@ class TestEstadoYEjecucion:
         assert sum(resultados) == 1
         evento.set()
         await asyncio.wait_for(servicio._tarea, 2)
+
+    async def test_el_lifespan_cancela_la_tarea_manual_al_salir(self, monkeypatch):
+        from types import SimpleNamespace
+
+        import zascarr.database as database
+        from zascarr import main
+
+        class EngineSinBd:
+            def __init__(self):
+                self.disposed = False
+
+            def begin(self):
+                raise RuntimeError("sin BD en la prueba")
+
+            async def dispose(self):
+                self.disposed = True
+
+        motor = EngineSinBd()
+        monkeypatch.setattr(database, "engine", motor)
+        app = SimpleNamespace(state=SimpleNamespace(db_degraded=False))
+        evento = asyncio.Event()
+
+        async def ejecutar(*_a, **_k):
+            await evento.wait()
+            return _informe()
+
+        servicio.iniciar_manual(_fabrica, ejecutar=ejecutar)
+        tarea = servicio._tarea
+        async with main.lifespan(app):
+            assert tarea is not None and not tarea.done()
+
+        assert tarea.done()
+        assert servicio._tarea is None
+        assert servicio.estado_actual().fase is FaseCicloDisco.INACTIVO
+        assert motor.disposed is True
