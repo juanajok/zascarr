@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import errno
 import os
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -270,6 +271,63 @@ class TestMensajes:
         html = _html(EstadoComprobacion(resultado=R.COMPROBADA, fecha=AHORA, archivos_registrados=120, ausentes=3))
         assert "120 rutas" in html and "3 no estaban" in html
         assert "sin verificar" not in html
+
+
+class TestPulidoVisual:
+    """Hallazgos de la validación en navegador real (2026-10-28): paréntesis anidados, una caja dentro de otra caja y un
+    enlace suelto de 16 px de alto."""
+
+    @pytest.mark.parametrize("resultado", [R.RAIZ_INACCESIBLE, R.RAIZ_VACIA, R.DESAPARICION_MASIVA, R.FALLO_DETECCION])
+    def test_la_fecha_no_queda_entre_parentesis_dentro_de_otros(self, resultado):
+        html = _html(EstadoComprobacion(resultado=resultado, fecha=AHORA, archivos_registrados=20, ausentes=15,
+                                        ultima_valida=AHORA))
+        plano = " ".join(re.sub(r"<[^>]+>", " ", html).split())
+        assert "(hoy))" not in plano and "((" not in plano
+        assert not re.search(r"\([^()]*\([^()]*\)", plano), plano
+
+    def test_el_aviso_no_mete_una_caja_dentro_de_otra(self):
+        html = _html(EstadoComprobacion(resultado=R.RAIZ_VACIA, fecha=AHORA, ultima_valida=AHORA))
+        assert 'class="caption' not in html   # `.caption` es una caja con borde: dentro de un aviso era caja en caja
+        assert "Última comprobación válida:" in html
+
+    def test_el_enlace_a_la_lista_en_estado_es_un_objetivo_tactil_y_no_texto_suelto(self):
+        plantilla = Path(__file__).resolve().parents[1] / "src/zascarr/web/templates/estado.html"
+        enlaces = re.findall(r'<a class="([^"]*)" href="/ui/no-disponibles">', plantilla.read_text(encoding="utf-8"))
+        assert enlaces and all("btn" in c.split() for c in enlaces)   # `.btn` mide ≥ 44 px (test_web_movil)
+
+
+class TestListaAccesible:
+    """Validación con el árbol de accesibilidad (2026-10-28): una `<nav>` sin enlaces es una región vacía para un lector."""
+
+    @staticmethod
+    def _lista(monkeypatch, *, despues: str | None, siguiente: str | None) -> str:
+        from zascarr.services import disponibilidad as servicio
+        from zascarr.services.disponibilidad import ArchivoNoDisponible, PaginaNoDisponibles
+        pagina = PaginaNoDisponibles(
+            archivos=[ArchivoNoDisponible(id="1", nombre="A.cbz", desde=AHORA, serie="Serie", numero="1")],
+            total=1, siguiente=siguiente)
+        d = EstadoComprobacion(resultado=R.COMPROBADA, fecha=AHORA, archivos_registrados=5, ausentes=1, ultima_valida=AHORA)
+
+        async def ultima(_db):
+            return d
+
+        async def listar(_db, _despues=None, limite=100):
+            return pagina
+
+        monkeypatch.setattr(servicio, "ultima_comprobacion", ultima)
+        monkeypatch.setattr(servicio, "listar_no_disponibles", listar)
+        cliente = _cliente(SesionSoloLectura(MagicMock()))
+        return cliente.get("/ui/no-disponibles", params={"despues": despues} if despues else None).text
+
+    def test_una_sola_pagina_no_pinta_la_nav_de_paginacion(self, monkeypatch):
+        html = self._lista(monkeypatch, despues=None, siguiente=None)
+        assert "A.cbz" in html and "<nav class=\"pagination\"" not in html
+
+    def test_con_siguiente_o_en_otra_pagina_si_hay_nav_con_enlaces(self, monkeypatch):
+        con_siguiente = self._lista(monkeypatch, despues=None, siguiente="tok")
+        assert '<nav class="pagination"' in con_siguiente and 'rel="next"' in con_siguiente
+        otra = self._lista(monkeypatch, despues="x", siguiente=None)
+        assert '<nav class="pagination"' in otra and "Volver al principio" in otra
 
 
 # --- Rutas (sesión falsa) ---------------------------------------------------------------------------------------------

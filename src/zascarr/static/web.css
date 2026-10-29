@@ -839,6 +839,8 @@ button[type="submit"].btn-sugerencia {
   background: var(--paper); color: var(--ink);
 }
 .politica-veredicto { margin: 12px 0 6px; }
+.archivo-desde { font-size: .875rem; }
+.aviso-aparte { margin-top: 8px; font-weight: 600; }   /* #231: segunda frase dentro de un aviso, sin caja propia */
 .politica-efecto { font-size: .875rem; margin: 4px 0; }   /* U21: la ayuda junto al selector es texto atenuado (.muted), no una caja de aviso */
 .politica-lista-corta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .politica-aviso { color: var(--warn-t); }
