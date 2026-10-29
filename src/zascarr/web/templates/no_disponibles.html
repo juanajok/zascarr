@@ -3,9 +3,8 @@
 {% block content %}
 <h1>Archivos no disponibles</h1>
 <p class="subtitle">
-  Archivos registrados que ZascArr no encontró en su ruta la última vez que lo comprobó. <strong>Solo informa: no borra,
-  no desvincula y no vuelve a mirar el disco al abrir esta página.</strong> Si un archivo reaparece, se recupera solo en la
-  siguiente revisión.
+  Esta página informa de los archivos que ZascArr no encontró en su ruta. La lista no borra ni desvincula nada.
+  Para volver a mirar el disco y actualizar la lista, usa «Comprobar el disco».
 </p>
 
 {% if error %}
@@ -15,7 +14,7 @@
   {% endcall %}
 {% else %}
   {% set no_disponibles = pagina.total %}
-  {% include "_disponibilidad_aviso.html" %}
+  {% include "_comprobacion_disco.html" %}
 
   {% if pagina.total == 0 %}
     {% if d.comprobada %}

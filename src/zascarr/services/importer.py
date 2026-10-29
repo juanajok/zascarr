@@ -27,6 +27,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 import structlog
 from sqlalchemy import cast, func, literal, or_, select, text, update
@@ -163,6 +164,9 @@ class ImportReport:
     reappeared: list[str] = field(default_factory=list)
     # #231: resultado de esa revisión; None solo si el ciclo ni llegó a ella
     comprobacion: ComprobacionBiblioteca | None = None
+    # #232: id del ImportRun persistido y origen de la ejecución (manual/automatico).
+    run_id: UUID | None = None
+    disparador: str = "automatico"
 
     @property
     def imported_count(self) -> int:
@@ -467,8 +471,8 @@ class Importer:
             s.downloads_path,
         ]
 
-    async def scan_and_import(self) -> ImportReport:
-        report = ImportReport(started_at=datetime.now(UTC))
+    async def scan_and_import(self, *, disparador: str = "automatico") -> ImportReport:
+        report = ImportReport(started_at=datetime.now(UTC), disparador=disparador)
 
         # Dedupe por (st_dev, st_ino), no por ruta: ver `listar_comics`. El
         # recorrido va en un hilo — bloquea en E/S (CLAUDE.md §4).
@@ -818,12 +822,14 @@ class Importer:
                 "errors": report.errors,
                 "disappeared": report.disappeared,
                 "reappeared": report.reappeared,
+                "disparador": report.disparador,
             },
         )
         if report.comprobacion is not None:
             run.details[CLAVE_COMPROBACION] = report.comprobacion.como_dict()
         self._db.add(run)
         await self._db.flush()
+        report.run_id = run.id
 
     def _build_dest(self, series, tr: TriageResult, orig: Path) -> Path:
         if not series:
