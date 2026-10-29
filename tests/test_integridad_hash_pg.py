@@ -16,7 +16,7 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select, text
@@ -444,3 +444,176 @@ class TestAdoptadorReenlaza:
         assert nuevo.exists()            # la adopción nunca mueve
         assert report.duplicate_count == 0
         assert any("reenlazado" in linea for linea in report.registered)
+
+
+class TestReenlazadoFormatoDeclarado:
+    """#332 residual 3: al reenlazar, `file_format` sigue a la extensión NUEVA.
+
+    `file_format` es la extensión declarada por el nombre; `metadata[
+    "formato_contenido"]` es el formato real leído del contenido. El reenlace
+    actualizaba el segundo pero dejaba el primero con el valor viejo.
+    """
+
+    def _fila(
+        self, *, issue_id: UUID, formato: FileFormat, sha: str,
+        original_sha256: str | None = None,
+        metadata: dict | None = None,
+    ) -> File:
+        return File(
+            id=uuid4(), issue_id=issue_id, file_path=f"/lib/desaparecido.{formato.value}",
+            file_name=f"desaparecido.{formato.value}", file_format=formato,
+            sha256_hash=sha, original_sha256=original_sha256,
+            is_missing=True, missing_since=datetime(2020, 1, 1, tzinfo=UTC),
+            imported_at=datetime(2020, 1, 1, tzinfo=UTC),
+            metadata_=metadata or {},
+        )
+
+    def _importer(self, db, tmp_path) -> Importer:
+        importer = Importer.__new__(Importer)
+        importer._db = db
+        importer._library = tmp_path / "lib"
+        return importer
+
+    @pytest.mark.asyncio
+    async def test_importer_reenlaza_cbz_desaparecido_en_ruta_cbr(self, db, tmp_path):
+        """Caso que motiva el residual: `.cbz` → `.cbr` deja de mentir sobre el
+        formato, y conserva vínculo, original, metadatos e historial."""
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       start_year=2011)
+        db.add(serie)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1")
+        db.add(issue)
+        await db.flush()
+
+        entrante = tmp_path / "descargas" / "recuperado.cbr"
+        entrante.parent.mkdir()
+        _crear_cbz(entrante)
+        sha = sha256_streaming(entrante)
+        fila = self._fila(
+            issue_id=issue.id, formato=FileFormat.CBZ, sha=sha, original_sha256=sha,
+            metadata={"match_status": "matched", "nota": "conservar",
+                      "formato_contenido": {"firma": "rar"}},
+        )
+        db.add(fila)
+        await db.flush()
+
+        report = ImportReport(started_at=datetime.now(UTC))
+        tr = TriageResult(path=entrante, sha256=sha,
+                          formato_contenido={"firma": "zip", "contrato": 1, "clase": "tebeo"})
+        await self._importer(db, tmp_path)._reenlazar(fila, entrante, tr, report)
+
+        assert fila.file_format is FileFormat.CBR
+        # Conserva el vínculo y el original; no reescribe la historia.
+        assert fila.issue_id == issue.id
+        assert fila.original_sha256 == sha
+        assert fila.metadata_["match_status"] == "matched"
+        assert fila.metadata_["nota"] == "conservar"
+        # El formato real por contenido se actualiza por separado.
+        assert fila.metadata_["formato_contenido"] == {
+            "firma": "zip", "contrato": 1, "clase": "tebeo"}
+        # D8: el historial se reinicia como hasta ahora.
+        assert fila.imported_at > datetime(2020, 1, 2, tzinfo=UTC)
+        assert Path(fila.file_path).suffix == ".cbr"
+        assert Path(fila.file_path).exists()
+        assert "(recuperado)" in report.imported[0]
+
+    @pytest.mark.asyncio
+    async def test_adopter_reenlaza_cbz_desaparecido_en_ruta_cbr(self, db, tmp_path, monkeypatch):
+        """El mismo contrato por el camino de `LibraryAdopter` (reenlace en el
+        sitio, sin mover)."""
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       start_year=2011)
+        db.add(serie)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1")
+        db.add(issue)
+        await db.flush()
+
+        nuevo = tmp_path / "reorganizado" / "recuperado.cbr"
+        nuevo.parent.mkdir()
+        _crear_cbz(nuevo)
+        sha = sha256_streaming(nuevo)
+        fila = self._fila(issue_id=issue.id, formato=FileFormat.CBZ, sha=sha)
+        db.add(fila)
+        await db.flush()
+
+        monkeypatch.setattr("zascarr.services.library_adopter.get_settings",
+                            lambda: MagicMock(library_path=tmp_path))
+        report = AdoptionReport(started_at=datetime.now(UTC))
+        await LibraryAdopter(db=db)._adopt_file(nuevo, report)
+
+        assert fila.file_format is FileFormat.CBR
+        assert fila.file_path == str(nuevo)
+        assert nuevo.exists()
+        assert any("reenlazado" in linea for linea in report.registered)
+
+    @pytest.mark.asyncio
+    async def test_reenlaza_cbr_desaparecido_en_ruta_cbz(self, db, tmp_path):
+        """Triangulación del sentido inverso: `.cbr` → `.cbz`."""
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       start_year=2011)
+        db.add(serie)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1")
+        db.add(issue)
+        await db.flush()
+
+        entrante = tmp_path / "descargas" / "recuperado.cbz"
+        entrante.parent.mkdir()
+        _crear_cbz(entrante)
+        sha = sha256_streaming(entrante)
+        fila = self._fila(issue_id=issue.id, formato=FileFormat.CBR, sha=sha)
+        db.add(fila)
+        await db.flush()
+
+        tr = TriageResult(path=entrante, sha256=sha)
+        await self._importer(db, tmp_path)._reenlazar(
+            fila, entrante, tr, ImportReport(started_at=datetime.now(UTC)))
+
+        assert fila.file_format is FileFormat.CBZ
+
+    @pytest.mark.asyncio
+    async def test_extension_en_mayusculas_se_normaliza(self, db, tmp_path):
+        """La extensión se normaliza igual que en el alta: `.CBR` → `cbr`."""
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       start_year=2011)
+        db.add(serie)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1")
+        db.add(issue)
+        await db.flush()
+
+        entrante = tmp_path / "descargas" / "RECUPERADO.CBR"
+        entrante.parent.mkdir()
+        _crear_cbz(entrante)
+        sha = sha256_streaming(entrante)
+        fila = self._fila(issue_id=issue.id, formato=FileFormat.CBZ, sha=sha)
+        db.add(fila)
+        await db.flush()
+
+        tr = TriageResult(path=entrante, sha256=sha)
+        await self._importer(db, tmp_path)._reenlazar(
+            fila, entrante, tr, ImportReport(started_at=datetime.now(UTC)))
+
+        assert fila.file_format is FileFormat.CBR
+
+    @pytest.mark.asyncio
+    async def test_mismo_formato_no_cambia_nada(self, db, tmp_path):
+        """No regresión: recuperar un `.cbz` como `.cbz` conserva CBZ."""
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       start_year=2011)
+        db.add(serie)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number="1")
+        db.add(issue)
+        await db.flush()
+
+        entrante = tmp_path / "descargas" / "recuperado.cbz"
+        entrante.parent.mkdir()
+        _crear_cbz(entrante)
+        sha = sha256_streaming(entrante)
+        fila = self._fila(issue_id=issue.id, formato=FileFormat.CBZ, sha=sha)
+        db.add(fila)
+        await db.flush()
+
+        tr = TriageResult(path=entrante, sha256=sha)
+        await self._importer(db, tmp_path)._reenlazar(
+            fila, entrante, tr, ImportReport(started_at=datetime.now(UTC)))
+
+        assert fila.file_format is FileFormat.CBZ
