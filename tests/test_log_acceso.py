@@ -342,13 +342,14 @@ class TestRotacionEfectivaConDockerCompose:
             assert log.get("options") == {"max-size": "10m", "max-file": "3"}, (nombre, log)
 
 
-#: B361-07 — INVENTARIO de los parámetros de query de las rutas GET (a 2026-10-29, 29 nombres). Si se añade, renombra o quita uno
+#: B361-07 — INVENTARIO de los parámetros de query de las rutas GET (a 2026-10-29, 30 nombres). Si se añade, renombra o quita uno
 #: sin tocar esta lista, `test_el_inventario_coincide_con_las_rutas` FALLA: obliga a mirar si el parámetro nuevo lleva datos de la
 #: persona y a seguir viéndolo fuera del registro de acceso. (El filtro quita la query entera, así que el inventario no decide qué
 #: se quita: sirve para que nadie dé por «sin datos» un parámetro nuevo sin haberlo mirado.)
 PARAMETROS_DE_QUERY = frozenset({
     "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
     "limite", "next", "operacion", "page", "page_size", "primero", "publisher_id", "q", "ref", "search", "serie_id",
+    "serie",
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
 })
 

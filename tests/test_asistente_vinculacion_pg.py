@@ -179,6 +179,7 @@ class TestCriterio1y12Entrada:
         await archivos(entorno, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
         p = await abrir(serie)
         assert CLAVE in p.visible and "Flash (1987)" in p.visible
+        assert f'/ui/pendientes/carpetas?serie={serie}' in p.t
         assert [f.nombre for f in p.filas] == ["Flash 01 (1987).cbz", "Flash 02 (1987).cbz"]
         assert all(not f.marcado for f in p.filas) and p.token is None
         assert p.total("marcados") == 0 and p.total("a_vincular") == 0

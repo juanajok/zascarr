@@ -31,6 +31,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -169,6 +170,20 @@ class TestCriterio1Token:
         assert await vinculados(ent.banco) == antes == 0 and await operaciones(ent.banco) == 0
         assert p.token                                              # y el token bueno sigue sirviendo
 
+    async def test_resultado_enlaza_ficha_y_otra_carpeta_con_la_serie_del_token(self, ent):
+        p = await listo(ent, UNO)
+        r = await confirmar(p)
+        assert f'href="/ui/series/{p.serie}"' in r.t
+        assert f'href="/ui/pendientes/carpetas?serie={p.serie}"' in r.t
+        assert "Volver a la ficha de la serie" in r.visible
+        assert "Elegir otra carpeta para esta serie" in r.visible
+        # Cambiar el series_id del formulario no cambia los enlaces: salen del token.
+        campos = [(k, v) for k, v in formulario_de_confirmacion(p.t)]
+        campos = [(k, str(uuid4()) if k == "series_id" else v) for k, v in campos]
+        r2 = Resultado((await enviar(campos)).text)
+        assert f'href="/ui/series/{p.serie}"' in r2.t
+        assert "Volver a la ficha de la serie" in r2.visible
+
     async def test_serie_y_grupo_salen_del_token_no_de_lo_que_reenvia_el_navegador(self, ent):
         p = await listo(ent, UNO)
         campos = [(k, v) for k, v in formulario_de_confirmacion(p.t) if k not in ("clave", "series_id")]
@@ -232,6 +247,19 @@ class TestCriterio3Resultado:
         assert r.grupo("ya_estaba_vinculado") == [DOS]                   # ya estaba en ese número: nada cambia
         assert [x.split(" (número")[0] for x in r.grupo("omitido")] == [TRES]  # cambió tras revisar: pendiente
         assert (r.total("vinculados"), r.total("ya_estaban"), r.total("omitidos")) == (1, 1, 1)
+
+    async def test_el_fallo_tambien_enlaza_ficha_y_otra_carpeta(self, ent, monkeypatch):
+        p = await listo(ent, UNO)
+
+        async def falla(_db, _token):
+            raise HTTPException(status_code=409, detail={"codigo": "error_inesperado"})
+
+        monkeypatch.setattr(asistente_vinculacion, "ejecutar_vinculacion", falla)
+        r = await confirmar(p)
+        assert f'href="/ui/series/{p.serie}"' in r.t
+        assert f'href="/ui/pendientes/carpetas?serie={p.serie}"' in r.t
+        assert "Volver a la ficha de la serie" in r.visible
+        assert "Elegir otra carpeta para esta serie" in r.visible
 
     async def test_el_resultado_no_inventa_estados_y_cada_motivo_del_contrato_tiene_texto(self, ent):
         assert set(MOTIVOS) <= set(TEXTO_DE_MOTIVO), set(MOTIVOS) - set(TEXTO_DE_MOTIVO)
