@@ -18,6 +18,7 @@ import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -39,7 +40,9 @@ CENTINELAS = {
     "ref": "eyJSRUZFUkVOQ0lBIjoiQ0VOVElORUxBLVJFRiJ9.firmaCENTINELA",
     "q": "CENTINELA-BUSQUEDA-9Z",
 }
-QUERY = "&".join(f"{k}={v}" for k, v in CENTINELAS.items())
+CENTINELAS["desconocido"] = "CENTINELA-X-NO-LISTADO"        # un nombre que ninguna lista de «prohibidos» conoce
+CENTINELAS["codificado"] = "CENTINELA%2FY%20Z"             # valores con %2F y %20: uvicorn escribe la query tal cual
+QUERY = "&".join(f"{k}={v}" for k, v in CENTINELAS.items() if k != "codificado") + "&zzz=" + CENTINELAS["codificado"]
 
 
 def _registro(args: tuple) -> logging.LogRecord:
@@ -47,6 +50,9 @@ def _registro(args: tuple) -> logging.LogRecord:
 
 
 class TestFiltroUnitario:
+    def test_la_marca_de_query_omitida_es_el_literal_acordado(self):
+        assert MARCA_DE_QUERY_OMITIDA == "?…"   # no se compara solo con la propia constante (sería tautológico)
+
     def test_quita_la_query_entera_y_conserva_ruta_metodo_y_estado(self):
         r = _registro(("127.0.0.1:5", "GET", "/ui/x?clave=A&cursor=B&ref=C&q=D", "1.1", 200))
         assert SinQueryEnAcceso().filter(r) is True
@@ -127,11 +133,15 @@ def _puerto_libre() -> int:
         return s.getsockname()[1]
 
 
-def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[str, str] | None = None) -> str:
+def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[str, str] | None = None,
+                    estados: dict[str, int] | None = None) -> str:
     puerto = _puerto_libre()
     entorno = {**os.environ, "PYTHONPATH": f"{RAIZ / 'src'}{os.pathsep}{cwd}", "AUTH_MODE": "none", **(entorno_extra or {})}
     proc = subprocess.Popen(_con_host_y_puerto(cmd, puerto), cwd=cwd, env=entorno, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True)
+    lineas: list[str] = []
+    lector = threading.Thread(target=lambda: lineas.extend(iter(proc.stdout.readline, "")), daemon=True)
+    lector.start()
     try:
         fin = time.time() + 40
         while time.time() < fin:
@@ -140,7 +150,8 @@ def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[
                 break
             except OSError:
                 if proc.poll() is not None:
-                    raise AssertionError(f"uvicorn terminó al arrancar: {proc.stdout.read()[-800:]}") from None
+                    lector.join(timeout=2)
+                    raise AssertionError(f"uvicorn terminó al arrancar: {''.join(lineas)[-800:]}") from None
                 time.sleep(0.2)
         else:
             raise AssertionError("uvicorn no arrancó a tiempo")
@@ -154,23 +165,36 @@ def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[
                     for nombre, valor in {"Origin": f"http://127.0.0.1:{puerto}", **cabeceras}.items():
                         conexion.putheader(nombre, valor)
                     conexion.endheaders()
-                    conexion.getresponse().read()
+                    respuesta = conexion.getresponse()
+                    respuesta.read()
+                    if estados is not None:
+                        estados[ruta] = respuesta.status
                     conexion.close()
                 else:
-                    urllib.request.urlopen(urllib.request.Request(
-                        f"http://127.0.0.1:{puerto}{ruta}", headers={"Origin": f"http://127.0.0.1:{puerto}", **cabeceras}),
-                        timeout=15).read()
-            except (urllib.error.HTTPError, http.client.HTTPException, ConnectionError):
-                pass   # 4xx/5xx también escriben su línea de acceso
-        time.sleep(0.5)
+                    with urllib.request.urlopen(urllib.request.Request(
+                            f"http://127.0.0.1:{puerto}{ruta}", headers={"Origin": f"http://127.0.0.1:{puerto}", **cabeceras}),
+                            timeout=15) as r:
+                        r.read()
+                        if estados is not None:
+                            estados[ruta] = r.status
+            except urllib.error.HTTPError as error:
+                if estados is not None:
+                    estados[ruta] = error.code   # 4xx/5xx también escriben su línea de acceso
+            except (http.client.HTTPException, ConnectionError):
+                pass
+        # En vez de dormir un rato fijo, se espera a que haya salido una línea por petición (o se agote el plazo)
+        plazo = time.time() + 5
+        while time.time() < plazo and sum(1 for linea in lineas if "HTTP/1.1" in linea or "WebSocket" in linea) < len(rutas):
+            time.sleep(0.1)
     finally:
         proc.terminate()
         try:
-            salida, _ = proc.communicate(timeout=15)
+            proc.wait(timeout=15)
         except subprocess.TimeoutExpired:
             proc.kill()
-            salida, _ = proc.communicate()
-    return salida
+            proc.wait()
+        lector.join(timeout=5)
+    return "".join(lineas)
 
 
 RUTAS = [
@@ -201,12 +225,15 @@ class TestConUvicornReal:
         cmd = _cmd_del_dockerfile()
         cmd[cmd.index("--log-level") + 1] = nivel
         salida = _servir_y_pedir(cmd, RUTAS[:1] + RUTAS[2:3], RAIZ)
+        assert "/ui/pendientes/carpetas/asistente/vinculacion" in salida and "/ui/descubrir" in salida   # no un registro mudo
         for valor in CENTINELAS.values():
             assert valor not in salida
 
-    def test_un_422_o_un_404_tampoco_dejan_la_query(self):
+    def test_otras_rutas_y_un_404_tampoco_dejan_la_query(self):
+        """Rutas distintas, mismo filtro. Un 422 de validación con base de datos NO se ejerce aquí (el arranque degradado sin
+        base responde 503 a todo): NOT RUN con `TEST_DATABASE_URL`; el filtro actúa antes que el estado de la respuesta."""
         salida = _servir_y_pedir(_cmd_del_dockerfile(), [f"/ruta/que/no/existe?{QUERY}", f"/api/series?page=0&{QUERY}"], RAIZ)
-        assert "/ruta/que/no/existe" in salida
+        assert "/ruta/que/no/existe" in salida and "/api/series" in salida
         for valor in CENTINELAS.values():
             assert valor not in salida
 
@@ -247,6 +274,55 @@ class TestConUvicornReal:
         assert CENTINELAS["clave"] in salida and CENTINELAS["ref"] in salida
 
 
+URL_PRUEBAS = os.environ.get("TEST_DATABASE_URL")
+
+
+@pytest.mark.skipif(not URL_PRUEBAS, reason="NOT RUN sin TEST_DATABASE_URL (Postgres real; la base de pruebas lleva «test» en el nombre)")
+class TestEstadosRealesConBaseDeDatos:
+    """B361-08 con estados REALES (no el 503 del arranque degradado): una base efímera migrada hace que la app arranque de
+    verdad, y se piden una serie inexistente (404) y un parámetro fuera de rango (422), con los centinelas en la query. Se
+    exige el estado en la RESPUESTA y en la LÍNEA DE ACCESO, y que ninguna marca llegue al registro."""
+
+    def test_404_y_422_reales_dejan_la_linea_con_su_estado_y_sin_query(self, tmp_path):
+        from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
+        rutas = [f"/api/series/00000000-0000-4000-8000-000000000404?{QUERY}", f"/api/series?page=0&{QUERY}"]
+        estados: dict[str, int] = {}
+        with bd_efimera_sync(URL_PRUEBAS) as url:
+            migrar_a_head(url)
+            entorno = {"DATABASE_URL": url_asyncpg(url), "IMPORT_INTERVAL_MINUTES": "99999", "ENRICH_INTERVAL_MINUTES": "99999",
+                       "SCAN_INTERVAL_MINUTES": "99999", "LIBRARY_PATH": str(tmp_path / "lib"),
+                       "TRANSMISSION_DOWNLOAD_DIR": str(tmp_path / "t"), "AMULE_INCOMING_DIR": str(tmp_path / "a"),
+                       "DOWNLOADS_PATH": str(tmp_path / "d"), "COVERS_CACHE_PATH": str(tmp_path / "c")}
+            salida = _servir_y_pedir(_cmd_del_dockerfile(), rutas, RAIZ, entorno, estados)
+        assert estados[rutas[0]] == 404 and estados[rutas[1]] == 422, (estados, salida[-800:])
+        lineas = [linea for linea in salida.splitlines() if ' - "GET ' in linea]
+        assert any("/api/series/00000000-0000-4000-8000-000000000404" in linea and linea.rstrip().endswith("404 Not Found") for linea in lineas), lineas
+        assert any(linea.split('"')[1].startswith("GET /api/series") and linea.rstrip().endswith("422 Unprocessable Content")
+                   or linea.rstrip().endswith("422 Unprocessable Entity") for linea in lineas), lineas
+        for valor in CENTINELAS.values():
+            assert valor not in salida
+
+
+class TestRotacionEfectivaConDockerCompose:
+    """La configuración EFECTIVA (con anclas resueltas): `docker compose config --format json`. Sin Docker, NOT RUN: la
+    comprobación del texto de arriba (que ignora comentarios) sigue cubriendo los dos servicios."""
+
+    def test_postgres_y_zascarr_tienen_json_file_10m_por_3(self):
+        import shutil
+        if shutil.which("docker") is None:
+            pytest.skip("NOT RUN: no hay Docker")
+        r = subprocess.run(["docker", "compose", "-f", str(RAIZ / "docker-compose.yml"), "config", "--format", "json"],
+                           capture_output=True, text=True, cwd=RAIZ, env={**os.environ, "DB_PASSWORD": "Sintetica-Prueba-0001"},
+                           check=False, timeout=60)
+        if r.returncode != 0:
+            pytest.skip(f"NOT RUN: `docker compose config` no pudo ejecutarse ({r.stderr.strip()[:120]})")
+        servicios = json.loads(r.stdout)["services"]
+        for nombre in ("postgres", "zascarr"):
+            log = servicios[nombre].get("logging") or {}
+            assert log.get("driver") == "json-file", nombre
+            assert log.get("options") == {"max-size": "10m", "max-file": "3"}, (nombre, log)
+
+
 class TestRotacionDeLogsEnElCompose:
     COMPOSE = (RAIZ / "docker-compose.yml").read_text(encoding="utf-8")
 
@@ -256,12 +332,20 @@ class TestRotacionDeLogsEnElCompose:
         bloque = m.group(1)
         assert "driver: json-file" in bloque and 'max-size: "10m"' in bloque and 'max-file: "3"' in bloque
 
-    @pytest.mark.parametrize("servicio", ["postgres", "zascarr"])
-    def test_los_servicios_con_estado_usan_la_rotacion(self, servicio):
-        inicio = self.COMPOSE.index(f"\n  {servicio}:\n")
-        siguiente = re.search(r"\n  [a-z_-]+:\n", self.COMPOSE[inicio + 1:])
-        bloque = self.COMPOSE[inicio: inicio + 1 + (siguiente.start() if siguiente else len(self.COMPOSE))]
-        assert "logging: *logging" in bloque
+    #: servicios SIN rotación a propósito: `credenciales` corre, comprueba y termina (no es un contenedor persistente)
+    SIN_ROTACION = {"credenciales"}
+
+    def _servicios(self) -> dict[str, str]:
+        raiz = self.COMPOSE[self.COMPOSE.index("\nservices:\n"):]
+        trozos = re.split(r"\n  ([a-z_-]+):\n", raiz)
+        return {nombre: cuerpo for nombre, cuerpo in zip(trozos[1::2], trozos[2::2], strict=True)}
+
+    def test_todos_los_servicios_rotan_salvo_los_de_un_solo_uso_declarados(self):
+        servicios = self._servicios()
+        assert {"postgres", "zascarr", "credenciales"} <= set(servicios)
+        for nombre, cuerpo in servicios.items():
+            tiene = re.search(r"(?m)^    logging: \*logging\s*$", cuerpo) is not None   # una línea comentada no cuenta
+            assert tiene == (nombre not in self.SIN_ROTACION), nombre
 
     def test_el_presupuesto_se_describe_como_nominal_y_de_disco(self):
         cabecera = self.COMPOSE[: self.COMPOSE.index("x-logging:")]
