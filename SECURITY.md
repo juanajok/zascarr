@@ -151,3 +151,9 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   contraseña. Se exige además una **longitud mínima de 12 caracteres**.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.
+
+## Registros de acceso (#361)
+
+El registro de acceso de uvicorn **no incluye la query** de las peticiones (`?clave=…&cursor=…&ref=…&q=…`): `zascarr.utils.log_acceso` deja método, ruta y estado, y sustituye lo demás por `?…`. En ZascArr la query puede llevar el nombre de una carpeta, un cursor que decodifica a un nombre de archivo, un token firmado de 24 h o lo que se busca. Los registros de los contenedores rotan (`json-file`, 10 MB × 3 ficheros, 30 MB **nominales** por contenedor en disco; no es un límite global ni una medición).
+
+**Límites:** la protección alcanza solo a ese registro. No acredita que otros registros, excepciones o el proxy inverso estén saneados. **Nota para quien opera el proxy:** si el proxy inverso registra la URI con su query, debe configurarse también para no hacerlo; ZascArr no puede comprobarlo desde dentro.

@@ -5,6 +5,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Seguridad
+
+- **Los registros de acceso ya no llevan la query de las peticiones** (#361). uvicorn escribía `GET /ruta?clave=…&cursor=…&ref=…`, que puede incluir el nombre de una carpeta, un cursor que decodifica a un nombre de archivo o un token firmado de 24 h. Ahora queda la ruta y el estado. Además, los registros de los contenedores rotan (10 MB × 3 ficheros por contenedor, 30 MB nominales en disco). Las URLs y los enlaces no cambian.
+
 ### Cambiado
 
 - **`scripts/update.sh` exige indicar la rama** (`--rama main` o `BRANCH=<rama>`). Antes instalaba por su cuenta la rama en la que

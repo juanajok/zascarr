@@ -13,6 +13,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
+from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 
 logger = structlog.get_logger()
 
@@ -295,6 +296,8 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    # #361: el registro de acceso de uvicorn no lleva la query (carpetas, cursores, tokens).
+    instalar_filtro_de_acceso()
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
