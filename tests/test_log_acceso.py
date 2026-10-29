@@ -10,6 +10,7 @@ Sin base de datos: el arranque degradado responde, y aun así uvicorn escribe la
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import logging
 import os
@@ -24,7 +25,12 @@ from pathlib import Path
 
 import pytest
 
-from zascarr.utils.log_acceso import MARCA_DE_QUERY_OMITIDA, SinQueryEnAcceso, instalar_filtro_de_acceso
+from zascarr.utils.log_acceso import (
+    MARCA_DE_QUERY_OMITIDA,
+    REGISTRO_OMITIDO,
+    SinQueryEnAcceso,
+    instalar_filtro_de_acceso,
+)
 
 RAIZ = Path(__file__).resolve().parents[1]
 CENTINELAS = {
@@ -65,10 +71,26 @@ class TestFiltroUnitario:
         assert time.perf_counter() - t < 0.5
 
     @pytest.mark.parametrize("args", [(), ("solo",), ("a", "b"), ("a", "b", None, "1.1", 200), ("a", "b", 3, "1.1", 200), None])
-    def test_argumentos_inesperados_no_lanzan_y_dejan_pasar_el_registro(self, args):
+    def test_argumentos_sin_query_no_lanzan_y_el_registro_sale_igual(self, args):
         r = _registro(("a", "b", "c", "d", 1))
         r.args = args
         assert SinQueryEnAcceso().filter(r) is True
+        assert r.args == args and r.msg != REGISTRO_OMITIDO
+
+    def test_cualquier_argumento_de_texto_con_query_se_limpia_no_solo_el_tercero(self):
+        r = _registro(("c?x=1", "GET", "/a?clave=SECRETA", "1.1?y=2", 200))
+        SinQueryEnAcceso().filter(r)
+        assert "=" not in r.getMessage() and "SECRETA" not in r.getMessage()
+
+    @pytest.mark.parametrize("args", ["texto suelto con ?clave=SECRETA", 12345, object(), ["a", "b?c=SECRETA"]])
+    def test_falla_cerrado_si_el_formato_de_los_argumentos_no_se_reconoce(self, args):
+        """R-2 de SecOps: si una versión futura de uvicorn cambia la forma de `args`, la línea se pierde en lugar de dejar
+        pasar una query. Nunca lanza."""
+        r = _registro(("a", "b", "c", "d", 1))
+        r.args = args
+        assert SinQueryEnAcceso().filter(r) is True
+        assert r.msg == REGISTRO_OMITIDO and r.args == ()
+        assert "SECRETA" not in r.getMessage()
 
     def test_instalarlo_es_idempotente(self):
         logger = logging.getLogger("uvicorn.access")
@@ -105,7 +127,7 @@ def _puerto_libre() -> int:
         return s.getsockname()[1]
 
 
-def _servir_y_pedir(cmd: list[str], rutas: list[str], cwd: Path, entorno_extra: dict[str, str] | None = None) -> str:
+def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[str, str] | None = None) -> str:
     puerto = _puerto_libre()
     entorno = {**os.environ, "PYTHONPATH": f"{RAIZ / 'src'}{os.pathsep}{cwd}", "AUTH_MODE": "none", **(entorno_extra or {})}
     proc = subprocess.Popen(_con_host_y_puerto(cmd, puerto), cwd=cwd, env=entorno, stdout=subprocess.PIPE,
@@ -122,10 +144,23 @@ def _servir_y_pedir(cmd: list[str], rutas: list[str], cwd: Path, entorno_extra: 
                 time.sleep(0.2)
         else:
             raise AssertionError("uvicorn no arrancó a tiempo")
-        for ruta in rutas:
+        for item in rutas:
+            ruta, cabeceras = item if isinstance(item, tuple) else (item, {})
             try:
-                urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{puerto}{ruta}", headers={"Origin": f"http://127.0.0.1:{puerto}"}), timeout=15).read()
-            except urllib.error.HTTPError:
+                if "Upgrade" in cabeceras:
+                    # urllib fuerza `Connection: close` y no deja pedir un Upgrade de verdad: se usa http.client
+                    conexion = http.client.HTTPConnection("127.0.0.1", puerto, timeout=15)
+                    conexion.putrequest("GET", ruta)
+                    for nombre, valor in {"Origin": f"http://127.0.0.1:{puerto}", **cabeceras}.items():
+                        conexion.putheader(nombre, valor)
+                    conexion.endheaders()
+                    conexion.getresponse().read()
+                    conexion.close()
+                else:
+                    urllib.request.urlopen(urllib.request.Request(
+                        f"http://127.0.0.1:{puerto}{ruta}", headers={"Origin": f"http://127.0.0.1:{puerto}", **cabeceras}),
+                        timeout=15).read()
+            except (urllib.error.HTTPError, http.client.HTTPException, ConnectionError):
                 pass   # 4xx/5xx también escriben su línea de acceso
         time.sleep(0.5)
     finally:
@@ -174,6 +209,29 @@ class TestConUvicornReal:
         assert "/ruta/que/no/existe" in salida
         for valor in CENTINELAS.values():
             assert valor not in salida
+
+    def test_el_cmd_del_dockerfile_desactiva_websockets(self):
+        """La app no tiene rutas WebSocket y uvicorn escribe su handshake rechazado en `uvicorn.error` (no en
+        `uvicorn.access`) con la query: sin `--ws none` el filtro no la alcanza (R-1 de SecOps)."""
+        cmd = _cmd_del_dockerfile()
+        assert cmd[cmd.index("--ws") + 1] == "none"
+
+    def test_una_peticion_de_upgrade_a_websocket_con_query_tampoco_la_deja_en_el_registro(self):
+        cabeceras = {"Connection": "Upgrade", "Upgrade": "websocket", "Sec-WebSocket-Version": "13",
+                     "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="}
+        salida = _servir_y_pedir(_cmd_del_dockerfile(), [(f"/ui/descubrir?{QUERY}", cabeceras)], RAIZ)
+        for valor in CENTINELAS.values():
+            assert valor not in salida
+
+    def test_control_negativo_websockets_activados_el_detector_si_ve_la_query_del_handshake(self):
+        """Con `--ws` en `auto` (sin la opción del CMD) el handshake rechazado SÍ deja la query en `uvicorn.error`: demuestra
+        que la prueba anterior ve el camino que cubre `--ws none`."""
+        cmd = _cmd_del_dockerfile()
+        cmd[cmd.index("--ws") + 1] = "auto"
+        cabeceras = {"Connection": "Upgrade", "Upgrade": "websocket", "Sec-WebSocket-Version": "13",
+                     "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="}
+        salida = _servir_y_pedir(cmd, [(f"/ui/descubrir?{QUERY}", cabeceras)], RAIZ)
+        assert CENTINELAS["clave"] in salida, salida[-1200:]
 
     def test_control_negativo_sin_el_filtro_el_detector_si_ve_la_query(self, tmp_path):
         """Una aplicación ASGI mínima bajo el MISMO uvicorn y los mismos argumentos, pero SIN el filtro: el centinela debe

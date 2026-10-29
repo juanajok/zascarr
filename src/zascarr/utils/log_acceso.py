@@ -19,17 +19,33 @@ MARCA_DE_QUERY_OMITIDA = "?…"
 _LOGGER_DE_ACCESO = "uvicorn.access"
 
 
+def _sin_query(valor: object) -> object:
+    if isinstance(valor, str) and "?" in valor:
+        return valor.split("?", 1)[0] + MARCA_DE_QUERY_OMITIDA
+    return valor
+
+
+#: Lo que se escribe si no se reconoce el formato del registro (más vale perder la línea que filtrar una query).
+REGISTRO_OMITIDO = "(registro de acceso omitido: formato inesperado)"
+
+
 class SinQueryEnAcceso(logging.Filter):
-    """Reescribe el tercer argumento del registro de acceso de uvicorn (`path?query`) dejando solo `path`."""
+    """Quita la query de CUALQUIER argumento de texto del registro de acceso (en uvicorn, el tercero: `path?query`).
+
+    **Falla cerrado:** si el formato de los argumentos cambia de una forma que no se sabe tratar (una versión futura de
+    uvicorn), el registro se sustituye por `REGISTRO_OMITIDO` en lugar de dejar pasar la línea tal cual."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             args = record.args
-            # Formato de uvicorn: '%s - "%s %s HTTP/%s" %d' → (cliente, método, ruta+query, versión, estado).
-            if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str) and "?" in args[2]:
-                record.args = (*args[:2], args[2].split("?", 1)[0] + MARCA_DE_QUERY_OMITIDA, *args[3:])
-        except Exception:  # noqa: BLE001 — un registro raro nunca debe tumbar la petición ni dejar de salir
-            pass
+            if isinstance(args, tuple):
+                record.args = tuple(_sin_query(a) for a in args)
+            elif isinstance(args, dict):
+                record.args = {k: _sin_query(v) for k, v in args.items()}
+            elif args is not None:
+                raise TypeError("argumentos de registro no reconocidos")
+        except Exception:  # noqa: BLE001 — nunca tumba la petición; solo pierde la línea
+            record.msg, record.args = REGISTRO_OMITIDO, ()
         return True
 
 
