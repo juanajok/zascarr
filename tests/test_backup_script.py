@@ -55,6 +55,15 @@ if [[ "${ultimo}" == "${OFFSITE_DIR:?}"/* && "${ultimo}" == *".sql.gz"* ]]; then
 fi
 """
 
+MV_TRUNCA = """#!/usr/bin/env bash
+set -euo pipefail
+"${REAL_MV:?}" "$@"
+for ultimo in "$@"; do :; done
+if [[ "${ultimo}" == *.sql.gz ]]; then
+    truncate -s $(( $(stat -c %s "${ultimo}") / 2 )) "${ultimo}"
+fi
+"""
+
 FIXTURE_SQL = """--
 -- PostgreSQL database dump
 --
@@ -68,6 +77,20 @@ COPY public.files (id) FROM stdin;
 COPY public.wishlist (id) FROM stdin;
 \\.
 """
+
+
+def _sin_copy(sql: str, tabla: str) -> str:
+    """El SQL sin el bloque `COPY public.<tabla> … \\.`."""
+    salida, dentro = [], False
+    for linea in sql.splitlines():
+        if linea.startswith(f"COPY public.{tabla} "):
+            dentro = True
+            continue
+        if dentro:
+            dentro = linea != "\\."
+            continue
+        salida.append(linea)
+    return "\n".join(salida) + "\n"
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -192,6 +215,40 @@ class TestBackupScript:
         assert _estado(ctx)["status"] == "failed"
         assert _estado(ctx)["error"] == "header_missing"
         assert not list(ctx["backup"].glob("backup_*.sql.gz"))
+
+    @pytest.mark.parametrize("tabla", ["alembic_version", "series", "files", "wishlist"])
+    def test_dump_sin_una_tabla_requerida_no_se_publica(self, tmp_path, tabla):
+        """Las cuatro tablas que `rollback.sh` necesita, una a una: sin cualquiera de ellas
+        la copia se descarta, el estado dice `tables_missing` y no queda nada, ni local
+        ni fuera del disco."""
+        ctx = _preparar(tmp_path)
+        ctx["fixture"].write_text(_sin_copy(FIXTURE_SQL, tabla), encoding="utf-8")
+        r = _ejecutar(ctx)
+        assert r.returncode != 0
+        assert _estado(ctx)["status"] == "failed"
+        assert _estado(ctx)["error"] == "tables_missing"
+        assert f"falta la tabla {tabla}" in r.stdout + r.stderr
+        assert not list(ctx["backup"].glob("backup_*.sql.gz"))
+        assert not list(ctx["backup"].glob("MANIFIESTO-*.json"))
+        assert not list(ctx["offsite"].glob("backup_*.sql.gz"))
+
+    def test_un_volcado_que_se_corta_al_publicarse_se_descarta_con_gzip_invalid(self, tmp_path):
+        """`volcar_postgres` comprueba `gzip -t` sobre el temporal; `verificar_dump` lo repite
+        sobre el fichero ya publicado. Aquí el `mv` corta el .gz a la mitad (como un disco que
+        falla justo al escribir): el temporal estaba bien, el definitivo no, y esa segunda
+        comprobación es la que lo detiene con su propia causa."""
+        ctx = _preparar(tmp_path)
+        mv = ctx["bin"] / "mv"
+        mv.write_text(MV_TRUNCA, encoding="utf-8")
+        mv.chmod(0o755)
+        r = _ejecutar(ctx, extra_env={"REAL_MV": shutil.which("mv") or "/bin/mv"})
+        assert r.returncode != 0
+        assert _estado(ctx)["status"] == "failed"
+        assert _estado(ctx)["error"] == "gzip_invalid"
+        assert "gzip -t falla" in r.stdout + r.stderr
+        assert not list(ctx["backup"].glob("backup_*.sql.gz"))
+        assert not list(ctx["backup"].glob("MANIFIESTO-*.json"))
+        assert not list(ctx["offsite"].glob("backup_*.sql.gz"))
 
     def test_montaje_ausente_avisa_y_no_escribe_offsite(self, tmp_path):
         ctx = _preparar(tmp_path)
