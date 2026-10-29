@@ -34,6 +34,7 @@ from zascarr.services.aceptacion_adopcion import (
     evaluar,
 )
 from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
+from zascarr.services.primeros_pasos import fecha_llana
 from zascarr.services.registro_biblioteca import (
     CLAVE_CERROJO_REGISTRO,
     EstadoRegistro,
@@ -511,7 +512,7 @@ class TestPantallaDeAceptacion:
         assert respuesta.status_code == 200
         html = respuesta.text
         assert "Registrar de todos modos" not in html
-        assert re.search(r"Biblioteca registrada con 1 carpeta o archivo sin leer el \d{1,2} de [a-z]+ de \d{4}\.",
+        assert re.search(r"Biblioteca registrada con 1 sin leer el \d{1,2} de [a-z]+ de \d{4}\.",
                          " ".join(html.split()))
         assert 'autofocus' in html and 'tabindex="-1"' in html
         assert 'role="alert"' not in html and 'role="status"' not in html
@@ -520,7 +521,7 @@ class TestPantallaDeAceptacion:
         registro_biblioteca.reiniciar_para_pruebas()
         async with _cliente(mundo) as c:
             recarga = await _get(c)
-        assert "Biblioteca registrada con 1" in recarga
+        assert "Biblioteca registrada con 1 sin leer" in recarga
         assert "autofocus" not in recarga
         assert "Registrar de todos modos" not in recarga
 
@@ -589,7 +590,7 @@ class TestPantallaDeAceptacion:
         async with _cliente(mundo) as c:
             html = await _get(c)
 
-        assert "Biblioteca registrada con 1" in html
+        assert "Biblioteca registrada con 1 sin leer" in html
         assert "Registrar de todos modos" not in html
 
     async def test_interrumpido_no_ofrece_aceptar(self, mundo, carpeta_cerrada):
@@ -725,3 +726,108 @@ class TestPersistenciaDeLotesSinAcreditar:
         valores = await _valores(mundo)
         assert valores[CLAVE_MARCADOR] is True
         assert valores[CLAVE_ACEPTACION]["count"] == 1
+
+
+async def _crear_trigger_fallo_evidencia(m: Mundo) -> None:
+    async with m.fabrica() as s:
+        await s.execute(text("DROP TRIGGER IF EXISTS zascarr_fallo_evidencia ON import_runs"))
+        await s.execute(text("DROP FUNCTION IF EXISTS zascarr_fallo_evidencia()"))
+        await s.execute(text("""
+            CREATE FUNCTION zascarr_fallo_evidencia() RETURNS trigger AS $$
+            BEGIN
+              IF NEW.details->>'kind' = 'adoption_acceptance' THEN
+                RAISE EXCEPTION 'fallo_evidencia';
+              END IF;
+              RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql
+        """))
+        await s.execute(text("""
+            CREATE TRIGGER zascarr_fallo_evidencia BEFORE INSERT ON import_runs
+            FOR EACH ROW EXECUTE FUNCTION zascarr_fallo_evidencia()
+        """))
+        await s.commit()
+
+
+async def _quitar_trigger_fallo_evidencia(m: Mundo) -> None:
+    async with m.fabrica() as s:
+        await s.execute(text("DROP TRIGGER IF EXISTS zascarr_fallo_evidencia ON import_runs"))
+        await s.execute(text("DROP FUNCTION IF EXISTS zascarr_fallo_evidencia()"))
+        await s.commit()
+
+
+class TestAvisoPermanenteEIntegridad:
+
+    async def test_aviso_visible_tras_un_incremental_real_y_tras_reiniciar(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        assert (await _aceptar(mundo, run.id, 1)).ok
+
+        nuevo = mundo.lib / "Nuevos" / "Nuevo 01.cbz"
+        _cbz(nuevo, "n")
+        registro_biblioteca.iniciar(mundo.fabrica, alcance=frozenset({str(nuevo)}))
+        await asyncio.wait_for(registro_biblioteca._tarea, 60)
+        estado = registro_biblioteca.estado_actual()
+        assert estado.incremental and estado.fase is FaseRegistro.TERMINADO
+
+        async with _cliente(mundo) as c:
+            html = await _get(c)
+        assert "sin leer" in html and "Biblioteca registrada con 1" in html
+
+        registro_biblioteca.reiniciar_para_pruebas()
+        async with _cliente(mundo) as c:
+            recarga = await _get(c)
+        assert "sin leer" in recarga and "Biblioteca registrada con 1" in recarga
+
+    async def test_el_aviso_usa_la_fecha_de_aceptacion_no_la_del_informe(self, mundo):
+        report = AdoptionReport(
+            started_at=datetime(2025, 12, 31, 10, 0, tzinfo=UTC),
+            finished_at=datetime(2025, 12, 31, 11, 0, tzinfo=UTC),
+            unreadable=1,
+        )
+        async with mundo.fabrica() as s:
+            run_id = await LibraryAdopter(s)._persist_run(report)
+            await s.commit()
+
+        assert (await _aceptar(mundo, run_id, 1)).ok
+        aceptado = datetime.fromisoformat((await _valores(mundo))[CLAVE_ACEPTACION]["accepted_at"])
+        esperada = fecha_llana(aceptado)
+
+        registro_biblioteca.reiniciar_para_pruebas()
+        async with _cliente(mundo) as c:
+            html = await _get(c)
+
+        plano = " ".join(html.split())
+        assert f"Biblioteca registrada con 1 sin leer el {esperada}." in plano
+        assert "2025" not in plano
+
+    async def test_si_falla_la_evidencia_se_revierte_marcador_y_registro(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        antes = await _snapshot(mundo)
+        await _crear_trigger_fallo_evidencia(mundo)
+        try:
+            with pytest.raises(Exception, match="fallo_evidencia"):
+                async with mundo.fabrica() as s:
+                    await aceptar(s, run.id, 1)
+        finally:
+            await _quitar_trigger_fallo_evidencia(mundo)
+
+        assert await _snapshot(mundo) == antes
+        valores = await _valores(mundo)
+        assert CLAVE_MARCADOR not in valores
+        assert CLAVE_ACEPTACION not in valores
+        assert await _runs(mundo, "adoption_acceptance") == []
+
+    async def test_aviso_en_la_lista_de_archivos_nuevos(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        assert (await _aceptar(mundo, run.id, 1)).ok
+        _cbz(mundo.lib / "Nuevos" / "Nuevo 02.cbz", "z")
+
+        async with _cliente(mundo) as c:
+            respuesta = await c.get("/ui/auditoria/nuevos")
+
+        assert respuesta.status_code == 200
+        assert "sin leer" in respuesta.text and "Biblioteca registrada con 1" in respuesta.text
+        assert "Archivos encontrados sin registrar" in respuesta.text
