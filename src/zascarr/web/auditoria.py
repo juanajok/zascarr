@@ -16,8 +16,10 @@ decisión irreversible que la historia se propone no tomar sola.
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +27,7 @@ from zascarr import database
 from zascarr.database import get_db
 from zascarr.models import ImportRun, Series
 from zascarr.services import registro_biblioteca
+from zascarr.services.aceptacion_adopcion import MAX_ILEGIBLES, aceptar, evaluar
 from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
 from zascarr.web.routes import crear_templates
@@ -82,12 +85,16 @@ async def analizar(request: Request, db: AsyncSession = Depends(get_db)) -> HTML
 
 
 async def _fragmento_registro(request: Request, db: AsyncSession, *, inc: InventarioBiblioteca | None = None,
-                              cambio: bool = False) -> HTMLResponse:
+                              cambio: bool = False, recien_aceptado: bool = False,
+                              conflicto: bool = False) -> HTMLResponse:
     """Lo que el coleccionista debe ver del registro AHORA: progreso, resultado o inventario previo.
     `inc` (#326) es el inventario de archivos NUEVOS que se acaba de calcular a petición suya; `cambio`, que al confirmar la carpeta
-    ya no era la que revisó."""
+    ya no era la que revisó; `recien_aceptado`, que la petición acaba de aceptar (para el foco); `conflicto`, que el intento
+    no era válido y hay que enseñar el estado fresco."""
     reg = registro_biblioteca.estado_actual()
-    contexto: dict = {"reg": reg, "estado": EstadoAdopcion.HECHA, "inv": None, "series": 0, "inc": inc, "cambio": cambio}
+    contexto: dict = {"reg": reg, "estado": EstadoAdopcion.HECHA, "inv": None, "series": 0, "inc": inc,
+                      "cambio": cambio, "adopcion": await evaluar(db, en_marcha=reg.en_marcha),
+                      "recien_aceptado": recien_aceptado, "conflicto": conflicto}
     if reg.fase is registro_biblioteca.FaseRegistro.INACTIVO:
         adopter = LibraryAdopter(db)
         contexto["estado"] = await adopter.estado()
@@ -114,6 +121,25 @@ async def adoptar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLR
     if not en_marcha and await LibraryAdopter(db).puede_registrar():
         registro_biblioteca.iniciar(database.async_session_factory)
     return await _fragmento_registro(request, db)
+
+
+@router.post("/aceptar-ilegibles", response_class=HTMLResponse)
+async def aceptar_ilegibles(request: Request, run_id: UUID = Form(...),
+                            count: int = Form(..., ge=1, le=MAX_ILEGIBLES),
+                            db: AsyncSession = Depends(get_db)):
+    """#332 residual 4: aceptación explícita de una adopción inicial incompleta.
+
+    HTMX no intercambia 4xx: si el intento no vale, se devuelve el fragmento actualizado con 200 y
+    el conflicto visible. Un cliente normal recibe 409/404 con el motivo, sin escribir nada."""
+    resultado = await aceptar(db, run_id, count,
+                              en_marcha=registro_biblioteca.estado_actual().en_marcha)
+    if request.headers.get("HX-Request") == "true":
+        return await _fragmento_registro(
+            request, db, recien_aceptado=resultado.reason == "accepted",
+            conflicto=not resultado.ok)
+    if not resultado.ok:
+        return JSONResponse({"reason": resultado.reason}, status_code=resultado.status)
+    return await _fragmento_registro(request, db, recien_aceptado=True)
 
 
 @router.get("/nuevos", response_class=HTMLResponse)

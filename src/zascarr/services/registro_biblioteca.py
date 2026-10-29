@@ -124,7 +124,8 @@ def _volcar(report: AdoptionReport) -> None:
 
 
 #: Clave del cerrojo consultivo de Postgres que serializa los registros de la biblioteca (inicial e incremental) entre procesos.
-_CLAVE_CERROJO = 326_000_001
+CLAVE_CERROJO_REGISTRO = 326_000_001
+_CLAVE_CERROJO = CLAVE_CERROJO_REGISTRO
 
 
 @contextlib.asynccontextmanager
