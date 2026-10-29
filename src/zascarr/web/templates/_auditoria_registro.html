@@ -14,8 +14,7 @@
 
 {%- macro aviso_aceptacion(ev, recien=false) -%}
 {% if ev and ev.aceptacion %}
-{% call ui.aviso("info", rol="", foco=recien) %}<strong>Biblioteca registrada con {{ ev.aceptacion.count }}
-  {{ "carpeta o archivo" if ev.aceptacion.count == 1 else "carpetas o archivos" }} sin leer
+{% call ui.aviso("info", rol="", foco=recien) %}<strong>Biblioteca registrada con {{ ev.aceptacion.count }} sin leer
   el {{ ev.aceptacion.accepted_at | fecha_llana }}.</strong>
   Se aceptó el registro sin leerlos; no están en el catálogo y no se ha borrado ni movido nada.{% endcall %}
 {% endif %}
@@ -44,6 +43,7 @@
 {% if reg.en_marcha %}
 <section id="registro" class="audit-block audit-adoptar" hx-get="/ui/auditoria/registro"
          hx-trigger="every 2s" hx-swap="outerHTML">
+  {{ aviso_aceptacion(adopcion, false) }}
   <h2>{{ "Registrando los archivos encontrados…" if reg.incremental else "Registrando tu biblioteca…" }}</h2>
   {% if reg.total %}
   <progress class="progress" value="{{ reg.procesados }}" max="{{ reg.total }}">
@@ -59,6 +59,7 @@
 
 {% elif inc %}
 <section id="registro" class="audit-block audit-adoptar">
+  {{ aviso_aceptacion(adopcion, false) }}
   <h2 class="titulo-frase">Archivos encontrados sin registrar</h2>
   {% if cambio %}{% call ui.aviso("amber") %}Lo que hay en la carpeta ha cambiado desde que lo revisaste, así que no se ha registrado
     nada. Esta es la lista de ahora: míralo y confirma de nuevo.{% endcall %}{% endif %}
@@ -105,6 +106,7 @@
 
 {% elif reg.fase.value == "ocupado" %}
 <section id="registro" class="audit-block audit-adoptar">
+  {{ aviso_aceptacion(adopcion, false) }}
   <h2 class="titulo-frase">El catálogo estaba ocupado</h2>
   {% call ui.aviso("amber") %}Otro registro de la biblioteca, o una importación de descargas, estaba usando el catálogo y no ha terminado a tiempo.
     El registro se ha detenido sin esperar más. Lo que ya estuviera guardado se conserva; el resto no se ha registrado. Espera a que termine
@@ -115,6 +117,7 @@
 {% elif reg.fase.value in ("terminado", "interrumpido") and reg.incremental %}
 <section id="registro" class="audit-block audit-adoptar">
   <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+  {{ aviso_aceptacion(adopcion, recien_aceptado) }}
   {#- Registro de archivos NUEVOS (#326). Cada archivo cae en UNA sola categoría; «mirados» no es «añadidos». -#}
   {% if reg.completo %}
   <h2>Archivos sin registrar revisados</h2>
