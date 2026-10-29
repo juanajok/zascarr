@@ -379,6 +379,50 @@ class TestCriterio8Fallos:
         assert comprobado.estado == "vinculados_todos" and "ya se había aplicado antes" in comprobado.visible
         assert await vinculados(ent.banco) == 2 and await operaciones(ent.banco) == 1
 
+    @pytest.mark.parametrize("donde", ["informe_agrupado", "referencia_del_resultado", "plantilla"])
+    async def test_un_fallo_al_presentar_tras_el_commit_es_resultado_incierto_y_repetirlo_no_duplica(
+            self, ent, monkeypatch, donde):
+        """B-1 (#116, criterios 3 y 4 en la interfaz): el `commit` ya se hizo y falla la PRESENTACIÓN (preparar el informe,
+        firmar la referencia o pintar la plantilla). No sale una página 500: sale el mismo «resultado incierto» de siempre,
+        repetible, sin decir «no se ha cambiado nada» y sin enseñar la excepción."""
+        import structlog
+
+        p = await listo(ent, UNO, DOS)
+        secreto = "SECRETO-/srv/biblioteca/ruta-interna"
+        explota = RuntimeError(secreto)
+
+        def falla(*a, **k):
+            raise explota
+        with monkeypatch.context() as m:
+            if donde == "informe_agrupado":
+                m.setattr(asistente_vinculacion, "_contexto_del_informe", falla)
+            elif donde == "referencia_del_resultado":
+                m.setattr(asistente_vinculacion, "crear_referencia_de_resultado", falla)
+            else:
+                real_respuesta = asistente_vinculacion.templates.TemplateResponse
+
+                def plantilla_rota(request, nombre, contexto, *a, **k):
+                    if contexto.get("fallo") is None and contexto.get("r") is not None:
+                        raise explota
+                    return real_respuesta(request, nombre, contexto, *a, **k)
+                m.setattr(asistente_vinculacion.templates, "TemplateResponse", plantilla_rota)
+            with structlog.testing.capture_logs() as registro:
+                respuesta = await enviar(formulario_de_confirmacion(p.t))
+        assert respuesta.status_code == 200, respuesta.text          # no es la página 500 genérica
+        r = Resultado(respuesta.text)
+        assert r.estado == "fallo" and "No se sabe si se llegó a vincular" in r.visible
+        assert "no lo des por hecho ni por fallido" in r.visible and "Comprobar el resultado" in r.visible
+        assert "Hecho" not in r.visible and "no se ha cambiado nada" not in r.visible.lower()
+        assert secreto not in respuesta.text and "RuntimeError" not in respuesta.text and "Traceback" not in respuesta.text
+        eventos = [e for e in registro if e.get("event") == "vinculacion.presentacion_fallida"]
+        assert len(eventos) == 1 and eventos[0].get("tipo") == "RuntimeError" and secreto not in str(registro)
+        assert await vinculados(ent.banco) == 2 and await operaciones(ent.banco) == 1       # ya estaba aplicado
+
+        # «Comprobar el resultado» = repetir el MISMO token, ya sin el fallo: el informe guardado, sin duplicar nada
+        comprobado = Resultado((await enviar(formulario_de_confirmacion_de_fallo(r.t))).text)
+        assert comprobado.estado == "vinculados_todos" and "ya se había aplicado antes" in comprobado.visible
+        assert await vinculados(ent.banco) == 2 and await operaciones(ent.banco) == 1
+
     async def test_un_fallo_definitivo_y_uno_reintentable_se_distinguen(self, ent, monkeypatch):
         p = await listo(ent, UNO)
 
