@@ -14,9 +14,10 @@
 
 {#- aviso(tipo, texto) o {% call aviso(tipo) %}…{% endcall %}. `tipo` ∈ nota | info | ok | amber | warn.
     `warn` usa role="alert" (asertivo); el resto, role="status" (cortés). -#}
-{% macro aviso(tipo, texto=none) -%}
+{% macro aviso(tipo, texto=none, rol="auto", foco=false) -%}
 {%- set t = tipo_aviso(tipo) -%}
-<div class="{{ t.clase }}" role="{{ t.rol }}">{% if t.icono %}<span class="aviso-icono" aria-hidden="true">{{ t.icono }}</span><div>{% endif %}{% if texto is not none %}{{ texto }}{% else %}{{ caller() }}{% endif %}{% if t.icono %}</div>{% endif %}</div>
+{%- set rol_final = t.rol if rol == "auto" else rol -%}
+<div class="{{ t.clase }}"{% if rol_final %} role="{{ rol_final }}"{% endif %}{% if foco %} tabindex="-1" autofocus{% endif %}>{% if t.icono %}<span class="aviso-icono" aria-hidden="true">{{ t.icono }}</span><div>{% endif %}{% if texto is not none %}{{ texto }}{% else %}{{ caller() }}{% endif %}{% if t.icono %}</div>{% endif %}</div>
 {%- endmacro %}
 
 {#- grupo(titulo, recuento): caja con cabecera; el contenido va dentro con `call`. `recuento` es

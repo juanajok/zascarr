@@ -12,9 +12,38 @@
         hx-target="#registro" hx-swap="outerHTML" hx-disabled-elt="this">{{ texto }}</button>
 {%- endmacro -%}
 
+{%- macro aviso_aceptacion(ev, recien=false) -%}
+{% if ev and ev.aceptacion %}
+{% call ui.aviso("info", rol="", foco=recien) %}<strong>Biblioteca registrada con {{ ev.aceptacion.count }} sin leer
+  el {{ ev.aceptacion.accepted_at | fecha_llana }}.</strong>
+  Se aceptó el registro sin leerlos; no están en el catálogo y no se ha borrado ni movido nada.{% endcall %}
+{% endif %}
+{%- endmacro -%}
+
+{%- macro decision_aceptar(ev) -%}
+{% if ev and ev.oferta %}
+<div class="audit-item">
+  <p><strong>También puedes dar la biblioteca por registrada sin leer lo que falta.</strong></p>
+  <p class="audit-why" id="aceptar-ilegibles-consecuencia">Quedarán fuera del catálogo hasta que se puedan
+    leer. No se borra ni se mueve nada. Si ya has arreglado el acceso, usa Continuar el registro.</p>
+  <div class="audit-acciones">
+    {{ boton("Continuar el registro") }}
+    <form hx-post="/ui/auditoria/aceptar-ilegibles" hx-target="#registro" hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <input type="hidden" name="run_id" value="{{ ev.run_id }}">
+      <input type="hidden" name="count" value="{{ ev.unreadable }}">
+      <button type="submit" aria-describedby="aceptar-ilegibles-consecuencia">Registrar de todos modos ({{ ev.unreadable }} sin leer)</button>
+      <span class="htmx-indicator" role="status">Guardando…</span>
+    </form>
+  </div>
+</div>
+{% endif %}
+{%- endmacro -%}
+
 {% if reg.en_marcha %}
 <section id="registro" class="audit-block audit-adoptar" hx-get="/ui/auditoria/registro"
          hx-trigger="every 2s" hx-swap="outerHTML">
+  {{ aviso_aceptacion(adopcion, false) }}
   <h2>{{ "Registrando los archivos encontrados…" if reg.incremental else "Registrando tu biblioteca…" }}</h2>
   {% if reg.total %}
   <progress class="progress" value="{{ reg.procesados }}" max="{{ reg.total }}">
@@ -30,6 +59,7 @@
 
 {% elif inc %}
 <section id="registro" class="audit-block audit-adoptar">
+  {{ aviso_aceptacion(adopcion, false) }}
   <h2 class="titulo-frase">Archivos encontrados sin registrar</h2>
   {% if cambio %}{% call ui.aviso("amber") %}Lo que hay en la carpeta ha cambiado desde que lo revisaste, así que no se ha registrado
     nada. Esta es la lista de ahora: míralo y confirma de nuevo.{% endcall %}{% endif %}
@@ -76,6 +106,7 @@
 
 {% elif reg.fase.value == "ocupado" %}
 <section id="registro" class="audit-block audit-adoptar">
+  {{ aviso_aceptacion(adopcion, false) }}
   <h2 class="titulo-frase">El catálogo estaba ocupado</h2>
   {% call ui.aviso("amber") %}Otro registro de la biblioteca, o una importación de descargas, estaba usando el catálogo y no ha terminado a tiempo.
     El registro se ha detenido sin esperar más. Lo que ya estuviera guardado se conserva; el resto no se ha registrado. Espera a que termine
@@ -86,6 +117,7 @@
 {% elif reg.fase.value in ("terminado", "interrumpido") and reg.incremental %}
 <section id="registro" class="audit-block audit-adoptar">
   <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+  {{ aviso_aceptacion(adopcion, recien_aceptado) }}
   {#- Registro de archivos NUEVOS (#326). Cada archivo cae en UNA sola categoría; «mirados» no es «añadidos». -#}
   {% if reg.completo %}
   <h2>Archivos sin registrar revisados</h2>
@@ -118,7 +150,7 @@
       que ya conocía: no se ha tocado ninguna ficha ni se ha creado otra (abajo, cuáles y por qué)</li>{% endif %}
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
     {% if reg.ilegibles %}<li><strong>{{ reg.ilegibles }}</strong> {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} que no se
-      {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver. No se da por registrada la biblioteca</li>{% endif %}
+      {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver</li>{% endif %}
     {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
     {% if reg.no_guardados %}<li><strong>{{ reg.no_guardados }}</strong> del último grupo no llegaron a guardarse
       (se comprobó que no quedaron): no se han añadido</li>{% endif %}
@@ -158,17 +190,27 @@
       como elemento inerte DENTRO del fragmento y NO como cabecera `HX-Trigger`: htmx 4 la despacha sobre el
       elemento que hizo la petición, que ya no está en el DOM tras el reemplazo (outerHTML), y el evento no llega. -#}
   <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+  {% if conflicto %}
+  {% call ui.aviso("amber", rol="", foco=true) %}<strong>El informe ha cambiado.</strong>
+    No se ha aceptado nada. Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
+  {% endif %}
+  {% if adopcion and adopcion.aviso %}
+  {% call ui.aviso("amber") %}{{ adopcion.aviso }}{% endcall %}
+  {% endif %}
   {% if reg.completo %}
   <h2>Biblioteca registrada</h2>
   <p class="audit-why">Ni un archivo se ha movido ni renombrado.</p>
+  {% elif adopcion and adopcion.aceptacion %}
+  <h2>Biblioteca registrada con una cobertura incompleta</h2>
+  {{ aviso_aceptacion(adopcion, recien_aceptado) }}
   {% else %}
   <h2 class="titulo-frase">El registro ha quedado incompleto</h2>
   {% call ui.aviso("amber") %}
     {% if reg.fase.value == "interrumpido" %}
     El registro se detuvo antes de terminar ({{ reg.causa }}). Se conserva lo que ya estaba guardado.
     {% elif reg.ilegibles and not reg.errores %}
-    No se ha podido leer {{ reg.ilegibles }} {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} de tu biblioteca (permisos o un fallo
-    del disco), así que puede haber tebeos que no se han visto. Lo que sí se vio está registrado. Arregla el acceso y continúa.
+    No se ha podido leer {{ reg.ilegibles }} {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} de tu biblioteca (suele ser un problema de permisos o un fallo
+    del disco), así que puede haber tebeos que no se han visto. Lo que sí se vio está registrado.
     {% else %}
     No se pudo registrar {{ reg.errores | length }} {{ "tebeo" if reg.errores | length == 1 else "tebeos" }}.
     El resto sí está registrado.
@@ -188,7 +230,7 @@
     <li><strong>{{ reg.repetidos }}</strong> repetidos (mismo contenido que otro ya registrado): no se añaden dos veces</li>
     {% if reg.otra_ejecucion %}<li><strong>{{ reg.otra_ejecucion }}</strong> los registró otra ejecución a la vez: ya constan, no se duplican</li>{% endif %}
     {% if reg.ilegibles %}<li><strong>{{ reg.ilegibles }}</strong> {{ "carpeta o archivo" if reg.ilegibles == 1 else "carpetas o archivos" }} que no se
-      {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver. No se da por registrada la biblioteca</li>{% endif %}
+      {{ "ha" if reg.ilegibles == 1 else "han" }} podido leer: puede haber tebeos sin ver</li>{% endif %}
     {% if reg.errores %}<li><strong>{{ reg.errores | length }}</strong> con error: no se han añadido</li>{% endif %}
     {% if reg.no_guardados %}<li><strong>{{ reg.no_guardados }}</strong> del último grupo no llegaron a guardarse
       (se comprobó que no quedaron): no se han añadido</li>{% endif %}
@@ -207,7 +249,15 @@
     </ul>
   </details>
   {% endif %}
-  {% if not reg.completo %}{{ boton("Continuar el registro") }}{% endif %}
+  {% if not reg.completo and not (adopcion and adopcion.aceptacion) %}
+    {% if reg.fase.value == "terminado" and adopcion and adopcion.oferta %}
+    {{ decision_aceptar(adopcion) }}
+    {% else %}
+    {{ boton("Continuar el registro") }}
+    {% endif %}
+  {% elif adopcion and adopcion.aceptacion %}
+  {{ buscar("Buscar archivos sin registrar") }}
+  {% endif %}
 </section>
 
 {% elif estado.value == "sin_tebeos" %}
@@ -219,6 +269,14 @@
 {% elif estado.value == "hecha" %}
 <section id="registro" class="audit-block">
   <h2 class="titulo-frase">Tu biblioteca ya está registrada</h2>
+  {% if conflicto %}
+  {% call ui.aviso("amber", rol="", foco=true) %}<strong>El informe ha cambiado.</strong>
+    No se ha aceptado nada. Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
+  {% endif %}
+  {% if adopcion and adopcion.aviso %}
+  {% call ui.aviso("amber") %}{{ adopcion.aviso }}{% endcall %}
+  {% endif %}
+  {{ aviso_aceptacion(adopcion, recien_aceptado) }}
   <p class="audit-why">Si has añadido tebeos a tus carpetas después, ZascArr no los ve solo: pídele que busque los que aún no tiene registrados. Buscar solo mira
     nombres y rutas; no cambia nada.</p>
   {{ buscar("Buscar archivos sin registrar") }}
@@ -226,6 +284,13 @@
 
 {% else %}
 <section id="registro" class="audit-block audit-adoptar">
+  {% if conflicto %}
+  {% call ui.aviso("amber", rol="", foco=true) %}<strong>El informe ha cambiado.</strong>
+    No se ha aceptado nada. Este es el estado de ahora: revísalo y decide de nuevo.{% endcall %}
+  {% endif %}
+  {% if adopcion and adopcion.aviso %}
+  {% call ui.aviso("amber") %}{{ adopcion.aviso }}{% endcall %}
+  {% endif %}
   <h2>Registrar mi biblioteca</h2>
   <p class="audit-why">Registrar mete tus tebeos en el catálogo de ZascArr <strong>sin mover ni renombrar
     ni un archivo</strong>: se quedan exactamente donde los tienes.
@@ -241,7 +306,9 @@
       registrar se reenlaza la fila; si no, sigue como estaba (y, si estaba sin clasificar, la verás en
       <a href="/ui/pendientes">Por revisar</a>)</li>{% endif %}
   </ul>
-  {% if inv.hay_que_registrar %}
+  {% if adopcion and adopcion.oferta %}
+  {{ decision_aceptar(adopcion) }}
+  {% elif inv.hay_que_registrar %}
   <p class="audit-why">Los que no sepamos clasificar quedarán registrados y te esperarán en
     <a href="/ui/pendientes">Por revisar</a>. En una colección grande puede tardar varios minutos.</p>
   {{ boton("Registrar los " ~ inv.nuevos ~ " tebeos nuevos") }}

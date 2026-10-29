@@ -615,6 +615,9 @@ class LibraryAdopter:
                 "ambiguous": report.ambiguous,
                 "omitted": report.omitted,
                 "unreadable": report.unreadable,
+                # #332 residual 4: la aceptación no puede certificar un cierre con lotes sin acreditar.
+                "reverted": report.reverted,
+                "unknown": report.unknown,
             },
         )
         self._db.add(run)
