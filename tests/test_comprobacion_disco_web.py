@@ -2,9 +2,12 @@
 """#232 — ruta, fragmento y copy de «Comprobar el disco» (#231/#232)."""
 from __future__ import annotations
 
+import asyncio
 import os
 import re
+import time
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -253,3 +256,33 @@ class TestEstadosYFoco:
         assert "/login" in r.headers["location"]
         assert servicio.estado_actual().fase is FaseCicloDisco.INACTIVO
 
+
+    async def test_post_real_devuelve_antes_de_que_el_ciclo_lento_termine(self, fabrica, monkeypatch):
+        from datetime import timedelta
+
+        from zascarr.services.importer import ImportReport
+
+        iniciado = asyncio.Event()
+
+        async def lento(_fabrica, disparador, _ejecutar):
+            iniciado.set()
+            await asyncio.sleep(1.2)
+            ahora = datetime.now(UTC)
+            return ImportReport(started_at=ahora - timedelta(seconds=1),
+                                finished_at=ahora, disparador=disparador,
+                                run_id=uuid4())
+
+        monkeypatch.setattr(servicio, "_correr", lento)
+        t0 = time.perf_counter()
+        async with _cliente() as c:
+            respuesta = await asyncio.wait_for(
+                c.post("/ui/no-disponibles/comprobar", headers={"HX-Request": "true"}),
+                timeout=0.8)
+        transcurrido = time.perf_counter() - t0
+        await asyncio.wait_for(iniciado.wait(), timeout=0.5)
+        assert respuesta.status_code == 200
+        assert "Comprobación en curso" in respuesta.text
+        assert servicio.estado_actual().fase is FaseCicloDisco.CORRIENDO
+        assert transcurrido < 0.8
+        await asyncio.wait_for(servicio._tarea, 3)
+        assert servicio.estado_actual().fase is FaseCicloDisco.TERMINADO
