@@ -163,6 +163,31 @@ def _reescribir_dump(ctx: dict, sql: str) -> None:
     )
 
 
+def _sql_sin_copy(tabla: str) -> str:
+    """El dump de prueba sin el bloque `COPY public.<tabla> … \\.` (sigue su `CREATE TABLE`)."""
+    salida, dentro = [], False
+    for linea in _sql_fixture().splitlines():
+        if linea.startswith(f"COPY public.{tabla} "):
+            dentro = True
+            continue
+        if dentro:
+            dentro = linea != "\\."
+            continue
+        salida.append(linea)
+    return "\n".join(salida) + "\n"
+
+
+def _reescribir_bytes(ctx: dict, datos: bytes) -> None:
+    """Como `_reescribir_dump`, pero con los bytes tal cual (manifiesto y .sha256 los acreditan)."""
+    dump = ctx["dump"]
+    dump.write_bytes(datos)
+    sha = hashlib.sha256(datos).hexdigest()
+    manifiesto = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+    manifiesto["sha256"], manifiesto["bytes"] = sha, len(datos)
+    ctx["manifest"].write_text(json.dumps(manifiesto), encoding="utf-8")
+    dump.with_name(f"{dump.name}.sha256").write_text(f"{sha}  {dump.name}\n", encoding="utf-8")
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
 class TestRestoreScript:
 
@@ -212,6 +237,41 @@ class TestRestoreScript:
         estado = _estado(ctx)
         assert estado["status"] == "failed"
         assert estado["error"] == "gzip_invalid"
+        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+
+    @pytest.mark.parametrize("tabla", ["alembic_version", "series", "files", "wishlist"])
+    def test_dump_sin_una_tabla_requerida_no_se_restaura(self, tmp_path, tabla):
+        """`verificar_dump` exige las cuatro tablas que `rollback.sh` necesita; se prueba cada una
+        por separado: con cualquiera ausente el estado es `tables_missing` y no se llega a crear
+        la base desechable."""
+        ctx = _preparar(tmp_path)
+        _reescribir_dump(ctx, _sql_sin_copy(tabla))
+        r = _ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"])
+        assert r.returncode != 0
+        estado = _estado(ctx)
+        assert estado["status"] == "failed" and estado["error"] == "tables_missing"
+        assert f"falta la tabla {tabla}" in r.stdout + r.stderr
+        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+
+    def test_gzip_realmente_truncado_no_crea_base(self, tmp_path):
+        """El caso real (disco lleno, copia cortada): un .gz que empezó bien y al que le falta la
+        cola. La prueba anterior usa bytes que ni siquiera son gzip. Aquí el manifiesto y el
+        .sha256 acreditan el fichero ya cortado, así que solo `gzip -t` puede detenerlo."""
+        ctx = _preparar(tmp_path)
+        lineas = _sql_fixture().splitlines() + ["COPY public.tabla_00 (id) FROM stdin;"]
+        lineas += [str(i) for i in range(50_000)] + ["\\."]
+        completo = gzip.compress(("\n".join(lineas) + "\n").encode("utf-8"))
+        cortado = completo[: len(completo) // 2]
+        assert cortado[:2] == b"\x1f\x8b" and len(cortado) > 1000  # cabecera válida, cuerpo cortado
+        gzip_t = subprocess.run(["gzip", "-t"], input=cortado, capture_output=True)
+        assert gzip_t.returncode != 0                                 # el propio gzip lo ve cortado
+        _reescribir_bytes(ctx, cortado)
+
+        r = _ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"])
+        assert r.returncode != 0
+        estado = _estado(ctx)
+        assert estado["status"] == "failed" and estado["error"] == "gzip_invalid"
+        assert "gzip -t falla" in r.stdout + r.stderr
         assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
 
     def test_recuento_distinto_falla(self, tmp_path):
