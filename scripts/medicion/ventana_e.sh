@@ -181,7 +181,7 @@ say "→ Sintéticos: 100 viejos + 1.200 nuevos + 20 grandes..."
 generar Viejos 100 0 12 0
 run_medicion "${SINT_DB}" seed synthetic "${SYNTH}"
 generar Nuevos 1200 100 12 0
-generar Grandes 20 1200 1 100
+generar Grandes 20 1300 1 100
 run_medicion "${SINT_DB}" synthetic synthetic "${SYNTH}" \
     --expected-new 1220 --expected-old 100
 if ! jq -e '.checks.E1.pass and .checks.E2.pass' "${RESULT}/synthetic.json" >/dev/null; then
