@@ -32,6 +32,7 @@ import zipfile
 import zlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "src"))
@@ -145,6 +146,38 @@ def _comprobar_salida(salida: Path, *, reset: bool) -> None:
         shutil.rmtree(salida)
 
 
+def _url_psql_aislada(url: str) -> str:
+    """Convierte la URL a la que entiende psql y exige el puerto aislado.
+
+    No es la compuerta de aislamiento (esa es `verificar_aislamiento_123a.sh`):
+    es una guardia barata contra el error humano de apuntar `--aplicar` a
+    producción. Sin host y puerto explícitos no se escribe nada.
+    """
+    try:
+        parsed = urlparse(url)
+        puerto = parsed.port
+    except ValueError as exc:
+        raise SystemExit(f"ERROR: URL de base de datos inválida: {exc}") from exc
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in {"postgresql", "postgresql+asyncpg"}:
+        raise SystemExit(
+            "ERROR: --database-url debe empezar por postgresql:// o postgresql+asyncpg://."
+        )
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        raise SystemExit(
+            "ERROR: --aplicar solo puede escribir en la BD aislada local "
+            "(127.0.0.1, localhost o ::1). No se escribe nada."
+        )
+    if puerto != 15432:
+        raise SystemExit(
+            "ERROR: --aplicar exige el puerto aislado 15432; la URL no lo declara "
+            "o usa otro puerto. No se escribe nada."
+        )
+    if parsed.scheme == "postgresql+asyncpg":
+        return url.replace("postgresql+asyncpg://", "postgresql://", 1)
+    return url
+
+
 def _psql(url: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["psql", url, "-v", "ON_ERROR_STOP=1", *args],
@@ -225,6 +258,9 @@ def main() -> int:
         parser.error("ZASCARR_ENTORNO debe ser exactamente '123a'.")
     if args.aplicar and not args.database_url:
         parser.error("--aplicar requiere --database-url o DATABASE_URL.")
+    url_psql = ""
+    if args.aplicar:
+        url_psql = _url_psql_aislada(args.database_url)
 
     _comprobar_salida(args.salida, reset=args.reset)
     args.salida.mkdir(parents=True, exist_ok=True)
@@ -400,7 +436,7 @@ def main() -> int:
     for n, sid, numero in issue_defs:
         lineas.append(
             "INSERT INTO issues (id, series_id, issue_number, volume, title, format) VALUES ("
-            f"{_q(issue_ids[n])}, {_q(sid)}, {_q(numero)}, 1, "
+            f"{_q(issue_ids[n])}, {_q(series_ids[sid])}, {_q(numero)}, 1, "
             f"{_q(f'Número {numero}')}, 'single_issue');"
         )
     lineas += files_sql
@@ -434,7 +470,7 @@ def main() -> int:
 
     if args.aplicar:
         _aplicar(
-            args.database_url,
+            url_psql,
             seed,
             resumen,
             reset=args.reset,

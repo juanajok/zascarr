@@ -125,25 +125,92 @@ class TestFixture123a:
         assert r.returncode != 0
         assert "database" in r.stderr.lower() or "DATABASE_URL" in r.stderr
 
-    def test_aplicar_rechaza_bd_no_vacia(self, tmp_path):
-        salida = tmp_path / "fixture"
+    def _psql_falso(self, tmp_path: Path) -> tuple[Path, Path]:
         bin_ = tmp_path / "bin"
         bin_.mkdir()
+        log = tmp_path / "psql.log"
+        log.write_text("", encoding="utf-8")
         psql = bin_ / "psql"
         psql.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
+            'echo "$*" >> "$PSQL_LOG"\n'
             'if [[ "$*" == *information_schema.tables* ]]; then echo 5; exit 0; fi\n'
-            "if [[ \"$*\" == *'count(*) from series'* ]]; then echo 1; exit 0; fi\n"
+            'if [[ "$*" == *"||"* ]]; then echo "4|6|40|3|3"; exit 0; fi\n'
+            'if [[ "$*" == *"from series)+(select count(*) from issues"* ]]; then\n'
+            '  echo "$FAKE_PSQL_CUENTA"; exit 0;\n'
+            "fi\n"
             "exit 0\n",
             encoding="utf-8",
         )
         psql.chmod(0o755)
-        env = _entorno(PATH=f"{bin_}:{os.environ['PATH']}")
+        return bin_, log
+
+    def test_aplicar_rechaza_bd_no_vacia(self, tmp_path):
+        salida = tmp_path / "fixture"
+        bin_, log = self._psql_falso(tmp_path)
+        env = _entorno(
+            PATH=f"{bin_}:{os.environ['PATH']}",
+            FAKE_PSQL_CUENTA="1",
+            PSQL_LOG=str(log),
+        )
         r = _ejecutar(
             salida,
             env=env,
-            extra=["--aplicar", "--database-url", "postgresql://test/test"],
+            extra=[
+                "--aplicar",
+                "--database-url",
+                "postgresql://test@127.0.0.1:15432/test",
+            ],
         )
         assert r.returncode != 0
         assert "vacía" in r.stderr.lower() or "reset" in r.stderr.lower()
+
+    def test_aplicar_permite_la_url_aislada(self, tmp_path):
+        salida = tmp_path / "fixture"
+        bin_, log = self._psql_falso(tmp_path)
+        env = _entorno(
+            PATH=f"{bin_}:{os.environ['PATH']}",
+            FAKE_PSQL_CUENTA="0",
+            PSQL_LOG=str(log),
+        )
+        r = _ejecutar(
+            salida,
+            env=env,
+            extra=[
+                "--aplicar",
+                "--database-url",
+                "postgresql://test@127.0.0.1:15432/test",
+            ],
+        )
+        assert r.returncode == 0, r.stdout + r.stderr
+        llamadas = log.read_text(encoding="utf-8")
+        assert "information_schema.tables" in llamadas
+        assert "-f" in llamadas
+        assert (salida / "seed.sql").exists()
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "postgresql://u:p@127.0.0.1:5432/zascarr",
+            "postgresql://u:p@db.example:15432/zascarr",
+            "postgresql://u:p@127.0.0.1/zascarr",
+        ],
+    )
+    def test_aplicar_rechaza_url_fuera_del_aislado_antes_de_psql(self, tmp_path, url):
+        salida = tmp_path / "fixture"
+        bin_ = tmp_path / "bin"
+        bin_.mkdir()
+        marca = tmp_path / "psql-llamado"
+        psql = bin_ / "psql"
+        psql.write_text(
+            f'#!/usr/bin/env bash\nset -euo pipefail\n: > "{marca}"\nexit 0\n',
+            encoding="utf-8",
+        )
+        psql.chmod(0o755)
+        env = _entorno(PATH=f"{bin_}:{os.environ['PATH']}")
+        r = _ejecutar(salida, env=env, extra=["--aplicar", "--database-url", url])
+        assert r.returncode != 0
+        assert "15432" in r.stderr or "aislada" in r.stderr.lower()
+        assert not marca.exists()
+        assert not salida.exists()
