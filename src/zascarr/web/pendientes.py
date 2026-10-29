@@ -276,7 +276,8 @@ async def _serie_del_filtro(db: AsyncSession, valor: str) -> tuple[dict | None, 
 
 
 async def _estado_nuevos(db: AsyncSession) -> str:
-    """Disponibilidad de #326 sin disco: solo el marcador, leído con SELECT puro."""
+    """Disponibilidad de #326 sin disco: solo el marcador, leído con SELECT puro.
+    `no_comprobado` = la lectura falló: no se sabe si la biblioteca está registrada."""
     if registro_biblioteca.estado_actual().en_marcha:
         return "en_marcha"
     try:
@@ -284,6 +285,7 @@ async def _estado_nuevos(db: AsyncSession) -> str:
             return "disponible"
     except Exception as exc:  # noqa: BLE001 — una oferta auxiliar no tumba la lista
         logger.warning("pendientes.marcador_fallo", error=type(exc).__name__)
+        return "no_comprobado"      # no se afirma que no esté registrada
     return "no_disponible"
 
 
