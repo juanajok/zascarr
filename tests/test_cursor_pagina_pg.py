@@ -21,6 +21,7 @@ import zlib
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import text
 
 from tests import test_vinculacion_previa_pg as _base
 from zascarr.models import File, FileFormat
@@ -408,3 +409,66 @@ class TestFormatoDelCursor:
     def test_el_zlib_de_la_huella_es_el_de_la_biblioteca_estandar(self):
         """Sin dependencias nuevas (CLAUDE.md §2): solo `zlib.crc32`."""
         assert zlib.crc32(b"") == 0
+
+
+# ── Criterio 6 de #143: paginar con cursor no tiene efectos colaterales ─────────────────────────────
+
+async def _operaciones(b) -> list[tuple]:
+    """`vinculacion_operaciones` entera (la `instantanea` de la vista previa no la incluye)."""
+    async with b.fabrica() as s:
+        return [tuple(r) for r in (await s.execute(text("SELECT * FROM vinculacion_operaciones ORDER BY 1"))).all()]
+
+
+class TestSoloLecturaConCursor:
+    """`TestSoloLectura` (test_vinculacion_previa_pg) pide la vista previa SIN cursor. Aquí se recorre el grupo con los
+    `siguiente`, y en la 2.ª página con `marcados` y `numeros` (la ruta con cursor más completa: emite token)."""
+
+    _LARGO = "z" + "😀" * 498          # 1.993 bytes: supera `_MAX_NOMBRE_EN_CURSOR`, así que el cursor lleva solo el id
+
+    @pytest.mark.parametrize("caso", ["nombres_normales", "cursor_por_id"])
+    async def test_paginar_con_cursor_no_escribe_ni_toca_updated_at_ni_ficheros(self, entorno, caso):
+        serie = await _base.serie_de_prueba(entorno)
+        if caso == "nombres_normales":
+            nombres = [f"Flash {i:03d} (1987).cbz" for i in range(1, 211)]                    # 100 + 100 + 10
+            ids = await _base.archivos(entorno, *nombres)
+            elegidos = nombres[100:102]
+        else:                                    # el último de la página 1 es el nombre largo: cursor por id (versión 2)
+            relleno = _relleno(LIMITE_ARCHIVOS - 1)
+            siguen = _siguen(self._LARGO)
+            ids = await _base.archivos(entorno, *relleno)
+            ids |= await _base.archivos(entorno, self._LARGO, *siguen, en_disco=False)       # no caben como nombre de fichero
+            elegidos = siguen
+        async with entorno.banco.fabrica() as s:                       # una operación vieja y caducada: una purga la borraría
+            await s.execute(text(
+                "INSERT INTO vinculacion_operaciones (operacion_id, series_id, resultado, token_hasta, creada) "
+                "VALUES (:o, :s, CAST('{}' AS jsonb), now() - interval '2 days', now() - interval '3 days')"),
+                {"o": str(uuid4()), "s": str(serie)})
+            await s.commit()
+
+        p1 = (await _pedir(serie)).json()
+        cursor = p1["pagina"]["siguiente"]
+        assert cursor and p1["pagina"]["hay_mas"]
+        if caso == "cursor_por_id":
+            assert self._LARGO.encode()[:32] not in base64.urlsafe_b64decode(cursor.encode()), "la prueba no ejercita el cursor por id"
+        antes_bd, antes_ops = await _base.instantanea(entorno.banco), await _operaciones(entorno.banco)
+        antes_disco, n = _base.huella_disco(entorno.lib), len(entorno.banco.sentencias)
+
+        paginas, token = 0, None
+        while cursor:
+            extra = {}
+            if paginas == 0:                                           # 2.ª página: marca dos y escribe un número
+                extra = {"marcados": [ids[x] for x in elegidos], "numeros": {ids[elegidos[0]]: "7"}}
+            r = await _base.previsualizar(serie, cursor=cursor, **extra)
+            assert r.status_code == 200, r.text[:300]
+            if paginas == 0:
+                token = r.json()["token"]
+            cursor = r.json()["pagina"]["siguiente"]
+            paginas += 1
+
+        assert paginas >= 1
+        if caso == "nombres_normales":      # con nombres de fichero imposibles (cursor por id) nada es vinculable: no hay token
+            assert token, "la prueba no llegó a emitir un token con cursor: no mide la ruta completa"
+        assert _base.escrituras(entorno.banco, n) == []                  # ni INSERT/UPDATE/DELETE ni candados consultivos
+        assert await _base.instantanea(entorno.banco) == antes_bd        # `SELECT *`: también `updated_at`
+        assert await _operaciones(entorno.banco) == antes_ops            # ni se crea ni se purga ninguna operación
+        assert _base.huella_disco(entorno.lib) == antes_disco            # bytes, tamaño y mtime idénticos
