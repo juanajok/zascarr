@@ -142,6 +142,19 @@ class TestFichaSerie:
         assert "#1" in r.text  # presente
         assert "#3" in r.text
 
+    def test_enlace_anadir_numeros_del_disco(self):
+        series = make_series(total_issues=3)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert f'href="/ui/pendientes/carpetas?serie={series.id}"' in r.text
+        assert "Añadir números del disco" in r.text
+        assert "Vincular no mueve ni renombra el archivo." in r.text
+
     def test_regresion_annual_1_5_no_oculta_el_hueco_del_1(self):
         series = make_series(total_issues=2)
         session = FakeSession([
@@ -453,6 +466,9 @@ class TestPresupuestoTextoU21:
         assert len(re.findall(r"\w+", self._texto(entrada.group(1)))) <= 20
 
         antes = html.split('id="wishlist_policy"', 1)[0]
+        # Presupuesto explícito de #304: .series-acciones tiene su propio límite
+        # (test_presupuesto_de_la_accion_nueva); este cómputo mide la entrada de #208.
+        antes = re.sub(r'<p class="series-acciones">.*?</p>', '', antes, flags=re.S)
         # El contenido de un <details> cerrado no cuenta, pero su <summary>
         # visible sí (contrato de medición de #208).
         antes = re.sub(
@@ -463,6 +479,14 @@ class TestPresupuestoTextoU21:
         )
         palabras = re.findall(r"\w+", self._texto(antes))
         assert len(palabras) <= 50, (len(palabras), " ".join(palabras))
+
+    def test_presupuesto_de_la_accion_nueva(self):
+        html = self._render()
+        accion = re.search(r'<p class="series-acciones">(.*?)</p>', html, re.S)
+        assert accion is not None
+        palabras = re.findall(r"\w+", self._texto(accion.group(1)))
+        assert len(palabras) <= 24, (len(palabras), " ".join(palabras))
+        assert "Añadir números del disco" in self._texto(accion.group(1))
 
     def test_la_accion_va_antes_que_el_listado(self):
         html = self._render()

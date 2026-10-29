@@ -12,6 +12,10 @@
     <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ series_id }}">Revisar de nuevo</a>
     {% endif %}
     <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+    {% if series_id %}
+    <a class="btn ghost sm" href="/ui/series/{{ series_id }}">Volver a la ficha de la serie</a>
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas?serie={{ series_id }}">Elegir otra carpeta para esta serie</a>
+    {% endif %}
   </p>
 </section>
 {% endblock %}

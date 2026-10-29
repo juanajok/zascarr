@@ -878,6 +878,7 @@ button[type="submit"].btn-sugerencia {
 }
 .series-meta { color: var(--ink-soft); font-size: .9rem; margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
+.series-acciones { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0 0; }
 .series-fuentes, .politica-detalles { margin-top: 8px; }
 .series-fuentes summary, .politica-detalles summary {
   cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
@@ -1438,7 +1439,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .nombre-archivo { overflow-wrap: anywhere; }
 /* «Carpetas 1–2 de N»: es el recuento de la página, no la navegación entre páginas. */
 .carpetas-pagina { margin: 12px 0; }
-.carpetas-paginas { display: flex; gap: 12px; margin: 18px 0; }
+.carpetas-paginas { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0; }
 .carpeta-resumen { margin: 0 0 10px; }
 .carpeta-explicacion, .carpeta-detalle { margin: 12px 0; }
 .carpeta-accion small { display: block; margin-top: 4px; font-size: .875rem; }
