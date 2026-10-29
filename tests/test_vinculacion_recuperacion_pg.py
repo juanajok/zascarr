@@ -365,6 +365,16 @@ async def envejecer(ent, operacion: str, *, minutos: int, token_vigente: bool) -
         await s.commit()
 
 
+async def sembrar_informes_purgables(ent, cuantos: int) -> None:
+    """`cuantos` informes que una purga SÍ borraría: más viejos que la retención y con el token ya caducado."""
+    async with ent.banco.fabrica() as s:
+        await s.execute(text(
+            "INSERT INTO vinculacion_operaciones (operacion_id, series_id, resultado, token_hasta, creada) "
+            "SELECT gen_random_uuid(), gen_random_uuid(), CAST('{}' AS jsonb), now() - interval '2 hours', "
+            "now() - make_interval(hours => :h) FROM generate_series(1, :n)"), {"h": RETENCION_HORAS + 6, "n": cuantos})
+        await s.commit()
+
+
 class TestCriterio5RetencionYPurga:
     """Las condiciones son las del contrato implementado (#103): informe más antiguo que `RETENCION_HORAS` **y** token
     ya caducado. La tarjeta las deja «pendientes de decisión»: los casos se calculan desde `RETENCION_HORAS` y no
@@ -406,6 +416,46 @@ class TestCriterio5RetencionYPurga:
             assert r.status_code == 200 and r.json()["repetida"] is True
             assert documento_canonico(r.json()["resultado"]) == documento_canonico(informe)
         assert await instantanea(ent.banco) == despues_de_purgar                # reenviarlo nunca cambia nada
+
+    @pytest.mark.parametrize("token_vigente", [True, False], ids=["token_vigente", "token_caducado_con_informe"])
+    async def test_reenviar_un_token_ya_procesado_no_purga_y_una_confirmacion_nueva_purga_hasta_cien(self, ent, token_vigente):
+        """C5: la purga solo corre dentro de una confirmación NUEVA. Recuperar el resultado de un token ya procesado
+        (vigente o caducado, pero con su informe guardado) devuelve el informe y no borra nada, aunque haya informes
+        purgables; una confirmación nueva, con los mismos purgables, borra como mucho `LOTE_DE_PURGA`."""
+        from zascarr.services.vinculacion import LOTE_DE_PURGA, VinculacionDeArchivos
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, UNO, DOS)
+        t0 = time.time() - (0 if token_vigente else TTL_SEGUNDOS + 3600)        # vigente al confirmar; caducado al reenviar
+        token = await firmar(ent, serie, [(ids[UNO], "1")], ahora=t0)
+        async with ent.banco.fabrica() as s:
+            await VinculacionDeArchivos(s, secret=SECRETO, ahora=t0 + 60).confirmar(token)
+        operacion = operacion_de(token)
+        await sembrar_informes_purgables(ent, LOTE_DE_PURGA + 5)
+        antes = await informes(ent.banco)
+
+        r = await confirmar(token)                                              # recuperación: el informe ya existe
+        assert r.status_code == 200 and r.json()["repetida"] is True
+        assert await informes(ent.banco) == antes                               # ninguno de los purgables se borró
+
+        otro = await firmar(ent, serie, [(ids[DOS], "2")])                      # una confirmación nueva
+        assert (await confirmar(otro)).status_code == 200
+        quedan = {i[0] for i in await informes(ent.banco)}
+        assert operacion in quedan and operacion_de(otro) in quedan
+        assert len(quedan) == len(antes) - LOTE_DE_PURGA + 1                    # borró el lote entero y no más; añadió el suyo
+
+    @pytest.mark.parametrize("rechazo", ["caducado_sin_informe", "token_invalido"])
+    async def test_un_rechazo_sin_informe_tampoco_purga(self, ent, rechazo):
+        """C5: ni el token caducado sin informe (410) ni el que no se puede interpretar (422) llegan a una confirmación nueva."""
+        serie = await serie_de_prueba(ent)
+        ids = await archivos(ent, UNO)
+        token = (await firmar(ent, serie, [(ids[UNO], "1")], ahora=time.time() - TTL_SEGUNDOS - 3600)
+                 if rechazo == "caducado_sin_informe" else "esto-no-es-un-token")
+        await sembrar_informes_purgables(ent, 3)
+        antes = await informes(ent.banco)
+
+        r = await confirmar(token)
+        assert r.status_code == {"caducado_sin_informe": 410, "token_invalido": 422}[rechazo], r.text
+        assert await informes(ent.banco) == antes
 
 
 async def concuerda_con_el_informe_de(ent, informe: dict, archivo_id) -> None:
