@@ -1,14 +1,48 @@
 {% extends "base.html" %}
 {% block title %}Pendientes por carpeta — ZascArr{% endblock %}
 {% block content %}
+{% macro url_carpetas(offset=none) -%}/ui/pendientes/carpetas?limite={{ limite }}{% if serie_actual %}&amp;serie={{ serie_actual.id }}{% endif %}{% if offset is not none %}&amp;desplazamiento={{ offset }}{% endif %}{%- endmacro %}
+{% macro bloque_vacio_serie(estado) -%}
+<div class="empty-state">
+  <h3>No hay carpetas con contexto pendientes.</h3>
+  <p>Los archivos sueltos y las carpetas sin contexto se revisan en
+    <a href="/ui/pendientes">«Por revisar»</a>.</p>
+  {% if estado == "disponible" %}
+  <p>Si esperabas ver archivos que aún no están registrados, puedes buscar archivos nuevos en el disco.
+    Eso solo los registra: después aparecerán en «Por revisar» y podrás vincularlos.</p>
+  <p><a class="btn" href="/ui/auditoria">Buscar archivos nuevos en el disco</a>
+     <a class="btn ghost" href="/ui/pendientes">Ir a Por revisar</a></p>
+  {% elif estado == "en_marcha" %}
+  <p role="status">Hay un registro en marcha; espera a que termine.</p>
+  <p><a class="btn ghost" href="/ui/pendientes">Ir a Por revisar</a></p>
+  {% elif estado == "no_disponible" %}
+  <p>La biblioteca todavía no está registrada, así que ZascArr no puede buscar archivos nuevos.
+    Regístrala primero en Auditoría.</p>
+  <p><a class="btn" href="/ui/auditoria">Ir a Auditoría</a>
+     <a class="btn ghost" href="/ui/pendientes">Ir a Por revisar</a></p>
+  {% endif %}
+</div>
+{%- endmacro %}
 <h1>Pendientes por carpeta</h1>
 
 {% if error %}
 <p class="subtitle">No se han podido leer los pendientes.</p>
 <p class="caption" role="alert">No se muestran recuentos parciales. Vuelve a intentarlo en unos segundos.</p>
 <p><a class="back-link" href="/ui/pendientes">← Volver a «Por revisar»</a></p>
-<p><a class="btn primary" href="/ui/pendientes/carpetas">Reintentar</a></p>
+<p><a class="btn primary" href="/ui/pendientes/carpetas{% if serie %}?serie={{ serie }}{% endif %}">Reintentar</a></p>
 {% else %}
+{% if serie_actual %}
+{% call ui.aviso("info") %}
+  <p><strong>Añadiendo números a {{ serie_actual.title }}{% if serie_actual.start_year %} ({{ serie_actual.start_year }}){% endif %}.</strong></p>
+  <p>Se listan todas las carpetas con contexto. Las que encajan con esta serie llevan la marca
+    «Sugerida para esta serie»; la lista no se filtra ni se reordena. Los archivos sueltos y las
+    carpetas sin contexto se revisan en «Por revisar».</p>
+  <p><a class="btn ghost sm" href="/ui/series/{{ serie_actual.id }}">Ver la ficha</a>
+     <a class="btn ghost sm" href="/ui/pendientes/carpetas">Quitar la serie</a></p>
+{% endcall %}
+{% elif serie_aviso %}
+{% call ui.aviso("amber") %}{{ serie_aviso }}{% endcall %}
+{% endif %}
 {% if total_visible or r.totales.candidata_inexistente %}
 <p class="subtitle">{{ r.totales.sin_serie | miles }} por revisar: {{ r.totales.sin_serie_en_carpetas | miles }} en {{ r.totales.carpetas_utiles_sin_serie | miles }} carpeta{{ "s" if r.totales.carpetas_utiles_sin_serie != 1 }} + {% if r.totales.sin_serie_sueltos %}<a href="/ui/pendientes">{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}</a>{% else %}{{ r.totales.sin_serie_sueltos | miles }} suelto{{ "s" if r.totales.sin_serie_sueltos != 1 }}{% endif %}. {{ r.totales.serie_sugerida | miles }} con serie sugerida, aparte. {{ total_visible | miles }} registro{{ "s" if total_visible != 1 }} visible{{ "s" if total_visible != 1 }}.</p>
 {% endif %}
@@ -31,16 +65,20 @@
 </details>
 
 {% if total_visible == 0 and r.totales.candidata_inexistente == 0 %}
+{% if serie_actual %}
+{{ bloque_vacio_serie(estado_nuevos) }}
+{% else %}
 {{ ui.estado_vacio("Nada pendiente", "No hay registros pendientes de verificar.") }}
+{% endif %}
 {% else %}
 {% if pagina_invalida %}
 <div class="empty-state" role="status">
   <h3>Esta página ya no existe</h3>
   <p>La lista de carpetas cambió desde que abriste este enlace. No se muestra una lista vacía como si fuera normal.</p>
   <p>
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas?limite={{ limite }}">Ir a la primera página</a>
+    <a class="btn ghost sm" href="{{ url_carpetas() }}">Ir a la primera página</a>
     {% if total_carpetas and ultima %}
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ ultima }}">Ir a la última página válida</a>
+    <a class="btn ghost sm" href="{{ url_carpetas(ultima) }}">Ir a la última página válida</a>
     {% endif %}
   </p>
 </div>
@@ -50,7 +88,11 @@
 {% endif %}
 
 {% if not grupos %}
+{% if serie_actual %}
+{{ bloque_vacio_serie(estado_nuevos) }}
+{% else %}
 <p class="empty">No hay carpetas con contexto. Los sueltos se revisan en «Por revisar».</p>
+{% endif %}
 {% endif %}
 
 {% for v in grupos %}
@@ -61,13 +103,19 @@
     {{ ui.chip("neutro" if g.estado == "sin_serie" else "info", g.etiqueta) }}
     {% if g.por_confirmar %}{{ ui.chip("amber", "por confirmar") }}{% endif %}
     {% if g.en_conflicto %}{{ ui.chip("warn", "en conflicto") }}{% endif %}
+    {% if v.sugerida_para_serie %}{{ ui.chip("info", "Sugerida para esta serie") }}{% endif %}
   </p>
 
   <p class="carpeta-resumen">{{ g.n_archivos }} registros{% if g.serie_sugerida %} · Serie sugerida: {{ g.serie_sugerida.titulo }}{% else %} · Sin serie sugerida{% endif %}</p>
 
   <p class="carpeta-accion">
+    {% if serie_actual %}
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ g.clave | urlencode }}&amp;series_id={{ serie_actual.id }}">Preparar los archivos de esta carpeta para esta serie</a>
+    <small>No se asigna nada hasta que confirmes; el archivo no se mueve.</small>
+    {% else %}
     <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ g.clave | urlencode }}">Elegir la serie de esta carpeta</a>
     <small>No se crea ni se asigna nada hasta que confirmes.</small>
+    {% endif %}
   </p>
 
   <details class="carpeta-detalle">
@@ -132,8 +180,10 @@
 
 {% if anterior is not none or siguiente is not none %}
 <nav class="carpetas-paginas" aria-label="Páginas de carpetas">
-  {% if anterior is not none %}<a class="btn ghost sm" rel="prev" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ anterior }}">← Anteriores</a>{% endif %}
-  {% if siguiente is not none %}<a class="btn ghost sm" rel="next" href="/ui/pendientes/carpetas?limite={{ limite }}&amp;desplazamiento={{ siguiente }}">Siguientes →</a>{% endif %}
+  {% if serie_actual and r.pagina.desplazamiento > 0 %}<a class="btn ghost sm" rel="first" href="{{ url_carpetas() }}">Primera</a>{% endif %}
+  {% if anterior is not none %}<a class="btn ghost sm" rel="prev" href="{{ url_carpetas(anterior) }}">← Anteriores</a>{% endif %}
+  {% if siguiente is not none %}<a class="btn ghost sm" rel="next" href="{{ url_carpetas(siguiente) }}">Siguientes →</a>{% endif %}
+  {% if serie_actual and siguiente is not none %}<a class="btn ghost sm" rel="last" href="{{ url_carpetas(ultima) }}">Última</a>{% endif %}
 </nav>
 {% endif %}
 {% endif %}

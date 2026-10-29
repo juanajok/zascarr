@@ -10,15 +10,18 @@ from __future__ import annotations
 
 import builtins
 import html as htmllib
+import json
 import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import httpx
 import pytest
 from sqlalchemy import text
 
+import zascarr.web.pendientes as _pendientes
 from tests._pg import bd_efimera_sync, migrar_a_head
 from tests.test_revision_carpetas_pg import (
     BIB,
@@ -30,6 +33,8 @@ from tests.test_revision_carpetas_pg import (
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.services import revision_carpetas
+from zascarr.services.registro_biblioteca import EstadoRegistro as _EstadoRegistro
+from zascarr.services.registro_biblioteca import FaseRegistro as _FaseRegistro
 from zascarr.services.revision_carpetas import (
     ETIQUETAS,
     ArchivoRevision,
@@ -587,3 +592,205 @@ class TestAccesoYEnlaces:
     async def test_la_vista_enlaza_de_vuelta(self, banco):
         r = await pagina()
         assert 'href="/ui/pendientes"' in r.text
+
+
+# ── #304 BL-SER2: serie fijada, marca, paginación y #326 ─────────────────────────────────────
+
+
+async def _poner_marcador(banco: Banco, valor: bool) -> None:
+    async with banco.fabrica() as s:
+        await s.execute(text(
+            'INSERT INTO runtime_settings (id, "values") VALUES (1, CAST(:v AS jsonb)) '
+            'ON CONFLICT (id) DO UPDATE SET "values" = CAST(:v AS jsonb)'
+        ), {"v": json.dumps({"_library_adoption_done": valor})})
+        await s.commit()
+
+
+async def _borrar_marcador(banco: Banco) -> None:
+    async with banco.fabrica() as s:
+        await s.execute(text("DELETE FROM runtime_settings WHERE id = 1"))
+        await s.commit()
+
+
+def _hrefs(html: str) -> list[str]:
+    return [htmllib.unescape(h) for h in re.findall(r'href="([^"]+)"', html)]
+
+
+class TestSerieFijada:
+
+    async def test_muestra_contexto_y_una_accion_por_carpeta(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(
+            archivo("Comics/Batman (2019)/Batman 01.cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Comics/Otra/Cosa 01.cbz"),
+        )
+        r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert "Añadiendo números a BATMAN (2025)." in t
+        assert "Quitar la serie" in t and "Ver la ficha" in t
+        assert "Preparar los archivos de esta carpeta para esta serie" in t
+        assert "Sugerida para esta serie" in t
+        # una acción nueva por cada una de las dos carpetas, sin la vieja con serie
+        assert len(re.findall(r"/asistente/vinculacion\?clave=", r.text)) == 2
+        assert "/asistente?clave=" not in r.text
+        assert f"series_id={sid}" in r.text
+
+    async def test_clave_codificada_y_series_id_exacto(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(archivo("Comics/Batman (2019)/Batman 01.cbz",
+                                    estado="direct", cands=candidatas(sid, "BATMAN", 2025)))
+        r = await pagina({"serie": str(sid)})
+        enlaces = [h for h in _hrefs(r.text) if "/asistente/vinculacion?clave=" in h]
+        assert len(enlaces) == 1
+        assert "clave=Comics/Batman%20%282019%29" in enlaces[0]
+        assert f"series_id={sid}" in enlaces[0]
+
+    async def test_marca_solo_la_sugerida_y_no_reordena(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(
+            archivo("Comics/Batman (2019)/Batman 01.cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Comics/Otra/Cosa 01.cbz"),
+        )
+        sin = visible((await pagina()).text)
+        respuesta = await pagina({"serie": str(sid)})
+        con = visible(respuesta.text)
+        assert re.search(r'<span class="chip[^"]*">(?:<span[^>]*>.*?</span> )?Sugerida para esta serie</span>', respuesta.text)
+        # el orden de las claves es el mismo con y sin serie
+        claves = ["Comics/Batman (2019)", "Comics/Otra"]
+        pos_sin = [sin.index(c) for c in claves]
+        pos_con = [con.index(c) for c in claves]
+        assert pos_sin == sorted(pos_sin) and pos_con == sorted(pos_con)
+
+    async def test_suelto_y_carpeta_con_contexto(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(
+            archivo("Comics/Batman (2019)/Batman 01.cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Suelto.cbz"),
+        )
+        t = visible((await pagina({"serie": str(sid)})).text)
+        assert "Comics/Batman (2019)" in t and "Suelto.cbz" not in t
+        assert "Por revisar" in t
+
+    async def test_serie_invalida_y_serie_inexistente_no_rompen(self, banco):
+        await banco.sembrar(archivo("Comics/Otra/Cosa 01.cbz"))
+        for valor in ("no-es-uuid", str(uuid4())):
+            r = await pagina({"serie": valor})
+            t = visible(r.text)
+            assert r.status_code == 200
+            assert "No hemos encontrado esa serie" in t
+            assert "series_id=" not in r.text
+            assert "Elegir la serie de esta carpeta" in t
+            assert "Preparar los archivos" not in t
+
+    async def test_120_carpetas_paginan_y_conservan_serie_y_limite(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(*(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(120)))
+        primera = await pagina({"serie": str(sid), "limite": 50})
+        assert "Carpetas 1–50 de 120" in visible(primera.text)
+        enlaces = [h for h in _hrefs(primera.text) if "/ui/pendientes/carpetas?" in h]
+        assert enlaces
+        assert all("serie=" in h and "limite=50" in h for h in enlaces)
+        assert any("desplazamiento=50" in h for h in enlaces)
+        segunda = await pagina({"serie": str(sid), "limite": 50, "desplazamiento": 50})
+        assert "Carpetas 51–100 de 120" in visible(segunda.text)
+        enlaces2 = [h for h in _hrefs(segunda.text) if "/ui/pendientes/carpetas?" in h]
+        assert 'rel="first"' in segunda.text                      # Primera
+        assert any("desplazamiento=100" in h for h in enlaces2)    # Última
+        assert all("serie=" in h and "limite=50" in h for h in enlaces2)
+
+    async def test_pagina_fuera_de_rango_conserva_serie(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        r = await pagina({"serie": str(sid), "desplazamiento": 999})
+        t = visible(r.text)
+        assert "Esta página ya no existe" in t
+        enlaces = [h for h in _hrefs(r.text) if "/ui/pendientes/carpetas?" in h]
+        assert enlaces and all("serie=" in h for h in enlaces)
+
+    async def test_sin_serie_no_aparecen_primera_ni_ultima(self, banco):
+        await banco.sembrar(*(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(5)))
+        r = await pagina({"limite": 2, "desplazamiento": 2})
+        assert "Primera" not in visible(r.text) and "Última" not in visible(r.text)
+
+
+class TestVacíoY326:
+
+    async def test_vacio_con_serie_ofrece_326_si_marcador_true(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await _poner_marcador(banco, True)
+        r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert "No hay carpetas con contexto pendientes" in t
+        assert r.text.count('class="empty-state"') == 1
+        assert "Buscar archivos nuevos en el disco" in t and "/ui/auditoria" in _hrefs(r.text)
+        assert "solo los registra" in t
+
+    async def test_vacio_sin_marcador_dice_registrar_y_no_ofrece_buscar(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await _borrar_marcador(banco)
+        r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert "La biblioteca todavía no está registrada" in t
+        assert "Regístrala primero en Auditoría" in t
+        assert r.text.count('class="empty-state"') == 1
+        assert "Buscar archivos nuevos en el disco" not in t
+        assert "Ir a Auditoría" in t
+
+    async def test_vacio_en_marcha_lo_dice(self, banco, monkeypatch):
+        sid = await banco.serie("BATMAN", 2025)
+        monkeypatch.setattr(_pendientes.registro_biblioteca, "estado_actual",
+                            lambda: _EstadoRegistro(fase=_FaseRegistro.CORRIENDO))
+        r = await pagina({"serie": str(sid)})
+        assert "Hay un registro en marcha" in visible(r.text)
+        assert r.text.count('class="empty-state"') == 1
+
+    async def test_sin_serie_no_aparece_la_oferta_326(self, banco):
+        await _poner_marcador(banco, True)
+        r = await pagina()
+        assert "Buscar archivos nuevos en el disco" not in visible(r.text)
+        assert "Ir a Auditoría" not in visible(r.text)
+
+    async def test_no_crea_la_fila_de_ajustes_al_leer_el_marcador(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await _borrar_marcador(banco)
+        async with banco.fabrica() as s:
+            assert (await s.execute(text("SELECT count(*) FROM runtime_settings"))).scalar() == 0
+        banco.sentencias.clear()
+        await pagina({"serie": str(sid)})
+        assert banco.sentencias and all(x.lstrip().upper().startswith(("SELECT", "WITH")) for x in banco.sentencias)
+        async with banco.fabrica() as s:
+            assert (await s.execute(text("SELECT count(*) FROM runtime_settings"))).scalar() == 0
+
+    async def test_no_llama_a_inventario_ni_recorre_disco(self, banco, monkeypatch):
+        sid = await banco.serie("BATMAN", 2025)
+        await _poner_marcador(banco, True)
+
+        async def prohibido(*_a, **_k):
+            raise AssertionError("la lista no debe recorrer la biblioteca")
+
+        import zascarr.services.library_adopter as la
+        from zascarr.utils import fs
+        monkeypatch.setattr(la.LibraryAdopter, "inventario", prohibido)
+        monkeypatch.setattr(fs, "recorrer_comics", prohibido)
+        assert (await pagina({"serie": str(sid)})).status_code == 200
+
+    async def test_titulo_se_escapa(self, banco):
+        sid = await banco.serie("<b>BATMAN</b>", 2025)
+        r = await pagina({"serie": str(sid)})
+        assert "<b>BATMAN</b>" not in r.text
+        assert "&lt;b&gt;BATMAN&lt;/b&gt;" in r.text
+
+    async def test_503_con_serie_conserva_el_reintento(self, banco, monkeypatch):
+        sid = await banco.serie("BATMAN", 2025)
+
+        async def falla(*_a, **_k):
+            raise RuntimeError("fallo simulado")
+
+        monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", falla)
+        r = await pagina({"serie": str(sid)})
+        assert r.status_code == 503
+        assert "series_id=" not in r.text
+        assert f"/ui/pendientes/carpetas?serie={sid}" in r.text

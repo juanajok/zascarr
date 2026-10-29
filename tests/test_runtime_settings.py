@@ -132,6 +132,23 @@ class TestFlags:
         assert await service.get_flag("_library_adoption_done") is False
 
     @pytest.mark.asyncio
+    async def test_get_flag_sin_crear_no_crea_la_fila(self):
+        session = FakeSession(existing_values=None)
+        service = RuntimeSettingsService(db=session)
+
+        assert await service.get_flag_sin_crear("_library_adoption_done") is False
+        assert session.added == []
+
+    @pytest.mark.asyncio
+    async def test_get_flag_sin_crear_lee_true_y_false(self):
+        assert await RuntimeSettingsService(db=FakeSession(
+            existing_values={"_library_adoption_done": True}
+        )).get_flag_sin_crear("_library_adoption_done") is True
+        assert await RuntimeSettingsService(db=FakeSession(
+            existing_values={"_library_adoption_done": False}
+        )).get_flag_sin_crear("_library_adoption_done") is False
+
+    @pytest.mark.asyncio
     async def test_set_flag_y_get_flag(self):
         session = FakeSession(existing_values={})
         service = RuntimeSettingsService(db=session)
