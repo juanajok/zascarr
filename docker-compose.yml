@@ -13,6 +13,15 @@
 
 name: zascarr
 
+# Rotación de los registros de los contenedores (#361). Sin ella, `json-file` crece sin tope en el disco del host (la SD
+# de la Pi). 10 MB × 3 ficheros = 30 MB NOMINALES por contenedor, según esta configuración: es un presupuesto, no un límite
+# global de disco ni una medición, y ocupa DISCO, no la RAM del contenedor. `docker logs` sigue funcionando.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 networks:
   zascarr-internal:
     driver: bridge
@@ -63,6 +72,7 @@ services:
     image: postgres:15-alpine
     container_name: zascarr-db
     restart: unless-stopped
+    logging: *logging
     networks:
       - zascarr-internal
     environment:
@@ -97,6 +107,7 @@ services:
       dockerfile: Dockerfile
     container_name: zascarr-orquestador
     restart: unless-stopped
+    logging: *logging
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
