@@ -517,32 +517,43 @@ async def confirmar(
             "pagina": f"{_entero(pagina_desde)}–{_entero(pagina_hasta)}" if _entero(pagina_hasta) else None}
     plantilla = "asistente_vinculacion.html" if "hx-request" not in request.headers else "_vinculacion_resultado.html"
     base["titulo_serie"] = await _titulo_de_la_serie(db, contexto["series_id"])
+    def pagina_de_fallo(codigo: str, mensaje: str) -> HTMLResponse:
+        titulo, definitivo, repetible = FALLOS.get(codigo, ("No se pudo vincular", True, False))
+        return _sin_cache(templates.TemplateResponse(request, plantilla, {
+            **base, "resultado": True, "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje,
+                                                   "definitivo": definitivo, "repetible": repetible}, "token": token,
+            "r": None, "error": None}))
+
     try:
         r = await ejecutar_vinculacion(db, token)
     except HTTPException as e:
         d = e.detail if isinstance(e.detail, dict) else {"codigo": "error_inesperado", "mensaje": str(e.detail)}
         codigo = str(d.get("codigo", "error_inesperado"))
-        titulo, definitivo, repetible = FALLOS.get(codigo, ("No se pudo vincular", True, False))
         mensaje = (MENSAJE_CADUCADO_SIN_INFORME if codigo == "token_caducado" and d.get("puede_haberse_aplicado")
                    else MENSAJES_DE_FALLO.get(codigo, MENSAJE_DE_FALLO_DESCONOCIDO))
         if codigo not in MENSAJES_DE_FALLO:
             logger.warning("vinculacion.fallo_sin_texto", codigo=codigo)
+        return pagina_de_fallo(codigo, mensaje)
+    try:
+        secreto = get_settings().secret_key
+        firmado = verificar_token_vinculacion(token, secreto, ignorar_caducidad=True) if secreto else None
+        ref = None
+        if firmado is not None:
+            # El plazo cuenta desde la FIRMA del token de vinculación, no desde ahora: repetir la confirmación emite la
+            # misma referencia con el mismo vencimiento (no reinicia las 24 horas).
+            ref = crear_referencia_de_resultado(
+                firmado.clave, firmado.series_id, firmado.operacion, firma=firmado.caduca - TTL_SEGUNDOS,
+                plazo_s=RETENCION_HORAS * 3600, secret=secreto)
         return _sin_cache(templates.TemplateResponse(request, plantilla, {
-            **base, "resultado": True, "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje,
-                                                   "definitivo": definitivo, "repetible": repetible}, "token": token,
-            "r": None, "error": None}))
-    secreto = get_settings().secret_key
-    firmado = verificar_token_vinculacion(token, secreto, ignorar_caducidad=True) if secreto else None
-    ref = None
-    if firmado is not None:
-        # El plazo cuenta desde la FIRMA del token de vinculación, no desde ahora: repetir la confirmación emite la
-        # misma referencia con el mismo vencimiento (no reinicia las 24 horas).
-        ref = crear_referencia_de_resultado(
-            firmado.clave, firmado.series_id, firmado.operacion, firma=firmado.caduca - TTL_SEGUNDOS,
-            plazo_s=RETENCION_HORAS * 3600, secret=secreto)
-    return _sin_cache(templates.TemplateResponse(request, plantilla, {
-        **base, "resultado": True, "fallo": None, "r": r, **_contexto_del_informe(r), "error": None,
-        "token": token, "ref": ref, "ruta_resultado": RUTA + "/resultado", "oob_cabecera": "hx-request" in request.headers}))
+            **base, "resultado": True, "fallo": None, "r": r, **_contexto_del_informe(r), "error": None,
+            "token": token, "ref": ref, "ruta_resultado": RUTA + "/resultado",
+            "oob_cabecera": "hx-request" in request.headers}))
+    except Exception as e:
+        # B-1 (#116): el `commit` YA se hizo y falló preparar o pintar el informe. No se sabe qué llegó a la persona, y
+        # no se puede decir «no se ha cambiado nada»: es el mismo «resultado incierto» de siempre, repetible con el
+        # mismo token (devuelve el informe guardado, no duplica). Al registro, solo el tipo; a la página, nada de la excepción.
+        logger.error("vinculacion.presentacion_fallida", tipo=type(e).__name__)
+        return pagina_de_fallo("resultado_incierto", MENSAJES_DE_FALLO["resultado_incierto"])
 
 
 def _contexto_del_informe(r) -> dict:
