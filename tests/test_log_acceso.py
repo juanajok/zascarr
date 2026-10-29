@@ -10,6 +10,7 @@ Sin base de datos: el arranque degradado responde, y aun así uvicorn escribe la
 from __future__ import annotations
 
 import base64
+import contextlib
 import http.client
 import json
 import logging
@@ -21,6 +22,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -133,8 +135,9 @@ def _puerto_libre() -> int:
         return s.getsockname()[1]
 
 
-def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[str, str] | None = None,
-                    estados: dict[str, int] | None = None) -> str:
+@contextlib.contextmanager
+def _uvicorn(cmd: list[str], cwd: Path, entorno_extra: dict[str, str] | None = None):
+    """Arranca uvicorn como lo hace la imagen (argumentos del CMD) y cede `(puerto, lineas)`; al salir lo para."""
     puerto = _puerto_libre()
     entorno = {**os.environ, "PYTHONPATH": f"{RAIZ / 'src'}{os.pathsep}{cwd}", "AUTH_MODE": "none", **(entorno_extra or {})}
     proc = subprocess.Popen(_con_host_y_puerto(cmd, puerto), cwd=cwd, env=entorno, stdout=subprocess.PIPE,
@@ -155,6 +158,39 @@ def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[
                 time.sleep(0.2)
         else:
             raise AssertionError("uvicorn no arrancó a tiempo")
+        yield puerto, lineas
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        lector.join(timeout=5)
+
+
+def _esperar_lineas(lineas: list[str], n: int, plazo: float = 5.0) -> None:
+    """En vez de dormir un rato fijo, espera a que haya salido una línea por petición (o se agote el plazo)."""
+    fin = time.time() + plazo
+    while time.time() < fin and sum(1 for linea in lineas if "HTTP/1.1" in linea or "WebSocket" in linea) < n:
+        time.sleep(0.1)
+
+
+def _pedir(puerto: int, ruta: str, cabeceras: dict[str, str] | None = None, datos: dict | None = None) -> tuple[int, str]:
+    """GET (o POST de formulario si hay `datos`); devuelve (estado, cuerpo) también ante 4xx/5xx."""
+    cuerpo = urllib.parse.urlencode(datos).encode() if datos is not None else None
+    peticion = urllib.request.Request(f"http://127.0.0.1:{puerto}{ruta}", data=cuerpo, method="POST" if cuerpo is not None else "GET",
+                                      headers={"Origin": f"http://127.0.0.1:{puerto}", **(cabeceras or {})})
+    try:
+        with urllib.request.urlopen(peticion, timeout=30) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode("utf-8", "replace")
+
+
+def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[str, str] | None = None,
+                    estados: dict[str, int] | None = None) -> str:
+    with _uvicorn(cmd, cwd, entorno_extra) as (puerto, lineas):
         for item in rutas:
             ruta, cabeceras = item if isinstance(item, tuple) else (item, {})
             try:
@@ -171,29 +207,12 @@ def _servir_y_pedir(cmd: list[str], rutas: list, cwd: Path, entorno_extra: dict[
                         estados[ruta] = respuesta.status
                     conexion.close()
                 else:
-                    with urllib.request.urlopen(urllib.request.Request(
-                            f"http://127.0.0.1:{puerto}{ruta}", headers={"Origin": f"http://127.0.0.1:{puerto}", **cabeceras}),
-                            timeout=15) as r:
-                        r.read()
-                        if estados is not None:
-                            estados[ruta] = r.status
-            except urllib.error.HTTPError as error:
-                if estados is not None:
-                    estados[ruta] = error.code   # 4xx/5xx también escriben su línea de acceso
+                    estado, _ = _pedir(puerto, ruta, cabeceras)
+                    if estados is not None:
+                        estados[ruta] = estado
             except (http.client.HTTPException, ConnectionError):
                 pass
-        # En vez de dormir un rato fijo, se espera a que haya salido una línea por petición (o se agote el plazo)
-        plazo = time.time() + 5
-        while time.time() < plazo and sum(1 for linea in lineas if "HTTP/1.1" in linea or "WebSocket" in linea) < len(rutas):
-            time.sleep(0.1)
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=15)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        lector.join(timeout=5)
+        _esperar_lineas(lineas, len(rutas))
     return "".join(lineas)
 
 
@@ -321,6 +340,177 @@ class TestRotacionEfectivaConDockerCompose:
             log = servicios[nombre].get("logging") or {}
             assert log.get("driver") == "json-file", nombre
             assert log.get("options") == {"max-size": "10m", "max-file": "3"}, (nombre, log)
+
+
+#: B361-07 — INVENTARIO de los parámetros de query de las rutas GET (a 2026-10-29, 29 nombres). Si se añade, renombra o quita uno
+#: sin tocar esta lista, `test_el_inventario_coincide_con_las_rutas` FALLA: obliga a mirar si el parámetro nuevo lleva datos de la
+#: persona y a seguir viéndolo fuera del registro de acceso. (El filtro quita la query entera, así que el inventario no decide qué
+#: se quita: sirve para que nadie dé por «sin datos» un parámetro nuevo sin haberlo mirado.)
+PARAMETROS_DE_QUERY = frozenset({
+    "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
+    "limite", "next", "operacion", "page", "page_size", "primero", "publisher_id", "q", "ref", "search", "serie_id",
+    "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
+})
+
+
+def _rutas_get_de_la_app() -> list:
+    from fastapi.routing import APIRoute
+
+    from zascarr.main import app
+
+    def recorrer(contenedor):
+        for ruta in contenedor.routes:
+            if hasattr(ruta, "original_router"):   # los routers incluidos cuelgan de un envoltorio
+                yield from recorrer(ruta.original_router)
+            else:
+                yield ruta
+    return [r for r in recorrer(app) if isinstance(r, APIRoute) and "GET" in r.methods]
+
+
+class TestInventarioDeParametros:
+    def test_el_inventario_coincide_con_las_rutas(self):
+        reales = {q.alias or q.name for r in _rutas_get_de_la_app() for q in r.dependant.query_params}
+        assert reales == set(PARAMETROS_DE_QUERY), (
+            f"inventario desactualizado: nuevos {sorted(reales - PARAMETROS_DE_QUERY)}, "
+            f"retirados {sorted(PARAMETROS_DE_QUERY - reales)}. Mira si llevan datos de la persona y actualiza PARAMETROS_DE_QUERY.")
+
+    def test_ninguna_ruta_lee_la_query_a_mano_sin_declararla(self):
+        """Un parámetro leído con `request.query_params` no aparece en las rutas: se vigila por texto."""
+        usos = [str(p.relative_to(RAIZ)) for p in (RAIZ / "src").rglob("*.py") if "query_params" in p.read_text(encoding="utf-8")]
+        assert usos == [], f"hay lectura manual de query_params: {usos}; añádela al inventario y a esta prueba"
+
+    def test_cada_parametro_con_su_centinela_no_llega_al_registro_ni_su_nombre_con_valor(self):
+        centinelas = {nombre: f"CENTINELA-{nombre.upper().replace('_', '-')}-INV" for nombre in sorted(PARAMETROS_DE_QUERY)}
+        rutas = [f"/ui/descubrir?{nombre}={valor}" for nombre, valor in centinelas.items()]
+        salida = _servir_y_pedir(_cmd_del_dockerfile(), rutas, RAIZ)
+        assert salida.count('GET /ui/descubrir') >= len(rutas)   # una línea de acceso por petición (no un registro mudo)
+        for nombre, valor in centinelas.items():
+            assert valor not in salida, f"el valor de «{nombre}» está en el registro"
+            assert not re.search(rf"[?&]{re.escape(nombre)}=", salida), f"el nombre «{nombre}=» está en el registro"
+
+
+def _campos_ocultos(html_: str) -> dict[str, str]:
+    import html
+    return {html.unescape(n): html.unescape(v) for n, v in re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)"', html_)}
+
+
+def _primero(patron: str, texto: str) -> str:
+    import html
+    m = re.search(patron, texto)
+    assert m, f"no encuentro {patron!r}"
+    return html.unescape(m.group(1))
+
+
+@pytest.mark.skipif(not URL_PRUEBAS, reason="NOT RUN sin TEST_DATABASE_URL (Postgres real; la base de pruebas lleva «test» en el nombre)")
+class TestRecorridoCompletoConElFiltro:
+    """B361-10/11: el recorrido REAL del asistente de vinculación con el filtro activo y uvicorn real: entrar, revisar, marcar,
+    confirmar, abrir el resultado guardado por su `ref` (dos veces: enlace recargable), paginar con el cursor, seguir revisando
+    con el enlace que lleva `cursor`. En cada paso, el resultado funcional esperado; al final, el registro de acceso conserva
+    ruta y estado de cada petición y NO lleva ninguna query ni dato de la persona (nombre de carpeta, `ref`, cursor)."""
+
+    @staticmethod
+    def _sembrar(url: str, biblioteca: Path) -> str:
+        import asyncio
+        import zipfile
+        from uuid import uuid4
+
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from sqlalchemy.pool import NullPool
+
+        from tests._pg import url_asyncpg
+        from zascarr.models import ComicTradition, File, FileFormat, Series
+
+        carpeta = biblioteca / "Comics" / "Carpeta Secreta Del Coleccionista (1999)"
+        carpeta.mkdir(parents=True)
+        serie_id = uuid4()
+
+        async def sembrar():
+            motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
+            async with async_sessionmaker(motor, expire_on_commit=False)() as sesion:
+                sesion.add(Series(id=serie_id, title="Serie Secreta Local", tradition=ComicTradition.AMERICAN, start_year=1999,
+                                  total_issues=200))
+                for i in range(1, 121):
+                    ruta = carpeta / f"Serie Secreta Local {i:03d} (1999).cbz"
+                    with zipfile.ZipFile(ruta, "w") as z:
+                        z.writestr("001.jpg", (chr(65 + i % 26) * 300).encode())
+                    sesion.add(File(id=uuid4(), file_path=str(ruta), file_name=ruta.name, file_format=FileFormat.CBZ,
+                                    file_size_bytes=ruta.stat().st_size, metadata_={"match_status": "unsorted", "candidates": []}))
+                await sesion.commit()
+            await motor.dispose()
+        asyncio.run(sembrar())
+        return str(serie_id)
+
+    def test_el_recorrido_funciona_y_el_registro_no_lleva_query(self, tmp_path):
+        from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
+        clave = "Comics/Carpeta Secreta Del Coleccionista (1999)"
+        base = "/ui/pendientes/carpetas/asistente"
+        with bd_efimera_sync(URL_PRUEBAS) as url:
+            migrar_a_head(url)
+            serie_id = self._sembrar(url, tmp_path / "lib")
+            entorno = {"DATABASE_URL": url_asyncpg(url), "IMPORT_INTERVAL_MINUTES": "99999", "ENRICH_INTERVAL_MINUTES": "99999",
+                       "SCAN_INTERVAL_MINUTES": "99999", "LIBRARY_PATH": str(tmp_path / "lib"),
+                       "TRANSMISSION_DOWNLOAD_DIR": str(tmp_path / "t"), "AMULE_INCOMING_DIR": str(tmp_path / "a"),
+                       "DOWNLOADS_PATH": str(tmp_path / "d"), "COVERS_CACHE_PATH": str(tmp_path / "c")}
+            sensibles: list[str] = []
+            pedidas: list[tuple[str, str, int]] = []
+            with _uvicorn(_cmd_del_dockerfile(), RAIZ, entorno) as (puerto, lineas):
+                def get(ruta):
+                    estado, cuerpo = _pedir(puerto, ruta)
+                    pedidas.append(("GET", ruta.split("?", 1)[0], estado))
+                    return estado, cuerpo
+
+                def post(ruta, datos):
+                    estado, cuerpo = _pedir(puerto, ruta, datos=datos, cabeceras={"HX-Request": "true"})
+                    pedidas.append(("POST", ruta, estado))
+                    return estado, cuerpo
+
+                q = urllib.parse.quote(clave, safe="/")
+                # 1. entrar al asistente de la carpeta
+                estado, pagina = get(f"{base}?clave={q}")
+                assert estado == 200 and "Elegir la serie" in pagina
+                # 2. revisar la carpeta para la serie (página 1: 100 archivos)
+                estado, pagina = get(f"{base}/vinculacion?clave={q}&series_id={serie_id}")
+                assert estado == 200 and "archivos 1–100" in pagina, pagina[:300]
+                campos = _campos_ocultos(pagina)
+                siguiente = _primero(r'name="ir_a" value="([^"]+)"[^>]*>\s*Página siguiente', pagina)
+                sensibles += [siguiente]
+                # 3. marcar todos los vinculables (acción del servidor)
+                estado, revisada = post(f"{base}/vinculacion/revisar", {**campos, "accion": "marcar_todos"})
+                assert estado == 200 and "Vincular 100 archivos" in revisada, revisada[:400]
+                # 4. confirmar la página 1
+                campos2 = _campos_ocultos(revisada)
+                estado, resultado = post(f"{base}/vinculacion/confirmar", {k: campos2[k] for k in ("token", "cursor_actual") if k in campos2})
+                assert estado == 200 and "Todos los archivos que preparaste están vinculados" in resultado, resultado[:500]
+                ref = _primero(r'resultado\?ref=([^"&]+)', resultado)
+                sensibles += [ref]
+                # 5. el enlace recargable del resultado guardado, dos veces
+                for _ in range(2):
+                    estado, guardado = get(f"{base}/vinculacion/resultado?ref={ref}")
+                    assert estado == 200 and "Resultado de la vinculación" in guardado
+                # 6. paginar con el cursor: segunda página (quedan 20)
+                estado, pagina2 = post(f"{base}/vinculacion/revisar", {**campos, "ir_a": siguiente})
+                assert estado == 200 and "archivos 1–20" in pagina2, pagina2[:300]   # quedan los 20 que la primera página no cubrió
+                c3 = _campos_ocultos(pagina2)
+                estado, marcada2 = post(f"{base}/vinculacion/revisar", {**c3, "accion": "marcar_todos"})
+                assert estado == 200 and "Vincular 20 archivos" in marcada2, marcada2[:400]
+                c4 = _campos_ocultos(marcada2)
+                estado, resultado2 = post(f"{base}/vinculacion/confirmar", {k: c4[k] for k in ("token", "cursor_actual") if k in c4})
+                assert estado == 200 and "vinculados" in resultado2, resultado2[:400]
+                # 7. «Seguir revisando esta carpeta» lleva `cursor`: se abre y responde
+                seguir = _primero(r'href="(/ui/pendientes/carpetas/asistente/vinculacion\?clave=[^"]*cursor=[^"]*)"', resultado2)
+                sensibles += [_primero(r"cursor=([^&]+)", seguir)]
+                estado, _ = get(seguir)
+                assert estado == 200
+                _esperar_lineas(lineas, len(pedidas))
+            salida = "".join(lineas)
+        # el registro: una línea por petición con su ruta y su estado, y nada de la query ni de los datos de la persona
+        acceso = [linea for linea in salida.splitlines() if ' - "' in linea and ("GET " in linea or "POST " in linea)]
+        assert len(acceso) >= len(pedidas), (len(acceso), len(pedidas))
+        for metodo, ruta, estado in pedidas:
+            assert any(re.search(rf'"{metodo} {re.escape(ruta)}[^"]* HTTP/1.1" {estado}\b', linea) for linea in acceso), (metodo, ruta, estado)
+        for marca in ("Carpeta Secreta", "Serie Secreta", "Carpeta%20Secreta", *sensibles):
+            assert marca not in salida, f"«{marca[:30]}…» está en el registro de acceso"
+        assert not re.search(r"[?&](clave|cursor|ref|series_id)=", salida)
 
 
 class TestRotacionDeLogsEnElCompose:
