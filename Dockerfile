@@ -59,6 +59,7 @@ CMD ["python", "-m", "uvicorn", \
      "--port", "8000", \
      "--workers", "1", \
      "--loop", "uvloop", \
+     "--ws", "none", \
      "--log-level", "info"]
 
 EXPOSE 8000

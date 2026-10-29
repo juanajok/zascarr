@@ -152,3 +152,11 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   contraseña. Se exige además una **longitud mínima de 12 caracteres**.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.
+
+## Registros de acceso (#361)
+
+El registro de acceso de uvicorn **no incluye la query** de las peticiones (`?clave=…&cursor=…&ref=…&q=…`): `zascarr.utils.log_acceso` deja método, ruta y estado, y sustituye lo demás por `?…`. En ZascArr la query puede llevar el nombre de una carpeta, un cursor que decodifica a un nombre de archivo, una referencia firmada al resultado (válida hasta 24 h desde que se firmó la vinculación) o lo que se busca. Tampoco se registra la query de una petición de `Upgrade` a WebSocket (la imagen arranca con `--ws none`, y la aplicación no tiene rutas WebSocket). Si una versión futura de uvicorn cambiara el formato del registro, el filtro **falla cerrado**: pierde esa línea en lugar de dejar pasar la query. Los registros de los contenedores rotan (`json-file`, 10 MB × 3 ficheros, 30 MB **nominales** por contenedor en disco; no es un límite global ni una medición); la rotación se aplica al recrear los contenedores (`update.sh` lo hace), y las líneas ya copiadas de `docker logs` antes siguen donde se copiaron.
+
+**Límites:** la protección alcanza solo a ese registro. No acredita que otros registros, excepciones o el proxy inverso estén saneados. **Nota para quien opera el proxy:** si el proxy inverso registra la URI con su query, debe configurarse también para no hacerlo; ZascArr no puede comprobarlo desde dentro. (Pista: Caddy no registra el acceso salvo que se active la directiva `log`; si se activa, el codificador `filter` permite quitar la query.)
+
+**Fuera de alcance de esta protección (historia aparte):** los registros estructurados de la aplicación (`structlog`) que escriben rutas de la biblioteca o mensajes de excepción, y las trazas de error 5xx cuyo mensaje puede llevar rutas.
