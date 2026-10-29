@@ -273,6 +273,18 @@ como marco permanente.
   «Fusionado», **Fin**. El sprint se fija con la mediana y el p85 del tiempo
   de ciclo cuando haya 8 historias terminadas o el 2026-11-12, lo que llegue
   antes (umbrales provisionales).
+- **Una PR por historia** (decidido el 2026-10-29, para alinearnos con agile): la PR de
+  una historia incluye **todo lo que se despliega para ella** —código, pruebas,
+  plantillas y CSS, scripts, migraciones y la documentación que necesite— en lugar de
+  varias PR sueltas (la funcionalidad, el pulido, el arreglo de pruebas). Va en
+  borrador hasta la revisión del diff y la CI. Si la historia cambia un **contrato
+  compartido** (p. ej. una opción obligatoria de `update.sh`), se adaptan en esa misma
+  PR **todas** las pruebas que lo usan y se pasa la suite sobre el `main` actual antes
+  de fusionar: con PR separadas, #347 y #351 dejaron `main` en rojo (una prueba sin
+  adaptar) y hizo falta #352. Un fallo que aparece **después** de fusionar sigue
+  necesitando su PR, pero es la excepción, no el cauce. Las notas de trazabilidad,
+  los movimientos de tarjeta y las fusiones siguen el flujo de siempre (con la orden del
+  PO).
 
 ## 10. Lo que NO se hace (anti-patrones del proyecto)
 
