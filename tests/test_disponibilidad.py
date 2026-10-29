@@ -315,6 +315,11 @@ class TestListaAccesible:
             return pagina
 
         monkeypatch.setattr(servicio, "ultima_comprobacion", ultima)
+
+        async def sin_ejecucion(_db, _run_id=None):
+            return None
+
+        monkeypatch.setattr(servicio, "ultima_ejecucion_importador", sin_ejecucion)
         monkeypatch.setattr(servicio, "listar_no_disponibles", listar)
         cliente = _cliente(SesionSoloLectura(MagicMock()))
         return cliente.get("/ui/no-disponibles", params={"despues": despues} if despues else None).text
@@ -405,8 +410,10 @@ class TestRutas:
         total.scalar_one.return_value = 0
         pagina = MagicMock()
         pagina.all.return_value = []
-        sesion = SesionSoloLectura(ultimo, total)
-        sesion._cola.append(pagina)
+        sin_ejecucion = MagicMock()
+        sin_ejecucion.scalar_one_or_none.return_value = None
+        sesion = SesionSoloLectura(total, pagina)
+        sesion._cola.extend([sin_ejecucion, ultimo])
 
         r = _cliente(sesion).get("/ui/no-disponibles")
 

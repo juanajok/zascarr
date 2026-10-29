@@ -121,6 +121,64 @@ async def ultima_comprobacion(db: AsyncSession) -> EstadoComprobacion:
         ultima_valida=_fecha(valida[0]) if valida else None)
 
 
+@dataclass(frozen=True)
+class UltimaEjecucionImportador:
+    """La última ejecución COMPLETADA del importador (#232), leída de `ImportRun`.
+
+    No es la comprobación de #231: esta describe el ciclo (descargas, importados, ausentes…) y
+    aquella la observación de las rutas de la biblioteca. `disparador=None` = run antiguo sin dato.
+    """
+    run_id: str
+    started_at: datetime
+    finished_at: datetime | None
+    disparador: str | None
+    files_scanned: int
+    imported_count: int
+    duplicate_count: int
+    unsorted_count: int
+    error_count: int
+    disappeared_count: int
+    reappeared_count: int
+    errors: list[str]
+
+    @property
+    def duracion_segundos(self) -> float | None:
+        if self.finished_at is None:
+            return None
+        return max(0.0, (self.finished_at - self.started_at).total_seconds())
+
+    @property
+    def con_cambios(self) -> bool:
+        return bool(self.imported_count or self.unsorted_count
+                    or self.disappeared_count or self.reappeared_count)
+
+
+async def ultima_ejecucion_importador(db: AsyncSession, run_id: str | None = None) -> UltimaEjecucionImportador | None:
+    """Última ejecución completada (o la de `run_id`), solo de ciclos del importador (`kind` ausente)."""
+    consulta = select(ImportRun).where(_ciclos_del_importador())
+    if run_id:
+        try:
+            consulta = consulta.where(ImportRun.id == UUID(run_id))
+        except (ValueError, TypeError):
+            return None
+    run = (await db.execute(
+        consulta.order_by(ImportRun.started_at.desc(), ImportRun.id.desc()).limit(1)
+    )).scalar_one_or_none()
+    if run is None:
+        return None
+    detalles = dict(run.details or {})
+    reappeared = detalles.get("reappeared")
+    return UltimaEjecucionImportador(
+        run_id=str(run.id), started_at=run.started_at, finished_at=run.finished_at,
+        disparador=(detalles.get("disparador") if isinstance(detalles.get("disparador"), str) else None),
+        files_scanned=run.files_scanned, imported_count=run.imported_count,
+        duplicate_count=run.duplicate_count, unsorted_count=run.unsorted_count,
+        error_count=run.error_count, disappeared_count=run.disappeared_count,
+        reappeared_count=len(reappeared) if isinstance(reappeared, list) else 0,
+        errors=list(detalles.get("errors") or []),
+    )
+
+
 # Orden de la lista (decisión del PO, 2026-10-27): `missing_since` con lo más reciente primero; los que no tienen
 # fecha, al final; desempate por nombre y por id. Paginación por CURSOR sobre esa misma clave: si entre dos peticiones
 # aparece o desaparece algún archivo, no se repite ni se salta ninguno de los que quedan «por delante».

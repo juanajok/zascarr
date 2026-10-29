@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
+from zascarr.services.ciclo_importador import ejecutar_ciclo_y_avisar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 
 logger = structlog.get_logger()
@@ -43,16 +44,8 @@ class RevalidatedStaticFiles(StaticFiles):
         return response
 
 
-async def _ejecutar_ciclo_y_avisar(notifier, session_factory, importer_cls):
-    """Scan → commit → aviso (E4). El aviso va DESPUÉS del `commit` y solo con
-    archivos nuevos; si el `commit` falla (rollback), la excepción se propaga y
-    NO se avisa. El webhook es mejor esfuerzo: `notifier` nunca propaga."""
-    async with session_factory() as session:
-        report = await importer_cls(session).scan_and_import()
-        await session.commit()
-    if report.imported:
-        await notifier.notify_imported(report.imported)
-    return report
+#: Compatibilidad: tests y código existente importan el nombre histórico desde `main`.
+_ejecutar_ciclo_y_avisar = ejecutar_ciclo_y_avisar
 
 
 async def _import_loop(interval_minutes: int) -> None:
@@ -64,20 +57,16 @@ async def _import_loop(interval_minutes: int) -> None:
     backlog no existía en producción hasta ahora.
     """
     from zascarr.database import async_session_factory
-    from zascarr.services.importer import Importer
-    from zascarr.services.notifier import Notifier
-
-    notifier = Notifier()
+    from zascarr.services import comprobacion_disco
 
     while True:
         try:
-            report = await _ejecutar_ciclo_y_avisar(
-                notifier, async_session_factory, Importer,
-            )
+            report = await comprobacion_disco.ejecutar_automatico(async_session_factory)
             # B7: la detección de desaparecidos revisa la biblioteca YA
             # importada, no las descargas — puede haber algo que avisar
             # aunque este ciclo no haya escaneado ningún fichero nuevo.
-            if report.files_scanned or report.disappeared_count or report.reappeared:
+            if report is not None and (
+                    report.files_scanned or report.disappeared_count or report.reappeared):
                 logger.info(
                     "importer.cycle_done",
                     escaneados=report.files_scanned,
@@ -280,6 +269,8 @@ async def lifespan(app: FastAPI):
     # E6: al apagar (o al terminar un test que levantó la app degradada), se
     # restablece la bandera para no contaminar el siguiente arranque.
     app.state.db_degraded = False
+    from zascarr.services.comprobacion_disco import detener as detener_comprobacion
+    await detener_comprobacion()
     for task in background_tasks:
         task.cancel()
     for task in background_tasks:

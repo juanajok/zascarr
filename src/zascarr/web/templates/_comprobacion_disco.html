@@ -1,0 +1,91 @@
+{%- macro cifra(n, singular, plural) -%}
+<strong>{{ n }}</strong> {{ singular if n == 1 else plural }}
+{%- endmacro -%}
+<section id="comprobar-disco" aria-labelledby="comprobar-titulo"
+         {% if estado_ciclo.en_curso %}hx-get="/ui/no-disponibles/comprobar" hx-trigger="every 5s"
+         hx-target="#comprobar-disco" hx-swap="outerHTML"{% endif %}>
+  <h2 id="comprobar-titulo" class="seccion">Comprobar el disco</h2>
+  <div id="comprobar-aviso">
+    {% call ui.aviso("amber") %}<strong>Qué hace:</strong> revisa ahora las carpetas de descargas e importa y
+      mueve los tebeos nuevos. Puede marcar como no disponibles los que ya no están en su sitio.
+      <strong>No consulta fuentes de datos ni descarga portadas.</strong>
+      Sigue en segundo plano: puedes cerrar esta página.{% endcall %}
+  </div>
+  <form class="audit-lanzar" hx-post="/ui/no-disponibles/comprobar"
+        hx-target="#comprobar-disco" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <button type="submit" class="btn-primary" aria-describedby="comprobar-aviso"
+            {% if estado_ciclo.en_curso or estado_ciclo.fase.value == "ocupado" %}disabled{% endif %}>
+      {{ "Comprobando…" if estado_ciclo.en_curso else "Comprobar el disco" }}
+    </button>
+  </form>
+  <div id="comprobar-estado">
+    {% if estado_ciclo.en_curso %}
+    <p role="status"{% if recien_lanzada %} tabindex="-1" autofocus{% endif %}>
+      {% if ya_en_curso %}Ya hay una comprobación en curso.{% if estado_ciclo.iniciado %} Empezó a las
+        {{ estado_ciclo.iniciado | hora }}.{% endif %} No se ha lanzado otra.
+      {% else %}Comprobación en curso. Empezó a las {{ estado_ciclo.iniciado | hora }}.
+        Esta página se actualiza sola.{% endif %}
+    </p>
+    {% elif estado_ciclo.fase.value == "ocupado" %}
+    <p role="status"><strong>Ya hay una comprobación en curso.</strong> No se ha lanzado otra.</p>
+    {% elif estado_ciclo.fase.value == "error" %}
+    <p role="alert"><strong>La comprobación no se pudo completar.</strong> Vuelve a intentarlo.
+      Si sigue fallando, revisa <a href="/estado">Estado</a>.</p>
+    {% endif %}
+
+    {% if estado_ciclo.fase.value != "error" and ultima %}
+    <div class="resultado-comprobacion"
+         {% if recien_terminada %}tabindex="-1" autofocus{% endif %}>
+      <p class="muted">Última comprobación: {{ ultima.started_at | fecha_con_antiguedad }},
+        {{ ultima.started_at | hora }} · {{ ultima.disparador | etiqueta_disparador }} ·
+        {% if ultima.error_count %}con {{ ultima.error_count }} {{ "error" if ultima.error_count == 1 else "errores" }}
+        {% elif ultima.con_cambios %}con cambios
+        {% else %}sin cambios{% endif %}.</p>
+      <p class="audit-why">
+        {% if ultima.error_count %}<strong>Terminó con {{ ultima.error_count }}
+          {{ "error" if ultima.error_count == 1 else "errores" }}.</strong>
+        {% elif ultima.con_cambios %}<strong>Terminó con cambios.</strong>
+        {% else %}<strong>Sin cambios:</strong> no había nada nuevo ni faltaba nada.
+        {% endif %}
+      </p>
+      <ul class="audit-resumen">
+        <li>{{ cifra(ultima.files_scanned, "archivo mirado", "archivos mirados") }} en las descargas</li>
+        <li>{{ cifra(ultima.imported_count, "importado", "importados") }} a la biblioteca</li>
+        <li>{{ cifra(ultima.duplicate_count, "repetido", "repetidos") }}: no se añaden</li>
+        <li>{{ cifra(ultima.unsorted_count, "sin clasificar", "sin clasificar") }}</li>
+        <li>{{ cifra(ultima.error_count, "con error", "con error") }}</li>
+        <li>{{ cifra(ultima.disappeared_count, "nuevo no disponible", "nuevos no disponibles") }}</li>
+        <li>{{ cifra(ultima.reappeared_count, "reaparecido", "reaparecidos") }}</li>
+        {% if ultima.duracion_segundos is not none %}
+        <li>{{ ultima.duracion_segundos | duracion }}</li>
+        {% endif %}
+      </ul>
+      {% if ultima.con_cambios and (ultima.disappeared_count or ultima.reappeared_count) %}
+      <p class="audit-why">La lista de abajo puede haber cambiado.
+        <a href="/ui/no-disponibles">Verla actualizada</a>.</p>
+      {% endif %}
+      {% if ultima.error_count and ultima.errors %}
+      <details><summary>Ver los errores ({{ ultima.errors | length }})</summary>
+        <ul class="audit-resumen">
+          {% for e in ultima.errors[:10] %}<li>{{ e }}</li>{% endfor %}
+          {% if ultima.errors | length > 10 %}<li>… y {{ ultima.errors | length - 10 }} más.</li>{% endif %}
+        </ul>
+      </details>
+      {% endif %}
+    </div>
+    {% elif estado_ciclo.fase.value == "inactivo" %}
+    <p class="muted">Todavía no hay ninguna comprobación registrada.</p>
+    {% endif %}
+
+    {% if estado_ciclo.fase.value != "error" and not estado_ciclo.en_curso %}
+      {% include "_disponibilidad_aviso.html" %}
+    {% elif estado_ciclo.fase.value == "error" %}
+      {% if ultima %}
+      <p class="muted">Última comprobación completada:
+        {{ ultima.started_at | fecha_con_antiguedad }}, {{ ultima.started_at | hora }} ·
+        {{ ultima.disparador | etiqueta_disparador }}.</p>
+      {% endif %}
+      {% include "_disponibilidad_aviso.html" %}
+    {% endif %}
+  </div>
+</section>
