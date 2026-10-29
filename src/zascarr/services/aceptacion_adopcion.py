@@ -26,7 +26,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.models import ImportRun
+from zascarr.models import ImportRun, RuntimeSetting
 from zascarr.services.registro_biblioteca import CLAVE_CERROJO_REGISTRO
 from zascarr.services.runtime_settings import RuntimeSettingsService
 
@@ -134,9 +134,17 @@ async def _ultima_adopcion(db: AsyncSession) -> ImportRun | None:
     )).scalar_one_or_none()
 
 
+async def _leer_valores(db: AsyncSession) -> dict:
+    """Lectura pura de la fila JSONB: no crea la fila ni escribe al consultar."""
+    valores = (await db.execute(
+        select(RuntimeSetting.values).where(RuntimeSetting.id == 1)
+    )).scalar_one_or_none()
+    return dict(valores or {})
+
+
 async def evaluar(db: AsyncSession, *, en_marcha: bool = False) -> Evaluacion:
     """Deriva oferta y aviso del almacén persistente, sin mirar el estado en memoria."""
-    valores = await RuntimeSettingsService(db).get_overrides()
+    valores = await _leer_valores(db)
     ultima = await _ultima_adopcion(db)
     tiene_marcador = CLAVE_MARCADOR in valores
     marcador = valores.get(CLAVE_MARCADOR)
@@ -209,7 +217,7 @@ async def _resultado(db: AsyncSession, run_id: UUID, count: int, status: int, re
 
 
 async def _leer_marcador(db: AsyncSession) -> tuple[dict, object, bool, Aceptacion | None]:
-    valores = await RuntimeSettingsService(db).get_overrides()
+    valores = await _leer_valores(db)
     tiene = CLAVE_MARCADOR in valores
     registro = valores.get(CLAVE_ACEPTACION)
     return valores, valores.get(CLAVE_MARCADOR), tiene, parsear_aceptacion(registro)
@@ -258,6 +266,8 @@ async def aceptar(db: AsyncSession, run_id: UUID, count: int, *, en_marcha: bool
         if motivo is not None:
             return await _resultado(db, run_id, count, 404 if motivo == "not_found" else 409, motivo)
 
+        # Solo en el camino válido se asegura la fila singleton; un rechazo no escribe.
+        await RuntimeSettingsService(db).get_overrides()
         ahora = datetime.now(UTC)
         iso = ahora.isoformat()
         auth_mode = get_settings().auth_mode

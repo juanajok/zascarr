@@ -637,3 +637,16 @@ class TestIncrementalSigueConservador:
 
         assert resultado.status == 409 and resultado.reason == "in_progress"
         assert CLAVE_MARCADOR not in await _valores(mundo)
+
+    async def test_un_rechazo_no_crea_la_fila_de_ajustes(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        async with mundo.fabrica() as s:
+            await s.execute(text("DELETE FROM runtime_settings"))
+            await s.commit()
+
+        resultado = await _aceptar(mundo, run.id, 2)
+
+        assert resultado.status == 409 and resultado.reason == "count_mismatch"
+        async with mundo.fabrica() as s:
+            assert (await s.execute(text("SELECT count(*) FROM runtime_settings"))).scalar() == 0
