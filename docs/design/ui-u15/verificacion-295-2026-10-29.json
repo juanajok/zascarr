@@ -1,0 +1,63 @@
+{
+  "issue": 295,
+  "fecha": "2026-10-29",
+  "sha": "2cd42f85f7674fa839cecc01d644d4e837292ceb",
+  "sha_corto": "2cd42f8",
+  "entorno": {
+    "app": "uvicorn zascarr.main:app en 127.0.0.1:8770",
+    "python": "3.14.4",
+    "postgres": "15",
+    "base": "zascarr_test_browser_295 (desechable)",
+    "biblioteca": "sintética, temporal",
+    "navegador": "Google Chrome 156.0.8078.47 headless",
+    "automatizacion": "Chrome DevTools Protocol con websockets; sin dependencias nuevas",
+    "viewports": ["1280x900", "360x800"],
+    "auth_mode": "none",
+    "fuentes": "controladas: Tebeosfera por_defecto y GCD tradition_guess=None"
+  },
+  "asistente": {
+    "grupo": "Comics/Flash (1987)",
+    "registros": 1,
+    "consulta_propuesta": "Flash",
+    "gcd_sin_sugerencia": {
+      "pista": null,
+      "selector_required": true,
+      "selector_value": "",
+      "opciones_seleccionadas": [""]
+    },
+    "tebeosfera_por_defecto": {
+      "pista": "La fuente no indica tradición: se sugiere Tebeo español por defecto. Es solo una pista de la fuente, no de la obra: elige tú.",
+      "selector_required": true,
+      "selector_value": "",
+      "opciones_seleccionadas": [""]
+    },
+    "eleccion": {
+      "tradicion": "Manga",
+      "sugerencia_fuente": "Tebeo español",
+      "procedencia": "valor por defecto: la fuente no lo indica",
+      "series_creadas": 0,
+      "alta_operaciones": 0,
+      "vinculacion_operaciones": 0,
+      "asignacion_operaciones": 0
+    },
+    "responsive": {
+      "360": {"innerWidth": 360, "clientWidth": 360, "scrollWidth": 360, "hscroll": false},
+      "1280": {"hscroll": false}
+    }
+  },
+  "tests": {
+    "comando": "pytest -q -rs tests/test_asistente_carpetas_pg.py tests/test_descubrir_dos_pasos_pg.py tests/test_descubrimiento_grupo_pg.py tests/test_descubrir_estados_web.py tests/test_tokens_revision.py tests/test_core_carpetas.py tests/test_tradiciones_de_la_carpeta.py tests/test_revision_senales.py tests/test_revision_carpetas_pg.py",
+    "passed": 787,
+    "skipped": 0,
+    "failed": 0
+  },
+  "capturas": [
+    "capturas/2026-10-29-asistente-295-resultados-1280.png",
+    "capturas/2026-10-29-asistente-295-revision-1280.png",
+    "capturas/2026-10-29-asistente-295-resultados-360.png"
+  ],
+  "not_run": [
+    "GCD/Tebeosfera reales en el asistente (se usaron fuentes controladas)",
+    "AniList/Comic Vine reales y copy explícita en vivo (sin clave/API)"
+  ]
+}
