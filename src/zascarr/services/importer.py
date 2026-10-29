@@ -318,9 +318,14 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     (D8 cierra por `File.imported_at >= Wishlist.added_at`, y reactivar un
     `IMPORTED` reinicia `added_at`) y, si el fichero es el ORIGINAL de una fila
     etiquetada, vacía `comicinfo_estado`/`comicinfo_propio` (describen un
-    fichero que ya no existe)."""
+    fichero que ya no existe).
+
+    El `file_format` (la extensión DECLARADA) sigue a `dest`: un fichero que
+    vuelve con otra extensión no puede seguir anunciando la vieja. El formato
+    REAL por contenido va aparte, en `metadata_["formato_contenido"]`."""
     fila.file_path = str(dest)
     fila.file_name = dest.name
+    fila.file_format = FileFormat(dest.suffix.lstrip(".").lower())
     fila.file_size_bytes = dest.stat().st_size
     fila.sha256_hash = tr.sha256
     fila.is_missing = False
