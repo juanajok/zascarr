@@ -76,6 +76,14 @@ class TestValidarInforme:
         run = _run()
         assert validar_informe(run, uuid4(), 3) == "stale_run"
 
+    def test_stale_tiene_prioridad_sobre_kind(self):
+        run = _run(details={"kind": "registro_incremental", "unreadable": 3})
+        assert validar_informe(run, uuid4(), 3) == "stale_run"
+
+    def test_sin_adopcion_previa_el_kind_sigue_mandando(self):
+        run = _run(details={"kind": "registro_incremental", "unreadable": 3})
+        assert validar_informe(run, None, 3) == "incremental_run"
+
     def test_lotes_sin_acreditar_no_permiten_aceptar(self):
         run = _run(details={"kind": "adoption", "unreadable": 3, "reverted": 1})
         assert validar_informe(run, run.id, 3) == "batch_unverified"

@@ -28,7 +28,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.models import ImportRun, RuntimeSetting
 from zascarr.services.registro_biblioteca import CLAVE_CERROJO_REGISTRO
-from zascarr.services.runtime_settings import RuntimeSettingsService
 
 logger = structlog.get_logger()
 
@@ -223,18 +222,32 @@ async def _leer_marcador(db: AsyncSession) -> tuple[dict, object, bool, Aceptaci
     return valores, valores.get(CLAVE_MARCADOR), tiene, parsear_aceptacion(registro)
 
 
-async def _reread_tras_carrera(db: AsyncSession, run_id: UUID, count: int) -> ResultadoAceptacion:
-    valores, marcador, tiene, aceptacion = await _leer_marcador(db)
-    if tiene and marcador is True:
+async def _revisar(db: AsyncSession, run_id: UUID, count: int, *, en_marcha: bool):
+    """Validaciones de solo lectura, en el orden de rechazo del memo #6.
+
+    422 lo pone FastAPI antes de entrar. Después: 404 -> stale -> kind -> cierre/errores ->
+    recuento -> marcador/registro -> in_progress. Devuelve un resultado si hay rechazo o
+    idempotencia; `None` solo cuando la aceptación puede escribir.
+    """
+    ultima = await _ultima_adopcion(db)
+    run = await db.get(ImportRun, run_id)
+    motivo = validar_informe(run, ultima.id if ultima is not None else None, count)
+    if motivo is not None:
+        return await _resultado(db, run_id, count, 404 if motivo == "not_found" else 409, motivo)
+
+    valores, marcador, tiene_marcador, aceptacion = await _leer_marcador(db)
+    if tiene_marcador and marcador is not True:
+        return await _resultado(db, run_id, count, 409, "corrupt_flag")
+    if tiene_marcador and marcador is True:
         if CLAVE_ACEPTACION in valores and aceptacion is None:
             return await _resultado(db, run_id, count, 409, "corrupt_record")
         if aceptacion is not None and aceptacion.run_id == run_id and aceptacion.count == count:
             return await _resultado(db, run_id, count, 200, "already_accepted_idempotent",
                                     aceptacion=aceptacion)
         return await _resultado(db, run_id, count, 409, "already_accepted")
-    if tiene:
-        return await _resultado(db, run_id, count, 409, "corrupt_flag")
-    return await _resultado(db, run_id, count, 409, "already_accepted")
+    if en_marcha:
+        return await _resultado(db, run_id, count, 409, "in_progress")
+    return None
 
 
 async def aceptar(db: AsyncSession, run_id: UUID, count: int, *, en_marcha: bool = False,
@@ -242,32 +255,26 @@ async def aceptar(db: AsyncSession, run_id: UUID, count: int, *, en_marcha: bool
     """Acepta una adopción inicial con N ilegibles, de forma explícita y atómica."""
     if type(count) is not int or not 1 <= count <= MAX_ILEGIBLES:
         return ResultadoAceptacion(status=422, reason="invalid_payload")
-    if en_marcha:
-        return await _resultado(db, run_id, count, 409, "in_progress")
+
+    # Primera pasada sin cerrojo: decide el motivo de rechazo en el orden del memo y evita
+    # bloquear si ni siquiera hay algo aceptable.
+    rechazo = await _revisar(db, run_id, count, en_marcha=en_marcha)
+    if rechazo is not None:
+        return rechazo
 
     async with _cerrojo_de_registro(db, espera_cerrojo) as libre:
         if not libre:
-            return await _resultado(db, run_id, count, 409, "in_progress")
+            # El cerrojo puede estar ocupado por otra aceptación (idempotencia) o por un
+            # registro en marcha. Releer permite devolver el motivo más específico.
+            rechazo = await _revisar(db, run_id, count, en_marcha=False)
+            return rechazo or await _resultado(db, run_id, count, 409, "in_progress")
 
-        _valores, marcador, tiene_marcador, aceptacion = await _leer_marcador(db)
-        if tiene_marcador and marcador is not True:
-            return await _resultado(db, run_id, count, 409, "corrupt_flag")
-        if tiene_marcador and marcador is True:
-            if CLAVE_ACEPTACION in _valores and aceptacion is None:
-                return await _resultado(db, run_id, count, 409, "corrupt_record")
-            if aceptacion is not None and aceptacion.run_id == run_id and aceptacion.count == count:
-                return await _resultado(db, run_id, count, 200, "already_accepted_idempotent",
-                                        aceptacion=aceptacion)
-            return await _resultado(db, run_id, count, 409, "already_accepted")
+        # Revalidar dentro del cerrojo: entre la primera pasada y ahora pudo aparecer un
+        # informe más nuevo o confirmarse otra aceptación.
+        rechazo = await _revisar(db, run_id, count, en_marcha=False)
+        if rechazo is not None:
+            return rechazo
 
-        ultima = await _ultima_adopcion(db)
-        run = await db.get(ImportRun, run_id)
-        motivo = validar_informe(run, ultima.id if ultima is not None else run_id, count)
-        if motivo is not None:
-            return await _resultado(db, run_id, count, 404 if motivo == "not_found" else 409, motivo)
-
-        # Solo en el camino válido se asegura la fila singleton; un rechazo no escribe.
-        await RuntimeSettingsService(db).get_overrides()
         ahora = datetime.now(UTC)
         iso = ahora.isoformat()
         auth_mode = get_settings().auth_mode
@@ -280,14 +287,20 @@ async def aceptar(db: AsyncSession, run_id: UUID, count: int, *, en_marcha: bool
                 "auth_mode": auth_mode,
             },
         }
+        # Upsert condicional: si la fila singleton no existe, la crea ya con el patch; si
+        # existe y el marcador está ausente, lo añade; si ya hay marcador, no toca nada.
+        # No se asegura la fila antes: un rechazo no deja ninguna escritura.
         fila = (await db.execute(text(
-            'UPDATE runtime_settings '
-            'SET "values" = COALESCE("values", \'{}\'::jsonb) || CAST(:patch AS jsonb) '
-            'WHERE id = 1 AND NOT (COALESCE("values", \'{}\'::jsonb) ? :clave) '
+            'INSERT INTO runtime_settings (id, "values") '
+            'VALUES (1, CAST(:patch AS jsonb)) '
+            'ON CONFLICT (id) DO UPDATE '
+            'SET "values" = runtime_settings."values" || CAST(:patch AS jsonb) '
+            'WHERE NOT (runtime_settings."values" ? :clave) '
             'RETURNING id'
         ), {"patch": json.dumps(patch, ensure_ascii=False), "clave": CLAVE_MARCADOR})).scalar()
         if fila is None:
-            return await _reread_tras_carrera(db, run_id, count)
+            rechazo = await _revisar(db, run_id, count, en_marcha=False)
+            return rechazo or await _resultado(db, run_id, count, 409, "already_accepted")
 
         db.add(ImportRun(
             started_at=ahora, finished_at=ahora,
@@ -305,21 +318,21 @@ async def aceptar(db: AsyncSession, run_id: UUID, count: int, *, en_marcha: bool
                                                       run_id=run_id, auth_mode=auth_mode))
 
 
-def validar_informe(run: ImportRun | None, ultimo_id: UUID, count: int) -> str | None:
+def validar_informe(run: ImportRun | None, ultimo_id: UUID | None, count: int) -> str | None:
     """Devuelve el motivo de rechazo (string estable) o `None` si el informe es aceptable.
 
-    El orden importa: primero el tipo de informe (un incremental no puede «robar» la adopción),
-    después la vigencia, el cierre, los errores y, por último, el recuento.
+    Orden del memo #6: existencia -> vigencia (stale) -> tipo -> cierre -> errores -> recuento ->
+    lotes sin acreditar. El 422 y el marcador se resuelven fuera, respetando la misma secuencia.
     """
     if run is None:
         return "not_found"
     detalles = dict(run.details or {})
+    if ultimo_id is not None and run.id != ultimo_id:
+        return "stale_run"
     if detalles.get("kind") != "adoption":
         return "incremental_run"
     if run.finished_at is None:
         return "not_terminated"
-    if run.id != ultimo_id:
-        return "stale_run"
     if run.error_count or detalles.get("errors"):
         return "has_errors"
     unreadable = detalles.get("unreadable")
