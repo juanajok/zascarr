@@ -734,10 +734,10 @@ class TestVacíoY326:
         r = await pagina({"serie": str(sid)})
         t = visible(r.text)
         assert "La biblioteca todavía no está registrada" in t
-        assert "Regístrala primero en Auditoría" in t
+        assert "Regístrala primero en Duplicados" in t
         assert r.text.count('class="empty-state"') == 1
         assert "Buscar archivos nuevos en el disco" not in t
-        assert "Ir a Auditoría" in t
+        assert "Ir a Duplicados" in t
 
     async def test_vacio_en_marcha_lo_dice(self, banco, monkeypatch):
         sid = await banco.serie("BATMAN", 2025)
@@ -751,7 +751,7 @@ class TestVacíoY326:
         await _poner_marcador(banco, True)
         r = await pagina()
         assert "Buscar archivos nuevos en el disco" not in visible(r.text)
-        assert "Ir a Auditoría" not in visible(r.text)
+        assert "Ir a Duplicados" not in visible(r.text)
 
     async def test_no_crea_la_fila_de_ajustes_al_leer_el_marcador(self, banco):
         sid = await banco.serie("BATMAN", 2025)
