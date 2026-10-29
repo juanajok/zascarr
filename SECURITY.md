@@ -103,6 +103,7 @@ caracteres** (15 recomendado sin segundo factor): sin eso, el retraso no basta.
 ## Deuda de seguridad conocida (A6)
 
 - **La cookie viaja sin `Secure`, decidido a propósito.** Con `secure=True` el navegador no enviaría la cookie por HTTP plano y el login en la LAN dejaría de funcionar, así que sin TLS activado rompería el caso de uso principal. Es la decisión correcta hoy, pero es deuda deliberada: cuando ZascArr viva tras un reverse proxy con TLS de verdad, ese flag debería activarse (o hacerse condicional a `base_url` empezando por `https://`). Entra de oficio con la futura historia de reverse proxy.
+- **Aceptación de cobertura incompleta con `auth_mode="none"`:** el registro guarda `auth_mode`, pero sin contraseña cualquier usuario con acceso local/LAN puede aceptar los N ilegibles; si la instalación se expone, se recomienda activar contraseña.
 
 ## Reportar una vulnerabilidad
 
