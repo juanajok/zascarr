@@ -33,7 +33,7 @@ from zascarr.services.aceptacion_adopcion import (
     aceptar,
     evaluar,
 )
-from zascarr.services.library_adopter import LibraryAdopter
+from zascarr.services.library_adopter import AdoptionReport, LibraryAdopter
 from zascarr.services.registro_biblioteca import (
     CLAVE_CERROJO_REGISTRO,
     EstadoRegistro,
@@ -117,6 +117,17 @@ async def _ultima_adopcion(m: Mundo) -> ImportRun:
     return (await _runs(m, "adoption"))[0]
 
 
+async def _snapshot(m: Mundo):
+    """Estado persistente completo que un rechazo no puede alterar."""
+    async with m.fabrica() as s:
+        valores = (await s.execute(text('SELECT "values" FROM runtime_settings WHERE id = 1'))).scalar_one_or_none()
+        runs = (await s.execute(text("SELECT id, details FROM import_runs ORDER BY id"))).all()
+    return (
+        dict(valores) if valores is not None else None,
+        sorted((str(fila[0]), json.dumps(fila[1] or {}, sort_keys=True)) for fila in runs),
+    )
+
+
 async def _insert_run(m: Mundo, *, kind: str, unreadable: int, errors: list[str] | None = None,
                       error_count: int = 0, finished_at=datetime.now(UTC), **extra) -> ImportRun:
     detalles = {"kind": kind, "unreadable": unreadable, "errors": errors or [], **extra}
@@ -173,26 +184,38 @@ class TestAceptacionPersistente:
         await _adopt(mundo)
         runs = await _runs(mundo, "adoption")
         viejo = runs[-1]
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, viejo.id, 1)
 
         assert resultado.status == 409 and resultado.reason == "stale_run"
+        assert await _snapshot(mundo) == antes
         assert CLAVE_MARCADOR not in await _valores(mundo)
         assert await _runs(mundo, "adoption_acceptance") == []
 
     async def test_count_distinto_no_escribe(self, mundo, carpeta_cerrada):
         await _adopt(mundo)
         run = await _ultima_adopcion(mundo)
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, run.id, 2)
 
         assert resultado.status == 409 and resultado.reason == "count_mismatch"
+        assert await _snapshot(mundo) == antes
         assert CLAVE_MARCADOR not in await _valores(mundo)
         assert await _runs(mundo, "adoption_acceptance") == []
 
     @pytest.mark.parametrize("kind", ["registro_incremental", "audit"])
-    async def test_otro_kind_no_puede_poner_el_marcador_inicial(self, mundo, carpeta_cerrada, kind):
+    async def test_otro_kind_con_adopcion_previa_es_stale(self, mundo, carpeta_cerrada, kind):
         await _adopt(mundo)
+        run = await _insert_run(mundo, kind=kind, unreadable=1)
+
+        resultado = await _aceptar(mundo, run.id, 1)
+
+        assert resultado.status == 409 and resultado.reason == "stale_run"
+
+    @pytest.mark.parametrize("kind", ["registro_incremental", "audit"])
+    async def test_otro_kind_sin_adopcion_previa_es_incremental(self, mundo, kind):
         run = await _insert_run(mundo, kind=kind, unreadable=1)
 
         resultado = await _aceptar(mundo, run.id, 1)
@@ -203,18 +226,22 @@ class TestAceptacionPersistente:
 
     async def test_informe_con_errores_no_se_acepta(self, mundo):
         run = await _insert_run(mundo, kind="adoption", unreadable=1, errors=["fallo"], error_count=1)
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, run.id, 1)
 
         assert resultado.status == 409 and resultado.reason == "has_errors"
+        assert await _snapshot(mundo) == antes
         assert CLAVE_MARCADOR not in await _valores(mundo)
 
     async def test_informe_sin_ilegibles_no_se_acepta(self, mundo):
         run = await _insert_run(mundo, kind="adoption", unreadable=0)
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, run.id, 1)
 
         assert resultado.status == 409 and resultado.reason == "zero_unreadable"
+        assert await _snapshot(mundo) == antes
         assert CLAVE_MARCADOR not in await _valores(mundo)
 
     async def test_lotes_sin_acreditar_no_se_aceptan(self, mundo):
@@ -230,10 +257,12 @@ class TestAceptacionPersistente:
         await _aceptar(mundo, primero.id, 1)
         registro = (await _valores(mundo))[CLAVE_ACEPTACION]
         segundo = await _insert_run(mundo, kind="adoption", unreadable=2)
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, segundo.id, 2)
 
         assert resultado.status == 409 and resultado.reason == "already_accepted"
+        assert await _snapshot(mundo) == antes
         assert (await _valores(mundo))[CLAVE_ACEPTACION] == registro
         assert len(await _runs(mundo, "adoption_acceptance")) == 1
 
@@ -242,10 +271,12 @@ class TestAceptacionPersistente:
         await _adopt(mundo)
         run = await _ultima_adopcion(mundo)
         await _set_values(mundo, {CLAVE_MARCADOR: valor})
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, run.id, 1)
 
         assert resultado.status == 409 and resultado.reason == "corrupt_flag"
+        assert await _snapshot(mundo) == antes
         assert (await _valores(mundo))[CLAVE_MARCADOR] == valor
         assert await _runs(mundo, "adoption_acceptance") == []
 
@@ -254,10 +285,12 @@ class TestAceptacionPersistente:
         run = await _ultima_adopcion(mundo)
         await _set_values(mundo, {CLAVE_MARCADOR: True,
                                   CLAVE_ACEPTACION: {"count": "1", "accepted_at": "no"}})
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, run.id, 1)
 
         assert resultado.status == 409 and resultado.reason == "corrupt_record"
+        assert await _snapshot(mundo) == antes
         assert (await _valores(mundo))[CLAVE_ACEPTACION]["count"] == "1"   # no se borra
 
     async def test_run_inexistente(self, mundo):
@@ -267,10 +300,12 @@ class TestAceptacionPersistente:
     async def test_registro_en_marcha_no_acepta(self, mundo, carpeta_cerrada):
         await _adopt(mundo)
         run = await _ultima_adopcion(mundo)
+        antes = await _snapshot(mundo)
 
         resultado = await _aceptar(mundo, run.id, 1, en_marcha=True)
 
         assert resultado.status == 409 and resultado.reason == "in_progress"
+        assert await _snapshot(mundo) == antes
         assert CLAVE_MARCADOR not in await _valores(mundo)
 
     async def test_aceptar_no_recorre_el_disco(self, mundo, carpeta_cerrada, monkeypatch):
@@ -627,6 +662,7 @@ class TestIncrementalSigueConservador:
     async def test_el_cerrojo_del_registro_ocupado_rechaza_sin_escribir(self, mundo, carpeta_cerrada):
         await _adopt(mundo)
         run = await _ultima_adopcion(mundo)
+        antes = await _snapshot(mundo)
         async with mundo.motor.connect() as conexion:
             await conexion.execute(text("SELECT pg_advisory_lock(:k)"), {"k": CLAVE_CERROJO_REGISTRO})
             try:
@@ -636,6 +672,7 @@ class TestIncrementalSigueConservador:
                 await conexion.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": CLAVE_CERROJO_REGISTRO})
 
         assert resultado.status == 409 and resultado.reason == "in_progress"
+        assert await _snapshot(mundo) == antes
         assert CLAVE_MARCADOR not in await _valores(mundo)
 
     async def test_un_rechazo_no_crea_la_fila_de_ajustes(self, mundo, carpeta_cerrada):
@@ -650,3 +687,41 @@ class TestIncrementalSigueConservador:
         assert resultado.status == 409 and resultado.reason == "count_mismatch"
         async with mundo.fabrica() as s:
             assert (await s.execute(text("SELECT count(*) FROM runtime_settings"))).scalar() == 0
+
+
+class TestPersistenciaDeLotesSinAcreditar:
+
+    async def test_persiste_reverted_y_unknown_y_bloquea_la_aceptacion(self, mundo):
+        ahora = datetime.now(UTC)
+        report = AdoptionReport(started_at=ahora, finished_at=ahora,
+                                unreadable=3, reverted=2, unknown=1)
+        async with mundo.fabrica() as s:
+            rid = await LibraryAdopter(s)._persist_run(report)
+            await s.commit()
+
+        run = next(r for r in await _runs(mundo, "adoption") if r.id == rid)
+        assert run.details["reverted"] == 2 and run.details["unknown"] == 1
+        assert (await _evaluar(mundo)).oferta is False
+        resultado = await _aceptar(mundo, rid, 3)
+        assert resultado.status == 409 and resultado.reason == "batch_unverified"
+        assert CLAVE_MARCADOR not in await _valores(mundo)
+
+    async def test_un_informe_viejo_sin_esas_claves_se_trata_como_cero(self, mundo):
+        run = await _insert_run(mundo, kind="adoption", unreadable=1)
+
+        assert (await _evaluar(mundo)).oferta is True
+        assert (await _aceptar(mundo, run.id, 1)).reason == "accepted"
+
+    async def test_el_camino_valido_crea_la_fila_si_falta_sin_paso_previo(self, mundo, carpeta_cerrada):
+        await _adopt(mundo)
+        run = await _ultima_adopcion(mundo)
+        async with mundo.fabrica() as s:
+            await s.execute(text("DELETE FROM runtime_settings"))
+            await s.commit()
+
+        resultado = await _aceptar(mundo, run.id, 1)
+
+        assert resultado.status == 200 and resultado.reason == "accepted"
+        valores = await _valores(mundo)
+        assert valores[CLAVE_MARCADOR] is True
+        assert valores[CLAVE_ACEPTACION]["count"] == 1
