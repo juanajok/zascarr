@@ -32,6 +32,10 @@
       {% endif %}
       {% if clave and series_id %}{{ volver(clave, series_id, cursor_actual, inicio, "Revisar de nuevo esta página") }}{% endif %}
       <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+      {% if series_id %}
+      <a class="btn ghost sm" href="/ui/series/{{ series_id }}">Volver a la ficha de la serie</a>
+      <a class="btn ghost sm" href="/ui/pendientes/carpetas?serie={{ series_id }}">Elegir otra carpeta para esta serie</a>
+      {% endif %}
     </div>
   </section>
 
@@ -83,6 +87,10 @@
   <div class="vinc-acciones">
     {% if clave and series_id %}{{ volver(clave, series_id, cursor_actual, inicio, "Revisar de nuevo" if grupos.omitido else "Seguir revisando esta carpeta") }}{% endif %}
     <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+    {% if series_id %}
+    <a class="btn ghost sm" href="/ui/series/{{ series_id }}">Volver a la ficha de la serie</a>
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas?serie={{ series_id }}">Elegir otra carpeta para esta serie</a>
+    {% endif %}
   </div>
   {% endif %}
 </div>

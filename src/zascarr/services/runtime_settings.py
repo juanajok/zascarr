@@ -145,6 +145,19 @@ class RuntimeSettingsService:
         row = await self._row()
         return bool((row.values or {}).get(key, False))
 
+    async def get_flag_sin_crear(self, key: str) -> bool:
+        """Lee un marcador con SELECT puro: NUNCA crea la fila ni hace flush.
+
+        Para pantallas de solo lectura (p. ej. la lista con `serie` de #304): una
+        oferta auxiliar no puede convertir un GET en una escritura.
+        """
+        row = (await self.db.execute(
+            select(RuntimeSetting).where(RuntimeSetting.id == _SETTINGS_ROW_ID)
+        )).scalar_one_or_none()
+        if row is None:
+            return False
+        return (row.values or {}).get(key) is True
+
     async def set_flag(self, key: str, value: bool) -> None:
         row = await self._row()
         values = dict(row.values or {})

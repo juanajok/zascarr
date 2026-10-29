@@ -17,10 +17,12 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
-from zascarr.models import File
+from zascarr.models import File, Series
+from zascarr.services import registro_biblioteca
 from zascarr.services.asignacion import (
     EstadoResultado,
     Resultado,
@@ -33,6 +35,7 @@ from zascarr.services.revision_carpetas import (
     RevisionCarpetas,
     Suelto,
 )
+from zascarr.services.runtime_settings import RuntimeSettingsService
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, puede_tener_portada
 from zascarr.utils.naming import parse_comic_filename
 from zascarr.web.routes import crear_templates
@@ -197,9 +200,12 @@ async def rango(
 #: Grupos por página en la vista HTML (el JSON admite hasta `LIMITE_MAXIMO`): una página corta se
 #: pinta rápido en la Pi y se revisa con calma.
 GRUPOS_POR_PAGINA = 50
+_MARCADOR_ADOPCION = "_library_adoption_done"
 
 
-def _vista_carpetas(r: RespuestaCarpetas) -> dict:
+def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
+                    serie_aviso: str | None = None,
+                    estado_nuevos: str | None = None) -> dict:
     """Prepara lo que pinta la plantilla SIN recalcular nada: señales, estados y etiquetas
     vienen del servicio (la misma respuesta que el JSON). Aquí solo se traducen los ids de
     `senales[].archivos` a nombres, que es presentación; `grupos[].archivos` contiene siempre
@@ -216,6 +222,10 @@ def _vista_carpetas(r: RespuestaCarpetas) -> dict:
                 for s in g.senales
             ],
             "sin_mostrar": g.n_archivos - len(g.archivos),
+            "sugerida_para_serie": bool(
+                serie_actual and g.serie_sugerida is not None
+                and str(g.serie_sugerida.series_id) == str(serie_actual["id"])
+            ),
         })
     p = r.pagina
     total = r.totales.carpetas_utiles
@@ -241,7 +251,40 @@ def _vista_carpetas(r: RespuestaCarpetas) -> dict:
             p.desplazamiento + p.limite if p.desplazamiento + p.limite < total else None
         ),
         "limite": p.limite,
+        "serie_actual": serie_actual,
+        "serie_aviso": serie_aviso,
+        "estado_nuevos": estado_nuevos,
     }
+
+
+async def _serie_del_filtro(db: AsyncSession, valor: str) -> tuple[dict | None, str | None]:
+    """200 con aviso si `serie` no es UUID o no existe; nunca 422/500 por una URL."""
+    if not valor:
+        return None, None
+    try:
+        serie_id = UUID(valor)
+    except (ValueError, TypeError):
+        return None, ("No hemos encontrado esa serie. Se muestra la lista sin serie fijada. "
+                      "Puede que se haya borrado o que el enlace esté incompleto.")
+    fila = (await db.execute(
+        select(Series.id, Series.title, Series.start_year).where(Series.id == serie_id)
+    )).first()
+    if fila is None:
+        return None, ("No hemos encontrado esa serie. Se muestra la lista sin serie fijada. "
+                      "Puede que se haya borrado o que el enlace esté incompleto.")
+    return {"id": fila[0], "title": fila[1], "start_year": fila[2]}, None
+
+
+async def _estado_nuevos(db: AsyncSession) -> str:
+    """Disponibilidad de #326 sin disco: solo el marcador, leído con SELECT puro."""
+    if registro_biblioteca.estado_actual().en_marcha:
+        return "en_marcha"
+    try:
+        if await RuntimeSettingsService(db).get_flag_sin_crear(_MARCADOR_ADOPCION):
+            return "disponible"
+    except Exception as exc:  # noqa: BLE001 — una oferta auxiliar no tumba la lista
+        logger.warning("pendientes.marcador_fallo", error=type(exc).__name__)
+    return "no_disponible"
 
 
 @router.get("/carpetas", response_class=HTMLResponse)
@@ -249,25 +292,39 @@ async def carpetas(
     request: Request,
     limite: int = Query(default=GRUPOS_POR_PAGINA, ge=1, le=LIMITE_MAXIMO),
     desplazamiento: int = Query(default=0, ge=0),
+    serie: str = Query(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Rebanada 1b: lo pendiente agrupado por carpeta, SOLO LECTURA. Misma respuesta que
     `GET /api/revision/carpetas`, con el filtro de lectura `solo_utiles`: los grupos sin
     contexto son sueltos y no se pintan como carpetas. No escribe, no mira el disco y no
     ofrece ninguna acción."""
+    serie_valida = ""
     try:
+        serie_uuid = UUID(serie) if serie else None
+        serie_valida = str(serie_uuid) if serie_uuid is not None else ""
+    except (ValueError, TypeError):
+        serie_uuid = None
+    try:
+        serie_actual, serie_aviso = await _serie_del_filtro(db, serie)
         servicio = RevisionCarpetas(db)
         respuesta = await servicio.carpetas(
             limite=limite, desplazamiento=desplazamiento, solo_utiles=True,
         )
+        estado_nuevos = None
+        if serie_actual is not None and not respuesta.grupos:
+            estado_nuevos = await _estado_nuevos(db)
     except Exception as exc:  # noqa: BLE001 — un fallo no puede dejar recuentos a medias
         logger.warning("pendientes.carpetas_fallo", error=type(exc).__name__)
         resp = templates.TemplateResponse(
-            request, "carpetas.html", {"error": True}, status_code=503,
+            request, "carpetas.html",
+            {"error": True, "serie": serie_valida}, status_code=503,
         )
         resp.headers["Cache-Control"] = "no-store"
         return resp
-    resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(respuesta))
+    resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(
+        respuesta, serie_actual=serie_actual, serie_aviso=serie_aviso,
+        estado_nuevos=estado_nuevos))
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
