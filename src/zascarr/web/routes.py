@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from fastapi.templating import Jinja2Templates
 
 from zascarr.config import get_settings
+from zascarr.services.primeros_pasos import fecha_llana
 from zascarr.web.componentes import registrar as registrar_componentes
 from zascarr.web.descubrir_texto import etiqueta_procedencia, pista_de_tradicion
 
@@ -38,6 +39,8 @@ def crear_templates() -> Jinja2Templates:
     # las plantillas.
     templates.env.filters["pista_de_tradicion"] = pista_de_tradicion
     templates.env.filters["etiqueta_procedencia"] = etiqueta_procedencia
+    # Fechas legibles sin depender del locale del sistema (la Pi puede no tener es_ES).
+    templates.env.filters["fecha_llana"] = fecha_llana
     # V2: macros de componentes (chip, aviso, grupo…) disponibles en TODAS las plantillas.
     registrar_componentes(templates.env)
     return templates
