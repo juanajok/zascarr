@@ -16,6 +16,7 @@
   <form class="politica-form">
     <label for="wishlist_policy">Qué buscar</label>
     <select id="wishlist_policy" name="wishlist_policy"
+            aria-describedby="politica-efecto politica-futuros"
             hx-post="/ui/series/{{ series.id }}/politica"
             hx-target="#politica-serie" hx-swap="outerHTML">
       {% for valor, etiqueta in politicas_ofrecidas.items() %}
@@ -40,7 +41,7 @@
      dicha con la acción de la persona) y el motivo de la opción no elegible plegado. El PORTADOR del motivo es el
      `<details>`: el `title` de la `<option>` NO se muestra en los selectores nativos del móvil ni lo anuncian de forma
      fiable los lectores de pantalla; se deja porque no estorba, no porque cuente como accesible. #}
-  <p class="muted politica-efecto">
+  <p id="politica-efecto" class="muted politica-efecto">
     Se guarda al elegir. Si dejas de buscar, se para al momento.
   </p>
 
