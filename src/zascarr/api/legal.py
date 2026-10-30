@@ -30,4 +30,8 @@ async def accept(data: LegalAccept, db: AsyncSession = Depends(get_db)):
     if not data.acknowledged:
         raise HTTPException(status_code=400, detail="Debes marcar acknowledged=true")
     ack = await acknowledge(db)
-    return {"accepted": True, "accepted_at": ack.accepted_at.isoformat(), "legal_version": ack.legal_version}
+    return {
+        "accepted": True,
+        "accepted_at": ack.accepted_at.isoformat(),
+        "legal_version": ack.legal_version,
+    }

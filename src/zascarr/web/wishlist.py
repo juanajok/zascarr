@@ -106,15 +106,21 @@ async def index(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRes
 
 
 @router.get("/buscar-serie", response_class=HTMLResponse)
-async def buscar_serie(request: Request, q: str = "", db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def buscar_serie(
+    request: Request, q: str = "", db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
     series_list = await WishlistService(db).search_series(q)
     return templates.TemplateResponse(
         request, "_resultados_series_wishlist.html", {"series_list": series_list}
     )
 
 
-@router.post("/anadir", response_class=HTMLResponse, dependencies=[Depends(require_legal_acknowledgment)])
-async def anadir(request: Request, series_id: UUID = Form(...), db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+@router.post(
+    "/anadir", response_class=HTMLResponse, dependencies=[Depends(require_legal_acknowledgment)]
+)
+async def anadir(
+    request: Request, series_id: UUID = Form(...), db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
     try:
         item = await WishlistService(db).add(series_id=series_id)
     except ValueError as exc:
@@ -132,8 +138,14 @@ async def quitar(item_id: UUID, db: AsyncSession = Depends(get_db)) -> HTMLRespo
     return HTMLResponse("")
 
 
-@router.post("/{item_id}/reintentar", response_class=HTMLResponse, dependencies=[Depends(require_legal_acknowledgment)])
-async def reintentar(item_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+@router.post(
+    "/{item_id}/reintentar",
+    response_class=HTMLResponse,
+    dependencies=[Depends(require_legal_acknowledgment)],
+)
+async def reintentar(
+    item_id: UUID, request: Request, db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
     try:
         await WishlistService(db).retry(item_id)
     except ValueError as exc:
@@ -166,7 +178,9 @@ def _formato_de(titulo: str) -> str:
 
 @router.post("/{item_id}/buscar-ahora", response_class=HTMLResponse,
              dependencies=[Depends(require_legal_acknowledgment)])
-async def buscar_ahora(item_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def buscar_ahora(
+    item_id: UUID, request: Request, db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
     item = await db.get(Wishlist, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item no encontrado")

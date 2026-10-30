@@ -130,7 +130,9 @@ def cached_image_response(request: Request, data: bytes, content_type: str, etag
     si no 200 con Cache-Control privado — son portadas de una biblioteca
     personal, no contenido público cacheable por un proxy intermedio."""
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "private, max-age=86400"})
+        return Response(
+            status_code=304, headers={"ETag": etag, "Cache-Control": "private, max-age=86400"}
+        )
     return Response(
         content=data, media_type=content_type,
         headers={"ETag": etag, "Cache-Control": "private, max-age=86400"},

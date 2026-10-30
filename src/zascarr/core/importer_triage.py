@@ -39,6 +39,7 @@ Correcciones respecto al diseño original:
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import io
 import re
@@ -162,10 +163,9 @@ def parse_comic_info(data: bytes) -> ComicInfo:
     for tag, attr in (("Volume", "volume"), ("Year", "year"),
                       ("PageCount", "page_count")):
         if v := _text(root.find(tag)):
-            try:
+            # Volume/Year no numéricos existen en la escena; ignorar
+            with contextlib.suppress(ValueError):
                 setattr(info, attr, int(v))
-            except ValueError:
-                pass  # Volume/Year no numéricos existen en la escena; ignorar
 
     for tag in _CREDIT_TAGS:
         if v := _text(root.find(tag)):
