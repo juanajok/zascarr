@@ -136,6 +136,7 @@ class TestFixture123a:
             "set -euo pipefail\n"
             'echo "$*" >> "$PSQL_LOG"\n'
             'echo "PGPASSWORD=${PGPASSWORD:-}" >> "$PSQL_LOG.env"\n'
+            'echo "PGHOSTADDR=${PGHOSTADDR:-} PGHOST=${PGHOST:-} PGPORT=${PGPORT:-} PGSERVICE=${PGSERVICE:-} PGOPTIONS=${PGOPTIONS:-}" >> "$PSQL_LOG.env"\n'
             'if [[ "$*" == *information_schema.tables* ]]; then echo 5; exit 0; fi\n'
             'if [[ "$*" == *shobj_description* ]]; then echo "${FAKE_PSQL_MARCA-zascarr-123a-aislada}"; exit 0; fi\n'
             'if [[ "$*" == *"||"* ]]; then echo "4|6|40|3|3"; exit 0; fi\n'
@@ -269,6 +270,7 @@ class TestSalvaguardas123a:
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             'echo "$*" >> "$PSQL_LOG"\n'
             'echo "PGPASSWORD=${PGPASSWORD:-}" >> "$PSQL_LOG.env"\n'
+            'echo "PGHOSTADDR=${PGHOSTADDR:-} PGHOST=${PGHOST:-} PGPORT=${PGPORT:-} PGSERVICE=${PGSERVICE:-} PGOPTIONS=${PGOPTIONS:-}" >> "$PSQL_LOG.env"\n'
             'if [[ "$*" == *information_schema.tables* ]]; then echo 5; exit 0; fi\n'
             'if [[ "$*" == *shobj_description* ]]; then echo "${FAKE_PSQL_MARCA-zascarr-123a-aislada}"; exit 0; fi\n'
             'if [[ "$*" == *"||"* ]]; then echo "4|6|40|3|3"; exit 0; fi\n'
@@ -294,3 +296,16 @@ class TestSalvaguardas123a:
         assert "C0ntr4s3na-SINTETICA" not in log.read_text(encoding="utf-8")            # no en argv
         assert "PGPASSWORD=C0ntr4s3na-SINTETICA" in (tmp_path / "psql.log.env").read_text(encoding="utf-8")
         assert "127.0.0.1:15432/test" in log.read_text(encoding="utf-8")                # el destino se conserva
+
+    def test_ninguna_variable_pg_del_entorno_cambia_el_destino(self, tmp_path):
+        """H-C: libpq usa PGHOSTADDR/PGHOST/PGPORT/PGSERVICE… por encima del host de la URL; el hijo no las hereda."""
+        env, log = self._con_psql_falso(
+            tmp_path, PGHOSTADDR="10.9.8.7", PGHOST="db.example", PGPORT="5432", PGSERVICE="produccion",
+            PGOPTIONS="-c search_path=otro")
+        r = _ejecutar(tmp_path / "fixture", env=env, extra=[
+            "--aplicar", "--database-url", "postgresql://test:x@127.0.0.1:15432/test"])
+        assert r.returncode == 0, r.stderr
+        vistos = (tmp_path / "psql.log.env").read_text(encoding="utf-8")
+        for var in ("PGHOSTADDR", "PGHOST", "PGPORT", "PGSERVICE", "PGOPTIONS"):
+            assert f"{var}= " in vistos or f"{var}=\n" in vistos or f"{var}=" not in vistos.replace("PGPASSWORD=", ""), (var, vistos)
+        assert "10.9.8.7" not in vistos and "db.example" not in vistos and "produccion" not in vistos

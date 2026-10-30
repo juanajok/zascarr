@@ -219,7 +219,9 @@ def _url_psql_aislada(url: str) -> str:
 def _psql(url: str, *args: str) -> subprocess.CompletedProcess:
     """psql con la contraseña en `PGPASSWORD`, no en la URL: lo que va en `argv` lo ve cualquiera con `ps`."""
     parsed = urlparse(url)
-    entorno = os.environ.copy()
+    # libpq lee PGHOSTADDR, PGHOST, PGPORT, PGSERVICE, PGSERVICEFILE, PGOPTIONS, PGPASSFILE… y alguna anula el host/puerto de la
+    # URL que se comprobó. El hijo NO hereda ninguna variable PG*: solo la contraseña, que se pone abajo.
+    entorno = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PG", "LIBPQ"))}
     if parsed.password:
         entorno["PGPASSWORD"] = unquote(parsed.password)
         netloc = (f"{parsed.username}@" if parsed.username else "") + (parsed.hostname or "")
@@ -262,7 +264,7 @@ def _aplicar(url: str, seed: Path, resumen: dict, *, reset: bool, force: bool) -
     if marca.returncode != 0 or marca.stdout.strip() != MARCA_BD:
         raise SystemExit(
             "ERROR: la BD no lleva la marca de entorno aislado "
-            f"(COMMENT ON DATABASE ... IS '{MARCA_BD}'). No se escribe nada."
+            f"(COMMENT ON DATABASE ... IS '{MARCA_BD}'). No se ha tocado la BD."
         )
     if not reset:
         cuenta = _psql(

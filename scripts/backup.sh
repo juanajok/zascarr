@@ -129,7 +129,7 @@ exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
         "la copia de seguridad local" && ESPACIO_RC=0 || ESPACIO_RC=$?
 if (( ESPACIO_RC == 2 )); then
     escribir_estado "failed" "pg_dump_failed" "" "" 0 false || true
-    die "No pude medir la base de datos (¿PostgreSQL parado?). No se ha escrito ningún volcado."
+    die "No pude medir el espacio necesario (¿PostgreSQL parado o el disco sin montar?). No se ha escrito ningún volcado."
 elif (( ESPACIO_RC != 0 )); then
     escribir_estado "failed" "disk_full" "" "" 0 false || true
     die "No hay espacio para la copia de seguridad. No se ha escrito ningún volcado."

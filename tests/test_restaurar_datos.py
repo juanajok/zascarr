@@ -51,7 +51,11 @@ fi
 if [[ "$cmd" == *" psql"* ]]; then
     if [[ "$cmd" == *" -c "* ]]; then
         if [[ "$cmd" == *"version_num"* ]]; then
-            echo "${FAKE_DB_ALEMBIC:-0020}"
+            if [[ -s "$RESTORE_LOG" && -n "${FAKE_DB_ALEMBIC_POST:-}" ]]; then
+                echo "$FAKE_DB_ALEMBIC_POST"
+            else
+                echo "${FAKE_DB_ALEMBIC:-0020}"
+            fi
             exit 0
         fi
         if [[ "$cmd" == *"left join"* ]]; then
@@ -583,7 +587,7 @@ class TestRestaurarDatos:
                 "--forzar",
             ],
         )
-        assert r.returncode != 0
+        assert r.returncode != 0 and "--forzar está prohibido" in r.stderr
         _sin_destructivos(ctx)
 
     def test_no_imprime_rutas_completas(self, tmp_path):
@@ -667,7 +671,7 @@ class TestCorreccionesDeSecOps:
         ctx = _preparar(tmp_path)
         r = _ejecutar(ctx, extra_env={"FAKE_DROP_FAIL": "1"})
         assert r.returncode != 0
-        assert "no pude eliminar" in r.stderr and "Intentando recuperar la BD anterior" in r.stderr
+        assert "el dropdb falló: la BD debería seguir como estaba" in r.stderr and "Intentando recuperar la BD anterior" in r.stderr
 
     def test_la_copia_previa_nace_600_no_644(self, tmp_path):
         ctx = _preparar(tmp_path)
@@ -695,3 +699,103 @@ class TestCorreccionesDeSecOps:
         assert r.returncode != 0
         assert "\x1b" not in r.stderr and "$(" not in r.stderr and "`" not in r.stderr
         assert "0099" in r.stderr                                          # sigue diciendo de qué revisión se trata
+
+
+class TestMensajesLimpiosYComparacionCruda:
+    """#123 (SecOps H-A, H-B): lo que viene del dump, del manifiesto o de la BD se compara CRUDO y se limpia solo para mostrar."""
+
+    ESC = "\x1b[7mXX"
+
+    def test_h_b_una_revision_con_un_caracter_de_control_no_se_hace_pasar_por_otra(self, tmp_path):
+        ctx = _preparar(tmp_path, sql=_sql(alembic="0019"))
+        datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+        datos["alembic"] = "00\x0119"                                   # limpiado sería 0019 y pasaría la comprobación
+        ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        r = _ejecutar(ctx, extra_env={"FAKE_DB_ALEMBIC": "0019"})
+        assert r.returncode != 0
+        assert "dropdb" not in _log(ctx, "stub") and "createdb" not in _log(ctx, "stub")   # y se para ANTES de tocar la BD
+
+    def test_h_a_la_revision_actual_con_escapes_no_llega_al_mensaje(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_DB_ALEMBIC": "0020" + self.ESC})
+        assert r.returncode != 0 and "La BD actual está en" in r.stderr
+        assert "[7m" not in r.stderr and "0020" in r.stderr
+
+    def test_h_a_el_schema_del_manifiesto_con_escapes_no_llega_al_mensaje(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+        datos["schema"] = "2" + self.ESC
+        ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        r = _ejecutar(ctx)
+        assert r.returncode != 0 and "declara schema" in r.stderr
+        assert "[7m" not in r.stderr and "'2" in r.stderr
+
+    def test_h_a_la_revision_restaurada_con_escapes_no_llega_al_mensaje(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_DB_ALEMBIC_POST": "0021" + self.ESC})
+        assert r.returncode != 0 and "la revisión restaurada es" in r.stderr
+        assert "[7m" not in r.stderr and "0021" in r.stderr
+
+    def test_h_a_el_nombre_del_dump_con_escapes_no_llega_al_resumen(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        nuevo = ctx["dump"].with_name("update_20261029_210527" + self.ESC + ".sql.gz")
+        ctx["dump"].rename(nuevo)
+        sidecar = ctx["dump"].with_name(ctx["dump"].name + ".sha256")
+        if sidecar.exists():
+            sidecar.unlink()
+        datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+        datos["backup"] = nuevo.name
+        ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        r = _ejecutar(ctx, args=["--dump", str(nuevo), "--manifest", str(ctx["manifest"]),
+                                 "--sha", ctx["head"], "--yes"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "[7m" not in r.stdout + r.stderr
+
+
+GIT_QUE_CAMBIA_EL_HEAD = """#!/usr/bin/env bash
+# La primera lectura de HEAD es la real; las siguientes devuelven otro commit (el HEAD «cambió durante la restauración»).
+if [[ "$*" == *"rev-parse HEAD"* ]]; then
+    if [[ -f "${HEAD_VISTO:?}" ]]; then echo "ffffffffffffffffffffffffffffffffffffffff"; exit 0; fi
+    : > "$HEAD_VISTO"
+fi
+exec "${REAL_GIT:?}" "$@"
+"""
+
+
+class TestMasGuardasDeLaRestauracion:
+    """#123 (QA, A2 de #376): guardas que sobrevivían a la mutación."""
+
+    def test_la_bd_actual_en_otra_revision_que_la_esperada_no_se_toca(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_DB_ALEMBIC": "0019"})            # el dump y el manifiesto dicen 0020
+        assert r.returncode != 0 and "La BD actual está en '0019'" in r.stderr
+        assert "dropdb" not in _log(ctx, "stub") and "createdb" not in _log(ctx, "stub")
+
+    def test_un_dump_de_otra_revision_que_la_esperada_no_se_restaura(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+        datos.pop("alembic")                                               # sin esto otra guarda saltaría antes
+        ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        args = ["--dump", str(ctx["dump"]), "--manifest", str(ctx["manifest"]), "--sha", ctx["head"],
+                "--alembic-esperada", "0021", "--yes"]
+        r = _ejecutar(ctx, args=args)
+        assert r.returncode != 0 and "Revisión incompatible: dump '0020', esperada '0021'" in r.stderr
+        assert "dropdb" not in _log(ctx, "stub")
+
+    def test_si_el_head_cambia_durante_la_restauracion_se_recupera_la_copia_previa(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        git = ctx["bin"] / "git"
+        git.write_text(GIT_QUE_CAMBIA_EL_HEAD, encoding="utf-8")
+        git.chmod(0o755)
+        r = _ejecutar(ctx, extra_env={"HEAD_VISTO": str(tmp_path / "head-visto")})
+        assert r.returncode != 0 and "el HEAD cambió durante la restauración" in r.stderr
+        assert "seguridad" in _log(ctx, "restore")
+
+    def test_una_copia_previa_que_no_es_una_bd_de_zascarr_aborta_sin_tocar_la_bd(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        ctx["safety_sql"].write_text("--\n-- PostgreSQL database dump\n--\nCREATE TABLE public.otra (id integer);\n",
+                                     encoding="utf-8")
+        r = _ejecutar(ctx)
+        assert r.returncode != 0 and "no parece una BD de ZascArr" in r.stderr
+        stub = _log(ctx, "stub")
+        assert "dropdb" not in stub and "createdb" not in stub and not list(ctx["backup"].glob("rollback-safety_*.sql.gz"))

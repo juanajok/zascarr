@@ -57,7 +57,11 @@ exigir_espacio_kb() {
             "${contexto}" >&2
         return 2
     fi
-    [[ "${libre}" =~ ^[0-9]+$ ]] || libre=0
+    if ! [[ "${libre}" =~ ^[0-9]+$ ]]; then
+        printf 'ERROR: No pude medir el espacio libre para %s. No se ha borrado nada. Comprueba que el disco está montado e inténtalo de nuevo.\n' \
+            "${contexto}" >&2
+        return 2
+    fi
     margen=$((necesario / 10 + 65536))
     total=$((necesario + margen))
     if (( libre < total )); then

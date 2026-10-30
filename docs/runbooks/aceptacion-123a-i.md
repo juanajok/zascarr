@@ -199,7 +199,8 @@ Sembrar en la pila aislada, con las migraciones ya aplicadas:
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d postgres
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm zascarr \
   alembic upgrade head
-# Marca de la BD aislada: sin ella el generador no trunca ni aplica nada (solo en la pila aislada, nunca en producción).
+# Marca de la BD aislada: sin ella el generador no trunca ni aplica nada. Aquí $COMPOSE_FILE y $ENV_FILE DEBEN apuntar a la
+# pila AISLADA (nunca a producción): comprueba antes que `verificar_aislamiento_123a.sh` pasó con 0 colisiones.
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T postgres \
   psql -U comics_admin -d zascarr -c "COMMENT ON DATABASE zascarr IS 'zascarr-123a-aislada';"
 # El generador puede aplicar con psql si el host lo tiene:

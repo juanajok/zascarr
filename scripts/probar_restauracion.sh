@@ -288,9 +288,13 @@ fi
 TAMANO_DUMP_KB="$(tamano_descomprimido_kb "${DUMP}")"
 exigir_espacio_kb "$(espacio_postgres_libre_kb)" "${TAMANO_DUMP_KB}" \
         "restaurar la base desechable" && ESPACIO_RC=0 || ESPACIO_RC=$?
-if (( ESPACIO_RC != 0 )); then
+if (( ESPACIO_RC == 2 )); then
+    # «No medible» no es «disco lleno»: se publica como fallo de la restauración, no como falta de espacio.
+    escribir_restore_estado "failed" "restore_failed" "no se pudo medir el espacio" || true
+    die "No pude medir el espacio para restaurar la base desechable. La BD de origen no se ha tocado."
+elif (( ESPACIO_RC != 0 )); then
     escribir_restore_estado "failed" "disk_full" || true
-    die "No hay espacio (o no pude medirlo) para restaurar la base desechable. La BD de origen no se ha tocado."
+    die "No hay espacio para restaurar la base desechable. La BD de origen no se ha tocado."
 fi
 TABLAS_DUMP="$(gzip -dc "${DUMP}" | grep -c '^CREATE TABLE public\.' || true)"
 ALEMBIC_DUMP="$(gzip -dc "${DUMP}" | awk '

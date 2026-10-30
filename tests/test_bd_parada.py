@@ -109,7 +109,7 @@ class TestBackup:
         assert "No pude medir" in _salida(r)
         assert not list(ctx["backup"].glob("backup_*.sql.gz"))
         estado = (ctx["status"] / "status.json").read_text(encoding="utf-8")
-        assert '"failed"' in estado                                        # /estado lo ve
+        assert '"failed"' in estado and '"pg_dump_failed"' in estado     # /estado lo ve, con una causa que ya traduce
 
 
 class TestRestaurarDatos:
@@ -164,3 +164,97 @@ class TestHelper:
         malo.write_bytes(b"no es gzip")
         r = _bash(f'T="$(tamano_descomprimido_kb "{malo}")"; echo "[${{T}}]"', tmp_path)
         assert r.returncode == 0 and r.stdout.strip() == "[]"
+
+
+class TestDockerDePegaDeLosEscenarios:
+    """Los escenarios aislados (`tests/escenarios/`, 88 casos que se saltan sin root o Docker con debian:12) usan un `docker` de
+    pega que DEBE contestar a la medición de la BD. Si no lo hace, `backup.sh` aborta con «No pude medir» y el escenario
+    dice «no funcionó como root» (P15), que despista. Esta prueba corre en cualquier máquina y falla diciendo la causa."""
+
+    def _stub(self, tmp_path: Path) -> Path:
+        texto = (RAIZ / "tests" / "escenarios" / "_comun.sh").read_text(encoding="utf-8")
+        inicio = texto.index("<<'STUB'\n", texto.index("poner_docker_de_pega()")) + len("<<'STUB'\n")
+        cuerpo = texto[inicio:texto.index("\nSTUB\n", inicio) + 1]
+        docker = tmp_path / "docker"
+        docker.write_text(cuerpo, encoding="utf-8")
+        docker.chmod(0o755)
+        (tmp_path / "env").write_text("DB_PASSWORD=x\n", encoding="utf-8")
+        return docker
+
+    def test_el_docker_de_pega_contesta_con_un_numero_a_la_medicion_de_la_bd(self, tmp_path):
+        docker = self._stub(tmp_path)
+        env = {"PATH": "/usr/bin:/bin", "STUB_LOG": str(tmp_path / "log")}
+        r = subprocess.run(
+            ["bash", "-c", f'set -euo pipefail; source {SCRIPTS}/_espacio.sh; '
+                           f'COMPOSE=({docker} compose --env-file {tmp_path}/env); DB_USER=u; DB_NAME=d; '
+                           'echo "[$(tamano_bd_kb)]"'],
+            capture_output=True, text=True, env=env, timeout=30)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert r.stdout.strip().strip("[]").isdigit(), (
+            "el `docker` de pega de tests/escenarios/_comun.sh no contesta al tamaño de la BD (pg_database_size): "
+            "backup.sh/update.sh/rollback.sh/restaurar_datos.sh abortarían con «No pude medir» en los escenarios")
+
+
+def _kb(necesario: int) -> int:
+    return necesario + necesario // 10 + 65536                           # necesario + 10 % + 64 MiB (en KiB)
+
+
+class TestUmbralesDeEspacio:
+    """#123 (QA, A3 de #385): el margen del 10 %, los 64 MiB y la frontera de `exigir_espacio_kb` se discriminan por separado."""
+
+    @pytest.mark.parametrize("necesario", [0, 1000, 100000, 5_000_000])
+    def test_justo_el_total_pasa_y_uno_menos_no(self, tmp_path, necesario):
+        total = _kb(necesario)
+        ok = _bash(f'exigir_espacio_kb {total} {necesario} "la prueba" && echo PASA || echo "rc=$?"', tmp_path)
+        assert ok.stdout.strip() == "PASA", (necesario, ok.stdout, ok.stderr)
+        corto = _bash(f'exigir_espacio_kb {total - 1} {necesario} "la prueba" && echo PASA || echo "rc=$?"', tmp_path)
+        assert corto.stdout.strip() == "rc=1" and "No hay espacio suficiente" in corto.stderr
+
+    def test_el_mensaje_da_las_cifras_en_mb(self, tmp_path):
+        r = _bash('exigir_espacio_kb 2048 1024000 "la prueba" || true', tmp_path)
+        assert "quedan 2 MB" in r.stderr and f"hacen falta {_kb(1024000) // 1024} MB" in r.stderr
+
+    @pytest.mark.parametrize("libre", ["", "abc"])
+    def test_un_espacio_libre_no_medible_no_es_disco_lleno(self, tmp_path, libre):
+        r = _bash(f'exigir_espacio_kb "{libre}" 1000 "la prueba" && echo PASA || echo "rc=$?"', tmp_path)
+        assert r.stdout.strip() == "rc=2" and "No pude medir el espacio libre" in r.stderr
+
+
+DF_POR_RUTA = """#!/usr/bin/env bash
+set -euo pipefail
+kb="${FAKE_DF_KB:-99999999}"
+if [[ "$*" == *"${OFFSITE_DIR:?}"* ]]; then kb="${FAKE_DF_OFFSITE_KB:-99999999}"; fi
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+printf '/ 100000000 1 %s 1%% /\n' "$kb"
+"""
+
+
+class TestBackupOffsiteSinEspacio:
+    def test_si_el_disco_de_respaldo_no_tiene_sitio_se_conserva_la_copia_local_y_se_avisa(self, tmp_path):
+        ctx = t_backup._preparar(tmp_path)
+        (ctx["bin"] / "df").write_text(DF_POR_RUTA, encoding="utf-8")
+        r = t_backup._ejecutar(ctx, extra_env={"OFFSITE_DIR": str(ctx["offsite"]), "FAKE_DF_OFFSITE_KB": "1024"})
+        assert r.returncode != 0 and "fuera del disco" in _salida(r)
+        assert list(ctx["backup"].glob("backup_*.sql.gz"))                 # la copia local sigue
+        assert not list(ctx["offsite"].glob("backup_*.sql.gz"))            # y no se intentó copiar fuera
+        assert '"disk_full"' in (ctx["status"] / "status.json").read_text(encoding="utf-8")
+
+
+class TestProbarRestauracionSinMedir:
+    def test_con_postgres_parado_no_se_publica_como_disco_lleno(self, tmp_path):
+        from tests import test_restore_script as t_restore
+
+        ctx = t_restore._preparar(tmp_path)
+        extra = _parar_bd(ctx["bin"], tmp_path, "siempre")
+        r = t_restore._ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"], extra_env=extra)
+        assert r.returncode != 0 and "No pude medir" in _salida(r)
+        estado = t_restore._estado(ctx)
+        assert estado["status"] == "failed" and estado["error"] == "restore_failed"     # no «disk_full»
+        assert "disk_full" not in str(estado)
+
+    def test_con_poco_espacio_si_se_publica_como_disco_lleno(self, tmp_path):
+        from tests import test_restore_script as t_restore
+
+        ctx = t_restore._preparar(tmp_path)
+        r = t_restore._ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"], extra_env={"FAKE_PG_FREE_KB": "1"})
+        assert r.returncode != 0 and t_restore._estado(ctx)["error"] == "disk_full"
