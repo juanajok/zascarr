@@ -11,6 +11,18 @@ from zascarr.config import get_settings
 logger = structlog.get_logger()
 
 
+def hash_contrasena_amuleweb(password: str) -> str:
+    """El campo `p` del login de amuleweb: MD5 hexadecimal de la contraseña.
+
+    Algoritmo exigido por el protocolo de amuleweb; no es elección nuestra y no se puede cambiar
+    sin romper aMule. Ojo: este hash EQUIVALE a la contraseña (quien lo capture entra) y amuleweb lo
+    recibe por HTTP sin cifrar, así que amuleweb debe quedarse en loopback o en una red de
+    confianza (SECURITY.md). Nunca se escribe en logs. `usedforsecurity=False` dice que no confiamos
+    en la resistencia de MD5 (y deja funcionar el login en builds FIPS); no que el valor no importe.
+    Única implementación: la usan el cliente y la prueba de conexión de Ajustes."""
+    return hashlib.md5(password.encode(), usedforsecurity=False).hexdigest()
+
+
 class AMuleClient:
     def __init__(self):
         s = get_settings()
@@ -19,7 +31,7 @@ class AMuleClient:
         self._cookies: dict[str, str] = {}
 
     async def login(self) -> bool:
-        pw_hash = hashlib.md5(self._password.encode()).hexdigest()
+        pw_hash = hash_contrasena_amuleweb(self._password)
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
             r = await client.post(f"{self._base}/", data={"p": pw_hash})
             for name, value in r.cookies.items():

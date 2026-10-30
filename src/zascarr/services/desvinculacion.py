@@ -237,7 +237,10 @@ class DesvinculacionDeArchivo:
 
         token = None
         if bloqueo is None:
-            assert issue is not None
+            if issue is None:
+                # Cierra en falla ANTES de firmar: sin número no hay token (con `assert`,
+                # `python -O` lo quitaría).
+                raise RuntimeError("Desvinculación sin número asociado: no se firma el token.")
             token = crear_token_desvinculacion(DesvinculacionFirmada(
                 file_id=str(file_id), issue_id=str(issue.id), series_id=str(issue.series_id),
                 vinculo_operacion=_uuid(vinculo["operacion_id"]) if vinculo is not None else SIN_PROCEDENCIA,

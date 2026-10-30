@@ -87,7 +87,8 @@ class AniListClient:
             await self._client.aclose()
 
     async def _post(self, query: str, variables: dict) -> dict:
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Cliente de AniList sin abrir: úsalo con `async with`.")
 
         for attempt in range(_MAX_RETRIES):
             now = asyncio.get_event_loop().time()

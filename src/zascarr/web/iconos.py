@@ -88,7 +88,10 @@ def icono(nombre: str) -> Markup:
         interior = ICONOS[nombre]
     except KeyError:
         raise ValueError(f"Icono desconocido: {nombre!r}. Válidos: {', '.join(ICONOS)}.") from None
-    return Markup(
+    # S704 revisado por SecOps: `interior` sale de ICONOS, un diccionario constante de este módulo
+    # (un nombre que no está lanza ValueError arriba); no entra nada del usuario. Que ningún trazado
+    # lleve `<script` ni `on…=` lo fija test_iconos_sin_codigo.
+    return Markup(  # noqa: S704
         '<svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
         ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
         f"{interior}</svg>"
