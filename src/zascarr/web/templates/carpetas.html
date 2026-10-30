@@ -16,10 +16,13 @@
   <p role="status">Hay un registro en marcha; espera a que termine.</p>
   <p><a class="btn ghost" href="/ui/pendientes">Ir a Por revisar</a></p>
   {% elif estado == "no_disponible" %}
-  <p>La biblioteca todavía no está registrada, así que ZascArr no puede buscar archivos nuevos.
-    Regístrala primero en Duplicados.</p>
-  <p><a class="btn" href="/ui/auditoria">Ir a Duplicados</a>
+  <p>Tu biblioteca aún no está registrada, así que ZascArr no puede buscar archivos nuevos.
+    El registro está en Duplicados, en el apartado «Registrar mi biblioteca». No mueve ni renombra ningún archivo.</p>
+  <p><a class="btn" href="/ui/auditoria#registro">Ir a registrar mi biblioteca</a>
      <a class="btn ghost" href="/ui/pendientes">Ir a Por revisar</a></p>
+  {% elif estado == "no_comprobado" %}
+  <p role="status">No se ha podido comprobar si tu biblioteca está registrada. Prueba de nuevo en unos segundos.</p>
+  <p><a class="btn ghost" href="/ui/pendientes">Ir a Por revisar</a></p>
   {% endif %}
 </div>
 {%- endmacro %}
