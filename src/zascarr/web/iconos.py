@@ -77,7 +77,33 @@ ICONOS: dict[str, str] = {
     "mas": (  # ellipsis
         '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'
     ),
+    # Glifos de los puntos de estado de /estado (`.estado-dot`): los mismos que los chips de su color
+    # (web/componentes.py::ASPECTOS: ✓ ok, ! warn, ? amber). Sin el círculo exterior de Lucide: el
+    # punto ya es un círculo.
+    "ok": '<path d="M20 6 9 17l-5-5"/>',  # check
+    "aviso": '<line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',  # circle-alert (sin círculo)
+    "pregunta": '<path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',  # circle-question-mark (sin círculo)
 }
+
+#: nivel del punto de /estado → icono del glifo. `neutral` no lleva (apagado o sin datos).
+#: «Verde ✓, rojo !, amarillo ?»: el nivel `bad` pinta el rojo de `--warn`, y `warn` el amarillo.
+ICONO_DE_PUNTO: dict[str, str] = {"ok": "ok", "bad": "aviso", "warn": "pregunta"}
+
+#: Tinta del glifo del punto: el par oscuro fijo (como `--on-yellow`), que se lee sobre verde, rojo
+#: y amarillo en los dos temas.
+TINTA_DEL_PUNTO = "#17171a"
+
+
+def svg_de_punto(nombre: str) -> str:
+    """Contenido del fichero `static/iconos/punto-<nombre>.svg`, generado desde `ICONOS` para que
+    haya UNA sola fuente de los trazados (test_estado_puntos comprueba que los ficheros no divergen).
+    Trazo de 3, más grueso que el de la navegación: el glifo mide unos 10 px dentro del punto."""
+    interior = ICONOS[nombre]
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
+        f'stroke="{TINTA_DEL_PUNTO}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">'
+        f"{interior}</svg>\n"
+    )
 
 
 def icono(nombre: str) -> Markup:
