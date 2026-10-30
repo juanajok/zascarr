@@ -97,6 +97,11 @@ info "Referencia de rescate: ${UPDATE_REF}"
 # ── 4. Backup OBLIGATORIO y verificado ANTES de tocar nada ───────────────────
 info "Copia de seguridad de PostgreSQL (antes de actualizar)..."
 mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}. ¿Permisos sobre el disco de backups?"
+TAMANO_KB="$(tamano_bd_kb)"
+if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
+        "la copia previa a la actualización"; then
+    die "No hay espacio para la copia previa. NO se ha actualizado nada."
+fi
 DEST="${BACKUP_DIR}/update_${TS}.sql.gz"
 volcar_postgres "${DEST}" || die \
     "El backup falló. NO se ha actualizado nada.

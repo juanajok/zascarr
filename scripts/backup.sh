@@ -123,6 +123,14 @@ trap on_exit EXIT
 TS="$(date +%Y%m%d_%H%M%S)"
 DEST="${BACKUP_DIR}/backup_${TS}.sql.gz"
 
+# ── Espacio libre ANTES de volcar (#123b) ───────────────────────────────────
+TAMANO_KB="$(tamano_bd_kb)"
+if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
+        "la copia de seguridad local"; then
+    escribir_estado "failed" "disk_full" "" "" 0 false || true
+    die "No hay espacio para la copia de seguridad. No se ha escrito ningún volcado."
+fi
+
 # ── Montaje y dispositivo ────────────────────────────────────────────────────
 if ! mountpoint -q "${BACKUP_OFFSITE_MOUNT}"; then
     OFFSITE_OK=0
@@ -158,6 +166,16 @@ if (( OFFSITE_OK == 1 )); then
     if ! install -d -m 700 "${BACKUP_OFFSITE_DIR}" 2>/dev/null; then
         OFFSITE_OK=0
         OFFSITE_ERROR="offsite_copy_failed"
+    fi
+fi
+
+if (( OFFSITE_OK == 1 )); then
+    if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_OFFSITE_DIR}")" \
+            "$((BYTES / 1024))" "la copia fuera del disco"; then
+        OFFSITE_OK=0
+        OFFSITE_ERROR="disk_full"
+        OFFSITE_JSON="$(jq -n --arg error "${OFFSITE_ERROR}" \
+            '{copia: false, error: $error, verificada: false}')"
     fi
 fi
 

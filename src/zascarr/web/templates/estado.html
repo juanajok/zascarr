@@ -49,6 +49,7 @@
     vpn: "VPN",
     backup: "Copias de seguridad",
     restore: "Restauración",
+    disk: "Disco",
   };
 
   const CHECK_TEXT = {
@@ -63,13 +64,20 @@
     vpn:          { ok: "Activa", warning: "No protege", unknown: "Sin datos" },
     backup:       { ok: "Copia reciente verificada", warning: "Copia atrasada o incompleta", error: "La última copia falló" },
     restore:      { ok: "Restauración reciente verificada", warning: "Restauración atrasada o con aviso", error: "La última restauración falló" },
+    disk:         { ok: "Espacio suficiente", warning: "Queda poco espacio", error: "Sin espacio suficiente", disabled: "Sin dato" },
   };
 
   // Qué hacer, en llano. El detalle técnico de la base de datos va en «Avisos», plegado.
   const CHECK_ACTION = {
-    unreachable: "ZascArr no consigue hablar con su base de datos. Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización (sudo bash scripts/update.sh --rama main).",
-    migration_required: "Falta un paso de la última actualización. Vuelve a ejecutarla (sudo bash scripts/update.sh --rama main): lo completa sin tocar tus datos.",
-    schema_incompatible: "A la base de datos le faltan partes, seguramente por una copia de seguridad restaurada a medias. Vuelve a restaurarla o a actualizar.",
+    database: {
+      unreachable: "ZascArr no consigue hablar con su base de datos. Reinicia ZascArr; si sigue igual, vuelve a ejecutar la actualización (sudo bash scripts/update.sh --rama main).",
+      migration_required: "Falta un paso de la última actualización. Vuelve a ejecutarla (sudo bash scripts/update.sh --rama main): lo completa sin tocar tus datos.",
+      schema_incompatible: "A la base de datos le faltan partes, seguramente por una copia de seguridad restaurada a medias. Vuelve a restaurarla o a actualizar.",
+    },
+    disk: {
+      warning: "Libera espacio o mueve la biblioteca a otro disco antes de que se llene. ZascArr no ha borrado nada.",
+      error: "Libera espacio o mueve la biblioteca a otro disco y vuelve a intentarlo. ZascArr no ha borrado nada.",
+    },
   };
 
   // Lo que dice /api/health está escrito para quien mantiene la Pi (rutas, «timer», «stale»…): en pantalla
@@ -84,6 +92,7 @@
     if (key === "database") return "La base de datos tiene un problema: mira qué hacer en su fila, más abajo.";
     if (key === "backup") return "La copia de seguridad tiene un problema: revisa el aviso técnico y el disco de respaldo.";
     if (key === "restore") return "La restauración de la copia tiene un problema: revisa el aviso técnico.";
+    if (key === "disk") return "El disco de datos tiene poco espacio: libera espacio o mueve la biblioteca a otro disco. ZascArr no ha borrado nada.";
     return raw;
   }
 
@@ -116,7 +125,7 @@
       const raw = checks[key];
       const level = CHECK_LEVEL[raw] || "neutral";
       const text = (CHECK_TEXT[key] && CHECK_TEXT[key][raw]) || "Sin datos";
-      const action = (key === "database" && CHECK_ACTION[raw]) || "";
+      const action = (CHECK_ACTION[key] && CHECK_ACTION[key][raw]) || "";
       if (level === "warn" || level === "bad") detailParts.push(CHECK_LABELS[key]);
 
       const row = document.createElement("div");

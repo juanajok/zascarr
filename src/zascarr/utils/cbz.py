@@ -42,13 +42,11 @@ from pathlib import Path
 import structlog
 
 from zascarr.core.comicinfo_write import ENTRADA_XML
+from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
 
 logger = structlog.get_logger()
 
 _CHUNK = 64 * 1024
-#: Margen de seguridad sobre el tamaño del original (cabeceras del ZIP nuevo,
-#: metadatos del sistema de ficheros).
-MARGEN_BYTES = 1 * 1024 * 1024
 #: Sufijo de los temporales propios (`.{nombre}.<aleatorio>.zascarr.tmp`).
 SUFIJO_TMP = ".zascarr.tmp"
 
@@ -61,8 +59,8 @@ class CbzInvalidoError(CbzError):
     pass
 
 
-class SinEspacioError(CbzError):
-    pass
+# Compatibilidad: el error de espacio vive ahora en `utils/espacio.py`.
+SinEspacioError = EspacioInsuficienteError
 
 
 class VerificacionError(CbzError):
@@ -134,6 +132,8 @@ def reescribir_con_xml(path: Path, xml: bytes) -> None:
     path = Path(path)
     try:
         _reescribir(path, xml)
+    except EspacioInsuficienteError:
+        raise
     except OSError as exc:  # no existe, sin permiso, disco desconectado…
         raise CbzInvalidoError(f"CBZ ilegible: {exc}") from exc
 
@@ -146,12 +146,10 @@ def _reescribir(path: Path, xml: bytes) -> None:
         raise CbzInvalidoError(f"CBZ ilegible: {exc}") from exc
 
     original_size = path.stat().st_size
-    libre = shutil.disk_usage(path.parent).free
-    if libre < original_size + MARGEN_BYTES:
-        raise SinEspacioError(
-            f"espacio insuficiente: {libre} libres, hacen falta "
-            f"~{original_size + MARGEN_BYTES}"
-        )
+    comprobar_espacio(
+        path.parent, original_size, "reescribir el CBZ",
+        libre=shutil.disk_usage(path.parent).free,
+    )
 
     _limpiar_temporales_viejos(path)
 

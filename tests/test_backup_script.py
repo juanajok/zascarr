@@ -5,6 +5,7 @@ No necesitan PostgreSQL ni el disco real: el script se ejecuta tal cual, con un
 los fallos que importan: pg_dump caído, dump sin cabecera, montaje ausente, offsite
 no escribible y hash del offsite manipulado.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,7 +30,7 @@ fi
 if [[ "${1:-}" == "info" ]]; then
     exit 0
 fi
-if [[ "$*" == *"pg_dump"* ]]; then
+if [[ "$*" == *" postgres pg_dump "* ]]; then
     case "${FAKE_MODE:-ok}" in
         fail) echo "pg_dump: boom" >&2; exit 1 ;;
         partial) printf -- '-- partial\\n'; exit 0 ;;
@@ -62,6 +63,12 @@ for ultimo in "$@"; do :; done
 if [[ "${ultimo}" == *.sql.gz ]]; then
     truncate -s $(( $(stat -c %s "${ultimo}") / 2 )) "${ultimo}"
 fi
+"""
+
+DF_FALSO = """#!/usr/bin/env bash
+set -euo pipefail
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'
+printf '/ 100000000 1 %s 1%% /\\n' "${FAKE_DF_KB:-99999999}"
 """
 
 FIXTURE_SQL = """--
@@ -118,6 +125,9 @@ def _preparar(tmp_path: Path) -> dict:
     docker = bin_dir / "docker"
     docker.write_text(DOCKER_FALSO, encoding="utf-8")
     docker.chmod(0o755)
+    df = bin_dir / "df"
+    df.write_text(DF_FALSO, encoding="utf-8")
+    df.chmod(0o755)
 
     fixture = tmp_path / "fixture.sql"
     fixture.write_text(FIXTURE_SQL, encoding="utf-8")
@@ -141,27 +151,38 @@ def _preparar(tmp_path: Path) -> dict:
     }
 
 
-def _ejecutar(ctx: dict, *, mode: str = "ok", mount: str = "/",
-              offsite: Path | None = None, extra_env: dict | None = None):
+def _ejecutar(
+    ctx: dict,
+    *,
+    mode: str = "ok",
+    mount: str = "/",
+    offsite: Path | None = None,
+    extra_env: dict | None = None,
+):
     env = os.environ.copy()
-    env.update({
-        "PATH": f"{ctx['bin']}:{env['PATH']}",
-        "FIXTURE_SQL": str(ctx["fixture"]),
-        "FAKE_MODE": mode,
-        "ZASCARR_REPO": str(ctx["repo"]),
-        "ZASCARR_ROOT": str(ctx["root"]),
-        "BACKUP_DIR": str(ctx["backup"]),
-        "BACKUP_OFFSITE_DIR": str(offsite if offsite is not None else ctx["offsite"]),
-        "BACKUP_OFFSITE_MOUNT": mount,
-        "BACKUP_SKIP_DEVICE_CHECK": "1",
-        "BACKUP_STATUS_DIR": str(ctx["status"]),
-        "BACKUP_LOCK_FILE": str(ctx["lock"]),
-    })
+    env.update(
+        {
+            "PATH": f"{ctx['bin']}:{env['PATH']}",
+            "FIXTURE_SQL": str(ctx["fixture"]),
+            "FAKE_MODE": mode,
+            "ZASCARR_REPO": str(ctx["repo"]),
+            "ZASCARR_ROOT": str(ctx["root"]),
+            "BACKUP_DIR": str(ctx["backup"]),
+            "BACKUP_OFFSITE_DIR": str(offsite if offsite is not None else ctx["offsite"]),
+            "BACKUP_OFFSITE_MOUNT": mount,
+            "BACKUP_SKIP_DEVICE_CHECK": "1",
+            "BACKUP_STATUS_DIR": str(ctx["status"]),
+            "BACKUP_LOCK_FILE": str(ctx["lock"]),
+        }
+    )
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
         ["bash", str(ctx["repo"] / "scripts" / "backup.sh")],
-        env=env, capture_output=True, text=True, timeout=60,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
         stdin=subprocess.DEVNULL,
     )
 
@@ -172,7 +193,6 @@ def _estado(ctx: dict) -> dict:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
 class TestBackupScript:
-
     def test_copia_local_y_offsite_verificada(self, tmp_path):
         ctx = _preparar(tmp_path)
         r = _ejecutar(ctx)
@@ -205,6 +225,14 @@ class TestBackupScript:
         assert r.returncode != 0
         assert _estado(ctx)["status"] == "failed"
         assert _estado(ctx)["error"] == "pg_dump_failed"
+        assert not list(ctx["backup"].glob("backup_*.sql.gz"))
+        assert not list(ctx["offsite"].glob("backup_*.sql.gz"))
+
+    def test_sin_espacio_no_volca_ni_publica(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_DF_KB": "1024"})
+        assert r.returncode != 0
+        assert _estado(ctx)["error"] == "disk_full"
         assert not list(ctx["backup"].glob("backup_*.sql.gz"))
         assert not list(ctx["offsite"].glob("backup_*.sql.gz"))
 
@@ -277,10 +305,13 @@ class TestBackupScript:
         cp_falso = ctx["bin"] / "cp"
         cp_falso.write_text(CP_FALSO, encoding="utf-8")
         cp_falso.chmod(0o755)
-        r = _ejecutar(ctx, extra_env={
-            "REAL_CP": shutil.which("cp") or "/bin/cp",
-            "OFFSITE_DIR": str(ctx["offsite"]),
-        })
+        r = _ejecutar(
+            ctx,
+            extra_env={
+                "REAL_CP": shutil.which("cp") or "/bin/cp",
+                "OFFSITE_DIR": str(ctx["offsite"]),
+            },
+        )
         assert r.returncode != 0
         estado = _estado(ctx)
         assert estado["status"] == "failed"

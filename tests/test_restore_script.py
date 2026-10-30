@@ -5,6 +5,7 @@ mentira que responde a createdb/dropdb/psql. Cubren el éxito, el dump truncado,
 el recuento distinto, el fallo de psql, la base temporal siempre borrada, la app
 sin arrancar y el aviso cuando el manifiesto falta o no acredita el commit.
 """
+
 from __future__ import annotations
 
 import gzip
@@ -27,6 +28,7 @@ def test_el_script_es_ejecutable():
     """El hook y el wrapper del timer lo ejecutan directamente, no con `bash`."""
     assert os.access(SCRIPTS / "probar_restauracion.sh", os.X_OK)
 
+
 DOCKER_FALSO = r"""#!/usr/bin/env bash
 set -euo pipefail
 echo "docker $*" >> "$STUB_LOG"
@@ -34,6 +36,10 @@ case "$*" in
   *"compose version"*) echo "Docker Compose version v2"; exit 0 ;;
   *"createdb"*) echo "createdb $*" >> "$DB_LOG"; exit 0 ;;
   *"dropdb"*) echo "dropdb $*" >> "$DB_LOG"; exit 0 ;;
+  *"df -Pk"*)
+    printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+    printf '/ %s 1 %s 1%% /\n' "${FAKE_PG_FREE_KB:-99999999}" "${FAKE_PG_FREE_KB:-99999999}"
+    exit 0 ;;
   *"psql"*)
     if [[ "$*" == *" -c "* ]]; then
       case "$*" in
@@ -91,12 +97,19 @@ def _preparar(tmp_path: Path) -> dict:
     sha = hashlib.sha256(dump.read_bytes()).hexdigest()
     bytes_ = dump.stat().st_size
     manifest = backup / "MANIFIESTO-backup_20261028_120000.json"
-    manifest.write_text(json.dumps({
-        "backup": dump.name, "sha256": sha, "bytes": bytes_,
-        "alembic": "0020",
-        "codigo_destino_sha_completo": "a" * 40,
-        "codigo_desplegado_sha_completo": "b" * 40,
-    }), encoding="utf-8")
+    manifest.write_text(
+        json.dumps(
+            {
+                "backup": dump.name,
+                "sha256": sha,
+                "bytes": bytes_,
+                "alembic": "0020",
+                "codigo_destino_sha_completo": "a" * 40,
+                "codigo_desplegado_sha_completo": "b" * 40,
+            }
+        ),
+        encoding="utf-8",
+    )
     (backup / f"{dump.name}.sha256").write_text(f"{sha}  {dump.name}\n", encoding="utf-8")
 
     bin_ = tmp_path / "bin"
@@ -112,27 +125,42 @@ def _preparar(tmp_path: Path) -> dict:
     restore.write_text("", encoding="utf-8")
 
     return {
-        "repo": repo, "root": root, "backup": backup, "offsite": offsite,
-        "status": status, "dump": dump, "manifest": manifest, "bin": bin_,
-        "stub": stub, "db": db, "restore": restore,
+        "repo": repo,
+        "root": root,
+        "backup": backup,
+        "offsite": offsite,
+        "status": status,
+        "dump": dump,
+        "manifest": manifest,
+        "bin": bin_,
+        "stub": stub,
+        "db": db,
+        "restore": restore,
     }
 
 
-def _ejecutar(ctx: dict, *, dump: Path | None = None, manifest: Path | None = None,
-              extra_env: dict | None = None) -> subprocess.CompletedProcess:
+def _ejecutar(
+    ctx: dict,
+    *,
+    dump: Path | None = None,
+    manifest: Path | None = None,
+    extra_env: dict | None = None,
+) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env.update({
-        "PATH": f"{ctx['bin']}:{env['PATH']}",
-        "ZASCARR_REPO": str(ctx["repo"]),
-        "ZASCARR_ROOT": str(ctx["root"]),
-        "BACKUP_DIR": str(ctx["backup"]),
-        "BACKUP_OFFSITE_DIR": str(ctx["offsite"]),
-        "BACKUP_STATUS_DIR": str(ctx["status"]),
-        "RESTORE_STATUS_FILE": str(ctx["status"] / "restore-status.json"),
-        "STUB_LOG": str(ctx["stub"]),
-        "DB_LOG": str(ctx["db"]),
-        "RESTORE_LOG": str(ctx["restore"]),
-    })
+    env.update(
+        {
+            "PATH": f"{ctx['bin']}:{env['PATH']}",
+            "ZASCARR_REPO": str(ctx["repo"]),
+            "ZASCARR_ROOT": str(ctx["root"]),
+            "BACKUP_DIR": str(ctx["backup"]),
+            "BACKUP_OFFSITE_DIR": str(ctx["offsite"]),
+            "BACKUP_STATUS_DIR": str(ctx["status"]),
+            "RESTORE_STATUS_FILE": str(ctx["status"] / "restore-status.json"),
+            "STUB_LOG": str(ctx["stub"]),
+            "DB_LOG": str(ctx["db"]),
+            "RESTORE_LOG": str(ctx["restore"]),
+        }
+    )
     if extra_env:
         env.update(extra_env)
     args = ["bash", str(ctx["repo"] / "scripts" / "probar_restauracion.sh")]
@@ -141,7 +169,11 @@ def _ejecutar(ctx: dict, *, dump: Path | None = None, manifest: Path | None = No
     if manifest is not None:
         args += ["--manifest", str(manifest)]
     return subprocess.run(
-        args, env=env, capture_output=True, text=True, timeout=60,
+        args,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
         stdin=subprocess.DEVNULL,
     )
 
@@ -158,9 +190,7 @@ def _reescribir_dump(ctx: dict, sql: str) -> None:
     datos["sha256"] = sha
     datos["bytes"] = dump.stat().st_size
     ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
-    dump.with_name(f"{dump.name}.sha256").write_text(
-        f"{sha}  {dump.name}\n", encoding="utf-8"
-    )
+    dump.with_name(f"{dump.name}.sha256").write_text(f"{sha}  {dump.name}\n", encoding="utf-8")
 
 
 def _sql_sin_copy(tabla: str) -> str:
@@ -190,7 +220,6 @@ def _reescribir_bytes(ctx: dict, datos: bytes) -> None:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
 class TestRestoreScript:
-
     def test_restaura_y_comprueba_recuentos(self, tmp_path):
         ctx = _preparar(tmp_path)
         r = _ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"])
@@ -239,6 +268,16 @@ class TestRestoreScript:
         assert estado["error"] == "gzip_invalid"
         assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
 
+    def test_sin_espacio_no_crea_la_base(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(
+            ctx, dump=ctx["dump"], manifest=ctx["manifest"], extra_env={"FAKE_PG_FREE_KB": "1"}
+        )
+        assert r.returncode != 0
+        assert _estado(ctx)["error"] == "disk_full"
+        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+        assert not [p for p in ctx["status"].iterdir() if p.name.startswith("zascarr_restore_")]
+
     @pytest.mark.parametrize("tabla", ["alembic_version", "series", "files", "wishlist"])
     def test_dump_sin_una_tabla_requerida_no_se_restaura(self, tmp_path, tabla):
         """`verificar_dump` exige las cuatro tablas que `rollback.sh` necesita; se prueba cada una
@@ -264,7 +303,7 @@ class TestRestoreScript:
         cortado = completo[: len(completo) // 2]
         assert cortado[:2] == b"\x1f\x8b" and len(cortado) > 1000  # cabecera válida, cuerpo cortado
         gzip_t = subprocess.run(["gzip", "-t"], input=cortado, capture_output=True)
-        assert gzip_t.returncode != 0                                 # el propio gzip lo ve cortado
+        assert gzip_t.returncode != 0  # el propio gzip lo ve cortado
         _reescribir_bytes(ctx, cortado)
 
         r = _ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"])
