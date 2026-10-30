@@ -172,37 +172,50 @@ contar_copy() {
     '
 }
 
-# Lista permitida: SOLO líneas ERROR:/FATAL: (con espacios iniciales). Se descartan
-# CONTEXT/DETAIL/LINE/STATEMENT/HINT/QUERY y cualquier otra línea. Después se
-# enmascaran credenciales y se trunca a 400 caracteres. Nunca devuelve el volcado.
+# Red de seguridad (la primera barrera es `psql -v VERBOSITY=terse`):
+#   1) aplanar CR/LF (un CR no puede inyectar una línea nueva),
+#   2) lista permitida: SOLO ERROR:/FATAL:/PANIC: (con espacios iniciales),
+#   3) redactar credenciales,
+#   4) unir, recortar y truncar a 400 caracteres.
+# Se descartan CONTEXT/DETAIL/LINE/STATEMENT/HINT/QUERY y cualquier otra línea.
+# Sin línea permitida devuelve vacío: el llamador escribe `detalle: null`.
 sanear_detalle() {
     local texto
-    texto="$(awk '{
-        linea=$0
-        sub(/^[[:space:]]+/, "", linea)
-        if (linea ~ /^(ERROR|FATAL):/) print linea
-    }' \
+    texto="$(tr '\r' '\n' \
+        | awk '{
+            linea=$0
+            sub(/^[[:space:]]+/, "", linea)
+            if (linea ~ /^(ERROR|FATAL|PANIC):/) print linea
+        }' \
         | sed -E \
             -e 's#[[:space:]]+$##' \
-            -e 's#(://[^:/@[:space:]]+:)[^[:space:]]*@#\1***@#g' \
+            -e 's#(://[^:/@[:space:]]+:).*@#\1***@#g' \
             -e 's#((password|passwd|pwd|PGPASSWORD)[[:space:]]*=[[:space:]]*)("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]&)]*)#\1***#Ig' \
             -e 's#((password|passwd|pwd|PGPASSWORD)[[:space:]]*=[[:space:]]*).*#\1***#Ig' \
         | tr '\n' ' ' \
         | sed -E 's/[[:space:]]+$//' \
         | cut -c1-400)"
-    if [[ -z "${texto}" ]]; then
-        texto="la restauración falló sin detalle de psql"
-    fi
     printf '%s' "${texto}"
+}
+
+# El texto crudo de psql nunca se imprime: ni aquí ni en el JSON. Si no hay
+# ERROR/FATAL/PANIC utilizable, se apunta al registro en vez de inventar detalle.
+mensaje_psql_sin_detalle() {
+    echo "[restauración] psql falló sin un ERROR/FATAL utilizable; revisa el registro de restauración y los logs de postgres." >&2
 }
 
 psql_temp() {
     local err salida detalle
     err="$(mktemp "${TMPDIR:-/tmp}/zascarr-psql.XXXXXX")" || return 1
-    if ! salida="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${TEMP}" -At -c "$1" 2>"${err}")"; then
+    if ! salida="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${TEMP}" -At \
+            -v VERBOSITY=terse -c "$1" 2>"${err}")"; then
         detalle="$(sanear_detalle < "${err}")"
         rm -f "${err}"
-        echo "[restauración] Motivo de psql: ${detalle}" >&2
+        if [[ -n "${detalle}" ]]; then
+            echo "[restauración] Motivo de psql: ${detalle}" >&2
+        else
+            mensaje_psql_sin_detalle
+        fi
         return 1
     fi
     rm -f "${err}"
@@ -251,11 +264,15 @@ ERR="$(mktemp "${TMPDIR:-/tmp}/zascarr-restore.XXXXXX")"
 "${COMPOSE[@]}" exec -T postgres createdb -U "${DB_USER}" "${TEMP}" \
     || { escribir_restore_estado "failed" "createdb_failed" || true; die "No pude crear ${TEMP}."; }
 if ! gzip -dc "${DUMP}" | "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" \
-        -d "${TEMP}" -v ON_ERROR_STOP=1 -q >/dev/null 2>"${ERR}"; then
+        -d "${TEMP}" -v ON_ERROR_STOP=1 -v VERBOSITY=terse -q >/dev/null 2>"${ERR}"; then
     DETALLE="$(sanear_detalle < "${ERR}")"
     escribir_restore_estado "failed" "restore_failed" "${DETALLE}" || true
     # El motivo también sale por pantalla (en la CI solo se veía este mensaje y el porqué quedaba en el JSON).
-    [[ -z "${DETALLE}" ]] || echo "[restauración] Motivo de psql: ${DETALLE}" >&2
+    if [[ -n "${DETALLE}" ]]; then
+        echo "[restauración] Motivo de psql: ${DETALLE}" >&2
+    else
+        mensaje_psql_sin_detalle
+    fi
     die "La restauración falló."
 fi
 

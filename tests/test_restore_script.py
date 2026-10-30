@@ -12,6 +12,7 @@ import gzip
 import hashlib
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -373,7 +374,7 @@ class TestRestoreScript:
         assert detalle and detalle == _estado(ctx)["detalle"]
         assert "hunter2" not in json.dumps(_estado(ctx))
 
-    def test_sin_error_ni_fatal_usa_un_generico_y_no_vuelca_nada(self, tmp_path):
+    def test_sin_error_ni_fatal_deja_detalle_null_y_apunta_al_registro(self, tmp_path):
         ctx = _preparar(tmp_path)
         r = _ejecutar(
             ctx,
@@ -387,9 +388,27 @@ class TestRestoreScript:
         )
         assert r.returncode != 0
         salida = r.stdout + r.stderr
-        assert "la restauración falló sin detalle de psql" in salida
         assert "hunter2" not in salida and "hunter2" not in json.dumps(_estado(ctx))
-        assert _estado(ctx)["detalle"] == "la restauración falló sin detalle de psql"
+        # `null` distingue «sin detalle» de un texto vacío que parezca éxito.
+        assert _estado(ctx)["error"] == "restore_failed"
+        assert _estado(ctx)["detalle"] is None
+        assert "sin un ERROR/FATAL utilizable" in salida
+        assert "revisa el registro" in salida
+        assert "La restauración falló." in salida
+
+    def test_panic_tambien_es_una_linea_permitida(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(
+            ctx,
+            dump=ctx["dump"],
+            extra_env={
+                "FAKE_PSQL_FAIL": "1",
+                "FAKE_PSQL_MSG": "PANIC:  el servidor está en apuros",
+            },
+        )
+        assert r.returncode != 0
+        assert "PANIC:  el servidor está en apuros" in r.stderr
+        assert _detalle_en_pantalla(r) == _estado(ctx)["detalle"]
 
     def test_fatal_tambien_es_una_linea_permitida(self, tmp_path):
         ctx = _preparar(tmp_path)
@@ -403,6 +422,70 @@ class TestRestoreScript:
         )
         assert r.returncode != 0
         assert "FATAL:  no se pudo conectar" in r.stderr
+
+    def test_canario_aleatorio_no_aparece_y_el_error_sigue_legible(self, tmp_path):
+        """Invariante: si se redacta todo, se pierde el ERROR; si se filtra, cae el canario."""
+        ctx = _preparar(tmp_path)
+        canario = "canario_" + secrets.token_hex(12)
+        mensaje = (
+            f"ERROR:  fallo al restaurar postgresql://u:{canario}@h/db\n"
+            f'CONTEXT:  COPY public.files, line 1: "{canario}"\n'
+            f"DETAIL:  Key (id)=({canario}) already exists.\n"
+            f"STATEMENT:  COPY files FROM stdin -- {canario}\n"
+            f"password={canario}&otro={canario}"
+        )
+        r = _ejecutar(
+            ctx, dump=ctx["dump"], extra_env={"FAKE_PSQL_FAIL": "1", "FAKE_PSQL_MSG": mensaje}
+        )
+        assert r.returncode != 0
+        salida = r.stdout + r.stderr
+        assert canario not in salida and canario not in json.dumps(_estado(ctx))
+        assert "ERROR:  fallo al restaurar" in salida
+        assert "postgresql://u:***@h/db" in salida
+        assert _detalle_en_pantalla(r) == _estado(ctx)["detalle"]
+        assert "ERROR:  fallo al restaurar" in _estado(ctx)["detalle"]
+
+    def test_cr_no_inyecta_una_linea_y_no_filtra_el_contexto(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        canario = "cr_" + secrets.token_hex(8)
+        mensaje = f'ERROR:  fallo de prueba\rCONTEXT: COPY t, line 1: "{canario}"'
+        r = _ejecutar(
+            ctx, dump=ctx["dump"], extra_env={"FAKE_PSQL_FAIL": "1", "FAKE_PSQL_MSG": mensaje}
+        )
+        assert r.returncode != 0
+        salida = r.stdout + r.stderr
+        assert canario not in salida and canario not in json.dumps(_estado(ctx))
+        assert "ERROR:  fallo de prueba" in salida
+        assert "CONTEXT" not in salida and "DETAIL" not in salida
+
+    def test_el_error_util_sigue_legible(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(
+            ctx,
+            dump=ctx["dump"],
+            extra_env={
+                "FAKE_PSQL_FAIL": "1",
+                "FAKE_PSQL_MSG": 'ERROR:  relation "files" does not exist',
+            },
+        )
+        assert r.returncode != 0
+        esperado = 'ERROR:  relation "files" does not exist'
+        assert esperado in r.stderr
+        assert _estado(ctx)["detalle"] == esperado
+        assert _detalle_en_pantalla(r) == esperado
+
+    def test_psql_usa_verbosity_terse_en_restauracion_y_consultas(self, tmp_path):
+        """La primera barrera es el cliente; la allowlist queda como red de seguridad."""
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, dump=ctx["dump"], manifest=ctx["manifest"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        lineas_psql = [
+            linea
+            for linea in ctx["stub"].read_text(encoding="utf-8").splitlines()
+            if " psql " in linea
+        ]
+        assert lineas_psql
+        assert all("VERBOSITY=terse" in linea for linea in lineas_psql), lineas_psql
 
     @pytest.mark.parametrize(
         "texto,prohibido,permitido",
@@ -433,6 +516,46 @@ class TestRestoreScript:
         salida = r.stdout + r.stderr
         assert prohibido not in salida and prohibido not in json.dumps(_estado(ctx))
         assert permitido in salida
+
+    @pytest.mark.parametrize(
+        "plantilla,secreto",
+        [
+            (plantilla, secreto)
+            for plantilla in (
+                "postgresql://u:{s}@h/db",
+                "PASSWORD='{s}'",
+                "PGPASSWORD={s}",
+                "password = {s}",
+            )
+            for secreto in (
+                "s3cr3t@",
+                "con espacio",
+                "apóstrofo'",
+                'comilla"',
+                "a=b",
+                "a&b",
+                "100%",
+            )
+        ],
+    )
+    def test_tabla_de_secretos_no_filtra_y_conserva_el_error(self, tmp_path, plantilla, secreto):
+        ctx = _preparar(tmp_path)
+        texto = plantilla.format(s=secreto)
+        r = _ejecutar(
+            ctx,
+            dump=ctx["dump"],
+            extra_env={
+                "FAKE_PSQL_FAIL": "1",
+                "FAKE_PSQL_MSG": f"ERROR:  fallo de prueba {texto}",
+            },
+        )
+        assert r.returncode != 0
+        salida = r.stdout + r.stderr
+        estado = _estado(ctx)
+        assert secreto not in salida, texto
+        assert secreto not in json.dumps(estado), texto
+        assert "ERROR:  fallo de prueba" in salida
+        assert _detalle_en_pantalla(r) == estado["detalle"]
 
     def test_un_valor_entre_comillas_con_espacios_no_deja_fragmentos(self, tmp_path):
         """Si solo se enmascara el primer token, el resto del secreto quedaría a la vista."""
@@ -466,6 +589,23 @@ class TestRestoreScript:
         assert r.returncode != 0
         salida = r.stdout + r.stderr
         assert secreto not in salida and secreto not in json.dumps(_estado(ctx))
+        assert len(_detalle_en_pantalla(r)) <= 400
+
+    def test_no_queda_un_fragmento_del_secreto_al_truncar(self, tmp_path):
+        """Si se trunca antes de redactar, un `@` fuera del corte deja medio secreto a la vista."""
+        ctx = _preparar(tmp_path)
+        secreto = "SECRETO1234567890"
+        mensaje = "ERROR:  " + ("x" * 370) + f" postgresql://u:{secreto}@h/db"
+        r = _ejecutar(
+            ctx,
+            dump=ctx["dump"],
+            extra_env={"FAKE_PSQL_FAIL": "1", "FAKE_PSQL_MSG": mensaje},
+        )
+        assert r.returncode != 0
+        salida = r.stdout + r.stderr
+        assert secreto[:6] not in salida
+        assert secreto[:6] not in json.dumps(_estado(ctx))
+        assert "postgresql://u:***" in salida
         assert len(_detalle_en_pantalla(r)) <= 400
 
     def test_psql_temp_tambien_sanea_y_no_imprime_crudo(self, tmp_path):
