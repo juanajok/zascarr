@@ -18,6 +18,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Seguridad
 
+- **Un fallo inesperado al confirmar el alta de una serie deja rastro en los registros.** La pantalla ya decía «no se sabe
+  si la serie llegó a crearse», pero el error no quedaba anotado en ningún sitio. Ahora se registra
+  `descubrir.crear_fallo` con el tipo de error, sin el título ni el token.
 - **La contraseña de la base de datos ya no hay que ponerla a mano ni puede ser una conocida** ([ADR 0012](docs/adr/0012-credenciales-del-env.md)).
   Una instalación nueva **ya no se detiene** pidiéndote editar el `.env`: el instalador genera una contraseña propia
   (aleatoria, sin mostrarla) y la guarda antes de crear la base de datos. Si vuelves a ejecutarlo la conserva; si ya existía
