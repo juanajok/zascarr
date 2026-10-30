@@ -20,6 +20,7 @@ pytestmark = pytest.mark.skipif(
 
 DOCKER_DE_PEGA = """#!/bin/sh
 echo "docker $*" >> "$STUB_LOG"
+case "$*" in *pg_database_size*) echo 1024 ;; esac
 exit 0
 """
 

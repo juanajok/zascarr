@@ -132,7 +132,7 @@ jq -e . "$MANIFEST" >/dev/null 2>&1 || die "El manifiesto no es JSON válido."
 M_SHA="$(jq -r '.sha256 // empty' "$MANIFEST")"
 M_BYTES="$(jq -r '.bytes // empty' "$MANIFEST")"
 M_SCHEMA="$(jq -r '.schema // empty' "$MANIFEST")"
-M_ALEMBIC="$(jq -r '.alembic // empty' "$MANIFEST")"
+M_ALEMBIC="$(jq -r '.alembic // empty' "$MANIFEST" | tr -cd '[:alnum:]_.-' | cut -c1-64)"
 M_DESTINO="$(jq -r '.codigo_destino_sha_completo // empty' "$MANIFEST")"
 M_DESPLEGADO="$(jq -r '.codigo_desplegado_sha_completo // empty' "$MANIFEST")"
 
@@ -198,7 +198,8 @@ if ! INSPECCION="$(inspeccionar "$DUMP")"; then
 fi
 IFS='|' read -r T_HEADER T_AV T_SERIES T_FILES T_WISH T_ISSUES VERSION_DUMP \
     N_SERIES N_ISSUES N_FILES N_OPS N_WISH <<< "$INSPECCION"
-VERSION_DUMP="$(printf '%s' "$VERSION_DUMP" | tr -d '[:space:]')"
+# Lo que sale del dump o del manifiesto se limpia antes de enseñarlo en un mensaje: solo caracteres de una revisión.
+VERSION_DUMP="$(printf '%s' "$VERSION_DUMP" | tr -cd '[:alnum:]_.-' | cut -c1-64)"
 
 [[ "$T_HEADER" == "1" ]] || die "El dump no tiene la cabecera de pg_dump."
 for par in "alembic_version:$T_AV" "series:$T_SERIES" "files:$T_FILES" "wishlist:$T_WISH"; do
@@ -262,17 +263,25 @@ mkdir -p "$BACKUP_DIR" || die "No puedo crear BACKUP_DIR."
 [[ -w "$BACKUP_DIR" ]] || die "BACKUP_DIR no es escribible."
 
 TAMANO_KB="$(tamano_bd_kb)"
-if ! exigir_espacio_kb "$(espacio_libre_kb "$BACKUP_DIR")" "${TAMANO_KB}" \
-        "la copia de seguridad previa a restaurar"; then
+exigir_espacio_kb "$(espacio_libre_kb "$BACKUP_DIR")" "${TAMANO_KB}" \
+        "la copia de seguridad previa a restaurar" && ESPACIO_RC=0 || ESPACIO_RC=$?
+if (( ESPACIO_RC == 2 )); then
+    die "No pude medir la base de datos actual (¿PostgreSQL parado?), así que no puedo asegurar la copia previa. No se ha tocado la BD."
+elif (( ESPACIO_RC != 0 )); then
     die "No hay espacio para la copia de seguridad. No se ha tocado la BD."
 fi
-TAMANO_DUMP_KB="$(gzip -l "$DUMP" 2>/dev/null | awk 'NR == 2 { print int($2 / 1024) }')"
-if ! exigir_espacio_kb "$(espacio_postgres_libre_kb)" "${TAMANO_DUMP_KB}" \
-        "restaurar la base de datos"; then
+TAMANO_DUMP_KB="$(tamano_descomprimido_kb "$DUMP")"
+exigir_espacio_kb "$(espacio_postgres_libre_kb)" "${TAMANO_DUMP_KB}" \
+        "restaurar la base de datos" && ESPACIO_RC=0 || ESPACIO_RC=$?
+if (( ESPACIO_RC == 2 )); then
+    die "No pude medir el tamaño del dump ni el espacio del volumen de PostgreSQL. No se ha tocado la BD."
+elif (( ESPACIO_RC != 0 )); then
     die "No hay espacio en el volumen de PostgreSQL para restaurar. No se ha tocado la BD."
 fi
 
 info "Copia de seguridad de la BD actual..."
+# El temporal nace 600: con umask 022 sería legible por todos durante TODO el pg_dump.
+( umask 077; : > "${SEGURIDAD}.tmp" ) || die "No pude crear la copia de seguridad. No se ha tocado la BD."
 if ! "${COMPOSE[@]}" exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "${SEGURIDAD}.tmp"; then
     rm -f "${SEGURIDAD}.tmp"
     die "No pude crear la copia de seguridad. No se ha tocado la BD."
@@ -339,10 +348,12 @@ fi
 
 FASE="dropdb"
 info "Eliminando la base de datos..."
-if ! "${COMPOSE[@]}" exec -T postgres dropdb -U "$DB_USER" --if-exists --force "$DB_NAME" >/dev/null; then
-    recuperar "no pude eliminar $DB_NAME; la BD sigue intacta"
-fi
+# Se marca ANTES: una interrupción durante el dropdb ya puede haber dejado la BD a medias, y la recuperación solo se
+# intenta con la BD marcada como tocada. Si el dropdb falla de verdad, recuperar restaura la copia previa (inocuo).
 DB_TOCADA=1
+if ! "${COMPOSE[@]}" exec -T postgres dropdb -U "$DB_USER" --if-exists --force "$DB_NAME" >/dev/null; then
+    recuperar "no pude eliminar $DB_NAME; se intenta dejarla como estaba"
+fi
 
 FASE="createdb"
 info "Creando base de datos vacía..."

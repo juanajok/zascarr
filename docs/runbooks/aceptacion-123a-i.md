@@ -199,6 +199,9 @@ Sembrar en la pila aislada, con las migraciones ya aplicadas:
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d postgres
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm zascarr \
   alembic upgrade head
+# Marca de la BD aislada: sin ella el generador no trunca ni aplica nada (solo en la pila aislada, nunca en producción).
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T postgres \
+  psql -U comics_admin -d zascarr -c "COMMENT ON DATABASE zascarr IS 'zascarr-123a-aislada';"
 # El generador puede aplicar con psql si el host lo tiene:
 python3 scripts/aceptacion/preparar_fixture_123a.py \
   --salida "$VAL/fixture" --reset \
@@ -209,7 +212,9 @@ python3 scripts/aceptacion/preparar_fixture_123a.py \
 15432**. Una URL sin puerto (5432 por defecto), con otro puerto o con host remoto
 se rechaza **antes de llamar a `psql`**, incluso con `--reset`/`--force`. Es una
 guardia contra el error humano; la compuerta real sigue siendo
-`verificar_aislamiento_123a.sh`.
+`verificar_aislamiento_123a.sh`. La URL no admite parámetros (`?host=…`, `?port=…`),
+varios hosts ni fragmentos, y la BD debe llevar la marca `zascarr-123a-aislada`
+(`COMMENT ON DATABASE`, arriba): sin ella se rechaza antes de truncar o aplicar.
 
 Si no hay `psql` en el host, aplicar `seed.sql` con `psql` dentro del contenedor
 `postgres`; el fichero está en `$VAL/fixture/seed.sql`. El test PG real de la PR
