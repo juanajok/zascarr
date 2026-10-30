@@ -265,6 +265,8 @@ verificar_dump() {
 volcar_postgres() {
     local destino="$1" tmp="${1}.tmp"
     rm -f "${tmp}"
+    # El temporal nace 600 (umask 077): con la umask 022 de los scripts sería legible por todos durante TODO el pg_dump.
+    ( umask 077; : > "${tmp}" ) || return 1
     if ! "${COMPOSE[@]}" exec -T postgres pg_dump -U "${DB_USER}" "${DB_NAME}" | gzip > "${tmp}"; then
         rm -f "${tmp}"
         return 1

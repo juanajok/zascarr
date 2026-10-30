@@ -184,6 +184,26 @@ while IFS= read -r origen; do
     fi
 done <<< "$C_BINDS"
 
+# El entorno de la copia tampoco puede contener un bind de producción ni estar contenido en uno: «todos los binds de la copia
+# están bajo --entorno» no prueba nada si --entorno es la raíz de producción (o un padre suyo).
+if [[ "$ENTORNO_REAL" == "/" ]]; then
+    printf 'ERROR: --entorno es la raíz del sistema de ficheros.\n' >&2
+    fallos=1
+fi
+n_prod=0
+while IFS= read -r origen; do
+    [[ -n "$origen" ]] || continue
+    n_prod=$((n_prod + 1))
+    real="$(realpath -m "$origen")"
+    if [[ "$real" == "$ENTORNO_REAL" || "$real" == "$ENTORNO_REAL/"* ]]; then
+        printf 'ERROR: --entorno contiene el bind #%d de producción.\n' "$n_prod" >&2
+        fallos=1
+    elif [[ "$ENTORNO_REAL" == "$real/"* ]]; then
+        printf 'ERROR: --entorno está dentro del bind #%d de producción.\n' "$n_prod" >&2
+        fallos=1
+    fi
+done <<< "$P_BINDS"
+
 if (( fallos != 0 )); then
     printf '\nDETENER: la copia no está aislada de producción.\n' >&2
     exit 1

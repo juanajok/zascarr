@@ -140,6 +140,7 @@ def _ejecutar(
     *,
     extra: list[str] | None = None,
     extra_env: dict | None = None,
+    entorno: str = "/srv/123a",
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env.update(
@@ -155,7 +156,7 @@ def _ejecutar(
         env.update(extra_env)
     args = [
         "--entorno",
-        str(Path("/srv/123a")),
+        str(Path(entorno)),
         "--compose",
         str(ctx["copia"]),
         "--env",
@@ -286,3 +287,54 @@ class TestVerificarAislamiento:
         ctx = _preparar(tmp_path)
         r = _ejecutar(ctx, extra=["--ids-despues", str(tmp_path / "no-existe")])
         assert r.returncode != 0
+
+
+def _mutar_prod(ctx: dict, fn) -> None:
+    datos = json.loads(ctx["prod_json"].read_text(encoding="utf-8"))
+    fn(datos)
+    ctx["prod_json"].write_text(json.dumps(datos), encoding="utf-8")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
+class TestBindsDelEntorno:
+    """#123 (SecOps/QA): cada guarda de binds se discrimina por separado, con su mensaje exacto."""
+
+    def test_un_bind_fuera_del_entorno_dice_justo_eso_y_nada_mas(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        _mutar(ctx, lambda d: d["services"]["postgres"]["volumes"][0].update({"source": "/otro/sitio"}))
+        r = _ejecutar(ctx)
+        assert r.returncode != 0
+        assert "está fuera del entorno de la copia" in r.stderr and "coincide con un bind de producción" not in r.stderr
+
+    def test_un_bind_igual_al_de_produccion_dentro_del_entorno_dice_justo_eso(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        _mutar_prod(ctx, lambda d: d["services"]["zascarr"]["volumes"][0].update({"source": "/srv/123a/library"}))
+        r = _ejecutar(ctx)
+        assert r.returncode != 0
+        assert "coincide con un bind de producción" in r.stderr and "fuera del entorno" not in r.stderr
+
+    def test_un_bind_con_enlace_o_punto_punto_hacia_produccion_se_detecta(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        _mutar(ctx, lambda d: d["services"]["zascarr"]["volumes"][0].update(
+            {"source": "/srv/123a/../../media/library"}))
+        r = _ejecutar(ctx)
+        assert r.returncode != 0 and "bind" in r.stderr
+
+    def test_el_entorno_no_puede_contener_un_bind_de_produccion(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        _mutar(ctx, lambda d: [v.update({"source": v["source"].replace("/srv/123a", "/media")})
+                               for s in d["services"].values() for v in s["volumes"]])
+        r = _ejecutar(ctx, entorno="/media")                        # «todos los binds bajo /media» pero /media contiene producción
+        assert r.returncode != 0 and "--entorno contiene el bind" in r.stderr
+
+    def test_el_entorno_no_puede_estar_dentro_de_un_bind_de_produccion(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        _mutar(ctx, lambda d: [v.update({"source": v["source"].replace("/srv/123a", "/media/library/123a")})
+                               for s in d["services"].values() for v in s["volumes"]])
+        r = _ejecutar(ctx, entorno="/media/library/123a")
+        assert r.returncode != 0 and "--entorno está dentro del bind" in r.stderr
+
+    def test_el_entorno_no_puede_ser_la_raiz(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, entorno="/")
+        assert r.returncode != 0 and "raíz del sistema de ficheros" in r.stderr

@@ -44,6 +44,10 @@ if [[ "$cmd" == *"pg_dump"* ]]; then
     cat "$FAKE_DB_DUMP_SQL"
     exit 0
 fi
+if [[ "$cmd" == *"pg_database_size"* ]]; then
+    echo "${FAKE_DB_SIZE_KB:-1024}"
+    exit 0
+fi
 if [[ "$cmd" == *" psql"* ]]; then
     if [[ "$cmd" == *" -c "* ]]; then
         if [[ "$cmd" == *"version_num"* ]]; then
@@ -99,6 +103,10 @@ if [[ -n "${FAKE_HEALTH_FALLOS:-}" ]]; then
 fi
 if [[ "${FAKE_HEALTH:-ok}" == "ok" ]]; then
     echo '{"status":"healthy","checks":{"database":"ok"}}'
+    exit 0
+fi
+if [[ "${FAKE_HEALTH:-ok}" == "db_error" ]]; then
+    echo '{"status":"unhealthy","checks":{"database":"error"}}'
     exit 0
 fi
 exit 22
@@ -587,3 +595,103 @@ class TestRestaurarDatos:
         salida = r.stdout + r.stderr
         assert str(ctx["dump"]) not in salida
         assert str(ctx["backup"]) not in salida
+
+
+GZIP_QUE_FALLA_EN_LA_COPIA_PREVIA = """#!/usr/bin/env bash
+if [[ "$1" == "-t" && "$2" == *rollback-safety_* ]]; then exit 1; fi
+exec "${REAL_GZIP:?}" "$@"
+"""
+
+
+class TestGuardasDeLaRestauracion:
+    """#123 (QA sobre #376, A2): cada guarda se discrimina con su propia prueba (antes sobrevivían a la mutación)."""
+
+    def test_la_restauracion_pide_on_error_stop(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx)
+        assert r.returncode == 0, r.stdout + r.stderr
+        lineas = [x for x in _log(ctx, "stub").splitlines() if " psql " in x and " -q " in x]
+        assert lineas and all("ON_ERROR_STOP=1" in x for x in lineas)
+
+    @pytest.mark.parametrize("cuentas,tabla", [
+        ("3|1|3|1|1", "series"), ("2|2|3|1|1", "issues"), ("2|1|4|1|1", "files"),
+        ("2|1|3|2|1", "operaciones"), ("2|1|3|1|2", "wishlist")])
+    def test_un_recuento_distinto_tras_restaurar_recupera_la_copia_previa(self, tmp_path, cuentas, tabla):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_DB_COUNTS": cuentas})
+        assert r.returncode != 0
+        assert f"recuento distinto en {tabla}" in r.stderr
+        assert "seguridad" in _log(ctx, "restore")                         # y recuperó la copia previa
+        assert "Datos restaurados" not in r.stdout
+
+    @pytest.mark.parametrize("huerfanos,campo", [
+        ("1|0|0|0", "files=1"), ("0|1|0|0", "issues=1"), ("0|0|1|0", "wishlist=1"), ("0|0|0|1", "operaciones=1")])
+    def test_los_vinculos_huerfanos_recuperan_la_copia_previa(self, tmp_path, huerfanos, campo):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_DB_ORPHANS": huerfanos})
+        assert r.returncode != 0
+        assert "vínculos huérfanos" in r.stderr and campo in r.stderr
+        assert "seguridad" in _log(ctx, "restore") and "Datos restaurados" not in r.stdout
+
+    def test_un_health_200_con_la_base_en_error_no_vale(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_HEALTH": "db_error", "HEALTH_TIMEOUT": "1", "HEALTH_INTERVAL": "1"})
+        assert r.returncode != 0 and "database=ok" in r.stderr
+        assert "seguridad" in _log(ctx, "restore")
+
+    def test_una_copia_previa_que_no_pasa_gzip_t_aborta_sin_tocar_la_bd(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        gz = ctx["bin"] / "gzip"
+        gz.write_text(GZIP_QUE_FALLA_EN_LA_COPIA_PREVIA, encoding="utf-8")
+        gz.chmod(0o755)
+        r = _ejecutar(ctx, extra_env={"REAL_GZIP": shutil.which("gzip") or "/usr/bin/gzip"})
+        assert r.returncode != 0 and "no pasa gzip -t" in r.stderr
+        stub = _log(ctx, "stub")
+        assert "dropdb" not in stub and " stop " not in stub and "createdb" not in stub   # la BD no se tocó
+        assert not list(ctx["backup"].glob("rollback-safety_*.sql.gz"))
+
+
+GZIP_QUE_ANOTA_EL_MODO = """#!/usr/bin/env bash
+# Anota el modo del fichero al que escribe gzip (su stdout) en el momento de empezar a volcar.
+if [[ "$1" != "-t" && "$1" != "-dc" && "$1" != "-l" ]]; then
+    stat -L -c '%a' /proc/$$/fd/1 >> "${MODO_LOG:?}" 2>/dev/null || true
+fi
+exec "${REAL_GZIP:?}" "$@"
+"""
+
+
+class TestCorreccionesDeSecOps:
+    """#123 (SecOps sobre #376): R-2 (recuperar si el dropdb falla), R-3 (temporal 600) y R-4 (mensajes limpios)."""
+
+    def test_si_falla_al_eliminar_la_bd_se_intenta_recuperar_la_copia_previa(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_DROP_FAIL": "1"})
+        assert r.returncode != 0
+        assert "no pude eliminar" in r.stderr and "Intentando recuperar la BD anterior" in r.stderr
+
+    def test_la_copia_previa_nace_600_no_644(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        modos = tmp_path / "modos.log"
+        modos.write_text("", encoding="utf-8")
+        gz = ctx["bin"] / "gzip"
+        gz.write_text(GZIP_QUE_ANOTA_EL_MODO, encoding="utf-8")
+        gz.chmod(0o755)
+        r = _ejecutar(ctx, extra_env={"REAL_GZIP": shutil.which("gzip") or "/usr/bin/gzip", "MODO_LOG": str(modos)})
+        assert r.returncode == 0, r.stdout + r.stderr
+        anotados = modos.read_text(encoding="utf-8").split()
+        assert anotados and set(anotados) == {"600"}, anotados            # durante TODO el pg_dump, no solo al final
+
+    @pytest.mark.parametrize("donde", ["dump", "manifiesto"])
+    def test_una_revision_con_caracteres_de_control_no_llega_al_mensaje(self, tmp_path, donde):
+        sucio = "0099\x1b[31m;$(id)`x`"
+        if donde == "dump":
+            ctx = _preparar(tmp_path, sql=_sql(alembic=sucio))
+        else:
+            ctx = _preparar(tmp_path)
+            datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+            datos["alembic"] = sucio
+            ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        r = _ejecutar(ctx)
+        assert r.returncode != 0
+        assert "\x1b" not in r.stderr and "$(" not in r.stderr and "`" not in r.stderr
+        assert "0099" in r.stderr                                          # sigue diciendo de qué revisión se trata
