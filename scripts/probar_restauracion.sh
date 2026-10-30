@@ -44,6 +44,9 @@ install -d -m 755 "${BACKUP_STATUS_DIR}" || die "No puedo crear ${BACKUP_STATUS_
 INICIO="$(date +%s)"
 TEMP=""
 ERR=""
+# `psql_temp` corre en una subshell (command substitution): deja aquí el detalle
+# saneado para que `on_exit` lo use al escribir el estado, sin volver a psql.
+DETALLE_TEMP_FILE="${RESTORE_STATUS_FILE}.detalle.$$"
 STATUS_WRITTEN=0
 DUMP_SHA=""
 DUMP_BYTES=""
@@ -156,8 +159,14 @@ on_exit() {
     local rc=$?
     limpiar
     if (( rc != 0 )) && (( STATUS_WRITTEN == 0 )); then
-        escribir_restore_estado "failed" "unexpected" || true
+        if [[ -f "${DETALLE_TEMP_FILE}" ]]; then
+            escribir_restore_estado "failed" "restore_failed" \
+                "$(cat "${DETALLE_TEMP_FILE}")" || true
+        else
+            escribir_restore_estado "failed" "unexpected" || true
+        fi
     fi
+    rm -f "${DETALLE_TEMP_FILE}"
     exit "${rc}"
 }
 trap on_exit EXIT
@@ -216,6 +225,9 @@ psql_temp() {
         else
             mensaje_psql_sin_detalle
         fi
+        # `psql_temp` corre en una subshell: `on_exit` escribirá el JSON con este
+        # mismo texto saneado (o `detalle: null` si el fichero queda vacío).
+        printf '%s' "${detalle}" > "${DETALLE_TEMP_FILE}" || true
         return 1
     fi
     rm -f "${err}"
