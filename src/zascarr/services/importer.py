@@ -701,8 +701,14 @@ class Importer:
             await self._reenlazar(outcome.recuperar, path, outcome.tr, report)
             return
         if outcome.duplicate_of:
-            report.duplicates.append(f"{path.name} — duplicado de {outcome.duplicate_of}, descartado")
-            logger.info("importer.duplicate", path=str(path), hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None)
+            report.duplicates.append(
+                f"{path.name} — duplicado de {outcome.duplicate_of}, descartado"
+            )
+            logger.info(
+                "importer.duplicate",
+                path=str(path),
+                hash=outcome.tr.sha256[:12] if outcome.tr.sha256 else None,
+            )
             return
         tr, result = outcome.tr, outcome.result
         is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
@@ -835,7 +841,9 @@ class Importer:
         if not series:
             return self._library / "_Unsorted" / orig.name
         number = tr.comic_info.number if tr.comic_info else None
-        return build_library_path(self._library, series, number, orig.suffix, fallback_name=orig.name)
+        return build_library_path(
+            self._library, series, number, orig.suffix, fallback_name=orig.name
+        )
 
 
 def build_library_path(library: Path, series: Series, issue_number: str | None,

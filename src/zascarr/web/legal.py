@@ -47,4 +47,6 @@ async def accept(
 
 @router.get("/legal", response_class=HTMLResponse)
 async def full_text(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "legal_full.html", {"legal_html": render_legal_html()})
+    return templates.TemplateResponse(
+        request, "legal_full.html", {"legal_html": render_legal_html()}
+    )

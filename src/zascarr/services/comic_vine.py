@@ -142,9 +142,15 @@ class ComicVineClient:
         ) for item in data.get("results", [])]
 
     async def get_issue_detail(self, issue_id: int) -> dict[str, Any]:
-        data = await self._get(f"/issue/4000-{issue_id}/", {
-            "field_list": "id,name,issue_number,volume,description,cover_date,image,person_credits,character_credits,story_arc_credits",
-        })
+        data = await self._get(
+            f"/issue/4000-{issue_id}/",
+            {
+                "field_list": (
+                    "id,name,issue_number,volume,description,cover_date,image,"
+                    "person_credits,character_credits,story_arc_credits"
+                ),
+            },
+        )
         return data.get("results", {})
 
     async def find_issue(self, volume_id: int, issue_number: str) -> CVIssueResult | None:
