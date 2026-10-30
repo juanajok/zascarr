@@ -81,6 +81,24 @@ class TestPuntosDeEstado:
         assert "'<div class=\"estado-dot estado-dot-sm estado-' + level + '\"></div>'" in html
 
 
+class TestContrasteDelGlifo:
+    """WCAG 1.4.11 (gráfico no textual): el glifo debe verse sobre el fondo de su punto, ≥ 3:1, en los dos
+    temas. Los colores salen de web.css, no se copian: si alguien oscurece `--warn`, el «!» deja de verse
+    y esta prueba falla (el rojo en claro va justo: ~3,3:1)."""
+
+    FONDO_DEL_NIVEL = {"ok": "var(--ok)", "bad": "var(--warn)", "warn": "var(--yellow)"}
+
+    @pytest.mark.parametrize("tema", ["claro", "oscuro"])
+    @pytest.mark.parametrize("nivel", ["ok", "bad", "warn"])
+    def test_el_glifo_se_ve_sobre_el_fondo_de_su_punto(self, tema, nivel):
+        from tests.test_web_css_contraste import _temas, contraste, resolver
+        regla = next(d for s, d in _reglas() if s == f".estado-dot.estado-{nivel}")
+        fondo = re.search(r"background-color:\s*(var\(--[\w-]+\))", regla).group(1)
+        assert fondo == self.FONDO_DEL_NIVEL[nivel]                      # el fondo que mide es el que pinta la hoja
+        t = _temas()[tema]
+        assert contraste(TINTA_DEL_PUNTO, resolver(fondo, t)) >= 3.0, (tema, nivel)
+
+
 class TestDeseados:
     def test_cada_estado_de_deseo_tiene_aspecto_y_es_uno_del_vocabulario(self):
         assert set(ASPECTO_DE_DESEO) == set(WishlistStatus)
