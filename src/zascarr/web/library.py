@@ -91,7 +91,9 @@ async def index(
 ) -> HTMLResponse:
     service = SeriesService(db)
     publishers = await service.list_publishers_with_series()
-    ctx = await _resultados_context(db, page, tradition, publisher_id, character_id, story_arc_id, q)
+    ctx = await _resultados_context(
+        db, page, tradition, publisher_id, character_id, story_arc_id, q
+    )
     ctx.update({
         "publishers": publishers,
         "tradiciones": [(t.value, _TRADICION_LABEL[t]) for t in ComicTradition],
@@ -105,17 +107,25 @@ async def resultados(
     character_id: str = "", story_arc_id: str = "", q: str = "",
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    ctx = await _resultados_context(db, page, tradition, publisher_id, character_id, story_arc_id, q)
+    ctx = await _resultados_context(
+        db, page, tradition, publisher_id, character_id, story_arc_id, q
+    )
     return templates.TemplateResponse(request, "_rejilla_biblioteca.html", ctx)
 
 
 @router.get("/buscar-personaje", response_class=HTMLResponse)
-async def buscar_personaje(request: Request, q: str = "", db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def buscar_personaje(
+    request: Request, q: str = "", db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
     characters = await SeriesService(db).search_characters(q)
-    return templates.TemplateResponse(request, "_resultados_personaje.html", {"characters": characters})
+    return templates.TemplateResponse(
+        request, "_resultados_personaje.html", {"characters": characters}
+    )
 
 
 @router.get("/buscar-saga", response_class=HTMLResponse)
-async def buscar_saga(request: Request, q: str = "", db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def buscar_saga(
+    request: Request, q: str = "", db: AsyncSession = Depends(get_db)
+) -> HTMLResponse:
     story_arcs = await SeriesService(db).search_story_arcs(q)
     return templates.TemplateResponse(request, "_resultados_saga.html", {"story_arcs": story_arcs})

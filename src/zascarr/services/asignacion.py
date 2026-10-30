@@ -69,6 +69,9 @@ logger = structlog.get_logger()
 _REINTENTOS_DESTINO = 3
 
 # El esquema es la migración 0017 (`asignacion_operaciones`).
+# S608 revisado por SecOps: las consultas de este módulo interpolan SOLO esta constante literal;
+# todo valor externo va como parámetro ligado (`:f`, `:i`). Que siga siendo literal lo fija
+# test_asignacion_vivas_es_literal.
 VIVAS = "estado IN ('preparada', 'confirmada')"
 
 
@@ -308,7 +311,7 @@ class AsignacionService:
         """Continúa o cierra las operaciones vivas. Consulta SOLO la tabla (índice parcial): no recorre la biblioteca."""
         async with self._fabrica() as s:
             ids = [r[0] for r in (await s.execute(text(
-                f"SELECT id FROM asignacion_operaciones WHERE {VIVAS} ORDER BY creada"))).all()]
+                f"SELECT id FROM asignacion_operaciones WHERE {VIVAS} ORDER BY creada"))).all()]  # noqa: S608 (solo interpola VIVAS)
         resultados = []
         for i in ids:
             r = await self._ejecutar(i)
@@ -328,7 +331,7 @@ class AsignacionService:
                 return Resultado("no_encontrado", "Archivo o serie no encontrados")
 
             viva = (await s.execute(text(
-                f"SELECT id FROM asignacion_operaciones WHERE file_id = :f AND {VIVAS}"), {"f": file_id})).first()
+                f"SELECT id FROM asignacion_operaciones WHERE file_id = :f AND {VIVAS}"), {"f": file_id})).first()  # noqa: S608 (solo interpola VIVAS)
             if viva is not None:
                 return viva[0]          # ya hay una: se continúa (o se informa si otro proceso la ejecuta)
 
@@ -380,7 +383,7 @@ class AsignacionService:
                     if "uq_asignacion_viva_por_archivo" in str(exc.orig):
                         await s.rollback()
                         otra = (await s.execute(text(
-                            f"SELECT id FROM asignacion_operaciones WHERE file_id = :f AND {VIVAS}"), {"f": file_id})).first()
+                            f"SELECT id FROM asignacion_operaciones WHERE file_id = :f AND {VIVAS}"), {"f": file_id})).first()  # noqa: S608 (solo interpola VIVAS)
                         return otra[0]
                     continue                      # destino reservado por otra operación: siguiente sufijo
             return Resultado("error", "No se encontró un nombre de destino libre")
@@ -412,7 +415,7 @@ class AsignacionService:
         """Cada ejecutor que consigue el candado incrementa la época (y la confirma): es su ficha de vallado."""
         async with self._fabrica() as s:
             fila = (await s.execute(text(
-                f"UPDATE asignacion_operaciones SET epoca = epoca + 1, actualizada = now() "
+                f"UPDATE asignacion_operaciones SET epoca = epoca + 1, actualizada = now() "  # noqa: S608 (solo interpola VIVAS)
                 f"WHERE id = :i AND {VIVAS} RETURNING epoca"), {"i": op_id})).first()
             await s.commit()
         return fila[0] if fila else None

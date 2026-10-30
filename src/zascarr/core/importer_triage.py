@@ -39,6 +39,7 @@ Correcciones respecto al diseño original:
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import io
 import re
@@ -48,6 +49,10 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from PIL import Image
+
+# DoS: el tope del ComicInfo.xml vive con el resto del formato (lo comparte el tagger, que lo lee
+# con `utils/cbz.py`); se usa aquí y se reexporta para quien lo importaba de este módulo.
+from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES
 
 # IMAGE_EXTS y natural_key se reexportan: otros módulos los importan de aquí.
 from zascarr.core.formato_contenedor import (  # noqa: F401
@@ -78,9 +83,6 @@ _TAG_PATTERNS: list[tuple[str, str]] = [
 ]
 _LAST_PAREN = re.compile(r"\(([^)]+)\)\s*$")
 
-# DoS: un ComicInfo.xml real mide pocos KB. Rechazar los enormes ANTES de
-# descomprimirlos en memoria (una ZIP bomb no debe reventar una Pi).
-MAX_COMICINFO_BYTES = 1 * 1024 * 1024   # 1 MiB
 # entradas máximas por ZIP (antes 1000; el máximo medido en la biblioteca real es 941)
 MAX_ZIP_ENTRIES = MAX_ENTRADAS
 # El tope de 500 MiB descomprimidos EN TOTAL desapareció (#307, D3): dejaba sin ComicInfo ni
@@ -148,7 +150,11 @@ def _text(el: ElementTree.Element | None) -> str | None:
 
 def parse_comic_info(data: bytes) -> ComicInfo:
     """Parsea el XML. Créditos multi-autor separados por coma."""
-    root = ElementTree.fromstring(data)  # lanza ParseError: lo captura triage()
+    # XML de terceros (S314 revisado por SecOps): el tamaño lo acota `leer_acotado` antes de llegar
+    # aquí; las entidades anidadas («billion laughs») las corta expat ≥ 2.4.1 (la imagen trae 2.9.0;
+    # lo fija test_comicinfo_entidades_anidadas); ElementTree no resuelve entidades externas (sin
+    # XXE). Lanza ParseError: lo captura triage().
+    root = ElementTree.fromstring(data)  # noqa: S314
     info = ComicInfo()
 
     scalars = {
@@ -162,10 +168,9 @@ def parse_comic_info(data: bytes) -> ComicInfo:
     for tag, attr in (("Volume", "volume"), ("Year", "year"),
                       ("PageCount", "page_count")):
         if v := _text(root.find(tag)):
-            try:
+            # Volume/Year no numéricos existen en la escena; ignorar
+            with contextlib.suppress(ValueError):
                 setattr(info, attr, int(v))
-            except ValueError:
-                pass  # Volume/Year no numéricos existen en la escena; ignorar
 
     for tag in _CREDIT_TAGS:
         if v := _text(root.find(tag)):

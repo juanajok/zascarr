@@ -41,19 +41,21 @@ ISSUE_PATTERNS = [
     # buscando y encontraba OTRO número más adelante en el nombre (bug real:
     # "Flash v2 019B Dc Bonus Book 09" daba #9, no #19B).
     (r"#\s*(\d+[a-zA-Z]?\.?\d*)", False),
-    (r"c(\d{3,4})\b", False),                # One Piece c1054
-    (r"\bT(\d{2})\b", False),                 # Astérix T01: BD de tomo único,
-                                              # el tomo ES el número de cara
-                                              # a catalogación (no un volumen
-                                              # de trade paperback americano).
+    (r"c(\d{3,4})\b", False),  # One Piece c1054
+    # Astérix T01: BD de tomo único, el tomo ES el número de cara a catalogación (no un volumen
+    # de trade paperback americano).
+    (r"\bT(\d{2})\b", False),
     # "nº 03", "n° 5", "núm. 7" y su mojibake "n║05" — la numeración
     # española, que no estaba cubierta. El "║" no es un error de copia:
     # media biblioteca real viene de scans con nombres en CP437 releídos
     # como Latin-1 ("Espa±a", "Traducci≤n"), y ahí "º" aparece así.
-    # `(?<![A-Za-zÀ-ÿ])`: el marcador NO puede ir pegado a una letra por la izquierda. Sin esto, el "no"
-    # final de "Inferno 01" o "La Cosa del Pantano 01" se leía como «nº 01» y el título se truncaba
-    # ("Infer", "La Cosa del Panta"). Medido en la biblioteca real: 14 de 1.542 nombres.
-    (r"(?<![A-Za-zÀ-ÿ])(?:Issue|No\.?|N[úu]m(?:ero)?\.?|[Nn][ºo°º║])\s*(\d{1,4}[a-zA-Z]?)\b", False),
+    # `(?<![A-Za-zÀ-ÿ])`: el marcador NO puede ir pegado a una letra por la izquierda. Sin esto,
+    # el "no" final de "Inferno 01" o "La Cosa del Pantano 01" se leía como «nº 01» y el título se
+    # truncaba ("Infer", "La Cosa del Panta"). Medido en la biblioteca real: 14 de 1.542 nombres.
+    (
+        r"(?<![A-Za-zÀ-ÿ])(?:Issue|No\.?|N[úu]m(?:ero)?\.?|[Nn][ºo°º║])\s*(\d{1,4}[a-zA-Z]?)\b",
+        False,
+    ),
     # El sufijo de letra es real y frecuente ("Superman Vol2 123a" son las
     # entregas partidas de Zinco); sin él, esos números se perdían enteros.
     (r"\b(\d{3,4}[a-zA-Z]?)\b(?!\s*\))", False),
@@ -333,7 +335,9 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # (`era_pack`): más abajo decide si el volumen puede sustituir al
     # número que falta, o si eso fabricaría una identidad falsa para un
     # pack (ver ese bloque).
-    era_pack = bool(NUMBER_RANGE_PATTERN.search(working) or NUMBER_RANGE_WORD_PATTERN.search(working))
+    era_pack = bool(
+        NUMBER_RANGE_PATTERN.search(working) or NUMBER_RANGE_WORD_PATTERN.search(working)
+    )
     working = NUMBER_RANGE_PATTERN.sub(" ", working)
     working = NUMBER_RANGE_WORD_PATTERN.sub(" ", working)
 
@@ -490,9 +494,14 @@ def normalize_series_name(name: str) -> str:
 
 def _confidence(p: ParsedComicName) -> float:
     score = 0.0
-    if p.series:        score += 0.4
-    if p.issue_number:  score += 0.3
-    if p.year:          score += 0.15
-    if p.format:        score += 0.1
-    if p.volume:        score += 0.05
+    if p.series:
+        score += 0.4
+    if p.issue_number:
+        score += 0.3
+    if p.year:
+        score += 0.15
+    if p.format:
+        score += 0.1
+    if p.volume:
+        score += 0.05
     return min(score, 1.0)
