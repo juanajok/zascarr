@@ -125,8 +125,12 @@ DEST="${BACKUP_DIR}/backup_${TS}.sql.gz"
 
 # ── Espacio libre ANTES de volcar (#123b) ───────────────────────────────────
 TAMANO_KB="$(tamano_bd_kb)"
-if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
-        "la copia de seguridad local"; then
+exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
+        "la copia de seguridad local" && ESPACIO_RC=0 || ESPACIO_RC=$?
+if (( ESPACIO_RC == 2 )); then
+    escribir_estado "failed" "pg_dump_failed" "" "" 0 false || true
+    die "No pude medir el espacio necesario (¿PostgreSQL parado o el disco sin montar?). No se ha escrito ningún volcado."
+elif (( ESPACIO_RC != 0 )); then
     escribir_estado "failed" "disk_full" "" "" 0 false || true
     die "No hay espacio para la copia de seguridad. No se ha escrito ningún volcado."
 fi
@@ -170,10 +174,12 @@ if (( OFFSITE_OK == 1 )); then
 fi
 
 if (( OFFSITE_OK == 1 )); then
-    if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_OFFSITE_DIR}")" \
-            "$((BYTES / 1024))" "la copia fuera del disco"; then
+    exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_OFFSITE_DIR}")" \
+            "$((BYTES / 1024))" "la copia fuera del disco" && ESPACIO_RC=0 || ESPACIO_RC=$?
+    if (( ESPACIO_RC != 0 )); then
         OFFSITE_OK=0
-        OFFSITE_ERROR="disk_full"
+        # 1 = no cabe (disk_full); 2 = no se pudo medir el disco de respaldo: no se publica como «disco lleno».
+        if (( ESPACIO_RC == 2 )); then OFFSITE_ERROR="offsite_copy_failed"; else OFFSITE_ERROR="disk_full"; fi
         OFFSITE_JSON="$(jq -n --arg error "${OFFSITE_ERROR}" \
             '{copia: false, error: $error, verificada: false}')"
     fi
