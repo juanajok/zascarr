@@ -547,3 +547,15 @@ class TestCriterio11Borrador:
         await archivos(entorno, "<img src=x onerror=alert(1)> 01.cbz")
         t = (await abrir(serie)).t
         assert "<img src=x" not in t and "&lt;img" in t
+
+
+class TestEnlaceDeVueltaConSerieCruda:
+    """#304: `?serie=` del enlace «← Volver a Pendientes por carpeta» sale de la URL; se codifica, no se pega en bruto."""
+
+    async def test_la_serie_se_codifica_en_el_enlace_de_vuelta(self, entorno):
+        async with cliente() as c:
+            r = await c.get(RUTA, params={"clave": CLAVE, "series_id": "a b&c#d\"e"})
+        assert r.status_code == 200
+        enlaces = [html.unescape(h) for h in re.findall(r'href="([^"]+)"', r.text)]
+        assert "/ui/pendientes/carpetas?serie=a%20b%26c%23d%22e" in enlaces
+        assert not [e for e in enlaces if e.startswith("/ui/pendientes/carpetas?serie=") and ("#" in e or " " in e)]

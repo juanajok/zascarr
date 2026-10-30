@@ -301,12 +301,10 @@ async def carpetas(
     `GET /api/revision/carpetas`, con el filtro de lectura `solo_utiles`: los grupos sin
     contexto son sueltos y no se pintan como carpetas. No escribe, no mira el disco y no
     ofrece ninguna acción."""
-    serie_valida = ""
     try:
-        serie_uuid = UUID(serie) if serie else None
-        serie_valida = str(serie_uuid) if serie_uuid is not None else ""
+        serie_valida = str(UUID(serie)) if serie else ""
     except (ValueError, TypeError):
-        serie_uuid = None
+        serie_valida = ""
     try:
         serie_actual, serie_aviso = await _serie_del_filtro(db, serie)
         servicio = RevisionCarpetas(db)
