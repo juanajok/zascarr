@@ -121,6 +121,9 @@ if [[ "$PROYECTO" != "$PROYECTO_ESPERADO" ]]; then
 fi
 
 # ── Manifiesto ───────────────────────────────────────────────────────────────
+# Lo que sale del dump, del manifiesto o de la BD se COMPARA tal cual (solo sin espacios) y se LIMPIA únicamente para
+# enseñarlo: limpiar antes de comparar haría pasar `00\x0119` por `0019`.
+limpio() { printf '%s' "$1" | tr -cd '[:alnum:]_.-' | cut -c1-64; }
 BASE="$(basename "$DUMP")"
 STEM="${BASE%.sql.gz}"
 if [[ -z "$MANIFEST" ]]; then
@@ -131,13 +134,13 @@ jq -e . "$MANIFEST" >/dev/null 2>&1 || die "El manifiesto no es JSON válido."
 
 M_SHA="$(jq -r '.sha256 // empty' "$MANIFEST")"
 M_BYTES="$(jq -r '.bytes // empty' "$MANIFEST")"
-M_SCHEMA="$(jq -r '.schema // empty' "$MANIFEST")"
-M_ALEMBIC="$(jq -r '.alembic // empty' "$MANIFEST" | tr -cd '[:alnum:]_.-' | cut -c1-64)"
+M_SCHEMA="$(jq -r '.schema // empty' "$MANIFEST" | tr -d '[:space:]')"
+M_ALEMBIC="$(jq -r '.alembic // empty' "$MANIFEST" | tr -d '[:space:]')"
 M_DESTINO="$(jq -r '.codigo_destino_sha_completo // empty' "$MANIFEST")"
 M_DESPLEGADO="$(jq -r '.codigo_desplegado_sha_completo // empty' "$MANIFEST")"
 
 if [[ -n "$M_SCHEMA" && "$M_SCHEMA" != "1" ]]; then
-    die "El manifiesto declara schema '$M_SCHEMA'; este script solo entiende el schema 1."
+    die "El manifiesto declara schema '$(limpio "$M_SCHEMA")'; este script solo entiende el schema 1."
 fi
 if [[ -z "$M_SCHEMA" ]]; then
     warn "El manifiesto no declara schema; se asume el esquema 1."
@@ -155,7 +158,7 @@ if [[ -f "${DUMP}.sha256" ]]; then
 fi
 
 if [[ -n "$M_ALEMBIC" && -n "$ALEMBIC_ESPERADA" && "$M_ALEMBIC" != "$ALEMBIC_ESPERADA" ]]; then
-    die "El manifiesto declara Alembic '$M_ALEMBIC'; se esperaba '$ALEMBIC_ESPERADA'."
+    die "El manifiesto declara Alembic '$(limpio "$M_ALEMBIC")'; se esperaba '$(limpio "$ALEMBIC_ESPERADA")'."
 fi
 if [[ "$M_DESTINO" != "$HEAD_ANTES" && "$M_DESPLEGADO" != "$HEAD_ANTES" ]]; then
     die "El manifiesto no acredita el commit actual. No restauro datos de otro código."
@@ -198,8 +201,7 @@ if ! INSPECCION="$(inspeccionar "$DUMP")"; then
 fi
 IFS='|' read -r T_HEADER T_AV T_SERIES T_FILES T_WISH T_ISSUES VERSION_DUMP \
     N_SERIES N_ISSUES N_FILES N_OPS N_WISH <<< "$INSPECCION"
-# Lo que sale del dump o del manifiesto se limpia antes de enseñarlo en un mensaje: solo caracteres de una revisión.
-VERSION_DUMP="$(printf '%s' "$VERSION_DUMP" | tr -cd '[:alnum:]_.-' | cut -c1-64)"
+VERSION_DUMP="$(printf '%s' "$VERSION_DUMP" | tr -d '[:space:]')"
 
 [[ "$T_HEADER" == "1" ]] || die "El dump no tiene la cabecera de pg_dump."
 for par in "alembic_version:$T_AV" "series:$T_SERIES" "files:$T_FILES" "wishlist:$T_WISH"; do
@@ -208,7 +210,7 @@ done
 [[ -n "$VERSION_DUMP" ]] || die "El dump no contiene version_num en alembic_version."
 
 if [[ -n "$M_ALEMBIC" && "$M_ALEMBIC" != "$VERSION_DUMP" ]]; then
-    die "El manifiesto declara Alembic '$M_ALEMBIC' pero el dump trae '$VERSION_DUMP'."
+    die "El manifiesto declara Alembic '$(limpio "$M_ALEMBIC")' pero el dump trae '$(limpio "$VERSION_DUMP")'."
 fi
 
 ACTUAL="$( "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
@@ -224,17 +226,17 @@ else
     ESPERADA="$ACTUAL"
 fi
 if [[ "$VERSION_DUMP" != "$ESPERADA" ]]; then
-    die "Revisión incompatible: dump '$VERSION_DUMP', esperada '$ESPERADA'. No toco la BD."
+    die "Revisión incompatible: dump '$(limpio "$VERSION_DUMP")', esperada '$(limpio "$ESPERADA")'. No toco la BD."
 fi
 if [[ "$ACTUAL" != "$ESPERADA" ]]; then
-    die "La BD actual está en '$ACTUAL' y se esperaba '$ESPERADA'. No toco la BD."
+    die "La BD actual está en '$(limpio "$ACTUAL")' y se esperaba '$(limpio "$ESPERADA")'. No toco la BD."
 fi
 
 # ── Plan / dry-run ──────────────────────────────────────────────────────────
 printf '\nDatos a restaurar (sin cambiar el código):\n'
 printf '  HEAD:              %s\n' "${HEAD_ANTES:0:12}…"
 printf '  Proyecto:          %s\n' "$PROYECTO"
-printf '  Dump:              %s\n' "$BASE"
+printf '  Dump:              %s\n' "$(limpio "$BASE")"
 printf '  Manifiesto:        %s\n' "$(basename "$MANIFEST")"
 printf '  SHA-256:           %s…\n' "${SHA_REAL:0:12}"
 printf '  Alembic esperado:  %s\n' "$ESPERADA"
@@ -352,7 +354,7 @@ info "Eliminando la base de datos..."
 # intenta con la BD marcada como tocada. Si el dropdb falla de verdad, recuperar restaura la copia previa (inocuo).
 DB_TOCADA=1
 if ! "${COMPOSE[@]}" exec -T postgres dropdb -U "$DB_USER" --if-exists --force "$DB_NAME" >/dev/null; then
-    recuperar "no pude eliminar $DB_NAME; se intenta dejarla como estaba"
+    recuperar "el dropdb falló: la BD debería seguir como estaba; se intenta dejarla como estaba"
 fi
 
 FASE="createdb"
@@ -374,7 +376,7 @@ REV_REST="$( "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -
     -c "select version_num from alembic_version" 2>/dev/null | tr -d '[:space:]' )" || \
     recuperar "no pude leer la revisión restaurada"
 if [[ "$REV_REST" != "$ESPERADA" ]]; then
-    recuperar "la revisión restaurada es '$REV_REST' y se esperaba '$ESPERADA'"
+    recuperar "la revisión restaurada es '$(limpio "$REV_REST")' y se esperaba '$(limpio "$ESPERADA")'"
 fi
 
 RECUENTOS="$( "${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At -c \
@@ -430,9 +432,9 @@ fi
 trap - INT TERM
 ok "Datos restaurados sin cambiar el código."
 printf '  HEAD:              %s…\n' "${HEAD_ANTES:0:12}"
-printf '  Dump:              %s\n' "$BASE"
+printf '  Dump:              %s\n' "$(limpio "$BASE")"
 printf '  Copia previa:      %s\n' "$(basename "$SEGURIDAD")"
-printf '  Alembic:           %s\n' "$REV_REST"
+printf '  Alembic:           %s\n' "$(limpio "$REV_REST")"
 printf '  Recuentos:         series=%s issues=%s files=%s operaciones=%s wishlist=%s\n' \
     "$R_SERIES" "$R_ISSUES" "$R_FILES" "$R_OPS" "$R_WISH"
 printf '  Vínculos huérfanos: 0\n'

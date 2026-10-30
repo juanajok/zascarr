@@ -338,3 +338,10 @@ class TestBindsDelEntorno:
         ctx = _preparar(tmp_path)
         r = _ejecutar(ctx, entorno="/")
         assert r.returncode != 0 and "raíz del sistema de ficheros" in r.stderr
+
+    def test_un_bind_con_el_prefijo_del_entorno_pero_sin_barra_esta_fuera(self, tmp_path):
+        """/srv/123abc empieza por /srv/123a pero NO está bajo él."""
+        ctx = _preparar(tmp_path)
+        _mutar(ctx, lambda d: d["services"]["postgres"]["volumes"][0].update({"source": "/srv/123abc/postgres"}))
+        r = _ejecutar(ctx)
+        assert r.returncode != 0 and "está fuera del entorno de la copia" in r.stderr
