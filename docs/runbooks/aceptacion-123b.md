@@ -54,11 +54,14 @@ Antes de añadir guardas se auditó lo existente:
 | `bootstrap.sh` | **sin** comprobaciones de espacio/montaje | Fuera de la entrega; solo se audita, no se modifica |
 | `scripts/restaurar_datos.sh` | Tenía una copia propia de `df`/margen | Se elimina; carga `scripts/_espacio.sh` |
 | `scripts/probar_restauracion.sh`, `update.sh`, `rollback.sh` | Cargan `_comun.sh` | Usan el mismo helper |
+| `scripts/medicion/ventana_e.sh` | Preflight de medición: exige 8 GiB libres para los sintéticos | **Ajeno a copias/restauración**; no se escanea ni se cambia |
 
-**Único umbral documentado:** `necesario + 10 % + 64 MiB`. En scripts vive en
-`scripts/_espacio.sh` (cargado por `_comun.sh` y por `restaurar_datos.sh`); en
-la app, `utils/espacio.py` aplica el mismo margen para las rutas Python. No hay
-un segundo umbral en los scripts. `bootstrap.sh` queda fuera y no se toca.
+**Único umbral para copias/restauración:** `necesario + 10 % + 64 MiB`. En los
+scripts de copia/restauración vive en `scripts/_espacio.sh` (cargado por
+`_comun.sh` y por `restaurar_datos.sh`); en la app, `utils/espacio.py` aplica el
+mismo margen para las rutas Python. No hay un segundo umbral en esos scripts.
+`scripts/medicion/ventana_e.sh` tiene su propio preflight de medición (8 GiB) y
+no es una copia/restauración; `bootstrap.sh` queda fuera y no se toca.
 
 ## 4. Fixture 123b
 
