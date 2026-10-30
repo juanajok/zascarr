@@ -156,7 +156,7 @@ class RuntimeSettingsService:
         )).scalar_one_or_none()
         if row is None:
             return False
-        return (row.values or {}).get(key) is True
+        return bool((row.values or {}).get(key, False))        # mismo criterio que `get_flag`
 
     async def set_flag(self, key: str, value: bool) -> None:
         row = await self._row()
