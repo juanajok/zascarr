@@ -29,6 +29,7 @@ from zascarr.core.formato_contenedor import (
     zip_fuera_de_limite,
 )
 from zascarr.models import ClaseZip
+from zascarr.utils.espacio import comprobar_espacio
 from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_imagen, host_para_log
 
 logger = structlog.get_logger()
@@ -175,6 +176,7 @@ def _resize_and_save(content: bytes, dest: Path) -> None:
     with Image.open(io.BytesIO(content)) as img:
         img.thumbnail((_COVER_MAX_WIDTH, _COVER_MAX_WIDTH * 2))
         dest.parent.mkdir(parents=True, exist_ok=True)
+        comprobar_espacio(dest.parent, len(content), "guardar la portada")
         img.convert("RGB").save(dest, format="JPEG", quality=85)
 
 
@@ -184,4 +186,5 @@ def write_cover_cache(dest: Path, data: bytes) -> None:
     volver a pasar por Pillow. Llamar dentro de asyncio.to_thread: es
     I/O de disco síncrono."""
     dest.parent.mkdir(parents=True, exist_ok=True)
+    comprobar_espacio(dest.parent, len(data), "guardar la portada")
     dest.write_bytes(data)

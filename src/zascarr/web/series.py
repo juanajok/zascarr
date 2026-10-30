@@ -12,6 +12,7 @@ import asyncio
 from pathlib import Path
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select
@@ -43,8 +44,10 @@ from zascarr.utils.cover import (
     fetch_and_cache_cover,
     write_cover_cache,
 )
+from zascarr.utils.espacio import EspacioInsuficienteError
 from zascarr.web.routes import crear_templates
 
+logger = structlog.get_logger()
 templates = crear_templates()
 
 router = APIRouter(prefix="/ui/series", tags=["ui"])
@@ -225,7 +228,11 @@ async def portada(series_id: UUID, request: Request,
                                          (row[1] or {}).get("formato_contenido"))
         if result:
             data, content_type = result
-            await asyncio.to_thread(write_cover_cache, cache_path, data)
+            try:
+                await asyncio.to_thread(write_cover_cache, cache_path, data)
+            except EspacioInsuficienteError:
+                # Sin espacio para la caché: se sirve igualmente la portada ya extraída.
+                logger.warning("cover.cache_sin_espacio")
             return cached_image_response(request, data, content_type, _etag_for(cache_path))
 
     # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.

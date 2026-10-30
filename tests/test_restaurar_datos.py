@@ -31,6 +31,11 @@ if [[ "$cmd" == *" config --format json"* ]]; then
     cat "$FAKE_COMPOSE_JSON"
     exit 0
 fi
+if [[ "$cmd" == *" df -Pk "* ]]; then
+    printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+    printf '/ %s 1 %s 1%% /\n' "${FAKE_PG_FREE_KB:-99999999}" "${FAKE_PG_FREE_KB:-99999999}"
+    exit 0
+fi
 if [[ "$cmd" == *"pg_dump"* ]]; then
     if [[ "${FAKE_PGDUMP_FAIL:-0}" == "1" ]]; then
         echo "pg_dump: boom" >&2
@@ -324,6 +329,13 @@ class TestRestaurarDatos:
         _sin_destructivos(ctx)
         assert not list(ctx["backup"].glob("rollback-safety_*.sql.gz"))
         assert "dry-run" in (r.stdout + r.stderr).lower()
+
+    def test_sin_espacio_aborta_antes_de_tocar_la_bd(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, extra_env={"FAKE_PG_FREE_KB": "1"})
+        assert r.returncode != 0
+        _sin_destructivos(ctx)
+        assert "espacio" in (r.stdout + r.stderr).lower()
 
     def test_head_distinto_aborta_antes_de_tocar(self, tmp_path):
         ctx = _preparar(tmp_path)

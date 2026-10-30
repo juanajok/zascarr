@@ -31,6 +31,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from zascarr.utils.espacio import comprobar_espacio
+
 # Límite por componente de ruta en ext4 (y la mayoría de filesystems): 255
 # bytes. Usamos 240 para dejar margen al sufijo " (NN)" o "#NNN" que se añade
 # después del nombre saneado, de modo que la ruta final nunca de ENAMETOOLONG.
@@ -146,6 +148,7 @@ def safe_move(src: str | Path, dest: str | Path) -> Path:
 
     # Discos distintos (o el rename anterior cruzó un límite de mount):
     # copiar y verificar ANTES de borrar el original.
+    comprobar_espacio(dest.parent, src_size, "copiar el archivo a la biblioteca")
     fd, tmp_name = tempfile.mkstemp(
         dir=str(dest.parent), prefix=f".{dest.name}.", suffix=".part"
     )

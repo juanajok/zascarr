@@ -60,6 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.importer import build_library_path
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
+from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
 from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
@@ -86,6 +87,17 @@ class EstadoResultado(enum.StrEnum):
     DATOS_NO_VALIDOS = "datos_no_validos"                         # p. ej. número vacío: la petición está mal
     NO_ENCONTRADO = "no_encontrado"
     ERROR = "error"
+
+
+#: Reintentos acotados de la reconciliación al arrancar (criterio 5, #123b).
+RECONCILIACION_INTENTOS = 3
+RECONCILIACION_BACKOFF_S = 1.0
+_ULTIMA_RECONCILIACION: dict = {"ok": None, "intentos": 0, "error": None}
+
+
+def estado_ultima_reconciliacion() -> dict:
+    """Copia del resultado del último intento de reconciliación (solo memoria)."""
+    return dict(_ULTIMA_RECONCILIACION)
 
 
 #: Resultados tras los cuales la operación SIGUE viva y conserva su reserva.
@@ -117,6 +129,7 @@ def _sha256(ruta: Path) -> str:
 def _copiar_y_verificar(origen: Path, temporal: Path, sha_esperado: str, size: int) -> None:
     """Copia a un temporal en la carpeta de destino y lo VERIFICA (tamaño y sha256) antes de publicarlo."""
     temporal.parent.mkdir(parents=True, exist_ok=True)
+    comprobar_espacio(temporal.parent, size, "asignar el archivo")
     try:
         shutil.copyfile(origen, temporal)
         with open(temporal, "rb") as f:
@@ -449,6 +462,9 @@ class AsignacionService:
                     return perdida
                 try:
                     await asyncio.to_thread(_copiar_y_verificar, origen, mi_temporal, op["sha256"], op["size_bytes"])
+                except EspacioInsuficienteError as exc:
+                    # La operación sigue `preparada`: se puede reintentar tras liberar espacio.
+                    return Resultado("error", str(exc), op["destino"])
                 except OSError as exc:
                     return Resultado("error", f"La copia no se pudo verificar: {exc}")
                 await self._gancho("tras_copiar")
@@ -706,16 +722,29 @@ async def reconciliar_al_arrancar(servicio: AsignacionService | None = None) -> 
     """Continúa o cierra las operaciones que quedaron vivas en una ejecución anterior.
 
     Se lanza como TAREA DE FONDO tras el arranque (no retrasa el healthcheck), solo con la BD disponible y
-    **nunca propaga una excepción**: un fallo aquí se registra y se reintenta al siguiente arranque, pero no
-    puede tirar la aplicación. Consulta solo `asignacion_operaciones` (índice parcial): no recorre la
-    biblioteca. Devuelve cuántas operaciones procesó (0 si falló)."""
-    try:
-        servicio = servicio or servicio_por_defecto()
-        resultados = await servicio.reconciliar()
-    except Exception:  # noqa: BLE001 — ver la docstring
-        logger.exception("asignacion.reconciliacion_fallida")
-        return 0
-    if resultados:
-        logger.info("asignacion.reconciliacion_terminada", operaciones=len(resultados),
-                    pendientes=sum(1 for r in resultados if r.estado in RESULTADOS_RECUPERABLES))
-    return len(resultados)
+    **nunca propaga una excepción**. Reintenta hasta 3 veces con backoff si falla; el resultado queda visible
+    en `estado_ultima_reconciliacion()` y en el log. Consulta solo `asignacion_operaciones` (índice parcial):
+    no recorre la biblioteca. Devuelve cuántas operaciones procesó (0 si falló las 3 veces)."""
+    global _ULTIMA_RECONCILIACION
+    servicio = servicio or servicio_por_defecto()
+    for intento in range(1, RECONCILIACION_INTENTOS + 1):
+        try:
+            resultados = await servicio.reconciliar()
+        except Exception as exc:  # noqa: BLE001 — ver la docstring
+            logger.exception("asignacion.reconciliacion_fallida", intento=intento,
+                             intentos=RECONCILIACION_INTENTOS)
+            _ULTIMA_RECONCILIACION = {
+                "ok": False if intento == RECONCILIACION_INTENTOS else None,
+                "intentos": intento,
+                "error": type(exc).__name__,
+            }
+            if intento < RECONCILIACION_INTENTOS:
+                await asyncio.sleep(RECONCILIACION_BACKOFF_S * (2 ** (intento - 1)))
+                continue
+            return 0
+        _ULTIMA_RECONCILIACION = {"ok": True, "intentos": intento, "error": None}
+        if resultados:
+            logger.info("asignacion.reconciliacion_terminada", operaciones=len(resultados),
+                        pendientes=sum(1 for r in resultados if r.estado in RESULTADOS_RECUPERABLES))
+        return len(resultados)
+    return 0
