@@ -147,11 +147,7 @@
     <div class="series-grid">
       {% for series in r.ultimas_series %}
       <a href="/ui/series/{{ series.id }}" class="series-card">
-        <img
-          src="/ui/series/{{ series.id }}/portada"
-          alt="{{ series.title }}"
-          onerror="this.classList.add('cover-missing')"
-        >
+        {{ ui.portada(series.title, series.id, "/ui/series/%s/portada" % series.id) }}
         <span class="series-title">{{ series.title }}</span>
         {% if series.start_year %}
         <span class="series-year">{{ series.start_year }}</span>
