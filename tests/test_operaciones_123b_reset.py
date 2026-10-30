@@ -34,12 +34,15 @@ def sidecar():
 
 
 class SQLFalso:
-    def __init__(self, issue_id: str | None = "issue-1"):
+    def __init__(self, issue_id: str | None = "issue-1", vivas: list[list[str]] | None = None):
         self.issue_id = issue_id
+        self.vivas = vivas or []
         self.consultas: list[str] = []
 
     def __call__(self, sql: str) -> list[list[str]]:
         self.consultas.append(sql)
+        if "from asignacion_operaciones" in sql:
+            return self.vivas
         if "from issues" in sql:
             return [[self.issue_id]] if self.issue_id else []
         return []
@@ -186,3 +189,87 @@ def test_regresion_el_orden_antiguo_perdia_la_unica_copia(sidecar, tmp_path):
     _poner(copia)
     sidecar.restaurar_y_resetear([_fila()], biblioteca, SQLFalso())
     assert (biblioteca / "original.cbz").read_bytes() == CONTENIDO
+
+
+def test_consulta_incluye_limpiada_y_excluye_sin_file_id(sidecar):
+    sql = " ".join(sidecar.SQL_OPERACIONES_CON_FICHERO.lower().split())
+    assert "limpiada" in sql
+    assert "file_id is not null" in sql
+
+
+def test_ciclo_real_limpiada_restaura_origenes_y_filas(sidecar, tmp_path):
+    """La app completa las operaciones: están `limpiada`, pero conservan file_id."""
+    biblioteca = _biblioteca(tmp_path)
+    contenido2 = CONTENIDO + b" preparada"
+    confirmada = biblioteca / "_123b" / "confirmada.cbz"
+    preparada = biblioteca / "_123b" / "preparada.cbz"
+    _poner(confirmada, CONTENIDO)
+    _poner(preparada, contenido2)
+    filas = [
+        _fila(
+            file_id="f-confirmada",
+            origen="/media/library/confirmada.cbz",
+            destino="/media/library/_123b/confirmada.cbz",
+        ),
+        _fila(
+            file_id="f-preparada",
+            origen="/media/library/preparada.cbz",
+            destino="/media/library/_123b/preparada.cbz",
+            size=len(contenido2),
+            sha=hashlib.sha256(contenido2).hexdigest(),
+        ),
+    ]
+    sql = SQLFalso(vivas=filas)
+
+    leidas = sidecar.leer_operaciones_a_restaurar(sql)
+    assert "limpiada" in sql.consultas[0]
+    assert "file_id is not null" in sql.consultas[0]
+    sidecar.restaurar_y_resetear(leidas, biblioteca, sql)
+
+    assert (biblioteca / "confirmada.cbz").read_bytes() == CONTENIDO
+    assert (biblioteca / "preparada.cbz").read_bytes() == contenido2
+    assert not (biblioteca / "_123b").exists()
+    assert len(sql.updates) == 2
+    assert sql.borrado
+
+
+def test_destino_alterado_no_deja_origen_ni_temporal(sidecar, tmp_path):
+    biblioteca = _biblioteca(tmp_path)
+    _poner(biblioteca / "_123b" / "confirmada.cbz", b"destino alterado")
+    sql = SQLFalso()
+
+    with pytest.raises(sidecar.FixtureError, match="no coincide"):
+        sidecar.restaurar_y_resetear([_fila()], biblioteca, sql)
+
+    assert not (biblioteca / "original.cbz").exists()
+    assert list(biblioteca.glob(".original.cbz.*")) == []
+    assert not sql.borrado
+    assert (biblioteca / "_123b" / "confirmada.cbz").exists()
+
+
+def test_origen_alterado_y_destino_bueno_se_reemplaza(sidecar, tmp_path):
+    biblioteca = _biblioteca(tmp_path)
+    _poner(biblioteca / "original.cbz", b"origen alterado")
+    _poner(biblioteca / "_123b" / "confirmada.cbz", CONTENIDO)
+    sql = SQLFalso()
+
+    sidecar.restaurar_y_resetear([_fila()], biblioteca, sql)
+
+    assert (biblioteca / "original.cbz").read_bytes() == CONTENIDO
+    assert list(biblioteca.glob(".original.cbz.*")) == []
+    assert sql.borrado
+
+
+def test_ambos_alterados_aborta_sin_residuo(sidecar, tmp_path):
+    biblioteca = _biblioteca(tmp_path)
+    _poner(biblioteca / "original.cbz", b"origen alterado")
+    _poner(biblioteca / "_123b" / "confirmada.cbz", b"destino alterado")
+    sql = SQLFalso()
+
+    with pytest.raises(sidecar.FixtureError, match="no coincide"):
+        sidecar.restaurar_y_resetear([_fila()], biblioteca, sql)
+
+    assert (biblioteca / "original.cbz").read_bytes() == b"origen alterado"
+    assert list(biblioteca.glob(".original.cbz.*")) == []
+    assert not sql.borrado
+    assert (biblioteca / "_123b" / "confirmada.cbz").exists()
