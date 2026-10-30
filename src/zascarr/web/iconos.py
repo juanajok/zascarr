@@ -94,14 +94,25 @@ ICONO_DE_PUNTO: dict[str, str] = {"ok": "ok", "bad": "aviso", "warn": "pregunta"
 TINTA_DEL_PUNTO = "#17171a"
 
 
+#: Encuadre de cada glifo en su punto: (viewBox, grosor del trazo). Los de Lucide ocupan zonas distintas de
+#: la rejilla de 24 (la «✓» casi toda, la «!» y la «?» solo el centro), así que sin recortar el encuadre
+#: la «!» salía diminuta junto a la «✓». El grosor se ajusta a la escala para que pesen parecido.
+ENCUADRE_DE_PUNTO: dict[str, tuple[str, str]] = {
+    "ok": ("3 4 18 16", "3"),
+    "aviso": ("6 5 12 14", "2.6"),
+    "pregunta": ("6 4 12 16", "2.6"),
+}
+
+
 def svg_de_punto(nombre: str) -> str:
     """Contenido del fichero `static/iconos/punto-<nombre>.svg`, generado desde `ICONOS` para que
     haya UNA sola fuente de los trazados (test_estado_puntos comprueba que los ficheros no divergen).
-    Trazo de 3, más grueso que el de la navegación: el glifo mide unos 10 px dentro del punto."""
+    Más grueso que el de la navegación: el glifo mide unos 10 px dentro del punto."""
     interior = ICONOS[nombre]
+    caja, trazo = ENCUADRE_DE_PUNTO[nombre]
     return (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" '
-        f'stroke="{TINTA_DEL_PUNTO}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{caja}" fill="none" '
+        f'stroke="{TINTA_DEL_PUNTO}" stroke-width="{trazo}" stroke-linecap="round" stroke-linejoin="round">'
         f"{interior}</svg>\n"
     )
 
