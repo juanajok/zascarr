@@ -147,6 +147,11 @@ def test_toda_causa_que_emiten_los_scripts_tiene_su_frase_en_llano():
     """#334 punto 4: una causa nueva en los scripts sin entrada en `_BACKUP_ERRORES` saldría a la pantalla como código crudo."""
     sin_frase = sorted(EMITIDAS - set(_BACKUP_ERRORES))
     assert sin_frase == [], f"causas de los scripts sin texto en llano en health.py::_BACKUP_ERRORES: {sin_frase}"
+    for codigo in sorted(EMITIDAS):
+        frase = _BACKUP_ERRORES[codigo]
+        assert frase.strip(), f"frase vacía para {codigo}"
+        assert frase != codigo, f"la frase de {codigo} es el propio código"
+        assert "_" not in frase, f"la frase de {codigo} conserva un código interno: {frase}"
 
 
 @pytest.mark.parametrize("codigo", [*sorted(EMITIDAS | set(_BACKUP_ERRORES)), "codigo_nuevo_sin_traducir"])
