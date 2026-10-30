@@ -15,8 +15,10 @@
 #
 # Después: copia de seguridad `rollback-safety_<TS>.sql.gz` verificada, parada
 # de la app, dropdb --force, createdb, psql ON_ERROR_STOP, `up -d` sin build,
-# health y recuentos/vínculos contra el dump. Si falla después del dropdb,
-# intenta recuperar la copia previa (best-effort) y sale ≠0 con la orden.
+# health y recuentos/vínculos contra el dump. El health se espera hasta
+# HEALTH_TIMEOUT segundos (total), porque la app tarda unos segundos en
+# arrancar tras `up -d`. Si falla después del dropdb, intenta recuperar la
+# copia previa (best-effort) y sale ≠0 con la orden.
 #
 # Uso:
 #   sudo bash scripts/restaurar_datos.sh \
@@ -25,7 +27,8 @@
 #     [--yes] [--dry-run]
 #
 # Variables obligatorias: REPO_DIR, ENV_FILE, COMPOSE_FILE, BACKUP_DIR,
-# DB_NAME y DB_USER. Opcionales: HEALTH_URL, HEALTH_TIMEOUT.
+# DB_NAME y DB_USER. Opcionales: HEALTH_URL, HEALTH_TIMEOUT (segundos TOTALES
+# de espera, por defecto 120) y HEALTH_INTERVAL (segundos entre intentos, 2).
 # `--forzar` está prohibido: este script no cambia el código.
 # =============================================================================
 set -euo pipefail
@@ -79,8 +82,10 @@ done
 [[ -s "$DUMP" ]] || die "El dump no existe o está vacío: $(basename "${DUMP:-?}")."
 
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:18000/api/health}"
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-60}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"
+HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 [[ "$HEALTH_TIMEOUT" =~ ^[0-9]+$ ]] || die "HEALTH_TIMEOUT no es un número."
+[[ "$HEALTH_INTERVAL" =~ ^[1-9][0-9]*$ ]] || die "HEALTH_INTERVAL debe ser un entero >= 1."
 
 COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
 
@@ -370,11 +375,20 @@ info "Arrancando la app (sin rebuild)..."
 if ! "${COMPOSE[@]}" up -d zascarr >/dev/null; then
     recuperar "no pude arrancar la app"
 fi
-if ! HEALTH="$(curl -sf --max-time "$HEALTH_TIMEOUT" "$HEALTH_URL" 2>/dev/null)"; then
-    recuperar "la app no responde en HEALTH_URL"
-fi
-if ! printf '%s' "$HEALTH" | jq -e '.checks.database == "ok"' >/dev/null 2>&1; then
-    recuperar "la salud no acredita la base de datos"
+HEALTH_INICIO="$(date +%s)"
+HEALTH_INTENTOS=0
+HEALTH_OK=0
+while (( $(date +%s) - HEALTH_INICIO < HEALTH_TIMEOUT )); do
+    HEALTH_INTENTOS=$((HEALTH_INTENTOS + 1))
+    if HEALTH="$(curl -sf --max-time 2 "$HEALTH_URL" 2>/dev/null)" && \
+       printf '%s' "$HEALTH" | jq -e '.checks.database == "ok"' >/dev/null 2>&1; then
+        HEALTH_OK=1
+        break
+    fi
+    sleep "$HEALTH_INTERVAL"
+done
+if (( HEALTH_OK == 0 )); then
+    recuperar "la app no responde con health 200 y database=ok en ${HEALTH_TIMEOUT}s (${HEALTH_INTENTOS} intentos)"
 fi
 
 HEAD_DESPUES="$(git -C "$REPO_DIR" rev-parse HEAD)" || recuperar "no pude releer HEAD"
@@ -394,5 +408,5 @@ printf '  Alembic:           %s\n' "$REV_REST"
 printf '  Recuentos:         series=%s issues=%s files=%s operaciones=%s wishlist=%s\n' \
     "$R_SERIES" "$R_ISSUES" "$R_FILES" "$R_OPS" "$R_WISH"
 printf '  Vínculos huérfanos: 0\n'
-printf '  Health:            %s\n' "$HEALTH_URL"
+printf '  Health:            %s (%s intentos)\n' "$HEALTH_URL" "$HEALTH_INTENTOS"
 printf '  Detalle:           %s\n' "$(basename "$LOG")"
