@@ -1,10 +1,11 @@
 # Aceptación 123b — operaciones recuperables, reinicio seguro y presión de disco (#123)
 
-> **Estado: preparación, NO ejecutada.** Esta entrega deja el inventario, el
+> **Estado: ventana local ejecutada; evidencia en #123. La Pi y la ventana de
+> reinicio/presión siguen NOT RUN.** Esta entrega deja el inventario, el
 > reinicio con reintento acotado, las guardas de espacio, `checks.disk` y el
-> procedimiento. La ventana en el host aislado (y, si el PO la autoriza, en la
-> Pi) se abre aparte. Hasta entonces **todos los casos de ventana son NOT RUN**;
-> no se declara PASS por leer código ni por pasar tests.
+> procedimiento. La ventana local se documenta en #123; este runbook **no**
+> convierte sus casos en PASS. La Pi y cualquier despliegue requieren
+> autorización aparte; hasta entonces, los casos de esta matriz son NOT RUN.
 
 ## 1. Alcance
 
@@ -90,6 +91,13 @@ fixture y solo añade:
 
 No inventa «en curso» en vinculación: ese estado solo se observa si el candado
 consultivo está tomado, y el fixture no lo fuerza.
+
+**Reset seguro (`--reset`):** antes de borrar filas y `_123b`, restaura los
+originales que la reconciliación movió: copia `destino` → `origen`, comprueba
+tamaño/sha y devuelve la fila `files` a `file_path=origen` con su `issue_id`.
+Si el origen queda fuera de `--biblioteca`, falta el destino o no cuadran
+tamaño/sha, **aborta sin borrar nada**. Es idempotente: dos `--reset` seguidos
+funcionan.
 
 ## 5. Matriz de casos
 
