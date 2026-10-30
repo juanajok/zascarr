@@ -18,6 +18,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,6 +54,8 @@ from zascarr.web.descubrir_texto import (
 )
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
+
+logger = structlog.get_logger()
 
 templates = crear_templates()
 # U14: la fuente se muestra con su nombre y la descripción como texto (nunca el HTML de la fuente).
@@ -329,9 +332,11 @@ async def crear(
                       tradicion=tradition.value if tradition else None, tradiciones=_tradiciones(), clave=clave)
     except AltaError as exc:
         return _error(request, _texto_de(exc))
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — nada llega al coleccionista como un 500 sin explicar
         # Un fallo que no es del contrato (la conexión, p. ej.): no se sabe si se llegó a crear. El mismo token es
-        # idempotente (comprobante en `alta_operaciones`): repetirlo devuelve la serie o la crea UNA vez.
+        # idempotente (comprobante en `alta_operaciones`): repetirlo devuelve la serie o la crea UNA vez. Se registra
+        # solo el TIPO: el mensaje puede llevar el título o el token.
+        logger.error("descubrir.crear_fallo", error=type(exc).__name__)
         return templates.TemplateResponse(request, "_alta_error.html", {
             "texto": MENSAJE_RESULTADO_DESCONOCIDO, "reintentar_token": token, "campos_origen": origen,
             "tradicion": tradition.value if tradition else None, "clave": clave})
