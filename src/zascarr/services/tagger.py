@@ -464,8 +464,14 @@ class TaggerService:
             return ResultadoEtiquetado(file.id, file.file_name, SALTADO, campos,
                                        "ya al día", reconciliado)
 
-        xml = await asyncio.to_thread(leer_comicinfo, path)
-        nuevo = fusionar_xml(xml, campos)
+        # El plan ya leyó este XML sin error: si ahora falla (tope, XML ilegible) es que el CBZ
+        # cambió entre medias. Se trata como plan caducado y no se toca el fichero.
+        try:
+            xml = await asyncio.to_thread(leer_comicinfo, path)
+            nuevo = fusionar_xml(xml, campos)
+        except ComicInfoInvalidoError:
+            return ResultadoEtiquetado(file.id, file.file_name, CADUCADO, campos,
+                                       "el archivo cambió entre el plan y la escritura")
 
         # El plan caduca si el CBZ cambió entre calcularlo y aplicarlo.
         if await asyncio.to_thread(_estado, path) != estado_antes:
