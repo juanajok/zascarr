@@ -44,6 +44,11 @@ install -d -m 755 "${BACKUP_STATUS_DIR}" || die "No puedo crear ${BACKUP_STATUS_
 INICIO="$(date +%s)"
 TEMP=""
 ERR=""
+ERR_CREATEDB=""
+# `psql_temp` corre en una subshell (command substitution): deja aquí el detalle
+# saneado para que `on_exit` lo use al escribir el estado, sin volver a psql.
+DETALLE_TEMP_FILE="${RESTORE_STATUS_FILE}.detalle.$$"
+rm -f "${DETALLE_TEMP_FILE}" 2>/dev/null || true
 STATUS_WRITTEN=0
 DUMP_SHA=""
 DUMP_BYTES=""
@@ -91,8 +96,30 @@ else
     MANIFEST_STATUS="manifest_ausente"
 fi
 
+# Los `detalle` y campos escalares que vienen del dump/manifiesto no son texto
+# libre: se restringen a un formato seguro antes de escribir el JSON.
+solo_digitos() {
+    local valor="${1:-}"
+    [[ "${valor}" =~ ^[0-9]{1,12}$ ]] && printf '%s' "${valor}" || printf '?'
+}
+
+revision_segura() {
+    local valor="${1:-}"
+    [[ -z "${valor}" ]] && { printf ''; return; }
+    [[ "${valor}" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] && printf '%s' "${valor}" || printf '?'
+}
+
+sha_segura() {
+    local valor="${1:-}"
+    [[ -z "${valor}" ]] && { printf ''; return; }
+    [[ "${valor}" =~ ^[0-9a-fA-F]{7,64}$ ]] && printf '%s' "${valor}" || printf '?'
+}
+
 escribir_restore_estado() {
     local estado="$1" error="${2:-}" detalle="${3:-}"
+    local tablas_json
+    tablas_json="$(solo_digitos "${TABLAS_REST:-}")"
+    [[ "${tablas_json}" == "?" ]] && tablas_json=0
     local now last_ok last_ok_iso tmp recuentos
     now="$(date +%s)"
     last_ok="$(jq -r '.last_ok_at_epoch // empty' "${RESTORE_STATUS_FILE}" 2>/dev/null || true)"
@@ -118,11 +145,11 @@ escribir_restore_estado() {
         --argjson bytes "${DUMP_BYTES:-0}" \
         --arg manifest "$([[ -n "${MANIFEST}" ]] && basename "${MANIFEST}" || true)" \
         --arg manifest_warning "${MANIFEST_STATUS}" \
-        --arg destino "${MANIFEST_DESTINO}" \
-        --arg desplegado "${MANIFEST_DESPLEGADO}" \
-        --argjson tablas "${TABLAS_REST:-0}" \
+        --arg destino "$(sha_segura "${MANIFEST_DESTINO}")" \
+        --arg desplegado "$(sha_segura "${MANIFEST_DESPLEGADO}")" \
+        --argjson tablas "${tablas_json}" \
         --argjson recuentos "${recuentos}" \
-        --arg alembic "${ALEMBIC_REST:-${ALEMBIC_DUMP}}" \
+        --arg alembic "$(revision_segura "${ALEMBIC_REST:-${ALEMBIC_DUMP}}")" \
         --argjson duracion "$(( $(date +%s) - INICIO ))" \
         --argjson last_ok "${last_ok:-0}" \
         --arg last_ok_at "${last_ok_iso}" \
@@ -151,13 +178,20 @@ limpiar() {
             >/dev/null 2>&1 || true
     fi
     [[ -z "${ERR}" ]] || rm -f "${ERR}"
+    [[ -z "${ERR_CREATEDB}" ]] || rm -f "${ERR_CREATEDB}"
 }
 on_exit() {
     local rc=$?
     limpiar
     if (( rc != 0 )) && (( STATUS_WRITTEN == 0 )); then
-        escribir_restore_estado "failed" "unexpected" || true
+        if [[ -f "${DETALLE_TEMP_FILE}" ]]; then
+            escribir_restore_estado "failed" "restore_failed" \
+                "$(cat "${DETALLE_TEMP_FILE}")" || true
+        else
+            escribir_restore_estado "failed" "unexpected" || true
+        fi
     fi
+    rm -f "${DETALLE_TEMP_FILE}"
     exit "${rc}"
 }
 trap on_exit EXIT
@@ -172,8 +206,61 @@ contar_copy() {
     '
 }
 
+# `psql -v VERBOSITY=terse` es la primera barrera, pero un dump puede traer
+# `\set VERBOSITY verbose` y reactivar CONTEXT/DETAIL/LOCATION: la GARANTÍA es
+# esta allowlist, no que terse sea infalsificable.
+#   1) aplanar CR/LF (un CR no puede inyectar una línea nueva),
+#   2) lista permitida: SOLO ERROR:/FATAL:/PANIC: (con espacios iniciales;
+#      se quita antes el prefijo `psql:fichero:línea:` para no publicar rutas),
+#   3) redactar credenciales,
+#   4) unir, recortar y truncar a 400 caracteres.
+# Se descartan CONTEXT/DETAIL/LINE/STATEMENT/HINT/QUERY y cualquier otra línea.
+# Sin línea permitida devuelve vacío: el llamador escribe `detalle: null`.
+sanear_detalle() {
+    local texto
+    texto="$(tr '\r' '\n' \
+        | awk '{
+            linea=$0
+            sub(/^[[:space:]]+/, "", linea)
+            sub(/^psql:[^:[:space:]]+:[0-9]+:[[:space:]]*/, "", linea)
+            if (linea ~ /^(ERROR|FATAL|PANIC):/) print linea
+        }' \
+        | sed -E \
+            -e 's#[[:space:]]+$##' \
+            -e 's#(://[^:/@[:space:]]+:).*@#\1***@#g' \
+            -e 's#((password|passwd|pwd|PGPASSWORD)[[:space:]]*=[[:space:]]*)("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]&)]*)#\1***#Ig' \
+            -e 's#((password|passwd|pwd|PGPASSWORD)[[:space:]]*=[[:space:]]*).*#\1***#Ig' \
+        | tr '\n' ' ' \
+        | sed -E 's/[[:space:]]+$//' \
+        | cut -c1-400)"
+    printf '%s' "${texto}"
+}
+
+# El texto crudo de psql nunca se imprime: ni aquí ni en el JSON. Si no hay
+# ERROR/FATAL/PANIC utilizable, se apunta al registro en vez de inventar detalle.
+mensaje_psql_sin_detalle() {
+    echo "[restauración] psql falló sin un ERROR/FATAL utilizable; revisa el registro de restauración y los logs de postgres." >&2
+}
+
 psql_temp() {
-    "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${TEMP}" -At -c "$1"
+    local err salida detalle
+    err="$(mktemp "${TMPDIR:-/tmp}/zascarr-psql.XXXXXX")" || return 1
+    if ! salida="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${TEMP}" -At \
+            -v VERBOSITY=terse -c "$1" 2>"${err}")"; then
+        detalle="$(sanear_detalle < "${err}")"
+        rm -f "${err}"
+        if [[ -n "${detalle}" ]]; then
+            echo "[restauración] Motivo de psql: ${detalle}" >&2
+        else
+            mensaje_psql_sin_detalle
+        fi
+        # `psql_temp` corre en una subshell: `on_exit` escribirá el JSON con este
+        # mismo texto saneado (o `detalle: null` si el fichero queda vacío).
+        printf '%s' "${detalle}" > "${DETALLE_TEMP_FILE}" || true
+        return 1
+    fi
+    rm -f "${err}"
+    printf '%s\n' "${salida}"
 }
 
 # ── Verificar dump + manifiesto ─────────────────────────────────────────────
@@ -215,12 +302,31 @@ TEMP="zascarr_restore_${TS}_$$"
 ERR="$(mktemp "${TMPDIR:-/tmp}/zascarr-restore.XXXXXX")"
 "${COMPOSE[@]}" exec -T postgres dropdb -U "${DB_USER}" --if-exists --force "${TEMP}" \
     >/dev/null 2>&1 || true
-"${COMPOSE[@]}" exec -T postgres createdb -U "${DB_USER}" "${TEMP}" \
-    || { escribir_restore_estado "failed" "createdb_failed" || true; die "No pude crear ${TEMP}."; }
+ERR_CREATEDB="$(mktemp "${TMPDIR:-/tmp}/zascarr-createdb.XXXXXX")"
+if ! "${COMPOSE[@]}" exec -T postgres createdb -U "${DB_USER}" "${TEMP}" 2>"${ERR_CREATEDB}"; then
+    DETALLE_CREATEDB="$(sanear_detalle < "${ERR_CREATEDB}")"
+    rm -f "${ERR_CREATEDB}"
+    ERR_CREATEDB=""
+    escribir_restore_estado "failed" "createdb_failed" "${DETALLE_CREATEDB}" || true
+    if [[ -n "${DETALLE_CREATEDB}" ]]; then
+        echo "[restauración] Motivo de createdb: ${DETALLE_CREATEDB}" >&2
+    else
+        mensaje_psql_sin_detalle
+    fi
+    die "No pude crear ${TEMP}."
+fi
+rm -f "${ERR_CREATEDB}"
+ERR_CREATEDB=""
 if ! gzip -dc "${DUMP}" | "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" \
-        -d "${TEMP}" -v ON_ERROR_STOP=1 -q >/dev/null 2>"${ERR}"; then
-    DETALLE="$(tail -3 "${ERR}" | tr '\n' ' ' || true)"
+        -d "${TEMP}" -v ON_ERROR_STOP=1 -v VERBOSITY=terse -q >/dev/null 2>"${ERR}"; then
+    DETALLE="$(sanear_detalle < "${ERR}")"
     escribir_restore_estado "failed" "restore_failed" "${DETALLE}" || true
+    # El motivo también sale por pantalla (en la CI solo se veía este mensaje y el porqué quedaba en el JSON).
+    if [[ -n "${DETALLE}" ]]; then
+        echo "[restauración] Motivo de psql: ${DETALLE}" >&2
+    else
+        mensaje_psql_sin_detalle
+    fi
     die "La restauración falló."
 fi
 
@@ -232,7 +338,8 @@ for tabla in alembic_version series files wishlist; do
     # el search_path; la pregunta es solo si existe.
     presente="$(psql_temp "select to_regclass('public.${tabla}') is not null")"
     [[ "${presente}" == "t" ]] || {
-        escribir_restore_estado "failed" "tabla_ausente" "falta ${tabla}" || true
+        escribir_restore_estado "failed" "tabla_ausente" \
+            "falta $(revision_segura "${tabla}")" || true
         die "Falta la tabla ${tabla} en la restauración."
     }
 done
@@ -244,21 +351,21 @@ WISHLIST_REST="$(psql_temp "select count(*) from wishlist")"
 
 if [[ "${TABLAS_REST}" != "${TABLAS_DUMP}" ]]; then
     escribir_restore_estado "failed" "tablas_distintas" \
-        "dump=${TABLAS_DUMP} restaurada=${TABLAS_REST}" || true
-    die "El número de tablas no coincide (dump=${TABLAS_DUMP}, restaurada=${TABLAS_REST})."
+        "dump=$(solo_digitos "${TABLAS_DUMP}") restaurada=$(solo_digitos "${TABLAS_REST}")" || true
+    die "El número de tablas no coincide (dump=$(solo_digitos "${TABLAS_DUMP}"), restaurada=$(solo_digitos "${TABLAS_REST}"))."
 fi
 for par in "files:${FILES_DUMP}:${FILES_REST}" "series:${SERIES_DUMP}:${SERIES_REST}" \
            "issues:${ISSUES_DUMP}:${ISSUES_REST}" "wishlist:${WISHLIST_DUMP}:${WISHLIST_REST}"; do
     tabla="${par%%:*}"; resto="${par#*:}"; esperado="${resto%%:*}"; obtenido="${resto#*:}"
     if [[ "${esperado}" != "${obtenido}" ]]; then
         escribir_restore_estado "failed" "recuento_distinto" \
-            "${tabla}: dump=${esperado} restaurada=${obtenido}" || true
+            "$(revision_segura "${tabla}"): dump=$(solo_digitos "${esperado}") restaurada=$(solo_digitos "${obtenido}")" || true
         die "El recuento de ${tabla} no coincide."
     fi
 done
 if [[ -n "${MANIFEST_ALEMBIC}" && "${ALEMBIC_REST}" != "${MANIFEST_ALEMBIC}" ]]; then
     escribir_restore_estado "failed" "alembic_distinto" \
-        "manifiesto=${MANIFEST_ALEMBIC} restaurada=${ALEMBIC_REST}" || true
+        "manifiesto=$(revision_segura "${MANIFEST_ALEMBIC}") restaurada=$(revision_segura "${ALEMBIC_REST}")" || true
     die "La revisión de Alembic no coincide."
 fi
 
