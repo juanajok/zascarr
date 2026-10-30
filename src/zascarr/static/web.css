@@ -100,8 +100,15 @@
   --font-display: "ZascArr Anton", Impact, "Arial Black", "Arial Narrow Bold", "Haettenschweiler", sans-serif;
   --font-body: "ZascArr Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
 
-  --shadow-ink:    4px 4px 0 var(--ink);
-  --shadow-ink-sm: 3px 3px 0 var(--ink);
+  /* Sombra dura: UN color por tema y cuatro desplazamientos. En claro es la tinta; en oscuro no puede
+     serlo (la tinta es crema: parecería un segundo borde). Antes el oscuro usaba negro al 55 %, que
+     sobre --paper daba 1,13:1 (no se veía), y el hover/active escribían `var(--ink)` a mano, así que
+     el botón sin sombra la ganaba en crema al pasar. Toda sombra dura sale de estos tokens. */
+  --shadow-color:      var(--ink);
+  --shadow-ink:        4px 4px 0 var(--shadow-color);
+  --shadow-ink-sm:     3px 3px 0 var(--shadow-color);
+  --shadow-ink-hover:  5px 5px 0 var(--shadow-color);   /* botón al pasar: sube y la sombra crece */
+  --shadow-ink-active: 1px 1px 0 var(--shadow-color);   /* botón al pulsar: baja y casi la pierde */
 }
 
 /* Tema nocturno (preferencia del sistema) */
@@ -134,8 +141,9 @@
     --warn-bg:        #3a1b17;
     --amber-bg:       #35290c;
     --info-bg:        #10293a;
-    --shadow-ink:    4px 4px 0 rgba(0,0,0,.55);
-    --shadow-ink-sm: 3px 3px 0 rgba(0,0,0,.55);
+    /* Gris de tinta: ≥ 3:1 sobre --paper (3,64) y --paper-2 (3,37), y lejos de la tinta crema (4,35)
+       para que se lea como sombra y no como borde. Los desplazamientos se heredan de :root. */
+    --shadow-color:   #6f6d76;
   }
 }
 
@@ -488,7 +496,7 @@ button[type="submit"]:where(:not([disabled])):hover,
 .btn-primary:where(:not([disabled])):hover,
 .series-result-item button:where(:not([disabled])):hover {
   transform: translate(-2px, -2px);
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: var(--shadow-ink-hover);
 }
 
 button:where(:not([disabled])):active,
@@ -496,7 +504,7 @@ button[type="submit"]:where(:not([disabled])):active,
 .btn:where(:not([disabled])):active,
 .btn-primary:where(:not([disabled])):active {
   transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: var(--shadow-ink-active);
 }
 
 /* Amarillo = LA acción que hace avanzar la tarea de la pantalla, y una sola. Antes lo era cualquier
