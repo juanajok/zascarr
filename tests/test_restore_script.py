@@ -474,6 +474,24 @@ class TestRestoreScript:
         assert _estado(ctx)["detalle"] == esperado
         assert _detalle_en_pantalla(r) == esperado
 
+    def test_prefijo_psql_de_fichero_no_publica_la_ruta(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        canario = "prefijo_" + secrets.token_hex(8)
+        r = _ejecutar(
+            ctx,
+            dump=ctx["dump"],
+            extra_env={
+                "FAKE_PSQL_FAIL": "1",
+                "FAKE_PSQL_MSG": (f"psql:dump.sql:12: ERROR:  fallo de prueba password={canario}"),
+            },
+        )
+        assert r.returncode != 0
+        salida = r.stdout + r.stderr
+        assert "dump.sql" not in salida
+        assert canario not in salida and canario not in json.dumps(_estado(ctx))
+        assert "ERROR:  fallo de prueba" in salida
+        assert _detalle_en_pantalla(r) == _estado(ctx)["detalle"]
+
     def test_psql_usa_verbosity_terse_en_restauracion_y_consultas(self, tmp_path):
         """La primera barrera es el cliente; la allowlist queda como red de seguridad."""
         ctx = _preparar(tmp_path)
@@ -546,7 +564,7 @@ class TestRestoreScript:
             dump=ctx["dump"],
             extra_env={
                 "FAKE_PSQL_FAIL": "1",
-                "FAKE_PSQL_MSG": f"ERROR:  fallo de prueba {texto}",
+                "FAKE_PSQL_MSG": f"psql:dump.sql:12: ERROR:  fallo de prueba {texto}",
             },
         )
         assert r.returncode != 0
@@ -555,6 +573,7 @@ class TestRestoreScript:
         assert secreto not in salida, texto
         assert secreto not in json.dumps(estado), texto
         assert "ERROR:  fallo de prueba" in salida
+        assert "dump.sql" not in salida
         assert _detalle_en_pantalla(r) == estado["detalle"]
 
     def test_un_valor_entre_comillas_con_espacios_no_deja_fragmentos(self, tmp_path):

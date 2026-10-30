@@ -47,6 +47,7 @@ ERR=""
 # `psql_temp` corre en una subshell (command substitution): deja aquí el detalle
 # saneado para que `on_exit` lo use al escribir el estado, sin volver a psql.
 DETALLE_TEMP_FILE="${RESTORE_STATUS_FILE}.detalle.$$"
+rm -f "${DETALLE_TEMP_FILE}" 2>/dev/null || true
 STATUS_WRITTEN=0
 DUMP_SHA=""
 DUMP_BYTES=""
@@ -183,7 +184,8 @@ contar_copy() {
 
 # Red de seguridad (la primera barrera es `psql -v VERBOSITY=terse`):
 #   1) aplanar CR/LF (un CR no puede inyectar una línea nueva),
-#   2) lista permitida: SOLO ERROR:/FATAL:/PANIC: (con espacios iniciales),
+#   2) lista permitida: SOLO ERROR:/FATAL:/PANIC: (con espacios iniciales;
+#      se quita antes el prefijo `psql:fichero:línea:` para no publicar rutas),
 #   3) redactar credenciales,
 #   4) unir, recortar y truncar a 400 caracteres.
 # Se descartan CONTEXT/DETAIL/LINE/STATEMENT/HINT/QUERY y cualquier otra línea.
@@ -194,6 +196,7 @@ sanear_detalle() {
         | awk '{
             linea=$0
             sub(/^[[:space:]]+/, "", linea)
+            sub(/^psql:[^:[:space:]]+:[0-9]+:[[:space:]]*/, "", linea)
             if (linea ~ /^(ERROR|FATAL|PANIC):/) print linea
         }' \
         | sed -E \
