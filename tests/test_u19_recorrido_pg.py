@@ -444,6 +444,16 @@ class TestT10LecturaDelComprobante:
         assert NO_ENCONTRADO in t and "No se sabe si se aplicó" in t
         assert "Hecho" not in t and "<form" not in r.text                         # ni éxito ni fracaso ni reintento
         assert VENCIDA not in t
+        sid = v.p.serie                                                           # y los enlaces para seguir, con la serie del token
+        enlaces = [html.unescape(h) for h in re.findall(r'href="([^"]+)"', r.text)]
+        assert f"/ui/series/{sid}" in enlaces and f"/ui/pendientes/carpetas?serie={sid}" in enlaces
+        assert "Volver a la ficha de la serie" in t and "Elegir otra carpeta para esta serie" in t
+
+    async def test_t10c_una_referencia_no_valida_no_ofrece_enlaces_de_la_serie(self, ent, reloj):
+        r = await leer("esto-no-es-una-referencia")
+        assert NO_VALIDA in visible(r.text)
+        assert "/ui/series/" not in r.text and "carpetas?serie=" not in r.text
+        assert "Volver a la ficha de la serie" not in visible(r.text)
 
     async def test_t10c2_expirado_con_la_fila_ya_purgada(self, ent, reloj):
         v = await vinculada(ent)

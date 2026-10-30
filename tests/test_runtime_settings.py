@@ -149,6 +149,18 @@ class TestFlags:
         )).get_flag_sin_crear("_library_adoption_done") is False
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("valor,esperado", [
+        (True, True), (1, True), ("true", True),
+        (False, False), (0, False), ("", False), (None, False)])
+    async def test_get_flag_sin_crear_usa_el_mismo_criterio_que_get_flag(self, valor, esperado):
+        valores = {"_library_adoption_done": valor}
+        sin_crear = await RuntimeSettingsService(
+            db=FakeSession(existing_values=dict(valores))).get_flag_sin_crear("_library_adoption_done")
+        con_crear = await RuntimeSettingsService(
+            db=FakeSession(existing_values=dict(valores))).get_flag("_library_adoption_done")
+        assert sin_crear is esperado and sin_crear is con_crear
+
+    @pytest.mark.asyncio
     async def test_set_flag_y_get_flag(self):
         session = FakeSession(existing_values={})
         service = RuntimeSettingsService(db=session)

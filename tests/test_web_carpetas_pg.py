@@ -613,6 +613,9 @@ async def _borrar_marcador(banco: Banco) -> None:
         await s.commit()
 
 
+CHIP_SUGERIDA = r'<span class="chip[^"]*">(?:<span[^>]*>.*?</span> )?Sugerida para esta serie</span>'
+
+
 def _hrefs(html: str) -> list[str]:
     return [htmllib.unescape(h) for h in re.findall(r'href="([^"]+)"', html)]
 
@@ -652,6 +655,17 @@ class TestSerieFijada:
         assert "clave=Comics/Batman%20%282019%29" in enlaces[0]
         assert f"series_id={sid}" in enlaces[0]
 
+    async def test_una_carpeta_sugerida_para_otra_serie_no_lleva_la_marca(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        otra = await banco.serie("SUPERMAN", 2024)
+        await banco.sembrar(archivo("Comics/Superman (2024)/Superman 01.cbz", estado="direct",
+                                    cands=candidatas(otra, "SUPERMAN", 2024)))
+        con = await pagina({"serie": str(sid)})
+        assert "Comics/Superman (2024)" in visible(con.text)          # la carpeta se lista...
+        assert not re.search(CHIP_SUGERIDA, con.text)                 # ...pero no es «para esta serie» (la frase suelta
+        propia = await pagina({"serie": str(otra)})                   # sale también en la explicación: se mira la marca)
+        assert re.search(CHIP_SUGERIDA, propia.text)                  # control: para SU serie sí
+
     async def test_marca_solo_la_sugerida_y_no_reordena(self, banco):
         sid = await banco.serie("BATMAN", 2025)
         await banco.sembrar(
@@ -662,7 +676,7 @@ class TestSerieFijada:
         sin = visible((await pagina()).text)
         respuesta = await pagina({"serie": str(sid)})
         con = visible(respuesta.text)
-        assert re.search(r'<span class="chip[^"]*">(?:<span[^>]*>.*?</span> )?Sugerida para esta serie</span>', respuesta.text)
+        assert re.search(CHIP_SUGERIDA, respuesta.text)
         # el orden de las claves es el mismo con y sin serie
         claves = ["Comics/Batman (2019)", "Comics/Otra"]
         pos_sin = [sin.index(c) for c in claves]
@@ -777,12 +791,19 @@ class TestVacíoY326:
         assert "Hay un registro en marcha" in visible(r.text)
         assert r.text.count('class="empty-state"') == 1
 
-    async def test_sin_serie_no_aparece_la_oferta_326(self, banco):
-        await _poner_marcador(banco, True)
+    @pytest.mark.parametrize("marcador", [True, False])
+    async def test_sin_serie_no_aparece_la_oferta_326(self, banco, marcador):
+        """Con o sin marcador: si lo pendiente estuviera vacío con la serie fijada saldría la oferta de buscar (marcador) o
+        la de registrar (sin él); sin serie no sale ninguna, ni sus enlaces."""
+        if marcador:
+            await _poner_marcador(banco, True)
+        else:
+            await _borrar_marcador(banco)
         r = await pagina()
+        assert r.status_code == 200
         assert "Buscar archivos nuevos en el disco" not in visible(r.text)
         assert "Ir a registrar mi biblioteca" not in visible(r.text)
-        assert "Ir a Duplicados" not in visible(r.text)
+        assert "/ui/auditoria#registro" not in _hrefs(r.text)
 
     async def test_no_crea_la_fila_de_ajustes_al_leer_el_marcador(self, banco):
         sid = await banco.serie("BATMAN", 2025)
