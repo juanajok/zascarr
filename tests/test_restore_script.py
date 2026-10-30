@@ -642,9 +642,16 @@ class TestRestoreScript:
         "texto,prohibido,permitido",
         [
             ("postgresql://u:url_secret@host/db", "url_secret", "postgresql://u:***@host/db"),
+            (
+                "postgresql://u:left@RIGHT@host/db",
+                "RIGHT",
+                "postgresql://u:***@host/db",
+            ),
             ("password=plain_secret", "plain_secret", "password=***"),
+            ("password=left@RIGHT", "RIGHT", "password=***"),
             ("password='con espacio'", "con espacio", "password=***"),
             ('password="p@ss@word"', "p@ss@word", "password=***"),
+            ('password="left@RIGHT con espacio"', "RIGHT", "password=***"),
             ("passwd=passwd_secret", "passwd_secret", "passwd=***"),
             ("pwd=pwd_secret", "pwd_secret", "pwd=***"),
             ("PGPASSWORD=pg_secret", "pg_secret", "PGPASSWORD=***"),
