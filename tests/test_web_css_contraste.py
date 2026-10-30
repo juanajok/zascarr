@@ -398,6 +398,45 @@ class TestTemas:
             "--ok": "#2e8b57", "--warn": "#c0392b"}
 
 
+# ── 4b. sombra dura: visible en los dos temas y de un solo color ──────────────────────────
+SOMBRAS_DURAS = ("--shadow-ink", "--shadow-ink-sm", "--shadow-ink-hover", "--shadow-ink-active")
+
+
+class TestSombraDura:
+    """Regresión de dos mecanismos del tema oscuro: la sombra era negro al 55 % (`rgba`, 1,13:1
+    sobre --paper: no se veía) y el hover/active de los botones escribían `var(--ink)` a mano, que
+    en oscuro es crema: el botón sin sombra la ganaba en crema al pasar. La sombra es la señal de
+    «esto se pulsa» (CLAUDE.md §6), así que se le pide el 3:1 de lo que no es texto (WCAG 1.4.11)."""
+
+    @pytest.mark.parametrize("tema", ["claro", "oscuro"])
+    @pytest.mark.parametrize("fondo", ["--paper", "--paper-2"])
+    def test_la_sombra_dura_se_ve_sobre_el_papel(self, tema, fondo):
+        t = _temas()[tema]
+        color = resolver("var(--shadow-color)", t)
+        assert color, f"--shadow-color [{tema}] no es un color sólido: {t.get('--shadow-color')!r}"
+        r = contraste(color, resolver(f"var({fondo})", t))
+        assert r >= NO_TEXTO, f"sombra sobre {fondo} [{tema}]: {r:.2f}:1 < {NO_TEXTO}:1"
+
+    def test_en_oscuro_la_sombra_no_es_la_tinta_crema(self):
+        """Con la tinta crema la sombra se leería como un segundo borde, más grueso."""
+        t = _temas()["oscuro"]
+        r = contraste(resolver("var(--shadow-color)", t), resolver("var(--ink)", t))
+        assert r >= NO_TEXTO, f"sombra frente a la tinta en oscuro: {r:.2f}:1"
+
+    @pytest.mark.parametrize("token", SOMBRAS_DURAS)
+    def test_cada_desplazamiento_usa_el_color_de_sombra_del_tema(self, token):
+        """Un solo color: el tema oscuro cambia --shadow-color y no redefine los desplazamientos."""
+        t = _temas()
+        assert t["claro"][token].endswith("0 var(--shadow-color)"), t["claro"][token]
+        assert t["oscuro"][token] == t["claro"][token], f"{token} se redefine en oscuro"
+
+    def test_ninguna_sombra_dura_lleva_el_color_escrito_a_mano(self):
+        permitidas = {"none"} | {f"var({s})" for s in SOMBRAS_DURAS}
+        malas = [f"{s}: box-shadow: {d['box-shadow']}" for s, d in _reglas()
+                 if "box-shadow" in d and d["box-shadow"] not in permitidas]
+        assert not malas, "sombras fuera de los tokens:\n" + "\n".join(malas)
+
+
 class TestLoNoSoportadoNoPasaInadvertido:
     """Regresión del mecanismo: antes `if f is None or b is None: continue` dejaba fuera, sin
     avisar, cualquier color que el resolvedor no entendiera."""
