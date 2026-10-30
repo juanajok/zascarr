@@ -81,6 +81,17 @@ exit 0
 CURL_FALSO = """#!/usr/bin/env bash
 set -euo pipefail
 echo "curl $*" >> "$CURL_LOG"
+if [[ -n "${FAKE_HEALTH_FALLOS:-}" ]]; then
+    n=0
+    [[ -f "$HEALTH_CONTADOR" ]] && n=$(cat "$HEALTH_CONTADOR")
+    n=$((n + 1))
+    echo "$n" > "$HEALTH_CONTADOR"
+    if (( n <= FAKE_HEALTH_FALLOS )); then
+        exit 22
+    fi
+    echo '{"status":"healthy","checks":{"database":"ok"}}'
+    exit 0
+fi
 if [[ "${FAKE_HEALTH:-ok}" == "ok" ]]; then
     echo '{"status":"healthy","checks":{"database":"ok"}}'
     exit 0
@@ -256,6 +267,7 @@ def _ejecutar(
             "RESTORE_LOG": str(ctx["restore"]),
             "RESTORE_FAIL_MARK": str(ctx["root"] / "restore-fail.marker"),
             "CURL_LOG": str(ctx["curl"]),
+            "HEALTH_CONTADOR": str(ctx["root"] / "health-intentos.txt"),
             "GIT_LOG": str(ctx["git"]),
         }
     )
@@ -473,10 +485,35 @@ class TestRestaurarDatos:
 
     def test_health_falla_recupera_la_copia(self, tmp_path):
         ctx = _preparar(tmp_path)
-        r = _ejecutar(ctx, extra_env={"FAKE_HEALTH": "fail"})
+        r = _ejecutar(
+            ctx,
+            extra_env={"FAKE_HEALTH": "fail", "HEALTH_TIMEOUT": "1", "HEALTH_INTERVAL": "1"},
+        )
         assert r.returncode != 0
         assert "seguridad" in _log(ctx, "restore")
         assert list(ctx["backup"].glob("rollback-safety_*.sql.gz"))
+
+    def test_health_reintenta_hasta_que_la_app_arranca(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(
+            ctx,
+            extra_env={"FAKE_HEALTH_FALLOS": "2", "HEALTH_TIMEOUT": "10", "HEALTH_INTERVAL": "1"},
+        )
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert len(_log(ctx, "curl").splitlines()) >= 3
+        assert "Datos restaurados sin cambiar el código" in r.stdout
+        assert "3 intentos" in r.stdout
+
+    def test_health_que_nunca_responde_recupera_y_falla(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(
+            ctx,
+            extra_env={"FAKE_HEALTH": "fail", "HEALTH_TIMEOUT": "2", "HEALTH_INTERVAL": "1"},
+        )
+        assert r.returncode != 0
+        assert "Datos restaurados" not in r.stdout
+        assert "seguridad" in _log(ctx, "restore")
+        assert "health" in (r.stdout + r.stderr).lower()
 
     def test_sin_yes_pide_si_y_no_continua_con_no(self, tmp_path):
         ctx = _preparar(tmp_path)
@@ -531,7 +568,10 @@ class TestRestaurarDatos:
 
     def test_no_imprime_rutas_completas(self, tmp_path):
         ctx = _preparar(tmp_path)
-        r = _ejecutar(ctx, extra_env={"FAKE_HEALTH": "fail"})
+        r = _ejecutar(
+            ctx,
+            extra_env={"FAKE_HEALTH": "fail", "HEALTH_TIMEOUT": "1", "HEALTH_INTERVAL": "1"},
+        )
         salida = r.stdout + r.stderr
         assert str(ctx["dump"]) not in salida
         assert str(ctx["backup"]) not in salida

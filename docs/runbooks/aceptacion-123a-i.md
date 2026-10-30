@@ -128,6 +128,7 @@ export COMPOSE_FILE="$VAL/zascarr/docker-compose.yml"
 export BACKUP_DIR="$VAL/backups"
 export BACKUP_STATUS_DIR="$VAL/status"
 export HEALTH_URL="http://127.0.0.1:18000/api/health"
+export HEALTH_TIMEOUT=120   # segundos TOTALES de espera; default 120
 export DB_NAME=zascarr
 export DB_USER=comics_admin
 ```
@@ -325,7 +326,10 @@ El script:
 5. crea `rollback-safety_<TS>.sql.gz` verificada;
 6. para la app, `dropdb --force`, `createdb`, `psql ON_ERROR_STOP`;
 7. arranca con `up -d` **sin build ni git reset**;
-8. comprueba health, recuentos y vínculos, y que el `HEAD` no cambió.
+8. espera el health hasta `HEALTH_TIMEOUT` **total** (reintentos cada 2 s),
+   exige HTTP 200 y `.checks.database == "ok"`, y comprueba recuentos,
+   vínculos y que el `HEAD` no cambió. Un solo `curl` no basta: la app tarda
+   unos segundos en arrancar tras `up -d`.
 
 Evidencia: comandos, salida, tiempo, copia previa, health 200, URL `:18000`.
 **No se usa `rollback.sh` en 123a-i**: el candidato es el actual y la pareja

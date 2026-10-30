@@ -1,5 +1,9 @@
 """Aplicación real del fixture de 123a en PostgreSQL (migrado a head).
 
+Se ejecuta después de `test_restore_pg.py` a propósito: ambos crean/destruyen
+bases desechables y el orden alfabético anterior hacía que este test dejara
+actividad de DDL antes del test de restauración, que podía morir por deadlock.
+
 El test crea una base desechable a partir de `TEST_DATABASE_URL`, aplica las
 migraciones y ejecuta el `seed.sql` generado con `ON_ERROR_STOP=1`. No usa el
 `--aplicar` del generador: la guardia de puerto 15432 se prueba aparte con un
