@@ -268,7 +268,7 @@ class TestHealthBackup:
         body = self._pedir()
         assert body["checks"]["backup"] == "error"
         assert body["status"] == "degraded"
-        assert "pg_dump" in body["warnings"]["backup"]
+        assert "el volcado falló" in body["warnings"]["backup"]
 
     def test_degraded_anclas_es_warning(self, tmp_path, monkeypatch):
         self._estado(tmp_path, monkeypatch, status="degraded",
