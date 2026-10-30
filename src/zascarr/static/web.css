@@ -879,10 +879,10 @@ button[type="submit"].btn-sugerencia {
 .back-link:hover { color: var(--cyan-t); }
 
 .series-header { display: flex; gap: 22px; margin-bottom: 24px; flex-wrap: wrap; }
-.series-cover {
-  width: 140px; aspect-ratio: 2 / 3; object-fit: cover;
+.portada.series-cover {
+  width: 140px;
   border: 3px solid var(--ink); border-radius: var(--radius-panel);
-  background: var(--paper-2); flex-shrink: 0;
+  flex-shrink: 0;
 }
 .series-meta { color: var(--ink-soft); font-size: .9rem; margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
@@ -920,11 +920,7 @@ button[type="submit"].btn-sugerencia {
   display: block; text-decoration: none; color: var(--ink);
   overflow: hidden; transition: transform .15s, box-shadow .15s;
 }
-.library-card .cover {
-  width: 100%; aspect-ratio: 2 / 3; object-fit: cover;
-  background: var(--paper); border-bottom: 3px solid var(--ink);
-}
-.library-card .cover.cover-missing { visibility: hidden; }
+.library-card .portada { border-bottom: 3px solid var(--ink); }
 .library-card-body { padding: 9px 11px 12px; }
 .library-card-title {
   font-size: .88rem; font-weight: 700;
@@ -1034,14 +1030,7 @@ button[type="submit"].btn-sugerencia {
   transition: transform .15s, box-shadow .15s;
 }
 .series-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-ink); }
-.series-card img {
-  width: 100%; aspect-ratio: 2 / 3; object-fit: cover;
-  border-bottom: 3px solid var(--ink); background: var(--paper-2);
-}
-.series-card img.cover-missing {
-  background: radial-gradient(var(--ink-faint) 1px, transparent 1px) 0 0 / 6px 6px,
-              var(--paper-2);
-}
+.series-card .portada { border-bottom: 3px solid var(--ink); }
 .series-title {
   display: block; font-size: .875rem; font-weight: 700;
   color: var(--ink); text-align: center; margin-top: 6px; padding: 0 8px;
@@ -1156,7 +1145,7 @@ button[type="submit"].btn-sugerencia {
   .search-form { flex-direction: column; }
   .search-input { max-width: none; }
   .series-header { flex-direction: column; }
-  .series-cover { width: 120px; }
+  .portada.series-cover { width: 120px; }
 }
 
 @media (max-width: 480px) {
@@ -1176,11 +1165,7 @@ button[type="submit"].btn-sugerencia {
   /* background/border/radius: regla compartida con pending-card/
      wishlist-row/library-card/metric-card, más arriba en este fichero. */
 }
-.discovery-card .cover {
-  width: 80px; flex: none; aspect-ratio: 2 / 3; object-fit: cover;
-  background: var(--paper); border: 2px solid var(--ink);
-}
-.discovery-card .cover.cover-missing { visibility: hidden; }
+.discovery-card .portada { width: 80px; flex: none; border: 2px solid var(--ink); }
 .discovery-card-body {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; gap: 6px;
@@ -1566,6 +1551,32 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   }
 }
 
+/* Portada de una serie (ui.portada): el marcador va SIEMPRE debajo y la <img> encima. Si la imagen
+   carga, lo tapa; si da 404 se ve el marcador, sin JavaScript. La <img> no lleva fondo, borde ni
+   sombra propios (una imagen rota los pintaría sobre el marcador): el marco va en el contenedor
+   de cada contexto (.library-card, .series-card, .discovery-card, .portada.series-cover). Tres
+   tintas de imprenta con la trama de otra encima; el color no significa nada. La inicial va en
+   el par oscuro fijo (on-yellow): se lee sobre las tres tintas en los dos temas. */
+.portada {
+  position: relative; display: grid; place-items: center; overflow: hidden;
+  width: 100%; aspect-ratio: 2 / 3; container-type: inline-size;
+}
+.portada-c { background: radial-gradient(var(--magenta) 1.6px, transparent 1.7px) 0 0 / 8px 8px, var(--cyan); }
+.portada-m { background: radial-gradient(var(--yellow) 1.6px, transparent 1.7px) 0 0 / 8px 8px, var(--magenta); }
+.portada-y { background: radial-gradient(var(--cyan) 1.6px, transparent 1.7px) 0 0 / 8px 8px, var(--yellow); }
+.portada-marca {
+  font-family: var(--font-display); font-weight: 400; line-height: 1;
+  font-size: 2.6rem; font-size: 46cqw; color: var(--on-yellow); user-select: none;
+}
+/* La <img> NO lleva `height`: una imagen rota con ancho Y alto fijados por CSS pinta el icono de
+   «imagen rota» y su filete (Chromium, también con alt=""); con el alto sin especificar se colapsa y
+   deja ver el marcador limpio. `min-height`/`max-height: 100%` la igualan al contenedor cuando carga
+   (con `object-fit: cover`, recorte centrado). Sin fondo, borde ni sombra propios. */
+.portada img {
+  position: absolute; top: 0; left: 0; width: 100%; min-height: 100%; max-height: 100%;
+  object-fit: cover; background: none; border: 0; box-shadow: none;
+}
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
@@ -1576,6 +1587,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .metric-card::before,
   .empty-state::before,
   .pagina-error::after { display: none; }
-  .series-card img.cover-missing { background: var(--paper-2); }
+  .portada-c, .portada-m, .portada-y { background: var(--paper-2); }
+  .portada-marca { color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }
