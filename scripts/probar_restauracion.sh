@@ -172,14 +172,41 @@ contar_copy() {
     '
 }
 
-# Una línea, acotada y sin credenciales: la salida de psql puede traer una URL de conexión o `password=`.
+# Lista permitida: SOLO líneas ERROR:/FATAL: (con espacios iniciales). Se descartan
+# CONTEXT/DETAIL/LINE/STATEMENT/HINT/QUERY y cualquier otra línea. Después se
+# enmascaran credenciales y se trunca a 400 caracteres. Nunca devuelve el volcado.
 sanear_detalle() {
-    tr '\n' ' ' | sed -E 's#(://[^:/@[:space:]]+:)[^@[:space:]]*@#\1***@#g; s#([Pp]assword=)[^[:space:]&)]*#\1***#g' \
-        | cut -c1-400
+    local texto
+    texto="$(awk '{
+        linea=$0
+        sub(/^[[:space:]]+/, "", linea)
+        if (linea ~ /^(ERROR|FATAL):/) print linea
+    }' \
+        | sed -E \
+            -e 's#[[:space:]]+$##' \
+            -e 's#(://[^:/@[:space:]]+:)[^[:space:]]*@#\1***@#g' \
+            -e 's#((password|passwd|pwd|PGPASSWORD)[[:space:]]*=[[:space:]]*)("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]&)]*)#\1***#Ig' \
+            -e 's#((password|passwd|pwd|PGPASSWORD)[[:space:]]*=[[:space:]]*).*#\1***#Ig' \
+        | tr '\n' ' ' \
+        | sed -E 's/[[:space:]]+$//' \
+        | cut -c1-400)"
+    if [[ -z "${texto}" ]]; then
+        texto="la restauración falló sin detalle de psql"
+    fi
+    printf '%s' "${texto}"
 }
 
 psql_temp() {
-    "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${TEMP}" -At -c "$1"
+    local err salida detalle
+    err="$(mktemp "${TMPDIR:-/tmp}/zascarr-psql.XXXXXX")" || return 1
+    if ! salida="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${TEMP}" -At -c "$1" 2>"${err}")"; then
+        detalle="$(sanear_detalle < "${err}")"
+        rm -f "${err}"
+        echo "[restauración] Motivo de psql: ${detalle}" >&2
+        return 1
+    fi
+    rm -f "${err}"
+    printf '%s\n' "${salida}"
 }
 
 # ── Verificar dump + manifiesto ─────────────────────────────────────────────
@@ -225,7 +252,7 @@ ERR="$(mktemp "${TMPDIR:-/tmp}/zascarr-restore.XXXXXX")"
     || { escribir_restore_estado "failed" "createdb_failed" || true; die "No pude crear ${TEMP}."; }
 if ! gzip -dc "${DUMP}" | "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" \
         -d "${TEMP}" -v ON_ERROR_STOP=1 -q >/dev/null 2>"${ERR}"; then
-    DETALLE="$(tail -3 "${ERR}" | sanear_detalle || true)"
+    DETALLE="$(sanear_detalle < "${ERR}")"
     escribir_restore_estado "failed" "restore_failed" "${DETALLE}" || true
     # El motivo también sale por pantalla (en la CI solo se veía este mensaje y el porqué quedaba en el JSON).
     [[ -z "${DETALLE}" ]] || echo "[restauración] Motivo de psql: ${DETALLE}" >&2
