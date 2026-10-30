@@ -1561,12 +1561,21 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   position: relative; display: grid; place-items: center; overflow: hidden;
   width: 100%; aspect-ratio: 2 / 3; container-type: inline-size;
 }
-.portada-c { background: radial-gradient(var(--magenta) 1.6px, transparent 1.7px) 0 0 / 8px 8px, var(--cyan); }
-.portada-m { background: radial-gradient(var(--yellow) 1.6px, transparent 1.7px) 0 0 / 8px 8px, var(--magenta); }
-.portada-y { background: radial-gradient(var(--cyan) 1.6px, transparent 1.7px) 0 0 / 8px 8px, var(--yellow); }
+.portada-c {
+  background-color: var(--cyan); color: var(--on-yellow);
+  background-image: radial-gradient(var(--magenta) 1.6px, transparent 1.7px); background-size: 8px 8px;
+}
+.portada-m {
+  background-color: var(--magenta); color: var(--on-yellow);
+  background-image: radial-gradient(var(--yellow) 1.6px, transparent 1.7px); background-size: 8px 8px;
+}
+.portada-y {
+  background-color: var(--yellow); color: var(--on-yellow);
+  background-image: radial-gradient(var(--cyan) 1.6px, transparent 1.7px); background-size: 8px 8px;
+}
 .portada-marca {
   font-family: var(--font-display); font-weight: 400; line-height: 1;
-  font-size: 2.6rem; font-size: 46cqw; color: var(--on-yellow); user-select: none;
+  font-size: 2.6rem; font-size: 46cqw; user-select: none;      /* el color lo pone la tinta de su .portada-* */
 }
 /* La <img> NO lleva `height`: una imagen rota con ancho Y alto fijados por CSS pinta el icono de
    «imagen rota» y su filete (Chromium, también con alt=""); con el alto sin especificar se colapsa y
@@ -1587,7 +1596,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .metric-card::before,
   .empty-state::before,
   .pagina-error::after { display: none; }
-  .portada-c, .portada-m, .portada-y { background: var(--paper-2); }
-  .portada-marca { color: var(--ink); }
+  .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }

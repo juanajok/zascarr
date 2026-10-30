@@ -172,5 +172,22 @@ class TestCss:
         bloque = re.search(r"@media \(prefers-contrast: more\), \(forced-colors: active\)\s*\{(.*?)\n\}",
                            CSS_SIN_COMENTARIOS, re.S).group(1)
         plano = " ".join(bloque.split())
-        assert ".portada-c, .portada-m, .portada-y { background: var(--paper-2); }" in plano
-        assert ".portada-marca { color: var(--ink); }" in plano
+        assert ".portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }" in plano
+
+
+class TestContrasteDeLaInicial:
+    """La inicial es texto grande y decorativo: le basta 3:1. Se comprueba aquí en las tres tintas y los
+    dos temas, porque la excepción de test_web_css_contraste.py solo la cubre a ella."""
+
+    @pytest.mark.parametrize("tema", ["claro", "oscuro"])
+    @pytest.mark.parametrize("tinta", ["cyan", "magenta", "yellow"])
+    def test_la_inicial_se_lee_sobre_cada_tinta(self, tema, tinta):
+        from tests.test_web_css_contraste import _temas, contraste, resolver
+        t = _temas()[tema]
+        assert contraste(resolver("var(--on-yellow)", t), resolver(f"var(--{tinta})", t)) >= 3.0
+
+    def test_cada_tinta_pone_su_color_y_su_fondo_solido_en_la_misma_regla(self):
+        """Para que la prueba de contraste de la hoja mida el par real y no el fondo de contexto."""
+        for clase, tinta in (("c", "cyan"), ("m", "magenta"), ("y", "yellow")):
+            d = next(d for s, d in _reglas() if s == f".portada-{clase}")
+            assert f"background-color: var(--{tinta})" in d and "color: var(--on-yellow)" in d
