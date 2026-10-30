@@ -306,6 +306,5 @@ class TestSalvaguardas123a:
             "--aplicar", "--database-url", "postgresql://test:x@127.0.0.1:15432/test"])
         assert r.returncode == 0, r.stderr
         vistos = (tmp_path / "psql.log.env").read_text(encoding="utf-8")
-        for var in ("PGHOSTADDR", "PGHOST", "PGPORT", "PGSERVICE", "PGOPTIONS"):
-            assert f"{var}= " in vistos or f"{var}=\n" in vistos or f"{var}=" not in vistos.replace("PGPASSWORD=", ""), (var, vistos)
+        assert "PGHOSTADDR= PGHOST= PGPORT= PGSERVICE= PGOPTIONS=\n" in vistos          # ninguna llegó al hijo
         assert "10.9.8.7" not in vistos and "db.example" not in vistos and "produccion" not in vistos

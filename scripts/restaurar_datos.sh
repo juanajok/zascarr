@@ -237,9 +237,9 @@ printf '\nDatos a restaurar (sin cambiar el código):\n'
 printf '  HEAD:              %s\n' "${HEAD_ANTES:0:12}…"
 printf '  Proyecto:          %s\n' "$PROYECTO"
 printf '  Dump:              %s\n' "$(limpio "$BASE")"
-printf '  Manifiesto:        %s\n' "$(basename "$MANIFEST")"
+printf '  Manifiesto:        %s\n' "$(limpio "$(basename "$MANIFEST")")"
 printf '  SHA-256:           %s…\n' "${SHA_REAL:0:12}"
-printf '  Alembic esperado:  %s\n' "$ESPERADA"
+printf '  Alembic esperado:  %s\n' "$(limpio "$ESPERADA")"
 printf '  Recuentos dump:    series=%s issues=%s files=%s operaciones=%s wishlist=%s\n' \
     "$N_SERIES" "$N_ISSUES" "$N_FILES" "$N_OPS" "$N_WISH"
 
@@ -268,7 +268,7 @@ TAMANO_KB="$(tamano_bd_kb)"
 exigir_espacio_kb "$(espacio_libre_kb "$BACKUP_DIR")" "${TAMANO_KB}" \
         "la copia de seguridad previa a restaurar" && ESPACIO_RC=0 || ESPACIO_RC=$?
 if (( ESPACIO_RC == 2 )); then
-    die "No pude medir la base de datos actual (¿PostgreSQL parado?), así que no puedo asegurar la copia previa. No se ha tocado la BD."
+    die "No pude medir el espacio (la base de datos actual o el disco de copias), así que no puedo asegurar la copia previa. No se ha tocado la BD."
 elif (( ESPACIO_RC != 0 )); then
     die "No hay espacio para la copia de seguridad. No se ha tocado la BD."
 fi

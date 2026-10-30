@@ -799,3 +799,28 @@ class TestMasGuardasDeLaRestauracion:
         assert r.returncode != 0 and "no parece una BD de ZascArr" in r.stderr
         stub = _log(ctx, "stub")
         assert "dropdb" not in stub and "createdb" not in stub and not list(ctx["backup"].glob("rollback-safety_*.sql.gz"))
+
+
+    def test_n_1_el_manifiesto_y_la_revision_esperada_del_resumen_salen_limpios(self, tmp_path):
+        """Sin --manifest el nombre del manifiesto sale del nombre del dump (con escapes): no llega crudo al resumen."""
+        esc = "\x1b[7mXX"
+        ctx = _preparar(tmp_path)
+        nuevo = ctx["dump"].with_name("update_20261029_210527" + esc + ".sql.gz")
+        ctx["dump"].rename(nuevo)
+        ctx["manifest"].rename(ctx["backup"] / ("MANIFIESTO-update_20261029_210527" + esc + ".json"))
+        viejo = ctx["dump"].with_name(ctx["dump"].name + ".sha256")
+        if viejo.exists():
+            viejo.unlink()
+        r = _ejecutar(ctx, args=["--dump", str(nuevo), "--sha", ctx["head"], "--yes"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "[7m" not in r.stdout + r.stderr and "Manifiesto:" in r.stdout
+
+    def test_n_1_la_revision_esperada_con_escapes_sale_limpia_en_el_resumen(self, tmp_path):
+        esc = "\x1b[7mXX"
+        ctx = _preparar(tmp_path, sql=_sql(alembic="0020" + esc))
+        datos = json.loads(ctx["manifest"].read_text(encoding="utf-8"))
+        datos.pop("alembic")
+        ctx["manifest"].write_text(json.dumps(datos), encoding="utf-8")
+        r = _ejecutar(ctx, extra_env={"FAKE_DB_ALEMBIC": "0020" + esc})
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "Alembic esperado:" in r.stdout and "[7m" not in r.stdout + r.stderr
