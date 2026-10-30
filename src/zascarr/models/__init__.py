@@ -31,7 +31,7 @@ from zascarr.database import Base
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
-class ComicTradition(str, enum.Enum):
+class ComicTradition(enum.StrEnum):
     AMERICAN      = "american"
     FRANCO_BELGIAN = "franco_belgian"
     MANGA         = "manga"
@@ -42,7 +42,7 @@ class ComicTradition(str, enum.Enum):
     BRITISH       = "british"
     OTHER         = "other"
 
-class CreatorRole(str, enum.Enum):
+class CreatorRole(enum.StrEnum):
     WRITER      = "writer"
     PENCILER    = "penciler"
     INKER       = "inker"
@@ -52,7 +52,7 @@ class CreatorRole(str, enum.Enum):
     EDITOR      = "editor"
     TRANSLATOR  = "translator"
 
-class IssueFormat(str, enum.Enum):
+class IssueFormat(enum.StrEnum):
     SINGLE_ISSUE    = "single_issue"
     TRADE_PAPERBACK = "trade_paperback"
     HARDCOVER       = "hardcover"
@@ -75,7 +75,7 @@ EDITION_KIND_A_FORMAT: dict[str, IssueFormat] = {
     "volumen": IssueFormat.TRADE_PAPERBACK,
 }
 
-class FileFormat(str, enum.Enum):
+class FileFormat(enum.StrEnum):
     CBZ  = "cbz"
     CBR  = "cbr"
     CB7  = "cb7"
@@ -126,7 +126,7 @@ class ResultadoComprobacion(enum.StrEnum):
     FALLO_DETECCION     = "fallo_deteccion"      # la comprobación lanzó una excepción
 
 
-class WishlistStatus(str, enum.Enum):
+class WishlistStatus(enum.StrEnum):
     WANTED      = "wanted"
     SEARCHING   = "searching"
     DOWNLOADING = "downloading"
@@ -140,7 +140,7 @@ class WishlistStatus(str, enum.Enum):
     RETIRADO    = "retirado"
 
 
-class WishlistPolicy(str, enum.Enum):
+class WishlistPolicy(enum.StrEnum):
     """D8: qué números de una serie busca ZascArr **por su cuenta**.
 
     No silencia nunca un item añadido a mano: gobierna lo que se **genera**.
@@ -151,7 +151,7 @@ class WishlistPolicy(str, enum.Enum):
     ALL     = "todos"        # reservado: no se ofrece hasta que D3 lo defina
 
 
-class WishlistOrigin(str, enum.Enum):
+class WishlistOrigin(enum.StrEnum):
     """D8: de dónde salió el item.
 
     `manual` = lo pidió el coleccionista (nunca se toca solo).
@@ -160,14 +160,14 @@ class WishlistOrigin(str, enum.Enum):
     MANUAL  = "manual"
     POLICY  = "politica"
 
-class ReadingStatus(str, enum.Enum):
+class ReadingStatus(enum.StrEnum):
     UNREAD    = "unread"
     READING   = "reading"
     COMPLETED = "completed"
     ON_HOLD   = "on_hold"
     DROPPED   = "dropped"
 
-class MetadataSource(str, enum.Enum):
+class MetadataSource(enum.StrEnum):
     COMIC_VINE    = "comic_vine"
     GCD           = "gcd"
     ANILIST       = "anilist"
@@ -548,7 +548,7 @@ class File(Base):
     issue: Mapped["Issue|None"] = relationship(back_populates="files")
 
 
-class AsignacionEstado(str, enum.Enum):
+class AsignacionEstado(enum.StrEnum):
     """Estados PERSISTIDOS de una operación de asignación (ADR 0006, migración 0017).
 
     Son solo cuatro. Los RESULTADOS que el servicio devuelve al cliente no son estados. Los
