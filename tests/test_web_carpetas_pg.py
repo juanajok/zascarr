@@ -19,6 +19,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+import structlog.testing
 from sqlalchemy import text
 
 import zascarr.web.pendientes as _pendientes
@@ -32,7 +33,7 @@ from tests.test_revision_carpetas_pg import (
 )
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.services import revision_carpetas
+from zascarr.services import revision_carpetas, runtime_settings
 from zascarr.services.registro_biblioteca import EstadoRegistro as _EstadoRegistro
 from zascarr.services.registro_biblioteca import FaseRegistro as _FaseRegistro
 from zascarr.services.revision_carpetas import (
@@ -616,6 +617,11 @@ def _hrefs(html: str) -> list[str]:
     return [htmllib.unescape(h) for h in re.findall(r'href="([^"]+)"', html)]
 
 
+def _hrefs_del_vacio(html: str) -> list[str]:
+    """Los enlaces del bloque de estado vacío: el menú de la página también lleva /ui/auditoria."""
+    return _hrefs(re.search(r'<div class="empty-state">.*?</div>', html, re.S).group(0))
+
+
 class TestSerieFijada:
 
     async def test_muestra_contexto_y_una_accion_por_carpeta(self, banco):
@@ -733,11 +739,35 @@ class TestVacíoY326:
         await _borrar_marcador(banco)
         r = await pagina({"serie": str(sid)})
         t = visible(r.text)
-        assert "La biblioteca todavía no está registrada" in t
-        assert "Regístrala primero en Duplicados" in t
+        assert "Tu biblioteca aún no está registrada, así que ZascArr no puede buscar archivos nuevos." in t
+        assert "El registro está en Duplicados, en el apartado «Registrar mi biblioteca»." in t
+        assert "No mueve ni renombra ningún archivo." in t
+        assert "al final de la página" not in t
         assert r.text.count('class="empty-state"') == 1
         assert "Buscar archivos nuevos en el disco" not in t
-        assert "Ir a Duplicados" in t
+        assert "Ir a registrar mi biblioteca" in t and "Ir a Duplicados" not in t
+        assert _hrefs_del_vacio(r.text) == ["/ui/pendientes", "/ui/auditoria#registro", "/ui/pendientes"]
+        assert "Ir a Por revisar" in t                                               # el secundario no cambia
+
+    async def test_si_no_se_puede_leer_el_marcador_no_afirma_que_no_este_registrada(self, banco, monkeypatch):
+        sid = await banco.serie("BATMAN", 2025)
+        await _poner_marcador(banco, True)           # lo está: la pantalla no puede decir lo contrario
+
+        async def falla(self, clave):
+            raise RuntimeError("lectura del marcador simulada /srv/interno")
+        monkeypatch.setattr(runtime_settings.RuntimeSettingsService, "get_flag_sin_crear", falla)
+        with structlog.testing.capture_logs() as registro:
+            r = await pagina({"serie": str(sid)})
+        t = visible(r.text)
+        assert r.status_code == 200 and r.text.count('class="empty-state"') == 1
+        assert "No se ha podido comprobar si tu biblioteca está registrada. Prueba de nuevo en unos segundos." in t
+        assert "aún no está registrada" not in t and "todavía no está registrada" not in t
+        assert "Ir a registrar mi biblioteca" not in t and "Buscar archivos nuevos en el disco" not in t
+        assert "Ir a Por revisar" in t
+        assert _hrefs_del_vacio(r.text) == ["/ui/pendientes", "/ui/pendientes"]      # ni registro ni búsqueda
+        assert "/srv/interno" not in r.text and "RuntimeError" not in r.text
+        fallos = [e for e in registro if e.get("event") == "pendientes.marcador_fallo"]
+        assert len(fallos) == 1 and fallos[0].get("error") == "RuntimeError" and "/srv/interno" not in str(registro)
 
     async def test_vacio_en_marcha_lo_dice(self, banco, monkeypatch):
         sid = await banco.serie("BATMAN", 2025)
@@ -751,6 +781,7 @@ class TestVacíoY326:
         await _poner_marcador(banco, True)
         r = await pagina()
         assert "Buscar archivos nuevos en el disco" not in visible(r.text)
+        assert "Ir a registrar mi biblioteca" not in visible(r.text)
         assert "Ir a Duplicados" not in visible(r.text)
 
     async def test_no_crea_la_fila_de_ajustes_al_leer_el_marcador(self, banco):
