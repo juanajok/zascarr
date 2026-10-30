@@ -158,9 +158,11 @@ def main() -> int:
     conf_dest_db = f"/media/library/{MARCA}/{conf_nombre}"
     conf_host = args.biblioteca / MARCA / conf_nombre
     conf_host.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(origen_conf, conf_host)
+    shutil.copy2(origen_conf, conf_host)
     if _sha(conf_host) != sha_conf:
         _error("la copia de la asignación confirmada no coincide.")
+    st_conf = conf_host.stat()
+    size_conf, mtime_conf = st_conf.st_size, st_conf.st_mtime_ns
 
     # Preparada: origen intacto, destino libre.
     origen_prep, size_prep, mtime_prep, sha_prep = datos(sin_issue[0])
