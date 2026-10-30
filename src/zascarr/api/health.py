@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -73,6 +74,7 @@ _BACKUP_ERRORES = {
     "offsite_verify_failed": "la copia fuera del disco no coincide",
     "anchor_sync_failed": "no se pudieron sincronizar las anclas",
     "status_write_failed": "no se pudo escribir el registro de estado",
+    "disk_full": "no hay espacio suficiente en el disco",
     "unexpected": "error inesperado",
 }
 
@@ -95,6 +97,7 @@ _RESTORE_ERRORES = {
     "tablas_distintas": "el número de tablas no coincide",
     "recuento_distinto": "un recuento no coincide",
     "alembic_distinto": "la revisión de Alembic no coincide",
+    "disk_full": "no hay espacio suficiente en el disco",
     "unexpected": "error inesperado",
 }
 
@@ -325,6 +328,46 @@ async def _database_status(db: AsyncSession) -> tuple[str, str]:
     return "ok", "Conectada y migrada."
 
 
+def _disco_bytes(mb: int) -> int:
+    return max(0, int(mb)) * 1024 * 1024
+
+
+def _disk_status() -> tuple[str, str]:
+    """Espacio libre en rutas locales; no mira la biblioteca de red ni bloquea."""
+    settings = get_settings()
+    rutas = [Path(p.strip()) for p in (settings.disk_paths or "").split(",") if p.strip()]
+    libres: list[int] = []
+    for ruta in rutas:
+        candidata = ruta
+        while not candidata.exists() and candidata != candidata.parent:
+            candidata = candidata.parent
+        if not candidata.exists() or not candidata.is_dir():
+            continue
+        try:
+            libres.append(shutil.disk_usage(candidata).free)
+        except OSError:
+            continue
+    if not libres:
+        return "disabled", "Sin rutas locales accesibles para comprobar el disco."
+    libre = min(libres)
+    warn = _disco_bytes(settings.disk_warn_free_mb)
+    error = _disco_bytes(settings.disk_error_free_mb)
+    if libre < error:
+        return "error", (
+            f"Quedan {libre / 1024 / 1024:.0f} MB libres en el disco de datos, "
+            f"por debajo del mínimo de {settings.disk_error_free_mb} MB. "
+            "Libera espacio o mueve la biblioteca a otro disco y vuelve a intentarlo. "
+            "ZascArr no ha borrado nada."
+        )
+    if libre < warn:
+        return "warning", (
+            f"Quedan {libre / 1024 / 1024:.0f} MB libres en el disco de datos. "
+            "Libera espacio o mueve la biblioteca a otro disco antes de que se llene. "
+            "ZascArr no ha borrado nada."
+        )
+    return "ok", f"Quedan {libre / 1024 / 1024:.0f} MB libres en el disco de datos."
+
+
 @router.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
     settings = get_settings()
@@ -349,15 +392,20 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     # ── Restauración de comprobación (fichero del host; no bloqueante) ──
     restore_status, restore_detail = _restore_status()
 
+    # ── Disco local (no bloqueante; nunca mira la biblioteca de red) ──
+    disk_status, disk_detail = _disk_status()
+
     core_ok = db_status == "ok"
     backup_ok = backup_status == "ok"
     restore_ok = restore_status == "ok"
+    disk_ok = disk_status in ("ok", "disabled")
     all_ok = (
         core_ok
         and transmission in ("ok", "disabled")
         and amule in ("ok", "disabled")
         and backup_ok
         and restore_ok
+        and disk_ok
     )
     status_str = "healthy" if all_ok else ("degraded" if core_ok else "unhealthy")
 
@@ -372,6 +420,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         warnings["backup"] = backup_detail
     if restore_status != "ok":
         warnings["restore"] = restore_detail
+    if disk_status not in ("ok", "disabled"):
+        warnings["disk"] = disk_detail
     # A11: puerto abierto (o dirección pública) y ninguna contraseña. Solo avisa:
     # nunca bloquea ni cambia el estado, igual que la VPN.
     exposicion = aviso_de_exposicion(settings)
@@ -388,6 +438,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
             "vpn":          vpn_status,
             "backup":       backup_status,
             "restore":      restore_status,
+            "disk":         disk_status,
         },
         # B8: estado de cada fuente de metadatos (on/off en Ajustes).
         # GCD hoy solo participa en Descubrir (el enricher no lo consulta).
