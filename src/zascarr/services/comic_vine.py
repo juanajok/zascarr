@@ -101,7 +101,8 @@ class ComicVineClient:
         # en el diccionario que pasó quien llamó, un efecto secundario
         # invisible detectado en el peer review.
         request_params = {**params, "api_key": self._api_key, "format": "json"}
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Cliente de Comic Vine sin abrir: úsalo con `async with`.")
 
         for attempt in range(_MAX_RETRIES):
             now = asyncio.get_event_loop().time()

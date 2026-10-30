@@ -11,8 +11,6 @@ botón de probar antes de guardar.
 """
 from __future__ import annotations
 
-import hashlib
-
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -21,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.services.amule import hash_contrasena_amuleweb
 from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
@@ -445,7 +444,7 @@ async def _test_amule(url: str, password: str) -> tuple[bool, str]:
     if not password:
         return False, "Falta la contraseña de amuleweb."
     try:
-        pw_hash = hashlib.md5(password.encode()).hexdigest()
+        pw_hash = hash_contrasena_amuleweb(password)
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
             r = await client.post(f"{url}/", data={"p": pw_hash})
         if r.cookies or r.headers.get("set-cookie"):
