@@ -285,6 +285,12 @@ if [[ -f "${DUMP}.sha256" ]]; then
     fi
 fi
 
+TAMANO_DUMP_KB="$(gzip -l "${DUMP}" 2>/dev/null | awk 'NR == 2 { print int($2 / 1024) }')"
+if ! exigir_espacio_kb "$(espacio_postgres_libre_kb)" "${TAMANO_DUMP_KB}" \
+        "restaurar la base desechable"; then
+    escribir_restore_estado "failed" "disk_full" || true
+    die "No hay espacio para restaurar la base desechable. La BD de origen no se ha tocado."
+fi
 TABLAS_DUMP="$(gzip -dc "${DUMP}" | grep -c '^CREATE TABLE public\.' || true)"
 ALEMBIC_DUMP="$(gzip -dc "${DUMP}" | awk '
     /^COPY public\.alembic_version / { en=1; next }

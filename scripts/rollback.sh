@@ -329,6 +329,11 @@ fi
 FASE="copia de seguridad de la base de datos actual"
 SEGURIDAD="${BACKUP_DIR}/rollback-safety_${TS}.sql.gz"
 mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}. ¿Permisos sobre el disco de backups?"
+TAMANO_KB="$(tamano_bd_kb)"
+if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
+        "la copia de seguridad previa al rollback"; then
+    die "No hay espacio para la copia previa. La BD y el código NO se han tocado."
+fi
 
 info "Levantando PostgreSQL..."
 "${COMPOSE[@]}" up -d postgres >/dev/null || die "No pude arrancar PostgreSQL."

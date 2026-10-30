@@ -34,6 +34,8 @@
 set -euo pipefail
 umask 022
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 DUMP=""
 MANIFEST=""
 SHA_ESPERADO=""
@@ -88,6 +90,10 @@ HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 [[ "$HEALTH_INTERVAL" =~ ^[1-9][0-9]*$ ]] || die "HEALTH_INTERVAL debe ser un entero >= 1."
 
 COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
+
+# Único helper/umbral de espacio (#123b); no se duplica aquí.
+# shellcheck source=scripts/_espacio.sh
+source "${SCRIPT_DIR}/_espacio.sh"
 
 # ── Árbol y commit ───────────────────────────────────────────────────────────
 git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
@@ -254,6 +260,17 @@ FASE="preparación"
 
 mkdir -p "$BACKUP_DIR" || die "No puedo crear BACKUP_DIR."
 [[ -w "$BACKUP_DIR" ]] || die "BACKUP_DIR no es escribible."
+
+TAMANO_KB="$(tamano_bd_kb)"
+if ! exigir_espacio_kb "$(espacio_libre_kb "$BACKUP_DIR")" "${TAMANO_KB}" \
+        "la copia de seguridad previa a restaurar"; then
+    die "No hay espacio para la copia de seguridad. No se ha tocado la BD."
+fi
+TAMANO_DUMP_KB="$(gzip -l "$DUMP" 2>/dev/null | awk 'NR == 2 { print int($2 / 1024) }')"
+if ! exigir_espacio_kb "$(espacio_postgres_libre_kb)" "${TAMANO_DUMP_KB}" \
+        "restaurar la base de datos"; then
+    die "No hay espacio en el volumen de PostgreSQL para restaurar. No se ha tocado la BD."
+fi
 
 info "Copia de seguridad de la BD actual..."
 if ! "${COMPOSE[@]}" exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "${SEGURIDAD}.tmp"; then

@@ -131,6 +131,12 @@ class Settings(BaseSettings):
     # C1: caché unificada de portadas (extraídas de CBZ o descargadas de
     # fuentes externas una sola vez) — ver utils/cover.py.
     covers_cache_path: Path = Field(default=Path("/config/covers"))
+    # #123b: rutas LOCALES (dentro del contenedor) para el aviso de disco.
+    # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
+    # cuelga del volumen de datos y es local; si no existe, el check queda «disabled».
+    disk_paths: str = Field(default="/config/covers")
+    disk_warn_free_mb: int = Field(default=2048, ge=0)
+    disk_error_free_mb: int = Field(default=512, ge=0)
 
     # ── VPN state (fichero escrito por un script del host) ────────
     # Fichero JSON escrito por scripts/vpn-state.sh (baremetal, fuera del

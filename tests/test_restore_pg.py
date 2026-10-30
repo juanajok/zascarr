@@ -34,6 +34,10 @@ set -euo pipefail
 echo "docker $*" >> "$STUB_LOG"
 case "$*" in
   *"compose version"*) echo "Docker Compose version v2"; exit 0 ;;
+  *" postgres df -Pk /var/lib/postgresql/data"*)
+    printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+    printf '/ %s 1 %s 1%% /\n' "${FAKE_PG_FREE_KB:-99999999}" "${FAKE_PG_FREE_KB:-99999999}"
+    exit 0 ;;
   *"info"*) exit 0 ;;
 esac
 args=("$@")
@@ -68,7 +72,7 @@ def _psql(pg: dict, sql: str) -> str:
 def _preparar(tmp_path: Path) -> dict:
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
-    for nombre in ("probar_restauracion.sh", "_comun.sh", "_credenciales.sh"):
+    for nombre in ("probar_restauracion.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh"):
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("", encoding="utf-8")
     root = tmp_path / "root"
