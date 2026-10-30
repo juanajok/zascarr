@@ -58,6 +58,10 @@ die()     { echo -e "${R}✗${N} $*" >&2; exit 1; }
 
 COMPOSE=(docker compose -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}")
 
+# Helper de espacio: único umbral y una sola implementación (#123b).
+# shellcheck source=scripts/_espacio.sh
+source "${SCRIPT_DIR}/_espacio.sh"
+
 # Credenciales del .env (validar, comprobar protección): ADR 0012.
 # shellcheck source=scripts/_credenciales.sh
 source "${SCRIPT_DIR}/_credenciales.sh"
@@ -94,6 +98,8 @@ comprobar_requisitos() {
         "No encuentro gzip. Instálalo con: sudo apt-get install gzip"
     command -v jq >/dev/null 2>&1 || die \
         "No encuentro jq. Instálalo con: sudo apt-get install jq"
+    command -v df >/dev/null 2>&1 || die \
+        "No encuentro df (util-linux/coreutils)."
     docker info >/dev/null 2>&1 || die \
         "El demonio de Docker no responde. Arranca el servicio con: sudo systemctl start docker"
     [[ -f "${COMPOSE_FILE}" ]] || die \

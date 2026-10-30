@@ -6,6 +6,7 @@ sobreescribe destinos ocupados, no borra el original hasta que la copia
 está verificada — y sanitize_segment impide que un título escape de la
 biblioteca al construir la ruta canónica.
 """
+
 from __future__ import annotations
 
 import errno
@@ -17,7 +18,6 @@ from zascarr.utils.fs import safe_move, sanitize_segment
 
 
 class TestSanitizeSegment:
-
     def test_barra_se_convierte_en_espacio(self):
         assert sanitize_segment("Batman/Superman") == "Batman Superman"
         assert sanitize_segment("Batman\\Superman") == "Batman Superman"
@@ -39,7 +39,6 @@ class TestSanitizeSegment:
 
 
 class TestSafeMove:
-
     def test_mueve_el_archivo(self, tmp_path):
         src = tmp_path / "a.cbz"
         src.write_bytes(b"hola")
@@ -115,6 +114,24 @@ class TestSafeMove:
         assert src.exists()
         assert src.read_bytes() == b"original"
         # el temporal a medias no debe quedar en el directorio destino
+        assert list(tmp_path.iterdir()) == [src]
+
+    def test_sin_espacio_antes_de_copiar_preserva_el_original(self, tmp_path, monkeypatch):
+        src = tmp_path / "a.cbz"
+        src.write_bytes(b"original")
+
+        def sin_espacio(*_a, **_k):
+            from zascarr.utils.espacio import EspacioInsuficienteError
+
+            raise EspacioInsuficienteError(
+                bytes_libres=1, bytes_necesarios=8, contexto="copiar el archivo a la biblioteca"
+            )
+
+        monkeypatch.setattr(fs, "_same_filesystem", lambda s, d: False)
+        monkeypatch.setattr(fs, "comprobar_espacio", sin_espacio)
+        with pytest.raises(Exception, match="No hay espacio suficiente"):
+            safe_move(src, tmp_path / "b.cbz")
+        assert src.read_bytes() == b"original"
         assert list(tmp_path.iterdir()) == [src]
 
     def test_exdev_con_mismo_st_dev_cae_a_copia_entre_discos(self, tmp_path, monkeypatch):

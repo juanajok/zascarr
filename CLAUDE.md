@@ -319,15 +319,19 @@ Decisiones ya validadas por comparación contra Kapowarr, Mylar3, Suwayomi
 
 ## 13. Benchmarking de referencia antes de features P0/P1
 
-Antes de implementar una feature P0/P1 de comportamiento nuevo: fijar el problema local
-(historia + caso real + comportamiento actual + resultado deseado), consultar las
-referencias pertinentes (Sonarr/Radarr para ciclo de búsqueda/estados/importación;
-Kapowarr/Mylar3 para ediciones/ficheros/metadatos de cómic; Suwayomi para
-capítulos/fuentes/lectura) y registrar adoptar/adaptar/descartar con versión/commit y
-pruebas. **No inferir soporte de una función por su UI, ni ausencia por no encontrarla.**
-El procedimiento y la ficha viven en `docs/design/benchmark-referencias.md`; solo las
-decisiones arquitectónicas duraderas pasan a ADR. El esfuerzo es proporcional al riesgo:
-un arreglo evidente de texto o CSS no requiere investigación.
+Antes de implementar una feature P0/P1 de comportamiento nuevo —o cualquier historia que
+toque modelo de datos, ficheros, seguridad o el ciclo de búsqueda y descarga—: fijar el
+problema local (historia + caso real + comportamiento actual en el código vigente +
+resultado deseado), consultar las referencias pertinentes (Sonarr/Radarr para ciclo de
+búsqueda/estados/importación; Kapowarr/Mylar3 para ediciones/ficheros/metadatos de cómic;
+Suwayomi para capítulos/fuentes/lectura) y registrar, por idea, adoptar / adaptar /
+mejorar / construir sobre lo propio / descartar, con versión/commit y pruebas. **No
+inferir soporte de una función por su UI, ni ausencia por no encontrarla.** El benchmark
+previo lo hace quien lo haga (p. ej. el rol SCOUT.bench) y lo entrega a quien coordina: su ficha es insumo para la
+especificación, no aprobación; decide el PO. El procedimiento, el vocabulario y la ficha
+viven en `docs/design/benchmark-referencias.md`; solo las decisiones arquitectónicas
+duraderas pasan a ADR. El esfuerzo es proporcional al riesgo: un arreglo evidente de texto
+o CSS no requiere investigación.
 
 **Barrera legal (separada del procedimiento):** inspirarse en un patrón no es copiar
 código. Kapowarr y Mylar3 son GPL-3.0; Suwayomi declara MPL-2.0 con componentes de
