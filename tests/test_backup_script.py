@@ -109,7 +109,7 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 def _preparar(tmp_path: Path) -> dict:
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
-    for nombre in ("backup.sh", "_comun.sh", "_credenciales.sh"):
+    for nombre in ("backup.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh"):
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("", encoding="utf-8")
     _git(repo, "init", "-q")

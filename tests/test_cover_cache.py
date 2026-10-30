@@ -15,7 +15,9 @@ import pytest
 from fastapi import Request
 from PIL import Image
 
+import zascarr.utils.cover as zcover
 from zascarr.utils.cover import cached_image_response, fetch_and_cache_cover
+from zascarr.utils.espacio import EspacioInsuficienteError
 
 
 def make_request(headers: dict | None = None) -> Request:
@@ -94,6 +96,22 @@ class TestFetchAndCacheCover:
 
         ok = await fetch_and_cache_cover(self.URL, dest)
 
+        assert ok is False
+        assert not dest.exists()
+
+    @pytest.mark.asyncio
+    async def test_sin_espacio_no_lanza_ni_cachea(self, tmp_path, monkeypatch):
+        """#123b: si no cabe la portada, se omite con aviso; no se rompe la ficha."""
+        dest = tmp_path / "cover.jpg"
+        self._red(monkeypatch, lambda r: httpx.Response(200, content=_fake_jpeg_bytes()))
+
+        def sin_espacio(*_a, **_k):
+            raise EspacioInsuficienteError(
+                bytes_libres=1, bytes_necesarios=1000, contexto="guardar la portada"
+            )
+
+        monkeypatch.setattr(zcover, "comprobar_espacio", sin_espacio)
+        ok = await fetch_and_cache_cover(self.URL, dest)
         assert ok is False
         assert not dest.exists()
 

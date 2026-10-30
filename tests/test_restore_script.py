@@ -35,19 +35,19 @@ set -euo pipefail
 echo "docker $*" >> "$STUB_LOG"
 case "$*" in
   *"compose version"*) echo "Docker Compose version v2"; exit 0 ;;
-  *"createdb"*)
+  *" postgres createdb "*)
     if [[ "${FAKE_CREATEDB_FAIL:-0}" == "1" ]]; then
       echo "${FAKE_CREATEDB_MSG:-createdb: error}" >&2
       exit 1
     fi
     echo "createdb $*" >> "$DB_LOG"
     exit 0 ;;
-  *"dropdb"*) echo "dropdb $*" >> "$DB_LOG"; exit 0 ;;
-  *"df -Pk"*)
+  *" postgres dropdb "*) echo "dropdb $*" >> "$DB_LOG"; exit 0 ;;
+  *" postgres df -Pk "*)
     printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
     printf '/ %s 1 %s 1%% /\n' "${FAKE_PG_FREE_KB:-99999999}" "${FAKE_PG_FREE_KB:-99999999}"
     exit 0 ;;
-  *"psql"*)
+  *" postgres psql "*)
     if [[ "$*" == *" -c "* ]]; then
       if [[ "${FAKE_PSQL_QUERY_FAIL:-0}" == "1" ]]; then
         echo "${FAKE_PSQL_QUERY_MSG:-boom}" >&2
@@ -100,7 +100,7 @@ def _sql_fixture() -> str:
 def _preparar(tmp_path: Path) -> dict:
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
-    for nombre in ("probar_restauracion.sh", "_comun.sh", "_credenciales.sh"):
+    for nombre in ("probar_restauracion.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh"):
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("", encoding="utf-8")
 
@@ -295,7 +295,7 @@ class TestRestoreScript:
         estado = _estado(ctx)
         assert estado["status"] == "failed"
         assert estado["error"] == "gzip_invalid"
-        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+        assert " postgres createdb " not in ctx["db"].read_text(encoding="utf-8")
 
     def test_sin_espacio_no_crea_la_base(self, tmp_path):
         ctx = _preparar(tmp_path)
@@ -304,7 +304,7 @@ class TestRestoreScript:
         )
         assert r.returncode != 0
         assert _estado(ctx)["error"] == "disk_full"
-        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+        assert " postgres createdb " not in ctx["db"].read_text(encoding="utf-8")
         assert not [p for p in ctx["status"].iterdir() if p.name.startswith("zascarr_restore_")]
 
     @pytest.mark.parametrize("tabla", ["alembic_version", "series", "files", "wishlist"])
@@ -319,7 +319,7 @@ class TestRestoreScript:
         estado = _estado(ctx)
         assert estado["status"] == "failed" and estado["error"] == "tables_missing"
         assert f"falta la tabla {tabla}" in r.stdout + r.stderr
-        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+        assert " postgres createdb " not in ctx["db"].read_text(encoding="utf-8")
 
     def test_gzip_realmente_truncado_no_crea_base(self, tmp_path):
         """El caso real (disco lleno, copia cortada): un .gz que empezó bien y al que le falta la
@@ -340,7 +340,7 @@ class TestRestoreScript:
         estado = _estado(ctx)
         assert estado["status"] == "failed" and estado["error"] == "gzip_invalid"
         assert "gzip -t falla" in r.stdout + r.stderr
-        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+        assert " postgres createdb " not in ctx["db"].read_text(encoding="utf-8")
 
     def test_recuento_distinto_falla(self, tmp_path):
         ctx = _preparar(tmp_path)
@@ -452,7 +452,7 @@ class TestRestoreScript:
         assert "CONTEXT" not in salida
         assert estado["detalle"] == _detalle_en_pantalla(r, "Motivo de createdb:")
         assert estado["detalle"] and "password=***" in estado["detalle"]
-        assert "createdb" not in ctx["db"].read_text(encoding="utf-8")
+        assert " postgres createdb " not in ctx["db"].read_text(encoding="utf-8")
 
     def test_si_psql_falla_el_motivo_sale_por_pantalla_y_sin_credenciales(self, tmp_path):
         """#334: la CI solo mostraba «La restauración falló»; el motivo (`transaction_timeout`,

@@ -190,7 +190,7 @@ def main() -> int:
     sql.append(
         "INSERT INTO asignacion_operaciones (file_id, series_id, estado, origen, destino, "
         "temporal, size_bytes, mtime_ns, sha256, issue_number, formato) VALUES ("
-        f"{_q(sin_issue[0][0])}, {_q(s1)}, 'preparada', {_q(origen_prep)}, "
+        f"{_q(sin_issue[0][0])}, {_q(s1)}, 'preparada', {_q(sin_issue[0][1])}, "
         f"{_q(prep_dest_db)}, {_q(prep_dest_db + '.part')}, {size_prep}, {mtime_prep}, "
         f"{_q(sha_prep)}, '2', 'single_issue');"
     )
@@ -230,8 +230,8 @@ def main() -> int:
         "(select count(*) from alta_operaciones)||'|'||"
         "(select count(*) from import_runs)",
     )
-    if verificado[0][0] != "4|2|2":
-        _error(f"recuentos inesperados: {verificado[0][0]}")
+    if verificado[0] != ["4", "2", "2"]:
+        _error(f"recuentos inesperados: {'|'.join(verificado[0])}")
     print("Sidecar 123b aplicado: 4 asignaciones, 2 altas y 2 import_runs.")
     return 0
 
