@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
@@ -35,6 +36,113 @@ MARCA = "_123b"
 def _error(msg: str) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
     raise SystemExit(1)
+
+
+class FixtureError(RuntimeError):
+    """El reset no puede restaurar el fixture; no se borra nada."""
+
+
+def _ruta_en_biblioteca(ruta: str, biblioteca: Path) -> Path:
+    """Resuelve una ruta de la BD al host, sin aceptar nada fuera de la biblioteca.
+
+    Las filas del fixture guardan rutas del contenedor (`/media/library/...`);
+    `--biblioteca` es la ruta del host. También se acepta una ruta que ya esté
+    bajo la biblioteca del host.
+    """
+    biblioteca = biblioteca.resolve()
+    p = Path(ruta)
+    if p.is_absolute():
+        candidato = p.resolve()
+        if candidato.is_relative_to(biblioteca):
+            return candidato
+        try:
+            rel = p.relative_to("/media/library")
+        except ValueError as exc:
+            raise FixtureError(f"ruta fuera de la biblioteca: {ruta}") from exc
+        candidato = (biblioteca / rel).resolve()
+    else:
+        candidato = (biblioteca / p).resolve()
+    if not candidato.is_relative_to(biblioteca):
+        raise FixtureError(f"ruta fuera de la biblioteca: {ruta}")
+    return candidato
+
+
+def _comprobar_copia(ruta: Path, size: str | int | None, sha: str | None) -> None:
+    if size not in (None, "") and ruta.stat().st_size != int(size):
+        raise FixtureError(f"el tamaño de {ruta.name} no coincide")
+    if sha and _sha(ruta) != sha:
+        raise FixtureError(f"el sha256 de {ruta.name} no coincide")
+
+
+def _issue_id(
+    ejecutar_sql: Callable[[str], list[list[str]]], series_id: str, issue_number: str
+) -> str | None:
+    if not issue_number:
+        return None
+    filas = ejecutar_sql(
+        "select id from issues where series_id = "
+        f"{_q(series_id)} and issue_number = {_q(issue_number)} limit 1"
+    )
+    return filas[0][0] if filas else None
+
+
+def restaurar_y_resetear(
+    filas: Iterable[Sequence[str]],
+    biblioteca: Path,
+    ejecutar_sql: Callable[[str], list[list[str]]],
+) -> None:
+    """Restaura los originales movidos por la reconciliación y borra el sidecar.
+
+    Se valida **todo** antes de copiar o borrar. Si un origen no está en la
+    biblioteca, o el destino no existe, o tamaño/sha no cuadran, aborta sin
+    tocar filas ni `_123b`.
+    """
+    biblioteca = biblioteca.resolve()
+    planes: list[tuple[str, str, Path, Path, str, str, str | int | None, str | None]] = []
+    for fila in filas:
+        file_id, origen, destino, series_id, issue_number, size, sha = fila
+        origen_host = _ruta_en_biblioteca(origen, biblioteca)
+        destino_host = _ruta_en_biblioteca(destino, biblioteca)
+        planes.append(
+            (file_id, origen, origen_host, destino_host, series_id, issue_number, size, sha)
+        )
+
+    # 1) Restaurar ficheros: si el origen desapareció, la única copia está en destino.
+    for _file_id, _origen, origen_host, destino_host, _series, _issue, size, sha in planes:
+        if not origen_host.exists():
+            if not destino_host.is_file():
+                raise FixtureError(f"no existe ni el origen ni el destino de {Path(_origen).name}")
+            origen_host.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(destino_host, origen_host)
+        _comprobar_copia(origen_host, size, sha)
+
+    # 2) Restaurar la fila `files` (file_path vuelve al origen y se reengancha el issue).
+    for (
+        file_id,
+        origen,
+        _origen_host,
+        _destino_host,
+        series_id,
+        issue_number,
+        _size,
+        _sha,
+    ) in planes:
+        issue_id = _issue_id(ejecutar_sql, series_id, issue_number)
+        ejecutar_sql(
+            "UPDATE files SET file_path = "
+            f"{_q(origen)}, file_name = {_q(Path(origen).name)}, "
+            f"is_missing = false, issue_id = {_q(issue_id)} WHERE id = {_q(file_id)}"
+        )
+
+    # 3) Solo ahora se borran las filas del sidecar.
+    ejecutar_sql(
+        "DELETE FROM asignacion_operaciones; DELETE FROM alta_operaciones; DELETE FROM import_runs;"
+    )
+
+    # 4) `_123b` se borra salvo que sea el propio origen restaurado.
+    marca = (biblioteca / MARCA).resolve()
+    if not any(plan[2].resolve().is_relative_to(marca) for plan in planes):
+        shutil.rmtree(biblioteca / MARCA, ignore_errors=True)
 
 
 def _url_aislada(url: str) -> str:
@@ -112,12 +220,20 @@ def main() -> int:
     if existentes and not args.reset:
         _error("ya hay asignaciones; usa --reset para regenerar el sidecar 123b.")
     if args.reset:
-        _aplicar(
+        vivas = _filas(
             url,
-            "DELETE FROM asignacion_operaciones; DELETE FROM alta_operaciones; "
-            "DELETE FROM import_runs;",
+            """
+            select file_id, origen, destino, series_id, issue_number,
+                   coalesce(size_bytes, 0), coalesce(sha256, '')
+            from asignacion_operaciones
+            where estado in ('preparada', 'confirmada')
+            order by creada
+        """,
         )
-        shutil.rmtree(args.biblioteca / MARCA, ignore_errors=True)
+        try:
+            restaurar_y_resetear(vivas, args.biblioteca, lambda sql: _filas(url, sql))
+        except FixtureError as exc:
+            _error(str(exc))
 
     series = _filas(url, "select id, title from series order by title limit 2")
     if len(series) < 2:
