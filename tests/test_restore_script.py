@@ -622,8 +622,34 @@ class TestRestoreScript:
         )
         assert r.returncode != 0
         salida = r.stdout + r.stderr
-        assert "query_secret" not in salida and "query_secret" not in json.dumps(_estado(ctx))
+        estado = _estado(ctx)
+        assert "query_secret" not in salida and "query_secret" not in json.dumps(estado)
         assert "CONTEXT" not in salida and "DETAIL" not in salida
+        assert estado["error"] == "restore_failed"
+        assert estado["detalle"] == _detalle_en_pantalla(r)
+        assert estado["detalle"] and "query_secret" not in estado["detalle"]
+
+    def test_psql_temp_sin_error_deja_null_y_apunta_al_registro(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        canario = "query_" + secrets.token_hex(8)
+        r = _ejecutar(
+            ctx,
+            dump=ctx["dump"],
+            extra_env={
+                "FAKE_PSQL_QUERY_FAIL": "1",
+                "FAKE_PSQL_QUERY_MSG": (
+                    f'DETAIL:  Key (id)=({canario}) already exists.\nCONTEXT: COPY "{canario}"'
+                ),
+            },
+        )
+        assert r.returncode != 0
+        salida = r.stdout + r.stderr
+        estado = _estado(ctx)
+        assert canario not in salida and canario not in json.dumps(estado)
+        assert estado["error"] == "restore_failed"
+        assert estado["detalle"] is None
+        assert "sin un ERROR/FATAL utilizable" in salida
+        assert "revisa el registro" in salida
 
     def test_manifiesto_ausente_avisa(self, tmp_path):
         ctx = _preparar(tmp_path)
