@@ -289,6 +289,14 @@ class TestHealthDisk:
         assert body["checks"]["disk"] == "ok"
         assert body["status"] == "healthy"
 
+    def test_estado_pinta_la_fila_de_disco(self):
+        from zascarr.web.routes import TEMPLATES_DIR
+
+        html = (TEMPLATES_DIR / "estado.html").read_text(encoding="utf-8")
+        assert 'disk: "Disco"' in html
+        assert "Espacio suficiente" in html
+        assert "Libera espacio" in html
+
 
 class TestHealthBackup:
     """#334: el aviso de copias se lee del fichero del host y no tumba /api/health."""

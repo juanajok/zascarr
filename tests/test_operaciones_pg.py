@@ -31,7 +31,7 @@ URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def url_bd():
     with bd_efimera_sync(URL) as url:
         migrar_a_head(url)

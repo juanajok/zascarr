@@ -51,8 +51,9 @@ def arbol(tmp_path: Path) -> dict[str, Path]:
     raiz = tmp_path / "raiz"
     repo = raiz / "zascarr"
     (repo / "scripts").mkdir(parents=True)
-    for f in ("docker-compose.yml", "scripts/_comun.sh", "scripts/_rutas.sh", "scripts/_credenciales.sh",
-              "scripts/etiquetar.sh", "scripts/backup.sh", "scripts/uninstall.sh"):
+    for f in ("docker-compose.yml", "scripts/_comun.sh", "scripts/_espacio.sh", "scripts/_rutas.sh",
+              "scripts/_credenciales.sh", "scripts/etiquetar.sh", "scripts/backup.sh",
+              "scripts/uninstall.sh"):
         origen = REPO / f
         if origen.exists():
             shutil.copy(origen, repo / f)

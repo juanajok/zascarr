@@ -34,6 +34,8 @@
 set -euo pipefail
 umask 022
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 DUMP=""
 MANIFEST=""
 SHA_ESPERADO=""
@@ -46,27 +48,6 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 info() { printf '→ %s\n' "$*"; }
 ok()   { printf '✓ %s\n' "$*"; }
 warn() { printf '⚠ %s\n' "$*" >&2; }
-
-espacio_libre_kb() {
-    df -Pk "$1" 2>/dev/null | awk 'NR == 2 { print $4 }'
-}
-espacio_postgres_libre_kb() {
-    "${COMPOSE[@]}" exec -T postgres df -Pk /var/lib/postgresql/data 2>/dev/null \
-        | awk 'NR == 2 { print $4 }'
-}
-exigir_espacio_kb() {
-    local libre="$1" necesario="$2" contexto="$3" margen total
-    [[ "${libre}" =~ ^[0-9]+$ ]] || libre=0
-    [[ "${necesario}" =~ ^[0-9]+$ ]] || necesario=0
-    margen=$((necesario / 10 + 65536))
-    total=$((necesario + margen))
-    if (( libre < total )); then
-        printf 'ERROR: No hay espacio suficiente para %s: quedan %s MB y hacen falta %s MB (con margen de seguridad). Libera espacio o mueve la biblioteca a otro disco y vuelve a intentarlo. No se ha borrado nada.\n' \
-            "${contexto}" "$((libre / 1024))" "$((total / 1024))" >&2
-        return 1
-    fi
-    return 0
-}
 
 uso() {
     sed -n '3,32p' "$0" | sed 's/^# \{0,1\}//'
@@ -109,6 +90,10 @@ HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 [[ "$HEALTH_INTERVAL" =~ ^[1-9][0-9]*$ ]] || die "HEALTH_INTERVAL debe ser un entero >= 1."
 
 COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE")
+
+# Único helper/umbral de espacio (#123b); no se duplica aquí.
+# shellcheck source=scripts/_espacio.sh
+source "${SCRIPT_DIR}/_espacio.sh"
 
 # ── Árbol y commit ───────────────────────────────────────────────────────────
 git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
@@ -276,8 +261,7 @@ FASE="preparación"
 mkdir -p "$BACKUP_DIR" || die "No puedo crear BACKUP_DIR."
 [[ -w "$BACKUP_DIR" ]] || die "BACKUP_DIR no es escribible."
 
-TAMANO_KB="$("${COMPOSE[@]}" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -At \
-    -c "select (pg_database_size(current_database()) / 1024)::bigint" 2>/dev/null | tr -d '[:space:]')"
+TAMANO_KB="$(tamano_bd_kb)"
 if ! exigir_espacio_kb "$(espacio_libre_kb "$BACKUP_DIR")" "${TAMANO_KB}" \
         "la copia de seguridad previa a restaurar"; then
     die "No hay espacio para la copia de seguridad. No se ha tocado la BD."
