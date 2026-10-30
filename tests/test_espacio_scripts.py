@@ -4,6 +4,7 @@ La auditoría del PO exige no duplicar el umbral ni tener dos fuentes de verdad.
 Este test es estático a propósito: comprueba que solo `_espacio.sh` define el
 helper y que los scripts que lo usan lo cargan desde ahí.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
