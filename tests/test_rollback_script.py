@@ -33,6 +33,10 @@ fi
 if [[ "$cmd" == "info" ]]; then
     exit 0
 fi
+if [[ "$cmd" == *"pg_database_size"* ]]; then
+    echo "${FAKE_DB_SIZE_KB:-1024}"
+    exit 0
+fi
 if [[ "$cmd" == *"pg_dump"* ]]; then
     cat "$FAKE_DB_DUMP_SQL"
     exit 0
@@ -70,6 +74,12 @@ if [[ "$cmd" == *" stop "* || "$cmd" == *" build "* || "$cmd" == *" up -d "* ]];
     exit 0
 fi
 exit 0
+"""
+
+DF_FALSO = """#!/usr/bin/env bash
+set -euo pipefail
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\\n'
+printf '/ 100000000 1 %s 1%% /\\n' "${FAKE_DF_KB:-99999999}"
 """
 
 CURL_FALSO = """#!/usr/bin/env bash
@@ -113,7 +123,7 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
 def _preparar(tmp_path: Path, *, con_alembic: bool = True) -> dict:
     repo = tmp_path / "repo"
     (repo / "scripts").mkdir(parents=True)
-    for nombre in ("rollback.sh", "_comun.sh", "_credenciales.sh"):
+    for nombre in ("rollback.sh", "_comun.sh", "_credenciales.sh", "_espacio.sh"):
         shutil.copy2(SCRIPTS / nombre, repo / "scripts" / nombre)
     (repo / "docker-compose.yml").write_text("name: zascarr-123a\n", encoding="utf-8")
     if con_alembic:
@@ -144,7 +154,7 @@ def _preparar(tmp_path: Path, *, con_alembic: bool = True) -> dict:
 
     bin_ = tmp_path / "bin"
     bin_.mkdir()
-    for nombre, contenido in (("docker", DOCKER_FALSO), ("curl", CURL_FALSO)):
+    for nombre, contenido in (("docker", DOCKER_FALSO), ("curl", CURL_FALSO), ("df", DF_FALSO)):
         ruta = bin_ / nombre
         ruta.write_text(contenido, encoding="utf-8")
         ruta.chmod(0o755)
@@ -240,6 +250,14 @@ def _no_destructivo(ctx: dict) -> None:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="scripts de shell POSIX")
 class TestPrecheckRollback:
+    def test_sin_espacio_aborta_antes_de_tocar_la_bd(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        _manifest(ctx)
+        r = _ejecutar(ctx, extra_env={"FAKE_DF_KB": "1"})
+        assert r.returncode != 0
+        _no_destructivo(ctx)
+        assert "espacio" in (r.stdout + r.stderr).lower()
+
     def test_manifiesto_correcto_pasa_y_el_flujo_existente_sigue(self, tmp_path):
         ctx = _preparar(tmp_path)
         _manifest(ctx)
