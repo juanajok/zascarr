@@ -1,11 +1,10 @@
 # Aceptación 123b — operaciones recuperables, reinicio seguro y presión de disco (#123)
 
-> **Estado: ventana local ejecutada; evidencia en #123. La Pi y la ventana de
-> reinicio/presión siguen NOT RUN.** Esta entrega deja el inventario, el
-> reinicio con reintento acotado, las guardas de espacio, `checks.disk` y el
-> procedimiento. La ventana local se documenta en #123; este runbook **no**
-> convierte sus casos en PASS. La Pi y cualquier despliegue requieren
-> autorización aparte; hasta entonces, los casos de esta matriz son NOT RUN.
+> **Estado: la ventana local ya se ejecutó (servicio, contenedor, pila,
+> `SIGKILL`, tmpfs) y su matriz está en #123.** Este runbook **no** convierte
+> esos casos en PASS. Siguen **NOT RUN**: la Pi, el reinicio de host, el ENOSPC
+> real en scripts de host, PostgreSQL lleno y el crash del importador (este
+> último aceptado). Cualquier despliegue requiere autorización aparte.
 
 ## 1. Alcance
 
@@ -21,12 +20,12 @@ biblioteca real y el crash del importador a mitad (ver §3.1).
 
 | Host | Uso | Estado |
 |---|---|---|
-| **Host aislado local con Docker** | Inventario, reinicio de servicio/contenedor/pila y presión con tmpfs real | **NOT RUN** hasta autorización |
+| **Host aislado local con Docker** | Inventario, reinicio de servicio/contenedor/pila y presión con tmpfs real | **Ejecutada**; evidencia en #123 (no se firma PASS aquí) |
 | **Pi (producción)** | Solo si el PO exige presión/reinicio en hardware real; ventana propia | **NOT RUN**; no se toca aquí |
 
 No se comparte red, proyecto, contenedores, puertos, binds ni RAM/disco con
 producción. La compuerta de aislamiento de 123a-i se reutiliza antes de la
-ventana.
+ventana de la Pi.
 
 ## 3. Precisión del PO
 
@@ -100,6 +99,10 @@ tamaño/sha, **aborta sin borrar nada**. Es idempotente: dos `--reset` seguidos
 funcionan.
 
 ## 5. Matriz de casos
+
+La ventana local ejecutó los casos 4/5/6; su evidencia está en #123. Esta tabla
+no los convierte en PASS: la columna «Estado» se refiere a la ventana pendiente
+(Pi/host), no a la evidencia local.
 
 | Caso | Qué se comprueba | Dónde | Estado |
 |---|---|---|---|
@@ -184,11 +187,12 @@ justificado y aceptado. No se usa esta ventana para probarlo.
 
 ## 8. Criterios y límites
 
-- **PASS** solo con evidencia en la ventana; los tests locales no sustituyen la
-  ventana real.
-- **NOT RUN aceptado:** crash del importador a mitad (§3.1), reinicio real de
-  host/Pi y presión real en la Pi si el PO no la autoriza.
+- **PASS** de la ventana pendiente solo con evidencia propia; la evidencia
+  local está en #123 y no se copia aquí como PASS.
+- **NOT RUN:** Pi, reinicio de host, ENOSPC real en scripts de host, PostgreSQL
+  lleno y 08 de producción. **NOT RUN aceptado:** crash del importador a mitad
+  (§3.1).
 - **Riesgos:** el crash del importador queda sin cubrir por diseño; el reinicio
-  del host/Pi y la presión real pueden revelar diferencias de hardware; 123c
-  sigue fuera.
+  del host/Pi, el ENOSPC real y PostgreSQL lleno pueden revelar diferencias de
+  hardware; 123c sigue fuera.
 - No se toca producción, la biblioteca real ni `docs/BACKLOG.md`.

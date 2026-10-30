@@ -32,6 +32,18 @@ from urllib.parse import urlparse
 
 MARCA = "_123b"
 
+# Operaciones que pueden tener un fichero movido por la reconciliación. Se
+# incluye `limpiada` (la app puede completar la asignación) y se excluyen las
+# filas históricas sin `file_id` (`_123b/historico-*` nunca existió).
+SQL_OPERACIONES_CON_FICHERO = """
+    select file_id, origen, destino, series_id, issue_number,
+           coalesce(size_bytes, 0), coalesce(sha256, '')
+    from asignacion_operaciones
+    where estado in ('preparada', 'confirmada', 'limpiada')
+      and file_id is not null
+    order by creada
+"""
+
 
 def _error(msg: str) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
@@ -68,10 +80,47 @@ def _ruta_en_biblioteca(ruta: str, biblioteca: Path) -> Path:
 
 
 def _comprobar_copia(ruta: Path, size: str | int | None, sha: str | None) -> None:
-    if size not in (None, "") and ruta.stat().st_size != int(size):
-        raise FixtureError(f"el tamaño de {ruta.name} no coincide")
+    if size not in (None, ""):
+        try:
+            tamano = int(size)
+        except (TypeError, ValueError) as exc:
+            raise FixtureError(f"tamaño inválido para {ruta.name}") from exc
+        if ruta.stat().st_size != tamano:
+            raise FixtureError(f"el tamaño de {ruta.name} no coincide")
     if sha and _sha(ruta) != sha:
         raise FixtureError(f"el sha256 de {ruta.name} no coincide")
+
+
+def _copia_atomica(
+    destino_host: Path, origen_host: Path, size: str | int | None, sha: str | None
+) -> None:
+    """Copia a un temporal junto al origen, verifica y solo entonces reemplaza."""
+    origen_host.parent.mkdir(parents=True, exist_ok=True)
+    fd, nombre = tempfile.mkstemp(prefix=f".{origen_host.name}.", dir=origen_host.parent)
+    os.close(fd)
+    temporal = Path(nombre)
+    try:
+        shutil.copy2(destino_host, temporal)
+        _comprobar_copia(temporal, size, sha)
+        os.replace(temporal, origen_host)
+    except Exception:
+        temporal.unlink(missing_ok=True)
+        raise
+
+
+def _restaurar_una(
+    origen_host: Path, destino_host: Path, size: str | int | None, sha: str | None
+) -> None:
+    if origen_host.exists():
+        try:
+            _comprobar_copia(origen_host, size, sha)
+            return
+        except FixtureError:
+            if not destino_host.is_file():
+                raise
+    elif not destino_host.is_file():
+        raise FixtureError(f"no existe ni el origen ni el destino de {origen_host.name}")
+    _copia_atomica(destino_host, origen_host, size, sha)
 
 
 def _issue_id(
@@ -84,6 +133,12 @@ def _issue_id(
         f"{_q(series_id)} and issue_number = {_q(issue_number)} limit 1"
     )
     return filas[0][0] if filas else None
+
+
+def leer_operaciones_a_restaurar(
+    ejecutar_sql: Callable[[str], list[list[str]]],
+) -> list[list[str]]:
+    return ejecutar_sql(SQL_OPERACIONES_CON_FICHERO)
 
 
 def restaurar_y_resetear(
@@ -109,12 +164,7 @@ def restaurar_y_resetear(
 
     # 1) Restaurar ficheros: si el origen desapareció, la única copia está en destino.
     for _file_id, _origen, origen_host, destino_host, _series, _issue, size, sha in planes:
-        if not origen_host.exists():
-            if not destino_host.is_file():
-                raise FixtureError(f"no existe ni el origen ni el destino de {Path(_origen).name}")
-            origen_host.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(destino_host, origen_host)
-        _comprobar_copia(origen_host, size, sha)
+        _restaurar_una(origen_host, destino_host, size, sha)
 
     # 2) Restaurar la fila `files` (file_path vuelve al origen y se reengancha el issue).
     for (
@@ -220,19 +270,10 @@ def main() -> int:
     if existentes and not args.reset:
         _error("ya hay asignaciones; usa --reset para regenerar el sidecar 123b.")
     if args.reset:
-        vivas = _filas(
-            url,
-            """
-            select file_id, origen, destino, series_id, issue_number,
-                   coalesce(size_bytes, 0), coalesce(sha256, '')
-            from asignacion_operaciones
-            where estado in ('preparada', 'confirmada')
-            order by creada
-        """,
-        )
+        vivas = leer_operaciones_a_restaurar(lambda sql: _filas(url, sql))
         try:
             restaurar_y_resetear(vivas, args.biblioteca, lambda sql: _filas(url, sql))
-        except FixtureError as exc:
+        except (FixtureError, OSError) as exc:
             _error(str(exc))
 
     series = _filas(url, "select id, title from series order by title limit 2")
