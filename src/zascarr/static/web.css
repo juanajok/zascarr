@@ -593,7 +593,6 @@ button[type="submit"].neutro {
 }
 
 /* ── 8. PEGATINAS / BADGES ───────────────────────────────────────────────── */
-.wishlist-badge,
 .issue-chip {
   font-size: .875rem;
   font-weight: 800;
@@ -606,40 +605,6 @@ button[type="submit"].neutro {
   background: var(--paper);
   color: var(--ink-soft);
   white-space: nowrap;
-}
-
-/* «Por buscar»: aún no pasa nada, así que el estilo base, sin el amarillo de «en marcha». */
-.wishlist-badge.estado-wanted {
-  background: var(--paper);
-  color: var(--ink-soft);
-}
-
-/* En marcha (amarillo).
-   DOWNLOADED también dice «Descargando…» y no tenía regla: se veía distinto del mismo texto. */
-.wishlist-badge.estado-downloading,
-.wishlist-badge.estado-downloaded,
-.wishlist-badge.estado-searching {
-  background: var(--caption-bg);
-  color: var(--ink);
-}
-
-.wishlist-badge.estado-imported {
-  background: var(--ok-solid);
-  color: var(--on-ok-solid);
-  border-color: var(--ink);
-}
-
-.wishlist-badge.estado-failed {
-  background: var(--warn-solid);
-  color: var(--on-warn-solid);
-  border-color: var(--ink);
-}
-
-/* D8: lo retiró la política, no falló nada — apagado, sin gritar. */
-.wishlist-badge.estado-retirado {
-  color: var(--ink-faint);
-  border-color: var(--ink-faint);
-  text-transform: none;
 }
 
 /* D9: motivo concreto de por qué una fila de la wishlist no avanza —
@@ -1287,11 +1252,19 @@ button[type="submit"].btn-sugerencia {
 .estado-check-name { flex: 1; font-weight: 700; }
 .estado-check-status { color: var(--ink-soft); font-size: .9rem; }
 
-.estado-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; border: 2px solid var(--ink); }
-.estado-dot-sm { width: 12px; height: 12px; }
-.estado-dot.estado-ok { background: var(--ok); }
-.estado-dot.estado-warn { background: var(--yellow); }
-.estado-dot.estado-bad { background: var(--warn); }
+.estado-dot {
+  width: 22px; height: 22px; border-radius: 50%; flex: none; border: 2px solid var(--ink);
+  background-position: center; background-repeat: no-repeat; background-size: 70%;
+}
+.estado-dot-sm { width: 16px; height: 16px; background-size: 80%; }
+/* El estado no depende solo del color: verde y rojo se confunden con daltonismo (deuteranopía: ΔE 12-29 de
+   ~90), así que cada nivel lleva el MISMO glifo que el chip de su color (web/componentes.py::ASPECTOS):
+   ✓ ok, ! warn (aquí, el rojo `bad`), ? amber (aquí, el amarillo `warn`). Neutro, sin glifo. SVG de
+   static/iconos (trazados de web/iconos.py), en el par oscuro fijo; el color de fondo va aparte
+   (`background-color`) para que la prueba de contraste lo vea. */
+.estado-dot.estado-ok { background-color: var(--ok); background-image: url("/static/iconos/punto-ok.svg"); }
+.estado-dot.estado-warn { background-color: var(--yellow); background-image: url("/static/iconos/punto-pregunta.svg"); }
+.estado-dot.estado-bad { background-color: var(--warn); background-image: url("/static/iconos/punto-aviso.svg"); }
 .estado-dot.estado-neutral { background: var(--ink-faint); }
 
 .estado-summary-label { font-size: 1.15rem; font-weight: 700; }
@@ -1308,7 +1281,7 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 16c. COMPONENTES (V2) ───────────────────────────────────────────────────
    Piezas reutilizables con los nombres de la maqueta (docs/design/maqueta-ui.html), sobre los
-   tokens ya comprobados de V1. Las clases actuales (.btn-primary, .wishlist-badge, .empty-state…)
+   tokens ya comprobados de V1. Las clases actuales (.btn-primary, .empty-state…)
    SIGUEN funcionando: se retiran en V14, no antes. Las macros que las emiten viven en
    templates/_componentes.html; el estado→aspecto, en web/componentes.py. */
 

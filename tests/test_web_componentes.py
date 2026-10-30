@@ -432,6 +432,8 @@ class TestCssDeLosComponentes:
 
 
 # ── compatibilidad: ninguna clase de antes desaparece ─────────────────────────────────────
+# `wishlist-badge` se retiró a propósito: ya no la usa ninguna plantilla (las filas de Deseados pintan
+# `ui.chip`, deuda 6 de la revisión de diseño); sus reglas por estado (`.estado-imported`…) con ella.
 CLASES_ANTERIORES_A_V2 = (
     "ajustes-actions", "ajustes-card", "ajustes-desc", "ajustes-error", "ajustes-grid",
     "ajustes-hint", "ajustes-ok", "assign-form", "audit-adoptar", "audit-block", "audit-count",
@@ -443,9 +445,9 @@ CLASES_ANTERIORES_A_V2 = (
     "discovery-card", "discovery-card-actions", "discovery-card-body", "discovery-card-desc",
     "discovery-card-title", "discovery-list", "empty", "empty-state", "estado-bad",
     "estado-check-name", "estado-check-row", "estado-check-status", "estado-checks",
-    "estado-dot", "estado-dot-sm", "estado-downloading", "estado-failed", "estado-imported",
-    "estado-neutral", "estado-ok", "estado-retirado", "estado-searching", "estado-summary",
-    "estado-summary-detail", "estado-summary-label", "estado-wanted", "estado-warn",
+    "estado-dot", "estado-dot-sm",
+    "estado-neutral", "estado-ok", "estado-summary",
+    "estado-summary-detail", "estado-summary-label", "estado-warn",
     "estado-warnings", "estado-warnings-title", "filename", "filter-bar",
     "filter-bar-secondary", "filter-search-box", "htmx-indicator", "htmx-request",
     "issue-chip", "issue-grid", "issue-input", "issue-missing", "issue-present",
@@ -460,7 +462,7 @@ CLASES_ANTERIORES_A_V2 = (
     "series-card", "series-cover", "series-grid", "series-header", "series-list",
     "series-meta", "series-name", "series-result-item", "series-results", "series-search",
     "series-title", "series-year", "site-footer", "subtitle", "suggestion", "suggestion-label",
-    "suggestion-score", "topnav", "view-all", "visible", "wishlist-badge", "wishlist-list",
+    "suggestion-score", "topnav", "view-all", "visible", "wishlist-list",
     "wishlist-motivo", "wishlist-row", "wishlist-title",
 )
 

@@ -8,6 +8,8 @@ lógica de negocio (ya cubierta en test_wishlist_service.py).
 """
 from __future__ import annotations
 
+import re
+
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -135,14 +137,16 @@ class TestIndex:
         sesion = FakeSession(exec_queue=[FakeExecResult([item]), FakeExecResult([])])
         with use_fake_session(sesion) as client:
             r = client.get("/ui/wishlist")
-        assert '<span class="wishlist-badge estado-wanted">Por buscar</span>' in r.text
-        assert '<span class="wishlist-badge estado-wanted">Buscando…' not in r.text
+        assert '<span class="chip">Por buscar</span>' in r.text
+        # «Buscando…» sigue existiendo en el indicador de «Buscar ahora»; lo que no puede es ser el CHIP
+        assert not re.search(r'class="chip[^"]*">(?:<span[^>]*>[^<]*</span> )?Buscando', r.text)
 
-    def test_cada_estado_con_etiqueta_comparte_estilo_con_los_suyos(self):
-        """DOWNLOADED dice lo mismo que DOWNLOADING; sin regla propia se pintaba distinto."""
-        from zascarr.main import STATIC_DIR
-        css = (STATIC_DIR / "web.css").read_text(encoding="utf-8")
-        assert ".wishlist-badge.estado-downloaded" in css
+    def test_cada_estado_con_etiqueta_tiene_aspecto_y_downloaded_se_ve_como_downloading(self):
+        """DOWNLOADED dice lo mismo que DOWNLOADING; con aspectos distintos se pintaba distinto.
+        El aspecto sale de `services/estado_deseo.py` (V8), ya no de una regla CSS por estado."""
+        from zascarr.services.estado_deseo import ASPECTO_DE_DESEO
+        assert ASPECTO_DE_DESEO[WishlistStatus.DOWNLOADED] == ASPECTO_DE_DESEO[WishlistStatus.DOWNLOADING]
+        assert set(ASPECTO_DE_DESEO) == set(WishlistStatus)
 
 
 class CapturingSession(FakeSession):

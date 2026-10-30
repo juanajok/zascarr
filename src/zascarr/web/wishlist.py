@@ -20,6 +20,7 @@ from sqlalchemy.orm import selectinload
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import Issue, Wishlist, WishlistStatus
+from zascarr.services.estado_deseo import aspecto_de_deseo
 from zascarr.services.legal import is_acknowledged, require_legal_acknowledgment
 from zascarr.services.orchestrator import (
     Orchestrator,
@@ -63,6 +64,7 @@ def _row(item: Wishlist) -> dict:
         "item": item,
         "titulo": titulo,
         "estado": _ESTADO_LABEL.get(item.status, item.status.value),
+        "aspecto": aspecto_de_deseo(item.status),      # aspecto de `ui.chip`, no una clase CSS
         "puede_reintentar": item.status == WishlistStatus.FAILED,
         # D10: "Buscar ahora" solo tiene sentido en un estado accionable —
         # una vez descargando/en biblioteca, esto no es la herramienta
