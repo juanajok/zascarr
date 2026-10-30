@@ -240,6 +240,25 @@ class TestBackupOffsiteSinEspacio:
         assert '"disk_full"' in (ctx["status"] / "status.json").read_text(encoding="utf-8")
 
 
+DF_OFFSITE_MUDO = """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == *"${OFFSITE_DIR:?}"* ]]; then exit 1; fi
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+printf '/ 100000000 1 %s 1%% /\n' "${FAKE_DF_KB:-99999999}"
+"""
+
+
+class TestBackupOffsiteSinMedir:
+    def test_si_no_se_puede_medir_el_disco_de_respaldo_no_se_publica_como_disco_lleno(self, tmp_path):
+        ctx = t_backup._preparar(tmp_path)
+        (ctx["bin"] / "df").write_text(DF_OFFSITE_MUDO, encoding="utf-8")
+        r = t_backup._ejecutar(ctx, extra_env={"OFFSITE_DIR": str(ctx["offsite"])})
+        assert r.returncode != 0
+        estado = (ctx["status"] / "status.json").read_text(encoding="utf-8")
+        assert '"offsite_copy_failed"' in estado and "disk_full" not in estado
+        assert list(ctx["backup"].glob("backup_*.sql.gz"))               # la copia local sigue
+
+
 class TestProbarRestauracionSinMedir:
     def test_con_postgres_parado_no_se_publica_como_disco_lleno(self, tmp_path):
         from tests import test_restore_script as t_restore

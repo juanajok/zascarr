@@ -338,7 +338,7 @@ TAMANO_KB="$(tamano_bd_kb)"
 exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
         "la copia de seguridad previa al rollback" && ESPACIO_RC=0 || ESPACIO_RC=$?
 if (( ESPACIO_RC == 2 )); then
-    die "No pude medir la base de datos aunque PostgreSQL está arriba. La BD y el código NO se han tocado."
+    die "No pude medir el espacio (la base de datos o el disco de copias). La BD y el código NO se han tocado."
 elif (( ESPACIO_RC != 0 )); then
     die "No hay espacio para la copia previa. La BD y el código NO se han tocado."
 fi

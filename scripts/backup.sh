@@ -174,10 +174,12 @@ if (( OFFSITE_OK == 1 )); then
 fi
 
 if (( OFFSITE_OK == 1 )); then
-    if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_OFFSITE_DIR}")" \
-            "$((BYTES / 1024))" "la copia fuera del disco"; then
+    exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_OFFSITE_DIR}")" \
+            "$((BYTES / 1024))" "la copia fuera del disco" && ESPACIO_RC=0 || ESPACIO_RC=$?
+    if (( ESPACIO_RC != 0 )); then
         OFFSITE_OK=0
-        OFFSITE_ERROR="disk_full"
+        # 1 = no cabe (disk_full); 2 = no se pudo medir el disco de respaldo: no se publica como «disco lleno».
+        if (( ESPACIO_RC == 2 )); then OFFSITE_ERROR="offsite_copy_failed"; else OFFSITE_ERROR="disk_full"; fi
         OFFSITE_JSON="$(jq -n --arg error "${OFFSITE_ERROR}" \
             '{copia: false, error: $error, verificada: false}')"
     fi
