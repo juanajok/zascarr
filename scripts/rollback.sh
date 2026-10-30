@@ -20,12 +20,14 @@
 # Orden:
 #   1. Requisitos, git utilizable y argumentos.
 #   2. Resolver y VALIDAR el commit destino y el dump (emparejados por ref).
-#   3. Enseñar el plan y pedir confirmación.
-#   4. Copia de seguridad de la BD ACTUAL (red de seguridad del propio rollback).
-#   5. Parar ZascArr y restaurar el dump (dropdb --force + psql ON_ERROR_STOP).
-#   6. Verificar que la restauración tiene tablas.
-#   7. Guardar copia de este script fuera del repo y resetear el código.
-#   8. Reconstruir y arrancar. Verificar healthcheck.
+#   3. Pre-check de revisión: version_num del dump contra el manifiesto o la
+#      cabeza Alembic del commit destino, SIEMPRE antes de tocar la BD.
+#   4. Enseñar el plan y pedir confirmación.
+#   5. Copia de seguridad de la BD ACTUAL (red de seguridad del propio rollback).
+#   6. Parar ZascArr y restaurar el dump (dropdb --force + psql ON_ERROR_STOP).
+#   7. Verificar que la restauración tiene tablas.
+#   8. Guardar copia de este script fuera del repo y resetear el código.
+#   9. Reconstruir y arrancar. Verificar healthcheck.
 #
 # Aviso importante: si el commit destino es anterior a la existencia de este
 # script, `git reset --hard` lo borra del repo. Por eso el paso 7 guarda una
@@ -46,6 +48,9 @@ DRY_RUN=0
 FORZAR=0
 SEGURIDAD=""
 RESCATE_REF=""
+REV_DUMP=""
+REV_ESPERADA=""
+REV_ORIGEN=""
 FASE="preparación"
 FICHERO="${SCRIPT_DIR}/rollback.sh"
 
@@ -67,6 +72,9 @@ Opciones:
                     cambios locales sin guardar.
   --dry-run, -n     Enseñar el plan y salir sin tocar nada.
   -h, --help        Esta ayuda.
+
+El pre-check de revisión del dump se ejecuta SIEMPRE antes de la copia de
+seguridad y del dropdb; --forzar no lo salta.
 
 Variables de entorno:
   BACKUP_DIR (def. /var/backups/zascarr/postgres), DB_NAME, DB_USER,
@@ -143,6 +151,84 @@ fi
 validar_sha() { git -C "${REPO_DIR}" rev-parse --verify --quiet "${1}^{commit}" >/dev/null 2>&1; }
 normalizar_sha() { git -C "${REPO_DIR}" rev-parse "${1}^{commit}"; }
 
+# Revisión Alembic que trae el dump, leída de su bloque COPY. No escribe.
+version_num_del_dump() {
+    local dump="$1"
+    gzip -dc "${dump}" | awk '
+        /^COPY public\.alembic_version / { en=1; next }
+        en && $0 == "\\." { en=0 }
+        en && !visto { print; visto=1 }
+    '
+}
+
+# Cabeza de Alembic del commit destino, sin ejecutar migraciones: se leen
+# revision/down_revision de alembic/versions en ese commit.
+cabeza_alembic_del_commit() {
+    local sha="$1" revs downs heads n
+    revs="$(git -C "${REPO_DIR}" grep -h -E '^revision[[:space:]]*=' "${sha}" \
+        -- 'alembic/versions/*.py' 2>/dev/null || true)"
+    revs="$(printf '%s\n' "${revs}" | grep -oE '"[^"]+"' | tr -d '"' | sort -u || true)"
+    downs="$(git -C "${REPO_DIR}" grep -h -E '^down_revision[[:space:]]*=' "${sha}" \
+        -- 'alembic/versions/*.py' 2>/dev/null || true)"
+    downs="$(printf '%s\n' "${downs}" | grep -oE '"[^"]+"' | tr -d '"' | sort -u || true)"
+    [[ -n "${revs}" ]] || return 1
+    heads="$(comm -23 <(printf '%s\n' "${revs}") \
+        <(printf '%s\n' "${downs}" | sed '/^[[:space:]]*$/d') \
+        | sed '/^[[:space:]]*$/d')"
+    n="$(printf '%s\n' "${heads}" | awk 'NF { n++ } END { print n+0 }')"
+    [[ "${n}" -eq 1 ]] || return 1
+    printf '%s\n' "${heads}"
+}
+
+# Pre-check de compatibilidad. Se ejecuta SIEMPRE antes de la copia de
+# seguridad y del dropdb; --forzar no lo salta.
+precheck_compatibilidad() {
+    local base stem manifest expected destino version
+    base="$(basename "${DUMP}")"
+    stem="${base%.sql.gz}"
+    manifest="$(dirname "${DUMP}")/MANIFIESTO-${stem}.json"
+
+    if [[ -f "${manifest}" ]]; then
+        jq -e . "${manifest}" >/dev/null 2>&1 || die \
+            "El manifiesto $(basename "${manifest}") no es JSON válido. No se ha tocado la BD."
+        expected="$(jq -r '.alembic // empty' "${manifest}")"
+        [[ -n "${expected}" ]] || die \
+            "El manifiesto $(basename "${manifest}") no declara .alembic.
+  Aporta el manifiesto de #334 con la revisión esperada; no se ha tocado la BD."
+        destino="$(jq -r '.codigo_destino_sha_completo // empty' "${manifest}")"
+        if [[ -n "${destino}" && "${destino}" != "${TARGET_SHA}" ]]; then
+            die "El manifiesto $(basename "${manifest}") declara un código destino distinto
+  del commit al que se quiere volver (${TARGET_SHA:0:7}). No se ha tocado la BD."
+        fi
+        REV_ORIGEN="manifiesto $(basename "${manifest}")"
+    else
+        expected="$(cabeza_alembic_del_commit "${TARGET_SHA}")" || die \
+            "No puedo determinar la revisión Alembic esperada del destino ${TARGET_SHA:0:7}.
+  El dump $(basename "${DUMP}") no tiene un MANIFIESTO-${stem}.json junto a él y
+  no pude derivar una única cabeza desde alembic/versions del commit destino.
+  Aporta el manifiesto de #334 (con .alembic) o revisa el dump; no se ha tocado la BD."
+        REV_ORIGEN="alembic/versions del destino"
+    fi
+
+    if ! version="$(version_num_del_dump "${DUMP}")"; then
+        die "No pude leer version_num del dump $(basename "${DUMP}"). No se ha tocado la BD."
+    fi
+    version="$(printf '%s' "${version}" | tr -d '[:space:]')"
+    [[ -n "${version}" ]] || die \
+        "El dump $(basename "${DUMP}") no contiene version_num en alembic_version.
+  No se ha tocado la BD."
+
+    if [[ "${version}" != "${expected}" ]]; then
+        die "Revisión incompatible: el dump $(basename "${DUMP}") trae '${version}'
+  y el destino ${TARGET_SHA:0:7} espera '${expected}' (${REV_ORIGEN}).
+  No se ha tocado la BD."
+    fi
+
+    REV_DUMP="${version}"
+    REV_ESPERADA="${expected}"
+    success "Revisión compatible: dump '${version}' = destino '${expected}' (${REV_ORIGEN})."
+}
+
 if [[ -n "${TARGET_SHA}" ]]; then
     validar_sha "${TARGET_SHA}" || die \
         "\"${TARGET_SHA}\" no es un commit de este repo.
@@ -198,6 +284,7 @@ if ! git -C "${REPO_DIR}" merge-base --is-ancestor "${TARGET_SHA}" "${PREV_SHA}"
 fi
 
 verificar_dump "${DUMP}"
+precheck_compatibilidad
 
 # El reset --hard descarta los cambios locales sin avisar; misma regla que
 # update.sh. Se comprueba aquí, ANTES de tocar la base de datos.
@@ -215,6 +302,8 @@ echo "    Commit actual  : ${PREV_SHA:0:7}"
 echo "    Commit destino : ${TARGET_SHA:0:7}"
 echo "    Backup a usar  : ${DUMP}"
 echo "    Base de datos  : ${DB_NAME} (usuario ${DB_USER})"
+echo "    Revisión dump  : ${REV_DUMP}"
+echo "    Revisión destino: ${REV_ESPERADA} (${REV_ORIGEN})"
 echo "    Antes de tocar nada se hará una copia de la BD ACTUAL."
 if [[ -n "${REF_USADA}" ]]; then
     echo "    Referencia     : ${REF_USADA} (se conserva: es el ancla del rollback)"
