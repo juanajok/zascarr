@@ -54,6 +54,26 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -e ".[dev]"
+      # #334: las pruebas de restauración vuelcan y restauran con los clientes del RUNNER contra el servidor de arriba
+      # (PostgreSQL 15, como docker-compose.yml). Con `ubuntu-latest` en 26.04 el cliente era de la serie 18 y su
+      # `pg_dump` escribe `SET transaction_timeout`, que un servidor 15 rechaza. Se instala el cliente 15 (PGDG) y se
+      # pone el primero en el PATH; el último paso falla alto si no es el 15, en vez de dejar un rojo difícil de leer.
+      - name: Cliente de PostgreSQL 15 (el mismo mayor que el servidor)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-15
+          echo "/usr/lib/postgresql/15/bin" >> "$GITHUB_PATH"
+      - name: Comprobar que los clientes de PostgreSQL son los del servidor (15)
+        run: |
+          for c in psql pg_dump createdb dropdb; do
+            v="$($c --version)"; echo "$c: $v"
+            case "$v" in *" 15."*) ;; *) echo "::error::$c no es de PostgreSQL 15 ($v)"; exit 1 ;; esac
+          done
       - name: Comprobar que Postgres contesta y la variable está definida
         run: python scripts/ci_postgres.py esperar
       - name: Pruebas que usan Postgres real

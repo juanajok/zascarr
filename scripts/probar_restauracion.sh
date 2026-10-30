@@ -172,6 +172,12 @@ contar_copy() {
     '
 }
 
+# Una línea, acotada y sin credenciales: la salida de psql puede traer una URL de conexión o `password=`.
+sanear_detalle() {
+    tr '\n' ' ' | sed -E 's#(://[^:/@[:space:]]+:)[^@[:space:]]*@#\1***@#g; s#([Pp]assword=)[^[:space:]&)]*#\1***#g' \
+        | cut -c1-400
+}
+
 psql_temp() {
     "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${TEMP}" -At -c "$1"
 }
@@ -219,8 +225,10 @@ ERR="$(mktemp "${TMPDIR:-/tmp}/zascarr-restore.XXXXXX")"
     || { escribir_restore_estado "failed" "createdb_failed" || true; die "No pude crear ${TEMP}."; }
 if ! gzip -dc "${DUMP}" | "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" \
         -d "${TEMP}" -v ON_ERROR_STOP=1 -q >/dev/null 2>"${ERR}"; then
-    DETALLE="$(tail -3 "${ERR}" | tr '\n' ' ' || true)"
+    DETALLE="$(tail -3 "${ERR}" | sanear_detalle || true)"
     escribir_restore_estado "failed" "restore_failed" "${DETALLE}" || true
+    # El motivo también sale por pantalla (en la CI solo se veía este mensaje y el porqué quedaba en el JSON).
+    [[ -z "${DETALLE}" ]] || echo "[restauración] Motivo de psql: ${DETALLE}" >&2
     die "La restauración falló."
 fi
 

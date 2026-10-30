@@ -48,7 +48,7 @@ case "$*" in
       esac
       exit 0
     fi
-    if [[ "${FAKE_PSQL_FAIL:-0}" == "1" ]]; then echo "boom" >&2; exit 1; fi
+    if [[ "${FAKE_PSQL_FAIL:-0}" == "1" ]]; then echo "${FAKE_PSQL_MSG:-boom}" >&2; exit 1; fi
     cat > "$RESTORE_LOG"
     exit 0 ;;
 esac
@@ -290,6 +290,23 @@ class TestRestoreScript:
         assert estado["status"] == "failed"
         assert estado["error"] == "restore_failed"
         assert "dropdb" in ctx["db"].read_text(encoding="utf-8")
+
+    def test_si_psql_falla_el_motivo_sale_por_pantalla_y_sin_credenciales(self, tmp_path):
+        """#334: la CI solo mostraba «La restauración falló»; el motivo (`transaction_timeout`,
+        que un servidor 15 no conoce tras un `pg_dump` 18) quedaba en `restore-status.json`.
+        Ahora sale por stderr, sin credenciales."""
+        ctx = _preparar(tmp_path)
+        param = 'unrecognized configuration parameter "transaction_timeout"'
+        mensaje = (f"ERROR:  {param} "
+                   "(conexion postgresql://zascarr:hunter2@db:5432/zascarr password=hunter2)")
+        r = _ejecutar(ctx, dump=ctx["dump"],
+                      extra_env={"FAKE_PSQL_FAIL": "1", "FAKE_PSQL_MSG": mensaje})
+        assert r.returncode != 0
+        salida = r.stdout + r.stderr
+        assert param in salida and "La restauración falló" in salida     # el motivo, a la vista
+        assert "hunter2" not in salida                                    # ni en pantalla...
+        assert "hunter2" not in json.dumps(_estado(ctx))                  # ...ni en el estado
+        assert "postgresql://zascarr:***@db" in salida and "password=***" in salida
 
     def test_manifiesto_ausente_avisa(self, tmp_path):
         ctx = _preparar(tmp_path)

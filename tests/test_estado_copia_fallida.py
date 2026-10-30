@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import time
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -121,10 +122,39 @@ def _pedir_la_pagina(tmp_path, monkeypatch, codigo: str) -> dict:
     return {"salud": salud, "dibujo": json.loads(ejecucion.stdout)}
 
 
-@pytest.mark.parametrize("codigo", [*sorted(_BACKUP_ERRORES), "codigo_nuevo_sin_traducir"])
+SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+
+
+def _causas_que_emiten_los_scripts() -> set[str]:
+    """Las causas con que `backup.sh` y `_comun.sh` pueden dejar `status=failed|degraded` (literales y asignaciones)."""
+    texto = "\n".join((SCRIPTS / f).read_text(encoding="utf-8") for f in ("backup.sh", "_comun.sh"))
+    causas = set(re.findall(r'(?:VERIFY_ERROR_CODE|OFFSITE_ERROR|ANCHOR_ERROR)="([a-z_]+)"', texto))
+    causas |= set(re.findall(r'escribir_estado "(?:failed|degraded)" "([a-z_]+)"', texto))
+    causas |= set(re.findall(r'VERIFY_ERROR_CODE:-([a-z_]+)\}', texto))         # la causa de respaldo de la verificación
+    return causas
+
+
+EMITIDAS = _causas_que_emiten_los_scripts()
+
+
+def test_se_encontraron_las_causas_de_los_scripts():
+    """Control: si el patrón dejara de casar, las pruebas de abajo serían vacuas."""
+    assert {"pg_dump_failed", "gzip_invalid", "not_found", "empty", "verify_failed", "offsite_mount_missing",
+            "anchor_sync_failed", "manifest_failed", "unexpected"} <= EMITIDAS
+
+
+def test_toda_causa_que_emiten_los_scripts_tiene_su_frase_en_llano():
+    """#334 punto 4: una causa nueva en los scripts sin entrada en `_BACKUP_ERRORES` saldría a la pantalla como código crudo."""
+    sin_frase = sorted(EMITIDAS - set(_BACKUP_ERRORES))
+    assert sin_frase == [], f"causas de los scripts sin texto en llano en health.py::_BACKUP_ERRORES: {sin_frase}"
+
+
+@pytest.mark.parametrize("codigo", [*sorted(EMITIDAS | set(_BACKUP_ERRORES)), "codigo_nuevo_sin_traducir"])
 def test_una_copia_fallida_se_ve_en_llano_y_lo_tecnico_va_plegado(tmp_path, monkeypatch, codigo):
     r = _pedir_la_pagina(tmp_path, monkeypatch, codigo)
     salud, dibujo = r["salud"], r["dibujo"]
+    if codigo in EMITIDAS:                                 # lo traducido, no el código crudo
+        assert salud["warnings"]["backup"] == f"La última copia falló: {_BACKUP_ERRORES[codigo]}."
     assert salud["checks"]["backup"] == "error"            # lo que la API entrega...
 
     # ...y lo que la persona ve: el resumen, la fila de copias en rojo y el resto sin tocar.
