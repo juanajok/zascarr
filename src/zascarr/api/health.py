@@ -302,7 +302,8 @@ async def _database_status(db: AsyncSession) -> tuple[str, str]:
     if head is None:
         return (
             "schema_incompatible",
-            "No se puede determinar el head de Alembic (¿falta alembic/versions o hay varios heads?).",
+            "No se puede determinar el head de Alembic "
+            "(¿falta alembic/versions o hay varios heads?).",
         )
     if version_num != head:
         return (
@@ -321,7 +322,8 @@ async def _database_status(db: AsyncSession) -> tuple[str, str]:
     if faltantes:
         return (
             "schema_incompatible",
-            f"Esquema incompleto: faltan {', '.join(faltantes)} (¿restauración o rollback a medias?).",
+            f"Esquema incompleto: faltan {', '.join(faltantes)} "
+            "(¿restauración o rollback a medias?).",
         )
     return "ok", "Conectada y migrada."
 

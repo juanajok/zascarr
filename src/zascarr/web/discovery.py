@@ -146,9 +146,10 @@ async def portada(request: Request, url: str, source: MetadataSource):
     clave = hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
     cache_path = get_settings().covers_cache_path / "descubrir" / f"{clave}.jpg"
 
-    if not await asyncio.to_thread(cache_path.exists):
-        if not await fetch_and_cache_cover(url, cache_path):
-            raise HTTPException(status_code=404, detail="Sin portada disponible")
+    if not await asyncio.to_thread(cache_path.exists) and not await fetch_and_cache_cover(
+        url, cache_path
+    ):
+        raise HTTPException(status_code=404, detail="Sin portada disponible")
 
     data = await asyncio.to_thread(cache_path.read_bytes)
     return cached_image_response(request, data, "image/jpeg", clave)

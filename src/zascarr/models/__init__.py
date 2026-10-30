@@ -31,7 +31,7 @@ from zascarr.database import Base
 
 # ── Enums ──────────────────────────────────────────────────────────────────────
 
-class ComicTradition(str, enum.Enum):
+class ComicTradition(enum.StrEnum):
     AMERICAN      = "american"
     FRANCO_BELGIAN = "franco_belgian"
     MANGA         = "manga"
@@ -42,7 +42,7 @@ class ComicTradition(str, enum.Enum):
     BRITISH       = "british"
     OTHER         = "other"
 
-class CreatorRole(str, enum.Enum):
+class CreatorRole(enum.StrEnum):
     WRITER      = "writer"
     PENCILER    = "penciler"
     INKER       = "inker"
@@ -52,7 +52,7 @@ class CreatorRole(str, enum.Enum):
     EDITOR      = "editor"
     TRANSLATOR  = "translator"
 
-class IssueFormat(str, enum.Enum):
+class IssueFormat(enum.StrEnum):
     SINGLE_ISSUE    = "single_issue"
     TRADE_PAPERBACK = "trade_paperback"
     HARDCOVER       = "hardcover"
@@ -75,7 +75,7 @@ EDITION_KIND_A_FORMAT: dict[str, IssueFormat] = {
     "volumen": IssueFormat.TRADE_PAPERBACK,
 }
 
-class FileFormat(str, enum.Enum):
+class FileFormat(enum.StrEnum):
     CBZ  = "cbz"
     CBR  = "cbr"
     CB7  = "cb7"
@@ -126,7 +126,7 @@ class ResultadoComprobacion(enum.StrEnum):
     FALLO_DETECCION     = "fallo_deteccion"      # la comprobación lanzó una excepción
 
 
-class WishlistStatus(str, enum.Enum):
+class WishlistStatus(enum.StrEnum):
     WANTED      = "wanted"
     SEARCHING   = "searching"
     DOWNLOADING = "downloading"
@@ -140,7 +140,7 @@ class WishlistStatus(str, enum.Enum):
     RETIRADO    = "retirado"
 
 
-class WishlistPolicy(str, enum.Enum):
+class WishlistPolicy(enum.StrEnum):
     """D8: qué números de una serie busca ZascArr **por su cuenta**.
 
     No silencia nunca un item añadido a mano: gobierna lo que se **genera**.
@@ -151,7 +151,7 @@ class WishlistPolicy(str, enum.Enum):
     ALL     = "todos"        # reservado: no se ofrece hasta que D3 lo defina
 
 
-class WishlistOrigin(str, enum.Enum):
+class WishlistOrigin(enum.StrEnum):
     """D8: de dónde salió el item.
 
     `manual` = lo pidió el coleccionista (nunca se toca solo).
@@ -160,14 +160,14 @@ class WishlistOrigin(str, enum.Enum):
     MANUAL  = "manual"
     POLICY  = "politica"
 
-class ReadingStatus(str, enum.Enum):
+class ReadingStatus(enum.StrEnum):
     UNREAD    = "unread"
     READING   = "reading"
     COMPLETED = "completed"
     ON_HOLD   = "on_hold"
     DROPPED   = "dropped"
 
-class MetadataSource(str, enum.Enum):
+class MetadataSource(enum.StrEnum):
     COMIC_VINE    = "comic_vine"
     GCD           = "gcd"
     ANILIST       = "anilist"
@@ -179,22 +179,52 @@ class MetadataSource(str, enum.Enum):
 # ── Tablas M:N ─────────────────────────────────────────────────────────────────
 
 series_genres = Table(
-    "series_genres", Base.metadata,
-    Column("series_id",  UUID(as_uuid=True), ForeignKey("series.id",   ondelete="CASCADE"), primary_key=True),
-    Column("genre_id",   UUID(as_uuid=True), ForeignKey("genres.id",   ondelete="CASCADE"), primary_key=True),
+    "series_genres",
+    Base.metadata,
+    Column(
+        "series_id",
+        UUID(as_uuid=True),
+        ForeignKey("series.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "genre_id",
+        UUID(as_uuid=True),
+        ForeignKey("genres.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 issue_characters = Table(
-    "issue_characters", Base.metadata,
-    Column("issue_id",     UUID(as_uuid=True), ForeignKey("issues.id",     ondelete="CASCADE"), primary_key=True),
-    Column("character_id", UUID(as_uuid=True), ForeignKey("characters.id", ondelete="CASCADE"), primary_key=True),
+    "issue_characters",
+    Base.metadata,
+    Column(
+        "issue_id",
+        UUID(as_uuid=True),
+        ForeignKey("issues.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "character_id",
+        UUID(as_uuid=True),
+        ForeignKey("characters.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
     Column("is_main", Boolean, default=False),
 )
 
 issue_tags = Table(
-    "issue_tags", Base.metadata,
-    Column("issue_id", UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True),
-    Column("tag_id",   UUID(as_uuid=True), ForeignKey("tags.id",   ondelete="CASCADE"), primary_key=True),
+    "issue_tags",
+    Base.metadata,
+    Column(
+        "issue_id",
+        UUID(as_uuid=True),
+        ForeignKey("issues.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id", UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    ),
 )
 
 
@@ -202,16 +232,20 @@ issue_tags = Table(
 
 class Publisher(Base):
     __tablename__ = "publishers"
-    id:            Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name:          Mapped[str]      = mapped_column(String(255), unique=True, nullable=False)
     country:       Mapped[str|None] = mapped_column(String(100))
     website:       Mapped[str|None] = mapped_column(String(500))
     comic_vine_id: Mapped[int|None] = mapped_column(BigInteger, unique=True)
     metadata_:     Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source: Mapped[str|None] = mapped_column(String(20))
-    created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    imprints:  Mapped[list["Imprint"]]  = relationship(back_populates="publisher", cascade="all, delete-orphan")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    imprints: Mapped[list["Imprint"]] = relationship(
+        back_populates="publisher", cascade="all, delete-orphan"
+    )
     series:    Mapped[list["Series"]]   = relationship(back_populates="publisher")
     universes: Mapped[list["Universe"]] = relationship(back_populates="publisher")
 
@@ -219,20 +253,24 @@ class Publisher(Base):
 class Imprint(Base):
     __tablename__ = "imprints"
     __table_args__ = (UniqueConstraint("publisher_id", "name"),)
-    id:           Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    publisher_id: Mapped[str]      = mapped_column(UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    publisher_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="CASCADE"), nullable=False
+    )
     name:         Mapped[str]      = mapped_column(String(255), nullable=False)
-    created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     publisher: Mapped["Publisher"] = relationship(back_populates="imprints")
 
 
 class Universe(Base):
     __tablename__ = "universes"
-    id:           Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name:         Mapped[str]      = mapped_column(String(255), unique=True, nullable=False)
-    publisher_id: Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL"))
+    publisher_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL")
+    )
     description:  Mapped[str|None] = mapped_column(Text)
-    created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     publisher:   Mapped["Publisher|None"]  = relationship(back_populates="universes")
     characters:  Mapped[list["Character"]] = relationship(back_populates="universe")
     story_arcs:  Mapped[list["StoryArc"]]  = relationship(back_populates="universe")
@@ -240,7 +278,7 @@ class Universe(Base):
 
 class Genre(Base):
     __tablename__ = "genres"
-    id:          Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name:        Mapped[str]      = mapped_column(String(100), unique=True, nullable=False)
     name_es:     Mapped[str|None] = mapped_column(String(100))
     description: Mapped[str|None] = mapped_column(Text)
@@ -248,7 +286,7 @@ class Genre(Base):
 
 class Creator(Base):
     __tablename__ = "creators"
-    id:              Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name:            Mapped[str]      = mapped_column(String(255), nullable=False)
     sort_name:       Mapped[str|None] = mapped_column(String(255))
     nationality:     Mapped[str|None] = mapped_column(String(100))
@@ -262,18 +300,24 @@ class Creator(Base):
     # H3 (peer review v2): campos que el enricher nunca sobrescribe aunque
     # metadata_source no sea 'manual' — bloqueo granular, no todo-o-nada.
     locked_fields:   Mapped[list]     = mapped_column(ARRAY(String), default=list)
-    created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     issue_credits: Mapped[list["IssueCreator"]] = relationship(back_populates="creator")
 
 
 class Character(Base):
     __tablename__ = "characters"
-    id:                     Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name:                   Mapped[str]      = mapped_column(String(255), nullable=False)
     real_name:              Mapped[str|None] = mapped_column(String(255))
-    universe_id:            Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL"))
-    publisher_id:           Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL"))
+    universe_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL")
+    )
+    publisher_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL")
+    )
     first_appearance_year:  Mapped[int|None] = mapped_column(SmallInteger)
     description:            Mapped[str|None] = mapped_column(Text)
     comic_vine_id:          Mapped[int|None] = mapped_column(BigInteger, unique=True)
@@ -281,24 +325,41 @@ class Character(Base):
     metadata_:              Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
     metadata_source:        Mapped[str|None] = mapped_column(String(20))
     locked_fields:          Mapped[list]     = mapped_column(ARRAY(String), default=list)
-    created_at:             Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at:             Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     universe: Mapped["Universe|None"] = relationship(back_populates="characters")
 
 
 class Series(Base):
     __tablename__ = "series"
-    id:              Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     title:           Mapped[str]      = mapped_column(String(500), nullable=False)
     sort_title:      Mapped[str|None] = mapped_column(String(500))
     # H1 (peer review v2): columna generada por Postgres (f_title_norm(title),
     # ver migración 0006) — espejo de core.matcher.normalize_title. Nunca se
     # asigna desde Python; SQLAlchemy solo la lee de vuelta tras un refresh.
-    title_norm:      Mapped[str|None] = mapped_column(Text, Computed("f_title_norm(title)", persisted=True))
-    publisher_id:    Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL"))
-    imprint_id:      Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("imprints.id", ondelete="SET NULL"))
-    universe_id:     Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL"))
-    tradition:       Mapped[ComicTradition] = mapped_column(Enum(ComicTradition, name="comic_tradition", values_callable=lambda obj: [e.value for e in obj]), default=ComicTradition.AMERICAN)
+    title_norm: Mapped[str | None] = mapped_column(
+        Text, Computed("f_title_norm(title)", persisted=True)
+    )
+    publisher_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("publishers.id", ondelete="SET NULL")
+    )
+    imprint_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("imprints.id", ondelete="SET NULL")
+    )
+    universe_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL")
+    )
+    tradition: Mapped[ComicTradition] = mapped_column(
+        Enum(
+            ComicTradition,
+            name="comic_tradition",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        default=ComicTradition.AMERICAN,
+    )
     start_year:      Mapped[int|None] = mapped_column(SmallInteger)
     end_year:        Mapped[int|None] = mapped_column(SmallInteger)
     total_issues:    Mapped[int|None] = mapped_column(Integer)
@@ -333,37 +394,50 @@ class Series(Base):
         Enum(WishlistPolicy, name="wishlist_policy",
              values_callable=lambda obj: [e.value for e in obj]),
         nullable=False, default=WishlistPolicy.NONE, server_default=WishlistPolicy.NONE.value)
-    created_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     publisher: Mapped["Publisher|None"]  = relationship(back_populates="series")
-    issues:    Mapped[list["Issue"]]     = relationship(back_populates="series", cascade="all, delete-orphan")
+    issues: Mapped[list["Issue"]] = relationship(
+        back_populates="series", cascade="all, delete-orphan"
+    )
     genres:    Mapped[list["Genre"]]     = relationship(secondary=series_genres)
 
 
 class StoryArc(Base):
     __tablename__ = "story_arcs"
-    id:            Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     title:         Mapped[str]      = mapped_column(String(500), nullable=False)
     description:   Mapped[str|None] = mapped_column(Text)
     is_crossover:  Mapped[bool]     = mapped_column(Boolean, default=False)
-    universe_id:   Mapped[str|None] = mapped_column(UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL"))
+    universe_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("universes.id", ondelete="SET NULL")
+    )
     comic_vine_id: Mapped[int|None] = mapped_column(BigInteger, unique=True)
     metadata_:     Mapped[dict]     = mapped_column("metadata", JSONB, default=dict)
-    created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     universe:   Mapped["Universe|None"]          = relationship(back_populates="story_arcs")
-    arc_issues: Mapped[list["StoryArcIssue"]]    = relationship(back_populates="story_arc", cascade="all, delete-orphan")
+    arc_issues: Mapped[list["StoryArcIssue"]] = relationship(
+        back_populates="story_arc", cascade="all, delete-orphan"
+    )
 
 
 class Issue(Base):
     __tablename__ = "issues"
     __table_args__ = (UniqueConstraint("series_id", "issue_number", "volume"),)
-    id:              Mapped[str]          = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    series_id:       Mapped[str]          = mapped_column(UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    series_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False
+    )
     issue_number:    Mapped[str|None]     = mapped_column(String(20))
     volume:          Mapped[int]          = mapped_column(Integer, default=1)
     title:           Mapped[str|None]     = mapped_column(String(500))
     release_date:    Mapped[date|None]    = mapped_column(Date)
-    format:          Mapped[IssueFormat]  = mapped_column(Enum(IssueFormat, name="issue_format", values_callable=lambda obj: [e.value for e in obj]), default=IssueFormat.SINGLE_ISSUE)
+    format: Mapped[IssueFormat] = mapped_column(
+        Enum(IssueFormat, name="issue_format", values_callable=lambda obj: [e.value for e in obj]),
+        default=IssueFormat.SINGLE_ISSUE,
+    )
     page_count:      Mapped[int|None]     = mapped_column(Integer)
     isbn:            Mapped[str|None]     = mapped_column(String(20))
     synopsis:        Mapped[str|None]     = mapped_column(Text)
@@ -375,29 +449,46 @@ class Issue(Base):
     # H2/H3 (peer review v2): ver Series.enrichment_attempted_at / Creator.locked_fields.
     enrichment_attempted_at: Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     locked_fields:   Mapped[list]         = mapped_column(ARRAY(String), default=list)
-    created_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at:      Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
     series:           Mapped["Series"]               = relationship(back_populates="issues")
-    credits:          Mapped[list["IssueCreator"]]   = relationship(back_populates="issue", cascade="all, delete-orphan")
+    credits: Mapped[list["IssueCreator"]] = relationship(
+        back_populates="issue", cascade="all, delete-orphan"
+    )
     files:            Mapped[list["File"]]            = relationship(back_populates="issue")
     characters:       Mapped[list["Character"]]       = relationship(secondary=issue_characters)
     tags:             Mapped[list["Tag"]]              = relationship(secondary=issue_tags)
-    reading_progress: Mapped["ReadingProgress|None"]  = relationship(back_populates="issue", uselist=False)
+    reading_progress: Mapped["ReadingProgress|None"] = relationship(
+        back_populates="issue", uselist=False
+    )
 
 
 class IssueCreator(Base):
     __tablename__ = "issue_creators"
-    issue_id:   Mapped[str]         = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
-    creator_id: Mapped[str]         = mapped_column(UUID(as_uuid=True), ForeignKey("creators.id", ondelete="CASCADE"), primary_key=True)
-    role:       Mapped[CreatorRole] = mapped_column(Enum(CreatorRole, name="creator_role", values_callable=lambda obj: [e.value for e in obj]), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
+    creator_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("creators.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[CreatorRole] = mapped_column(
+        Enum(CreatorRole, name="creator_role", values_callable=lambda obj: [e.value for e in obj]),
+        primary_key=True,
+    )
     issue:   Mapped["Issue"]   = relationship(back_populates="credits")
     creator: Mapped["Creator"] = relationship(back_populates="issue_credits")
 
 
 class StoryArcIssue(Base):
     __tablename__ = "story_arc_issues"
-    story_arc_id:  Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("story_arcs.id", ondelete="CASCADE"), primary_key=True)
-    issue_id:      Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
+    story_arc_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("story_arcs.id", ondelete="CASCADE"), primary_key=True
+    )
+    issue_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
     reading_order: Mapped[int] = mapped_column(Integer, nullable=False)
     story_arc: Mapped["StoryArc"] = relationship(back_populates="arc_issues")
     issue:     Mapped["Issue"]    = relationship()
@@ -412,11 +503,16 @@ class Tag(Base):
 
 class File(Base):
     __tablename__ = "files"
-    id:                  Mapped[str]          = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    issue_id:            Mapped[str|None]     = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="SET NULL"))
-    file_path:           Mapped[str]          = mapped_column(String(1000), unique=True, nullable=False)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    issue_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="SET NULL")
+    )
+    file_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
     file_name:           Mapped[str]          = mapped_column(String(500), nullable=False)
-    file_format:         Mapped[FileFormat]   = mapped_column(Enum(FileFormat, name="file_format", values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    file_format: Mapped[FileFormat] = mapped_column(
+        Enum(FileFormat, name="file_format", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+    )
     file_size_bytes:     Mapped[int|None]     = mapped_column(BigInteger)
     sha256_hash:         Mapped[str|None]     = mapped_column(String(64), index=True)
     # Integridad (ficha benchmark-integridad-hash-dedupe): hash del fichero
@@ -428,44 +524,46 @@ class File(Base):
     original_sha256:     Mapped[str|None]     = mapped_column(String(64), index=True)
     source_tag:          Mapped[str|None]     = mapped_column(String(50))
     width_px:            Mapped[int|None]     = mapped_column(Integer)
-    covered_issue_ids:   Mapped[list]         = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
+    covered_issue_ids: Mapped[list] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
     quality:             Mapped[str|None]     = mapped_column(String(50))
     is_verified:         Mapped[bool]         = mapped_column(Boolean, default=False)
     metadata_source:     Mapped[str|None]     = mapped_column(String(20))
-    imported_at:         Mapped[datetime]     = mapped_column(DateTime(timezone=True), server_default=func.now())
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     metadata_:           Mapped[dict]         = mapped_column("metadata", JSONB, default=dict)
     # B2: el coleccionista descartó este archivo desde la bandeja de
     # pendientes ("ignorar"). Distinto de tener issue_id — un archivo
     # puede seguir sin issue_id (posible hueco del enricher) sin haber
     # sido nunca revisado ni descartado a mano.
-    review_dismissed:    Mapped[bool]         = mapped_column(Boolean, default=False, server_default="false")
+    review_dismissed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # B7: si el fichero desaparece del disco (borrado a mano fuera de
     # ZascArr) deja de "contar como que lo tienes" sin que nadie tenga
     # que avisar — Importer.scan_and_import() lo detecta en cada ciclo
     # (ver Importer._detectar_desaparecidos). Se revierte solo si el
     # fichero reaparece (disco de red que estuvo desmontado, etc.) — el
     # File nunca se borra por esto, solo se marca.
-    is_missing:          Mapped[bool]         = mapped_column(Boolean, default=False, server_default="false")
+    is_missing: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     missing_since:       Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
     issue: Mapped["Issue|None"] = relationship(back_populates="files")
 
 
-class AsignacionEstado(str, enum.Enum):
+class AsignacionEstado(enum.StrEnum):
     """Estados PERSISTIDOS de una operación de asignación (ADR 0006, migración 0017).
 
-    Son solo cuatro. Los RESULTADOS que el servicio devuelve al cliente no son estados. Los RECUPERABLES
-    (`pendiente`, `reparacion_pendiente`, `asignado_limpieza_pendiente`) dejan la operación `preparada` o
-    `confirmada`, es decir, VIVA, con su reserva intacta: una reparación pendiente no debe liberar el destino
-    por accidente. `destino_ocupado`, en cambio, CANCELA la operación y libera la reserva (el reintento
-    reserva el siguiente nombre libre)."""
+    Son solo cuatro. Los RESULTADOS que el servicio devuelve al cliente no son estados. Los
+    RECUPERABLES (`pendiente`, `reparacion_pendiente`, `asignado_limpieza_pendiente`) dejan la
+    operación `preparada` o `confirmada`, es decir, VIVA, con su reserva intacta: una reparación
+    pendiente no debe liberar el destino por accidente. `destino_ocupado`, en cambio, CANCELA la
+    operación y libera la reserva (el reintento reserva el siguiente nombre libre)."""
     PREPARADA = "preparada"      # reservada; el origen sigue siendo la única copia confirmada
     CONFIRMADA = "confirmada"    # la BD ya apunta al destino; falta (o falló) retirar el origen
     LIMPIADA = "limpiada"        # terminada: el origen se retiró
     CANCELADA = "cancelada"      # abandonada sin efecto (p. ej. el destino lo ocupó un ajeno)
 
 
-#: Estados que RESERVAN archivo y destino (índices únicos parciales). Fuente única: la migración 0017 y
-#: las pruebas comparan contra esta constante.
+#: Estados que RESERVAN archivo y destino (índices únicos parciales). Fuente única: la migración
+#: 0017 y las pruebas comparan contra esta constante.
 ASIGNACION_ESTADOS_VIVOS = (AsignacionEstado.PREPARADA, AsignacionEstado.CONFIRMADA)
 _VIVOS_SQL = "estado IN ('preparada', 'confirmada')"
 
@@ -475,28 +573,40 @@ class AsignacionOperacion(Base):
     __tablename__ = "asignacion_operaciones"
     __table_args__ = (
         CheckConstraint(
-            "estado IN ('limpiada', 'cancelada') OR (file_id IS NOT NULL AND series_id IS NOT NULL)",
-            name="ck_asignacion_viva_con_referencias"),
-        CheckConstraint("origen <> destino AND temporal <> destino AND temporal <> origen",
-                        name="ck_asignacion_rutas_distintas"),
+            "estado IN ('limpiada', 'cancelada') "
+            "OR (file_id IS NOT NULL AND series_id IS NOT NULL)",
+            name="ck_asignacion_viva_con_referencias",
+        ),
+        CheckConstraint(
+            "origen <> destino AND temporal <> destino AND temporal <> origen",
+            name="ck_asignacion_rutas_distintas",
+        ),
         CheckConstraint("size_bytes >= 0", name="ck_asignacion_tamano"),
         CheckConstraint("epoca >= 0", name="ck_asignacion_epoca"),
         CheckConstraint("length(btrim(issue_number)) > 0", name="ck_asignacion_issue_number"),
         CheckConstraint("sha256 ~ '^[0-9a-f]{64}$'", name="ck_asignacion_sha256"),
-        Index("uq_asignacion_viva_por_archivo", "file_id", unique=True,
-              postgresql_where=text(_VIVOS_SQL)),
-        Index("uq_asignacion_viva_por_destino", "destino", unique=True,
-              postgresql_where=text(_VIVOS_SQL)),
+        Index(
+            "uq_asignacion_viva_por_archivo",
+            "file_id",
+            unique=True,
+            postgresql_where=text(_VIVOS_SQL),
+        ),
+        Index(
+            "uq_asignacion_viva_por_destino",
+            "destino",
+            unique=True,
+            postgresql_where=text(_VIVOS_SQL),
+        ),
         Index("ix_asignacion_viva_creada", "creada", postgresql_where=text(_VIVOS_SQL)),
-        # Declarados a mano (no `index=True`, que los llamaría `ix_asignacion_operaciones_*`): mismos nombres
-        # que la migración 0017, para que Alembic no proponga renombrarlos.
+        # Declarados a mano (no `index=True`, que los llamaría `ix_asignacion_operaciones_*`):
+        # mismos nombres que la migración 0017, para que Alembic no proponga renombrarlos.
         Index("ix_asignacion_file_id", "file_id"),
         Index("ix_asignacion_series_id", "series_id"),
     )
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4,
                                     server_default=text("gen_random_uuid()"))
-    # SET NULL + el CHECK de arriba: borrar un archivo/serie con una operación VIVA falla; con una cerrada
-    # procede y la fila queda como historial.
+    # SET NULL + el CHECK de arriba: borrar un archivo/serie con una operación VIVA falla; con una
+    # cerrada procede y la fila queda como historial.
     file_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("files.id", ondelete="SET NULL"))
     series_id: Mapped[str | None] = mapped_column(
@@ -507,7 +617,8 @@ class AsignacionOperacion(Base):
         nullable=False, default=AsignacionEstado.PREPARADA,
         server_default=AsignacionEstado.PREPARADA.value)
     origen: Mapped[str] = mapped_column(String(1000), nullable=False)
-    destino: Mapped[str] = mapped_column(String(1000), nullable=False)   # el EFECTIVO, no el canónico
+    # El destino EFECTIVO, no el canónico.
+    destino: Mapped[str] = mapped_column(String(1000), nullable=False)
     temporal: Mapped[str] = mapped_column(String(1000), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -519,10 +630,13 @@ class AsignacionOperacion(Base):
         nullable=False)
     aprender_alias: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True,
                                                  server_default="true")
-    # Ficha de vallado: cada ejecutor que toma la operación la incrementa; sus escrituras llevan `AND epoca = <la suya>`.
+    # Ficha de vallado: cada ejecutor que toma la operación la incrementa; sus escrituras llevan
+    # `AND epoca = <la suya>`.
     epoca: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     creada: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    actualizada: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actualizada: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class AltaEstado(enum.StrEnum):
@@ -575,14 +689,29 @@ class VinculacionOperacion(Base):
 
 class Wishlist(Base):
     __tablename__ = "wishlist"
-    __table_args__ = (CheckConstraint("series_id IS NOT NULL OR issue_id IS NOT NULL", name="wishlist_target_check"),)
-    id:               Mapped[str]             = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    series_id:        Mapped[str|None]        = mapped_column(UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"))
-    issue_id:         Mapped[str|None]        = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"))
-    status:           Mapped[WishlistStatus]  = mapped_column(Enum(WishlistStatus, name="wishlist_status", values_callable=lambda obj: [e.value for e in obj]), default=WishlistStatus.WANTED)
+    __table_args__ = (
+        CheckConstraint(
+            "series_id IS NOT NULL OR issue_id IS NOT NULL", name="wishlist_target_check"
+        ),
+    )
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    series_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE")
+    )
+    issue_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE")
+    )
+    status: Mapped[WishlistStatus] = mapped_column(
+        Enum(
+            WishlistStatus,
+            name="wishlist_status",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        default=WishlistStatus.WANTED,
+    )
     priority:         Mapped[int]             = mapped_column(Integer, default=5)
     search_query:     Mapped[str|None]        = mapped_column(String(500))
-    added_at:         Mapped[datetime]        = mapped_column(DateTime(timezone=True), server_default=func.now())
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_searched_at: Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     downloaded_at:    Mapped[datetime|None]   = mapped_column(DateTime(timezone=True))
     notes:            Mapped[str|None]        = mapped_column(Text)
@@ -616,9 +745,16 @@ class Wishlist(Base):
 
 class ReadingProgress(Base):
     __tablename__ = "reading_progress"
-    id:           Mapped[str]           = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    issue_id:     Mapped[str]           = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), unique=True, nullable=False)
-    status:       Mapped[ReadingStatus] = mapped_column(Enum(ReadingStatus, name="reading_status", values_callable=lambda obj: [e.value for e in obj]), default=ReadingStatus.UNREAD)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    issue_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    status: Mapped[ReadingStatus] = mapped_column(
+        Enum(
+            ReadingStatus, name="reading_status", values_callable=lambda obj: [e.value for e in obj]
+        ),
+        default=ReadingStatus.UNREAD,
+    )
     current_page: Mapped[int]           = mapped_column(Integer, default=0)
     rating:       Mapped[int|None]      = mapped_column(SmallInteger)
     started_at:   Mapped[datetime|None] = mapped_column(DateTime(timezone=True))
@@ -629,11 +765,13 @@ class ReadingProgress(Base):
 
 class ReadingList(Base):
     __tablename__ = "reading_lists"
-    id:          Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name:        Mapped[str]      = mapped_column(String(255), nullable=False)
     description: Mapped[str|None] = mapped_column(Text)
-    created_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    items: Mapped[list["ReadingListItem"]] = relationship(back_populates="reading_list", cascade="all, delete-orphan")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    items: Mapped[list["ReadingListItem"]] = relationship(
+        back_populates="reading_list", cascade="all, delete-orphan"
+    )
 
 
 class ImportRun(Base):
@@ -641,7 +779,7 @@ class ImportRun(Base):
     responder "¿qué pasó en el ciclo de las 03:00?" desde una futura UI
     sin depender solo de los logs (idea rescatada de zascarr: scrape_runs)."""
     __tablename__ = "import_runs"
-    id:              Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     started_at:      Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at:     Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     files_scanned:   Mapped[int]      = mapped_column(Integer, default=0)
@@ -661,8 +799,12 @@ class ImportRun(Base):
 
 class ReadingListItem(Base):
     __tablename__ = "reading_list_items"
-    reading_list_id: Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("reading_lists.id", ondelete="CASCADE"), primary_key=True)
-    issue_id:        Mapped[str] = mapped_column(UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
+    reading_list_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("reading_lists.id", ondelete="CASCADE"), primary_key=True
+    )
+    issue_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True
+    )
     position:        Mapped[int] = mapped_column(Integer, nullable=False)
     reading_list: Mapped["ReadingList"] = relationship(back_populates="items")
     issue:        Mapped["Issue"]       = relationship()
@@ -674,8 +816,10 @@ class LegalAcknowledgment(Base):
     legal_version == la versión actual?" (hash de LEGAL.md, ver
     services/legal.py), no un estado por usuario."""
     __tablename__ = "legal_acknowledgments"
-    id:            Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    accepted_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     legal_version: Mapped[str]      = mapped_column(String(64), nullable=False)
 
 
@@ -694,7 +838,9 @@ class RuntimeSetting(Base):
     __tablename__ = "runtime_settings"
     id:         Mapped[int]      = mapped_column(Integer, primary_key=True, default=1)
     values:     Mapped[dict]     = mapped_column(JSONB, default=dict, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class LocalAlias(Base):
@@ -708,7 +854,9 @@ class LocalAlias(Base):
     core.matcher.normalize_title(título extraído por naming.py del
     nombre de archivo original), no un regex ni nada exportable."""
     __tablename__ = "local_aliases"
-    id:           Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     pattern_norm: Mapped[str]      = mapped_column(String(500), nullable=False, unique=True)
-    series_id:    Mapped[str]      = mapped_column(UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False)
-    created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    series_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

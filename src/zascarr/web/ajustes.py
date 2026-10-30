@@ -11,8 +11,6 @@ botón de probar antes de guardar.
 """
 from __future__ import annotations
 
-import hashlib
-
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -21,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
+from zascarr.services.amule import hash_contrasena_amuleweb
 from zascarr.services.auth import (
     COOKIE_NAME,
     SESSION_MAX_AGE,
@@ -78,7 +77,10 @@ _PISTA_CONEXION_RECHAZADA = (
 
 def _mensaje_conexion_fallida(exc: httpx.HTTPError) -> str:
     if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
-        return "No se pudo conectar (conexión rechazada, timeout o nombre sin resolver)." + _PISTA_CONEXION_RECHAZADA
+        return (
+            "No se pudo conectar (conexión rechazada, timeout o nombre sin resolver)."
+            + _PISTA_CONEXION_RECHAZADA
+        )
     return "No se pudo conectar (red o timeout)."
 
 router = APIRouter(prefix="/ui/ajustes", tags=["ui"])
@@ -219,7 +221,8 @@ async def guardar_fuentes(
         "anilist_enabled": anilist_enabled,
         "tebeosfera_enabled": tebeosfera_enabled,
         "gcd_enabled": gcd_enabled,
-        # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser «heredado».
+        # Guardar es tomar la decisión (aunque sea confirmar el estado actual): deja de ser
+        # «heredado».
         "fuentes_heredadas": False,
     })
     return templates.TemplateResponse(
@@ -321,10 +324,14 @@ def _secreto_o_guardado(valor_form: str, campo: str) -> str:
 
 
 @router.post("/probar/comic-vine", response_class=HTMLResponse)
-async def probar_comic_vine(request: Request, comicvine_api_key: str = Form(default="")) -> HTMLResponse:
+async def probar_comic_vine(
+    request: Request, comicvine_api_key: str = Form(default="")
+) -> HTMLResponse:
     api_key = _secreto_o_guardado(comicvine_api_key, "comicvine_api_key")
     ok, mensaje = await _test_comic_vine(api_key)
-    return templates.TemplateResponse(request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje})
+    return templates.TemplateResponse(
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje}
+    )
 
 
 @router.post("/probar/prowlarr", response_class=HTMLResponse)
@@ -333,7 +340,9 @@ async def probar_prowlarr(
 ) -> HTMLResponse:
     api_key = _secreto_o_guardado(prowlarr_api_key, "prowlarr_api_key")
     ok, mensaje = await _test_prowlarr(prowlarr_url.rstrip("/"), api_key)
-    return templates.TemplateResponse(request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje})
+    return templates.TemplateResponse(
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje}
+    )
 
 
 @router.post("/probar/transmission", response_class=HTMLResponse)
@@ -342,15 +351,23 @@ async def probar_transmission(
     transmission_username: str = Form(default=""), transmission_password: str = Form(default=""),
 ) -> HTMLResponse:
     password = _secreto_o_guardado(transmission_password, "transmission_password")
-    ok, mensaje = await _test_transmission(transmission_url.rstrip("/"), transmission_username, password)
-    return templates.TemplateResponse(request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje})
+    ok, mensaje = await _test_transmission(
+        transmission_url.rstrip("/"), transmission_username, password
+    )
+    return templates.TemplateResponse(
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje}
+    )
 
 
 @router.post("/probar/amule", response_class=HTMLResponse)
-async def probar_amule(request: Request, amule_url: str = Form(...), amule_password: str = Form(default="")) -> HTMLResponse:
+async def probar_amule(
+    request: Request, amule_url: str = Form(...), amule_password: str = Form(default="")
+) -> HTMLResponse:
     password = _secreto_o_guardado(amule_password, "amule_password")
     ok, mensaje = await _test_amule(amule_url.rstrip("/"), password)
-    return templates.TemplateResponse(request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje})
+    return templates.TemplateResponse(
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje}
+    )
 
 
 async def _test_comic_vine(api_key: str) -> tuple[bool, str]:
@@ -427,7 +444,7 @@ async def _test_amule(url: str, password: str) -> tuple[bool, str]:
     if not password:
         return False, "Falta la contraseña de amuleweb."
     try:
-        pw_hash = hashlib.md5(password.encode()).hexdigest()
+        pw_hash = hash_contrasena_amuleweb(password)
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
             r = await client.post(f"{url}/", data={"p": pw_hash})
         if r.cookies or r.headers.get("set-cookie"):

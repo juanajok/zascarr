@@ -246,8 +246,8 @@ async def lifespan(app: FastAPI):
         logger.warning("background_tasks_skipped_db_degraded", db_degraded=True)
         background_tasks = []
     else:
-        # V6a (ADR 0006): continúa o cierra las asignaciones que quedaron vivas en una ejecución anterior.
-        # Tarea de fondo (no retrasa el healthcheck) que nunca propaga una excepción.
+        # V6a (ADR 0006): continúa o cierra las asignaciones que quedaron vivas en una ejecución
+        # anterior. Tarea de fondo (no retrasa el healthcheck) que nunca propaga una excepción.
         from zascarr.services.asignacion import comprobar_pool, reconciliar_al_arrancar
         if not comprobar_pool(engine, settings.asignacion_simultaneas):
             logger.warning("asignacion.pool_insuficiente",
@@ -380,7 +380,10 @@ def create_app() -> FastAPI:
                 return JSONResponse(
                     status_code=503,
                     content={
-                        "detail": "Esquema de base de datos incompleto o sin migrar — consulta /api/health",
+                        "detail": (
+                            "Esquema de base de datos incompleto o sin migrar"
+                            " — consulta /api/health"
+                        ),
                     },
                 )
             return pagina_error(
