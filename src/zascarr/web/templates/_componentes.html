@@ -20,6 +20,17 @@
 <div class="{{ t.clase }}"{% if rol_final %} role="{{ rol_final }}"{% endif %}{% if foco %} tabindex="-1" autofocus{% endif %}>{% if t.icono %}<span class="aviso-icono" aria-hidden="true">{{ t.icono }}</span><div>{% endif %}{% if texto is not none %}{{ texto }}{% else %}{{ caller() }}{% endif %}{% if t.icono %}</div>{% endif %}</div>
 {%- endmacro %}
 
+{#- portada(titulo, clave, src, clase): portada de una serie con su marcador DEBAJO, sin JavaScript.
+    El marcador (color + inicial, `web/portada_marca.py`) va siempre; la `<img>` va encima y, si
+    carga, lo tapa; si falla, se ve el marcador. `src` vacío = ausencia ya conocida (sin `<img>`).
+    La `<img>` no lleva fondo, borde ni sombra propios (una imagen rota los pintaría sobre el
+    marcador): el marco va en el contenedor, por contexto (`clase`). `alt=""`: el nombre
+    accesible es el título que acompaña a la tarjeta. `clave`: `series.id` si lo hay. -#}
+{% macro portada(titulo, clave=none, src=none, clase="") -%}
+{%- set m = marca_de_portada(titulo, clave) -%}
+<span class="portada portada-{{ m.color }}{% if clase %} {{ clase }}{% endif %}"><span class="portada-marca" aria-hidden="true">{{ m.inicial }}</span>{% if src %}<img src="{{ src }}" alt="">{% endif %}</span>
+{%- endmacro %}
+
 {#- grupo(titulo, recuento): caja con cabecera; el contenido va dentro con `call`. `recuento` es
     opcional (número o texto) y se muestra como chip neutro. -#}
 {% macro grupo(titulo, recuento=none) -%}

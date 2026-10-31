@@ -184,7 +184,7 @@ class TestBuscar:
 
     def test_la_portada_no_permitida_no_se_muestra_ni_se_firma(self):
         html = self._buscar([_resultado(cover_url="http://127.0.0.1:9091/x.jpg")])
-        assert "127.0.0.1" not in html and "cover-missing" in html
+        assert "127.0.0.1" not in html and 'class="portada-marca"' in html and "<img" not in html
 
     def test_un_resultado_que_no_se_puede_firmar_se_omite_con_aviso(self):
         malo = _resultado(external_id="x" * 300, title="Malo")                  # el identificador no cabe en lo que se guarda
