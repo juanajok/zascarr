@@ -137,8 +137,8 @@ class Settings(BaseSettings):
     covers_cache_path: Path = Field(default=Path("/config/covers"))
     # #123b: rutas LOCALES (dentro del contenedor) para el aviso de disco.
     # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
-    # cuelga del volumen de datos y es local; si no existe ninguna, el check queda «disabled»;
-    # si existen pero no se pueden medir, es un «warning».
+    # cuelga del volumen de datos y es local; de cada ruta se usa su primer ancestro existente;
+    # «disabled» solo si `disk_paths` está vacío (o ninguno existe); si no se miden, «warning».
     disk_paths: str = Field(default="/config/covers")
     # Cota superior: 10 TiB (en MB), más que cualquier disco de una Raspberry Pi;
     # evita desbordes y valores absurdos. Si `error > warn`, la app arranca igual
@@ -174,6 +174,17 @@ class Settings(BaseSettings):
     # reparte en rondas entre series para que ninguna acapare el lote — ver
     # Orchestrator._generar_lo_que_falta.
     orchestrator_politica_lote: int = 25
+    # C6: techo de seguridad de búsquedas de la POLÍTICA («completar»): como mucho este número de
+    # ítems por hora, en ventana deslizante y contando todas las series con política activa. Es un
+    # techo, no una cadencia: no obliga a buscar.
+    # CUENTA ÍTEMS, NO PETICIONES: cada ítem buscado puede consumir hasta dos peticiones externas
+    # (Prowlarr y foro), así que no es una cota de peticiones. Si más adelante hace falta un
+    # presupuesto separado de peticiones, será una decisión nueva, no una reinterpretación de esta.
+    # `last_searched_at` no distingue quién disparó la búsqueda (ciclo o «Buscar ahora») y el
+    # reintento manual la pone a None, así que el techo es APROXIMADO. 0 desactiva estas búsquedas
+    # automáticas. Es un ajuste propio: `max_concurrent_downloads` no cambia (sigue acotando lo
+    # manual del ciclo y `check_completions`).
+    politica_busquedas_por_hora: int = Field(default=2, ge=0, le=10)
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el

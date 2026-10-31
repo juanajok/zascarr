@@ -38,7 +38,7 @@ from enum import StrEnum
 from uuid import uuid4
 
 import structlog
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -128,6 +128,12 @@ class SincronizacionPolitica:
     retirados: int
 
 
+#: C6 (FR-14): lo que genera la política entra detrás de lo pedido a mano (prioridad 5). Se fija
+#: al CREAR el ítem;
+#: reactivar uno existente (`retirado`/`imported` → `wanted`) no toca su prioridad.
+PRIORIDAD_DE_LA_POLITICA = 8
+
+
 class DownloadBackend(StrEnum):
     TRANSMISSION = "transmission"
     AMULE        = "amule"
@@ -155,9 +161,10 @@ class Orchestrator:
             logger.info("orchestrator.cycle_skipped_no_legal_acknowledgment")
             return 0
 
-        cooldown = timedelta(hours=get_settings().orchestrator_retry_cooldown_hours)
+        settings = get_settings()
+        cooldown = timedelta(hours=settings.orchestrator_retry_cooldown_hours)
         cutoff = datetime.now(UTC) - cooldown
-        items = list((await self.db.execute(
+        elegibles = (
             select(Wishlist)
             .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
             .where(or_(
@@ -165,11 +172,22 @@ class Orchestrator:
                 Wishlist.last_searched_at < cutoff,
             ))
             .order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
-            .limit(limit)
+        )
+        # C6 (FR-18): lo MANUAL conserva su lote por ciclo (`limit` = max_concurrent_downloads); lo
+        # que genera la política va aparte y solo lo limita el techo por hora
+        # (`politica_busquedas_por_hora`).
+        manuales = list((await self.db.execute(
+            elegibles.where(Wishlist.origen != WishlistOrigin.POLICY).limit(limit)
+        )).scalars().all())
+        de_politica = list((await self.db.execute(
+            elegibles.where(Wishlist.origen == WishlistOrigin.POLICY)
+            .limit(settings.politica_busquedas_por_hora)
         )).scalars().all())
 
         sent = 0
-        for item in items:
+        for item in [*manuales, *de_politica]:
+            if item.origen == WishlistOrigin.POLICY and not await self._queda_cupo_de_politica():
+                break          # techo agotado: lo demás espera a un ciclo posterior
             try:
                 if await self._process_item(item):
                     sent += 1
@@ -179,6 +197,35 @@ class Orchestrator:
                 item.last_error = MOTIVO_ERROR_INESPERADO
                 await self.db.flush()
         return sent
+
+    async def _queda_cupo_de_politica(self) -> bool:
+        """FR-05/FR-07: ¿se han buscado menos de R ítems de política en la última hora? Se cuenta
+        con
+        las marcas YA CONFIRMADAS en la BD y con la hora de la BD (`now()`), no con el reloj del
+        proceso: así vale también en el primer ciclo tras un arranque o un reinicio."""
+        usadas = (await self.db.execute(
+            select(func.count()).select_from(Wishlist)
+            .where(Wishlist.origen == WishlistOrigin.POLICY)
+            .where(Wishlist.last_searched_at > func.now() - timedelta(hours=1))
+        )).scalar_one()
+        return int(usadas) < get_settings().politica_busquedas_por_hora
+
+    async def _marcar_busqueda(self, item: Wishlist) -> None:
+        """Marca el intento con la hora de la BD (FR-23). En ítems de política la marca se CONFIRMA
+        con un commit corto ANTES de la primera petición externa (FR-22): si el ciclo falla después,
+        la marca persiste y la ventana la cuenta. Se hace con `UPDATE … now() RETURNING` para no
+        dejar el atributo expirado (carga perezosa en async)."""
+        marca = (await self.db.execute(
+            update(Wishlist).where(Wishlist.id == item.id)
+            .values(status=WishlistStatus.SEARCHING, last_searched_at=func.now())
+            .returning(Wishlist.last_searched_at)
+        )).scalar_one()
+        item.status = WishlistStatus.SEARCHING
+        item.last_searched_at = marca
+        if item.origen == WishlistOrigin.POLICY:
+            await self.db.commit()
+        else:
+            await self.db.flush()
 
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
@@ -222,12 +269,12 @@ class Orchestrator:
         if not query:
             return None
 
-        item.status = WishlistStatus.SEARCHING
         # D1/H2: marca el intento ya aquí, con o sin resultado — es lo que
         # activa el cooldown de process_wishlist y evita quemar Prowlarr/
-        # foro en cada ciclo con un item condenado.
-        item.last_searched_at = datetime.now(UTC)
-        await self.db.flush()
+        # foro en cada ciclo con un item condenado. C6: va ANTES de comprobar si hay alguna fuente
+        # activa (decisión del PO): un ítem sin fuentes gasta el cooldown de 6 h y no vuelve a
+        # ocupar huecos del lote en cada ciclo.
+        await self._marcar_busqueda(item)
 
         settings = get_settings()
 
@@ -411,7 +458,8 @@ class Orchestrator:
         item.download_backend = backend.value
         item.download_ref = ref
         item.last_error = None
-        item.last_searched_at = datetime.now(UTC)
+        # Hora de la BD (FR-23).
+        item.last_searched_at = (await self.db.execute(select(func.now()))).scalar_one()
         await self.db.flush()
         logger.info(
             "orchestrator.download_started",
@@ -749,7 +797,7 @@ class Orchestrator:
                 series_id=series_id,
                 issue_id=None,
                 status=WishlistStatus.WANTED,
-                priority=5,
+                priority=PRIORIDAD_DE_LA_POLITICA,
                 origen=WishlistOrigin.POLICY,
                 numero=numero,
                 added_at=ahora,
