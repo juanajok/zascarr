@@ -593,7 +593,8 @@ class TestElMinimoDeTamanoNoOmiteNada:
         assert any("motivo" in x for x in self._p(regla, excepciones={".nav": (12.0, "  ")}))
 
     def test_la_hoja_real_solo_tiene_la_excepcion_de_la_barra_inferior(self):
-        """La excepción declarada se usa de verdad y lleva las medidas que la justifican."""
+        """La excepción declarada se usa de verdad. Buscar «56,1», «60,8»… en el motivo comprueba texto
+        escrito a mano: solo es una guarda de que el motivo conserva sus medidas, no las verifica."""
         assert list(EXCEPCIONES_DE_TAMANO) == [".nav-enlace"]
         minimo, motivo = EXCEPCIONES_DE_TAMANO[".nav-enlace"]
         assert minimo == 12.0
