@@ -120,9 +120,20 @@ class FakeSession:
     def __init__(self, queue: list | None = None):
         self._queue = list(queue or [])
         self.flush = AsyncMock()
+        self.commit = AsyncMock()
 
-    async def execute(self, _statement):
+    async def execute(self, statement):
+        # C6: la marca del intento es un `UPDATE … SET last_searched_at = now() RETURNING` (hora de la BD): contesta con
+        # una fecha sin consumir la cola de resultados de la prueba.
+        texto = str(statement)
+        if (texto.startswith("UPDATE wishlist") and "last_searched_at" in texto) or texto.startswith("SELECT now()"):
+            return FakeMarca()
         return self._queue.pop(0)
+
+
+class FakeMarca:
+    def scalar_one(self):
+        return datetime.now(UTC)
 
 
 class CapturingSession(FakeSession):
@@ -351,7 +362,8 @@ class TestMotivoNoAvanza:
         item = Wishlist(id=uuid4(), search_query="Batman", status=WishlistStatus.WANTED)
         session = FakeSession(queue=[
             FakeExecResult(["acknowledged"]),  # is_acknowledged: sí aceptado
-            FakeExecResult([item]),            # items pendientes de la wishlist
+            FakeExecResult([item]),            # items pendientes de la wishlist (manuales)
+            FakeExecResult([]),                # items pendientes de la wishlist (política)
         ])
         orch = Orchestrator(db=session)
 
