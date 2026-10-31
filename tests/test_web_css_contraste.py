@@ -9,7 +9,9 @@ Umbrales (WCAG 2.2, criterio 1.4.3 y 1.4.11):
   · texto normal ......................... ≥ 4,5 : 1  (se aplica a TODO el texto: es más estricto
                                                        que el 3:1 del texto grande, a propósito)
   · foco, bordes de controles, iconos .... ≥ 3 : 1
-  · tamaño mínimo de texto informativo ... 14 px (decisión de producto, no de WCAG)
+  · tamaño mínimo de texto informativo ... 14 px (decisión de producto, no de WCAG); un `clamp` cuenta
+                                            por su mínimo y las excepciones van declaradas con su motivo
+                                            (`EXCEPCIONES_DE_TAMANO`)
   · objetivo táctil de controles ......... 40 px; casillas y radios 24 px
 
 ALCANCE (qué garantiza esta prueba y qué no):
@@ -65,6 +67,99 @@ def _reglas(css: str | None = None) -> list[tuple[str, dict[str, str]]]:
         decl = {k.strip(): v.strip() for k, v in re.findall(r"([\w-]+)\s*:\s*([^;]+);?", cuerpo)}
         salida.append((" ".join(selector.split()), decl))
     return salida
+
+
+# ── tamaño mínimo del texto ───────────────────────────────────────────────────────────────
+MINIMO_PX = 14.0
+
+#: Excepciones DECLARADAS al mínimo de 14 px: selector → (mínimo en px que se tolera, motivo).
+#: Una excepción vale solo mientras el selector siga bajando de 14 px y no baje de lo declarado;
+#: si deja de bajar, la prueba falla (excepción obsoleta) para que no se pudra.
+EXCEPCIONES_DE_TAMANO: dict[str, tuple[float, str]] = {
+    ".nav-enlace": (
+        12.0,
+        "U16: que «Deseados» quepa a 320 px en la barra inferior del móvil. Medido con la fuente real "
+        "(Archivo 600, Chromium): ocupa 56,1 px a 12 px, 60,8 a 13 y 65,5 a 14; la columna a 320 px "
+        "mide 64 px y con el padding quedan 62, así que a 14 px no cabe. clamp(.75rem, 3.3vw, "
+        ".875rem) da 12 px a 320-360, 12,9 a 390, 13,7 a 414 y 14 desde 424 px: la etiqueta mide "
+        "menos de 14 px en cualquier pantalla de menos de 424 px. No se acorta «Deseados»."),
+}
+
+#: `font-size` con `var(...)` o `inherit`: no se puede saber su valor leyendo la hoja, así que FALLAN
+#: salvo que el selector esté aquí con su motivo. Vacía a propósito (hoy ninguna regla los usa).
+TAMANOS_NO_COMPROBABLES: dict[str, str] = {}
+
+#: `font-size` proporcional a su contenedor (`cqw`): sin mínimo en px que leer; cada uno con su motivo.
+TAMANOS_PROPORCIONALES: dict[str, str] = {
+    ".portada-marca": "la inicial decorativa y aria-hidden de ui.portada: 46 % del ancho de su tarjeta, "
+                      "≥ 37 px incluso en la más pequeña (80 px de ancho); el título va en texto debajo",
+}
+
+
+def minimo_px(valor: str) -> float | None:
+    """Tamaño mínimo en px de un `font-size` (un `clamp` cuenta por su primer argumento).
+
+    Devuelve None si el valor es relativo (`em`), y LANZA ValueError si no se puede leer: nada se omite."""
+    v = " ".join(valor.split())
+    if v.startswith("clamp("):
+        m = re.fullmatch(r"clamp\(\s*([\d.]+)(rem|px)\s*,\s*[^,()]+,\s*([\d.]+)(rem|px)\s*\)", v)
+        if not m:
+            raise ValueError(f"clamp no reconocido: {valor!r}")
+        v = m.group(1) + m.group(2)
+    m = re.fullmatch(r"([\d.]+)(rem|em|px)", v)
+    if not m:
+        raise ValueError(f"font-size no reconocido: {valor!r}")
+    n, u = float(m.group(1)), m.group(2)
+    return n * 16 if u == "rem" else n if u == "px" else None
+
+
+def problemas_de_tamano(reglas, excepciones=None, no_comprobables=None, proporcionales=None) -> list[str]:
+    """Todo lo que incumple el mínimo de 14 px. Vacía = bien. No omite nada en silencio."""
+    excepciones = EXCEPCIONES_DE_TAMANO if excepciones is None else excepciones
+    no_comprobables = TAMANOS_NO_COMPROBABLES if no_comprobables is None else no_comprobables
+    proporcionales = TAMANOS_PROPORCIONALES if proporcionales is None else proporcionales
+    problemas, usadas = [], set()
+    for selector, motivo in {**excepciones_motivos(excepciones), **no_comprobables, **proporcionales}.items():
+        if not motivo.strip():
+            problemas.append(f"{selector}: una excepción necesita motivo")
+    for selector, d in reglas:
+        v = d.get("font-size")
+        if not v:
+            continue
+        if v.endswith("cqw"):
+            if selector not in proporcionales:
+                problemas.append(f"{selector}: font-size {v!r} proporcional sin declarar")
+            continue
+        if v.startswith(("var(", "inherit")):
+            if selector not in no_comprobables:
+                problemas.append(f"{selector}: font-size {v!r} no se puede comprobar leyendo la hoja")
+            continue
+        try:
+            px = minimo_px(v)
+        except ValueError as e:
+            problemas.append(f"{selector}: {e}")
+            continue
+        if px is None:                       # `em`: relativo al elemento padre
+            if float(v.removesuffix("em")) < 1:
+                problemas.append(f"{selector}: {v} (em < 1)")
+            continue
+        if px >= MINIMO_PX:
+            continue
+        if selector not in excepciones:
+            problemas.append(f"{selector}: {v} baja de {MINIMO_PX:g} px ({px:g} px)")
+            continue
+        usadas.add(selector)
+        if px < excepciones[selector][0]:
+            problemas.append(f"{selector}: {v} baja de lo declarado en su excepción "
+                             f"({px:g} < {excepciones[selector][0]:g} px)")
+    for selector in excepciones:
+        if selector not in usadas:
+            problemas.append(f"{selector}: excepción obsoleta (ya no baja de {MINIMO_PX:g} px)")
+    return problemas
+
+
+def excepciones_motivos(excepciones) -> dict[str, str]:
+    return {selector: motivo for selector, (_minimo, motivo) in excepciones.items()}
 
 
 # ── color ─────────────────────────────────────────────────────────────────────────────────
@@ -321,20 +416,10 @@ class TestEstructura:
         assert not malos, f"estilos de color en línea en: {malos}"
 
     def test_ningun_texto_baja_de_14_px(self):
-        malos = []
-        for selector, d in _reglas():
-            v = d.get("font-size")
-            if not v or v.startswith(("clamp", "inherit", "var")):
-                continue
-            if v.endswith("cqw"):       # la inicial de ui.portada: proporcional a su tarjeta (≥ 37 px)
-                continue
-            m = re.fullmatch(r"([\d.]+)(rem|em|px)", v)
-            assert m, f"{selector}: font-size no reconocido {v!r}"
-            n, u = float(m.group(1)), m.group(2)
-            px = n * 16 if u == "rem" else n if u == "px" else None
-            if (px is not None and px < 14) or (u == "em" and n < 1):
-                malos.append(f"{selector}: {v}")
-        assert not malos, "texto por debajo de 14 px:\n  " + "\n  ".join(malos)
+        """Un `clamp` cuenta por su mínimo (la etiqueta de la barra inferior baja a 12 px y está
+        declarada en EXCEPCIONES_DE_TAMANO); `var()`/`inherit` y `cqw` fallan salvo declarados."""
+        problemas = problemas_de_tamano(_reglas())
+        assert not problemas, "texto por debajo de 14 px o sin poder comprobarse:\n  " + "\n  ".join(problemas)
 
     @pytest.mark.parametrize("selector", [
         ".topnav a", ".series-search", ".issue-input", ".search-input",
@@ -444,6 +529,78 @@ class TestSombraDura:
         malas = [f"{s}: box-shadow: {d['box-shadow']}" for s, d in _reglas()
                  if "box-shadow" in d and d["box-shadow"] not in permitidas]
         assert not malas, "sombras fuera de los tokens:\n" + "\n".join(malas)
+
+
+class TestElMinimoDeTamanoNoOmiteNada:
+    """Pruebas de la propia prueba del mínimo de 14 px. Antes saltaba todo `clamp`, `var()` e `inherit`,
+    así que la etiqueta de la barra inferior (12 px) no se comprobaba y un `clamp(.5rem, …)` habría pasado."""
+
+    SIN = {}      # sin excepciones, para probar la regla pelada
+
+    def _p(self, reglas, **kw):
+        kw.setdefault("excepciones", self.SIN)
+        kw.setdefault("no_comprobables", self.SIN)
+        kw.setdefault("proporcionales", self.SIN)
+        return problemas_de_tamano(reglas, **kw)
+
+    def test_un_clamp_cuenta_por_su_minimo(self):
+        assert minimo_px("clamp(.75rem, 3.3vw, .875rem)") == 12.0
+        assert minimo_px("clamp(30px, 4.4vw, 48px)") == 30.0
+
+    def test_un_clamp_que_baja_de_14_sin_excepcion_falla(self):
+        p = self._p([(".etiqueta", {"font-size": "clamp(.5rem, 3vw, 1rem)"})])
+        assert len(p) == 1 and ".etiqueta" in p[0] and "8 px" in p[0]
+
+    def test_un_clamp_que_no_baja_de_14_pasa(self):
+        assert self._p([(".h", {"font-size": "clamp(19px, 2.4vw, 26px)"})]) == []
+
+    @pytest.mark.parametrize("valor", [
+        "clamp(1vw, 3vw, 2rem)", "clamp(.75rem, 3vw)", "clamp(var(--a), 3vw, 2rem)", "min(1rem, 2vw)",
+        "smaller", "large",
+    ])
+    def test_un_valor_ilegible_falla_en_vez_de_saltarse(self, valor):
+        p = self._p([(".x", {"font-size": valor})])
+        assert len(p) == 1 and ".x" in p[0]
+
+    def test_var_e_inherit_fallan_salvo_lista_explicita_y_hoy_la_lista_esta_vacia(self):
+        assert TAMANOS_NO_COMPROBABLES == {}
+        for valor in ("var(--tam)", "inherit"):
+            assert len(self._p([(".v", {"font-size": valor})])) == 1
+            assert self._p([(".v", {"font-size": valor})], no_comprobables={".v": "motivo"}) == []
+
+    def test_el_tamano_proporcional_se_declara_con_motivo(self):
+        regla = [(".inicial", {"font-size": "46cqw"})]
+        assert len(self._p(regla)) == 1
+        assert self._p(regla, proporcionales={".inicial": "decorativa"}) == []
+
+    def test_la_excepcion_vale_con_su_minimo_y_su_motivo(self):
+        regla = [(".nav", {"font-size": "clamp(.75rem, 3.3vw, .875rem)"})]
+        assert self._p(regla, excepciones={".nav": (12.0, "U16")}) == []
+
+    def test_una_excepcion_no_deja_bajar_de_lo_declarado(self):
+        regla = [(".nav", {"font-size": "clamp(.6rem, 3.3vw, .875rem)"})]
+        p = self._p(regla, excepciones={".nav": (12.0, "U16")})
+        assert len(p) == 1 and "lo declarado" in p[0]
+
+    def test_una_excepcion_obsoleta_falla(self):
+        """Si la regla vuelve a 14 px o desaparece, la excepción sobra y se tiene que borrar."""
+        for reglas in ([(".nav", {"font-size": ".875rem"})], []):
+            p = self._p(reglas, excepciones={".nav": (12.0, "U16")})
+            assert len(p) == 1 and "obsoleta" in p[0]
+
+    def test_una_excepcion_sin_motivo_falla(self):
+        regla = [(".nav", {"font-size": "clamp(.75rem, 3.3vw, .875rem)"})]
+        assert any("motivo" in x for x in self._p(regla, excepciones={".nav": (12.0, "  ")}))
+
+    def test_la_hoja_real_solo_tiene_la_excepcion_de_la_barra_inferior(self):
+        """La excepción declarada se usa de verdad. Buscar «56,1», «60,8»… en el motivo comprueba texto
+        escrito a mano: solo es una guarda de que el motivo conserva sus medidas, no las verifica."""
+        assert list(EXCEPCIONES_DE_TAMANO) == [".nav-enlace"]
+        minimo, motivo = EXCEPCIONES_DE_TAMANO[".nav-enlace"]
+        assert minimo == 12.0
+        for dato in ("56,1", "60,8", "65,5", "62", "424"):
+            assert dato in motivo, dato
+        assert problemas_de_tamano(_reglas()) == []
 
 
 class TestLoNoSoportadoNoPasaInadvertido:
