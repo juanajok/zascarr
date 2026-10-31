@@ -89,7 +89,8 @@ async def _cuantos_retirados(db: AsyncSession, series: Series) -> int:
 
 
 async def _contexto_politica(db: AsyncSession, series: Series,
-                             querer=None, retirados_ahora: int | None = None) -> dict:
+                             querer=None, retirados_ahora: int | None = None,
+                             aviso_legal_pendiente: bool | None = None) -> dict:
     """Lo que la ficha de serie enseña sobre D8.
 
     Usa el MISMO predicado que genera (`services/politica.querer_de_serie`) — si
@@ -99,6 +100,9 @@ async def _contexto_politica(db: AsyncSession, series: Series,
     `retirados` es SIEMPRE el total de la serie (no lo que retiró este
     guardado): lo que acaba de retirarse va aparte, en `retirados_ahora`, para
     que la confirmación no se confunda con el acumulado.
+
+    `aviso_legal_pendiente`: si el manejador ya consultó el acuse (puerta legal), se reutiliza;
+    `None` = consultarlo aquí.
     """
     if querer is None:
         querer = await querer_de_serie(db, series)
@@ -110,7 +114,9 @@ async def _contexto_politica(db: AsyncSession, series: Series,
         "lote": get_settings().orchestrator_politica_lote,
         # D8 + blindaje legal: el ciclo no genera ni busca sin acuse, así que
         # prometer búsquedas sin decirlo sería engañar.
-        "aviso_legal_pendiente": not await is_acknowledged(db),
+        "aviso_legal_pendiente": (
+            not await is_acknowledged(db) if aviso_legal_pendiente is None
+            else aviso_legal_pendiente),
         "retirados": await _cuantos_retirados(db, series),
         "retirados_ahora": retirados_ahora,
     }
@@ -171,13 +177,26 @@ async def cambiar_politica(series_id: UUID, request: Request,
             status_code=422,
             detail="Esa política todavía no se puede aplicar — no hace nada",
         )
+    # Puerta legal (C6, FR-20/21): SOLO al activar; desactivar nunca la exige. Va después del 404 y
+    # del 422 y antes de escribir. Se responde 2xx (htmx no intercambia los 4xx) con el fragmento
+    # SIN CAMBIOS, el aviso y el enlace.
+    acuse = None
+    if politica != WishlistPolicy.NONE:
+        acuse = await is_acknowledged(db)
+        if not acuse:
+            contexto = await _contexto_politica(db, series, aviso_legal_pendiente=True)
+            contexto["activacion_bloqueada_por_aviso"] = True
+            return templates.TemplateResponse(
+                request, "_politica_serie.html", {"series": series, **contexto}
+            )
     series.wishlist_policy = politica
     await db.flush()
 
     querer = await querer_de_serie(db, series)
     retirados_ahora = await retirar_de_serie(db, series, querer)
-    contexto = await _contexto_politica(db, series, querer=querer,
-                                        retirados_ahora=retirados_ahora)
+    contexto = await _contexto_politica(
+        db, series, querer=querer, retirados_ahora=retirados_ahora,
+        aviso_legal_pendiente=None if acuse is None else not acuse)
     return templates.TemplateResponse(
         request, "_politica_serie.html", {"series": series, **contexto}
     )
