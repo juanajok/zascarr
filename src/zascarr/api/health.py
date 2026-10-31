@@ -337,16 +337,24 @@ def _disk_status() -> tuple[str, str]:
     settings = get_settings()
     rutas = [Path(p.strip()) for p in (settings.disk_paths or "").split(",") if p.strip()]
     libres: list[int] = []
+    existentes = 0
     for ruta in rutas:
         candidata = ruta
         while not candidata.exists() and candidata != candidata.parent:
             candidata = candidata.parent
         if not candidata.exists() or not candidata.is_dir():
             continue
+        existentes += 1
         try:
             libres.append(shutil.disk_usage(candidata).free)
         except OSError:
             continue
+    if not libres and existentes:
+        # Hay rutas pero ninguna se pudo medir: «no medible» no es «todo bien».
+        return "warning", (
+            "No se pudo medir el espacio libre del disco de datos. "
+            "Revisa que el disco esté montado y se lea bien."
+        )
     if not libres:
         return "disabled", "Sin rutas locales accesibles para comprobar el disco."
     libre = min(libres)

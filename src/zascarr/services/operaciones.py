@@ -77,7 +77,7 @@ def _fecha(valor) -> str | None:
 
 
 async def _contar_por(db: AsyncSession, columna) -> dict:
-    """`{valor: n}` con un GROUP BY en SQL: ninguna fila de operaciones llega a Python, solo un recuento por valor."""
+    """`{valor: n}` con un GROUP BY en SQL: a Python llega un recuento por valor, no las filas."""
     return {valor: int(n) for valor, n in (await db.execute(
         select(columna, func.count()).group_by(columna))).all()}
 
@@ -85,8 +85,9 @@ async def _contar_por(db: AsyncSession, columna) -> dict:
 async def resumen_operaciones(db: AsyncSession) -> dict:
     """Recuentos/estados de las cuatro tablas, sin rutas ni nombres.
 
-    Todo se cuenta en SQL (`GROUP BY`): con miles de operaciones la petición no carga las filas en memoria. Lo único que
-    se lee fila a fila son los ids de las asignaciones VIVAS (`preparada`/`confirmada`), para mirar su candado."""
+    Todo se cuenta en SQL (`GROUP BY`): con miles de operaciones la petición no carga las filas en
+    memoria. Lo único que se lee fila a fila son los ids de las asignaciones VIVAS
+    (`preparada`/`confirmada`), para mirar su candado."""
     candados = await _candados(db)
 
     asignacion = {estado: 0 for estado in ESTADOS_ASIGNACION}
@@ -94,7 +95,7 @@ async def resumen_operaciones(db: AsyncSession) -> dict:
     for estado, n in (await _contar_por(db, AsignacionOperacion.estado)).items():
         estado_valor = estado.value if hasattr(estado, "value") else str(estado)
         if estado_valor in ("preparada", "confirmada"):
-            continue                                   # las vivas se clasifican una a una, por su candado
+            continue                       # las vivas se clasifican una a una, por su candado
         try:
             asignacion[clasificar_asignacion(estado_valor, en_curso=False)] += n
         except ValueError:

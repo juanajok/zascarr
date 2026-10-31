@@ -217,3 +217,28 @@ async def test_h1_el_resumen_cuenta_en_sql_y_no_carga_las_filas(url_bd):
                 "SELECT asignacion_operaciones.id FROM") and "estado IN" in x
             ultimo_run = tabla == "import_runs" and "LIMIT" in x
             assert agregada or solo_ids_vivos or ultimo_run, f"carga filas de {tabla}: {x[:160]}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resultado", [
+    "'null'::jsonb", "'[]'::jsonb", "'[1, 2]'::jsonb", "'\"texto\"'::jsonb", "'42'::jsonb", "'{}'::jsonb",
+    "'{\"global\": null}'::jsonb", "'{\"global\": \"inventado\"}'::jsonb"])
+async def test_un_resultado_atipico_cuenta_como_desconocida_y_no_rompe(url_bd, resultado):
+    """#123 (SecOps): `resultado` `null` JSON (la columna es NOT NULL), una lista, un texto o un `global` ajeno → «desconocida». Antes una lista
+    daba AttributeError en el inventario."""
+    motor = create_async_engine(url_asyncpg(url_bd), poolclass=NullPool)
+    fab = async_sessionmaker(motor, expire_on_commit=False)
+    try:
+        async with fab() as s:
+            serie = Series(id=uuid.uuid4(), title="Serie atípica", tradition=ComicTradition.AMERICAN)
+            s.add(serie)
+            await s.flush()
+            await s.execute(text(
+                "insert into vinculacion_operaciones (operacion_id, series_id, resultado, token_hasta) "
+                f"values (gen_random_uuid(), :s, {resultado}, now() + interval '1 hour')"), {"s": serie.id})
+            await s.commit()
+        async with fab() as s:
+            r = await resumen_operaciones(s)
+    finally:
+        await motor.dispose()
+    assert r["vinculacion"]["desconocida"] == 1 and r["vinculacion"]["total"] == 1

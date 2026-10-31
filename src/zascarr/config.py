@@ -5,6 +5,7 @@ Todas las variables se leen del entorno (o .env). Validación estricta al arranq
 from functools import lru_cache
 from pathlib import Path
 
+import structlog
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -138,7 +139,9 @@ class Settings(BaseSettings):
     # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
     # cuelga del volumen de datos y es local; si no existe, el check queda «disabled».
     disk_paths: str = Field(default="/config/covers")
-    # Cota superior: 10 TiB (en MB), más que cualquier disco de una Raspberry Pi; evita desbordes y valores absurdos.
+    # Cota superior: 10 TiB (en MB), más que cualquier disco de una Raspberry Pi;
+    # evita desbordes y valores absurdos. Si `error > warn`, la app arranca igual
+    # y corrige `error` a `warn`.
     disk_warn_free_mb: int = Field(default=2048, ge=0, le=10_485_760)
     disk_error_free_mb: int = Field(default=512, ge=0, le=10_485_760)
 
@@ -242,12 +245,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _umbrales_de_disco_coherentes(self) -> "Settings":
-        """El aviso salta con MÁS espacio libre que el error: con `warn < error` el estado del disco sería incoherente."""
-        if self.disk_warn_free_mb < self.disk_error_free_mb:
-            raise ValueError(
-                f"DISK_WARN_FREE_MB ({self.disk_warn_free_mb}) no puede ser menor que "
-                f"DISK_ERROR_FREE_MB ({self.disk_error_free_mb}): el aviso salta antes que el error."
+        """El aviso salta con MÁS espacio libre que el error. Un par invertido NO impide arrancar
+        (lo observacional no bloquea, CLAUDE.md §3.2): se ajusta `error = min(error, warn)` y se
+        deja un aviso en el registro."""
+        if self.disk_error_free_mb > self.disk_warn_free_mb:
+            structlog.get_logger().warning(
+                "config.umbrales_de_disco_invertidos",
+                DISK_WARN_FREE_MB=self.disk_warn_free_mb,
+                DISK_ERROR_FREE_MB=self.disk_error_free_mb,
+                ajustado_a=self.disk_warn_free_mb,
             )
+            self.disk_error_free_mb = self.disk_warn_free_mb
         return self
 
 
