@@ -1,6 +1,6 @@
 <div class="wishlist-row" id="fila-{{ row.item.id }}">
   <span class="wishlist-title">{{ row.titulo }}</span>
-  <span class="wishlist-badge estado-{{ row.item.status.value }}">{{ row.estado }}</span>
+  {{ ui.chip(row.aspecto, row.estado) }}
   {% if row.motivo %}
   <span class="wishlist-motivo" title="{{ row.motivo }}">{{ row.motivo }}</span>
   {% endif %}
