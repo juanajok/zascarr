@@ -343,3 +343,26 @@ class TestPrioridad:
             filas = (await s.execute(text("select numero, priority, status::text from wishlist order by numero"))).all()
         assert [(f[0], f[1]) for f in filas] == [(1, 5), (2, 5), (3, 5)]
         assert [f[2] for f in filas][:2] == ["wanted", "wanted"]           # sí se reactivaron
+
+
+class TestEstadoNoSeConfirma:
+    async def test_a2_si_el_proceso_cae_durante_la_peticion_el_item_no_queda_buscando_para_siempre(self, mundo):
+        """SecOps A-2: la marca (`last_searched_at`) se confirma antes de la petición, pero el estado `searching` NO: si el
+        proceso muere o se cancela durante la petición, el rollback lo deshace y el ítem vuelve a ser reintentable."""
+        import asyncio
+
+        await mundo.item(1)
+
+        async def cancelada(*_a, **_k):
+            raise asyncio.CancelledError
+
+        async with mundo.fab() as s:
+            o = mundo.orquestador(s)
+            o._prowlarr.search.side_effect = cancelada
+            with pytest.raises(asyncio.CancelledError):
+                await o.process_wishlist(limit=2)
+            await s.rollback()                                            # lo que ocurre al cerrar la sesión sin commit
+        async with mundo.fab() as s:
+            fila = (await s.execute(text("select status::text, last_searched_at is not null from wishlist"))).one()
+        assert fila[0] == "wanted"                                        # no `searching` para siempre
+        assert fila[1] is True                                            # y la marca sí persiste (FR-22)

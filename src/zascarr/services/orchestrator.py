@@ -214,18 +214,22 @@ class Orchestrator:
         """Marca el intento con la hora de la BD (FR-23). En ítems de política la marca se CONFIRMA
         con un commit corto ANTES de la primera petición externa (FR-22): si el ciclo falla después,
         la marca persiste y la ventana la cuenta. Se hace con `UPDATE … now() RETURNING` para no
-        dejar el atributo expirado (carga perezosa en async)."""
+        dejar el atributo expirado (carga perezosa en async).
+
+        Se confirma SOLO la marca. El estado `searching` queda como cambio sin confirmar (flush):
+        si el proceso muere o se cancela durante la petición, el rollback lo deshace y el ítem sigue
+        siendo reintentable; confirmarlo lo dejaría «buscando» para siempre (el ciclo solo toma
+        `wanted`/`failed`)."""
         marca = (await self.db.execute(
             update(Wishlist).where(Wishlist.id == item.id)
-            .values(status=WishlistStatus.SEARCHING, last_searched_at=func.now())
+            .values(last_searched_at=func.now())
             .returning(Wishlist.last_searched_at)
         )).scalar_one()
-        item.status = WishlistStatus.SEARCHING
         item.last_searched_at = marca
         if item.origen == WishlistOrigin.POLICY:
             await self.db.commit()
-        else:
-            await self.db.flush()
+        item.status = WishlistStatus.SEARCHING
+        await self.db.flush()
 
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
