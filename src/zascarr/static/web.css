@@ -712,7 +712,7 @@ button[type="submit"].neutro {
 .suggestion {
   display: flex; flex-direction: column; gap: 4px;
   padding: 8px 10px;
-  background: color-mix(in srgb, var(--ok) 12%, var(--paper));
+  background: var(--ok-bg);
   border: 2.5px solid var(--ok);
   border-radius: var(--radius-panel);
 }
@@ -777,7 +777,7 @@ button[type="submit"].btn-sugerencia {
 .audit-resumen { margin: 6px 0 0; padding-left: 18px; font-size: .9rem; }
 .audit-ok {
   border: 3px solid var(--ok);
-  background: color-mix(in srgb, var(--ok) 12%, var(--paper));
+  background: var(--ok-bg);
   border-radius: var(--radius-panel);
   padding: 12px 14px; margin: 20px 0; font-weight: 600;
 }
@@ -914,7 +914,7 @@ button[type="submit"].btn-sugerencia {
 }
 .legal-notice-info {
   display: block; border-radius: var(--radius-panel); padding: 10px 14px; margin: 12px 0;
-  background: color-mix(in srgb, var(--cyan) 14%, var(--paper));
+  background: var(--info-bg);
   color: var(--ink);
   border: 2px solid var(--ink);
 }

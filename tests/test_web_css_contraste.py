@@ -162,6 +162,52 @@ def excepciones_motivos(excepciones) -> dict[str, str]:
     return {selector: motivo for selector, (_minimo, motivo) in excepciones.items()}
 
 
+# ── color-mix(): los estados llevan token, no una mezcla ──────────────────────────────────
+#: Usos permitidos de `color-mix()`: (selector, propiedad) → motivo. Son decorativos, NO estados: una
+#: tinta con alfa sobre lo que haya detrás, que un token de fondo opaco (`ok-bg`…) no sustituye. Un
+#: estado (ok, warn, amber, info) se tiñe con su token `-bg`; cualquier mezcla nueva en CUALQUIER
+#: propiedad (background, border, color, text-shadow, box-shadow, variables…) falla salvo que se
+#: declare aquí con su motivo, y una entrada que ya no existe también falla (se pudriría).
+USOS_DE_COLOR_MIX: dict[tuple[str, str], str] = {
+    (".audit-item", "border-top"):
+        "separador discontinuo de la lista del informe de auditoría: ink al 22 % con alfa, no un estado",
+    (".series-results li", "border-bottom"):
+        "separador discontinuo de los resultados de búsqueda de serie: ink al 22 % con alfa, no un estado",
+    (".pagina-error h1", "text-shadow"):
+        "desalineamiento de planchas (cian y magenta corridos) del rótulo de la página de error: el único "
+        "sitio donde está permitido; se apaga con prefers-contrast y forced-colors",
+}
+
+
+def declaraciones(css: str | None = None) -> list[tuple[str, str, str]]:
+    """(selector, propiedad, valor) de TODAS las declaraciones de la hoja, sin colapsar duplicadas
+    (a diferencia de `_reglas`, donde la última pisa a la anterior)."""
+    salida = []
+    for selector, cuerpo in re.findall(r"([^{}@]+)\{([^{}]*)\}", _hoja(css)):
+        sel = " ".join(selector.split())
+        for prop, valor in re.findall(r"([\w-]+)\s*:\s*([^;]+);?", cuerpo):
+            salida.append((sel, prop.strip(), " ".join(valor.split())))
+    return salida
+
+
+def problemas_de_color_mix(decls, permitidos=None) -> list[str]:
+    permitidos = USOS_DE_COLOR_MIX if permitidos is None else permitidos
+    problemas = [f"{sel} {{ {prop} }}: una excepción necesita motivo"
+                 for (sel, prop), motivo in permitidos.items() if not motivo.strip()]
+    vistos = set()
+    for sel, prop, valor in decls:
+        if "color-mix(" not in valor:
+            continue
+        if (sel, prop) in permitidos:
+            vistos.add((sel, prop))
+        else:
+            problemas.append(f"{sel} {{ {prop}: {valor} }}: color-mix() fuera de la lista; un estado "
+                             "se tiñe con su token -bg (ok-bg, warn-bg, amber-bg, info-bg)")
+    problemas += [f"{sel} {{ {prop} }}: entrada obsoleta (ya no usa color-mix())"
+                  for sel, prop in permitidos if (sel, prop) not in vistos]
+    return problemas
+
+
 # ── color ─────────────────────────────────────────────────────────────────────────────────
 def _rgb(hexa: str) -> tuple[float, float, float]:
     h = hexa.lstrip("#")
@@ -226,8 +272,8 @@ def contraste(a: str, b: str) -> float:
 # ── fondos sobre los que puede caer texto «sin fondo propio» ─────────────────────────────
 FONDOS_DE_CONTEXTO = [
     "var(--paper)", "var(--paper-2)", "var(--caption-bg)",
-    "color-mix(in srgb, var(--ok) 12%, var(--paper))",     # .suggestion, .audit-ok
-    "color-mix(in srgb, var(--cyan) 14%, var(--paper))",   # .legal-notice-info
+    "var(--ok-bg)",      # .suggestion, .audit-ok
+    "var(--info-bg)",    # .legal-notice-info
 ]
 FG_BASE_DEL_BOTON = "var(--ink)"   # `button { color: var(--ink) }`; --btn-bg solo cambia el fondo
 
@@ -601,6 +647,53 @@ class TestElMinimoDeTamanoNoOmiteNada:
         for dato in ("56,1", "60,8", "65,5", "62", "424"):
             assert dato in motivo, dato
         assert problemas_de_tamano(_reglas()) == []
+
+
+class TestColorMixSoloDondeSeDeclara:
+    """El estado se tiñe con su token -bg. Antes había 7 `color-mix()` y nada impedía una octava."""
+
+    def test_la_hoja_real_solo_mezcla_donde_se_declara(self):
+        problemas = problemas_de_color_mix(declaraciones())
+        assert not problemas, "\n  ".join(problemas)
+
+    def test_los_usos_permitidos_son_los_tres_decorativos(self):
+        assert sorted(USOS_DE_COLOR_MIX) == [
+            (".audit-item", "border-top"), (".pagina-error h1", "text-shadow"),
+            (".series-results li", "border-bottom")]
+
+    def test_los_estados_de_la_hoja_usan_su_token(self):
+        """Los tres fondos que eran mezclas (`.suggestion`, `.audit-ok`, `.legal-notice-info`)."""
+        fondos = {sel: valor for sel, prop, valor in declaraciones() if prop == "background"}
+        assert fondos[".suggestion"] == "var(--ok-bg)"
+        assert fondos[".audit-ok"] == "var(--ok-bg)"
+        assert fondos[".legal-notice-info"] == "var(--info-bg)"
+
+    @pytest.mark.parametrize("propiedad", [
+        "background", "border-color", "color", "box-shadow", "text-shadow", "--btn-bg", "outline-color"])
+    def test_una_mezcla_nueva_falla_en_cualquier_propiedad(self, propiedad):
+        css = f".nuevo {{ {propiedad}: color-mix(in srgb, var(--ok) 12%, var(--paper)); }}"
+        p = problemas_de_color_mix(declaraciones(css), permitidos={})
+        assert len(p) == 1 and ".nuevo" in p[0] and propiedad in p[0]
+
+    def test_una_mezcla_repetida_en_la_misma_regla_no_se_oculta(self):
+        """`_reglas` se queda con la última declaración; la guarda las ve todas."""
+        css = (".x { background: color-mix(in srgb, var(--ok) 12%, var(--paper)); "
+               "background: var(--paper); }")
+        assert len(problemas_de_color_mix(declaraciones(css), permitidos={})) == 1
+
+    def test_un_uso_declarado_pasa(self):
+        css = ".sep { border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent); }"
+        assert problemas_de_color_mix(declaraciones(css), permitidos={(".sep", "border-top"): "decorativo"}) == []
+
+    def test_una_entrada_que_ya_no_existe_falla(self):
+        p = problemas_de_color_mix(declaraciones(".sep { border-top: 2px dashed var(--ink); }"),
+                                   permitidos={(".sep", "border-top"): "decorativo"})
+        assert len(p) == 1 and "obsoleta" in p[0]
+
+    def test_una_entrada_sin_motivo_falla(self):
+        css = ".sep { border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent); }"
+        p = problemas_de_color_mix(declaraciones(css), permitidos={(".sep", "border-top"): "  "})
+        assert any("motivo" in x for x in p)
 
 
 class TestLoNoSoportadoNoPasaInadvertido:
