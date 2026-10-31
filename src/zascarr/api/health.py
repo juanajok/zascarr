@@ -393,7 +393,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     restore_status, restore_detail = _restore_status()
 
     # ── Disco local (no bloqueante; nunca mira la biblioteca de red) ──
-    disk_status, disk_detail = _disk_status()
+    # `shutil.disk_usage` es E/S síncrona: fuera del bucle de eventos (CLAUDE.md §4).
+    disk_status, disk_detail = await asyncio.to_thread(_disk_status)
 
     core_ok = db_status == "ok"
     backup_ok = backup_status == "ok"

@@ -5,7 +5,7 @@ Todas las variables se leen del entorno (o .env). Validación estricta al arranq
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -138,8 +138,9 @@ class Settings(BaseSettings):
     # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
     # cuelga del volumen de datos y es local; si no existe, el check queda «disabled».
     disk_paths: str = Field(default="/config/covers")
-    disk_warn_free_mb: int = Field(default=2048, ge=0)
-    disk_error_free_mb: int = Field(default=512, ge=0)
+    # Cota superior: 10 TiB (en MB), más que cualquier disco de una Raspberry Pi; evita desbordes y valores absurdos.
+    disk_warn_free_mb: int = Field(default=2048, ge=0, le=10_485_760)
+    disk_error_free_mb: int = Field(default=512, ge=0, le=10_485_760)
 
     # ── VPN state (fichero escrito por un script del host) ────────
     # Fichero JSON escrito por scripts/vpn-state.sh (baremetal, fuera del
@@ -238,6 +239,16 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
     debug: bool = False
+
+    @model_validator(mode="after")
+    def _umbrales_de_disco_coherentes(self) -> "Settings":
+        """El aviso salta con MÁS espacio libre que el error: con `warn < error` el estado del disco sería incoherente."""
+        if self.disk_warn_free_mb < self.disk_error_free_mb:
+            raise ValueError(
+                f"DISK_WARN_FREE_MB ({self.disk_warn_free_mb}) no puede ser menor que "
+                f"DISK_ERROR_FREE_MB ({self.disk_error_free_mb}): el aviso salta antes que el error."
+            )
+        return self
 
 
 @lru_cache

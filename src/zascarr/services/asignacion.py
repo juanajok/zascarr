@@ -729,7 +729,13 @@ async def reconciliar_al_arrancar(servicio: AsignacionService | None = None) -> 
     en `estado_ultima_reconciliacion()` y en el log. Consulta solo `asignacion_operaciones` (índice parcial):
     no recorre la biblioteca. Devuelve cuántas operaciones procesó (0 si falló las 3 veces)."""
     global _ULTIMA_RECONCILIACION
-    servicio = servicio or servicio_por_defecto()
+    if servicio is None:
+        try:
+            servicio = servicio_por_defecto()
+        except Exception as exc:  # noqa: BLE001 — «nunca propaga»: una configuración rota no puede subir por la tarea de fondo
+            logger.exception("asignacion.reconciliacion_sin_servicio")
+            _ULTIMA_RECONCILIACION = {"ok": False, "intentos": 0, "error": type(exc).__name__}
+            return 0
     for intento in range(1, RECONCILIACION_INTENTOS + 1):
         try:
             resultados = await servicio.reconciliar()
