@@ -16,6 +16,7 @@ from zascarr.services.borrado_serie import (
     SerieNoEncontradaError,
 )
 from zascarr.services.edicion_serie import EdicionDeSerie, ParecidasSinVerError, SerieCambiadaError
+from zascarr.services.legal import is_acknowledged
 
 # El cálculo de huecos vive en `services/` (lo usa también el orquestador, que
 # no puede depender de `api/`). Se reexportan aquí porque `web/series.py`,
@@ -178,6 +179,18 @@ async def update_series(series_id: UUID, data: SeriesUpdate, db: AsyncSession = 
     `vistas` incluya sus identificadores."""
     cambios = data.model_dump(exclude_unset=True)
     vistas = {str(v) for v in cambios.pop("vistas", [])}
+    # Puerta legal (C6, SecOps A-1): activar una política distinta de `ninguno` exige el aviso
+    # aceptado, igual que en la UI; desactivar nunca. Mismo 403 y mismo `HX-Redirect` que
+    # `require_legal_acknowledgment`. El 404 va antes.
+    politica = cambios.get("wishlist_policy")
+    activa = politica is not None and politica != WishlistPolicy.NONE
+    if activa and not await is_acknowledged(db):
+        existe = (await db.execute(
+            select(Series.id).where(Series.id == series_id))).scalar_one_or_none()
+        if existe is None:
+            raise HTTPException(status_code=404, detail="Serie no encontrada")
+        raise HTTPException(status_code=403, detail="legal_acknowledgment_required",
+                            headers={"HX-Redirect": "/ui/legal"})
     try:
         return await EdicionDeSerie(db).actualizar(series_id, cambios, vistas)
     except SerieNoEncontradaError:
