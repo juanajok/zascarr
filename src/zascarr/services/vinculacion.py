@@ -209,6 +209,10 @@ class VinculacionDeArchivos:
             VinculacionOperacion.operacion_id == operacion_id))).scalar_one_or_none()
         if previo is None:
             return None
+        # BL-SER1 (#303): la tabla guarda también informes de RETIRADA (`resultado.tipo`). No son vinculaciones y no
+        # se pueden leer con este contrato; se ignoran como si no hubiera informe.
+        if (previo.resultado or {}).get("tipo") is not None:
+            return None
         if UUID(str(previo.series_id)) != series_id:
             raise InformeDeOtraSerieError("El informe es de otra serie.")
         doc = previo.resultado
