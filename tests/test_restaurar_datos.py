@@ -824,3 +824,19 @@ class TestMasGuardasDeLaRestauracion:
         r = _ejecutar(ctx, extra_env={"FAKE_DB_ALEMBIC": "0020" + esc})
         assert r.returncode == 0, r.stdout + r.stderr
         assert "Alembic esperado:" in r.stdout and "[7m" not in r.stdout + r.stderr
+
+
+    def test_el_dump_inexistente_con_escapes_en_el_nombre_sale_limpio(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        r = _ejecutar(ctx, args=["--dump", str(ctx["backup"] / ("no-existe\x1b[7mXX.sql.gz")),
+                                 "--sha", ctx["head"], "--yes"])
+        assert r.returncode != 0 and "El dump no existe o está vacío" in r.stderr
+        assert "[7m" not in r.stderr and "no-existe" in r.stderr
+
+    def test_el_manifiesto_ausente_con_un_dump_de_nombre_con_escapes_sale_limpio(self, tmp_path):
+        ctx = _preparar(tmp_path)
+        nuevo = ctx["dump"].with_name("update_20261029_210527\x1b[7mXX.sql.gz")
+        ctx["dump"].rename(nuevo)                       # y no hay MANIFIESTO-<ese nombre>.json
+        r = _ejecutar(ctx, args=["--dump", str(nuevo), "--sha", ctx["head"], "--yes"])
+        assert r.returncode != 0 and "No encuentro el manifiesto" in r.stderr
+        assert "[7m" not in r.stderr and "MANIFIESTO-update_20261029_210527" in r.stderr

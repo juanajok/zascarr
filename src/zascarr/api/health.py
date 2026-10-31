@@ -337,16 +337,24 @@ def _disk_status() -> tuple[str, str]:
     settings = get_settings()
     rutas = [Path(p.strip()) for p in (settings.disk_paths or "").split(",") if p.strip()]
     libres: list[int] = []
+    existentes = 0
     for ruta in rutas:
         candidata = ruta
         while not candidata.exists() and candidata != candidata.parent:
             candidata = candidata.parent
         if not candidata.exists() or not candidata.is_dir():
             continue
+        existentes += 1
         try:
             libres.append(shutil.disk_usage(candidata).free)
         except OSError:
             continue
+    if not libres and existentes:
+        # Hay rutas pero ninguna se pudo medir: «no medible» no es «todo bien».
+        return "warning", (
+            "No se pudo medir el espacio libre del disco de datos. "
+            "Revisa que el disco esté montado y se lea bien."
+        )
     if not libres:
         return "disabled", "Sin rutas locales accesibles para comprobar el disco."
     libre = min(libres)
@@ -393,7 +401,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     restore_status, restore_detail = _restore_status()
 
     # ── Disco local (no bloqueante; nunca mira la biblioteca de red) ──
-    disk_status, disk_detail = _disk_status()
+    # `shutil.disk_usage` es E/S síncrona: fuera del bucle de eventos (CLAUDE.md §4).
+    disk_status, disk_detail = await asyncio.to_thread(_disk_status)
 
     core_ok = db_status == "ok"
     backup_ok = backup_status == "ok"
