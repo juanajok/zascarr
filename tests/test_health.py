@@ -504,3 +504,32 @@ class TestHealthRestore:
         assert 'restore: "Restauración"' in html
         assert "Restauración reciente verificada" in html
         assert "La última restauración falló" in html
+
+
+class TestDiscoFueraDelBucle:
+    """#123 (QA, A5 de #385): `_disk_status` hace E/S síncrona (`shutil.disk_usage`); en un handler async bloquearía el bucle."""
+
+    def test_el_disco_se_mide_fuera_del_hilo_del_bucle(self, clientes, monkeypatch, tmp_path):
+        import threading
+
+        clientes(transmission=False, amule=False)
+        monkeypatch.setattr(get_settings(), "disk_paths", str(tmp_path))
+        hilos = {}
+
+        async def base_ok(_db):
+            hilos["bucle"] = threading.get_ident()
+            return "ok", "Conectada y migrada."
+
+        def disco():
+            hilos["disco"] = threading.get_ident()
+            return "ok", "Quedan 9999 MB libres en el disco de datos."
+
+        with (
+            patch("zascarr.api.health._database_status", base_ok),
+            patch("zascarr.api.health._disk_status", disco),
+            patch("zascarr.api.health._restore_status", return_value=("ok", "Restauración reciente")),
+            _fake_db_client() as client,
+        ):
+            body = client.get("/api/health").json()
+        assert body["checks"]["disk"] == "ok"
+        assert hilos["disco"] != hilos["bucle"], "la medición del disco corre en el hilo del bucle de eventos"

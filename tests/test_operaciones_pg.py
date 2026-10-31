@@ -175,3 +175,45 @@ async def test_el_candado_consultivo_marca_en_curso(url_bd):
         await trans.rollback()
         await candado.close()
         await motor.dispose()
+
+
+@pytest.mark.asyncio
+async def test_h1_el_resumen_cuenta_en_sql_y_no_carga_las_filas(url_bd):
+    """#123 (SecOps H-1): con miles de operaciones, ninguna consulta trae las filas de las tablas a Python: o agrupa y cuenta
+    (`GROUP BY`/`count`), o pide solo los ids de las asignaciones VIVAS para mirar su candado."""
+    from sqlalchemy import event
+
+    ids = await _sembrar(url_bd)
+    motor = create_async_engine(url_asyncpg(url_bd), poolclass=NullPool)
+    fab = async_sessionmaker(motor, expire_on_commit=False)
+    async with fab() as s:
+        serie = (await s.execute(text("select id from series limit 1"))).scalar_one()
+        await s.execute(text(
+            "insert into vinculacion_operaciones (operacion_id, series_id, resultado, token_hasta) "
+            "select gen_random_uuid(), :s, "
+            "jsonb_build_object('version', 1, 'global', 'vinculados_todos', 'archivos', '[]'::jsonb, 'totales', '{}'::jsonb), "
+            "now() + interval '1 hour' from generate_series(1, 3000)"), {"s": serie})
+        await s.commit()
+    sentencias: list[str] = []
+
+    def anotar(_conn, _cursor, statement, *_a):
+        sentencias.append(" ".join(statement.split()))
+
+    event.listen(motor.sync_engine, "before_cursor_execute", anotar)
+    try:
+        async with fab() as s:
+            r = await resumen_operaciones(s)
+    finally:
+        event.remove(motor.sync_engine, "before_cursor_execute", anotar)
+        await motor.dispose()
+    assert r["vinculacion"]["completada"] == 3001 and r["vinculacion"]["total"] == 3003    # los 3 sembrados + 3000
+    assert r["asignacion"]["recuperable"] == 2 and ids                                       # las vivas siguen contándose
+    for tabla in ("asignacion_operaciones", "alta_operaciones", "vinculacion_operaciones", "import_runs"):
+        propias = [x for x in sentencias if f"FROM {tabla}" in x and "pg_" not in x]
+        assert propias, tabla
+        for x in propias:
+            agregada = "count(" in x.lower() or "GROUP BY" in x
+            solo_ids_vivos = tabla == "asignacion_operaciones" and x.startswith(
+                "SELECT asignacion_operaciones.id FROM") and "estado IN" in x
+            ultimo_run = tabla == "import_runs" and "LIMIT" in x
+            assert agregada or solo_ids_vivos or ultimo_run, f"carga filas de {tabla}: {x[:160]}"

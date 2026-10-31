@@ -68,3 +68,48 @@ def test_la_ruta_get_operaciones_esta_registrada():
     from zascarr.main import app
 
     assert "/api/operaciones" in app.openapi()["paths"]
+
+
+class TestResumenClasificaLoDesconocido:
+    """#123 (QA, A3 de #385): un estado fuera del enum cuenta como «desconocida», no como completada ni rompe la petición."""
+
+    @pytest.mark.asyncio
+    async def test_estados_inventados_van_a_desconocida(self, monkeypatch):
+        import zascarr.services.operaciones as ops
+
+        async def sin_candados(_db):
+            return set()
+
+        async def contar(_db, columna):
+            nombre = str(columna)
+            if "AsignacionOperacion.estado" in nombre:
+                return {"limpiada": 2, "rara": 3}
+            if "AltaOperacion.estado" in nombre:
+                return {"creada": 1, "rarisima": 4}
+            return {"vinculados_todos": 5, "nada_vinculado": 1, None: 2, "otra": 1}
+
+        class Resultado:
+            def scalar_one_or_none(self):
+                return None
+
+            def scalars(self):
+                return self
+
+            def all(self):
+                return []
+
+            def one(self):
+                return (0, 0)
+
+        class Db:
+            async def execute(self, *_a, **_k):
+                return Resultado()
+
+        monkeypatch.setattr(ops, "_candados", sin_candados)
+        monkeypatch.setattr(ops, "_contar_por", contar)
+        r = await ops.resumen_operaciones(Db())
+        assert r["asignacion"]["completada"] == 2 and r["asignacion"]["desconocida"] == 3
+        assert r["asignacion"]["total"] == 5
+        assert r["alta"]["completada"] == 1 and r["alta"]["desconocida"] == 4 and r["alta"]["total"] == 5
+        assert r["vinculacion"]["completada"] == 5 and r["vinculacion"]["sin_efecto"] == 1
+        assert r["vinculacion"]["desconocida"] == 3 and r["vinculacion"]["total"] == 9

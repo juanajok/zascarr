@@ -75,13 +75,16 @@ for cmd in docker git jq gzip gunzip sha256sum stat curl awk; do
     command -v "$cmd" >/dev/null 2>&1 || die "No encuentro $cmd."
 done
 
+# Lo que sale del dump, del manifiesto o de la BD se COMPARA tal cual (solo sin espacios) y se LIMPIA únicamente para
+# enseñarlo: limpiar antes de comparar haría pasar `00\x0119` por `0019`.
+limpio() { printf '%s' "$1" | tr -cd '[:alnum:]_.-' | cut -c1-64; }
 for var in REPO_DIR ENV_FILE COMPOSE_FILE BACKUP_DIR DB_NAME DB_USER; do
     [[ -n "${!var:-}" ]] || die "Falta $var. Este script no usa valores por defecto de producción."
 done
 [[ -d "$REPO_DIR" ]] || die "REPO_DIR no es un directorio."
 [[ -f "$ENV_FILE" && -r "$ENV_FILE" ]] || die "ENV_FILE no existe o no se puede leer."
 [[ -f "$COMPOSE_FILE" ]] || die "COMPOSE_FILE no existe."
-[[ -s "$DUMP" ]] || die "El dump no existe o está vacío: $(basename "${DUMP:-?}")."
+[[ -s "$DUMP" ]] || die "El dump no existe o está vacío: $(limpio "$(basename "${DUMP:-?}")")."
 
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:18000/api/health}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"
@@ -121,15 +124,12 @@ if [[ "$PROYECTO" != "$PROYECTO_ESPERADO" ]]; then
 fi
 
 # ── Manifiesto ───────────────────────────────────────────────────────────────
-# Lo que sale del dump, del manifiesto o de la BD se COMPARA tal cual (solo sin espacios) y se LIMPIA únicamente para
-# enseñarlo: limpiar antes de comparar haría pasar `00\x0119` por `0019`.
-limpio() { printf '%s' "$1" | tr -cd '[:alnum:]_.-' | cut -c1-64; }
 BASE="$(basename "$DUMP")"
 STEM="${BASE%.sql.gz}"
 if [[ -z "$MANIFEST" ]]; then
     MANIFEST="$(dirname "$DUMP")/MANIFIESTO-${STEM}.json"
 fi
-[[ -f "$MANIFEST" ]] || die "No encuentro el manifiesto: $(basename "$MANIFEST")."
+[[ -f "$MANIFEST" ]] || die "No encuentro el manifiesto: $(limpio "$(basename "$MANIFEST")")."
 jq -e . "$MANIFEST" >/dev/null 2>&1 || die "El manifiesto no es JSON válido."
 
 M_SHA="$(jq -r '.sha256 // empty' "$MANIFEST")"
