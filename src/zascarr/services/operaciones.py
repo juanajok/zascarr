@@ -107,8 +107,12 @@ async def resumen_operaciones(db: AsyncSession) -> dict:
     alta["total"] = alta["completada"] + alta["no_aplica"] + alta["desconocida"]
 
     vinculacion = {"completada": 0, "parcial": 0, "sin_efecto": 0, "desconocida": 0}
+    # BL-SER1 (#303): la misma tabla guarda informes de RETIRADA de serie
+    # (`resultado.tipo = "retirada_serie"`). No son vinculaciones y no se
+    # cuentan como tales: el resumen de operaciones no debe inflarse.
     for (resultado,) in (await db.execute(
             select(VinculacionOperacion.resultado)
+            .where(VinculacionOperacion.resultado["tipo"].astext.is_(None))
             .order_by(VinculacionOperacion.creada))).all():
         try:
             vinculacion[clasificar_vinculacion(

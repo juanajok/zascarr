@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Retirar una serie — ZascArr{% endblock %}
+{% block content %}
+{% if serie and serie.existe and fase == "vista_previa" %}
+<a class="back-link" href="/ui/series/{{ serie.id }}">← {{ serie.title }}</a>
+{% endif %}
+{% include "_retirada_panel.html" %}
+{% endblock %}

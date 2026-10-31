@@ -38,6 +38,8 @@ PROPOSITO_CANDIDATA = "candidata"
 PROPOSITO_ALTA = "alta"
 PROPOSITO_VINCULAR = "vincular"
 PROPOSITO_DESVINCULAR = "desvincular"
+#: BL-SER1 (#303): retirar una serie de la biblioteca (sin tocar el disco).
+PROPOSITO_RETIRAR = "retirar_serie"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
 MAX_DESCRIPCION = 1000
 
@@ -691,3 +693,61 @@ def _longitud_peor_caso_del_token_de_desvinculacion() -> int:
 
 #: El límite del cuerpo de `POST /api/revision/desvinculacion`: acotado e IGUAL al peor caso emitible.
 MAX_TOKEN_DESVINCULACION = _longitud_peor_caso_del_token_de_desvinculacion()
+
+
+# ── Token de retirar una serie de la biblioteca (BL-SER1, #303) ──────────────────────────────────
+
+VERSION_TOKEN_RETIRAR = 1
+
+
+@dataclass(frozen=True)
+class RetiradaFirmada:
+    """Lo que la persona vio al pedir retirar UNA serie. El contexto firmado es el `series_id` (un token de una serie no
+    sirve en otra). `huella` es el SHA-256 del estado versionado que mostró la vista previa (serie, alias, números,
+    archivos vinculados, deseados y bloqueos): NO se firman las listas — el token queda de tamaño fijo y la confirmación
+    vuelve a calcular la huella con las filas ya bloqueadas."""
+    series_id: str
+    huella: str
+    operacion: str
+    caduca: int = 0
+
+
+def crear_token_retirada(d: RetiradaFirmada, secret: str, *, ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_RETIRAR, d.series_id, {
+        "version": VERSION_TOKEN_RETIRAR, "serie_id": d.series_id, "huella": d.huella, "operacion": d.operacion,
+    }, secret, ahora=ahora)
+
+
+def verificar_token_retirada(token: str, secret: str, *, ahora: float | None = None,
+                             ignorar_caducidad: bool = False) -> RetiradaFirmada | None:
+    """La retirada firmada, o `None`. Firma, propósito (`retirar_serie`: no sirve para vincular, dar de alta ni
+    desvincular), contexto (el `series_id`, leído del propio token porque la confirmación recibe solo el token) y
+    caducidad; además el ESQUEMA: UUID canónicos, `huella` de 64 hexadecimales y `version` 1."""
+    series_id = _contexto_del_token(token, secret)
+    if series_id is None or not _uuid_texto(series_id):
+        return None
+    verificado = _verificar(token, PROPOSITO_RETIRAR, series_id, secret, ahora=ahora, ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    version = d.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != VERSION_TOKEN_RETIRAR:
+        return None
+    if not _uuid_texto(d.get("serie_id")) or not _uuid_texto(d.get("operacion")):
+        return None
+    if not _hex64(d.get("huella")):
+        return None
+    return RetiradaFirmada(series_id, d["serie_id"], d["huella"], d["operacion"], caduca)
+
+
+def _longitud_peor_caso_del_token_de_retirada() -> int:
+    """Cota de la longitud de un token `retirar_serie` válido: como el de desvinculación, todos los campos son de tamaño
+    fijo (UUID canónicos y una huella de 64 hexadecimales), así que sale de la serialización, la codificación y la firma
+    reales con la época más larga."""
+    ident = "00000000-0000-4000-8000-000000000000"
+    return len(crear_token_retirada(RetiradaFirmada(ident, "f" * 64, ident), "x" * 32, ahora=EPOCA_DEL_PEOR_CASO))
+
+
+#: El límite del campo `token` de `POST /api/series/{id}/retirada` y de su formulario en la UI: acotado e IGUAL al peor
+#: caso emitible.
+MAX_TOKEN_RETIRADA = _longitud_peor_caso_del_token_de_retirada()
