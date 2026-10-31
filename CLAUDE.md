@@ -132,7 +132,8 @@ como marco permanente.
 4. **Logs sin datos sensibles** (structlog). Si un error lleva datos del
    usuario (rutas, credenciales), sanitiza antes.
 5. Endpoints mutables usan `Form(...)` con campos explícitos en UI HTMX;
-   `Cache-Control` y `X-Legal-Redirect` documentados en `api/legal.py`.
+   `Cache-Control` documentado en `api/legal.py`; el 403 de la puerta legal lleva `HX-Redirect`
+   (`services/legal.py::require_legal_acknowledgment`).
 6. **La UI escucha en localhost por defecto** (`127.0.0.1` en la app; Postgres
    no se publica a la red en ningún caso). Abrir a la LAN es una decisión
    **explícita** del operador y exige contraseña; el exterior, proxy inverso con
