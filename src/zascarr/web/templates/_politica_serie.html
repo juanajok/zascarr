@@ -79,6 +79,7 @@
   <p class="caption politica-aviso">
     El aviso legal está pendiente: hasta que lo aceptes, el ciclo no genera ni
     busca nada de esto.
+    {% if activacion_bloqueada_por_aviso %}<a href="/ui/legal">Ir al aviso legal</a>{% endif %}
   </p>
   {% endif %}
 
