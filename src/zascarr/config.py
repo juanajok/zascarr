@@ -5,7 +5,8 @@ Todas las variables se leen del entorno (o .env). Validación estricta al arranq
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+import structlog
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -136,10 +137,14 @@ class Settings(BaseSettings):
     covers_cache_path: Path = Field(default=Path("/config/covers"))
     # #123b: rutas LOCALES (dentro del contenedor) para el aviso de disco.
     # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
-    # cuelga del volumen de datos y es local; si no existe, el check queda «disabled».
+    # cuelga del volumen de datos y es local; si no existe ninguna, el check queda «disabled»;
+    # si existen pero no se pueden medir, es un «warning».
     disk_paths: str = Field(default="/config/covers")
-    disk_warn_free_mb: int = Field(default=2048, ge=0)
-    disk_error_free_mb: int = Field(default=512, ge=0)
+    # Cota superior: 10 TiB (en MB), más que cualquier disco de una Raspberry Pi;
+    # evita desbordes y valores absurdos. Si `error > warn`, la app arranca igual
+    # y sube `warn` hasta `error` (el aviso nunca se retrasa).
+    disk_warn_free_mb: int = Field(default=2048, ge=0, le=10_485_760)
+    disk_error_free_mb: int = Field(default=512, ge=0, le=10_485_760)
 
     # ── VPN state (fichero escrito por un script del host) ────────
     # Fichero JSON escrito por scripts/vpn-state.sh (baremetal, fuera del
@@ -238,6 +243,22 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
     debug: bool = False
+
+    @model_validator(mode="after")
+    def _umbrales_de_disco_coherentes(self) -> "Settings":
+        """El aviso salta con MÁS espacio libre que el error. Un par invertido NO impide arrancar
+        (lo observacional no bloquea, CLAUDE.md §3.2): se sube `warn = max(warn, error)` y se
+        deja un aviso en el registro. Así el aviso nunca se retrasa ni se apaga la alarma de
+        error por un valor mal puesto (p. ej. solo `DISK_WARN_FREE_MB=0`)."""
+        if self.disk_error_free_mb > self.disk_warn_free_mb:
+            structlog.get_logger().warning(
+                "config.umbrales_de_disco_invertidos",
+                DISK_WARN_FREE_MB=self.disk_warn_free_mb,
+                DISK_ERROR_FREE_MB=self.disk_error_free_mb,
+                ajustado_a=self.disk_error_free_mb,
+            )
+            self.disk_warn_free_mb = self.disk_error_free_mb
+        return self
 
 
 @lru_cache

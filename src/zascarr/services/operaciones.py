@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import (
     AltaOperacion,
+    AsignacionEstado,
     AsignacionOperacion,
     ImportRun,
     VinculacionOperacion,
@@ -75,46 +76,54 @@ def _fecha(valor) -> str | None:
     return valor.isoformat() if valor is not None else None
 
 
+async def _contar_por(db: AsyncSession, columna) -> dict:
+    """`{valor: n}` con un GROUP BY en SQL: a Python llega un recuento por valor, no las filas."""
+    return {valor: int(n) for valor, n in (await db.execute(
+        select(columna, func.count()).group_by(columna))).all()}
+
+
 async def resumen_operaciones(db: AsyncSession) -> dict:
-    """Recuentos/estados de las cuatro tablas, sin rutas ni nombres."""
+    """Recuentos/estados de las cuatro tablas, sin rutas ni nombres.
+
+    Todo se cuenta en SQL (`GROUP BY`): con miles de operaciones la petición no carga las filas en
+    memoria. Lo único que se lee fila a fila son los ids de las asignaciones VIVAS
+    (`preparada`/`confirmada`), para mirar su candado."""
     candados = await _candados(db)
 
     asignacion = {estado: 0 for estado in ESTADOS_ASIGNACION}
     asignacion["desconocida"] = 0
-    filas = (await db.execute(
-        select(AsignacionOperacion.id, AsignacionOperacion.estado,
-               AsignacionOperacion.creada, AsignacionOperacion.actualizada)
-        .order_by(AsignacionOperacion.creada)
-    )).all()
-    for op_id, estado, _creada, _actualizada in filas:
+    for estado, n in (await _contar_por(db, AsignacionOperacion.estado)).items():
         estado_valor = estado.value if hasattr(estado, "value") else str(estado)
+        if estado_valor in ("preparada", "confirmada"):
+            continue                       # las vivas se clasifican una a una, por su candado
         try:
-            cubo = clasificar_asignacion(
-                estado_valor, en_curso=_clave_candado(op_id) in candados)
+            asignacion[clasificar_asignacion(estado_valor, en_curso=False)] += n
         except ValueError:
-            cubo = "desconocida"
-        asignacion[cubo] += 1
+            asignacion["desconocida"] += n
+    vivas = (await db.execute(
+        select(AsignacionOperacion.id).where(AsignacionOperacion.estado.in_(
+            [AsignacionEstado.PREPARADA, AsignacionEstado.CONFIRMADA])))).scalars().all()
+    for op_id in vivas:
+        asignacion[clasificar_asignacion(
+            "preparada", en_curso=_clave_candado(op_id) in candados)] += 1
     asignacion["total"] = sum(v for k, v in asignacion.items() if k != "total")
 
     alta = {"completada": 0, "no_aplica": 0, "desconocida": 0}
-    for (estado,) in (await db.execute(
-            select(AltaOperacion.estado).order_by(AltaOperacion.creada))).all():
+    for estado, n in (await _contar_por(db, AltaOperacion.estado)).items():
         valor = estado.value if hasattr(estado, "value") else str(estado)
         try:
-            alta[clasificar_alta(valor)] += 1
+            alta[clasificar_alta(valor)] += n
         except ValueError:
-            alta["desconocida"] += 1
+            alta["desconocida"] += n
     alta["total"] = alta["completada"] + alta["no_aplica"] + alta["desconocida"]
 
     vinculacion = {"completada": 0, "parcial": 0, "sin_efecto": 0, "desconocida": 0}
-    for (resultado,) in (await db.execute(
-            select(VinculacionOperacion.resultado)
-            .order_by(VinculacionOperacion.creada))).all():
+    global_ = VinculacionOperacion.resultado["global"].as_string()
+    for valor, n in (await _contar_por(db, global_)).items():
         try:
-            vinculacion[clasificar_vinculacion(
-                (resultado or {}).get("global"))] += 1
+            vinculacion[clasificar_vinculacion(valor)] += n
         except ValueError:
-            vinculacion["desconocida"] += 1
+            vinculacion["desconocida"] += n
     vinculacion["total"] = sum(
         v for k, v in vinculacion.items() if k != "total")
 
@@ -122,8 +131,10 @@ async def resumen_operaciones(db: AsyncSession) -> dict:
     ultimo = (await db.execute(
         select(ImportRun).order_by(ImportRun.started_at.desc(), ImportRun.id.desc())
         .limit(1))).scalar_one_or_none()
-    for (errores,) in (await db.execute(select(ImportRun.error_count))).all():
-        import_runs["con_errores" if (errores or 0) > 0 else "completada"] += 1
+    con_errores = func.count().filter(func.coalesce(ImportRun.error_count, 0) > 0)
+    total_runs, n_con_errores = (await db.execute(select(func.count(), con_errores))).one()
+    import_runs["con_errores"] = int(n_con_errores)
+    import_runs["completada"] = int(total_runs) - int(n_con_errores)
     import_runs["total"] = import_runs["completada"] + import_runs["con_errores"]
     import_runs["ultima"] = None if ultimo is None else {
         "iniciada": _fecha(ultimo.started_at),
