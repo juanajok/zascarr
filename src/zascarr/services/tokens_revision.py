@@ -737,7 +737,7 @@ def verificar_token_retirada(token: str, secret: str, *, ahora: float | None = N
         return None
     if not _hex64(d.get("huella")):
         return None
-    return RetiradaFirmada(series_id, d["serie_id"], d["huella"], d["operacion"], caduca)
+    return RetiradaFirmada(d["serie_id"], d["huella"], d["operacion"], caduca)
 
 
 def _longitud_peor_caso_del_token_de_retirada() -> int:
