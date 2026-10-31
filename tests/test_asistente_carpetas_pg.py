@@ -230,7 +230,9 @@ class TestCriterio3SinPreseleccion:
         v = visible(t)
         assert "Sin datos" in v and "None" not in v and "()" not in v
         assert "discovery-card-desc" not in t and "↗" not in t                    # sin descripción ni ficha
-        assert 'class="cover cover-missing"' in t                                  # portada ausente = marcador CSS
+        # portada ausente ya conocida = solo el marcador (aria-hidden), sin <img> que falle
+        m = re.search(r'<span class="portada portada-[cmy]">(.*?)</span></span>', t, re.S)
+        assert m and 'class="portada-marca" aria-hidden="true">S' in m.group(1) and "<img" not in m.group(1)
 
     async def test_la_descripcion_html_y_la_portada_de_relleno_no_parecen_un_fallo(self, entorno):
         """#311: la tarjeta enseñaba `<p>…<a href=…>` y la imagen «Blank!» de Comic Vine; parecía que ZascArr
@@ -244,7 +246,8 @@ class TestCriterio3SinPreseleccion:
         desc = re.search(r'<div class="discovery-card-desc">(.*?)</div>', t, re.S).group(1)
         assert desc.strip() == "Series of Russian hardcovers translating The Flash (2016)."
         assert "&lt;" not in t and "4050-91750" not in t
-        assert 'class="cover cover-missing"' in t and "6373148" not in t
+        assert 'class="portada-marca" aria-hidden="true">F' in t and "6373148" not in t
+        assert 'class="portada portada-' in t and "<img" not in t
 
     async def test_sin_sugerencia_no_hay_texto_de_pista_y_el_selector_sigue_vacio(self, entorno):
         await sembrar_flash(entorno.banco)

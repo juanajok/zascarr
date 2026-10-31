@@ -5,8 +5,7 @@
 <a href="/ui/biblioteca" class="back-link">← Biblioteca</a>
 
 <div class="series-header">
-  <img class="cover series-cover" src="/ui/series/{{ series.id }}/portada" alt=""
-       onerror="this.classList.add('cover-missing')">
+  {{ ui.portada(series.title, series.id, "/ui/series/%s/portada" % series.id, "series-cover") }}
   <div>
     <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle" style="display:inline">({{ series.start_year }})</span>{% endif %}</h1>
     {% if series.publisher %}<p class="series-meta">{{ series.publisher.name }}</p>{% endif %}
