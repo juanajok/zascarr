@@ -143,7 +143,14 @@ SIN_TEXTO = ("dot", "progress-value", "progress-bar")
 
 # Pares que el resolvedor no debe tener que entender y que se excluyen A PROPÓSITO:
 # {(selector, fg, bg): motivo}. Vacío: cada entrada nueva exige su justificación.
-EXCLUSIONES: dict[tuple[str, str, str], str] = {}
+EXCLUSIONES: dict[tuple[str, str, str], str] = {
+    # La inicial de la portada que falta (ui.portada): una letra de ~46 % del ancho de la tarjeta (≥ 37 px
+    # incluso en la más pequeña), decorativa y aria-hidden (el título va en texto debajo). Es texto
+    # grande: le vale 3:1, y el caso peor, magenta en claro, mide 3,68:1
+    # (test_portada_marca.py::TestContrasteDeLaInicial lo comprueba en las tres tintas y los dos temas).
+    (".portada-m", "var(--on-yellow)", "var(--magenta)"):
+        "inicial decorativa y enorme de la portada que falta (texto grande, 3:1; 3,68:1 medido)",
+}
 
 
 def _pares_de_la_hoja(css: str | None = None) -> list[tuple[str, str, str, str, str]]:
@@ -318,6 +325,8 @@ class TestEstructura:
         for selector, d in _reglas():
             v = d.get("font-size")
             if not v or v.startswith(("clamp", "inherit", "var")):
+                continue
+            if v.endswith("cqw"):       # la inicial de ui.portada: proporcional a su tarjeta (≥ 37 px)
                 continue
             m = re.fullmatch(r"([\d.]+)(rem|em|px)", v)
             assert m, f"{selector}: font-size no reconocido {v!r}"
