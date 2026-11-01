@@ -9,11 +9,16 @@ from uuid import uuid4
 from zascarr.services.auth import sign_token
 from zascarr.services.tokens_revision import (
     MAX_TOKEN_RETIRADA,
+    PROPOSITO_ALTA,
+    PROPOSITO_DESVINCULAR,
     PROPOSITO_RETIRAR,
+    PROPOSITO_VINCULAR,
     RetiradaFirmada,
     crear_token,
     crear_token_retirada,
+    verificar_token_desvinculacion,
     verificar_token_retirada,
+    verificar_token_vinculacion,
 )
 
 SECRETO = "clave-de-prueba-para-firmar"
@@ -55,13 +60,11 @@ def test_otra_clave_o_manipulado_no_vale():
 def test_el_proposito_no_se_intercambia():
     d = firmada()
     ret = crear_token_retirada(d, SECRETO, ahora=AHORA)
-    from zascarr.services.tokens_revision import PROPOSITO_DESVINCULAR, PROPOSITO_VINCULAR, PROPOSITO_ALTA
     # un token de otro propósito no se acepta como retirada
     for prop in (PROPOSITO_DESVINCULAR, PROPOSITO_VINCULAR, PROPOSITO_ALTA):
         ajeno = crear_token(prop, d.series_id, {"version": 1}, SECRETO, ahora=AHORA)
         assert verificar_token_retirada(ajeno, SECRETO, ahora=AHORA) is None
     # un token de retirada no sirve para verificar como otro propósito
-    from zascarr.services.tokens_revision import verificar_token_desvinculacion, verificar_token_vinculacion
     assert verificar_token_desvinculacion(ret, SECRETO, ahora=AHORA) is None
     assert verificar_token_vinculacion(ret, SECRETO, ahora=AHORA) is None
 
