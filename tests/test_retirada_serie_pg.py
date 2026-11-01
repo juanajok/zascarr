@@ -2,6 +2,7 @@
 """Retirar una serie de la biblioteca (BL-SER1, #303) — pruebas sobre Postgres real y ficheros reales en `tmp`."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from types import SimpleNamespace
@@ -11,6 +12,9 @@ import httpx
 import pytest
 from sqlalchemy import text
 
+# El entorno base no fija la clave en los módulos nuevos de #303: la fijamos aquí.
+import zascarr.api.series as _api_series
+import zascarr.web.retirada_serie as _web_retirada
 from tests.test_desvinculacion_pg import (  # noqa: F401
     SECRETO,
     archivos,
@@ -21,11 +25,9 @@ from tests.test_desvinculacion_pg import (  # noqa: F401
     serie_de_prueba,
     url_bd,
 )
-from tests.test_desvinculacion_pg import entorno as entorno_base  # noqa: F401
-
-# El entorno base no fija la clave en los módulos nuevos de #303: la fijamos aquí.
-import zascarr.api.series as _api_series
-import zascarr.web.retirada_serie as _web_retirada
+from tests.test_vinculacion_previa_pg import entorno as entorno_base  # noqa: F401
+from zascarr.services.operaciones import resumen_operaciones
+from zascarr.services.vinculacion import VinculacionDeArchivos
 
 
 @pytest.fixture
@@ -257,3 +259,37 @@ async def test_sagas_perdidas(entorno):
         assert (await s.execute(text("SELECT count(*) FROM story_arc_issues WHERE issue_id = :i"), {"i": iid})).scalar() == 0
         # el arc sigue existiendo (no se borra la saga, solo la participación)
         assert (await s.execute(text("SELECT count(*) FROM story_arcs WHERE id = :a"), {"a": arc})).scalar() == 1
+
+
+@pytest.mark.asyncio
+async def test_dos_confirmaciones_simultaneas_del_mismo_token(entorno):
+    """La misma persona pulsa dos veces (o dos pestañas): una retira y la otra ve «ya retirada». Nada se aplica dos veces."""
+    serie, ids = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
+    token = (await previa_retirada(serie)).json()["token"]
+    antes_disco = huella_disco(entorno.lib)
+    a, b = await asyncio.gather(retirar(serie, token), retirar(serie, token))
+    assert a.status_code == 200 and b.status_code == 200
+    resultados = sorted([a.json()["resultado"], b.json()["resultado"]])
+    assert resultados == ["retirada", "ya_retirada"], (a.text, b.text)
+    assert a.json()["operacion_id"] == b.json()["operacion_id"]
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(text("SELECT count(*) FROM series WHERE id = :s"), {"s": serie})).scalar() == 0
+        assert (await s.execute(text("SELECT count(*) FROM vinculacion_operaciones WHERE resultado ->> 'tipo' = 'retirada_serie'"),
+                                {})).scalar() == 1
+        for fid in ids.values():
+            fila = (await s.execute(text("SELECT issue_id, metadata FROM files WHERE id = :f"), {"f": fid})).mappings().first()
+            assert fila["issue_id"] is None and len(fila["metadata"]["vinculo_historial"]) == 1
+    assert huella_disco(entorno.lib) == antes_disco
+
+
+@pytest.mark.asyncio
+async def test_el_informe_de_retirada_no_se_confunde_con_una_vinculacion(entorno):
+    serie, ids = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    c = await retirar(serie, (await previa_retirada(serie)).json()["token"])
+    oid = UUID(c.json()["operacion_id"])
+    async with entorno.banco.fabrica() as s:
+        assert await VinculacionDeArchivos(s, secret=SECRETO).leer_resultado(oid, serie) is None
+        resumen = await resumen_operaciones(s)
+    # Solo cuenta la vinculación real que hizo `_serie_con_vinculo`; el informe de retirada no se suma.
+    assert resumen["vinculacion"]["total"] == 1
+    assert resumen["vinculacion"]["completada"] == 1
