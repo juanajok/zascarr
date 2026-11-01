@@ -735,6 +735,8 @@ def verificar_token_retirada(token: str, secret: str, *, ahora: float | None = N
         return None
     if not _uuid_texto(d.get("serie_id")) or not _uuid_texto(d.get("operacion")):
         return None
+    if d["serie_id"] != series_id:
+        return None
     if not _hex64(d.get("huella")):
         return None
     return RetiradaFirmada(d["serie_id"], d["huella"], d["operacion"], caduca)

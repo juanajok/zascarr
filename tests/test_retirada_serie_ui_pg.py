@@ -176,6 +176,8 @@ class TestVistaPrevia:
         monkeypatch.setattr(web_retirada, "get_settings", lambda: SimpleNamespace(secret_key=""))
         r = await get(RUTA.format(serie=serie))
         assert r.status_code == 503 and "clave" in visible(r.text)
+        r = await post(RUTA.format(serie=serie), {"token": "x" * 40})
+        assert r.status_code == 503 and "clave" in visible(r.text)
 
     async def test_bloqueo_por_asignacion_viva_no_ofrece_formulario_y_dice_por_que(self, ent):
         serie, ids = await serie_retirada(ent)
