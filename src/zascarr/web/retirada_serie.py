@@ -42,7 +42,7 @@ FALLO_DESCONOCIDO = ("No se ha podido completar", "No se ha cambiado nada que se
 OMITIDOS: dict[str, str] = {
     "serie_inexistente": "Esta serie ya no está en tu biblioteca: puede que otra pantalla la retirara o borrara. No se ha cambiado nada más.",
     "en_curso": "Ahora mismo ZascArr está trabajando con esta serie (una asignación de archivos o una búsqueda o descarga). No se ha cambiado nada: prueba de nuevo en unos minutos.",
-    "cambio_desde_la_vista_previa": "La serie ha cambiado desde que abriste esta página (por ejemplo, se vinculó otro archivo o empezó una búsqueda). No se ha cambiado nada: ábrela de nuevo para ver cómo está ahora.",
+    "cambio_desde_la_vista_previa": "La serie ha cambiado desde que abriste esta página (por ejemplo, se vinculó otro archivo, se añadió un número o empezó una asignación o una búsqueda). No se ha cambiado nada: ábrela de nuevo para ver cómo está ahora.",
 }
 
 
