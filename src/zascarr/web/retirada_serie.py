@@ -51,6 +51,13 @@ def _sin_cache(resp: HTMLResponse) -> HTMLResponse:
     return resp
 
 
+def _secreto() -> str:
+    secret = get_settings().secret_key
+    if not secret:
+        raise HTTPException(status_code=503, detail="ZascArr no tiene clave para firmar; reinícialo.")
+    return secret
+
+
 def _plantilla(request: Request) -> str:
     return "retirada_serie.html" if "hx-request" not in request.headers else "_retirada_panel.html"
 
@@ -77,11 +84,9 @@ def _archivos(p) -> list[SimpleNamespace]:
 async def vista_previa(series_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     serie = await _serie(db, series_id)
     try:
-        p = await RetiradaDeSerie(db, secret=get_settings().secret_key).previsualizar(series_id)
+        p = await RetiradaDeSerie(db, secret=_secreto()).previsualizar(series_id)
     except SerieNoEncontradaError:
         raise HTTPException(status_code=404, detail="Serie no encontrada") from None
-    except ValueError:
-        raise HTTPException(status_code=503, detail="ZascArr no tiene clave para firmar; reinícialo.") from None
     return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
         "serie": serie, "fase": "vista_previa", "p": p, "r": None, "fallo": None, "token": p.token,
         "archivos": _archivos(p), "textos_bloqueo": BLOQUEOS,
@@ -95,8 +100,7 @@ async def confirmar(series_id: UUID, request: Request,
     serie = await _serie_o_none(db, series_id)
     base = {"serie": serie, "fase": "resultado", "p": None, "r": None, "fallo": None, "token": token,
             "archivos": [], "textos_bloqueo": BLOQUEOS, "aviso_disco": None, "aviso_despues": None}
-    secreto = get_settings().secret_key
-    firmado = verificar_token_retirada(token, secreto, ignorar_caducidad=True) if secreto else None
+    firmado = verificar_token_retirada(token, _secreto(), ignorar_caducidad=True)
     if firmado is None or firmado.series_id != str(series_id):
         titulo, mensaje, repetible = FALLOS["token_invalido"]
         if firmado is not None:

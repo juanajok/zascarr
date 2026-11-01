@@ -75,6 +75,8 @@ def test_el_contexto_es_la_serie_y_no_se_puede_cambiar():
     assert v is not None and v.series_id == d.series_id
     t = crear_token(PROPOSITO_RETIRAR, "no-es-un-uuid", {"version": 1}, SECRETO, ahora=AHORA)
     assert verificar_token_retirada(t, SECRETO, ahora=AHORA) is None
+    # El `serie_id` del cuerpo debe coincidir con el contexto firmado: un token con dos series distintas no vale.
+    assert verificar_token_retirada(_con_datos(d, serie_id=str(uuid4())), SECRETO, ahora=AHORA) is None
 
 
 def test_esquema_estricto():
