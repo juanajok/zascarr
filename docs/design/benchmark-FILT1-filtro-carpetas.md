@@ -2,6 +2,7 @@
 
 > Ficha de **nivel 1** según `docs/design/benchmark-referencias.md` (CLAUDE.md §13): ≤ 2 referencias, sin matriz. Insumo, no aprobación; decide el PO.
 > **Fecha:** 2026-11-01 · **SHA contrastado:** `9d7fedf` (`origin/main`). **Caduca:** ~60 días, o antes si cambia la historia o la ruta de carpetas.
+> **Actualizada el 2026-11-01 tras las decisiones del PO** (filtro del nombre en Python sin prefiltro SQL; modelo de estados; «Volver» sin parámetro de retorno).
 
 ## Historia / problema observado
 Hoy `/ui/pendientes/carpetas` solo pagina y admite `?serie=`; no filtra. Con 108 carpetas (referencia de la Pi) o más, encontrar una carpeta concreta exige recorrer las páginas.
@@ -40,20 +41,26 @@ Kavita no se examinó; Kapowarr solo se miró en lo que toca al almacenamiento d
 *«No lo encontré» no equivale a «no existe».* No comprobé en ninguna: normalización de tildes y mayúsculas, tipo de coincidencia del texto («contiene» o exacta), contador «N de M», ni qué hacen al volver de un detalle por una vía distinta del retroceso del navegador.
 
 ## Respuestas a las preguntas del encargo
-1. **Estados no excluyentes.** Komga usa multiselección con un modo «todos/alguno» por criterio; Sonarr, un selector único más filtros personalizados con condiciones. Ninguna separa un estado excluyente de marcas independientes. Para ZascArr encaja un **selector del estado excluyente** (todas / sin serie / con serie sugerida / mixto) **más dos marcas independientes** («por confirmar», «en conflicto») combinadas con «y»; con solo dos marcas no hace falta el modo «todos/alguno». *Duda para el PO:* los cuatro estados de la historia mezclan uno excluyente (`estado`) y dos marcas; `mixto` no aparece en la lista del PO.
-2. **Conservar el filtro al entrar en un detalle y volver.** Komga lo hace guardándolo en la **URL** (más un valor guardado como respaldo). ZascArr ya pagina por URL, así que el filtro debe ir en la misma consulta. Lo que hoy rompe la vuelta es el enlace «Volver a las carpetas», que no lleva nada: habría que pasar el filtro por el asistente. Atención de seguridad: ese «volver» no puede ser una URL libre; debe aceptar solo la ruta de carpetas y parámetros conocidos (riesgo de redirección abierta).
+1. **Estados no excluyentes.** Komga usa multiselección con un modo «todos/alguno» por criterio; Sonarr, un selector único más filtros personalizados con condiciones. Ninguna separa un estado excluyente de marcas independientes. Para ZascArr encaja un **selector del estado excluyente** (todas / sin serie / con serie sugerida / mixto) **más dos marcas independientes** («por confirmar», «en conflicto») combinadas con «y»; con solo dos marcas no hace falta el modo «todos/alguno». *Resuelto por el PO (2026-11-01):* modelo (c), con «Por confirmar» = «Con serie sugerida» o «Mezcla».
+2. **Conservar el filtro al entrar en un detalle y volver.** Komga lo hace guardándolo en la **URL** (más un valor guardado como respaldo). ZascArr ya pagina por URL, así que el filtro debe ir en la misma consulta. Lo que hoy rompe la vuelta es el enlace «Volver a las carpetas», que no lleva nada: el filtro debe propagarse por el asistente. *Decidido por el PO (2026-11-01):* «Volver» sin parámetro de retorno (ni URL ni ruta de vuelta), lo que evita la redirección abierta; propagación por el asistente salvo en el «resultado guardado».
 
 ## Resultado por idea (propuesta; decide el PO)
 | Idea | Resultado | Motivo |
 |---|---|---|
-| Filtro en la URL, restaurado desde ella (Komga) | **Adaptar** | Encaja con la paginación y `serie` ya en URL; añadir «volver» que conserve la consulta |
+| Filtro en la URL, restaurado desde ella (Komga) | **Adaptar** | Encaja con la paginación y `serie` ya en URL; propagar el filtro por el asistente, sin parámetro de retorno |
 | Validar los valores y no fallar (Komga) | **Adaptar** | ZascArr ya avisa con 200 en `serie` inválida; mejor un aviso que ignorar en silencio |
 | Selección múltiple (Komga) sin el modo «todos/alguno» | **Adaptar** | Solo hacen falta dos marcas independientes |
 | Estado vacío con «quitar filtros» (Komga) | **Adoptar** | Mismo problema, sin dependencia; texto en español llano |
 | Guardar el filtro en el navegador como respaldo (Komga, Sonarr) | **Descartar** por ahora | Estado oculto que sorprende; la URL basta. Opción a decidir por el PO |
 | Selector único + filtros personalizados con condiciones (Sonarr) | **Descartar** | Pensado para usuarios técnicos |
 | «N de M» tras filtrar; mantener el filtro al volver desde el asistente | **Mejorar** | No lo encontré en las referencias examinadas; evidencia: hoy «Volver» pierde página y serie |
-| Prefiltro SQL del nombre + afinado en Python (opción A del PO) | **Construir sobre lo propio** | Ninguna referencia pagina en memoria; es una restricción propia |
+| Filtro del nombre en Python sobre la `clave`, sin prefiltro SQL (decisión del PO) | **Construir sobre lo propio** | Una sola consulta; totales y «M» intactos; el servicio ya lo carga todo |
+| Prefiltro SQL del nombre | **Descartar** por ahora | Contradice los totales y el «M» con una única consulta; Python y PostgreSQL pliegan distinto (ß, ø, æ, œ, đ, ł, ð, þ, ħ, ı, ½); no ahorra memoria ni consultas. Para reabrirla: medir en la Pi, normalizar el patrón en la misma consulta SQL y una prueba de paridad con PostgreSQL real |
+
+**Decisiones del PO del 2026-11-01:**
+- **Modelo de estados (c):** un selector excluyente más dos marcas independientes, «Por confirmar» y «En conflicto». «Por confirmar» = «Con serie sugerida» o «Mezcla». Resuelve la duda sobre `mixto`.
+- **«Volver» sin parámetro de retorno:** el enlace no lleva una URL ni una ruta de vuelta.
+- **Propagación del filtro por el asistente**, salvo en el «resultado guardado».
 
 ## IGUALAR (mínimo competitivo)
 1. El filtro sobrevive a paginar y a recargar (va en la URL).
@@ -62,19 +69,19 @@ Kavita no se examinó; Kapowarr solo se miró en lo que toca al almacenamiento d
 4. Cambiar el filtro vuelve al principio de la lista (sin páginas vacías). *(Sonarr lo hace al cambiar el tamaño de página; el cambio de filtro no se comprobó.)*
 
 ## MEJORAR (con evidencia)
-1. **Volver desde el asistente conservando filtro, página y serie.** Hoy `_vinculacion_resultado.html:34, 89` enlaza sin parámetros. El destino debe ser una ruta fija con parámetros conocidos.
+1. **Volver desde el asistente conservando filtro, página y serie.** Hoy `_vinculacion_resultado.html:34, 89` enlaza sin parámetros. Sin parámetro de retorno: el filtro se propaga por el asistente, salvo en el «resultado guardado» (decisión del PO).
 2. **Recuento «N de M»** tras filtrar. No lo encontré en las referencias.
 3. **Estado excluyente y marcas independientes** en vez de una lista plana de cuatro estados.
-4. **Nombre sin mayúsculas ni tildes** (decisión del PO). Ninguna referencia examinada lo documenta; en ZascArr conviene comprobar si ya existe una función de normalización reutilizable en Postgres (la migración 0006 `f_title_norm` es el precedente de CLAUDE.md §7) *[no verificado si sirve para rutas]*.
+4. **Nombre sin mayúsculas ni tildes** (decisión del PO). Ninguna referencia examinada lo documenta; se hace en Python sobre la `clave`; Python y PostgreSQL pliegan distinto (ß, ø, æ, œ, đ, ł, ð, þ, ħ, ı, ½), así que la prueba debe fijar el pliegue elegido.
 
 ## Invariantes de ZascArr
-No mentir (el recuento y el vacío dicen la verdad) · no escribir (la lista sigue siendo solo lectura) · coste Pi (el prefiltro SQL evita cargar todo cuando hay nombre) · sin redirecciones abiertas · español llano.
+No mentir (el recuento y el vacío dicen la verdad) · no escribir (la lista sigue siendo solo lectura) · coste Pi (el servicio ya carga todo en una consulta; el filtro del nombre no añade consultas) · sin redirecciones abiertas · español llano.
 
 ## Casos de prueba antes de implementar (propuestos)
-Filtro por nombre «sin tildes ni mayúsculas» devuelve la misma carpeta que con ellas · el filtro se conserva en los enlaces de página y en «Volver» del asistente · filtro sin coincidencias → estado vacío con «quitar filtro» y página 1 · desplazamiento fuera de rango tras filtrar → no hay página vacía · valor de estado desconocido → aviso, no 500 · «volver» con una ruta externa se rechaza.
+Filtro por nombre «sin tildes ni mayúsculas» devuelve la misma carpeta que con ellas · el filtro se conserva en los enlaces de página y en «Volver» del asistente · filtro sin coincidencias → estado vacío con «quitar filtro» y página 1 · desplazamiento fuera de rango tras filtrar → no hay página vacía · valor de estado desconocido → aviso, no 500 · el enlace «Volver» no lleva parámetro de retorno · prueba de pliegue con ß, ø, æ, œ, đ, ł, ð, þ, ħ, ı y ½.
 
 ## NOT RUN / no verificado
 - Nada ejecutado: ni ZascArr, ni las referencias, ni la suite; todo es lectura de código.
 - Komga: solo `komga-webui`, y no verifiqué el medio de almacenamiento del filtro de respaldo ni el comportamiento al volver de un detalle. Sonarr: solo la interfaz; no verifiqué el medio de `createPersist` ni el reinicio de página al cambiar de filtro. Kavita sin examinar.
-- No medí el coste del prefiltro SQL en la Pi ni la normalización de tildes en Postgres.
+- No medí en la Pi el filtro en Python ni, para reabrir el prefiltro SQL, su coste; las diferencias de pliegue entre Python y PostgreSQL son un dato aportado por el PO, no medido por mí.
 - Ninguna queja de usuarios consultada.
