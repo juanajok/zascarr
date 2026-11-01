@@ -1,6 +1,7 @@
 """Router de Series — CRUD + full-text search + missing issues."""
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
@@ -45,6 +46,7 @@ from zascarr.services.vinculacion import (
 from zascarr.utils.url_portada import es_url_de_portada_permitida
 
 router = APIRouter(prefix="/series", tags=["series"])
+logger = structlog.get_logger()
 
 
 def _portada_permitida(valor: str | None) -> str | None:
@@ -284,6 +286,7 @@ async def ejecutar_retirada(db: AsyncSession, token: str) -> ResultadoRetirada:
     except HTTPException:
         raise
     except Exception:
+        logger.exception("retirada.error_inesperado")
         raise _error_retirada(
             500, "error_inesperado",
             "No se pudo completar y no se ha cambiado nada. Inténtalo de nuevo.") from None

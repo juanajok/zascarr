@@ -432,7 +432,7 @@ class RetiradaDeSerie:
             resultado="omitido", motivo=motivo, mensaje=MENSAJES[motivo], fecha=None,
             totales={}, archivos=[])
 
-    async def _omitir(self, firmado: RetiradaFirmada, motivo: str, *, titulo: str | None) -> ResultadoRetirada:
+    async def _omitido(self, firmado: RetiradaFirmada, motivo: str, *, titulo: str | None) -> ResultadoRetirada:
         await self._db.commit()
         return self._resultado_omitido(firmado, motivo, titulo=titulo)
 
