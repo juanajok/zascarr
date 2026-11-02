@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import json
 import time
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Literal
@@ -22,6 +23,7 @@ from zascarr.models import (
     File,
     Issue,
     LocalAlias,
+    ReadingProgress,
     Series,
     StoryArcIssue,
     VinculacionOperacion,
@@ -174,7 +176,7 @@ def _match_status(meta: dict | None) -> str | None:
     return v if isinstance(v, str) else None
 
 
-def estado_canonico(serie: Series, alias, numeros, archivos, deseados, vivas, sagas) -> dict:
+def estado_canonico(serie: Series, alias, numeros, archivos, deseados, vivas, sagas, lecturas) -> dict:
     return {
         "serie": {"titulo": serie.title, "tradicion": _texto(serie.tradition),
                   "anio_inicio": serie.start_year, "anio_fin": serie.end_year,
@@ -191,6 +193,12 @@ def estado_canonico(serie: Series, alias, numeros, archivos, deseados, vivas, sa
         "vivas": sorted([[str(o.id), str(o.file_id) if o.file_id is not None else None,
                           str(o.series_id) if o.series_id is not None else None, _texto(o.estado)] for o in vivas]),
         "sagas": sorted([[str(s.story_arc_id), str(s.issue_id), s.reading_order] for s in sagas]),
+        # El progreso de lectura se borra en cascada con los números: si cambia entre la vista previa y la
+        # confirmación, la persona no vio lo que se iba a perder. Se firma también su contenido.
+        "lecturas": sorted([[str(r.id), str(r.issue_id), _texto(r.status), r.current_page, r.rating,
+                             r.started_at.isoformat() if r.started_at else None,
+                             r.completed_at.isoformat() if r.completed_at else None, r.notes]
+                            for r in lecturas]),
     }
 
 
@@ -216,7 +224,10 @@ def bloqueos_de(deseados, vivas) -> list[Bloqueo]:
 
 
 class RetiradaDeSerie:
-    _gancho_con_filas_bloqueadas = None
+    #: Gancho de PRUEBAS (se asigna como `staticmethod`): se espera con las filas ya bloqueadas y el estado
+    #: comprobado, justo antes de aplicar los efectos. Sirve para intercalar de forma determinista una
+    #: asignación viva que aparece en la carrera. En producción es `None`.
+    _gancho_antes_de_efectos: Callable[[], Awaitable[None]] | None = None
 
     def __init__(self, db: AsyncSession, *, secret: str, ahora: float | None = None):
         self._db = db
@@ -260,10 +271,16 @@ class RetiradaDeSerie:
             select(StoryArcIssue.story_arc_id, StoryArcIssue.issue_id, StoryArcIssue.reading_order)
             .join(Issue, StoryArcIssue.issue_id == Issue.id).where(Issue.series_id == sid)
             .order_by(StoryArcIssue.issue_id))).all()
+        lecturas = (await db.execute(
+            select(ReadingProgress.id, ReadingProgress.issue_id, ReadingProgress.status,
+                   ReadingProgress.current_page, ReadingProgress.rating, ReadingProgress.started_at,
+                   ReadingProgress.completed_at, ReadingProgress.notes)
+            .join(Issue, ReadingProgress.issue_id == Issue.id).where(Issue.series_id == sid)
+            .order_by(ReadingProgress.id))).all()
         series_de_issue = {str(n.id): str(sid) for n in numeros}
         return SimpleNamespace(serie=serie, alias=alias, numeros=numeros, archivos=[
             SimpleNamespace(**f._mapping, series_id_de_issue=series_de_issue.get(str(f.issue_id), str(sid)))
-            for f in archivos], deseados=deseados, vivas=vivas, sagas=sagas)
+            for f in archivos], deseados=deseados, vivas=vivas, sagas=sagas, lecturas=lecturas)
 
     async def previsualizar(self, series_id: UUID) -> VistaPreviaRetirada:
         db = self._db
@@ -272,7 +289,7 @@ class RetiradaDeSerie:
             raise SerieNoEncontradaError(str(series_id))
         e = await self._leer_estado(serie)
         bloqueos = bloqueos_de(e.deseados, e.vivas)
-        huella = huella_de_estado(estado_canonico(e.serie, e.alias, e.numeros, e.archivos, e.deseados, e.vivas, e.sagas))
+        huella = huella_de_estado(estado_canonico(e.serie, e.alias, e.numeros, e.archivos, e.deseados, e.vivas, e.sagas, e.lecturas))
         token = None
         if not bloqueos:
             token = crear_token_retirada(
@@ -338,16 +355,17 @@ class RetiradaDeSerie:
             return await self._omitido(firmado, "serie_inexistente", titulo=None)
 
         await self._bloquear(series_id)
-        if self._gancho_con_filas_bloqueadas is not None:
-            await self._gancho_con_filas_bloqueadas()
 
         e = await self._leer_estado(serie)
-        huella = huella_de_estado(estado_canonico(e.serie, e.alias, e.numeros, e.archivos, e.deseados, e.vivas, e.sagas))
+        huella = huella_de_estado(estado_canonico(e.serie, e.alias, e.numeros, e.archivos, e.deseados, e.vivas, e.sagas, e.lecturas))
         if huella != firmado.huella:
             return await self._omitido(firmado, "cambio_desde_la_vista_previa", titulo=serie.title)
         if bloqueos_de(e.deseados, e.vivas):
             return await self._omitido(firmado, "en_curso", titulo=serie.title)
 
+        titulo = serie.title
+        if self._gancho_antes_de_efectos is not None:
+            await self._gancho_antes_de_efectos()
         fecha = self._fecha()
         informe = self._informe(firmado, fecha, e)
         try:
@@ -368,7 +386,7 @@ class RetiradaDeSerie:
         except IntegrityError as exc:
             await db.rollback()
             if conflicto_por_operacion_viva(exc):
-                return self._resultado_omitido(firmado, "en_curso", titulo=serie.title)
+                return self._resultado_omitido(firmado, "en_curso", titulo=titulo)
             raise
         resultado = self._resultado_informe(firmado, informe, [
             ArchivoResultado(id=str(f.id), nombre=f.file_name, numero=f.issue_number) for f in e.archivos])
@@ -410,11 +428,14 @@ class RetiradaDeSerie:
     def _resultado_informe(self, firmado: RetiradaFirmada, informe: dict, archivos: list[ArchivoResultado],
                            resultado: str = "retirada",
                            mensaje: str | None = None) -> ResultadoRetirada:
+        titulo = (informe.get("serie") or {}).get("titulo")
+        if mensaje is None:
+            mensaje = f"Listo: «{titulo}» ya no está en tu biblioteca."
+            mensaje += (" Los archivos siguen en el disco, en «Por revisar»." if archivos
+                        else " No tenía archivos vinculados.")
         return ResultadoRetirada(
             version=VERSION_RESULTADO, operacion_id=firmado.operacion, series_id=firmado.series_id,
-            titulo=(informe.get("serie") or {}).get("titulo"), resultado=resultado, motivo=None,
-            mensaje=mensaje or f"Listo: «{(informe.get('serie') or {}).get('titulo')}» ya no está en tu biblioteca. "
-                              "Los archivos siguen en el disco, en «Por revisar».",
+            titulo=titulo, resultado=resultado, motivo=None, mensaje=mensaje,
             fecha=informe.get("fecha"), totales=informe.get("totales", {}), archivos=archivos)
 
     async def _purgar(self) -> None:

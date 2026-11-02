@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import time
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -27,7 +30,14 @@ from tests.test_desvinculacion_pg import (  # noqa: F401
 )
 from tests.test_vinculacion_previa_pg import entorno as entorno_base  # noqa: F401
 from zascarr.services.operaciones import resumen_operaciones
-from zascarr.services.vinculacion import VinculacionDeArchivos
+from zascarr.services.retirada_serie import RetiradaDeSerie
+from zascarr.services.tokens_revision import TTL_SEGUNDOS, RetiradaFirmada, crear_token_retirada
+from zascarr.services.vinculacion import (
+    RETENCION_HORAS,
+    ConflictoDeBloqueoError,
+    ResultadoInciertoError,
+    VinculacionDeArchivos,
+)
 
 
 @pytest.fixture
@@ -228,15 +238,21 @@ async def test_comprobante_presente(entorno):
     token = r.json()["token"]
     c = await retirar(serie, token)
     assert c.status_code == 200
+    assert c.headers["cache-control"] == "no-store"
     oid = c.json()["operacion_id"]
     async with entorno.banco.fabrica() as s:
         row = (await s.execute(text("SELECT resultado FROM vinculacion_operaciones WHERE operacion_id = :o"), {"o": oid})).scalar()
         assert row is not None
         assert (row or {}).get("tipo") == "retirada_serie"
-        # sin rutas/nombres/hash
-        assert "file_path" not in json.dumps(row)
-        assert "sha256" not in json.dumps(row)
-        assert "token" not in json.dumps(row)
+        datos = (await s.execute(text("SELECT file_path, file_name, sha256_hash FROM files WHERE id = :f"),
+                                 {"f": list(ids.values())[0]})).mappings().first()
+    texto = json.dumps(row, ensure_ascii=False)
+    sha = hashlib.sha256(Path(datos["file_path"]).read_bytes()).hexdigest()
+    # Ni rutas, ni nombres, ni hashes, ni tokens, ni la huella firmada: el comprobante no es una copia del archivo.
+    for valor in (datos["file_path"], datos["file_name"], sha):
+        assert valor and valor not in texto
+    for clave in ("file_path", "file_name", "sha256", "token", "huella"):
+        assert clave not in texto
 
 
 @pytest.mark.asyncio
@@ -293,3 +309,137 @@ async def test_el_informe_de_retirada_no_se_confunde_con_una_vinculacion(entorno
     # Solo cuenta la vinculación real que hizo `_serie_con_vinculo`; el informe de retirada no se suma.
     assert resumen["vinculacion"]["total"] == 1
     assert resumen["vinculacion"]["completada"] == 1
+
+
+def _token_caducado(serie, *, puede_haberse_aplicado: bool) -> str:
+    """Un token firmado hace lo suficiente para que ya no valga; `puede` decide si además pudo purgarse su informe."""
+    ahora = time.time()
+    antiguedad = RETENCION_HORAS * 3600 + 60 if puede_haberse_aplicado else 60
+    firma = ahora - TTL_SEGUNDOS - antiguedad
+    return crear_token_retirada(
+        RetiradaFirmada(series_id=str(serie), huella="a" * 64, operacion=str(uuid4())),
+        SECRETO, ahora=firma)
+
+
+# ── Errores de la API: estado, cabeceras y nada aplicado ───────────────────────────────────────
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("puede", [True, False])
+async def test_caducado_dice_si_pudo_aplicarse(entorno, puede):
+    serie, _ = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    r = await retirar(serie, _token_caducado(serie, puede_haberse_aplicado=puede))
+    assert r.status_code == 410, r.text
+    assert r.headers["cache-control"] == "no-store"
+    d = r.json()["detail"]
+    assert d["codigo"] == "token_caducado"
+    assert d["puede_haberse_aplicado"] is puede
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(text("SELECT count(*) FROM series WHERE id = :s"), {"s": serie})).scalar() == 1
+
+
+@pytest.mark.asyncio
+async def test_api_404_y_503_sin_clave_llevan_no_store(entorno, monkeypatch):
+    r = await previa_retirada(uuid4())
+    assert r.status_code == 404 and r.headers["cache-control"] == "no-store"
+    serie, _ = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    r = await retirar(serie, "basura")
+    assert r.status_code == 422 and r.headers["cache-control"] == "no-store"
+    monkeypatch.setattr(_api_series, "get_settings",
+                        lambda: SimpleNamespace(library_path=entorno.lib, secret_key=""))
+    r = await previa_retirada(serie)
+    assert r.status_code == 503 and r.headers["cache-control"] == "no-store"
+    r = await retirar(serie, "x" * 40)
+    assert r.status_code == 503 and r.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exc", [ConflictoDeBloqueoError("coincidió"), ResultadoInciertoError("no se sabe")])
+async def test_api_conflicto_e_incierto_son_503_con_retry_after(entorno, monkeypatch, exc):
+    serie, _ = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    token = (await previa_retirada(serie)).json()["token"]
+
+    async def boom(self, token):
+        raise exc
+
+    monkeypatch.setattr(RetiradaDeSerie, "confirmar", boom)
+    r = await retirar(serie, token)
+    assert r.status_code == 503, r.text
+    assert r.headers["retry-after"] == "1" and r.headers["cache-control"] == "no-store"
+    assert r.json()["detail"]["codigo"] == exc.codigo
+
+
+@pytest.mark.asyncio
+async def test_api_error_inesperado_es_500_sin_fugas(entorno, monkeypatch):
+    serie, _ = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    token = (await previa_retirada(serie)).json()["token"]
+
+    async def boom(self, token):
+        raise RuntimeError("ruta privada /media/secreto")
+
+    monkeypatch.setattr(RetiradaDeSerie, "confirmar", boom)
+    r = await retirar(serie, token)
+    assert r.status_code == 500, r.text
+    assert r.headers["cache-control"] == "no-store"
+    assert r.json()["detail"]["codigo"] == "error_inesperado"
+    assert "/media/secreto" not in r.text
+
+
+# ── Omisiones: serie desaparecida y asignación que aparece en la carrera ───────────────────────
+
+@pytest.mark.asyncio
+async def test_serie_borrada_tras_la_previa_se_omite_sin_tocar_el_disco(entorno):
+    serie, _ = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    token = (await previa_retirada(serie)).json()["token"]
+    antes_disco = huella_disco(entorno.lib)
+    async with entorno.banco.fabrica() as s:
+        await s.execute(text("DELETE FROM series WHERE id = :s"), {"s": serie})
+        await s.commit()
+    r = await retirar(serie, token)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["resultado"] == "omitido" and j["motivo"] == "serie_inexistente"
+    assert huella_disco(entorno.lib) == antes_disco
+
+
+@pytest.mark.asyncio
+async def test_asignacion_que_aparece_en_la_carrera_se_omite_sin_cambios(entorno, monkeypatch):
+    """La red de seguridad de la BD (CHECK de asignación viva) se traduce a `omitido/en_curso`; no revienta."""
+    serie, ids = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    token = (await previa_retirada(serie)).json()["token"]
+    fid = list(ids.values())[0]
+
+    async with entorno.banco.fabrica() as s:
+        async def gancho():
+            await s.execute(text(
+                "INSERT INTO asignacion_operaciones (file_id, series_id, estado, origen, destino, temporal, "
+                "size_bytes, mtime_ns, sha256, issue_number, formato) VALUES (:f, :s, 'preparada', '/o', '/d', "
+                "'/t', 1, 1, :h, '1', 'single_issue')"), {"f": fid, "s": serie, "h": "a" * 64})
+
+        monkeypatch.setattr(RetiradaDeSerie, "_gancho_antes_de_efectos", staticmethod(gancho))
+        r = await RetiradaDeSerie(s, secret=SECRETO).confirmar(token)
+    assert r.resultado == "omitido" and r.motivo == "en_curso"
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(text("SELECT count(*) FROM series WHERE id = :s"), {"s": serie})).scalar() == 1
+        assert (await s.execute(text("SELECT issue_id FROM files WHERE id = :f"), {"f": fid})).scalar() is not None
+        assert (await s.execute(text(
+            "SELECT count(*) FROM vinculacion_operaciones WHERE resultado ->> 'tipo' = 'retirada_serie'"))).scalar() == 0
+
+
+@pytest.mark.asyncio
+async def test_cambio_de_progreso_de_lectura_invalida_la_previa(entorno):
+    serie, ids = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    token = (await previa_retirada(serie)).json()["token"]
+    async with entorno.banco.fabrica() as s:
+        iid = (await s.execute(text("SELECT issue_id FROM files WHERE id = :f"),
+                               {"f": list(ids.values())[0]})).scalar()
+        await s.execute(text(
+            "INSERT INTO reading_progress (id, issue_id, status) VALUES (:i, :s, CAST('unread' AS reading_status))"),
+            {"i": uuid4(), "s": iid})
+        await s.commit()
+    r = await retirar(serie, token)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["resultado"] == "omitido" and j["motivo"] == "cambio_desde_la_vista_previa"
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(text("SELECT count(*) FROM reading_progress WHERE issue_id = :i"),
+                                {"i": iid})).scalar() == 1

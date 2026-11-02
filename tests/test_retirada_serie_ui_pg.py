@@ -11,6 +11,7 @@ from __future__ import annotations
 import html
 import os
 import re
+import time
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -32,6 +33,8 @@ from tests.test_desvinculacion_pg import (  # noqa: F401  (fixtures y ayudas com
     vinculado,
 )
 from tests.test_vinculacion_previa_pg import entorno as entorno_base  # noqa: F401
+from zascarr.services.tokens_revision import TTL_SEGUNDOS, RetiradaFirmada, crear_token_retirada
+from zascarr.services.vinculacion import RETENCION_HORAS
 from zascarr.web import retirada_serie as web_retirada
 
 URL = os.environ.get("TEST_DATABASE_URL")
@@ -93,6 +96,14 @@ async def con_asignacion_viva(entorno, serie, file_id):
 async def serie_retirada(ent) -> tuple:
     serie, ids = await vinculado(ent, "Flash 01 (1987).cbz", "Flash 02 (1987).cbz")
     return serie, ids
+
+
+def token_caducado(serie, *, puede_haberse_aplicado: bool) -> str:
+    ahora = time.time()
+    antiguedad = RETENCION_HORAS * 3600 + 60 if puede_haberse_aplicado else 60
+    return crear_token_retirada(
+        RetiradaFirmada(series_id=str(serie), huella="a" * 64, operacion=str(uuid4())),
+        SECRETO, ahora=ahora - TTL_SEGUNDOS - antiguedad)
 
 
 # ── La ficha: entrada a «Retirar» ───────────────────────────────────────────────────────────────
@@ -175,9 +186,14 @@ class TestVistaPrevia:
         serie, _ = await serie_retirada(ent)
         monkeypatch.setattr(web_retirada, "get_settings", lambda: SimpleNamespace(secret_key=""))
         r = await get(RUTA.format(serie=serie))
-        assert r.status_code == 503 and "clave" in visible(r.text)
+        # Página HTML de verdad (no el JSON de `detail` colado en el panel) y con el aviso en llano.
+        assert r.status_code == 503 and "<html" in r.text and "clave" in visible(r.text)
+        assert 'id="retirada"' in r.text
         r = await post(RUTA.format(serie=serie), {"token": "x" * 40})
-        assert r.status_code == 503 and "clave" in visible(r.text)
+        assert r.status_code == 503 and "<html" in r.text and 'id="retirada"' in r.text
+        assert "clave" in visible(r.text) and 'name="token"' not in r.text
+        r = await post(RUTA.format(serie=serie), {"token": "x" * 40}, headers=HX)
+        assert r.status_code == 503 and r.text.lstrip().startswith('<div id="retirada"')
 
     async def test_bloqueo_por_asignacion_viva_no_ofrece_formulario_y_dice_por_que(self, ent):
         serie, ids = await serie_retirada(ent)
@@ -271,6 +287,23 @@ class TestConfirmacion:
         serie, _ = await serie_retirada(ent)
         assert (await post(RUTA.format(serie=serie), {})).status_code == 422
         assert (await post(RUTA.format(serie=serie), {"token": "x" * 5000})).status_code == 422
+
+    async def test_caducado_sin_poder_saber_si_se_aplico_no_dice_que_no_se_cambio_nada(self, ent):
+        serie, _ = await serie_retirada(ent)
+        r = await post(RUTA.format(serie=serie), {"token": token_caducado(serie, puede_haberse_aplicado=True)})
+        v = visible(r.text)
+        assert r.status_code == 200 and 'data-fase="fallo"' in r.text
+        assert "Puede que la retirada ya se hubiera aplicado" in v
+        assert "No se ha cambiado nada" not in v
+        assert "«Por revisar»" in v
+
+    async def test_caducado_sin_informe_purgado_dice_que_no_se_cambio_nada(self, ent):
+        serie, _ = await serie_retirada(ent)
+        r = await post(RUTA.format(serie=serie), {"token": token_caducado(serie, puede_haberse_aplicado=False)})
+        v = visible(r.text)
+        assert r.status_code == 200 and 'data-fase="fallo"' in r.text
+        assert "No se ha cambiado nada" in v
+        assert "Puede que la retirada" not in v
 
     async def test_cambio_desde_la_vista_previa_dice_que_no_se_cambio_nada(self, ent):
         serie, _ = await serie_retirada(ent)
