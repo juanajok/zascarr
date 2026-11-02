@@ -205,6 +205,18 @@ clientes `psql`/`pg_dump` de PostgreSQL 15 en el PATH; en esta máquina no está
 `postgres` de CI los instala y exige **cero** saltos, así que allí se ejecutan. **No se han dado
 por pasados en local.**
 
+Suite no-PG completa (`pytest -q -rs`):
+
+```
+4855 passed, 1837 skipped, 1 failed
+```
+
+El único fallo es
+`test_ensayo_f1bis_arnes.py::TestPresupuestoDeDescarga::test_se_corta_mientras_se_descarga_y_mata_el_grupo_entero`:
+una prueba de tiempos (4 s) que tardó 4,5 s en este host. El fichero es idéntico a `origin/main`
+y no toca código de la retirada; la `Suite unitaria` de CI pasa. Se deja como **FAIL local
+conocido**, no se cuenta como PASS ni se oculta.
+
 ### Navegador real
 
 Chrome headless por CDP, aplicación real contra Postgres real y una biblioteca temporal con
