@@ -132,7 +132,8 @@ como marco permanente.
 4. **Logs sin datos sensibles** (structlog). Si un error lleva datos del
    usuario (rutas, credenciales), sanitiza antes.
 5. Endpoints mutables usan `Form(...)` con campos explícitos en UI HTMX;
-   `Cache-Control` y `X-Legal-Redirect` documentados en `api/legal.py`.
+   `Cache-Control` documentado en `api/legal.py`; el 403 de la puerta legal lleva `HX-Redirect`
+   (`services/legal.py::require_legal_acknowledgment`).
 6. **La UI escucha en localhost por defecto** (`127.0.0.1` en la app; Postgres
    no se publica a la red en ningún caso). Abrir a la LAN es una decisión
    **explícita** del operador y exige contraseña; el exterior, proxy inverso con
@@ -160,8 +161,14 @@ como marco permanente.
 - **Sin diálogos nativos ni balas invisible**: `hx-confirm` ya se sabe que
   la automatización del navegador no lo resuelve; el usuario real sí.
   Documentado como limitación aceptada en B2.
-- Tarjetas con gracia de fallo: portada rota = placeholder CSS
-  `.cover-missing`, no imagen rota; campo ausente con icono claro.
+- Tarjetas con gracia de fallo: portada rota = marcador debajo de la imagen
+  (`ui.portada`: tinta de imprenta, trama e inicial; sin `onerror=`), no imagen
+  rota; campo ausente con icono claro.
+- **Texto informativo: 14 px como mínimo** (`.875rem`; lo comprueba `test_web_css_contraste`).
+  Única excepción declarada: la etiqueta de la barra inferior del móvil (`.nav-enlace`,
+  `clamp(.75rem, 3.3vw, .875rem)`), que baja hasta 12 px en pantallas de menos de 424 px
+  para que «Deseados» quepa a 320 px (U16). Una excepción nueva se declara en esa prueba con
+  su motivo; no se acorta la etiqueta.
 - **Tipografía** (decidido el 2026-10-20): dos familias libres (OFL), servidas por la
   app desde `static/vendor/fonts` y nunca desde un CDN: **Anton** para titulares y
   rótulos en mayúsculas (`--font-display`), **Archivo** variable para todo lo que se

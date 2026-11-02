@@ -147,7 +147,8 @@ class TebeosferaClient:
         (`destino_permitido`); 301/302/303 pasan a GET sin cuerpo, 307/308 conservan método y
         cuerpo. Un destino no permitido, demasiados saltos o una redirección sin `Location`
         lanzan `httpx.HTTPError` (el llamador lo trata como «sin resultados»)."""
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Cliente de Tebeosfera sin abrir: úsalo con `async with`.")
         for _ in range(MAX_SALTOS + 1):
             await self._throttle()
             r = await self._client.request(metodo, url, data=data)

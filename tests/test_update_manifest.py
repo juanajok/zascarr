@@ -28,6 +28,7 @@ DOCKER_FALSO = """#!/bin/sh
 echo "docker $*" >> "$STUB_LOG"
 case "$*" in
   *"compose version"*) echo "Docker Compose version v2"; exit 0 ;;
+  *"pg_database_size"*) echo "${FAKE_DB_SIZE_KB:-1024}"; exit 0 ;;
   *"pg_dump"*) cat "$FIXTURE_SQL"; exit 0 ;;
   *"psql"*) cat >/dev/null 2>&1 || true; echo "0020"; exit 0 ;;
 esac

@@ -410,6 +410,35 @@ class TestReconciliarAlArrancar:
         assert asyncio.run(estado()) == "limpiada" and not origen.exists() and destino.exists()
 
 
+class TestApagadoSinPropagar:
+    def test_a1_el_apagado_no_relanza_si_la_reconciliacion_termino_con_excepcion(
+        self, url_bd, monkeypatch
+    ):
+        """#123 (QA, A1 de #385): `main.py` espera las tareas de fondo al apagar y relanza lo que haya propagado alguna.
+        La reconciliación «nunca propaga»; con un servicio por defecto que no se puede construir, el apagado es limpio."""
+        from fastapi.testclient import TestClient
+
+        import zascarr.database as dbmod
+        import zascarr.main as main_mod
+        import zascarr.services.asignacion as asignacion_mod
+
+        def explota():
+            raise ValueError("configuración inválida")
+
+        async def nada(*_a, **_k):
+            return None
+
+        monkeypatch.setattr(asignacion_mod, "servicio_por_defecto", explota)
+        for nombre in ("_library_audit_task", "_import_loop", "_enrichment_loop", "_orchestrator_loop"):
+            monkeypatch.setattr(main_mod, nombre, nada)
+        motor = create_async_engine(url_asyncpg(url_bd), pool_size=5, max_overflow=2)
+        monkeypatch.setattr(dbmod, "engine", motor)
+        monkeypatch.setattr(dbmod, "async_session_factory", async_sessionmaker(motor, expire_on_commit=False))
+        with TestClient(main_mod.app, raise_server_exceptions=False):
+            pass                                                     # arrancar y apagar: si la tarea propagó, aquí revienta
+        assert asignacion_mod.estado_ultima_reconciliacion()["ok"] is False
+
+
 class TestConflictoPorOperacionViva:
     """El 409 traduce SOLO la restricción concreta, con rollback, y antes de que haya operaciones vivas en producción."""
 

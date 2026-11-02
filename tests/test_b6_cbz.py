@@ -15,10 +15,13 @@ import os
 import tempfile
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from xml.etree import ElementTree
 
 import pytest
 
+from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES, ComicInfoInvalidoError
+from zascarr.services.tagger import TaggerService, _Contexto
 from zascarr.utils import cbz as zcbz
 from zascarr.utils.cbz import (
     CbzInvalidoError,
@@ -66,6 +69,39 @@ class TestLectura:
 
     def test_sin_comicinfo_devuelve_none(self, tmp_path):
         assert leer_comicinfo(_cbz(tmp_path / "a.cbz")) is None
+
+    def test_un_comicinfo_bomba_no_se_carga_en_memoria(self, tmp_path):
+        """Regresión (SecOps, hallazgo 1a): `leer_comicinfo` hacía `zf.read` sin tope. Un XML de
+        más de 1 MiB que se comprime cientos de veces (la forma de una bomba de descompresión)
+        se rechaza como inválido sin descomprimirlo entero, igual que en el importer."""
+        relleno = b"<ComicInfo><Notes>" + b" " * (MAX_COMICINFO_BYTES + 1) + b"</Notes></ComicInfo>"
+        ruta = _cbz(tmp_path / "bomba.cbz", xml=relleno)
+        with zipfile.ZipFile(ruta) as zf:
+            info = zf.getinfo("ComicInfo.xml")
+            assert info.file_size > MAX_COMICINFO_BYTES
+            assert info.file_size / info.compress_size > 100
+        with pytest.raises(ComicInfoInvalidoError, match="ComicInfo.xml"):
+            leer_comicinfo(ruta)
+
+    def test_un_comicinfo_grande_pero_no_sospechoso_tambien_se_rechaza_por_tamano(
+            self, tmp_path, monkeypatch):
+        monkeypatch.setattr(zcbz, "MAX_COMICINFO_BYTES", 64)
+        xml = b"<ComicInfo><Series>" + os.urandom(48).hex().encode() + b"</Series></ComicInfo>"
+        with pytest.raises(ComicInfoInvalidoError, match="demasiado grande"):
+            leer_comicinfo(_cbz(tmp_path / "a.cbz", xml=xml))
+
+    @pytest.mark.asyncio
+    async def test_el_tagger_no_toca_un_cbz_con_comicinfo_bomba(self, tmp_path):
+        """El plan del tagger lanza `ComicInfoInvalidoError` (que sus llamadores convierten en
+        INVALIDO) y el CBZ queda byte a byte como estaba."""
+        relleno = b"<ComicInfo><Notes>" + b" " * (MAX_COMICINFO_BYTES + 1) + b"</Notes></ComicInfo>"
+        ruta = _cbz(tmp_path / "bomba.cbz", xml=relleno)
+        antes = hashlib.sha256(ruta.read_bytes()).hexdigest()
+        archivo = SimpleNamespace(file_path=str(ruta), metadata_={})
+        ctx = _Contexto(deseados={"Series": "Thorgal"}, bloqueados=set())
+        with pytest.raises(ComicInfoInvalidoError):
+            await TaggerService(db=None).planificar(archivo, ctx)
+        assert hashlib.sha256(ruta.read_bytes()).hexdigest() == antes
 
     @pytest.mark.parametrize("nombre", ["ComicInfo.xml", "comicinfo.xml", "COMICINFO.XML"])
     def test_nombre_es_case_insensitive(self, tmp_path, nombre):

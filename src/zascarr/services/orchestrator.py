@@ -34,11 +34,11 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from enum import Enum
+from enum import StrEnum
 from uuid import uuid4
 
 import structlog
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,7 +77,9 @@ MAX_SIZE_BYTES = 500 * 1024 * 1024
 def hay_fuente_de_busqueda(settings) -> bool:
     """¿Hay al menos una fuente de búsqueda de descargas activa? (D9; la reutiliza el Inicio, V4,
     para no inventar su propia definición de «fuente activa»)."""
-    foro_configurado = bool(settings.forum_enabled and settings.forum_username and settings.forum_url)
+    foro_configurado = bool(
+        settings.forum_enabled and settings.forum_username and settings.forum_url
+    )
     return bool(settings.prowlarr_enabled) or foro_configurado
 
 
@@ -87,9 +89,13 @@ def hay_fuente_de_busqueda(settings) -> bool:
 # vive aquí: es un estado global (ver services/legal.py), lo muestra la
 # UI de wishlist con un banner propio en vez de escribirse en cada fila.
 MOTIVO_SIN_FUENTE = "Sin fuente de búsqueda activa — activa Prowlarr o el foro en Ajustes"
-MOTIVO_FUENTE_INACCESIBLE = "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
+MOTIVO_FUENTE_INACCESIBLE = (
+    "La fuente de búsqueda no respondió a tiempo — se reintentará automáticamente"
+)
 MOTIVO_SIN_RESULTADOS = "No se encontró nada en las fuentes activas"
-MOTIVO_CANDIDATO_RECHAZADO = "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
+MOTIVO_CANDIDATO_RECHAZADO = (
+    "Se encontró algo, pero ningún cliente de descarga está activo — revisa Ajustes"
+)
 #: D8: había resultados, pero ninguno declaraba el número pedido. NO es
 #: "ningún backend activo" — decir eso sería mentir (D9) sobre lo que pasó.
 #: Cubre los dos motivos de descarte (número distinto o serie distinta):
@@ -100,9 +106,13 @@ MOTIVO_NUMERO_DISTINTO = (
     "Si el release usa otro nombre para la serie, importa un fichero y asígnalo una vez "
     "en Pendientes: ZascArr aprenderá ese nombre para la próxima búsqueda"
 )
-MOTIVO_CLIENTE_INACCESIBLE = "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
+MOTIVO_CLIENTE_INACCESIBLE = (
+    "No se pudo enviar a ningún cliente de descarga — se reintentará más tarde"
+)
 MOTIVO_ERROR_INESPERADO = "Ocurrió un error inesperado al buscar — se reintentará automáticamente"
-MOTIVO_CANDIDATO_INVALIDO = "Ese candidato ya no es válido — vuelve a buscar y elige uno de la lista actual"
+MOTIVO_CANDIDATO_INVALIDO = (
+    "Ese candidato ya no es válido — vuelve a buscar y elige uno de la lista actual"
+)
 
 # D10: cuánto dura la validez de un candidato mostrado en "Buscar ahora"
 # antes de que haya que volver a buscar — suficiente para que una persona
@@ -118,13 +128,21 @@ class SincronizacionPolitica:
     retirados: int
 
 
-class DownloadBackend(str, Enum):
+#: C6 (FR-14): lo que genera la política entra detrás de lo pedido a mano (prioridad 5). Se fija
+#: al CREAR el ítem;
+#: reactivar uno existente (`retirado`/`imported` → `wanted`) no toca su prioridad.
+PRIORIDAD_DE_LA_POLITICA = 8
+
+
+class DownloadBackend(StrEnum):
     TRANSMISSION = "transmission"
     AMULE        = "amule"
 
 
 def _detect_backend(url: str) -> DownloadBackend:
-    return DownloadBackend.AMULE if url.lower().startswith("ed2k://") else DownloadBackend.TRANSMISSION
+    return (
+        DownloadBackend.AMULE if url.lower().startswith("ed2k://") else DownloadBackend.TRANSMISSION
+    )
 
 
 class Orchestrator:
@@ -143,9 +161,10 @@ class Orchestrator:
             logger.info("orchestrator.cycle_skipped_no_legal_acknowledgment")
             return 0
 
-        cooldown = timedelta(hours=get_settings().orchestrator_retry_cooldown_hours)
+        settings = get_settings()
+        cooldown = timedelta(hours=settings.orchestrator_retry_cooldown_hours)
         cutoff = datetime.now(UTC) - cooldown
-        items = list((await self.db.execute(
+        elegibles = (
             select(Wishlist)
             .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
             .where(or_(
@@ -153,11 +172,22 @@ class Orchestrator:
                 Wishlist.last_searched_at < cutoff,
             ))
             .order_by(Wishlist.priority.asc(), Wishlist.added_at.asc())
-            .limit(limit)
+        )
+        # C6 (FR-18): lo MANUAL conserva su lote por ciclo (`limit` = max_concurrent_downloads); lo
+        # que genera la política va aparte y solo lo limita el techo por hora
+        # (`politica_busquedas_por_hora`).
+        manuales = list((await self.db.execute(
+            elegibles.where(Wishlist.origen != WishlistOrigin.POLICY).limit(limit)
+        )).scalars().all())
+        de_politica = list((await self.db.execute(
+            elegibles.where(Wishlist.origen == WishlistOrigin.POLICY)
+            .limit(settings.politica_busquedas_por_hora)
         )).scalars().all())
 
         sent = 0
-        for item in items:
+        for item in [*manuales, *de_politica]:
+            if item.origen == WishlistOrigin.POLICY and not await self._queda_cupo_de_politica():
+                break          # techo agotado: lo demás espera a un ciclo posterior
             try:
                 if await self._process_item(item):
                     sent += 1
@@ -167,6 +197,39 @@ class Orchestrator:
                 item.last_error = MOTIVO_ERROR_INESPERADO
                 await self.db.flush()
         return sent
+
+    async def _queda_cupo_de_politica(self) -> bool:
+        """FR-05/FR-07: ¿se han buscado menos de R ítems de política en la última hora? Se cuenta
+        con
+        las marcas YA CONFIRMADAS en la BD y con la hora de la BD (`now()`), no con el reloj del
+        proceso: así vale también en el primer ciclo tras un arranque o un reinicio."""
+        usadas = (await self.db.execute(
+            select(func.count()).select_from(Wishlist)
+            .where(Wishlist.origen == WishlistOrigin.POLICY)
+            .where(Wishlist.last_searched_at > func.now() - timedelta(hours=1))
+        )).scalar_one()
+        return int(usadas) < get_settings().politica_busquedas_por_hora
+
+    async def _marcar_busqueda(self, item: Wishlist) -> None:
+        """Marca el intento con la hora de la BD (FR-23). En ítems de política la marca se CONFIRMA
+        con un commit corto ANTES de la primera petición externa (FR-22): si el ciclo falla después,
+        la marca persiste y la ventana la cuenta. Se hace con `UPDATE … now() RETURNING` para no
+        dejar el atributo expirado (carga perezosa en async).
+
+        Se confirma SOLO la marca. El estado `searching` queda como cambio sin confirmar (flush):
+        si el proceso muere o se cancela durante la petición, el rollback lo deshace y el ítem sigue
+        siendo reintentable; confirmarlo lo dejaría «buscando» para siempre (el ciclo solo toma
+        `wanted`/`failed`)."""
+        marca = (await self.db.execute(
+            update(Wishlist).where(Wishlist.id == item.id)
+            .values(last_searched_at=func.now())
+            .returning(Wishlist.last_searched_at)
+        )).scalar_one()
+        item.last_searched_at = marca
+        if item.origen == WishlistOrigin.POLICY:
+            await self.db.commit()
+        item.status = WishlistStatus.SEARCHING
+        await self.db.flush()
 
     async def _process_item(self, item: Wishlist) -> bool:
         candidates = await self._search_and_rank(item)
@@ -184,7 +247,9 @@ class Orchestrator:
                 item.download_ref = ref
                 item.last_error = None  # D9: ya no aplica, se recuperó
                 await self.db.flush()
-                logger.info("orchestrator.download_started", title=candidate.title, backend=backend.value)
+                logger.info(
+                    "orchestrator.download_started", title=candidate.title, backend=backend.value
+                )
                 return True
 
         # Hubo candidatos pero ninguno se pudo enviar (backend caído, etc.):
@@ -208,12 +273,12 @@ class Orchestrator:
         if not query:
             return None
 
-        item.status = WishlistStatus.SEARCHING
         # D1/H2: marca el intento ya aquí, con o sin resultado — es lo que
         # activa el cooldown de process_wishlist y evita quemar Prowlarr/
-        # foro en cada ciclo con un item condenado.
-        item.last_searched_at = datetime.now(UTC)
-        await self.db.flush()
+        # foro en cada ciclo con un item condenado. C6: va ANTES de comprobar si hay alguna fuente
+        # activa (decisión del PO): un ítem sin fuentes gasta el cooldown de 6 h y no vuelve a
+        # ocupar huecos del lote en cada ciclo.
+        await self._marcar_busqueda(item)
 
         settings = get_settings()
 
@@ -263,8 +328,11 @@ class Orchestrator:
                     select(LocalAlias.pattern_norm)
                     .where(LocalAlias.series_id == item.series_id))).scalars().all())
             antes = len(candidates)
-            candidates = [c for c in candidates
-                          if self._candidato_es_del_numero(c, item.numero, titulo_serie, alias_serie)]
+            candidates = [
+                c
+                for c in candidates
+                if self._candidato_es_del_numero(c, item.numero, titulo_serie, alias_serie)
+            ]
             descartados_por_numero = antes - len(candidates)
 
         # Blindaje legal: opt-in por backend (deshabilitados por defecto,
@@ -272,7 +340,11 @@ class Orchestrator:
         # backend no activado ni se intenta enviar, ni se ofrece para
         # elegir a mano en D10.
         candidatos_crudos = candidates
-        candidates = [c for c in candidates if self._backend_enabled(_detect_backend(c.download_url), settings)]
+        candidates = [
+            c
+            for c in candidates
+            if self._backend_enabled(_detect_backend(c.download_url), settings)
+        ]
 
         if not candidates:
             item.status = WishlistStatus.WANTED  # nada encontrado todavía, no es un fallo
@@ -390,16 +462,24 @@ class Orchestrator:
         item.download_backend = backend.value
         item.download_ref = ref
         item.last_error = None
-        item.last_searched_at = datetime.now(UTC)
+        # Hora de la BD (FR-23).
+        item.last_searched_at = (await self.db.execute(select(func.now()))).scalar_one()
         await self.db.flush()
-        logger.info("orchestrator.download_started", title=candidate.title, backend=backend.value, manual=True)
+        logger.info(
+            "orchestrator.download_started",
+            title=candidate.title,
+            backend=backend.value,
+            manual=True,
+        )
         return True
 
     async def _build_query(self, item: Wishlist) -> str | None:
         if item.search_query:
             return item.search_query
         if item.series_id:
-            series = (await self.db.execute(select(Series).where(Series.id == item.series_id))).scalar_one_or_none()
+            series = (
+                await self.db.execute(select(Series).where(Series.id == item.series_id))
+            ).scalar_one_or_none()
             if not series:
                 return None
             q = series.title
@@ -411,14 +491,20 @@ class Orchestrator:
             if item.numero is not None:
                 q += f" {item.numero}"
             elif item.issue_id:
-                issue = (await self.db.execute(select(Issue).where(Issue.id == item.issue_id))).scalar_one_or_none()
+                issue = (
+                    await self.db.execute(select(Issue).where(Issue.id == item.issue_id))
+                ).scalar_one_or_none()
                 if issue and issue.issue_number:
                     q += f" {issue.issue_number}"
             return q
         if item.issue_id:
-            issue = (await self.db.execute(select(Issue).where(Issue.id == item.issue_id))).scalar_one_or_none()
+            issue = (
+                await self.db.execute(select(Issue).where(Issue.id == item.issue_id))
+            ).scalar_one_or_none()
             if issue:
-                series = (await self.db.execute(select(Series).where(Series.id == issue.series_id))).scalar_one_or_none()
+                series = (
+                    await self.db.execute(select(Series).where(Series.id == issue.series_id))
+                ).scalar_one_or_none()
                 if series:
                     return f"{series.title} {issue.issue_number}"
         return None
@@ -477,9 +563,13 @@ class Orchestrator:
             await scraper.login(s.forum_username, s.forum_password)
             for fr in await scraper.use_ipb_search(query):
                 if fr.ed2k_links:
-                    return SearchResult(fr.topic_title, "forum:crg", fr.ed2k_links[0], 0, 0, "comics")
+                    return SearchResult(
+                        fr.topic_title, "forum:crg", fr.ed2k_links[0], 0, 0, "comics"
+                    )
                 if fr.magnet_links:
-                    return SearchResult(fr.topic_title, "forum:crg", fr.magnet_links[0], 0, 1, "comics")
+                    return SearchResult(
+                        fr.topic_title, "forum:crg", fr.magnet_links[0], 0, 1, "comics"
+                    )
         except Exception:
             logger.exception("orchestrator.forum_fallback_error")
         return None
@@ -711,7 +801,7 @@ class Orchestrator:
                 series_id=series_id,
                 issue_id=None,
                 status=WishlistStatus.WANTED,
-                priority=5,
+                priority=PRIORIDAD_DE_LA_POLITICA,
                 origen=WishlistOrigin.POLICY,
                 numero=numero,
                 added_at=ahora,

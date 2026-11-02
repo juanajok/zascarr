@@ -504,3 +504,89 @@ class TestHealthRestore:
         assert 'restore: "Restauración"' in html
         assert "Restauración reciente verificada" in html
         assert "La última restauración falló" in html
+
+
+class TestDiscoFueraDelBucle:
+    """#123 (QA, A5 de #385): `_disk_status` hace E/S síncrona (`shutil.disk_usage`); en un handler async bloquearía el bucle."""
+
+    def test_el_disco_se_mide_fuera_del_hilo_del_bucle(self, clientes, monkeypatch, tmp_path):
+        import threading
+
+        clientes(transmission=False, amule=False)
+        monkeypatch.setattr(get_settings(), "disk_paths", str(tmp_path))
+        hilos = {}
+
+        async def base_ok(_db):
+            hilos["bucle"] = threading.get_ident()
+            return "ok", "Conectada y migrada."
+
+        def disco():
+            hilos["disco"] = threading.get_ident()
+            return "ok", "Quedan 9999 MB libres en el disco de datos."
+
+        with (
+            patch("zascarr.api.health._database_status", base_ok),
+            patch("zascarr.api.health._disk_status", disco),
+            patch("zascarr.api.health._restore_status", return_value=("ok", "Restauración reciente")),
+            _fake_db_client() as client,
+        ):
+            body = client.get("/api/health").json()
+        assert body["checks"]["disk"] == "ok"
+        assert hilos["disco"] != hilos["bucle"], "la medición del disco corre en el hilo del bucle de eventos"
+
+
+class TestDiscoNoMedible:
+    """#123 (SecOps O-2): «no medible» no es «todo bien». Con rutas configuradas y existentes pero ilegibles es `warning`;
+    `disabled` solo si no hay ninguna ruta configurada o ninguna existe."""
+
+    def _con(self, monkeypatch, rutas: str):
+        monkeypatch.setattr(get_settings(), "disk_paths", rutas)
+        from zascarr.api.health import _disk_status
+
+        return _disk_status()
+
+    def test_ruta_existente_pero_ilegible_es_warning(self, monkeypatch, tmp_path):
+        def ilegible(_ruta):
+            raise OSError("Input/output error")
+
+        monkeypatch.setattr("zascarr.api.health.shutil.disk_usage", ilegible)
+        estado, detalle = self._con(monkeypatch, str(tmp_path))
+        assert estado == "warning" and "No se pudo medir" in detalle
+
+    def test_si_una_ruta_se_mide_y_otra_no_se_usa_la_medible(self, monkeypatch, tmp_path):
+        buena, mala = tmp_path / "buena", tmp_path / "mala"
+        buena.mkdir()
+        mala.mkdir()
+
+        def medir(ruta):
+            if ruta == mala:
+                raise OSError("Input/output error")
+            return type("U", (), {"free": 9999 * 1024 * 1024})()
+
+        monkeypatch.setattr("zascarr.api.health.shutil.disk_usage", medir)
+        estado, _ = self._con(monkeypatch, f"{buena},{mala}")
+        assert estado == "ok"
+
+    def test_sin_rutas_configuradas_es_disabled(self, monkeypatch):
+        assert self._con(monkeypatch, "")[0] == "disabled"
+
+    def test_con_rutas_que_no_existen_en_ningun_nivel_es_disabled(self, monkeypatch):
+        monkeypatch.setattr("zascarr.api.health.Path.exists", lambda self: False)
+        assert self._con(monkeypatch, "/no/existe/nada")[0] == "disabled"
+
+    def test_el_warning_cuenta_como_aviso_en_health(self, clientes, monkeypatch, tmp_path):
+        clientes(transmission=False, amule=False)
+        monkeypatch.setattr(get_settings(), "disk_paths", str(tmp_path))
+
+        def ilegible(_ruta):
+            raise OSError("Input/output error")
+
+        monkeypatch.setattr("zascarr.api.health.shutil.disk_usage", ilegible)
+        with (
+            patch("zascarr.api.health._database_status", AsyncMock(return_value=("ok", "Conectada y migrada."))),
+            patch("zascarr.api.health._restore_status", return_value=("ok", "Restauración reciente")),
+            _fake_db_client() as client,
+        ):
+            body = client.get("/api/health").json()
+        assert body["checks"]["disk"] == "warning" and body["status"] == "degraded"
+        assert "disk" in body["warnings"]

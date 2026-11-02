@@ -308,10 +308,7 @@ class LibraryAudit:
         report.carpetas_vacias = vacias
 
     def _tiene_algun_comic(self, carpeta: Path) -> bool:
-        for ext in COMIC_EXTS:
-            if next(carpeta.rglob(f"*{ext}"), None) is not None:
-                return True
-        return False
+        return any(next(carpeta.rglob(f"*{ext}"), None) is not None for ext in COMIC_EXTS)
 
     def _detectar_no_reconocidos(self, report: AuditReport) -> None:
         """RF-02: dos formas concretas de "parece un tebeo, no lo es para

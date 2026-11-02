@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from tests._pg import bd_efimera_sync, migrar_a_head, url_asyncpg
-from zascarr.models import ComicTradition, Series, WishlistPolicy
+from zascarr.models import ComicTradition, LegalAcknowledgment, Series, WishlistPolicy
+from zascarr.services.legal import current_legal_version
 from zascarr.services.alta_serie import AltaDeSerie, bloquear_titulo
 from zascarr.services.edicion_serie import EdicionDeSerie, SesionConTrabajoPendienteError
 
@@ -150,6 +151,9 @@ class TestLoQueNoCambia:
     async def test_los_demas_campos_no_se_ven_afectados_por_un_duplicado_existente(self, banco):
         await banco.serie("Saga del Faro")
         mia = await banco.serie("Saga del Faro")
+        async with banco.fabrica() as s:                       # activar una política exige el aviso legal aceptado (C6)
+            s.add(LegalAcknowledgment(id=uuid4(), legal_version=current_legal_version()))
+            await s.commit()
         r = await banco.patch(mia.id, {"description": "Nueva", "status": "completed", "wishlist_policy": "faltantes",
                                        "cover_url": None, "total_issues": 12})
         assert r.status_code == 200

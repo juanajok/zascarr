@@ -9,7 +9,9 @@ Umbrales (WCAG 2.2, criterio 1.4.3 y 1.4.11):
   · texto normal ......................... ≥ 4,5 : 1  (se aplica a TODO el texto: es más estricto
                                                        que el 3:1 del texto grande, a propósito)
   · foco, bordes de controles, iconos .... ≥ 3 : 1
-  · tamaño mínimo de texto informativo ... 14 px (decisión de producto, no de WCAG)
+  · tamaño mínimo de texto informativo ... 14 px (decisión de producto, no de WCAG); un `clamp` cuenta
+                                            por su mínimo y las excepciones van declaradas con su motivo
+                                            (`EXCEPCIONES_DE_TAMANO`)
   · objetivo táctil de controles ......... 40 px; casillas y radios 24 px
 
 ALCANCE (qué garantiza esta prueba y qué no):
@@ -65,6 +67,145 @@ def _reglas(css: str | None = None) -> list[tuple[str, dict[str, str]]]:
         decl = {k.strip(): v.strip() for k, v in re.findall(r"([\w-]+)\s*:\s*([^;]+);?", cuerpo)}
         salida.append((" ".join(selector.split()), decl))
     return salida
+
+
+# ── tamaño mínimo del texto ───────────────────────────────────────────────────────────────
+MINIMO_PX = 14.0
+
+#: Excepciones DECLARADAS al mínimo de 14 px: selector → (mínimo en px que se tolera, motivo).
+#: Una excepción vale solo mientras el selector siga bajando de 14 px y no baje de lo declarado;
+#: si deja de bajar, la prueba falla (excepción obsoleta) para que no se pudra.
+EXCEPCIONES_DE_TAMANO: dict[str, tuple[float, str]] = {
+    ".nav-enlace": (
+        12.0,
+        "U16: que «Deseados» quepa a 320 px en la barra inferior del móvil. Medido con la fuente real "
+        "(Archivo 600, Chromium): ocupa 56,1 px a 12 px, 60,8 a 13 y 65,5 a 14; la columna a 320 px "
+        "mide 64 px y con el padding quedan 62, así que a 14 px no cabe. clamp(.75rem, 3.3vw, "
+        ".875rem) da 12 px a 320-360, 12,9 a 390, 13,7 a 414 y 14 desde 424 px: la etiqueta mide "
+        "menos de 14 px en cualquier pantalla de menos de 424 px. No se acorta «Deseados»."),
+}
+
+#: `font-size` con `var(...)` o `inherit`: no se puede saber su valor leyendo la hoja, así que FALLAN
+#: salvo que el selector esté aquí con su motivo. Vacía a propósito (hoy ninguna regla los usa).
+TAMANOS_NO_COMPROBABLES: dict[str, str] = {}
+
+#: `font-size` proporcional a su contenedor (`cqw`): sin mínimo en px que leer; cada uno con su motivo.
+TAMANOS_PROPORCIONALES: dict[str, str] = {
+    ".portada-marca": "la inicial decorativa y aria-hidden de ui.portada: 46 % del ancho de su tarjeta, "
+                      "≥ 37 px incluso en la más pequeña (80 px de ancho); el título va en texto debajo",
+}
+
+
+def minimo_px(valor: str) -> float | None:
+    """Tamaño mínimo en px de un `font-size` (un `clamp` cuenta por su primer argumento).
+
+    Devuelve None si el valor es relativo (`em`), y LANZA ValueError si no se puede leer: nada se omite."""
+    v = " ".join(valor.split())
+    if v.startswith("clamp("):
+        m = re.fullmatch(r"clamp\(\s*([\d.]+)(rem|px)\s*,\s*[^,()]+,\s*([\d.]+)(rem|px)\s*\)", v)
+        if not m:
+            raise ValueError(f"clamp no reconocido: {valor!r}")
+        v = m.group(1) + m.group(2)
+    m = re.fullmatch(r"([\d.]+)(rem|em|px)", v)
+    if not m:
+        raise ValueError(f"font-size no reconocido: {valor!r}")
+    n, u = float(m.group(1)), m.group(2)
+    return n * 16 if u == "rem" else n if u == "px" else None
+
+
+def problemas_de_tamano(reglas, excepciones=None, no_comprobables=None, proporcionales=None) -> list[str]:
+    """Todo lo que incumple el mínimo de 14 px. Vacía = bien. No omite nada en silencio."""
+    excepciones = EXCEPCIONES_DE_TAMANO if excepciones is None else excepciones
+    no_comprobables = TAMANOS_NO_COMPROBABLES if no_comprobables is None else no_comprobables
+    proporcionales = TAMANOS_PROPORCIONALES if proporcionales is None else proporcionales
+    problemas, usadas = [], set()
+    for selector, motivo in {**excepciones_motivos(excepciones), **no_comprobables, **proporcionales}.items():
+        if not motivo.strip():
+            problemas.append(f"{selector}: una excepción necesita motivo")
+    for selector, d in reglas:
+        v = d.get("font-size")
+        if not v:
+            continue
+        if v.endswith("cqw"):
+            if selector not in proporcionales:
+                problemas.append(f"{selector}: font-size {v!r} proporcional sin declarar")
+            continue
+        if v.startswith(("var(", "inherit")):
+            if selector not in no_comprobables:
+                problemas.append(f"{selector}: font-size {v!r} no se puede comprobar leyendo la hoja")
+            continue
+        try:
+            px = minimo_px(v)
+        except ValueError as e:
+            problemas.append(f"{selector}: {e}")
+            continue
+        if px is None:                       # `em`: relativo al elemento padre
+            if float(v.removesuffix("em")) < 1:
+                problemas.append(f"{selector}: {v} (em < 1)")
+            continue
+        if px >= MINIMO_PX:
+            continue
+        if selector not in excepciones:
+            problemas.append(f"{selector}: {v} baja de {MINIMO_PX:g} px ({px:g} px)")
+            continue
+        usadas.add(selector)
+        if px < excepciones[selector][0]:
+            problemas.append(f"{selector}: {v} baja de lo declarado en su excepción "
+                             f"({px:g} < {excepciones[selector][0]:g} px)")
+    for selector in excepciones:
+        if selector not in usadas:
+            problemas.append(f"{selector}: excepción obsoleta (ya no baja de {MINIMO_PX:g} px)")
+    return problemas
+
+
+def excepciones_motivos(excepciones) -> dict[str, str]:
+    return {selector: motivo for selector, (_minimo, motivo) in excepciones.items()}
+
+
+# ── color-mix(): los estados llevan token, no una mezcla ──────────────────────────────────
+#: Usos permitidos de `color-mix()`: (selector, propiedad) → motivo. Son decorativos, NO estados: una
+#: tinta con alfa sobre lo que haya detrás, que un token de fondo opaco (`ok-bg`…) no sustituye. Un
+#: estado (ok, warn, amber, info) se tiñe con su token `-bg`; cualquier mezcla nueva en CUALQUIER
+#: propiedad (background, border, color, text-shadow, box-shadow, variables…) falla salvo que se
+#: declare aquí con su motivo, y una entrada que ya no existe también falla (se pudriría).
+USOS_DE_COLOR_MIX: dict[tuple[str, str], str] = {
+    (".audit-item", "border-top"):
+        "separador discontinuo de la lista del informe de auditoría: ink al 22 % con alfa, no un estado",
+    (".series-results li", "border-bottom"):
+        "separador discontinuo de los resultados de búsqueda de serie: ink al 22 % con alfa, no un estado",
+    (".pagina-error h1", "text-shadow"):
+        "desalineamiento de planchas (cian y magenta corridos) del rótulo de la página de error: el único "
+        "sitio donde está permitido; se apaga con prefers-contrast y forced-colors",
+}
+
+
+def declaraciones(css: str | None = None) -> list[tuple[str, str, str]]:
+    """(selector, propiedad, valor) de TODAS las declaraciones de la hoja, sin colapsar duplicadas
+    (a diferencia de `_reglas`, donde la última pisa a la anterior)."""
+    salida = []
+    for selector, cuerpo in re.findall(r"([^{}@]+)\{([^{}]*)\}", _hoja(css)):
+        sel = " ".join(selector.split())
+        for prop, valor in re.findall(r"([\w-]+)\s*:\s*([^;]+);?", cuerpo):
+            salida.append((sel, prop.strip(), " ".join(valor.split())))
+    return salida
+
+
+def problemas_de_color_mix(decls, permitidos=None) -> list[str]:
+    permitidos = USOS_DE_COLOR_MIX if permitidos is None else permitidos
+    problemas = [f"{sel} {{ {prop} }}: una excepción necesita motivo"
+                 for (sel, prop), motivo in permitidos.items() if not motivo.strip()]
+    vistos = set()
+    for sel, prop, valor in decls:
+        if "color-mix(" not in valor:
+            continue
+        if (sel, prop) in permitidos:
+            vistos.add((sel, prop))
+        else:
+            problemas.append(f"{sel} {{ {prop}: {valor} }}: color-mix() fuera de la lista; un estado "
+                             "se tiñe con su token -bg (ok-bg, warn-bg, amber-bg, info-bg)")
+    problemas += [f"{sel} {{ {prop} }}: entrada obsoleta (ya no usa color-mix())"
+                  for sel, prop in permitidos if (sel, prop) not in vistos]
+    return problemas
 
 
 # ── color ─────────────────────────────────────────────────────────────────────────────────
@@ -131,8 +272,8 @@ def contraste(a: str, b: str) -> float:
 # ── fondos sobre los que puede caer texto «sin fondo propio» ─────────────────────────────
 FONDOS_DE_CONTEXTO = [
     "var(--paper)", "var(--paper-2)", "var(--caption-bg)",
-    "color-mix(in srgb, var(--ok) 12%, var(--paper))",     # .suggestion, .audit-ok
-    "color-mix(in srgb, var(--cyan) 14%, var(--paper))",   # .legal-notice-info
+    "var(--ok-bg)",      # .suggestion, .audit-ok
+    "var(--info-bg)",    # .legal-notice-info
 ]
 FG_BASE_DEL_BOTON = "var(--ink)"   # `button { color: var(--ink) }`; --btn-bg solo cambia el fondo
 
@@ -143,7 +284,14 @@ SIN_TEXTO = ("dot", "progress-value", "progress-bar")
 
 # Pares que el resolvedor no debe tener que entender y que se excluyen A PROPÓSITO:
 # {(selector, fg, bg): motivo}. Vacío: cada entrada nueva exige su justificación.
-EXCLUSIONES: dict[tuple[str, str, str], str] = {}
+EXCLUSIONES: dict[tuple[str, str, str], str] = {
+    # La inicial de la portada que falta (ui.portada): una letra de ~46 % del ancho de la tarjeta (≥ 37 px
+    # incluso en la más pequeña), decorativa y aria-hidden (el título va en texto debajo). Es texto
+    # grande: le vale 3:1, y el caso peor, magenta en claro, mide 3,68:1
+    # (test_portada_marca.py::TestContrasteDeLaInicial lo comprueba en las tres tintas y los dos temas).
+    (".portada-m", "var(--on-yellow)", "var(--magenta)"):
+        "inicial decorativa y enorme de la portada que falta (texto grande, 3:1; 3,68:1 medido)",
+}
 
 
 def _pares_de_la_hoja(css: str | None = None) -> list[tuple[str, str, str, str, str]]:
@@ -314,18 +462,10 @@ class TestEstructura:
         assert not malos, f"estilos de color en línea en: {malos}"
 
     def test_ningun_texto_baja_de_14_px(self):
-        malos = []
-        for selector, d in _reglas():
-            v = d.get("font-size")
-            if not v or v.startswith(("clamp", "inherit", "var")):
-                continue
-            m = re.fullmatch(r"([\d.]+)(rem|em|px)", v)
-            assert m, f"{selector}: font-size no reconocido {v!r}"
-            n, u = float(m.group(1)), m.group(2)
-            px = n * 16 if u == "rem" else n if u == "px" else None
-            if (px is not None and px < 14) or (u == "em" and n < 1):
-                malos.append(f"{selector}: {v}")
-        assert not malos, "texto por debajo de 14 px:\n  " + "\n  ".join(malos)
+        """Un `clamp` cuenta por su mínimo (la etiqueta de la barra inferior baja a 12 px y está
+        declarada en EXCEPCIONES_DE_TAMANO); `var()`/`inherit` y `cqw` fallan salvo declarados."""
+        problemas = problemas_de_tamano(_reglas())
+        assert not problemas, "texto por debajo de 14 px o sin poder comprobarse:\n  " + "\n  ".join(problemas)
 
     @pytest.mark.parametrize("selector", [
         ".topnav a", ".series-search", ".issue-input", ".search-input",
@@ -396,6 +536,164 @@ class TestTemas:
         assert {k: claro[k] for k in ("--cyan", "--magenta", "--yellow", "--ok", "--warn")} == {
             "--cyan": "#0d9bd6", "--magenta": "#d81a75", "--yellow": "#f2c500",
             "--ok": "#2e8b57", "--warn": "#c0392b"}
+
+
+# ── 4b. sombra dura: visible en los dos temas y de un solo color ──────────────────────────
+SOMBRAS_DURAS = ("--shadow-ink", "--shadow-ink-sm", "--shadow-ink-hover", "--shadow-ink-active")
+
+
+class TestSombraDura:
+    """Regresión de dos mecanismos del tema oscuro: la sombra era negro al 55 % (`rgba`, 1,13:1
+    sobre --paper: no se veía) y el hover/active de los botones escribían `var(--ink)` a mano, que
+    en oscuro es crema: el botón sin sombra la ganaba en crema al pasar. La sombra es la señal de
+    «esto se pulsa» (CLAUDE.md §6), así que se le pide el 3:1 de lo que no es texto (WCAG 1.4.11)."""
+
+    @pytest.mark.parametrize("tema", ["claro", "oscuro"])
+    @pytest.mark.parametrize("fondo", ["--paper", "--paper-2"])
+    def test_la_sombra_dura_se_ve_sobre_el_papel(self, tema, fondo):
+        t = _temas()[tema]
+        color = resolver("var(--shadow-color)", t)
+        assert color, f"--shadow-color [{tema}] no es un color sólido: {t.get('--shadow-color')!r}"
+        r = contraste(color, resolver(f"var({fondo})", t))
+        assert r >= NO_TEXTO, f"sombra sobre {fondo} [{tema}]: {r:.2f}:1 < {NO_TEXTO}:1"
+
+    def test_en_oscuro_la_sombra_no_es_la_tinta_crema(self):
+        """Con la tinta crema la sombra se leería como un segundo borde, más grueso."""
+        t = _temas()["oscuro"]
+        r = contraste(resolver("var(--shadow-color)", t), resolver("var(--ink)", t))
+        assert r >= NO_TEXTO, f"sombra frente a la tinta en oscuro: {r:.2f}:1"
+
+    @pytest.mark.parametrize("token", SOMBRAS_DURAS)
+    def test_cada_desplazamiento_usa_el_color_de_sombra_del_tema(self, token):
+        """Un solo color: el tema oscuro cambia --shadow-color y no redefine los desplazamientos."""
+        t = _temas()
+        assert t["claro"][token].endswith("0 var(--shadow-color)"), t["claro"][token]
+        assert t["oscuro"][token] == t["claro"][token], f"{token} se redefine en oscuro"
+
+    def test_ninguna_sombra_dura_lleva_el_color_escrito_a_mano(self):
+        permitidas = {"none"} | {f"var({s})" for s in SOMBRAS_DURAS}
+        malas = [f"{s}: box-shadow: {d['box-shadow']}" for s, d in _reglas()
+                 if "box-shadow" in d and d["box-shadow"] not in permitidas]
+        assert not malas, "sombras fuera de los tokens:\n" + "\n".join(malas)
+
+
+class TestElMinimoDeTamanoNoOmiteNada:
+    """Pruebas de la propia prueba del mínimo de 14 px. Antes saltaba todo `clamp`, `var()` e `inherit`,
+    así que la etiqueta de la barra inferior (12 px) no se comprobaba y un `clamp(.5rem, …)` habría pasado."""
+
+    SIN = {}      # sin excepciones, para probar la regla pelada
+
+    def _p(self, reglas, **kw):
+        kw.setdefault("excepciones", self.SIN)
+        kw.setdefault("no_comprobables", self.SIN)
+        kw.setdefault("proporcionales", self.SIN)
+        return problemas_de_tamano(reglas, **kw)
+
+    def test_un_clamp_cuenta_por_su_minimo(self):
+        assert minimo_px("clamp(.75rem, 3.3vw, .875rem)") == 12.0
+        assert minimo_px("clamp(30px, 4.4vw, 48px)") == 30.0
+
+    def test_un_clamp_que_baja_de_14_sin_excepcion_falla(self):
+        p = self._p([(".etiqueta", {"font-size": "clamp(.5rem, 3vw, 1rem)"})])
+        assert len(p) == 1 and ".etiqueta" in p[0] and "8 px" in p[0]
+
+    def test_un_clamp_que_no_baja_de_14_pasa(self):
+        assert self._p([(".h", {"font-size": "clamp(19px, 2.4vw, 26px)"})]) == []
+
+    @pytest.mark.parametrize("valor", [
+        "clamp(1vw, 3vw, 2rem)", "clamp(.75rem, 3vw)", "clamp(var(--a), 3vw, 2rem)", "min(1rem, 2vw)",
+        "smaller", "large",
+    ])
+    def test_un_valor_ilegible_falla_en_vez_de_saltarse(self, valor):
+        p = self._p([(".x", {"font-size": valor})])
+        assert len(p) == 1 and ".x" in p[0]
+
+    def test_var_e_inherit_fallan_salvo_lista_explicita_y_hoy_la_lista_esta_vacia(self):
+        assert TAMANOS_NO_COMPROBABLES == {}
+        for valor in ("var(--tam)", "inherit"):
+            assert len(self._p([(".v", {"font-size": valor})])) == 1
+            assert self._p([(".v", {"font-size": valor})], no_comprobables={".v": "motivo"}) == []
+
+    def test_el_tamano_proporcional_se_declara_con_motivo(self):
+        regla = [(".inicial", {"font-size": "46cqw"})]
+        assert len(self._p(regla)) == 1
+        assert self._p(regla, proporcionales={".inicial": "decorativa"}) == []
+
+    def test_la_excepcion_vale_con_su_minimo_y_su_motivo(self):
+        regla = [(".nav", {"font-size": "clamp(.75rem, 3.3vw, .875rem)"})]
+        assert self._p(regla, excepciones={".nav": (12.0, "U16")}) == []
+
+    def test_una_excepcion_no_deja_bajar_de_lo_declarado(self):
+        regla = [(".nav", {"font-size": "clamp(.6rem, 3.3vw, .875rem)"})]
+        p = self._p(regla, excepciones={".nav": (12.0, "U16")})
+        assert len(p) == 1 and "lo declarado" in p[0]
+
+    def test_una_excepcion_obsoleta_falla(self):
+        """Si la regla vuelve a 14 px o desaparece, la excepción sobra y se tiene que borrar."""
+        for reglas in ([(".nav", {"font-size": ".875rem"})], []):
+            p = self._p(reglas, excepciones={".nav": (12.0, "U16")})
+            assert len(p) == 1 and "obsoleta" in p[0]
+
+    def test_una_excepcion_sin_motivo_falla(self):
+        regla = [(".nav", {"font-size": "clamp(.75rem, 3.3vw, .875rem)"})]
+        assert any("motivo" in x for x in self._p(regla, excepciones={".nav": (12.0, "  ")}))
+
+    def test_la_hoja_real_solo_tiene_la_excepcion_de_la_barra_inferior(self):
+        """La excepción declarada se usa de verdad. Buscar «56,1», «60,8»… en el motivo comprueba texto
+        escrito a mano: solo es una guarda de que el motivo conserva sus medidas, no las verifica."""
+        assert list(EXCEPCIONES_DE_TAMANO) == [".nav-enlace"]
+        minimo, motivo = EXCEPCIONES_DE_TAMANO[".nav-enlace"]
+        assert minimo == 12.0
+        for dato in ("56,1", "60,8", "65,5", "62", "424"):
+            assert dato in motivo, dato
+        assert problemas_de_tamano(_reglas()) == []
+
+
+class TestColorMixSoloDondeSeDeclara:
+    """El estado se tiñe con su token -bg. Antes había 7 `color-mix()` y nada impedía una octava."""
+
+    def test_la_hoja_real_solo_mezcla_donde_se_declara(self):
+        problemas = problemas_de_color_mix(declaraciones())
+        assert not problemas, "\n  ".join(problemas)
+
+    def test_los_usos_permitidos_son_los_tres_decorativos(self):
+        assert sorted(USOS_DE_COLOR_MIX) == [
+            (".audit-item", "border-top"), (".pagina-error h1", "text-shadow"),
+            (".series-results li", "border-bottom")]
+
+    def test_los_estados_de_la_hoja_usan_su_token(self):
+        """Los tres fondos que eran mezclas (`.suggestion`, `.audit-ok`, `.legal-notice-info`)."""
+        fondos = {sel: valor for sel, prop, valor in declaraciones() if prop == "background"}
+        assert fondos[".suggestion"] == "var(--ok-bg)"
+        assert fondos[".audit-ok"] == "var(--ok-bg)"
+        assert fondos[".legal-notice-info"] == "var(--info-bg)"
+
+    @pytest.mark.parametrize("propiedad", [
+        "background", "border-color", "color", "box-shadow", "text-shadow", "--btn-bg", "outline-color"])
+    def test_una_mezcla_nueva_falla_en_cualquier_propiedad(self, propiedad):
+        css = f".nuevo {{ {propiedad}: color-mix(in srgb, var(--ok) 12%, var(--paper)); }}"
+        p = problemas_de_color_mix(declaraciones(css), permitidos={})
+        assert len(p) == 1 and ".nuevo" in p[0] and propiedad in p[0]
+
+    def test_una_mezcla_repetida_en_la_misma_regla_no_se_oculta(self):
+        """`_reglas` se queda con la última declaración; la guarda las ve todas."""
+        css = (".x { background: color-mix(in srgb, var(--ok) 12%, var(--paper)); "
+               "background: var(--paper); }")
+        assert len(problemas_de_color_mix(declaraciones(css), permitidos={})) == 1
+
+    def test_un_uso_declarado_pasa(self):
+        css = ".sep { border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent); }"
+        assert problemas_de_color_mix(declaraciones(css), permitidos={(".sep", "border-top"): "decorativo"}) == []
+
+    def test_una_entrada_que_ya_no_existe_falla(self):
+        p = problemas_de_color_mix(declaraciones(".sep { border-top: 2px dashed var(--ink); }"),
+                                   permitidos={(".sep", "border-top"): "decorativo"})
+        assert len(p) == 1 and "obsoleta" in p[0]
+
+    def test_una_entrada_sin_motivo_falla(self):
+        css = ".sep { border-top: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent); }"
+        p = problemas_de_color_mix(declaraciones(css), permitidos={(".sep", "border-top"): "  "})
+        assert any("motivo" in x for x in p)
 
 
 class TestLoNoSoportadoNoPasaInadvertido:
