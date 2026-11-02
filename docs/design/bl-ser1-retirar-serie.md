@@ -194,7 +194,7 @@ tests/test_retirada_serie_ui_pg.py    28 passed
 tests/test_tokens_retirada.py          9 passed
 ```
 
-Suite PG completa de CI (`grep -l TEST_DATABASE_URL tests/*.py`):
+Suite PG completa, mismo conjunto que el job de CI (`grep -l TEST_DATABASE_URL tests/*.py`):
 
 ```
 1811 passed, 2 skipped
@@ -213,9 +213,10 @@ Suite no-PG completa (`pytest -q -rs`):
 
 El único fallo es
 `test_ensayo_f1bis_arnes.py::TestPresupuestoDeDescarga::test_se_corta_mientras_se_descarga_y_mata_el_grupo_entero`:
-una prueba de tiempos (4 s) que tardó 4,5 s en este host. El fichero es idéntico a `origin/main`
-y no toca código de la retirada; la `Suite unitaria` de CI pasa. Se deja como **FAIL local
-conocido**, no se cuenta como PASS ni se oculta.
+una prueba de tiempos (4 s) que tardó 4,5 s en este host, también con `--basetemp` en el disco
+raíz. La prueba **aislada pasa**; es el fichero completo el que falla por interacción/tiempos. El
+fichero es idéntico a `origin/main` y no toca código de la retirada; la `Suite unitaria` de CI
+pasa. Se deja como **FAIL local conocido**, no se cuenta como PASS ni se oculta.
 
 ### Navegador real
 
