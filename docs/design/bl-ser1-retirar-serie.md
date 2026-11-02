@@ -1,7 +1,8 @@
 # BL-SER1 (#303) — Retirar una serie de la biblioteca sin borrar sus archivos
 
-Estado: **implementado, pendiente de revisión y despliegue**. Fecha: 2026-11-01.
-Rama: `claude/303-retirar-serie`. No hay migración ni tabla nueva.
+Estado: **implementado, pendiente de revisión y despliegue**. Fecha: 2026-11-02.
+Rama: `claude/303-retirar-serie`, fusionada con `origin/main` (`9d7fedf`). No hay migración ni
+tabla nueva.
 
 ## 1. Qué problema resuelve
 
@@ -100,9 +101,9 @@ URL (se comprueba en el servicio y en la capa web/API). Campos firmados: `versio
 `huella` (SHA-256 del estado canónico) y `operacion` (UUID de la operación). TTL 15 minutos.
 Tamaño fijo y acotado por `MAX_TOKEN_RETIRADA` (peor caso emitible), validado en API y formulario.
 
-La `huella` no firma listas: se calcula con `json.dumps(..., sort_keys=True)` sobre el estado
-canónico (serie, alias, números, archivos, deseados, asignaciones vivas, participaciones en
-sagas y progreso de lectura). La confirmación vuelve a leer y recalcula con las filas ya
+La `huella` firma el estado canónico completo, no una lista de nombres: se calcula con
+`json.dumps(..., sort_keys=True)` sobre la serie, sus alias, números, archivos, deseados,
+asignaciones vivas, participaciones en sagas y progreso de lectura. La confirmación vuelve a leer y recalcula con las filas ya
 bloqueadas; si cambió, no se aplica nada. El progreso de lectura se incluye porque se borra en
 cascada con los números: si alguien empieza o termina una lectura entre la vista previa y la
 confirmación, la vista previa ya no vale y no se pierde en silencio.
@@ -188,7 +189,7 @@ esquema estricto, tamaño máximo.
 Resultado local (Postgres 15 en Docker, `zascarr_test`):
 
 ```
-tests/test_retirada_serie_pg.py       23 passed
+tests/test_retirada_serie_pg.py       24 passed
 tests/test_retirada_serie_ui_pg.py    28 passed
 tests/test_tokens_retirada.py          9 passed
 ```
@@ -196,7 +197,7 @@ tests/test_tokens_retirada.py          9 passed
 Suite PG completa de CI (`grep -l TEST_DATABASE_URL tests/*.py`):
 
 ```
-1775 passed, 2 skipped
+1811 passed, 2 skipped
 ```
 
 Los 2 saltos son `test_restore_pg.py` y `test_zz_preparar_fixture_123a_pg.py`, que necesitan los
@@ -207,7 +208,9 @@ por pasados en local.**
 ### Navegador real
 
 Chrome headless por CDP, aplicación real contra Postgres real y una biblioteca temporal con
-archivos reales. Evidencia en `/tmp/opencode/303-browser/capturas/` (fuera del repo):
+archivos reales. La captura se repitió **después** de fusionar `origin/main` (`9d7fedf`), para que
+la evidencia corresponda al código final de la rama. Evidencia en
+`/tmp/opencode/303-browser/capturas/` (fuera del repo):
 
 | Captura | Qué demuestra |
 |---|---|
