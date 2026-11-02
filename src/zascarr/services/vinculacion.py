@@ -232,6 +232,10 @@ class VinculacionDeArchivos:
             VinculacionOperacion.operacion_id == operacion))).scalar_one_or_none()
         if previo is not None:
             doc = previo.resultado
+            if (doc or {}).get("tipo") is not None:
+                # BL-SER1 (#303): la misma tabla guarda informes de retirada. Un identificador de operación
+                # ocupado por otro tipo de informe no se puede devolver como si fuera una vinculación.
+                raise VinculacionError("El identificador de esta operación ya está ocupado por otro informe.")
             nombres = await self._nombres([UUID(a["id"]) for a in doc["archivos"]])
             respuesta = self._respuesta(doc, repetida=True, nombres=nombres)
             await db.commit()                      # (solo suelta el candado: aquí no se escribió nada)

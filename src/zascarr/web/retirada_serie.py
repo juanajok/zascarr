@@ -11,7 +11,6 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.api.series import ejecutar_retirada
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import Series
@@ -21,6 +20,12 @@ from zascarr.services.tokens_revision import (
     MAX_TOKEN_RETIRADA,
     TTL_SEGUNDOS,
     verificar_token_retirada,
+)
+from zascarr.services.vinculacion import (
+    ConflictoDeBloqueoError,
+    ResultadoInciertoError,
+    TokenCaducadoError,
+    TokenInvalidoError,
 )
 from zascarr.utils.ruta_visible import ruta_visible
 from zascarr.web.routes import crear_templates
@@ -37,7 +42,16 @@ FALLOS: dict[str, tuple[str, str, bool]] = {
     "conflicto_de_bloqueo": ("Ahora no se ha podido", "ZascArr estaba haciendo otra cosa con esta serie. No se ha cambiado nada: vuelve a intentarlo.", True),
     "error_inesperado": ("No se ha podido completar", "No se ha cambiado nada. Vuelve a intentarlo; si se repite, mira «Estado».", False),
 }
-FALLO_DESCONOCIDO = ("No se ha podido completar", "No se ha cambiado nada que sepamos. Ábrela de nuevo e inténtalo otra vez.", False)
+#: Caducado y sin informe: el informe ya se purgó, así que NO se puede afirmar que no se aplicara.
+CADUCADO_APLICADO = (
+    "Esta página ha caducado",
+    f"Han pasado más de {TTL_SEGUNDOS // 60} minutos y ya no se conserva el informe de esta operación. "
+    "Puede que la retirada ya se hubiera aplicado: comprueba si la serie sigue en tu biblioteca y si sus "
+    "archivos están en «Por revisar». Si la serie sigue ahí, abre la vista previa de nuevo.",
+    False,
+)
+SIN_CLAVE = ("ZascArr no puede firmar ahora",
+             "El servidor no tiene clave para firmar; reinícialo y vuelve a intentarlo.", False)
 
 OMITIDOS: dict[str, str] = {
     "serie_inexistente": "Esta serie ya no está en tu biblioteca: puede que otra pantalla la retirara o borrara. No se ha cambiado nada más.",
@@ -54,12 +68,26 @@ def _sin_cache(resp: HTMLResponse) -> HTMLResponse:
 def _secreto() -> str:
     secret = get_settings().secret_key
     if not secret:
-        raise HTTPException(status_code=503, detail="ZascArr no tiene clave para firmar; reinícialo.")
+        raise HTTPException(status_code=503, detail=SIN_CLAVE[1])
     return secret
 
 
 def _plantilla(request: Request) -> str:
     return "retirada_serie.html" if "hx-request" not in request.headers else "_retirada_panel.html"
+
+
+def _fallo(request: Request, serie, *, codigo: str, titulo: str, mensaje: str, repetible: bool,
+           token: str | None = None, status_code: int = 200) -> HTMLResponse:
+    return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
+        "serie": serie, "fase": "fallo", "p": None, "r": None,
+        "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje, "repetible": repetible},
+        "token": token, "archivos": [], "textos_bloqueo": BLOQUEOS,
+        "aviso_disco": None, "aviso_despues": None}, status_code=status_code))
+
+
+def _sin_clave(request: Request, serie, token: str | None = None) -> HTMLResponse:
+    return _fallo(request, serie, codigo="sin_clave", titulo=SIN_CLAVE[0], mensaje=SIN_CLAVE[1],
+                  repetible=False, token=token, status_code=503)
 
 
 async def _serie(db: AsyncSession, series_id: UUID) -> SimpleNamespace:
@@ -87,6 +115,10 @@ async def vista_previa(series_id: UUID, request: Request, db: AsyncSession = Dep
         p = await RetiradaDeSerie(db, secret=_secreto()).previsualizar(series_id)
     except SerieNoEncontradaError:
         raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+    except HTTPException as e:
+        if e.status_code == 503:
+            return _sin_clave(request, serie)
+        raise
     return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
         "serie": serie, "fase": "vista_previa", "p": p, "r": None, "fallo": None, "token": p.token,
         "archivos": _archivos(p), "textos_bloqueo": BLOQUEOS,
@@ -98,27 +130,45 @@ async def confirmar(series_id: UUID, request: Request,
                     token: str = Form(..., min_length=1, max_length=MAX_TOKEN_RETIRADA),
                     db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     serie = await _serie_o_none(db, series_id)
-    base = {"serie": serie, "fase": "resultado", "p": None, "r": None, "fallo": None, "token": token,
-            "archivos": [], "textos_bloqueo": BLOQUEOS, "aviso_disco": None, "aviso_despues": None}
-    firmado = verificar_token_retirada(token, _secreto(), ignorar_caducidad=True)
+    try:
+        firmado = verificar_token_retirada(token, _secreto(), ignorar_caducidad=True)
+    except HTTPException as e:
+        if e.status_code == 503:
+            return _sin_clave(request, serie, token)
+        raise
     if firmado is None or firmado.series_id != str(series_id):
         titulo, mensaje, repetible = FALLOS["token_invalido"]
         if firmado is not None:
             mensaje = "Esa vista previa es de otra serie. Abre la de esta serie y confírmala desde ahí. No se ha cambiado nada."
-        return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
-            **base, "fase": "fallo", "fallo": {"codigo": "token_invalido", "titulo": titulo, "mensaje": mensaje,
-                                               "repetible": repetible}}))
+        return _fallo(request, serie, codigo="token_invalido", titulo=titulo, mensaje=mensaje,
+                      repetible=repetible, token=token)
     try:
-        r = await ejecutar_retirada(db, token)
+        r = await RetiradaDeSerie(db, secret=_secreto()).confirmar(token)
+    except TokenInvalidoError:
+        titulo, mensaje, repetible = FALLOS["token_invalido"]
+        return _fallo(request, serie, codigo="token_invalido", titulo=titulo, mensaje=mensaje,
+                      repetible=repetible, token=token)
+    except TokenCaducadoError as e:
+        titulo, mensaje, repetible = CADUCADO_APLICADO if e.puede_haberse_aplicado else FALLOS["token_caducado"]
+        return _fallo(request, serie, codigo="token_caducado", titulo=titulo, mensaje=mensaje,
+                      repetible=repetible, token=token)
+    except ConflictoDeBloqueoError:
+        titulo, mensaje, repetible = FALLOS["conflicto_de_bloqueo"]
+        return _fallo(request, serie, codigo="conflicto_de_bloqueo", titulo=titulo, mensaje=mensaje,
+                      repetible=repetible, token=token)
+    except ResultadoInciertoError:
+        titulo, mensaje, repetible = FALLOS["resultado_incierto"]
+        return _fallo(request, serie, codigo="resultado_incierto", titulo=titulo, mensaje=mensaje,
+                      repetible=repetible, token=token)
     except HTTPException as e:
-        d = e.detail if isinstance(e.detail, dict) else {"codigo": "error_inesperado"}
-        codigo = str(d.get("codigo", "error_inesperado"))
-        if codigo not in FALLOS:
-            logger.warning("retirada.fallo_sin_texto", codigo=codigo)
-        titulo, mensaje, repetible = FALLOS.get(codigo, FALLO_DESCONOCIDO)
-        return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
-            **base, "fase": "fallo",
-            "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje, "repetible": repetible}}))
+        if e.status_code == 503:
+            return _sin_clave(request, serie, token)
+        raise
+    except Exception:
+        logger.exception("retirada.error_inesperado_ui")
+        titulo, mensaje, repetible = FALLOS["error_inesperado"]
+        return _fallo(request, serie, codigo="error_inesperado", titulo=titulo, mensaje=mensaje,
+                      repetible=repetible, token=token)
     if serie is None and r.titulo:
         serie = SimpleNamespace(id=str(series_id), title=r.titulo, existe=False)
     elif serie is not None and r.resultado == "retirada":
@@ -129,4 +179,6 @@ async def confirmar(series_id: UUID, request: Request,
         if r.motivo not in OMITIDOS:
             logger.warning("retirada.motivo_sin_texto", motivo=r.motivo)
     return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
-        **base, "serie": serie, "r": r, "texto_omitido": texto_omitido}))
+        "serie": serie, "fase": "resultado", "p": None, "r": r, "fallo": None, "token": token,
+        "archivos": [], "textos_bloqueo": BLOQUEOS, "aviso_disco": None, "aviso_despues": None,
+        "texto_omitido": texto_omitido}))

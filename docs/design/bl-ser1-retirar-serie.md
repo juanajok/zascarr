@@ -101,9 +101,11 @@ URL (se comprueba en el servicio y en la capa web/API). Campos firmados: `versio
 Tamaño fijo y acotado por `MAX_TOKEN_RETIRADA` (peor caso emitible), validado en API y formulario.
 
 La `huella` no firma listas: se calcula con `json.dumps(..., sort_keys=True)` sobre el estado
-canónico (serie, alias, números, archivos, deseados, asignaciones vivas y participaciones en
-sagas). La confirmación vuelve a leer y recalcula con las filas ya bloqueadas; si cambió, no se
-aplica nada.
+canónico (serie, alias, números, archivos, deseados, asignaciones vivas, participaciones en
+sagas y progreso de lectura). La confirmación vuelve a leer y recalcula con las filas ya
+bloqueadas; si cambió, no se aplica nada. El progreso de lectura se incluye porque se borra en
+cascada con los números: si alguien empieza o termina una lectura entre la vista previa y la
+confirmación, la vista previa ya no vale y no se pierde en silencio.
 
 ## 4. Bloqueos
 
@@ -150,7 +152,7 @@ ni infla el panel de operaciones.
 
 ### Postgres real y ficheros reales
 
-`tests/test_retirada_serie_pg.py` (14 pruebas):
+`tests/test_retirada_serie_pg.py` (23 pruebas):
 
 - vista previa sin escrituras, sin cambios en disco y con contenido/token correctos;
 - bloqueo por asignación viva y por deseo `searching`/`downloading`; deseo `wanted` no bloquea;
@@ -158,20 +160,27 @@ ni infla el panel de operaciones.
   `review_dismissed = false` y una entrada en `vinculo_historial`; disco intacto;
 - idempotencia (`ya_retirada`) y dos confirmaciones simultáneas del mismo token
   (`retirada` + `ya_retirada`, un solo comprobante);
-- token de otra serie → `422`; cambio tras la vista previa → `omitido` sin cambios;
+- token de otra serie → `422`; cambio tras la vista previa → `omitido` sin cambios; cambio de progreso
+  de lectura → `omitido` sin perder la lectura;
+- serie borrada entre la vista previa y la confirmación → `omitido/serie_inexistente`;
+- asignación viva que aparece en la carrera (red de seguridad `ck_asignacion_viva_con_referencias`) →
+  `omitido/en_curso`, con la serie y los vínculos intactos;
 - `DELETE /api/series/{id}` sigue devolviendo `409`;
 - comprobante presente, sin rutas/nombres/hash/token y sin contarse como vinculación;
+- errores de la API: `410` con y sin `puede_haberse_aplicado`, `404`, `503` sin clave, `503` de
+  conflicto/resultado incierto con `Retry-After: 1`, `500` sin fugas; todos con `Cache-Control: no-store`;
 - sagas: se borra la participación (`story_arc_issues`), no la saga.
 
-`tests/test_retirada_serie_ui_pg.py` (26 pruebas):
+`tests/test_retirada_serie_ui_pg.py` (28 pruebas):
 
 - enlace en la ficha con aviso de disco y sin escrituras al entrar;
 - vista previa: aviso destacado, conteos, alias/sagas/deseados, sin escrituras, `no-store`,
   contrato htmx y panel solo con `HX-Request`;
 - bloqueos sin formulario y con causa; `wanted` no bloquea; sin códigos internos;
 - confirmación sin JS y con htmx; resultado, «Por revisar», repetición sin escrituras, token de
-  otra serie, token inválido, cambio posterior, resultado incierto con «Comprobar el resultado»,
-  ficha ya inexistente.
+  otra serie, token inválido, caducado con y sin «pudo aplicarse», cambio posterior, resultado
+  incierto con «Comprobar el resultado», ficha ya inexistente, y `503` sin clave como HTML/panel
+  (no como JSON colado).
 
 `tests/test_tokens_retirada.py` (9 pruebas): ida y vuelta, caducidad, propósito, contexto,
 esquema estricto, tamaño máximo.
@@ -179,15 +188,15 @@ esquema estricto, tamaño máximo.
 Resultado local (Postgres 15 en Docker, `zascarr_test`):
 
 ```
-tests/test_retirada_serie_pg.py       14 passed
-tests/test_retirada_serie_ui_pg.py    26 passed
+tests/test_retirada_serie_pg.py       23 passed
+tests/test_retirada_serie_ui_pg.py    28 passed
 tests/test_tokens_retirada.py          9 passed
 ```
 
 Suite PG completa de CI (`grep -l TEST_DATABASE_URL tests/*.py`):
 
 ```
-1764 passed, 2 skipped
+1775 passed, 2 skipped
 ```
 
 Los 2 saltos son `test_restore_pg.py` y `test_zz_preparar_fixture_123a_pg.py`, que necesitan los
@@ -227,8 +236,10 @@ antes y después). La base quedó con las series retiradas en `404`, los archivo
 - **Biblioteca real**: no se toca. La prueba de disco usa una biblioteca temporal.
 - **Clientes de PostgreSQL 15 en local**: no instalados; los 2 saltos de arriba los cubre el job
   de CI.
-- **Revisión de Seguridad/QA/Pixel independiente**: pendiente de las sesiones de revisión; este
-  documento y el PR son la entrada.
+- **Revisión de Seguridad/QA/Pixel independiente**: se hizo una revisión QA/SecOps de la rama; no
+  encontró bloqueantes y sus hallazgos importantes (caducado ambiguo, `no-store` en errores,
+  `MissingGreenlet` en la carrera y pruebas que faltaban) están corregidos y cubiertos por las
+  pruebas de arriba. La revisión de Pixel y la aceptación final corresponden al PR.
 
 ## 8. Rollback
 
@@ -238,10 +249,14 @@ comprobantes ya escritos se purgan solos a las 24 h; no bloquean nada.
 
 ## 9. Riesgos y decisiones abiertas
 
-- **Carrera con un deseo que empieza justo después de la relectura**: los deseos se bloquean con
-  `FOR UPDATE`, pero un `INSERT` concurrente no espera a esas filas. La ventana es mínima y la
-  asignación tiene red de seguridad en la BD; para deseados no se añadió una restricción porque
-  implicaría una migración no autorizada. Se documenta como riesgo aceptado de esta rebanada.
+- **Carrera con un deseo que empieza justo después de la relectura**: no se cuela. Un `INSERT`
+  en `wishlist` que apunta a la serie (o a uno de sus números) necesita la clave foránea y toma
+  `FOR KEY SHARE` sobre la fila de `series`, que esta transacción mantiene `FOR UPDATE`: espera
+  al `COMMIT` y, cuando entra, la serie ya no está. No hace falta una restricción adicional ni
+  una migración.
+- **Asignación viva que aparece en la carrera**: además de los bloqueos, la restricción
+  `ck_asignacion_viva_con_referencias` revierte la transacción y se traduce a
+  `omitido/en_curso`; hay una prueba determinista con el gancho de pruebas.
 - **Sagas**: borrar la serie borra sus participaciones, no las sagas. Es la cascada existente.
 - **Deseados**: se borran los de la serie y los de sus números, incluidos los de política; no hay
   búsqueda ni descarga en curso porque eso bloquea.

@@ -239,13 +239,18 @@ def _secreto() -> str:
     secret = get_settings().secret_key
     if not secret:
         raise HTTPException(
-            status_code=503,
+            status_code=503, headers={"Cache-Control": "no-store"},
             detail="El servidor no tiene clave para firmar; reinícialo.")
     return secret
 
 
-def _error_retirada(estado: int, codigo: str, mensaje: str) -> HTTPException:
-    return HTTPException(status_code=estado, detail={"codigo": codigo, "mensaje": mensaje})
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+def _error_retirada(estado: int, codigo: str, mensaje: str,
+                    *, headers: dict[str, str] | None = None) -> HTTPException:
+    return HTTPException(status_code=estado, detail={"codigo": codigo, "mensaje": mensaje},
+                         headers={**_NO_STORE, **(headers or {})})
 
 
 @router.post("/{series_id}/retirada/previsualizar", response_model=VistaPreviaRetirada)
@@ -256,7 +261,8 @@ async def previsualizar_retirada(
     try:
         return await RetiradaDeSerie(db, secret=_secreto()).previsualizar(series_id)
     except SerieNoEncontradaError:
-        raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+        raise HTTPException(status_code=404, headers=_NO_STORE,
+                            detail="Serie no encontrada") from None
 
 
 async def ejecutar_retirada(db: AsyncSession, token: str) -> ResultadoRetirada:
@@ -266,18 +272,18 @@ async def ejecutar_retirada(db: AsyncSession, token: str) -> ResultadoRetirada:
         raise _error_retirada(422, e.codigo, str(e)) from None
     except TokenCaducadoError as e:
         raise HTTPException(
-            status_code=410,
+            status_code=410, headers=_NO_STORE,
             detail={
                 "codigo": e.codigo,
                 "mensaje": str(e),
                 "puede_haberse_aplicado": e.puede_haberse_aplicado,
             }) from None
     except ConflictoDeBloqueoError as e:
-        raise HTTPException(status_code=503, headers={"Retry-After": "1"},
+        raise HTTPException(status_code=503, headers={**_NO_STORE, "Retry-After": "1"},
                             detail={"codigo": e.codigo, "mensaje": str(e)}) from None
     except ResultadoInciertoError as e:
         raise HTTPException(
-            status_code=503, headers={"Retry-After": "1"},
+            status_code=503, headers={**_NO_STORE, "Retry-After": "1"},
             detail={
                 "codigo": e.codigo,
                 "mensaje": ("No se pudo confirmar si se retiró. Repite la confirmación con el "
