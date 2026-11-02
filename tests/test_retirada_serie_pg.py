@@ -402,6 +402,30 @@ async def test_serie_borrada_tras_la_previa_se_omite_sin_tocar_el_disco(entorno)
 
 
 @pytest.mark.asyncio
+async def test_vinculacion_tras_la_previa_se_omite_sin_cambios(entorno):
+    """Lo que se confirma es lo que se vio: un archivo vinculado después de la vista previa invalida el token."""
+    serie, _ = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
+    token = (await previa_retirada(serie)).json()["token"]
+    nuevos = await archivos(entorno, "Flash 02 (1987).cbz")
+    from tests.test_desvinculacion_pg import api_previa_vinculacion, confirmar
+    rv = await api_previa_vinculacion(serie, nuevos.values())
+    assert rv.status_code == 200 and rv.json()["token"], rv.text
+    assert (await confirmar(rv.json()["token"])).status_code == 200
+    antes_disco = huella_disco(entorno.lib)
+    r = await retirar(serie, token)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert j["resultado"] == "omitido" and j["motivo"] == "cambio_desde_la_vista_previa"
+    async with entorno.banco.fabrica() as s:
+        assert (await s.execute(text("SELECT count(*) FROM series WHERE id = :s"), {"s": serie})).scalar() == 1
+        assert (await s.execute(text("SELECT issue_id FROM files WHERE id = :f"),
+                                {"f": list(nuevos.values())[0]})).scalar() is not None
+        assert (await s.execute(text(
+            "SELECT count(*) FROM vinculacion_operaciones WHERE resultado ->> 'tipo' = 'retirada_serie'"))).scalar() == 0
+    assert huella_disco(entorno.lib) == antes_disco
+
+
+@pytest.mark.asyncio
 async def test_asignacion_que_aparece_en_la_carrera_se_omite_sin_cambios(entorno, monkeypatch):
     """La red de seguridad de la BD (CHECK de asignación viva) se traduce a `omitido/en_curso`; no revienta."""
     serie, ids = await _serie_con_vinculo(entorno, "Flash 01 (1987).cbz")
