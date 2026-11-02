@@ -27,18 +27,41 @@ espacio_postgres_libre_kb() {
         | awk 'NR == 2 { print $4 }'
 }
 
+# KiB que ocupa la BD; VACÍO si no se pudo medir (p. ej. PostgreSQL parado). Nunca falla: bajo `set -e` un fallo aquí
+# mataría al script llamador en la asignación, sin mensaje. Quien llama decide, y `exigir_espacio_kb` no trata un
+# vacío como 0 (fallaría abierto).
 tamano_bd_kb() {
-    "${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${DB_NAME}" -At \
-        -c "select (pg_database_size(current_database()) / 1024)::bigint" 2>/dev/null \
-        | tr -d '[:space:]'
+    local salida
+    salida="$("${COMPOSE[@]}" exec -T postgres psql -U "${DB_USER}" -d "${DB_NAME}" -At \
+        -c "select (pg_database_size(current_database()) / 1024)::bigint" 2>/dev/null)" || return 0
+    printf '%s' "${salida}" | tr -d '[:space:]'
 }
 
-# Comprueba `libre` (KiB) contra `necesario` + 10 % + 64 MiB. Devuelve 1 y
-# explica en español si no cabe; los scripts deciden si escriben estado y salen.
+# KiB que ocupará un .sql.gz descomprimido, EXACTOS. `gzip -l` guarda el tamaño sin comprimir en 32 bits y con más de
+# 4 GiB lo subestima (da módulo 2^32); se cuenta el flujo descomprimido. Vacío si no se pudo leer.
+tamano_descomprimido_kb() {
+    local bytes
+    bytes="$(gzip -dc "$1" 2>/dev/null | wc -c)" || return 0
+    bytes="${bytes//[[:space:]]/}"
+    [[ "${bytes}" =~ ^[0-9]+$ ]] || return 0
+    printf '%s' "$(( (bytes + 1023) / 1024 ))"
+}
+
+# Comprueba `libre` (KiB) contra `necesario` + 10 % + 64 MiB. Devuelve 1 y explica en español si no cabe, y 2 si no se
+# pudo medir lo necesario (nunca se toma como 0: sería dar por bueno lo que no se sabe); los scripts deciden si
+# escriben estado y salen.
 exigir_espacio_kb() {
     local libre="$1" necesario="$2" contexto="$3" margen total
-    [[ "${libre}" =~ ^[0-9]+$ ]] || libre=0
-    [[ "${necesario}" =~ ^[0-9]+$ ]] || necesario=0
+    if ! [[ "${necesario}" =~ ^[0-9]+$ ]]; then
+        printf 'ERROR: No pude medir cuánto espacio hace falta para %s (¿está PostgreSQL arrancado?). No se ha borrado nada. Arranca PostgreSQL e inténtalo de nuevo.\n' \
+            "${contexto}" >&2
+        return 2
+    fi
+    if ! [[ "${libre}" =~ ^[0-9]+$ ]]; then
+        printf 'ERROR: No pude medir el espacio libre para %s. No se ha borrado nada. Comprueba que el disco está montado e inténtalo de nuevo.\n' \
+            "${contexto}" >&2
+        return 2
+    fi
     margen=$((necesario / 10 + 65536))
     total=$((necesario + margen))
     if (( libre < total )); then

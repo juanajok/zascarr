@@ -26,6 +26,11 @@ from xml.etree import ElementTree
 #: Entrada canónica dentro del CBZ (se normaliza a una sola, en la raíz).
 ENTRADA_XML = "ComicInfo.xml"
 
+#: DoS: un ComicInfo.xml real mide pocos KB. Quien lo LEE de un CBZ lo acota a este tamaño
+#: descomprimido ANTES de tenerlo en memoria (una bomba de descompresión no debe tumbar la Pi): el
+#: importer y el tagger, los dos con `formato_contenedor.leer_acotado`.
+MAX_COMICINFO_BYTES = 1 * 1024 * 1024   # 1 MiB
+
 #: Campos que B6 gestiona (mapa mínimo de la ficha). El resto del XML se
 #: preserva tal cual al reescribir.
 CAMPOS_GESTIONADOS = (
@@ -116,7 +121,10 @@ def parsear(existente: bytes) -> ElementTree.Element:
     Un XML ilegible o con otra raíz lanza `ComicInfoInvalidoError` — nunca
     devuelve un árbol vacío que pudiera acabar reemplazando al original."""
     try:
-        root = ElementTree.fromstring(existente)
+        # XML de terceros (S314 revisado por SecOps): el tamaño lo acota
+        # `utils/cbz.leer_comicinfo`; las entidades anidadas las corta expat ≥ 2.4.1 (lo fija
+        # test_comicinfo_entidades_anidadas); sin XXE (ElementTree no resuelve entidades externas).
+        root = ElementTree.fromstring(existente)  # noqa: S314
     except ElementTree.ParseError as exc:
         raise ComicInfoInvalidoError(f"XML ilegible: {exc}") from exc
     if root.tag != "ComicInfo":

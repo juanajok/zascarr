@@ -362,10 +362,11 @@ class TestPoliticaBusquedaD8:
         series.wishlist_policy = WishlistPolicy.NONE
         session = FakeSession([
             FakeExecResult([series]),   # búsqueda de la serie en el POST
+            acuse(),                    # puerta legal (solo al ACTIVAR): se consulta una vez y se reutiliza
             FakeExecResult([]),         # manuales (predicado)
             FakeExecResult([]),         # poseídos (predicado)
             FakeExecResult([], rowcount=0),   # retirada (no hay nada que retirar)
-            acuse(), retirados(),
+            retirados(),
         ])
         with use_fake_session(session) as client:
             r = client.post(f"/ui/series/{series.id}/politica",
@@ -397,6 +398,55 @@ class TestPoliticaBusquedaD8:
         # mostraría «2» cuando en la serie ya había 3 más.
         assert "Se han retirado 2 números" in r.text
         assert "5 números retirados" in r.text
+
+    def test_activar_politica_sin_aviso_no_escribe_nada(self):
+        """C6 / FR-20: sin el aviso legal aceptado, ACTIVAR no escribe (ni la política ni la retirada) y responde con el
+        fragmento SIN CAMBIOS, el aviso y el enlace a /ui/legal. Es 200 (htmx no intercambia los 4xx)."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.NONE
+        session = FakeSession([
+            FakeExecResult([series]),   # la serie
+            FakeExecResult([]),         # puerta legal: SIN acuse
+            retirados(),                # contexto del fragmento sin cambios (predicado NONE: sin más consultas)
+        ])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "faltantes"})
+
+        assert r.status_code == 200
+        assert series.wishlist_policy == WishlistPolicy.NONE          # no se activó
+        session.flush.assert_not_called()                             # y no se escribió nada
+        assert session._queue == []                                   # ni se hizo la retirada (no hay más consultas)
+        assert "El aviso legal está pendiente" in r.text and 'href="/ui/legal"' in r.text
+        assert "Se han retirado" not in r.text
+
+    def test_desactivar_politica_sin_aviso_si_funciona(self):
+        """C6 / FR-21: desactivar nunca exige el aviso legal."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([], rowcount=2),   # retirada inmediata
+            FakeExecResult([]),               # contexto: sin acuse (no se consultó antes para desactivar)
+            retirados(2),
+        ])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "ninguno"})
+
+        assert r.status_code == 200
+        assert series.wishlist_policy == WishlistPolicy.NONE
+        assert "Se han retirado 2 números" in r.text
+        assert "El aviso legal está pendiente" in r.text              # el aviso sigue informando, sin bloquear
+        assert 'href="/ui/legal"' not in r.text                       # el enlace es de la activación bloqueada
+
+    def test_activar_con_aviso_aceptado_sigue_funcionando_y_no_enlaza_la_pantalla_legal(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.NONE
+        session = FakeSession([FakeExecResult([series]), acuse(), FakeExecResult([]), FakeExecResult([]),
+                               FakeExecResult([], rowcount=0), retirados()])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "faltantes"})
+        assert r.status_code == 200 and series.wishlist_policy == WishlistPolicy.MISSING
+        assert 'href="/ui/legal"' not in r.text
 
     @pytest.mark.parametrize("reservada", ["futuros", "todos"])
     def test_la_ui_rechaza_los_valores_reservados(self, reservada):

@@ -290,7 +290,8 @@ def _cursor_de(a) -> str:
         cabeza = bytes([_CURSOR_POR_ID]) + ident
         crudo = cabeza + _huella(cabeza)
     cursor = base64.urlsafe_b64encode(crudo).decode()
-    assert len(cursor) <= LIMITE_CURSOR      # por construcción: 4/3·(21 + 1024) ≈ 1.394
+    if len(cursor) > LIMITE_CURSOR:      # imposible por construcción: 4/3·(21 + 1024) ≈ 1.394
+        raise ValueError("Cursor de paginación más largo que el límite.")
     return cursor
 
 

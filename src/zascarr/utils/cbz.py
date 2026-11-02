@@ -41,7 +41,12 @@ from pathlib import Path
 
 import structlog
 
-from zascarr.core.comicinfo_write import ENTRADA_XML
+from zascarr.core.comicinfo_write import (
+    ENTRADA_XML,
+    MAX_COMICINFO_BYTES,
+    ComicInfoInvalidoError,
+)
+from zascarr.core.formato_contenedor import EntradaNoLegible, leer_acotado
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
 
 logger = structlog.get_logger()
@@ -97,11 +102,19 @@ def _limpiar_temporales_viejos(path: Path) -> None:
 # ── lectura ─────────────────────────────────────────────────────────────────
 
 def leer_comicinfo(path: Path) -> bytes | None:
-    """Bytes del primer `ComicInfo.xml` del CBZ (case-insensitive), o None."""
+    """Bytes del primer `ComicInfo.xml` del CBZ (case-insensitive), o None.
+
+    Acotado como en el importer: un XML de más de `MAX_COMICINFO_BYTES` descomprimido, o que se
+    comprime de forma sospechosa, lanza `ComicInfoInvalidoError` sin cargarse en memoria. Antes
+    era un `zf.read` sin tope: un CBZ con un ComicInfo minúsculo que se expandía a GB tumbaba el
+    contenedor al etiquetar. El tagger trata esa excepción como «inválido» y no toca el fichero."""
     with zipfile.ZipFile(path) as zf:
         for info in zf.infolist():
             if not info.is_dir() and _es_comicinfo(info.filename):
-                return zf.read(info)
+                try:
+                    return leer_acotado(zf, info, tope=MAX_COMICINFO_BYTES)
+                except EntradaNoLegible as exc:
+                    raise ComicInfoInvalidoError(f"ComicInfo.xml {exc}") from exc
     return None
 
 

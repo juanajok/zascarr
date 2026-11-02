@@ -18,6 +18,7 @@ from jinja2 import Environment
 
 from zascarr.web.iconos import icono
 from zascarr.web.menu import ENTRADAS, GRUPOS, entrada_activa
+from zascarr.web.portada_marca import marca_de_portada
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ def tipo_aviso(tipo: str) -> TipoAviso:
 
 
 #: macros de `_componentes.html`, disponibles en las plantillas como `ui.<macro>`.
-MACROS = ("chip", "aviso", "grupo", "estado_vacio", "progreso", "region_viva", "menu")
+MACROS = ("chip", "aviso", "grupo", "estado_vacio", "progreso", "region_viva", "menu", "portada")
 PLANTILLA = "_componentes.html"
 #: ÚNICO nombre que se añade al entorno de Jinja.
 ESPACIO_DE_NOMBRES = "ui"
@@ -97,6 +98,6 @@ def registrar(env: Environment) -> None:
         "aspecto": aspecto, "tipo_aviso": tipo_aviso,
         # V3: los datos del menú (web/menu.py) tampoco son globales del entorno.
         "ENTRADAS": ENTRADAS, "GRUPOS": GRUPOS, "entrada_activa": entrada_activa,
-        "icono": icono,
+        "icono": icono, "marca_de_portada": marca_de_portada,
     }).module
     env.globals[ESPACIO_DE_NOMBRES] = modulo

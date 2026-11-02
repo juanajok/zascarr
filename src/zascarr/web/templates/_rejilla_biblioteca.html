@@ -8,8 +8,7 @@
 <div class="library-grid">
   {% for series in items %}
   <a class="library-card" href="/ui/series/{{ series.id }}">
-    <img class="cover" src="/ui/series/{{ series.id }}/portada" alt=""
-         onerror="this.classList.add('cover-missing')">
+    {{ ui.portada(series.title, series.id, "/ui/series/%s/portada" % series.id) }}
     <div class="library-card-body">
       <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
       <div class="library-card-meta">

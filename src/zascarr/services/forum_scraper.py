@@ -29,7 +29,9 @@ logger = structlog.get_logger()
 
 ED2K_PATTERN   = re.compile(r'ed2k://\|file\|[^"<\s]+', re.IGNORECASE)
 MAGNET_PATTERN = re.compile(r'magnet:\?xt=urn:[^"<\s]+', re.IGNORECASE)
-TOPIC_PATTERN  = re.compile(r'<a[^>]+href=["\']([^"\']*showtopic=\d+)["\'][^>]*>([^<]+)</a>', re.IGNORECASE)
+TOPIC_PATTERN = re.compile(
+    r'<a[^>]+href=["\']([^"\']*showtopic=\d+)["\'][^>]*>([^<]+)</a>', re.IGNORECASE
+)
 
 MAX_SALTOS = 3
 _PUERTO_POR_DEFECTO = {"http": 80, "https": 443}
@@ -85,8 +87,10 @@ class ForumScraper:
 
     async def login(self, username: str, password: str) -> bool:
         async with self._crear_cliente() as client:
-            r = await client.post(f"{self._base}/index.php?act=Login&CODE=01",
-                                  data={"UserName": username, "PassWord": password, "CookieDate": "1"})
+            r = await client.post(
+                f"{self._base}/index.php?act=Login&CODE=01",
+                data={"UserName": username, "PassWord": password, "CookieDate": "1"},
+            )
             for k, v in r.cookies.items():
                 self._cookies[k] = v
             self._logged_in = bool(self._cookies) and r.status_code in (200, 301, 302)

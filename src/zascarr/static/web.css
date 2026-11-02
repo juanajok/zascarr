@@ -100,8 +100,15 @@
   --font-display: "ZascArr Anton", Impact, "Arial Black", "Arial Narrow Bold", "Haettenschweiler", sans-serif;
   --font-body: "ZascArr Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
 
-  --shadow-ink:    4px 4px 0 var(--ink);
-  --shadow-ink-sm: 3px 3px 0 var(--ink);
+  /* Sombra dura: UN color por tema y cuatro desplazamientos. En claro es la tinta; en oscuro no puede
+     serlo (la tinta es crema: parecería un segundo borde). Antes el oscuro usaba negro al 55 %, que
+     sobre --paper daba 1,13:1 (no se veía), y el hover/active escribían `var(--ink)` a mano, así que
+     el botón sin sombra la ganaba en crema al pasar. Toda sombra dura sale de estos tokens. */
+  --shadow-color:      var(--ink);
+  --shadow-ink:        4px 4px 0 var(--shadow-color);
+  --shadow-ink-sm:     3px 3px 0 var(--shadow-color);
+  --shadow-ink-hover:  5px 5px 0 var(--shadow-color);   /* botón al pasar: sube y la sombra crece */
+  --shadow-ink-active: 1px 1px 0 var(--shadow-color);   /* botón al pulsar: baja y casi la pierde */
 }
 
 /* Tema nocturno (preferencia del sistema) */
@@ -134,8 +141,9 @@
     --warn-bg:        #3a1b17;
     --amber-bg:       #35290c;
     --info-bg:        #10293a;
-    --shadow-ink:    4px 4px 0 rgba(0,0,0,.55);
-    --shadow-ink-sm: 3px 3px 0 rgba(0,0,0,.55);
+    /* Gris de tinta: ≥ 3:1 sobre --paper (3,64) y --paper-2 (3,37), y lejos de la tinta crema (4,35)
+       para que se lea como sombra y no como borde. Los desplazamientos se heredan de :root. */
+    --shadow-color:   #6f6d76;
   }
 }
 
@@ -488,7 +496,7 @@ button[type="submit"]:where(:not([disabled])):hover,
 .btn-primary:where(:not([disabled])):hover,
 .series-result-item button:where(:not([disabled])):hover {
   transform: translate(-2px, -2px);
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: var(--shadow-ink-hover);
 }
 
 button:where(:not([disabled])):active,
@@ -496,7 +504,7 @@ button[type="submit"]:where(:not([disabled])):active,
 .btn:where(:not([disabled])):active,
 .btn-primary:where(:not([disabled])):active {
   transform: translate(1px, 1px);
-  box-shadow: 1px 1px 0 var(--ink);
+  box-shadow: var(--shadow-ink-active);
 }
 
 /* Amarillo = LA acción que hace avanzar la tarea de la pantalla, y una sola. Antes lo era cualquier
@@ -585,7 +593,6 @@ button[type="submit"].neutro {
 }
 
 /* ── 8. PEGATINAS / BADGES ───────────────────────────────────────────────── */
-.wishlist-badge,
 .issue-chip {
   font-size: .875rem;
   font-weight: 800;
@@ -598,40 +605,6 @@ button[type="submit"].neutro {
   background: var(--paper);
   color: var(--ink-soft);
   white-space: nowrap;
-}
-
-/* «Por buscar»: aún no pasa nada, así que el estilo base, sin el amarillo de «en marcha». */
-.wishlist-badge.estado-wanted {
-  background: var(--paper);
-  color: var(--ink-soft);
-}
-
-/* En marcha (amarillo).
-   DOWNLOADED también dice «Descargando…» y no tenía regla: se veía distinto del mismo texto. */
-.wishlist-badge.estado-downloading,
-.wishlist-badge.estado-downloaded,
-.wishlist-badge.estado-searching {
-  background: var(--caption-bg);
-  color: var(--ink);
-}
-
-.wishlist-badge.estado-imported {
-  background: var(--ok-solid);
-  color: var(--on-ok-solid);
-  border-color: var(--ink);
-}
-
-.wishlist-badge.estado-failed {
-  background: var(--warn-solid);
-  color: var(--on-warn-solid);
-  border-color: var(--ink);
-}
-
-/* D8: lo retiró la política, no falló nada — apagado, sin gritar. */
-.wishlist-badge.estado-retirado {
-  color: var(--ink-faint);
-  border-color: var(--ink-faint);
-  text-transform: none;
 }
 
 /* D9: motivo concreto de por qué una fila de la wishlist no avanza —
@@ -739,7 +712,7 @@ button[type="submit"].neutro {
 .suggestion {
   display: flex; flex-direction: column; gap: 4px;
   padding: 8px 10px;
-  background: color-mix(in srgb, var(--ok) 12%, var(--paper));
+  background: var(--ok-bg);
   border: 2.5px solid var(--ok);
   border-radius: var(--radius-panel);
 }
@@ -804,7 +777,7 @@ button[type="submit"].btn-sugerencia {
 .audit-resumen { margin: 6px 0 0; padding-left: 18px; font-size: .9rem; }
 .audit-ok {
   border: 3px solid var(--ok);
-  background: color-mix(in srgb, var(--ok) 12%, var(--paper));
+  background: var(--ok-bg);
   border-radius: var(--radius-panel);
   padding: 12px 14px; margin: 20px 0; font-weight: 600;
 }
@@ -871,10 +844,10 @@ button[type="submit"].btn-sugerencia {
 .back-link:hover { color: var(--cyan-t); }
 
 .series-header { display: flex; gap: 22px; margin-bottom: 24px; flex-wrap: wrap; }
-.series-cover {
-  width: 140px; aspect-ratio: 2 / 3; object-fit: cover;
+.portada.series-cover {
+  width: 140px;
   border: 3px solid var(--ink); border-radius: var(--radius-panel);
-  background: var(--paper-2); flex-shrink: 0;
+  flex-shrink: 0;
 }
 .series-meta { color: var(--ink-soft); font-size: .9rem; margin: 2px 0; }
 .series-intro { margin: 0 0 6px; font-weight: 600; }
@@ -912,11 +885,7 @@ button[type="submit"].btn-sugerencia {
   display: block; text-decoration: none; color: var(--ink);
   overflow: hidden; transition: transform .15s, box-shadow .15s;
 }
-.library-card .cover {
-  width: 100%; aspect-ratio: 2 / 3; object-fit: cover;
-  background: var(--paper); border-bottom: 3px solid var(--ink);
-}
-.library-card .cover.cover-missing { visibility: hidden; }
+.library-card .portada { border-bottom: 3px solid var(--ink); }
 .library-card-body { padding: 9px 11px 12px; }
 .library-card-title {
   font-size: .88rem; font-weight: 700;
@@ -945,7 +914,7 @@ button[type="submit"].btn-sugerencia {
 }
 .legal-notice-info {
   display: block; border-radius: var(--radius-panel); padding: 10px 14px; margin: 12px 0;
-  background: color-mix(in srgb, var(--cyan) 14%, var(--paper));
+  background: var(--info-bg);
   color: var(--ink);
   border: 2px solid var(--ink);
 }
@@ -1026,14 +995,7 @@ button[type="submit"].btn-sugerencia {
   transition: transform .15s, box-shadow .15s;
 }
 .series-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-ink); }
-.series-card img {
-  width: 100%; aspect-ratio: 2 / 3; object-fit: cover;
-  border-bottom: 3px solid var(--ink); background: var(--paper-2);
-}
-.series-card img.cover-missing {
-  background: radial-gradient(var(--ink-faint) 1px, transparent 1px) 0 0 / 6px 6px,
-              var(--paper-2);
-}
+.series-card .portada { border-bottom: 3px solid var(--ink); }
 .series-title {
   display: block; font-size: .875rem; font-weight: 700;
   color: var(--ink); text-align: center; margin-top: 6px; padding: 0 8px;
@@ -1148,7 +1110,7 @@ button[type="submit"].btn-sugerencia {
   .search-form { flex-direction: column; }
   .search-input { max-width: none; }
   .series-header { flex-direction: column; }
-  .series-cover { width: 120px; }
+  .portada.series-cover { width: 120px; }
 }
 
 @media (max-width: 480px) {
@@ -1168,11 +1130,7 @@ button[type="submit"].btn-sugerencia {
   /* background/border/radius: regla compartida con pending-card/
      wishlist-row/library-card/metric-card, más arriba en este fichero. */
 }
-.discovery-card .cover {
-  width: 80px; flex: none; aspect-ratio: 2 / 3; object-fit: cover;
-  background: var(--paper); border: 2px solid var(--ink);
-}
-.discovery-card .cover.cover-missing { visibility: hidden; }
+.discovery-card .portada { width: 80px; flex: none; border: 2px solid var(--ink); }
 .discovery-card-body {
   flex: 1; min-width: 0;
   display: flex; flex-direction: column; gap: 6px;
@@ -1279,11 +1237,19 @@ button[type="submit"].btn-sugerencia {
 .estado-check-name { flex: 1; font-weight: 700; }
 .estado-check-status { color: var(--ink-soft); font-size: .9rem; }
 
-.estado-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; border: 2px solid var(--ink); }
-.estado-dot-sm { width: 12px; height: 12px; }
-.estado-dot.estado-ok { background: var(--ok); }
-.estado-dot.estado-warn { background: var(--yellow); }
-.estado-dot.estado-bad { background: var(--warn); }
+.estado-dot {
+  width: 22px; height: 22px; border-radius: 50%; flex: none; border: 2px solid var(--ink);
+  background-position: center; background-repeat: no-repeat; background-size: 70%;
+}
+.estado-dot-sm { width: 16px; height: 16px; background-size: 80%; }
+/* El estado no depende solo del color: verde y rojo se confunden con daltonismo (deuteranopía: ΔE 12-29 de
+   ~90), así que cada nivel lleva el MISMO glifo que el chip de su color (web/componentes.py::ASPECTOS):
+   ✓ ok, ! warn (aquí, el rojo `bad`), ? amber (aquí, el amarillo `warn`). Neutro, sin glifo. SVG de
+   static/iconos (trazados de web/iconos.py), en el par oscuro fijo; el color de fondo va aparte
+   (`background-color`) para que la prueba de contraste lo vea. */
+.estado-dot.estado-ok { background-color: var(--ok); background-image: url("/static/iconos/punto-ok.svg"); }
+.estado-dot.estado-warn { background-color: var(--yellow); background-image: url("/static/iconos/punto-pregunta.svg"); }
+.estado-dot.estado-bad { background-color: var(--warn); background-image: url("/static/iconos/punto-aviso.svg"); }
 .estado-dot.estado-neutral { background: var(--ink-faint); }
 
 .estado-summary-label { font-size: 1.15rem; font-weight: 700; }
@@ -1300,7 +1266,7 @@ button[type="submit"].btn-sugerencia {
 
 /* ── 16c. COMPONENTES (V2) ───────────────────────────────────────────────────
    Piezas reutilizables con los nombres de la maqueta (docs/design/maqueta-ui.html), sobre los
-   tokens ya comprobados de V1. Las clases actuales (.btn-primary, .wishlist-badge, .empty-state…)
+   tokens ya comprobados de V1. Las clases actuales (.btn-primary, .empty-state…)
    SIGUEN funcionando: se retiran en V14, no antes. Las macros que las emiten viven en
    templates/_componentes.html; el estado→aspecto, en web/componentes.py. */
 
@@ -1558,6 +1524,41 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   }
 }
 
+/* Portada de una serie (ui.portada): el marcador va SIEMPRE debajo y la <img> encima. Si la imagen
+   carga, lo tapa; si da 404 se ve el marcador, sin JavaScript. La <img> no lleva fondo, borde ni
+   sombra propios (una imagen rota los pintaría sobre el marcador): el marco va en el contenedor
+   de cada contexto (.library-card, .series-card, .discovery-card, .portada.series-cover). Tres
+   tintas de imprenta con la trama de otra encima; el color no significa nada. La inicial va en
+   el par oscuro fijo (on-yellow): se lee sobre las tres tintas en los dos temas. */
+.portada {
+  position: relative; display: grid; place-items: center; overflow: hidden;
+  width: 100%; aspect-ratio: 2 / 3; container-type: inline-size;
+}
+.portada-c {
+  background-color: var(--cyan); color: var(--on-yellow);
+  background-image: radial-gradient(var(--magenta) 1.6px, transparent 1.7px); background-size: 8px 8px;
+}
+.portada-m {
+  background-color: var(--magenta); color: var(--on-yellow);
+  background-image: radial-gradient(var(--yellow) 1.6px, transparent 1.7px); background-size: 8px 8px;
+}
+.portada-y {
+  background-color: var(--yellow); color: var(--on-yellow);
+  background-image: radial-gradient(var(--cyan) 1.6px, transparent 1.7px); background-size: 8px 8px;
+}
+.portada-marca {
+  font-family: var(--font-display); font-weight: 400; line-height: 1;
+  font-size: 2.6rem; font-size: 46cqw; user-select: none;      /* el color lo pone la tinta de su .portada-* */
+}
+/* La <img> NO lleva `height`: una imagen rota con ancho Y alto fijados por CSS pinta el icono de
+   «imagen rota» y su filete (Chromium, también con alt=""); con el alto sin especificar se colapsa y
+   deja ver el marcador limpio. `min-height`/`max-height: 100%` la igualan al contenedor cuando carga
+   (con `object-fit: cover`, recorte centrado). Sin fondo, borde ni sombra propios. */
+.portada img {
+  position: absolute; top: 0; left: 0; width: 100%; min-height: 100%; max-height: 100%;
+  object-fit: cover; background: none; border: 0; box-shadow: none;
+}
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
@@ -1568,6 +1569,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .metric-card::before,
   .empty-state::before,
   .pagina-error::after { display: none; }
-  .series-card img.cover-missing { background: var(--paper-2); }
+  .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }

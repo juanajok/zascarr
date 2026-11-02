@@ -19,12 +19,7 @@
 <ul class="discovery-list">
   {% for r in resultados %}
   <li class="discovery-card">
-    {% if r.portada %}
-    <img class="cover" alt="" src="{{ r.portada }}"
-         onerror="this.classList.add('cover-missing')">
-    {% else %}
-    <img class="cover cover-missing" alt="">
-    {% endif %}
+    {{ ui.portada(r.titulo, src=r.portada) }}
     <div class="discovery-card-body">
       <div class="discovery-card-title">
         {{ r.titulo }}{% if r.anio %} ({{ r.anio }}){% endif %}

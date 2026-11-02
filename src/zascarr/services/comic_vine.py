@@ -101,7 +101,8 @@ class ComicVineClient:
         # en el diccionario que pasó quien llamó, un efecto secundario
         # invisible detectado en el peer review.
         request_params = {**params, "api_key": self._api_key, "format": "json"}
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("Cliente de Comic Vine sin abrir: úsalo con `async with`.")
 
         for attempt in range(_MAX_RETRIES):
             now = asyncio.get_event_loop().time()
@@ -142,9 +143,15 @@ class ComicVineClient:
         ) for item in data.get("results", [])]
 
     async def get_issue_detail(self, issue_id: int) -> dict[str, Any]:
-        data = await self._get(f"/issue/4000-{issue_id}/", {
-            "field_list": "id,name,issue_number,volume,description,cover_date,image,person_credits,character_credits,story_arc_credits",
-        })
+        data = await self._get(
+            f"/issue/4000-{issue_id}/",
+            {
+                "field_list": (
+                    "id,name,issue_number,volume,description,cover_date,image,"
+                    "person_credits,character_credits,story_arc_credits"
+                ),
+            },
+        )
         return data.get("results", {})
 
     async def find_issue(self, volume_id: int, issue_number: str) -> CVIssueResult | None:

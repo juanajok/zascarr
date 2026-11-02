@@ -151,7 +151,9 @@ class EnrichmentService:
             tebeosfera_client = self._injected_tebeosfera if settings.tebeosfera_enabled else None
             if tebeosfera_client is None and settings.tebeosfera_enabled:
                 tebeosfera_client = await stack.enter_async_context(TebeosferaClient())
-            await self._enrich_series_batch(cv_client, anilist_client, tebeosfera_client, limit, report)
+            await self._enrich_series_batch(
+                cv_client, anilist_client, tebeosfera_client, limit, report
+            )
             await self._enrich_issues_batch(cv_client, limit, report)
         return report
 
@@ -221,7 +223,9 @@ class EnrichmentService:
                 # No se marca enrichment_attempted_at: un fallo de red es
                 # transitorio y debe poder reintentarse en el próximo ciclo,
                 # no dentro de 30 días como un "no encontrado" genuino.
-                logger.exception("enricher.series_lookup_failed", series=series.title, source=source_label)
+                logger.exception(
+                    "enricher.series_lookup_failed", series=series.title, source=source_label
+                )
                 report.errors.append(f"serie '{series.title}': error consultando {source_label}")
                 continue
 
@@ -251,7 +255,9 @@ class EnrichmentService:
         return None
 
     @staticmethod
-    def _apply_series_match(series: Series, match: SeriesMatch, id_field: str, source_value: str) -> None:
+    def _apply_series_match(
+        series: Series, match: SeriesMatch, id_field: str, source_value: str
+    ) -> None:
         # H3 (peer review v2): locked_fields protege campos concretos aunque
         # metadata_source no sea 'manual' (ese caso ya lo excluye la query
         # de _enrich_series_batch, que es bloqueo total, no granular).
@@ -267,7 +273,9 @@ class EnrichmentService:
         if series.metadata_source is None:
             series.metadata_source = source_value
 
-    async def _find_cv_series_match(self, client: ComicVineClient, series: Series) -> SeriesMatch | None:
+    async def _find_cv_series_match(
+        self, client: ComicVineClient, series: Series
+    ) -> SeriesMatch | None:
         """Solo acepta coincidencia de título normalizado exacto.
 
         El ranking de relevancia de /search/ de Comic Vine es una caja negra;
@@ -284,15 +292,19 @@ class EnrichmentService:
         return SeriesMatch(source_id=chosen.cv_id, description=chosen.description,
                            cover_url=chosen.image_url, count_of_issues=chosen.count_of_issues)
 
-    async def _find_anilist_match(self, client: AniListClient, series: Series) -> SeriesMatch | None:
+    async def _find_anilist_match(
+        self, client: AniListClient, series: Series
+    ) -> SeriesMatch | None:
         """Mismo criterio conservador que Comic Vine: solo título exacto
         (romaji O inglés) tras normalizar. AniList no tiene "sort_title"
         separado, así que no hay desambiguación extra más allá del año."""
         candidates = await client.search_manga(series.title, limit=10)
         norm = normalize_title(series.title)
         matches = [
-            c for c in candidates
-            if norm in (normalize_title(c.title_romaji or ""), normalize_title(c.title_english or ""))
+            c
+            for c in candidates
+            if norm
+            in (normalize_title(c.title_romaji or ""), normalize_title(c.title_english or ""))
         ]
         chosen = self._pick_by_year(matches, series.start_year, lambda c: c.start_year)
         if chosen is None:
@@ -300,7 +312,9 @@ class EnrichmentService:
         return SeriesMatch(source_id=chosen.anilist_id, description=chosen.description,
                            cover_url=chosen.cover_url, count_of_issues=chosen.chapters)
 
-    async def _find_tebeosfera_match(self, client: TebeosferaClient, series: Series) -> SeriesMatch | None:
+    async def _find_tebeosfera_match(
+        self, client: TebeosferaClient, series: Series
+    ) -> SeriesMatch | None:
         """Mismo criterio conservador: solo título exacto tras normalizar.
 
         TebeosferaClient ya limpia el sufijo "(año, editorial)" que el
@@ -325,7 +339,9 @@ class EnrichmentService:
             return None
         if len(matches) == 1 or not target_year:
             return matches[0]
-        by_year = [c for c in matches if year_of(c) and abs(year_of(c) - target_year) <= _YEAR_TOLERANCE]
+        by_year = [
+            c for c in matches if year_of(c) and abs(year_of(c) - target_year) <= _YEAR_TOLERANCE
+        ]
         return by_year[0] if by_year else matches[0]
 
     # ── Issues (solo Comic Vine: ver docstring del módulo) ────────────────

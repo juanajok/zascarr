@@ -22,6 +22,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+import structlog.testing
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -344,6 +345,25 @@ class TestUS03ConfirmarYEntregar:
         monkeypatch.setattr(AsyncSession, "commit", real)
         assert "Comprobar el resultado" in visible(r.text) and await n_series(entorno.banco) == 0
         assert "creada" in visible((await enviar(CREAR, [("token", token)])).text) and await n_series(entorno.banco) == 1
+
+    async def test_un_fallo_desconocido_al_confirmar_se_registra_con_su_tipo_sin_titulo_ni_token(self, entorno, monkeypatch):
+        """Regresión (revisión SecOps de #190): el `except Exception` de `crear` se tragaba el fallo sin dejar rastro en
+        los logs. Ahora se registra el TIPO, nunca el mensaje (que puede llevar el título) ni el token."""
+        v = await revisar("Serie Rastro Única", "american", anio="1987")
+        token = token_de(v.text)
+        real = AsyncSession.commit
+
+        async def falla(self):
+            raise ConnectionError("Serie Rastro Única: se cayó antes de confirmar")
+        monkeypatch.setattr(AsyncSession, "commit", falla)
+        with structlog.testing.capture_logs() as registros:
+            r = await enviar(CREAR, [("token", token)])
+        monkeypatch.setattr(AsyncSession, "commit", real)
+        assert "Comprobar el resultado" in visible(r.text)
+        fallos = [x for x in registros if x["event"] == "descubrir.crear_fallo"]
+        assert fallos == [{"event": "descubrir.crear_fallo", "error": "ConnectionError", "log_level": "error"}]
+        volcado = str(registros)
+        assert "Rastro" not in volcado and token not in volcado
 
     async def test_confirmar_el_alta_no_autoriza_la_vinculacion(self, entorno):
         carpeta = await sembrar_flash(entorno.banco, 3)

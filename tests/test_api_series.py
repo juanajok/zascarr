@@ -248,11 +248,44 @@ class TestPoliticaBusquedaD8:
     def test_patch_a_faltantes_se_acepta(self):
         series = make_series()
         series.wishlist_policy = WishlistPolicy.NONE
-        session = FakeSession([FakeExecResult([series])])
+        session = FakeSession([FakeExecResult([object()]), FakeExecResult([series])])   # acuse aceptado, serie
         with use_fake_session(session) as client:
             r = client.patch(f"/api/series/{series.id}", json={"wishlist_policy": "faltantes"})
         assert r.status_code == 200
         assert series.wishlist_policy == WishlistPolicy.MISSING
+
+    def test_a1_patch_a_faltantes_sin_aviso_legal_da_403_y_no_arma_la_politica(self):
+        """C6 / SecOps A-1: la API no puede saltarse la puerta legal de la UI. Mismo 403 y mismo `HX-Redirect` que
+        `require_legal_acknowledgment`; la política NO queda armada."""
+        series = make_series()
+        series.wishlist_policy = WishlistPolicy.NONE
+        session = FakeSession([FakeExecResult([]), FakeExecResult([series])])        # sin acuse; la serie existe
+        with use_fake_session(session) as client:
+            r = client.patch(f"/api/series/{series.id}", json={"wishlist_policy": "faltantes"})
+        assert r.status_code == 403 and r.json()["detail"] == "legal_acknowledgment_required"
+        assert r.headers["HX-Redirect"] == "/ui/legal"
+        assert series.wishlist_policy == WishlistPolicy.NONE
+
+    def test_a1_la_serie_inexistente_da_404_aunque_falte_el_aviso(self):
+        session = FakeSession([FakeExecResult([]), FakeExecResult([])])              # sin acuse; sin serie
+        with use_fake_session(session) as client:
+            r = client.patch(f"/api/series/{uuid4()}", json={"wishlist_policy": "faltantes"})
+        assert r.status_code == 404
+
+    def test_a1_patch_a_ninguno_sin_aviso_legal_funciona(self):
+        series = make_series()
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([FakeExecResult([series])])                            # desactivar: no se consulta el acuse
+        with use_fake_session(session) as client:
+            r = client.patch(f"/api/series/{series.id}", json={"wishlist_policy": "ninguno"})
+        assert r.status_code == 200 and series.wishlist_policy == WishlistPolicy.NONE
+
+    def test_a1_otros_campos_no_piden_aviso_legal(self):
+        series = make_series()
+        session = FakeSession([FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.patch(f"/api/series/{series.id}", json={"status": "completed"})
+        assert r.status_code == 200
 
     def test_patch_a_ninguno_se_acepta(self):
         series = make_series()

@@ -98,8 +98,14 @@ info "Referencia de rescate: ${UPDATE_REF}"
 info "Copia de seguridad de PostgreSQL (antes de actualizar)..."
 mkdir -p "${BACKUP_DIR}" || die "No puedo crear ${BACKUP_DIR}. ¿Permisos sobre el disco de backups?"
 TAMANO_KB="$(tamano_bd_kb)"
-if ! exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
-        "la copia previa a la actualización"; then
+exigir_espacio_kb "$(espacio_libre_kb "${BACKUP_DIR}")" "${TAMANO_KB}" \
+        "la copia previa a la actualización" && ESPACIO_RC=0 || ESPACIO_RC=$?
+if (( ESPACIO_RC != 0 )); then
+    # Nada se ha tocado: la referencia de rescate recién creada no apunta a nada que haga falta y se retira.
+    git -C "${REPO_DIR}" update-ref -d "${UPDATE_REF}" 2>/dev/null || true
+    if (( ESPACIO_RC == 2 )); then
+        die "No pude comprobar si hay sitio para la copia previa. NO se ha actualizado nada."
+    fi
     die "No hay espacio para la copia previa. NO se ha actualizado nada."
 fi
 DEST="${BACKUP_DIR}/update_${TS}.sql.gz"

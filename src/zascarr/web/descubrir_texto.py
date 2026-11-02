@@ -21,7 +21,9 @@ from zascarr.services.discovery import (
     FUENTE_SIN_CLAVE,
     ORDEN_DE_FUENTES,
 )
-from zascarr.utils.texto_html import texto_plano  # noqa: F401  (se reexporta: la usan Descubrir y sus pruebas)
+from zascarr.utils.texto_html import (
+    texto_plano,  # noqa: F401  (se reexporta: la usan Descubrir y sus pruebas)
+)
 
 #: Cómo se llama cada fuente: los mismos nombres que usa el servicio en sus avisos.
 ETIQUETAS = {

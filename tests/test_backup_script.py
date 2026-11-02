@@ -37,6 +37,10 @@ if [[ "$*" == *" postgres pg_dump "* ]]; then
         *) cat "${FIXTURE_SQL:?}" ;;
     esac
 fi
+if [[ "$*" == *"pg_database_size"* ]]; then
+    echo "${FAKE_DB_SIZE_KB:-1024}"
+    exit 0
+fi
 if [[ "$*" == *"psql"* ]]; then
     # Como `docker compose exec`: consume stdin. Sin esto, el stub no reproduce
     # el bucle que pierde nombres al llamar a escribir_manifiesto.
@@ -340,3 +344,25 @@ class TestBackupScript:
         estado = _estado(ctx)
         assert estado["status"] == "ok"
         assert len(estado["retencion_protegida"]) == len(anclas)
+
+
+GZIP_QUE_ANOTA_EL_MODO = """#!/usr/bin/env bash
+if [[ "$1" != "-t" && "$1" != "-dc" && "$1" != "-l" ]]; then
+    stat -L -c '%a' /proc/$$/fd/1 >> "${MODO_LOG:?}" 2>/dev/null || true
+fi
+exec "${REAL_GZIP:?}" "$@"
+"""
+
+
+def test_el_temporal_del_volcado_nace_600_y_no_644(tmp_path):
+    """#123 (SecOps R-3): con la umask 022 de los scripts, el `.tmp` era legible por todos durante todo el pg_dump."""
+    ctx = _preparar(tmp_path)
+    modos = tmp_path / "modos.log"
+    modos.write_text("", encoding="utf-8")
+    gz = ctx["bin"] / "gzip"
+    gz.write_text(GZIP_QUE_ANOTA_EL_MODO, encoding="utf-8")
+    gz.chmod(0o755)
+    r = _ejecutar(ctx, extra_env={"REAL_GZIP": shutil.which("gzip") or "/usr/bin/gzip", "MODO_LOG": str(modos)})
+    assert r.returncode == 0, r.stdout + r.stderr
+    anotados = modos.read_text(encoding="utf-8").split()
+    assert anotados and set(anotados) == {"600"}, anotados

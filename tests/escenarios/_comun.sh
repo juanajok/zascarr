@@ -77,6 +77,7 @@ for a in "$@"; do
     prev="$a"
 done
 case "$*" in
+  *pg_database_size*) echo 1024; exit 0 ;;
   *pg_dump*)
     cat <<'SQL'
 --

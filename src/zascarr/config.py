@@ -5,7 +5,8 @@ Todas las variables se leen del entorno (o .env). Validación estricta al arranq
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+import structlog
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,8 +32,9 @@ class Settings(BaseSettings):
     )
     db_pool_size: int = 5
     db_max_overflow: int = 2
-    # V6a: asignaciones de archivos simultáneas (ADR 0006). Cada una retiene una conexión del pool durante toda
-    # la copia y usa otra para el trabajo corto: db_pool_size + db_max_overflow debe ser al menos el doble.
+    # V6a: asignaciones de archivos simultáneas (ADR 0006). Cada una retiene una conexión del pool
+    # durante toda la copia y usa otra para el trabajo corto: db_pool_size + db_max_overflow debe
+    # ser al menos el doble.
     asignacion_simultaneas: int = Field(default=1, ge=1)
     db_pool_recycle: int = 1800
 
@@ -42,13 +44,14 @@ class Settings(BaseSettings):
     comicvine_rate_limit: float = 1.0
 
     # ── Fuentes de enriquecimiento (on/off en caliente, B8) ─────────
-    # APAGADAS por defecto (decisión del PO, 2026-10-19, #239 · ADR 0013): ninguna fuente de metadatos consulta
-    # Internet hasta que el coleccionista la enciende en /ui/ajustes. Las instalaciones que ya funcionaban
-    # conservan sus fuentes activas (migración 0020). Los flags NO se gobiernan desde el `.env`: docker-compose
-    # solo transmite FORUM_ENABLED; la vía efectiva es Ajustes (override en `runtime_settings`).
-    # Apagar una desde /ui/ajustes no borra metadatos ya catalogados: solo deja de consultar esa API en el
-    # siguiente ciclo, y el intento omitido no se marca como búsqueda fallida (no consume el plazo de reintento
-    # de 30 días). Reutiliza el override runtime de D11.
+    # APAGADAS por defecto (decisión del PO, 2026-10-19, #239 · ADR 0013): ninguna fuente de
+    # metadatos consulta Internet hasta que el coleccionista la enciende en /ui/ajustes. Las
+    # instalaciones que ya funcionaban conservan sus fuentes activas (migración 0020). Los flags
+    # NO se gobiernan desde el `.env`:
+    # docker-compose solo transmite FORUM_ENABLED; la vía efectiva es Ajustes (override en
+    # `runtime_settings`). Apagar una desde /ui/ajustes no borra metadatos ya catalogados: solo deja
+    # de consultar esa API en el siguiente ciclo, y el intento omitido no se marca como búsqueda
+    # fallida (no consume el plazo de reintento de 30 días). Reutiliza el override runtime de D11.
     comicvine_enabled: bool = Field(default=False)
     anilist_enabled: bool = Field(default=False)
     tebeosfera_enabled: bool = Field(default=False)
@@ -56,10 +59,11 @@ class Settings(BaseSettings):
     # enricher todavía no lo consulta — ampliarlo es otra historia (ver
     # BACKLOG E7). Apagado = ninguna consulta a GCD en Descubrir.
     gcd_enabled: bool = Field(default=False)
-    # Estado «heredado» (ADR 0013): la migración 0020 lo pone a True en las instalaciones que se actualizaron con uso
-    # previo y NUNCA guardaron las fuentes en Ajustes, y les conservó las fuentes activas. Guardar «Fuentes de
-    # metadatos» en Ajustes lo pone a False (y el aviso desaparece). Vive en `runtime_settings`, no se deduce en
-    # cada arranque. No es un ajuste editable: no está en ningún grupo de OVERRIDABLE_FIELDS.
+    # Estado «heredado» (ADR 0013): la migración 0020 lo pone a True en las instalaciones que se
+    # actualizaron con uso previo y NUNCA guardaron las fuentes en Ajustes, y les conservó las
+    # fuentes activas. Guardar «Fuentes de metadatos» en Ajustes lo pone a False (y el aviso
+    # desaparece). Vive en `runtime_settings`, no se deduce en cada arranque. No es un ajuste
+    # editable: no está en ningún grupo de OVERRIDABLE_FIELDS.
     fuentes_heredadas: bool = Field(default=False)
 
     # ── AniList API (manga/manhwa/manhua) ────────────────────────────
@@ -133,10 +137,14 @@ class Settings(BaseSettings):
     covers_cache_path: Path = Field(default=Path("/config/covers"))
     # #123b: rutas LOCALES (dentro del contenedor) para el aviso de disco.
     # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
-    # cuelga del volumen de datos y es local; si no existe, el check queda «disabled».
+    # cuelga del volumen de datos y es local; de cada ruta se usa su primer ancestro existente;
+    # «disabled» solo si `disk_paths` está vacío (o ninguno existe); si no se miden, «warning».
     disk_paths: str = Field(default="/config/covers")
-    disk_warn_free_mb: int = Field(default=2048, ge=0)
-    disk_error_free_mb: int = Field(default=512, ge=0)
+    # Cota superior: 10 TiB (en MB), más que cualquier disco de una Raspberry Pi;
+    # evita desbordes y valores absurdos. Si `error > warn`, la app arranca igual
+    # y sube `warn` hasta `error` (el aviso nunca se retrasa).
+    disk_warn_free_mb: int = Field(default=2048, ge=0, le=10_485_760)
+    disk_error_free_mb: int = Field(default=512, ge=0, le=10_485_760)
 
     # ── VPN state (fichero escrito por un script del host) ────────
     # Fichero JSON escrito por scripts/vpn-state.sh (baremetal, fuera del
@@ -166,6 +174,17 @@ class Settings(BaseSettings):
     # reparte en rondas entre series para que ninguna acapare el lote — ver
     # Orchestrator._generar_lo_que_falta.
     orchestrator_politica_lote: int = 25
+    # C6: techo de seguridad de búsquedas de la POLÍTICA («completar»): como mucho este número de
+    # ítems por hora, en ventana deslizante y contando todas las series con política activa. Es un
+    # techo, no una cadencia: no obliga a buscar.
+    # CUENTA ÍTEMS, NO PETICIONES: cada ítem buscado puede consumir hasta dos peticiones externas
+    # (Prowlarr y foro), así que no es una cota de peticiones. Si más adelante hace falta un
+    # presupuesto separado de peticiones, será una decisión nueva, no una reinterpretación de esta.
+    # `last_searched_at` no distingue quién disparó la búsqueda (ciclo o «Buscar ahora») y el
+    # reintento manual la pone a None, así que el techo es APROXIMADO. 0 desactiva estas búsquedas
+    # automáticas. Es un ajuste propio: `max_concurrent_downloads` no cambia (sigue acotando lo
+    # manual del ciclo y `check_completions`).
+    politica_busquedas_por_hora: int = Field(default=2, ge=0, le=10)
 
     # ── Enricher (Comic Vine) ────────────────────────────────────────
     # Intervalo largo a propósito: Comic Vine limita a ~1 req/s y el
@@ -235,6 +254,22 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_json: bool = True
     debug: bool = False
+
+    @model_validator(mode="after")
+    def _umbrales_de_disco_coherentes(self) -> "Settings":
+        """El aviso salta con MÁS espacio libre que el error. Un par invertido NO impide arrancar
+        (lo observacional no bloquea, CLAUDE.md §3.2): se sube `warn = max(warn, error)` y se
+        deja un aviso en el registro. Así el aviso nunca se retrasa ni se apaga la alarma de
+        error por un valor mal puesto (p. ej. solo `DISK_WARN_FREE_MB=0`)."""
+        if self.disk_error_free_mb > self.disk_warn_free_mb:
+            structlog.get_logger().warning(
+                "config.umbrales_de_disco_invertidos",
+                DISK_WARN_FREE_MB=self.disk_warn_free_mb,
+                DISK_ERROR_FREE_MB=self.disk_error_free_mb,
+                ajustado_a=self.disk_error_free_mb,
+            )
+            self.disk_warn_free_mb = self.disk_error_free_mb
+        return self
 
 
 @lru_cache

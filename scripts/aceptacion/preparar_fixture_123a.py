@@ -32,7 +32,7 @@ import zipfile
 import zlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "src"))
@@ -44,6 +44,11 @@ from zascarr.services.tokens_revision import (  # noqa: E402
 )
 
 MARCADOR = ".fixture-123a"
+#: Lo ÚNICO que este generador escribe en `--salida`. `--reset` solo borra un directorio que contenga exactamente esto.
+CONTENIDO_ESPERADO = {MARCADOR, "biblioteca", "token.txt", "secret_key.txt", "seed.sql", "resumen.json"}
+#: Marca de la BD aislada: la pone la persona que prepara el entorno (ver el runbook) con `COMMENT ON DATABASE`.
+#: Sin ella no se hace `TRUNCATE` ni se aplica nada: el host y el puerto solos no prueban que la BD sea la aislada.
+MARCA_BD = "zascarr-123a-aislada"
 PREFIJO_CONTENEDOR = "/media/library"
 
 
@@ -141,9 +146,35 @@ def _comprobar_salida(salida: Path, *, reset: bool) -> None:
                 "ERROR: el directorio de salida ya existe. Usa --reset para "
                 "regenerar un fixture de 123a."
             )
-        if not (salida / MARCADOR).exists():
-            raise SystemExit("ERROR: el directorio no parece un fixture de 123a; no lo borro.")
-        shutil.rmtree(salida)
+        _borrar_fixture_anterior(salida)
+
+
+def _borrar_fixture_anterior(salida: Path) -> None:
+    """Borra SOLO un fixture reconocible: marcador válido y contenido exactamente el que genera este script.
+
+    El marcador solo no basta: un directorio con otros ficheros (o un enlace) no se toca.
+    """
+    marcador = salida / MARCADOR
+    if salida.is_symlink() or not marcador.is_file() or marcador.is_symlink() \
+            or marcador.read_text(encoding="utf-8") != "1\n":
+        raise SystemExit("ERROR: el directorio no parece un fixture de 123a; no lo borro.")
+    entradas = {e.name: e for e in salida.iterdir()}
+    sobrantes = sorted(set(entradas) - CONTENIDO_ESPERADO)
+    if sobrantes:
+        raise SystemExit(
+            "ERROR: el directorio tiene ficheros que no son del fixture de 123a "
+            f"({', '.join(sobrantes[:5])}); no lo borro."
+        )
+    if any(e.is_symlink() for e in entradas.values()):
+        raise SystemExit("ERROR: el fixture contiene enlaces simbólicos; no lo borro.")
+    for nombre, entrada in entradas.items():
+        if nombre == "biblioteca":
+            if not entrada.is_dir():
+                raise SystemExit("ERROR: 'biblioteca' no es un directorio; no borro el fixture.")
+            shutil.rmtree(entrada)
+        else:
+            entrada.unlink()
+    salida.rmdir()
 
 
 def _url_psql_aislada(url: str) -> str:
@@ -159,6 +190,13 @@ def _url_psql_aislada(url: str) -> str:
     except ValueError as exc:
         raise SystemExit(f"ERROR: URL de base de datos inválida: {exc}") from exc
     host = (parsed.hostname or "").lower()
+    # libpq deja que los parámetros de la URL (`?host=…&port=…`, `hostaddr`, `service`…) o varios hosts (`a,b`) cambien el
+    # destino efectivo: el host y el puerto de arriba dejarían de ser los reales. Se admite la URL pelada y nada más.
+    if parsed.query or parsed.params or parsed.fragment or "," in parsed.netloc:
+        raise SystemExit(
+            "ERROR: la URL de la BD aislada no admite parámetros (?host=, ?port=…), varios hosts ni fragmentos. "
+            "No se escribe nada."
+        )
     if parsed.scheme not in {"postgresql", "postgresql+asyncpg"}:
         raise SystemExit(
             "ERROR: --database-url debe empezar por postgresql:// o postgresql+asyncpg://."
@@ -179,11 +217,23 @@ def _url_psql_aislada(url: str) -> str:
 
 
 def _psql(url: str, *args: str) -> subprocess.CompletedProcess:
+    """psql con la contraseña en `PGPASSWORD`, no en la URL: lo que va en `argv` lo ve cualquiera con `ps`."""
+    parsed = urlparse(url)
+    # libpq lee PGHOSTADDR, PGHOST, PGPORT, PGSERVICE, PGSERVICEFILE, PGOPTIONS, PGPASSFILE… y alguna anula el host/puerto de la
+    # URL que se comprobó. El hijo NO hereda ninguna variable PG*: solo la contraseña, que se pone abajo.
+    entorno = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PG", "LIBPQ"))}
+    if parsed.password:
+        entorno["PGPASSWORD"] = unquote(parsed.password)
+        netloc = (f"{parsed.username}@" if parsed.username else "") + (parsed.hostname or "")
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        url = parsed._replace(netloc=netloc).geturl()
     return subprocess.run(
         ["psql", url, "-v", "ON_ERROR_STOP=1", *args],
         capture_output=True,
         text=True,
         timeout=120,
+        env=entorno,
     )
 
 
@@ -203,6 +253,18 @@ def _aplicar(url: str, seed: Path, resumen: dict, *, reset: bool, force: bool) -
         raise SystemExit(
             "ERROR: faltan tablas de ZascArr en la BD. Aplica `alembic upgrade head` "
             "antes de --aplicar."
+        )
+    marca = _psql(
+        url,
+        "-At",
+        "-c",
+        "select coalesce(shobj_description(oid, 'pg_database'), '') from pg_database "
+        "where datname = current_database();",
+    )
+    if marca.returncode != 0 or marca.stdout.strip() != MARCA_BD:
+        raise SystemExit(
+            "ERROR: la BD no lleva la marca de entorno aislado "
+            f"(COMMENT ON DATABASE ... IS '{MARCA_BD}'). No se ha tocado la BD."
         )
     if not reset:
         cuenta = _psql(

@@ -17,6 +17,12 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 - PostgreSQL publica en `127.0.0.1`, nunca en `0.0.0.0`. (Redis ya no forma parte del stack: ADR 0011.)
 - Las integraciones P2P (Prowlarr, Transmission, aMule, foro) nacen
   **desactivadas** y piden activación explícita.
+- **amuleweb, en loopback o en una red de confianza.** Su protocolo de login exige enviar el MD5 de
+  la contraseña por HTTP sin cifrar, y ese hash **equivale a la contraseña**: quien lo capture
+  entra en aMule. No es una elección de ZascArr ni se puede cambiar sin romper aMule. Por eso
+  `amule_url` apunta por defecto a `http://127.0.0.1:4711`. Si aMule corre en otra máquina,
+  mantenlo en una red de confianza (nunca expuesto a internet). ZascArr no escribe el hash en
+  los logs.
 - **Sin contraseña de base de datos de fábrica.** El instalador genera una aleatoria (sin mostrarla) y la guarda en
   el `.env`; Docker Compose se niega a crear PostgreSQL con una ausente, vacía o de ejemplo, y la aplicación no abre
   ninguna conexión con una conocida. El `.env` es de `root` (modo 600) y el usuario de servicio —compartido con el

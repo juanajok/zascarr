@@ -59,7 +59,9 @@ async def add_to_wishlist(data: WishlistCreate, db: AsyncSession = Depends(get_d
 
 
 @router.patch("/{item_id}")
-async def update_wishlist_item(item_id: UUID, data: WishlistUpdate, db: AsyncSession = Depends(get_db)):
+async def update_wishlist_item(
+    item_id: UUID, data: WishlistUpdate, db: AsyncSession = Depends(get_db)
+):
     item = (await db.execute(select(Wishlist).where(Wishlist.id == item_id))).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Item no encontrado")
