@@ -255,7 +255,10 @@ antes y después). La base quedó con las series retiradas en `404`, los archivo
 - **Revisión de Seguridad/QA/Pixel independiente**: se hizo una revisión QA/SecOps de la rama; no
   encontró bloqueantes y sus hallazgos importantes (caducado ambiguo, `no-store` en errores,
   `MissingGreenlet` en la carrera y pruebas que faltaban) están corregidos y cubiertos por las
-  pruebas de arriba. La revisión de Pixel y la aceptación final corresponden al PR.
+  pruebas de arriba. La revisión Pixel formal como sesión independiente no se pudo lanzar en esta
+  sesión (límite de la plataforma); se revisaron visualmente las 11 capturas y la plantilla. La
+  revisión Pixel formal y la aceptación final quedan pendientes en el PR y requieren aceptación
+  explícita del PO.
 
 ## 8. Rollback
 
