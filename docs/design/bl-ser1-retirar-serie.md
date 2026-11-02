@@ -152,7 +152,7 @@ ni infla el panel de operaciones.
 
 ### Postgres real y ficheros reales
 
-`tests/test_retirada_serie_pg.py` (23 pruebas):
+`tests/test_retirada_serie_pg.py` (24 pruebas):
 
 - vista previa sin escrituras, sin cambios en disco y con contenido/token correctos;
 - bloqueo por asignación viva y por deseo `searching`/`downloading`; deseo `wanted` no bloquea;
@@ -160,8 +160,8 @@ ni infla el panel de operaciones.
   `review_dismissed = false` y una entrada en `vinculo_historial`; disco intacto;
 - idempotencia (`ya_retirada`) y dos confirmaciones simultáneas del mismo token
   (`retirada` + `ya_retirada`, un solo comprobante);
-- token de otra serie → `422`; cambio tras la vista previa → `omitido` sin cambios; cambio de progreso
-  de lectura → `omitido` sin perder la lectura;
+- token de otra serie → `422`; cambio tras la vista previa (incluido vincular un archivo nuevo) →
+  `omitido` sin cambios; cambio de progreso de lectura → `omitido` sin perder la lectura;
 - serie borrada entre la vista previa y la confirmación → `omitido/serie_inexistente`;
 - asignación viva que aparece en la carrera (red de seguridad `ck_asignacion_viva_con_referencias`) →
   `omitido/en_curso`, con la serie y los vínculos intactos;
