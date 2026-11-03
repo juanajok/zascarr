@@ -76,18 +76,18 @@ def _plantilla(request: Request) -> str:
     return "retirada_serie.html" if "hx-request" not in request.headers else "_retirada_panel.html"
 
 
-def _fallo(request: Request, serie, *, codigo: str, titulo: str, mensaje: str, repetible: bool,
-           token: str | None = None, status_code: int = 200) -> HTMLResponse:
+def _fallo(request: Request, serie, *, retirar_url: str, codigo: str, titulo: str, mensaje: str,
+           repetible: bool, token: str | None = None, status_code: int = 200) -> HTMLResponse:
     return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
         "serie": serie, "fase": "fallo", "p": None, "r": None,
         "fallo": {"codigo": codigo, "titulo": titulo, "mensaje": mensaje, "repetible": repetible},
-        "token": token, "archivos": [], "textos_bloqueo": BLOQUEOS,
+        "token": token, "retirar_url": retirar_url, "archivos": [], "textos_bloqueo": BLOQUEOS,
         "aviso_disco": None, "aviso_despues": None}, status_code=status_code))
 
 
-def _sin_clave(request: Request, serie, token: str | None = None) -> HTMLResponse:
-    return _fallo(request, serie, codigo="sin_clave", titulo=SIN_CLAVE[0], mensaje=SIN_CLAVE[1],
-                  repetible=False, token=token, status_code=503)
+def _sin_clave(request: Request, serie, retirar_url: str, token: str | None = None) -> HTMLResponse:
+    return _fallo(request, serie, retirar_url=retirar_url, codigo="sin_clave", titulo=SIN_CLAVE[0],
+                  mensaje=SIN_CLAVE[1], repetible=False, token=token, status_code=503)
 
 
 async def _serie(db: AsyncSession, series_id: UUID) -> SimpleNamespace:
@@ -111,17 +111,18 @@ def _archivos(p) -> list[SimpleNamespace]:
 @router.get("/retirar", response_class=HTMLResponse)
 async def vista_previa(series_id: UUID, request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     serie = await _serie(db, series_id)
+    retirar_url = f"/ui/series/{series_id}/retirar"
     try:
         p = await RetiradaDeSerie(db, secret=_secreto()).previsualizar(series_id)
     except SerieNoEncontradaError:
         raise HTTPException(status_code=404, detail="Serie no encontrada") from None
     except HTTPException as e:
         if e.status_code == 503:
-            return _sin_clave(request, serie)
+            return _sin_clave(request, serie, retirar_url)
         raise
     return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
         "serie": serie, "fase": "vista_previa", "p": p, "r": None, "fallo": None, "token": p.token,
-        "archivos": _archivos(p), "textos_bloqueo": BLOQUEOS,
+        "retirar_url": retirar_url, "archivos": _archivos(p), "textos_bloqueo": BLOQUEOS,
         "aviso_disco": p.aviso_disco, "aviso_despues": p.aviso_despues}))
 
 
@@ -130,45 +131,46 @@ async def confirmar(series_id: UUID, request: Request,
                     token: str = Form(..., min_length=1, max_length=MAX_TOKEN_RETIRADA),
                     db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     serie = await _serie_o_none(db, series_id)
+    retirar_url = f"/ui/series/{series_id}/retirar"
     try:
         firmado = verificar_token_retirada(token, _secreto(), ignorar_caducidad=True)
     except HTTPException as e:
         if e.status_code == 503:
-            return _sin_clave(request, serie, token)
+            return _sin_clave(request, serie, retirar_url, token)
         raise
     if firmado is None or firmado.series_id != str(series_id):
         titulo, mensaje, repetible = FALLOS["token_invalido"]
         if firmado is not None:
             mensaje = "Esa vista previa es de otra serie. Abre la de esta serie y confírmala desde ahí. No se ha cambiado nada."
-        return _fallo(request, serie, codigo="token_invalido", titulo=titulo, mensaje=mensaje,
-                      repetible=repetible, token=token)
+        return _fallo(request, serie, retirar_url=retirar_url, codigo="token_invalido", titulo=titulo,
+                      mensaje=mensaje, repetible=repetible, token=token)
     try:
         r = await RetiradaDeSerie(db, secret=_secreto()).confirmar(token)
     except TokenInvalidoError:
         titulo, mensaje, repetible = FALLOS["token_invalido"]
-        return _fallo(request, serie, codigo="token_invalido", titulo=titulo, mensaje=mensaje,
-                      repetible=repetible, token=token)
+        return _fallo(request, serie, retirar_url=retirar_url, codigo="token_invalido", titulo=titulo,
+                      mensaje=mensaje, repetible=repetible, token=token)
     except TokenCaducadoError as e:
         titulo, mensaje, repetible = CADUCADO_APLICADO if e.puede_haberse_aplicado else FALLOS["token_caducado"]
-        return _fallo(request, serie, codigo="token_caducado", titulo=titulo, mensaje=mensaje,
-                      repetible=repetible, token=token)
+        return _fallo(request, serie, retirar_url=retirar_url, codigo="token_caducado", titulo=titulo,
+                      mensaje=mensaje, repetible=repetible, token=token)
     except ConflictoDeBloqueoError:
         titulo, mensaje, repetible = FALLOS["conflicto_de_bloqueo"]
-        return _fallo(request, serie, codigo="conflicto_de_bloqueo", titulo=titulo, mensaje=mensaje,
-                      repetible=repetible, token=token)
+        return _fallo(request, serie, retirar_url=retirar_url, codigo="conflicto_de_bloqueo", titulo=titulo,
+                      mensaje=mensaje, repetible=repetible, token=token)
     except ResultadoInciertoError:
         titulo, mensaje, repetible = FALLOS["resultado_incierto"]
-        return _fallo(request, serie, codigo="resultado_incierto", titulo=titulo, mensaje=mensaje,
-                      repetible=repetible, token=token)
+        return _fallo(request, serie, retirar_url=retirar_url, codigo="resultado_incierto", titulo=titulo,
+                      mensaje=mensaje, repetible=repetible, token=token)
     except HTTPException as e:
         if e.status_code == 503:
-            return _sin_clave(request, serie, token)
+            return _sin_clave(request, serie, retirar_url, token)
         raise
     except Exception:
         logger.exception("retirada.error_inesperado_ui")
         titulo, mensaje, repetible = FALLOS["error_inesperado"]
-        return _fallo(request, serie, codigo="error_inesperado", titulo=titulo, mensaje=mensaje,
-                      repetible=repetible, token=token)
+        return _fallo(request, serie, retirar_url=retirar_url, codigo="error_inesperado", titulo=titulo,
+                      mensaje=mensaje, repetible=repetible, token=token)
     if serie is None and r.titulo:
         serie = SimpleNamespace(id=str(series_id), title=r.titulo, existe=False)
     elif serie is not None and r.resultado == "retirada":
@@ -180,5 +182,5 @@ async def confirmar(series_id: UUID, request: Request,
             logger.warning("retirada.motivo_sin_texto", motivo=r.motivo)
     return _sin_cache(templates.TemplateResponse(request, _plantilla(request), {
         "serie": serie, "fase": "resultado", "p": None, "r": r, "fallo": None, "token": token,
-        "archivos": [], "textos_bloqueo": BLOQUEOS, "aviso_disco": None, "aviso_despues": None,
+        "retirar_url": retirar_url, "archivos": [], "textos_bloqueo": BLOQUEOS, "aviso_disco": None, "aviso_despues": None,
         "texto_omitido": texto_omitido}))

@@ -172,7 +172,7 @@ ni infla el panel de operaciones.
   conflicto/resultado incierto con `Retry-After: 1`, `500` sin fugas; todos con `Cache-Control: no-store`;
 - sagas: se borra la participación (`story_arc_issues`), no la saga.
 
-`tests/test_retirada_serie_ui_pg.py` (28 pruebas):
+`tests/test_retirada_serie_ui_pg.py` (29 pruebas):
 
 - enlace en la ficha con aviso de disco y sin escrituras al entrar;
 - vista previa: aviso destacado, conteos, alias/sagas/deseados, sin escrituras, `no-store`,
@@ -181,7 +181,9 @@ ni infla el panel de operaciones.
 - confirmación sin JS y con htmx; resultado, «Por revisar», repetición sin escrituras, token de
   otra serie, token inválido, caducado con y sin «pudo aplicarse», cambio posterior, resultado
   incierto con «Comprobar el resultado», ficha ya inexistente, y `503` sin clave como HTML/panel
-  (no como JSON colado).
+  (no como JSON colado);
+- si la serie desaparece y el fallo es repetible, el reintento apunta a
+  `/ui/series/{id}/retirar`, no a una ruta inexistente.
 
 `tests/test_tokens_retirada.py` (9 pruebas): ida y vuelta, caducidad, propósito, contexto,
 esquema estricto, tamaño máximo.
@@ -190,7 +192,7 @@ Resultado local (Postgres 15 en Docker, `zascarr_test`):
 
 ```
 tests/test_retirada_serie_pg.py       24 passed
-tests/test_retirada_serie_ui_pg.py    28 passed
+tests/test_retirada_serie_ui_pg.py    29 passed
 tests/test_tokens_retirada.py          9 passed
 ```
 
