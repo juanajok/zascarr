@@ -9,8 +9,8 @@
     {{ ui.aviso("warn", fallo.mensaje) }}
     <div class="vinc-acciones">
       {% if fallo.repetible and token %}
-      <form method="post" action="{{ volver }}/retirar"
-            hx-post="{{ volver }}/retirar" hx-target="#retirada" hx-swap="outerHTML"
+      <form method="post" action="{{ retirar_url }}"
+            hx-post="{{ retirar_url }}" hx-target="#retirada" hx-swap="outerHTML"
             hx-disabled-elt="find button">
         <input type="hidden" name="token" value="{{ token }}">
         <button type="submit" class="primary">{{ "Comprobar el resultado" if fallo.codigo == "resultado_incierto" else "Reintentar" }}</button>
@@ -123,8 +123,8 @@
     </details>
     {% endif %}
 
-    <form method="post" action="{{ volver }}/retirar"
-          hx-post="{{ volver }}/retirar" hx-target="#retirada" hx-swap="outerHTML"
+    <form method="post" action="{{ retirar_url }}"
+          hx-post="{{ retirar_url }}" hx-target="#retirada" hx-swap="outerHTML"
           hx-disabled-elt="find button">
       <input type="hidden" name="token" value="{{ token }}">
       <p class="caption">Hasta que pulses el botón, no cambia nada.</p>

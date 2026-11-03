@@ -297,6 +297,26 @@ class TestConfirmacion:
         assert "No se ha cambiado nada" not in v
         assert "«Por revisar»" in v
 
+    async def test_serie_borrada_y_fallo_repetible_reintenta_en_su_ruta_no_en_biblioteca(self, ent, monkeypatch):
+        """El reintento de una serie que ya no existe no puede apuntar a una ruta que no existe."""
+        from zascarr.services.vinculacion import ConflictoDeBloqueoError
+
+        serie = await serie_de_prueba(ent, "Borrada", 1991)
+        async with ent.banco.fabrica() as s:
+            await s.execute(text("DELETE FROM series WHERE id = :s"), {"s": serie})
+            await s.commit()
+
+        async def conflicto(self, token):
+            raise ConflictoDeBloqueoError("otra operación")
+
+        monkeypatch.setattr(web_retirada.RetiradaDeSerie, "confirmar", conflicto)
+        token = crear_token_retirada(
+            RetiradaFirmada(series_id=str(serie), huella="a" * 64, operacion=str(uuid4())), SECRETO)
+        r = await post(RUTA.format(serie=serie), {"token": token})
+        assert r.status_code == 200 and 'data-fase="fallo"' in r.text
+        assert f'action="/ui/series/{serie}/retirar"' in r.text
+        assert "/ui/biblioteca/retirar" not in r.text
+
     async def test_caducado_sin_informe_purgado_dice_que_no_se_cambio_nada(self, ent):
         serie, _ = await serie_retirada(ent)
         r = await post(RUTA.format(serie=serie), {"token": token_caducado(serie, puede_haberse_aplicado=False)})
