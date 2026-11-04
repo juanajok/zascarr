@@ -76,10 +76,12 @@ def _fecha(valor) -> str | None:
     return valor.isoformat() if valor is not None else None
 
 
-async def _contar_por(db: AsyncSession, columna) -> dict:
+async def _contar_por(db: AsyncSession, columna, *, where=None) -> dict:
     """`{valor: n}` con un GROUP BY en SQL: a Python llega un recuento por valor, no las filas."""
-    return {valor: int(n) for valor, n in (await db.execute(
-        select(columna, func.count()).group_by(columna))).all()}
+    consulta = select(columna, func.count()).group_by(columna)
+    if where is not None:
+        consulta = consulta.where(where)
+    return {valor: int(n) for valor, n in (await db.execute(consulta)).all()}
 
 
 async def resumen_operaciones(db: AsyncSession) -> dict:
@@ -118,8 +120,12 @@ async def resumen_operaciones(db: AsyncSession) -> dict:
     alta["total"] = alta["completada"] + alta["no_aplica"] + alta["desconocida"]
 
     vinculacion = {"completada": 0, "parcial": 0, "sin_efecto": 0, "desconocida": 0}
+    # BL-SER1 (#303): la misma tabla guarda informes de RETIRADA de serie
+    # (`resultado.tipo = "retirada_serie"`). No son vinculaciones y no se
+    # cuentan como tales: el resumen de operaciones no debe inflarse.
     global_ = VinculacionOperacion.resultado["global"].as_string()
-    for valor, n in (await _contar_por(db, global_)).items():
+    solo_vinculaciones = VinculacionOperacion.resultado["tipo"].astext.is_(None)
+    for valor, n in (await _contar_por(db, global_, where=solo_vinculaciones)).items():
         try:
             vinculacion[clasificar_vinculacion(valor)] += n
         except ValueError:

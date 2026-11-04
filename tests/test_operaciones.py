@@ -80,7 +80,7 @@ class TestResumenClasificaLoDesconocido:
         async def sin_candados(_db):
             return set()
 
-        async def contar(_db, columna):
+        async def contar(_db, columna, **_kwargs):
             nombre = str(columna)
             if "AsignacionOperacion.estado" in nombre:
                 return {"limpiada": 2, "rara": 3}

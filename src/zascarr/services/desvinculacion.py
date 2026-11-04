@@ -191,6 +191,42 @@ async def _asignacion_viva(db: AsyncSession, file_id: UUID) -> bool:
     ).first() is not None
 
 
+async def aplicar_desvinculacion(db: AsyncSession, *, file_id: UUID, issue_id: UUID, vinculo: dict | None,
+                                 metadata_: dict | None, metadata_source: str | None, issue_numero: str | None,
+                                 issue_formato: str, serie_id: str, operacion_id: str, fecha: str) -> str | None:
+    bruto = (metadata_ or {}).get("vinculo")
+    operacion_actual = bruto.get("operacion_id") if isinstance(bruto, dict) and isinstance(bruto.get("operacion_id"), str) else None
+    if vinculo is not None:
+        previo_vinculo = vinculo.get("previo")
+        fuente = previo_vinculo.get("metadata_source") if isinstance(previo_vinculo, dict) else None
+        comprobante = {**vinculo, "deshecho": {"operacion_id": operacion_id, "fecha": fecha}}
+        numero = vinculo.get("numero") if isinstance(vinculo.get("numero"), str) else None
+    else:
+        fuente = None
+        estado_previo = (metadata_ or {}).get("match_status")
+        comprobante = {
+            "procedencia": "desconocida", "serie_id": serie_id, "issue_id": str(issue_id),
+            "numero": issue_numero, "formato": issue_formato,
+            "previo": {"match_status": estado_previo if isinstance(estado_previo, str) else None,
+                       "metadata_source": metadata_source},
+            "deshecho": {"operacion_id": operacion_id, "fecha": fecha}}
+        if bruto is not None:
+            comprobante["vinculo_no_valido"] = bruto
+        numero = issue_numero
+    r = await db.execute(text(
+        "UPDATE files SET issue_id = NULL, review_dismissed = false, metadata_source = CAST(:src AS varchar), "
+        "metadata = (coalesce(metadata, '{}'::jsonb) - 'vinculo') || jsonb_build_object("
+        " 'match_status', 'unsorted',"
+        " 'vinculo_historial', CASE WHEN jsonb_typeof(metadata -> 'vinculo_historial') = 'array'"
+        "   THEN metadata -> 'vinculo_historial' ELSE '[]'::jsonb END || jsonb_build_array(CAST(:e AS jsonb))) "
+        "WHERE id = :f AND issue_id = :i AND (metadata -> 'vinculo' ->> 'operacion_id') IS NOT DISTINCT FROM CAST(:vop AS text)"),
+        {"src": fuente if isinstance(fuente, str) else None, "e": json.dumps(comprobante, ensure_ascii=False),
+         "f": file_id, "i": issue_id, "vop": operacion_actual})
+    if r.rowcount != 1:
+        raise RuntimeError("la fila bloqueada no se pudo desvincular")
+    return numero
+
+
 # ── Servicio ─────────────────────────────────────────────────────────────────────────────────────
 
 class DesvinculacionDeArchivo:
@@ -339,37 +375,10 @@ class DesvinculacionDeArchivo:
 
         # 6. Una sola sentencia, con el vínculo comprobado en el WHERE. Todo por fusión JSONB.
         fecha = self._fecha()
-        bruto = (f.metadata_ or {}).get("vinculo")                    # lo que haya ahora (puede ser una procedencia no válida)
-        operacion_actual = bruto.get("operacion_id") if isinstance(bruto, dict) and isinstance(bruto.get("operacion_id"), str) else None
-        if vinculo is not None:
-            previo_vinculo = vinculo.get("previo")
-            fuente = previo_vinculo.get("metadata_source") if isinstance(previo_vinculo, dict) else None      # D8
-            comprobante = {**vinculo, "deshecho": {"operacion_id": firmado.operacion, "fecha": fecha}}
-            numero = vinculo.get("numero") if isinstance(vinculo.get("numero"), str) else None
-        else:
-            # Sin procedencia (BL-R1, revisión de D9): no hay nada que restaurar (D8 → NULL), pero se deja dicho qué había.
-            fuente = None
-            estado_previo = (f.metadata_ or {}).get("match_status")
-            comprobante = {
-                "procedencia": "desconocida", "serie_id": firmado.series_id, "issue_id": firmado.issue_id,
-                "numero": issue.issue_number, "formato": issue.format.value,
-                "previo": {"match_status": estado_previo if isinstance(estado_previo, str) else None,
-                           "metadata_source": f.metadata_source},
-                "deshecho": {"operacion_id": firmado.operacion, "fecha": fecha}}
-            if bruto is not None:
-                comprobante["vinculo_no_valido"] = bruto              # una procedencia incoherente o mal formada: evidencia
-            numero = issue.issue_number
-        r = await db.execute(text(
-            "UPDATE files SET issue_id = NULL, review_dismissed = false, metadata_source = CAST(:src AS varchar), "
-            "metadata = (coalesce(metadata, '{}'::jsonb) - 'vinculo') || jsonb_build_object("
-            " 'match_status', 'unsorted',"
-            " 'vinculo_historial', CASE WHEN jsonb_typeof(metadata -> 'vinculo_historial') = 'array'"
-            "   THEN metadata -> 'vinculo_historial' ELSE '[]'::jsonb END || jsonb_build_array(CAST(:e AS jsonb))) "
-            "WHERE id = :f AND issue_id = :i AND (metadata -> 'vinculo' ->> 'operacion_id') IS NOT DISTINCT FROM CAST(:vop AS text)"),
-            {"src": fuente if isinstance(fuente, str) else None, "e": json.dumps(comprobante, ensure_ascii=False),
-             "f": file_id, "i": f.issue_id, "vop": operacion_actual})
-        if r.rowcount != 1:
-            raise RuntimeError("la fila bloqueada no se pudo desvincular")
+        numero = await aplicar_desvinculacion(
+            self._db, file_id=file_id, issue_id=f.issue_id, vinculo=vinculo, metadata_=f.metadata_,
+            metadata_source=f.metadata_source, issue_numero=issue.issue_number, issue_formato=issue.format.value,
+            serie_id=firmado.series_id, operacion_id=firmado.operacion, fecha=fecha)
 
         resultado = ResultadoDesvinculacion(
             version=VERSION_RESULTADO, operacion_id=firmado.operacion, file_id=firmado.file_id, resultado="deshecho",
