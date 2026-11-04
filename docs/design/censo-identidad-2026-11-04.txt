@@ -1,0 +1,121 @@
+========================================================================
+Censo de identidad editorial (B22) — solo lectura
+========================================================================
+
+Issues por format
+  format | issues
+  single_issue | 443
+
+Issues por tradición (de la serie)
+  tradicion | issues
+  american | 337
+  tebeo | 53
+  manga | 30
+  franco_belgian | 23
+
+Issues por fuente de metadatos
+  fuente | issues
+  (sin fuente) | 272
+  comic_vine | 171
+
+Series por tradición (contexto)
+  tradicion | series
+  american | 13
+  tebeo | 4
+  franco_belgian | 2
+  manga | 1
+
+Issues SIN número (issue_number IS NULL) — contados aparte
+  issues_sin_numero
+  0
+
+Series con MÁS de un issue sin número (no es colisión de un mismo número)
+  series_con_multiples_sin_numero
+  0
+
+Grupos (serie + número) con MÁS de un issue (número no NULL)
+  grupos_con_multiples
+  0
+
+Colisión efectiva: mismo serie+número con volume NULL repetido (duplicados ambiguos)
+  colisiones_null
+  0
+
+Mismo serie+número con volúmenes DISTINTOS (otra edición posible)
+  otras_ediciones_posibles
+  0
+
+Recopilaciones que comparten número con una grapa (distinto format, mismo volumen 1 — si existen)
+  casos
+  0
+
+Muestra: colisiones efectivas (volume NULL repetido) (hasta 20) [compartible (seudonimizado)]
+  (sin filas)
+
+Muestra: misma serie+número, volúmenes distintos (otra edición posible) (hasta 20) [compartible (seudonimizado)]
+  (sin filas)
+
+Issues con volume IS NULL
+  issues_volume_null
+  0
+
+Archivos con covered_issue_ids NO vacío (evidencia ALMACENADA en esta columna)
+  files_con_covered
+  0
+
+Archivos con ComicInfo (metadata_source='comicinfo_xml') — evidencia EXTERNA posible, no medida aquí
+  files_con_comicinfo
+  0
+
+Recopilaciones (tomo/ómnibus/álbum) por formato: con archivo y con evidencia almacenada
+  (sin filas)
+  (NOTA: 'con_evidencia_covered' = covered_issue_ids no vacío. No es
+   cobertura confirmada: es una cota superior, no una prueba de que el
+   tomo reproduzca esas grapas.)
+
+Muestra: Omnigold/Integral (edicion omnigold|integral o format omnibus) (hasta 5) [compartible (seudonimizado)]
+  (sin filas)
+
+Muestra: Tomo/Volumen (edicion tomo|volumen o format trade_paperback) (hasta 5) [compartible (seudonimizado)]
+  (sin filas)
+
+Muestra: manga por tomos (tradición manga/manhwa/manhua con recopilación) (hasta 5) [compartible (seudonimizado)]
+  (sin filas)
+
+Muestra: packs con covered_issue_ids no vacío (si existen) (hasta 10) [compartible (seudonimizado)]
+  (sin filas)
+
+Muestra: CANDIDATOS a pack sin Issue asignado (issue_id IS NULL) (hasta 20) [compartible (seudonimizado)]
+  nombre_seud | file_format | fuente | ruta_seud
+  0100e270 | cbr | (sin fuente) | a2efe479
+  eab8bfd8 | cbr | (sin fuente) | c1747dcc
+  0c22b6cf | cbz | (sin fuente) | 26c7e074
+  1ffc5cee | cbr | (sin fuente) | 267d494a
+  660517b7 | cbr | (sin fuente) | 9d95fe1d
+  c3465108 | cbr | (sin fuente) | 978afe8a
+  2da79492 | cbz | (sin fuente) | b692fc00
+  59fa1ffe | cbr | (sin fuente) | a621b9b1
+  9bc69315 | cbr | (sin fuente) | f74cb91d
+  5e9d3919 | cbr | (sin fuente) | e2aac058
+  a9390b3b | cbr | (sin fuente) | 206ba3d5
+  224ac70a | cbr | (sin fuente) | d53dbad7
+  0fc5d86b | cbr | (sin fuente) | 47339d67
+  3aab6464 | cbr | (sin fuente) | 333839de
+  4e44e9c1 | cbr | (sin fuente) | 5322bd2f
+  c9d83e3d | cbr | (sin fuente) | 087ebd69
+  48a51cdd | cbr | (sin fuente) | 8213d610
+  6877e1a1 | cbr | (sin fuente) | 43ffa1f8
+  cf9c453c | cbz | (sin fuente) | e875e02a
+  166ec893 | cbr | (sin fuente) | 03b7167d
+  (de la muestra de candidatos, 9 nombres parecen rango — heurístico,
+   no es cobertura cierta)
+
+========================================================================
+VEREDICTO: 443 issues, 0 recopilaciones.
+  Evidencia ALMACENADA en BD: covered_issue_ids no vacío = 0
+  Evidencia EXTERNA en archivo (ComicInfo) = 0
+  Archivos sin Issue (candidatos a pack) = 897
+  → covered_issue_ids=0 solo demuestra «no hay pistas en ESTA columna».
+    Puede haber cobertura verificable en ComicInfo, catálogos o revisión
+    manual, que este script NO mide. La decisión de posponer exige ambas.
+========================================================================
