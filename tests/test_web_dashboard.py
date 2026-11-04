@@ -434,7 +434,7 @@ class TestUltimasSeries:
                    metadata_source=MetadataSource.COMIC_VINE.value)
         html = pagina(vista(adopcion=EstadoAdopcion.HECHA, registrados=2, series=1,
                             con_archivos=1, ultimas=[s]))
-        assert "Batman" in html and f"/ui/series/{s.id}/portada" in html
+        assert "Batman" in html and f"/ui/series/{s.id}/portada?v=2" in html
 
     def test_ya_no_hay_tarjeta_de_actualizadas_recientemente(self):
         """Era len(ultimas), topado a 10: una cifra que no contaba lo que decía."""

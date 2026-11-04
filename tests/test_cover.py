@@ -59,3 +59,43 @@ class TestExtractCoverThumbnail:
         path = tmp_path / "corrupto.cbz"
         path.write_bytes(b"esto no es un zip")
         assert extract_cover_thumbnail(path) is None
+
+
+class TestAnchoExplicito:
+    """BL-PORT1 (#300, AC-01/AC-05): el ancho se pide explícitamente (240 «Por revisar»,
+    600 serie) y NUNCA se amplía un original más pequeño."""
+
+    def test_ancho_explicito_600(self, tmp_path):
+        path = tmp_path / "comic.cbz"
+        make_cbz_with_page(path, size=(1600, 2400))
+
+        result = extract_cover_thumbnail(path, ancho=600)
+
+        assert result is not None
+        data, content_type = result
+        assert content_type == "image/jpeg"
+        with Image.open(io.BytesIO(data)) as thumb:
+            assert thumb.width == 600
+            assert abs(thumb.height - 900) <= 1
+
+    def test_por_defecto_sigue_en_240(self, tmp_path):
+        """FR-17: «Por revisar» no cambia aunque exista el ancho de serie."""
+        path = tmp_path / "comic.cbz"
+        make_cbz_with_page(path, size=(1600, 2400))
+
+        result = extract_cover_thumbnail(path)
+
+        assert result is not None
+        with Image.open(io.BytesIO(result[0])) as thumb:
+            assert thumb.width == 240
+
+    def test_original_pequeno_no_se_amplia(self, tmp_path):
+        path = tmp_path / "pequeno.cbz"
+        make_cbz_with_page(path, size=(400, 600))
+
+        result = extract_cover_thumbnail(path, ancho=600)
+
+        assert result is not None
+        with Image.open(io.BytesIO(result[0])) as thumb:
+            assert thumb.width == 400
+            assert thumb.height == 600

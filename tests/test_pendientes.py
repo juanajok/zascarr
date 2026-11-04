@@ -321,6 +321,31 @@ class TestPortada:
         assert r.status_code == 200
         assert r.headers["content-type"] == "image/jpeg"
 
+    def test_regresion_240_sin_escribir_cache_y_etag_del_origen(self, tmp_path):
+        """AC-03 (FR-17): «Por revisar» sigue a 240, sin escribir en `covers/` y con el
+        ETag del `mtime` del fichero ORIGEN (no el de una caché)."""
+        import io
+
+        from PIL import Image
+
+        path = tmp_path / "comic.cbz"
+        buf = io.BytesIO()
+        Image.new("RGB", (1600, 2400), color="red").save(buf, format="JPEG")
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("001.jpg", buf.getvalue())
+
+        file = File(id=uuid4(), file_path=str(path),
+                    file_name="comic.cbz", file_format=FileFormat.CBZ)
+        antes = set(tmp_path.iterdir())
+        with use_fake_session(FakeSession(get_map={(File, file.id): file})) as client:
+            r = client.get(f"/ui/pendientes/{file.id}/portada")
+
+        assert r.status_code == 200
+        with Image.open(io.BytesIO(r.content)) as img:
+            assert img.width <= 240
+        assert r.headers["etag"] == f'"{path.stat().st_mtime}"'
+        assert set(tmp_path.iterdir()) == antes, "«Por revisar» no escribe caché en disco"
+
     def test_archivo_sin_miniatura_da_404(self, tmp_path):
         path = tmp_path / "roto.cbz"
         path.write_bytes(b"no es un zip")
