@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from zascarr.config import get_settings
 from zascarr.services.primeros_pasos import fecha_llana
+from zascarr.utils.ruta_visible import ruta_visible
 from zascarr.web.componentes import registrar as registrar_componentes
 from zascarr.web.descubrir_texto import etiqueta_procedencia, pista_de_tradicion
 
@@ -41,6 +42,10 @@ def crear_templates() -> Jinja2Templates:
     templates.env.filters["etiqueta_procedencia"] = etiqueta_procedencia
     # Fechas legibles sin depender del locale del sistema (la Pi puede no tener es_ES).
     templates.env.filters["fecha_llana"] = fecha_llana
+    # #294: una sola forma de enseñar una ruta —la del disco de la persona, no la del contenedor—
+    # en todas las pantallas. Va en la fábrica, no en un router, para que la siguiente pantalla
+    # que enseñe una ruta la tenga sin acordarse (y para que no vuelvan a convivir las dos formas).
+    templates.env.filters["ruta_visible"] = ruta_visible
     # V2: macros de componentes (chip, aviso, grupo…) disponibles en TODAS las plantillas.
     registrar_componentes(templates.env)
     return templates

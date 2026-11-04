@@ -770,7 +770,7 @@ button[type="submit"].btn-sugerencia {
   .audit-acciones button { width: 100%; }
 }
 .audit-path {
-  font-size: .875rem; word-break: break-all;
+  font-size: .875rem; overflow-wrap: anywhere;
   color: var(--ink);
 }
 .audit-detail { font-size: .875rem; color: var(--ink-faint); margin-top: 2px; }
