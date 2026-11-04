@@ -11,7 +11,9 @@ sistema informa y decide la persona" y lo que hacía antes.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
@@ -157,3 +159,82 @@ class TestCabeceraDeNoReconocidos:
         assert ("Si arreglas una copia (por ejemplo, la descomprimes o pones .cbz al final de su nombre) y la dejas en tu carpeta de descargas, "
                 "ZascArr intentará importarla; el original seguirá aquí.") in t
         assert "hasta que los conviertas" not in t                       # la cabecera antigua, que decía que ninguno de estos archivos contaba
+
+
+class TestRutasDelHost:
+    """#294: «Duplicados» habla el idioma del disco de la persona, no el del contenedor.
+
+    El invariante es a propósito global: se recorren TODOS los `.audit-path` del HTML, no uno por
+    bloque. Cubre los seis puntos de hoy y caza cualquier bloque nuevo que se añada sin pasar por
+    `ruta_visible`. Por eso el fixture monta las cinco secciones: con una sola, el invariante
+    pasaría en vacío y daría una red que no es red.
+    """
+
+    HOST = "/media/WDElements/Tebeos"
+
+    def _informe(self):
+        return informe_falso(
+            carpetas_repetidas=[{"ruta_a": "/media/library/Comics/Superman (1987)",
+                                 "ruta_b": "/media/library/Comics/Superman Vol2",
+                                 "comunes": 140, "solo_en_a": 0, "solo_en_b": 0}],
+            mismo_contenido=[{"rutas": ["/media/library/Comics/A/x.cbr",
+                                        "/media/library/Comics/B/x.cbr"],
+                              "size_bytes": 1024, "sha256": "abc"}],
+            misma_obra=[{"obra": "gideon falls #1", "rutas": ["/media/library/Comics/C/y.cbr"]}],
+            carpetas_vacias=[{"ruta": "/media/library/Comics/Vacía", "subcarpetas": 0}],
+            no_reconocidos=[{"ruta": "/media/library/Comics/raro.rar",
+                             "motivo": "extensión no admitida"}],
+        )
+
+    def _rutas_pintadas(self, html):
+        return re.findall(r'class="audit-path">([^<]*)<', html)
+
+    def _con_host(self, monkeypatch, host):
+        from zascarr.utils import ruta_visible as modulo
+        monkeypatch.setattr(modulo, "get_settings",
+                            lambda: SimpleNamespace(library_path="/media/library", host_library_dir=host))
+
+    def test_la_ruta_que_se_ve_es_la_del_host_y_no_la_del_contenedor(self, monkeypatch):
+        # Caso real (Pi, 2026-10-22): la pantalla decía /media/library/… y el disco de la persona es
+        # /media/WDElements/Tebeos.
+        self._con_host(monkeypatch, self.HOST)
+        with use_fake_session(FakeSession([FakeExecResult(self._informe())])) as client:
+            r = client.get("/ui/auditoria")
+        rutas = self._rutas_pintadas(r.text)
+        assert len(rutas) == 7, rutas           # 2 + 2 + 1 + 1 + 1: las cinco secciones del fixture
+        assert all(x.startswith(self.HOST) for x in rutas), rutas
+        assert "/media/library" not in r.text
+
+    def test_sin_host_las_rutas_se_ven_como_estan_guardadas(self, monkeypatch):
+        self._con_host(monkeypatch, "")
+        with use_fake_session(FakeSession([FakeExecResult(self._informe())])) as client:
+            r = client.get("/ui/auditoria")
+        rutas = self._rutas_pintadas(r.text)
+        assert rutas and all(x.startswith("/media/library") for x in rutas), rutas
+
+    def test_una_ruta_fuera_de_la_biblioteca_no_se_toca(self, monkeypatch):
+        self._con_host(monkeypatch, self.HOST)
+        informe = informe_falso(no_reconocidos=[{"ruta": "/mnt/usb/suelto.rar",
+                                                 "motivo": "extensión no admitida"}])
+        with use_fake_session(FakeSession([FakeExecResult(informe)])) as client:
+            r = client.get("/ui/auditoria")
+        assert "/mnt/usb/suelto.rar" in r.text
+        assert self.HOST + "/mnt/usb" not in r.text
+
+    def test_el_fragmento_de_analizar_tambien_traduce(self, monkeypatch):
+        # Segunda ruta de render: no basta con que la página traiga el filtro.
+        from zascarr.web import auditoria as modulo_auditoria
+
+        class _SinTocarElDisco:
+            def __init__(self, _db): ...
+            async def run(self): return None
+
+        self._con_host(monkeypatch, self.HOST)
+        monkeypatch.setattr(modulo_auditoria, "LibraryAudit", _SinTocarElDisco)
+        informe = informe_falso(carpetas_vacias=[{"ruta": "/media/library/Comics/Vacía",
+                                                  "subcarpetas": 0}])
+        with use_fake_session(FakeSession([FakeExecResult(informe)])) as client:
+            r = client.post("/ui/auditoria/analizar")
+        assert r.status_code == 200
+        assert self.HOST + "/Comics/Vacía" in r.text
+        assert "/media/library" not in r.text

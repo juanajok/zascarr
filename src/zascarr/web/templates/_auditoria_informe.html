@@ -20,8 +20,8 @@
   <p class="audit-why">Dos carpetas con los mismos tebeos dentro. Decide tú cuál quieres conservar: ZascArr no va a elegir por ti.</p>
   {% for c in informe.carpetas_repetidas %}
   <div class="audit-item">
-    <div class="audit-path">{{ c.ruta_a }}</div>
-    <div class="audit-path">{{ c.ruta_b }}</div>
+    <div class="audit-path">{{ c.ruta_a | ruta_visible }}</div>
+    <div class="audit-path">{{ c.ruta_b | ruta_visible }}</div>
     <div class="audit-detail">
       {{ c.comunes }} tebeos en común.
       {% if c.solo_en_a == 0 and c.solo_en_b == 0 %}
@@ -46,7 +46,7 @@
     {{ informe.bytes_recuperables | tamano }} — pero eso lo haces tú en tu disco, no ZascArr.</p>
   {% for d in informe.mismo_contenido %}
   <div class="audit-item">
-    {% for r in d.rutas %}<div class="audit-path">{{ r }}</div>{% endfor %}
+    {% for r in d.rutas %}<div class="audit-path">{{ r | ruta_visible }}</div>{% endfor %}
     <div class="audit-detail">{{ d.size_bytes | tamano }} cada uno.</div>
   </div>
   {% endfor %}
@@ -61,7 +61,7 @@
   {% for d in informe.misma_obra %}
   <div class="audit-item">
     <div class="audit-detail"><strong>{{ d.obra }}</strong></div>
-    {% for r in d.rutas %}<div class="audit-path">{{ r }}</div>{% endfor %}
+    {% for r in d.rutas %}<div class="audit-path">{{ r | ruta_visible }}</div>{% endfor %}
   </div>
   {% endfor %}
 </section>
@@ -74,7 +74,7 @@
     falte un disco por montar o que quedaran a medias de una mudanza de archivos.</p>
   {% for c in informe.carpetas_vacias %}
   <div class="audit-item">
-    <div class="audit-path">{{ c.ruta }}</div>
+    <div class="audit-path">{{ c.ruta | ruta_visible }}</div>
     {% if c.subcarpetas %}<div class="audit-detail">Con {{ c.subcarpetas }} subcarpeta{{ 's' if c.subcarpetas != 1 }}, también vac{{ 'ías' if c.subcarpetas != 1 else 'ía' }}.</div>{% endif %}
   </div>
   {% endfor %}
@@ -89,7 +89,7 @@
     carpeta de descargas, ZascArr intentará importarla; el original seguirá aquí.</p>
   {% for n in informe.no_reconocidos %}
   <div class="audit-item">
-    <div class="audit-path">{{ n.ruta }}</div>
+    <div class="audit-path">{{ n.ruta | ruta_visible }}</div>
     <div class="audit-detail">{{ n.motivo }}</div>
   </div>
   {% endfor %}
