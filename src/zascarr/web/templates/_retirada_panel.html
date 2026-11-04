@@ -1,0 +1,139 @@
+{#- BL-SER1 (#303): vista previa y resultado de «Retirar de mi biblioteca». -#}
+{% set volver = '/ui/series/' ~ serie.id if serie else '/ui/biblioteca' %}
+<div id="retirada" class="retirada" data-fase="{{ 'fallo' if fallo else fase }}"
+     data-resultado="{{ r.resultado if r else '' }}">
+
+  {% if fallo %}
+  <section class="card" aria-labelledby="ret-fallo">
+    <h2 id="ret-fallo" class="titulo-frase">{{ fallo.titulo }}</h2>
+    {{ ui.aviso("warn", fallo.mensaje) }}
+    <div class="vinc-acciones">
+      {% if fallo.repetible and token %}
+      <form method="post" action="{{ retirar_url }}"
+            hx-post="{{ retirar_url }}" hx-target="#retirada" hx-swap="outerHTML"
+            hx-disabled-elt="find button">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="primary">{{ "Comprobar el resultado" if fallo.codigo == "resultado_incierto" else "Reintentar" }}</button>
+      </form>
+      {% endif %}
+      {% if serie and serie.existe %}<a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>{% endif %}
+      <a class="btn ghost sm" href="/ui/biblioteca">Volver a la biblioteca</a>
+    </div>
+  </section>
+
+  {% elif r %}
+  <section class="card" aria-labelledby="ret-resultado">
+    {% if r.resultado == "retirada" %}
+    <span class="nav-recuento" hidden hx-get="/ui/_nav/estado" hx-trigger="load" hx-swap="none"></span>
+    <h2 id="ret-resultado" class="titulo-frase">«{{ r.titulo }}» ya no está en tu biblioteca</h2>
+    {{ ui.aviso("ok", "Los archivos siguen en el disco: no se ha borrado, movido ni renombrado nada.") }}
+    <p>{{ r.totales.numeros }} número{{ "s" if r.totales.numeros != 1 }} y {{ r.totales.archivos }} archivo{{ "s" if r.totales.archivos != 1 }} retirados de ZascArr.
+       {% if r.totales.archivos %}Los archivos han vuelto a «Por revisar».{% endif %}</p>
+    {% if r.archivos %}
+    <ul class="desv-lista">
+      {% for a in r.archivos %}
+      <li><span class="nombre-archivo">{{ a.nombre }}</span>{% if a.numero %} · #{{ a.numero }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% elif r.resultado == "ya_retirada" %}
+    <h2 id="ret-resultado" class="titulo-frase">Esta serie ya estaba retirada</h2>
+    {{ ui.aviso("info", "No está en tu biblioteca y no se ha cambiado nada más. Los archivos siguen en el disco, en «Por revisar».") }}
+    {% else %}
+    <h2 id="ret-resultado" class="titulo-frase">No se ha retirado nada</h2>
+    {{ ui.aviso("warn", texto_omitido) }}
+    {% endif %}
+    {% if r.resultado in ("retirada", "ya_retirada") %}
+    <p>La serie no reaparece sola: ZascArr no da de alta series automáticamente. Para volver a tenerla, búscala o dala de alta de nuevo.</p>
+    {% endif %}
+    <div class="vinc-acciones">
+      {% if r.resultado in ("retirada", "ya_retirada") %}<a class="btn-primary" href="/ui/pendientes">Ir a «Por revisar»</a>{% endif %}
+      {% if serie and serie.existe %}<a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>{% endif %}
+      <a class="btn ghost sm" href="/ui/biblioteca">Volver a la biblioteca</a>
+    </div>
+  </section>
+
+  {% else %}
+  <section class="card" aria-labelledby="ret-titulo">
+    <h2 id="ret-titulo" class="titulo-frase">¿Retirar «{{ p.serie.titulo }}» de tu biblioteca?</h2>
+    {{ ui.aviso("warn", aviso_disco) }}
+
+    <dl class="carpeta-datos">
+      {% if p.serie.anio %}<dt>Año</dt><dd>{{ p.serie.anio }}</dd>{% endif %}
+      <dt>Números</dt><dd>{{ p.numeros|length }}</dd>
+      <dt>Archivos vinculados</dt><dd>{{ p.archivos|length }}</dd>
+      <dt>Deseados</dt><dd>{{ p.deseados|length }}</dd>
+      {% if p.alias %}<dt>Alias de búsqueda</dt><dd>{{ p.alias }}</dd>{% endif %}
+      {% if p.sagas %}<dt>Participaciones en sagas</dt><dd>{{ p.sagas }}</dd>{% endif %}
+    </dl>
+
+    {% if p.bloqueos %}
+    <h3 class="titulo-frase">Ahora no se puede retirar</h3>
+    {% for b in p.bloqueos %}
+    {{ ui.aviso("warn", b.mensaje) }}
+    {% if b.detalle %}<ul class="desv-lista">{% for d in b.detalle %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+    {% endfor %}
+    <div class="vinc-acciones">
+      <a class="btn ghost sm" href="{{ volver }}">Volver a la serie</a>
+    </div>
+
+    {% else %}
+    <h3 class="titulo-frase">Qué pasará</h3>
+    <ul class="desv-lista">
+      <li>La serie, sus números{% if p.alias %}, sus {{ p.alias }} alias de búsqueda{% endif %}{% if p.sagas %} y sus {{ p.sagas }} participaciones en sagas{% endif %} desaparecen de ZascArr.</li>
+      {% if p.archivos %}<li>Sus {{ p.archivos|length }} archivo{{ "s" if p.archivos|length != 1 }} vuelven a «Por revisar»; no se toca ninguno.</li>{% endif %}
+      {% if p.deseados %}<li>Se retiran {{ p.deseados|length }} deseo{{ "s" if p.deseados|length != 1 }} sin búsqueda ni descarga en marcha.</li>{% endif %}
+      <li>{{ aviso_despues }}</li>
+    </ul>
+
+    {% if archivos %}
+    <details class="desv-donde" open>
+      <summary>Archivos que vuelven a «Por revisar»</summary>
+      <ul class="desv-lista">
+        {% for a in archivos %}
+        <li><span class="nombre-archivo">{{ a.nombre }}</span>{% if a.numero %} · #{{ a.numero }}{% endif %}
+          {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% endif %}
+          <span class="muted">{{ a.ruta }}</span></li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+
+    {% if p.numeros %}
+    <details class="desv-donde">
+      <summary>Números que se retiran</summary>
+      <ul class="desv-lista">
+        {% for n in p.numeros %}
+        <li>{% if n.numero %}#{{ n.numero }}{% else %}Sin número{% endif %} · {{ n.formato|upper }}
+          {% if n.archivos %}· {{ n.archivos }} archivo{{ "s" if n.archivos != 1 }}{% endif %}
+          {% if n.lecturas %}· {{ n.lecturas }} lectura{{ "s" if n.lecturas != 1 }}{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+
+    {% if p.deseados %}
+    <details class="desv-donde">
+      <summary>Deseados que se retiran</summary>
+      <ul class="desv-lista">
+        {% for w in p.deseados %}
+        <li>{% if w.numero is not none %}Nº {{ w.numero }}{% else %}De la serie{% endif %} · {{ w.estado }} · {{ w.origen }}</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+
+    <form method="post" action="{{ retirar_url }}"
+          hx-post="{{ retirar_url }}" hx-target="#retirada" hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <input type="hidden" name="token" value="{{ token }}">
+      <p class="caption">Hasta que pulses el botón, no cambia nada.</p>
+      <div class="vinc-acciones">
+        <button type="submit" class="primary">Retirar de mi biblioteca</button>
+        <a class="btn ghost sm" href="{{ volver }}">Cancelar</a>
+      </div>
+    </form>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>

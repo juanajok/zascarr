@@ -1,12 +1,14 @@
 """Router de Series — CRUD + full-text search + missing issues."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import ComicTradition, Series, WishlistPolicy
 from zascarr.services.alta_serie import DemasiadasParecidasError
@@ -17,6 +19,7 @@ from zascarr.services.borrado_serie import (
 )
 from zascarr.services.edicion_serie import EdicionDeSerie, ParecidasSinVerError, SerieCambiadaError
 from zascarr.services.legal import is_acknowledged
+from zascarr.services.retirada_serie import ResultadoRetirada, RetiradaDeSerie, VistaPreviaRetirada
 
 # El cálculo de huecos vive en `services/` (lo usa también el orquestador, que
 # no puede depender de `api/`). Se reexportan aquí porque `web/series.py`,
@@ -30,10 +33,21 @@ from zascarr.services.series import (  # noqa: F401
     numeros_poseidos,
     numeros_poseidos_por_serie,
 )
-from zascarr.services.tokens_revision import MAX_PARECIDAS_FIRMADAS
+from zascarr.services.tokens_revision import (
+    MAX_PARECIDAS_FIRMADAS,
+    MAX_TOKEN_RETIRADA,
+    verificar_token_retirada,
+)
+from zascarr.services.vinculacion import (
+    ConflictoDeBloqueoError,
+    ResultadoInciertoError,
+    TokenCaducadoError,
+    TokenInvalidoError,
+)
 from zascarr.utils.url_portada import es_url_de_portada_permitida
 
 router = APIRouter(prefix="/series", tags=["series"])
+logger = structlog.get_logger()
 
 
 def _portada_permitida(valor: str | None) -> str | None:
@@ -224,6 +238,93 @@ async def delete_series(series_id: UUID, db: AsyncSession = Depends(get_db)):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         detalle = {"codigo": exc.motivo, "mensaje": str(exc)}
         raise HTTPException(status_code=409, detail=detalle) from exc
+
+
+# ── BL-SER1 (#303): retirar una serie de la biblioteca SIN borrar sus archivos ───────────────────
+
+class PeticionRetirarSerie(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(..., min_length=1, max_length=MAX_TOKEN_RETIRADA)
+
+
+def _secreto() -> str:
+    secret = get_settings().secret_key
+    if not secret:
+        raise HTTPException(
+            status_code=503, headers={"Cache-Control": "no-store"},
+            detail="El servidor no tiene clave para firmar; reinícialo.")
+    return secret
+
+
+_NO_STORE = {"Cache-Control": "no-store"}
+
+
+def _error_retirada(estado: int, codigo: str, mensaje: str,
+                    *, headers: dict[str, str] | None = None) -> HTTPException:
+    return HTTPException(status_code=estado, detail={"codigo": codigo, "mensaje": mensaje},
+                         headers={**_NO_STORE, **(headers or {})})
+
+
+@router.post("/{series_id}/retirada/previsualizar", response_model=VistaPreviaRetirada)
+async def previsualizar_retirada(
+    series_id: UUID, response: Response, db: AsyncSession = Depends(get_db),
+) -> VistaPreviaRetirada:
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return await RetiradaDeSerie(db, secret=_secreto()).previsualizar(series_id)
+    except SerieNoEncontradaError:
+        raise HTTPException(status_code=404, headers=_NO_STORE,
+                            detail="Serie no encontrada") from None
+
+
+async def ejecutar_retirada(db: AsyncSession, token: str) -> ResultadoRetirada:
+    try:
+        return await RetiradaDeSerie(db, secret=_secreto()).confirmar(token)
+    except TokenInvalidoError as e:
+        raise _error_retirada(422, e.codigo, str(e)) from None
+    except TokenCaducadoError as e:
+        raise HTTPException(
+            status_code=410, headers=_NO_STORE,
+            detail={
+                "codigo": e.codigo,
+                "mensaje": str(e),
+                "puede_haberse_aplicado": e.puede_haberse_aplicado,
+            }) from None
+    except ConflictoDeBloqueoError as e:
+        raise HTTPException(status_code=503, headers={**_NO_STORE, "Retry-After": "1"},
+                            detail={"codigo": e.codigo, "mensaje": str(e)}) from None
+    except ResultadoInciertoError as e:
+        raise HTTPException(
+            status_code=503, headers={**_NO_STORE, "Retry-After": "1"},
+            detail={
+                "codigo": e.codigo,
+                "mensaje": ("No se pudo confirmar si se retiró. Repite la confirmación con el "
+                            "mismo token para ver el resultado."),
+            }) from None
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("retirada.error_inesperado")
+        raise _error_retirada(
+            500, "error_inesperado",
+            "No se pudo completar y no se ha cambiado nada. Inténtalo de nuevo.") from None
+
+
+@router.post("/{series_id}/retirada", response_model=ResultadoRetirada)
+async def retirar_serie(
+    series_id: UUID,
+    peticion: PeticionRetirarSerie,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> ResultadoRetirada:
+    response.headers["Cache-Control"] = "no-store"
+    firmado = verificar_token_retirada(peticion.token, _secreto(), ignorar_caducidad=True)
+    if firmado is None or firmado.series_id != str(series_id):
+        raise _error_retirada(
+            422, "token_invalido",
+            "Esa vista previa no es de esta serie: ábrela de nuevo desde la serie.")
+    return await ejecutar_retirada(db, peticion.token)
 
 
 @router.get("/{series_id}/missing")

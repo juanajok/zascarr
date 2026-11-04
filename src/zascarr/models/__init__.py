@@ -670,13 +670,17 @@ class AltaOperacion(Base):
 
 
 class VinculacionOperacion(Base):
-    """Informe INMUTABLE de una vinculación en su sitio (rebanada 2d, migración 0019).
+    """Informe INMUTABLE de una operación de revisión (rebanada 2d, migración 0019).
 
-    Se escribe una sola vez, en la misma transacción que los vínculos (un disparador de la
-    migración rechaza todo `UPDATE`). **No es un historial de auditoría**: sirve para devolver
+    Se escribe una sola vez, en la misma transacción que los cambios que describe (un disparador
+    de la migración rechaza todo `UPDATE`). **No es un historial de auditoría**: sirve para devolver
     el mismo resultado ante un reintento, también tras un reinicio, y se purga pasadas 24 h
     **y** caducado el token. Sin token, sesión, rutas, nombres ni hash. `series_id` no es
-    clave foránea: borrar la serie no borra el informe."""
+    clave foránea: borrar la serie no borra el informe.
+
+    BL-SER1 (#303): además de las vinculaciones (`resultado.tipo` ausente), guarda los informes de
+    RETIRADA de una serie (`resultado.tipo = "retirada_serie"`). Es el mismo contrato de almacén
+    inmutable y purgado; quien lee un tipo filtra por `tipo` y no mezcla los dos."""
     __tablename__ = "vinculacion_operaciones"
     __table_args__ = (Index("ix_vinculacion_operaciones_purga", "creada"),)
     operacion_id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True)

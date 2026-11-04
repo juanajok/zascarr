@@ -45,6 +45,13 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Retirar una serie de tu biblioteca sin borrar sus archivos** (#303, BL-SER1). Desde la ficha de
+  la serie, «Retirar de mi biblioteca» enseña una vista previa (números, archivos, deseados y avisos),
+  se bloquea si hay una asignación o una búsqueda/descarga en marcha y confirma en una sola operación
+  atómica: la serie y sus números salen de ZascArr, los archivos vuelven a «Por revisar» con su
+  historial y **no se borra, mueve ni renombra nada del disco**. Queda un comprobante en el registro
+  de operaciones; `DELETE /api/series/{id}` conserva su contrato. Sin migración.
+
 - `scripts/credenciales.sh` (`iniciar` / `comprobar`): inicialización explícita para la instalación manual y comprobación sin
   mostrar valores.
 
