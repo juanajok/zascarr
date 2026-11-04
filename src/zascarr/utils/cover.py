@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
+import secrets
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 
 import structlog
@@ -179,7 +182,30 @@ def _resize_and_save(content: bytes, dest: Path) -> None:
         img.thumbnail((_COVER_MAX_WIDTH, _COVER_MAX_WIDTH * 2))
         dest.parent.mkdir(parents=True, exist_ok=True)
         comprobar_espacio(dest.parent, len(content), "guardar la portada")
-        img.convert("RGB").save(dest, format="JPEG", quality=85)
+        _publicar_atomico(
+            dest,
+            lambda temporal: img.convert("RGB").save(temporal, format="JPEG", quality=85),
+        )
+
+
+def _temporal_junto_a(dest: Path) -> Path:
+    """Temporal en el MISMO directorio que `dest`: `os.replace` solo es atómico dentro del
+    mismo sistema de ficheros. El nombre no colisiona entre procesos ni entre peticiones."""
+    return dest.with_name(f".{dest.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+
+
+def _publicar_atomico(dest: Path, escribir: Callable[[Path], None]) -> None:
+    """Publica `dest` de una vez o no lo publica: se prepara en un temporal junto al destino y
+    se sustituye con `os.replace` (atómico en el mismo sistema de ficheros). Si algo falla a
+    mitad, el temporal se borra y `dest` conserva su versión anterior entera; una petición
+    posterior puede reintentar. Sin esto, un corte dejaba un JPEG truncado que `exists()` da
+    por bueno para siempre. Llamar dentro de `asyncio.to_thread`: es I/O de disco síncrono."""
+    temporal = _temporal_junto_a(dest)
+    try:
+        escribir(temporal)
+        os.replace(temporal, dest)
+    finally:
+        temporal.unlink(missing_ok=True)
 
 
 def write_cover_cache(dest: Path, data: bytes) -> None:
@@ -189,4 +215,4 @@ def write_cover_cache(dest: Path, data: bytes) -> None:
     I/O de disco síncrono."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     comprobar_espacio(dest.parent, len(data), "guardar la portada")
-    dest.write_bytes(data)
+    _publicar_atomico(dest, lambda temporal: temporal.write_bytes(data))
