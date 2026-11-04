@@ -254,7 +254,13 @@ async def portada(series_id: UUID, request: Request,
                 # denegado…), se sirve igualmente la portada ya extraída, con un ETag
                 # derivado de sus bytes. Antes se pedía el `mtime` de un fichero que no
                 # existía: el `stat()` lanzaba FileNotFoundError y la petición daba 500.
-                logger.warning("cover.cache_no_guardada", motivo=type(exc).__name__)
+                # El nombre del evento se conserva (`cover.cache_sin_espacio`) porque hay
+                # alertas montadas sobre él; `motivo` y `errno` distinguen la causa real.
+                logger.warning(
+                    "cover.cache_sin_espacio",
+                    motivo=type(exc).__name__,
+                    errno=getattr(exc, "errno", None),
+                )
                 return cached_image_response(request, data, content_type, _etag_de_bytes(data))
             return cached_image_response(request, data, content_type, _etag_for(cache_path))
 
