@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
 import zipfile
 from pathlib import Path
 from uuid import uuid4
@@ -152,7 +153,9 @@ class TestFetchAndCacheCover:
         def _permiso_denegado(*_a, **_k):
             raise PermissionError(13, "Permiso denegado")
 
-        monkeypatch.setattr(zcover.os, "replace", _permiso_denegado)
+        # Se inyecta en la stdlib (`os.replace`), no en un atributo del módulo: así la prueba
+        # falla por el comportamiento y no por un símbolo que aún no exista.
+        monkeypatch.setattr(os, "replace", _permiso_denegado)
 
         ok = await fetch_and_cache_cover(self.URL, dest)
 
@@ -271,9 +274,10 @@ class TestFalloDeDiscoEnLaPortada:
             assert r2.status_code == 304
 
         assert not (covers / f"{series.id}.jpg").exists()
-        avisos = [a for a in registros if a["event"] == "cover.cache_no_guardada"]
+        avisos = [a for a in registros if a["event"] == "cover.cache_sin_espacio"]
         assert avisos, f"no se registró el aviso de caché no escrita: {registros!r}"
         assert avisos[0]["motivo"] == "EspacioInsuficienteError"
+        assert avisos[0]["errno"] is None      # el espacio se comprueba ANTES de escribir
         assert str(covers) not in repr(registros), "el aviso no debe llevar rutas del disco"
 
     def test_permiso_denegado_al_publicar_no_da_500(self, portada_de_serie, monkeypatch):
@@ -282,11 +286,12 @@ class TestFalloDeDiscoEnLaPortada:
         def _permiso_denegado(*_a, **_k):
             raise PermissionError(13, "Permiso denegado")
 
-        # El fallo se inyecta en la publicación atómica: el temporal se escribió y el
-        # `os.replace` que lo publica es lo que falla.
-        monkeypatch.setattr(zcover.os, "replace", _permiso_denegado)
+        # El fallo se inyecta en la stdlib (`os.replace`), no en un atributo del módulo: el
+        # temporal se escribe y lo que falla es la publicación en el destino.
+        monkeypatch.setattr(os, "replace", _permiso_denegado)
 
-        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+        with structlog.testing.capture_logs() as registros:
+            r = TestClient(app).get(f"/ui/series/{series.id}/portada")
 
         assert r.status_code == 200, r.text
         with Image.open(io.BytesIO(r.content)) as img:
@@ -294,31 +299,49 @@ class TestFalloDeDiscoEnLaPortada:
             assert img.format == "JPEG"
         assert not (covers / f"{series.id}.jpg").exists()
         assert _temporales(covers) == []
+        avisos = [a for a in registros if a["event"] == "cover.cache_sin_espacio"]
+        assert avisos and avisos[0]["motivo"] == "PermissionError"
+        assert avisos[0]["errno"] == 13        # el errno real no se pierde como «OSError»
+        assert str(covers) not in repr(registros)
+
+
+def _falla_a_mitad_de_escritura(monkeypatch):
+    """Simula un disco que se llena a mitad del temporal: escribe medio contenido y falla.
+
+    Se inyecta en la stdlib (`os.fdopen`), no en un atributo del módulo, para que la prueba
+    falle por el comportamiento y no por un símbolo que aún no exista (QA, 2026-11-05)."""
+    original = os.fdopen
+
+    class _FicheroQueCorta:
+        def __init__(self, real):
+            self._real = real
+
+        def write(self, data):
+            self._real.write(data[: max(1, len(data) // 2)])
+            raise OSError(28, "No queda espacio en el dispositivo")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            self._real.close()
+            return False
+
+    monkeypatch.setattr(
+        os, "fdopen", lambda fd, *a, **k: _FicheroQueCorta(original(fd, *a, **k))
+    )
 
 
 class TestEscrituraAtomica:
-    """FR-12 (AC-23): temporal en el mismo directorio + `os.replace`. Un fallo a mitad de la
-    escritura no deja `covers/<id>.jpg` truncado ni temporales, y la petición siguiente puede
-    escribir la caché buena."""
-
-    @staticmethod
-    def _corta_a_mitad(monkeypatch):
-        """Simula un disco que se llena a mitad del temporal: escribe medio fichero y falla."""
-        original = Path.write_bytes
-
-        def _corta(self, data):
-            if self.name.endswith(".tmp"):
-                original(self, data[: max(1, len(data) // 2)])
-                raise OSError(28, "No queda espacio en el dispositivo")
-            return original(self, data)
-
-        monkeypatch.setattr(Path, "write_bytes", _corta)
+    """FR-12 (AC-23): temporal en el mismo directorio (`mkstemp`, `O_EXCL`) + `os.replace`.
+    Un fallo a mitad de la escritura no deja `covers/<id>.jpg` truncado ni temporales, y la
+    petición siguiente puede escribir la caché buena."""
 
     def test_fallo_a_mitad_no_publica_el_fichero_ni_deja_temporal(self, tmp_path, monkeypatch):
         dest = tmp_path / "covers" / "serie.jpg"
 
         with monkeypatch.context() as m:
-            self._corta_a_mitad(m)
+            _falla_a_mitad_de_escritura(m)
             with pytest.raises(OSError):
                 write_cover_cache(dest, _jpeg())
 
@@ -332,7 +355,7 @@ class TestEscrituraAtomica:
         dest = covers / f"{series.id}.jpg"
 
         with monkeypatch.context() as m:
-            self._corta_a_mitad(m)
+            _falla_a_mitad_de_escritura(m)
             r = TestClient(app).get(f"/ui/series/{series.id}/portada")
 
         assert r.status_code == 200                       # el corte no rompe la petición…
@@ -357,6 +380,22 @@ class TestEscrituraAtomica:
         write_cover_cache(dest, datos)
         assert dest.read_bytes() == datos
         assert list((tmp_path / "covers").iterdir()) == [dest]
+
+    def test_no_se_sigue_un_symlink_plantado_con_forma_de_temporal(self, tmp_path):
+        """`mkstemp` crea el temporal con `O_EXCL` y nombre aleatorio: un enlace plantado con
+        la forma `.<destino>.…zascarr.tmp` (la que tenía el nombre predecible) no se abre, no
+        se sigue y no se pisa."""
+        dest = tmp_path / "serie.jpg"
+        victima = tmp_path / "victima.txt"
+        victima.write_bytes(b"intacto")
+        plantado = tmp_path / f".{dest.name}.plantado.zascarr.tmp"
+        plantado.symlink_to(victima)
+
+        write_cover_cache(dest, b"jpeg")
+
+        assert victima.read_bytes() == b"intacto"
+        assert plantado.is_symlink()
+        assert dest.read_bytes() == b"jpeg"
 
 
 class TestDosPeticionesALaVez:

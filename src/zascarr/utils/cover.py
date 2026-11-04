@@ -10,10 +10,11 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import secrets
+import tempfile
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import BinaryIO
 
 import structlog
 from fastapi import Request, Response
@@ -188,24 +189,27 @@ def _resize_and_save(content: bytes, dest: Path) -> None:
         )
 
 
-def _temporal_junto_a(dest: Path) -> Path:
-    """Temporal en el MISMO directorio que `dest`: `os.replace` solo es atómico dentro del
-    mismo sistema de ficheros. El nombre no colisiona entre procesos ni entre peticiones."""
-    return dest.with_name(f".{dest.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
+#: Sufijo de los temporales propios; el mismo que usa `utils/cbz.py`.
+_SUFIJO_TEMPORAL = ".zascarr.tmp"
 
 
-def _publicar_atomico(dest: Path, escribir: Callable[[Path], None]) -> None:
-    """Publica `dest` de una vez o no lo publica: se prepara en un temporal junto al destino y
-    se sustituye con `os.replace` (atómico en el mismo sistema de ficheros). Si algo falla a
+def _publicar_atomico(dest: Path, escribir: Callable[[BinaryIO], None]) -> None:
+    """Publica `dest` de una vez o no lo publica: el contenido se prepara en un temporal
+    **único** creado con `tempfile.mkstemp` en el mismo directorio (nombre impredecible y
+    `O_EXCL`: no se reutiliza ni se sigue un enlace plantado, y `os.replace` solo es atómico
+    dentro del mismo sistema de ficheros) y se sustituye con `os.replace`. Si algo falla a
     mitad, el temporal se borra y `dest` conserva su versión anterior entera; una petición
     posterior puede reintentar. Sin esto, un corte dejaba un JPEG truncado que `exists()` da
     por bueno para siempre. Llamar dentro de `asyncio.to_thread`: es I/O de disco síncrono."""
-    temporal = _temporal_junto_a(dest)
+    fd, ruta_temporal = tempfile.mkstemp(
+        dir=dest.parent, prefix=f".{dest.name}.", suffix=_SUFIJO_TEMPORAL
+    )
     try:
-        escribir(temporal)
-        os.replace(temporal, dest)
+        with os.fdopen(fd, "wb") as temporal:
+            escribir(temporal)
+        os.replace(ruta_temporal, dest)
     finally:
-        temporal.unlink(missing_ok=True)
+        Path(ruta_temporal).unlink(missing_ok=True)
 
 
 def write_cover_cache(dest: Path, data: bytes) -> None:
@@ -215,4 +219,4 @@ def write_cover_cache(dest: Path, data: bytes) -> None:
     I/O de disco síncrono."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     comprobar_espacio(dest.parent, len(data), "guardar la portada")
-    _publicar_atomico(dest, lambda temporal: temporal.write_bytes(data))
+    _publicar_atomico(dest, lambda temporal: temporal.write(data))
