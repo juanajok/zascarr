@@ -9,10 +9,16 @@ ningún archivo en modo escritura: la biblioteca se puede pasar tal cual.
 Qué mide y con qué umbral (propuesta de la ficha §10.1, a ratificar por el PO):
 
   - p50 y p95 de la extracción en frío (por ancho). p95 ≤ 400 ms a 600 px;
-    ≤ 600 ms si el original supera 12 Mpx.
+    ≤ 600 ms si el **original** supera 12 Mpx (se lee el tamaño real de la
+    primera página, no el de la salida reducida).
   - bytes del JPEG de salida (media ≤ 60 KB/portada) y ancho resultante, para
     ver cuántos originales pequeños se quedan por debajo de 600 sin ampliar.
   - opcionalmente, delta de RSS del proceso (`--rss`): ≤ 40 MB.
+
+**Sin rutas en la evidencia.** El JSON y la consola son material que puede
+acabar versionado o pegado en un issue: no incluyen la carpeta base ni rutas
+por archivo, solo nombres de fichero y recuentos. El código de salida es 1 si
+algún umbral no se cumple (0 si todo pasa).
 
 Lo que este banco NO mide (queda para la medida de página, §10.2): 30 portadas
 en frío con 6 peticiones concurrentes, caliente-304, `docker stats`/cgroup ni
@@ -39,10 +45,18 @@ import math
 import resource
 import sys
 import time
+import zipfile
+from collections import Counter
 from pathlib import Path
 
 from PIL import Image
 
+from zascarr.core.formato_contenedor import (
+    IMAGE_EXTS,
+    EntradaNoLegible,
+    leer_acotado,
+    natural_key,
+)
 from zascarr.utils.cover import SERIES_COVER_MAX_WIDTH, extract_cover_thumbnail
 
 #: «Por revisar» (FR-17): se mide también para comparar el sobrecoste de 600.
@@ -79,8 +93,40 @@ def _cbz(carpeta: Path, muestra: int) -> list[Path]:
     return candidatos[:muestra]
 
 
-def _medir_archivo(path: Path, ancho: int, repeticiones: int) -> dict | None:
-    """Extrae `repeticiones` veces a `ancho`. None si el archivo no da portada."""
+def _dimensiones_original(path: Path) -> tuple[int, int] | None:
+    """Tamaño REAL de la primera página del CBZ, sin reducirla.
+
+    Es la página que extrae la aplicación (mismo `natural_key`, mismas
+    extensiones y misma lectura acotada de `core/formato_contenedor`), solo que
+    abierta para leer su cabecera: con esto la exención de > 12 Mpx del AC-12
+    mira el original y no la salida de 600 px."""
+    try:
+        with zipfile.ZipFile(path) as zf:
+            por_nombre = {i.filename: i for i in zf.infolist() if not i.is_dir()}
+            paginas = sorted(
+                (n for n in por_nombre if Path(n).suffix.lower() in IMAGE_EXTS),
+                key=natural_key,
+            )
+            if not paginas:
+                return None
+            datos = leer_acotado(zf, por_nombre[paginas[0]])
+    except (OSError, zipfile.BadZipFile, EntradaNoLegible):
+        return None
+    try:
+        with Image.open(io.BytesIO(datos)) as img:
+            return img.width, img.height
+    except Exception:
+        return None
+
+
+def _medir_archivo(path: Path, ancho: int, repeticiones: int) -> tuple[dict | None, str | None]:
+    """Extrae `repeticiones` veces a `ancho`.
+
+    Devuelve `(caso, None)` con el original medido, o `(None, motivo)` si el
+    archivo no da portada (motivo = clase del fallo, sin rutas)."""
+    original = _dimensiones_original(path)
+    if original is None:
+        return None, "sin_lectura"
     tiempos: list[float] = []
     datos: bytes | None = None
     for _ in range(repeticiones):
@@ -88,20 +134,23 @@ def _medir_archivo(path: Path, ancho: int, repeticiones: int) -> dict | None:
         resultado = extract_cover_thumbnail(path, ancho=ancho)
         tiempos.append((time.perf_counter() - inicio) * 1000)
         if resultado is None:
-            return None
+            return None, "sin_portada"
         datos = resultado[0]
     with Image.open(io.BytesIO(datos)) as img:
         ancho_salida, alto_salida = img.width, img.height
     return {
-        "archivo": str(path),
+        "archivo": path.name,
         "tiempos_ms": tiempos,
         "mediana_ms": _percentil(tiempos, 50),
         "p95_ms": _percentil(tiempos, 95),
         "bytes": len(datos),
+        "ancho_original": original[0],
+        "alto_original": original[1],
+        "pixeles_original": original[0] * original[1],
         "ancho_salida": ancho_salida,
         "alto_salida": alto_salida,
-        "pixeles_original": ancho_salida * alto_salida,
-    }
+        "pixeles_salida": ancho_salida * alto_salida,
+    }, None
 
 
 def _resumen(casos: list[dict], ancho: int) -> dict:
@@ -137,14 +186,14 @@ def _resumen(casos: list[dict], ancho: int) -> dict:
 
 
 def _imprimir(informe: dict) -> None:
+    # Sin rutas: la consola puede acabar pegada en el issue como evidencia.
     print("")
     print("BANCO DE PORTADAS — BL-PORT1 (#300), AC-12")
-    print(f"Carpeta: {informe['carpeta']}")
     print(f"Archivos medidos: {informe['n_medidos']} de {informe['n_candidatos']} "
           f"(muestra {informe['muestra']}, {informe['repeticiones']} repeticiones)")
-    print(f"Fallos sin portada (CBR real, corrupto…): {informe['n_fallos']}")
-    if informe["n_fallos"]:
-        print("  " + ", ".join(Path(f).name for f in informe["fallos"][:5]))
+    if informe["aviso_muestra"]:
+        print(f"Aviso: {informe['aviso_muestra']}")
+    print(f"Fallos sin portada (CBR real, corrupto…): {informe['n_fallos']} {informe['motivos']}")
     print("")
     print(f"{'Ancho':>6} {'p50':>9} {'p95':>9} {'límite':>9} {'PASS/FAIL':>10} "
           f"{'KB medio':>9} {'ΔRSS':>8}")
@@ -172,6 +221,7 @@ def _imprimir(informe: dict) -> None:
     print("")
     print("NOT RUN en este banco (medida de página, ficha §10.2): 30 portadas en frío con 6")
     print("peticiones concurrentes; caliente 304; docker stats/cgroup; du de la caché.")
+    print(f"RESULTADO: {'PASS' if informe['pasa'] else 'FAIL'}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -187,11 +237,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rss", action="store_true",
                         help="anotar el delta de RSS del proceso (ru_maxrss)")
     parser.add_argument("--json", type=Path, default=None,
-                        help="escribir el informe completo en JSON en esta ruta")
+                        help="escribir el informe completo (sin rutas) en JSON en esta ruta")
     args = parser.parse_args(argv)
 
     if not args.carpeta.is_dir():
-        print(f"No existe la carpeta: {args.carpeta}", file=sys.stderr)
+        print("No existe la carpeta indicada.", file=sys.stderr)
         return 2
     if args.muestra < 1 or args.repeticiones < 1:
         print("La muestra y las repeticiones deben ser >= 1", file=sys.stderr)
@@ -199,31 +249,44 @@ def main(argv: list[str] | None = None) -> int:
 
     archivos = _cbz(args.carpeta, args.muestra)
     if not archivos:
-        print(f"No hay ningún .cbz/.zip en {args.carpeta}", file=sys.stderr)
+        print("No hay ningún .cbz/.zip en la carpeta indicada.", file=sys.stderr)
         return 2
+
+    aviso_muestra = None
+    if len(archivos) < args.muestra:
+        aviso_muestra = (f"la carpeta solo tiene {len(archivos)} archivo(s) medibles y se "
+                         f"pidió una muestra de {args.muestra}")
 
     rss_inicial = _rss_mb() if args.rss else None
     casos: dict[int, list[dict]] = {ANCHO_REVISION: [], SERIES_COVER_MAX_WIDTH: []}
-    fallos: list[str] = []
+    fallos: list[tuple[str, str]] = []
     for path in archivos:
         for ancho in casos:
-            caso = _medir_archivo(path, ancho, args.repeticiones)
+            caso, motivo = _medir_archivo(path, ancho, args.repeticiones)
             if caso is None:
-                fallos.append(str(path))
+                fallos.append((path.name, motivo or "desconocido"))
                 break
             casos[ancho].append(caso)
 
     resumen = [_resumen(lista, ancho) for ancho, lista in casos.items()]
     rss_final = _rss_mb() if args.rss else None
+    rss_delta = round(rss_final - rss_inicial, 1) if rss_inicial is not None else None
+
+    motivos = dict(Counter(motivo for _, motivo in fallos))
+    pasa = all(fila["p95_pasa"] and fila["media_pasa"] for fila in resumen) and (
+        rss_delta is None or rss_delta <= UMBRAL_RSS_MB
+    )
     informe = {
         "fecha": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "carpeta": str(args.carpeta),
+        "carpeta_relativa": ".",
         "muestra": args.muestra,
         "repeticiones": args.repeticiones,
         "n_candidatos": len(archivos),
         "n_medidos": len(casos[SERIES_COVER_MAX_WIDTH]),
-        "n_fallos": len(set(fallos)),
-        "fallos": sorted(set(fallos)),
+        "aviso_muestra": aviso_muestra,
+        "n_fallos": len(fallos),
+        "motivos": motivos,
+        "fallos": [{"archivo": nombre, "motivo": motivo} for nombre, motivo in fallos],
         "umbrales": {
             "p95_ms": UMBRAL_P95_MS,
             "p95_ms_original_grande": UMBRAL_P95_GRANDE_MS,
@@ -232,7 +295,8 @@ def main(argv: list[str] | None = None) -> int:
         },
         "rss_inicial_mb": round(rss_inicial, 1) if rss_inicial is not None else None,
         "rss_final_mb": round(rss_final, 1) if rss_final is not None else None,
-        "rss_delta_mb": round(rss_final - rss_inicial, 1) if rss_inicial is not None else None,
+        "rss_delta_mb": rss_delta,
+        "pasa": pasa,
         "resumen": resumen,
         "casos": casos,
     }
@@ -241,8 +305,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.json is not None:
         args.json.parent.mkdir(parents=True, exist_ok=True)
         args.json.write_text(json.dumps(informe, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"Informe JSON: {args.json}")
-    return 0
+        print(f"Informe JSON: {args.json.name}")
+    return 0 if pasa else 1
 
 
 if __name__ == "__main__":
