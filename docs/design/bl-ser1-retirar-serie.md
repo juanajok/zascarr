@@ -261,7 +261,11 @@ antes y después). La base quedó con las series retiradas en `404`, los archivo
   Pixel) con modelos gratuitos y con el modelo de pago: **ambos límites de uso están agotados**, así
   que ninguna de esas sesiones llegó a emitir dictamen. Se revisaron visualmente las 11 capturas y
   la plantilla en esta misma sesión, pero **no cuenta como revisión independiente**. El PO aceptó
-  el resto de NOT RUN «salvo la revisión independiente», que sigue pendiente y bloquea el cierre.
+  el resto de NOT RUN «salvo la revisión independiente». El **2026-11-04**, visto que ambos límites
+  de uso siguen agotados, el PO **aceptó explícitamente sustituir la revisión independiente por la
+  revisión QA/SecOps y visual hecha en esta sesión**, con la salvedad de que no es independiente.
+  No queda ningún NOT RUN sin aceptación; la fusión y el despliegue siguen siendo autorizaciones
+  separadas.
 
 ## 8. Rollback
 
