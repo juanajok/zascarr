@@ -9,6 +9,7 @@ diseño final de una ficha de serie, solo deja de estar pelada.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from uuid import UUID
 
@@ -44,7 +45,6 @@ from zascarr.utils.cover import (
     fetch_and_cache_cover,
     write_cover_cache,
 )
-from zascarr.utils.espacio import EspacioInsuficienteError
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -249,9 +249,19 @@ async def portada(series_id: UUID, request: Request,
             data, content_type = result
             try:
                 await asyncio.to_thread(write_cover_cache, cache_path, data)
-            except EspacioInsuficienteError:
-                # Sin espacio para la caché: se sirve igualmente la portada ya extraída.
-                logger.warning("cover.cache_sin_espacio")
+            except OSError as exc:
+                # FR-11 (#300): si la caché no se puede escribir (disco lleno, permiso
+                # denegado…), se sirve igualmente la portada ya extraída, con un ETag
+                # derivado de sus bytes. Antes se pedía el `mtime` de un fichero que no
+                # existía: el `stat()` lanzaba FileNotFoundError y la petición daba 500.
+                # El nombre del evento se conserva (`cover.cache_sin_espacio`) porque hay
+                # alertas montadas sobre él; `motivo` y `errno` distinguen la causa real.
+                logger.warning(
+                    "cover.cache_sin_espacio",
+                    motivo=type(exc).__name__,
+                    errno=getattr(exc, "errno", None),
+                )
+                return cached_image_response(request, data, content_type, _etag_de_bytes(data))
             return cached_image_response(request, data, content_type, _etag_for(cache_path))
 
     # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
@@ -265,3 +275,10 @@ async def portada(series_id: UUID, request: Request,
 
 def _etag_for(path: Path) -> str:
     return f'"{path.stat().st_mtime}"'
+
+
+def _etag_de_bytes(data: bytes) -> str:
+    """ETag de una imagen servida sin caché en disco (FR-11, #300): deriva de los bytes
+    servidos, así que el mismo dato da el mismo ETag y la segunda petición recibe un 304,
+    sin depender del `mtime` de un fichero que no llegó a escribirse."""
+    return f'"{hashlib.sha256(data).hexdigest()}"'

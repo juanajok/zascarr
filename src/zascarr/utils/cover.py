@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import io
+import os
+import tempfile
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
+from typing import BinaryIO
 
 import structlog
 from fastapi import Request, Response
@@ -179,7 +183,33 @@ def _resize_and_save(content: bytes, dest: Path) -> None:
         img.thumbnail((_COVER_MAX_WIDTH, _COVER_MAX_WIDTH * 2))
         dest.parent.mkdir(parents=True, exist_ok=True)
         comprobar_espacio(dest.parent, len(content), "guardar la portada")
-        img.convert("RGB").save(dest, format="JPEG", quality=85)
+        _publicar_atomico(
+            dest,
+            lambda temporal: img.convert("RGB").save(temporal, format="JPEG", quality=85),
+        )
+
+
+#: Sufijo de los temporales propios; el mismo que usa `utils/cbz.py`.
+_SUFIJO_TEMPORAL = ".zascarr.tmp"
+
+
+def _publicar_atomico(dest: Path, escribir: Callable[[BinaryIO], None]) -> None:
+    """Publica `dest` de una vez o no lo publica: el contenido se prepara en un temporal
+    **único** creado con `tempfile.mkstemp` en el mismo directorio (nombre impredecible y
+    `O_EXCL`: no se reutiliza ni se sigue un enlace plantado, y `os.replace` solo es atómico
+    dentro del mismo sistema de ficheros) y se sustituye con `os.replace`. Si algo falla a
+    mitad, el temporal se borra y `dest` conserva su versión anterior entera; una petición
+    posterior puede reintentar. Sin esto, un corte dejaba un JPEG truncado que `exists()` da
+    por bueno para siempre. Llamar dentro de `asyncio.to_thread`: es I/O de disco síncrono."""
+    fd, ruta_temporal = tempfile.mkstemp(
+        dir=dest.parent, prefix=f".{dest.name}.", suffix=_SUFIJO_TEMPORAL
+    )
+    try:
+        with os.fdopen(fd, "wb") as temporal:
+            escribir(temporal)
+        os.replace(ruta_temporal, dest)
+    finally:
+        Path(ruta_temporal).unlink(missing_ok=True)
 
 
 def write_cover_cache(dest: Path, data: bytes) -> None:
@@ -189,4 +219,4 @@ def write_cover_cache(dest: Path, data: bytes) -> None:
     I/O de disco síncrono."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     comprobar_espacio(dest.parent, len(data), "guardar la portada")
-    dest.write_bytes(data)
+    _publicar_atomico(dest, lambda temporal: temporal.write(data))
