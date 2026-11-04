@@ -26,15 +26,15 @@ sudo docker compose exec -T zascarr python scripts/medicion/censo_identidad.py \
 
 **Incidencia de entorno (no del censo).** El primer intento falló con `open .env: permission denied` porque `docker compose` se ejecutaba como `pi` y el `.env` es de `root:600` (ADR 0012). Se resolvió con `sudo`. No produjo medición parcial ni dato contaminado: el censo se ejecutó una sola vez, completa.
 
-## Métricas obligatorias del ADR 0003
+## Métricas del censo (ADR 0003 y B22)
 
 | Métrica | Valor | Lectura |
 |---|---|---|
-| **Filas por formato** | `single_issue` 443 · resto 0 | El catálogo es **100 % grapas**. No hay ni un tomo, ómnibus, álbum, tapa dura o tankobon. |
+| **Filas por formato** | `single_issue` 443 · resto 0 | Los 443 `Issue` registrados son `single_issue`; ninguno tiene formato de recopilación. Entre los 897 archivos sin Issue no se ha comprobado si hay tomos o packs (NOT RUN 2). |
 | **Colisiones de `number_key`** | `grupos_con_multiples` 0 · `colisiones_null` 0 · `issues_sin_numero` 0 | Ningún grupo `serie + número` tiene más de un issue; ningún número se repite con `volume` nulo. El índice único actual no tiene nada que desambiguar. |
 | **Posibles ediciones** | `otras_ediciones_posibles` 0 | Ningún número aparece en dos volúmenes distintos: no hay reimpresión ni edición paralela en el catálogo. |
 | **Recopilaciones** | `0` con archivo · `0` con evidencia almacenada | No hay recopilaciones que cubran grapas; los bloques de muestra de Omnigold/Integral, tomo y manga por tomos salen vacíos. |
-| **Cobertura disponible** | `covered_issue_ids` 0 · `files_con_comicinfo` 0 | **Ninguna** evidencia de cobertura almacenada en la columna prevista ni en ComicInfo. |
+| **Cobertura disponible** | `covered_issue_ids` 0 · `files_con_comicinfo` 0 | `covered_issue_ids = 0`: ninguna evidencia **almacenada en esa columna**. `files_con_comicinfo = 0`: ningún archivo declara `metadata_source='comicinfo_xml'`. El ComicInfo **dentro** del archivo no se inspecciona (NOT RUN 1). |
 | **Registros sin contraste** | 272 de 443 sin fuente (61,4 %) · 171 `comic_vine` (38,6 %) | Casi dos tercios del catálogo no declaran fuente de metadatos. Es contexto de calidad de datos, no de identidad editorial. |
 
 ### Contexto del catálogo
@@ -48,7 +48,7 @@ sudo docker compose exec -T zascarr python scripts/medicion/censo_identidad.py \
 **PASS**
 1. Censo ejecutado con el script existente, **sin modificarlo**, contra la base real.
 2. Esquema, commit, imagen, fecha, entorno y parámetros conservados en la cabecera.
-3. Las seis métricas obligatorias del ADR 0003 quedan cubiertas y con valor.
+3. Las seis métricas del censo quedan cubiertas y con valor.
 4. Solo lectura acreditada (`BEGIN TRANSACTION READ ONLY`) y muestra seudonimizada.
 5. Salida íntegra conservada en el anexo, tal cual se produjo.
 
@@ -62,7 +62,7 @@ sudo docker compose exec -T zascarr python scripts/medicion/censo_identidad.py \
 
 ## Lectura
 
-El catálogo no tiene hoy **ningún** problema de identidad editorial que la migración vaya a resolver: una sola edición por número, cero colisiones, cero recopilaciones. Diseñar el modelo de ediciones (#184) con estos datos sería diseñar para un estado que no existe.
+En lo que el censo mide, no aparece el problema que la migración resolvería: una sola edición por número, cero colisiones, cero recopilaciones. Diseñar el modelo de ediciones (#184) con estos datos sería diseñar para un estado que no existe.
 
 Ahora bien, **la ausencia no es neutra**: los 897 archivos sin Issue son justo el sitio donde vivirían los packs y tomos si existieran. El censo no puede distinguir «no hay recopilaciones» de «hay contenido que el modelo actual no puede expresar y por eso quedó sin vincular». Esa duda no la cierra este script: la cerraría un censo de contenido sobre esos 897 (leer nombres y ComicInfo), que es **otra historia**, no una modificación de #181.
 
@@ -74,7 +74,7 @@ Ahora bien, **la ausencia no es neutra**: los 897 archivos sin Issue son justo e
 - aparece un `format` distinto de `single_issue` en el catálogo;
 - `grupos_con_multiples` o `colisiones_null` dejan de ser 0;
 - `covered_issue_ids` deja de ser 0;
-- se censan los 897 archivos sin Issue y resultan ser packs o tomos.
+- se censan los 897 archivos sin Issue y resultan ser packs o tomos (el `.txt` ya marca 9 de 20 candidatos con nombre que «parece rango»; es heurístico, no cobertura cierta).
 
 **Propuesta al PO (fuera de #181):** una tarjeta para caracterizar esos 897 archivos sin abrir la biblioteca en modo escritura. Es la única pieza que falta para que «posponer» sea una decisión cerrada y no una decisión a la espera.
 
