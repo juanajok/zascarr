@@ -29,20 +29,27 @@ SET default_transaction_read_only = on;
 WITH u AS (
   SELECT id, started_at, files_scanned, duplicate_count, unsorted_count, details
   FROM import_runs
-  WHERE id = '<ID_INFORME>'::uuid
+  WHERE details->>'kind' = 'audit'
+  ORDER BY started_at DESC
+  LIMIT 1
 )
-SELECT id, started_at, files_scanned, duplicate_count, unsorted_count,
+SELECT 'M1_informe', id, started_at, files_scanned, duplicate_count, unsorted_count,
        details->>'truncado' AS truncado,
-       details->>'bytes_recuperables' AS bytes_recuperables,
-       jsonb_array_length(details->'mismo_contenido') AS grupos_lista,
+       jsonb_array_length(details->'mismo_contenido') AS grupos_identicos_lista,
        (SELECT coalesce(sum(jsonb_array_length(e->'rutas')), 0)
-          FROM jsonb_array_elements(details->'mismo_contenido') e) AS ficheros_lista
+          FROM jsonb_array_elements(details->'mismo_contenido') e) AS ficheros_identicos_lista,
+       details->>'bytes_recuperables' AS bytes_recuperables
 FROM u;
 SQL
 ```
 
-Las consultas M2–M4 fueron las de `benchmark-bl-dup0-duplicados.md` §7.2,
-sustituyendo la selección del último informe por `WHERE id = '<ID_INFORME>'`.
+Es la consulta exacta que se ejecutó (selecciona el último informe de auditoría
+y lo etiqueta como `M1_informe`); así la salida de
+`medicion-BL-DUP0-2026-11-05.txt` es reproducible sin sustituir nada.
+
+Las consultas M2–M4 fueron las de `benchmark-bl-dup0-duplicados.md` §7.2, con la
+misma selección del último informe (`WHERE details->>'kind' = 'audit' ORDER BY
+started_at DESC LIMIT 1`).
 M5 no se ejecutó (necesita `stat` dentro del contenedor de la app).
 
 ## 2. Resultados
@@ -74,8 +81,10 @@ M5 no se ejecutó (necesita `stat` dentro del contenedor de la app).
 **Lectura de M4:** los 6 pares son subconjunto en algún sentido: **4 son
 conjuntos iguales** (ambas ⊆) y **2 son b⊆a estricto** (a⊆b solo aparece en los
 4 iguales). Las **10 carpetas distintas** de M4b son compatibles con 4 pares
-iguales (8 lados) más 2 estrictos (2 lados); no se publica la lista, que
-confirmaría si hay solapes.
+iguales (8 lados) más 2 estrictos (4 lados): desde 8 hasta 10 hay **2 solapes**
+entre parejas, que no se pueden identificar sin la lista. No se publica, así que
+el 10 se lee como cota inferior de carpetas distintas implicadas, no como suma
+exacta.
 
 **Filas de clase que no venían en el extracto:** no se recibieron recuentos de
 `carpetas_vacias` ni de `no_reconocidos`. No se ponen a cero ni se infieren: se
@@ -98,8 +107,9 @@ del encargo, no porque se haya comprobado que esa lista esté recortada.
 **Lo que confirman los números.** Los duplicados existen y son recuperables:
 **215 grupos y 8,06 GB** de exceso (7,50 GiB), sobre 1.542 ficheros escaneados.
 No es una hipótesis de laboratorio; es una muestra real de la Pi. El censo #297
-hablaba de 222 copias y 8,1 GB; aquí se cuentan **grupos** (215) y bytes
-recuperables, no copias, así que las cifras son compatibles sin sumarse.
+hablaba de 222 copias y 8,1 GB **en las 217 `.cbr`/`.cbz`**; aquí se cuentan
+**grupos** (215) y bytes recuperables, no copias, así que las cifras son
+compatibles sin sumarse.
 
 **D1 (dónde y exclusión).** No cambia la recomendación: cuarentena oculta en la
 misma montura, con PUID/PGID y exclusión explícita. Los datos añaden un matiz:
