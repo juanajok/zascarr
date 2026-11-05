@@ -24,7 +24,7 @@
       </div>
       {% endif %}
     </div>
-    <main class="content" id="main" tabindex="-1">
+    <main class="content" id="main" tabindex="-1" hx-history-elt>
       {% block content %}{% endblock %}
       <footer class="site-footer">
         {% from "_legal_disclaimer.html" import legal_disclaimer %}
