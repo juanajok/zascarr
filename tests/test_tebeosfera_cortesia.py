@@ -22,7 +22,7 @@ from zascarr.config import get_settings
 from zascarr.services import tebeosfera
 from zascarr.services.tebeosfera import MINIMO_ENTRE_PETICIONES_S, TebeosferaClient
 from zascarr.utils import cortesia
-from zascarr.utils.cortesia import LimitadorDeCortesia
+from zascarr.utils.cortesia import CortesiaProceso, politica_de
 
 HTML = ('<div class="linea_resultados"><a href="/colecciones/thorgal_1981_distrinovel.html">'
         'THORGAL (1981, DISTRINOVEL)</a></div>')
@@ -64,19 +64,35 @@ class Sitio:
         return [b - a for a, b in zip(self.instantes, self.instantes[1:], strict=False)]
 
 
+class AjustesDinamicos:
+    """Lee del dict en cada acceso: las pruebas lo mutan y el cliente ve el valor nuevo."""
+
+    def __init__(self, datos: dict):
+        self._datos = datos
+
+    def __getattr__(self, nombre):
+        return self._datos[nombre]
+
+
 @pytest.fixture
 def mundo(monkeypatch):
     cortesia.reiniciar_para_pruebas()
     reloj = Reloj()
-    cortesia._LIMITADORES["tebeosfera"] = LimitadorDeCortesia(reloj=reloj, dormir=reloj.dormir)
-    ajustes = {"tebeosfera_rate_limit": 2.5}
-    monkeypatch.setattr(tebeosfera, "get_settings", lambda: SimpleNamespace(**ajustes))
-    yield SimpleNamespace(reloj=reloj, sitio=Sitio(reloj), ajustes=ajustes)
+    ajustes = {"tebeosfera_rate_limit": 2.5, "tebeosfera_enabled": True}
+    falsos = AjustesDinamicos(ajustes)
+    lim = CortesiaProceso(reloj=reloj, dormir=reloj.dormir)
+    lim.registrar_politica(politica_de("tebeosfera", falsos))
+    monkeypatch.setattr(tebeosfera, "get_settings", lambda: falsos)
+    # La puerta de fuente apagada de la envoltura lee la configuración real del proceso.
+    monkeypatch.setattr("zascarr.config.get_settings", lambda: falsos)
+    yield SimpleNamespace(reloj=reloj, sitio=Sitio(reloj), ajustes=ajustes, lim=lim)
     cortesia.reiniciar_para_pruebas()
 
 
 def cliente(mundo) -> TebeosferaClient:
-    return TebeosferaClient(transporte=mundo.sitio.transporte())
+    return TebeosferaClient(transporte=mundo.sitio.transporte(),
+                            cortesia=mundo.lim, reloj=mundo.reloj,
+                            dormir=mundo.reloj.dormir)
 
 
 async def buscar(mundo, consulta="Thorgal"):
@@ -140,7 +156,7 @@ class TestInstanciasYCaminosDistintos:
             await a._throttle()
             await b._throttle()
         assert mundo.sitio.instantes == []                    # (solo throttle: sin peticiones)
-        assert cortesia._LIMITADORES["tebeosfera"]._ultima is not None
+        assert mundo.lim._fuentes["tebeosfera"].ultima is not None
         assert not hasattr(a, "_last_req") and not hasattr(b, "_last_req")
 
 
@@ -191,12 +207,17 @@ class TestCancelacionYBucles:
     def test_funciona_en_bucles_de_eventos_distintos(self, monkeypatch):
         cortesia.reiniciar_para_pruebas()
         reloj = Reloj()
-        cortesia._LIMITADORES["tebeosfera"] = LimitadorDeCortesia(reloj=reloj, dormir=reloj.dormir)
-        monkeypatch.setattr(tebeosfera, "get_settings", lambda: SimpleNamespace(tebeosfera_rate_limit=2.5))
+        falsos = SimpleNamespace(tebeosfera_rate_limit=2.5, tebeosfera_enabled=True)
+        lim = CortesiaProceso(reloj=reloj, dormir=reloj.dormir)
+        lim.registrar_politica(politica_de("tebeosfera", falsos))
+        monkeypatch.setattr(tebeosfera, "get_settings", lambda: falsos)
+        monkeypatch.setattr("zascarr.config.get_settings", lambda: falsos)
         sitio = Sitio(reloj)
 
         async def una():
-            async with TebeosferaClient(transporte=sitio.transporte()) as c:
+            cliente = TebeosferaClient(transporte=sitio.transporte(), cortesia=lim,
+                                       reloj=reloj, dormir=reloj.dormir)
+            async with cliente as c:
                 await c.search_series("x")
         asyncio.run(una())
         asyncio.run(una())

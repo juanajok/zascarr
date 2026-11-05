@@ -33,7 +33,8 @@ from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
 from zascarr.services.gcd import GCDClient
 from zascarr.services.tebeosfera import TebeosferaClient
-from zascarr.utils.cortesia import CortesiaEnEspera
+from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
+from zascarr.utils.peticiones import ReintentosAgotados
 
 logger = structlog.get_logger()
 
@@ -54,23 +55,73 @@ ORDEN_DE_FUENTES: tuple[MetadataSource, ...] = (
     MetadataSource.TEBEOSFERA, MetadataSource.GCD,
 )
 
-# Estado de cada fuente en una búsqueda.
+#: Conjunto CERRADO de estados de una fuente para una capacidad (MIT-M8-US01, #133). La interfaz
+#: NO deduce causas: pinta el estado que decide este servicio. Un estado nuevo se añade aquí, no
+#: en cada pantalla.
 FUENTE_OK = "ok"
-FUENTE_APAGADA = "apagada"
-FUENTE_SIN_CLAVE = "sin_clave"
-FUENTE_ERROR = "error"
-#: §6.5: no se ha consultado porque la cortesía pide esperar. No es un fallo ni «sin resultados».
-FUENTE_ESPERA = "espera"
+FUENTE_SIN_RESULTADOS = "sin_resultados"
+FUENTE_FALLO_TRANSITORIO = "fallo_transitorio"
+FUENTE_CONFIGURACION_INCOMPLETA = "configuracion_incompleta"
+FUENTE_LIMITE_DE_CORTESIA = "limite_de_cortesia"
+FUENTE_APAGADA = "fuente_apagada"
+ESTADOS_DE_FUENTE = frozenset({
+    FUENTE_OK, FUENTE_SIN_RESULTADOS, FUENTE_FALLO_TRANSITORIO,
+    FUENTE_CONFIGURACION_INCOMPLETA, FUENTE_LIMITE_DE_CORTESIA, FUENTE_APAGADA,
+})
+
+#: Única capacidad VERIFICADA en esta entrega para las cuatro fuentes: **buscar series**. No se
+#: declaran metadatos ni portadas: no están contrastadas como capacidad en esta historia (que una
+#: fuente devuelva una descripción no la convierte en «capacidad verificada»).
+CAPACIDAD_BUSQUEDA = "busqueda"
+
+#: Metadatos de cada fuente que no están en `MetadataSource`: su interruptor de Ajustes.
+_INTERRUPTOR = {
+    MetadataSource.COMIC_VINE: "comicvine_enabled",
+    MetadataSource.ANILIST: "anilist_enabled",
+    MetadataSource.TEBEOSFERA: "tebeosfera_enabled",
+    MetadataSource.GCD: "gcd_enabled",
+}
+
+
+@dataclass(frozen=True)
+class EstadoFuente:
+    """En qué quedó UNA fuente para UNA capacidad.
+
+    `motivo` es texto en español para la persona (nunca un identificador ni una causa inventada);
+    `reintentar_en` son segundos y solo va relleno si el contrato los aportó.
+    """
+    fuente: str
+    capacidad: str
+    estado: str
+    motivo: str | None = None
+    reintentar_en: int | None = None
+
+
+def _estado(fuente: MetadataSource, estado: str, motivo: str | None = None,
+            reintentar_en: int | None = None) -> EstadoFuente:
+    return EstadoFuente(fuente=fuente.value, capacidad=CAPACIDAD_BUSQUEDA, estado=estado,
+                        motivo=motivo, reintentar_en=reintentar_en)
 
 
 @dataclass
 class Busqueda:
-    """Una búsqueda: los candidatos, los avisos en español y el estado de CADA fuente."""
+    """Una búsqueda: los candidatos, los avisos en español y el estado de CADA fuente.
+
+    `fuentes` (fuente → estado) se conserva por compatibilidad con los consumidores que ya lo
+    leían; `detalles` añade capacidad, motivo y reintento por fuente. Las búsquedas construidas
+    a mano en pruebas pueden dar solo `fuentes`: `__post_init__` completa los detalles que falten
+    sin inventar motivo ni plazo.
+    """
     resultados: list[DiscoveryResult]
     avisos: list[str]
     fuentes: dict[str, str]
-    #: Fuente → segundos estimados de espera (None si no hay estimación). Solo para `espera`.
-    esperas: dict[str, float | None] = field(default_factory=dict)
+    detalles: dict[str, EstadoFuente] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for fuente in ORDEN_DE_FUENTES:
+            nombre = fuente.value
+            if nombre in self.fuentes and nombre not in self.detalles:
+                self.detalles[nombre] = _estado(fuente, self.fuentes[nombre])
 
 
 class ProcedenciaTradicion(StrEnum):
@@ -133,28 +184,42 @@ class DiscoveryService:
         return b.resultados, b.avisos
 
     async def search_detallada(self, query: str, limit: int = 10) -> Busqueda:
-        """Como `search`, pero además dice en qué estado quedó CADA fuente: `ok`, `apagada`
-        (desactivada en la configuración), `sin_clave` (Comic Vine encendida pero sin
-        `COMICVINE_API_KEY`: no se consulta) o `error` (se consultó y falló). Una fuente que
-        falla o está apagada no tumba las demás."""
+        """Como `search`, pero además dice en qué estado quedó CADA fuente y capacidad (#133).
+
+        Estados del conjunto cerrado (`ESTADOS_DE_FUENTE`): `ok`, `sin_resultados`,
+        `fallo_transitorio`, `configuracion_incompleta`, `limite_de_cortesia` y
+        `fuente_apagada`. Una fuente apagada o sin configurar NO se instancia ni se consulta; una
+        que falla o limita no tumba a las demás. El motivo lo escribe el servicio, no la
+        interfaz, y el reintento solo aparece si la fuente lo indicó.
+        """
         query = query.strip()
-        estados = {f.value: FUENTE_APAGADA for f in ORDEN_DE_FUENTES}
         if not query:
-            return Busqueda([], [], estados)
+            # Sin consulta no se ha consultado ninguna fuente: no se inventa otro estado.
+            motivo = "No se ha consultado: no hay consulta que buscar."
+            detalles = {f.value: _estado(f, FUENTE_APAGADA, motivo) for f in ORDEN_DE_FUENTES}
+            return Busqueda([], [], {f.value: FUENTE_APAGADA for f in ORDEN_DE_FUENTES}, detalles)
 
         avisos: list[str] = []
         settings = get_settings()
+        detalles: dict[str, EstadoFuente] = {}
+
+        for fuente in ORDEN_DE_FUENTES:
+            if not getattr(settings, _INTERRUPTOR[fuente]):
+                detalles[fuente.value] = _estado(fuente, FUENTE_APAGADA, "Está apagada en Ajustes.")
+
         if settings.comicvine_enabled and not settings.comicvine_api_key:
             avisos.append(
-                "Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env "
-                "para incluirlo en la búsqueda."
-            )
-            estados[MetadataSource.COMIC_VINE.value] = FUENTE_SIN_CLAVE
+                "Comic Vine no está configurado: añade su clave en Ajustes "
+                "para incluirlo en la búsqueda.")
+            detalles[MetadataSource.COMIC_VINE.value] = _estado(
+                MetadataSource.COMIC_VINE, FUENTE_CONFIGURACION_INCOMPLETA,
+                "Falta su clave en Ajustes.")
 
         # B8: «fuente apagada» vale en TODA ZascArr, también en Descubrir — una
-        # fuente desactivada no se instancia ni consulta, las demás sí.
+        # fuente desactivada no se instancia ni consulta, las demás sí. Lo mismo con
+        # una fuente que necesita clave y no la tiene: no se hace tráfico para nada.
         fuentes: list[tuple[MetadataSource, str, object]] = []
-        if settings.comicvine_enabled:
+        if settings.comicvine_enabled and settings.comicvine_api_key:
             fuentes.append(
                 (MetadataSource.COMIC_VINE, "Comic Vine", self._search_comic_vine(query, limit)))
         if settings.anilist_enabled:
@@ -168,30 +233,47 @@ class DiscoveryService:
         outcomes = await asyncio.gather(*(coro for _, _, coro in fuentes), return_exceptions=True)
 
         results: list[DiscoveryResult] = []
-        esperas: dict[str, float | None] = {}
         for (fuente, nombre, _), outcome in zip(fuentes, outcomes, strict=True):
+            if isinstance(outcome, FuenteApagada):
+                # #134 puede lanzarlo si el ajuste cambia entre la comprobación y la petición.
+                detalles[fuente.value] = _estado(
+                    fuente, FUENTE_APAGADA, "Está apagada en Ajustes.")
+                continue
             if isinstance(outcome, CortesiaEnEspera):
-                # §6.5/AC-14: espera visible, no error ni «sin resultados». Nunca la URL.
-                estimacion = outcome.espera_estimada_s if outcome.espera_estimada_s > 0 else None
-                esperas[fuente.value] = estimacion
-                espera_txt = (f"hay que esperar ~{max(1, round(estimacion))} s por cortesía"
-                              if estimacion else "hay que esperar por cortesía")
-                avisos.append(
-                    f"{nombre}: no se ha consultado; {espera_txt}. "
-                    "No se ha enviado nada; vuelve a intentarlo en un momento.")
-                estados[fuente.value] = FUENTE_ESPERA
+                # La fuente pidió esperar y la espera no cabía en el presupuesto: es cortesía,
+                # no un fallo. El plazo solo va si el contrato lo trae.
+                reintentar = (max(1, int(outcome.espera_estimada_s + 0.999))
+                              if outcome.espera_estimada_s > 0 else None)
+                # #134 §6.5: el motivo es el aviso de espera por cortesía, con estimación si consta.
+                # El estado sigue siendo el del conjunto cerrado de #133 (`limite_de_cortesia`).
+                espera = f" ~{reintentar} s" if reintentar else ""
+                detalles[fuente.value] = _estado(
+                    fuente, FUENTE_LIMITE_DE_CORTESIA,
+                    f"No se ha consultado: hay que esperar{espera} por cortesía. "
+                    "No se ha enviado nada; vuelve a intentarlo en un momento.", reintentar)
+                avisos.append(f"{nombre}: ha pedido esperar antes de volver a consultarla.")
+                continue
+            if isinstance(outcome, ReintentosAgotados) and outcome.ultimo_codigo == 429:
+                # 429 tras agotar reintentos: tampoco es un fallo transitorio.
+                detalles[fuente.value] = _estado(
+                    fuente, FUENTE_LIMITE_DE_CORTESIA,
+                    "Ha pedido esperar antes de volver a consultarla.")
+                avisos.append(f"{nombre}: ha pedido esperar antes de volver a consultarla.")
                 continue
             if isinstance(outcome, BaseException):
-                # Solo la clase (§6.6): `str(exc)` puede llevar URL o detalles internos.
-                logger.warning("discovery.source_failed", source=nombre,
-                               error=type(outcome).__name__)
+                logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
                 avisos.append(f"{nombre}: no se pudo consultar ahora mismo.")
-                estados[fuente.value] = FUENTE_ERROR
+                detalles[fuente.value] = _estado(
+                    fuente, FUENTE_FALLO_TRANSITORIO, "No ha respondido ahora mismo.")
                 continue
-            if estados[fuente.value] != FUENTE_SIN_CLAVE:
-                estados[fuente.value] = FUENTE_OK
-            results.extend(outcome)
-        return Busqueda(results, avisos, estados, esperas)
+            if outcome:
+                detalles[fuente.value] = _estado(fuente, FUENTE_OK)
+                results.extend(outcome)
+            else:
+                detalles[fuente.value] = _estado(
+                    fuente, FUENTE_SIN_RESULTADOS, "Ha respondido, pero no hay coincidencias.")
+        estados = {nombre: detalle.estado for nombre, detalle in detalles.items()}
+        return Busqueda(results, avisos, estados, detalles)
 
     async def _search_comic_vine(self, query: str, limit: int) -> list[DiscoveryResult]:
         # Sin API key, la petición está condenada (401) — no la intentamos.

@@ -26,12 +26,13 @@ from zascarr.main import app
 from zascarr.models import ComicTradition, MetadataSource, Series
 from zascarr.services import revision_carpetas
 from zascarr.services.discovery import (
-    FUENTE_ERROR,
+    FUENTE_CONFIGURACION_INCOMPLETA,
+    FUENTE_FALLO_TRANSITORIO,
     FUENTE_OK,
-    FUENTE_SIN_CLAVE,
     Busqueda,
     DiscoveryResult,
     DiscoveryService,
+    EstadoFuente,
     ProcedenciaTradicion,
 )
 from zascarr.services.tokens_revision import (
@@ -72,10 +73,12 @@ class FuentesFalsas:
         self.resultados: list[DiscoveryResult] = []
         self.avisos: list[str] = []
         self.fuentes = {"comic_vine": FUENTE_OK, "anilist": FUENTE_OK, "tebeosfera": FUENTE_OK, "gcd": FUENTE_OK}
+        # #133: detalle por fuente cuando una prueba necesita motivo o plazo de reintento.
+        self.detalles: dict[str, EstadoFuente] = {}
 
     async def buscar(self, consulta, limit=10):
         self.llamadas.append(consulta)
-        return Busqueda(list(self.resultados), list(self.avisos), dict(self.fuentes))
+        return Busqueda(list(self.resultados), list(self.avisos), dict(self.fuentes), dict(self.detalles))
 
 
 @pytest.fixture
@@ -468,11 +471,18 @@ class TestRespuestaYAcceso:
 
     async def test_el_estado_de_cada_fuente_y_los_avisos_se_devuelven_tal_cual(self, entorno):
         carpeta = await sembrar_flash(entorno.banco)
-        entorno.fuentes.fuentes.update(comic_vine=FUENTE_SIN_CLAVE, tebeosfera=FUENTE_ERROR)
+        entorno.fuentes.fuentes.update(comic_vine=FUENTE_CONFIGURACION_INCOMPLETA,
+                                       tebeosfera=FUENTE_FALLO_TRANSITORIO)
         entorno.fuentes.avisos = ["Comic Vine no está configurado.", "Tebeosfera: no se pudo consultar ahora mismo."]
         cuerpo = (await descubrir(carpeta)).json()
-        assert cuerpo["fuentes"] == {"comic_vine": "sin_clave", "anilist": "ok", "tebeosfera": "error", "gcd": "ok"}
+        assert cuerpo["fuentes"] == {"comic_vine": "configuracion_incompleta", "anilist": "ok",
+                                     "tebeosfera": "fallo_transitorio", "gcd": "ok"}
         assert cuerpo["avisos"] == entorno.fuentes.avisos and cuerpo["candidatas"] == []
+        # #133: el detalle por fuente (capacidad, estado, motivo y reintento) viaja también en la API.
+        assert set(cuerpo["detalles"]) == {"comic_vine", "anilist", "tebeosfera", "gcd"}
+        assert cuerpo["detalles"]["comic_vine"] == {
+            "fuente": "comic_vine", "capacidad": "busqueda", "estado": "configuracion_incompleta",
+            "motivo": None, "reintentar_en": None}
 
     async def test_el_esquema_de_la_respuesta_es_estable(self, entorno):
         carpeta = await sembrar_flash(entorno.banco)
@@ -480,8 +490,9 @@ class TestRespuestaYAcceso:
         r = await descubrir(carpeta)
         assert r.headers["cache-control"] == "no-store"
         c = r.json()
-        assert set(c) == {"consulta", "consulta_propuesta", "grupo", "fuentes", "avisos", "candidatas"}
+        assert set(c) == {"consulta", "consulta_propuesta", "grupo", "fuentes", "avisos", "candidatas", "detalles"}
         assert set(c["grupo"]) == {"clave", "carpeta_contextual", "n_archivos"}
+        assert set(c["detalles"]["comic_vine"]) == {"fuente", "capacidad", "estado", "motivo", "reintentar_en"}
         assert set(c["candidatas"][0]) == {
             "token", "fuente", "titulo", "anio", "tradicion_sugerida", "procedencia", "sitio_url", "portada",
             "descripcion", "ya_en_biblioteca", "parecidas_locales", "coincidencia_con_la_carpeta"}
