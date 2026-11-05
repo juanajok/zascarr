@@ -1,9 +1,61 @@
-{% macro pagina_url(p) -%}
-/ui/biblioteca/resultados?page={{ p }}&tradition={{ tradition }}&q={{ q|urlencode }}{% if publisher_id %}&publisher_id={{ publisher_id }}{% endif %}{% if character_id %}&character_id={{ character_id }}{% endif %}{% if story_arc_id %}&story_arc_id={{ story_arc_id }}{% endif %}
-{%- endmacro %}
+{#- Rejilla de biblioteca + estado de la vista (BL-IT01, #283).
+    Se intercambia entera en `#rejilla`: recuento, chips de filtros activos,
+    avisos, rejilla y paginación. Así el recuento no se queda obsoleto al
+    filtrar y el vacío conserva la consulta y ofrece salida.
+    `url_pagina(p)` / `url_fragmento(p)` las construye el router con los
+    filtros normalizados; la plantilla no concatena parámetros a mano. -#}
+{#- `quitar` es interno y de valores cerrados: un valor desconocido se ignora
+    (no enfoca ni emite el campo fuera de banda) — BL-IT01, spec §6.2. -#}
+{% set quitar = request.query_params.get("quitar") %}
+{% set quitar_valido = quitar if quitar in (
+  "q", "tradition", "publisher_id", "character_id", "story_arc_id", "todos"
+) else none %}
+<div id="resumen-biblioteca" class="resumen-biblioteca">
+  {% if error %}
+  {{ ui.aviso("warn", "No se pudo cargar la biblioteca. Vuelve a intentarlo.") }}
+  <p><a class="btn ghost" href="{{ url_reintento }}"
+        hx-get="{{ url_reintento_fragmento }}" hx-target="#rejilla"
+        hx-swap="innerHTML">Reintentar</a></p>
+  {% else %}
+  {% call ui.region_viva("recuento-biblioteca") %}
+  <p class="subtitle recuento-biblioteca">{{ recuento }}</p>
+  {% endcall %}
+  {% endif %}
 
-{% if not items %}
-<p class="empty">Ninguna serie coincide con estos filtros.</p>
+  {% for aviso in avisos %}
+  {{ ui.aviso("amber", aviso) }}
+  {% endfor %}
+
+  {% if filtros_activos %}
+  <ul class="filtros-activos" id="filtros-activos" aria-label="Filtros activos"
+      {% if request.headers.get("HX-Request") == "true" and quitar_valido %}tabindex="-1" autofocus{% endif %}>
+    {% for f in filtros_activos %}
+    <li class="filtro-activo">
+      {{ ui.chip("info", f.etiqueta) }}
+      <a class="quitar-filtro" href="{{ f.url_quitar }}"
+         hx-get="{{ f.url_quitar_fragmento }}" hx-target="#rejilla"
+         hx-swap="innerHTML"
+         aria-label="Quitar filtro {{ f.etiqueta }}">Quitar</a>
+    </li>
+    {% endfor %}
+    <li>
+      <a class="limpiar-filtros" href="{{ url_limpiar }}"
+         hx-get="{{ url_limpiar_fragmento }}" hx-target="#rejilla"
+         hx-swap="innerHTML">Limpiar todos</a>
+    </li>
+  </ul>
+  {% endif %}
+</div>
+
+{% if error %}
+{#- El aviso y el reintento ya están arriba; no se pinta una rejilla vacía que
+    parezca «no hay series» (criterio 5 del issue). -#}
+{% elif not items %}
+  {% if hay_filtros %}
+  <p class="empty">Prueba a quitar algún filtro de los de arriba.</p>
+  {% else %}
+  <p class="empty"><a href="/ui/pendientes">Añade lo que tengas en el disco desde Por revisar.</a></p>
+  {% endif %}
 {% else %}
 <div class="library-grid">
   {% for series in items %}
@@ -22,12 +74,23 @@
 </div>
 {% endif %}
 
-{% if pages > 1 %}
-<div class="pagination"
-     hx-target="#rejilla" hx-swap="innerHTML" hx-push-url="true">
+{% if pages > 1 and not error %}
+<nav class="pagination" aria-label="Páginas de la biblioteca"
+     hx-target="#rejilla" hx-swap="innerHTML">
   {% for p in range(1, pages + 1) %}
-  <a href="{{ pagina_url(p) }}" hx-get="{{ pagina_url(p) }}"
-     class="page-link{% if p == page %} page-current{% endif %}">{{ p }}</a>
+  <a href="{{ url_pagina(p) }}" hx-get="{{ url_fragmento(p) }}"
+     hx-target="#rejilla" hx-swap="innerHTML"
+     class="page-link{% if p == page %} page-current{% endif %}"
+     {% if p == page %}aria-current="page"{% endif %}>{{ p }}</a>
   {% endfor %}
-</div>
+</nav>
+{% endif %}
+
+{% if request.headers.get("HX-Request") == "true" and quitar_valido
+      and (quitar_valido in ("q", "todos") or not filtros_activos) %}
+{#- Solo en respuesta a un intercambio HTMX, y solo cuando hay que limpiar o
+    el campo se queda sin chips: en una página completa el OOB quedaría inerte
+    dentro de #rejilla y duplicaría el campo de título. -#}
+{% set valor = filtros.q %}{% set oob = true %}{% set foco = not filtros_activos %}
+{% include "_campo_q.html" %}
 {% endif %}

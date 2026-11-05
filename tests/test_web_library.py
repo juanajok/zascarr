@@ -7,13 +7,16 @@ en test_series_service.py.
 """
 from __future__ import annotations
 
+import re
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
+from structlog.testing import capture_logs
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.models import ComicTradition, Publisher, Series
+from zascarr.models import Character, ComicTradition, Publisher, Series, StoryArc
 
 
 class FakeScalarResult:
@@ -36,10 +39,13 @@ class FakeExecResult:
 
 
 class FakeSession:
-    def __init__(self, queue: list):
-        self._queue = list(queue)
+    def __init__(self, queue: list | None = None, error: Exception | None = None):
+        self._queue = list(queue or [])
+        self._error = error
 
     async def execute(self, _statement):
+        if self._error is not None:
+            raise self._error
         return self._queue.pop(0)
 
 
@@ -125,7 +131,7 @@ class TestIndex:
         with use_fake_session(session) as client:
             r = client.get("/ui/biblioteca")
         assert r.status_code == 200
-        assert "Ninguna serie coincide" in r.text
+        assert "Tu biblioteca todavía no tiene series." in r.text
 
     def test_titulo_con_script_se_escapa(self):
         """XSS: un título con <script> debe renderizarse escapado por Jinja2,
@@ -185,3 +191,330 @@ class TestBuscarPersonajeYSaga:
         with use_fake_session(session) as client:
             r = client.get("/ui/biblioteca/buscar-saga?q=zzz")
         assert "Sin coincidencias" in r.text
+
+
+# ── BL-IT01 (#283): filtros que se conservan, se retiran y se explican ───────
+
+
+class TestFiltrosActivosYRecuento:
+    """El fragmento que se intercambia trae el recuento y los chips; el
+    recuento de la cabecera ya no puede quedarse viejo."""
+
+    def test_el_fragmento_trae_recuento_y_chips(self):
+        session = FakeSession([
+            FakeExecResult([]),                        # editoriales
+            FakeExecResult(2),                         # count
+            FakeExecResult([make_series("A"), make_series("B")]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?tradition=tebeo&q=thorgal")
+        assert r.status_code == 200
+        assert "2 series coinciden con estos filtros." in r.text
+        assert "Tradición: Tebeo español" in r.text
+        assert "Búsqueda: «thorgal»" in r.text
+        assert 'aria-label="Quitar filtro Tradición: Tebeo español"' in r.text
+        assert "Limpiar todos" in r.text
+
+    def test_quitar_un_filtro_conserva_los_demas(self):
+        publisher_id = uuid4()
+        session = FakeSession([
+            FakeExecResult(1),
+            FakeExecResult([make_series("Thorgal")]),
+            FakeExecResult("Bruguera"),                # nombre de la editorial
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(
+                f"/ui/biblioteca/resultados?tradition=tebeo&publisher_id={publisher_id}"
+            )
+        assert r.status_code == 200
+        enlaces = re.findall(r'href="(/ui/biblioteca\?[^"]*)"', r.text)
+        sin_tradicion = next(u for u in enlaces if "publisher_id" in u and "tradition=" not in u)
+        assert f"publisher_id={publisher_id}" in sin_tradicion
+        sin_editorial = next(
+            u for u in enlaces if "tradition=tebeo" in u and "publisher_id=" not in u
+        )
+        assert "page=1" in sin_editorial  # quitar un filtro vuelve a la página 1
+        assert "quitar=tradition" in r.text
+        assert "quitar=publisher_id" in r.text
+
+    def test_limpiar_todos_es_una_accion_aparte(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?tradition=tebeo")
+        assert 'href="/ui/biblioteca?page=1"' in r.text
+        assert "quitar=todos" in r.text
+        assert "Limpiar todos" in r.text
+
+    def test_retirar_el_chip_de_busqueda_limpia_el_campo_fuera_de_banda(self):
+        """El campo de título vive fuera de #rejilla: si no se limpia, queda
+        el texto viejo y el siguiente cambio reaplica un filtro retirado."""
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get(
+                "/ui/biblioteca/resultados?page=1&quitar=q",
+                headers={"HX-Request": "true"},
+            )
+        assert r.status_code == 200
+        assert 'hx-swap-oob="outerHTML"' in r.text
+        assert 'id="f-q"' in r.text
+        assert 'value=""' in r.text
+        assert "autofocus" in r.text
+        assert r.headers["HX-Push-Url"] == "/ui/biblioteca?page=1"
+
+    def test_vacio_conserva_los_filtros_y_ofrece_salida(self):
+        session = FakeSession([FakeExecResult(0), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?tradition=tebeo")
+        assert "Ninguna serie coincide con estos filtros." in r.text
+        # Los chips siguen ahí: la consulta no se ha perdido.
+        assert "Tradición: Tebeo español" in r.text
+        assert "Prueba a quitar algún filtro" in r.text
+
+    def test_biblioteca_vacia_sin_filtros_no_culpa_a_los_filtros(self):
+        session = FakeSession([FakeExecResult([]), FakeExecResult(0), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert "Tu biblioteca todavía no tiene series." in r.text
+
+
+class TestUrlCanonica:
+    """La URL que empuja htmx es la de la página completa, no la del fragmento."""
+
+    def test_coste_de_la_pagina_con_tres_filtros(self):
+        """AC-08: editoriales (1) + count (1) + página (1) + nombre de
+        personaje/saga (2); la editorial sale de la lista ya cargada."""
+        editorial = Publisher(id=uuid4(), name="Bruguera")
+        session = FakeSession([
+            FakeExecResult([editorial]),          # editoriales
+            FakeExecResult(1),                    # count
+            FakeExecResult([make_series("A")]),   # página
+            FakeExecResult("Batman"),             # nombre de personaje
+            FakeExecResult("La Patrulla X"),      # nombre de saga
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(
+                f"/ui/biblioteca?publisher_id={editorial.id}"
+                f"&character_id={uuid4()}&story_arc_id={uuid4()}"
+            )
+        assert r.status_code == 200
+        assert "Editorial: Bruguera" in r.text
+        assert "Personaje: Batman" in r.text
+        assert "Saga: La Patrulla X" in r.text
+        assert not session._queue  # exactamente 5 SELECT, ni uno más
+
+    def test_coste_del_fragmento_con_tres_filtros(self):
+        """AC-08: count + página + 3 nombres = 5 SELECT, sin N+1."""
+        session = FakeSession([
+            FakeExecResult(1),
+            FakeExecResult([make_series("A")]),
+            FakeExecResult("Bruguera"),
+            FakeExecResult("Batman"),
+            FakeExecResult("La Patrulla X"),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(
+                f"/ui/biblioteca/resultados?publisher_id={uuid4()}"
+                f"&character_id={uuid4()}&story_arc_id={uuid4()}"
+            )
+        assert r.status_code == 200
+        assert "Editorial: Bruguera" in r.text
+        assert "Personaje: Batman" in r.text
+        assert "Saga: La Patrulla X" in r.text
+        assert not session._queue  # count + página + 3 nombres, sin N+1
+
+    def test_el_fragmento_empuja_la_pagina_completa(self):
+        session = FakeSession([FakeExecResult(50), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?tradition=tebeo&page=2")
+        assert r.headers["HX-Push-Url"] == "/ui/biblioteca?tradition=tebeo&page=2"
+        assert r.headers["Cache-Control"] == "no-store"
+
+    def test_la_pagina_uno_tambien_es_canonica(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?tradition=tebeo&page=1")
+        assert r.headers["HX-Push-Url"] == "/ui/biblioteca?tradition=tebeo&page=1"
+
+    def test_el_main_es_el_elemento_de_historial(self):
+        session = FakeSession([FakeExecResult([]), FakeExecResult(0), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert "hx-history-elt" in r.text
+
+    def test_paginacion_conserva_filtros_y_aria_current(self):
+        session = FakeSession([FakeExecResult(50), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?tradition=tebeo&page=2")
+        assert 'aria-current="page"' in r.text
+        assert "page=3" in r.text
+        assert "tradition=tebeo" in r.text
+
+    def test_la_paginacion_no_depende_de_la_herencia_implicita_de_htmx4(self):
+        """Bug real de la pasada de navegador (2026-11-05): htmx 4 trae
+        `implicitInheritance: false`, así que `hx-target`/`hx-swap` del `<nav>`
+        NO llegan a los enlaces. Sin atributos propios, el fragmento se
+        intercambiaba DENTRO del enlace: quedaban dos rejillas y 30 tarjetas.
+        Cada enlace de página debe llevar su target y swap."""
+        session = FakeSession([FakeExecResult(50), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?page=1")
+        enlace = re.search(r'<a href="[^"]*page=2"[^>]*>2</a>', r.text)
+        assert enlace, "no se encontró el enlace a la página 2"
+        assert 'hx-target="#rejilla"' in enlace.group(0)
+        assert 'hx-swap="innerHTML"' in enlace.group(0)
+
+
+class TestEntradasInvalidas:
+    """Nunca 422/500 en la UI ni una biblioteca vacía que parezca real."""
+
+    def test_tradicion_inexistente_se_quita_con_aviso(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?tradition=inventada")
+        assert r.status_code == 200
+        assert "La tradición de ese filtro no existe; se ha quitado." in r.text
+        assert "A" in r.text
+
+    def test_uuid_mal_formado_se_quita_con_aviso(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?character_id=no-es-uuid")
+        assert r.status_code == 200
+        assert "El filtro de personaje no es válido; se ha quitado." in r.text
+        assert "A" in r.text
+
+    def test_pagina_cero_se_corrige_con_aviso(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?page=0")
+        assert r.status_code == 200
+        assert "La página pedida no existe; se muestra la primera." in r.text
+
+    def test_pagina_no_numerica_se_corrige_con_aviso(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?page=abc")
+        assert r.status_code == 200
+        assert "La página pedida no es válida; se muestra la primera." in r.text
+
+    def test_q_con_caracteres_de_control_se_limpia(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?q=noir%00%0A")
+        assert r.status_code == 200
+        assert "La búsqueda tenía caracteres no válidos; se han quitado." in r.text
+
+    def test_q_con_control_al_final_tambien_avisa(self):
+        """Regresión: el `strip()` previo se comía el CRLF final y no avisaba."""
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?q=noir%0d%0a")
+        assert r.status_code == 200
+        assert "La búsqueda tenía caracteres no válidos; se han quitado." in r.text
+        assert r.headers["HX-Push-Url"] == "/ui/biblioteca?q=noir&page=1"
+
+    def test_quitar_desconocido_se_ignora(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get(
+                "/ui/biblioteca/resultados?tradition=tebeo&quitar=desconocido",
+                headers={"HX-Request": "true"},
+            )
+        assert r.status_code == 200
+        assert 'hx-swap-oob="outerHTML"' not in r.text
+        assert "autofocus" not in r.text
+
+    def test_q_demasiado_larga_se_recorta(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?q=" + "a" * 201)
+        assert r.status_code == 200
+        assert (
+            "La búsqueda era demasiado larga; se han usado los primeros 200 caracteres."
+            in r.text
+        )
+
+    def test_pagina_posterior_al_final_se_corrige(self):
+        session = FakeSession([FakeExecResult(50), FakeExecResult([make_series("A")])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?page=99")
+        assert r.status_code == 200
+        assert "La página pedida no existe; se muestra la última." in r.text
+        assert r.headers["HX-Push-Url"] == "/ui/biblioteca?page=3"
+        assert 'aria-current="page"' in r.text
+
+    def test_fallo_de_bd_no_se_disfraza_de_biblioteca_vacia(self):
+        session = FakeSession(error=SQLAlchemyError("boom"))
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?tradition=tebeo")
+        assert r.status_code == 200
+        assert "No se pudo cargar la biblioteca. Vuelve a intentarlo." in r.text
+        assert "Ninguna serie coincide" not in r.text
+
+
+class TestBusquedaPersonajeSagaConservaFiltros:
+
+    def test_personaje_anade_su_filtro_sin_perder_los_demas(self):
+        personaje = Character(id=uuid4(), name="Batman")
+        publisher_id = uuid4()
+        session = FakeSession([FakeExecResult([personaje])])
+        with use_fake_session(session) as client:
+            r = client.get(
+                "/ui/biblioteca/buscar-personaje?personaje=bat"
+                f"&tradition=tebeo&publisher_id={publisher_id}"
+            )
+        assert r.status_code == 200
+        assert "Batman" in r.text
+        assert "tradition=tebeo" in r.text
+        assert f"publisher_id={publisher_id}" in r.text
+        assert f"character_id={personaje.id}" in r.text
+
+    def test_saga_anade_su_filtro_sin_perder_los_demas(self):
+        saga = StoryArc(id=uuid4(), title="La Patrulla X")
+        session = FakeSession([FakeExecResult([saga])])
+        with use_fake_session(session) as client:
+            r = client.get(
+                "/ui/biblioteca/buscar-saga?saga=patrulla&tradition=tebeo"
+            )
+        assert r.status_code == 200
+        assert "La Patrulla X" in r.text
+        assert "tradition=tebeo" in r.text
+        assert f"story_arc_id={saga.id}" in r.text
+
+    def test_contrato_antiguo_con_q_sigue_funcionando(self):
+        personaje = Character(id=uuid4(), name="Mortadelo")
+        session = FakeSession([FakeExecResult([personaje])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/buscar-personaje?q=morta")
+        assert "Mortadelo" in r.text
+
+    def test_los_parciales_no_se_cachean(self):
+        session = FakeSession([FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/buscar-personaje?personaje=morta")
+        assert r.headers["Cache-Control"] == "no-store"
+
+    def test_personaje_con_caracteres_de_control_se_limpia(self):
+        session = FakeSession([FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/buscar-personaje?personaje=%00morta%0A")
+        assert r.status_code == 200
+        assert "Sin coincidencias" in r.text
+
+
+class TestPrivacidadYLogs:
+    """AC-07: los GET no escriben ni dejan valores del coleccionista en logs."""
+
+    def test_la_busqueda_no_aparece_en_los_registros(self):
+        session = FakeSession([FakeExecResult(1), FakeExecResult([make_series("A")])])
+        with capture_logs() as registros, use_fake_session(session) as client:
+            client.get("/ui/biblioteca/resultados?q=secreto-mio&tradition=tebeo")
+        assert "secreto-mio" not in " ".join(str(evento) for evento in registros)
+
+    def test_el_error_solo_registra_la_clase(self):
+        session = FakeSession(error=SQLAlchemyError("boom"))
+        with capture_logs() as registros, use_fake_session(session) as client:
+            client.get("/ui/biblioteca/resultados?q=secreto-mio")
+        texto = " ".join(str(evento) for evento in registros)
+        assert "secreto-mio" not in texto
+        assert "SQLAlchemyError" in texto

@@ -62,7 +62,7 @@
 {#- region_viva(id): región `aria-live="polite"` para lo que cambia tras una acción HTMX
     (destino de hx-target): el lector de pantalla anuncia el resultado sin robar el foco. -#}
 {% macro region_viva(id) -%}
-<div id="{{ id }}" class="region-viva" aria-live="polite" aria-atomic="true">{% if caller is defined %}{{ caller() }}{% endif %}</div>
+<div id="{{ id }}" class="region-viva" tabindex="-1" aria-live="polite" aria-atomic="true">{% if caller is defined %}{{ caller() }}{% endif %}</div>
 {%- endmacro %}
 
 {#- menu(ruta): navegación principal (V3). Los enlaces están SIEMPRE en el marcado (no los trae ningún

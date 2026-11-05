@@ -32,11 +32,24 @@ from zascarr.models import (
 )
 
 
+def pagina_efectiva(page: int, total: int, page_size: int) -> int:
+    """Página que de verdad se sirve: 1..última, o 1 si no hay resultados.
+
+    Función pura para que la URL, la plantilla y el servicio usen el mismo
+    cálculo. Permite corregir `page>pages` ANTES del `offset` (sin un segundo
+    SELECT), que es el requisito de rendimiento de BL-IT01 (#283, AC-08).
+    """
+    if total <= 0:
+        return 1
+    paginas = (total + page_size - 1) // page_size
+    return min(max(page, 1), paginas)
+
+
 class SeriesService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def list_series(
+    async def _list_series(
         self,
         page: int = 1,
         page_size: int = 20,
@@ -46,7 +59,16 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
-    ) -> tuple[list[Series], int]:
+        *,
+        corregir_pagina: bool = True,
+    ) -> tuple[list[Series], int, int]:
+        """Consulta común: `(items, total, página_efectiva)`.
+
+        `corregir_pagina=False` conserva el contrato histórico de la API
+        (`page` fuera de rango devuelve items vacíos y el llamador sigue
+        informando la página pedida); la biblioteca usa True para no gastar
+        un segundo SELECT.
+        """
         query = select(Series)
         needs_distinct = False
 
@@ -80,10 +102,52 @@ class SeriesService:
             select(func.count()).select_from(query.subquery())
         )).scalar() or 0
 
+        pagina = pagina_efectiva(page, total, page_size) if corregir_pagina else page
         query = query.order_by(Series.sort_title, Series.start_year)
-        query = query.offset((page - 1) * page_size).limit(page_size)
+        query = query.offset((pagina - 1) * page_size).limit(page_size)
         items = list((await self.db.execute(query)).scalars().all())
+        return items, total, pagina
+
+    async def list_series(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        tradition: str | None = None,
+        status: str | None = None,
+        search: str | None = None,
+        publisher_id: UUID | None = None,
+        character_id: UUID | None = None,
+        story_arc_id: UUID | None = None,
+    ) -> tuple[list[Series], int]:
+        """Contrato histórico `(items, total)` para API y tests."""
+        items, total, _ = await self._list_series(
+            page=page, page_size=page_size, tradition=tradition, status=status,
+            search=search, publisher_id=publisher_id, character_id=character_id,
+            story_arc_id=story_arc_id, corregir_pagina=False,
+        )
         return items, total
+
+    async def list_series_paginado(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        tradition: str | None = None,
+        status: str | None = None,
+        search: str | None = None,
+        publisher_id: UUID | None = None,
+        character_id: UUID | None = None,
+        story_arc_id: UUID | None = None,
+    ) -> tuple[list[Series], int, int]:
+        """Como `list_series`, pero devuelve también la página efectiva.
+
+        La biblioteca la necesita para construir la URL canónica sin volver a
+        consultar (`page>pages` no cuesta un segundo SELECT).
+        """
+        return await self._list_series(
+            page=page, page_size=page_size, tradition=tradition, status=status,
+            search=search, publisher_id=publisher_id, character_id=character_id,
+            story_arc_id=story_arc_id,
+        )
 
     async def list_publishers_with_series(self) -> list[Publisher]:
         """Solo editoriales que de verdad tienen alguna serie — un
@@ -93,6 +157,33 @@ class SeriesService:
             .where(Publisher.id.in_(select(Series.publisher_id).where(Series.publisher_id.is_not(None))))
             .order_by(Publisher.name)
         )).scalars().all())
+
+    async def nombres_de_filtros(
+        self,
+        publisher_id: UUID | None = None,
+        character_id: UUID | None = None,
+        story_arc_id: UUID | None = None,
+    ) -> dict[str, str | None]:
+        """Nombres legibles de los filtros activos, para sus chips.
+
+        Una consulta por filtro presente (máximo tres) y ninguna si no hay
+        filtros: el recuento de consultas de la biblioteca no depende del
+        tamaño del catálogo (#283/BL-IT01).
+        """
+        nombres: dict[str, str | None] = {}
+        if publisher_id is not None:
+            nombres["publisher"] = (await self.db.execute(
+                select(Publisher.name).where(Publisher.id == publisher_id)
+            )).scalar()
+        if character_id is not None:
+            nombres["character"] = (await self.db.execute(
+                select(Character.name).where(Character.id == character_id)
+            )).scalar()
+        if story_arc_id is not None:
+            nombres["story_arc"] = (await self.db.execute(
+                select(StoryArc.title).where(StoryArc.id == story_arc_id)
+            )).scalar()
+        return nombres
 
     async def search_characters(self, query: str, limit: int = 20) -> list[Character]:
         query = (query or "").strip()
