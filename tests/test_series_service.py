@@ -12,14 +12,13 @@ tests/test_title_norm.py — se saltan si no está definida.
 from __future__ import annotations
 
 import os
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete
 
 from zascarr.models import ComicTradition, Publisher, Series
-from zascarr.services.series import SeriesService
+from zascarr.services.series import SeriesService, pagina_efectiva
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -85,6 +84,32 @@ class TestPublishersConSerie:
         assert result == publishers
 
 
+class TestNombresDeFiltros:
+    """BL-IT01 (#283): los chips de filtros activos necesitan el nombre legible,
+    no el UUID. Una consulta por filtro presente y ninguna si no hay filtros."""
+
+    @pytest.mark.asyncio
+    async def test_devuelve_el_nombre_de_cada_filtro_presente(self):
+        session = FakeSession([
+            FakeExecResult("Bruguera"),
+            FakeExecResult("Batman"),
+            FakeExecResult("La Patrulla X"),
+        ])
+        nombres = await SeriesService(session).nombres_de_filtros(
+            publisher_id=uuid4(), character_id=uuid4(), story_arc_id=uuid4()
+        )
+        assert nombres == {
+            "publisher": "Bruguera",
+            "character": "Batman",
+            "story_arc": "La Patrulla X",
+        }
+
+    @pytest.mark.asyncio
+    async def test_sin_filtros_no_consulta_la_bd(self):
+        session = FakeSession([])  # una consulta inesperada haría pop de lista vacía
+        assert await SeriesService(session).nombres_de_filtros() == {}
+
+
 class TestSearchCharactersYStoryArcs:
 
     @pytest.mark.asyncio
@@ -106,7 +131,10 @@ class TestSearchCharactersYStoryArcs:
 
 pytestmark_live = pytest.mark.skipif(
     not TEST_DATABASE_URL,
-    reason="requiere TEST_DATABASE_URL (Postgres real) — el JOIN M:N no se puede verificar con FakeSession",
+    reason=(
+        "requiere TEST_DATABASE_URL (Postgres real) — el JOIN M:N no se puede "
+        "verificar con FakeSession"
+    ),
 )
 
 
@@ -138,7 +166,11 @@ class TestFiltrosPorJoinRealesContraPostgres:
         # issue.characters.append(...): tocar la relationship lazy fuera
         # de un await explícito dispara MissingGreenlet (mismo cuidado
         # que documenta enricher.py._apply_credits).
-        await session.execute(issue_characters.insert().values(issue_id=issue.id, character_id=character.id))
+        await session.execute(
+            issue_characters.insert().values(
+                issue_id=issue.id, character_id=character.id
+            )
+        )
         await session.commit()
 
         try:
@@ -179,3 +211,19 @@ class TestFiltrosPorJoinRealesContraPostgres:
             await session.delete(con_saga)
             await session.delete(sin_saga)
             await session.commit()
+
+
+class TestPaginaEfectiva:
+    """BL-IT01 (#283): corregir la página antes del offset evita un segundo SELECT."""
+
+    def test_dentro_de_rango(self):
+        assert pagina_efectiva(2, 50, 24) == 2
+
+    def test_por_debajo_de_uno(self):
+        assert pagina_efectiva(0, 50, 24) == 1
+
+    def test_posterior_al_final(self):
+        assert pagina_efectiva(99, 50, 24) == 3
+
+    def test_sin_resultados(self):
+        assert pagina_efectiva(99, 0, 24) == 1
