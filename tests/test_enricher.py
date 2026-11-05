@@ -10,6 +10,7 @@ para el método bajo prueba.
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -65,15 +66,24 @@ class TestParseIssue:
         assert result.description is None
 
 
+def _ajustes_cv(monkeypatch):
+    monkeypatch.setattr("zascarr.services.comic_vine.get_settings", lambda: SimpleNamespace(
+        comicvine_enabled=True, comicvine_rate_limit=0.0, comicvine_api_key="k"))
+    monkeypatch.setattr("zascarr.config.get_settings", lambda: SimpleNamespace(
+        comicvine_enabled=True, anilist_enabled=True, tebeosfera_enabled=False, gcd_enabled=False,
+        forum_enabled=False, forum_url="", comicvine_rate_limit=0.0, anilist_rate_limit=0.0,
+        tebeosfera_rate_limit=2.5, gcd_rate_limit=2.0, forum_rate_limit=2.0))
+
+
 class TestComicVineRetry:
+    """El reintento y el 429 viven AHORA en la envoltura común (#134); el cliente solo la usa."""
 
     @pytest.mark.asyncio
     async def test_reintenta_en_429_y_devuelve_datos_al_reintentar(self, monkeypatch):
-        monkeypatch.setattr("asyncio.sleep", AsyncMock())
-
+        _ajustes_cv(monkeypatch)
         client = ComicVineClient()
         responses = [
-            httpx.Response(429, headers={"Retry-After": "0"}, request=httpx.Request("GET", "http://x")),
+            httpx.Response(429, headers={"Retry-After": "0.01"}, request=httpx.Request("GET", "http://x")),
             httpx.Response(200, json={"error": "OK", "results": []}, request=httpx.Request("GET", "http://x")),
         ]
         fake_http = MagicMock()
@@ -87,7 +97,7 @@ class TestComicVineRetry:
 
     @pytest.mark.asyncio
     async def test_no_muta_params_del_caller(self, monkeypatch):
-        monkeypatch.setattr("asyncio.sleep", AsyncMock())
+        _ajustes_cv(monkeypatch)
         client = ComicVineClient()
         fake_http = MagicMock()
         fake_http.get = AsyncMock(
@@ -102,14 +112,17 @@ class TestComicVineRetry:
 
 
 class TestAniListRetry:
-
     @pytest.mark.asyncio
     async def test_reintenta_en_429_y_devuelve_datos_al_reintentar(self, monkeypatch):
-        monkeypatch.setattr("asyncio.sleep", AsyncMock())
-
+        monkeypatch.setattr("zascarr.services.anilist.get_settings", lambda: SimpleNamespace(
+            anilist_enabled=True, anilist_rate_limit=0.0))
+        monkeypatch.setattr("zascarr.config.get_settings", lambda: SimpleNamespace(
+            comicvine_enabled=False, anilist_enabled=True, tebeosfera_enabled=False, gcd_enabled=False,
+            forum_enabled=False, forum_url="", comicvine_rate_limit=1.0, anilist_rate_limit=0.0,
+            tebeosfera_rate_limit=2.5, gcd_rate_limit=2.0, forum_rate_limit=2.0))
         client = AniListClient()
         responses = [
-            httpx.Response(429, headers={"Retry-After": "0"}, request=httpx.Request("POST", "http://x")),
+            httpx.Response(429, headers={"Retry-After": "0.01"}, request=httpx.Request("POST", "http://x")),
             httpx.Response(200, json={"data": {"Page": {"media": []}}},
                            request=httpx.Request("POST", "http://x")),
         ]
