@@ -122,6 +122,24 @@ INTERVALO_PORTADA_POR_HOST: tuple[tuple[str, float], ...] = (
 )
 INTERVALO_PORTADA_DESCONOCIDO_S = 2.5
 
+#: Host de portada → fuente a la que pertenece (para la puerta de «fuente apagada» de AC-12).
+HOST_DE_FUENTE_PARA_PORTADAS: tuple[tuple[str, str], ...] = (
+    ("comicvine.gamespot.com", "comicvine"),
+    ("cbsistatic.com", "comicvine"),
+    ("anilist.co", "anilist"),
+    ("tebeosfera.com", "tebeosfera"),
+    ("comics.org", "gcd"),
+)
+
+
+def fuente_de_host_portada(host: str | None) -> str | None:
+    """Fuente a la que pertenece una portada por su host, o None si no está en el mapa."""
+    nombre = (host or "").strip().lower().split(":", 1)[0]
+    for dominio, fuente in HOST_DE_FUENTE_PARA_PORTADAS:
+        if nombre == dominio or nombre.endswith(f".{dominio}"):
+            return fuente
+    return None
+
 
 class CortesiaEnEspera(Exception):  # noqa: N818 — nombre del contrato (§3.6)
     """La espera estimada no cabe en el presupuesto del llamador: NO se envía la petición.
@@ -302,11 +320,14 @@ class Turno:
     """Contexto asíncrono de una autorización (reserva en las dos colas). Ver `CortesiaProceso.reservar`."""
 
     def __init__(self, lim: CortesiaProceso, fuente: str, host: str, *, motivo: str,
-                 espera_max_s: float | None, intentos_restantes: int = 0):
+                 espera_max_s: float | None, intentos_restantes: int = 0,
+                 intervalo_s: float | None = None, solo_host: bool = False):
         self._lim = lim
         self.fuente = fuente
         self.host = host
         self._motivo = motivo
+        self._intervalo_s = intervalo_s
+        self._solo_host = solo_host
         self._espera_max_s = espera_max_s
         self._deadline = None if espera_max_s is None else lim._reloj() + max(0.0, espera_max_s)
         self._espera_s = 0.0
@@ -318,13 +339,14 @@ class Turno:
 
     async def __aenter__(self) -> Espera:
         lim = self._lim
-        estado_fuente = lim._estado_fuente(self.fuente)
-        estado_fuente.esperando += 1
-        try:
-            await self._autorizar(estado_fuente, lim._intervalo_de_fuente(self.fuente))
-            self._autorizada_fuente = True
-        finally:
-            estado_fuente.esperando -= 1
+        if not self._solo_host:
+            estado_fuente = lim._estado_fuente(self.fuente)
+            estado_fuente.esperando += 1
+            try:
+                await self._autorizar(estado_fuente, lim._intervalo_de_fuente(self.fuente))
+                self._autorizada_fuente = True
+            finally:
+                estado_fuente.esperando -= 1
         estado_host = lim._estado_host(self.host)
         estado_host.esperando += 1
         try:
@@ -346,6 +368,8 @@ class Turno:
 
     async def _autorizar(self, estado: _EstadoCola, intervalo: float) -> None:
         lim = self._lim
+        if self._intervalo_s is not None:
+            intervalo = max(0.0, float(self._intervalo_s))
         async with lim._candados.de(self._clave(estado)):
             espera, motivo = self._espera_necesaria(estado, intervalo)
             if espera > 0:
@@ -421,7 +445,8 @@ class CortesiaProceso:
 
     # ── API ─────────────────────────────────────────────────────────────────────────────────────
     def reservar(self, fuente: str, host: str, *, motivo: str = "cortesia",
-                 espera_max_s: float | None = ESPERA_MAX_POR_DEFECTO_S) -> Turno:
+                 espera_max_s: float | None = ESPERA_MAX_POR_DEFECTO_S,
+                 intervalo_s: float | None = None, solo_host: bool = False) -> Turno:
         """Registra la intención en las dos colas (sin dormir) y devuelve el contexto. El estado
         solo se marca al autorizar; una cancelación previa no consume hueco."""
         try:
@@ -435,12 +460,18 @@ class CortesiaProceso:
             raise ValueError("el host efectivo no puede estar vacío")
         self._fuentes_por_host.setdefault(host, set()).add(fuente)
         self._politica(fuente)
-        return Turno(self, fuente, host, motivo=motivo, espera_max_s=espera_max_s)
+        return Turno(self, fuente, host, motivo=motivo, espera_max_s=espera_max_s,
+                     intervalo_s=intervalo_s, solo_host=solo_host)
 
     async def esperar(self, fuente: str, host: str, *, motivo: str = "cortesia",
-                      espera_max_s: float | None = ESPERA_MAX_POR_DEFECTO_S) -> Espera:
-        """Atajo: reserva, espera y libera. Devuelve la espera (cuánto y por qué)."""
-        async with self.reservar(fuente, host, motivo=motivo, espera_max_s=espera_max_s) as espera:
+                      espera_max_s: float | None = ESPERA_MAX_POR_DEFECTO_S,
+                      intervalo_s: float | None = None, solo_host: bool = False) -> Espera:
+        """Atajo: reserva, espera y libera. Devuelve la espera (cuánto y por qué).
+
+        `solo_host=True` salta el nivel de FUENTE: es el caso de las portadas (§3.1), cuya política
+        es por host y no por fuente; así dos hosts distintos no se bloquean entre sí."""
+        async with self.reservar(fuente, host, motivo=motivo, espera_max_s=espera_max_s,
+                                 intervalo_s=intervalo_s, solo_host=solo_host) as espera:
             return espera
 
     def liberar(self, turno: Turno) -> None:

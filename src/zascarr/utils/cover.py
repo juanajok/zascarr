@@ -11,6 +11,7 @@ import asyncio
 import io
 import os
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -20,6 +21,7 @@ import structlog
 from fastapi import Request, Response
 from PIL import Image
 
+from zascarr.config import get_settings
 from zascarr.core.formato_contenedor import (
     IMAGE_EXTS,
     MAX_PIXELES_PORTADA,
@@ -33,8 +35,19 @@ from zascarr.core.formato_contenedor import (
     zip_fuera_de_limite,
 )
 from zascarr.models import ClaseZip
+from zascarr.utils.cortesia import (
+    CortesiaEnEspera,
+    CortesiaProceso,
+    fuente_de_host_portada,
+    fuente_habilitada,
+)
 from zascarr.utils.espacio import comprobar_espacio
-from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_imagen, host_para_log
+from zascarr.utils.url_portada import (
+    ESPERA_MAX_PORTADA_S,
+    UrlNoPermitidaError,
+    descargar_imagen,
+    host_para_log,
+)
 
 logger = structlog.get_logger()
 
@@ -159,7 +172,12 @@ def cached_image_response(request: Request, data: bytes, content_type: str, etag
 
 
 async def fetch_and_cache_cover(url: str, dest: Path, *,
-                                 ancho: int = _COVER_MAX_WIDTH) -> bool:
+                                 ancho: int = _COVER_MAX_WIDTH,
+                                 cortesia: CortesiaProceso | None = None,
+                                 reloj=time.monotonic,
+                                 dormir=asyncio.sleep,
+                                 espera_max_s: float = ESPERA_MAX_PORTADA_S,
+                                 resolutor=None, crear_cliente=None) -> bool:
     """Descarga `url` (portada externa de Comic Vine/AniList/Tebeosfera/GCD), la redimensiona y
     la guarda en `dest`. Devuelve False sin lanzar si algo falla (URL no permitida, URL muerta,
     timeout, imagen ilegible): no se cachea nada en ese caso.
@@ -177,9 +195,23 @@ async def fetch_and_cache_cover(url: str, dest: Path, *,
     de peticiones a un CDN externo cuando una rejilla entera de tarjetas carga en frío. El
     decode/resize de Pillow es síncrono y se manda a un hilo aparte.
     """
+    # AC-12/AC-15: una fuente apagada no recibe portadas (se apaga en Ajustes, no en el .env).
+    fuente = fuente_de_host_portada(host_para_log(url))
+    if fuente is not None and not fuente_habilitada(fuente, get_settings()):
+        logger.info("cover.fuente_apagada", fuente=fuente)
+        return False
+
     async with _COVER_FETCH_SEMAPHORE:
         try:
-            content = await descargar_imagen(url)
+            content = await descargar_imagen(
+                url, cortesia=cortesia, reloj=reloj, dormir=dormir,
+                espera_max_s=espera_max_s, resolutor=resolutor,
+                crear_cliente=crear_cliente)
+        except CortesiaEnEspera as exc:
+            # Espera visible sin prometer recuperación: no se envía y la ausencia no se cachea.
+            logger.info("cover.cortesia_en_espera", motivo=exc.motivo,
+                        espera_s=round(exc.espera_estimada_s, 1))
+            return False
         except UrlNoPermitidaError as exc:
             # Solo el host y el código: la URL entera puede llevar credenciales o claves.
             logger.warning("cover.url_rechazada", host=host_para_log(url), motivo=str(exc))
