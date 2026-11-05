@@ -84,6 +84,16 @@ class TestIndex:
         assert r.status_code == 200
         assert "Batman" in r.text
 
+    def test_la_portada_de_la_rejilla_lleva_v2(self):
+        """R-01 de BL-PORT1 (#300): sin `?v=2` el navegador puede pintar hasta 24 h la
+        portada vieja tras desplegar la caché `v2`. La ruta ignora el query."""
+        series = make_series("Batman")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert r.status_code == 200
+        assert f"/ui/series/{series.id}/portada?v=2" in r.text
+
     def test_la_tarjeta_dice_la_tradicion_como_el_filtro(self):
         """Caso real (2026-10-20): la tarjeta decía «franco_belgian»; el filtro, «Franco-belga»."""
         series = make_series("Thorgal")
