@@ -67,8 +67,12 @@ PIXELES_GRANDES = 12_000_000
 
 UMBRAL_P95_MS = {ANCHO_REVISION: 400.0, SERIES_COVER_MAX_WIDTH: 400.0}
 UMBRAL_P95_GRANDE_MS = 600.0
-UMBRAL_MEDIA_BYTES = 60 * 1024
-UMBRAL_RSS_MB = 40.0
+# Ratificados por el PO el 2026-11-05 con la medida delante (Q-4): los 60 KB y 40 MB
+# propuestos no cabían con 600 px (93,7 KB y 65,5 MB medidos en la Pi). Ver
+# docs/design/medicion-BL-PORT1-2026-11-05.md. No es «el número que salió bien»: es el
+# coste aceptado de mantener 2× de nitidez; 480 daría 1,66× en el móvil de una columna.
+UMBRAL_MEDIA_BYTES = 100 * 1024
+UMBRAL_RSS_MB = 80.0
 
 
 def _percentil(valores: list[float], p: float) -> float | None:
