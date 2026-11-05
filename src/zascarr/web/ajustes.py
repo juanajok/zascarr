@@ -25,6 +25,7 @@ from zascarr.services.auth import (
     SESSION_MAX_AGE,
     crear_cookie_sesion,
 )
+from zascarr.services.cortesia_estado import texto_politica_ajustes
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.services.seguridad import MODOS, fijar_seguridad
@@ -126,6 +127,7 @@ def _contexto() -> dict:
         "webhook_token_configurado": bool(s.webhook_token),
         "webhook_chat_id": s.webhook_chat_id,
         "webhook_incluir_nombres": s.webhook_incluir_nombres,
+        "cortesia": texto_politica_ajustes(s),
     }
 
 
@@ -340,8 +342,10 @@ async def probar_comic_vine(
 ) -> HTMLResponse:
     api_key = _secreto_o_guardado(comicvine_api_key, "comicvine_api_key")
     ok, mensaje = await _test_comic_vine(api_key)
+    # §6.5: «no se ha probado por cortesía» es un aviso neutro (warn), no un error en rojo.
+    aviso = (not ok) and mensaje.startswith("No se ha probado")
     return templates.TemplateResponse(
-        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje}
+        request, "_ajustes_prueba.html", {"ok": ok, "mensaje": mensaje, "aviso": aviso}
     )
 
 

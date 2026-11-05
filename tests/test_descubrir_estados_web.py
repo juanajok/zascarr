@@ -27,6 +27,7 @@ from zascarr.models import MetadataSource
 from zascarr.services.discovery import (
     FUENTE_APAGADA,
     FUENTE_ERROR,
+    FUENTE_ESPERA,
     FUENTE_OK,
     FUENTE_SIN_CLAVE,
     Busqueda,
@@ -34,7 +35,8 @@ from zascarr.services.discovery import (
 from zascarr.web import descubrir_texto as dt
 
 SECRETO = "secreto-de-prueba-para-firmar"
-OK, ERR, OFF, SINCLAVE = FUENTE_OK, FUENTE_ERROR, FUENTE_APAGADA, FUENTE_SIN_CLAVE
+OK, ERR, OFF, SINCLAVE, ESPERA = (FUENTE_OK, FUENTE_ERROR, FUENTE_APAGADA, FUENTE_SIN_CLAVE,
+                                FUENTE_ESPERA)
 
 
 def estados(cv=OK, al=OK, te=OK, gcd=OK) -> dict[str, str]:
@@ -307,3 +309,41 @@ def test_la_ruta_sigue_respondiendo_sin_resultados_ni_avisos(web):
         r = client.get("/ui/descubrir/buscar", params={"q": "zzz"})
     v = visible(r.text)
     assert r.status_code == 200 and "Sin coincidencias en Comic Vine, AniList, Tebeosfera y GCD." in v
+
+
+# ── PR-2 / AC-14: espera visible sin presentarla como fallo ─────────────────────────────────
+
+class TestEsperaPorCortesia:
+
+    def test_el_aviso_dice_no_se_ha_consultado_y_cuanto_esperar(self):
+        r = dt.resumir(estados(cv=ESPERA), 0, {"comic_vine": 12.0})
+        assert r.avisos == ["Comic Vine: no se ha consultado; hay que esperar ~12 s por cortesía. "
+                            "No se ha enviado nada; vuelve a intentarlo en un momento."]
+        assert not any("No respondió" in a for a in r.avisos)
+        assert r.avisos[0] in r.anuncio
+
+    def test_sin_estimacion_no_inventa_segundos(self):
+        r = dt.resumir(estados(cv=ESPERA), 0, {"comic_vine": None})
+        assert "hay que esperar por cortesía" in r.avisos[0] and "~" not in r.avisos[0]
+
+    def test_si_no_se_consulto_ninguna_manda_la_frase_agregada(self):
+        r = dt.resumir(estados(cv=ESPERA, al=ESPERA, te=ESPERA, gcd=ESPERA), 0,
+                       {"comic_vine": 12.0, "anilist": None, "tebeosfera": 3.0, "gcd": 5.0})
+        assert r.anuncio.startswith(
+            "Todavía no se ha consultado ninguna fuente: hay que esperar por cortesía.")
+        assert "Ningún resultado" not in r.anuncio and "No respondió" not in " ".join(r.avisos)
+
+    def test_una_fuente_en_espera_no_se_presenta_como_caida(self, web):
+        b = Busqueda([], [], estados(cv=ESPERA, al=OK, te=OK, gcd=OK),
+                     esperas={"comic_vine": 12.0})
+        v = visible(buscar(b))
+        assert "Comic Vine: no se ha consultado; hay que esperar ~12 s por cortesía." in v
+        assert "No respondió" not in v and "no se pudo consultar" not in v
+
+    def test_si_todas_esperan_lo_dice_en_vez_de_sin_coincidencias(self, web):
+        b = Busqueda([], [], estados(cv=ESPERA, al=ESPERA, te=ESPERA, gcd=ESPERA),
+                     esperas={"comic_vine": 12.0, "anilist": 12.0, "tebeosfera": 12.0, "gcd": 12.0})
+        t = buscar(b)
+        v = visible(t)
+        assert "Todavía no se ha consultado ninguna fuente: hay que esperar por cortesía." in v
+        assert "Sin coincidencias" not in v and "No respondió" not in v

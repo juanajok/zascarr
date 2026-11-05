@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from zascarr.services.discovery import (
     FUENTE_ERROR,
+    FUENTE_ESPERA,
     FUENTE_OK,
     FUENTE_SIN_CLAVE,
     ORDEN_DE_FUENTES,
@@ -105,14 +106,30 @@ class Resumen:
     consultadas: list[str]
 
 
-def resumir(estados: dict[str, str], n_resultados: int) -> Resumen:
-    """Qué decir tras una búsqueda: `estados` es el estado de cada fuente (`Busqueda.fuentes`)."""
+def _aviso_de_espera(nombre: str, segundos: float | None) -> str:
+    espera = (f"hay que esperar ~{max(1, round(segundos))} s por cortesía"
+              if segundos else "hay que esperar por cortesía")
+    return (f"{nombre}: no se ha consultado; {espera}. "
+            "No se ha enviado nada; vuelve a intentarlo en un momento.")
+
+
+def resumir(estados: dict[str, str], n_resultados: int,
+            esperas: dict[str, float | None] | None = None) -> Resumen:
+    """Qué decir tras una búsqueda: `estados` es el estado de cada fuente (`Busqueda.fuentes`).
+
+    `esperas` (fuente → segundos o None) solo hace falta para `espera`: el aviso §6.5 dice cuánto
+    hay que esperar y nunca se presenta como fallo ni como ausencia de resultados."""
     orden = [f.value for f in ORDEN_DE_FUENTES]
     consultadas = [ETIQUETAS[v] for v in orden if estados.get(v) == FUENTE_OK]
     caidas = [ETIQUETAS[v] for v in orden if estados.get(v) == FUENTE_ERROR]
     sin_clave = [ETIQUETAS[v] for v in orden if estados.get(v) == FUENTE_SIN_CLAVE]
+    esperando = [v for v in orden if estados.get(v) == FUENTE_ESPERA]
+    esperas = esperas or {}
 
     avisos: list[str] = []
+    for fuente in esperando:
+        nombre = ETIQUETAS[fuente]
+        avisos.append(_aviso_de_espera(nombre, esperas.get(fuente)))
     if caidas:
         if not consultadas:
             avisos.append(f"No respondió ninguna fuente: {enumerar(caidas)}. "
@@ -126,10 +143,14 @@ def resumir(estados: dict[str, str], n_resultados: int) -> Resumen:
     for nombre in sin_clave:
         avisos.append(f"{nombre} no está configurado: añade su clave en Ajustes para "
                       "incluirlo en la búsqueda.")
-    if not consultadas and not caidas and not sin_clave:
+    if not consultadas and not caidas and not sin_clave and not esperando:
         avisos.append("No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar.")
 
-    if n_resultados > 0:
+    if not consultadas and esperando and not caidas:
+        # §6.5: si no se consultó ninguna por espera, manda esta frase, no «resultados».
+        cabeza = ("Todavía no se ha consultado ninguna fuente: "
+                  "hay que esperar por cortesía.")
+    elif n_resultados > 0:
         cabeza = "1 resultado." if n_resultados == 1 else f"{n_resultados} resultados."
     elif not consultadas:
         cabeza = ""             # ya lo dicen los avisos («No respondió ninguna fuente…»)
