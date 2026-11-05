@@ -152,19 +152,25 @@ def _destino_seguro(actual: str, location: str | None, *, hosts_redireccion,
 
 
 async def _enviar(cliente: httpx.AsyncClient, metodo: str, url: str, *,
-                  datos, cabeceras) -> httpx.Response:
-    """Un salto, sin seguir redirecciones automáticas. GET lleva `params`, el resto `json`."""
+                  datos, cabeceras, form: bool) -> httpx.Response:
+    """Un salto, sin seguir redirecciones automáticas.
+
+    GET lleva `params`; POST lleva `json` salvo `form=True` (formularios de Tebeosfera y del
+    foro, que esperan `application/x-www-form-urlencoded`)."""
     metodo = metodo.upper()
     if metodo == "GET" and datos is not None:
         return await cliente.get(url, params=datos, headers=cabeceras)
     if metodo == "POST" and datos is not None:
+        if form:
+            return await cliente.post(url, data=datos, headers=cabeceras)
         return await cliente.post(url, json=datos, headers=cabeceras)
     return await cliente.request(metodo, url, headers=cabeceras)
 
 
 async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: PoliticaFuente,
                                 deadline: float | None, hosts_redireccion,
-                                datos, cabeceras, cortesia, reloj, motivo: str):
+                                datos, cabeceras, cortesia, reloj, motivo: str,
+                                form: bool, permitir_apagada: bool):
     """Una llamada con sus saltos: cada hop pasa por la cola y cuenta en el presupuesto."""
     try:
         origen_inicial = origen_normalizado(url)
@@ -175,6 +181,10 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
     espera_total = 0.0
     origen_actual = origen_inicial
     for salto in range(0, politica.max_redirecciones + 1):
+        # La puerta de «fuente apagada» se comprueba antes de CADA salto, no solo antes del
+        # primer intento: si se apaga mientras se sigue una redirección, no se envía.
+        if not permitir_apagada and not fuente_habilitada(politica.fuente):
+            raise FuenteApagada(politica.fuente)
         host = origen_actual                    # §3.2: (esquema, host, puerto)
         restante = None if deadline is None else deadline - reloj()
         if restante is not None and restante <= 0:
@@ -182,9 +192,13 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
         espera = await cortesia.esperar(politica.fuente, host, motivo=motivo,
                                         espera_max_s=restante)
         espera_total += espera.espera_s
+        # La fuente pudo apagarse DURANTE la espera: se vuelve a mirar justo antes de enviar.
+        if not permitir_apagada and not fuente_habilitada(politica.fuente):
+            raise FuenteApagada(politica.fuente)
         try:
             respuesta = await _enviar(cliente, metodo_actual, url_actual,
-                                      datos=datos_actuales, cabeceras=cabeceras_actuales)
+                                      datos=datos_actuales, cabeceras=cabeceras_actuales,
+                                      form=form)
         except (httpx.RemoteProtocolError, httpx.InvalidURL) as exc:
             # La URL del salto no es protocolizable: fallo de redirección, no de red.
             raise RedireccionNoPermitida("", "location_invalida") from exc
@@ -219,6 +233,7 @@ async def pedir_con_cortesia(
     datos=None,
     cabeceras: dict | None = None,
     permitir_apagada: bool = False,
+    form: bool = False,
     cortesia=None,
     reloj=time.monotonic,
     dormir=asyncio.sleep,
@@ -246,7 +261,9 @@ async def pedir_con_cortesia(
             respuesta, espera_s_intento, origen_final = await _seguir_redirecciones(
                 cliente, metodo, url, politica=politica, deadline=deadline,
                 hosts_redireccion=hosts_redireccion, datos=datos, cabeceras=cabeceras,
-                cortesia=servicio, reloj=reloj, motivo="cortesia" if intento == 1 else "reintento")
+                cortesia=servicio, reloj=reloj,
+                motivo="cortesia" if intento == 1 else "reintento",
+                form=form, permitir_apagada=permitir_apagada)
         except CortesiaEnEspera:
             raise
         except httpx.TimeoutException:

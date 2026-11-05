@@ -392,3 +392,15 @@ class TestPresupuestoPorDefecto:
         with pytest.raises(CortesiaEnEspera):
             async with lim.reservar("comicvine", "https://a.example"):
                 pass
+
+
+class TestPortadaNoContagiaSuIntervaloAlHost:
+    async def test_la_fuente_sintetica_portada_no_infla_el_intervalo_del_host(self):
+        """La portada usa su intervalo por host; no debe hacer que Comic Vine espere 2,5 s."""
+        r = Reloj()
+        lim = _lim(r)
+        lim.registrar_politica(politica_de("comicvine", AjustesFalsos()))
+        origen = "https://comicvine.gamespot.com:443"
+        await lim.esperar("portada", origen, intervalo_s=2.5, solo_host=True)
+        # Comic Vine llega después al mismo host: espera SU 1,0 s, no el 2,5 de la portada.
+        assert (await lim.esperar("comicvine", origen)).espera_s == pytest.approx(1.0)

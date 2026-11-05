@@ -15,6 +15,16 @@ def pytest_configure(config):
 
 
 @pytest.fixture(autouse=True)
+def _limpiar_cortesia():
+    """El limitador compartido es estado de módulo: se reinicia entre pruebas para que una espera
+    no se filtre de un test a otro (y para que la suite no duerma de verdad)."""
+    from zascarr.utils.cortesia import reiniciar_para_pruebas
+    reiniciar_para_pruebas()
+    yield
+    reiniciar_para_pruebas()
+
+
+@pytest.fixture(autouse=True)
 def _limpiar_estado_auth():
     """El retraso progresivo, la caché de Basic y las primitivas de concurrencia
     (candado/semáforo) son estado de módulo: se limpian entre tests para que no
