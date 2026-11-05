@@ -453,3 +453,17 @@ class TestUsaLaVersionEnLaRuta:
         assert CACHE_VERSION == "v2"
         assert m.v2.exists()
         assert not m.legado.exists()
+
+    def test_el_query_v2_de_la_ui_no_cambia_la_respuesta(self, tmp_path, mundo):
+        """`?v=2` es solo el separador de caché del navegador (R-01): el endpoint lo ignora
+        y responde igual que sin query."""
+        m = mundo([(str(_cbz(tmp_path / "comic.cbz")), None)])
+        cliente = TestClient(app)
+
+        sin_query = cliente.get(m.url())
+        con_query = cliente.get(m.url() + "?v=2")
+
+        assert sin_query.status_code == con_query.status_code == 200
+        assert con_query.headers["etag"] == sin_query.headers["etag"]
+        assert con_query.headers["cache-control"] == "private, max-age=86400"
+        assert con_query.content == sin_query.content
