@@ -356,7 +356,7 @@ class TestPortada:
         get_settings.cache_clear()
         monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path))
 
-        async def fake_fetch(url, dest):
+        async def fake_fetch(url, dest, **kwargs):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(b"\xff\xd8\xff")  # cabecera JPEG mínima
             return True

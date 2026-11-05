@@ -18,12 +18,20 @@ host y puerto de `FORUM_URL`, que elige quien administra la instalación y puede
 """
 import asyncio
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 import structlog
+
+from zascarr.utils.cortesia import CortesiaProceso, PoliticaFuente
+from zascarr.utils.peticiones import (
+    DemasiadasRedirecciones,
+    RedireccionNoPermitida,
+    pedir_con_cortesia,
+)
 
 logger = structlog.get_logger()
 
@@ -74,24 +82,39 @@ class ForumResult:
 
 
 class ForumScraper:
-    def __init__(self, base_url: str, rate_limit: float = 2.0,
-                 crear_cliente: Callable[[], httpx.AsyncClient] | None = None):
+    def __init__(self, base_url: str, rate_limit: float | None = 2.0,
+                 crear_cliente: Callable[[], httpx.AsyncClient] | None = None, *,
+                 politica: PoliticaFuente | None = None,
+                 cortesia: CortesiaProceso | None = None,
+                 reloj=time.monotonic, dormir=asyncio.sleep, espera_max_s: float = 30.0):
         self._base = base_url.rstrip("/")
         self._origen = origen_de(self._base)
-        self._rate_limit = rate_limit
-        self._last_req: float = 0
+        self._politica = politica or PoliticaFuente(
+            "foro", "Foro", max(0.0, float(rate_limit if rate_limit is not None else 2.0)),
+            max_intentos=2, max_redirecciones=MAX_SALTOS)
+        self._cortesia = cortesia
+        self._reloj = reloj
+        self._dormir = dormir
+        self._espera_max_s = espera_max_s
         self._cookies: dict = {}
         # Las pruebas inyectan un cliente con transporte simulado. Sin redirecciones automáticas.
         self._crear_cliente = crear_cliente or (
             lambda: httpx.AsyncClient(timeout=30.0, follow_redirects=False))
 
     async def login(self, username: str, password: str) -> bool:
+        if self._origen is None:
+            raise OrigenNoPermitidoError("foro_sin_origen")
         async with self._crear_cliente() as client:
-            r = await client.post(
-                f"{self._base}/index.php?act=Login&CODE=01",
-                data={"UserName": username, "PassWord": password, "CookieDate": "1"},
+            r = await pedir_con_cortesia(
+                client, "POST", f"{self._base}/index.php?act=Login&CODE=01",
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                datos={"UserName": username, "PassWord": password, "CookieDate": "1"},
+                form=True, cortesia=self._cortesia,
+                reloj=self._reloj, dormir=self._dormir,
             )
-            for k, v in r.cookies.items():
+            # El jar del cliente conserva también las cookies de un 302 intermedio (IPB
+            # responde 302 + Set-Cookie); `r.cookies` (respuesta final) llegaría vacío.
+            for k, v in client.cookies.items():
                 self._cookies[k] = v
             self._logged_in = bool(self._cookies) and r.status_code in (200, 301, 302)
             return self._logged_in
@@ -136,29 +159,29 @@ class ForumScraper:
         return url
 
     async def _get(self, url: str) -> str:
-        for _ in range(MAX_SALTOS + 1):
-            # Defensa en profundidad: ANTES de cada petición (también tras una redirección)
-            # el destino debe ser el origen del foro.
-            if origen_de(url) != self._origen:
-                raise OrigenNoPermitidoError("otro_origen")
-            now = asyncio.get_event_loop().time()
-            if (elapsed := now - self._last_req) < self._rate_limit:
-                await asyncio.sleep(self._rate_limit - elapsed)
-            async with self._crear_cliente() as client:
-                r = await client.get(url, headers=self._cabeceras(url))
-            self._last_req = asyncio.get_event_loop().time()
-            if r.status_code in _REDIRECCIONES:
-                destino = r.headers.get("location") or ""
-                if not destino:
-                    raise OrigenNoPermitidoError("redireccion_sin_destino")
-                try:
-                    url = urljoin(url, destino)
-                except ValueError:
-                    raise OrigenNoPermitidoError("url_mal_formada") from None
-                continue
-            r.raise_for_status()
+        # Defensa en profundidad: el destino de partida debe ser el origen del foro.
+        if origen_de(url) != self._origen:
+            raise OrigenNoPermitidoError("otro_origen")
+        async with self._crear_cliente() as client:
+            try:
+                # La envoltura sigue las redirecciones a mano, solo al mismo origen, y cada
+                # salto pasa por la cola compartida. La cookie va en las cabeceras explícitas.
+                r = await pedir_con_cortesia(
+                    client, "GET", url, politica=self._politica,
+                    espera_max_s=self._espera_max_s, cabeceras=self._cabeceras(url),
+                    cortesia=self._cortesia,
+                    reloj=self._reloj, dormir=self._dormir,
+                )
+            except RedireccionNoPermitida as exc:
+                motivos = {
+                    "otro_origen": "otro_origen",
+                    "location_ausente": "redireccion_sin_destino",
+                    "location_con_credenciales": "credenciales_en_la_url",
+                }
+                raise OrigenNoPermitidoError(motivos.get(exc.motivo, "url_mal_formada")) from exc
+            except DemasiadasRedirecciones as exc:
+                raise OrigenNoPermitidoError("demasiadas_redirecciones") from exc
             return r.text
-        raise OrigenNoPermitidoError("demasiadas_redirecciones")
 
     async def use_ipb_search(self, query: str) -> list[ForumResult]:
         try:
@@ -169,7 +192,8 @@ class ForumScraper:
             logger.warning("forum.search_rechazada", motivo=str(exc))
             return []
         except Exception:
-            logger.exception("forum.search_failed", query=query)
+            # Sin query en el registro (privacidad §6.6).
+            logger.exception("forum.search_failed")
             return []
         results = []
         for href, title in TOPIC_PATTERN.findall(html)[:10]:
