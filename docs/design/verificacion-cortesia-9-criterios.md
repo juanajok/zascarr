@@ -437,9 +437,12 @@ y «determinismo» sí tienen prueba. Ningún NOT RUN se cuenta como PASS.
 
 ---
 
-## 2. Resumen de FAIL y de evidencias frágiles
+## 2. Resumen de la foto inicial y de evidencias frágiles
 
-### 2.1 Los 7 FAIL de la matriz
+### 2.1 Los 7 FAIL de la foto `4ec55cb` (todos cerrados en §7)
+
+Esta tabla es **histórica**: documenta lo que la matriz marcaba FAIL en la foto inicial y
+cómo se cerró. El estado actual es **0 FAIL** (47 PASS); ver §7.
 
 | Celda | Tipo | Qué falta | Qué haría falta para cerrarlo |
 |---|---|---|---|
@@ -554,8 +557,8 @@ confunda «suite verde» con «validado en producción».
   petición más espaciada, nunca una ráfaga.
 - **Garantía en la Pi real ni en red real.** Nada de §3; el PASS de §1 es de suite simulada.
 - **Portadas por fuente.** Su URL no lleva la fuente; el nivel host sale del mapa
-  allowlist→fuente y un host desconocido espera 2,5 s. El snapshot no declara bien el
-  intervalo de un host solo-portada (FAIL I de §1.8).
+  allowlist→fuente y un host desconocido espera 2,5 s. El snapshot **sí** declara el
+  intervalo efectivo de un host solo-portada y su fuente mapeada (§1.8 y §7).
 
 ---
 
@@ -608,7 +611,9 @@ confunda «suite verde» con «validado en producción».
 
 ---
 
-## 7. Registro de cambios
+## 7. Registro de cambios y nota de cierre
+
+### 7.1 Registro de cambios
 
 | Fecha | Versión | Cambio |
 |---|---|---|
@@ -616,7 +621,7 @@ confunda «suite verde» con «validado en producción».
 
 ---
 
-## 7. Nota de cierre (2026-11-05, rama `fix/134-cortesia-cierre`)
+### 7.2 Nota de cierre (2026-11-05, rama `fix/134-cortesia-cierre`)
 
 Actualización posterior a la foto de `4ec55cb`; no reescribe el informe, solo registra lo que
 pasa a PASS:
