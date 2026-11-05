@@ -123,7 +123,7 @@ async def buscar(request: Request, q: str = "", db: AsyncSession = Depends(get_d
     firmados, omitidas = firmar_resultados(busqueda.resultados, secreto)
     # U14: la web explica el estado de CADA fuente ella misma (qué no respondió y que las demás sí); los avisos
     # de texto del servicio ya no se pintan (llevaban `.env` y nombres de variables).
-    resumen = resumir(busqueda.fuentes, len(firmados))
+    resumen = resumir(busqueda.fuentes, len(firmados), busqueda.esperas)
     avisos = list(resumen.avisos)
     if omitidas:
         avisos.append(f"Se han omitido {omitidas} resultado(s) cuyo título o identificador no se puede guardar.")

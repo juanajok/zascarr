@@ -14,11 +14,13 @@ from zascarr.services.comic_vine import CVResult
 from zascarr.services.discovery import (
     FUENTE_APAGADA,
     FUENTE_ERROR,
+    FUENTE_ESPERA,
     FUENTE_OK,
     FUENTE_SIN_CLAVE,
     ORDEN_DE_FUENTES,
     DiscoveryService,
 )
+from zascarr.utils.cortesia import CortesiaEnEspera
 from zascarr.services.gcd import GCDResult
 from zascarr.services.tebeosfera import TebeosferaResult
 
@@ -34,6 +36,15 @@ def _ctx(valor):
 def _roto():
     cliente = AsyncMock()
     cliente.__aenter__.side_effect = RuntimeError("caída")
+    return MagicMock(return_value=cliente)
+
+
+def _esperando(segundos: float = 12.0):
+    """Un cliente cuya petición no se envía: la cortesía pide esperar (AC-14)."""
+    cliente = AsyncMock()
+    cliente.__aenter__.return_value = cliente
+    cliente.search_series = AsyncMock(side_effect=CortesiaEnEspera(
+        "comicvine", "https://comicvine.gamespot.com:443", segundos, "bloqueo_fuente"))
     return MagicMock(return_value=cliente)
 
 
@@ -116,3 +127,30 @@ async def test_search_conserva_su_contrato_de_pareja(monkeypatch):
          patch("zascarr.services.discovery.GCDClient", _ctx(GC)):
         r, a = await DiscoveryService(db=MagicMock()).search("algo")
     assert isinstance(r, list) and a == [] and len(r) == 4
+
+
+# ── PR-2: espera visible (AC-14/AC-16) ───────────────────────────────────────────────────────
+
+async def test_una_fuente_en_espera_no_es_error_y_dice_cuanto_hay_que_esperar(monkeypatch):
+    b = await _busca(monkeypatch, cv=_esperando(12.0))
+    assert b.fuentes["comic_vine"] == FUENTE_ESPERA
+    assert b.esperas == {"comic_vine": 12.0}
+    assert {b.fuentes[k] for k in ("anilist", "tebeosfera", "gcd")} == {FUENTE_OK}
+    assert b.avisos == ["Comic Vine: no se ha consultado; hay que esperar ~12 s por cortesía. "
+                        "No se ha enviado nada; vuelve a intentarlo en un momento."]
+    assert not any("no se pudo consultar" in a for a in b.avisos)
+
+
+async def test_la_espera_sin_estimacion_no_inventa_segundos(monkeypatch):
+    b = await _busca(monkeypatch, cv=_esperando(0.0))
+    assert b.esperas == {"comic_vine": None}
+    assert "hay que esperar por cortesía" in b.avisos[0]
+    assert "~" not in b.avisos[0]
+
+
+async def test_la_espera_no_se_mezcla_con_una_caida(monkeypatch):
+    b = await _busca(monkeypatch, cv=_esperando(12.0), al=_roto())
+    assert b.fuentes["comic_vine"] == FUENTE_ESPERA and b.fuentes["anilist"] == FUENTE_ERROR
+    assert len(b.avisos) == 2
+    assert any("no se ha consultado" in a for a in b.avisos)
+    assert any("no se pudo consultar" in a for a in b.avisos)

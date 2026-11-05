@@ -21,7 +21,7 @@ criterio de tolerancia a fallos que enricher.py.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 import structlog
@@ -33,6 +33,7 @@ from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
 from zascarr.services.gcd import GCDClient
 from zascarr.services.tebeosfera import TebeosferaClient
+from zascarr.utils.cortesia import CortesiaEnEspera
 
 logger = structlog.get_logger()
 
@@ -58,6 +59,8 @@ FUENTE_OK = "ok"
 FUENTE_APAGADA = "apagada"
 FUENTE_SIN_CLAVE = "sin_clave"
 FUENTE_ERROR = "error"
+#: §6.5: no se ha consultado porque la cortesía pide esperar. No es un fallo ni «sin resultados».
+FUENTE_ESPERA = "espera"
 
 
 @dataclass
@@ -66,6 +69,8 @@ class Busqueda:
     resultados: list[DiscoveryResult]
     avisos: list[str]
     fuentes: dict[str, str]
+    #: Fuente → segundos estimados de espera (None si no hay estimación). Solo para `espera`.
+    esperas: dict[str, float | None] = field(default_factory=dict)
 
 
 class ProcedenciaTradicion(StrEnum):
@@ -163,16 +168,30 @@ class DiscoveryService:
         outcomes = await asyncio.gather(*(coro for _, _, coro in fuentes), return_exceptions=True)
 
         results: list[DiscoveryResult] = []
+        esperas: dict[str, float | None] = {}
         for (fuente, nombre, _), outcome in zip(fuentes, outcomes, strict=True):
+            if isinstance(outcome, CortesiaEnEspera):
+                # §6.5/AC-14: espera visible, no error ni «sin resultados». Nunca la URL.
+                estimacion = outcome.espera_estimada_s if outcome.espera_estimada_s > 0 else None
+                esperas[fuente.value] = estimacion
+                espera_txt = (f"hay que esperar ~{max(1, round(estimacion))} s por cortesía"
+                              if estimacion else "hay que esperar por cortesía")
+                avisos.append(
+                    f"{nombre}: no se ha consultado; {espera_txt}. "
+                    "No se ha enviado nada; vuelve a intentarlo en un momento.")
+                estados[fuente.value] = FUENTE_ESPERA
+                continue
             if isinstance(outcome, BaseException):
-                logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
+                # Solo la clase (§6.6): `str(exc)` puede llevar URL o detalles internos.
+                logger.warning("discovery.source_failed", source=nombre,
+                               error=type(outcome).__name__)
                 avisos.append(f"{nombre}: no se pudo consultar ahora mismo.")
                 estados[fuente.value] = FUENTE_ERROR
                 continue
             if estados[fuente.value] != FUENTE_SIN_CLAVE:
                 estados[fuente.value] = FUENTE_OK
             results.extend(outcome)
-        return Busqueda(results, avisos, estados)
+        return Busqueda(results, avisos, estados, esperas)
 
     async def _search_comic_vine(self, query: str, limit: int) -> list[DiscoveryResult]:
         # Sin API key, la petición está condenada (401) — no la intentamos.
