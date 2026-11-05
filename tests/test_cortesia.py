@@ -353,3 +353,42 @@ class TestFuenteHabilitada:
         assert fuente_habilitada("comicvine", Ajustes()) is False
         assert fuente_habilitada("anilist", Ajustes()) is True
         assert fuente_habilitada("foro", Ajustes()) is False
+
+
+class TestOrigenNormalizadoComoHost:
+    """AC-02 (§3.2): la clave del nivel host es `(esquema, host, puerto)`, no el hostname."""
+
+    async def test_mismo_host_distinto_esquema_o_puerto_son_colas_distintas(self):
+        from zascarr.utils.cortesia import PoliticaFuente
+        r = Reloj()
+        lim = _lim(r)
+        for fuente, intervalo in (("tebeosfera", 2.5), ("comicvine", 1.0),
+                                  ("gcd", 2.0), ("anilist", 1.5)):
+            lim.registrar_politica(PoliticaFuente(fuente, fuente, intervalo, 3, 3))
+        await lim.esperar("tebeosfera", "https://cdn.example")             # marca el origen https:443
+        assert (await lim.esperar("comicvine", "http://cdn.example")).espera_s == 0.0
+        assert (await lim.esperar("gcd", "https://cdn.example:8443")).espera_s == 0.0
+        # El mismo origen SÍ comparte cola: espera el máximo de los intervalos del host (2,5 s).
+        assert (await lim.esperar("anilist", "https://cdn.example")).espera_s == pytest.approx(2.5)
+
+    async def test_la_url_completa_tambien_se_normaliza(self):
+        r = Reloj()
+        lim = _lim(r)
+        await lim.esperar("comicvine", "https://cdn.example/ruta?x=1")
+        assert (await lim.esperar("comicvine", "https://cdn.example:443/otra")) is not None
+        assert (await lim.esperar("anilist", "https://cdn.example/c.png")).espera_s > 0
+
+
+class TestPresupuestoPorDefecto:
+    async def test_sin_presupuesto_explicito_no_se_duerme_hasta_una_hora(self):
+        """Un caller nuevo no puede dormir indefinidamente: el defecto es 30 s (fondo, §3.7)."""
+        r = Reloj()
+        lim = _lim(r)
+        lim.bloquear("comicvine", "https://a.example", 1000, motivo="429")
+        with pytest.raises(CortesiaEnEspera) as exc:
+            await lim.esperar("comicvine", "https://a.example")
+        assert exc.value.espera_estimada_s == pytest.approx(1000)
+        assert r.dormidos == []
+        with pytest.raises(CortesiaEnEspera):
+            async with lim.reservar("comicvine", "https://a.example"):
+                pass

@@ -87,6 +87,9 @@ logger = logging.getLogger(__name__)
 
 #: Tope del bloqueo compartido que puede imponer un `Retry-After` (§5).
 BLOQUEO_MAX_S = 3600.0
+#: Presupuesto por defecto de un llamador que no dice el suyo (fondo, §3.7). Un caller nuevo no
+#: puede dormir hasta una hora: sin presupuesto explícito se aplica este.
+ESPERA_MAX_POR_DEFECTO_S = 30.0
 #: Backoff local de un intento: 2 s ×2 (2, 4, 8…), con tope, sin jitter (§5).
 BACKOFF_BASE_S = 2.0
 FACTOR_BACKOFF = 2.0
@@ -256,23 +259,43 @@ class _Candados:
 
 
 def origen_normalizado(url: str) -> str:
-    """Origen `(esquema, host, puerto)` normalizado: `https://x` y `http://x` son destinos distintos."""
+    """Origen `(esquema, host, puerto)` normalizado: `https://x` y `http://x` son destinos distintos.
+
+    Lanza `ValueError` si la URL no se puede partir (puerto no numérico, IPv6 roto…): quien la use
+    para seguir un `Location` lo convierte en `location_invalida`, nunca en un reintento."""
     from urllib.parse import urlsplit
 
-    partes = urlsplit(url)
-    esquema = (partes.scheme or "").lower()
-    host = (partes.hostname or "").lower()
-    puerto = partes.port
+    try:
+        partes = urlsplit(url)
+        esquema = (partes.scheme or "").lower()
+        host = (partes.hostname or "").lower()
+        puerto = partes.port
+    except ValueError as exc:
+        raise ValueError("URL no válida") from exc
     if puerto is None:
         puerto = 443 if esquema == "https" else 80 if esquema == "http" else 0
     return f"{esquema}://{host}:{puerto}"
 
 
 def host_efectivo(url: str) -> str:
-    """El host de una URL para el nivel host (sin esquema ni puerto: el snapshot lo enseña así)."""
+    """El nombre del host de una URL (solo para mensajes; la cola usa el origen normalizado)."""
     from urllib.parse import urlsplit
 
     return (urlsplit(url).hostname or "").lower()
+
+
+def clave_de_host(valor: str) -> str:
+    """Clave del nivel host: **origen normalizado `(esquema, host, puerto)`** (§3.2).
+
+    `https://cdn.example` y `http://cdn.example` (o el mismo nombre en otro puerto) son destinos
+    DISTINTOS y no comparten cola. Se acepta también una URL completa (se normaliza) y un nombre
+    suelto (se deja tal cual: solo para pruebas o consumidores que ya traen su propia clave)."""
+    limpio = (valor or "").strip().lower()
+    if not limpio:
+        return ""
+    if "://" in limpio:
+        return origen_normalizado(limpio)
+    return limpio
 
 
 class Turno:
@@ -398,7 +421,7 @@ class CortesiaProceso:
 
     # ── API ─────────────────────────────────────────────────────────────────────────────────────
     def reservar(self, fuente: str, host: str, *, motivo: str = "cortesia",
-                 espera_max_s: float | None = None) -> Turno:
+                 espera_max_s: float | None = ESPERA_MAX_POR_DEFECTO_S) -> Turno:
         """Registra la intención en las dos colas (sin dormir) y devuelve el contexto. El estado
         solo se marca al autorizar; una cancelación previa no consume hueco."""
         try:
@@ -407,7 +430,7 @@ class CortesiaProceso:
             raise RuntimeError(
                 "El limitador de cortesía vive en el bucle de asyncio: no se puede usar desde un hilo."
             ) from exc
-        host = (host or "").strip().lower()
+        host = clave_de_host(host)
         if not host:
             raise ValueError("el host efectivo no puede estar vacío")
         self._fuentes_por_host.setdefault(host, set()).add(fuente)
@@ -415,7 +438,7 @@ class CortesiaProceso:
         return Turno(self, fuente, host, motivo=motivo, espera_max_s=espera_max_s)
 
     async def esperar(self, fuente: str, host: str, *, motivo: str = "cortesia",
-                      espera_max_s: float | None = None) -> Espera:
+                      espera_max_s: float | None = ESPERA_MAX_POR_DEFECTO_S) -> Espera:
         """Atajo: reserva, espera y libera. Devuelve la espera (cuánto y por qué)."""
         async with self.reservar(fuente, host, motivo=motivo, espera_max_s=espera_max_s) as espera:
             return espera
@@ -423,13 +446,18 @@ class CortesiaProceso:
     def liberar(self, turno: Turno) -> None:
         turno.liberar()
 
-    def bloquear(self, fuente: str, host: str | None, segundos: float, motivo: str = "429") -> None:
-        """Comparte un `Retry-After` con todos: bloquea la fuente y el host indicado (§5)."""
+    def bloquear(self, fuente: str, host: str | None, segundos: float, motivo: str = "429",
+                 *, maximo_s: float | None = None) -> None:
+        """Comparte un `Retry-After` con todos: bloquea la fuente y el host (origen) indicado (§5)."""
         if not math.isfinite(segundos) or segundos <= 0:
             return
-        if segundos > BLOQUEO_MAX_S:
-            logger.warning("cortesia: bloqueo de %s recortado a %s s", fuente, BLOQUEO_MAX_S)
-            segundos = BLOQUEO_MAX_S
+        host = clave_de_host(host) if host else None
+        tope = BLOQUEO_MAX_S if maximo_s is None else min(BLOQUEO_MAX_S, max(0.0, maximo_s))
+        if segundos > tope:
+            logger.warning("cortesia: bloqueo de %s recortado a %s s", fuente, tope)
+            segundos = tope
+        if segundos <= 0:
+            return
         hasta = self._reloj() + segundos
         for estado in (self._estado_fuente(fuente), *( (self._estado_host(host),) if host else () )):
             if estado.bloqueada_hasta is None or estado.bloqueada_hasta < hasta:
