@@ -1,8 +1,10 @@
-# SPEC: «Portadas nítidas a partir de lo que ya tengo» (BL-PORT1, issue #300) — v0.2
+# SPEC: «Portadas nítidas a partir de lo que ya tengo» (BL-PORT1, issue #300) — v0.3
 
-> **Estado:** v0.2 (2026-11-04). **Q-1 y Q-2 resueltas por el PO el 2026-11-04** (§11) y **AC-02 PASS** con la
-> medida de presentación (§9.2). Sin bloqueos de producto: queda la evidencia de la Pi (AC-12) **antes** de
-> fusionar PR-1, ratificar los umbrales de **Q-4** (no bloquea) y decidir **Q-3** (no bloquea).
+> **Estado:** v0.3 (2026-11-05). **Q-1 y Q-2 resueltas por el PO (2026-11-04)**; **AC-02 PASS** (medida de
+> presentación, §9.2); **AC-12 medido en la Pi (2026-11-05)**: PASS en tiempo y FAIL en los dos umbrales
+> propuestos, **ratificados por el PO** con valores nuevos (Q-4). Sin bloqueos de producto: quedan **Q-3** (no
+> bloquea), la medida de página de la Pi (NOT RUN, §9.3) y AC-21 (navegador).
+> **Evidencia de AC-12:** `docs/design/medicion-BL-PORT1-2026-11-05.md` (banco `e0d6ea5`, 29 de 30 archivos).
 > **Base contrastada:** `main` = `35283b5` (2026-11-04). El issue #300 se redactó
 > sobre `11aac45`; en los ficheros que toca esta historia no hay diferencia de comportamiento (la ficha lo
 > contrasta con `git diff` vacío, §0).
@@ -26,14 +28,20 @@ como respaldo. No se amplía ningún original pequeño. No se añade red.
 (`ETag` por `mtime`, `private, max-age=86400`, 304), «Por revisar» (240, sin caché en disco, `ETag` del fichero
 origen) y Descubrir (320, caché aparte). Sin `srcset`. Sin ajustes nuevos. Sin migración.
 
-**Cómo se demuestra.** 24 criterios Given/When/Then (§8). **AC-02 ya es PASS** (medida del 2026-11-04, §9.2);
-quedan por evidencia AC-12 (Pi, **antes** de fusionar PR-1), AC-15 (informe real, PR-3) y AC-21 (navegador con las
-plantillas nuevas). Todo lo demás es pytest. Los números citados salen de la ficha (§5.3, §10.0–§10.3) y de la
-medida de presentación (§9.2); no se inventa ninguno.
+**Cómo se demuestra.** 24 criterios Given/When/Then (§8). **AC-02 PASS** (medida del 2026-11-04, §9.2) y
+**AC-12 medido en la Pi el 2026-11-05**: p95 a 600 = 156,2 ms (**PASS**, 2,6× de margen), bytes 93,7 KB y ΔRSS
+65,5 MB (**FAIL de los umbrales propuestos, ratificados por el PO** con 100 KB y 80 MB → **PASS** con los
+nuevos). Quedan por evidencia AC-15 (informe real, PR-3), AC-21 (navegador) y la medida de página de la Pi
+(NOT RUN, §9.3). Todo lo demás es pytest. Los números salen de la ficha (§5.3, §10.0–§10.3), de la medida de
+presentación (§9.2) y de la medición de AC-12; no se inventa ninguno.
 
 **Decisiones del PO (2026-11-04).** **Q-1 aceptada**: una serie sin CBZ extraíble y solo con caché antigua se
 queda a 320/240, sin red y sin borrar, y se cuenta en el informe. **Q-2 = 600 px**: 480 descartado (1,66× en el
 peor caso medido, 290 CSS). AC-02 PASS con la tabla de §9.2.
+
+**Decisión del PO (2026-11-05, Q-4).** Con la medida de la Pi delante, se **mantiene 600** y se ratifican los
+umbrales: media ≤ **100 KB/portada** (≈100 MB/1000 series) y ΔRSS ≤ **80 MB**. Detalle, cifras y NOT RUN en
+`docs/design/medicion-BL-PORT1-2026-11-05.md`.
 
 **Entrega por PRs.** Tres cortes de dominio (§10): **PR-1** comportamiento de la historia; **PR-2** seguridad
 de la escritura de caché (MEJORAR 1 y 2 de la ficha); **PR-3** informe del criterio 6 (MEJORAR 3). Orden
@@ -77,7 +85,7 @@ PASS** (§9.2).
 | O-2 No mentir con originales pequeños | ancho del JPEG cacheado / servido | nunca mayor que el original |
 | O-3 Caché autorreparable | peticiones para regenerar una portada antigua | 1 (la primera), sin intervención de la persona |
 | O-4 Caché sin regresión | `ETag`, `Cache-Control`, 304 | idénticos a hoy en formato y semántica |
-| O-5 Coste en Pi | p95 de extracción en frío a 600 en la Pi | ≤ 400 ms (≤ 600 ms si el original supera 12 Mpx) — propuesta de ficha §10.1, la ratifica el PO (Q-4) |
+| O-5 Coste en Pi | p95 de extracción en frío a 600 en la Pi | ≤ 400 ms (≤ 600 ms si el original supera 12 Mpx) — **medido 156,2 ms (PASS)** el 2026-11-05; umbral ratificado (Q-4) |
 | O-6 Abrir Biblioteca | extracciones/escrituras durante el render HTML | 0 |
 | O-7 Sin red | peticiones externas nuevas | 0 |
 | O-8 Lo que queda | series por debajo del objetivo por causa, contadas | informe de una pasada (§9.5) |
@@ -260,18 +268,19 @@ Esta historia **no introduce estado visible nuevo**. La tabla fija lo que ya hay
 
 ## 7. Requisitos no funcionales
 
-> Los umbrales de NFR-02 a NFR-06 son **propuestas** de la ficha §10.1 (líneas 556-573), no medidas; el PO los
-> ratifica (Q-4). Si el PO no los ratifica, se usan igualmente como criterio de PASS/FAIL provisional y se
-> declara así en el informe.
+> Los umbrales de NFR-02, NFR-03 y NFR-04 siguen siendo **propuestas** de la ficha §10.1 (líneas 556-573); el
+> banco por portada del 2026-11-05 mide ya NFR-02 (p95) y da la evidencia de NFR-05/NFR-06 (RSS y bytes).
+> **Q-4 quedó ratificada por el PO el 2026-11-05** con el dato delante: NFR-05 y NFR-06 llevan los valores
+> nuevos; NFR-03/NFR-04 siguen **NOT RUN** (§9.3), no se sustituyen por un PASS supuesto.
 
 | ID | NFR | Umbral | Método de verificación |
 |---|---|---|---|
 | NFR-01 | Nada bloqueante en el *event loop*: zipfile, Pillow, disco y lectura de caché fuera del bucle | 100 % de esas llamadas en `asyncio.to_thread` | pytest: el extractor simulado comprueba que se ejecuta en un hilo distinto del principal (AC-11) + revisión de código |
-| NFR-02 | Coste de extracción en frío en la Pi | p95 ≤ 400 ms a 600 px (≤ 600 ms si el original supera 12 Mpx) | Banco de 30 CBZ reales, 5 repeticiones por caso, `taskset -c 0`, mediana y p95 (ficha §10.1) |
-| NFR-03 | Coste de una rejilla en frío | 30 portadas en frío con 6 peticiones concurrentes ≤ 6 s | Mismo banco, `curl -w '%{time_total}'` (ficha §10.2) |
-| NFR-04 | Lectura caliente | 304 ≤ 30 ms | Banco caliente (ficha §10.1) |
-| NFR-05 | Memoria | delta de RSS del proceso ≤ 40 MB | `docker stats --no-stream` y `/sys/fs/cgroup/memory.current` (ficha §10.2) |
-| NFR-06 | Tamaño de caché | media ≤ 60 KB/portada; extrapolación ≤ 60 MB/1000 series | `du -sb` antes/después + media real medida, no la del banco sintético (ficha §10.2) |
+| NFR-02 | Coste de extracción en frío en la Pi | p95 ≤ 400 ms a 600 px (≤ 600 ms si el original supera 12 Mpx) — **medido 156,2 ms el 2026-11-05 (PASS, 2,6× de margen)** | Banco de 29 CBZ reales, 5 repeticiones, mediana y p95 (ficha §10.1); detalle en `docs/design/medicion-BL-PORT1-2026-11-05.md` |
+| NFR-03 | Coste de una rejilla en frío | 30 portadas en frío con 6 peticiones concurrentes ≤ 6 s | Mismo banco, `curl -w '%{time_total}'` (ficha §10.2) — **NOT RUN** |
+| NFR-04 | Lectura caliente | 304 ≤ 30 ms | Banco caliente (ficha §10.1) — **NOT RUN** |
+| NFR-05 | Memoria | delta de RSS del proceso ≤ **80 MB** (ratificado por el PO el 2026-11-05; antes 40 MB) | Medido en el banco: **Δ 65,5 MB** (pico 79,1 → 144,6 MB, dentro de 512 MB); `docker stats`/cgroup siguen **NOT RUN** (ficha §10.2) |
+| NFR-06 | Tamaño de caché | media ≤ **100 KB/portada**; extrapolación ≤ **100 MB/1000 series** (ratificado el 2026-11-05; antes 60 KB/60 MB) | Medido en el banco: **93,7 KB/portada** a 600 (20,9 KB a 240); `du` real y extrapolación con la media medida siguen **NOT RUN** (ficha §10.2) |
 | NFR-07 | Latencia de abrir Biblioteca | 0 extracciones/escrituras en el render; latencia del HTML sin empeorar más del 10 % respecto a la línea base del mismo entorno (n=30) | pytest (AC-10) + medida `curl` antes/después |
 | NFR-08 | Sin dependencias nuevas, sin esquema, sin configuración | solo stdlib + Pillow ya presente; `git diff --stat alembic/ pyproject.toml config.py` vacío | Revisión de la PR |
 | NFR-09 | Sin red nueva | 0 peticiones externas añadidas; solo la cascada actual | Dobles de los clientes que fallan si se invocan (AC-14) |
@@ -374,13 +383,16 @@ Then la extracción ocurrió en un hilo distinto del principal (`threading.curre
 ligera concurrente (p. ej. `/api/health`) no espera a que termine.
 *Verificación: pytest.*
 
-**AC-12 (NFR-02 a NFR-06) — medida en la Pi, separada del entorno de desarrollo**
-Given la rama de PR-1 montada en la Pi con 30 CBZ reales (10 pesados >150 MB, 10 medios, 10 ligeros) + 5 casos
-borde (original 400×600, 8000×12000, CBR real, CBZ con `formato_contenido` ZIP, serie solo con `cover_url`),
-When se ejecuta el banco (ficha §10.1/§10.2),
-Then se registran p95, 30-frías/6-concurrentes, caliente-304, delta de RSS y media de bytes por portada, con
-PASS/FAIL/NOT RUN separados; si no se ejecuta, **el criterio 4 no se cierra** (NOT RUN).
-*Verificación: medida (json/csv en `docs/design/medicion-*` + nota en el issue).*
+**AC-12 (NFR-02 a NFR-06) — medida en la Pi, separada del entorno de desarrollo — PASS en tiempo; FAIL en los dos umbrales propuestos (ratificados por el PO)**
+Given la rama `feat/300-portadas-v2` @ `e0d6ea5` montada en la Pi del PO, en un contenedor de un solo uso, con
+una muestra determinista de 30 CBZ/ZIP reales (29 medidos, 1 ilegible) y 5 repeticiones por archivo y ancho,
+When se ejecuta el banco `scripts/medicion/banco_portadas.py` (ficha §10.1/§10.2),
+Then: **p95 a 600 = 156,2 ms ≤ 400 ms → PASS** (2,6× de margen; ningún original se amplió); **bytes medios a
+600 = 93,7 KB → FAIL del propuesto de 60 KB**; **ΔRSS = 65,5 MB → FAIL del propuesto de 40 MB**. Con la
+ratificación de Q-4 por el PO (2026-11-05: 100 KB y 80 MB), ambos pasan a **PASS con los umbrales nuevos**.
+Quedan **NOT RUN** la medida de página (30 frías/6 concurrentes ≤ 6 s), el 304 caliente ≤ 30 ms, `docker
+stats`/cgroup y el `du` real de la caché; no se cierran por omisión.
+*Verificación: `docs/design/medicion-BL-PORT1-2026-11-05.md` (tabla, veredicto por umbral y NOT RUN).*
 
 ### Criterio 5 del issue — sin red
 
@@ -532,16 +544,19 @@ y 1,47× en 327. Ningún uso normal supera 300 CSS, luego **Q-2 no se reabre**.
 
 ### 9.3 Medición en la Pi (criterio 4)
 
-- Banco de una pasada en `scripts/medicion/medir_portadas_pi.py` (patrón de `scripts/medicion/`, fuera de
-  `src/`): importa `extract_cover_thumbnail` real, extrae a 240 y 600 (480 ya está descartado por AC-02), mide
-  `time.perf_counter()`, bytes y
-  `resource.getrusage`; 5 repeticiones, mediana y p95; proceso fijado a un núcleo (`taskset -c 0`).
-- Coste de página y disco (ficha §10.2): `curl -w '%{time_total}'` frío/caliente, `docker stats --no-stream`,
-  `/sys/fs/cgroup/memory.current`, `du -sb` antes/después; extrapolación a 100/1000 series con la media real.
-- **Salida:** `docs/design/medicion-portadas-<fecha>.json` (o csv) + nota en el issue. PASS/FAIL/NOT RUN
-  separados (DoD del issue). El ancho ya está decidido (**Q-2 = 600**, 480 descartado en §9.2): si p95/RSS/tamaño
-  no cumplen, la primera palanca es el semáforo local de MEJORAR 4 (ficha §7.4) y la cifra se lleva al PO; cambiar
-  el ancho exige reabrir Q-2 y, con `v2` ya desplegada, `v3` (FR-03).
+- **Hecho el 2026-11-05:** banco `scripts/medicion/banco_portadas.py` (rama `e0d6ea5`) sobre la Pi del PO, en un
+  contenedor de un solo uso: 30 candidatos, 29 medidos (1 ilegible), 5 repeticiones por archivo y ancho, 240 y
+  600 px. Resultado: p95 a 600 = **156,2 ms (PASS)**, bytes **93,7 KB** y ΔRSS **65,5 MB** (FAIL de los umbrales
+  propuestos; ratificados por el PO con 100 KB y 80 MB). Evidencia completa, veredicto por umbral y NOT RUN en
+  `docs/design/medicion-BL-PORT1-2026-11-05.md`.
+- **Pendiente (NOT RUN):** la medida de página y disco de la ficha §10.2: 30 portadas en frío con 6 peticiones
+  concurrentes (≤ 6 s), 304 caliente (≤ 30 ms), `docker stats --no-stream`/`/sys/fs/cgroup/memory.current` y
+  `du -sb` real de la caché con extrapolación a 100/1000 series. No se cierran por omisión.
+- **Salida:** `docs/design/medicion-BL-PORT1-2026-11-05.md` (agregados y cifras, sin rutas ni nombres de archivo).
+  PASS/FAIL/NOT RUN separados (DoD del issue). El ancho está decidido (**Q-2 = 600**, 480 descartado en §9.2) y
+  los umbrales de bytes y RSS ratificados (Q-4): si la medida de página no cumple, la primera palanca es el
+  semáforo local de MEJORAR 4 (ficha §7.4) y la cifra se lleva al PO; cambiar el ancho exige reabrir Q-2 y, con
+  `v2` ya desplegada, `v3` (FR-03).
 
 ### 9.4 Navegador real (criterio 7)
 
@@ -653,15 +668,20 @@ concluya que «no ha funcionado» durante un día. Coste: un parámetro en el HT
 plantilla que comparen el `src` exacto. Si el Lead prefiere no tocarlo, se acepta la ventana de 24 h y se anota
 como riesgo R-01 (es cosmético y temporal).
 
-### Q-4 (no bloquea; se ruega ratificación) — umbrales de coste de la Pi
+### Q-4 (RESUELTA por el PO el 2026-11-05) — umbrales de coste de la Pi
 
 **Pregunta.** ¿Se ratifican los umbrales propuestos por la ficha §10.1 (p95 frío ≤ 400 ms a 600; 30 frías con 6
 concurrentes ≤ 6 s; 304 ≤ 30 ms; delta RSS ≤ 40 MB; media ≤ 60 KB/portada y ≤ 60 MB/1000 series) como criterio
 de PASS/FAIL de NFR-02…NFR-06?
 
-**Recomendación: ratificarlos tal cual y declararlos provisionales** hasta que haya una medida real de la Pi
-(son propuestas, no mediciones). Si no se ratifican, el DoD no tiene contra qué comparar y el criterio 4 no se
-puede cerrar.
+**Recomendación (v0.1): ratificarlos tal cual y declararlos provisionales** hasta que haya una medida real de la
+Pi. La medida llegó el 2026-11-05 (banco de 29 archivos): p95 a 600 = 156,2 ms (**PASS**), bytes 93,7 KB y ΔRSS
+65,5 MB (**FAIL** de los dos umbrales propuestos).
+
+**Decisión del PO (2026-11-05): se mantiene 600 y se ratifican umbrales nuevos.** Media ≤ **100 KB/portada**
+(≈100 MB/1000 series, ~1 % de una biblioteca de 8 GB) y ΔRSS ≤ **80 MB** (pico total 144,6 MB dentro del
+contenedor de 512 MB). No se baja a 480: en el móvil de una columna (290 CSS) 480 da 1,66×, no 2×, y el objetivo
+de la historia es nitidez a 2×. **NFR-05 y NFR-06** llevan los valores nuevos; NFR-03/NFR-04 siguen NOT RUN.
 
 ---
 
@@ -676,7 +696,7 @@ puede cerrar.
 | R-05 | La caché legada huérfana crece y no se borra desde la app | Disco (≈ 4–14 KB por serie; ~4–14 MB por 1000) | Invariante no borrar; la purga el desinstalador; limpieza opcional fuera de alcance |
 | R-06 | La primera página del CBZ no es la portada (créditos, scan) | Portada «fea» pero existente | Comportamiento actual; esta historia no cambia la selección de página |
 | R-07 | Decodificar una página enorme en la Pi | Pico de RAM | `MAX_PIXELES_PORTADA` (40 Mpx) ya acota; el búfer de salida a 600×900 RGB ≈ 1,6 MB; todo en `to_thread` |
-| R-08 | El ancho 600 no cabe en el presupuesto de disco/memoria de alguna instalación | Decisión de producto | Q-2 resuelta (600) y AC-02 PASS; la medida de la Pi se hace antes de fusionar PR-1. Si no cumple NFR-02/03/06, la palanca es el semáforo condicional (MEJORAR 4) o reabrir Q-2; el implementador no baja el ancho por su cuenta |
+| R-08 | El ancho 600 no cabe en el presupuesto de disco/memoria de alguna instalación | Decisión de producto | Medido el 2026-11-05: 93,7 KB/portada y ΔRSS 65,5 MB, dentro de los umbrales ratificados (100 KB/80 MB). No se reabre Q-2; la medida de página (frías/concurrentes, du real) sigue NOT RUN |
 | R-09 | Un corte deja un JPEG truncado que `exists()` daría por bueno | Portada rota para siempre | PR-2 (atómica); hasta entonces es el bug heredado documentado en la ficha |
 | R-10 | Caché ilegible (permisos, corrupción previa): hoy 500 | El navegador pinta el marcador igual; no hay texto nuevo | Fuera de alcance (§6); riesgo declarado, no se promete |
 | R-11 | El informe se ejecuta antes de que la regeneración perezosa haya pasado por la biblioteca y cuenta como «problema» lo que solo era «no visitada» | Cifra sesgada → BL-PORT2 mal priorizada | Clase `regenerable_al_pedir` separada (FR-14, §9.5); ejecutar tras desplegar PR-1 y tras una pasada de uso normal |
@@ -692,7 +712,7 @@ puede cerrar.
 | 1. Tamaño según dónde se muestra (240/600/320; umbral antes de implementar) | FR-01, FR-02, FR-03, FR-17, FR-18 | AC-01, AC-02, AC-03, AC-04 | pytest + medida (D-0: **PASS**, 2026-11-04) |
 | 2. Sin ampliar lo que no existe | FR-02 | AC-05, AC-06 | pytest |
 | 3. La caché se rehace sola, sin perder `ETag` ni `Cache-Control` | FR-03, FR-04, FR-05, FR-09, FR-10 | AC-07, AC-08, AC-09 | pytest |
-| 4. Ligero en la Pi (perezoso, fuera del bucle, sin reprocesar la colección, medido) | FR-05, FR-11, FR-12, FR-16 | AC-10, AC-11, AC-12, AC-22, AC-23, AC-24 | pytest + medida |
+| 4. Ligero en la Pi (perezoso, fuera del bucle, sin reprocesar la colección, medido) | FR-05, FR-11, FR-12, FR-16 | AC-10, AC-11, AC-12, AC-22, AC-23, AC-24 | pytest + medida (banco 2026-11-05: p95 **PASS**; bytes/RSS ratificados; página NOT RUN) |
 | 5. Sin red | FR-06, FR-15 | AC-13, AC-14 | pytest |
 | 6. Medición de lo que queda | FR-13, FR-14 | AC-15, AC-16 | pytest del clasificador + informe real |
 | 7. Pruebas (grande, pequeño, caché vieja, CBR, ausente, navegador) | FR-06, FR-07, FR-08 | AC-17, AC-18, AC-19, AC-20, AC-21 | pytest + navegador |
@@ -702,15 +722,15 @@ puede cerrar.
 ## 14. Auto-revisión
 
 - [x] **Cada AC es comprobable** con pytest (20), medida registrada (AC-02, AC-12) o navegador con pasos
-      (AC-21). No hay «rápido», «bonito» ni «intuitivo». **AC-02 ya es PASS** con la medida de §9.2 (Chrome 156
-      headless, 2026-11-04).
+      (AC-21). No hay «rápido», «bonito» ni «intuitivo». **AC-02 PASS** (§9.2, 2026-11-04) y **AC-12 medido**
+      (2026-11-05): PASS en tiempo; FAIL de los dos umbrales propuestos, ratificados por el PO.
 - [x] **Los 7 criterios del issue** están cubiertos uno a uno (§13) y no se contradice ninguno. La única
       tensión real (criterio 1 vs 5) está declarada y **resuelta por el PO** (Q-1), no escondida.
 - [x] **Los números citan la ficha o una medida**: 240/600/320 (§5.3, líneas 364-370 y 372-379); `v2` (383);
       orden de la cascada (385-397); no borrar (398-399); cabeceras (400-402); atómica (402-403); 500 de disco
-      (470-481); informe (§10.3, 586-597); umbrales de la Pi (§10.1, 556-573); anchos de presentación medidos
-      (§9.2, 2026-11-04) frente a la estimación de la ficha (§1, 80-86; §10.0, 545-554); `srcset` descartado
-      (§5.4, 423-445).
+      (470-481); informe (§10.3, 586-597); umbrales de la Pi (§10.1, 556-573) y medición de AC-12 del 2026-11-05
+      (156,2 ms / 93,7 KB / 65,5 MB, umbrales ratificados); anchos de presentación medidos (§9.2, 2026-11-04)
+      frente a la estimación de la ficha (§1, 80-86; §10.0, 545-554); `srcset` descartado (§5.4, 423-445).
 - [x] **El benchmark existe** (`docs/design/benchmark-BL-PORT1.md`, 2026-11-04) para esta feature P1; no se
       inventa referencia. Veredicto aplicado: IGUALAR → FR-01…FR-12; MEJORAR 1/2 → FR-11/FR-12; MEJORAR 3 →
       FR-13/FR-14.
@@ -721,8 +741,9 @@ puede cerrar.
 - [x] **Una historia, no dos**: PR-1 es el comportamiento; PR-2 es la integridad de la misma caché (MEJORAR
       1/2); PR-3 es medición. No hay cambio de dominio oculto en PR-1.
 - [x] **Sin `srcset`**: se aplica la decisión de la ficha §5.4; si se reabre, exige un benchmark nuevo.
-- [x] **Dependencia de la ficha declarada**: caduca 2027-01-03; PR-3 depende de PR-1 desplegado; la medida de
-      la Pi es puerta de PR-1.
+- [x] **Dependencia de la ficha declarada**: caduca 2027-01-03; PR-3 depende de PR-1 desplegado; la medida por
+      portada de la Pi ya está hecha (AC-12, 2026-11-05) y la de página sigue **NOT RUN**, sin sustituirse por un
+      PASS supuesto.
 
 ### Registro de cambios
 
@@ -730,3 +751,4 @@ puede cerrar.
 |---|---|---|
 | 2026-11-04 | v0.1 | Primera especificación a partir del issue #300 y de la ficha `benchmark-BL-PORT1.md` (`35283b5`). Pendiente: Q-1, Q-2 (bloquean), Q-3, Q-4; tabla de AC-02 (NOT RUN). |
 | 2026-11-04 | v0.2 | **Q-1 y Q-2 resueltas por el PO** (§11): Q-1 aceptada; Q-2 = **600 px**, 480 descartado. **AC-02 PASS** con la medida de presentación en Chrome 156 headless (§9.2): peor caso 290 CSS → 600 = 2,07×; borde 327 CSS → 1,84×; a 900 CSS, 3,18×. Correcciones: corte de la ficha es `@media (max-width: 768px)` (768 → 120, 769 → 140; no hay corte en 1109 px); nota de precisión del «1,8×» (columna única del móvil, no escritorio); desviación conocida frente a la estimación de la ficha (290/327/188,8 vs 296/333/171,5; +10,1 % en Inicio). |
+| 2026-11-05 | v0.3 | **AC-12 medido en la Pi** (rama `e0d6ea5`, contenedor de un solo uso): p95 a 600 = **156,2 ms (PASS**, 2,6× de margen), bytes **93,7 KB** y ΔRSS **65,5 MB** (**FAIL** de los umbrales propuestos de 60 KB y 40 MB). **Q-4 ratificada por el PO** con el dato delante: se mantiene **600** y los umbrales pasan a **NFR-05 ≤ 80 MB** y **NFR-06 ≤ 100 KB/portada y ≤ 100 MB/1000 series** (PASS con los nuevos). Quedan **NOT RUN** 30 frías/6 concurrentes, 304 caliente, `docker stats`/cgroup y `du` real. Evidencia: `docs/design/medicion-BL-PORT1-2026-11-05.md`. |
