@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 tests/test_web_series.py
 
@@ -113,6 +114,12 @@ def acuse() -> FakeExecResult:
     """Fila del aviso legal aceptado — `_contexto_politica` lo consulta para no
     prometer búsquedas que el ciclo no va a hacer."""
     return FakeExecResult([object()])
+
+
+def sin_otras(otras: int = 0) -> list[FakeExecResult]:
+    """Las dos consultas de la cota (C6, N): números de ESTA serie ya buscándose/descargándose y deseos pendientes de las
+    DEMÁS series con política. Solo se hacen con política activa, sin aviso pendiente, R > 0 y números que faltan."""
+    return [FakeExecResult([]), FakeExecResult(otras)]
 
 
 def retirados(n: int = 0) -> FakeExecResult:
@@ -243,7 +250,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),         # poseídos (para pintar la ficha)
             FakeExecResult([]),         # manuales vivos (predicado)
             FakeExecResult([]),         # poseídos (predicado)
-            acuse(), retirados(), FakeExecResult([]),
+            acuse(), *sin_otras(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -251,7 +258,8 @@ class TestPoliticaBusquedaD8:
         assert r.status_code == 200
         assert "Búsqueda automática" in r.text
         assert "Faltan 3 números" in r.text
-        assert "25 por ciclo" in r.text
+        assert "por ciclo" not in r.text and "25" not in re.sub(r"<[^>]+>", " ", r.text.split('id="politica-serie"', 1)[1])
+        assert "unos 2 por hora como máximo" in r.text
 
     def test_una_serie_larga_no_inunda_la_seccion(self):
         series = make_series(total_issues=200)
@@ -259,7 +267,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(), FakeExecResult([]),
+            acuse(), *sin_otras(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -273,7 +281,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(), FakeExecResult([]),
+            acuse(), *sin_otras(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -292,7 +300,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([]),
             FakeExecResult([]), FakeExecResult([]),
-            acuse(), retirados(), FakeExecResult([]),
+            acuse(), *sin_otras(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -355,7 +363,7 @@ class TestPoliticaBusquedaD8:
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
 
-        assert "4 números retirados" in r.text
+        assert "4 números dejados de buscar por la política" in r.text
 
     def test_cambiar_a_faltantes_por_la_ui(self):
         series = make_series(total_issues=3)
@@ -366,6 +374,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),         # manuales (predicado)
             FakeExecResult([]),         # poseídos (predicado)
             FakeExecResult([], rowcount=0),   # retirada (no hay nada que retirar)
+            *sin_otras(),                     # cota: lo ya buscándose y las demás series
             retirados(),
         ])
         with use_fake_session(session) as client:
@@ -396,8 +405,9 @@ class TestPoliticaBusquedaD8:
         assert series.wishlist_policy == WishlistPolicy.NONE
         # Lo retirado AHORA y el acumulado se dicen por separado: confundirlos
         # mostraría «2» cuando en la serie ya había 3 más.
-        assert "Se han retirado 2 números" in r.text
-        assert "5 números retirados" in r.text
+        assert "Se han dejado de buscar 2 números que aún no habían empezado" in r.text
+        assert "Lo que ya se estaba buscando o descargando termina" in r.text
+        assert "5 números dejados de buscar por la política" in r.text
 
     def test_activar_politica_sin_aviso_no_escribe_nada(self):
         """C6 / FR-20: sin el aviso legal aceptado, ACTIVAR no escribe (ni la política ni la retirada) y responde con el
@@ -416,8 +426,9 @@ class TestPoliticaBusquedaD8:
         assert series.wishlist_policy == WishlistPolicy.NONE          # no se activó
         session.flush.assert_not_called()                             # y no se escribió nada
         assert session._queue == []                                   # ni se hizo la retirada (no hay más consultas)
-        assert "El aviso legal está pendiente" in r.text and 'href="/ui/legal"' in r.text
-        assert "Se han retirado" not in r.text
+        assert "No se ha activado: antes tienes que aceptar el aviso legal." in r.text
+        assert 'href="/ui/legal"' in r.text
+        assert "dejado de buscar" not in r.text
 
     def test_desactivar_politica_sin_aviso_si_funciona(self):
         """C6 / FR-21: desactivar nunca exige el aviso legal."""
@@ -434,15 +445,14 @@ class TestPoliticaBusquedaD8:
 
         assert r.status_code == 200
         assert series.wishlist_policy == WishlistPolicy.NONE
-        assert "Se han retirado 2 números" in r.text
-        assert "El aviso legal está pendiente" in r.text              # el aviso sigue informando, sin bloquear
-        assert 'href="/ui/legal"' not in r.text                       # el enlace es de la activación bloqueada
+        assert "Se han dejado de buscar 2 números que aún no habían empezado" in r.text
+        assert "No se ha activado" not in r.text and 'href="/ui/legal"' not in r.text   # desactivar nunca choca con el aviso
 
     def test_activar_con_aviso_aceptado_sigue_funcionando_y_no_enlaza_la_pantalla_legal(self):
         series = make_series(total_issues=3)
         series.wishlist_policy = WishlistPolicy.NONE
         session = FakeSession([FakeExecResult([series]), acuse(), FakeExecResult([]), FakeExecResult([]),
-                               FakeExecResult([], rowcount=0), retirados()])
+                               FakeExecResult([], rowcount=0), *sin_otras(), retirados()])
         with use_fake_session(session) as client:
             r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "faltantes"})
         assert r.status_code == 200 and series.wishlist_policy == WishlistPolicy.MISSING
@@ -493,7 +503,7 @@ class TestPresupuestoTextoU21:
             FakeExecResult([]),
             FakeExecResult([]),
             FakeExecResult([]),
-            acuse(), retirados(), FakeExecResult([]),
+            acuse(), *sin_otras(), retirados(), FakeExecResult([]),
         ])
         with use_fake_session(session) as client:
             r = client.get(f"/ui/series/{series.id}")
@@ -560,7 +570,7 @@ class TestPresupuestoTextoU21:
         pos_efecto = html.index("politica-efecto")
         pos_veredicto = html.index("politica-veredicto")
         assert pos_select < pos_efecto < pos_veredicto
-        assert "Se guarda al elegir. Si dejas de buscar, se para al momento." in html
+        assert "Se guarda al elegir. Si dejas de completar, lo ya empezado termina." in html
         assert "Guardar aplica la retirada" not in html
 
     def test_la_nota_de_futuros_va_junto_al_selector(self):
@@ -582,8 +592,8 @@ class TestPresupuestoTextoU21:
         notas = re.findall(r'<p\b[^>]*\bclass="[^"]*\bpolitica-efecto\b[^"]*"[^>]*>(.*?)</p>', fuera, re.S)
         assert len(notas) == 1, notas
         linea = " ".join(self._texto(notas[0]).split())
-        assert linea == "Se guarda al elegir. Si dejas de buscar, se para al momento."
-        assert len(linea) <= 60
+        assert linea == "Se guarda al elegir. Si dejas de completar, lo ya empezado termina."
+        assert len(linea) <= 80   # U21: una sola nota; puede ocupar dos renglones en móvil
         assert 'id="politica-futuros"' not in fuera   # el motivo va plegado (el selector solo lo referencia por aria-describedby)
         assert 'class="caption' not in fuera   # ya no hay cajas de aviso junto al selector (era el problema de #296)
 
@@ -623,7 +633,7 @@ class TestPresupuestoTextoU21:
 
     def test_u21_no_se_pierde_que_guardar_es_inmediato(self):
         plano = " ".join(self._texto(self._bloque_politica()).split())
-        assert "Se guarda al elegir" in plano and "se para al momento" in plano
+        assert "Se guarda al elegir" in plano and "lo ya empezado termina" in plano
 
     def test_ningun_parrafo_visible_va_en_mayusculas(self):
         html = self._render()
@@ -681,3 +691,161 @@ class TestPortadaDeRelleno:
 
         assert r.status_code == 404
         assert descargas == []
+
+
+class TestTextosC6:
+    """C6 (PR 2): qué entiende la persona en la ficha de serie.
+
+    Cubre la cota (FR-09/10, ★1/★2), R=0 y aviso legal (FR-27/29), el motivo
+    con nombre público y el dato técnico plegado (FR-11/26), y el efecto
+    diferido (FR-13). Los textos exactos son los del Anexo A de la v1.5.
+    """
+
+    @staticmethod
+    def _render(series, queue):
+        session = FakeSession(queue)
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        return r.text
+
+    def _ficha(self, series, *, computable=True, acuse_=True, cota=False, otras=0):
+        queue = [FakeExecResult([series]), FakeExecResult([]), FakeExecResult([])]
+        if computable:
+            queue.append(FakeExecResult([]))
+        queue.append(acuse() if acuse_ else FakeExecResult([]))
+        if cota:
+            queue.extend(sin_otras(otras))
+        queue.extend([retirados(), FakeExecResult([])])
+        return self._render(series, queue)
+
+    @staticmethod
+    def _bloque(html):
+        return html.split('id="politica-serie"', 1)[1]
+
+    def test_cota_una_hora(self):
+        series = make_series(total_issues=1)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, cota=True))
+        assert "Falta 1 número." in bloque
+        assert "unos 2 por hora como máximo" in bloque
+        assert "(ahora, 1 por buscar)" in bloque
+        assert "una hora" in bloque
+
+    def test_cota_en_horas(self):
+        series = make_series(total_issues=5)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, cota=True))
+        assert "Faltan 5 números." in bloque
+        assert "unas 3 horas" in bloque
+
+    def test_cota_limite_48_horas(self):
+        series = make_series(total_issues=96)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, cota=True))
+        assert "unas 48 horas" in bloque
+
+    def test_cota_salta_a_dias_hacia_abajo(self):
+        series = make_series(total_issues=97)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, cota=True))
+        assert "unos 2 días" in bloque
+        assert "3 días" not in bloque
+
+    def test_cota_cuenta_las_otras_series(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, cota=True, otras=7))
+        assert "(ahora, 10 por buscar)" in bloque
+        assert "unas 5 horas" in bloque
+
+    def test_r_cero_no_promete_busquedas(self, monkeypatch):
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={"politica_busquedas_por_hora": 0})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, cota=False))
+        assert "desactivadas" in bloque
+        assert "por hora" not in bloque
+
+    def test_aviso_legal_tiene_precedencia_sobre_la_cota(self):
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, acuse_=False, cota=False))
+        assert "No se buscará ninguno hasta que aceptes el aviso legal." in bloque
+        assert "por hora" not in bloque
+
+    def test_motivo_con_nombre_publico_y_dato_tecnico_plegado(self):
+        series = make_series(total_issues=120, metadata_source=MetadataSource.ANILIST.value)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        html = self._ficha(series, computable=False)
+        bloque = self._bloque(html)
+        assert "(viene de AniList)" in bloque
+        assert "Ver el dato técnico" in bloque
+        assert "Fuente registrada: <code>anilist</code>" in bloque
+        sin_detalles = re.sub(r"<details\b.*?</details>", "", bloque, flags=re.S)
+        assert "viene de AniList" in sin_detalles
+        assert "<code>anilist</code>" not in sin_detalles
+
+    def test_motivo_sin_total_no_lleva_dato_tecnico(self):
+        series = make_series(total_issues=None)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False))
+        assert "no tiene un total de números conocido" in bloque
+        assert "Ver el dato técnico" not in bloque
+
+    def test_motivo_sin_fuente_no_lleva_dato_tecnico(self):
+        series = make_series(total_issues=120, metadata_source="fuente-rara")
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False))
+        assert "(sin fuente)" in bloque
+        assert "Ver el dato técnico" not in bloque
+
+    def test_motivo_alta_a_mano(self):
+        series = make_series(total_issues=120, metadata_source=MetadataSource.MANUAL.value)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False))
+        assert "(alta a mano)" in bloque
+        assert "Fuente registrada: <code>manual</code>" in bloque
+
+    def test_efecto_diferido_sin_nombrar_la_fuente(self, monkeypatch):
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={"comicvine_enabled": True})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=120, metadata_source=None)
+        series.tradition = ComicTradition.AMERICAN
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False))
+        assert "Si llega a conocerse el total" in bloque
+        assert "Comic Vine" not in bloque
+
+    def test_cabecera_y_un_solo_dato_tecnico(self):
+        series = make_series(total_issues=120, metadata_source=MetadataSource.ANILIST.value)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        html = self._ficha(series, computable=False)
+        assert "No sabemos cuáles faltan:" in html
+        assert "(viene de AniList)" in html
+        assert html.count("Ver el dato técnico") == 1
+
+    def test_politica_ninguno_no_pinta_el_dato_tecnico(self):
+        series = make_series(total_issues=120, metadata_source=MetadataSource.ANILIST.value)
+        series.wishlist_policy = WishlistPolicy.NONE
+        html = self._render(
+            series,
+            [FakeExecResult([series]), FakeExecResult([]), acuse(), retirados(), FakeExecResult([])],
+        )
+        assert "En esta serie, «completar» tampoco podría buscar nada" in html
+        assert "Ver el dato técnico" not in html
+
+    def test_r_uno_usa_el_singular_del_anexo(self, monkeypatch):
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={"politica_busquedas_por_hora": 1})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=1)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, cota=True))
+        assert "unos 1 por hora como máximo" in bloque

@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 SeriesService — listado/filtrado de series (C1).
 
@@ -230,6 +231,9 @@ class Huecos:
     faltantes: list[int]
     computable: bool
     motivo: str | None = None
+    #: Valor interno de `metadata_source` (solo si es un `MetadataSource` válido y la causa es la UNIDAD de la fuente);
+    #: nunca se imprime fuera del `<details>` «Ver el dato técnico» (C6, FR-11/FR-26).
+    fuente: str | None = None
 
 
 def compute_missing_issues(total_issues: int | None, numeros_poseidos: set[int]) -> list[int]:
@@ -307,6 +311,39 @@ async def numeros_poseidos(db: AsyncSession, series_id: UUID) -> set[int]:
     return poseidos
 
 
+#: C6 (V-B): cómo se nombra cada fuente en la frase del motivo (RESTRICCIÓN-4: el texto se construye AQUÍ y el valor
+#: interno llega aparte). Es un tercer mapa a propósito (los de `web/` no cubren `comicinfo_xml`, `manual` ni «sin
+#: fuente»); no se unifican en esta historia.
+NOMBRE_PUBLICO_DE_FUENTE = {
+    MetadataSource.COMIC_VINE.value: "viene de Comic Vine",
+    MetadataSource.ANILIST.value: "viene de AniList",
+    MetadataSource.TEBEOSFERA.value: "viene de Tebeosfera",
+    MetadataSource.GCD.value: "viene de GCD",
+    MetadataSource.COMICINFO_XML.value: "viene del propio archivo",
+    MetadataSource.MANUAL.value: "alta a mano",
+}
+NOMBRE_SIN_FUENTE = "sin fuente"
+MOTIVO_SIN_TOTAL = "la serie no tiene un total de números conocido"
+
+
+def razon_de_no_calculable(series: Series) -> Huecos | None:
+    """Puro (sin base de datos): `Huecos` no computable si la serie no se puede calcular por su total o por la unidad
+    de su fuente; `None` si la comprobación previa no lo impide. La usa `huecos_de_serie` y la ficha, que necesita saber
+    si es calculable también con política `ninguno` (donde el predicado sale antes de calcular huecos)."""
+    if not series.total_issues:
+        return Huecos([], False, MOTIVO_SIN_TOTAL)
+    if series.metadata_source not in UNIDAD_DE_GRAPA:
+        valida = series.metadata_source if series.metadata_source in NOMBRE_PUBLICO_DE_FUENTE else None
+        nombre = NOMBRE_PUBLICO_DE_FUENTE.get(valida or "", NOMBRE_SIN_FUENTE)
+        return Huecos(
+            [], False,
+            "el total de la serie no consta como número de grapas "
+            f"({nombre}), así que no se puede comparar con los números que hay en disco",
+            fuente=valida,
+        )
+    return None
+
+
 async def huecos_de_serie(db: AsyncSession, series: Series,
                           poseidos: set[int] | None = None) -> Huecos:
     """Huecos de una serie, diciendo — explícitamente — si el cálculo es fiable.
@@ -319,15 +356,9 @@ async def huecos_de_serie(db: AsyncSession, series: Series,
     `poseidos` permite reutilizar una consulta ya hecha (la ficha de serie
     necesita el conjunto igualmente, para pintar los números presentes).
     """
-    if not series.total_issues:
-        return Huecos([], False, "la serie no tiene un total de números conocido")
-    if series.metadata_source not in UNIDAD_DE_GRAPA:
-        return Huecos(
-            [], False,
-            "el total de la serie no consta como número de grapas "
-            f"({series.metadata_source or 'fuente desconocida'}), así que no se "
-            "puede comparar con los números que hay en disco",
-        )
+    no_calculable = razon_de_no_calculable(series)
+    if no_calculable is not None:
+        return no_calculable
     if poseidos is None:
         poseidos = await numeros_poseidos(db, series.id)
     return Huecos(compute_missing_issues(series.total_issues, poseidos), True, None)

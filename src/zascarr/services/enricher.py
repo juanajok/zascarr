@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 Enricher — completa metadatos de series e issues consultando fuentes externas.
 
@@ -92,6 +93,21 @@ _YEAR_TOLERANCE = 1
 # siguiente ciclo (cada pocos minutos), sino a plazo largo: una fuente puede
 # indexar una serie recién publicada con retraso.
 ENRICHMENT_RETRY_AFTER = timedelta(days=30)
+
+
+def puede_enlazarse_con_comic_vine(series: Series, comic_vine_activo: bool) -> bool:
+    """¿Puede el enriquecedor enlazar esta serie con Comic Vine? Es LA condición de `_enrich_series_batch` (sin
+    identidad externa elegida, `metadata_source` distinto de `manual`, tradición con Comic Vine como fuente y la fuente
+    activa) para que la ficha no repita una copia. No incluye el plazo de reintento (30 días): es «puede llegar a ser»."""
+    return bool(
+        comic_vine_activo
+        and series.comic_vine_id is None
+        and series.anilist_id is None
+        and series.tebeosfera_slug is None
+        and series.gcd_id is None
+        and series.metadata_source != MetadataSource.MANUAL.value
+        and series.tradition in _COMIC_VINE_TRADITIONS
+    )
 
 
 @dataclass

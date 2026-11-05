@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 D8 — política de búsqueda por serie: qué números quiere y qué se retira.
 
@@ -18,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import (
@@ -72,6 +73,9 @@ ESTADOS_TERMINADOS = (WishlistStatus.IMPORTED, WishlistStatus.RETIRADO)
 #:   reiniciarlo volvería a buscar un número que ya viene de camino.
 ESTADOS_REACTIVABLES = (WishlistStatus.RETIRADO, WishlistStatus.IMPORTED)
 
+#: C6: lo que ya salió de «pendiente de buscar» y no cuenta para la cota (se está buscando, descargando o ya descargado).
+ESTADOS_YA_BUSCADOS = (WishlistStatus.SEARCHING, WishlistStatus.DOWNLOADING, WishlistStatus.DOWNLOADED)
+
 
 @dataclass(frozen=True)
 class Querer:
@@ -86,6 +90,8 @@ class Querer:
     numeros: frozenset[int]
     computable: bool
     motivo: str | None = None
+    #: Valor interno de la fuente cuando el motivo es por su UNIDAD (ver `Huecos.fuente`); solo para el dato técnico.
+    fuente: str | None = None
 
 
 async def querer_de_serie(db: AsyncSession, series: Series) -> Querer:
@@ -123,7 +129,7 @@ async def querer_de_serie(db: AsyncSession, series: Series) -> Querer:
 
     huecos = await huecos_de_serie(db, series)
     if not huecos.computable:
-        return Querer(frozenset(), False, huecos.motivo)
+        return Querer(frozenset(), False, huecos.motivo, huecos.fuente)
 
     numeros = (frozenset(range(1, series.total_issues + 1))
                if politica == WishlistPolicy.ALL else frozenset(huecos.faltantes))
@@ -140,6 +146,46 @@ async def querer_de_serie(db: AsyncSession, series: Series) -> Querer:
             if (n := numero_de_grapa(numero_issue, formato)) is not None:
                 ocupados.add(n)
     return Querer(numeros - ocupados, True)
+
+
+def horas_minimas(pendientes: int, por_hora: int) -> int:
+    """H = ⌈N/R⌉: horas mínimas para BUSCAR `pendientes` ítems al ritmo máximo de `por_hora` (ventana de 1 h). Es una cota
+    inferior de cuándo se habrá intentado todo, no una promesa (C6, FR-09). `por_hora` debe ser ≥ 1."""
+    return -(-pendientes // por_hora)
+
+
+def texto_de_cota(horas: int) -> str:
+    """La cota en llano y SIEMPRE por defecto: «una hora», «unas H horas» (hasta 48) y «unos D días» con D = ⌊H/24⌋ (hacia
+    abajo: redondear hacia arriba afirmaría un mínimo falso). «Un día» no puede salir (H > 48 da D ≥ 2)."""
+    if horas <= 1:
+        return "una hora"
+    if horas <= 48:
+        return f"unas {horas} horas"
+    return f"unos {horas // 24} días"
+
+
+async def pendientes_de_buscar(db: AsyncSession, series: Series, querer: Querer) -> int:
+    """N de la cota (C6, FR-10/★2): para ESTA serie, todos los números que faltan y aún no se han buscado —también los
+    que todavía no están generados como deseos (la generación va por lotes)— y, para las DEMÁS series con política
+    activa, sus deseos de política pendientes de buscar. Lo que ya está buscándose o descargándose no cuenta. Dos
+    consultas agregadas, sin N+1: no recalcula el predicado de las demás series (sus deseos ya son su resultado)."""
+    en_marcha = set((await db.execute(
+        select(Wishlist.numero)
+        .where(Wishlist.series_id == series.id)
+        .where(Wishlist.origen == WishlistOrigin.POLICY)
+        .where(Wishlist.numero.is_not(None))
+        .where(Wishlist.status.in_(ESTADOS_YA_BUSCADOS))
+    )).scalars().all())
+    propias = len(querer.numeros - en_marcha)
+    otras = (await db.execute(
+        select(func.count()).select_from(Wishlist)
+        .join(Series, Series.id == Wishlist.series_id)
+        .where(Wishlist.series_id != series.id)
+        .where(Wishlist.origen == WishlistOrigin.POLICY)
+        .where(Wishlist.status.in_([WishlistStatus.WANTED, WishlistStatus.FAILED]))
+        .where(Series.wishlist_policy.in_([WishlistPolicy.MISSING, WishlistPolicy.ALL]))
+    )).scalar() or 0
+    return propias + int(otras)
 
 
 def stmt_retirada(series_id, querer: Querer):

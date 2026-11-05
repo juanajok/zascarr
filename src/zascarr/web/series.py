@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """
 Ficha de serie (C2, ampliada en C1) — /ui/series/{id}.
 
@@ -34,11 +35,16 @@ from zascarr.models import (
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
+from zascarr.services.enricher import puede_enlazarse_con_comic_vine
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
+    horas_minimas,
+    pendientes_de_buscar,
     querer_de_serie,
     retirar_de_serie,
+    texto_de_cota,
 )
+from zascarr.services.series import razon_de_no_calculable
 from zascarr.utils.cover import (
     CACHE_VERSION,
     SERIES_COVER_MAX_WIDTH,
@@ -67,7 +73,7 @@ MOTIVO_FUTUROS_EN_PANTALLA = (
 # una opción que parece funcionar y no hace nada es peor que no ofrecerla.
 _POLITICAS_OFRECIDAS = {
     WishlistPolicy.NONE: "No buscar nada por mi cuenta",
-    WishlistPolicy.MISSING: "Buscar los números que me faltan",
+    WishlistPolicy.MISSING: "Completar la serie: buscar lo que me falta",
 }
 
 
@@ -90,6 +96,34 @@ async def _cuantos_retirados(db: AsyncSession, series: Series) -> int:
     )).scalar() or 0
 
 
+async def _veredicto(db: AsyncSession, series: Series, querer, politica: WishlistPolicy,
+                     aviso_pendiente: bool) -> dict:
+    """Qué dice el veredicto de la política (C6, FR-09/27/28/29). Precedencia con la política ACTIVA, donde cada nivel
+    anula los siguientes: aviso legal pendiente > R = 0 > serie no calculable > cota de tiempo."""
+    k = len(querer.numeros)
+    r = get_settings().politica_busquedas_por_hora
+    if politica == WishlistPolicy.NONE:
+        return {"tipo": "ninguno", "no_calculable": razon_de_no_calculable(series) is not None}
+    if k >= 1 and aviso_pendiente:
+        return {"tipo": "aviso_legal", "k": k}
+    if k >= 1 and r == 0:
+        return {"tipo": "r_cero", "k": k}
+    if querer.motivo:
+        # Efecto diferido (FR-13): el enriquecedor podría enlazar la serie con Comic Vine y darle total. Solo si hay
+        # búsquedas posibles (R > 0 y aviso aceptado); en condicional y sin nombrar la fuente.
+        diferido = (not querer.computable and r > 0 and not aviso_pendiente
+                    and politica in (WishlistPolicy.MISSING, WishlistPolicy.ALL)
+                    and puede_enlazarse_con_comic_vine(series, get_settings().comicvine_enabled))
+        return {"tipo": "motivo", "fuente": querer.fuente if not querer.computable else None,
+                "diferido": diferido}
+    if k >= 1:
+        n = await pendientes_de_buscar(db, series, querer)
+        if n >= 1:
+            return {"tipo": "cota", "k": k, "r": r, "n": n, "cota": texto_de_cota(horas_minimas(n, r))}
+        return {"tipo": "faltan", "k": k}
+    return {"tipo": "completa"}
+
+
 async def _contexto_politica(db: AsyncSession, series: Series,
                              querer=None, retirados_ahora: int | None = None,
                              aviso_legal_pendiente: bool | None = None) -> dict:
@@ -108,17 +142,19 @@ async def _contexto_politica(db: AsyncSession, series: Series,
     """
     if querer is None:
         querer = await querer_de_serie(db, series)
+    pendiente_de_aviso = (
+        not await is_acknowledged(db) if aviso_legal_pendiente is None else aviso_legal_pendiente)
+    politica_actual = series.wishlist_policy or WishlistPolicy.NONE
     return {
+        "veredicto": await _veredicto(db, series, querer, politica_actual, pendiente_de_aviso),
         "querer": querer,
-        "politica_actual": series.wishlist_policy or WishlistPolicy.NONE,
+        "politica_actual": politica_actual,
         "politicas_ofrecidas": _POLITICAS_OFRECIDAS,
         "motivo_futuros": MOTIVO_FUTUROS_EN_PANTALLA,
         "lote": get_settings().orchestrator_politica_lote,
         # D8 + blindaje legal: el ciclo no genera ni busca sin acuse, así que
         # prometer búsquedas sin decirlo sería engañar.
-        "aviso_legal_pendiente": (
-            not await is_acknowledged(db) if aviso_legal_pendiente is None
-            else aviso_legal_pendiente),
+        "aviso_legal_pendiente": pendiente_de_aviso,
         "retirados": await _cuantos_retirados(db, series),
         "retirados_ahora": retirados_ahora,
     }
