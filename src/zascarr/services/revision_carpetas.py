@@ -409,9 +409,7 @@ class RevisionCarpetas:
             return False
         if por_confirmar and not grupo.por_confirmar:
             return False
-        if en_conflicto and not grupo.en_conflicto:
-            return False
-        return True
+        return not (en_conflicto and not grupo.en_conflicto)
 
     @staticmethod
     def _totales(

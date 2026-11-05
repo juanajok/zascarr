@@ -113,14 +113,16 @@ class TestUrlCanonica:
 
 class TestContextoDelAsistente:
     def test_lee_y_reconstruye_los_siete_valores(self):
+        from uuid import uuid4
+        sid = str(uuid4())
         ctx = ContextoCarpetas.desde(_peticion(
             "nombre=batman&estado=sin_serie&por_confirmar=1&en_conflicto=1"
-            "&serie=s-1&limite=10&desplazamiento=20"))
+            f"&serie={sid}&limite=10&desplazamiento=20"))
         assert ctx.query == ("&nombre=batman&estado=sin_serie&por_confirmar=1"
-                             "&en_conflicto=1&serie=s-1&limite=10&desplazamiento=20")
+                             f"&en_conflicto=1&serie={sid}&limite=10&desplazamiento=20")
         assert ctx.campos == [("nombre", "batman"), ("estado", "sin_serie"),
                               ("por_confirmar", "1"), ("en_conflicto", "1"),
-                              ("serie", "s-1"), ("limite", "10"),
+                              ("serie", sid), ("limite", "10"),
                               ("desplazamiento", "20")]
 
     def test_limite_50_y_desplazamiento_0_no_viajan(self):
@@ -133,6 +135,25 @@ class TestContextoDelAsistente:
             "estado=INVENTADO&por_confirmar=2&limite=x&desplazamiento=-3&serie="))
         assert ctx.estado == "" and ctx.por_confirmar == "" and ctx.limite == ""
         assert ctx.desplazamiento == "" and ctx.serie == "" and ctx.query == ""
+
+    def test_serie_no_uuid_se_descarta_y_la_valida_se_conserva(self):
+        """§6.1/seguridad: el contexto solo propaga una `serie` canónica (UUID); el router
+        valida y avisa, y lo que va a URLs y `hidden` no lleva texto arbitrario."""
+        from urllib.parse import urlencode
+        from uuid import uuid4
+
+        for basura in ("no-es-uuid", "123", "<script>alert(1)</script>", "  ", "x" * 64):
+            ctx = ContextoCarpetas.desde(_peticion(urlencode(
+                {"nombre": "x", "serie": basura})))
+            assert ctx.serie == "", basura
+            assert "serie=" not in ctx.query
+            assert ctx.campos == [("nombre", "x")]
+
+        sid = str(uuid4())
+        ctx = ContextoCarpetas.desde(_peticion(urlencode({"nombre": "x", "serie": sid})))
+        assert ctx.serie == sid
+        assert ("serie", sid) in ctx.campos
+        assert f"serie={sid}" in ctx.query
 
     def test_une_con_el_separador_correcto(self):
         ctx = ContextoCarpetas.desde(_peticion("nombre=x&estado=mixto"))

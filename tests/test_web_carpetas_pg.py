@@ -1211,6 +1211,23 @@ class TestPropagacionDelContexto:
         assert quitar and "desplazamiento" not in quitar[0]
 
 
+class TestSerieInventadaEnElContexto:
+    async def test_una_serie_no_uuid_no_se_propaga_al_asistente(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        invalida = await pagina(ruta="/ui/pendientes/carpetas/asistente?clave=Comics/G"
+                                "&nombre=x&serie=no-es-uuid")
+        assert invalida.status_code == 200
+        assert "no-es-uuid" not in invalida.text
+        assert 'name="serie" value="no-es-uuid"' not in invalida.text
+
+        from uuid import uuid4
+        sid = uuid4()
+        valida = await pagina(ruta=f"/ui/pendientes/carpetas/asistente?clave=Comics/G"
+                              f"&nombre=x&serie={sid}")
+        assert valida.status_code == 200
+        assert f'name="serie" value="{sid}"' in valida.text
+
+
 class TestMapaDeEnlacesDelAsistente:
     """§6.3: TODOS los enlaces de vuelta a la lista conservan el contexto, salvo el resultado guardado."""
 
