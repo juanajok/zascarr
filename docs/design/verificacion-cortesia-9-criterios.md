@@ -6,9 +6,14 @@
 > `.squad/wt-134c` (rama `docs/134-matriz-cortesia`). No se ha tocado el árbol compartido.
 > **Método:** lectura de la spec, del código y de la suite; ejecución de los 18 ficheros de
 > prueba relevantes con `httpx.MockTransport` y reloj simulado, **sin Postgres y sin red real**.
-> **Resultado:** **707 pruebas, 0 fallos**. Matriz: **40 celdas PASS, 7 FAIL, 7 n/a**. Los
-> NOT RUN (red real, Pi, multi-proceso, despliegue real) están separados en §3 y **no se
-> cuentan como PASS**.
+> **Resultado:** **707 pruebas, 0 fallos** en la foto de `4ec55cb`. Matriz: **40 celdas PASS,
+> 7 FAIL, 7 n/a**. Los NOT RUN (red real, Pi, multi-proceso, despliegue real) están separados
+> en §3 y **no se cuentan como PASS**.
+>
+> **Actualización de cierre (2026-11-05, rama `fix/134-cortesia-cierre`, PR de cierre de #134):**
+> se corrigen los dos FAIL (I) —foro que se tragaba la espera y snapshot sin el intervalo del
+> host de portada— y se añade la evidencia GCD/foro que faltaba en los criterios 2, 3 y 4. La
+> matriz pasa a **47 PASS (22 D + 25 C), 0 FAIL, 7 n/a**. Detalle en §7.
 
 ---
 
@@ -59,17 +64,17 @@ Los consumidores son los seis del alcance de #134: **Comic Vine**, **AniList**, 
 | Criterio (issue) | Comic Vine | AniList | GCD | Foro | Tebeosfera | Portadas |
 |---|---|---|---|---|---|---|
 | **1. Ámbito de coordinación** | PASS (D)<br>`tests/test_clientes_cortesia.py:98` | PASS (C)<br>`tests/test_clientes_cortesia.py:212`<br>`tests/test_peticiones.py:430` | PASS (C)<br>`tests/test_clientes_fuente_apagada.py:53`<br>`tests/test_peticiones.py:430` | PASS (C)<br>`tests/test_clientes_fuente_apagada.py:66`<br>`tests/test_peticiones.py:430` | PASS (D)<br>`tests/test_tebeosfera_cortesia.py:105`<br>`:125` | PASS (D)<br>`tests/test_cover_cortesia.py:119` |
-| **2. Dos niveles (fuente + host)** | PASS (C)<br>`tests/test_cortesia.py:205`<br>`:212` | PASS (C)<br>`tests/test_cortesia.py:205`<br>`:212` | **FAIL (E)**<br>solo `tests/test_cortesia.py:173` (política), sin prueba de cola/host de GCD | **FAIL (E)**<br>`tests/test_forum_scraper.py:68` usa `rate_limit=0`; ningún test mide el escalonado | PASS (D)<br>`tests/test_tebeosfera_cortesia.py:153`<br>`:105` | n/a: por diseño solo hay nivel **host** (§3.2.4); host acreditado en `tests/test_cover_cortesia.py:92` |
-| **3. Redirecciones acotadas** | PASS (D)<br>`tests/test_clientes_cortesia.py:124`<br>`:184` | PASS (D)<br>`tests/test_clientes_cortesia.py:212`<br>`:252` | **FAIL (E)**<br>sin prueba de redirección ni de `follow_redirects=False` en `GCDClient` | PASS (D)<br>`tests/test_forum_scraper.py:250`<br>`:268`<br>`:279` | PASS (D)<br>`tests/test_tebeosfera_cortesia.py:246`<br>`:268`<br>`:336`<br>`:344` | PASS (D)<br>`tests/test_cover_cortesia.py:92`<br>`:106`<br>`tests/test_cover_ssrf.py:280` |
-| **4. Reintentos / 429 / apagada** | PASS (D)<br>`tests/test_clientes_cortesia.py:148`<br>`:166`<br>`:189`<br>`tests/test_enricher.py:83` | PASS (D)<br>`tests/test_enricher.py:117`<br>`tests/test_cortesia.py:173` | **FAIL (E)**<br>`tests/test_clientes_fuente_apagada.py:53` cubre solo apagada; sin 429/reintento de GCD | **FAIL (E)**<br>`tests/test_clientes_fuente_apagada.py:66` cubre solo apagado; sin 429/reintento | PASS (C)<br>`tests/test_cortesia.py:177` (1 intento)<br>`tests/test_tebeosfera_cortesia.py:363` (500 → sin resultados) | PASS (D)<br>`tests/test_cover_cortesia.py:113`<br>`:136`<br>`:171` |
-| **5. Espera visible sin promesas** | PASS (D)<br>`tests/test_clientes_cortesia.py:277`<br>`:297` | PASS (C)<br>`tests/test_discovery_estados.py:277`<br>`src/zascarr/services/anilist.py:92-103` | PASS (C)<br>`tests/test_discovery_estados.py:277`<br>`src/zascarr/services/gcd.py:115-127` | **FAIL (I)**<br>`src/zascarr/services/forum_scraper.py:186-197` convierte `CortesiaEnEspera` en `[]`; ver §1.5 | PASS (C)<br>`tests/test_discovery_estados.py:277`<br>`src/zascarr/services/tebeosfera.py:185-195` | PASS (D)<br>`tests/test_cover_cortesia.py:182`<br>`:126`<br>`tests/test_cover_ssrf.py:547` |
+| **2. Dos niveles (fuente + host)** | PASS (C)<br>`tests/test_cortesia.py:205`<br>`:212` | PASS (C)<br>`tests/test_cortesia.py:205`<br>`:212` | PASS (D)<br>`tests/test_gcd_cortesia.py::test_dos_clientes_distintos_se_escalonan` | PASS (D)<br>`tests/test_forum_cortesia.py::test_dos_instancias_se_escalonan` | PASS (D)<br>`tests/test_tebeosfera_cortesia.py:153`<br>`:105` | n/a: por diseño solo hay nivel **host** (§3.2.4); host acreditado en `tests/test_cover_cortesia.py:92` |
+| **3. Redirecciones acotadas** | PASS (D)<br>`tests/test_clientes_cortesia.py:124`<br>`:184` | PASS (D)<br>`tests/test_clientes_cortesia.py:212`<br>`:252` | PASS (D)<br>`tests/test_gcd_cortesia.py::test_sigue_una_redireccion_del_mismo_origen`<br>`::test_un_destino_prohibido_no_se_pide`<br>`::test_el_cliente_se_abre_sin_redirecciones_automaticas` | PASS (D)<br>`tests/test_forum_scraper.py:250`<br>`:268`<br>`:279`<br>`tests/test_forum_cortesia.py::test_una_redireccion_prohibida_no_se_pide` | PASS (D)<br>`tests/test_tebeosfera_cortesia.py:246`<br>`:268`<br>`:336`<br>`:344` | PASS (D)<br>`tests/test_cover_cortesia.py:92`<br>`:106`<br>`tests/test_cover_ssrf.py:280` |
+| **4. Reintentos / 429 / apagada** | PASS (D)<br>`tests/test_clientes_cortesia.py:148`<br>`:166`<br>`:189`<br>`tests/test_enricher.py:83` | PASS (D)<br>`tests/test_enricher.py:117`<br>`tests/test_cortesia.py:173` | PASS (D)<br>`tests/test_gcd_cortesia.py::test_429_con_retry_after_se_espera_y_se_reintenta`<br>`::test_los_reintentos_se_agotan_con_su_maximo_y_backoff`<br>`tests/test_clientes_fuente_apagada.py:53` | PASS (D)<br>`tests/test_forum_cortesia.py::test_429_con_retry_after_se_espera_y_se_reintenta`<br>`::test_los_reintentos_se_agotan_con_su_maximo_y_backoff`<br>`tests/test_clientes_fuente_apagada.py:66` | PASS (C)<br>`tests/test_cortesia.py:177` (1 intento)<br>`tests/test_tebeosfera_cortesia.py:363` (500 → sin resultados) | PASS (D)<br>`tests/test_cover_cortesia.py:113`<br>`:136`<br>`:171` |
+| **5. Espera visible sin promesas** | PASS (D)<br>`tests/test_clientes_cortesia.py:277`<br>`:297` | PASS (C)<br>`tests/test_discovery_estados.py:277`<br>`src/zascarr/services/anilist.py:92-103` | PASS (C)<br>`tests/test_discovery_estados.py:277`<br>`src/zascarr/services/gcd.py:115-127` | PASS (D)<br>`tests/test_forum_cortesia.py::test_un_bloqueo_mayor_que_el_presupuesto_no_devuelve_lista_vacia`<br>`::test_el_orchestrator_omite_el_ciclo_sin_registrar_fallo` | PASS (C)<br>`tests/test_discovery_estados.py:277`<br>`src/zascarr/services/tebeosfera.py:185-195` | PASS (D)<br>`tests/test_cover_cortesia.py:182`<br>`:126`<br>`tests/test_cover_ssrf.py:547` |
 | **6. Coordinación declarada** | PASS (C)<br>`tests/test_cortesia.py:314`<br>`tests/test_cortesia_estado.py:161` | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>`docs/design/cortesia-compartida.md:15-16` |
 | **7. FIFO y cancelación** | PASS (C)<br>`tests/test_cortesia.py:227`<br>`:251`<br>`:265` | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (D)<br>`tests/test_tebeosfera_cortesia.py:197`<br>`:351`<br>`:372` | PASS (C)<br>ídem |
-| **8. Observabilidad mínima** | PASS (C)<br>`tests/test_cortesia.py:314`<br>`tests/test_cortesia_estado.py:113`<br>`tests/test_web_estado_cortesia.py:69` | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>ídem | **FAIL (I)**<br>el host usado solo por portadas sale con `intervalo_min_s: 0.0` y `fuentes: []`; ver §1.8 |
+| **8. Observabilidad mínima** | PASS (C)<br>`tests/test_cortesia.py:314`<br>`tests/test_cortesia_estado.py:113`<br>`tests/test_web_estado_cortesia.py:69` | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (C)<br>ídem | PASS (D)<br>`tests/test_cortesia.py::TestSnapshotPortada::test_el_host_de_una_portada_publica_su_intervalo_real_y_su_fuente` |
 | **9. Evidencia verificable** | n/a: criterio global (esta matriz y la suite); ver §1.9 | n/a | n/a | n/a | n/a | n/a |
 
-**Recuento:** 40 PASS (15 D + 25 C), 7 FAIL (5 E + 2 I), 7 n/a. No hay celdas NOT RUN: los
-NOT RUN son transversales (§3).
+**Recuento (tras el cierre):** 47 PASS (22 D + 25 C), 0 FAIL, 7 n/a. No hay celdas NOT RUN:
+los NOT RUN son transversales (§3).
 
 > **Nota sobre «FAIL (E)»:** no significa «roto». Significa que hoy la suite no tiene una
 > prueba que se ponga roja si ese consumidor deja de cumplir el criterio. GCD es el caso
@@ -162,11 +167,11 @@ distintos son colas distintas.
 **Código.** `utils/cortesia.py:437-444` (`_intervalo_de_host` = máximo de las fuentes) y
 `utils/peticiones.py:183-193` (host = origen de la URL del salto).
 
-**Estado.** PASS en CV, AniList y Tebeosfera; PASS (D) en el nivel host de portadas. En
-portadas el nivel **fuente** es n/a por la excepción declarada §3.2.4 (su URL no lleva
-fuente). **FAIL (E)** en GCD y foro: no hay prueba que mida su escalonado. La tabla
-`tests/test_cortesia.py:173` acredita el **valor** de la política de GCD (2,0 s) y de foro
-(2,0 s), pero no que esos clientes la apliquen a su cola.
+**Estado.** PASS en CV, AniList, Tebeosfera, GCD y foro; PASS (D) en el nivel host de
+portadas. En portadas el nivel **fuente** es n/a por la excepción declarada §3.2.4 (su URL no
+lleva fuente). GCD y foro pasan a PASS (D) con `tests/test_gcd_cortesia.py::test_dos_clientes_distintos_se_escalonan`
+y `tests/test_forum_cortesia.py::test_dos_instancias_se_escalonan`, que miden el escalonado real de
+sus colas (2,0 s) y no solo el valor de la política.
 
 ### 1.3 Criterio 3 — Redirecciones acotadas (AC-03, AC-12)
 
@@ -205,10 +210,11 @@ allowlist falla **sin enviar**; en portadas cada salto revalida allowlist, DNS/I
 **Código.** `utils/peticiones.py:170-221` (`_seguir_redirecciones`) y
 `utils/url_portada.py:242-263` (portadas).
 
-**Estado.** PASS en CV, AniList, foro, Tebeosfera y portadas. **FAIL (E)** en GCD: no hay
-ninguna prueba de redirección con `GCDClient` ni que compruebe que su `AsyncClient` se abre
-con `follow_redirects=False` (`gcd.py:92-102` lo hace, pero no se prueba). Un cambio a
-redirecciones automáticas en GCD pasaría la suite.
+**Estado.** PASS en los seis. GCD pasa a PASS (D) con
+`tests/test_gcd_cortesia.py::test_sigue_una_redireccion_del_mismo_origen`,
+`::test_un_destino_prohibido_no_se_pide` (otro origen y `Location` malformado, sin segunda
+petición) y `::test_el_cliente_se_abre_sin_redirecciones_automaticas`. El foro cierra la
+evidencia con `tests/test_forum_cortesia.py::test_una_redireccion_prohibida_no_se_pide`.
 
 ### 1.4 Criterio 4 — Reintentos, 429 y fuente apagada (AC-04, AC-05, AC-15)
 
@@ -248,11 +254,11 @@ no reserva, no envía y no reintenta (la prueba de Ajustes es la excepción expl
 **Código.** `utils/peticiones.py:253-338` (bucle de intentos, 429, `Retry-After`, backoff)
 y `utils/cortesia.py:484-500` (`bloquear`).
 
-**Estado.** PASS en CV, AniList, Tebeosfera y portadas. **FAIL (E)** en GCD y foro: la única
-prueba de esos dos clientes en este criterio es la de fuente apagada
-(`tests/test_clientes_fuente_apagada.py:53` y `:66`); no hay prueba de 429, de
-`Retry-After` compartido ni del máximo de reintentos (2) aplicado a GCD/foro. El mecanismo
-común está probado; el cableado de esos dos clientes, no.
+**Estado.** PASS en los seis. GCD y foro pasan a PASS (D) con
+`tests/test_gcd_cortesia.py` (`::test_429_con_retry_after_se_espera_y_se_reintenta` y
+`::test_los_reintentos_se_agotan_con_su_maximo_y_backoff`) y `tests/test_forum_cortesia.py`
+(los mismos dos casos): 429 con `Retry-After`, reintento tras el bloqueo, máximo de 2
+intentos y backoff de 2 s, además de la puerta de fuente apagada que ya existía.
 
 ### 1.5 Criterio 5 — Espera visible sin promesas (AC-06, AC-13, AC-14, AC-18)
 
@@ -296,19 +302,15 @@ sin cachear.
   de AniList/GCD/Tebeosfera. El código lo deja propagar (`anilist.py:92-103`,
   `gcd.py:115-127`, `tebeosfera.py:185-195`), pero es inspección, no test.
 - **Portadas: PASS (D)**.
-- **Foro: FAIL (I).** `ForumScraper.use_ipb_search` atrapa `Exception` alrededor de `_get`
-  y devuelve `[]` (`src/zascarr/services/forum_scraper.py:186-197`). `_get` sí lanza
-  `CortesiaEnEspera` (`:169-174`), así que una espera por `Retry-After` o por bloqueo se
-  convierte en «sin resultados» y además se registra como `forum.search_failed` con
-  `logger.exception`, justo lo contrario de AC-16 («no se registra fallo»). El
-  `_forum_fallback` del orchestrator vuelve a atrapar `Exception` y registra
-  `orchestrator.forum_fallback_error` (`src/zascarr/services/orchestrator.py:573-574`).
-
-  Comprobación manual (no es un test de la suite, no se ha añadido al repo): con un
-  `CortesiaProceso` con la fuente `foro` bloqueada 60 s y `espera_max_s=5`, `_get` lanza
-  `CortesiaEnEspera` con motivo `bloqueo_fuente`; `use_ipb_search("thorgal")` devuelve `[]`
-  y registra `forum.search_failed`. Es el escenario de un 429 real con `Retry-After` mayor
-  que el presupuesto del foro.
+- **Foro: PASS (D)** tras el cierre. `ForumScraper.use_ipb_search` deja pasar
+  `CortesiaEnEspera`/`FuenteApagada` (ya no las convierte en `[]` ni registra
+  `forum.search_failed`), y `_forum_fallback` del orchestrator las distingue del fallo
+  (`orchestrator.forum_sin_turno`, sin `logger.exception`). Tests:
+  `tests/test_forum_cortesia.py::TestForoSinTurno::test_un_bloqueo_mayor_que_el_presupuesto_no_devuelve_lista_vacia`
+  (bloqueo de 60 s con `espera_max_s=5`) y `::test_el_orchestrator_omite_el_ciclo_sin_registrar_fallo`.
+  El foro no es una de las fuentes de búsqueda de #133 (no emite `EstadoFuente`); la espera
+  es la misma excepción que `DiscoveryService` clasifica como `limite_de_cortesia` para las
+  cuatro fuentes de búsqueda.
 
 ### 1.6 Criterio 6 — Fallos de coordinación visibles / coordinación declarada (AC-07, AC-09)
 
@@ -393,15 +395,13 @@ credencial ni dato personal; el HTML pinta los textos de §6.3.
 
 **Estado.** PASS (C) en CV, AniList, GCD, foro y Tebeosfera: el snapshot lista las seis
 fuentes y la UI las pinta; no hay una prueba por fuente, sino una prueba del snapshot común
-más la tabla de políticas. **FAIL (I) en portadas:** el nivel host del snapshot no declara
-el intervalo de una portada. Si un host solo se usa para portadas (p. ej.
-`s4.anilist.co`), `CortesiaProceso.snapshot()` devuelve `fuentes: []`, `intervalo_min_s: 0.0`
-y `siguiente_hueco_s: 0.0`, aunque el espaciado real sea 1,5 s (`intervalo_de_portada`), y
-la fuente `portada` sale con el intervalo desconocido 2,5 s en vez del de cada host. El
-espaciado real no está roto (el `Turno` usa `intervalo_s` explícito,
-`utils/cortesia.py:369-382`), pero el snapshot publica un dato falso y §3.2.4 pide
-declararlo. No hay test que lo cubra. Comprobado a mano con un `CortesiaProceso` y
-`snapshot_publico`; no se ha añadido al repo.
+más la tabla de políticas. **Portadas: PASS (D)** tras el cierre: el nivel host guarda el
+intervalo efectivo con el que se reservó (máximo con el previo) y, si el host está en la
+allowlist, la fuente real a la que pertenece; el snapshot publica ambos en vez de `0.0` y
+`fuentes: []`. El intervalo de la portada no se usa para autorizar a la fuente real del host
+(Comic Vine sigue esperando su 1,0 s). Tests:
+`tests/test_cortesia.py::TestSnapshotPortada::test_el_host_de_una_portada_publica_su_intervalo_real_y_su_fuente`
+y `::test_el_intervalo_del_host_es_el_maximo_entre_portada_y_su_fuente`.
 
 ### 1.9 Criterio 9 — Evidencia verificable (AC-10, AC-19)
 
@@ -437,9 +437,12 @@ y «determinismo» sí tienen prueba. Ningún NOT RUN se cuenta como PASS.
 
 ---
 
-## 2. Resumen de FAIL y de evidencias frágiles
+## 2. Resumen de la foto inicial y de evidencias frágiles
 
-### 2.1 Los 7 FAIL de la matriz
+### 2.1 Los 7 FAIL de la foto `4ec55cb` (todos cerrados en §7)
+
+Esta tabla es **histórica**: documenta lo que la matriz marcaba FAIL en la foto inicial y
+cómo se cerró. El estado actual es **0 FAIL** (47 PASS); ver §7.
 
 | Celda | Tipo | Qué falta | Qué haría falta para cerrarlo |
 |---|---|---|---|
@@ -554,41 +557,38 @@ confunda «suite verde» con «validado en producción».
   petición más espaciada, nunca una ráfaga.
 - **Garantía en la Pi real ni en red real.** Nada de §3; el PASS de §1 es de suite simulada.
 - **Portadas por fuente.** Su URL no lleva la fuente; el nivel host sale del mapa
-  allowlist→fuente y un host desconocido espera 2,5 s. El snapshot no declara bien el
-  intervalo de un host solo-portada (FAIL I de §1.8).
+  allowlist→fuente y un host desconocido espera 2,5 s. El snapshot **sí** declara el
+  intervalo efectivo de un host solo-portada y su fuente mapeada (§1.8 y §7).
 
 ---
 
 ## 5. Conclusiones
 
-1. **Plenamente acreditados con la suite (sin celdas FAIL):** criterio **1** (ámbito),
-   criterio **6** (coordinación declarada), criterio **7** (FIFO/cancelación, con Tebeosfera
-   directa y el resto por la cola común) y criterio **9** (global; sus celdas por consumidor
-   son n/a, esta matriz + 707 tests). El criterio **8** está acreditado para las seis fuentes
-   y falla solo en el detalle de host de portadas.
-2. **Acreditados con la suite salvo un consumidor:** criterio **3** (todo menos GCD) y
-   criterio **4** (todo menos GCD y foro). El mecanismo común está probado; lo que falta es
-   la prueba de que esos clientes lo usan en el escenario concreto (redirección, 429,
-   reintento).
-3. **Parciales:** criterio **2** (CV, AniList y Tebeosfera; GCD y foro sin prueba de
-   escalonado; portadas solo host por diseño) y criterio **5** (CV y portadas directos;
-   AniList/GCD/Tebeosfera por el mapeo común con doble; foro con un fallo de implementación:
-   la espera se convierte en «sin resultados» y se registra como error).
+1. **Plenamente acreditados con la suite (sin celdas FAIL):** criterios **1** (ámbito), **3**
+   (redirecciones), **4** (reintentos/429/apagada), **6** (coordinación declarada), **7**
+   (FIFO/cancelación) y **8** (observabilidad, incluido el host de portadas); el criterio **9**
+   es global (sus celdas por consumidor son n/a; esta matriz más la suite).
+2. **Criterio 2 (dos niveles):** acreditado en todos los consumidores; GCD y foro pasan de
+   FAIL (E) a PASS (D) con prueba de escalonado propia, y portadas mantiene n/a el nivel
+   fuente por diseño (solo host).
+3. **Criterio 5 (espera visible):** CV, foro y portadas con prueba directa (D); AniList, GCD y
+   Tebeosfera mantienen PASS (C) por el mapeo común —el mecanismo está probado y el código
+   propaga la excepción, pero no hay una prueba con el cliente real de esas tres fuentes—. No
+   queda ningún FAIL (I).
 4. **Dependen de entorno real (NOT RUN):** latencia/CPU/RAM en Pi, red real de las cinco
    fuentes y CDNs, 429/`Retry-After` reales, despliegue `uvicorn --workers 1` real,
    navegador real, soak y Postgres real en `/estado`. Ninguno se cuenta como PASS.
-5. **Hallazgos que no se corrigen en este PR (es documental):**
-   - **Foro, criterio 5 (FAIL I):** `use_ipb_search` debe dejar pasar
-     `CortesiaEnEspera`/`FuenteApagada` (o devolver una omisión explícita) antes del
-     `except Exception`; `_forum_fallback` debe distinguir la omisión del fallo.
-   - **Portadas, criterio 8 (FAIL I):** el snapshot debe declarar el intervalo del host de
-     portada (hoy 0,0 s y `fuentes: []`), o la fila `portada` debe reflejar el intervalo por
-     host.
-   - **Evidencias frágiles:** añadir tests de GCD (cola, host, redirects, 429/reintento),
-     de foro (escalonado 2,0 s, 429/reintento), de Tebeosfera (propagación de
-     `CortesiaEnEspera`, un solo intento contado) y de AniList (espera visible con el
-     cliente real). Con ellos, los FAIL (E) pasarían a PASS (D) y las celdas C de criterio 5
-     quedarían cerradas.
+5. **Hallazgos corregidos en la rama de cierre (`fix/134-cortesia-cierre`, §7):**
+   - **Foro, criterio 5 (era FAIL I):** `use_ipb_search` deja pasar
+     `CortesiaEnEspera`/`FuenteApagada` antes del `except Exception` y `_forum_fallback`
+     distingue la omisión del fallo. PASS (D).
+   - **Portadas, criterio 8 (era FAIL I):** el snapshot declara el intervalo efectivo del
+     host de portada y la fuente mapeada de la allowlist. PASS (D).
+   - **Evidencia GCD/foro (eran FAIL E):** añadidos los tests de escalonado, redirecciones,
+     429/`Retry-After` y agotamiento con máximo 2/backoff 2 s. PASS (D).
+   - **Evidencia que sigue siendo PASS (C), no FAIL:** AniList/GCD/Tebeosfera en criterio 5
+     (el aviso se prueba con dobles y el mapeo es común; una prueba con el cliente real
+     cerraría la reserva, no un fallo).
 6. **Lo que no cambia:** Tebeosfera conserva 2,5 s, ≤3 saltos, mismo origen y 1 intento
    (AC-11); las portadas conservan allowlist/SSRF/tiempo/tamaño (AC-12); no hay dependencias
    nuevas, ni Redis/PostgreSQL, ni escritura en disco/BD (AC-17).
@@ -600,19 +600,43 @@ confunda «suite verde» con «validado en producción».
 | AC | Qué exige | Prueba / evidencia | Estado |
 |---|---|---|---|
 | **AC-11** | Tebeosfera intacta: 2,5 s, ≤3 saltos, mismo origen, 1 intento, elevación de config con aviso. | `tests/test_tebeosfera_cortesia.py` completo (L103-403). | PASS |
-| **AC-12** | Portadas: cada salto por la cola del host, sin reintento; allowlist/SSRF/tiempo/tamaño; espera >5 s → 404/marcador sin cachear. | `tests/test_cover_cortesia.py` (L91-218) y `tests/test_cover_ssrf.py` (L200-383, L547/L566). | PASS (salvo el detalle de host de §1.8) |
+| **AC-12** | Portadas: cada salto por la cola del host, sin reintento; allowlist/SSRF/tiempo/tamaño; espera >5 s → 404/marcador sin cachear. | `tests/test_cover_cortesia.py` (L91-218), `tests/test_cover_ssrf.py` (L200-383, L547/L566) y `tests/test_cortesia.py::TestSnapshotPortada`. | PASS |
 | **AC-13** | `asyncio.to_thread`: espera y petición en el bucle; resize en hilo; limitador desde un hilo falla. | `tests/test_cover_cortesia.py:191`, `tests/test_cortesia.py:304`. | PASS |
 | **AC-14** | Descubrir distingue `espera` de `error`; aviso §6.5; no «Ningún resultado» por la fuente en espera. | `tests/test_discovery_estados.py:277`/`:288`; `tests/test_descubrir_estados_web.py:415`/`:422`. | PASS |
-| **AC-15** | Fuente apagada sin reserva/envío/reintento en enricher, Descubrir, foro, portada; prueba de Ajustes es la excepción. | `tests/test_peticiones.py:355-415`; `tests/test_clientes_fuente_apagada.py:42-84`; `tests/test_cover_cortesia.py:135-180`; `tests/test_enricher.py:613`/`:828`. | PASS (foro: el caso «apagada durante la espera» puede acabar en `[]` por el mismo `except` de §1.5) |
-| **AC-16** | Espera ≠ fallo: no `error`, no log de fallo, no degradar; `espera` en UI u omisión en fondo. | `tests/test_enricher.py:613`; `tests/test_discovery_estados.py:277`; `tests/test_cover_cortesia.py:182`. | PASS en CV/AniList/GCD/Tebeosfera/portadas; **FAIL (I) en foro** (§1.5) |
+| **AC-15** | Fuente apagada sin reserva/envío/reintento en enricher, Descubrir, foro, portada; prueba de Ajustes es la excepción. | `tests/test_peticiones.py:355-415`; `tests/test_clientes_fuente_apagada.py:42-84`; `tests/test_cover_cortesia.py:135-180`; `tests/test_enricher.py:613`/`:828`. | PASS |
+| **AC-16** | Espera ≠ fallo: no `error`, no log de fallo, no degradar; `espera` en UI u omisión en fondo. | `tests/test_enricher.py:613`; `tests/test_discovery_estados.py:277`; `tests/test_cover_cortesia.py:182`; `tests/test_forum_cortesia.py::TestForoSinTurno`. | PASS en los seis |
 | **AC-17** | Sin dependencias nuevas, migración, Redis/PostgreSQL; estado en memoria; snapshot sin escritura. | `git diff 3562f3a..HEAD -- pyproject.toml alembic/` vacío; `utils/cortesia.py:515-575`; `pyproject.toml:6-21`. | PASS (inspección) |
 | **AC-18** | Estados: apagada gris no es fallo; bloqueada «Bloqueada temporalmente (~Ns)»; foro sin URL «Sin configurar»; disponible «Disponible». | `tests/test_cortesia_estado.py:113`/`:126`/`:135`; `tests/test_web_estado_cortesia.py:97`. | PASS |
 | **AC-19** | Coste/determinismo: sin I/O añadida; estado acotado; la suite no duerme; mismos datos ⇒ mismas esperas. | `tests/test_cortesia.py:339`; reloj/`dormir` simulados en toda la suite. «Sin I/O» es inspección, no test. | PASS (con reserva en «sin I/O») |
 
 ---
 
-## 7. Registro de cambios
+## 7. Registro de cambios y nota de cierre
+
+### 7.1 Registro de cambios
 
 | Fecha | Versión | Cambio |
 |---|---|---|
 | 2026-11-05 | v1.0 | Primera matriz de verificación de los 9 criterios de #134 sobre `4ec55cb`: 707 pruebas relevantes, 40 PASS, 7 FAIL, 7 n/a; NOT RUN de red real/Pi/multi-proceso separados. Hallazgos: espera del foro convertida en «sin resultados» y host de portada con intervalo 0,0 s en el snapshot. |
+
+---
+
+### 7.2 Nota de cierre (2026-11-05, rama `fix/134-cortesia-cierre`)
+
+Actualización posterior a la foto de `4ec55cb`; no reescribe el informe, solo registra lo que
+pasa a PASS:
+
+| Celda que estaba FAIL | Cambio | Test que lo acredita |
+|---|---|---|
+| Criterio 2 · GCD | Prueba del escalonado real (2,0 s) de dos clientes | `tests/test_gcd_cortesia.py::test_dos_clientes_distintos_se_escalonan` |
+| Criterio 2 · foro | Prueba del escalonado real (2,0 s) de dos instancias | `tests/test_forum_cortesia.py::test_dos_instancias_se_escalonan` |
+| Criterio 3 · GCD | Redirección del mismo origen, destino prohibido/malformado y `follow_redirects=False` | `test_gcd_cortesia.py::test_sigue_una_redireccion_del_mismo_origen`, `::test_un_destino_prohibido_no_se_pide`, `::test_el_cliente_se_abre_sin_redirecciones_automaticas` |
+| Criterio 4 · GCD | 429 con `Retry-After`, reintento y agotamiento con máximo 2 / backoff 2 s | `test_gcd_cortesia.py::test_429_con_retry_after_se_espera_y_se_reintenta`, `::test_los_reintentos_se_agotan_con_su_maximo_y_backoff` |
+| Criterio 4 · foro | Los mismos dos casos sobre `ForumScraper._get` | `test_forum_cortesia.py::test_429_con_retry_after_se_espera_y_se_reintenta`, `::test_los_reintentos_se_agotan_con_su_maximo_y_backoff` |
+| Criterio 5 · foro (FAIL I) | `use_ipb_search` deja pasar `CortesiaEnEspera`/`FuenteApagada`; el orchestrator omite el ciclo sin registrarlo | `test_forum_cortesia.py::TestForoSinTurno` (bloqueo 60 s, presupuesto 5 s: no `[]`, sin `forum.search_failed`) |
+| Criterio 8 · portadas (FAIL I) | El snapshot guarda el intervalo efectivo del host y la fuente mapeada de la allowlist | `tests/test_cortesia.py::TestSnapshotPortada` |
+
+**Recuento final:** 47 PASS (22 D + 25 C), 0 FAIL, 7 n/a. Siguen NOT RUN, sin cambios, los
+entornos reales de §3 (red, Pi, multi-proceso, navegador, soak). El foro no es fuente de
+búsqueda de #133: no emite `EstadoFuente`; su espera se propaga como la misma excepción que
+el contrato de #133 clasifica como `limite_de_cortesia` en las cuatro fuentes de búsqueda.

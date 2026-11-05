@@ -26,7 +26,12 @@ from urllib.parse import quote, urljoin, urlsplit
 import httpx
 import structlog
 
-from zascarr.utils.cortesia import CortesiaProceso, PoliticaFuente
+from zascarr.utils.cortesia import (
+    CortesiaEnEspera,
+    CortesiaProceso,
+    FuenteApagada,
+    PoliticaFuente,
+)
 from zascarr.utils.peticiones import (
     DemasiadasRedirecciones,
     RedireccionNoPermitida,
@@ -191,6 +196,10 @@ class ForumScraper:
         except OrigenNoPermitidoError as exc:
             logger.warning("forum.search_rechazada", motivo=str(exc))
             return []
+        except (CortesiaEnEspera, FuenteApagada):
+            # AC-16: una espera o una fuente apagada NO es «sin resultados» ni un fallo:
+            # se propaga para que el consumidor omita el ciclo (orchestrator) sin registrarlo.
+            raise
         except Exception:
             # Sin query en el registro (privacidad §6.6).
             logger.exception("forum.search_failed")
@@ -212,6 +221,8 @@ class ForumScraper:
                     results.append(ForumResult(title.strip(), url, ed2k, magnets))
             except OrigenNoPermitidoError as exc:
                 logger.warning("forum.tema_rechazado", motivo=str(exc))
+            except (CortesiaEnEspera, FuenteApagada):
+                raise
             except Exception:
                 logger.exception("forum.topic_failed", url=url)
         return results
