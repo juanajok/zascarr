@@ -21,6 +21,7 @@ Reglas que aplica (spec §3–§5):
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin, urlsplit
@@ -42,7 +43,10 @@ logger = structlog.get_logger()
 
 CODIGOS_REDIRECCION = frozenset({301, 302, 303, 307, 308})
 CODIGOS_SIN_CUERPO_TRAS_SALTO = frozenset({301, 302, 303})
-_MAXIMO_BLOQUEO_S = 3600.0
+#: Cabeceras que NO cruzan un cambio de origen (§4, condición de Seguridad C2).
+CABECERAS_SENSIBLES = frozenset({
+    "authorization", "proxy-authorization", "cookie", "x-api-key",
+})
 
 
 class ErrorDePeticion(Exception):  # noqa: N818 — nombre del contrato (§3.6)
@@ -91,8 +95,17 @@ def _cabeceras_sin_cuerpo(cabeceras: dict | None) -> dict | None:
             if k.lower() not in ("content-type", "content-length")}
 
 
-def retry_after_s(valor: str | None) -> float | None:
-    """Segundos de un `Retry-After` (número o fecha HTTP de la stdlib); None si falta o no vale."""
+def _cabeceras_sin_credenciales(cabeceras: dict | None) -> dict | None:
+    """Un salto a OTRO origen no lleva `Authorization`/`X-Api-Key`/`Cookie`/`Proxy-Authorization`."""
+    if not cabeceras:
+        return cabeceras
+    return {k: v for k, v in cabeceras.items() if k.lower() not in CABECERAS_SENSIBLES}
+
+
+def retry_after_s(valor: str | None, maximo: float = 3600.0) -> float | None:
+    """Segundos de un `Retry-After` (número o fecha HTTP de la stdlib); None si falta o no vale.
+
+    Un `NaN`/`inf` no es un número de segundos: cae al backoff (nunca se convierte en bloqueo)."""
     if not valor:
         return None
     texto = valor.strip()
@@ -106,30 +119,36 @@ def retry_after_s(valor: str | None) -> float | None:
         if fecha is None:
             return None
         segundos = (fecha - fecha.now(fecha.tzinfo)).total_seconds()
-    if segundos <= 0:
+    if not math.isfinite(segundos) or segundos <= 0:
         return None
-    return min(segundos, _MAXIMO_BLOQUEO_S)
+    return min(segundos, max(0.0, maximo))
 
 
 def _destino_seguro(actual: str, location: str | None, *, hosts_redireccion,
-                    origen_inicial: str) -> str:
-    """Resuelve `Location` y comprueba origen/allowlist ANTES de pedir el salto."""
+                    origen_inicial: str) -> tuple[str, str]:
+    """Resuelve `Location` y comprueba origen/allowlist ANTES de pedir el salto.
+
+    Devuelve `(destino, origen)`. Un puerto no numérico o una IPv6 rota es `location_invalida`
+    (fallo de redirección, sin reintento), no un error de red."""
     if not location or not location.strip():
         raise RedireccionNoPermitida(host_efectivo(actual), "location_ausente")
-    destino = urljoin(actual, location.strip())
-    partes = urlsplit(destino)
+    try:
+        destino = urljoin(actual, location.strip())
+        partes = urlsplit(destino)
+        origen = origen_normalizado(destino)
+    except (ValueError, httpx.InvalidURL) as exc:
+        raise RedireccionNoPermitida("", "location_invalida") from exc
     if partes.scheme not in ("http", "https") or not partes.hostname:
         raise RedireccionNoPermitida("", "location_invalida")
     if partes.username or partes.password or "@" in (partes.netloc or ""):
         raise RedireccionNoPermitida(partes.hostname, "location_con_credenciales")
-    origen = origen_normalizado(destino)
     permitido = (
         hosts_redireccion(origen) if hosts_redireccion is not None
         else origen == origen_inicial
     )
     if not permitido:
         raise RedireccionNoPermitida(partes.hostname, "otro_origen")
-    return destino
+    return destino, origen
 
 
 async def _enviar(cliente: httpx.AsyncClient, metodo: str, url: str, *,
@@ -147,31 +166,44 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
                                 deadline: float | None, hosts_redireccion,
                                 datos, cabeceras, cortesia, reloj, motivo: str):
     """Una llamada con sus saltos: cada hop pasa por la cola y cuenta en el presupuesto."""
-    origen_inicial = origen_normalizado(url)
+    try:
+        origen_inicial = origen_normalizado(url)
+    except ValueError as exc:
+        raise RedireccionNoPermitida("", "location_invalida") from exc
     metodo_actual, url_actual, datos_actuales = metodo, url, datos
     cabeceras_actuales = cabeceras
     espera_total = 0.0
+    origen_actual = origen_inicial
     for salto in range(0, politica.max_redirecciones + 1):
-        host = host_efectivo(url_actual)
+        host = origen_actual                    # §3.2: (esquema, host, puerto)
         restante = None if deadline is None else deadline - reloj()
         if restante is not None and restante <= 0:
             raise CortesiaEnEspera(politica.fuente, host, 0.0, motivo)
         espera = await cortesia.esperar(politica.fuente, host, motivo=motivo,
                                         espera_max_s=restante)
         espera_total += espera.espera_s
-        respuesta = await _enviar(cliente, metodo_actual, url_actual,
-                                  datos=datos_actuales, cabeceras=cabeceras_actuales)
+        try:
+            respuesta = await _enviar(cliente, metodo_actual, url_actual,
+                                      datos=datos_actuales, cabeceras=cabeceras_actuales)
+        except (httpx.RemoteProtocolError, httpx.InvalidURL) as exc:
+            # La URL del salto no es protocolizable: fallo de redirección, no de red.
+            raise RedireccionNoPermitida("", "location_invalida") from exc
         if respuesta.status_code not in CODIGOS_REDIRECCION:
-            return respuesta, espera_total
+            return respuesta, espera_total, origen_actual
         if salto >= politica.max_redirecciones:
             raise DemasiadasRedirecciones(politica.max_redirecciones)
-        destino = _destino_seguro(url_actual, respuesta.headers.get("location"),
-                                  hosts_redireccion=hosts_redireccion,
-                                  origen_inicial=origen_inicial)
+        destino, origen_destino = _destino_seguro(
+            url_actual, respuesta.headers.get("location"),
+            hosts_redireccion=hosts_redireccion, origen_inicial=origen_inicial)
+        if origen_destino != origen_inicial:
+            # Condición de Seguridad C2: un salto a OTRO origen no reenvía credenciales
+            # (cabeceras sensibles) ni datos (query/cuerpo con claves).
+            cabeceras_actuales = _cabeceras_sin_credenciales(cabeceras_actuales)
+            datos_actuales = None
         if respuesta.status_code in CODIGOS_SIN_CUERPO_TRAS_SALTO:
             metodo_actual, datos_actuales = "GET", None
             cabeceras_actuales = _cabeceras_sin_cuerpo(cabeceras_actuales)
-        url_actual = destino
+        url_actual, origen_actual = destino, origen_destino
     raise DemasiadasRedirecciones(politica.max_redirecciones)
 
 
@@ -208,10 +240,10 @@ async def pedir_con_cortesia(
             raise FuenteApagada(politica.fuente)
         restante = deadline - reloj()
         if restante <= 0:
-            raise CortesiaEnEspera(politica.fuente, host_efectivo(url), 0.0, "cortesia")
+            raise CortesiaEnEspera(politica.fuente, origen_normalizado(url), 0.0, "cortesia")
         espera_s_intento = 0.0
         try:
-            respuesta, espera_s_intento = await _seguir_redirecciones(
+            respuesta, espera_s_intento, origen_final = await _seguir_redirecciones(
                 cliente, metodo, url, politica=politica, deadline=deadline,
                 hosts_redireccion=hosts_redireccion, datos=datos, cabeceras=cabeceras,
                 cortesia=servicio, reloj=reloj, motivo="cortesia" if intento == 1 else "reintento")
@@ -226,7 +258,7 @@ async def pedir_con_cortesia(
                 raise ReintentosAgotados(politica.fuente, intento, None) from None
             restante = deadline - reloj()
             if restante < espera_backoff:
-                raise CortesiaEnEspera(politica.fuente, host_efectivo(url), espera_backoff,
+                raise CortesiaEnEspera(politica.fuente, origen_normalizado(url), espera_backoff,
                                        "reintento") from None
             await dormir(espera_backoff)
             continue
@@ -239,7 +271,7 @@ async def pedir_con_cortesia(
                 raise ReintentosAgotados(politica.fuente, intento, None) from None
             restante = deadline - reloj()
             if restante < espera_backoff:
-                raise CortesiaEnEspera(politica.fuente, host_efectivo(url), espera_backoff,
+                raise CortesiaEnEspera(politica.fuente, origen_normalizado(url), espera_backoff,
                                        "reintento") from None
             await dormir(espera_backoff)
             continue
@@ -251,16 +283,20 @@ async def pedir_con_cortesia(
                                          espera_s=espera_s_intento)
             segundos = None
             if politica.obedece_retry_after:
-                segundos = retry_after_s(respuesta.headers.get("retry-after"))
+                segundos = retry_after_s(respuesta.headers.get("retry-after"),
+                                        politica.bloqueo_max_s)
             if segundos is None:
                 segundos = politica.backoff_s(intento)
-            servicio.bloquear(politica.fuente, host_efectivo(url), segundos, motivo="429")
+            origen = origen_final
+            servicio.bloquear(politica.fuente, origen, segundos, motivo="429",
+                              maximo_s=politica.bloqueo_max_s)
             restante = deadline - reloj()
+            # Primero el presupuesto: un bloqueo que no cabe es ESPERA visible (no fallo de red),
+            # aunque ya no quedaran intentos (§3.7/§6.5).
+            if restante < segundos:
+                raise CortesiaEnEspera(politica.fuente, origen, segundos, "bloqueo_fuente")
             if intento >= politica.max_intentos:
                 raise ReintentosAgotados(politica.fuente, intento, 429)
-            if restante < segundos:
-                raise CortesiaEnEspera(politica.fuente, host_efectivo(url), segundos,
-                                       "bloqueo_fuente")
             continue
         if codigo == 408 or 500 <= codigo <= 599:
             ultimo_codigo = codigo
@@ -271,7 +307,7 @@ async def pedir_con_cortesia(
                 raise ReintentosAgotados(politica.fuente, intento, codigo)
             restante = deadline - reloj()
             if restante < espera_backoff:
-                raise CortesiaEnEspera(politica.fuente, host_efectivo(url), espera_backoff,
+                raise CortesiaEnEspera(politica.fuente, origen_normalizado(url), espera_backoff,
                                        "reintento")
             await dormir(espera_backoff)
             continue

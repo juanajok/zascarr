@@ -186,6 +186,27 @@ class TestComicVine:
         async with ComicVineClient() as cliente:
             assert cliente._client.follow_redirects is False
 
+    async def test_un_error_de_parseo_no_se_reintenta(self, reloj_y_lim, puente):
+        """El parseo es del cliente (`r.json()`), no de la envoltura: un 200 ilegible no se reintenta."""
+        reloj, _ = reloj_y_lim
+        peticiones = []
+
+        def handler(request: httpx.Request):
+            peticiones.append(1)
+            return httpx.Response(200, content=b"no es json")
+
+        cliente = _cliente_cv(handler)
+        import zascarr.services.comic_vine as cv
+        original = cv.pedir_con_cortesia
+        cv.pedir_con_cortesia = puente(reloj)
+        try:
+            with pytest.raises(ValueError):       # json.JSONDecodeError hereda de ValueError
+                await cliente.search_series("x")
+        finally:
+            cv.pedir_con_cortesia = original
+            await _cerrar(cliente)
+        assert len(peticiones) == 1 and reloj.dormidos == []
+
 
 class TestAniList:
     async def test_post_por_la_cola_y_307_conserva_cuerpo(self, reloj_y_lim, puente):
@@ -272,6 +293,26 @@ class TestPruebaDeAjustes:
         from zascarr.web.ajustes import _test_comic_vine
         ok, mensaje = await _test_comic_vine("clave")
         assert ok is False and "HTTP 401" in mensaje
+
+    async def test_un_429_real_en_la_prueba_muestra_la_espera(self, monkeypatch):
+        """QA: 429 con `Retry-After: 12` y presupuesto 10 s → espera visible, no «fallo de red»."""
+        from zascarr.utils import cortesia as modulo_cortesia
+        constructor = httpx.AsyncClient
+        monkeypatch.setattr(httpx, "AsyncClient",
+                            lambda **kw: constructor(
+                                transport=httpx.MockTransport(
+                                    lambda r: httpx.Response(429, headers={"retry-after": "12"})),
+                                follow_redirects=False))
+        modulo_cortesia.reiniciar_para_pruebas()
+        try:
+            from zascarr.web.ajustes import _test_comic_vine
+            ok, mensaje = await _test_comic_vine("clave")
+        finally:
+            modulo_cortesia.reiniciar_para_pruebas()
+        assert ok is False
+        assert "hay que esperar ~12 s por cortesía" in mensaje
+        assert "No se pudo conectar" not in mensaje
+        assert "recuperar" not in mensaje and "volverá" not in mensaje
 
     async def test_la_prueba_funciona_con_la_fuente_apagada(self, monkeypatch):
         class Apagada(Ajustes):

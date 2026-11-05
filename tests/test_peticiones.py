@@ -75,11 +75,11 @@ def _mundo(handler):
 
 async def _pedir(cliente, reloj, lim, *, politica=None, url="https://comicvine.gamespot.com/api/",
                  metodo="GET", datos=None, espera_max_s=30.0, hosts_redireccion=None,
-                 permitir_apagada=False):
+                 permitir_apagada=False, cabeceras=None):
     return await pedir_con_cortesia(
         cliente, metodo, url, politica=politica or _politica(), espera_max_s=espera_max_s,
-        hosts_redireccion=hosts_redireccion, datos=datos, permitir_apagada=permitir_apagada,
-        cortesia=lim, reloj=reloj, dormir=reloj.dormir)
+        hosts_redireccion=hosts_redireccion, datos=datos, cabeceras=cabeceras,
+        permitir_apagada=permitir_apagada, cortesia=lim, reloj=reloj, dormir=reloj.dormir)
 
 
 class TestRedirecciones:
@@ -107,6 +107,21 @@ class TestRedirecciones:
         assert peticiones[1][2] == b"" and peticiones[2][2] == b""
         # Cada salto se escalona por el nivel host/fuente (1,0 s) con el reloj simulado.
         assert reloj.dormidos[:2] == [pytest.approx(1.0), pytest.approx(1.0)]
+
+    async def test_301_desde_post_pasa_a_get_sin_cuerpo(self, ajustes_habilitados):
+        peticiones: list[tuple[str, bytes]] = []
+
+        def handler(request: httpx.Request):
+            peticiones.append((request.method, request.content))
+            if len(peticiones) == 1:
+                return httpx.Response(301, headers={"location": "/api/nuevo"})
+            return httpx.Response(200, json={})
+        cliente, reloj, lim = _mundo(handler)
+        async with cliente:
+            assert (await _pedir(cliente, reloj, lim, metodo="POST",
+                                 datos={"q": "x"})).status_code == 200
+        assert peticiones[0][0] == "POST" and peticiones[1][0] == "GET"
+        assert peticiones[1][1] == b""
 
     @pytest.mark.parametrize("codigo", [307, 308])
     async def test_307_y_308_conservan_metodo_y_cuerpo(self, ajustes_habilitados, codigo):
@@ -205,6 +220,20 @@ class TestReintentos:
         assert exc.value.intentos == 3 and exc.value.ultimo_codigo == codigo
         assert len(peticiones) == 3 and reloj.dormidos == [pytest.approx(2.0), pytest.approx(4.0)]
 
+    async def test_un_timeout_reintenta_y_luego_se_agota(self, ajustes_habilitados):
+        peticiones = []
+
+        def handler(request: httpx.Request):
+            peticiones.append(1)
+            raise httpx.ReadTimeout("timeout")
+        cliente, reloj, lim = _mundo(handler)
+        async with cliente:
+            with pytest.raises(ReintentosAgotados) as exc:
+                await _pedir(cliente, reloj, lim, espera_max_s=60.0,
+                             politica=_politica(max_intentos=2))
+        assert exc.value.intentos == 2 and exc.value.ultimo_codigo is None
+        assert len(peticiones) == 2 and reloj.dormidos == [pytest.approx(2.0)]
+
     async def test_un_error_de_red_reintenta_y_luego_da_la_respuesta(self, ajustes_habilitados):
         peticiones = []
 
@@ -279,6 +308,28 @@ class TestRetryAfter:
         assert reloj.dormidos == [pytest.approx(7.0)]
         assert lim.snapshot(Ajustes())["fuentes"][0]["bloqueada_hasta_s"] is None
 
+    async def test_retry_after_como_fecha_http_se_comparte_entre_dos_consumidores(self, ajustes_habilitados):
+        from datetime import UTC, datetime, timedelta
+        from email.utils import format_datetime
+
+        reloj = Reloj()
+        lim = CortesiaProceso(reloj=reloj, dormir=reloj.dormir)
+        futura = format_datetime(datetime.now(UTC) + timedelta(seconds=12))
+        cliente_a = httpx.AsyncClient(
+            transport=httpx.MockTransport(
+                lambda r: httpx.Response(429, headers={"retry-after": futura})),
+            follow_redirects=False)
+        cliente_b = httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+            follow_redirects=False)
+        async with cliente_a, cliente_b:
+            with pytest.raises(CortesiaEnEspera) as exc:
+                await _pedir(cliente_a, reloj, lim, espera_max_s=5.0)
+            assert 10.0 <= exc.value.espera_estimada_s <= 13.0
+            assert exc.value.motivo == "bloqueo_fuente"
+            await _pedir(cliente_b, reloj, lim, espera_max_s=30.0)
+        assert len(reloj.dormidos) == 1 and 10.0 <= reloj.dormidos[0] <= 13.0
+
     async def test_un_retry_after_invalido_cae_al_backoff(self, ajustes_habilitados):
         peticiones = []
         cliente, reloj, lim = _mundo(
@@ -347,3 +398,134 @@ class TestPresupuestoDelLlamador:
             await _pedir(cliente_a, reloj, lim, politica=_politica(intervalo_min_s=1.0))
             await _pedir(cliente_b, reloj, lim, politica=_politica(intervalo_min_s=1.0))
         assert reloj.dormidos == [pytest.approx(1.0)]
+
+
+class TestLocalizacionesInvalidas:
+    """C1 (Seguridad): un `Location` malformado es fallo de redirección, NUNCA un reintento de red."""
+
+    @pytest.mark.parametrize("location", [
+        "https://cdn.example:bad/x",       # puerto no numérico
+        "http://[::1/x",                    # IPv6 sin cerrar
+        "https://[::1]:bad/x",              # IPv6 con puerto no numérico
+    ])
+    async def test_un_location_malformado_no_se_reintenta(self, ajustes_habilitados, location):
+        peticiones = []
+        cliente, reloj, lim = _mundo(
+            lambda r: peticiones.append(str(r.url)) or
+            httpx.Response(302, headers={"location": location}))
+        async with cliente:
+            with pytest.raises(RedireccionNoPermitida) as exc:
+                await _pedir(cliente, reloj, lim, espera_max_s=60.0)
+        assert exc.value.motivo == "location_invalida"
+        assert len(peticiones) == 1 and reloj.dormidos == []
+
+    async def test_un_error_de_protocolo_no_se_reintenta(self, ajustes_habilitados):
+        peticiones = []
+
+        def handler(request: httpx.Request):
+            peticiones.append(1)
+            raise httpx.RemoteProtocolError("respuesta malformada")
+
+        cliente, reloj, lim = _mundo(handler)
+        async with cliente:
+            with pytest.raises(RedireccionNoPermitida) as exc:
+                await _pedir(cliente, reloj, lim, espera_max_s=60.0)
+        assert exc.value.motivo == "location_invalida"
+        assert len(peticiones) == 1 and reloj.dormidos == []
+
+
+class TestCredencialesEntreOrigenes:
+    """C2 (Seguridad): al cambiar de origen no se reenvían cabeceras sensibles ni datos."""
+
+    SENSIBLES = {"authorization", "x-api-key", "cookie", "proxy-authorization"}
+
+    async def test_302_a_otro_origen_sin_credenciales(self, ajustes_habilitados):
+        registros: list[httpx.Request] = []
+
+        def handler(request: httpx.Request):
+            registros.append(request)
+            if len(registros) == 1:
+                return httpx.Response(302, headers={"location": "https://cdn.example/x"})
+            return httpx.Response(200, json={})
+
+        cliente, reloj, lim = _mundo(handler)
+        cabeceras = {"Authorization": "Bearer secreta", "X-Api-Key": "clave",
+                     "Cookie": "sesion=1", "Proxy-Authorization": "Basic x", "X-Otra": "vale"}
+        async with cliente:
+            await _pedir(cliente, reloj, lim, datos={"api_key": "clave"},
+                         cabeceras=cabeceras,
+                         hosts_redireccion=lambda origen: origen.startswith("https://cdn.example:"))
+        segunda = registros[1]
+        assert not (set(h.lower() for h in segunda.headers) & self.SENSIBLES)
+        assert segunda.headers.get("x-otra") == "vale"
+        assert "api_key" not in str(segunda.url) and segunda.method == "GET"
+
+    async def test_307_a_otro_origen_conserva_metodo_pero_no_cuerpo_ni_credenciales(self, ajustes_habilitados):
+        registros: list[httpx.Request] = []
+
+        def handler(request: httpx.Request):
+            registros.append(request)
+            if len(registros) == 1:
+                return httpx.Response(307, headers={"location": "https://cdn.example/x"})
+            return httpx.Response(200, json={})
+
+        cliente, reloj, lim = _mundo(handler)
+        async with cliente:
+            await _pedir(cliente, reloj, lim, metodo="POST",
+                         datos={"q": "x", "api_key": "clave"},
+                         cabeceras={"Authorization": "Bearer secreta", "X-Otra": "vale"},
+                         hosts_redireccion=lambda origen: origen.startswith("https://cdn.example:"))
+        segunda = registros[1]
+        assert segunda.method == "POST" and segunda.content == b""
+        assert "authorization" not in {h.lower() for h in segunda.headers}
+        assert segunda.headers.get("x-otra") == "vale"
+
+    async def test_mismo_origen_307_si_conserva_cuerpo_y_credenciales(self, ajustes_habilitados):
+        registros: list[httpx.Request] = []
+
+        def handler(request: httpx.Request):
+            registros.append(request)
+            if len(registros) == 1:
+                return httpx.Response(307, headers={"location": "/api/siguiente"})
+            return httpx.Response(200, json={})
+
+        cliente, reloj, lim = _mundo(handler)
+        async with cliente:
+            await _pedir(cliente, reloj, lim, metodo="POST", datos={"q": "x"},
+                         cabeceras={"Authorization": "Bearer secreta"})
+        segunda = registros[1]
+        assert segunda.method == "POST" and b'"q"' in segunda.content
+        assert segunda.headers.get("authorization") == "Bearer secreta"
+
+
+class TestRecomendacionesDeSeguridad:
+    def test_retry_after_no_finito_cae_al_backoff(self):
+        assert retry_after_s("nan") is None
+        assert retry_after_s("inf") is None
+        assert retry_after_s("-inf") is None
+        assert retry_after_s("5000", maximo=100) == 100.0
+
+    async def test_el_429_tras_un_salto_bloquea_el_host_del_salto_final(self, ajustes_habilitados):
+        registros = []
+
+        def handler(request: httpx.Request):
+            registros.append(str(request.url))
+            if len(registros) == 1:
+                return httpx.Response(302, headers={"location": "https://b.example/x"})
+            return httpx.Response(429, headers={"retry-after": "30"})
+
+        cliente, reloj, lim = _mundo(handler)
+        async with cliente:
+            with pytest.raises(CortesiaEnEspera) as exc:
+                await _pedir(cliente, reloj, lim, espera_max_s=5.0,
+                             hosts_redireccion=lambda origen: True)
+        assert exc.value.host_efectivo == "https://b.example:443"
+        hosts = {h["host"]: h for h in lim.snapshot(Ajustes())["hosts"]}
+        assert hosts["https://b.example:443"]["bloqueada_hasta_s"] == pytest.approx(30)
+        assert hosts["https://comicvine.gamespot.com:443"]["bloqueada_hasta_s"] is None
+
+    async def test_el_bloqueo_respeta_el_tope_de_la_politica(self, ajustes_habilitados):
+        lim = CortesiaProceso(reloj=Reloj(), dormir=asyncio.sleep)
+        lim.bloquear("comicvine", "https://a.example", 5000,
+                     maximo_s=politica_de("comicvine", Ajustes()).bloqueo_max_s)
+        assert lim.snapshot(Ajustes())["fuentes"][0]["bloqueada_hasta_s"] == 3600
