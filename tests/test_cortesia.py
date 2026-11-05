@@ -310,6 +310,29 @@ class TestCancelacionYPresupuesto:
             await asyncio.to_thread(desde_hilo)
 
 
+class TestSnapshotPortada:
+    async def test_el_host_de_una_portada_publica_su_intervalo_real_y_su_fuente(self):
+        """Criterio 8: un host usado solo por portadas no sale con 0,0 s ni con fuentes: []."""
+        r = Reloj()
+        lim = _lim(r)
+        origen = "https://s4.anilist.co:443"
+        await lim.esperar("portada", origen, motivo="portada", intervalo_s=1.5, solo_host=True)
+        host = next(h for h in lim.snapshot(AjustesFalsos())["hosts"] if h["host"] == origen)
+        assert host["intervalo_min_s"] == pytest.approx(1.5)
+        assert host["fuentes"] == ["anilist"]
+
+    async def test_el_intervalo_del_host_es_el_maximo_entre_portada_y_su_fuente(self):
+        r = Reloj()
+        lim = _lim(r)
+        origen = "https://comicvine.gamespot.com:443"
+        lim.registrar_politica(politica_de("comicvine", AjustesFalsos()))
+        await lim.esperar("comicvine", origen)
+        await lim.esperar("portada", origen, motivo="portada", intervalo_s=1.0, solo_host=True)
+        host = next(h for h in lim.snapshot(AjustesFalsos())["hosts"] if h["host"] == origen)
+        assert host["intervalo_min_s"] == pytest.approx(1.0)   # 1,0 real, no 2,5 de la sintética
+        assert host["fuentes"] == ["comicvine"]
+
+
 class TestSnapshot:
     async def test_forma_y_datos_sin_secretos(self):
         r = Reloj()
