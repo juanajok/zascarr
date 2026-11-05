@@ -233,8 +233,8 @@ class _FakeResult:
     def __init__(self, rows):
         self._rows = rows
 
-    def first(self):
-        return self._rows[0] if self._rows else None
+    def all(self):
+        return self._rows
 
 
 class _SesionDePortada:
