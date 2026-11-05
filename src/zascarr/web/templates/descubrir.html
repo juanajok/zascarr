@@ -23,6 +23,13 @@
 <div id="descubrir-estado" class="sr" aria-live="polite" aria-atomic="true"></div>
 <div id="resultados-descubrir" class="series-results"></div>
 
+{#- #133: qué significa el estado de cada fuente. Va plegado para no gastar el presupuesto de texto de la pantalla y
+    porque solo hace falta cuando algo no ha ido bien; la lista de estados de la búsqueda ya lo dice fuente a fuente. -#}
+<details class="politica-detalles">
+  <summary>¿Qué significa el estado de cada fuente?</summary>
+  <p class="caption">Cada fuente se consulta por separado. Una fuente apagada, sin configurar o que ha pedido esperar no es un fallo: ZascArr no la consulta y te lo dice. Que una fuente no encuentre coincidencias tampoco significa que esté caída. Por ahora ZascArr solo sabe buscar series en estas fuentes.</p>
+</details>
+
 <details class="alta-a-mano">
   <summary>¿No aparece, o no quieres usar fuentes? Crear la serie a mano</summary>
   <p class="caption">No consulta ninguna fuente ni necesita claves: solo el título y la tradición.</p>

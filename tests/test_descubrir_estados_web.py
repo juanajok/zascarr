@@ -1,14 +1,16 @@
 # ruff: noqa: E501
-"""U14 (#201) — Descubrir: ver que la búsqueda avanza y leer resultados limpios. Casos 1–7 de la ficha
-`docs/design/benchmark-U14-descubrir-estados.md`; la verificación en NAVEGADOR (caso 8) está en `docs/design/ui-u14/`.
+"""U14 (#201) + MIT-M8-US01 (#133) — Descubrir: ver que la búsqueda avanza y leer resultados limpios, con el
+estado CERRADO de cada fuente y capacidad.
 
-Sin base de datos ni red: el servicio de búsqueda se sustituye por una `Busqueda` ya calculada (el estado de cada fuente
-lo prueba `tests/test_discovery_estados.py`); aquí se prueba lo que la WEB hace con ese estado.
+Sin base de datos ni red: el servicio de búsqueda se sustituye por una `Busqueda` ya calculada (los estados y su
+clasificación los prueba `tests/test_discovery_estados.py`); aquí se prueba lo que la WEB hace con ellos.
 
 Invariantes:
-  · «Ningún resultado» NO se dice cuando TODAS las fuentes consultadas fallaron;
-  · «las demás sí respondieron» solo se dice de las que dieron `ok`;
-  · una fuente apagada o sin clave no es un fallo y no se mezcla con ellos;
+  · «Ningún resultado» NO se dice cuando todas las fuentes fallaron; solo si alguna respondió sin coincidencias;
+  · «las demás sí respondieron» solo se dice de las que respondieron;
+  · apagada, sin configurar y límite de cortesía no son fallos y no se mezclan con ellos;
+  · el motivo lo escribe el servicio; el reintento solo aparece si el contrato lo trae;
+  · una capacidad no verificada no se presenta como disponible;
   · el HTML de la fuente nunca se interpreta: se convierte a texto;
   · hay UNA sola región viva y se anuncia UNA vez por búsqueda.
 """
@@ -25,20 +27,48 @@ from tests.test_web_css_contraste import _reglas
 from tests.test_web_discovery import FakeSession, _resultado, use_fake_session
 from zascarr.models import MetadataSource
 from zascarr.services.discovery import (
+    CAPACIDAD_BUSQUEDA,
+    ESTADOS_DE_FUENTE,
     FUENTE_APAGADA,
-    FUENTE_ERROR,
+    FUENTE_CONFIGURACION_INCOMPLETA,
+    FUENTE_FALLO_TRANSITORIO,
+    FUENTE_LIMITE_DE_CORTESIA,
     FUENTE_OK,
-    FUENTE_SIN_CLAVE,
+    FUENTE_SIN_RESULTADOS,
     Busqueda,
+    EstadoFuente,
 )
 from zascarr.web import descubrir_texto as dt
 
 SECRETO = "secreto-de-prueba-para-firmar"
-OK, ERR, OFF, SINCLAVE = FUENTE_OK, FUENTE_ERROR, FUENTE_APAGADA, FUENTE_SIN_CLAVE
+OK, SIN, FALLO, CONFIG, LIMITE, OFF = (
+    FUENTE_OK, FUENTE_SIN_RESULTADOS, FUENTE_FALLO_TRANSITORIO,
+    FUENTE_CONFIGURACION_INCOMPLETA, FUENTE_LIMITE_DE_CORTESIA, FUENTE_APAGADA)
+
+MOTIVOS = {
+    FUENTE_APAGADA: "Está apagada en Ajustes.",
+    FUENTE_CONFIGURACION_INCOMPLETA: "Falta su clave en Ajustes.",
+    FUENTE_FALLO_TRANSITORIO: "No ha respondido ahora mismo.",
+    FUENTE_LIMITE_DE_CORTESIA: "Ha pedido esperar antes de volver a consultarla.",
+    FUENTE_SIN_RESULTADOS: "Ha respondido, pero no hay coincidencias.",
+}
 
 
 def estados(cv=OK, al=OK, te=OK, gcd=OK) -> dict[str, str]:
     return {"comic_vine": cv, "anilist": al, "tebeosfera": te, "gcd": gcd}
+
+
+def detalles(estados_: dict[str, str], reintentos: dict[str, int] | None = None) -> dict[str, EstadoFuente]:
+    return {nombre: EstadoFuente(fuente=nombre, capacidad=CAPACIDAD_BUSQUEDA, estado=estado,
+                                 motivo=MOTIVOS.get(estado),
+                                 reintentar_en=(reintentos or {}).get(nombre))
+            for nombre, estado in estados_.items()}
+
+
+def busqueda(resultados, *, avisos=(), estados_: dict[str, str] | None = None,
+             reintentos: dict[str, int] | None = None) -> Busqueda:
+    e = estados_ if estados_ is not None else estados()
+    return Busqueda(resultados, list(avisos), dict(e), detalles(e, reintentos))
 
 
 def visible(t: str) -> str:
@@ -57,9 +87,9 @@ def web(monkeypatch):
     return ajustes
 
 
-def buscar(busqueda: Busqueda) -> str:
+def buscar(b: Busqueda) -> str:
     with use_fake_session(FakeSession()) as client, \
-         patch("zascarr.web.discovery.DiscoveryService.search_detallada", AsyncMock(return_value=busqueda)):
+         patch("zascarr.web.discovery.DiscoveryService.search_detallada", AsyncMock(return_value=b)):
         r = client.get("/ui/descubrir/buscar", params={"q": "Mortadelo"})
     assert r.status_code == 200
     return r.text
@@ -88,15 +118,14 @@ class TestTextoPlano:
         assert dt.texto_plano("a < b y c > d") == "a < b y c > d"          # un «<» suelto NO es una etiqueta
 
     def test_la_tarjeta_muestra_la_descripcion_como_texto_plano(self, web):
-        b = Busqueda([_resultado(description="<p>Mortadelo <a href='/e'>Bruguera</a> &amp; Filemón</p><script>x()</script>")],
-                     [], estados())
+        b = busqueda([_resultado(description="<p>Mortadelo <a href='/e'>Bruguera</a> &amp; Filemón</p><script>x()</script>")])
         t = buscar(b)
         desc = re.search(r'<div class="discovery-card-desc">(.*?)</div>', t, re.S).group(1)
         assert html.unescape(desc).strip() == "Mortadelo Bruguera & Filemón"
         assert "&lt;p&gt;" not in t and "&lt;a href" not in t and "<script" not in t
 
     def test_una_descripcion_vacia_tras_limpiar_no_pinta_el_bloque(self, web):
-        t = buscar(Busqueda([_resultado(description="<p> </p><br>")], [], estados()))
+        t = buscar(busqueda([_resultado(description="<p> </p><br>")]))
         assert "discovery-card-desc" not in t
 
 
@@ -116,65 +145,120 @@ class TestFuenteLegible:
         assert all(dt.etiqueta_fuente(f.value) != "otra fuente" for f in ORDEN_DE_FUENTES)
 
     def test_la_tarjeta_dice_el_nombre_y_no_el_identificador(self, web):
-        t = buscar(Busqueda([_resultado(source=MetadataSource.COMIC_VINE)], [], estados()))
+        t = buscar(busqueda([_resultado(source=MetadataSource.COMIC_VINE)]))
         v = visible(t)
         assert "Comic Vine" in v
         assert "comic_vine" not in v.lower() and not re.search(r"\b[a-z]+_[a-z_]+\b", v)
 
 
-# ── 7. Errores por fuente, en llano ───────────────────────────────────────────────────────────
+# ── 1. Estado por fuente y capacidad (#133) ──────────────────────────────────────────────────
+
+class TestEstadoPorFuente:
+
+    def test_el_estado_visible_usa_el_conjunto_cerrado(self):
+        assert set(dt.ESTADOS_VISIBLES) == ESTADOS_DE_FUENTE
+
+    def test_se_muestra_fuente_capacidad_estado_y_motivo(self, web):
+        b = busqueda([], estados_=estados(cv=OK, al=LIMITE, te=CONFIG, gcd=OFF),
+                     reintentos={"anilist": 30})
+        v = visible(buscar(b))
+        assert "Comic Vine · búsqueda: ha respondido" in v
+        assert "AniList · búsqueda: ha pedido esperar" in v
+        assert "Tebeosfera · búsqueda: sin configurar" in v
+        assert "GCD · búsqueda: apagada en Ajustes" in v
+        assert "Ha pedido esperar antes de volver a consultarla." in v
+        assert "Falta su clave en Ajustes." in v
+        assert "Está apagada en Ajustes." in v
+        assert "Puedes reintentar en 30 s." in v
+
+    def test_el_reintento_solo_se_pinta_si_el_contrato_lo_trae(self, web):
+        sin_plazo = visible(buscar(busqueda([], estados_=estados(al=LIMITE))))
+        con_plazo = visible(buscar(busqueda([], estados_=estados(al=LIMITE), reintentos={"anilist": 15})))
+        assert "Puedes reintentar" not in sin_plazo
+        assert "Puedes reintentar en 15 s." in con_plazo
+
+    def test_una_fuente_apagada_no_se_presenta_como_un_fallo(self, web):
+        v = visible(buscar(busqueda([], estados_=estados(gcd=OFF))))
+        assert "GCD · búsqueda: apagada en Ajustes" in v
+        assert "No respondió GCD" not in v and "No han respondido" not in v
+
+    def test_una_capacidad_no_verificada_no_se_presenta_como_disponible(self):
+        assert dt.etiqueta_capacidad(CAPACIDAD_BUSQUEDA) == "búsqueda"
+        assert dt.etiqueta_capacidad("metadatos") == "capacidad no verificada"
+        visibles = dt.detalles_visibles({"comic_vine": EstadoFuente(
+            fuente="comic_vine", capacidad="metadatos", estado=OK)})
+        assert visibles[0].capacidad == "capacidad no verificada"
+        assert visibles[0].capacidad != "disponible"
+
+
+# ── 7. Errores por fuente, en llano y sin mezclar ────────────────────────────────────────────
 class TestErroresPorFuente:
 
     def test_una_fuente_caida_dice_cual_y_que_las_demas_si_respondieron(self):
-        r = dt.resumir(estados(cv=ERR), 4)
+        r = dt.resumir(estados(cv=FALLO), 4, detalles(estados(cv=FALLO)))
         assert r.avisos == ["No respondió Comic Vine. Los resultados de AniList, Tebeosfera y GCD sí se han consultado."]
 
     def test_dos_caidas_se_enumeran_y_el_verbo_concuerda(self):
-        r = dt.resumir(estados(cv=ERR, gcd=ERR), 2)
+        r = dt.resumir(estados(cv=FALLO, gcd=FALLO), 2, detalles(estados(cv=FALLO, gcd=FALLO)))
         assert r.avisos == ["No respondieron Comic Vine y GCD. Los resultados de AniList y Tebeosfera sí se han consultado."]
 
     def test_tres_caidas_y_una_sola_que_responde(self):
-        r = dt.resumir(estados(cv=ERR, al=ERR, te=ERR), 1)
+        r = dt.resumir(estados(cv=FALLO, al=FALLO, te=FALLO), 1, detalles(estados(cv=FALLO, al=FALLO, te=FALLO)))
         assert r.avisos == ["No respondieron Comic Vine, AniList y Tebeosfera. El resultado de GCD sí se ha consultado."]
 
     def test_si_todas_fallan_no_se_dice_que_no_hay_coincidencias(self, web):
-        b = Busqueda([], ["x"], estados(cv=ERR, al=ERR, te=ERR, gcd=ERR))
-        r = dt.resumir(b.fuentes, 0)
+        e = estados(cv=FALLO, al=FALLO, te=FALLO, gcd=FALLO)
+        r = dt.resumir(e, 0, detalles(e))
         assert "ninguna fuente" in r.avisos[0].lower() and "Ningún resultado" not in r.anuncio
         assert r.anuncio == r.avisos[0], "el anuncio no repite la misma frase dos veces"
-        v = visible(buscar(b))
+        v = visible(buscar(busqueda([], estados_=e)))
         assert "Sin coincidencias" not in v and "No respondió ninguna fuente" in v
 
-    def test_apagada_y_sin_clave_no_son_fallos(self):
-        r = dt.resumir(estados(cv=SINCLAVE, al=OFF, te=OK, gcd=OK), 3)
+    def test_apagada_y_sin_configurar_no_son_fallos_y_se_dicen_aparte(self):
+        e = estados(cv=CONFIG, al=OFF, te=OK, gcd=OK)
+        r = dt.resumir(e, 3, detalles(e))
         assert not any("No respondi" in a for a in r.avisos)
-        assert r.avisos == ["Comic Vine no está configurado: añade su clave en Ajustes para incluirlo en la búsqueda."]
-        assert "AniList" not in " ".join(r.avisos)
+        assert r.avisos == [
+            "Comic Vine no está configurado: añade su clave en Ajustes para incluirlo en la búsqueda.",
+            "Apagada en Ajustes: AniList.",
+        ]
 
-    def test_un_fallo_y_una_fuente_sin_clave_se_dicen_los_dos(self):
-        r = dt.resumir(estados(cv=SINCLAVE, al=ERR, te=OK, gcd=OK), 1)
+    def test_un_fallo_y_una_fuente_sin_configurar_se_dicen_los_dos(self):
+        e = estados(cv=CONFIG, al=FALLO, te=OK, gcd=OK)
+        r = dt.resumir(e, 1, detalles(e))
         assert len(r.avisos) == 2 and "No respondió AniList" in r.avisos[0] and "Comic Vine no está configurado" in r.avisos[1]
         assert "Los resultados de Tebeosfera y GCD sí se han consultado" in r.avisos[0]
 
+    def test_el_limite_de_cortesia_es_aparte_y_solo_da_plazo_si_consta(self):
+        e = estados(al=LIMITE, te=OK, gcd=OK)
+        con = dt.resumir(e, 1, detalles(e, {"anilist": 20}))
+        sin = dt.resumir(e, 1, detalles(e))
+        assert con.avisos == ["AniList ha pedido esperar antes de volver a consultarla. Puedes reintentar en 20 s."]
+        assert sin.avisos == ["AniList ha pedido esperar antes de volver a consultarla."]
+        assert "No respondió" not in con.avisos[0]
+
     def test_todo_apagado_lo_dice_en_vez_de_sin_coincidencias(self):
-        r = dt.resumir(estados(cv=OFF, al=OFF, te=OFF, gcd=OFF), 0)
+        e = estados(cv=OFF, al=OFF, te=OFF, gcd=OFF)
+        r = dt.resumir(e, 0, detalles(e))
         assert "ninguna fuente activa" in " ".join(r.avisos).lower() and "Ningún resultado" not in r.anuncio
         assert r.anuncio == r.avisos[0]
 
     def test_ningun_aviso_lleva_codigos_internos(self):
-        for e in (estados(cv=ERR), estados(cv=SINCLAVE), estados(cv=ERR, al=ERR, te=ERR, gcd=ERR), estados(cv=OFF, al=OFF, te=OFF, gcd=OFF)):
-            for a in dt.resumir(e, 0).avisos + [dt.resumir(e, 0).anuncio]:
+        for e in (estados(cv=FALLO), estados(cv=CONFIG), estados(al=LIMITE),
+                  estados(cv=FALLO, al=FALLO, te=FALLO, gcd=FALLO),
+                  estados(cv=OFF, al=OFF, te=OFF, gcd=OFF)):
+            for a in dt.resumir(e, 0, detalles(e)).avisos + [dt.resumir(e, 0, detalles(e)).anuncio]:
                 assert not re.search(r"COMIC_VINE|comic_vine|\.env|API_KEY|Traceback|Exception|Error\b", a), a
 
     def test_el_aviso_de_la_pantalla_no_es_el_texto_antiguo_del_servicio(self, web):
         """La web explica el estado ella misma; los avisos del servicio (con `.env`) ya no se pintan."""
-        b = Busqueda([], ["Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env para incluirlo en la búsqueda."],
-                     estados(cv=SINCLAVE))
+        b = busqueda([], avisos=["Comic Vine no está configurado — añade COMICVINE_API_KEY en tu .env para incluirlo en la búsqueda."],
+                     estados_=estados(cv=CONFIG))
         t = buscar(b)
         assert "COMICVINE_API_KEY" not in t and ".env" not in t and "Ajustes" in visible(t)
 
     def test_los_resultados_de_las_fuentes_que_si_respondieron_se_muestran(self, web):
-        b = Busqueda([_resultado(source=MetadataSource.ANILIST, title="Naruto")], ["x"], estados(cv=ERR))
+        b = busqueda([_resultado(source=MetadataSource.ANILIST, title="Naruto")], estados_=estados(cv=FALLO))
         v = visible(buscar(b))
         assert "Naruto" in v and "No respondió Comic Vine" in v
 
@@ -184,10 +268,17 @@ class TestResultadoAnunciado:
 
     @pytest.mark.parametrize("n,esperado", [(0, "Ningún resultado."), (1, "1 resultado."), (3, "3 resultados.")])
     def test_el_recuento_en_el_anuncio(self, n, esperado):
-        assert dt.resumir(estados(), n).anuncio.startswith(esperado)
+        e = estados(SIN, SIN, SIN, SIN) if n == 0 else estados()
+        assert dt.resumir(e, n, detalles(e)).anuncio.startswith(esperado)
+
+    def test_sin_resultados_de_una_fuente_que_respondio_si_permite_decirlo(self):
+        e = estados(cv=SIN, al=FALLO, te=SIN, gcd=OFF)
+        a = dt.resumir(e, 0, detalles(e)).anuncio
+        assert a.startswith("Ningún resultado.") and "No respondió AniList" in a
 
     def test_el_anuncio_incluye_el_fallo(self):
-        a = dt.resumir(estados(cv=ERR), 2).anuncio
+        e = estados(cv=FALLO)
+        a = dt.resumir(e, 2, detalles(e)).anuncio
         assert a.startswith("2 resultados.") and "No respondió Comic Vine" in a
 
     def test_la_pagina_tiene_una_region_viva_fuera_del_destino(self, web):
@@ -204,7 +295,7 @@ class TestResultadoAnunciado:
     def test_la_respuesta_actualiza_el_contenido_de_la_region_y_no_la_sustituye(self, web):
         """Regresión del mecanismo (revisión de #217): `hx-swap-oob="true"` es `outerHTML` en htmx 4 y sustituiría el
         propio elemento. Tiene que ser `innerHTML`: se conserva el nodo y solo cambia lo que contiene."""
-        t = buscar(Busqueda([_resultado(), _resultado(external_id="2", title="Superman")], [], estados()))
+        t = buscar(busqueda([_resultado(), _resultado(external_id="2", title="Superman")]))
         etiquetas = re.findall(r'<div id="descubrir-estado"[^>]*>', t)
         assert len(etiquetas) == 1
         assert 'hx-swap-oob="innerHTML"' in etiquetas[0]
@@ -221,8 +312,8 @@ class TestResultadoAnunciado:
     def test_la_estrategia_de_la_region_viva_nunca_es_outer(self, web):
         """Para CUALQUIER resultado de la búsqueda (con resultados, sin coincidencias, todas fallan) la estrategia es
         `innerHTML`: la región de la página nunca se reemplaza."""
-        casos = [Busqueda([_resultado()], [], estados()), Busqueda([], [], estados()),
-                 Busqueda([], [], estados(cv=ERR, al=ERR, te=ERR, gcd=ERR))]
+        casos = [busqueda([_resultado()]), busqueda([], estados_=estados(SIN, SIN, SIN, SIN)),
+                 busqueda([], estados_=estados(FALLO, FALLO, FALLO, FALLO))]
         for b in casos:
             t = buscar(b)
             assert re.findall(r'hx-swap-oob="([^"]*)"', t) == ["innerHTML"]
@@ -268,6 +359,12 @@ class TestProgreso:
         t = self._pagina()
         assert "buscando-descubrir" not in t and "ninguna fuente activa" in visible(t).lower()
 
+    def test_la_pagina_explica_los_estados_sin_jerga(self, web):
+        v = visible(self._pagina())
+        assert "¿Qué significa el estado de cada fuente?" in v
+        assert "no es un fallo" in v and "tampoco significa que esté caída" in v
+        assert "capacidad" not in v.lower() and "metadatos" not in v.lower()
+
     def test_el_indicador_se_oculta_a_los_lectores_y_aparece_con_retardo_en_la_hoja(self, web):
         t = self._pagina()
         assert 'aria-hidden="true"' in re.search(r'<p id="buscando-descubrir"([^>]*)>', t).group(1)
@@ -282,7 +379,7 @@ class TestProgreso:
 class TestEnlaceYControles:
 
     def test_el_enlace_dice_adonde_lleva_y_que_abre_otra_pestana(self, web):
-        t = buscar(Busqueda([_resultado(title="Batman", source=MetadataSource.COMIC_VINE)], [], estados()))
+        t = buscar(busqueda([_resultado(title="Batman", source=MetadataSource.COMIC_VINE)]))
         a = re.search(r'<a href="https://comicvine[^"]*"[^>]*>.*?</a>', t, re.S).group(0)
         assert 'aria-label="Ver la ficha de «Batman» en Comic Vine (se abre en otra pestaña)"' in a
         assert 'rel="noopener noreferrer"' in a and 'target="_blank"' in a
@@ -296,14 +393,16 @@ class TestEnlaceYControles:
         assert d.get("border") == "2px solid var(--ink)" and "min-height" in d and float(d["min-height"][:-2]) >= 40
 
     def test_el_select_conserva_su_nombre_accesible_y_no_viene_preseleccionado(self, web):
-        t = buscar(Busqueda([_resultado()], [], estados()))
+        t = buscar(busqueda([_resultado()]))
         sel = re.search(r'<select name="tradition" required aria-label="Tradición">', t)
         assert sel and '<option value="" selected disabled>' in t
 
 
 def test_la_ruta_sigue_respondiendo_sin_resultados_ni_avisos(web):
+    e = estados(SIN, SIN, SIN, SIN)
     with use_fake_session(FakeSession()) as client, \
-         patch("zascarr.web.discovery.DiscoveryService.search_detallada", AsyncMock(return_value=Busqueda([], [], estados()))):
+         patch("zascarr.web.discovery.DiscoveryService.search_detallada",
+               AsyncMock(return_value=busqueda([], estados_=e))):
         r = client.get("/ui/descubrir/buscar", params={"q": "zzz"})
     v = visible(r.text)
     assert r.status_code == 200 and "Sin coincidencias en Comic Vine, AniList, Tebeosfera y GCD." in v

@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,7 @@ from zascarr.services.discovery import (
     Busqueda,
     DiscoveryResult,
     DiscoveryService,
+    EstadoFuente,
 )
 from zascarr.services.importer import TRADITION_MAP
 from zascarr.services.revision_carpetas import RevisionCarpetas, Senal, senales_contra_serie
@@ -113,6 +114,9 @@ class RespuestaDescubrir(BaseModel):
     fuentes: dict[str, str]
     avisos: list[str]
     candidatas: list[Candidata]
+    # #133: estado, capacidad, motivo y reintento por fuente. `fuentes` se conserva para los
+    # consumidores que ya lo leían; esto es información añadida, no sustituta.
+    detalles: dict[str, EstadoFuente] = Field(default_factory=dict)
 
 
 def tradiciones_de_la_carpeta(clave: str) -> list[str]:
@@ -194,7 +198,7 @@ class DescubrimientoDeGrupo:
         return RespuestaDescubrir(
             consulta=usada, consulta_propuesta=propuesta,
             grupo=GrupoResumen(clave=clave, carpeta_contextual=div.contextual, n_archivos=len(archivos)),
-            fuentes=busqueda.fuentes, avisos=avisos,
+            fuentes=busqueda.fuentes, avisos=avisos, detalles=busqueda.detalles,
             candidatas=[self._candidata(clave, p, locales, carpeta, archivos, bool(div.contextual))
                         for p in preparados],
         )

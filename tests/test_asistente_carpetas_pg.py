@@ -40,10 +40,14 @@ from tests.test_revision_carpetas_pg import archivo
 from zascarr.api import revision as api_revision
 from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.discovery import (
+    CAPACIDAD_BUSQUEDA,
     FUENTE_APAGADA,
-    FUENTE_ERROR,
+    FUENTE_CONFIGURACION_INCOMPLETA,
+    FUENTE_FALLO_TRANSITORIO,
+    FUENTE_LIMITE_DE_CORTESIA,
     FUENTE_OK,
-    FUENTE_SIN_CLAVE,
+    FUENTE_SIN_RESULTADOS,
+    EstadoFuente,
     ProcedenciaTradicion,
 )
 from zascarr.services.tokens_revision import verificar_token_candidata
@@ -363,40 +367,79 @@ class TestCriterio5ErroresParciales:
     async def test_la_fuente_que_falla_se_identifica_y_las_demas_siguen_disponibles(self, entorno):
         await sembrar_flash(entorno.banco)
         entorno.fuentes.resultados = [res(MetadataSource.COMIC_VINE, "1", "Flash", 1987)]
-        entorno.fuentes.fuentes["anilist"] = FUENTE_ERROR
-        entorno.fuentes.avisos = ["AniList: no se pudo consultar ahora mismo."]
+        entorno.fuentes.fuentes["anilist"] = FUENTE_FALLO_TRANSITORIO
         v = visible((await buscar()).text)
-        assert "AniList: no ha respondido ahora mismo" in v and "Comic Vine: ha respondido" in v
+        assert "AniList · búsqueda: no ha respondido ahora mismo" in v
+        assert "Comic Vine · búsqueda: ha respondido" in v
         assert "No han respondido: AniList" in v and "Flash (1987)" in v
         assert "Ninguna fuente" not in v                                         # un error no es «sin coincidencias»
 
     async def test_si_todas_fallan_no_se_dice_que_no_hay_coincidencias(self, entorno):
         await sembrar_flash(entorno.banco)
-        entorno.fuentes.fuentes = {f: FUENTE_ERROR for f in ("comic_vine", "anilist", "tebeosfera", "gcd")}
+        entorno.fuentes.fuentes = {f: FUENTE_FALLO_TRANSITORIO for f in ("comic_vine", "anilist", "tebeosfera", "gcd")}
         v = visible((await buscar()).text)
         assert "No se ha podido consultar ninguna fuente" in v and "No es que no haya coincidencias" in v
         assert "ha encontrado coincidencias" not in v
 
     async def test_con_error_en_una_y_sin_resultados_en_las_otras_se_dicen_las_dos_cosas(self, entorno):
         await sembrar_flash(entorno.banco)
-        entorno.fuentes.fuentes["tebeosfera"] = FUENTE_ERROR
+        entorno.fuentes.fuentes = {"comic_vine": FUENTE_SIN_RESULTADOS, "anilist": FUENTE_SIN_RESULTADOS,
+                                   "tebeosfera": FUENTE_FALLO_TRANSITORIO, "gcd": FUENTE_SIN_RESULTADOS}
         v = visible((await buscar()).text)
         assert "No han respondido: Tebeosfera" in v
         assert "Ninguna fuente que ha respondido ha encontrado coincidencias" in v
+        assert "Tebeosfera · búsqueda: no ha respondido ahora mismo" in v
+        assert "Comic Vine · búsqueda: sin coincidencias" in v
 
     async def test_sin_ningun_error_y_sin_resultados_es_sin_coincidencias(self, entorno):
         await sembrar_flash(entorno.banco)
+        entorno.fuentes.fuentes = {f: FUENTE_SIN_RESULTADOS for f in ("comic_vine", "anilist", "tebeosfera", "gcd")}
         v = visible((await buscar()).text)
         assert "Ninguna fuente que ha respondido ha encontrado coincidencias" in v and "No han respondido" not in v
 
     async def test_con_las_fuentes_apagadas_se_dice_y_se_ofrece_el_camino_a_mano(self, entorno):
         await sembrar_flash(entorno.banco)
-        entorno.fuentes.fuentes = {"comic_vine": FUENTE_SIN_CLAVE, "anilist": FUENTE_APAGADA,
+        entorno.fuentes.fuentes = {"comic_vine": FUENTE_CONFIGURACION_INCOMPLETA, "anilist": FUENTE_APAGADA,
                                    "tebeosfera": FUENTE_APAGADA, "gcd": FUENTE_APAGADA}
         v = visible((await buscar()).text)
-        assert "Comic Vine: sin clave configurada" in v and "AniList: apagada en los ajustes" in v
+        assert "Comic Vine · búsqueda: sin configurar" in v
+        assert "AniList · búsqueda: apagada en Ajustes" in v
         assert "No hay ninguna fuente activa" in v and "crear la serie a mano" in v
         assert "Ninguna fuente que ha respondido" not in v
+
+    async def test_el_limite_de_cortesia_se_distingue_del_fallo_y_no_pide_mas_trafico(self, entorno):
+        await sembrar_flash(entorno.banco)
+        entorno.fuentes.fuentes = {"comic_vine": FUENTE_OK, "anilist": FUENTE_LIMITE_DE_CORTESIA,
+                                   "tebeosfera": FUENTE_SIN_RESULTADOS, "gcd": FUENTE_SIN_RESULTADOS}
+        entorno.fuentes.detalles = {
+            "anilist": EstadoFuente("anilist", CAPACIDAD_BUSQUEDA, FUENTE_LIMITE_DE_CORTESIA,
+                                    "Ha pedido esperar antes de volver a consultarla.", 30)}
+        v = visible((await buscar()).text)
+        assert "AniList · búsqueda: ha pedido esperar" in v
+        assert "Puedes reintentar en 30 s." in v
+        assert "Ha pedido esperar: AniList" in v
+        assert "No han respondido: AniList" not in v                    # límite ≠ fallo
+        assert "No respondió AniList" not in v
+
+    async def test_la_capacidad_verificada_es_busqueda_y_no_se_declaran_otras(self, entorno):
+        await sembrar_flash(entorno.banco)
+        v = visible((await buscar()).text)
+        assert "· búsqueda:" in v
+        assert "metadatos" not in v.lower() and "portadas" not in v.lower()
+
+    async def test_un_resultado_vacio_no_se_presenta_como_fallo(self, entorno):
+        await sembrar_flash(entorno.banco)
+        entorno.fuentes.fuentes = {f: FUENTE_SIN_RESULTADOS for f in ("comic_vine", "anilist", "tebeosfera", "gcd")}
+        v = visible((await buscar()).text)
+        assert "sin coincidencias" in v and "No han respondido" not in v and "No respondió" not in v
+
+    async def test_los_avisos_sin_estado_por_fuente_siguen_visibles(self, entorno):
+        """El aviso de resultados omitidos al firmar no tiene estado por fuente: no se pierde."""
+        await sembrar_flash(entorno.banco)
+        entorno.fuentes.resultados = [res(MetadataSource.COMIC_VINE, "1", "Flash", 1987)]
+        entorno.fuentes.avisos = ["Se han omitido 1 resultado(s) cuyo título o identificador no se puede guardar."]
+        v = visible((await buscar()).text)
+        assert "Se han omitido 1 resultado(s)" in v
 
 
 # ── 6. Formulario a mano ────────────────────────────────────────────────────────────────────────
