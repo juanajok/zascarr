@@ -231,15 +231,24 @@ que ya comprueban las pruebas (`tests/test_web_carpetas_pg.py:307-330,371-380,70
 | Opción sin serie | «Sin serie» |
 | Opción con serie sugerida | «Con serie sugerida» |
 | Opción mixto | «Mezcla (sin serie y con serie sugerida)» |
-| Leyenda del grupo de marcas | «Marcas» |
-| Marca 1 | «Por confirmar» |
-| Marca 2 | «En conflicto» |
-| Nota de las marcas | «Se suman al estado; no son estados.» |
+| Filtro de conflicto | «Solo carpetas con conflictos» |
 | Botón de envío | «Filtrar» |
 | Enlace de quitar (cuando hay filtro) | «Quitar el filtro» |
 
+- **Revisión UI/UX del 2026-11-05:** la barra solo expone **«Solo carpetas con conflictos»**. `por_confirmar`
+  sigue en el contrato del servicio y de la URL por compatibilidad, pero **no se ofrece** en la interfaz: por
+  construcción equivale a «hay algún archivo con serie sugerida», que ya eligen «Con serie sugerida» o «Mezcla».
+  Dos marcas con esa solapadura no ayudaban a un coleccionista no técnico; el conflicto sí aporta información
+  distinta al estado.
 - Formulario **GET** a `/ui/pendientes/carpetas`; sin HTMX, sin JavaScript; **un solo** `<form>` y **un solo**
   `<button type="submit">` en toda la pantalla (precisión de la regla «sin acciones», §10.2).
+- La barra es una **rejilla** de campos con la etiqueta encima. En pantallas estrechas pasa a dos columnas y luego a una.
+- El formulario no se presenta como una caja suelta de controles: la barra tiene su propio panel y el botón queda
+  alineado con la base de los campos.
+- **«Por confirmar» no se expone en la interfaz:** el servicio lo calcula como «hay algún archivo con serie sugerida»,
+  que ya se selecciona con «Con serie sugerida» o «Mezcla». Exponerlo como marca duplicaba el filtro y confundía.
+  El parámetro `por_confirmar` se conserva en el contrato del servicio por compatibilidad, pero la barra solo ofrece
+  «Solo carpetas con conflictos», que sí aporta información distinta al estado.
 - Los `hidden` `limite` y `serie` (si es válida) van **antes** de los campos visibles en el DOM: el GET
   serializa en ese orden y así el envío produce el orden canónico de §3.3.
 - `nombre` se pinta en `value` escapado; `estado` con `selected`; las marcas con `checked`; `serie` (si es
