@@ -132,6 +132,28 @@ class TestCadaSaltoPorLaColaDelHost:
         assert mundo.peticiones == [] and mundo.resoluciones == []
 
 
+class TestFuenteApagadaDuranteLaEspera:
+    async def test_si_la_fuente_se_apaga_durante_la_espera_no_se_descarga(self, monkeypatch):
+        """Seguridad: la puerta se vuelve a mirar tras la espera, no solo antes de ella."""
+        ajustes = SimpleNamespace(
+            comicvine_enabled=True, anilist_enabled=False, tebeosfera_enabled=False,
+            gcd_enabled=False, forum_enabled=False, forum_url="")
+        monkeypatch.setattr("zascarr.utils.url_portada.get_settings", lambda: ajustes)
+        mundo = _mundo(lambda r: httpx.Response(200, content=_jpeg()))
+        mundo.lim.bloquear("portada", "https://comicvine.gamespot.com:443", 2.0)
+
+        async def dormir_y_apagar(segundos):
+            mundo.reloj.dormidos.append(segundos)
+            ajustes.comicvine_enabled = False
+            await asyncio.sleep(0)
+            mundo.reloj.t += segundos
+        mundo.lim._dormir = dormir_y_apagar
+
+        with pytest.raises(FuenteApagada):
+            await _descargar(mundo)
+        assert mundo.peticiones == [] and mundo.resoluciones == []
+
+
 class TestFuenteApagadaPorSalto:
     async def test_un_salto_a_una_fuente_apagada_no_se_descarga(self, monkeypatch):
         """AC-15: el host inicial es de CV (encendida), pero el 302 va a AniList (apagada)."""
