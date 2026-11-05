@@ -18,8 +18,8 @@
   {% for f in detalles %}
   <li>
     {{ ui.chip(f.chip, f.fuente ~ " · " ~ f.capacidad ~ ": " ~ f.texto) }}
-    {% if f.motivo %}<span class="caption">{{ f.motivo }}</span>{% endif %}
-    {% if f.reintentar_en %}<span class="caption">Puedes reintentar en {{ f.reintentar_en }} s.</span>{% endif %}
+    {% if f.motivo %}<p class="caption">{{ f.motivo }}</p>{% endif %}
+    {% if f.reintentar_en %}<p class="caption">Puedes reintentar en {{ f.reintentar_en }} s.</p>{% endif %}
   </li>
   {% endfor %}
 </ul>
