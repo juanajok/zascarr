@@ -543,6 +543,23 @@ class TestPuntosDeEntrada:
                 "tradition": "american", "cover_url": CV})
         assert r.status_code == 422 and sesion.added == []
 
+    def test_el_404_de_descubrir_por_cortesia_tampoco_se_cachea(self, tmp_path, monkeypatch):
+        """El proxy de portadas de Descubrir pasa `motivo_fallo` igual que la cascada de series."""
+        from zascarr.config import get_settings
+        monkeypatch.setattr("zascarr.web.discovery.get_settings",
+                            lambda: get_settings().model_copy(update={"covers_cache_path": tmp_path}))
+        async def sin_descarga(_url, _dest, *, ancho=None, motivo_fallo=None):
+            motivo_fallo.append("cortesia")
+            return False
+
+        monkeypatch.setattr("zascarr.web.discovery.fetch_and_cache_cover", sin_descarga)
+        with _Cliente(_Sesion()) as client:
+            r = client.get("/ui/descubrir/portada", params={
+                "url": "https://comicvine.gamespot.com/a/uploads/cover.jpg",
+                "source": "comic_vine",
+            })
+        assert r.status_code == 404 and r.headers.get("cache-control") == "no-store"
+
     def test_el_404_por_cortesia_no_deja_cachear_la_ausencia(self, tmp_path, monkeypatch):
         """AC-12: una espera de cortesía no es «no hay portada» definitivo; el 404 no se cachea."""
         from zascarr.config import get_settings

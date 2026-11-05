@@ -149,10 +149,13 @@ async def portada(request: Request, url: str, source: MetadataSource):
     clave = hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
     cache_path = get_settings().covers_cache_path / "descubrir" / f"{clave}.jpg"
 
+    motivo_fallo: list[str] = []
     if not await asyncio.to_thread(cache_path.exists) and not await fetch_and_cache_cover(
-        url, cache_path
+        url, cache_path, motivo_fallo=motivo_fallo
     ):
-        raise HTTPException(status_code=404, detail="Sin portada disponible")
+        # Una espera de cortesía no es un «no hay portada» definitivo: no se cachea el 404.
+        cabeceras = {"Cache-Control": "no-store"} if "cortesia" in motivo_fallo else None
+        raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
 
     data = await asyncio.to_thread(cache_path.read_bytes)
     return cached_image_response(request, data, "image/jpeg", clave)

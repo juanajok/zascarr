@@ -249,6 +249,9 @@ async def descargar_imagen(url: str, *, resolutor: Resolutor | None = None,
             await servicio.esperar(
                 "portada", origen, motivo="portada", espera_max_s=espera_max_s,
                 intervalo_s=intervalo_de_portada(host), solo_host=True)
+            # TOCTOU: la fuente pudo apagarse DURANTE la espera; se mira otra vez antes de pedir.
+            if fuente is not None and not fuente_habilitada(fuente, ajustes):
+                raise FuenteApagada(fuente)
             ip = await resolver_publica(host, puerto or _PUERTO_POR_DEFECTO[esquema], resolutor)
             async with crear_cliente() as cliente:
                 _, destino, cuerpo = await _pedir(cliente, esquema, host, ip, puerto, ruta, max_bytes)
