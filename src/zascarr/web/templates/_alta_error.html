@@ -10,15 +10,17 @@
   {% endif %}
   {% if reintentar_token %}
   {#- Resultado desconocido: repetir el MISMO token es seguro (comprobante en `alta_operaciones`). -#}
-  <form hx-post="/ui/descubrir/crear" hx-target="closest .alta-paso" hx-swap="outerHTML">
+  <form hx-post="{{ con_contexto('/ui/descubrir/crear') }}" hx-target="closest .alta-paso" hx-swap="outerHTML">
     <input type="hidden" name="token" value="{{ reintentar_token }}">
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     {% for n, v in campos_origen or [] %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     {% if tradicion %}<input type="hidden" name="tradition" value="{{ tradicion }}">{% endif %}
     <div class="discovery-card-actions"><button type="submit">Comprobar el resultado</button></div>
   </form>
   {% elif campos_origen and tradicion %}
-  <form hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
+  <form hx-post="{{ con_contexto('/ui/descubrir/revisar') }}" hx-target="closest .alta-paso" hx-swap="outerHTML">
     {% for n, v in campos_origen %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="tradition" value="{{ tradicion }}">
     <div class="discovery-card-actions"><button type="submit">Revisar de nuevo</button></div>
   </form>

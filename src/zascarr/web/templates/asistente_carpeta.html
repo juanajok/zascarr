@@ -4,7 +4,7 @@
 <h1>Elegir la serie de una carpeta</h1>
 {% from "_asistente_macros.html" import indicador_de_pasos %}{{ indicador_de_pasos(1) }}
 <p class="subtitle">Busca la serie en las fuentes o créala a mano. En este paso no se crea ninguna serie ni se vincula ningún archivo.</p>
-<p><a class="back-link" href="/ui/pendientes/carpetas">← Volver a «Pendientes por carpeta»</a></p>
+<p><a class="back-link" href="{{ con_contexto('/ui/pendientes/carpetas') }}">← Volver a «Pendientes por carpeta»</a></p>
 
 {% if apertura is none %}
 {{ ui.aviso("warn", "Esa carpeta ya no tiene registros pendientes: puede que se hayan vinculado o descartado. Vuelve a «Pendientes por carpeta» para ver lo que queda.") }}
@@ -22,8 +22,9 @@
 <section class="card" aria-labelledby="asistente-locales-titulo">
   <h2 id="asistente-locales-titulo" class="titulo-frase">¿Ya la tienes en tu biblioteca?</h2>
   <p>Busca entre las series que ya tienes. No consulta ninguna fuente ni crea nada.</p>
-  <form class="asistente-form" hx-get="/ui/pendientes/carpetas/asistente/locales" hx-target="#asistente-locales" hx-swap="innerHTML">
+  <form class="asistente-form" hx-get="{{ con_contexto('/ui/pendientes/carpetas/asistente/locales') }}" hx-target="#asistente-locales" hx-swap="innerHTML">
     <input type="hidden" name="clave" value="{{ g.clave }}">
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <label for="asistente-local-q">Título de tu serie</label>
     <input id="asistente-local-q" type="search" name="q" maxlength="200" autocomplete="off" placeholder="Parte del título…">
     <button type="submit">Buscar en mi biblioteca</button>
@@ -33,8 +34,9 @@
 
 <section class="card" aria-labelledby="asistente-buscar">
   <h2 id="asistente-buscar" class="titulo-frase">Buscar en las fuentes</h2>
-  <form class="asistente-form" hx-post="/ui/pendientes/carpetas/asistente/buscar" hx-target="#asistente-resultados" hx-swap="innerHTML">
+  <form class="asistente-form" hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/buscar') }}" hx-target="#asistente-resultados" hx-swap="innerHTML">
     <input type="hidden" name="clave" value="{{ g.clave }}">
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <label for="asistente-consulta">Qué buscar</label>
     <input id="asistente-consulta" type="search" name="consulta" maxlength="200" value="{{ consulta_escrita or apertura.consulta_propuesta }}"
            placeholder="Título de la serie…" autocomplete="off">
@@ -53,8 +55,8 @@
 <section class="card" aria-labelledby="asistente-manual-titulo">
   <h2 id="asistente-manual-titulo" class="titulo-frase">¿No aparece? Crear la serie a mano</h2>
   <p>No hace falta ninguna fuente ni clave: solo el título y la tradición.</p>
-  <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/manual?clave={{ g.clave | urlencode }}"
-     hx-get="/ui/pendientes/carpetas/asistente/manual?clave={{ g.clave | urlencode }}"
+  <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas/asistente/manual?clave=' ~ (g.clave | urlencode)) }}"
+     hx-get="{{ con_contexto('/ui/pendientes/carpetas/asistente/manual?clave=' ~ (g.clave | urlencode)) }}"
      hx-target="#asistente-manual" hx-swap="innerHTML">Abrir el formulario a mano</a>
   <div id="asistente-manual" aria-live="polite">{% if manual_abierto %}{% include "_asistente_manual.html" %}{% endif %}</div>
 </section>

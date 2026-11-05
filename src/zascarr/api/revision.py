@@ -18,6 +18,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,15 +93,21 @@ router = APIRouter(prefix="/revision", tags=["revision"])
 
 @router.get("/carpetas", response_model=RespuestaCarpetas)
 async def carpetas_pendientes(
-    response: Response,
     limite: int = Query(default=LIMITE_POR_DEFECTO, ge=1, le=LIMITE_MAXIMO),
     desplazamiento: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-) -> RespuestaCarpetas:
-    """Lo pendiente agrupado por su carpeta contextual, con la serie sugerida y las señales que la contradicen."""
+):
+    """Lo pendiente agrupado por su carpeta contextual, con la serie sugerida y las señales que la contradicen.
+
+    La API no recibe parámetros de filtro (BL-FILT1 es la vista HTML) y su JSON **no gana
+    claves**: el bloque `filtro` se omite cuando no hay filtro (siempre aquí), en vez de
+    pintarse como `null`."""
+    respuesta = await RevisionCarpetas(db).carpetas(limite=limite, desplazamiento=desplazamiento)
+    datos = respuesta.model_dump(mode="json")
+    if respuesta.filtro is None:
+        datos.pop("filtro", None)
     # Los datos cambian con cada registro o asignación: nada de cachés intermedias.
-    response.headers["Cache-Control"] = "no-store"
-    return await RevisionCarpetas(db).carpetas(limite=limite, desplazamiento=desplazamiento)
+    return JSONResponse(content=datos, headers={"Cache-Control": "no-store"})
 
 
 # ── 2a: descubrimiento desde un grupo ─────────────────────────────────────────────────────────

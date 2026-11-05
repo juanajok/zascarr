@@ -3,8 +3,9 @@
     Descubrir; escribir aquí no crea nada. -#}
 <div class="alta-paso">
   {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
-  <form class="asistente-form" hx-post="/ui/descubrir/revisar" hx-target="closest .alta-paso" hx-swap="outerHTML">
+  <form class="asistente-form" hx-post="{{ con_contexto('/ui/descubrir/revisar') }}" hx-target="closest .alta-paso" hx-swap="outerHTML">
     {% if clave %}<input type="hidden" name="clave" value="{{ clave }}">{% endif %}
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <label for="manual-titulo">Título de la serie</label>
     <input id="manual-titulo" type="text" name="titulo" maxlength="500" required value="{{ titulo }}">
     <label for="manual-anio">Año de inicio (opcional)</label>
