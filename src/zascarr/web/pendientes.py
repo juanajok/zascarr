@@ -209,7 +209,9 @@ _ESTADOS_DE_CARPETA = ("", "todas", "sin_serie", "serie_sugerida", "mixto")
 
 AVISO_ESTADO_INVALIDO = "El estado de la carpeta no es válido; se muestran todos los estados."
 AVISO_NOMBRE_CONTROLES = "La búsqueda tenía caracteres no válidos; se han quitado."
-AVISO_NOMBRE_LARGO = "La búsqueda era demasiado larga; se han usado los primeros 200 caracteres."
+AVISO_NOMBRE_LARGO = (
+    "La búsqueda era demasiado larga; se han usado los primeros 200 caracteres."
+)
 AVISO_NOMBRE_SIN_PALABRAS = "El texto no contiene palabras que buscar; no se aplica el filtro de nombre."
 
 
@@ -419,7 +421,8 @@ async def carpetas(
         resp = templates.TemplateResponse(
             request, "carpetas.html",
             {"error": True, "serie": serie_valida,
-             "url_reintentar": _url_de_carpetas(limite=limite, serie=serie_valida, filtros=filtros)},
+             "url_reintentar": _url_de_carpetas(
+                 limite=limite, serie=serie_valida, filtros=filtros)},
             status_code=503,
         )
         resp.headers["Cache-Control"] = "no-store"

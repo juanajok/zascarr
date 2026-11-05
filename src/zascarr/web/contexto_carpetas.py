@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from urllib.parse import urlencode
+from uuid import UUID
 
 from fastapi import Request
 
@@ -71,12 +72,19 @@ class ContextoCarpetas:
         estado = _texto(consulta.get("estado"), maximo=40)
         if estado not in ESTADOS_DE_CARPETA or estado == "todas":
             estado = ""
+        # `serie` es canónica o no viaja: el router la valida y avisa, y el contexto que se
+        # reenvía por el asistente no debe propagar texto arbitrario a URLs ni `hidden`.
+        serie = _texto(consulta.get("serie"), maximo=64)
+        try:
+            serie = str(UUID(serie)) if serie else ""
+        except (ValueError, TypeError):
+            serie = ""
         return cls(
             nombre=_texto(consulta.get("nombre")),
             estado=estado,
             por_confirmar="1" if consulta.get("por_confirmar") == "1" else "",
             en_conflicto="1" if consulta.get("en_conflicto") == "1" else "",
-            serie=_texto(consulta.get("serie"), maximo=64),
+            serie=serie,
             limite=_numero(consulta.get("limite"), por_defecto=LIMITE_POR_DEFECTO),
             desplazamiento=_numero(consulta.get("desplazamiento"), por_defecto="0"),
         )
