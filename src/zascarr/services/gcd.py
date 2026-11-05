@@ -31,6 +31,8 @@ import httpx
 import structlog
 
 from zascarr.config import get_settings
+from zascarr.utils.cortesia import CortesiaProceso, PoliticaFuente, politica_de
+from zascarr.utils.peticiones import ErrorDePeticion, pedir_con_cortesia
 
 logger = structlog.get_logger()
 
@@ -76,15 +78,20 @@ class GCDResult:
 
 
 class GCDClient:
-    def __init__(self):
+    def __init__(self, *, politica: PoliticaFuente | None = None,
+                 cortesia: CortesiaProceso | None = None,
+                 reloj=time.monotonic, dormir=asyncio.sleep, espera_max_s: float = 30.0):
         s = get_settings()
-        self._rate_limit = s.gcd_rate_limit
-        self._last_req: float = 0
+        self._politica = politica or politica_de("gcd", s)
+        self._cortesia = cortesia
+        self._reloj = reloj
+        self._dormir = dormir
+        self._espera_max_s = espera_max_s
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
-            base_url=_BASE_URL, timeout=30.0,
+            base_url=_BASE_URL, timeout=30.0, follow_redirects=False,
             headers={
                 "User-Agent": "ZascArr/0.1 (+https://github.com/juanajok/zascarr)",
                 # Bug real (reportado, verificado en vivo): sin este header,
@@ -99,30 +106,31 @@ class GCDClient:
         if self._client:
             await self._client.aclose()
 
-    async def _throttle(self) -> None:
-        elapsed = time.monotonic() - self._last_req
-        if elapsed < self._rate_limit:
-            await asyncio.sleep(self._rate_limit - elapsed)
-        self._last_req = time.monotonic()
-
     async def search_series(self, query: str, limit: int = 10) -> list[GCDResult]:
         query = (query or "").strip()
         if not query:
             return []
-        await self._throttle()
+        if self._client is None:
+            raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
         try:
-            r = await self._client.get(f"/series/name/{quote(query, safe='')}/")
-            r.raise_for_status()
+            # Sin cadencia por instancia: cada petición y salto pasa por la cortesía del proceso.
+            r = await pedir_con_cortesia(
+                self._client, "GET", f"{_BASE_URL}/series/name/{quote(query, safe='')}/",
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                permitir_apagada=True, cortesia=self._cortesia,
+                reloj=self._reloj, dormir=self._dormir,
+            )
             data = r.json()
-        except httpx.HTTPError as exc:
-            logger.warning("gcd.request_failed", query=query, error=str(exc))
+        except ErrorDePeticion:
+            # Sin query en el registro (privacidad §6.6).
+            logger.warning("gcd.request_failed")
             return []
         except ValueError as exc:
             # JSON inválido (p.ej. Cloudflare interponiendo una página de
             # verificación en vez de la API): "sin resultado", nunca una
             # excepción que tumbe la búsqueda — mismo criterio que
             # Tebeosfera (services/tebeosfera.py) ante fallos de parseo.
-            logger.warning("gcd.invalid_json", query=query, error=str(exc))
+            logger.warning("gcd.invalid_json", error=type(exc).__name__)
             return []
         results = []
         for item in data.get("results", [])[:limit]:
