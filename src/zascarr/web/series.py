@@ -40,6 +40,8 @@ from zascarr.services.politica import (
     retirar_de_serie,
 )
 from zascarr.utils.cover import (
+    CACHE_VERSION,
+    SERIES_COVER_MAX_WIDTH,
     cached_image_response,
     extract_cover_thumbnail,
     fetch_and_cache_cover,
@@ -205,30 +207,35 @@ async def cambiar_politica(series_id: UUID, request: Request,
 @router.get("/{series_id}/portada")
 async def portada(series_id: UUID, request: Request,
                   db: AsyncSession = Depends(get_db)) -> Response:
-    """Cascada unificada de 3 niveles (C1):
+    """Cascada de portada de serie (BL-PORT1, #300; antes C1):
 
-    1. ¿Ya está cacheada en disco (venga de donde venga)? Servirla.
-    2. Si no, ¿hay algún archivo ya importado de esta serie? Extraer su
-       primera página, cachearla, servirla.
-    3. Si no, ¿tiene `cover_url` de una fuente externa? Descargarla una
-       vez, cachearla, servirla.
-    4. Si nada de eso, 404 — el <img> del template cae al placeholder
-       CSS (.cover-missing), igual que en pendientes.html.
+    1. `covers/v2/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304).
+    2. Si no, primer `File` no ausente por `sort_order` → extraer su primera
+       página a 600, escribir `v2`, servirla. Si la escritura falla, se sirve
+       igualmente lo extraído con un ETag de sus bytes (FR-11, PR-2).
+    3. Si no hay archivo utilizable, `covers/<id>.jpg` legada → servirla **sin
+       red y sin copiarla** a `v2` (respaldo que solo se lee).
+    4. Si tampoco, `cover_url` externa → descargar una vez a 600, escribir
+       `v2`, servirla.
+    5. Nada de eso → 404: el `<img>` cae al marcador CSS, sin texto nuevo.
 
-    Nunca se cachea una AUSENCIA: si no hay portada todavía, la próxima
-    petición vuelve a intentarlo (barato: un exists() + una query).
-    Todo el trabajo bloqueante (zipfile, Pillow, disco) va a un hilo
-    aparte para no congelar el event loop.
+    La regeneración es **perezosa**: solo al pedir la imagen; el HTML de
+    Biblioteca/Inicio/ficha no extrae ni escribe nada (FR-16). Nunca se cachea
+    una ausencia: la próxima petición vuelve a intentarlo. Todo el trabajo
+    bloqueante (zipfile, Pillow, disco, red) va en `asyncio.to_thread` o en un
+    cliente async, para no congelar el event loop.
     """
     series = await db.get(Series, series_id)
     if not series:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
 
-    cache_path = get_settings().covers_cache_path / f"{series_id}.jpg"
+    covers = get_settings().covers_cache_path
+    v2_path = covers / CACHE_VERSION / f"{series_id}.jpg"
+    legacy_path = covers / f"{series_id}.jpg"
 
-    if await asyncio.to_thread(cache_path.exists):
-        data = await asyncio.to_thread(cache_path.read_bytes)
-        return cached_image_response(request, data, "image/jpeg", _etag_for(cache_path))
+    if await asyncio.to_thread(v2_path.exists):
+        data = await asyncio.to_thread(v2_path.read_bytes)
+        return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
 
     # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
     # está en disco — sin este filtro, la portada podía intentar (y
@@ -243,12 +250,15 @@ async def portada(series_id: UUID, request: Request,
         .limit(1)
     )).first()
     if row:
-        result = await asyncio.to_thread(extract_cover_thumbnail, Path(row[0]),
-                                         (row[1] or {}).get("formato_contenido"))
+        result = await asyncio.to_thread(
+            extract_cover_thumbnail, Path(row[0]),
+            (row[1] or {}).get("formato_contenido"),
+            ancho=SERIES_COVER_MAX_WIDTH,
+        )
         if result:
             data, content_type = result
             try:
-                await asyncio.to_thread(write_cover_cache, cache_path, data)
+                await asyncio.to_thread(write_cover_cache, v2_path, data)
             except OSError as exc:
                 # FR-11 (#300): si la caché no se puede escribir (disco lleno, permiso
                 # denegado…), se sirve igualmente la portada ya extraída, con un ETag
@@ -262,13 +272,21 @@ async def portada(series_id: UUID, request: Request,
                     errno=getattr(exc, "errno", None),
                 )
                 return cached_image_response(request, data, content_type, _etag_de_bytes(data))
-            return cached_image_response(request, data, content_type, _etag_for(cache_path))
+            return cached_image_response(request, data, content_type, _etag_for(v2_path))
+
+    # Respaldo: la caché antigua (240/320) se sirve sin red y no se copia a v2. Si hay
+    # un CBZ utilizable se regenera arriba; esta rama es para CBR, archivos ausentes o
+    # series que ya solo conservan la caché vieja (Q-1 del PO).
+    if await asyncio.to_thread(legacy_path.exists):
+        data = await asyncio.to_thread(legacy_path.read_bytes)
+        return cached_image_response(request, data, "image/jpeg", _etag_for(legacy_path))
 
     # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
     if (series.cover_url and not es_portada_de_relleno(series.cover_url)
-            and await fetch_and_cache_cover(series.cover_url, cache_path)):
-        data = await asyncio.to_thread(cache_path.read_bytes)
-        return cached_image_response(request, data, "image/jpeg", _etag_for(cache_path))
+            and await fetch_and_cache_cover(series.cover_url, v2_path,
+                                            ancho=SERIES_COVER_MAX_WIDTH)):
+        data = await asyncio.to_thread(v2_path.read_bytes)
+        return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
 
     raise HTTPException(status_code=404, detail="Sin portada disponible")
 

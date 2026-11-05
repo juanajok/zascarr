@@ -28,6 +28,7 @@ from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.models import ComicTradition, Series
 from zascarr.utils.cover import (
+    CACHE_VERSION,
     cached_image_response,
     fetch_and_cache_cover,
     write_cover_cache,
@@ -66,6 +67,13 @@ class TestCachedImageResponse:
 def _fake_jpeg_bytes() -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", (10, 10), color="blue").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _jpeg_de(ancho: int, alto: int) -> bytes:
+    """JPEG de tamaño concreto para probar el redimensionado sin ampliación."""
+    buf = io.BytesIO()
+    Image.new("RGB", (ancho, alto), color="blue").save(buf, format="JPEG")
     return buf.getvalue()
 
 
@@ -162,6 +170,38 @@ class TestFetchAndCacheCover:
         assert ok is False
         assert dest.read_bytes() == anterior
         assert [p for p in tmp_path.iterdir() if p.name.endswith(".tmp")] == []
+
+    @pytest.mark.asyncio
+    async def test_ancho_explicito_600_y_sin_ampliar(self, tmp_path, monkeypatch):
+        """BL-PORT1 (AC-06): la portada de serie se pide a 600 y no se amplía."""
+        dest = tmp_path / "v2" / "serie.jpg"
+        self._red(monkeypatch, lambda r: httpx.Response(200, content=_jpeg_de(900, 1350)))
+
+        assert await fetch_and_cache_cover(self.URL, dest, ancho=600) is True
+
+        with Image.open(dest) as img:
+            assert img.width == 600
+
+    @pytest.mark.asyncio
+    async def test_ancho_explicito_no_amplia_un_original_pequeno(self, tmp_path, monkeypatch):
+        dest = tmp_path / "v2" / "serie.jpg"
+        self._red(monkeypatch, lambda r: httpx.Response(200, content=_jpeg_de(250, 375)))
+
+        assert await fetch_and_cache_cover(self.URL, dest, ancho=600) is True
+
+        with Image.open(dest) as img:
+            assert img.width == 250
+
+    @pytest.mark.asyncio
+    async def test_por_defecto_sigue_en_320(self, tmp_path, monkeypatch):
+        """FR-18/AC-04: Descubrir no pasa ancho; el defecto sigue siendo 320."""
+        dest = tmp_path / "descubrir" / "clave.jpg"
+        self._red(monkeypatch, lambda r: httpx.Response(200, content=_jpeg_de(900, 1350)))
+
+        assert await fetch_and_cache_cover(self.URL, dest) is True
+
+        with Image.open(dest) as img:
+            assert img.width == 320
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -273,7 +313,7 @@ class TestFalloDeDiscoEnLaPortada:
                              headers={"If-None-Match": etag})
             assert r2.status_code == 304
 
-        assert not (covers / f"{series.id}.jpg").exists()
+        assert not (covers / CACHE_VERSION / f"{series.id}.jpg").exists()
         avisos = [a for a in registros if a["event"] == "cover.cache_sin_espacio"]
         assert avisos, f"no se registró el aviso de caché no escrita: {registros!r}"
         assert avisos[0]["motivo"] == "EspacioInsuficienteError"
@@ -297,8 +337,8 @@ class TestFalloDeDiscoEnLaPortada:
         with Image.open(io.BytesIO(r.content)) as img:
             img.load()
             assert img.format == "JPEG"
-        assert not (covers / f"{series.id}.jpg").exists()
-        assert _temporales(covers) == []
+        assert not (covers / CACHE_VERSION / f"{series.id}.jpg").exists()
+        assert _temporales(covers / CACHE_VERSION) == []
         avisos = [a for a in registros if a["event"] == "cover.cache_sin_espacio"]
         assert avisos and avisos[0]["motivo"] == "PermissionError"
         assert avisos[0]["errno"] == 13        # el errno real no se pierde como «OSError»
@@ -352,7 +392,7 @@ class TestEscrituraAtomica:
         self, portada_de_serie, monkeypatch
     ):
         series, covers = portada_de_serie
-        dest = covers / f"{series.id}.jpg"
+        dest = covers / CACHE_VERSION / f"{series.id}.jpg"
 
         with monkeypatch.context() as m:
             _falla_a_mitad_de_escritura(m)
@@ -363,7 +403,7 @@ class TestEscrituraAtomica:
             img.load()
             assert img.format == "JPEG"                   # …y se sirve el JPEG completo
         assert not dest.exists(), "quedó una caché a medias que exists() daría por buena"
-        assert _temporales(covers) == []
+        assert _temporales(covers / CACHE_VERSION) == []
 
         r2 = TestClient(app).get(f"/ui/series/{series.id}/portada")
         assert r2.status_code == 200
@@ -424,9 +464,9 @@ class TestDosPeticionesALaVez:
                 assert img.format == "JPEG"
             cuerpos.append(r.content)
 
-        dest = covers / f"{series.id}.jpg"
+        dest = covers / CACHE_VERSION / f"{series.id}.jpg"
         assert dest.exists()
-        assert _temporales(covers) == []
+        assert _temporales(covers / CACHE_VERSION) == []
         with Image.open(dest) as img:
             img.load()
             assert img.format == "JPEG"
@@ -439,8 +479,8 @@ class TestCacheYaEscrita:
 
     def test_se_sirve_con_etag_por_mtime_y_no_se_toca(self, portada_de_serie):
         series, covers = portada_de_serie
-        covers.mkdir(parents=True)
-        dest = covers / f"{series.id}.jpg"
+        (covers / CACHE_VERSION).mkdir(parents=True)
+        dest = covers / CACHE_VERSION / f"{series.id}.jpg"
         dest.write_bytes(_jpeg())
 
         cliente = TestClient(app)

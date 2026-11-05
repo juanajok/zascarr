@@ -43,6 +43,15 @@ logger = structlog.get_logger()
 # abierta, y el dispositivo es una Pi).
 _THUMB_MAX_WIDTH = 240
 
+#: Ancho de la portada de serie (Biblioteca, Inicio y ficha). Medido en la especificación
+#: BL-PORT1 (§9.2): 600 cubre 2,07× el peor caso presentado (290 CSS) sin `srcset`.
+SERIES_COVER_MAX_WIDTH = 600
+
+#: Versión de la clave de caché de la portada de serie: `covers/<CACHE_VERSION>/<id>.jpg`.
+#: Un cambio de ancho objetivo o de algoritmo exige subir la versión (`v3`), porque la
+#: ruta es lo que separa una caché vieja de una nueva (FR-03).
+CACHE_VERSION = "v2"
+
 #: Extensiones de las que `extract_cover_thumbnail` SABE sacar una miniatura (las que son un
 #: zip). El resto (CBR, CB7, PDF, EPUB) no tiene extractor: «sin portada» se sabe por la
 #: extensión, sin abrir el archivo. Esta constante y el extractor tienen que decir lo mismo,
@@ -71,11 +80,16 @@ _COVER_FETCH_SEMAPHORE = asyncio.Semaphore(2)
 
 
 def extract_cover_thumbnail(path: Path,
-                            formato_contenido: dict | None = None) -> tuple[bytes, str] | None:
+                            formato_contenido: dict | None = None,
+                            *, ancho: int = _THUMB_MAX_WIDTH) -> tuple[bytes, str] | None:
     """(bytes JPEG, content-type) de una miniatura de la primera página en orden natural, o None
     si el archivo no es un ZIP legible, no
     tiene páginas de imagen o su primera página supera los topes (CBR real: requeriría una
     herramienta que no está; ver #308).
+
+    `ancho` es el ancho máximo de la miniatura: 240 por defecto («Por revisar») y
+    `SERIES_COVER_MAX_WIDTH` (600) para la portada de serie (BL-PORT1, #300). Se usa
+    `Image.thumbnail`, que **nunca amplía**: un original menor se devuelve a su tamaño.
 
     #307: un `.cbr`/`.cb7` cuyo CONTENIDO es un ZIP se lee igual que un `.cbz`, siempre que sea un
     tebeo comprobado. Con el
@@ -118,7 +132,7 @@ def extract_cover_thumbnail(path: Path,
             # `open` solo lee la cabecera: se rechaza SIN decodificar
             if img.width * img.height > MAX_PIXELES_PORTADA:
                 return None
-            img.thumbnail((_THUMB_MAX_WIDTH, _THUMB_MAX_WIDTH * 2))
+            img.thumbnail((ancho, ancho * 2))
             buf = io.BytesIO()
             img.convert("RGB").save(buf, format="JPEG", quality=80)
             return buf.getvalue(), "image/jpeg"
@@ -144,10 +158,14 @@ def cached_image_response(request: Request, data: bytes, content_type: str, etag
     )
 
 
-async def fetch_and_cache_cover(url: str, dest: Path) -> bool:
+async def fetch_and_cache_cover(url: str, dest: Path, *,
+                                 ancho: int = _COVER_MAX_WIDTH) -> bool:
     """Descarga `url` (portada externa de Comic Vine/AniList/Tebeosfera/GCD), la redimensiona y
     la guarda en `dest`. Devuelve False sin lanzar si algo falla (URL no permitida, URL muerta,
     timeout, imagen ilegible): no se cachea nada en ese caso.
+
+    `ancho` es el ancho máximo: 320 por defecto (Descubrir, FR-18) y
+    `SERIES_COVER_MAX_WIDTH` (600) para la portada de serie (BL-PORT1, #300). Nunca amplía.
 
     ESTE es el punto común que hace la petición, y por eso la política de H1
     (`utils/url_portada.py`) se aplica AQUÍ y no solo donde se guarda la URL: protege también
@@ -171,16 +189,16 @@ async def fetch_and_cache_cover(url: str, dest: Path) -> bool:
             return False
 
     try:
-        await asyncio.to_thread(_resize_and_save, content, dest)
+        await asyncio.to_thread(_resize_and_save, content, dest, ancho)
         return True
     except Exception:
         logger.warning("cover.resize_failed", host=host_para_log(url))
         return False
 
 
-def _resize_and_save(content: bytes, dest: Path) -> None:
+def _resize_and_save(content: bytes, dest: Path, ancho: int = _COVER_MAX_WIDTH) -> None:
     with Image.open(io.BytesIO(content)) as img:
-        img.thumbnail((_COVER_MAX_WIDTH, _COVER_MAX_WIDTH * 2))
+        img.thumbnail((ancho, ancho * 2))
         dest.parent.mkdir(parents=True, exist_ok=True)
         comprobar_espacio(dest.parent, len(content), "guardar la portada")
         _publicar_atomico(
