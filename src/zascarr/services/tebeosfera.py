@@ -180,7 +180,6 @@ class TebeosferaClient:
                 self._client, "POST", f"{_BASE_URL}{_SEARCH_ENDPOINT}",
                 politica=self._politica, espera_max_s=self._espera_max_s,
                 datos={"tabla": tabla, "busqueda": query}, form=True,
-                permitir_apagada=True,
                 cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
             )
         except RedireccionNoPermitida as exc:

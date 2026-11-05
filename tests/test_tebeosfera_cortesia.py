@@ -83,6 +83,8 @@ def mundo(monkeypatch):
     lim = CortesiaProceso(reloj=reloj, dormir=reloj.dormir)
     lim.registrar_politica(politica_de("tebeosfera", falsos))
     monkeypatch.setattr(tebeosfera, "get_settings", lambda: falsos)
+    # La puerta de fuente apagada de la envoltura lee la configuración real del proceso.
+    monkeypatch.setattr("zascarr.config.get_settings", lambda: falsos)
     yield SimpleNamespace(reloj=reloj, sitio=Sitio(reloj), ajustes=ajustes, lim=lim)
     cortesia.reiniciar_para_pruebas()
 
@@ -209,6 +211,7 @@ class TestCancelacionYBucles:
         lim = CortesiaProceso(reloj=reloj, dormir=reloj.dormir)
         lim.registrar_politica(politica_de("tebeosfera", falsos))
         monkeypatch.setattr(tebeosfera, "get_settings", lambda: falsos)
+        monkeypatch.setattr("zascarr.config.get_settings", lambda: falsos)
         sitio = Sitio(reloj)
 
         async def una():

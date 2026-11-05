@@ -192,6 +192,9 @@ async def _seguir_redirecciones(cliente, metodo: str, url: str, *, politica: Pol
         espera = await cortesia.esperar(politica.fuente, host, motivo=motivo,
                                         espera_max_s=restante)
         espera_total += espera.espera_s
+        # La fuente pudo apagarse DURANTE la espera: se vuelve a mirar justo antes de enviar.
+        if not permitir_apagada and not fuente_habilitada(politica.fuente):
+            raise FuenteApagada(politica.fuente)
         try:
             respuesta = await _enviar(cliente, metodo_actual, url_actual,
                                       datos=datos_actuales, cabeceras=cabeceras_actuales,
