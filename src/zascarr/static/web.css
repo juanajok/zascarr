@@ -853,6 +853,7 @@ button[type="submit"].btn-sugerencia {
 .series-intro { margin: 0 0 6px; font-weight: 600; }
 .series-acciones { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 10px 0 0; }
 .series-fuentes, .politica-detalles { margin-top: 8px; }
+.politica-detalles code { font-size: .875rem; }
 .series-fuentes summary, .politica-detalles summary {
   cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
   padding: 8px 0; min-height: 40px;
