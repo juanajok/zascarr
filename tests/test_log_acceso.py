@@ -350,6 +350,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
     "limite", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
     "search", "serie_id", "serie",
+    # BL-FILT1 (#397): filtro de «Pendientes por carpeta» (estado de la vista, no se registra).
+    "nombre", "estado", "por_confirmar", "en_conflicto",
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
 })
 
@@ -376,9 +378,15 @@ class TestInventarioDeParametros:
             f"retirados {sorted(PARAMETROS_DE_QUERY - reales)}. Mira si llevan datos de la persona y actualiza PARAMETROS_DE_QUERY.")
 
     def test_ninguna_ruta_lee_la_query_a_mano_sin_declararla(self):
-        """Un parámetro leído con `request.query_params` no aparece en las rutas: se vigila por texto."""
+        """Un parámetro leído con `request.query_params` no aparece en las rutas: se vigila por texto.
+
+        Única excepción declarada: `web/contexto_carpetas.py` reenvía por el asistente los cuatro
+        parámetros del filtro de «Pendientes por carpeta» (todos declarados en su ruta) y el
+        contexto de la lista (serie/limite/desplazamiento). No lee nada nuevo de la persona: los
+        valores de una URL que la vista ya recibió."""
         usos = [str(p.relative_to(RAIZ)) for p in (RAIZ / "src").rglob("*.py") if "query_params" in p.read_text(encoding="utf-8")]
-        assert usos == [], f"hay lectura manual de query_params: {usos}; añádela al inventario y a esta prueba"
+        assert usos == ["src/zascarr/web/contexto_carpetas.py"], (
+            f"hay lectura manual de query_params: {usos}; añádela al inventario y a esta prueba")
 
     def test_cada_parametro_con_su_centinela_no_llega_al_registro_ni_su_nombre_con_valor(self):
         centinelas = {nombre: f"CENTINELA-{nombre.upper().replace('_', '-')}-INV" for nombre in sorted(PARAMETROS_DE_QUERY)}

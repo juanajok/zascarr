@@ -11,6 +11,6 @@
     {% if eleccion_sugerida %}<dt>La fuente sugería</dt><dd>{{ eleccion_sugerida }} (era solo una sugerencia)</dd>{% endif %}
   </dl>
   {% include plantilla %}
-  <p><a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ clave | urlencode }}{% if consulta %}&amp;consulta={{ consulta | urlencode }}{% endif %}">Elegir otra</a>
-     <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a></p>
+  <p><a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas/asistente?clave=' ~ (clave | urlencode) ~ ('&consulta=' ~ (consulta | urlencode) if consulta else '')) }}">Elegir otra</a>
+     <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas') }}">Volver a las carpetas</a></p>
 </div>

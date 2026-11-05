@@ -17,6 +17,7 @@ from zascarr.config import get_settings
 from zascarr.services.primeros_pasos import fecha_llana
 from zascarr.utils.ruta_visible import ruta_visible
 from zascarr.web.componentes import registrar as registrar_componentes
+from zascarr.web.contexto_carpetas import ContextoCarpetas
 from zascarr.web.descubrir_texto import etiqueta_procedencia, pista_de_tradicion
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -33,7 +34,30 @@ def crear_templates() -> Jinja2Templates:
     `auth_activo` (A6): `base.html` lo usa para mostrar u ocultar
     "Cerrar sesión" en el nav sin que cada router tenga que acordarse de
     meter `auth_mode` en su propio contexto de plantilla."""
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    def _contexto_de_carpetas(request) -> dict:
+        """BL-FILT1 (#397): el contexto de «Pendientes por carpeta» viaja con las
+        plantillas del asistente sin que cada router tenga que acordarse de meterlo.
+        Se lee de la query de la petición (en un POST, de la query del `action`), que
+        es donde vive por decisión del PO: sin sesión, sin cookie y sin parámetro de
+        retorno."""
+        if getattr(request.state, "sin_contexto_carpetas", False):
+            # «Resultado guardado» (excepción del PO, §6.4): no propaga el contexto de la lista.
+            contexto = ContextoCarpetas()
+        else:
+            contexto = ContextoCarpetas.desde(request)
+
+        def _con_contexto(url: str) -> str:
+            return contexto.url(str(url))
+
+        return {
+            "contexto_query": contexto.query,
+            "contexto_campos": contexto.campos,
+            "con_contexto": _con_contexto,
+        }
+
+    templates = Jinja2Templates(
+        directory=str(TEMPLATES_DIR), context_processors=[_contexto_de_carpetas]
+    )
     templates.env.globals["auth_activo"] = lambda: get_settings().auth_mode != "none"
     # #276: la pista de tradición se atribuye según su procedencia y se usa en Descubrir y en el
     # asistente. Se registran como filtros (no como globales) para no ampliar el contexto de todas
