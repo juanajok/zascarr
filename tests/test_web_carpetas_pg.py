@@ -36,6 +36,17 @@ from zascarr.main import app
 from zascarr.services import revision_carpetas, runtime_settings
 from zascarr.services.registro_biblioteca import EstadoRegistro as _EstadoRegistro
 from zascarr.services.registro_biblioteca import FaseRegistro as _FaseRegistro
+from tests.test_asistente_vinculacion_pg import (  # noqa: F401  (fixtures y ayudas compartidas)
+    _secreto_en_el_asistente,
+)
+from tests.test_u19_recorrido_pg import (  # noqa: F401  (fixtures y ayudas compartidas)
+    V as V_U19,
+    ent,
+    entorno,
+    get as get_u19,
+    url_bd,
+    vinculada,
+)
 from zascarr.services.revision_carpetas import (
     ETIQUETAS,
     ArchivoRevision,
@@ -778,9 +789,11 @@ class TestSerieFijada:
         r = await pagina({"serie": str(sid), "desplazamiento": 999})
         t = visible(r.text)
         assert "Esta página ya no existe" in t
-        enlaces = [h for h in _hrefs(r.text) if "/ui/pendientes/carpetas?" in h]
-        # La salida conserva la serie; «Quitar la serie» es el único enlace que la pierde a propósito.
-        assert any("serie=" in h and "desplazamiento" not in h for h in enlaces)
+        quitar_serie = re.findall(r'href="([^"]+)"[^>]*>Quitar la serie</a>', r.text)
+        assert len(quitar_serie) == 1, quitar_serie
+        enlaces = [h for h in _hrefs(r.text) if "/ui/pendientes/carpetas?" in h
+                   and h not in quitar_serie]
+        assert enlaces and all("serie=" in h for h in enlaces), enlaces
 
     async def test_sin_serie_no_aparecen_primera_ni_ultima(self, banco):
         await banco.sembrar(*(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(5)))
@@ -1132,15 +1145,8 @@ class TestPropagacionDelContexto:
         # El formulario de buscar en el asistente lleva el contexto al POST.
         assert any("nombre=coincide" in a for a in re.findall(r'hx-post="([^"]+)"', r3.text))
 
-    async def test_ac13_resultado_guardado_no_propaga_y_no_hay_parametro_de_retorno(self, banco):
+    async def test_ac13_no_hay_parametro_de_retorno_en_la_lista_ni_en_el_asistente(self, banco):
         sid = await self._sembrar_120(banco)
-        guardado = await pagina(ruta="/ui/pendientes/carpetas/asistente/vinculacion/resultado?ref=no-vale")
-        assert guardado.status_code == 200
-        assert "Volver a las carpetas" in visible(guardado.text)
-        assert 'href="/ui/pendientes/carpetas"' in guardado.text
-        if sid:
-            assert f'href="/ui/pendientes/carpetas?serie={sid}"' not in guardado.text
-
         lista = await pagina({"nombre": "coincide", "limite": 10, "desplazamiento": 10,
                               "serie": str(sid)})
         asistente = await pagina(ruta="/ui/pendientes/carpetas/asistente?clave=Comics/Coincide 00"
@@ -1228,6 +1234,36 @@ class TestSerieInventadaEnElContexto:
         assert f'name="serie" value="{sid}"' in valida.text
 
 
+class TestResultadoGuardadoNoPropaga:
+    """§6.4: el resultado guardado es la excepción; con una referencia VÁLIDA tampoco propaga."""
+
+    async def test_ac13_un_resultado_guardado_valido_no_propaga_el_contexto(self, ent):
+        v = await vinculada(ent)
+        consulta = {"ref": v.ref, "nombre": "batman", "estado": "sin_serie",
+                    "por_confirmar": "1", "en_conflicto": "1", "limite": "10",
+                    "desplazamiento": "20"}
+        r = await get_u19(f"{V_U19}/resultado", **consulta)
+        assert r.status_code == 200
+        assert "Resultado de la vinculación" in visible(r.text)
+        enlaces = [h for h in _hrefs(r.text) if "/ui/pendientes/carpetas" in h]
+        assert enlaces, "el resultado guardado no tiene enlaces de vuelta a la lista"
+        for h in enlaces:
+            for parametro in ("nombre=batman", "estado=sin_serie", "por_confirmar=1",
+                              "en_conflicto=1", "limite=10", "desplazamiento=20"):
+                assert parametro not in h, (parametro, h)
+        # Contrato de hoy: «Volver a las carpetas» sin parámetros y «Elegir otra carpeta»
+        # solo con `serie`.
+        assert any(h == "/ui/pendientes/carpetas" for h in enlaces)
+        assert any(re.fullmatch(r"/ui/pendientes/carpetas\?serie=[0-9a-f-]+", h) for h in enlaces)
+
+        async with cliente() as c:
+            fragmento = await c.get(f"{V_U19}/resultado", params=consulta,
+                                    headers={"HX-Request": "true"})
+        assert fragmento.status_code == 200
+        assert "nombre=batman" not in fragmento.text
+        assert "limite=10" not in fragmento.text
+
+
 class TestMapaDeEnlacesDelAsistente:
     """§6.3: TODOS los enlaces de vuelta a la lista conservan el contexto, salvo el resultado guardado."""
 
@@ -1235,15 +1271,18 @@ class TestMapaDeEnlacesDelAsistente:
         "asistente_carpeta.html", "_asistente_eleccion.html", "asistente_vinculacion.html",
         "_vinculacion_resultado.html", "asistente_alta.html", "asistente_alta_resultado.html",
     )
-    PLANTILLA_SIN_CONTEXTO = "asistente_resultado_guardado.html"
-
     def test_cada_plantilla_de_vuelta_usa_el_helper_de_contexto(self):
         base = Path(__file__).resolve().parents[1] / "src/zascarr/web/templates"
         for nombre in self.PLANTILLAS_CON_CONTEXTO:
             texto = (base / nombre).read_text(encoding="utf-8")
             assert "con_contexto(" in texto, f"{nombre} no reenvía el contexto de la lista"
-        guardado = (base / self.PLANTILLA_SIN_CONTEXTO).read_text(encoding="utf-8")
-        assert "con_contexto(" not in guardado, "el resultado guardado es la excepción del PO (§6.4)"
+
+    def test_el_resultado_guardado_desactiva_el_contexto_en_la_ruta(self):
+        """La excepción del PO (§6.4) no cambia las plantillas: se apaga en la ruta, que es la
+        única que se puede abrir con una `ref` de 24 h y sin la lista delante."""
+        fuente = (Path(__file__).resolve().parents[1]
+                  / "src/zascarr/web/asistente_vinculacion.py").read_text(encoding="utf-8")
+        assert "request.state.sin_contexto_carpetas = True" in fuente
 
     async def test_ningun_enlace_de_la_lista_sale_a_una_url_absoluta(self, banco):
         await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))

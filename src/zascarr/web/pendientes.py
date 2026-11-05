@@ -204,7 +204,7 @@ async def rango(
 GRUPOS_POR_PAGINA = 50
 _MARCADOR_ADOPCION = "_library_adoption_done"
 
-#: Estados que admite el selector de la vista (BL-FILT1, #397); "todas" y "" son «sin restricción».
+#: Estados del selector de la vista (BL-FILT1, #397); "todas" y "" son «sin restricción».
 _ESTADOS_DE_CARPETA = ("", "todas", "sin_serie", "serie_sugerida", "mixto")
 
 AVISO_ESTADO_INVALIDO = "El estado de la carpeta no es válido; se muestran todos los estados."
@@ -212,7 +212,9 @@ AVISO_NOMBRE_CONTROLES = "La búsqueda tenía caracteres no válidos; se han qui
 AVISO_NOMBRE_LARGO = (
     "La búsqueda era demasiado larga; se han usado los primeros 200 caracteres."
 )
-AVISO_NOMBRE_SIN_PALABRAS = "El texto no contiene palabras que buscar; no se aplica el filtro de nombre."
+AVISO_NOMBRE_SIN_PALABRAS = (
+    "El texto no contiene palabras que buscar; no se aplica el filtro de nombre."
+)
 
 
 def _filtros_de_url(nombre: str, estado: str, por_confirmar: str, en_conflicto: str) -> dict:

@@ -581,6 +581,10 @@ async def resultado_guardado(
     purga, escribe ni emite una referencia nueva. Orden de las comprobaciones (se corta en la primera que aplica):
     1) integridad y contexto de la referencia, sin reloj ni base; 2) vencimiento (`ahora >= vence`), haya o no fila;
     3) solo si sigue vigente, el comprobante: encontrado, de otra serie o ausente."""
+    # Excepción del PO (§6.4): este resultado se puede reabrir desde un enlace de 24 h sin la
+    # lista delante; el filtro no forma parte de él y sus vueltas no deben propagar el contexto,
+    # aunque la URL traiga esos parámetros.
+    request.state.sin_contexto_carpetas = True
     secreto = get_settings().secret_key
     referencia = verificar_referencia_de_resultado(ref, secreto) if secreto else None
     plantilla = "asistente_resultado_guardado.html"
