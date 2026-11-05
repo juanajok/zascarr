@@ -1,7 +1,8 @@
 # Cortesía compartida: qué coordina y qué no (#134, MIT-M8-US02)
 
-Este documento acompaña a [`especificacion-cortesia-compartida.md`](especificacion-cortesia-compartida.md)
-y a [`benchmark-cortesia-compartida.md`](benchmark-cortesia-compartida.md). No repite el contrato:
+Este documento acompaña a [`especificacion-cortesia-compartida.md`](especificacion-cortesia-compartida.md),
+a [`benchmark-cortesia-compartida.md`](benchmark-cortesia-compartida.md) y a la
+[matriz de verificación de los 9 criterios](verificacion-cortesia-9-criterios.md). No repite el contrato:
 aclara **el alcance de la coordinación**, que es lo que más fácilmente se malinterpreta.
 
 ## Qué se coordina: un solo proceso
