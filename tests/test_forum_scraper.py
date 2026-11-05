@@ -193,14 +193,12 @@ class TestEnlacesHostiles:
         assert await foro.scraper().use_ipb_search("tebeo") == []      # y no revienta
 
     async def test_una_redireccion_con_un_destino_que_hace_lanzar_a_urljoin_se_corta(self, monkeypatch):
-        from zascarr.services import forum_scraper
-        original = forum_scraper.urljoin
+        """La redirección la sigue la envoltura común: es ella quien resuelve el `Location`."""
+        from zascarr.utils import peticiones as modulo_peticiones
 
-        def _lanza_solo_en_redirecciones(base, href):
-            if "bomba" in href:
-                raise ValueError("netloc con caracteres inválidos")
-            return original(base, href)
-        monkeypatch.setattr(forum_scraper, "urljoin", _lanza_solo_en_redirecciones)
+        def _lanza(base, href):
+            raise ValueError("netloc con caracteres inválidos")
+        monkeypatch.setattr(modulo_peticiones, "urljoin", _lanza)
         foro = Foro("", manejador=lambda r: httpx.Response(302, headers={"Location": "/bomba"}))
         with pytest.raises(OrigenNoPermitidoError, match="url_mal_formada"):
             await foro.scraper()._get(f"{BASE}/index.php")
