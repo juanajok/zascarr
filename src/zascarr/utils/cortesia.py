@@ -414,6 +414,8 @@ class CortesiaProceso:
         self._fuentes: dict[str, _EstadoCola] = {}
         self._hosts: dict[str, _EstadoCola] = {}
         self._fuentes_por_host: dict[str, set[str]] = {}
+        #: Intervalo efectivo con el que se reservó cada host (portadas: su `intervalo_s`).
+        self._intervalos_de_host: dict[str, float] = {}
         self._intentos: dict[str, deque] = {}
         self._candados = _Candados()
 
@@ -438,10 +440,12 @@ class CortesiaProceso:
         return max(0.0, self._politica(fuente).intervalo_min_s)
 
     def _intervalo_de_host(self, host: str) -> float:
+        """Intervalo con el que se autoriza el nivel host: solo las fuentes reales que lo usan.
+
+        El intervalo explícito de una portada (`_intervalos_de_host`) NO entra aquí: no debe
+        contagiar su ritmo a la fuente real del host. El snapshot lo publica aparte."""
         fuentes = self._fuentes_por_host.get(host) or set()
-        if not fuentes:
-            return 0.0
-        return max(self._intervalo_de_fuente(f) for f in fuentes)
+        return max((self._intervalo_de_fuente(f) for f in fuentes), default=0.0)
 
     # ── API ─────────────────────────────────────────────────────────────────────────────────────
     def reservar(self, fuente: str, host: str, *, motivo: str = "cortesia",
@@ -461,7 +465,19 @@ class CortesiaProceso:
         # «portada» no es una fuente con intervalo fijo: su ritmo es POR HOST y se pasa en
         # `intervalo_s`. Si se registrara aquí, su 2,5 s se contagiaría a la fuente real del host
         # (Comic Vine pasaría a esperar 2,5 s en vez de 1,0 s).
-        if fuente != "portada":
+        if fuente == "portada":
+            # La portada no es fuente con intervalo fijo, pero su ritmo POR HOST sí debe quedar
+            # en el snapshot; se guarda el intervalo efectivo y, si el host está en la allowlist,
+            # la fuente real a la que pertenece.
+            if intervalo_s is not None:
+                previo = self._intervalos_de_host.get(host, 0.0)
+                self._intervalos_de_host[host] = max(previo, max(0.0, float(intervalo_s)))
+            from urllib.parse import urlsplit
+
+            mapeada = fuente_de_host_portada(urlsplit(host).hostname)
+            if mapeada is not None:
+                self._fuentes_por_host.setdefault(host, set()).add(mapeada)
+        else:
             self._fuentes_por_host.setdefault(host, set()).add(fuente)
         self._politica(fuente)
         return Turno(self, fuente, host, motivo=motivo, espera_max_s=espera_max_s,
@@ -550,7 +566,8 @@ class CortesiaProceso:
         hosts = []
         for host, estado in self._hosts.items():
             fuentes_del_host = sorted(self._fuentes_por_host.get(host) or ())
-            intervalo = self._intervalo_de_host(host)
+            intervalo = max(self._intervalo_de_host(host),
+                            self._intervalos_de_host.get(host, 0.0))
             siguiente = 0.0
             if estado.ultima is not None:
                 siguiente = max(siguiente, estado.ultima + intervalo - ahora)
@@ -578,6 +595,7 @@ class CortesiaProceso:
         self._fuentes.clear()
         self._hosts.clear()
         self._fuentes_por_host.clear()
+        self._intervalos_de_host.clear()
         self._intentos.clear()
         self._candados.limpiar()
 
