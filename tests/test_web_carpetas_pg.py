@@ -310,6 +310,7 @@ class TestSinLogicaPropia:
         assert cuerpo.count("<form") == 1
         formulario = re.search(r"<form\b[^>]*>", cuerpo).group(0)
         assert 'method="get"' in formulario and 'action="/ui/pendientes/carpetas"' in formulario
+        assert 'aria-label="Filtrar carpetas por nombre, estado y conflictos"' in formulario
         assert cuerpo.count('type="submit"') == 1
         for metodo in ("post", "put", "delete", "patch"):
             assert f'method="{metodo}"' not in cuerpo
@@ -613,6 +614,7 @@ class TestFormularioDeFiltro:
                        "Solo carpetas con conflictos", "Filtrar"):
             assert exacto in formulario, exacto
         assert 'method="get"' in formulario and 'action="/ui/pendientes/carpetas"' in formulario
+        assert 'aria-label="Filtrar carpetas por nombre, estado y conflictos"' in formulario
         # Etiquetas visibles asociadas y campo de búsqueda nativo.
         assert 'for="f-nombre"' in formulario and 'id="f-nombre"' in formulario
         assert 'for="f-estado"' in formulario and 'id="f-estado"' in formulario

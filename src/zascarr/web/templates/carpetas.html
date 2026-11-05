@@ -50,10 +50,11 @@
 
 {#- Filtro de la lista (BL-FILT1, #397): UN formulario GET, sin HTMX ni JavaScript. Los
     `hidden` van antes que los campos visibles para que el GET produzca la URL canónica
-    (limite, serie, nombre, estado, por_confirmar, en_conflicto) y vuelva a la página 1:
-    no se envía `desplazamiento`. -#}
+    (limite, serie, nombre, estado, en_conflicto) y vuelva a la página 1: no se envía
+    `desplazamiento`. `por_confirmar` sigue en el servicio y se acepta por URL, pero la
+    interfaz ya no lo ofrece (revisión UI/UX #397). -#}
 <form class="filter-bar carpetas-filtros" id="filtro-carpetas" action="/ui/pendientes/carpetas" method="get"
-      aria-label="Filtrar carpetas por nombre y estado">
+      aria-label="Filtrar carpetas por nombre, estado y conflictos">
   <input type="hidden" name="limite" value="{{ limite }}">
   {% if serie_actual %}<input type="hidden" name="serie" value="{{ serie_actual.id }}">{% endif %}
   <div class="filtro-campo">
@@ -71,14 +72,12 @@
     </select>
   </div>
   <div class="filtro-campo filtro-conflicto-campo">
-    <span class="filtro-etiqueta" aria-hidden="true">&nbsp;</span>
     <label class="filtro-conflicto">
       <input type="checkbox" name="en_conflicto" value="1"{% if filtros.en_conflicto %} checked{% endif %}>
       Solo carpetas con conflictos
     </label>
   </div>
   <div class="filtro-campo filtro-accion">
-    <span class="filtro-etiqueta" aria-hidden="true">&nbsp;</span>
     <button type="submit">Filtrar</button>
   </div>
 </form>
