@@ -21,6 +21,15 @@ from uuid import uuid4
 
 import httpx
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fuentes_encendidas_cover(monkeypatch):
+    """Una fuente apagada no recibe portadas (AC-15); estas pruebas son del camino permitido."""
+    from types import SimpleNamespace
+    monkeypatch.setattr("zascarr.utils.cover.get_settings", lambda: SimpleNamespace(
+        comicvine_enabled=True, anilist_enabled=True, tebeosfera_enabled=True,
+        gcd_enabled=True, forum_enabled=False, forum_url=""))
 import structlog
 from fastapi.testclient import TestClient
 from PIL import Image

@@ -20,6 +20,7 @@ import pytest
 from zascarr.models import ComicTradition, Creator, CreatorRole, Issue, MetadataSource, Series
 from zascarr.services.anilist import AniListClient, AniListResult
 from zascarr.services.comic_vine import ComicVineClient, CVCredit, CVIssueResult, CVResult, _parse_issue
+from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 from zascarr.services.enricher import EnrichmentReport, EnrichmentService
 from zascarr.services.tebeosfera import TebeosferaResult, _parse_results
 
