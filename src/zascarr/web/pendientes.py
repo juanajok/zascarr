@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.core.matcher import normalize_title
 from zascarr.database import get_db
 from zascarr.models import File, Series
 from zascarr.services import registro_biblioteca
@@ -38,6 +39,7 @@ from zascarr.services.revision_carpetas import (
 from zascarr.services.runtime_settings import RuntimeSettingsService
 from zascarr.utils.cover import cached_image_response, extract_cover_thumbnail, puede_tener_portada
 from zascarr.utils.naming import parse_comic_filename
+from zascarr.web.contexto_carpetas import ContextoCarpetas
 from zascarr.web.routes import crear_templates
 
 
@@ -202,10 +204,72 @@ async def rango(
 GRUPOS_POR_PAGINA = 50
 _MARCADOR_ADOPCION = "_library_adoption_done"
 
+#: Estados que admite el selector de la vista (BL-FILT1, #397); "todas" y "" son «sin restricción».
+_ESTADOS_DE_CARPETA = ("", "todas", "sin_serie", "serie_sugerida", "mixto")
+
+AVISO_ESTADO_INVALIDO = "El estado de la carpeta no es válido; se muestran todos los estados."
+AVISO_NOMBRE_CONTROLES = "La búsqueda tenía caracteres no válidos; se han quitado."
+AVISO_NOMBRE_LARGO = "La búsqueda era demasiado larga; se han usado los primeros 200 caracteres."
+AVISO_NOMBRE_SIN_PALABRAS = "El texto no contiene palabras que buscar; no se aplica el filtro de nombre."
+
+
+def _filtros_de_url(nombre: str, estado: str, por_confirmar: str, en_conflicto: str) -> dict:
+    """Normaliza los parámetros del filtro; NUNCA lanza ni devuelve 422 (spec §3.2).
+
+    Se conservan los valores válidos y se explican los descartados. Las marcas solo se
+    activan con `1` (el control no emite otro valor y no es editable por la persona, así
+    que no lleva aviso). Un nombre que normaliza a vacío no restringe pero deja el filtro
+    activo para el recuento y el estado vacío."""
+    avisos: list[str] = []
+    bruto = nombre or ""
+    if any(ord(c) < 32 or ord(c) == 127 for c in bruto):
+        bruto = "".join(c for c in bruto if ord(c) >= 32 and ord(c) != 127)
+        avisos.append(AVISO_NOMBRE_CONTROLES)
+    texto = bruto.strip()
+    if len(texto) > 200:
+        texto = texto[:200]
+        avisos.append(AVISO_NOMBRE_LARGO)
+    estado_limpio = (estado or "").strip()
+    if estado_limpio not in _ESTADOS_DE_CARPETA:
+        avisos.append(AVISO_ESTADO_INVALIDO)
+        estado_limpio = ""
+    if estado_limpio == "todas":
+        estado_limpio = ""
+    marcas = {
+        "por_confirmar": "1" if por_confirmar == "1" else "",
+        "en_conflicto": "1" if en_conflicto == "1" else "",
+    }
+    if texto and not normalize_title(texto):
+        avisos.append(AVISO_NOMBRE_SIN_PALABRAS)
+    return {
+        "nombre": texto, "estado": estado_limpio, **marcas,
+        "avisos": avisos,
+        "activo": bool(texto or estado_limpio or marcas["por_confirmar"] or marcas["en_conflicto"]),
+    }
+
+
+def _url_de_carpetas(*, limite: int, serie: str, filtros: dict,
+                     desplazamiento: int | None = None) -> str:
+    """URL canónica de §3.3: orden `limite, serie, nombre, estado, por_confirmar,
+    en_conflicto, desplazamiento`; valores vacíos fuera y `desplazamiento` solo si no es 0.
+
+    Sin filtro, la cadena es **idéntica** a la de antes de esta historia (criterio 6)."""
+    valores: dict[str, str] = {"limite": str(limite)}
+    if serie:
+        valores["serie"] = serie
+    for clave in ("nombre", "estado", "por_confirmar", "en_conflicto"):
+        if filtros.get(clave):
+            valores[clave] = str(filtros[clave])
+    if desplazamiento:
+        valores["desplazamiento"] = str(desplazamiento)
+    return "/ui/pendientes/carpetas?" + urlencode(valores)
+
 
 def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
                     serie_aviso: str | None = None,
-                    estado_nuevos: str | None = None) -> dict:
+                    estado_nuevos: str | None = None,
+                    filtros: dict | None = None, avisos=(), url_base: str = "",
+                    url_quitar_filtro: str = "", url_quitar_serie: str = "") -> dict:
     """Prepara lo que pinta la plantilla SIN recalcular nada: señales, estados y etiquetas
     vienen del servicio (la misma respuesta que el JSON). Aquí solo se traducen los ids de
     `senales[].archivos` a nombres, que es presentación; `grupos[].archivos` contiene siempre
@@ -228,7 +292,20 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
             ),
         })
     p = r.pagina
-    total = r.totales.carpetas_utiles
+    filtros = filtros or {"nombre": "", "estado": "", "por_confirmar": "", "en_conflicto": ""}
+    hay_filtro = r.filtro is not None
+    # Con filtro, la paginación y el recuento usan N (las que coinciden); M no cambia de
+    # significado (`totales.carpetas_utiles`). Sin filtro, N = M y todo es como siempre.
+    total = r.filtro.coinciden if hay_filtro else r.totales.carpetas_utiles
+    coinciden = r.filtro.coinciden if hay_filtro else 0
+    contexto = ContextoCarpetas(
+        nombre=filtros.get("nombre", ""), estado=filtros.get("estado", ""),
+        por_confirmar=filtros.get("por_confirmar", ""),
+        en_conflicto=filtros.get("en_conflicto", ""),
+        serie=str(serie_actual["id"]) if serie_actual else "",
+        limite="" if p.limite == GRUPOS_POR_PAGINA else str(p.limite),
+        desplazamiento="" if p.desplazamiento == 0 else str(p.desplazamiento),
+    )
     # Una página deja de existir si su offset ya cae fuera del conjunto actual. La
     # página 1 (offset 0) con cero grupos es el estado vacío normal, no una página rota.
     pagina_invalida = p.desplazamiento > 0 and p.desplazamiento >= total
@@ -254,6 +331,15 @@ def _vista_carpetas(r: RespuestaCarpetas, *, serie_actual: dict | None = None,
         "serie_actual": serie_actual,
         "serie_aviso": serie_aviso,
         "estado_nuevos": estado_nuevos,
+        "filtros": filtros,
+        "hay_filtro": hay_filtro,
+        "coinciden": coinciden,
+        "avisos": list(avisos),
+        "url_base": url_base,
+        "url_quitar_filtro": url_quitar_filtro,
+        "url_quitar_serie": url_quitar_serie,
+        "contexto_query": contexto.query,
+        "contexto_campos": contexto.campos,
     }
 
 
@@ -295,12 +381,22 @@ async def carpetas(
     limite: int = Query(default=GRUPOS_POR_PAGINA, ge=1, le=LIMITE_MAXIMO),
     desplazamiento: int = Query(default=0, ge=0),
     serie: str = Query(default=""),
+    nombre: str = Query(default=""),
+    estado: str = Query(default=""),
+    por_confirmar: str = Query(default=""),
+    en_conflicto: str = Query(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     """Rebanada 1b: lo pendiente agrupado por carpeta, SOLO LECTURA. Misma respuesta que
     `GET /api/revision/carpetas`, con el filtro de lectura `solo_utiles`: los grupos sin
     contexto son sueltos y no se pintan como carpetas. No escribe, no mira el disco y no
-    ofrece ninguna acción."""
+    ofrece ninguna acción.
+
+    BL-FILT1 (#397): `nombre` (contiene, sin mayúsculas ni tildes), `estado` (selector
+    excluyente) y las marcas `por_confirmar`/`en_conflicto` se aplican **en memoria** sobre
+    los grupos ya construidos (mismas dos consultas). Un valor inválido se descarta con un
+    aviso: 200, nunca 422/500. El valor del filtro no se registra (§7)."""
+    filtros = _filtros_de_url(nombre, estado, por_confirmar, en_conflicto)
     try:
         serie_valida = str(UUID(serie)) if serie else ""
     except (ValueError, TypeError):
@@ -310,21 +406,32 @@ async def carpetas(
         servicio = RevisionCarpetas(db)
         respuesta = await servicio.carpetas(
             limite=limite, desplazamiento=desplazamiento, solo_utiles=True,
+            nombre=filtros["nombre"], estado=filtros["estado"],
+            por_confirmar=filtros["por_confirmar"] == "1",
+            en_conflicto=filtros["en_conflicto"] == "1",
         )
         estado_nuevos = None
-        if serie_actual is not None and not respuesta.grupos:
+        if (serie_actual is not None and not respuesta.grupos
+                and respuesta.filtro is None):
             estado_nuevos = await _estado_nuevos(db)
     except Exception as exc:  # noqa: BLE001 — un fallo no puede dejar recuentos a medias
         logger.warning("pendientes.carpetas_fallo", error=type(exc).__name__)
         resp = templates.TemplateResponse(
             request, "carpetas.html",
-            {"error": True, "serie": serie_valida}, status_code=503,
+            {"error": True, "serie": serie_valida,
+             "url_reintentar": _url_de_carpetas(limite=limite, serie=serie_valida, filtros=filtros)},
+            status_code=503,
         )
         resp.headers["Cache-Control"] = "no-store"
         return resp
+    serie_str = str(serie_actual["id"]) if serie_actual else ""
+    sin_filtro = {**filtros, "nombre": "", "estado": "", "por_confirmar": "", "en_conflicto": ""}
     resp = templates.TemplateResponse(request, "carpetas.html", _vista_carpetas(
         respuesta, serie_actual=serie_actual, serie_aviso=serie_aviso,
-        estado_nuevos=estado_nuevos))
+        estado_nuevos=estado_nuevos, filtros=filtros, avisos=filtros["avisos"],
+        url_base=_url_de_carpetas(limite=limite, serie=serie_str, filtros=filtros),
+        url_quitar_filtro=_url_de_carpetas(limite=limite, serie=serie_str, filtros=sin_filtro),
+        url_quitar_serie=_url_de_carpetas(limite=limite, serie="", filtros=filtros)))
     resp.headers["Cache-Control"] = "no-store"
     return resp
 

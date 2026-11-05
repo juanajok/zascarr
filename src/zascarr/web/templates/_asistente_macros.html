@@ -4,8 +4,9 @@
 {% macro eleccion_form(clave, token, etiqueta_sugerida, tradiciones, pista, error=none, consulta="", procedencia=none) -%}
 <div class="asistente-paso">
   {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
-  <form hx-post="/ui/pendientes/carpetas/asistente/elegir" hx-target="closest .asistente-paso" hx-swap="outerHTML">
+  <form hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/elegir') }}" hx-target="closest .asistente-paso" hx-swap="outerHTML">
     <input type="hidden" name="clave" value="{{ clave }}">
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="candidata" value="{{ token }}">
     {% if consulta %}<input type="hidden" name="consulta" value="{{ consulta }}">{% endif %}
     <div class="discovery-card-actions">
