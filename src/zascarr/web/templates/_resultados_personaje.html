@@ -1,9 +1,9 @@
-{% if not characters %}
+{% if not resultados %}
 <p class="no-results">Sin coincidencias.</p>
 {% else %}
 <ul class="series-list">
-  {% for c in characters %}
-  <li><a href="/ui/biblioteca?character_id={{ c.id }}">{{ c.name }}</a></li>
+  {% for nombre, url in resultados %}
+  <li><a href="{{ url }}">{{ nombre }}</a></li>
   {% endfor %}
 </ul>
 {% endif %}

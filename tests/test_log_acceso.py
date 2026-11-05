@@ -348,8 +348,8 @@ class TestRotacionEfectivaConDockerCompose:
 #: se quita: sirve para que nadie dé por «sin datos» un parámetro nuevo sin haberlo mirado.)
 PARAMETROS_DE_QUERY = frozenset({
     "anio", "antes", "candidata", "character_id", "clave", "consulta", "cursor", "decision", "desplazamiento", "despues",
-    "limite", "next", "operacion", "page", "page_size", "primero", "publisher_id", "q", "ref", "search", "serie_id",
-    "serie",
+    "limite", "next", "operacion", "page", "page_size", "personaje", "primero", "publisher_id", "q", "ref", "saga",
+    "search", "serie_id", "serie",
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
 })
 

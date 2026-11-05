@@ -1559,6 +1559,28 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   object-fit: cover; background: none; border: 0; box-shadow: none;
 }
 
+/* ── BL-IT01 (#283): estado de los filtros de Biblioteca ───────────────────
+   El recuento y los chips viven DENTRO de #rejilla, que es lo que se
+   intercambia; así no queda un recuento viejo encima de una lista nueva.
+   Cada filtro activo es un chip (no interactivo) más un enlace «Quitar»:
+   texto y no solo color, 40 px de alto y foco visible heredado. */
+.resumen-biblioteca { margin-bottom: 14px; }
+.recuento-biblioteca { margin: 0 0 8px; }
+.filtros-activos {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+  margin: 0 0 8px; padding: 0; list-style: none;
+}
+.filtro-activo { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+.filtro-activo .chip { white-space: normal; text-align: left; }
+.quitar-filtro,
+.limpiar-filtros {
+  display: inline-flex; align-items: center; min-height: 40px;
+  font-size: .875rem; font-weight: 700; color: var(--ink);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.quitar-filtro:hover,
+.limpiar-filtros:hover { background: var(--yellow); color: var(--on-yellow); }
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de

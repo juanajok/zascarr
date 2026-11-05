@@ -1,0 +1,4 @@
+{#- Campo de título de la Biblioteca, compartido por el formulario y por el
+    intercambio fuera de banda que lo limpia al retirar su chip (BL-IT01).
+    Variables: `valor`, `oob` (bool), `foco` (bool). -#}
+<input type="search" name="q" id="f-q" placeholder="Buscar por título…" aria-label="Buscar por título" value="{{ valor }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}{% if foco %} autofocus{% endif %}>
