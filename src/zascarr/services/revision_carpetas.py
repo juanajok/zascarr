@@ -135,11 +135,26 @@ class Pagina(BaseModel):
     desplazamiento: int
 
 
+class Filtro(BaseModel):
+    """El filtro aplicado y cuántas carpetas coinciden (**N**), distinto de **M**
+    (`totales.carpetas_utiles`, que conserva su significado sin filtrar). Se omite del
+    JSON cuando no hay filtro (BL-FILT1, #397)."""
+
+    nombre: str
+    estado: str
+    por_confirmar: bool
+    en_conflicto: bool
+    #: N: carpetas útiles que pasan el filtro (M = `totales.carpetas_utiles`).
+    coinciden: int
+
+
 class RespuestaCarpetas(BaseModel):
     generado: str
     totales: Totales
     pagina: Pagina
     grupos: list[Grupo]
+    #: `None` sin filtro: la API no gana claves (AC-21).
+    filtro: Filtro | None = None
 
 
 @dataclass(frozen=True)
@@ -299,10 +314,20 @@ class RevisionCarpetas:
 
     async def carpetas(
         self, limite: int = LIMITE_POR_DEFECTO, desplazamiento: int = 0,
-        solo_utiles: bool = False,
+        solo_utiles: bool = False, *, nombre: str = "", estado: str = "",
+        por_confirmar: bool = False, en_conflicto: bool = False,
     ) -> RespuestaCarpetas:
+        """Carpetas pendientes, con filtro **en memoria** sobre los grupos ya construidos
+        (decisión del PO del 2026-11-01: sin prefiltro SQL ni consultas nuevas, BL-FILT1).
+
+        `nombre` se compara con el título visible (`Grupo.clave`) con `normalize_title`;
+        `estado` es excluyente y las dos marcas se combinan con Y. El filtro se aplica
+        DESPUÉS de `solo_utiles` y ANTES de paginar, y no reordena."""
         limite = max(1, min(limite, LIMITE_MAXIMO))
         desplazamiento = max(0, desplazamiento)
+        estado = estado if estado in ("sin_serie", "serie_sugerida", "mixto") else ""
+        nombre_norm = normalize_title(nombre)
+        hay_filtro = bool(nombre) or bool(estado) or por_confirmar or en_conflicto
 
         filas = await self._leer()
         ids = {f.candidata.series_id for f in filas if f.candidata}
@@ -336,7 +361,14 @@ class RevisionCarpetas:
         # La paginación se aplica DESPUÉS de filtrar: una página de la vista contiene
         # 50 carpetas útiles, no 50 claves de las que algunas son sueltos.
         utiles = [g for g in grupos if g.carpeta_contextual is not None]
+        utiles_todas = utiles
+        if hay_filtro:
+            utiles = [
+                g for g in utiles
+                if self._pasa_filtro(g, nombre_norm, estado, por_confirmar, en_conflicto)
+            ]
         lista = utiles if solo_utiles else grupos
+        total_visible = len(utiles) if hay_filtro else None
         desglose = {
             clave: (
                 sum(1 for a in acum.archivos if a.sin_serie),
@@ -344,8 +376,10 @@ class RevisionCarpetas:
             )
             for clave, acum in grupos_por_clave.items()
         }
+        # M (`carpetas_utiles`) se cuenta SIEMPRE sin filtrar; el filtro solo cambia N, la
+        # lista de la página y `filtro.coinciden`.
         totales = self._totales(
-            grupos, {g.clave for g in utiles}, desglose,
+            grupos, {g.clave for g in utiles_todas}, desglose,
             sin_serie_total, sugeridas_total, huerfanas,
         )
 
@@ -354,7 +388,28 @@ class RevisionCarpetas:
             totales=totales,
             pagina=Pagina(limite=limite, desplazamiento=desplazamiento),
             grupos=lista[desplazamiento:desplazamiento + limite],
+            filtro=(
+                Filtro(nombre=nombre, estado=estado, por_confirmar=por_confirmar,
+                       en_conflicto=en_conflicto, coinciden=total_visible)
+                if hay_filtro else None
+            ),
         )
+
+    @staticmethod
+    def _pasa_filtro(
+        grupo: Grupo, nombre_norm: str, estado: str,
+        por_confirmar: bool, en_conflicto: bool,
+    ) -> bool:
+        """Criterios activos combinados con **Y**. Un `nombre` que normaliza a vacío no
+        restringe (la vista ya avisa); una combinación contradictoria da conjunto vacío, no
+        error."""
+        if nombre_norm and nombre_norm not in normalize_title(grupo.clave):
+            return False
+        if estado and grupo.estado != estado:
+            return False
+        if por_confirmar and not grupo.por_confirmar:
+            return False
+        return not (en_conflicto and not grupo.en_conflicto)
 
     @staticmethod
     def _totales(
