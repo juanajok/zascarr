@@ -406,3 +406,28 @@ def test_la_ruta_sigue_respondiendo_sin_resultados_ni_avisos(web):
         r = client.get("/ui/descubrir/buscar", params={"q": "zzz"})
     v = visible(r.text)
     assert r.status_code == 200 and "Sin coincidencias en Comic Vine, AniList, Tebeosfera y GCD." in v
+
+
+# ── #134 §6.5: aviso de espera por cortesía desde `limite_de_cortesia` (sin estado nuevo) ───
+
+class TestAvisoDeCortesia:
+
+    def test_si_no_se_consulto_ninguna_por_cortesia_manda_la_frase_agregada(self):
+        e = estados(cv=LIMITE, al=LIMITE, te=LIMITE, gcd=LIMITE)
+        r = dt.resumir(e, 0, detalles(e))
+        assert r.anuncio.startswith(
+            "Todavía no se ha consultado ninguna fuente: hay que esperar por cortesía.")
+        assert "Ningún resultado" not in r.anuncio
+
+    def test_la_ui_muestra_el_aviso_6_5_con_estimacion(self, web):
+        b = busqueda([], estados_=estados(cv=OK, al=LIMITE, te=OK, gcd=OK))
+        b.detalles["anilist"] = EstadoFuente(
+            fuente="anilist", capacidad=CAPACIDAD_BUSQUEDA, estado=LIMITE,
+            motivo=("No se ha consultado: hay que esperar ~12 s por cortesía. "
+                    "No se ha enviado nada; vuelve a intentarlo en un momento."),
+            reintentar_en=12)
+        v = visible(buscar(b))
+        assert "hay que esperar ~12 s por cortesía" in v
+        assert "No se ha enviado nada; vuelve a intentarlo en un momento." in v
+        assert "Puedes reintentar en 12 s." in v
+        assert "No respondió" not in v

@@ -244,9 +244,13 @@ class DiscoveryService:
                 # no un fallo. El plazo solo va si el contrato lo trae.
                 reintentar = (max(1, int(outcome.espera_estimada_s + 0.999))
                               if outcome.espera_estimada_s > 0 else None)
+                # #134 §6.5: el motivo es el aviso de espera por cortesía, con estimación si consta.
+                # El estado sigue siendo el del conjunto cerrado de #133 (`limite_de_cortesia`).
+                espera = f" ~{reintentar} s" if reintentar else ""
                 detalles[fuente.value] = _estado(
                     fuente, FUENTE_LIMITE_DE_CORTESIA,
-                    "Ha pedido esperar antes de volver a consultarla.", reintentar)
+                    f"No se ha consultado: hay que esperar{espera} por cortesía. "
+                    "No se ha enviado nada; vuelve a intentarlo en un momento.", reintentar)
                 avisos.append(f"{nombre}: ha pedido esperar antes de volver a consultarla.")
                 continue
             if isinstance(outcome, ReintentosAgotados) and outcome.ultimo_codigo == 429:

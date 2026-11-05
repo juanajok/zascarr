@@ -270,3 +270,24 @@ async def test_los_motivos_son_texto_para_la_persona_sin_identificadores(monkeyp
         assert ".env" not in texto and "API_KEY" not in texto
         assert "Traceback" not in texto and "RuntimeError" not in texto
         assert "http://" not in texto and "https://" not in texto
+
+
+# ── #134 §6.5: la espera por cortesía NO es un estado nuevo; es `limite_de_cortesia` ─────────
+
+async def test_cortesia_en_espera_es_limite_de_cortesia_con_el_aviso_6_5(monkeypatch):
+    b = await _busca(monkeypatch, al=_limite(42))
+    assert b.fuentes["anilist"] == FUENTE_LIMITE_DE_CORTESIA
+    assert "espera" not in b.fuentes.values()
+    detalle = b.detalles["anilist"]
+    assert detalle.estado == FUENTE_LIMITE_DE_CORTESIA and detalle.reintentar_en == 42
+    assert "por cortesía" in detalle.motivo and "No se ha enviado nada" in detalle.motivo
+    assert "~42 s" in detalle.motivo
+    assert b.fuentes["anilist"] != FUENTE_FALLO_TRANSITORIO
+
+
+async def test_la_espera_sin_estimacion_no_inventa_segundos(monkeypatch):
+    b = await _busca(monkeypatch, al=_limite(0))
+    detalle = b.detalles["anilist"]
+    assert b.fuentes["anilist"] == FUENTE_LIMITE_DE_CORTESIA
+    assert detalle.reintentar_en is None and "~" not in detalle.motivo
+    assert "hay que esperar por cortesía" in detalle.motivo

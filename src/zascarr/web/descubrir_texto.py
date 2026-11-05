@@ -212,7 +212,10 @@ def resumir(estados: dict[str, str], n_resultados: int,
     if not consultadas and not fallos and not sin_configurar and not con_limite:
         avisos.append("No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar.")
 
-    if n_resultados > 0:
+    if not consultadas and con_limite and not fallos:
+        # #134 §6.5: si no se consultó ninguna por cortesía, no se habla de «resultados».
+        cabeza = "Todavía no se ha consultado ninguna fuente: hay que esperar por cortesía."
+    elif n_resultados > 0:
         cabeza = "1 resultado." if n_resultados == 1 else f"{n_resultados} resultados."
     elif sin_coincidencias:
         # Solo se afirma «no hay resultados» de una fuente que respondió sin coincidencias.
