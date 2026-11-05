@@ -1,8 +1,8 @@
 # Disponibilidad de los archivos y resultado de la comprobación (BL-R2, #231)
 
-> Contrato **implementado** de la historia #231 (hija de #228), sobre `main` `b7e8a09`. Ficha de referencias: `docs/design/benchmark-reconciliacion-plex.md`
-> (§10, Sonarr/Radarr leídos el 2026-10-28). **Sin migración**: todo vive en `import_runs.details` (JSONB) y en las columnas que ya existían.
-> No cambia umbrales ni reglas de baja de B7.
+> Contrato **implementado** de la historia #231 (hija de #228), sobre `main` `b7e8a09`; revisado para el cierre el 2026-11-05
+> (§10). Ficha de referencias: `docs/design/benchmark-reconciliacion-plex.md` (§10, Sonarr/Radarr leídos el 2026-10-28).
+> **Sin migración**: todo vive en `import_runs.details` (JSONB) y en las columnas que ya existían. No cambia umbrales ni reglas de baja de B7.
 
 ## 1. Qué hace
 
@@ -102,3 +102,24 @@ con una conexión nueva cada una.
 
 Una petición a la lista = 4 consultas (≤ 5 del umbral propuesto); Estado = 3. RSS del proceso: sin aumento medible (91 MiB). **Son cifras de
 un portátil, no del hardware de destino:** no acreditan el p95 ≤ 1 s en una Pi 4/5 con la base en su disco. Sigue siendo NOT RUN allí.
+
+
+## 10. Cierre y aceptación (2026-11-05)
+
+Revisión de cierre sobre `main` `6cde4ab`; la app desplegada en la Pi es `9d7fedf` (el código de esta historia ya estaba
+allí). No cambia el contrato de §1–§6.
+
+- **Criterios 1–12:** 12/12 con prueba (`§7`). Ejecutados con PostgreSQL 15 real: **55 pasadas, 0 fallos** (38 sin BD +
+  17 de `test_disponibilidad_pg.py`), incluidas las 12 tablas de §7, idempotencia, ciclos antiguos, paginación de 250,
+  cursor estable y navegación sin escrituras.
+- **Pantallas:** navegador local con Chrome 156 y datos sintéticos (no la Pi), en los tres estados de Estado —comprobada,
+  raíz vacía con «Última comprobación válida» y sin dato— y la lista de 4 no disponibles con el orden acordado (fecha
+  descendente; sin fecha al final), total visible, serie/número, archivo sin vincular y «Sin fecha». Ningún mensaje
+  afirma desmontaje ni pérdida.
+- **BL-R0:** el hueco `[NV]` de Sonarr/Radarr se cerró en `benchmark-reconciliacion-plex.md` §10. Plex sigue sin leerse
+  (HTTP 403) y no se usa; la evidencia limitada ya declarada se acepta al cerrar la historia. La dependencia BL-R0
+  queda cubierta para esta entrega.
+- **Aceptación:** el PO cierra la historia con esta revisión. Se aceptan como límites declarados, no como PASS, los
+  **NOT RUN** de §8: rendimiento en la Pi (p95/32 MiB), lector de pantalla real y biblioteca real. Las cifras locales de
+  §9 son de portátil y **no** se presentan como medición de la Pi. El despliegue en la Pi está hecho con `9d7fedf`; esta
+  revisión no ha vuelto a entrar en esa instancia.
