@@ -318,13 +318,18 @@ async def portada(series_id: UUID, request: Request,
         return cached_image_response(request, data, "image/jpeg", _etag_for(legacy_path))
 
     # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
+    motivo_fallo: list[str] = []
     if (series.cover_url and not es_portada_de_relleno(series.cover_url)
             and await fetch_and_cache_cover(series.cover_url, v2_path,
-                                            ancho=SERIES_COVER_MAX_WIDTH)):
+                                            ancho=SERIES_COVER_MAX_WIDTH,
+                                            motivo_fallo=motivo_fallo)):
         data = await asyncio.to_thread(v2_path.read_bytes)
         return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
 
-    raise HTTPException(status_code=404, detail="Sin portada disponible")
+    # Una espera de cortesía no es un «no hay portada» definitivo: el navegador no debe
+    # cachear la ausencia (mañana podría descargarse).
+    cabeceras = {"Cache-Control": "no-store"} if "cortesia" in motivo_fallo else None
+    raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
 
 
 def _etag_for(path: Path) -> str:

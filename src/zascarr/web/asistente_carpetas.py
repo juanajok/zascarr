@@ -34,11 +34,14 @@ from zascarr.services.descubrimiento_grupo import (
     tradiciones_de_la_carpeta,
 )
 from zascarr.services.discovery import (
+    CAPACIDAD_BUSQUEDA,
     FUENTE_APAGADA,
-    FUENTE_ERROR,
+    FUENTE_CONFIGURACION_INCOMPLETA,
+    FUENTE_FALLO_TRANSITORIO,
+    FUENTE_LIMITE_DE_CORTESIA,
     FUENTE_OK,
-    FUENTE_SIN_CLAVE,
-    ORDEN_DE_FUENTES,
+    FUENTE_SIN_RESULTADOS,
+    EstadoFuente,
 )
 from zascarr.services.review import ReviewService
 from zascarr.services.revision_carpetas import RevisionCarpetas
@@ -48,6 +51,7 @@ from zascarr.services.tokens_revision import (
     MAX_TOKEN_CANDIDATA,
     verificar_token_candidata,
 )
+from zascarr.web.descubrir_texto import detalles_visibles
 from zascarr.web.discovery import preparar_vista_previa
 from zascarr.web.library import _TRADICION_LABEL
 from zascarr.web.routes import crear_templates
@@ -60,13 +64,12 @@ RUTA = "/ui/pendientes/carpetas/asistente"
 
 _NOMBRE_FUENTE = {"comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera", "gcd": "GCD"}
 
-#: estado de una fuente → (estado del chip, texto para la persona). «error» NO es «sin coincidencias».
-_ESTADO_DE_FUENTE = {
-    FUENTE_OK: ("ok", "ha respondido"),
-    FUENTE_APAGADA: ("neutro", "apagada en los ajustes"),
-    FUENTE_SIN_CLAVE: ("amber", "sin clave configurada"),
-    FUENTE_ERROR: ("warn", "no ha respondido ahora mismo"),
-}
+#: Estados del conjunto cerrado #133 que implican que la fuente SÍ llegó a consultarse (o se
+#: intentó). Los demás (apagada, sin configurar) no generan tráfico.
+_ESTADOS_QUE_CONSULTAN = (FUENTE_OK, FUENTE_SIN_RESULTADOS, FUENTE_FALLO_TRANSITORIO, FUENTE_LIMITE_DE_CORTESIA)
+
+#: Prefijo del aviso del servicio que no tiene estado por fuente (resultado que no se puede firmar).
+_PREFIJO_DE_OMISION = "Se han omitido"
 
 MENSAJE_SIN_CLAVE = "ZascArr no tiene clave para firmar lo que ves: reinícialo e inténtalo de nuevo."
 MENSAJE_BUSQUEDA_CADUCADA = ("Esa búsqueda ya no vale (ha caducado o no es de esta carpeta). "
@@ -135,6 +138,15 @@ async def abrir(
     return await _pagina(request, db, clave, consulta=consulta)
 
 
+def _detalles_de(r) -> dict[str, EstadoFuente]:
+    """Los detalles por fuente. Si un contrato antiguo solo trae `fuentes`, se completa el estado
+    sin inventar motivo ni plazo (la UI no deduce causas)."""
+    if r.detalles:
+        return r.detalles
+    return {nombre: EstadoFuente(fuente=nombre, capacidad=CAPACIDAD_BUSQUEDA, estado=estado)
+            for nombre, estado in r.fuentes.items()}
+
+
 @router.post("/buscar", response_class=HTMLResponse)
 async def buscar(
     request: Request,
@@ -149,16 +161,25 @@ async def buscar(
         espera = e.headers.get("Retry-After") if e.headers else None
         return _sin_cache(templates.TemplateResponse(request, "_asistente_resultados.html", {
             "error": str(e.detail), "espera": espera, "clave": clave, "r": None}))
-    fuentes = []
-    for f in ORDEN_DE_FUENTES:
-        estado = r.fuentes.get(f.value, FUENTE_APAGADA)
-        chip, texto = _ESTADO_DE_FUENTE.get(estado, ("warn", "estado desconocido"))
-        fuentes.append({"nombre": _NOMBRE_FUENTE.get(f.value, f.value), "estado": estado, "chip": chip, "texto": texto})
-    consultadas = [f for f in fuentes if f["estado"] in (FUENTE_OK, FUENTE_ERROR)]
+    fuentes = [
+        {"nombre": d.fuente, "capacidad": d.capacidad, "estado": d.estado, "chip": d.chip,
+         "texto": d.texto, "motivo": d.motivo, "reintentar_en": d.reintentar_en}
+        for d in detalles_visibles(_detalles_de(r))
+    ]
+    respondieron = [f["nombre"] for f in fuentes if f["estado"] in (FUENTE_OK, FUENTE_SIN_RESULTADOS)]
+    con_error = [f for f in fuentes if f["estado"] == FUENTE_FALLO_TRANSITORIO]
+    con_limite = [f for f in fuentes if f["estado"] == FUENTE_LIMITE_DE_CORTESIA]
+    sin_configurar = [f for f in fuentes if f["estado"] == FUENTE_CONFIGURACION_INCOMPLETA]
+    apagadas = [f for f in fuentes if f["estado"] == FUENTE_APAGADA]
+    hubo_consulta = any(f["estado"] in _ESTADOS_QUE_CONSULTAN for f in fuentes)
+    # El estado de cada fuente ya se pinta desde `detalles` (con motivo y reintento); de los avisos
+    # del servicio solo se conserva lo que NO tiene estado por fuente: resultados omitidos al firmar.
+    avisos_de_omision = [a for a in r.avisos if a.startswith(_PREFIJO_DE_OMISION)]
     return _sin_cache(templates.TemplateResponse(request, "_asistente_resultados.html", {
         "error": None, "espera": None, "clave": clave, "r": r, "fuentes": fuentes,
-        "con_error": [f for f in fuentes if f["estado"] == FUENTE_ERROR],
-        "hubo_consulta": bool(consultadas),
+        "con_error": con_error, "con_limite": con_limite, "sin_configurar": sin_configurar,
+        "apagadas": apagadas, "respondieron": respondieron, "hubo_consulta": hubo_consulta,
+        "avisos_de_omision": avisos_de_omision,
         "tradiciones": _tradiciones(),
         "pista": _pista_de_carpeta(clave, tradiciones_de_la_carpeta(clave)),
         "etiqueta_de_tradicion": _etiqueta_de_tradicion,
