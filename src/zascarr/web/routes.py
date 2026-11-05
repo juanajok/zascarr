@@ -40,7 +40,11 @@ def crear_templates() -> Jinja2Templates:
         Se lee de la query de la petición (en un POST, de la query del `action`), que
         es donde vive por decisión del PO: sin sesión, sin cookie y sin parámetro de
         retorno."""
-        contexto = ContextoCarpetas.desde(request)
+        if getattr(request.state, "sin_contexto_carpetas", False):
+            # «Resultado guardado» (excepción del PO, §6.4): no propaga el contexto de la lista.
+            contexto = ContextoCarpetas()
+        else:
+            contexto = ContextoCarpetas.desde(request)
 
         def _con_contexto(url: str) -> str:
             return contexto.url(str(url))
