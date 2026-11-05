@@ -36,9 +36,13 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
+from zascarr.config import get_settings
 from zascarr.utils.cortesia import (
     CortesiaProceso,
+    FuenteApagada,
     cortesia_de_proceso,
+    fuente_de_host_portada,
+    fuente_habilitada,
     intervalo_de_portada,
 )
 
@@ -220,19 +224,27 @@ async def descargar_imagen(url: str, *, resolutor: Resolutor | None = None,
                            cortesia: CortesiaProceso | None = None,
                            reloj: Callable[[], float] = time.monotonic,
                            dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
-                           espera_max_s: float = ESPERA_MAX_PORTADA_S) -> bytes:
+                           espera_max_s: float = ESPERA_MAX_PORTADA_S,
+                           ajustes=None) -> bytes:
     """Los bytes de la portada, o `UrlNoPermitidaError` / un error de `httpx` si no se puede. La política se aplica
     en CADA salto; la URL inicial además debe ser de la lista de fuentes.
 
     Cada salto pasa por la cola de cortesía **del host** (nivel host solo, §3.1): la portada no tiene
-    «fuente» en la URL, y el intervalo sale del mapa allowlist→fuente. Esa espera no reintenta."""
+    «fuente» en la URL, y el intervalo sale del mapa allowlist→fuente. Esa espera no reintenta.
+
+    La fuente del host de CADA salto también se comprueba: un 302 a un host de una fuente apagada
+    no se descarga (AC-12/AC-15)."""
     resolutor = resolutor or resolver_dns
     crear_cliente = crear_cliente or _cliente_por_defecto
     servicio = cortesia or cortesia_de_proceso()
+    ajustes = ajustes if ajustes is not None else get_settings()
     actual = url
     async with asyncio.timeout(TIEMPO_TOTAL_S):
         for salto in range(MAX_SALTOS + 1):
             esquema, host, puerto, ruta = analizar_url(actual, exigir_lista=(salto == 0))
+            fuente = fuente_de_host_portada(host)
+            if fuente is not None and not fuente_habilitada(fuente, ajustes):
+                raise FuenteApagada(fuente)
             origen = f"{esquema}://{host}:{puerto or _PUERTO_POR_DEFECTO[esquema]}"
             await servicio.esperar(
                 "portada", origen, motivo="portada", espera_max_s=espera_max_s,

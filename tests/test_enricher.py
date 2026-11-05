@@ -604,6 +604,25 @@ class TestCacheNegativaH2:
         assert series.enrichment_attempted_at is None
         assert report.errors
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("excepcion", [
+        CortesiaEnEspera("comicvine", "https://comicvine.gamespot.com:443", 10.0,
+                         "bloqueo_fuente"),
+        FuenteApagada("comicvine"),
+    ])
+    async def test_espera_o_apagada_no_es_fallo_ni_consume_los_30_dias(self, excepcion):
+        """AC-16: una fuente sin turno no se marca como error ni como intento fallido."""
+        series = make_series("Batman")
+        client = AsyncMock()
+        client.search_series.side_effect = excepcion
+        service = EnrichmentService(db=FakeSession([FakeExecResult([series])]))
+        report = EnrichmentReport()
+
+        await service._enrich_series_batch(client, AsyncMock(), AsyncMock(), 10, report)
+
+        assert report.errors == [] and report.series_no_match == []
+        assert series.enrichment_attempted_at is None
+
     def test_query_de_series_filtra_por_attempted_at(self):
         """No hay DB real en esta suite: se verifica que el WHERE generado
         usa IS NULL / comparación temporal sobre enrichment_attempted_at."""

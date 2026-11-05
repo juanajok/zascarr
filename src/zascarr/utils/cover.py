@@ -177,7 +177,8 @@ async def fetch_and_cache_cover(url: str, dest: Path, *,
                                  reloj=time.monotonic,
                                  dormir=asyncio.sleep,
                                  espera_max_s: float = ESPERA_MAX_PORTADA_S,
-                                 resolutor=None, crear_cliente=None) -> bool:
+                                 resolutor=None, crear_cliente=None,
+                                 motivo_fallo: list[str] | None = None) -> bool:
     """Descarga `url` (portada externa de Comic Vine/AniList/Tebeosfera/GCD), la redimensiona y
     la guarda en `dest`. Devuelve False sin lanzar si algo falla (URL no permitida, URL muerta,
     timeout, imagen ilegible): no se cachea nada en ese caso.
@@ -195,10 +196,13 @@ async def fetch_and_cache_cover(url: str, dest: Path, *,
     de peticiones a un CDN externo cuando una rejilla entera de tarjetas carga en frío. El
     decode/resize de Pillow es síncrono y se manda a un hilo aparte.
     """
+    ajustes = get_settings()
     # AC-12/AC-15: una fuente apagada no recibe portadas (se apaga en Ajustes, no en el .env).
     fuente = fuente_de_host_portada(host_para_log(url))
-    if fuente is not None and not fuente_habilitada(fuente, get_settings()):
+    if fuente is not None and not fuente_habilitada(fuente, ajustes):
         logger.info("cover.fuente_apagada", fuente=fuente)
+        if motivo_fallo is not None:
+            motivo_fallo.append("apagada")
         return False
 
     async with _COVER_FETCH_SEMAPHORE:
@@ -206,11 +210,13 @@ async def fetch_and_cache_cover(url: str, dest: Path, *,
             content = await descargar_imagen(
                 url, cortesia=cortesia, reloj=reloj, dormir=dormir,
                 espera_max_s=espera_max_s, resolutor=resolutor,
-                crear_cliente=crear_cliente)
+                crear_cliente=crear_cliente, ajustes=ajustes)
         except CortesiaEnEspera as exc:
             # Espera visible sin prometer recuperación: no se envía y la ausencia no se cachea.
             logger.info("cover.cortesia_en_espera", motivo=exc.motivo,
                         espera_s=round(exc.espera_estimada_s, 1))
+            if motivo_fallo is not None:
+                motivo_fallo.append("cortesia")
             return False
         except UrlNoPermitidaError as exc:
             # Solo el host y el código: la URL entera puede llevar credenciales o claves.

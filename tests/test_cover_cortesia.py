@@ -19,16 +19,19 @@ from PIL import Image
 
 from zascarr.utils import cover as modulo_cover
 from zascarr.utils import url_portada
-from zascarr.utils.cortesia import CortesiaEnEspera, CortesiaProceso
+from zascarr.utils.cortesia import CortesiaEnEspera, CortesiaProceso, FuenteApagada
 from zascarr.utils.cover import fetch_and_cache_cover
 from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_imagen
 
 @pytest.fixture(autouse=True)
 def _fuentes_encendidas(monkeypatch):
     """Una fuente apagada no recibe portadas (AC-15); el caso apagado tiene su propia prueba."""
-    monkeypatch.setattr("zascarr.utils.cover.get_settings", lambda: SimpleNamespace(
+    encendidas = SimpleNamespace(
         comicvine_enabled=True, anilist_enabled=True, tebeosfera_enabled=True,
-        gcd_enabled=True, forum_enabled=False, forum_url=""))
+        gcd_enabled=True, forum_enabled=False, forum_url="")
+    monkeypatch.setattr("zascarr.utils.cover.get_settings", lambda: encendidas)
+    # `descargar_imagen` comprueba la fuente de CADA salto por su cuenta.
+    monkeypatch.setattr("zascarr.utils.url_portada.get_settings", lambda: encendidas)
 
 
 URL_CV = "https://comicvine.gamespot.com/a/uploads/cover.jpg"
@@ -127,6 +130,19 @@ class TestCadaSaltoPorLaColaDelHost:
             await _descargar(mundo)
         assert exc.value.espera_estimada_s == pytest.approx(10.0)
         assert mundo.peticiones == [] and mundo.resoluciones == []
+
+
+class TestFuenteApagadaPorSalto:
+    async def test_un_salto_a_una_fuente_apagada_no_se_descarga(self, monkeypatch):
+        """AC-15: el host inicial es de CV (encendida), pero el 302 va a AniList (apagada)."""
+        apagadas = SimpleNamespace(
+            comicvine_enabled=True, anilist_enabled=False, tebeosfera_enabled=False,
+            gcd_enabled=False, forum_enabled=False, forum_url="")
+        monkeypatch.setattr("zascarr.utils.url_portada.get_settings", lambda: apagadas)
+        mundo = _mundo(lambda r: httpx.Response(302, headers={"location": "https://s4.anilist.co/x"}))
+        with pytest.raises(FuenteApagada):
+            await _descargar(mundo)
+        assert len(mundo.peticiones) == 1
 
 
 class TestCoverFetch:

@@ -109,10 +109,12 @@ class ForumScraper:
                 client, "POST", f"{self._base}/index.php?act=Login&CODE=01",
                 politica=self._politica, espera_max_s=self._espera_max_s,
                 datos={"UserName": username, "PassWord": password, "CookieDate": "1"},
-                form=True, permitir_apagada=True, cortesia=self._cortesia,
+                form=True, cortesia=self._cortesia,
                 reloj=self._reloj, dormir=self._dormir,
             )
-            for k, v in r.cookies.items():
+            # El jar del cliente conserva también las cookies de un 302 intermedio (IPB
+            # responde 302 + Set-Cookie); `r.cookies` (respuesta final) llegaría vacío.
+            for k, v in client.cookies.items():
                 self._cookies[k] = v
             self._logged_in = bool(self._cookies) and r.status_code in (200, 301, 302)
             return self._logged_in
@@ -167,7 +169,7 @@ class ForumScraper:
                 r = await pedir_con_cortesia(
                     client, "GET", url, politica=self._politica,
                     espera_max_s=self._espera_max_s, cabeceras=self._cabeceras(url),
-                    permitir_apagada=True, cortesia=self._cortesia,
+                    cortesia=self._cortesia,
                     reloj=self._reloj, dormir=self._dormir,
                 )
             except RedireccionNoPermitida as exc:

@@ -23,6 +23,15 @@ from zascarr.services.forum_scraper import (
     origen_de,
 )
 
+@pytest.fixture(autouse=True)
+def _foro_encendido(monkeypatch):
+    """La puerta de fuente apagada de la envoltura lee la configuración real: aquí, encendida."""
+    from types import SimpleNamespace
+    monkeypatch.setattr("zascarr.config.get_settings", lambda: SimpleNamespace(
+        forum_enabled=True, forum_url=BASE, comicvine_enabled=False, anilist_enabled=False,
+        tebeosfera_enabled=False, gcd_enabled=False))
+
+
 BASE = "https://foro.example"
 COOKIE = "member_id=1; pass_hash=SECRETA"
 ED2K = "ed2k://|file|Tebeo_01.cbr|1234|ABCDEF0123456789ABCDEF0123456789|/"
@@ -333,3 +342,28 @@ class TestOrigen:
     @pytest.mark.parametrize("url", ["", "file:///x", "javascript:x", "https://", "https://foro.example:99999/"])
     def test_lo_que_no_es_http_valido_no_tiene_origen(self, url):
         assert origen_de(url) is None
+
+
+class TestLoginConRedireccion:
+
+    async def test_login_con_302_y_set_cookie_conserva_la_sesion(self):
+        """IPB responde 302 + Set-Cookie: la cookie queda en el jar del cliente, no en la final."""
+        peticiones = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            peticiones.append(str(request.url))
+            if "act=Login" in str(request.url):
+                return httpx.Response(302, headers={
+                    "location": "/index.php",
+                    "set-cookie": "member_id=42; Path=/; HttpOnly",
+                })
+            return httpx.Response(200, text="<html>Dentro</html>")
+
+        def cliente() -> httpx.AsyncClient:
+            return httpx.AsyncClient(transport=httpx.MockTransport(handler),
+                                     follow_redirects=False)
+
+        scraper = ForumScraper(BASE, rate_limit=0, crear_cliente=cliente)
+        assert await scraper.login("usuario", "clave") is True
+        assert scraper._cookies.get("member_id") == "42"
+        assert len(peticiones) == 2                      # login + salto al índice

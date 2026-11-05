@@ -458,7 +458,11 @@ class CortesiaProceso:
         host = clave_de_host(host)
         if not host:
             raise ValueError("el host efectivo no puede estar vacío")
-        self._fuentes_por_host.setdefault(host, set()).add(fuente)
+        # «portada» no es una fuente con intervalo fijo: su ritmo es POR HOST y se pasa en
+        # `intervalo_s`. Si se registrara aquí, su 2,5 s se contagiaría a la fuente real del host
+        # (Comic Vine pasaría a esperar 2,5 s en vez de 1,0 s).
+        if fuente != "portada":
+            self._fuentes_por_host.setdefault(host, set()).add(fuente)
         self._politica(fuente)
         return Turno(self, fuente, host, motivo=motivo, espera_max_s=espera_max_s,
                      intervalo_s=intervalo_s, solo_host=solo_host)

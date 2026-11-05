@@ -117,7 +117,7 @@ class GCDClient:
             r = await pedir_con_cortesia(
                 self._client, "GET", f"{_BASE_URL}/series/name/{quote(query, safe='')}/",
                 politica=self._politica, espera_max_s=self._espera_max_s,
-                permitir_apagada=True, cortesia=self._cortesia,
+                cortesia=self._cortesia,
                 reloj=self._reloj, dormir=self._dormir,
             )
             data = r.json()

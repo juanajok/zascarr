@@ -27,9 +27,12 @@ import pytest
 def _fuentes_encendidas_cover(monkeypatch):
     """Una fuente apagada no recibe portadas (AC-15); estas pruebas son del camino permitido."""
     from types import SimpleNamespace
-    monkeypatch.setattr("zascarr.utils.cover.get_settings", lambda: SimpleNamespace(
+    encendidas = SimpleNamespace(
         comicvine_enabled=True, anilist_enabled=True, tebeosfera_enabled=True,
-        gcd_enabled=True, forum_enabled=False, forum_url=""))
+        gcd_enabled=True, forum_enabled=False, forum_url="")
+    monkeypatch.setattr("zascarr.utils.cover.get_settings", lambda: encendidas)
+    # `descargar_imagen` comprueba la fuente de CADA salto por su cuenta.
+    monkeypatch.setattr("zascarr.utils.url_portada.get_settings", lambda: encendidas)
 import structlog
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -539,6 +542,24 @@ class TestPuntosDeEntrada:
                 "source": "comic_vine", "external_id": "1234", "title": "Batman",
                 "tradition": "american", "cover_url": CV})
         assert r.status_code == 422 and sesion.added == []
+
+    def test_el_404_por_cortesia_no_deja_cachear_la_ausencia(self, tmp_path, monkeypatch):
+        """AC-12: una espera de cortesía no es «no hay portada» definitivo; el 404 no se cachea."""
+        from zascarr.config import get_settings
+        monkeypatch.setattr("zascarr.web.series.get_settings",
+                            lambda: get_settings().model_copy(update={"covers_cache_path": tmp_path}))
+
+        async def _sin_descarga(_url, _dest, *, ancho, motivo_fallo=None):
+            if motivo_fallo is not None:
+                motivo_fallo.append("cortesia")
+            return False
+
+        monkeypatch.setattr("zascarr.web.series.fetch_and_cache_cover", _sin_descarga)
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       cover_url="https://comicvine.gamespot.com/a/uploads/cover.jpg")
+        with _Cliente(_Sesion(serie=serie)) as client:
+            r = client.get(f"/ui/series/{serie.id}/portada")
+        assert r.status_code == 404 and r.headers.get("cache-control") == "no-store"
 
     def test_un_registro_guardado_con_una_url_hostil_no_dispara_ninguna_peticion_desde_la_cascada(
             self, tmp_path, monkeypatch):

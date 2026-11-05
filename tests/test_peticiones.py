@@ -364,6 +364,28 @@ class TestFuenteApagada:
                 await _pedir(cliente, reloj, lim)
         assert peticiones == [] and lim.snapshot(Apaga).fuentes if False else peticiones == []
 
+    async def test_si_la_fuente_se_apaga_durante_la_espera_no_se_envia(self, monkeypatch):
+        """QA/Seguridad: la puerta se vuelve a mirar DESPUÉS de esperar y antes de enviar."""
+        ajustes = SimpleNamespace(
+            comicvine_enabled=True, anilist_enabled=True, tebeosfera_enabled=False,
+            gcd_enabled=False, forum_enabled=False, forum_url="")
+        monkeypatch.setattr("zascarr.config.get_settings", lambda: ajustes)
+        peticiones = []
+        cliente, reloj, lim = _mundo(
+            lambda r: peticiones.append(1) or httpx.Response(200, json={}))
+        lim.bloquear("comicvine", "https://comicvine.gamespot.com:443", 2.0, motivo="429")
+
+        async def dormir_y_apagar(segundos):
+            reloj.dormidos.append(segundos)
+            ajustes.comicvine_enabled = False
+            await asyncio.sleep(0)
+            reloj.t += segundos
+        lim._dormir = dormir_y_apagar
+        async with cliente:
+            with pytest.raises(FuenteApagada):
+                await _pedir(cliente, reloj, lim, espera_max_s=30.0)
+        assert peticiones == []
+
     async def test_si_la_fuente_se_apaga_entre_saltos_no_se_envia_el_siguiente(self, monkeypatch):
         """AC-15: la puerta se comprueba antes de CADA salto, no solo antes del intento."""
         ajustes = SimpleNamespace(
