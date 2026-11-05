@@ -28,6 +28,17 @@ from zascarr.services.auth import (
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
 from zascarr.services.seguridad import MODOS, fijar_seguridad
+from zascarr.utils.cortesia import (
+    CortesiaEnEspera,
+    FuenteApagada,
+    politica_de,
+)
+from zascarr.utils.peticiones import (
+    ErrorDePeticion,
+    ReintentosAgotados,
+    RespuestaNoTransitoria,
+    pedir_con_cortesia,
+)
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -371,24 +382,36 @@ async def probar_amule(
 
 
 async def _test_comic_vine(api_key: str) -> tuple[bool, str]:
+    """Prueba manual de conexión: pasa por la cortesía compartida (#134).
+
+    Es la excepción explícita a «fuente apagada» (acción del operador) y **no reintenta**: un
+    presupuesto de 10 s para una acción interactiva, con la política de Comic Vine a un intento.
+    """
     if not api_key:
         return False, "Falta la clave de API."
+    from dataclasses import replace
+    politica = replace(politica_de("comicvine"), max_intentos=1)
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(
-                "https://comicvine.gamespot.com/api/search/",
-                params={"api_key": api_key, "query": "test", "resources": "volume",
-                        "format": "json", "limit": 1},
-                headers={"User-Agent": "ZascArr/0.1"},
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+            r = await pedir_con_cortesia(
+                client, "GET", "https://comicvine.gamespot.com/api/search/",
+                politica=politica, espera_max_s=10.0, permitir_apagada=True,
+                datos={"api_key": api_key, "query": "test", "resources": "volume",
+                       "format": "json", "limit": 1},
             )
-        if r.status_code != 200:
-            return False, f"Comic Vine respondió HTTP {r.status_code}."
         data = r.json()
         if data.get("error") == "OK":
             return True, "Conexión correcta."
         return False, f"Comic Vine rechazó la clave: {data.get('error')}"
-    except httpx.HTTPError as exc:
-        logger.warning("ajustes.test_failed", integracion="comic_vine", error=str(exc))
+    except CortesiaEnEspera as exc:
+        segundos = max(1, round(exc.espera_estimada_s))
+        return False, ("No se ha probado: hay que esperar ~" f"{segundos} s por cortesía. "
+                       "Inténtalo de nuevo en un momento.")
+    except RespuestaNoTransitoria as exc:
+        return False, f"Comic Vine respondió HTTP {exc.codigo}."
+    except (ReintentosAgotados, FuenteApagada, httpx.HTTPError, ErrorDePeticion) as exc:
+        logger.warning("ajustes.test_failed", integracion="comic_vine",
+                       error=type(exc).__name__)
         return False, "No se pudo conectar (red o timeout)."
 
 
