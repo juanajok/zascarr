@@ -426,20 +426,23 @@ de ADR 0015 (no creado en este encargo):
 
 ---
 
-## 7. Plan de medición delta (criterio 2) — NO RUN
+## 7. Plan de medición delta (criterio 2) — EJECUTADA EN PARTE (M1–M4; M5 NOT RUN)
 
-**Estado: NOT RUN.** Requiere autorización expresa del PO y acceso a la base y
-al disco reales. No se ha leído la biblioteca ni ejecutado SQL.
+**Estado:** M1–M4 **ejecutadas** en la Pi del PO el 2026-11-05, en una sesión
+`default_transaction_read_only=on`; resultados y caveat de truncado en
+[`medicion-BL-DUP0-2026-11-05.md`](medicion-BL-DUP0-2026-11-05.md). **M5 sigue
+NOT RUN** (requiere `stat` dentro del contenedor de la app). La medición no
+volvió a ejecutar la auditoría ni escribió nada.
 
 ### 7.1 Las cinco métricas
 
-| # | Métrica | Unidad | Definición operativa | Fuente |
-|---|---|---|---|---|
-| M1 | Grupos por clase | grupo | `mismo_contenido`, `misma_obra`, `carpetas_repetidas`, `carpetas_vacias`, `no_reconocidos`; para idénticos, ficheros y bytes | `import_runs.details` + contadores |
-| M2 | Grupos idénticos con copia en catálogo (y vinculada) | grupo | ≥1 ruta del grupo coincide con `files.file_path` con `is_missing = false`; «vinculada» = esa fila tiene `issue_id` no nulo | `details` + `files` |
-| M3 | Grupos que cruzan carpetas de tradición | grupo | ≥2 primeras carpetas distintas bajo la biblioteca (proxy de tradición: `Comics`, `Manga`, `Tebeos`…); variante estricta con `series.tradition` para grupos con ≥2 copias en catálogo | `details` + `files`/`issues`/`series` |
-| M4 | Carpetas subconjunto | par y carpeta | `solo_en_a = 0` o `solo_en_b = 0` en `carpetas_repetidas`; contar pares y carpetas distintas | `details` |
-| M5 | Grupos que cruzan monturas | grupo | ≥2 `st_dev` distintos (o puntos de montaje distintos) entre las rutas del grupo; ficheros no `stat`ables aparte | rutas + `stat`/`/proc/self/mountinfo` dentro del contenedor |
+| # | Métrica | Unidad | Definición operativa | Fuente | Estado |
+|---|---|---|---|---|---|
+| M1 | Grupos por clase | grupo | `mismo_contenido`, `misma_obra`, `carpetas_repetidas`, `carpetas_vacias`, `no_reconocidos`; para idénticos, ficheros y bytes | `import_runs.details` + contadores | **Ejecutada**; contadores completos; lista 200/215 |
+| M2 | Grupos idénticos con copia en catálogo (y vinculada) | grupo | ≥1 ruta del grupo coincide con `files.file_path` con `is_missing = false`; «vinculada» = esa fila tiene `issue_id` no nulo | `details` + `files` | **Ejecutada** sobre 200/215 (mínimo) |
+| M3 | Grupos que cruzan carpetas de tradición | grupo | ≥2 primeras carpetas distintas bajo la biblioteca (proxy de tradición: `Comics`, `Manga`, `Tebeos`…); variante estricta con `series.tradition` para grupos con ≥2 copias en catálogo | `details` + `files`/`issues`/`series` | **Ejecutada** sobre 200/215 (mínimo) |
+| M4 | Carpetas subconjunto | par y carpeta | `solo_en_a = 0` o `solo_en_b = 0` en `carpetas_repetidas`; contar pares y carpetas distintas | `details` | **Ejecutada** (6 pares; mínimo por la regla del encargo) |
+| M5 | Grupos que cruzan monturas | grupo | ≥2 `st_dev` distintos (o puntos de montaje distintos) entre las rutas del grupo; ficheros no `stat`ables aparte | rutas + `stat`/`/proc/self/mountinfo` dentro del contenedor | **NOT RUN** |
 
 **Delta sobre #297:** el censo ya da 222 copias exactas (217 `.cbr`/`.cbz` +
 5 sin extensión), 8,1 GB las 217, sin enlaces duros. M1–M5 añaden grupos,
@@ -448,12 +451,12 @@ censo completo** si sus cifras siguen válidas.
 
 ### 7.2 Consultas de solo lectura (M1–M4)
 
-**Las consultas no se han ejecutado** (NOT RUN): antes de publicar cifras hay
-que validarlas contra el esquema real (nombres de columnas y forma del JSONB).
-`details->'truncado' = true` significa que las listas se recortaron a 200 y los
-grupos de M2–M4 son un **mínimo**, no el total; los contadores
-`duplicate_count`/`unsorted_count` sí son completos. Para M2–M4 completos, o
-bien el informe no está truncado, o se usa el respaldo de §7.3.
+**Consultas ejecutadas** el 2026-11-05 sobre el informe
+`48b5624f-49f6-4382-aa69-18d7bcb75b21` (2026-10-29 21:06:30 UTC), filtrando por
+`id` en lugar del «último informe». El informe tenía **`truncado = true`**: la
+lista se recortó a 200 de 215 grupos y M2–M4 son **mínimos**, no totales; los
+contadores `duplicate_count`/`unsorted_count` sí son completos. El respaldo de
+§7.3 no se ejecutó (no era necesario para publicar el mínimo).
 
 ```sql
 -- Todo en una transacción de solo lectura: se lanza con
@@ -626,17 +629,12 @@ docker exec -i -e PGOPTIONS='-c default_transaction_read_only=on' \
   las rutas, nombres y hashes se quedan en `/tmp` y no se pegan en la ficha, el
   issue ni el tablero.
 
-### 7.4 Qué se publicará (plantilla)
+### 7.4 Resultados publicados
 
-| Métrica | Valor | Unidad | Nota |
-|---|---:|---|---|
-| M1 grupos idénticos / ficheros / bytes | — | grupos / ficheros / GB | `bytes_recuperables` del informe |
-| M1 misma obra / carpetas repetidas / vacías / no reconocidos | — | grupos / pares / carpetas | — |
-| M2 con copia en catálogo / vinculada | — | grupos | — |
-| M3 cruzan primera carpeta / tradición estricta | — | grupos | proxy y estricta por separado |
-| M4 pares subconjunto / carpetas distintas | — | pares / carpetas | — |
-| M5 grupos que cruzan monturas / rutas ausentes | — | grupos / rutas | — |
-| `truncado` | — | sí/no | si sí, M2–M4 son mínimos |
+M1–M4 quedaron **ejecutadas**; **M5 sigue NOT RUN**. Las cifras, la naturaleza
+de cada una (completa o mínimo) y la lectura para D1–D4 están en
+[`medicion-BL-DUP0-2026-11-05.md`](medicion-BL-DUP0-2026-11-05.md). No se
+duplican aquí para que la ficha de resultados sea la única fuente de cifras.
 
 ---
 
@@ -645,7 +643,7 @@ docker exec -i -e PGOPTIONS='-c default_transaction_read_only=on' \
 | Criterio de #263 | Estado | Evidencia / motivo |
 |---|---|---|
 | 1. Ficha §13 con referencias, versiones, adoptar/adaptar/descartar y licencias | **PASS** | §2–§4; commit por referencia y licencia revisada |
-| 2. Medición en solo lectura sobre biblioteca real, métricas delta | **NOT RUN** | Requiere autorización expresa y acceso a la BD/disco; el plan y las consultas están listos (§7). No se ha ejecutado nada |
+| 2. Medición en solo lectura sobre biblioteca real, métricas delta | **PASS parcial / NOT RUN M5** | M1–M4 ejecutadas el 2026-11-05 con `truncado=true` (M2–M4 mínimos); M5 pendiente. Ficha: `medicion-BL-DUP0-2026-11-05.md` |
 | 3. Restricciones técnicas comprobadas (EXDEV, PUID/PGID, exclusión, adopción/auditoría/#232) | **PASS (por código/documentación)** | §5: EXDEV y PUID/PGID heredados; la exclusión **no existe hoy** y queda como requisito de BL-DUP1. No se ha probado en la Pi: **NOT RUN** la ejecución |
 | 4. Recomendación D1–D4 y propuesta de ADR | **PASS** | §6; ADR 0015 propuesto, no creado |
 | 5. PASS/FAIL/NOT RUN separados | **PASS** | esta tabla |

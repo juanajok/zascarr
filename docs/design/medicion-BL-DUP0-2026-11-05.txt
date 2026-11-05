@@ -1,0 +1,26 @@
+Salida íntegra de la medición BL-DUP0 (#263) — Pi del PO, 2026-11-05.
+Sesión psql con PGOPTIONS='-c default_transaction_read_only=on'. Solo lectura.
+
+?column?	id	started_at	files_scanned	duplicate_count	unsorted_count	truncado	grupos_identicos_lista	ficheros_identicos_lista	bytes_recuperables
+M1_informe	48b5624f-49f6-4382-aa69-18d7bcb75b21	2026-10-29 21:06:30.455589+00	1542	215	28	true	200	401	8058146534
+(1 row)
+
+?column?	grupos	con_copia_en_catalogo	con_copia_vinculada
+M2	200	200	112
+(1 row)
+
+?column?	cruzan_primera_carpeta	una_sola_carpeta	sin_raiz
+M3a	26	174	0
+(1 row)
+
+?column?	grupos	cruzan_tradicion	sin_mapeo
+M3b	200	0	88
+(1 row)
+
+?column?	pares	a_subconjunto_de_b	b_subconjunto_de_a	iguales
+M4	6	4	6	4
+(1 row)
+
+?column?	carpetas_subconjunto
+M4b	10
+(1 row)
