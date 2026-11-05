@@ -10,6 +10,20 @@
 {% for aviso in avisos %}
 <div class="{{ clase_aviso }}"><span class="aviso-icono" aria-hidden="true">?</span><div>{{ aviso }}</div></div>
 {% endfor %}
+{#- #133: estado por fuente y capacidad. La fuente puede no tener resultados, estar apagada, sin
+    configurar o haber pedido esperar: no es lo mismo y no se presenta como un fallo. El motivo lo
+    escribe el servicio; el reintento solo aparece si el contrato lo trae. -#}
+{% if detalles %}
+<ul class="carpeta-senales" aria-label="Estado de cada fuente">
+  {% for f in detalles %}
+  <li>
+    {{ ui.chip(f.chip, f.fuente ~ " · " ~ f.capacidad ~ ": " ~ f.texto) }}
+    {% if f.motivo %}<p class="caption">{{ f.motivo }}</p>{% endif %}
+    {% if f.reintentar_en %}<p class="caption">Puedes reintentar en {{ f.reintentar_en }} s.</p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
 {#- El recuento que ve quien mira la pantalla; el lector de pantalla ya lo tiene en la región viva, así que aquí se oculta. -#}
 {% if resultados %}<p class="discovery-count" aria-hidden="true">{{ resultados | length }} resultado{{ "s" if resultados | length != 1 }}</p>{% endif %}
 {% if not resultados %}
