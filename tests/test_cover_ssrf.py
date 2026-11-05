@@ -42,6 +42,7 @@ from zascarr.main import app
 from zascarr.models import ComicTradition, Series
 from zascarr.utils import cover as cover_mod
 from zascarr.utils import url_portada
+from zascarr.utils.cortesia import CortesiaEnEspera
 from zascarr.utils.cover import fetch_and_cache_cover
 from zascarr.utils.url_portada import (
     MAX_SALTOS,
@@ -544,15 +545,17 @@ class TestPuntosDeEntrada:
         assert r.status_code == 422 and sesion.added == []
 
     def test_el_404_de_descubrir_por_cortesia_tampoco_se_cachea(self, tmp_path, monkeypatch):
-        """El proxy de portadas de Descubrir pasa `motivo_fallo` igual que la cascada de series."""
+        """End-to-end: `fetch_and_cache_cover` real ejecuta el `append`; el proxy lo traduce a no-store."""
         from zascarr.config import get_settings
         monkeypatch.setattr("zascarr.web.discovery.get_settings",
                             lambda: get_settings().model_copy(update={"covers_cache_path": tmp_path}))
-        async def sin_descarga(_url, _dest, *, ancho=None, motivo_fallo=None):
-            motivo_fallo.append("cortesia")
-            return False
 
-        monkeypatch.setattr("zascarr.web.discovery.fetch_and_cache_cover", sin_descarga)
+        async def espera(*_a, **_k):
+            raise CortesiaEnEspera("comicvine", "https://comicvine.gamespot.com:443", 10.0,
+                                   "bloqueo_fuente")
+
+        # Se parchea la descarga de RED, no `fetch_and_cache_cover`: el `append` de cover.py corre.
+        monkeypatch.setattr("zascarr.utils.cover.descargar_imagen", espera)
         with _Cliente(_Sesion()) as client:
             r = client.get("/ui/descubrir/portada", params={
                 "url": "https://comicvine.gamespot.com/a/uploads/cover.jpg",
@@ -561,17 +564,17 @@ class TestPuntosDeEntrada:
         assert r.status_code == 404 and r.headers.get("cache-control") == "no-store"
 
     def test_el_404_por_cortesia_no_deja_cachear_la_ausencia(self, tmp_path, monkeypatch):
-        """AC-12: una espera de cortesía no es «no hay portada» definitivo; el 404 no se cachea."""
+        """End-to-end: la cascada de series pasa por `fetch_and_cache_cover` y su `append` real."""
         from zascarr.config import get_settings
         monkeypatch.setattr("zascarr.web.series.get_settings",
                             lambda: get_settings().model_copy(update={"covers_cache_path": tmp_path}))
 
-        async def _sin_descarga(_url, _dest, *, ancho, motivo_fallo=None):
-            if motivo_fallo is not None:
-                motivo_fallo.append("cortesia")
-            return False
+        async def espera(*_a, **_k):
+            raise CortesiaEnEspera("comicvine", "https://comicvine.gamespot.com:443", 10.0,
+                                   "bloqueo_fuente")
 
-        monkeypatch.setattr("zascarr.web.series.fetch_and_cache_cover", _sin_descarga)
+        # Se parchea la descarga de RED, no `fetch_and_cache_cover`: el `append` de cover.py corre.
+        monkeypatch.setattr("zascarr.utils.cover.descargar_imagen", espera)
         serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
                        cover_url="https://comicvine.gamespot.com/a/uploads/cover.jpg")
         with _Cliente(_Sesion(serie=serie)) as client:
