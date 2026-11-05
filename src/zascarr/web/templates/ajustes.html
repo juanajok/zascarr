@@ -38,6 +38,12 @@
       </div>
     </form>
     <div id="resultado-fuentes"></div>
+
+    <p class="ajustes-hint" id="cortesia-fuentes">{{ cortesia.politica }}</p>
+    <p class="ajustes-hint">{{ cortesia.coordinacion }}</p>
+    {% for nombre in cortesia.apagadas %}
+    <p class="ajustes-hint">{{ nombre }}: <strong>Apagada: {{ cortesia.nota_apagada }}</strong></p>
+    {% endfor %}
   </fieldset>
 
   <fieldset class="ajustes-card">
