@@ -5,7 +5,7 @@
 > **Base:** `main` al 2026-11-06. Sin dependencias nuevas, sin migración, sin red en las
 > pruebas. Corpus v1: `sha256:1c9a5d0f5e8cc7dd95771aa6ec8d131b4e3ec55b55878a2e8eeaf6d6a9cdd6dd`.
 
-## 1. Qué se entrega (preparación, PR-1 + PR-2)
+## 1. Qué se entrega (preparación y ejecutor real)
 
 - **Corpus v1 en borrador**: 30 casos (8 serie, 8 edición/publicación, 8 número/formato,
   6 campo), 6 editoriales y formatos variados. **Todas las etiquetas son propuestas**:
@@ -17,8 +17,11 @@
   `configuracion_incompleta`, `sin_metodo_autorizado` y un campo ausente. Sin URL ni claves.
 - **Arnés** `scripts/medicion/banco_cobertura.py`: `--seco` valida corpus, fixtures, parser,
   registro, métricas e informe; `--real` exige autorización versionada (ámbito, presupuesto,
-  caducidad y SHA del corpus) y, sin ella, sale con **exit 2 y cero peticiones**. No se ha
-  ejecutado el modo real.
+  caducidad y SHA del corpus) y, sin ella, sale con **exit 2 y cero peticiones**. Con
+  autorización válida, el ejecutor revalida el permiso, llama a los clientes existentes (que
+  pasan por `pedir_con_cortesia` de #134), respeta los topes efectivos y para por presupuesto,
+  cortesía, fuente apagada o 3 fallos consecutivos. **No se ha ejecutado con datos reales**:
+  el estado de cobertura sigue `NOT RUN`.
 - **Métricas con denominadores**: por fuente × unidad, separando disponibilidad técnica de
   precisión/cobertura editorial; sin porcentajes con denominador 0 y solo cantidades si n<10;
   `sin_extractor`/estados no se mezclan con editorial.
@@ -40,7 +43,7 @@ python scripts/medicion/banco_cobertura.py --seco \
 
 Resultado: **8 ensayos**, informe con `cobertura: NOT RUN` y PASS/FAIL/NOT RUN separados;
 cero peticiones; sin sockets ni clientes. En subproceso se comprueba además que `httpx` y
-`zascarr.services.discovery` **no** se cargan. `tests/test_banco_cobertura.py`: **43 passed**.
+`zascarr.services.discovery` **no** se cargan. `tests/test_banco_cobertura.py`: **50 passed**.
 
 Cubierto por pruebas (PASS):
 
@@ -57,6 +60,9 @@ Cubierto por pruebas (PASS):
 - SHA del corpus leído una vez en bytes y comparado con el manifiesto;
 - PASS calculado de los datos (no «30 casos» fijo), JSONL append-only, sin rutas ni SHA de
   entorno en el informe, centinela de salida y lista blanca de campos.
+- ejecutor real con cliente inyectado (cero red): ejecuta y para por presupuesto; fuente
+  apagada → cero peticiones; 429 → `limite_de_cortesia` sin reintento extra; 3 fallos →
+  parada; revalidación final del permiso (SHA/ámbito/casos) antes de cualquier petición;
 - métricas con n=0, n<10 (sin porcentaje), n≥10 (con denominador), no acreditadas, ausencias y
   campos faltantes por campo.
 
@@ -66,7 +72,8 @@ Cubierto por pruebas (PASS):
   `--seco` con sintéticos **no** acredita cobertura (criterio 9).
 - **Revisión humana**: sin verificadores designados; no hay `coincidencia_verificada`, ni
   `ambiguo`/`incorrecto` reales, ni `revision_simple` declarada.
-- **Piloto de 12 casos / 80 peticiones**: no autorizado ni ejecutado.
+- **Piloto de 12 casos / 80 peticiones**: no autorizado ni ejecutado; el ejecutor está
+  conectado, pero solo debe lanzarlo el PO en la Pi con la autorización de su rama.
 - **Red real y disponibilidad de fuentes**: no medida; los fixtures no la representan.
 - **Precisión/cobertura con porcentajes**: imposible sin revisión; además el corpus es
   intencional (no aleatorio), así que la cifra no se extrapola a la población.

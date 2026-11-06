@@ -11,6 +11,7 @@ import json
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -440,3 +441,160 @@ class TestMetricas:
         campo = metricas["por_campo"]["comic_vine__editorial"]
         assert campo["campos_evaluados"] == 2 and campo["campos_faltantes"] == 1
         assert campo["tasa_campo"]["porcentaje"] is None   # n=2 < 10
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PR-3: ejecutor real con cliente inyectado (cero red)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import asyncio  # noqa: E402
+
+from zascarr.utils.peticiones import ReintentosAgotados  # noqa: E402
+
+
+def _corpus_min(n: int = 4) -> dict:
+    corpus = _corpus()
+    corpus["casos"] = corpus["casos"][:n]
+    corpus["tamano_objetivo"] = n
+    corpus["estratos"] = {"serie": n, "edicion_publicacion": 0,
+                          "numero_formato": 0, "campo": 0}
+    return corpus
+
+
+def _auth(sha: str = "sha-corpus", *, casos=None, ambito=None) -> dict:
+    ahora = datetime.now(UTC)
+    return {
+        "id": "auth-test", "ambito": ambito or ["comic_vine"],
+        "presupuesto_peticiones": 80, "max_por_fuente": 20,
+        "casos": casos or [],
+        "desde": (ahora - timedelta(days=1)).isoformat(),
+        "hasta": (ahora + timedelta(days=1)).isoformat(),
+        "concede": "PO", "condiciones": "prueba", "sha_corpus": sha,
+    }
+
+
+class ClienteFalso:
+    def __init__(self, comportamiento):
+        self._comportamiento = comportamiento
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc):
+        return None
+
+    async def search_series(self, consulta):
+        return self._comportamiento(consulta)
+
+
+def _ejecutar(corpus, auth, *, max_peticiones=80, max_por_fuente=20, comportamiento=None,
+              llamadas=None):
+    plan = banco.plan_real(corpus, fuentes=["comic_vine"], unidades=["serie"])
+    llamadas = llamadas if llamadas is not None else []
+
+    def factory(_fuente):
+        return ClienteFalso(lambda consulta: (llamadas.append(consulta) or
+                                              comportamiento(consulta)))
+
+    return asyncio.run(banco.ejecutar_real(
+        plan, corpus, auth, max_peticiones=max_peticiones,
+        max_por_fuente=max_por_fuente, salida=Path("/tmp/salida-inexistente"),
+        corpus_sha="sha-corpus", fuentes=["comic_vine"],
+        cliente_factory=factory, sha_ejecutor="abc")), llamadas
+
+
+class TestEjecutorReal:
+    def test_ejecuta_y_para_por_presupuesto(self, tmp_path, monkeypatch):
+        corpus = _corpus_min(4)
+        auth = _auth(casos=[c["caso_id"] for c in corpus["casos"]])
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+        filas, llamadas = _ejecutar(
+            corpus, auth, max_peticiones=2,
+            comportamiento=lambda q: [{"name": f"Resultado {q}"}])
+        assert len(llamadas) == 2                     # cero peticiones fuera del presupuesto
+        assert len(filas) == 4
+        assert [f["estado_tecnico"] for f in filas[:2]] == ["ok", "ok"]
+        assert all(f["estado_tecnico"] == "no_ejecutado" for f in filas[2:])
+        assert all(f["motivo_no_ejecutado"] == "presupuesto_agotado" for f in filas[2:])
+        assert filas[0]["peticiones"] == 1 and filas[0]["autorizacion"]["id"] == "auth-test"
+        assert filas[-1]["condiciones"]["parada"] == "presupuesto"
+        informe = banco.construir_informe(
+            registros=filas, corpus=corpus, corpus_sha="sha-corpus", modo="real",
+            autorizacion=auth, errores_autorizacion=[], sha_ejecutor="abc")
+        assert informe["cobertura"] == "NOT RUN"
+        assert informe["pass_fail_not_run"]["PASS"]
+        assert "NOT RUN" in informe["pass_fail_not_run"]
+
+    def test_fuente_apagada_no_hace_ninguna_peticion(self, monkeypatch):
+        corpus = _corpus_min(3)
+        auth = _auth(casos=[c["caso_id"] for c in corpus["casos"]])
+        monkeypatch.setattr(banco, "_configuracion_fuente",
+                            lambda _f: (False, "fuente_apagada"))
+        filas, llamadas = _ejecutar(
+            corpus, auth, comportamiento=lambda q: (_ for _ in ()).throw(
+                AssertionError("no se puede llamar")))
+        assert llamadas == []
+        assert len(filas) == 3
+        assert all(f["estado_tecnico"] == "no_ejecutado" for f in filas)
+        assert all(f["motivo_no_ejecutado"] == "fuente_apagada" for f in filas)
+        assert filas[0]["estado_fuente_133"] == "fuente_apagada"
+        assert filas[-1]["condiciones"]["parada"] == "fuente_apagada"
+
+    def test_429_es_limite_de_cortesia_sin_reintento_extra(self, monkeypatch):
+        corpus = _corpus_min(3)
+        auth = _auth(casos=[c["caso_id"] for c in corpus["casos"]])
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+
+        def boom(_q):
+            raise ReintentosAgotados("comic_vine", 3, 429)
+        filas, llamadas = _ejecutar(corpus, auth, comportamiento=boom)
+        assert len(llamadas) == 1                    # el cliente ya agotó sus reintentos
+        assert len(filas) == 3
+        assert filas[0]["estado_tecnico"] == "limite_de_cortesia"
+        assert filas[0]["peticiones"] == 3 and filas[0]["reintentos"] == 2
+        assert all(f["motivo_no_ejecutado"] == "fuera_de_alcance" for f in filas[1:])
+        assert filas[-1]["condiciones"]["parada"] == "limite_de_cortesia"
+
+    def test_tres_fallos_consecutivos_detienen_la_fuente(self, monkeypatch):
+        corpus = _corpus_min(5)
+        auth = _auth(casos=[c["caso_id"] for c in corpus["casos"]])
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+
+        def boom(_q):
+            raise RuntimeError("red")
+        filas, llamadas = _ejecutar(corpus, auth, comportamiento=boom)
+        assert len(llamadas) == 3
+        assert [f["estado_tecnico"] for f in filas[:3]] == ["fallo_transitorio"] * 3
+        assert all(f["estado_tecnico"] == "no_ejecutado" for f in filas[3:])
+        assert filas[-1]["condiciones"]["parada"] == "fallos_transitorios"
+
+    def test_una_espera_de_cortesia_no_cuenta_como_peticion(self, monkeypatch):
+        corpus = _corpus_min(2)
+        auth = _auth(casos=[c["caso_id"] for c in corpus["casos"]])
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+        from zascarr.utils.cortesia import CortesiaEnEspera
+
+        def espera(_q):
+            raise CortesiaEnEspera("comic_vine", "host", 60.0, "bloqueo_fuente")
+        filas, llamadas = _ejecutar(corpus, auth, comportamiento=espera)
+        assert len(llamadas) == 1
+        assert filas[0]["estado_tecnico"] == "limite_de_cortesia"
+        assert filas[0]["peticiones"] == 0 and filas[0]["reintentos"] == 0
+        assert filas[-1]["condiciones"]["parada"] == "limite_de_cortesia"
+
+    def test_revalida_el_permiso_y_no_confia_en_el_llamador(self):
+        corpus = _corpus_min(2)
+        auth = _auth(casos=[c["caso_id"] for c in corpus["casos"]])
+        auth["sha_corpus"] = "sha-distinto"
+        with pytest.raises(PermissionError):
+            _ejecutar(corpus, auth, comportamiento=lambda q: [])
+
+    def test_el_ambito_por_caso_se_revalida_en_el_ejecutor(self):
+        corpus = _corpus_min(2)
+        auth = _auth(casos=[corpus["casos"][0]["caso_id"]], ambito=["comic_vine"])
+        plan = banco.plan_real(corpus, fuentes=["comic_vine"], unidades=["serie"])
+        # El plan filtrado por el CLI puede traer el segundo caso: la revalidación lo rechaza.
+        with pytest.raises(PermissionError):
+            asyncio.run(banco.ejecutar_real(
+                plan, corpus, auth, max_peticiones=10, max_por_fuente=10,
+                salida=Path("/tmp/x"), corpus_sha="sha-corpus", fuentes=["comic_vine"]))
