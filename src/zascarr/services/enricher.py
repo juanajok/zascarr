@@ -58,6 +58,7 @@ from zascarr.models import (
 from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient, CVCredit
 from zascarr.services.tebeosfera import TebeosferaClient
+from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 
 logger = structlog.get_logger()
 
@@ -235,6 +236,12 @@ class EnrichmentService:
                     match = await self._find_tebeosfera_match(cliente, series)
                 else:
                     match = await self._find_cv_series_match(cliente, series)
+            except (CortesiaEnEspera, FuenteApagada) as exc:
+                # AC-16: una fuente sin turno (espera o apagada) no es un fallo ni consume los
+                # 30 días de la caché negativa: se omite esa fuente en este ciclo.
+                logger.info("enricher.source_sin_turno", source=source_label,
+                            motivo=getattr(exc, "motivo", "apagada"))
+                continue
             except Exception:
                 # No se marca enrichment_attempted_at: un fallo de red es
                 # transitorio y debe poder reintentarse en el próximo ciclo,
@@ -385,6 +392,10 @@ class EnrichmentService:
             label = f"{series.title} #{issue.issue_number}"
             try:
                 match = await client.find_issue(series.comic_vine_id, issue.issue_number)
+            except (CortesiaEnEspera, FuenteApagada) as exc:
+                logger.info("enricher.source_sin_turno", source="comic_vine",
+                            motivo=getattr(exc, "motivo", "apagada"))
+                continue
             except Exception:
                 # Igual que en series: fallo transitorio, no cuenta como
                 # intento para la caché negativa de 30 días.

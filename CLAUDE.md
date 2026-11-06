@@ -97,13 +97,15 @@ Sigue las guías oficiales con estas precisiones locales:
 - **Rate limits corteses en clientes externos** (config.py): Tebeosfera
   2.5s/req, Comic Vine 1.0s, AniList 1.5s. El motivo está en `services/
   tebeosfera.py`: scraping cortés porque la fuente es una asociación
-  cultural sin ánimo de lucro, no cuestión de bugs. **Tebeosfera: el
-  espaciado es COMPARTIDO por todo el proceso** (`utils/cortesia.py`, no
-  por instancia de cliente; cada salto HTTP, redirecciones incluidas,
-  espera, y estas solo van a su propio origen, ≤ 3) y 2.5 s es el mínimo
-  del proyecto aunque la configuración diga menos; depende de `uvicorn --workers 1`. Ver
-  `docs/design/cortesia-tebeosfera.md`. Los demás clientes aún llevan el
-  espaciado por instancia.
+  cultural sin ánimo de lucro, no cuestión de bugs. **El espaciado es
+  COMPARTIDO por todo el proceso** (`utils/cortesia.py`, no por instancia de
+  cliente): fuentes con cliente propio y portadas externas pasan por la cola
+  por fuente y por host efectivo (cada salto HTTP, redirecciones incluidas),
+  con espera visible y presupuestada. Tebeosfera mantiene 2.5 s como mínimo
+  del proyecto aunque la configuración diga menos. Depende de **un solo
+  proceso** (`uvicorn --workers 1`): con varias réplicas no hay coordinación
+  entre ellas y la política es conservadora por instancia; qué se coordina y
+  qué no está en `docs/design/cortesia-compartida.md`.
 - **Caché local-first.** Portadas, metadatos, TODO se escribe a disco/BD
   y se sirve local después. Endpoints de imagen llevan `Cache-Control:
   private, max-age=86400` + `ETag` por mtime (`utils/cover.py::

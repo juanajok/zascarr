@@ -798,7 +798,10 @@ class TestSoloLecturaYCoste:
 
         assert r["totales"]["sin_serie"] + r["totales"]["serie_sugerida"] == 1820 + 182
         assert pocas == muchas <= 3, (pocas, muchas)
-        assert segundos < 1.0, f"{segundos:.2f} s con 2.000 filas"
+        # 1,0 s era un presupuesto LOCAL; el runner de CI lo supera por carga (≈1,2 s) sin que
+        # haya cambiado el número de consultas. 2,0 s conserva la detección de una regresión de
+        # orden de magnitud sin convertir la prueba en una moneda al aire.
+        assert segundos < 2.0, f"{segundos:.2f} s con 2.000 filas"
 
 
 # ── Contrato y seguridad (14-16) ──────────────────────────────────────────────────────────────────
@@ -891,3 +894,100 @@ class TestContratoYSeguridad:
         salida = capfd.readouterr()
         for visible in (caplog.text, salida.out, salida.err):
             assert "SecretaQ9" not in visible and "SecretoQ9" not in visible and BIB not in visible
+
+
+# ── BL-FILT1 (#397): el filtro es en memoria y no añade consultas ────────────────────────────────
+
+class TestFiltroEnMemoria:
+    """AC-19/AC-20: mismas dos consultas con y sin filtro, determinismo y coste local."""
+
+    async def test_ac19_dos_consultas_con_y_sin_filtro_y_determinismo(self, banco):
+        await sembrar_referencia_u13a(banco)
+        async with banco.fabrica() as s:
+            servicio = revision_carpetas.RevisionCarpetas(s)
+            await servicio.carpetas(limite=50, solo_utiles=True)          # calienta
+            banco.sentencias.clear()
+            await servicio.carpetas(limite=50, solo_utiles=True)
+            consultas_sin = list(banco.sentencias)
+            banco.sentencias.clear()
+            con = await servicio.carpetas(
+                limite=50, solo_utiles=True, nombre="serie", estado="sin_serie")
+            consultas_con = list(banco.sentencias)
+
+        assert len(consultas_sin) == 2, [s[:80] for s in consultas_sin]
+        assert len(consultas_con) == 2, [s[:80] for s in consultas_con]
+        assert con.filtro is not None
+        # 17 de las 108 carpetas son mixtas (llevan un archivo con serie sugerida):
+        # `estado=sin_serie` deja 91, pero M sigue siendo 108 (se cuenta sin filtrar).
+        assert (con.filtro.coinciden, con.totales.carpetas_utiles) == (91, 108)
+
+        async with banco.fabrica() as s:
+            dos = await revision_carpetas.RevisionCarpetas(s).carpetas(
+                limite=50, solo_utiles=True, nombre="serie", estado="sin_serie")
+        assert [(g.clave, g.n_archivos) for g in con.grupos] == [
+            (g.clave, g.n_archivos) for g in dos.grupos]
+        assert con.filtro.coinciden == dos.filtro.coinciden
+
+        import time
+        tiempos: list[float] = []
+        for _ in range(20):
+            inicio = time.perf_counter()
+            async with banco.fabrica() as s:
+                await revision_carpetas.RevisionCarpetas(s).carpetas(
+                    limite=50, solo_utiles=True, nombre="serie", estado="serie_sugerida")
+            tiempos.append((time.perf_counter() - inicio) * 1000)
+        p95 = sorted(tiempos)[18]
+        assert p95 <= 2000, f"p95 local con filtro {p95:.0f} ms"
+        print(f"\n[BL-FILT1] servicio con filtro: 2 consultas, p95 local {p95:.0f} ms (no Pi)")
+
+    async def test_ac20_no_se_lee_ni_una_fila_mas_que_sin_filtro(self, banco):
+        await sembrar_referencia_u13a(banco)
+        async with banco.fabrica() as s:
+            servicio = revision_carpetas.RevisionCarpetas(s)
+            await servicio.carpetas(limite=50, solo_utiles=True)
+            banco.sentencias.clear()
+            await servicio.carpetas(limite=50, solo_utiles=True)
+            sin_filtro = [s.strip() for s in banco.sentencias]
+            banco.sentencias.clear()
+            await servicio.carpetas(
+                limite=50, solo_utiles=True, nombre="serie", estado="mixto",
+                por_confirmar=True, en_conflicto=True)
+            con_filtro = [s.strip() for s in banco.sentencias]
+        assert con_filtro == sin_filtro, "el filtro cambió las sentencias: habría lectura nueva"
+        assert not any("nombre" in s and "ILIKE" in s.upper() for s in con_filtro)
+
+    async def test_ac21_la_api_sin_filtro_no_gana_claves(self, banco):
+        await sembrar_referencia_u13a(banco)
+        datos = await consultar({"limite": 50})
+        assert "filtro" not in datos
+        assert set(datos) == {"generado", "totales", "pagina", "grupos"}
+        assert datos["totales"]["carpetas_utiles"] == 108
+        assert len(datos["grupos"]) == 50
+
+
+#: Tabla de pliegue de AC-23: (clave, consulta, ¿coincide?).
+CASOS_DE_PLIEGUE = [
+    ("Q/Straße", "ß", True), ("Q/Straße", "ss", False), ("Q/Strasse", "ss", True),
+    ("Q/Søren", "ø", True), ("Q/Søren", "o", False),
+    ("Q/Æon", "æ", True), ("Q/Æon", "ae", False),
+    ("Q/Œuvre", "œ", True), ("Q/Œuvre", "oe", False),
+    ("Q/Đorđe", "đ", True), ("Q/Đorđe", "d", False),
+    ("Q/Łódź", "ł", True), ("Q/Łódź", "l", False),
+    ("Q/Guðrún", "ð", True), ("Q/Guðrún", "d", False),
+    ("Q/Þór", "þ", True), ("Q/Þór", "th", False),
+    ("Q/Ħal", "ħ", True), ("Q/Ħal", "h", False),
+    ("Q/Kırmızı", "ı", True), ("Q/Kırmızı", "i", False),
+    ("Q/Istanbul", "I", True),
+    ("Q/½", "½", True), ("Q/½", "1/2", True), ("Q/½", "12", False),
+]
+
+
+@pytest.mark.parametrize("clave,consulta,coincide", CASOS_DE_PLIEGUE)
+async def test_ac23_tabla_de_pliegue_contra_el_servicio(banco, clave, consulta, coincide):
+    """AC-23: el pliegue de `normalize_title` tal cual (lower, no casefold), fijado en 25 casos."""
+    await banco.sembrar(archivo(f"{clave}/Cosa 01.cbz"))
+    async with banco.fabrica() as s:
+        respuesta = await revision_carpetas.RevisionCarpetas(s).carpetas(
+            limite=50, solo_utiles=True, nombre=consulta)
+    encontradas = [g.clave for g in respuesta.grupos]
+    assert encontradas == ([clave] if coincide else []), (clave, consulta, encontradas)

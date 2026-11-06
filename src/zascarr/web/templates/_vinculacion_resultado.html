@@ -2,7 +2,7 @@
 {#- Lo que pasó al confirmar (#120). Serie y grupo salen del token firmado; la página, del formulario (solo presentación).
     Nunca se dice «completado» sin que el servicio lo haya confirmado, y un resultado parcial no se presenta como completo. -#}
 {% macro volver(clave, series_id, cursor_actual, inicio, texto) -%}
-<a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ series_id }}{% if cursor_actual and cursor_actual != inicio %}&amp;cursor={{ cursor_actual | urlencode }}{% endif %}">{{ texto }}</a>
+<a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion?clave=' ~ (clave | urlencode) ~ '&series_id=' ~ series_id ~ ('&cursor=' ~ (cursor_actual | urlencode) if cursor_actual and cursor_actual != inicio else '')) }}">{{ texto }}</a>
 {%- endmacro %}
 <div id="revision" class="vinculacion vinculacion-resultado" data-estado="{{ 'fallo' if fallo else informe.global_ }}">
   <section class="card" aria-labelledby="res-contexto">
@@ -20,21 +20,22 @@
     {{ ui.aviso("warn", fallo.mensaje) }}
     <div class="vinc-acciones">
       {% if fallo.repetible and token %}
-      <form method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/confirmar"
-            hx-post="/ui/pendientes/carpetas/asistente/vinculacion/confirmar" hx-target="#revision" hx-swap="outerHTML"
+      <form method="post" action="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/confirmar') }}"
+            hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/confirmar') }}" hx-target="#revision" hx-swap="outerHTML"
             hx-disabled-elt="find button">
         <input type="hidden" name="token" value="{{ token }}">
         <input type="hidden" name="cursor_actual" value="{{ cursor_actual }}">
+        {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
         {% if pagina %}<input type="hidden" name="pagina_desde" value="{{ pagina.split('–')[0] }}">
         <input type="hidden" name="pagina_hasta" value="{{ pagina.split('–')[1] }}">{% endif %}
         <button type="submit">{{ "Comprobar el resultado" if fallo.codigo == "resultado_incierto" else "Reintentar" }}</button>
       </form>
       {% endif %}
       {% if clave and series_id %}{{ volver(clave, series_id, cursor_actual, inicio, "Revisar de nuevo esta página") }}{% endif %}
-      <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+      <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas') }}">Volver a las carpetas</a>
       {% if series_id %}
       <a class="btn ghost sm" href="/ui/series/{{ series_id }}">Volver a la ficha de la serie</a>
-      <a class="btn ghost sm" href="/ui/pendientes/carpetas?serie={{ series_id }}">Elegir otra carpeta para esta serie</a>
+      <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas?serie=' ~ series_id) }}">Elegir otra carpeta para esta serie</a>
       {% endif %}
     </div>
   </section>
@@ -86,10 +87,10 @@
 
   <div class="vinc-acciones">
     {% if clave and series_id %}{{ volver(clave, series_id, cursor_actual, inicio, "Revisar de nuevo" if grupos.omitido else "Seguir revisando esta carpeta") }}{% endif %}
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas">Volver a las carpetas</a>
+    <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas') }}">Volver a las carpetas</a>
     {% if series_id %}
     <a class="btn ghost sm" href="/ui/series/{{ series_id }}">Volver a la ficha de la serie</a>
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas?serie={{ series_id }}">Elegir otra carpeta para esta serie</a>
+    <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas?serie=' ~ series_id) }}">Elegir otra carpeta para esta serie</a>
     {% endif %}
   </div>
   {% endif %}

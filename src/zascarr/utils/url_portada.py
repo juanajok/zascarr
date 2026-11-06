@@ -30,10 +30,21 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
+import time
 from collections.abc import Awaitable, Callable
 from urllib.parse import urljoin, urlsplit
 
 import httpx
+
+from zascarr.config import get_settings
+from zascarr.utils.cortesia import (
+    CortesiaProceso,
+    FuenteApagada,
+    cortesia_de_proceso,
+    fuente_de_host_portada,
+    fuente_habilitada,
+    intervalo_de_portada,
+)
 
 #: Dominios (y sus subdominios) de los que se aceptan portadas. Son los mismos de `/ui/descubrir/portada`.
 HOSTS_PERMITIDOS: tuple[str, ...] = (
@@ -43,6 +54,9 @@ LONGITUD_MAXIMA_URL = 500
 MAX_SALTOS = 3
 MAX_BYTES = 8 * 1024 * 1024
 TIEMPO_TOTAL_S = 15.0
+#: Presupuesto de espera por cortesía en una portada (§3.7/AC-12): si la cola del host pide más,
+#: no se envía y la portada se queda sin cachear (marcador), sin reintento.
+ESPERA_MAX_PORTADA_S = 5.0
 _CODIGOS_REDIRECCION = frozenset({301, 302, 303, 307, 308})
 _PUERTO_POR_DEFECTO = {"http": 80, "https": 443}
 
@@ -206,15 +220,38 @@ async def _pedir(cliente: httpx.AsyncClient, esquema: str, host: str, ip: str, p
 
 async def descargar_imagen(url: str, *, resolutor: Resolutor | None = None,
                            crear_cliente: CreadorDeCliente | None = None,
-                           max_bytes: int = MAX_BYTES) -> bytes:
+                           max_bytes: int = MAX_BYTES,
+                           cortesia: CortesiaProceso | None = None,
+                           reloj: Callable[[], float] = time.monotonic,
+                           dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
+                           espera_max_s: float = ESPERA_MAX_PORTADA_S,
+                           ajustes=None) -> bytes:
     """Los bytes de la portada, o `UrlNoPermitidaError` / un error de `httpx` si no se puede. La política se aplica
-    en CADA salto; la URL inicial además debe ser de la lista de fuentes."""
+    en CADA salto; la URL inicial además debe ser de la lista de fuentes.
+
+    Cada salto pasa por la cola de cortesía **del host** (nivel host solo, §3.1): la portada no tiene
+    «fuente» en la URL, y el intervalo sale del mapa allowlist→fuente. Esa espera no reintenta.
+
+    La fuente del host de CADA salto también se comprueba: un 302 a un host de una fuente apagada
+    no se descarga (AC-12/AC-15)."""
     resolutor = resolutor or resolver_dns
     crear_cliente = crear_cliente or _cliente_por_defecto
+    servicio = cortesia or cortesia_de_proceso()
+    ajustes = ajustes if ajustes is not None else get_settings()
     actual = url
     async with asyncio.timeout(TIEMPO_TOTAL_S):
         for salto in range(MAX_SALTOS + 1):
             esquema, host, puerto, ruta = analizar_url(actual, exigir_lista=(salto == 0))
+            fuente = fuente_de_host_portada(host)
+            if fuente is not None and not fuente_habilitada(fuente, ajustes):
+                raise FuenteApagada(fuente)
+            origen = f"{esquema}://{host}:{puerto or _PUERTO_POR_DEFECTO[esquema]}"
+            await servicio.esperar(
+                "portada", origen, motivo="portada", espera_max_s=espera_max_s,
+                intervalo_s=intervalo_de_portada(host), solo_host=True)
+            # TOCTOU: la fuente pudo apagarse DURANTE la espera; se mira otra vez antes de pedir.
+            if fuente is not None and not fuente_habilitada(fuente, ajustes):
+                raise FuenteApagada(fuente)
             ip = await resolver_publica(host, puerto or _PUERTO_POR_DEFECTO[esquema], resolutor)
             async with crear_cliente() as cliente:
                 _, destino, cuerpo = await _pedir(cliente, esquema, host, ip, puerto, ruta, max_bytes)

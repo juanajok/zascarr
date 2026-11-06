@@ -12,6 +12,48 @@
   </div>
 </div>
 
+<section id="cortesia" aria-labelledby="cortesia-titulo">
+  <h2 id="cortesia-titulo" class="seccion titulo-frase">Esperas al pedir datos</h2>
+  <p>{{ cortesia.subtitulo }}</p>
+  {% if cortesia.hay_bloqueos %}
+    {% call ui.aviso("warn") %}
+      {{ cortesia.nota_bloqueos }}
+    {% endcall %}
+  {% endif %}
+  <details>
+    <summary>Ver el detalle por web</summary>
+    <p class="muted">{{ cortesia.coordinacion }}</p>
+    <div class="pending-card cortesia-card">
+      <table class="cortesia-tabla">
+        <caption class="sr">Esperas para pedir datos a cada web</caption>
+        <thead>
+          <tr>
+            <th scope="col">Web</th>
+            <th scope="col">Estado</th>
+            <th scope="col">Siguiente consulta</th>
+            <th scope="col">Esperando turno</th>
+            <th scope="col">Últimos intentos</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in cortesia.filas %}
+          <tr>
+            <th scope="row">{{ f.fuente }}</th>
+            <td>
+              <span class="cortesia-estado cortesia-estado-{{ f.clase }}">{{ f.estado }}</span>
+              {% if f.nota_apagada %}<div class="muted">{{ cortesia.nota_apagada }}</div>{% endif %}
+            </td>
+            <td>{{ f.proxima }}</td>
+            <td>{{ f.en_espera }}</td>
+            <td>{{ f.reintentos }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
 <section id="disponibilidad" aria-labelledby="disponibilidad-titulo">
   <h2 id="disponibilidad-titulo" class="seccion">Tu biblioteca en disco</h2>
   {% if disponibilidad_error %}

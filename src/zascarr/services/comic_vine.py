@@ -4,7 +4,6 @@ Cliente Comic Vine API.
 Rate limit: 1 req/s (ToS). Sin caché compartida: lo que se guarda se guarda en PostgreSQL.
 Documentación: https://comicvine.gamespot.com/api/documentation
 """
-import asyncio
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
@@ -13,10 +12,10 @@ import httpx
 import structlog
 
 from zascarr.config import get_settings
+from zascarr.utils.cortesia import PoliticaFuente, politica_de
+from zascarr.utils.peticiones import pedir_con_cortesia
 
 logger = structlog.get_logger()
-
-_MAX_RETRIES = 3
 
 #: #311 — la imagen que Comic Vine pone en `image.*_url` cuando una serie o un número NO
 #: tiene portada (se ve como «Blank!»). Mismo nombre de fichero en todos los tamaños
@@ -79,16 +78,23 @@ class CVIssueResult:
 class ComicVineClient:
     BASE_URL = "https://comicvine.gamespot.com/api"
 
-    def __init__(self):
+    def __init__(self, *, espera_max_s: float = 30.0,
+                 politica: PoliticaFuente | None = None):
+        """Sin estado de cadencia propio: la cortesía es del proceso (#134).
+
+        `espera_max_s` es el presupuesto de espera de cada método (fondo: 30 s; una acción de UI
+        pasa el suyo). No hay `_last_req` ni `_rate_limit` por instancia: dos clientes de la misma
+        fuente comparten la cola del proceso.
+        """
         s = get_settings()
         self._api_key = s.comicvine_api_key
-        self._rate_limit = s.comicvine_rate_limit
-        self._last_req: float = 0
+        self._politica = politica or politica_de("comicvine", s)
+        self._espera_max_s = espera_max_s
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
-            base_url=self.BASE_URL, timeout=30.0,
+            base_url=self.BASE_URL, timeout=30.0, follow_redirects=False,
             headers={"User-Agent": "ZascArr/0.1"})
         return self
 
@@ -103,29 +109,15 @@ class ComicVineClient:
         request_params = {**params, "api_key": self._api_key, "format": "json"}
         if self._client is None:
             raise RuntimeError("Cliente de Comic Vine sin abrir: úsalo con `async with`.")
-
-        for attempt in range(_MAX_RETRIES):
-            now = asyncio.get_event_loop().time()
-            if (elapsed := now - self._last_req) < self._rate_limit:
-                await asyncio.sleep(self._rate_limit - elapsed)
-
-            r = await self._client.get(endpoint, params=request_params)
-            self._last_req = asyncio.get_event_loop().time()
-
-            if r.status_code == 429:
-                retry_after = float(r.headers.get("Retry-After", 2 ** attempt * 2))
-                logger.warning("comicvine.rate_limited",
-                               attempt=attempt, retry_after=retry_after)
-                await asyncio.sleep(retry_after)
-                continue
-
-            r.raise_for_status()
-            data = r.json()
-            if data.get("error") != "OK":
-                logger.warning("comicvine.api_error", error=data.get("error"))
-            return data
-
-        raise RuntimeError("Comic Vine: rate limit persistente tras reintentos")
+        r = await pedir_con_cortesia(
+            self._client, "GET", f"{self.BASE_URL}{endpoint}",
+            politica=self._politica, espera_max_s=self._espera_max_s,
+            datos=request_params,
+        )
+        data = r.json()
+        if data.get("error") != "OK":
+            logger.warning("comicvine.api_error", error=data.get("error"))
+        return data
 
     async def search_series(self, query: str, limit: int = 10) -> list[CVResult]:
         data = await self._get("/search/", {

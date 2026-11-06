@@ -5,13 +5,14 @@
 {{ ui.aviso("warn", error) }}
 {% else %}
 {% set s = r.serie %}
-<form id="vinculacion-form" method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/revisar"
-      hx-post="/ui/pendientes/carpetas/asistente/vinculacion/revisar" hx-trigger="change, submit"
+<form id="vinculacion-form" method="post" action="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/revisar') }}"
+      hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/revisar') }}" hx-trigger="change, submit"
       hx-target="#revision" hx-swap="outerHTML" hx-sync="this:replace"
       hx-on::before-request="this.closest('.vinculacion').classList.add('pendiente')"
       hx-on::send-error="this.closest('.vinculacion').classList.add('pendiente')">
   <input type="hidden" name="clave" value="{{ r.clave }}">
   <input type="hidden" name="series_id" value="{{ s.series_id }}">
+  {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
   <input type="hidden" name="cursor_actual" value="{{ cursor_actual }}">
   <input type="hidden" name="pagina_desde" value="{{ r.pagina.desde }}">
   <input type="hidden" name="pagina_hasta" value="{{ r.pagina.hasta }}">
@@ -147,11 +148,12 @@
   <p>Marcados, pero <strong>no se vincularán</strong>:</p>
   <ul>{% for a in excluidos %}<li><span class="nombre-archivo">{{ a.nombre }}</span> — {{ texto_legible(a.texto) }}</li>{% endfor %}</ul>
   {% endif %}
-  <form class="vinculacion-confirmar" method="post" action="/ui/pendientes/carpetas/asistente/vinculacion/confirmar"
-        hx-post="/ui/pendientes/carpetas/asistente/vinculacion/confirmar" hx-target="#revision" hx-swap="outerHTML"
+  <form class="vinculacion-confirmar" method="post" action="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/confirmar') }}"
+        hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/confirmar') }}" hx-target="#revision" hx-swap="outerHTML"
         hx-disabled-elt="find button">
     <input type="hidden" name="token" value="{{ r.token }}">
     <input type="hidden" name="cursor_actual" value="{{ cursor_actual }}">
+    {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
     <input type="hidden" name="pagina_desde" value="{{ r.pagina.desde }}">
     <input type="hidden" name="pagina_hasta" value="{{ r.pagina.hasta }}">
     <p class="caption">Al pulsar «Vincular», estos {{ incluidos | length }} archivo{{ "s" if incluidos | length != 1 }} quedarán vinculados a

@@ -15,7 +15,7 @@ from pathlib import Path
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,10 @@ from zascarr.models import (
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.enricher import puede_enlazarse_con_comic_vine
+from zascarr.services.enriquecimiento_plan import (
+    EnriquecimientoPlanService,
+    ErrorDePlan,
+)
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     horas_minimas,
@@ -44,18 +48,34 @@ from zascarr.services.politica import (
     retirar_de_serie,
     texto_de_cota,
 )
+from zascarr.services.procedencia import procedencia_de_serie
 from zascarr.services.series import razon_de_no_calculable
 from zascarr.utils.cover import (
     CACHE_VERSION,
     SERIES_COVER_MAX_WIDTH,
     cached_image_response,
+    es_candidato_de_portada,
     extract_cover_thumbnail,
     fetch_and_cache_cover,
+    portada_previa_suficiente,
     write_cover_cache,
 )
+from zascarr.web.retorno import volver_segura
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
+
+#: #419: cuántos archivos «plausibles» (los que `es_candidato_de_portada` acepta) se abren como
+#: máximo en una petición fría de portada. Los descartados no se abren ni gastan intento. El
+#: fallo no se cachea, así que 3 acota el peor caso (tres aperturas por petición) sin recorrer
+#: una serie de cientos de archivos.
+MAX_INTENTOS_PORTADA = 3
+
+#: #419: cuántos archivos se EVALÚAN como máximo por petición, los que se descartan por firma o por
+#: formato conocido incluidos (leer la firma cuesta disco, y el fallo no se recuerda). Provisional (PO,
+#: 2026-11-06). Una serie con más de 50 archivos y el primer legible más allá del 50º no obtiene esa
+#: portada hasta que se rellene `formato_contenido` (y el orden los acerque).
+MAX_EVALUADOS_PORTADA = 50
 templates = crear_templates()
 
 router = APIRouter(prefix="/ui/series", tags=["ui"])
@@ -94,6 +114,37 @@ async def _cuantos_retirados(db: AsyncSession, series: Series) -> int:
         .where(Wishlist.origen == WishlistOrigin.POLICY)
         .where(Wishlist.status == WishlistStatus.RETIRADO)
     )).scalar() or 0
+
+
+def _stmt_archivos_de_portada(series_id: UUID):
+    """Archivos candidatos a portada de una serie: no ausentes, por `sort_order` ascendente con los sin
+    número al final y `File.id` como desempate, para que dos peticiones frías elijan el mismo archivo."""
+    return (
+        select(File.file_path, File.metadata_["formato_contenido"])
+        .join(Issue, File.issue_id == Issue.id)
+        .where(Issue.series_id == series_id)
+        .where(File.is_missing.is_(False))
+        .order_by(Issue.sort_order.asc().nulls_last(), File.id.asc())
+        .limit(MAX_EVALUADOS_PORTADA)
+    )
+
+
+def _primera_portada(archivos: list[tuple[str, dict | None]]) -> tuple[bytes, str] | None:
+    """Portada del primer archivo de `archivos` (ya ordenados y acotados) que la dé; todo en un solo
+    hilo. Solo gasta intento el que se llega a abrir como ZIP (firma o formato guardado); un fallo
+    se registra sin ruta ni nombre de archivo (CLAUDE.md §5.4)."""
+    intentos = 0
+    for ruta, formato in archivos:
+        if not es_candidato_de_portada(Path(ruta), formato):
+            continue
+        if intentos >= MAX_INTENTOS_PORTADA:
+            break
+        intentos += 1
+        result = extract_cover_thumbnail(Path(ruta), formato, ancho=SERIES_COVER_MAX_WIDTH)
+        if result:
+            return result
+        logger.info("cover.candidato_sin_portada", intento=intentos)
+    return None
 
 
 async def _veredicto(db: AsyncSession, series: Series, querer, politica: WishlistPolicy,
@@ -161,7 +212,7 @@ async def _contexto_politica(db: AsyncSession, series: Series,
 
 
 @router.get("/{series_id}", response_class=HTMLResponse)
-async def detalle(series_id: UUID, request: Request,
+async def detalle(series_id: UUID, request: Request, volver: str = Query(default=""),
                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = (await db.execute(
         select(Series)
@@ -181,8 +232,58 @@ async def detalle(series_id: UUID, request: Request,
         **politica,
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": await archivos_por_numero(db, series.id),
+        "procedencia": procedencia_de_serie(series),
+        "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
     })
+
+
+async def _serie_o_404(db: AsyncSession, series_id: UUID) -> Series:
+    series = await db.get(Series, series_id)
+    if series is None:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    return series
+
+
+@router.post("/{series_id}/enriquecimiento/previsualizar", response_class=HTMLResponse)
+async def previsualizar_enriquecimiento(
+    series_id: UUID, request: Request, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#128: construye y firma un plan por campo; no escribe ni aplica nada."""
+    series = await _serie_o_404(db, series_id)
+    servicio = EnriquecimientoPlanService(db, get_settings().secret_key)
+    try:
+        plan = await servicio.previsualizar(series_id)
+    except ErrorDePlan as exc:
+        return templates.TemplateResponse(
+            request, "enriquecimiento_previa.html",
+            {"series": series, "plan": None, "error": str(exc)},
+        )
+    return templates.TemplateResponse(
+        request, "enriquecimiento_previa.html",
+        {"series": series, "plan": plan, "error": None},
+    )
+
+
+@router.post("/{series_id}/enriquecimiento/aplicar", response_class=HTMLResponse)
+async def aplicar_enriquecimiento(
+    series_id: UUID, request: Request, token: str = Form(...),
+    campos: list[str] | None = Form(None), db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#128: aplica el MISMO plan firmado y solo los campos seleccionados."""
+    series = await _serie_o_404(db, series_id)
+    servicio = EnriquecimientoPlanService(db, get_settings().secret_key)
+    try:
+        resultado = await servicio.aplicar(token, campos or [], series_id)
+    except ErrorDePlan as exc:
+        return templates.TemplateResponse(
+            request, "enriquecimiento_resultado.html",
+            {"series": series, "resultado": None, "error": str(exc)},
+        )
+    return templates.TemplateResponse(
+        request, "enriquecimiento_resultado.html",
+        {"series": series, "resultado": resultado, "error": None},
+    )
 
 
 @router.post("/{series_id}/politica", response_class=HTMLResponse)
@@ -245,12 +346,17 @@ async def portada(series_id: UUID, request: Request,
                   db: AsyncSession = Depends(get_db)) -> Response:
     """Cascada de portada de serie (BL-PORT1, #300; antes C1):
 
+    0. Una portada previa con ancho suficiente (`portada_previa_suficiente`: hoy la caché
+       antigua `covers/<id>.jpg` con >= 300 px, #435) → servirla (ETag por su `mtime`, 304)
+       **sin** extraer, sin red, sin escribir y sin copiarla; una `v2` ya escrita se ignora.
     1. `covers/v2/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304).
-    2. Si no, primer `File` no ausente por `sort_order` → extraer su primera
-       página a 600, escribir `v2`, servirla. Si la escritura falla, se sirve
-       igualmente lo extraído con un ETag de sus bytes (FR-11, PR-2).
-    3. Si no hay archivo utilizable, `covers/<id>.jpg` legada → servirla **sin
-       red y sin copiarla** a `v2` (respaldo que solo se lee).
+    2. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419):
+       solo los que `es_candidato_de_portada` acepta (ausencia conocida o firma que no es ZIP:
+       se saltan), con un tope de `MAX_INTENTOS_PORTADA` aperturas y de `MAX_EVALUADOS_PORTADA`
+       archivos evaluados → extraer su primera página a 600, escribir `v2`, servirla. Si la
+       escritura falla, se sirve igualmente lo extraído con un ETag de sus bytes (FR-11, PR-2).
+    3. Si no hay archivo utilizable, `covers/<id>.jpg` legada (de menos de 300 px) → servirla
+       **sin red y sin copiarla** a `v2` (respaldo que solo se lee).
     4. Si tampoco, `cover_url` externa → descargar una vez a 600, escribir
        `v2`, servirla.
     5. Nada de eso → 404: el `<img>` cae al marcador CSS, sin texto nuevo.
@@ -269,6 +375,17 @@ async def portada(series_id: UUID, request: Request,
     v2_path = covers / CACHE_VERSION / f"{series_id}.jpg"
     legacy_path = covers / f"{series_id}.jpg"
 
+    # #435 (BL-PORT5): una portada previa con resolución suficiente (hoy la caché antigua, >= 300 px)
+    # se conserva: se sirve ANTES que `v2` y que los archivos, sin extraer, sin red y sin escribir ni
+    # copiar nada. Una `v2` ya escrita de esa serie queda en disco, sin uso.
+    previa = await asyncio.to_thread(portada_previa_suficiente, covers, series_id)
+    if previa is not None:
+        try:
+            etag = _etag_for(previa.ruta)
+        except OSError:       # desapareció entre leerla y servirla: el ETag sale de los bytes
+            etag = _etag_de_bytes(previa.datos)
+        return cached_image_response(request, previa.datos, "image/jpeg", etag)
+
     if await asyncio.to_thread(v2_path.exists):
         data = await asyncio.to_thread(v2_path.read_bytes)
         return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
@@ -277,38 +394,26 @@ async def portada(series_id: UUID, request: Request,
     # está en disco — sin este filtro, la portada podía intentar (y
     # fallar) extraer de un CBZ borrado en vez de probar el siguiente
     # número disponible o caer al cover_url externo.
-    row = (await db.execute(
-        select(File.file_path, File.metadata_)
-        .join(Issue, File.issue_id == Issue.id)
-        .where(Issue.series_id == series_id)
-        .where(File.is_missing.is_(False))
-        .order_by(Issue.sort_order.asc().nulls_last())
-        .limit(1)
-    )).first()
-    if row:
-        result = await asyncio.to_thread(
-            extract_cover_thumbnail, Path(row[0]),
-            (row[1] or {}).get("formato_contenido"),
-            ancho=SERIES_COVER_MAX_WIDTH,
-        )
-        if result:
-            data, content_type = result
-            try:
-                await asyncio.to_thread(write_cover_cache, v2_path, data)
-            except OSError as exc:
-                # FR-11 (#300): si la caché no se puede escribir (disco lleno, permiso
-                # denegado…), se sirve igualmente la portada ya extraída, con un ETag
-                # derivado de sus bytes. Antes se pedía el `mtime` de un fichero que no
-                # existía: el `stat()` lanzaba FileNotFoundError y la petición daba 500.
-                # El nombre del evento se conserva (`cover.cache_sin_espacio`) porque hay
-                # alertas montadas sobre él; `motivo` y `errno` distinguen la causa real.
-                logger.warning(
-                    "cover.cache_sin_espacio",
-                    motivo=type(exc).__name__,
-                    errno=getattr(exc, "errno", None),
-                )
-                return cached_image_response(request, data, content_type, _etag_de_bytes(data))
-            return cached_image_response(request, data, content_type, _etag_for(v2_path))
+    archivos = (await db.execute(_stmt_archivos_de_portada(series_id))).all()
+    result = await asyncio.to_thread(_primera_portada, [tuple(a) for a in archivos])
+    if result:
+        data, content_type = result
+        try:
+            await asyncio.to_thread(write_cover_cache, v2_path, data)
+        except OSError as exc:
+            # FR-11 (#300): si la caché no se puede escribir (disco lleno, permiso
+            # denegado…), se sirve igualmente la portada ya extraída, con un ETag
+            # derivado de sus bytes. Antes se pedía el `mtime` de un fichero que no
+            # existía: el `stat()` lanzaba FileNotFoundError y la petición daba 500.
+            # El nombre del evento se conserva (`cover.cache_sin_espacio`) porque hay
+            # alertas montadas sobre él; `motivo` y `errno` distinguen la causa real.
+            logger.warning(
+                "cover.cache_sin_espacio",
+                motivo=type(exc).__name__,
+                errno=getattr(exc, "errno", None),
+            )
+            return cached_image_response(request, data, content_type, _etag_de_bytes(data))
+        return cached_image_response(request, data, content_type, _etag_for(v2_path))
 
     # Respaldo: la caché antigua (240/320) se sirve sin red y no se copia a v2. Si hay
     # un CBZ utilizable se regenera arriba; esta rama es para CBR, archivos ausentes o
@@ -318,13 +423,18 @@ async def portada(series_id: UUID, request: Request,
         return cached_image_response(request, data, "image/jpeg", _etag_for(legacy_path))
 
     # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
+    motivo_fallo: list[str] = []
     if (series.cover_url and not es_portada_de_relleno(series.cover_url)
             and await fetch_and_cache_cover(series.cover_url, v2_path,
-                                            ancho=SERIES_COVER_MAX_WIDTH)):
+                                            ancho=SERIES_COVER_MAX_WIDTH,
+                                            motivo_fallo=motivo_fallo)):
         data = await asyncio.to_thread(v2_path.read_bytes)
         return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
 
-    raise HTTPException(status_code=404, detail="Sin portada disponible")
+    # Una espera de cortesía no es un «no hay portada» definitivo: el navegador no debe
+    # cachear la ausencia (mañana podría descargarse).
+    cabeceras = {"Cache-Control": "no-store"} if "cortesia" in motivo_fallo else None
+    raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
 
 
 def _etag_for(path: Path) -> str:

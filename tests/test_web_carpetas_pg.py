@@ -36,6 +36,17 @@ from zascarr.main import app
 from zascarr.services import revision_carpetas, runtime_settings
 from zascarr.services.registro_biblioteca import EstadoRegistro as _EstadoRegistro
 from zascarr.services.registro_biblioteca import FaseRegistro as _FaseRegistro
+from tests.test_asistente_vinculacion_pg import (  # noqa: F401  (fixtures y ayudas compartidas)
+    _secreto_en_el_asistente,
+)
+from tests.test_u19_recorrido_pg import (  # noqa: F401  (fixtures y ayudas compartidas)
+    V as V_U19,
+    ent,
+    entorno,
+    get as get_u19,
+    url_bd,
+    vinculada,
+)
 from zascarr.services.revision_carpetas import (
     ETIQUETAS,
     ArchivoRevision,
@@ -279,7 +290,7 @@ class TestSinLogicaPropia:
             )],
         )
 
-        async def falso(self, limite=200, desplazamiento=0, solo_utiles=False):
+        async def falso(self, limite=200, desplazamiento=0, solo_utiles=False, **_kwargs):
             return enlatada
         monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", falso)
         t = visible((await pagina()).text)
@@ -292,8 +303,17 @@ class TestSinLogicaPropia:
             archivo("Comics/Batman (2019)/Batman 01.cbz", estado="direct", cands=candidatas(sid, "BATMAN", 2025)),
         )
         cuerpo = principal((await pagina()).text)
-        for prohibido in ("<form", "<button", "<script", "hx-post", "hx-delete", "hx-put", "hx-get", "onclick", "onerror=", 'type="submit"'):
+        # BL-FILT1: la pantalla sigue sin acciones que ESCRIBAN. Se permite UN formulario GET
+        # (el filtro) con UN botón de envío; nada de JS ni de HTMX ni de formularios POST.
+        for prohibido in ("<script", "hx-post", "hx-delete", "hx-put", "hx-get", "onclick", "onerror="):
             assert prohibido not in cuerpo, prohibido
+        assert cuerpo.count("<form") == 1
+        formulario = re.search(r"<form\b[^>]*>", cuerpo).group(0)
+        assert 'method="get"' in formulario and 'action="/ui/pendientes/carpetas"' in formulario
+        assert 'aria-label="Filtrar carpetas por nombre, estado y conflictos"' in formulario
+        assert cuerpo.count('type="submit"') == 1
+        for metodo in ("post", "put", "delete", "patch"):
+            assert f'method="{metodo}"' not in cuerpo
         # #118: lo único nuevo es un ENLACE por carpeta al asistente (abrirlo no consulta ni escribe nada).
         assert cuerpo.count('href="/ui/pendientes/carpetas/asistente?clave=') == 2
         plantilla = (Path(__file__).resolve().parents[1] / "src/zascarr/web/templates/carpetas.html").read_text(encoding="utf-8")
@@ -400,7 +420,7 @@ class TestU13aCarpetasUtilesYSueltos:
         assert "No se han podido leer los pendientes" in t
         assert "No se muestran recuentos parciales" in t
         assert "CosaSecretaQ9" not in t and "1 por revisar" not in t
-        assert 'href="/ui/pendientes/carpetas">Reintentar</a>' in r.text
+        assert 'href="/ui/pendientes/carpetas?limite=50">Reintentar</a>' in r.text
 
     async def test_medicion_local_de_carga_y_cambio_de_pagina(self, banco):
         """P1/P1b locales en ASGI con 1.322 A + 17 B, página 50.
@@ -511,23 +531,23 @@ class TestPresupuestoTexto:
         return re.sub(r"<details\b.*?</details>", resumen, html, flags=re.S)
 
     async def test_entrada_y_primera_accion_caben_en_50_palabras(self, banco):
+        """BL-FILT1: la primera acción de la pantalla pasa a ser el formulario de filtro."""
         await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
         cuerpo = (await pagina()).text
         principal_cuerpo = principal(cuerpo).split(">", 1)[1]
         sin_detalles = self._sin_contenido_de_detalles(principal_cuerpo)
-        antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
+        antes = sin_detalles.split("<form", 1)[0]
         palabras = self._palabras(antes)
         assert len(palabras) <= 50, f"{len(palabras)} palabras antes de la acción: {' '.join(palabras)}"
         assert "No se crea ni se asigna nada hasta que confirmes." in visible(cuerpo)
-        assert "Sin serie sugerida" in antes
+        assert "Sin serie sugerida" in principal_cuerpo
         assert principal_cuerpo.index('class="carpeta-accion"') < principal_cuerpo.index('class="carpeta-detalle"')
 
-    async def test_la_cifra_de_46_es_reproducible_con_el_fixture_de_referencia(self, banco, monkeypatch):
-        """U13a mide 46 palabras con 1.322/108/14 + 17 y dos tarjetas; esta prueba enlata esa respuesta.
-
-        44 era la composición de #208 antes de U13a. U13a sustituye los chips por la frase de
-        resumen (18 palabras) y enlaza los sueltos; el subtítulo sigue por debajo de 20. La prueba
-        general de umbral siembra un solo registro y comprueba ≤ 50, no la cifra exacta.
+    async def test_la_cabecera_sin_filtro_cabe_en_50_palabras_con_el_fixture_de_referencia(self, banco, monkeypatch):
+        """U13a medía 46 palabras antes de la acción de la tarjeta; con BL-FILT1 la primera acción
+        es el formulario de filtro, así que se conserva el umbral (≤ 50), no la cifra exacta
+        (spec §10.2). El fixture se mantiene para que la respuesta enlatada siga siendo la de
+        referencia (1.322 A + 17 B, 108 carpetas útiles).
         """
         enlatada = RespuestaCarpetas(
             generado="2026-10-21T00:00:00Z",
@@ -547,21 +567,21 @@ class TestPresupuestoTexto:
             ],
         )
 
-        async def falso(self, limite=200, desplazamiento=0, solo_utiles=False):
+        async def falso(self, limite=200, desplazamiento=0, solo_utiles=False, **_kwargs):
             return enlatada
         monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", falso)
 
         cuerpo = (await pagina()).text
         principal_cuerpo = principal(cuerpo).split(">", 1)[1]
         sin_detalles = self._sin_contenido_de_detalles(principal_cuerpo)
-        antes = sin_detalles.split('<p class="carpeta-accion">', 1)[0]
+        antes = sin_detalles.split("<form", 1)[0]
         palabras = self._palabras(antes)
-        assert len(palabras) == 46, f"{len(palabras)} palabras: {' '.join(palabras)}"
+        assert len(palabras) <= 50, f"{len(palabras)} palabras: {' '.join(palabras)}"
 
     async def test_estado_vacio_tambien_cabe(self, banco):
         cuerpo = (await pagina()).text
         principal_cuerpo = principal(cuerpo).split(">", 1)[1]
-        antes = principal_cuerpo.split('<p><a class="back-link"', 1)[0]
+        antes = principal_cuerpo.split("<form", 1)[0]
         assert len(self._palabras(antes)) <= 50
 
     async def test_el_subtitulo_no_pasa_de_20_palabras(self, banco):
@@ -569,6 +589,52 @@ class TestPresupuestoTexto:
         cuerpo = (await pagina()).text
         subtitulo = re.search(r'<p class="subtitle">(.*?)</p>', cuerpo, re.S).group(1)
         assert len(self._palabras(subtitulo)) == 18      # la frase aprobada, ≤ 20
+
+    async def test_el_recuento_con_filtro_no_pasa_de_20_palabras(self, banco):
+        await banco.sembrar(
+            *(archivo(f"Comics/Coincide {i:02d}/Cosa 01.cbz") for i in range(7)),
+            *(archivo(f"Comics/Otra {i:03d}/Cosa 01.cbz") for i in range(113)),
+        )
+        cuerpo = (await pagina({"nombre": "coincide"})).text
+        recuento = re.search(r'<p class="subtitle" id="recuento-filtro">(.*?)</p>', cuerpo, re.S).group(1)
+        assert len(self._palabras(recuento)) <= 20
+        assert "Quitar el filtro" in recuento
+
+
+class TestFormularioDeFiltro:
+    """§5.1: textos exactos, etiquetas visibles y UN formulario GET accesible."""
+
+    async def test_textos_y_estructura_del_formulario(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        html = (await pagina()).text
+        formulario = re.search(r'<form class="filter-bar[^"]*".*?</form>', html, re.S).group(0)
+        for exacto in ("Nombre de la carpeta", "Parte del nombre", "Estado de la carpeta",
+                       "Todas", "Sin serie", "Con serie sugerida",
+                       "Mezcla (sin serie y con serie sugerida)",
+                       "Solo carpetas cuyos datos no cuadran", "Filtrar"):
+            assert exacto in formulario, exacto
+        assert 'method="get"' in formulario and 'action="/ui/pendientes/carpetas"' in formulario
+        assert 'aria-label="Filtrar carpetas por nombre, estado y conflictos"' in formulario
+        # Etiquetas visibles asociadas y campo de búsqueda nativo.
+        assert 'for="f-nombre"' in formulario and 'id="f-nombre"' in formulario
+        assert 'for="f-estado"' in formulario and 'id="f-estado"' in formulario
+        assert 'type="search"' in formulario and 'name="nombre"' in formulario
+        assert "por_confirmar" not in formulario   # redundante con el estado
+        assert "Cuando la carpeta, el título o el año no coinciden" in formulario
+        assert formulario.count('class="filtro-campo') == 4   # nombre, estado, conflicto y acción
+        # Los hidden van antes que los campos visibles (GET serializa en ese orden).
+        assert formulario.index('name="limite"') < formulario.index('id="f-nombre"')
+        # Sin desplazamiento: aplicar el filtro vuelve a la página 1.
+        assert 'name="desplazamiento"' not in formulario
+
+    async def test_el_valor_y_el_conflicto_se_recuerdan(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        html = (await pagina({"nombre": "cosa", "estado": "sin_serie",
+                              "en_conflicto": "1"})).text
+        formulario = re.search(r'<form class="filter-bar[^"]*".*?</form>', html, re.S).group(0)
+        assert 'value="cosa"' in formulario
+        assert re.search(r'<option value="sin_serie" selected>', formulario)
+        assert _marcada(formulario, "en_conflicto")
 
 
 class TestAccesoYEnlaces:
@@ -710,13 +776,13 @@ class TestSerieFijada:
         await banco.sembrar(*(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(120)))
         primera = await pagina({"serie": str(sid), "limite": 50})
         assert "Carpetas 1–50 de 120" in visible(primera.text)
-        enlaces = [h for h in _hrefs(primera.text) if "/ui/pendientes/carpetas?" in h]
+        enlaces = [h for h in _hrefs(primera.text) if "/ui/pendientes/carpetas?" in h and "desplazamiento=" in h]
         assert enlaces
         assert all("serie=" in h and "limite=50" in h for h in enlaces)
         assert any("desplazamiento=50" in h for h in enlaces)
         segunda = await pagina({"serie": str(sid), "limite": 50, "desplazamiento": 50})
         assert "Carpetas 51–100 de 120" in visible(segunda.text)
-        enlaces2 = [h for h in _hrefs(segunda.text) if "/ui/pendientes/carpetas?" in h]
+        enlaces2 = [h for h in _hrefs(segunda.text) if "/ui/pendientes/carpetas?" in h and "desplazamiento=" in h]
         assert 'rel="first"' in segunda.text                      # Primera
         assert any("desplazamiento=100" in h for h in enlaces2)    # Última
         assert all("serie=" in h and "limite=50" in h for h in enlaces2)
@@ -727,8 +793,11 @@ class TestSerieFijada:
         r = await pagina({"serie": str(sid), "desplazamiento": 999})
         t = visible(r.text)
         assert "Esta página ya no existe" in t
-        enlaces = [h for h in _hrefs(r.text) if "/ui/pendientes/carpetas?" in h]
-        assert enlaces and all("serie=" in h for h in enlaces)
+        quitar_serie = re.findall(r'href="([^"]+)"[^>]*>Quitar la serie</a>', r.text)
+        assert len(quitar_serie) == 1, quitar_serie
+        enlaces = [h for h in _hrefs(r.text) if "/ui/pendientes/carpetas?" in h
+                   and h not in quitar_serie]
+        assert enlaces and all("serie=" in h for h in enlaces), enlaces
 
     async def test_sin_serie_no_aparecen_primera_ni_ultima(self, banco):
         await banco.sembrar(*(archivo(f"Comics/G{i}/Cosa 01.cbz") for i in range(5)))
@@ -845,4 +914,418 @@ class TestVacíoY326:
         r = await pagina({"serie": str(sid)})
         assert r.status_code == 503
         assert "series_id=" not in r.text
-        assert f"/ui/pendientes/carpetas?serie={sid}" in r.text
+        assert f"/ui/pendientes/carpetas?limite=50&amp;serie={sid}" in r.text
+
+
+# ── BL-FILT1 (#397): filtro por nombre y estado ─────────────────────────────────────────────────
+
+def claves(cuerpo: str) -> list[str]:
+    """Las claves de las carpetas pintadas, en el orden de la página."""
+    return [htmllib.unescape(c) for c in re.findall(
+        r'class="carpeta-titulo titulo-frase">(.*?)</h2>', cuerpo)]
+
+
+def _marcada(cuerpo: str, nombre: str) -> bool:
+    return re.search(rf'name="{nombre}"[^>]*\bchecked\b', cuerpo) is not None
+
+
+class TestFiltroPorNombre:
+    async def test_ac01_coincidencia_parcial_sin_mayusculas(self, banco):
+        await banco.sembrar(
+            archivo("Comics/Astérix el Galo/Astérix 01.cbz"),
+            archivo("Comics/Batman (2019)/Batman 01.cbz"),
+        )
+        r = await pagina({"nombre": "ast"})
+        assert claves(r.text) == ["Comics/Astérix el Galo"]
+        assert 'value="ast"' in r.text
+        assert claves((await pagina({"nombre": "ASTÉRIX"})).text) == ["Comics/Astérix el Galo"]
+        assert 'value="ASTÉRIX"' in (await pagina({"nombre": "ASTÉRIX"})).text
+
+    async def test_ac02_acentos_y_tildes(self, banco):
+        await banco.sembrar(
+            archivo("Comics/Astérix/Cosa 01.cbz"),
+            archivo("Comics/Año Cero/Cosa 01.cbz"),
+            archivo("Comics/Doña Urraca/Cosa 01.cbz"),
+        )
+        assert claves((await pagina({"nombre": "asterix"})).text) == ["Comics/Astérix"]
+        assert claves((await pagina({"nombre": "ano"})).text) == ["Comics/Año Cero"]
+        assert claves((await pagina({"nombre": "dona"})).text) == ["Comics/Doña Urraca"]
+        assert claves((await pagina({"nombre": "AÑO"})).text) == ["Comics/Año Cero"]
+
+    async def test_ac03_recuentos_del_conjunto_filtrado(self, banco):
+        await banco.sembrar(
+            *(archivo(f"Comics/Coincide {i:02d}/Cosa 01.cbz") for i in range(7)),
+            *(archivo(f"Comics/Otra {i:03d}/Cosa 01.cbz") for i in range(113)),
+        )
+        r = await pagina({"nombre": "coincide"})
+        t = visible(r.text)
+        assert "Carpetas 1–7 de 7." in t
+        assert "7 de 120 carpetas coinciden con el filtro." in t
+        assert 'rel="next"' not in r.text
+        async with banco.fabrica() as s:
+            respuesta = await revision_carpetas.RevisionCarpetas(s).carpetas(
+                limite=50, solo_utiles=True, nombre="coincide")
+        assert respuesta.filtro is not None
+        assert respuesta.filtro.coinciden == 7
+        assert respuesta.totales.carpetas_utiles == 120
+        assert (respuesta.pagina.limite, len(respuesta.grupos)) == (50, 7)
+
+    async def test_ac04_filtra_sobre_el_titulo_visible_de_la_carpeta(self, banco):
+        await banco.sembrar(archivo("Comics/Batman (2019)/Batman 01.cbz"))
+        for consulta in ("batman (2019)", "comics batman"):
+            assert claves((await pagina({"nombre": consulta})).text) == ["Comics/Batman (2019)"]
+
+
+class TestFiltroPorEstadoYMarcas:
+    async def _sembrar_tres_estados(self, banco) -> None:
+        sid = await banco.serie("Sugerida", 2025)
+        await banco.sembrar(
+            archivo("Comics/Solo Sin/Cosa 01.cbz"),
+            archivo("Comics/Solo Sugerida/Sugerida 01 (2025).cbz", estado="direct",
+                    cands=candidatas(sid, "Sugerida", 2025)),
+            archivo("Comics/Mezcla/Sugerida 01 (2025).cbz", estado="direct",
+                    cands=candidatas(sid, "Sugerida", 2025)),
+            archivo("Comics/Mezcla/Sin 01.cbz"),
+        )
+
+    async def test_ac05_selector_excluyente(self, banco):
+        await self._sembrar_tres_estados(banco)
+        assert claves((await pagina({"estado": "sin_serie"})).text) == ["Comics/Solo Sin"]
+        assert claves((await pagina({"estado": "serie_sugerida"})).text) == ["Comics/Solo Sugerida"]
+        assert claves((await pagina({"estado": "mixto"})).text) == ["Comics/Mezcla"]
+        todos = claves((await pagina()).text)
+        assert set(todos) == {"Comics/Solo Sin", "Comics/Solo Sugerida", "Comics/Mezcla"}
+        assert claves((await pagina({"estado": "todas"})).text) == todos
+        assert claves((await pagina({"estado": ""})).text) == todos
+
+    async def test_ac06_nombre_y_estado_se_combinan_con_y(self, banco):
+        sid = await banco.serie("Batman", 2025)
+        await banco.sembrar(
+            archivo("Comics/Batman (2019)/Batman 01.cbz", estado="direct",
+                    cands=candidatas(sid, "Batman", 2025)),
+            archivo("Comics/Batman Sin Serie/Batman 02.cbz"),
+        )
+        r = await pagina({"nombre": "batman", "estado": "sin_serie"})
+        assert claves(r.text) == ["Comics/Batman Sin Serie"]
+        assert "1 de 2 carpetas coincide con el filtro." in visible(r.text)
+
+    async def test_ac07_mixto_no_es_en_conflicto(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        # (a) mixto sin conflicto: el año del archivo corrobora la serie sugerida.
+        await banco.sembrar(
+            archivo("Comics/Mezcla Buena/BATMAN 01 (2025).cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Comics/Mezcla Buena/Sin 01.cbz"),
+            # (b) mixto con conflicto: la carpeta dice 2019 y la serie empieza en 2025.
+            archivo("Comics/BATMAN - Saga (2019)/BATMAN 01.cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Comics/BATMAN - Saga (2019)/Sin 01.cbz"),
+            # (d) sin serie sin conflicto.
+            archivo("Comics/Sin Serie/Sin 01.cbz"),
+        )
+        assert set(claves((await pagina({"estado": "mixto"})).text)) == {
+            "Comics/Mezcla Buena", "Comics/BATMAN - Saga (2019)"}
+        assert claves((await pagina({"en_conflicto": "1"})).text) == ["Comics/BATMAN - Saga (2019)"]
+        assert claves((await pagina({"estado": "mixto", "en_conflicto": "1"})).text) == [
+            "Comics/BATMAN - Saga (2019)"]
+        assert set(claves((await pagina({"por_confirmar": "1"})).text)) == {
+            "Comics/Mezcla Buena", "Comics/BATMAN - Saga (2019)"}
+        assert "Comics/BATMAN - Saga (2019)" not in claves(
+            (await pagina({"estado": "sin_serie"})).text)
+
+    async def test_ac08_dos_marcas_independientes_y_combinacion_contradictoria(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(
+            archivo("Comics/Mezcla Buena/BATMAN 01 (2025).cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Comics/Mezcla Buena/Sin 01.cbz"),
+            archivo("Comics/BATMAN - Saga (2019)/BATMAN 01.cbz", estado="direct",
+                    cands=candidatas(sid, "BATMAN", 2025)),
+            archivo("Comics/BATMAN - Saga (2019)/Sin 01.cbz"),
+            archivo("Comics/Sin Serie/Sin 01.cbz"),
+        )
+        con_por_confirmar = set(claves((await pagina({"por_confirmar": "1"})).text))
+        con_conflicto = set(claves((await pagina({"en_conflicto": "1"})).text))
+        ambas = set(claves((await pagina({"por_confirmar": "1", "en_conflicto": "1"})).text))
+        assert con_por_confirmar == {"Comics/Mezcla Buena", "Comics/BATMAN - Saga (2019)"}
+        assert con_conflicto == {"Comics/BATMAN - Saga (2019)"}
+        assert ambas == {"Comics/BATMAN - Saga (2019)"}
+        contradictoria = await pagina({"estado": "sin_serie", "por_confirmar": "1"})
+        assert contradictoria.status_code == 200
+        assert "Ninguna carpeta coincide con estos filtros." in visible(contradictoria.text)
+
+
+class TestVacioDelFiltro:
+    async def test_ac09_estado_vacio_de_filtro(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        r = await pagina({"nombre": "zzz-inexistente"})
+        t = visible(r.text)
+        assert r.status_code == 200
+        assert "Ninguna carpeta coincide con «zzz-inexistente»." in t
+        assert "Prueba a cambiar el filtro o a quitarlo." in t
+        assert "Nada pendiente" not in t and "No hay carpetas con contexto" not in t
+        assert any("Quitar el filtro" in h or "Quitar el filtro" in visible(r.text) for h in _hrefs(r.text))
+
+    async def test_ac10_el_vacio_de_filtro_manda_sobre_el_de_serie(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        r = await pagina({"serie": str(sid), "nombre": "zzz-inexistente"})
+        t = visible(r.text)
+        assert "Ninguna carpeta coincide con «zzz-inexistente»." in t
+        assert "Buscar archivos nuevos en el disco" not in t
+        quitar = re.findall(r'href="([^"]+)"[^>]*>Quitar el filtro</a>', r.text)
+        assert quitar and f"serie={sid}" in quitar[0] and "nombre=" not in quitar[0]
+
+
+class TestPropagacionDelContexto:
+    async def _sembrar_120(self, banco) -> object:
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(
+            *(archivo(f"Comics/Coincide {i:02d}/Cosa 01.cbz") for i in range(25)),
+            *(archivo(f"Comics/Otra {i:03d}/Cosa 01.cbz") for i in range(95)),
+        )
+        return sid
+
+    async def test_ac11_la_paginacion_conserva_el_filtro(self, banco):
+        await banco.sembrar(
+            *(archivo(f"Comics/Coincide {i:02d}/Cosa 01.cbz") for i in range(25)),
+            *(archivo(f"Comics/Otra {i:03d}/Cosa 01.cbz") for i in range(95)),
+        )
+        r = await pagina({"nombre": "coincide", "limite": 10, "desplazamiento": 10})
+        t = visible(r.text)
+        assert "Carpetas 11–20 de 25." in t
+        enlaces = [h for h in _hrefs(r.text) if "desplazamiento=" in h and "nombre=coincide" in h]
+        assert enlaces and all("limite=10" in h for h in enlaces)
+        assert any("desplazamiento=0" in h for h in enlaces)          # Anteriores
+        assert any("desplazamiento=20" in h for h in enlaces)         # Siguientes
+
+    async def test_ac12_volver_del_asistente_conserva_filtro_pagina_y_serie(self, banco, monkeypatch):
+        from types import SimpleNamespace
+        from zascarr.config import get_settings
+        from zascarr.services import vinculacion_previa
+        # La vista previa de la vinculación resuelve la biblioteca por su cuenta y firma con
+        # `secret_key`; en pruebas no hay clave y la biblioteca es la de prueba (BIB).
+        monkeypatch.setattr(vinculacion_previa, "get_settings",
+                            lambda: SimpleNamespace(library_path=Path(BIB)))
+        monkeypatch.setattr(
+            "zascarr.web.asistente_vinculacion.get_settings",
+            lambda: get_settings().model_copy(update={"secret_key": "secreto-de-prueba"}))
+        sid = await self._sembrar_120(banco)
+        # Con serie fijada la entrada es «Preparar los archivos…» (vinculación).
+        lista = await pagina({"nombre": "coincide", "limite": 10, "desplazamiento": 10,
+                              "serie": str(sid), "estado": "sin_serie"})
+        enlaces = [h for h in _hrefs(lista.text) if "/asistente/vinculacion?clave=" in h]
+        assert enlaces, "la lista filtrada no enlaza a la vinculación"
+        vinculacion = enlaces[0]
+        for esperado in ("nombre=coincide", "limite=10", "desplazamiento=10",
+                         f"serie={sid}", "estado=sin_serie"):
+            assert esperado in vinculacion, (esperado, vinculacion)
+        r2 = await pagina(ruta=vinculacion)
+        assert r2.status_code == 200
+        vuelta = [h for h in _hrefs(r2.text) if h.startswith("/ui/pendientes/carpetas?")]
+        assert any(all(x in h for x in ("nombre=coincide", "limite=10",
+                                        "desplazamiento=10", f"serie={sid}")) for h in vuelta)
+        # La cadena intermedia (formularios POST del asistente) también transporta el contexto.
+
+        acciones = re.findall(r'(?:action|hx-post)="([^"]+)"', r2.text)
+        assert acciones and all("nombre=coincide" in a for a in acciones if "/asistente/" in a)
+        ocultos = dict(re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)"', r2.text))
+        assert ocultos.get("nombre") == "coincide" and ocultos.get("limite") == "10"
+
+        # Sin serie, la entrada es «Elegir la serie de esta carpeta».
+        lista2 = await pagina({"nombre": "coincide", "limite": 10, "desplazamiento": 10})
+        enlaces2 = [h for h in _hrefs(lista2.text)
+                    if "/ui/pendientes/carpetas/asistente?clave=" in h]
+        assert enlaces2, "la lista filtrada no enlaza al asistente"
+        entrada = enlaces2[0]
+        for esperado in ("nombre=coincide", "limite=10", "desplazamiento=10"):
+            assert esperado in entrada, (esperado, entrada)
+        r3 = await pagina(ruta=entrada)
+        assert r3.status_code == 200
+        vuelta3 = [h for h in _hrefs(r3.text) if h.startswith("/ui/pendientes/carpetas?")]
+        assert vuelta3
+        assert any(all(x in h for x in ("nombre=coincide", "limite=10",
+                                        "desplazamiento=10")) for h in vuelta3)
+        # El formulario de buscar en el asistente lleva el contexto al POST.
+        assert any("nombre=coincide" in a for a in re.findall(r'hx-post="([^"]+)"', r3.text))
+
+    async def test_ac13_no_hay_parametro_de_retorno_en_la_lista_ni_en_el_asistente(self, banco):
+        sid = await self._sembrar_120(banco)
+        lista = await pagina({"nombre": "coincide", "limite": 10, "desplazamiento": 10,
+                              "serie": str(sid)})
+        asistente = await pagina(ruta="/ui/pendientes/carpetas/asistente?clave=Comics/Coincide 00"
+                                 "&nombre=coincide&limite=10&desplazamiento=10")
+        for prohibido in ("volver=", "next=", "return_to=", "redirect=", "url="):
+            assert prohibido not in lista.text, prohibido
+            assert prohibido not in asistente.text, prohibido
+
+    async def test_ac14_quitar_serie_y_quitar_filtro_se_respetan(self, banco):
+        sid = await banco.serie("BATMAN", 2025)
+        await banco.sembrar(archivo("Comics/Batman cosa/Cosa 01.cbz"))
+        r = await pagina({"serie": str(sid), "nombre": "batman", "limite": 50})
+        quitar_serie = [h for h in _hrefs(r.text) if h.startswith("/ui/pendientes/carpetas?")
+                        and "serie=" not in h and "nombre=batman" in h]
+        assert quitar_serie and "desplazamiento" not in quitar_serie[0]
+        quitar_filtro = [h for h in _hrefs(r.text) if h.startswith("/ui/pendientes/carpetas?")
+                         and "serie=" in h and "nombre=" not in h]
+        assert quitar_filtro and "desplazamiento" not in quitar_filtro[0]
+
+    async def test_ac15_valores_invalidos_dan_200_con_aviso_y_nunca_422(self, banco):
+        await banco.sembrar(archivo("Comics/Astérix/Cosa 01.cbz"))
+        for params in ({"estado": "inventado"}, {"estado": "SIN_SERIE"},
+                       {"por_confirmar": "2"}, {"en_conflicto": "abc"}):
+            r = await pagina(params)
+            assert r.status_code == 200, params
+        r = await pagina({"estado": "inventado"})
+        assert "El estado de la carpeta no es válido; se muestran todos los estados." in visible(r.text)
+        assert not _marcada(r.text, "por_confirmar")
+        # El nombre se sigue aplicando aunque el estado sea inválido.
+        r = await pagina({"estado": "inventado", "nombre": "asterix"})
+        assert claves(r.text) == ["Comics/Astérix"]
+
+    async def test_ac16_texto_del_nombre_controles_longitud_y_escape(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        controles = await pagina({"nombre": "Bat\x00man"})
+        assert controles.status_code == 200
+        assert "La búsqueda tenía caracteres no válidos; se han quitado." in visible(controles.text)
+        larga = await pagina({"nombre": "x" * 250})
+        assert "La búsqueda era demasiado larga; se han usado los primeros 200 caracteres." in visible(larga.text)
+        maliciosa = await pagina({"nombre": "<script>alert(1)</script>"})
+        assert maliciosa.status_code == 200
+        assert "<script>" not in maliciosa.text
+        assert "&lt;script&gt;" in maliciosa.text
+
+    async def test_ac17_desplazamiento_fuera_de_rango_tras_filtrar(self, banco):
+        await banco.sembrar(*(archivo(f"Comics/Coincide {i}/Cosa 01.cbz") for i in range(5)))
+        r = await pagina({"nombre": "coincide", "limite": 2, "desplazamiento": 99})
+        t = visible(r.text)
+        assert r.status_code == 200
+        assert "Esta página ya no existe" in t
+        assert "Carpetas 99–99" not in t
+        primera = [h for h in _hrefs(r.text) if "nombre=coincide" in h and "desplazamiento" not in h]
+        assert primera, "no hay enlace a la primera página filtrada"
+        ultima = [h for h in _hrefs(r.text) if "nombre=coincide" in h and "desplazamiento=4" in h]
+        assert ultima, "no hay enlace a la última página filtrada"
+
+    async def test_ac18_cambiar_filtro_vuelve_a_la_pagina_1(self, banco):
+        await banco.sembrar(
+            *(archivo(f"Comics/Coincide {i:02d}/Cosa 01.cbz") for i in range(25)),
+            *(archivo(f"Comics/Otra {i:03d}/Cosa 01.cbz") for i in range(95)),
+        )
+        r = await pagina({"nombre": "coincide", "limite": 10, "desplazamiento": 10})
+        formulario = re.search(r'<form class="filter-bar[^"]*".*?</form>', r.text, re.S).group(0)
+        assert 'name="desplazamiento"' not in formulario
+        assert 'action="/ui/pendientes/carpetas"' in formulario
+        assert 'method="get"' in formulario
+        quitar = re.findall(r'href="([^"]+)"[^>]*>Quitar el filtro</a>', r.text)
+        assert quitar and "desplazamiento" not in quitar[0]
+
+
+class TestSerieInventadaEnElContexto:
+    async def test_una_serie_no_uuid_no_se_propaga_al_asistente(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        invalida = await pagina(ruta="/ui/pendientes/carpetas/asistente?clave=Comics/G"
+                                "&nombre=x&serie=no-es-uuid")
+        assert invalida.status_code == 200
+        assert "no-es-uuid" not in invalida.text
+        assert 'name="serie" value="no-es-uuid"' not in invalida.text
+
+        from uuid import uuid4
+        sid = uuid4()
+        valida = await pagina(ruta=f"/ui/pendientes/carpetas/asistente?clave=Comics/G"
+                              f"&nombre=x&serie={sid}")
+        assert valida.status_code == 200
+        assert f'name="serie" value="{sid}"' in valida.text
+
+
+class TestResultadoGuardadoNoPropaga:
+    """§6.4: el resultado guardado es la excepción; con una referencia VÁLIDA tampoco propaga."""
+
+    async def test_ac13_un_resultado_guardado_valido_no_propaga_el_contexto(self, ent):
+        v = await vinculada(ent)
+        consulta = {"ref": v.ref, "nombre": "batman", "estado": "sin_serie",
+                    "por_confirmar": "1", "en_conflicto": "1", "limite": "10",
+                    "desplazamiento": "20"}
+        r = await get_u19(f"{V_U19}/resultado", **consulta)
+        assert r.status_code == 200
+        assert "Resultado de la vinculación" in visible(r.text)
+        enlaces = [h for h in _hrefs(r.text) if "/ui/pendientes/carpetas" in h]
+        assert enlaces, "el resultado guardado no tiene enlaces de vuelta a la lista"
+        for h in enlaces:
+            for parametro in ("nombre=batman", "estado=sin_serie", "por_confirmar=1",
+                              "en_conflicto=1", "limite=10", "desplazamiento=20"):
+                assert parametro not in h, (parametro, h)
+        # Contrato de hoy: «Volver a las carpetas» sin parámetros y «Elegir otra carpeta»
+        # solo con `serie`.
+        assert any(h == "/ui/pendientes/carpetas" for h in enlaces)
+        assert any(re.fullmatch(r"/ui/pendientes/carpetas\?serie=[0-9a-f-]+", h) for h in enlaces)
+
+        async with cliente() as c:
+            fragmento = await c.get(f"{V_U19}/resultado", params=consulta,
+                                    headers={"HX-Request": "true"})
+        assert fragmento.status_code == 200
+        assert "nombre=batman" not in fragmento.text
+        assert "limite=10" not in fragmento.text
+
+
+class TestMapaDeEnlacesDelAsistente:
+    """§6.3: TODOS los enlaces de vuelta a la lista conservan el contexto, salvo el resultado guardado."""
+
+    PLANTILLAS_CON_CONTEXTO = (
+        "asistente_carpeta.html", "_asistente_eleccion.html", "asistente_vinculacion.html",
+        "_vinculacion_resultado.html", "asistente_alta.html", "asistente_alta_resultado.html",
+    )
+    def test_cada_plantilla_de_vuelta_usa_el_helper_de_contexto(self):
+        base = Path(__file__).resolve().parents[1] / "src/zascarr/web/templates"
+        for nombre in self.PLANTILLAS_CON_CONTEXTO:
+            texto = (base / nombre).read_text(encoding="utf-8")
+            assert "con_contexto(" in texto, f"{nombre} no reenvía el contexto de la lista"
+
+    def test_el_resultado_guardado_desactiva_el_contexto_en_la_ruta(self):
+        """La excepción del PO (§6.4) no cambia las plantillas: se apaga en la ruta, que es la
+        única que se puede abrir con una `ref` de 24 h y sin la lista delante."""
+        fuente = (Path(__file__).resolve().parents[1]
+                  / "src/zascarr/web/asistente_vinculacion.py").read_text(encoding="utf-8")
+        assert "request.state.sin_contexto_carpetas = True" in fuente
+
+    async def test_ningun_enlace_de_la_lista_sale_a_una_url_absoluta(self, banco):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        html = (await pagina({"nombre": "cosa"})).text
+        assert all(not h.startswith(("http://", "https://")) for h in _hrefs(html))
+
+
+class TestPrivacidadDelFiltro:
+    async def test_ac22_el_valor_del_filtro_no_llega_a_los_registros(self, banco, monkeypatch):
+        await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
+        with structlog.testing.capture_logs() as registros:
+            r = await pagina({"nombre": "CENTINELA-PRIV-9Q", "estado": "inventado"})
+        assert r.status_code == 200
+        assert "CENTINELA-PRIV-9Q" not in repr(registros)
+
+        async def falla(*_a, **_k):
+            raise RuntimeError("fallo simulado")
+
+        monkeypatch.setattr(revision_carpetas.RevisionCarpetas, "carpetas", falla)
+        with structlog.testing.capture_logs() as registros_fallo:
+            r = await pagina({"nombre": "CENTINELA-PRIV-9Q"})
+        assert r.status_code == 503
+        assert any(reg.get("event") == "pendientes.carpetas_fallo" for reg in registros_fallo)
+        assert "CENTINELA-PRIV-9Q" not in repr(registros_fallo)
+
+
+class TestArticulosYPuntuacion:
+    async def test_ac24_articulos_puntuacion_y_texto_sin_palabras(self, banco):
+        await banco.sembrar(
+            archivo("Comics/Los Vengadores/Cosa 01.cbz"),
+            archivo("Comics/El Sandman/Cosa 01.cbz"),
+            archivo("Comics/S.H.I.E.L.D./Cosa 01.cbz"),
+        )
+        assert claves((await pagina({"nombre": "vengadores"})).text) == ["Comics/Los Vengadores"]
+        assert claves((await pagina({"nombre": "sandman"})).text) == ["Comics/El Sandman"]
+        assert claves((await pagina({"nombre": "shield"})).text) == ["Comics/S.H.I.E.L.D."]
+        for articulo in ("el", "los"):
+            r = await pagina({"nombre": articulo})
+            assert r.status_code == 200
+            assert "El texto no contiene palabras que buscar; no se aplica el filtro de nombre." in visible(r.text)
+            assert set(claves(r.text)) == {"Comics/Los Vengadores", "Comics/El Sandman",
+                                           "Comics/S.H.I.E.L.D."}

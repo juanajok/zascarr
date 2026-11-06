@@ -405,9 +405,25 @@ class TestPoliticaBusquedaD8:
         assert series.wishlist_policy == WishlistPolicy.NONE
         # Lo retirado AHORA y el acumulado se dicen por separado: confundirlos
         # mostraría «2» cuando en la serie ya había 3 más.
-        assert "Se han dejado de buscar 2 números que aún no habían empezado" in r.text
+        assert "Se han dejado de buscar 2 números que estaban por buscar o sin resultados" in r.text
         assert "Lo que ya se estaba buscando o descargando termina" in r.text
         assert "5 números dejados de buscar por la política" in r.text
+
+    def test_pasar_a_ninguno_con_un_solo_numero_usa_el_singular(self):
+        """AC-03: el singular también se fija (la rama de `retirados_ahora == 1` de la plantilla)."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([], rowcount=1), acuse(), retirados(1),
+        ])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/politica",
+                            data={"wishlist_policy": "ninguno"})
+
+        texto = " ".join(re.sub(r"<[^>]+>", " ", r.text).split())
+        assert ("Se ha dejado de buscar 1 número que estaba por buscar o sin resultados. "
+                "Lo que ya se estaba buscando o descargando termina.") in texto
+        assert "aún no había empezado" not in texto and "Se han dejado de buscar 1 " not in texto
 
     def test_activar_politica_sin_aviso_no_escribe_nada(self):
         """C6 / FR-20: sin el aviso legal aceptado, ACTIVAR no escribe (ni la política ni la retirada) y responde con el
@@ -445,7 +461,7 @@ class TestPoliticaBusquedaD8:
 
         assert r.status_code == 200
         assert series.wishlist_policy == WishlistPolicy.NONE
-        assert "Se han dejado de buscar 2 números que aún no habían empezado" in r.text
+        assert "Se han dejado de buscar 2 números que estaban por buscar o sin resultados" in r.text
         assert "No se ha activado" not in r.text and 'href="/ui/legal"' not in r.text   # desactivar nunca choca con el aviso
 
     def test_activar_con_aviso_aceptado_sigue_funcionando_y_no_enlaza_la_pantalla_legal(self):
@@ -769,6 +785,7 @@ class TestTextosC6:
         bloque = self._bloque(self._ficha(series, cota=False))
         assert "desactivadas" in bloque
         assert "por hora" not in bloque
+        assert "instalación" not in bloque
 
     def test_aviso_legal_tiene_precedencia_sobre_la_cota(self):
         series = make_series(total_issues=3)
@@ -848,4 +865,165 @@ class TestTextosC6:
         series = make_series(total_issues=1)
         series.wishlist_policy = WishlistPolicy.MISSING
         bloque = self._bloque(self._ficha(series, cota=True))
-        assert "unos 1 por hora como máximo" in bloque
+        assert "un número por hora como máximo" in bloque
+        assert "unos 1" not in bloque
+
+    def test_el_aviso_legal_pendiente_gana_a_r_cero(self, monkeypatch):
+        """Precedencia (FR-29): con el aviso sin aceptar y R = 0, se dice lo del aviso, no lo de R = 0."""
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={"politica_busquedas_por_hora": 0})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, acuse_=False, cota=False))
+        assert "No se buscará ninguno hasta que aceptes el aviso legal." in bloque
+        assert "desactivadas" not in bloque
+
+    def test_el_efecto_diferido_no_se_promete_con_el_aviso_legal_pendiente(self, monkeypatch):
+        """Sin aviso aceptado no habrá búsquedas aunque llegue el total: no se promete que ZascArr buscará."""
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={"comicvine_enabled": True})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=120, metadata_source=None)
+        series.tradition = ComicTradition.AMERICAN
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False, acuse_=False))
+        assert "Si llega a conocerse el total" not in bloque
+
+    def test_el_efecto_diferido_no_se_promete_con_r_cero(self, monkeypatch):
+        """Con R = 0 ZascArr no buscará nada aunque llegue el total: no se promete."""
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(
+            update={"comicvine_enabled": True, "politica_busquedas_por_hora": 0})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=120, metadata_source=None)
+        series.tradition = ComicTradition.AMERICAN
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False))
+        assert "Si llega a conocerse el total" not in bloque
+
+    def test_sin_numeros_que_faltan_el_aviso_legal_no_habla_de_faltantes(self):
+        """V6: el aviso legal solo gana con algo que buscar (`k >= 1`); con k = 0 se enseña el motivo y no
+        «Faltan 0 números. No se buscará ninguno…»."""
+        series = make_series(total_issues=120, metadata_source=MetadataSource.ANILIST.value)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False, acuse_=False))
+        assert "(viene de AniList)" in bloque
+        assert "Faltan 0" not in bloque and "No se buscará ninguno hasta que aceptes" not in bloque
+
+class TestProcedenciaCamposC6:
+    """#127: el bloque de procedencia no inventa origen ni expone ids internos."""
+
+    def test_la_ficha_muestra_procedencia_y_bloqueo(self):
+        series = make_series(total_issues=3)
+        series.metadata_source = "comic_vine"
+        series.metadata_ = {"alta": {"origen": "descubrir", "fuente": "comic_vine",
+                                     "id_externo": "777", "fecha": "2026-11-06T10:00:00+00:00"}}
+        series.comic_vine_id = 777
+        series.locked_fields = ["comic_vine_id"]
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert "De dónde sale cada dato" in r.text
+        assert "Alta desde Comic Vine" in r.text
+        assert "Protegido: el enriquecimiento no lo sobrescribe." in r.text
+        assert "Protegido</strong> significa que el enriquecimiento no lo sobrescribe." in r.text
+        assert "Identificador de la fuente" in r.text
+        assert "777" not in r.text   # el id externo no se pinta
+
+    def test_sin_procedencia_lo_dice_en_vez_de_atribuir(self):
+        series = make_series(total_issues=3)
+        series.metadata_source = None
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert "Origen no registrado" in r.text
+        assert "No hay procedencia registrada" in r.text
+        assert "significa que el enriquecimiento no lo sobrescribe" not in r.text
+        assert "significa que lo has escrito tú" not in r.text
+
+
+class TestVolverALaBiblioteca:
+    """BL-IT03 (#286): vuelta al contexto o a Biblioteca, nunca a un destino abierto."""
+
+    def _get(self, series, volver=None):
+        params = {} if volver is None else {"volver": volver}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            return client.get(f"/ui/series/{series.id}", params=params)
+
+    def test_con_contexto_valido_vuelve_a_la_biblioteca(self):
+        series = make_series(total_issues=3)
+        destino = f"/ui/biblioteca?q=thor&page=2#serie-{series.id}"
+        r = self._get(series, destino)
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca?q=thor&amp;page=2#serie-' in r.text
+        assert "Volver a la biblioteca" in r.text
+
+    def test_sin_contexto_ofrece_biblioteca_sin_inventar_busqueda(self):
+        series = make_series(total_issues=3)
+        r = self._get(series)
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text
+        assert "← Biblioteca" in r.text
+
+    def test_un_contexto_externo_o_manipulado_cae_a_biblioteca(self):
+        series = make_series(total_issues=3)
+        for valor in ("https%3A%2F%2Fevil.example", "%2F%2Fevil.example", "javascript%3Aalert(1)"):
+            r = self._get(series, valor)
+            assert r.status_code == 200
+            assert 'href="/ui/biblioteca" class="back-link"' in r.text
+            assert "evil" not in r.text and "javascript:" not in r.text
+
+    def test_dos_contextos_distintos_no_se_mezclan(self):
+        series = make_series(total_issues=3)
+        uno = f"/ui/biblioteca?q=uno&page=1#serie-{series.id}"
+        dos = f"/ui/biblioteca?q=dos&page=2#serie-{series.id}"
+        r1 = self._get(series, uno)
+        r2 = self._get(series, dos)
+        assert "q=uno&amp;page=1" in r1.text and "q=dos" not in r1.text
+        assert "q=dos&amp;page=2" in r2.text and "q=uno" not in r2.text
+
+    def test_un_volver_demasiado_largo_cae_a_biblioteca_sin_422(self):
+        series = make_series(total_issues=3)
+        r = self._get(series, "/ui/biblioteca?q=" + "x" * 2100)
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text
+        assert "← Biblioteca" in r.text
+
+    def test_un_ancla_de_otra_serie_cae_a_biblioteca(self):
+        series = make_series(total_issues=3)
+        otra = uuid4()
+        r = self._get(series, f"/ui/biblioteca?page=1#serie-{otra}")
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text
+
+    def test_desde_la_vista_lista_vuelve_a_la_lista(self):
+        series = make_series(total_issues=3)
+        destino = f"/ui/biblioteca?vista=lista&page=2#serie-{series.id}"
+        r = self._get(series, destino)
+        assert r.status_code == 200
+        assert "vista=lista&amp;page=2#serie-" in r.text
+        assert "Volver a la biblioteca" in r.text
+
+
+class TestEnriquecimientoEnFicha:
+    """#128: la ficha ofrece revisar la propuesta, pero no la aplica sola."""
+
+    def test_la_ficha_ofrece_revisar_los_cambios(self):
+        series = make_series(total_issues=3)
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert "Revisar cambios de datos" in r.text
+        assert f'action="/ui/series/{series.id}/enriquecimiento/previsualizar"' in r.text
+        assert "No se aplica nada hasta que lo confirmes" in r.text

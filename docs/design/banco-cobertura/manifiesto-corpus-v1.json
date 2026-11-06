@@ -1,0 +1,8 @@
+{
+  "version": "v1",
+  "corpus": "docs/design/corpus-cobertura-v1.json",
+  "sha256": "7f1a0f1f916a8572278c3fea149490029c235b01e7293a9718fe9c8b300665b2",
+  "casos": 30,
+  "acreditacion": "parcial_12_de_30",
+  "nota": "12 de 30 acreditados por el PO el 2026-11-06 (dossier de evidencia); 18 en borrador."
+}

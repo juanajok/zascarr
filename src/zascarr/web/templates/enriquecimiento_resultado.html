@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Resultado del enriquecimiento — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ series.id }}">← {{ series.title }}</a>
+<h1>Datos revisados</h1>
+
+{% if error %}
+  {{ ui.aviso("warn", error) }}
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la ficha</a></p>
+{% else %}
+  <p class="subtitle">Esto es lo que ha pasado con cada campo. Nada más se ha tocado.</p>
+  <ul class="enriquecimiento-resultado">
+    {% for campo in resultado.campos %}
+    <li class="enriquecimiento-resultado-{{ campo.estado }}">
+      <strong>{{ campo.etiqueta }}</strong>: {{ campo.estado|replace("_", " ") }}.
+      <span class="muted">{{ campo.motivo }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if resultado.aplicados %}
+  <p><a class="btn primary" href="/ui/series/{{ series.id }}">Ver la ficha actualizada</a></p>
+  {% else %}
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la ficha</a></p>
+  {% endif %}
+{% endif %}
+{% endblock %}

@@ -47,6 +47,15 @@
   {% endif %}
 </div>
 
+<div class="library-vistas" role="group" aria-label="Presentación de la biblioteca">
+  <a class="library-vista{% if vista != "lista" %} library-vista-actual{% endif %}"
+     href="{{ url_vista_tarjetas }}"
+     {% if vista != "lista" %}aria-current="true"{% endif %}>Tarjetas</a>
+  <a class="library-vista{% if vista == "lista" %} library-vista-actual{% endif %}"
+     href="{{ url_vista_lista }}"
+     {% if vista == "lista" %}aria-current="true"{% endif %}>Lista</a>
+</div>
+
 {% if error %}
 {#- El aviso y el reintento ya están arriba; no se pinta una rejilla vacía que
     parezca «no hay series» (criterio 5 del issue). -#}
@@ -57,9 +66,32 @@
   <p class="empty"><a href="/ui/pendientes">Añade lo que tengas en el disco desde Por revisar.</a></p>
   {% endif %}
 {% else %}
+{% if vista == "lista" %}
+<table class="library-lista">
+  <caption class="sr">Series de la biblioteca</caption>
+  <thead>
+    <tr>
+      <th scope="col">Título</th>
+      <th scope="col">Año</th>
+      <th scope="col">Tradición</th>
+      <th scope="col">Números</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for series in items %}
+    <tr id="serie-{{ series.id }}">
+      <td data-label="Título"><a href="{{ url_serie(series.id) }}">{{ series.title }}</a></td>
+      <td data-label="Año">{% if series.start_year is not none %}{{ series.start_year }}{% else %}No consta{% endif %}</td>
+      <td data-label="Tradición">{{ (series.tradition|tradicion) or "No consta" }}</td>
+      <td data-label="Números">{% if series.total_issues is not none %}{{ series.total_issues }}{% else %}No consta{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
 <div class="library-grid">
   {% for series in items %}
-  <a class="library-card" href="/ui/series/{{ series.id }}">
+  <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
     <div class="library-card-body">
       <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
@@ -72,6 +104,7 @@
   </a>
   {% endfor %}
 </div>
+{% endif %}
 {% endif %}
 
 {% if pages > 1 and not error %}

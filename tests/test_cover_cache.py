@@ -9,6 +9,7 @@ ASGITransport/monkeypatch de httpx hace de servidor falso.
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 import io
 import os
 import zipfile
@@ -42,6 +43,14 @@ def make_request(headers: dict | None = None) -> Request:
         "headers": [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()],
     }
     return Request(scope)
+
+
+@pytest.fixture(autouse=True)
+def _fuentes_encendidas(monkeypatch):
+    """Una fuente apagada no recibe portadas (AC-15); estas pruebas son del camino permitido."""
+    monkeypatch.setattr("zascarr.utils.cover.get_settings", lambda: SimpleNamespace(
+        comicvine_enabled=True, anilist_enabled=True, tebeosfera_enabled=True,
+        gcd_enabled=True, forum_enabled=False, forum_url=""))
 
 
 class TestCachedImageResponse:
@@ -233,8 +242,8 @@ class _FakeResult:
     def __init__(self, rows):
         self._rows = rows
 
-    def first(self):
-        return self._rows[0] if self._rows else None
+    def all(self):
+        return self._rows
 
 
 class _SesionDePortada:
