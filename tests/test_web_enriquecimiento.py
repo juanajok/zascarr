@@ -107,6 +107,7 @@ def test_aplicar_reenvia_el_mismo_token_y_muestra_resultado(monkeypatch):
     assert "aplicado" in r.text and "bloqueado" in r.text
     aplicar.assert_awaited_once()
     assert aplicar.await_args.args[1] == ["description"]
+    assert aplicar.await_args.args[2] == s.id
 
 
 def test_aplicar_con_token_invalido_no_afirma_que_aplico(monkeypatch):

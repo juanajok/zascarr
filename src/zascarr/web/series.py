@@ -274,7 +274,7 @@ async def aplicar_enriquecimiento(
     series = await _serie_o_404(db, series_id)
     servicio = EnriquecimientoPlanService(db, get_settings().secret_key)
     try:
-        resultado = await servicio.aplicar(token, campos or [])
+        resultado = await servicio.aplicar(token, campos or [], series_id)
     except ErrorDePlan as exc:
         return templates.TemplateResponse(
             request, "enriquecimiento_resultado.html",

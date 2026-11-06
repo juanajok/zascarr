@@ -137,6 +137,16 @@ async def test_plan_desactualizado_no_aplica_nada():
 
 
 @pytest.mark.asyncio
+async def test_el_plan_no_se_aplica_a_otra_ficha():
+    s = serie(description="Sinopsis propia.")
+    svc = servicio(s, match(description="Otra."))
+    plan = await svc.previsualizar(s.id)
+    with pytest.raises(TokenInvalido):
+        await svc.aplicar(plan.token, ["description"], uuid4())
+    assert s.description == "Sinopsis propia."
+
+
+@pytest.mark.asyncio
 async def test_token_manipulado_no_aplica():
     s = serie(description="Sinopsis propia.")
     svc = servicio(s, match(description="Otra."))
