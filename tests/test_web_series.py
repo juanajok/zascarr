@@ -409,6 +409,22 @@ class TestPoliticaBusquedaD8:
         assert "Lo que ya se estaba buscando o descargando termina" in r.text
         assert "5 números dejados de buscar por la política" in r.text
 
+    def test_pasar_a_ninguno_con_un_solo_numero_usa_el_singular(self):
+        """AC-03: el singular también se fija (la rama de `retirados_ahora == 1` de la plantilla)."""
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        session = FakeSession([
+            FakeExecResult([series]), FakeExecResult([], rowcount=1), acuse(), retirados(1),
+        ])
+        with use_fake_session(session) as client:
+            r = client.post(f"/ui/series/{series.id}/politica",
+                            data={"wishlist_policy": "ninguno"})
+
+        texto = " ".join(re.sub(r"<[^>]+>", " ", r.text).split())
+        assert ("Se ha dejado de buscar 1 número que estaba por buscar o sin resultados. "
+                "Lo que ya se estaba buscando o descargando termina.") in texto
+        assert "aún no había empezado" not in texto and "Se han dejado de buscar 1 " not in texto
+
     def test_activar_politica_sin_aviso_no_escribe_nada(self):
         """C6 / FR-20: sin el aviso legal aceptado, ACTIVAR no escribe (ni la política ni la retirada) y responde con el
         fragmento SIN CAMBIOS, el aviso y el enlace a /ui/legal. Es 200 (htmx no intercambia los 4xx)."""
@@ -849,7 +865,8 @@ class TestTextosC6:
         series = make_series(total_issues=1)
         series.wishlist_policy = WishlistPolicy.MISSING
         bloque = self._bloque(self._ficha(series, cota=True))
-        assert "unos 1 por hora como máximo" in bloque
+        assert "un número por hora como máximo" in bloque
+        assert "unos 1" not in bloque
 
     def test_el_aviso_legal_pendiente_gana_a_r_cero(self, monkeypatch):
         """Precedencia (FR-29): con el aviso sin aceptar y R = 0, se dice lo del aviso, no lo de R = 0."""
@@ -887,6 +904,15 @@ class TestTextosC6:
         series.wishlist_policy = WishlistPolicy.MISSING
         bloque = self._bloque(self._ficha(series, computable=False))
         assert "Si llega a conocerse el total" not in bloque
+
+    def test_sin_numeros_que_faltan_el_aviso_legal_no_habla_de_faltantes(self):
+        """V6: el aviso legal solo gana con algo que buscar (`k >= 1`); con k = 0 se enseña el motivo y no
+        «Faltan 0 números. No se buscará ninguno…»."""
+        series = make_series(total_issues=120, metadata_source=MetadataSource.ANILIST.value)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False, acuse_=False))
+        assert "(viene de AniList)" in bloque
+        assert "Faltan 0" not in bloque and "No se buscará ninguno hasta que aceptes" not in bloque
 
 class TestProcedenciaCamposC6:
     """#127: el bloque de procedencia no inventa origen ni expone ids internos."""
