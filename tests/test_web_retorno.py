@@ -52,3 +52,9 @@ def test_el_ancla_debe_ser_la_de_esta_ficha():
     sid, otra = uuid4(), uuid4()
     assert volver_segura(f"/ui/biblioteca?page=1#serie-{sid}", sid) is not None
     assert volver_segura(f"/ui/biblioteca?page=1#serie-{otra}", sid) is None
+
+
+def test_volver_acepta_la_vista_lista():
+    sid = uuid4()
+    valor = f"/ui/biblioteca?vista=lista&page=2#serie-{sid}"
+    assert volver_segura(valor, sid) == valor

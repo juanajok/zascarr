@@ -1705,6 +1705,60 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .procedencia-campo { grid-template-columns: 1fr; gap: 3px; }
 }
 
+/* ── BL-IT02 (#284): vista compacta de la biblioteca ──────────────────────── */
+.library-vistas {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 0 0 12px;
+}
+.library-vista {
+  display: inline-flex; align-items: center; min-height: 40px;
+  padding: 6px 12px; border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  color: var(--ink); font-size: .875rem; font-weight: 700; text-decoration: none;
+}
+.library-vista:hover, .library-vista:focus-visible {
+  background: var(--yellow); color: var(--on-yellow);
+}
+.library-vista-actual { background: var(--ink); color: var(--paper); }
+.library-lista {
+  width: 100%; border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--paper);
+}
+.library-lista th, .library-lista td {
+  padding: 10px 12px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.library-lista th {
+  background: var(--paper-2); font-size: .875rem; font-weight: 700;
+}
+.library-lista tbody tr:last-child td { border-bottom: 0; }
+.library-lista tbody tr:hover { background: var(--paper-2); }
+.library-lista td a { color: var(--ink); font-weight: 700; }
+.library-lista td a:hover { color: var(--cyan-t); }
+.library-lista tr { scroll-margin-block-start: 16px; }
+@media (max-width: 640px) {
+  .library-lista, .library-lista tbody, .library-lista tr, .library-lista td { display: block; }
+  .library-lista thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .library-lista tr { padding: 8px 12px; border-bottom: 1px solid var(--ink-faint); }
+  .library-lista tbody tr:last-child { border-bottom: 0; }
+  .library-lista td {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 4px 0; border: 0;
+  }
+  .library-lista td::before {
+    content: attr(data-label); color: var(--ink-soft); font-weight: 700; flex: none;
+  }
+  .library-lista td:first-child { padding-top: 0; }
+  .library-lista td:last-child { padding-bottom: 0; }
+}
+
+/* En táctil/estrecho, el selector es un control de 44 px como el resto. */
+@media (max-width: 860px), (pointer: coarse) {
+  .library-vista { min-height: 44px; }
+}
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
