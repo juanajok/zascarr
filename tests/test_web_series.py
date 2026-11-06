@@ -405,7 +405,7 @@ class TestPoliticaBusquedaD8:
         assert series.wishlist_policy == WishlistPolicy.NONE
         # Lo retirado AHORA y el acumulado se dicen por separado: confundirlos
         # mostraría «2» cuando en la serie ya había 3 más.
-        assert "Se han dejado de buscar 2 números que aún no habían empezado" in r.text
+        assert "Se han dejado de buscar 2 números que estaban por buscar o sin resultados" in r.text
         assert "Lo que ya se estaba buscando o descargando termina" in r.text
         assert "5 números dejados de buscar por la política" in r.text
 
@@ -445,7 +445,7 @@ class TestPoliticaBusquedaD8:
 
         assert r.status_code == 200
         assert series.wishlist_policy == WishlistPolicy.NONE
-        assert "Se han dejado de buscar 2 números que aún no habían empezado" in r.text
+        assert "Se han dejado de buscar 2 números que estaban por buscar o sin resultados" in r.text
         assert "No se ha activado" not in r.text and 'href="/ui/legal"' not in r.text   # desactivar nunca choca con el aviso
 
     def test_activar_con_aviso_aceptado_sigue_funcionando_y_no_enlaza_la_pantalla_legal(self):
@@ -769,6 +769,7 @@ class TestTextosC6:
         bloque = self._bloque(self._ficha(series, cota=False))
         assert "desactivadas" in bloque
         assert "por hora" not in bloque
+        assert "instalación" not in bloque
 
     def test_aviso_legal_tiene_precedencia_sobre_la_cota(self):
         series = make_series(total_issues=3)
@@ -850,6 +851,42 @@ class TestTextosC6:
         bloque = self._bloque(self._ficha(series, cota=True))
         assert "unos 1 por hora como máximo" in bloque
 
+    def test_el_aviso_legal_pendiente_gana_a_r_cero(self, monkeypatch):
+        """Precedencia (FR-29): con el aviso sin aceptar y R = 0, se dice lo del aviso, no lo de R = 0."""
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={"politica_busquedas_por_hora": 0})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=3)
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, acuse_=False, cota=False))
+        assert "No se buscará ninguno hasta que aceptes el aviso legal." in bloque
+        assert "desactivadas" not in bloque
+
+    def test_el_efecto_diferido_no_se_promete_con_el_aviso_legal_pendiente(self, monkeypatch):
+        """Sin aviso aceptado no habrá búsquedas aunque llegue el total: no se promete que ZascArr buscará."""
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(update={"comicvine_enabled": True})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=120, metadata_source=None)
+        series.tradition = ComicTradition.AMERICAN
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False, acuse_=False))
+        assert "Si llega a conocerse el total" not in bloque
+
+    def test_el_efecto_diferido_no_se_promete_con_r_cero(self, monkeypatch):
+        """Con R = 0 ZascArr no buscará nada aunque llegue el total: no se promete."""
+        from zascarr.config import get_settings
+
+        settings = get_settings().model_copy(
+            update={"comicvine_enabled": True, "politica_busquedas_por_hora": 0})
+        monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+        series = make_series(total_issues=120, metadata_source=None)
+        series.tradition = ComicTradition.AMERICAN
+        series.wishlist_policy = WishlistPolicy.MISSING
+        bloque = self._bloque(self._ficha(series, computable=False))
+        assert "Si llega a conocerse el total" not in bloque
 
 class TestProcedenciaCamposC6:
     """#127: el bloque de procedencia no inventa origen ni expone ids internos."""
