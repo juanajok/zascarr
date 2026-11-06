@@ -88,12 +88,17 @@ async def _rescan_loop(interval_minutes: int) -> None:
     (identificado → serie; si no → «Por revisar»), re-tría lo sustituido y
     marca/revierte lo desaparecido, sin consultar fuentes ni mover nada.
 
-    Comparte el cerrojo de ciclo con el importador: si coinciden, uno de los
-    dos se salta ese turno (el rescan consta en el log y reintenta el siguiente).
+    El PRIMER paseo espera un intervalo completo: el primer rescan tras una actualización
+    es el más caro (línea de base `file_mtime_ns` NULL: lee todos los CBZ una vez) y no debe
+    competir con el arranque de la Pi; el checklist de despliegue recomienda lanzarlo a mano
+    en un momento tranquilo. Comparte el cerrojo de ciclo con el importador: si coinciden,
+    uno de los dos se salta ese turno (el rescan consta en el log y reintenta el siguiente).
     """
     from zascarr.database import async_session_factory
     from zascarr.services import rescan_biblioteca
 
+    logger.info("rescan.first_delayed", minutos=interval_minutes)
+    await asyncio.sleep(interval_minutes * 60)
     while True:
         try:
             informe = await rescan_biblioteca.ejecutar_automatico(async_session_factory)

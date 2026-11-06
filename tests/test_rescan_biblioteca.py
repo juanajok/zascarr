@@ -179,6 +179,48 @@ class TestPantalla:
         for interna in (" stat", "triaje", "cerrojo", "ImportRun"):
             assert interna not in r.text
 
+    def test_el_fragmento_tras_reinicio_pinta_el_informe_persistido(self):
+        """B1 del peer review: sin estado en memoria (proceso recién arrancado), el fragmento lee el
+        `ImportRun` persistido y lo pinta SIN reventar (antes `started_at=None` → 500)."""
+        from datetime import UTC, datetime
+
+        from fastapi.testclient import TestClient
+
+        from zascarr.database import get_db
+        from zascarr.main import app
+
+        class Run:
+            details = {
+                "kind": "rescan", "disparador": "automatico", "files_scanned": 1300,
+                "sin_cambios": 1290, "nuevos_registrados": 3, "nuevos_a_revisar": 2,
+                "repetidos": 1, "reenlazados": 0, "re_triados": 0, "desaparecidos": 0,
+                "reaparecidos": 0, "errores": [], "no_revisado": False,
+                "resultado_biblioteca": "comprobada", "por_comprobar": 0,
+            }
+            started_at = datetime(2026, 11, 6, 8, 0, tzinfo=UTC)
+            files_scanned = 1300
+
+        class Ejec:
+            def scalar_one_or_none(self):
+                return Run()
+
+        class Sesion:
+            async def execute(self, _st):
+                return Ejec()
+
+        async def _get_db():
+            yield Sesion()
+        app.dependency_overrides[get_db] = _get_db
+        try:
+            r = TestClient(app).get("/ui/auditoria/rescanear")
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200
+        assert "Último rescan" in r.text and "automática" in r.text
+        assert "<strong>3</strong> nuevos a su serie" in r.text
+        assert "<strong>1300</strong> archivos mirados" in r.text
+        assert "Todavía no se ha hecho ningún rescan" not in r.text
+
     def test_el_post_lanza_una_sola_y_enseña_el_curso(self, monkeypatch):
         from fastapi.testclient import TestClient
 

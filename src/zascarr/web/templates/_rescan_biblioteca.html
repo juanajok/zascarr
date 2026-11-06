@@ -6,11 +6,14 @@
          hx-target="#rescan-biblioteca" hx-swap="outerHTML"{% endif %}>
   <h2 id="rescan-titulo" class="seccion">Reescanear la biblioteca</h2>
   <div id="rescan-aviso">
-    {% call ui.aviso("amber") %}<strong>Qué hace:</strong> mira ahora tu biblioteca y actualiza el catálogo:
-      registra los tebeos nuevos (a su serie si los reconoce, y a «Por revisar» si no), re-clasifica los que
-      cambiaron de contenido y marca los que ya no están en su sitio. <strong>No mueve, no renombra y no borra nada,</strong>
-      y no consulta fuentes de datos. Sigue en segundo plano: puedes cerrar esta página.
-      {{ cadencia }}{% endcall %}
+    {% call ui.aviso("amber") %}<strong>Qué hace:</strong> actualiza el catálogo con lo que hay ahora en tu
+      biblioteca. <strong>No mueve, no renombra y no borra nada.</strong>
+      {{ cadencia }}
+      <details><summary>Qué mira en detalle</summary>
+        <p>Registra los tebeos nuevos (a su serie si los reconoce, y a «Por revisar» si no), re-clasifica los
+          que cambiaron de contenido y marca los que ya no están en su sitio. No consulta fuentes de datos.
+          Sigue en segundo plano: puedes cerrar esta página.</p>
+      </details>{% endcall %}
   </div>
   <form class="audit-lanzar" hx-post="/ui/auditoria/rescanear"
         hx-target="#rescan-biblioteca" hx-swap="outerHTML" hx-disabled-elt="find button">
@@ -44,6 +47,19 @@
         {{ cifra_rescan(resumen.unreadable, "carpeta o archivo quedó sin leer", "carpetas o archivos quedaron sin leer") }}.
         Lo que no se pudo mirar no se da por revisado.</p>
       {% endif %}
+      {% if resumen.resultado_biblioteca not in ("", "comprobada") %}
+      <p class="audit-why"><strong>La comprobación de disponibilidad no se completó.</strong>
+        {% if resumen.resultado_biblioteca == "raiz_inaccesible" -%}
+          La carpeta de la biblioteca no existía o no era una carpeta.
+        {%- elif resumen.resultado_biblioteca == "raiz_vacia" -%}
+          La carpeta de la biblioteca estaba vacía.
+        {%- elif resumen.resultado_biblioteca == "desaparicion_masiva" -%}
+          Parecían demasiados a la vez: más de la mitad de los registrados no estaban.
+        {%- else -%}
+          No se pudo terminar de comprobar.
+        {%- endif %}
+        <strong>No se han marcado archivos como no encontrados en este rescan.</strong></p>
+      {% endif %}
       <ul class="audit-resumen">
         <li>{{ cifra_rescan(resumen.files_scanned, "archivo mirado", "archivos mirados") }} en la biblioteca</li>
         <li>{{ cifra_rescan(resumen.nuevos_registrados, "nuevo a su serie", "nuevos a su serie") }}</li>
@@ -54,6 +70,9 @@
         <li>{{ cifra_rescan(resumen.re_triados, "re-clasificado", "re-clasificados") }} por cambiar de contenido
           ({{ resumen.re_triados_igual }} igual, {{ resumen.re_triados_cambiado }} otro número,
           {{ resumen.re_triados_a_revisar }} a revisar, {{ resumen.re_triados_descartado }} descartado)</li>
+        {% endif %}
+        {% if resumen.copias_de_otra %}
+        <li>{{ cifra_rescan(resumen.copias_de_otra, "ahora es copia", "ahora son copias") }} idéntica de otro archivo registrado: se conserva su ficha</li>
         {% endif %}
         <li>{{ cifra_rescan(resumen.desaparecidos, "nuevo no disponible", "nuevos no disponibles") }}</li>
         <li>{{ cifra_rescan(resumen.reaparecidos, "reaparecido", "reaparecidos") }}</li>
