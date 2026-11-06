@@ -1677,6 +1677,38 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
    puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
 
+
+/* ── MIT-M6-US01 (#127): procedencia y protección por campo ────────────────── */
+.procedencia-serie { margin: 14px 0 18px; }
+.procedencia-serie summary {
+  cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
+  padding: 8px 0; min-height: 40px;
+}
+.procedencia-serie .muted { margin: 0 0 10px; }
+.procedencia-campos {
+  display: grid; gap: 0; margin: 0 0 10px;
+  border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper); overflow: hidden;
+}
+.procedencia-campo {
+  display: grid; grid-template-columns: minmax(150px, .55fr) minmax(0, 1fr);
+  gap: 4px 16px; padding: 10px 14px;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.procedencia-campo:last-child { border-bottom: 0; }
+.procedencia-campo dt { font-weight: 700; }
+.procedencia-campo dd {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  margin: 0;
+}
+.procedencia-valor { font-weight: 600; }
+.procedencia-origen { color: var(--ink-soft); font-size: .875rem; }
+.procedencia-origen.manual { color: var(--ink); font-weight: 700; }
+.procedencia-campo small { flex-basis: 100%; }
+@media (max-width: 560px) {
+  .procedencia-campo { grid-template-columns: 1fr; gap: 3px; }
+}
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
