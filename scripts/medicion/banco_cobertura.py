@@ -31,6 +31,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import re
@@ -577,40 +578,65 @@ class _SinDatos(Exception):  # noqa: N818 — marcador interno, no se publica
     """El caso no trae el dato que el método autorizado necesita (p. ej. volume_id)."""
 
 
-async def _llamar_cliente(fuente: str, metodo: str | None, caso: dict) -> list[Any]:
-    """Llamada real a un método autorizado. Solo se usa en `--real` con autorización válida."""
+async def _invocar(cliente: Any, fuente: str, metodo: str | None, caso: dict) -> list[Any]:
+    """Invoca el método autorizado sobre un cliente ya construido (real o inyectado)."""
     if metodo is None:
         raise _SinDatos()
     etiqueta = caso["etiqueta_editorial"]
     campos = etiqueta.get("campos") or {}
     if fuente == "comic_vine":
+        if metodo.endswith("search_series"):
+            return list(await cliente.search_series(caso["consulta"]))
+        if metodo.endswith("find_issue"):
+            volume_id = campos.get("volume_id")
+            numero = etiqueta.get("numero")
+            if not volume_id or not numero:
+                raise _SinDatos()
+            return list(await cliente.find_issue(int(volume_id), str(numero)))
+        if metodo.endswith("get_issue_detail"):
+            issue_id = campos.get("issue_id")
+            if not issue_id:
+                raise _SinDatos()
+            return [await cliente.get_issue_detail(int(issue_id))]
+    if fuente == "anilist":
+        return list(await cliente.search_manga(caso["consulta"]))
+    if fuente in ("tebeosfera", "gcd"):
+        return list(await cliente.search_series(caso["consulta"]))
+    raise _SinDatos()
+
+
+async def _llamar_cliente(fuente: str, metodo: str | None, caso: dict, *,
+                          cliente_factory=None) -> list[Any]:
+    """Llamada real a un método autorizado. Solo se usa en `--real` con autorización válida.
+
+    `cliente_factory(fuente)` permite inyectar un doble en las pruebas (cero red). Sin factory
+    se usan los clientes reales, que ya pasan por `pedir_con_cortesia` (#134); aquí no se hace
+    ninguna petición directa.
+    """
+    if metodo is None:
+        raise _SinDatos()
+    if cliente_factory is not None:
+        cliente = cliente_factory(fuente)
+        if hasattr(cliente, "__aenter__"):
+            async with cliente as abierto:
+                return await _invocar(abierto, fuente, metodo, caso)
+        return await _invocar(cliente, fuente, metodo, caso)
+    if fuente == "comic_vine":
         from zascarr.services.comic_vine import ComicVineClient
         async with ComicVineClient() as cliente:
-            if metodo.endswith("search_series"):
-                return list(await cliente.search_series(caso["consulta"]))
-            if metodo.endswith("find_issue"):
-                volume_id = campos.get("volume_id")
-                numero = etiqueta.get("numero")
-                if not volume_id or not numero:
-                    raise _SinDatos()
-                return list(await cliente.find_issue(int(volume_id), str(numero)))
-            if metodo.endswith("get_issue_detail"):
-                issue_id = campos.get("issue_id")
-                if not issue_id:
-                    raise _SinDatos()
-                return [await cliente.get_issue_detail(int(issue_id))]
+            return await _invocar(cliente, fuente, metodo, caso)
     if fuente == "anilist":
         from zascarr.services.anilist import AniListClient
         async with AniListClient() as cliente:
-            return list(await cliente.search_manga(caso["consulta"]))
+            return await _invocar(cliente, fuente, metodo, caso)
     if fuente == "tebeosfera":
         from zascarr.services.tebeosfera import TebeosferaClient
         async with TebeosferaClient() as cliente:
-            return list(await cliente.search_series(caso["consulta"]))
+            return await _invocar(cliente, fuente, metodo, caso)
     if fuente == "gcd":
         from zascarr.services.gcd import GCDClient
         async with GCDClient() as cliente:
-            return list(await cliente.search_series(caso["consulta"]))
+            return await _invocar(cliente, fuente, metodo, caso)
     raise _SinDatos()
 
 
@@ -646,81 +672,140 @@ def _configuracion_fuente(fuente: str) -> tuple[bool, str | None]:
     return True, None
 
 
-async def ejecutar_real(plan: Sequence[dict], corpus: dict, autorizacion: dict, *,
-                        max_peticiones: int, max_por_fuente: int,
-                        salida: Path) -> list[dict]:
-    """Ejecuta el plan real. No se lanza en esta entrega; queda implementado y acotado."""
-    condiciones = {"fecha": _iso(ahora_utc()), "red": "real", "fuentes_encendidas": [],
-                   "presupuesto": autorizacion["presupuesto_peticiones"], "parada": "final"}
+async def ejecutar_real(
+    plan: Sequence[dict], corpus: dict, autorizacion: dict, *,
+    max_peticiones: int, max_por_fuente: int, salida: Path,
+    corpus_sha: str, fuentes: Sequence[str] | None = None,
+    cliente_factory=None, sha_ejecutor: str = "no_disponible",
+    ahora: datetime | None = None,
+) -> list[dict]:
+    """Ejecuta el plan real con la cortesía de #134. No se lanza en tests ni en PR-3 aquí.
+
+    Revalida el permiso contra el corpus (no confía en el diccionario del llamador), aplica
+    ámbito/casos/topes y se detiene por presupuesto, cortesía, fuente apagada o 3 fallos
+    consecutivos. Las celdas no ejecutadas quedan `no_ejecutado` con su motivo.
+    """
+    fuentes = list(fuentes or sorted({c["fuente"] for c in plan}))
+    errores = validar_autorizacion(autorizacion, sha_corpus=corpus_sha, fuentes=fuentes,
+                                   ahora=ahora, plan=plan)
+    if errores:
+        raise PermissionError("autorizacion_invalida:" + ",".join(errores))
+    casos_auth = set(autorizacion.get("casos") or [])
+    plan = [c for c in plan
+            if _celda_autorizada(c, autorizacion["ambito"], casos_auth or None)]
+    # El tope efectivo nunca puede superar el permiso, aunque el llamador pase más.
+    max_peticiones = min(max_peticiones, autorizacion["presupuesto_peticiones"])
+    max_por_fuente = min(max_por_fuente, autorizacion.get("max_por_fuente", max_por_fuente))
+
+    fuentes_encendidas: list[str] = []
+    for fuente in sorted({c["fuente"] for c in plan}):
+        disponible, _causa = _configuracion_fuente(fuente)
+        if disponible:
+            fuentes_encendidas.append(fuente)
+    condiciones = {"fecha": _iso(ahora_utc()), "red": "real",
+                   "fuentes_encendidas": fuentes_encendidas,
+                   "presupuesto": max_peticiones, "parada": "final"}
     filas: list[dict] = []
     peticiones = 0
     por_fuente: Counter[str] = Counter()
     fallos_consecutivos: Counter[str] = Counter()
     parada: str | None = None
+
+    def _no_ejecutado(celda: dict, motivo: str, estado133: str | None = None,
+                      notas: str = "", *, cuenta: bool = False) -> None:
+        filas.append(_registro(
+            caso=celda["caso"], corpus_version=corpus["version"], fuente=celda["fuente"],
+            capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=celda["metodo"],
+            estado_tecnico="no_ejecutado", estado_fuente_133=estado133,
+            motivo_no_ejecutado=motivo, peticiones=0, reintentos=0,
+            resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
+            campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
+            notas=notas, sha_ejecutor=sha_ejecutor))
+        if cuenta:
+            filas[-1]["autorizacion"] = autorizacion
+
     for celda in plan:
         caso, fuente = celda["caso"], celda["fuente"]
         if parada is not None:
-            filas.append(_registro(
-                caso=caso, corpus_version=corpus["version"], fuente=fuente,
-                capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=celda["metodo"],
-                estado_tecnico="no_ejecutado", estado_fuente_133=None,
-                motivo_no_ejecutado="presupuesto_agotado" if parada == "presupuesto"
-                else "fuera_de_alcance", peticiones=0, reintentos=0,
-                resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
-                campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
-                notas=f"detenido: {parada}"))
+            motivo = ("presupuesto_agotado" if parada == "presupuesto"
+                      else "fuente_apagada" if parada == "fuente_apagada"
+                      else "fuera_de_alcance")
+            _no_ejecutado(celda, motivo, notas=f"detenido: {parada}", cuenta=True)
             continue
         if peticiones >= max_peticiones or por_fuente[fuente] >= max_por_fuente:
             parada = "presupuesto"
-            filas.append(_registro(
-                caso=caso, corpus_version=corpus["version"], fuente=fuente,
-                capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=celda["metodo"],
-                estado_tecnico="no_ejecutado", estado_fuente_133=None,
-                motivo_no_ejecutado="presupuesto_agotado", peticiones=0, reintentos=0,
-                resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
-                campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
-                notas="parada por presupuesto"))
+            _no_ejecutado(celda, "presupuesto_agotado", notas="parada por presupuesto",
+                          cuenta=True)
             continue
         if celda["metodo"] is None:
-            filas.append(_registro(
-                caso=caso, corpus_version=corpus["version"], fuente=fuente,
-                capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=None,
-                estado_tecnico="no_ejecutado", estado_fuente_133=None,
-                motivo_no_ejecutado="sin_metodo_autorizado", peticiones=0, reintentos=0,
-                resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
-                campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
-                notas="sin método autorizado; no se prueba"))
+            _no_ejecutado(celda, "sin_metodo_autorizado",
+                          notas="sin método autorizado; no se prueba", cuenta=True)
             continue
         disponible, causa = _configuracion_fuente(fuente)
         if not disponible:
-            filas.append(_registro(
-                caso=caso, corpus_version=corpus["version"], fuente=fuente,
-                capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=celda["metodo"],
-                estado_tecnico="no_ejecutado", estado_fuente_133=causa,
-                motivo_no_ejecutado=causa or "fuera_de_alcance", peticiones=0, reintentos=0,
-                resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
-                campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
-                notas="precomprobación sin tráfico"))
+            if causa == "fuente_apagada":
+                parada = "fuente_apagada"
+            _no_ejecutado(celda, causa or "fuera_de_alcance", estado133=causa,
+                          notas="precomprobación sin tráfico", cuenta=True)
+            if parada is None and causa == "configuracion_incompleta":
+                parada = "configuracion_incompleta"
             continue
+        filas.append(None)  # marcador de orden; se sustituye por la fila real
         peticiones += 1
         por_fuente[fuente] += 1
         try:
-            resultados = await _llamar_cliente(fuente, celda["metodo"], caso)
+            resultados = await _llamar_cliente(fuente, celda["metodo"], caso,
+                                               cliente_factory=cliente_factory)
         except _SinDatos:
-            filas.append(_registro(
-                caso=caso, corpus_version=corpus["version"], fuente=fuente,
-                capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=celda["metodo"],
-                estado_tecnico="no_ejecutado", estado_fuente_133=None,
-                motivo_no_ejecutado="fuera_de_alcance", peticiones=0, reintentos=0,
-                resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
-                campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
-                notas="al caso le falta el dato que pide el método"))
+            peticiones -= 1
+            por_fuente[fuente] -= 1
+            filas.pop()
+            _no_ejecutado(celda, "fuera_de_alcance",
+                          notas="al caso le falta el dato que pide el método", cuenta=True)
             continue
-        except Exception as exc:  # noqa: BLE001 — se clasifica con el contrato de #133/#134
+        except Exception as exc:  # noqa: BLE001 — se clasifica con #133/#134
+            if filas and filas[-1] is None:
+                filas.pop()
             estado, estado133 = estado_desde_excepcion(exc)
+            if isinstance(exc, _SinDatos):
+                peticiones -= 1
+                por_fuente[fuente] -= 1
+            intentos = getattr(exc, "intentos", 1) if estado in (
+                "fallo_transitorio", "limite_de_cortesia") else 1
             if estado == "limite_de_cortesia":
+                from zascarr.utils.cortesia import CortesiaEnEspera
+                if isinstance(exc, CortesiaEnEspera):
+                    # La cortesía no llegó a enviar: coste real 0, no se inventa una petición.
+                    intentos = 0
+                    peticiones -= 1
+                    por_fuente[fuente] -= 1
+                if intentos > 1:
+                    peticiones += intentos - 1
+                    por_fuente[fuente] += intentos - 1
                 parada = "limite_de_cortesia"
-            elif estado == "fallo_transitorio":
+                filas.append(_registro(
+                    caso=caso, corpus_version=corpus["version"], fuente=fuente,
+                    capacidad=celda["capacidad"], unidad=celda["unidad"],
+                    metodo=celda["metodo"], estado_tecnico="limite_de_cortesia",
+                    estado_fuente_133="limite_de_cortesia",
+                    motivo_no_ejecutado=None, peticiones=intentos,
+                    reintentos=max(0, intentos - 1), resultado_editorial=None,
+                    campos_evaluados=[], campos_presentes=[], campos_ausentes=[],
+                    candidatos=[], modo="real", condiciones=condiciones,
+                    notas="parada por cortesía; no se reenvía", sha_ejecutor=sha_ejecutor))
+                filas[-1]["autorizacion"] = autorizacion
+                continue
+            if intentos > 1:
+                peticiones += intentos - 1
+                por_fuente[fuente] += intentos - 1
+            if estado == "no_ejecutado":
+                peticiones -= 1
+                por_fuente[fuente] -= 1
+                parada = "fuente_apagada"
+                _no_ejecutado(celda, "fuente_apagada", estado133=estado133,
+                              notas="la fuente se apagó durante la ejecución", cuenta=True)
+                continue
+            if estado == "fallo_transitorio":
                 fallos_consecutivos[fuente] += 1
                 if fallos_consecutivos[fuente] >= 3:
                     parada = "fallos_transitorios"
@@ -728,11 +813,15 @@ async def ejecutar_real(plan: Sequence[dict], corpus: dict, autorizacion: dict, 
                 caso=caso, corpus_version=corpus["version"], fuente=fuente,
                 capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=celda["metodo"],
                 estado_tecnico=estado, estado_fuente_133=estado133,
-                motivo_no_ejecutado=None, peticiones=1, reintentos=0,
+                motivo_no_ejecutado=None, peticiones=intentos,
+                reintentos=max(0, intentos - 1),
                 resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
                 campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
-                notas=f"error clasificado: {type(exc).__name__}"))
+                notas=f"error clasificado: {type(exc).__name__}", sha_ejecutor=sha_ejecutor))
+            filas[-1]["autorizacion"] = autorizacion
             continue
+        if filas and filas[-1] is None:
+            filas.pop()
         fallos_consecutivos[fuente] = 0
         candidatos = _candidatos_saneados(resultados)
         estado = "ok" if resultados else "sin_resultados"
@@ -743,11 +832,11 @@ async def ejecutar_real(plan: Sequence[dict], corpus: dict, autorizacion: dict, 
             motivo_no_ejecutado=None, peticiones=1, reintentos=0,
             resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
             campos_ausentes=[], candidatos=candidatos, modo="real",
-            condiciones={**condiciones, "parada": parada or "final"},
-            hash_respuesta=_hash_saneado(candidatos),
-            notas="candidatos pendientes de revisión humana"))
-    if filas:
-        filas[-1]["condiciones"] = {**filas[-1]["condiciones"], "parada": parada or "final"}
+            condiciones=condiciones, hash_respuesta=_hash_saneado(candidatos),
+            notas="candidatos pendientes de revisión humana", sha_ejecutor=sha_ejecutor))
+        filas[-1]["autorizacion"] = autorizacion
+    for fila in filas:
+        fila["condiciones"] = {**fila["condiciones"], "parada": parada or "final"}
     return filas
 
 
@@ -1072,7 +1161,13 @@ def _main_real(args: argparse.Namespace) -> int:
     plan = plan_real(corpus, fuentes=fuentes, unidades=unidades, casos=casos)
     autorizacion, errores = cargar_autorizacion(
         Path(args.autorizacion) if args.autorizacion else None,
-        sha_corpus=sha, fuentes=fuentes, plan=plan)
+        sha_corpus=sha, fuentes=fuentes, plan=None)
+    if not errores and autorizacion is not None:
+        # El ámbito por unidad/capacidad se comprueba contra el plan pedido; los `casos` del
+        # permiso filtran el plan (los casos no pedidos no son «fuera de ámbito»).
+        auth_sin_casos = {k: v for k, v in autorizacion.items() if k != "casos"}
+        errores = validar_autorizacion(auth_sin_casos, sha_corpus=sha, fuentes=fuentes,
+                                       plan=plan)
     if errores or autorizacion is None:
         registros = registros_sin_autorizacion(plan, corpus,
                                                sha_ejecutor=args.sha_ejecutor)
@@ -1088,21 +1183,35 @@ def _main_real(args: argparse.Namespace) -> int:
         print("FAIL  sin autorización válida: 0 peticiones; informe con "
               "no_ejecutado: sin_autorizacion", file=sys.stderr)
         return 2
-    # Con autorización válida el arnés está listo, pero esta entrega no ejecuta PR-3.
-    # Topes efectivos = mínimo(autorización, CLI); el plan se filtra por casos del permiso.
-    _presupuesto = min(args.max_peticiones, autorizacion["presupuesto_peticiones"])
-    _max_fuente = min(args.max_por_fuente,
-                      autorizacion.get("max_por_fuente", args.max_por_fuente))
+    # Autorización válida: ejecuta el plan autorizado con cortesía de #134.
     casos_auth = set(autorizacion.get("casos") or [])
-    plan_autorizado = [c for c in plan
-                       if (not casos_auth or c["caso"]["caso_id"] in casos_auth)
-                       and _celda_autorizada(c, autorizacion["ambito"],
-                                             casos_auth or None)]
-    print(f"NOT RUN  ejecución real no lanzada en la entrega de preparación "
-          f"({len(plan_autorizado)} celdas autorizadas, presupuesto efectivo "
-          f"{_presupuesto}, max/fuente {_max_fuente}; requiere PR-3 y revisores)",
-          file=sys.stderr)
-    return 3
+    plan = [c for c in plan
+            if not casos_auth or c["caso"]["caso_id"] in casos_auth]
+    presupuesto = min(args.max_peticiones, autorizacion["presupuesto_peticiones"])
+    max_fuente = min(args.max_por_fuente,
+                     autorizacion.get("max_por_fuente", args.max_por_fuente))
+    try:
+        registros = asyncio.run(ejecutar_real(
+            plan, corpus, autorizacion, max_peticiones=presupuesto,
+            max_por_fuente=max_fuente, salida=Path(args.salida), corpus_sha=sha,
+            fuentes=fuentes, sha_ejecutor=args.sha_ejecutor))
+    except PermissionError as exc:
+        print(f"FAIL  revalidación de autorización: {exc}", file=sys.stderr)
+        return 2
+    informe = construir_informe(
+        registros=registros, corpus=corpus, corpus_sha=sha, modo="real",
+        autorizacion=autorizacion, errores_autorizacion=[], sha_ejecutor=args.sha_ejecutor)
+    try:
+        escribir_informe(informe, registros, Path(args.salida))
+    except ErrorBanco as exc:
+        print(f"FAIL  {exc}", file=sys.stderr)
+        return 1
+    ejecutadas = sum(1 for r in registros if r["estado_tecnico"] != "no_ejecutado")
+    parada = registros[-1]["condiciones"]["parada"] if registros else "final"
+    print(f"PASS  ejecución real terminada: {len(registros)} celdas, "
+          f"{ejecutadas} con petición, parada={parada}")
+    print("      cobertura editorial: NOT RUN hasta la revisión humana")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
