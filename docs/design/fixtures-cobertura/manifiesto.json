@@ -1,0 +1,7 @@
+{
+  "version": "v1",
+  "fichero": "seco.json",
+  "sha256": "8d65aed3195ca8bbd7521d7676a7e9cd14750c50b2ca511fa7b879c03f76a978",
+  "ensayos": 8,
+  "nota": "Fixtures saneados y sintéticos: validan el arnés en seco; no acreditan cobertura."
+}
