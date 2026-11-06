@@ -355,6 +355,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
     # BL-IT03 (#286): contexto de vuelta Biblioteca → ficha; solo ruta local validada.
     "volver",
+    # BL-IT02 (#284): presentación tarjetas/lista de la Biblioteca.
+    "vista",
 })
 
 
