@@ -722,7 +722,7 @@ async def ejecutar_real(
             campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
             notas=notas, sha_ejecutor=sha_ejecutor))
         if cuenta:
-            filas[-1]["autorizacion"] = autorizacion
+            filas[-1]["autorizacion"] = {"id": autorizacion.get("id")}
 
     for celda in plan:
         caso, fuente = celda["caso"], celda["fuente"]
@@ -793,7 +793,7 @@ async def ejecutar_real(
                     campos_evaluados=[], campos_presentes=[], campos_ausentes=[],
                     candidatos=[], modo="real", condiciones=condiciones,
                     notas="parada por cortesía; no se reenvía", sha_ejecutor=sha_ejecutor))
-                filas[-1]["autorizacion"] = autorizacion
+                filas[-1]["autorizacion"] = {"id": autorizacion.get("id")}
                 continue
             if intentos > 1:
                 peticiones += intentos - 1
@@ -818,7 +818,7 @@ async def ejecutar_real(
                 resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
                 campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
                 notas=f"error clasificado: {type(exc).__name__}", sha_ejecutor=sha_ejecutor))
-            filas[-1]["autorizacion"] = autorizacion
+            filas[-1]["autorizacion"] = {"id": autorizacion.get("id")}
             continue
         if filas and filas[-1] is None:
             filas.pop()
@@ -834,7 +834,7 @@ async def ejecutar_real(
             campos_ausentes=[], candidatos=candidatos, modo="real",
             condiciones=condiciones, hash_respuesta=_hash_saneado(candidatos),
             notas="candidatos pendientes de revisión humana", sha_ejecutor=sha_ejecutor))
-        filas[-1]["autorizacion"] = autorizacion
+        filas[-1]["autorizacion"] = {"id": autorizacion.get("id")}
     for fila in filas:
         fila["condiciones"] = {**fila["condiciones"], "parada": parada or "final"}
     return filas
