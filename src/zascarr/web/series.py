@@ -44,6 +44,7 @@ from zascarr.services.politica import (
     retirar_de_serie,
     texto_de_cota,
 )
+from zascarr.services.procedencia import procedencia_de_serie
 from zascarr.services.series import razon_de_no_calculable
 from zascarr.utils.cover import (
     CACHE_VERSION,
@@ -225,6 +226,7 @@ async def detalle(series_id: UUID, request: Request,
         **politica,
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": await archivos_por_numero(db, series.id),
+        "procedencia": procedencia_de_serie(series),
         "razones_sin_boton": RAZONES_SIN_BOTON,
     })
 
