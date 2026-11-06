@@ -30,8 +30,10 @@
 
 ## Cadencia periódica
 
-8. Confirmar en Auditoría que dice «Además, ZascArr lo hace solo una vez al día» y, al día siguiente,
-   que el resumen aparece con disparador «automática».
+8. Confirmar en Auditoría que dice «Además, ZascArr lo hace solo una vez al día». **El primer paseo
+   automático espera un intervalo completo desde el arranque** (24 h): el paseo más caro —la línea de
+   base— no compite con el arranque de la Pi; por eso se recomienda lanzarlo a mano (paso 5). Al día
+   siguiente del despliegue, comprobar que el resumen aparece con disparador «automática».
 9. Ajustar si hace falta: `RESCAN_INTERVAL_MINUTES` en el `.env` (1440 = diario; 0 apaga el periódico
    y queda solo el botón). Requiere `docker compose up -d` para releerlo.
 

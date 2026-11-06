@@ -105,9 +105,7 @@ Los 14 casos semilla de la ficha §8, más los de las decisiones del PO:
 - No hay migración destructiva ni dependencia nueva; el cerrojo de ciclo `(326,2)` se comparte a
   propósito (una sola operación de disco a la vez).
 
-## 7. Medición sintética local (no es la Pi)
-
-`scripts/medicion/medir_rescan_biblioteca.py` (2026-11-06, Postgres 15 en contenedor local, **no la
+## 7. Medición sintética local (no es la Pi)`scripts/medicion/medir_rescan_biblioteca.py` (2026-11-06, Postgres 15 en contenedor local, **no la
 Pi**, ficheros en caché de disco): 1.300 `.cbz` de 12 imágenes pequeñas (100 registrados + 1.200
 nuevos), x86, Python 3.14.
 
@@ -120,3 +118,26 @@ nuevos), x86, Python 3.14.
 Confirma que el coste de la pasada periódica es el paseo de rutas (no el contenido) y crece de forma
 lineal; **no** predice la Pi ni el USB (los archivos reales pesan decenas de MB y el disco no está en
 caché). Coste en la Pi con la biblioteca real: **NOT RUN**.
+
+## 8. Revisión del peer review (2026-11-06) — decisiones y ajustes
+
+El revisor (rol SCOUT.bench) entregó «aprobar con cambios» sobre los commits `0783d4a`→`d644b1d`.
+Resolución por hallazgo:
+
+| Hallazgo | Decisión |
+|---|---|
+| B1: el fragmento reventaba tras reiniciar el proceso (`_resumen` no entendía el dict persistido → 500) | **Corregido**: `_resumen` normaliza dict y `RescanReport`; regresión en `test_el_fragmento_tras_reinicio_pinta_el_informe_persistido` |
+| M1: el automático se disparaba al arrancar (la primera pasada es la más cara) | **Corregido**: el primer paseo espera un intervalo completo (`rescan.first_delayed`); el checklist recomienda lanzar la línea de base a mano |
+| M2: la UI callaba el guardarraíl de disponibilidad (`resultado_biblioteca`) | **Corregido**: el fragmento lo pinta con el vocabulario observacional de #231 («no se han marcado archivos…») |
+| m1: presupuesto de texto U21 | **Corregido**: entrada ≤ 50 palabras; el detalle va en `<details>` |
+| m2: `metadata_source` se borraba al re-triar | **Decidido**: se conserva; un ComicInfo nuevo solo lo actualiza si no era `manual` (protección del enricher) |
+| m3: doble contabilidad con commit de lote fallido | **Corregido**: los contadores del lote se revierten y pasan a «por comprobar»; regresión pg |
+| m4: rama `recuperar` (contenido = fila desaparecida) sin contrato | **Declarado**: la fila sigue en su ruta, conserva el vínculo y se actualiza el stat; cuenta como `re_triados_igual` |
+| m5: `copias_de_otra` no se pintaba | **Corregido**: línea propia en el resumen |
+| m6: `stat` fallido en `_partir` no contaba | **Corregido**: suma a `unreadable` y enciende `no_revisado` |
+| s1: seq scan sobre `import_runs.details` | **Diferido**: medir en la Pi; si molesta, columna `kind` o índice GIN |
+| s2: `original_sha256` describe el tebeo sustituido | **Declarado**: no se toca (contrato «tal como se importó», `models`); el dedupe por `original_sha256` sigue valiendo para la copia original |
+| s3: línea de base NULL + fichero ilegible se reintenta | **Declarado**: correcto; no se fija un stat no acreditado |
+| s4: caminos de fallo de commit sin prueba | **Corregido**: dos pruebas pg nuevas (lote fallido e informe final fallido) |
+| s5: el rescan no mira el marcador de adopción | **Declarado**: el rescan usa `adopt(alcance=…)`, que no toca el marcador; con el registro inicial a medias, lo que ve se registra y el registro inicial sigue ofreciéndose |
+| s6: un rescan con nuevos escribe dos `ImportRun` | **Declarado**: el `kind="registro_incremental"` de `adopt` es el registro de los nuevos; el `kind="rescan"` es el informe de la operación completa |

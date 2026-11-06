@@ -186,12 +186,15 @@ _CAMPOS_RESUMEN = (
 
 
 def _resumen(informe) -> dict | None:
-    """Normaliza el informe (en memoria o persistido) a un dict para la plantilla."""
+    """Normaliza el informe —en memoria (`RescanReport`) o persistido (dict de `_ultimo_rescan`)—
+    a un dict para la plantilla. Un informe persistido debe pintarse igual que uno en memoria:
+    tras un reinicio del proceso el estado en memoria ya no existe y la pantalla lee el `ImportRun`."""
     if informe is None:
         return None
+    fuente = informe.get if isinstance(informe, dict) else (lambda c: getattr(informe, c, None))
     out: dict = {}
     for c in _CAMPOS_RESUMEN:
-        v = getattr(informe, c, None)
+        v = fuente(c)
         if c in ("errores", "omitidos", "ambiguos") or isinstance(v, (list, tuple)):
             out[c] = list(v) if v else []
         elif isinstance(v, bool):
@@ -200,8 +203,8 @@ def _resumen(informe) -> dict | None:
             out[c] = v or 0
         else:
             out[c] = v or ""
-    out["disparador"] = getattr(informe, "disparador", None) or "manual"
-    out["started_at"] = getattr(informe, "started_at", None)
+    out["disparador"] = fuente("disparador") or "manual"
+    out["started_at"] = fuente("started_at")
     return out
 
 

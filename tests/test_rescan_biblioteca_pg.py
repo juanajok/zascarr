@@ -300,6 +300,36 @@ class TestMovidosYDesaparecidos:
             p.write_bytes(c)
 
 
+    async def test_si_el_commit_del_lote_falla_no_se_cuenta_dos_veces(self, mundo, monkeypatch):
+        """m3 del peer review: un lote cuyo commit no se acredita pasa a «por comprobar» y sus
+        re-triajes NO se cuentan también como hechos; el bucle se detiene y el informe final
+        (otro commit) sí se guarda."""
+        async def falla(self, report, mirados):
+            report.por_comprobar += mirados
+            await self._db.rollback()          # como el commit fallido real: lo pendiente se revierte
+            return False
+        monkeypatch.setattr(LibraryAdopter, "_confirmar_lote_rescan", falla)
+        informe = await _rescan(mundo)
+        assert informe.re_triados == 0 and informe.por_comprobar == 3
+        assert not informe.errores
+        assert await _n_runs(mundo, "rescan") == 1
+        sembrada = next(p for p in mundo.contenido if "Comics" in str(p))
+        async with mundo.fabrica() as s:
+            fila = (await s.execute(select(File).where(File.file_path == str(sembrada)))).scalar_one()
+        assert fila.file_mtime_ns is None   # el lote fallido no dejó su línea de base fijada a medias
+
+    async def test_si_el_informe_final_no_se_guarda_lo_dice(self, mundo, monkeypatch):
+        """s4 del peer review: el commit final del `ImportRun` puede fallar; el rescan termina
+        honesto («informe no se pudo guardar»), sin fingir un run que no existe."""
+        async def revienta(self, report):
+            raise RuntimeError("boom")
+        monkeypatch.setattr(LibraryAdopter, "_persist_run_rescan", revienta)
+        informe = await _rescan(mundo)
+        assert informe.run_id is None
+        assert any("informe no se pudo guardar" in e for e in informe.errores)
+        assert await _n_runs(mundo, "rescan") == 0
+
+
 class TestGuardasYContratos:
 
     async def test_raiz_inaccesible_no_revisa_ni_marca(self, mundo, monkeypatch):

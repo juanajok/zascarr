@@ -471,10 +471,11 @@ class LibraryAdopter:
         filas = {f.file_path: f for f in (await self._db.execute(select(File))).scalars().all()}
         report.ya_registrados = sum(1 for f in files if str(f) in filas)
 
-        def _partir() -> tuple[list[Path], list[tuple[Path, File]], int]:
+        def _partir() -> tuple[list[Path], list[tuple[Path, File]], int, int]:
             nuevos: list[Path] = []
             cambiados: list[tuple[Path, File]] = []
             sin_cambios = 0
+            sin_consultar = 0
             for f in files:
                 fila = filas.get(str(f))
                 if fila is None:
@@ -483,17 +484,22 @@ class LibraryAdopter:
                 try:
                     st = f.stat()
                 except OSError:
-                    continue    # no se pudo consultar: lo dirá la comprobación de desaparecidos o `ilegibles`
+                    # El recorrido sí lo `stat`ó; que falle ahora es un cambio a mitad de pasada.
+                    # No se afirma ni «igual» ni «cambió»: el paseo queda incompleto (`no_revisado`).
+                    sin_consultar += 1
+                    continue
                 if fila.file_mtime_ns is None or (st.st_size, st.st_mtime_ns) != (
                     fila.file_size_bytes, fila.file_mtime_ns
                 ):
                     cambiados.append((f, fila))
                 else:
                     sin_cambios += 1
-            return nuevos, cambiados, sin_cambios
+            return nuevos, cambiados, sin_cambios, sin_consultar
 
-        nuevos, cambiados, sin_cambios = await asyncio.to_thread(_partir)
+        nuevos, cambiados, sin_cambios, sin_consultar = await asyncio.to_thread(_partir)
         report.sin_cambios = sin_cambios
+        report.unreadable += sin_consultar
+        report.no_revisado = report.no_revisado or sin_consultar > 0
         pistas = detectar_ordenes_de_lectura([f.name for f in files])
 
         # Lo nuevo, con el contrato completo del registro incremental (sin tocar su marcador).
@@ -516,7 +522,25 @@ class LibraryAdopter:
         # Lo cambiado, archivo a archivo, en la MISMA fila.
         if cambiados:
             pendientes = 0
+
+            def _marca_del_lote() -> tuple:
+                """Foto de los contadores del informe: si el commit del lote no se acredita,
+                sus re-triajes pasan a «por comprobar» y NO se cuentan dos veces (misma
+                honestidad que los lotes de `adopt`: solo cuenta lo acreditado)."""
+                return (report.re_triados, report.re_triados_igual, report.re_triados_cambiado,
+                        report.re_triados_a_revisar, report.re_triados_descartado,
+                        report.copias_de_otra, len(report.errores), len(report.omitidos))
+
+            def _deshacer_lote(marca: tuple) -> None:
+                (report.re_triados, report.re_triados_igual, report.re_triados_cambiado,
+                 report.re_triados_a_revisar, report.re_triados_descartado,
+                 report.copias_de_otra) = marca[:6]
+                del report.errores[marca[6]:]
+                del report.omitidos[marca[7]:]
+
             for _n, (path, fila) in enumerate(sorted(cambiados, key=lambda t: str(t[0])), start=1):
+                if pendientes == 0:
+                    marca = _marca_del_lote()   # foto al EMPEZAR el lote: lo no acreditado se revierte a esto
                 try:
                     async with self._db.begin_nested():
                         await self._re_triar_cambio(path, fila, report, pistas.get(path.name))
@@ -539,10 +563,14 @@ class LibraryAdopter:
                     progreso(report)
                 if pendientes >= lote:
                     if not await self._confirmar_lote_rescan(report, pendientes):
+                        _deshacer_lote(marca)
                         pendientes = 0
                         break
                     pendientes = 0
-            await self._confirmar_lote_rescan(report, pendientes)
+            if pendientes == 0:
+                marca = _marca_del_lote()
+            if not await self._confirmar_lote_rescan(report, pendientes):
+                _deshacer_lote(marca)
 
         # B7: disponibilidad de lo registrado (marca `is_missing`/revierte), con sus guardarraíles.
         try:
@@ -649,13 +677,17 @@ class LibraryAdopter:
         if is_unsorted:
             if fila.issue_id is not None:
                 fila.issue_id = None
-                fila.metadata_source = None
+                # La procedencia (`metadata_source`) se CONSERVA: describía la fila y el enricher
+                # sabe restaurarla; borrarla perdería la pista sin ganar nada (decisión, spec §5).
             report.re_triados_a_revisar += 1
             return
         nuevo_vinculo = str(result.issue_id) if result.issue_id else None
         anterior = str(fila.issue_id) if fila.issue_id else None
         fila.issue_id = nuevo_vinculo
-        fila.metadata_source = "comicinfo_xml" if tr.strong_candidate else None
+        # Un ComicInfo nuevo es evidencia fresca de procedencia; sin él se conserva la anterior.
+        # `manual` no se pisa jamás (protección del enricher, CLAUDE.md).
+        if tr.strong_candidate and fila.metadata_source != "manual":
+            fila.metadata_source = "comicinfo_xml"
         if anterior == nuevo_vinculo:
             report.re_triados_igual += 1
         else:
