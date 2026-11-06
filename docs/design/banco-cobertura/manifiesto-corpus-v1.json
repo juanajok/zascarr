@@ -1,0 +1,8 @@
+{
+  "version": "v1",
+  "corpus": "docs/design/corpus-cobertura-v1.json",
+  "sha256": "1c9a5d0f5e8cc7dd95771aa6ec8d131b4e3ec55b55878a2e8eeaf6d6a9cdd6dd",
+  "casos": 30,
+  "acreditacion": "borrador",
+  "nota": "Todas las etiquetas son propuestas; ninguna se acredita hasta que el PO adjunte evidencia (ver validacion-banco-cobertura-2026-11-06.md)."
+}

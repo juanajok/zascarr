@@ -1,0 +1,12 @@
+{
+  "id": "auth-2026-11-06-1",
+  "ambito": ["comic_vine", "anilist", "tebeosfera", "gcd"],
+  "presupuesto_peticiones": 80,
+  "max_por_fuente": 20,
+  "casos": ["ES-001", "ES-009", "ES-017", "ES-025"],
+  "desde": "2026-11-06T00:00:00+00:00",
+  "hasta": "2026-11-20T00:00:00+00:00",
+  "concede": "PENDIENTE: persona del PO que concede",
+  "condiciones": "Piloto de 12 casos, 80 peticiones, 20 por fuente; secuencial; cortesía de #134; revisión humana posterior.",
+  "sha_corpus": "PENDIENTE: sha256 real del corpus congelado (ver manifiesto-corpus-v1.json)"
+}
