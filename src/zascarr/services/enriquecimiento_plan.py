@@ -254,18 +254,25 @@ class EnriquecimientoPlanService:
         return Plan(series_id=series.id, titulo=series.title, fuente=source_value,
                     fuente_etiqueta=label, campos=campos, token=token)
 
-    async def aplicar(self, token: str, seleccion: list[str] | tuple[str, ...]) -> Resultado:
-        """Aplica exactamente el plan firmado; solo las claves seleccionadas."""
+    async def aplicar(self, token: str, seleccion: list[str] | tuple[str, ...],
+                      series_id: UUID | None = None) -> Resultado:
+        """Aplica exactamente el plan firmado; solo las claves seleccionadas.
+
+        `series_id` es la ficha de la URL: si el token es de otra, no se aplica
+        aunque la firma sea válida.
+        """
         payload = _payload(token)
         contexto = payload.get("c") if payload else None
         datos = verificar_token(token, PROPOSITO, contexto or "", self.secret) if contexto else None
         if not datos:
             raise TokenInvalido("La vista previa no es válida o ha caducado; vuelve a revisarla.")
         try:
-            series_id = UUID(str(payload["c"]))
+            token_series_id = UUID(str(payload["c"]))
         except (ValueError, KeyError) as exc:
             raise TokenInvalido("La vista previa no es válida; vuelve a revisarla.") from exc
-        series = await self._series(series_id)
+        if series_id is not None and token_series_id != series_id:
+            raise TokenInvalido("La vista previa pertenece a otra serie; vuelve a revisarla.")
+        series = await self._series(token_series_id)
         campos_token = datos.get("campos")
         if not isinstance(campos_token, list):
             raise TokenInvalido("La vista previa no es válida; vuelve a revisarla.")
