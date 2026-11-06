@@ -1650,6 +1650,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   min-height: 44px;
   padding-inline: 18px;
 }
+.carpetas-filtros .filtro-ayuda {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: .875rem;
+  line-height: 1.35;
+}
 /* Anchos: 4 columnas solo con sitio de sobra. Entre 861 y 969 px el menú lateral
    deja el contenido demasiado estrecho para dos columnas (el selector de estado
    recortaría «Mezcla…»); allí se usa una sola columna. */

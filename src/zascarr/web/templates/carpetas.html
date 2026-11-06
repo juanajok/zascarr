@@ -74,12 +74,13 @@
   <div class="filtro-campo filtro-conflicto-campo">
     <label class="filtro-conflicto">
       <input type="checkbox" name="en_conflicto" value="1"{% if filtros.en_conflicto %} checked{% endif %}>
-      Solo carpetas con conflictos
+      Solo carpetas cuyos datos no cuadran
     </label>
   </div>
   <div class="filtro-campo filtro-accion">
     <button type="submit">Filtrar</button>
   </div>
+  <p class="muted filtro-ayuda">Cuando la carpeta, el título o el año no coinciden con la serie que ZascArr propone.</p>
 </form>
 
 {% if hay_filtro and coinciden %}

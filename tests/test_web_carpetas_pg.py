@@ -611,7 +611,7 @@ class TestFormularioDeFiltro:
         for exacto in ("Nombre de la carpeta", "Parte del nombre", "Estado de la carpeta",
                        "Todas", "Sin serie", "Con serie sugerida",
                        "Mezcla (sin serie y con serie sugerida)",
-                       "Solo carpetas con conflictos", "Filtrar"):
+                       "Solo carpetas cuyos datos no cuadran", "Filtrar"):
             assert exacto in formulario, exacto
         assert 'method="get"' in formulario and 'action="/ui/pendientes/carpetas"' in formulario
         assert 'aria-label="Filtrar carpetas por nombre, estado y conflictos"' in formulario
@@ -620,6 +620,7 @@ class TestFormularioDeFiltro:
         assert 'for="f-estado"' in formulario and 'id="f-estado"' in formulario
         assert 'type="search"' in formulario and 'name="nombre"' in formulario
         assert "por_confirmar" not in formulario   # redundante con el estado
+        assert "Cuando la carpeta, el título o el año no coinciden" in formulario
         assert formulario.count('class="filtro-campo') == 4   # nombre, estado, conflicto y acción
         # Los hidden van antes que los campos visibles (GET serializa en ese orden).
         assert formulario.index('name="limite"') < formulario.index('id="f-nombre"')
