@@ -44,7 +44,7 @@ python scripts/medicion/banco_cobertura.py --seco \
 
 Resultado: **8 ensayos**, informe con `cobertura: NOT RUN` y PASS/FAIL/NOT RUN separados;
 cero peticiones; sin sockets ni clientes. En subproceso se comprueba además que `httpx` y
-`zascarr.services.discovery` **no** se cargan. `tests/test_banco_cobertura.py`: **55 passed**.
+`zascarr.services.discovery` **no** se cargan. `tests/test_banco_cobertura.py`: **58 passed**.
 
 Cubierto por pruebas (PASS):
 
@@ -66,6 +66,9 @@ Cubierto por pruebas (PASS):
   parada; revalidación final del permiso (SHA/ámbito/casos) antes de cualquier petición;
 - **overlay de Ajustes**: un `comicvine_enabled=True` en `runtime_settings` deja de dar
   `fuente_apagada`; sin fila/BD se mantiene el `.env` y `fuente_apagada`;
+- **tope por fuente**: cuando una fuente llega a `max_por_fuente` solo se saltan sus celdas
+  (`limite_por_fuente`) y las demás continúan; el tope global (`max_peticiones`) sí detiene
+  todo el banco;
 - métricas con n=0, n<10 (sin porcentaje), n≥10 (con denominador), no acreditadas, ausencias y
   campos faltantes por campo.
 
@@ -75,28 +78,26 @@ Cubierto por pruebas (PASS):
   `--seco` con sintéticos **no** acredita cobertura (criterio 9).
 - **Revisión humana**: verificador `juanajok (PO)`; sin `coincidencia_verificada`,
   `ambiguo`/`incorrecto` reales ni `revision_simple` declarada todavía.
-- **Piloto de 12 casos / 80 peticiones**: no autorizado ni ejecutado; el ejecutor está
-  conectado, pero solo debe lanzarlo el PO en la Pi con la autorización de su rama.
+- **Ejecución real del piloto**: ejecutada el 2026-11-06 con la autorización
+  `piloto-cobertura-2026-11-06`; la cobertura sigue `NOT RUN` hasta la revisión humana.
+  La ejecución con el tope por fuente corregido se repite y se registra en
+  `/tmp/medicion-cobertura-piloto-2`.
 - **Red real y disponibilidad de fuentes**: no medida; los fixtures no la representan.
 - **Precisión/cobertura con porcentajes**: imposible sin revisión; además el corpus es
   intencional (no aleatorio), así que la cifra no se extrapola a la población.
 
-## 4. Qué falta para autorizar el piloto
+## 4. Qué falta para cerrar el piloto
 
-1. **PO acepta o corrige el corpus v1**: hay 12 etiquetas acreditadas con evidencia y 18
-   en borrador; solo las acreditadas suman a coincidencias. Los 2 casos
-   `sin_identidad_acreditada` deben seguir marcados.
-2. **Autorización versionada** con `id`, `ambito`, `presupuesto_peticiones` (80),
-   `max_por_fuente` (20), `desde`/`hasta`, `concede` (persona del PO), `condiciones` y
-   `sha_corpus` igual al del manifiesto. Copiar la plantilla a
-   `docs/design/banco-cobertura/autorizacion-<id>.json`.
-3. **Revisores designados**: verificador editorial `juanajok (PO)`; si se quieren revisar
+1. **Corpus**: hay 12 etiquetas acreditadas con evidencia y 18 en borrador; solo las
+   acreditadas suman a coincidencias. Los 2 casos `sin_identidad_acreditada` siguen marcados.
+2. **Autorización**: `piloto-cobertura-2026-11-06` concede el piloto (80 peticiones, 20 por
+   fuente). No hace falta una nueva para repetir la pasada con el tope corregido.
+3. **Revisor**: el verificador editorial es el PO (`juanajok`); si se quieren revisar
    desacuerdos, un segundo; si no hay segundo, el informe declarará `revision_simple`.
-4. **Fuentes encendidas y configuradas** en Ajustes (nunca por el arnés) y **ejecución
-   secuencial** con `--real --autorizacion <ruta> --casos ... --max-peticiones 80`; parada por
-   presupuesto, cortesía o 3 fallos transitorios. Después, revisión humana y actualización del
-   informe de cobertura (PR-3).
-5. **Ninguna cifra de cobertura** se publica antes de 2–4: el resultado de este documento es
+4. **Ejecución**: fuentes encendidas en Ajustes (el arnés ya aplica el overlay de
+   `runtime_settings`), ejecución secuencial con el comando del PR y salida nueva; después,
+   revisión humana de candidatos y actualización del informe de cobertura.
+5. **Ninguna cifra de cobertura** se publica antes de 4: el resultado de este documento es
    `NOT RUN`.
 
 ## 5. Límites y privacidad
