@@ -47,14 +47,14 @@
   {% endif %}
 </div>
 
-<nav class="library-vistas" aria-label="Presentación de la biblioteca">
+<div class="library-vistas" role="group" aria-label="Presentación de la biblioteca">
   <a class="library-vista{% if vista != "lista" %} library-vista-actual{% endif %}"
      href="{{ url_vista_tarjetas }}"
-     {% if vista != "lista" %}aria-current="page"{% endif %}>Tarjetas</a>
+     {% if vista != "lista" %}aria-current="true"{% endif %}>Tarjetas</a>
   <a class="library-vista{% if vista == "lista" %} library-vista-actual{% endif %}"
      href="{{ url_vista_lista }}"
-     {% if vista == "lista" %}aria-current="page"{% endif %}>Lista</a>
-</nav>
+     {% if vista == "lista" %}aria-current="true"{% endif %}>Lista</a>
+</div>
 
 {% if error %}
 {#- El aviso y el reintento ya están arriba; no se pinta una rejilla vacía que

@@ -574,7 +574,7 @@ class TestVistaLista:
         for cabecera in ("Título", "Año", "Tradición", "Números"):
             assert f'<th scope="col">{cabecera}</th>' in r.text
         assert re.search(
-            r'class="library-vista library-vista-actual"[^>]*aria-current="page">Lista</a>',
+            r'class="library-vista library-vista-actual"[^>]*aria-current="true">Lista</a>',
             r.text,
         )
         assert re.search(
