@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 from structlog.testing import capture_logs
@@ -528,3 +529,124 @@ class TestPrivacidadYLogs:
         texto = " ".join(str(evento) for evento in registros)
         assert "secreto-mio" not in texto
         assert "SQLAlchemyError" in texto
+
+
+class TestContextoDeRetorno:
+    """BL-IT03 (#286): la tarjeta recuerda la URL canónica y su ancla."""
+
+    def test_la_tarjeta_lleva_volver_y_ancla_a_si_misma(self):
+        from urllib.parse import parse_qs, unquote, urlsplit
+        series = make_series("Thorgal")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?q=thor&page=1")
+        href = re.search(rf'<a class="library-card" id="serie-{series.id}" href="([^"]+)"', r.text)
+        assert href is not None
+        url = href.group(1).replace("&amp;", "&")
+        destino = unquote(parse_qs(urlsplit(url).query)["volver"][0])
+        assert urlsplit(destino).path == "/ui/biblioteca"
+        assert parse_qs(urlsplit(destino).query)["q"] == ["thor"]
+        assert urlsplit(destino).fragment == f"serie-{series.id}"
+
+
+class TestVistaLista:
+    """BL-IT02 (#284): vista compacta sobre el mismo catálogo y la misma página."""
+
+    def _index(self, series, *, params=""):
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/biblioteca{params}")
+        return r, session
+
+    def test_la_lista_no_genera_portadas_y_muestra_titulo_completo(self):
+        series = make_series("Un título bastante largo para comparar sin portada")
+        r, session = self._index(series, params="?vista=lista")
+        assert r.status_code == 200
+        assert 'class="library-lista"' in r.text
+        assert "Un título bastante largo para comparar sin portada" in r.text
+        assert f"/ui/series/{series.id}/portada" not in r.text
+        assert "/portada" not in r.text
+        assert not session._queue
+
+    def test_encabezados_y_estado_actual(self):
+        r, _ = self._index(make_series("Batman"), params="?vista=lista")
+        assert "<caption class=\"sr\">Series de la biblioteca</caption>" in r.text
+        for cabecera in ("Título", "Año", "Tradición", "Números"):
+            assert f'<th scope="col">{cabecera}</th>' in r.text
+        assert re.search(
+            r'class="library-vista library-vista-actual"[^>]*aria-current="true">Lista</a>',
+            r.text,
+        )
+        assert re.search(
+            r'class="library-vista"\s+href="/ui/biblioteca\?page=1"\s*>Tarjetas</a>', r.text,
+        )
+
+    def test_valor_desconocido_no_se_convierte_en_cero(self):
+        series = make_series("Sin datos")
+        series.start_year = None
+        series.total_issues = None
+        r, _ = self._index(series, params="?vista=lista")
+        assert '<td data-label="Números">No consta</td>' in r.text
+        assert '<td data-label="Año">No consta</td>' in r.text
+        assert ">0</td>" not in r.text
+
+    def test_misma_serie_y_misma_pagina_al_cambiar_de_vista(self):
+        series = make_series("Batman")
+        tarjetas, _ = self._index(series)
+        lista, _ = self._index(series, params="?vista=lista")
+        assert f'id="serie-{series.id}"' in tarjetas.text
+        assert f'id="serie-{series.id}"' in lista.text
+        assert "library-grid" in tarjetas.text
+        assert "library-grid" not in lista.text
+
+    def test_conserva_filtros_pagina_y_vuelta(self):
+        series = make_series("Thorgal")
+        session = FakeSession([
+            FakeExecResult([]), FakeExecResult(50), FakeExecResult([series]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?q=thor&tradition=tebeo&page=2&vista=lista")
+        for parte in ("q=thor", "tradition=tebeo", "page=2", "vista=lista"):
+            assert parte in r.text
+        assert "page=3" in r.text
+        assert "volver=%2Fui%2Fbiblioteca" in r.text
+
+    def test_una_vista_invalida_vuelve_a_tarjetas_con_aviso(self):
+        series = make_series("Batman")
+        r, _ = self._index(series, params="?vista=inventada")
+        assert "La presentación pedida no existe; se muestran tarjetas." in r.text
+        assert "library-grid" in r.text and "library-lista" not in r.text
+
+    def test_el_fragmento_lista_no_repite_layout(self):
+        series = make_series("Batman")
+        session = FakeSession([FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?vista=lista")
+        assert "library-lista" in r.text and "ZascArr" not in r.text
+        assert not session._queue
+
+
+class TestOrdenDeterminista:
+    """#284: con el mismo título/año, el id desempata; no se depende del orden de la BD."""
+
+    @pytest.mark.asyncio
+    async def test_el_servicio_desempata_por_id(self):
+        from tests.test_series_service import FakeExecResult as SSResult
+        from tests.test_series_service import FakeSession as SSSession
+        from zascarr.services.series import SeriesService
+
+        class Capturing(SSSession):
+            def __init__(self, queue):
+                super().__init__(queue)
+                self.statements = []
+
+            async def execute(self, statement):
+                self.statements.append(str(statement))
+                return await super().execute(statement)
+
+        session = Capturing([SSResult(0), SSResult([])])
+        await SeriesService(session).list_series()
+        consulta = " ".join(session.statements)
+        assert "ORDER BY series.sort_title" in consulta
+        assert "series.start_year" in consulta
+        assert "series.id" in consulta

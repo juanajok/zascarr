@@ -65,8 +65,7 @@
     {% elif v.tipo == "r_cero" %}
       {{ "Falta 1 número." if v.k == 1 else "Faltan %d números." % v.k }}
       La configuración de ZascArr tiene desactivadas estas búsquedas automáticas, así que no buscará
-      ninguno por su cuenta. Se cambia en la instalación, no desde Ajustes. Lo que añadas a mano a
-      Deseados sí se busca.
+      ninguno por su cuenta. Lo que añadas a mano a Deseados sí se busca.
     {% elif v.tipo == "motivo" %}
       {{ querer.motivo }}
       {% if v.diferido %}
@@ -75,7 +74,7 @@
       {% endif %}
     {% elif v.tipo == "cota" %}
       {{ "Falta 1 número." if v.k == 1 else "Faltan %d números." % v.k }}
-      ZascArr empieza a buscar unos {{ v.r }} por hora como máximo, contando todas las
+      ZascArr empieza a buscar {% if v.r == 1 %}un número{% else %}unos {{ v.r }}{% endif %} por hora como máximo, contando todas las
       series que estás completando (ahora, {{ v.n }} por buscar). Por eso no debería terminar antes de
       {{ v.cota }}; puede tardar más, y puede que algún número no aparezca.
       {% if querer.numeros|length <= 12 %}
@@ -111,9 +110,9 @@
   {% if retirados_ahora %}
   <p class="caption politica-retirados-ahora">
     {% if retirados_ahora == 1 %}
-      Se ha dejado de buscar 1 número que aún no había empezado.
+      Se ha dejado de buscar 1 número que estaba por buscar o sin resultados.
     {% else %}
-      Se han dejado de buscar {{ retirados_ahora }} números que aún no habían empezado.
+      Se han dejado de buscar {{ retirados_ahora }} números que estaban por buscar o sin resultados.
     {% endif %}
     Lo que ya se estaba buscando o descargando termina.
   </p>

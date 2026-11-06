@@ -1,4 +1,4 @@
-{% from "_asistente_macros.html" import eleccion_form %}
+{% from "_asistente_macros.html" import eleccion_form with context %}
 {#- Resultado de una búsqueda a petición. El orden es el fijo de las fuentes; nada se marca como «mejor» y nada llega
     preseleccionado, aunque solo haya una candidata. Un fallo de fuente NO es «sin coincidencias». -#}
 {% if error %}
@@ -8,15 +8,27 @@
 
 <ul class="carpeta-senales" aria-label="Estado de cada fuente">
   {% for f in fuentes %}
-  <li>{{ ui.chip(f.chip, f.nombre ~ ": " ~ f.texto) }}</li>
+  <li>
+    {{ ui.chip(f.chip, f.nombre ~ " · " ~ f.capacidad ~ ": " ~ f.texto) }}
+    {% if f.motivo %}<p class="caption">{{ f.motivo }}</p>{% endif %}
+    {% if f.reintentar_en %}<p class="caption">Puedes reintentar en {{ f.reintentar_en }} s.</p>{% endif %}
+  </li>
   {% endfor %}
 </ul>
-{% if r.avisos %}<p class="caption">{{ r.avisos | join(" · ") }}</p>{% endif %}
 
 {% if con_error %}
-{% set respondieron = fuentes | selectattr("estado", "equalto", "ok") | list %}
 {{ ui.aviso("warn", "No han respondido: " ~ (con_error | map(attribute="nombre") | join(", ")) ~ "." ~ (" Lo que se muestra abajo viene solo de las fuentes que sí respondieron; eso no significa que en las otras no haya coincidencias." if respondieron else "")) }}
 {% endif %}
+{% if con_limite %}
+{{ ui.aviso("amber", ("Ha" if con_limite | length == 1 else "Han") ~ " pedido esperar: " ~ (con_limite | map(attribute="nombre") | join(", ")) ~ ". Espera antes de volver a buscar: insistir ahora solo añade tráfico.") }}
+{% endif %}
+{% if sin_configurar %}
+{{ ui.aviso("amber", "Sin configurar: " ~ (sin_configurar | map(attribute="nombre") | join(", ")) ~ ". Añade su clave en Ajustes para incluirla en la búsqueda.") }}
+{% endif %}
+{% if apagadas %}
+{{ ui.aviso("info", "Apagadas en Ajustes: " ~ (apagadas | map(attribute="nombre") | join(", ")) ~ ".") }}
+{% endif %}
+{% for aviso in avisos_de_omision %}<p class="caption">{{ aviso }}</p>{% endfor %}
 
 {% if r.candidatas %}
 <ul class="discovery-list">
@@ -35,14 +47,14 @@
       {% if c.ya_en_biblioteca %}
       <p class="caption">Ya tienes una serie con este identificador:
         <a href="/ui/series/{{ c.ya_en_biblioteca.series_id }}">{{ c.ya_en_biblioteca.titulo }}</a>{% if c.ya_en_biblioteca.anio %} ({{ c.ya_en_biblioteca.anio }}){% endif %}.
-        <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ c.ya_en_biblioteca.series_id }}">Preparar los archivos de esta carpeta para esa serie</a></p>
+        <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion?clave=' ~ (clave | urlencode) ~ '&series_id=' ~ c.ya_en_biblioteca.series_id) }}">Preparar los archivos de esta carpeta para esa serie</a></p>
       {% endif %}
       {% if c.parecidas_locales and not c.ya_en_biblioteca %}
       <div class="caption">Series que ya tienes y se parecen:
         <ul class="series-list">
           {% for p in c.parecidas_locales %}
           <li><span class="series-name">{{ p.titulo }}{% if p.anio %} ({{ p.anio }}){% endif %} <span class="rotulo">{{ etiqueta_de_tradicion(p.tradicion) }}</span></span>
-            <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente/vinculacion?clave={{ clave | urlencode }}&amp;series_id={{ p.series_id }}">Preparar los archivos de esta carpeta para esa serie</a></li>
+            <a class="btn ghost sm" href="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion?clave=' ~ (clave | urlencode) ~ '&series_id=' ~ p.series_id) }}">Preparar los archivos de esta carpeta para esa serie</a></li>
           {% endfor %}
         </ul></div>
       {% endif %}

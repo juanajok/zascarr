@@ -145,10 +145,31 @@ class TestBuscar:
     def test_muestra_avisos_de_fuentes_no_configuradas_o_caidas(self):
         with use_fake_session(FakeSession()) as client, \
              patch("zascarr.web.discovery.DiscoveryService.search_detallada",
-                   AsyncMock(return_value=Busqueda([], [], {"comic_vine": "sin_clave", "anilist": "error", "tebeosfera": "ok", "gcd": "apagada"}))):
+                   AsyncMock(return_value=Busqueda([], [], {"comic_vine": "configuracion_incompleta", "anilist": "fallo_transitorio", "tebeosfera": "ok", "gcd": "fuente_apagada"}))):
             r = client.get("/ui/descubrir/buscar", params={"q": "xyz"})
 
         assert "Comic Vine no está configurado" in r.text and "No respondió AniList" in r.text
+
+    def test_el_detalle_por_fuente_muestra_capacidad_estado_motivo_y_reintento(self):
+        from zascarr.services.discovery import CAPACIDAD_BUSQUEDA, EstadoFuente
+        detalles = {
+            "comic_vine": EstadoFuente("comic_vine", CAPACIDAD_BUSQUEDA, "ok"),
+            "anilist": EstadoFuente("anilist", CAPACIDAD_BUSQUEDA, "limite_de_cortesia",
+                                    "Ha pedido esperar antes de volver a consultarla.", 12),
+            "tebeosfera": EstadoFuente("tebeosfera", CAPACIDAD_BUSQUEDA, "sin_resultados",
+                                       "Ha respondido, pero no hay coincidencias."),
+            "gcd": EstadoFuente("gcd", CAPACIDAD_BUSQUEDA, "fuente_apagada", "Está apagada en Ajustes."),
+        }
+        b = Busqueda([_resultado()], [], {n: d.estado for n, d in detalles.items()}, detalles)
+        with use_fake_session(FakeSession()) as client, \
+             patch("zascarr.web.discovery.DiscoveryService.search_detallada", AsyncMock(return_value=b)):
+            r = client.get("/ui/descubrir/buscar", params={"q": "Batman"})
+        assert "Comic Vine · búsqueda: ha respondido" in r.text
+        assert "AniList · búsqueda: ha pedido esperar" in r.text
+        assert "Puedes reintentar en 12 s." in r.text
+        assert "Tebeosfera · búsqueda: sin coincidencias" in r.text
+        assert "GCD · búsqueda: apagada en Ajustes" in r.text
+        assert "No respondió GCD" not in r.text and "metadatos" not in r.text.lower()
 
     # ── I2 de #114: lo que vuelve del navegador es un token firmado, no datos de la serie ──
 
@@ -335,7 +356,7 @@ class TestPortada:
         get_settings.cache_clear()
         monkeypatch.setenv("COVERS_CACHE_PATH", str(tmp_path))
 
-        async def fake_fetch(url, dest):
+        async def fake_fetch(url, dest, **kwargs):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(b"\xff\xd8\xff")  # cabecera JPEG mínima
             return True

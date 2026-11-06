@@ -347,6 +347,7 @@ def create_app() -> FastAPI:
 
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
+    from zascarr.api.estado import router as estado_cortesia_router
     from zascarr.api.health import router as health_router
     from zascarr.api.legal import router as legal_router
     from zascarr.api.operaciones import router as operaciones_router
@@ -380,6 +381,7 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthMiddleware)
 
     app.include_router(health_router, prefix="/api")
+    app.include_router(estado_cortesia_router, prefix="/api")
     app.include_router(legal_router)
     app.include_router(operaciones_router, prefix="/api")
     app.include_router(revision_router, prefix="/api")

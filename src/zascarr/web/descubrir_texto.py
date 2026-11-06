@@ -8,18 +8,24 @@ Tres cosas, todas de PRESENTACIÓN (no cambian lo que se firma ni lo que devuelv
     lector de pantalla.
 
 Invariantes: «Ningún resultado» no se dice cuando TODAS las fuentes consultadas fallaron; «las
-demás sí respondieron» solo se dice de las que dieron `ok`; una fuente apagada o sin clave no
-es un fallo.
+demás sí respondieron» solo se dice de las que respondieron; una fuente apagada, sin configurar o
+que ha pedido esperar no es un fallo y no se mezcla con ellos; una capacidad no verificada no se
+presenta como disponible.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from zascarr.services.discovery import (
-    FUENTE_ERROR,
+    CAPACIDAD_BUSQUEDA,
+    FUENTE_APAGADA,
+    FUENTE_CONFIGURACION_INCOMPLETA,
+    FUENTE_FALLO_TRANSITORIO,
+    FUENTE_LIMITE_DE_CORTESIA,
     FUENTE_OK,
-    FUENTE_SIN_CLAVE,
+    FUENTE_SIN_RESULTADOS,
     ORDEN_DE_FUENTES,
+    EstadoFuente,
 )
 from zascarr.utils.texto_html import (
     texto_plano,  # noqa: F401  (se reexporta: la usan Descubrir y sus pruebas)
@@ -29,6 +35,54 @@ from zascarr.utils.texto_html import (
 ETIQUETAS = {
     "comic_vine": "Comic Vine", "anilist": "AniList", "tebeosfera": "Tebeosfera", "gcd": "GCD"}
 OTRA_FUENTE = "otra fuente"
+
+#: Capacidades verificadas por el contrato, con su nombre para la persona. Lo que no esté aquí
+#: NO se presenta como disponible: sale como «capacidad no verificada».
+CAPACIDADES = {CAPACIDAD_BUSQUEDA: "búsqueda"}
+
+#: Estado del servicio → (aspecto del chip, texto corto). El conjunto es CERRADO (#133): la
+#: interfaz no deduce causas; un estado que no conozca se pinta como advertencia y se dice.
+ESTADOS_VISIBLES: dict[str, tuple[str, str]] = {
+    FUENTE_OK: ("ok", "ha respondido"),
+    FUENTE_SIN_RESULTADOS: ("neutro", "sin coincidencias"),
+    FUENTE_FALLO_TRANSITORIO: ("warn", "no ha respondido ahora mismo"),
+    FUENTE_CONFIGURACION_INCOMPLETA: ("amber", "sin configurar"),
+    FUENTE_LIMITE_DE_CORTESIA: ("amber", "ha pedido esperar"),
+    FUENTE_APAGADA: ("neutro", "apagada en Ajustes"),
+}
+
+
+@dataclass(frozen=True)
+class FuenteVisible:
+    """Una fuente preparada para pintar: nombre y capacidad en llano, estado y su explicación."""
+    fuente: str
+    capacidad: str
+    estado: str
+    chip: str
+    texto: str
+    motivo: str | None
+    reintentar_en: int | None
+
+
+def etiqueta_capacidad(valor: str) -> str:
+    """El nombre de la capacidad; la que el contrato no verifique no se presenta como disponible."""
+    return CAPACIDADES.get(str(valor or ""), "capacidad no verificada")
+
+
+def detalles_visibles(detalles: dict[str, EstadoFuente]) -> list[FuenteVisible]:
+    """Las fuentes con detalle, en el orden fijo. Las que el servicio no nombra no se inventan."""
+    visibles: list[FuenteVisible] = []
+    for fuente in ORDEN_DE_FUENTES:
+        detalle = detalles.get(fuente.value)
+        if detalle is None:
+            continue
+        chip, texto = ESTADOS_VISIBLES.get(detalle.estado, ("warn", "estado desconocido"))
+        visibles.append(FuenteVisible(
+            fuente=ETIQUETAS.get(fuente.value, OTRA_FUENTE),
+            capacidad=etiqueta_capacidad(detalle.capacidad),
+            estado=detalle.estado, chip=chip, texto=texto,
+            motivo=detalle.motivo, reintentar_en=detalle.reintentar_en))
+    return visibles
 
 
 ETIQUETAS_PROCEDENCIA = {
@@ -105,35 +159,68 @@ class Resumen:
     consultadas: list[str]
 
 
-def resumir(estados: dict[str, str], n_resultados: int) -> Resumen:
-    """Qué decir tras una búsqueda: `estados` es el estado de cada fuente (`Busqueda.fuentes`)."""
+def resumir(estados: dict[str, str], n_resultados: int,
+            detalles: dict[str, EstadoFuente] | None = None) -> Resumen:
+    """Qué decir tras una búsqueda: `estados` es el estado de cada fuente (`Busqueda.fuentes`) y
+    `detalles` (opcional) el contrato nuevo con capacidad, motivo y reintento.
+
+    Los estados son el conjunto cerrado de #133. Cada cosa se dice por separado: un fallo no se
+    mezcla con una fuente apagada, sin configurar o que ha pedido esperar. «Ningún resultado» solo
+    se dice si alguna fuente respondió sin coincidencias; un plazo de reintento solo se menciona si
+    el servicio lo trae.
+    """
+    detalles = detalles or {}
     orden = [f.value for f in ORDEN_DE_FUENTES]
-    consultadas = [ETIQUETAS[v] for v in orden if estados.get(v) == FUENTE_OK]
-    caidas = [ETIQUETAS[v] for v in orden if estados.get(v) == FUENTE_ERROR]
-    sin_clave = [ETIQUETAS[v] for v in orden if estados.get(v) == FUENTE_SIN_CLAVE]
+    por_estado = {valor: estados.get(valor) for valor in orden}
+
+    def nombres(estado: str) -> list[str]:
+        return [ETIQUETAS[valor] for valor in orden if por_estado[valor] == estado]
+
+    consultadas = [ETIQUETAS[valor] for valor in orden
+                   if por_estado[valor] in (FUENTE_OK, FUENTE_SIN_RESULTADOS)]
+    sin_coincidencias = nombres(FUENTE_SIN_RESULTADOS)
+    fallos = nombres(FUENTE_FALLO_TRANSITORIO)
+    sin_configurar = nombres(FUENTE_CONFIGURACION_INCOMPLETA)
+    apagadas = nombres(FUENTE_APAGADA)
+    con_limite = [valor for valor in orden if por_estado[valor] == FUENTE_LIMITE_DE_CORTESIA]
 
     avisos: list[str] = []
-    if caidas:
+    if fallos:
         if not consultadas:
-            avisos.append(f"No respondió ninguna fuente: {enumerar(caidas)}. "
+            avisos.append(f"No respondió ninguna fuente: {enumerar(fallos)}. "
                           "Inténtalo de nuevo en un momento.")
         else:
-            verbo = "No respondió" if len(caidas) == 1 else "No respondieron"
+            verbo = "No respondió" if len(fallos) == 1 else "No respondieron"
             ok = (f"Los resultados de {enumerar(consultadas)} sí se han consultado."
                   if len(consultadas) > 1
                   else f"El resultado de {consultadas[0]} sí se ha consultado.")
-            avisos.append(f"{verbo} {enumerar(caidas)}. {ok}")
-    for nombre in sin_clave:
+            avisos.append(f"{verbo} {enumerar(fallos)}. {ok}")
+    for nombre in sin_configurar:
         avisos.append(f"{nombre} no está configurado: añade su clave en Ajustes para "
                       "incluirlo en la búsqueda.")
-    if not consultadas and not caidas and not sin_clave:
+    for valor in con_limite:
+        nombre = ETIQUETAS[valor]
+        reintento = getattr(detalles.get(valor), "reintentar_en", None)
+        aviso = f"{nombre} ha pedido esperar antes de volver a consultarla."
+        if reintento:
+            aviso += f" Puedes reintentar en {reintento} s."
+        avisos.append(aviso)
+    # Una fuente apagada no es un fallo: se dice aparte, y la global solo cubre «ninguna activa».
+    if apagadas and (consultadas or fallos or sin_configurar or con_limite):
+        avisos.append(f"{'Apagada' if len(apagadas) == 1 else 'Apagadas'} en Ajustes: "
+                      f"{enumerar(apagadas)}.")
+    if not consultadas and not fallos and not sin_configurar and not con_limite:
         avisos.append("No hay ninguna fuente activa: enciéndelas en Ajustes para poder buscar.")
 
-    if n_resultados > 0:
+    if not consultadas and con_limite and not fallos:
+        # #134 §6.5: si no se consultó ninguna por cortesía, no se habla de «resultados».
+        cabeza = "Todavía no se ha consultado ninguna fuente: hay que esperar por cortesía."
+    elif n_resultados > 0:
         cabeza = "1 resultado." if n_resultados == 1 else f"{n_resultados} resultados."
-    elif not consultadas:
-        cabeza = ""             # ya lo dicen los avisos («No respondió ninguna fuente…»)
-    else:
+    elif sin_coincidencias:
+        # Solo se afirma «no hay resultados» de una fuente que respondió sin coincidencias.
         cabeza = "Ningún resultado."
+    else:
+        cabeza = ""             # lo dicen los avisos (fallos, configuración, cortesía o apagadas)
     anuncio = " ".join(x for x in [cabeza, *avisos] if x)
     return Resumen(avisos=avisos, anuncio=anuncio, consultadas=consultadas)

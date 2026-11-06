@@ -46,6 +46,7 @@ from zascarr.services.tokens_revision import (
 from zascarr.utils.cover import cached_image_response, fetch_and_cache_cover
 from zascarr.web.componentes import tipo_aviso
 from zascarr.web.descubrir_texto import (
+    detalles_visibles,
     enumerar,
     etiqueta_fuente,
     fuentes_que_se_consultan,
@@ -123,7 +124,7 @@ async def buscar(request: Request, q: str = "", db: AsyncSession = Depends(get_d
     firmados, omitidas = firmar_resultados(busqueda.resultados, secreto)
     # U14: la web explica el estado de CADA fuente ella misma (qué no respondió y que las demás sí); los avisos
     # de texto del servicio ya no se pintan (llevaban `.env` y nombres de variables).
-    resumen = resumir(busqueda.fuentes, len(firmados))
+    resumen = resumir(busqueda.fuentes, len(firmados), busqueda.detalles)
     avisos = list(resumen.avisos)
     if omitidas:
         avisos.append(f"Se han omitido {omitidas} resultado(s) cuyo título o identificador no se puede guardar.")
@@ -132,7 +133,9 @@ async def buscar(request: Request, q: str = "", db: AsyncSession = Depends(get_d
         {"resultados": firmados, "avisos": avisos, "tradiciones": _tradiciones(),
          "hay_resultados": bool(busqueda.resultados), "anuncio": resumen.anuncio,
          "clase_aviso": tipo_aviso("amber").clase,       # el aspecto de «aviso», SIN su `role` (ver la plantilla)
-         "consultadas": enumerar(resumen.consultadas), "hay_consultadas": bool(resumen.consultadas)},
+         "consultadas": enumerar(resumen.consultadas), "hay_consultadas": bool(resumen.consultadas),
+         # #133: fuente + capacidad + estado + motivo y, solo si consta, cuándo reintentar.
+         "detalles": detalles_visibles(busqueda.detalles)},
     )
 
 
@@ -149,10 +152,13 @@ async def portada(request: Request, url: str, source: MetadataSource):
     clave = hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
     cache_path = get_settings().covers_cache_path / "descubrir" / f"{clave}.jpg"
 
+    motivo_fallo: list[str] = []
     if not await asyncio.to_thread(cache_path.exists) and not await fetch_and_cache_cover(
-        url, cache_path
+        url, cache_path, motivo_fallo=motivo_fallo
     ):
-        raise HTTPException(status_code=404, detail="Sin portada disponible")
+        # Una espera de cortesía no es un «no hay portada» definitivo: no se cachea el 404.
+        cabeceras = {"Cache-Control": "no-store"} if "cortesia" in motivo_fallo else None
+        raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
 
     data = await asyncio.to_thread(cache_path.read_bytes)
     return cached_image_response(request, data, "image/jpeg", clave)

@@ -18,7 +18,6 @@ Documentación: https://docs.anilist.co/guide/graphql/
 """
 from __future__ import annotations
 
-import asyncio
 import re
 from dataclasses import dataclass
 
@@ -26,6 +25,8 @@ import httpx
 import structlog
 
 from zascarr.config import get_settings
+from zascarr.utils.cortesia import PoliticaFuente, politica_de
+from zascarr.utils.peticiones import pedir_con_cortesia
 
 # Bug real (reportado, visible en /ui/descubrir): "description(asHtml:
 # false)" en la query de más abajo NO quita los "<br>" — AniList los deja
@@ -36,7 +37,6 @@ _BR_PATTERN = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 logger = structlog.get_logger()
 
-_MAX_RETRIES = 3
 _ENDPOINT = "https://graphql.anilist.co"
 
 _SEARCH_QUERY = """
@@ -71,15 +71,18 @@ class AniListResult:
 
 
 class AniListClient:
-    def __init__(self):
+    def __init__(self, *, espera_max_s: float = 30.0,
+                 politica: PoliticaFuente | None = None):
+        """Sin cadencia propia: la cortesía la comparte todo el proceso (#134)."""
         s = get_settings()
-        self._rate_limit = s.anilist_rate_limit
-        self._last_req: float = 0
+        self._politica = politica or politica_de("anilist", s)
+        self._espera_max_s = espera_max_s
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
-            timeout=30.0, headers={"User-Agent": "ZascArr/0.1"})
+            timeout=30.0, follow_redirects=False,
+            headers={"User-Agent": "ZascArr/0.1"})
         return self
 
     async def __aexit__(self, *args):
@@ -89,28 +92,15 @@ class AniListClient:
     async def _post(self, query: str, variables: dict) -> dict:
         if self._client is None:
             raise RuntimeError("Cliente de AniList sin abrir: úsalo con `async with`.")
-
-        for attempt in range(_MAX_RETRIES):
-            now = asyncio.get_event_loop().time()
-            if (elapsed := now - self._last_req) < self._rate_limit:
-                await asyncio.sleep(self._rate_limit - elapsed)
-
-            r = await self._client.post(_ENDPOINT, json={"query": query, "variables": variables})
-            self._last_req = asyncio.get_event_loop().time()
-
-            if r.status_code == 429:
-                retry_after = float(r.headers.get("Retry-After", 2 ** attempt * 2))
-                logger.warning("anilist.rate_limited", attempt=attempt, retry_after=retry_after)
-                await asyncio.sleep(retry_after)
-                continue
-
-            r.raise_for_status()
-            data = r.json()
-            if "errors" in data:
-                logger.warning("anilist.api_error", errors=data["errors"])
-            return data
-
-        raise RuntimeError("AniList: rate limit persistente tras reintentos")
+        r = await pedir_con_cortesia(
+            self._client, "POST", _ENDPOINT,
+            politica=self._politica, espera_max_s=self._espera_max_s,
+            datos={"query": query, "variables": variables},
+        )
+        data = r.json()
+        if "errors" in data:
+            logger.warning("anilist.api_error", errors=data["errors"])
+        return data
 
     async def search_manga(self, query: str, limit: int = 10) -> list[AniListResult]:
         data = await self._post(_SEARCH_QUERY, {"search": query, "perPage": limit})

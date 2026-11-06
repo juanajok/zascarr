@@ -11,15 +11,19 @@ import asyncio
 import io
 import os
 import tempfile
+import time
 import zipfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
+from uuid import UUID
 
 import structlog
 from fastapi import Request, Response
 from PIL import Image
 
+from zascarr.config import get_settings
 from zascarr.core.formato_contenedor import (
     IMAGE_EXTS,
     MAX_PIXELES_PORTADA,
@@ -33,8 +37,19 @@ from zascarr.core.formato_contenedor import (
     zip_fuera_de_limite,
 )
 from zascarr.models import ClaseZip
+from zascarr.utils.cortesia import (
+    CortesiaEnEspera,
+    CortesiaProceso,
+    fuente_de_host_portada,
+    fuente_habilitada,
+)
 from zascarr.utils.espacio import comprobar_espacio
-from zascarr.utils.url_portada import UrlNoPermitidaError, descargar_imagen, host_para_log
+from zascarr.utils.url_portada import (
+    ESPERA_MAX_PORTADA_S,
+    UrlNoPermitidaError,
+    descargar_imagen,
+    host_para_log,
+)
 
 logger = structlog.get_logger()
 
@@ -59,6 +74,99 @@ CACHE_VERSION = "v2"
 EXTENSIONES_CON_PORTADA = frozenset({".cbz", ".zip"})
 
 
+#: #435 (BL-PORT5): ancho mínimo, INCLUSIVO, de una portada previa para conservarla en vez de
+#: sustituirla por la primera página del archivo. La antigua sacada de un CBZ mide ≤ 240 px y la de
+#: una descarga ≤ 320 (`_THUMB_MAX_WIDTH`, `_COVER_MAX_WIDTH`), así que cualquier valor en (240,
+#: 320] las separa. Es una constante del código, no un ajuste de usuario.
+UMBRAL_PORTADA_PREVIA_PX = 300
+
+#: Tope de bytes de una portada previa que se lee entera para medirla y servirla. Las hace ZascArr a
+#: ≤ 320 px (decenas de KB); una mayor no es una de ellas y no se sube a memoria en la Pi.
+MAX_BYTES_PORTADA_PREVIA = 8 * 1024 * 1024
+
+
+#: Portadas previas ilegibles ya avisadas: `(ruta, mtime_ns, tamaño)`. Una portada corrupta se pide
+#: en cada carga de la rejilla; sin esto el aviso se repetiría en cada petición. Acotado (se vacía
+#: al llenarse) y nunca se registra: solo evita repetir el aviso mientras el fichero no cambie.
+_ILEGIBLES_AVISADAS: set[tuple[str, int, int]] = set()
+_MAX_ILEGIBLES_AVISADAS = 256
+
+
+def _avisar_previa_ilegible(ruta: Path, exc: Exception) -> None:
+    """Un solo aviso (sin ruta) por portada previa ilegible y versión del fichero."""
+    try:
+        estado = ruta.stat()
+        clave = (str(ruta), estado.st_mtime_ns, estado.st_size)
+    except OSError:
+        clave = (str(ruta), 0, 0)
+    if clave in _ILEGIBLES_AVISADAS:
+        return
+    if len(_ILEGIBLES_AVISADAS) >= _MAX_ILEGIBLES_AVISADAS:
+        _ILEGIBLES_AVISADAS.clear()
+    _ILEGIBLES_AVISADAS.add(clave)
+    logger.warning("cover.previa_ilegible", motivo=type(exc).__name__)
+
+
+class PortadaPreviaTruncadaError(ValueError):
+    """El JPEG no acaba en su marcador final (EOI): se cortó al escribirlo (disco lleno, caída)."""
+
+
+def _jpeg_terminado(datos: bytes) -> bool:
+    """¿Empieza el JPEG en `FF D8` (SOI) y termina exactamente en `FF D9` (EOI)? O(1) y sin
+    decodificar. Medir solo la cabecera da el ancho de un JPEG cortado a mitad del cuerpo, que el
+    navegador pintaría a medias; el de ZascArr (Pillow) acaba siempre en EOI, sin relleno."""
+    return datos.startswith(b"\xff\xd8") and datos.endswith(b"\xff\xd9")
+
+
+@dataclass(frozen=True)
+class PortadaPrevia:
+    """Una portada previa suficiente: la ruta (para el `ETag` por `mtime`), los bytes ya leídos
+    (los mismos que se miden y se sirven) y el ancho medido."""
+    ruta: Path
+    datos: bytes
+    ancho: int
+
+
+def rutas_de_portadas_previas(covers: Path, series_id: UUID) -> list[Path]:
+    """LA lista ordenada de portadas previas de solo lectura de una serie (#435): se prueban por
+    orden y se sirve la primera suficiente. Hoy solo la caché antigua `covers/<id>.jpg`; #418
+    añadirá `covers/externa/<id>.jpg` aquí y en ningún otro sitio."""
+    return [covers / f"{series_id}.jpg"]
+
+
+def portada_previa_suficiente(covers: Path, series_id: UUID) -> PortadaPrevia | None:
+    """La primera portada previa de la serie con ancho ≥ `UMBRAL_PORTADA_PREVIA_PX`, o `None`.
+
+    ÚNICA regla de «portada previa suficiente» (compartida con #418). No abre archivos de la
+    biblioteca, no usa la red y no escribe nada. El ancho sale de la CABECERA de la imagen (no se
+    decodifica). Lo que no se puede leer, no es un JPEG, está cortado (sin `FF D8`…`FF D9` exactos)
+    o supera el tope de bytes NO cuenta como suficiente (falla cerrado): se sigue la cascada de
+    siempre. No registra nada en el acierto ni cuando no hay previa; avisa una sola vez por fichero
+    ilegible, solo con el tipo de error: nunca rutas."""
+    for ruta in rutas_de_portadas_previas(covers, series_id):
+        try:
+            with open(ruta, "rb") as fh:
+                datos = fh.read(MAX_BYTES_PORTADA_PREVIA + 1)
+            if len(datos) > MAX_BYTES_PORTADA_PREVIA:
+                continue
+            with Image.open(io.BytesIO(datos)) as img:
+                if img.format != "JPEG":
+                    continue
+                ancho = img.width
+            if not _jpeg_terminado(datos):
+                raise PortadaPreviaTruncadaError
+        except FileNotFoundError:
+            continue
+        except Exception as exc:   # OSError, imagen no válida, DecompressionBombError…
+            _avisar_previa_ilegible(ruta, exc)
+            continue
+        if ancho >= UMBRAL_PORTADA_PREVIA_PX:
+            # sin evento de acierto: se evalúa en CADA petición (también las 304) y la app no filtra
+            # por nivel; el ancho y el umbral los cubren las pruebas
+            return PortadaPrevia(ruta, datos, ancho)
+    return None
+
+
 def puede_tener_portada(ruta: str | Path, formato_contenido: dict | None = None) -> bool:
     """¿Tiene sentido pedir la portada de este archivo? Ni abre el archivo ni lo busca en disco
     (se llama en listados): decide con el
@@ -77,6 +185,22 @@ _COVER_MAX_WIDTH = 320
 # si una rejilla entera de tarjetas carga en frío — mismo principio de
 # cortesía que ya rige Tebeosfera/el scraper del foro.
 _COVER_FETCH_SEMAPHORE = asyncio.Semaphore(2)
+
+
+def es_candidato_de_portada(path: Path, formato_contenido: dict | None = None) -> bool:
+    """¿Merece la pena abrir este archivo para sacar la portada de una serie (y gastar un intento)?
+
+    Solo se descarta SIN leer el archivo la ausencia CONOCIDA (`puede_dar_portada(...) is False`: un
+    `formato_contenido` guardado que dice que no es un ZIP legible). Lo desconocido (nada guardado o
+    una lectura fallida antigua) se decide por la firma, 512 bytes como máximo: un `.cbr` que por
+    dentro es ZIP se abre, uno que es RAR no. Así un RAR sin formato guardado no agota el tope de
+    intentos antes de llegar a un CBZ, y un tebeo que hoy da portada sigue dándola (#419, criterio
+    2)."""
+    ext = path.suffix.lower()
+    guardado = puede_dar_portada(ext, formato_contenido)
+    if guardado is not None:
+        return guardado
+    return se_lee_como_zip(ext, firma_de(path))
 
 
 def extract_cover_thumbnail(path: Path,
@@ -159,7 +283,13 @@ def cached_image_response(request: Request, data: bytes, content_type: str, etag
 
 
 async def fetch_and_cache_cover(url: str, dest: Path, *,
-                                 ancho: int = _COVER_MAX_WIDTH) -> bool:
+                                 ancho: int = _COVER_MAX_WIDTH,
+                                 cortesia: CortesiaProceso | None = None,
+                                 reloj=time.monotonic,
+                                 dormir=asyncio.sleep,
+                                 espera_max_s: float = ESPERA_MAX_PORTADA_S,
+                                 resolutor=None, crear_cliente=None,
+                                 motivo_fallo: list[str] | None = None) -> bool:
     """Descarga `url` (portada externa de Comic Vine/AniList/Tebeosfera/GCD), la redimensiona y
     la guarda en `dest`. Devuelve False sin lanzar si algo falla (URL no permitida, URL muerta,
     timeout, imagen ilegible): no se cachea nada en ese caso.
@@ -177,9 +307,28 @@ async def fetch_and_cache_cover(url: str, dest: Path, *,
     de peticiones a un CDN externo cuando una rejilla entera de tarjetas carga en frío. El
     decode/resize de Pillow es síncrono y se manda a un hilo aparte.
     """
+    ajustes = get_settings()
+    # AC-12/AC-15: una fuente apagada no recibe portadas (se apaga en Ajustes, no en el .env).
+    fuente = fuente_de_host_portada(host_para_log(url))
+    if fuente is not None and not fuente_habilitada(fuente, ajustes):
+        logger.info("cover.fuente_apagada", fuente=fuente)
+        if motivo_fallo is not None:
+            motivo_fallo.append("apagada")
+        return False
+
     async with _COVER_FETCH_SEMAPHORE:
         try:
-            content = await descargar_imagen(url)
+            content = await descargar_imagen(
+                url, cortesia=cortesia, reloj=reloj, dormir=dormir,
+                espera_max_s=espera_max_s, resolutor=resolutor,
+                crear_cliente=crear_cliente, ajustes=ajustes)
+        except CortesiaEnEspera as exc:
+            # Espera visible sin prometer recuperación: no se envía y la ausencia no se cachea.
+            logger.info("cover.cortesia_en_espera", motivo=exc.motivo,
+                        espera_s=round(exc.espera_estimada_s, 1))
+            if motivo_fallo is not None:
+                motivo_fallo.append("cortesia")
+            return False
         except UrlNoPermitidaError as exc:
             # Solo el host y el código: la URL entera puede llevar credenciales o claves.
             logger.warning("cover.url_rechazada", host=host_para_log(url), motivo=str(exc))

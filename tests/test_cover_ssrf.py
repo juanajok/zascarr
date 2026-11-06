@@ -21,6 +21,18 @@ from uuid import uuid4
 
 import httpx
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _fuentes_encendidas_cover(monkeypatch):
+    """Una fuente apagada no recibe portadas (AC-15); estas pruebas son del camino permitido."""
+    from types import SimpleNamespace
+    encendidas = SimpleNamespace(
+        comicvine_enabled=True, anilist_enabled=True, tebeosfera_enabled=True,
+        gcd_enabled=True, forum_enabled=False, forum_url="")
+    monkeypatch.setattr("zascarr.utils.cover.get_settings", lambda: encendidas)
+    # `descargar_imagen` comprueba la fuente de CADA salto por su cuenta.
+    monkeypatch.setattr("zascarr.utils.url_portada.get_settings", lambda: encendidas)
 import structlog
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -30,6 +42,7 @@ from zascarr.main import app
 from zascarr.models import ComicTradition, Series
 from zascarr.utils import cover as cover_mod
 from zascarr.utils import url_portada
+from zascarr.utils.cortesia import CortesiaEnEspera
 from zascarr.utils.cover import fetch_and_cache_cover
 from zascarr.utils.url_portada import (
     MAX_SALTOS,
@@ -530,6 +543,43 @@ class TestPuntosDeEntrada:
                 "source": "comic_vine", "external_id": "1234", "title": "Batman",
                 "tradition": "american", "cover_url": CV})
         assert r.status_code == 422 and sesion.added == []
+
+    def test_el_404_de_descubrir_por_cortesia_tampoco_se_cachea(self, tmp_path, monkeypatch):
+        """End-to-end: `fetch_and_cache_cover` real ejecuta el `append`; el proxy lo traduce a no-store."""
+        from zascarr.config import get_settings
+        monkeypatch.setattr("zascarr.web.discovery.get_settings",
+                            lambda: get_settings().model_copy(update={"covers_cache_path": tmp_path}))
+
+        async def espera(*_a, **_k):
+            raise CortesiaEnEspera("comicvine", "https://comicvine.gamespot.com:443", 10.0,
+                                   "bloqueo_fuente")
+
+        # Se parchea la descarga de RED, no `fetch_and_cache_cover`: el `append` de cover.py corre.
+        monkeypatch.setattr("zascarr.utils.cover.descargar_imagen", espera)
+        with _Cliente(_Sesion()) as client:
+            r = client.get("/ui/descubrir/portada", params={
+                "url": "https://comicvine.gamespot.com/a/uploads/cover.jpg",
+                "source": "comic_vine",
+            })
+        assert r.status_code == 404 and r.headers.get("cache-control") == "no-store"
+
+    def test_el_404_por_cortesia_no_deja_cachear_la_ausencia(self, tmp_path, monkeypatch):
+        """End-to-end: la cascada de series pasa por `fetch_and_cache_cover` y su `append` real."""
+        from zascarr.config import get_settings
+        monkeypatch.setattr("zascarr.web.series.get_settings",
+                            lambda: get_settings().model_copy(update={"covers_cache_path": tmp_path}))
+
+        async def espera(*_a, **_k):
+            raise CortesiaEnEspera("comicvine", "https://comicvine.gamespot.com:443", 10.0,
+                                   "bloqueo_fuente")
+
+        # Se parchea la descarga de RED, no `fetch_and_cache_cover`: el `append` de cover.py corre.
+        monkeypatch.setattr("zascarr.utils.cover.descargar_imagen", espera)
+        serie = Series(id=uuid4(), title="Batman", tradition=ComicTradition.AMERICAN,
+                       cover_url="https://comicvine.gamespot.com/a/uploads/cover.jpg")
+        with _Cliente(_Sesion(serie=serie)) as client:
+            r = client.get(f"/ui/series/{serie.id}/portada")
+        assert r.status_code == 404 and r.headers.get("cache-control") == "no-store"
 
     def test_un_registro_guardado_con_una_url_hostil_no_dispara_ninguna_peticion_desde_la_cascada(
             self, tmp_path, monkeypatch):

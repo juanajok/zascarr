@@ -885,6 +885,8 @@ button[type="submit"].btn-sugerencia {
 .library-card {
   display: block; text-decoration: none; color: var(--ink);
   overflow: hidden; transition: transform .15s, box-shadow .15s;
+  /* BL-IT03 (#286): al volver con el ancla de la tarjeta, el foco no queda pegado al borde. */
+  scroll-margin-block-start: 16px;
 }
 .library-card .portada { border-bottom: 3px solid var(--ink); }
 .library-card-body { padding: 9px 11px 12px; }
@@ -1194,6 +1196,7 @@ button[type="submit"].btn-sugerencia {
 .ajustes-actions { display: flex; gap: 8px; margin-top: 4px; }
 .ajustes-ok { color: var(--ok-t); }
 .ajustes-error { color: var(--warn-t); }
+.ajustes-aviso { color: var(--warn-t); }
 
 /* A6: /login vive fuera de base.html (accesible aunque el resto de la
    app esté bloqueado) — mismos tokens/tarjeta que ajustes, layout
@@ -1237,6 +1240,21 @@ button[type="submit"].btn-sugerencia {
 .estado-check-row:last-child { border-bottom: none; }
 .estado-check-name { flex: 1; font-weight: 700; }
 .estado-check-status { color: var(--ink-soft); font-size: .9rem; }
+
+/* §6.3: tabla de cortesía con las fuentes; «Apagada» en gris, nunca como fallo. */
+.cortesia-card { overflow-x: auto; }
+.cortesia-tabla { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.cortesia-tabla th, .cortesia-tabla td {
+  text-align: left; vertical-align: top; padding: 12px 16px; border-bottom: 2px solid var(--ink);
+}
+.cortesia-tabla tbody tr:last-child th, .cortesia-tabla tbody tr:last-child td { border-bottom: none; }
+.cortesia-tabla thead th {
+  font-size: .875rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft);
+}
+.cortesia-estado { font-weight: 700; }
+.cortesia-estado-ok { color: var(--ok-t); }
+.cortesia-estado-warn { color: var(--warn-t); }
+.cortesia-estado-neutral { color: var(--ink-soft); }
 
 .estado-dot {
   width: 22px; height: 22px; border-radius: 50%; flex: none; border: 2px solid var(--ink);
@@ -1582,11 +1600,234 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .quitar-filtro:hover,
 .limpiar-filtros:hover { background: var(--yellow); color: var(--on-yellow); }
 
+/* ── Filtro de «Pendientes por carpeta» (#397, revisión UI/UX) ───────────────
+   Cada campo es una celda de rejilla con su etiqueta encima; el único filtro de
+   marca que aporta algo es «en conflicto», porque «por confirmar» ya lo cubre el
+   estado. Los campos comparten alto y base para que la barra no parezca una caja
+   de controles sueltos. */
+.filter-bar.carpetas-filtros {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) minmax(320px, 1fr) minmax(275px, max-content) auto;
+  align-items: end;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  margin-bottom: 16px;
+}
+.carpetas-filtros .filtro-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.carpetas-filtros .filtro-campo > label {
+  color: var(--ink);
+  font-size: .875rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.carpetas-filtros input[type="search"],
+.carpetas-filtros select {
+  width: 100%;
+  /* Mismo alto y misma caja en los dos campos: antes el search medía 44,3 px y el
+     select 40 px, y sus bases no coincidían. */
+  height: 44px;
+  min-height: 44px;
+  padding-block: 0;
+}
+.carpetas-filtros .filtro-conflicto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: .875rem;
+  font-weight: 400;
+}
+.carpetas-filtros .filtro-conflicto input { flex: none; }
+.carpetas-filtros .filtro-accion { display: flex; flex-direction: column; }
+.carpetas-filtros .filtro-accion > button {
+  height: 44px;
+  min-height: 44px;
+  padding-inline: 18px;
+}
+.carpetas-filtros .filtro-ayuda {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: .875rem;
+  line-height: 1.35;
+}
+/* Anchos: 4 columnas solo con sitio de sobra. Entre 861 y 969 px el menú lateral
+   deja el contenido demasiado estrecho para dos columnas (el selector de estado
+   recortaría «Mezcla…»); allí se usa una sola columna. */
+@media (max-width: 1240px) {
+  .filter-bar.carpetas-filtros { grid-template-columns: 1fr; }
+  .carpetas-filtros .filtro-accion { justify-self: start; }
+}
+@media (min-width: 970px) and (max-width: 1240px),
+       (min-width: 761px) and (max-width: 860px) {
+  .filter-bar.carpetas-filtros { grid-template-columns: 1fr 1fr; }
+  .carpetas-filtros .filtro-conflicto-campo { grid-column: 1 / 2; }
+  .carpetas-filtros .filtro-accion { grid-column: 2 / 3; justify-self: end; }
+}
+
+/* ── MIT-M6-US01 (#127): procedencia y protección por campo ────────────────── */
+.procedencia-serie { margin: 14px 0 18px; }
+.procedencia-serie summary {
+  cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
+  padding: 8px 0; min-height: 44px;
+}
+.procedencia-serie .muted { margin: 0 0 10px; }
+.procedencia-campos {
+  display: grid; gap: 0; margin: 0 0 10px;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper); overflow: hidden;
+}
+.procedencia-campo {
+  display: grid; grid-template-columns: minmax(150px, .55fr) minmax(0, 1fr);
+  gap: 4px 16px; padding: 10px 14px;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.procedencia-campo:last-child { border-bottom: 0; }
+.procedencia-campo dt { font-weight: 700; }
+.procedencia-campo dd {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  margin: 0;
+}
+.procedencia-valor { font-weight: 600; }
+.procedencia-origen { color: var(--ink-soft); font-size: .875rem; }
+.procedencia-origen.manual { color: var(--ink); font-weight: 700; }
+/* Las observaciones son texto informativo: 14 px, no el `small` del navegador. */
+.procedencia-campo small { flex-basis: 100%; font-size: .875rem; }
+@media (max-width: 560px) {
+  .procedencia-campo { grid-template-columns: 1fr; gap: 3px; }
+}
+
+/* ── BL-IT02 (#284): vista compacta de la biblioteca ──────────────────────── */
+.library-vistas {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 0 0 12px;
+}
+.library-vista {
+  display: inline-flex; align-items: center; min-height: 40px;
+  padding: 6px 12px; border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  color: var(--ink); font-size: .875rem; font-weight: 700; text-decoration: none;
+}
+.library-vista:hover, .library-vista:focus-visible {
+  background: var(--yellow); color: var(--on-yellow);
+}
+.library-vista-actual { background: var(--ink); color: var(--paper); }
+.library-lista {
+  width: 100%; border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--paper);
+}
+.library-lista th, .library-lista td {
+  padding: 10px 12px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.library-lista th {
+  background: var(--paper-2); font-size: .875rem; font-weight: 700;
+}
+.library-lista tbody tr:last-child td { border-bottom: 0; }
+.library-lista tbody tr:hover { background: var(--paper-2); }
+.library-lista td a { color: var(--ink); font-weight: 700; }
+.library-lista td a:hover { color: var(--cyan-t); }
+.library-lista tr { scroll-margin-block-start: 16px; }
+@media (max-width: 640px) {
+  .library-lista, .library-lista tbody, .library-lista tr, .library-lista td { display: block; }
+  .library-lista thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .library-lista tr { padding: 8px 12px; border-bottom: 1px solid var(--ink-faint); }
+  .library-lista tbody tr:last-child { border-bottom: 0; }
+  .library-lista td {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 4px 0; border: 0;
+  }
+  .library-lista td::before {
+    content: attr(data-label); color: var(--ink-soft); font-weight: 700; flex: none;
+  }
+  .library-lista td:first-child { padding-top: 0; }
+  .library-lista td:last-child { padding-bottom: 0; }
+}
+
+/* En táctil/estrecho, el selector es un control de 44 px como el resto. */
+@media (max-width: 860px), (pointer: coarse) {
+  .library-vista { min-height: 44px; }
+}
+
+/* ── #128: plan de enriquecimiento por campo ─────────────────────────────── */
+.series-enriquecimiento { margin: 14px 0 4px; }
+.series-enriquecimiento summary {
+  cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
+  padding: 8px 0; min-height: 40px;
+}
+.series-enriquecimiento form { margin-top: 4px; }
+.tabla-scroll { overflow-x: auto; }
+.enriquecimiento-tabla {
+  width: 100%; border-collapse: collapse; border: 2px solid var(--ink);
+  background: var(--paper); font-size: .875rem;
+}
+.enriquecimiento-tabla caption { text-align: left; }
+.enriquecimiento-tabla th, .enriquecimiento-tabla td {
+  padding: 8px 10px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.enriquecimiento-tabla thead th { background: var(--paper-2); }
+.enriquecimiento-tabla tbody tr:last-child th,
+.enriquecimiento-tabla tbody tr:last-child td { border-bottom: 0; }
+.enriquecimiento-valor { overflow-wrap: anywhere; }
+.enriquecimiento-accion { display: block; font-weight: 700; }
+.enriquecimiento-observacion { display: block; margin-top: 2px; font-size: .875rem; }
+.enriquecimiento-check { display: inline-flex; align-items: center; min-width: 40px; min-height: 40px; }
+.enriquecimiento-check input { width: 24px; height: 24px; }
+.enriquecimiento-resultado { padding-left: 18px; }
+.enriquecimiento-resultado li { margin: 8px 0; }
+.enriquecimiento-resultado-aplicado strong { color: var(--ok-t); }
+.enriquecimiento-resultado-bloqueado strong { color: var(--warn-t); }
+.enriquecimiento-resultado-omitido strong,
+.enriquecimiento-resultado-no_aplicado strong { color: var(--ink-soft); }
+
+/* En táctil/estrecho, el resumen y las casillas alcanzan el objetivo de 44 px. */
+@media (max-width: 860px), (pointer: coarse) {
+  .series-enriquecimiento summary,
+  .enriquecimiento-check { min-height: 44px; }
+  .enriquecimiento-check { min-width: 44px; }
+}
+
+@media (max-width: 860px) {
+  .enriquecimiento-tabla { border: 0; }
+  .enriquecimiento-tabla thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .enriquecimiento-tabla, .enriquecimiento-tabla tbody, .enriquecimiento-tabla tr,
+  .enriquecimiento-tabla th, .enriquecimiento-tabla td { display: block; width: 100%; }
+  .enriquecimiento-tabla tr {
+    border: 2px solid var(--ink); border-radius: var(--radius-panel);
+    padding: 8px 10px; margin-bottom: 10px;
+  }
+  .enriquecimiento-tabla tbody th {
+    border: 0; padding: 0 0 4px; font-size: 1rem;
+  }
+  .enriquecimiento-tabla th, .enriquecimiento-tabla td { border: 0; padding: 4px 0; }
+  .enriquecimiento-tabla td::before {
+    content: attr(data-label); display: block;
+    color: var(--ink-soft); font-size: .875rem; font-weight: 700;
+  }
+  .enriquecimiento-tabla td:first-of-type { padding-top: 6px; }
+}
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
    puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
+
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

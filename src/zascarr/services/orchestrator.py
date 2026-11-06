@@ -559,6 +559,7 @@ class Orchestrator:
             return None
         try:
             from zascarr.services.forum_scraper import ForumScraper
+            from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
             scraper = ForumScraper(base_url=s.forum_url, rate_limit=s.forum_rate_limit)
             await scraper.login(s.forum_username, s.forum_password)
             for fr in await scraper.use_ipb_search(query):
@@ -570,6 +571,10 @@ class Orchestrator:
                     return SearchResult(
                         fr.topic_title, "forum:crg", fr.magnet_links[0], 0, 1, "comics"
                     )
+        except (CortesiaEnEspera, FuenteApagada) as exc:
+            # AC-16: sin turno no es un fallo; se omite el ciclo sin registrar excepción.
+            logger.info("orchestrator.forum_sin_turno",
+                        motivo=getattr(exc, "motivo", "apagada"))
         except Exception:
             logger.exception("orchestrator.forum_fallback_error")
         return None

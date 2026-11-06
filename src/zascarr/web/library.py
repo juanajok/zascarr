@@ -18,7 +18,7 @@ sirve.
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
 from zascarr.services.series import SeriesService
+from zascarr.web.retorno import url_de_ficha
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -99,6 +100,7 @@ class Filtros:
     character_id: str = ""
     story_arc_id: str = ""
     page: int = 1
+    vista: str = "tarjetas"
     avisos: tuple[str, ...] = ()
 
     def uuid(self, nombre: str) -> UUID | None:
@@ -125,6 +127,7 @@ def _leer_filtros(
     publisher_id: str,
     character_id: str,
     story_arc_id: str,
+    vista: str = "tarjetas",
 ) -> Filtros:
     """Normaliza y valida la entrada de la URL; nunca lanza por un valor inválido.
 
@@ -170,6 +173,10 @@ def _leer_filtros(
         pagina = 1
         avisos.append("La página pedida no existe; se muestra la primera.")
 
+    vista_limpia = (vista or "").strip().lower()
+    if vista_limpia not in ("", "tarjetas", "lista"):
+        avisos.append("La presentación pedida no existe; se muestran tarjetas.")
+        vista_limpia = "tarjetas"
     return Filtros(
         q=texto,
         tradition=tradicion,
@@ -177,6 +184,7 @@ def _leer_filtros(
         character_id=_uuid(character_id, "personaje"),
         story_arc_id=_uuid(story_arc_id, "saga"),
         page=pagina,
+        vista="lista" if vista_limpia == "lista" else "tarjetas",
         avisos=tuple(avisos),
     )
 
@@ -193,6 +201,7 @@ def _qs(filtros: Filtros, *, page: int, omitir: str | None = None) -> str:
         "publisher_id": filtros.publisher_id,
         "character_id": filtros.character_id,
         "story_arc_id": filtros.story_arc_id,
+        "vista": "lista" if filtros.vista == "lista" else "",
     }
     if omitir:
         valores[omitir] = ""
@@ -319,6 +328,7 @@ async def _contexto(
         character_id=filtros.character_id,
         story_arc_id=filtros.story_arc_id,
         page=pagina,
+        vista=filtros.vista,
         avisos=tuple(avisos),
     )
     activos = _filtros_activos(filtros_finales, nombres)
@@ -331,16 +341,23 @@ async def _contexto(
         "error": error,
         "avisos": avisos,
         "filtros": filtros_finales,
+        "vista": filtros_finales.vista,
         "filtros_activos": activos,
         "hay_filtros": bool(activos),
         "recuento": _texto_recuento(total, bool(activos)),
         "url_canonica": url_canonica,
+        "url_serie": lambda series_id: url_de_ficha(series_id, url_canonica),
         "url_pagina": lambda p: _url_pagina(filtros_finales, page=p),
         "url_fragmento": lambda p: _url_fragmento(filtros_finales, page=p),
         "url_reintento": url_canonica,
         "url_reintento_fragmento": _url_fragmento(filtros_finales, page=pagina),
-        "url_limpiar": "/ui/biblioteca?page=1",
-        "url_limpiar_fragmento": "/ui/biblioteca/resultados?page=1&quitar=todos",
+        "url_vista_tarjetas": _url_pagina(replace(filtros_finales, vista="tarjetas"), page=pagina),
+        "url_vista_lista": _url_pagina(replace(filtros_finales, vista="lista"), page=pagina),
+        "url_limpiar": _url_pagina(replace(filtros_finales, q="", tradition="", publisher_id="",
+                                           character_id="", story_arc_id=""), page=1),
+        "url_limpiar_fragmento": _url_fragmento(
+            replace(filtros_finales, q="", tradition="", publisher_id="", character_id="",
+                    story_arc_id=""), page=1) + "&quitar=todos",
     }
 
 
@@ -367,9 +384,9 @@ def _respuesta_auxiliar(request: Request, plantilla: str, ctx: dict) -> Response
 async def index(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
-    db: AsyncSession = Depends(get_db),
+    vista: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    filtros = _leer_filtros(page, q, tradition, publisher_id, character_id, story_arc_id)
+    filtros = _leer_filtros(page, q, tradition, publisher_id, character_id, story_arc_id, vista)
     publishers: list = []
     editoriales_error = False
     try:
@@ -396,9 +413,9 @@ async def index(
 async def resultados(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
-    db: AsyncSession = Depends(get_db),
+    vista: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    filtros = _leer_filtros(page, q, tradition, publisher_id, character_id, story_arc_id)
+    filtros = _leer_filtros(page, q, tradition, publisher_id, character_id, story_arc_id, vista)
     return _respuesta_fragmento(request, await _contexto(db, filtros))
 
 
@@ -410,6 +427,7 @@ def _enlace_con_filtro(filtros: Filtros, clave: str, valor: str) -> str:
         "publisher_id": filtros.publisher_id,
         "character_id": filtros.character_id,
         "story_arc_id": filtros.story_arc_id,
+        "vista": "lista" if filtros.vista == "lista" else "",
         clave: valor,
         "page": "1",
     }
@@ -428,13 +446,13 @@ async def _buscar(filtros: Filtros, clave: str, encontrados: list) -> list[tuple
 async def buscar_personaje(
     request: Request, personaje: str = "", q: str = "", tradition: str = "",
     publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
-    db: AsyncSession = Depends(get_db),
+    vista: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(personaje)
     if not texto and q:
         # Compatibilidad con el contrato anterior (`?q=` era el texto del buscador).
         texto, q = _texto_buscador(q), ""
-    filtros = _leer_filtros(1, q, tradition, publisher_id, character_id, story_arc_id)
+    filtros = _leer_filtros(1, q, tradition, publisher_id, character_id, story_arc_id, vista)
     service = SeriesService(db)
     encontrados: list = []
     try:
@@ -453,12 +471,12 @@ async def buscar_personaje(
 async def buscar_saga(
     request: Request, saga: str = "", q: str = "", tradition: str = "",
     publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
-    db: AsyncSession = Depends(get_db),
+    vista: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(saga)
     if not texto and q:
         texto, q = _texto_buscador(q), ""
-    filtros = _leer_filtros(1, q, tradition, publisher_id, character_id, story_arc_id)
+    filtros = _leer_filtros(1, q, tradition, publisher_id, character_id, story_arc_id, vista)
     service = SeriesService(db)
     encontrados: list = []
     try:

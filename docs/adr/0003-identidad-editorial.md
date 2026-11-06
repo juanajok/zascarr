@@ -116,7 +116,7 @@ mismo tipo). Es un parche conservador, no el modelo.
 | Decisión abierta | Pasa a | Nota |
 |---|---|---|
 | Función exacta de `number_key` (`Annual 1`, `1.5`, `0`, `12 B`, `1/2`; subespacio de anuales) | **#125** | D1 fija los principios; la especificación (§8) la mantiene abierta. Lo necesita el criterio «colisiones con la unidad editorial acordada». |
-| Qué discriminantes se muestran para homónimas y la vía manual | **#125** | Idioma/país de la serie **no están modelados**: decidir si hacen falta. |
+| Qué discriminantes se muestran para homónimas y la vía manual | **Cerrada por #182** (2026-11-06) | Acuerdo en [`discriminantes-publicacion.md`](../design/discriminantes-publicacion.md): identidad por UUID/id de fuente; título/año/número/formato/volumen no identifican solos; idioma, país, edición e ISBN no están modelados y no se inventan. |
 | Reimpresión sin renumerar: «reimpresión de» | **#125** / PO | Hoy no hay dónde guardarlo. |
 | Esquema de la relación archivo ↔ publicaciones (N:M, `forced`, procedencia) | **#126** | Kapowarr usa `issues_files`; ZascArr no ha elegido. |
 | Recuento externo: fuente, unidad, edición y fecha; no equiparar «publicado» con «previsto» | **#126** | Consecuencia de D3. |
@@ -352,3 +352,18 @@ decisiones** —no dependen del censo para sostenerse: son un contrato, no una
 medida— y decidir **una** cosa, si la migración aditiva de cobertura se autoriza
 ahora o se pospone. Orden: censo local agregado → revisión final de ADR-0003 →
 decidir migración.
+
+
+## Actualización 2026-11-06 — discriminantes de publicación (#182)
+
+La pregunta abierta «qué discriminantes se muestran para homónimas y la vía manual» queda **cerrada** por
+[`docs/design/discriminantes-publicacion.md`](../design/discriminantes-publicacion.md), con la evidencia del censo
+de #181 (`docs/design/censo-identidad-real.md`).
+
+- Identidad: UUID local e id externo de su fuente cuando consta. No hay identidad universal de obra/edición.
+- Discriminantes para mostrar: serie (título, año, tradición), editorial/sello, número, formato de publicación,
+  fuente/procedencia y id externo. `volume` es dato heredado, no identidad.
+- No se usan ni inventan idioma, país, edición/reimpresión, ISBN, obra ni cobertura.
+- Ambigüedad persistente: no se elige automáticamente; se explica y se usa el camino manual.
+- La migración sigue **no autorizada**: el censo no observa hoy colisiones ni diversidad de formatos y #184 queda
+  pospuesto hasta que se cumpla un disparador.

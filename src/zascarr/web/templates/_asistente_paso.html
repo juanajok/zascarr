@@ -1,2 +1,2 @@
-{% from "_asistente_macros.html" import eleccion_form %}
+{% from "_asistente_macros.html" import eleccion_form with context %}
 {{ eleccion_form(clave, token, etiqueta_sugerida, tradiciones, pista, error, consulta, procedencia=procedencia) }}
