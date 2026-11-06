@@ -134,3 +134,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t zascarr:ci .
+      # #418: la imagen lleva `unar` y lo ejecuta el usuario de servicio (no solo root).
+      - name: lsar dentro de la imagen, como el usuario de servicio
+        run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- lsar --version
