@@ -13,6 +13,7 @@ from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
 from zascarr.services.ciclo_importador import ejecutar_ciclo_y_avisar
+from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
 
@@ -191,6 +192,9 @@ async def _library_audit_task() -> None:
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("zascarr.starting", version=settings.app_version)
+    # #418: observacional, no bloqueante (CLAUDE.md §3.2): sin `unar` solo faltan portadas de .cbr.
+    if not lector_rar.disponible():
+        logger.warning("lector_rar.no_disponible")
     from sqlalchemy import text
 
     from zascarr.database import async_session_factory, engine
