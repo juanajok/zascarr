@@ -1,6 +1,6 @@
-# SPEC: «Conservar la portada que ya tiene buena resolución» (BL-PORT5, issue #435) — v1.0
+# SPEC: «Conservar la portada que ya tiene buena resolución» (BL-PORT5, issue #435) — v1.1
 
-> **Estado:** **v1.0** (2026-11-06). **Aprobada por el PO, que ordena implementarla.** Sin decisiones abiertas: umbral
+> **Estado:** **v1.1** (2026-11-06; registro de un cambio de QA, §15). **v1.0** (2026-11-06). **Aprobada por el PO, que ordena implementarla.** Sin decisiones abiertas: umbral
 > 300 px inclusivo (aprobado a sabiendas de que JSA usará su portada local), regla de precedencia sobre `v2` sin `v3`
 > (con las alternativas descartadas), cinco series y sus anchos medidos en la Pi (P-1 cubierto). Solo especificación:
 > **sin código, sin dependencias, sin despliegue**; no toca repo, issues ni tablero. Siguen los supuestos (§12) y los NOT
@@ -98,7 +98,7 @@ Origen: I = issue #435, V# = verificación (§1.1), Q = pregunta de §9.
 - FR-01 (ubicuo) Existirá **una única función** `portada_previa_suficiente` (sugerido: `utils/cover.py`) que, dado el directorio de portadas y el id de la serie, devuelva la primera portada previa cuyo **ancho** sea ≥ `UMBRAL_PORTADA_PREVIA_PX`, o nada. La **lista ordenada** de portadas previas vive en un solo sitio; hoy contiene solo `covers/<id>.jpg`. *(O-5; compartida con #418)*
 - FR-02 (evento) CUANDO se pida `GET /ui/series/{id}/portada`, el sistema deberá evaluar `portada_previa_suficiente` **antes** de servir `covers/v2/<id>.jpg` y antes de consultar archivos. *(V5; Q-1)*
 - FR-03 (evento) CUANDO exista una portada previa suficiente, el sistema deberá servirla con `Content-Type: image/jpeg`, `ETag` = `mtime` de **ese** fichero y `Cache-Control: private, max-age=86400` (304 con `If-None-Match`), **sin** consultar archivos de la biblioteca, **sin** llamar a ningún extractor, **sin** descargar nada y **sin** escribir en `covers/`. *(I criterios 1, 3, 4)*
-- FR-04 (ubicuo) El ancho se obtendrá leyendo **solo la cabecera** de la imagen (sin decodificarla). SI la cabecera no se puede leer, la imagen no es un JPEG/imagen válida o el fichero no existe, ENTONCES esa portada previa **no cuenta como suficiente** (falla cerrado) y la cascada sigue; se registra el tipo de error sin ruta. *(I criterio 4; CLAUDE.md §5.4)*
+- FR-04 (ubicuo) El ancho se obtendrá leyendo **solo la cabecera** de la imagen (sin decodificarla) sobre **los mismos bytes que se van a servir** (una sola lectura). Una portada previa solo cuenta como suficiente si, además, **es un JPEG íntegro en lo comprobable**: empieza por el marcador `FF D8` y **termina exactamente en el marcador `FF D9` (EOI)**. SI la cabecera no se puede leer, la imagen no es válida, **está truncada (no acaba en `FF D9`)** o el fichero no existe, ENTONCES esa portada previa **no cuenta como suficiente** (falla cerrado) y la cascada sigue; se registra el tipo de error sin ruta. **Límite conocido:** un JPEG roto en mitad del cuerpo pero con `FF D8` al inicio y `FF D9` al final se seguiría aceptando (decodificar costaba 2,9 ms por petición; el marcador, 0,0002 ms). *(I criterio 4; CLAUDE.md §5.4; QA de #439)*
 - FR-05 (ubicuo) El umbral será `UMBRAL_PORTADA_PREVIA_PX = 300` (inclusivo: 300 es suficiente, 299 no), una constante de módulo, no un ajuste de usuario. *(Q-2)*
 - FR-06 (estado) MIENTRAS no exista una previa suficiente (falta, es menor que el umbral o ilegible), el sistema deberá comportarse **exactamente como hoy**: `v2` → candidatos de archivo (#419) → antigua → `cover_url` → 404, con las mismas cabeceras y escrituras. *(I criterios 2 y 5)*
 - FR-07 (ubicuo) El sistema **no deberá borrar, mover, regenerar ni modificar** ningún fichero de `covers/` por esta regla: una `v2` ya escrita de una serie con previa suficiente **se ignora** (queda en disco, sin uso). *(O-3; Q-3)*
@@ -150,7 +150,7 @@ Las series con una portada de Comic Vine suficiente vuelven a mostrarla (las cin
 - AC-05 *(FR-06)* Dada una serie sin antigua, entonces el comportamiento es el de `main` en todos los pasos (archivo → `v2` → externa → 404).
 - AC-06 *(FR-02, FR-07, V5)* Dada una serie con **`v2` ya escrita** (de un CBZ) y una antigua de 320 px, entonces se sirve la **antigua**, `v2` sigue en disco con su contenido y `mtime` y no se regenera. *(Es el caso de las cinco series de la Pi.)*
 - AC-07 *(FR-07, FR-06)* Dada una `v2` ya escrita y una antigua de 100 px, entonces se sirve `v2` como hoy.
-- AC-08 *(FR-04)* Dada una antigua vacía, truncada, no imagen o ausente, entonces **no** cuenta como suficiente, no hay 500 y la cascada sigue; el registro lleva el tipo de error y ninguna ruta.
+- AC-08 *(FR-04)* Dada una antigua vacía, de 1 byte, sin `FF D8` inicial, **cortada a mitad del cuerpo con la cabecera íntegra**, **cortada justo tras la cabecera**, con **bytes sobrantes tras el `FF D9` final** o ausente, entonces **no** cuenta como suficiente, no hay 500 y la cascada sigue; con un `FF D9` **en mitad** del fichero (p. ej. una miniatura EXIF) pero sin él al final, tampoco cuenta; el registro lleva el tipo de error y ninguna ruta. **Mutación:** comprobar `FF D9` en cualquier posición, o no comprobarlo, rompe al menos una de estas pruebas. *(Límite conocido: AC no cubre un JPEG roto con `FF D9` al final.)*
 - AC-09 *(FR-04)* Dada una antigua de 40 Mpx, entonces el ancho se lee por cabecera y la imagen **no se decodifica** (prueba con una imagen falsa que falla en `.load()`).
 - AC-10 *(FR-08, Q-4)* Dada una serie cuyo primer archivo es un RAR y una antigua de 320 px, entonces se sirve la antigua sin abrir el archivo; con una antigua de 100 px, o sin ella, la cascada actual (la antigua o `cover_url`), sin leer el RAR.
 - AC-11 *(FR-01, O-5)* La decisión «previa suficiente» está en **una sola función** y la ruta no tiene otra comparación de anchos; la lista de portadas previas está en un solo lugar y es ampliable con una línea (prueba con una lista de dos elementos: devuelve la primera suficiente en orden).
@@ -228,7 +228,7 @@ Una historia = **una PR**, dos commits:
 | R-3 | `v2` huérfana ocupa espacio | Decenas de KB por serie; limpieza fuera de alcance |
 | R-4 | Dos reglas divergentes entre #435 y #418 | FR-01, AC-11 |
 | R-5 | Coste por petición caliente | FR-10, AC-12, NFR-01 |
-| R-6 | Una antigua corrupta bloquearía la cascada | FR-04 (falla cerrado) |
+| R-6 | Una antigua corrupta bloquearía la cascada, o se serviría rota (QA de #439: truncada a mitad del cuerpo con la cabecera íntegra contaba como suficiente) | FR-04: falla cerrado; ancho por cabecera **y** `FF D8`…`FF D9` sobre los mismos bytes. Límite: un JPEG roto con EOI al final se aceptaría |
 
 ## 14. Trazabilidad
 | Objetivo | FR | AC |
@@ -241,3 +241,18 @@ Una historia = **una PR**, dos commits:
 | O-6 sin regresión | 06, 11, 12 | 05, 14, 16 |
 
 **Autorrevisión.** *Vaguedad:* «suficiente» está definido (ancho ≥ 300 por cabecera); el 5 ms es propuesta, marcada. *Compuestos:* FR-03, FR-04 y FR-07 separan servir, medir y no tocar. *Contradicciones a la superficie:* (a) el encargo habla de «seis `v2`» y la issue de cinco; (b) la issue dice que las externas se cachean «a 600» y `thumbnail` no amplía (V8); (c) §16 de BL-PORT3 decía que el salto a `v3` resolvía las `v2` ya escritas: con esta regla ya no es necesario para eso. *Estado:* v1.0 aprobada por el PO; sin decisiones abiertas; con 5 NOT RUN, 4 supuestos y la puerta de despliegue P-2.
+
+## 15. Registro de cambios
+| Versión | Fecha | Cambio |
+|---|---|---|
+| v1.0 | 2026-11-06 | Aprobada por el PO (registro de decisiones en §9). |
+| **v1.1** | 2026-11-06 | **QA de #439:** una antigua truncada a mitad del cuerpo, con la cabecera íntegra, contaba como suficiente y se servía rota. FR-04 exige que la imagen **empiece por `FF D8` y acabe en `FF D9`**, sobre los bytes ya leídos (0,0002 ms; `load()` costaba 2,9 ms por petición); AC-08 y R-6 ampliados; límite conocido anotado. El builder lo aplicó en la copia de la PR; esta copia lo recoge. |
+
+### 15.1 Huecos que veo en la regla del marcador (sin decidir; para el Brain y el builder)
+1. **La antigua servida como último recurso no pasa por la misma comprobación.** La rama 4 de §5.1 sirve la antigua «de cualquier ancho»: una truncada o de menos de 300 px se serviría igualmente rota antes de intentar `cover_url`. Si se quiere coherencia, la misma comprobación de integridad debería aplicarse allí (la antigua rota cae a la externa o al 404). **Cambia el comportamiento actual de esa rama**, por eso es decisión del PO y no entra en v1.1.
+2. **Solo se mira el ancho.** Una antigua de 320×10 o con dimensiones absurdas contaría como suficiente. Las antiguas las generó este código con `thumbnail` (≤ 320 de ancho, proporcional), así que el riesgo es bajo; si se quisiera cubrir, bastaría un alto mínimo y un ancho máximo razonable en la cabecera.
+3. **Bytes sobrantes tras el EOI.** Exigir que el fichero acabe *exactamente* en `FF D9` rechaza un JPEG válido con relleno final (raro, pero existe). Es seguro (cae a la cascada) pero puede descartar una buena; las antiguas las escribió Pillow, que no deja relleno.
+4. **Una sola lectura.** El ancho, la comprobación y el servido deben usar el mismo `bytes`: si se lee dos veces y el fichero cambia entre medias, se serviría otra cosa. Debería figurar en una prueba (que el fichero se sustituya a mitad con un doble).
+5. **Si se memoriza el ancho (FR-10),** la memoria no debe recordar «suficiente» sin el resultado de la comprobación de integridad: la clave `(ruta, mtime_ns, tamaño)` la invalida si el fichero se trunca después, pero hay que probarlo.
+6. **Otros formatos.** Se asume que la antigua es siempre JPEG (se sirve con `image/jpeg`). Una antigua en otro formato (PNG) quedaría fuera por `FF D8`: es lo correcto, pero conviene un caso de prueba.
+7. **Sin cobertura de `v2`.** `v2` se escribe de forma atómica (`_publicar_atomico`); no se comprueba al servirse y no entra en esta regla.
