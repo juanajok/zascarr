@@ -163,35 +163,26 @@ class TestUnaSolaRegla:
 
 
 class TestRegistro:
-    def test_el_evento_lleva_ancho_y_umbral_y_ninguna_ruta(self, tmp_path):
-        """AC-13."""
+    def test_un_acierto_no_registra_nada(self, tmp_path):
+        """AC-13: la app no filtra por nivel; un evento por petición (también las 304) sería una línea
+        por portada de la rejilla. El acierto no emite ningún evento."""
         serie = uuid4()
         _antigua(tmp_path, serie, 320)
         with structlog.testing.capture_logs() as registros:
-            portada_previa_suficiente(tmp_path, serie)
-        eventos = [r for r in registros if r["event"] == "cover.previa_suficiente"]
-        assert len(eventos) == 1
-        assert eventos[0]["ancho"] == 320 and eventos[0]["umbral"] == 300
-        assert str(tmp_path) not in str(registros) and str(serie) not in str(registros)
+            assert portada_previa_suficiente(tmp_path, serie).ancho == 320
+        assert registros == []
 
-    def test_una_previa_pequena_no_registra_el_evento(self, tmp_path):
+    def test_una_previa_pequena_no_registra_nada(self, tmp_path):
         serie = uuid4()
         _antigua(tmp_path, serie, 100)
         with structlog.testing.capture_logs() as registros:
             portada_previa_suficiente(tmp_path, serie)
-        assert not [r for r in registros if r["event"] == "cover.previa_suficiente"]
+        assert registros == []
+
 
 
 class TestRuidoEnElRegistro:
     """Se evalúa en CADA petición (también las 304); una rejilla pide cientos de portadas."""
-
-    def test_el_acierto_se_registra_a_debug_no_a_info(self, tmp_path):
-        serie = uuid4()
-        _antigua(tmp_path, serie, 320)
-        with structlog.testing.capture_logs() as registros:
-            portada_previa_suficiente(tmp_path, serie)
-        evento = next(r for r in registros if r["event"] == "cover.previa_suficiente")
-        assert evento["log_level"] == "debug"
 
     def test_sin_previa_no_emite_ningun_evento(self, tmp_path):
         """El caso más común (serie sin antigua) no avisa: `FileNotFoundError` no es un fallo."""
@@ -254,6 +245,13 @@ class TestJpegTruncado:
         """AC-08 (v1.1): termina EXACTAMENTE en `FF D9`; cae a la cascada, que es segura."""
         serie = uuid4()
         (tmp_path / f"{serie}.jpg").write_bytes(_jpeg_con_ruido() + sobrante)
+        assert portada_previa_suficiente(tmp_path, serie) is None
+
+    def test_acabar_en_d9_sin_el_ff_delante_no_cuenta(self, tmp_path):
+        """Mutación E4: comprobar solo el byte final `D9` aceptaría una cola que no es un EOI."""
+        serie = uuid4()
+        entero = _jpeg_con_ruido()
+        (tmp_path / f"{serie}.jpg").write_bytes(entero[:-2] + b"\x00\xd9")
         assert portada_previa_suficiente(tmp_path, serie) is None
 
     def test_un_ff_d9_en_mitad_del_fichero_no_basta(self, tmp_path):
