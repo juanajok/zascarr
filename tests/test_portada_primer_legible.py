@@ -69,7 +69,8 @@ class _Resultado:
 class _Sesion:
     def __init__(self, series: Series, archivos: list[tuple[str, dict | None]]):
         self._series = series
-        self._archivos = archivos
+        # la consulta real trae (id, ruta, formato): el id lo usa la marca de fallo de los RAR (#418)
+        self._archivos = [(uuid4(), *a) for a in archivos]
         self.sentencias: list[str] = []
 
     async def get(self, _model, _id):

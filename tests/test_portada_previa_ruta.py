@@ -54,7 +54,8 @@ class _Sesion:
     """Cuenta las consultas de archivos: con una previa suficiente no debe haber ninguna."""
 
     def __init__(self, series, archivos):
-        self._series, self._archivos, self.consultas = series, archivos, 0
+        self._series, self.consultas = series, 0
+        self._archivos = [(uuid4(), *a) for a in archivos]   # la consulta real trae (id, ruta, formato)
 
     async def get(self, _model, _id):
         return self._series

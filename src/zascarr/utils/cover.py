@@ -44,6 +44,7 @@ from zascarr.utils.cortesia import (
     fuente_habilitada,
 )
 from zascarr.utils.espacio import comprobar_espacio
+from zascarr.utils.portada_rar import es_rar_candidato
 from zascarr.utils.url_portada import (
     ESPERA_MAX_PORTADA_S,
     UrlNoPermitidaError,
@@ -63,9 +64,14 @@ _THUMB_MAX_WIDTH = 240
 SERIES_COVER_MAX_WIDTH = 600
 
 #: Versión de la clave de caché de la portada de serie: `covers/<CACHE_VERSION>/<id>.jpg`.
-#: Un cambio de ancho objetivo o de algoritmo exige subir la versión (`v3`), porque la
-#: ruta es lo que separa una caché vieja de una nueva (FR-03).
-CACHE_VERSION = "v2"
+#: Un cambio de ancho objetivo o de algoritmo exige subir la versión, porque la ruta es lo que
+#: separa una caché vieja de una nueva (FR-03). `v3` (#418): solo portadas sacadas de un archivo.
+CACHE_VERSION = "v3"
+
+#: #418: carpeta (dentro de `covers/`) de las portadas EXTERNAS de `cover_url`. `v3` guarda
+#: solo portadas sacadas de un archivo: así una serie con externa pequeña cambia sola a la de su
+#: archivo cuando éste se hace legible (la externa en `v3` la bloquearía para siempre).
+CARPETA_EXTERNA = "externa"
 
 #: Extensiones de las que `extract_cover_thumbnail` SABE sacar una miniatura (las que son un
 #: zip). El resto (CBR, CB7, PDF, EPUB) no tiene extractor: «sin portada» se sabe por la
@@ -129,9 +135,9 @@ class PortadaPrevia:
 
 def rutas_de_portadas_previas(covers: Path, series_id: UUID) -> list[Path]:
     """LA lista ordenada de portadas previas de solo lectura de una serie (#435): se prueban por
-    orden y se sirve la primera suficiente. Hoy solo la caché antigua `covers/<id>.jpg`; #418
-    añadirá `covers/externa/<id>.jpg` aquí y en ningún otro sitio."""
-    return [covers / f"{series_id}.jpg"]
+    orden y se sirve la primera suficiente. La caché antigua `covers/<id>.jpg` y la externa
+    `covers/externa/<id>.jpg` (#418), aquí y en ningún otro sitio."""
+    return [covers / f"{series_id}.jpg", covers / CARPETA_EXTERNA / f"{series_id}.jpg"]
 
 
 def portada_previa_suficiente(covers: Path, series_id: UUID) -> PortadaPrevia | None:
@@ -195,8 +201,10 @@ def es_candidato_de_portada(path: Path, formato_contenido: dict | None = None) -
     una lectura fallida antigua) se decide por la firma, 512 bytes como máximo: un `.cbr` que por
     dentro es ZIP se abre, uno que es RAR no. Así un RAR sin formato guardado no agota el tope de
     intentos antes de llegar a un CBZ, y un tebeo que hoy da portada sigue dándola (#419, criterio
-    2)."""
+    2). #418: un RAR de verdad (firma, no extensión) también lo es: lo abre el lector de RAR."""
     ext = path.suffix.lower()
+    if es_rar_candidato(path, formato_contenido):
+        return True
     guardado = puede_dar_portada(ext, formato_contenido)
     if guardado is not None:
         return guardado
