@@ -74,7 +74,7 @@
       {% endif %}
     {% elif v.tipo == "cota" %}
       {{ "Falta 1 número." if v.k == 1 else "Faltan %d números." % v.k }}
-      ZascArr empieza a buscar unos {{ v.r }} por hora como máximo, contando todas las
+      ZascArr empieza a buscar {% if v.r == 1 %}un número{% else %}unos {{ v.r }}{% endif %} por hora como máximo, contando todas las
       series que estás completando (ahora, {{ v.n }} por buscar). Por eso no debería terminar antes de
       {{ v.cota }}; puede tardar más, y puede que algún número no aparezca.
       {% if querer.numeros|length <= 12 %}
