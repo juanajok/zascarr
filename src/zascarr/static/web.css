@@ -1705,13 +1705,6 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .procedencia-campo { grid-template-columns: 1fr; gap: 3px; }
 }
 
-/* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
-   La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
-   colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
-   puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
-   especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
-
-
 /* ── BL-IT02 (#284): vista compacta de la biblioteca ──────────────────────── */
 .library-vistas {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
@@ -1727,7 +1720,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 .library-vista-actual { background: var(--ink); color: var(--paper); }
 .library-lista {
-  width: 100%; border: 2px solid var(--ink); border-radius: var(--radius-panel);
+  width: 100%; border: 3px solid var(--ink); border-radius: var(--radius-panel);
   border-collapse: separate; border-spacing: 0; overflow: hidden; background: var(--paper);
 }
 .library-lista th, .library-lista td {
@@ -1760,6 +1753,18 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .library-lista td:first-child { padding-top: 0; }
   .library-lista td:last-child { padding-bottom: 0; }
 }
+
+/* En táctil/estrecho, el selector es un control de 44 px como el resto. */
+@media (max-width: 860px), (pointer: coarse) {
+  .library-vista { min-height: 44px; }
+}
+
+/* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
+   La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
+   colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
+   puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
+   especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
+
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
