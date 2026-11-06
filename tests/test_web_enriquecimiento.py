@@ -12,6 +12,9 @@ from zascarr.models import ComicTradition, Series
 from zascarr.services.enriquecimiento_plan import (
     ANADIR,
     BLOQUEADO,
+    CONSERVAR,
+    OMITIR_POR_AUSENCIA,
+    PROPONER_SUSTITUCION,
     CampoPlan,
     EnriquecimientoPlanService,
     Plan,
@@ -75,6 +78,47 @@ def test_previsualizar_muestra_plan_por_campo(monkeypatch):
     assert 'name="campos" value="description"' in r.text
     assert 'name="campos" value="cover_url"' not in r.text
     assert "Esto es una propuesta: no se ha cambiado nada de tu ficha." in r.text
+    # La maquetación móvil oculta la cabecera: cada celda conserva su etiqueta.
+    assert '<td class="enriquecimiento-valor" data-label="Ahora">' in r.text
+    assert '<td class="enriquecimiento-valor" data-label="Propuesta">' in r.text
+    assert '<td data-label="Origen">' in r.text
+    assert '<td data-label="Acción">' in r.text
+    assert '<td data-label="Aplicar">' in r.text
+    # Las acciones se ven en español; no se filtran los códigos internos.
+    assert ">Añadir</span>" in r.text and ">Protegido</span>" in r.text
+    assert ">anadir</span>" not in r.text
+
+
+def _plan_con_todas_las_acciones(s):
+    return Plan(
+        series_id=s.id, titulo=s.title, fuente="tebeosfera", fuente_etiqueta="Tebeosfera",
+        token="token-firmado",
+        campos=(
+            CampoPlan("comic_vine_id", "Identidad", None, "777", "Tebeosfera",
+                      "Se añadirá.", ANADIR),
+            CampoPlan("description", "Sinopsis", "Actual", "Propuesta", "Tebeosfera",
+                      "Se sustituirá si la marcas.", PROPONER_SUSTITUCION),
+            CampoPlan("cover_url", "Portada", "Actual", "Propuesta", "Tebeosfera",
+                      "Protegido.", BLOQUEADO),
+            CampoPlan("total_issues", "Números", 3, 3, "Tebeosfera",
+                      "Coincide; se conserva.", CONSERVAR),
+            CampoPlan("publisher", "Editorial", "Actual", None, "Tebeosfera",
+                      "La fuente no lo trae.", OMITIR_POR_AUSENCIA),
+        ),
+    )
+
+
+def test_las_acciones_del_plan_se_muestran_en_espanol(monkeypatch):
+    s = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN)
+    monkeypatch.setattr(EnriquecimientoPlanService, "previsualizar",
+                        AsyncMock(return_value=_plan_con_todas_las_acciones(s)))
+    with use_session(s) as client:
+        r = client.post(f"/ui/series/{s.id}/enriquecimiento/previsualizar")
+    assert r.status_code == 200
+    for texto in ("Añadir", "Sustituir", "Protegido", "Conservar", "Omitir"):
+        assert f">{texto}</span>" in r.text
+    for codigo in ("anadir", "proponer_sustitucion", "omitir_por_ausencia"):
+        assert f">{codigo}</span>" not in r.text
 
 
 def test_error_de_vista_previa_se_explica_sin_romper(monkeypatch):
