@@ -849,3 +849,38 @@ class TestTextosC6:
         series.wishlist_policy = WishlistPolicy.MISSING
         bloque = self._bloque(self._ficha(series, cota=True))
         assert "unos 1 por hora como máximo" in bloque
+
+
+class TestProcedenciaCamposC6:
+    """#127: el bloque de procedencia no inventa origen ni expone ids internos."""
+
+    def test_la_ficha_muestra_procedencia_y_bloqueo(self):
+        series = make_series(total_issues=3)
+        series.metadata_source = "comic_vine"
+        series.metadata_ = {"alta": {"origen": "descubrir", "fuente": "comic_vine",
+                                     "id_externo": "777", "fecha": "2026-11-06T10:00:00+00:00"}}
+        series.comic_vine_id = 777
+        series.locked_fields = ["comic_vine_id"]
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert "De dónde sale cada dato" in r.text
+        assert "Alta desde Comic Vine" in r.text
+        assert "Protegido: el enriquecimiento no lo sobrescribe." in r.text
+        assert "Protegido</strong> significa que el enriquecimiento no lo sobrescribe." in r.text
+        assert "Identificador de la fuente" in r.text
+        assert "777" not in r.text   # el id externo no se pinta
+
+    def test_sin_procedencia_lo_dice_en_vez_de_atribuir(self):
+        series = make_series(total_issues=3)
+        series.metadata_source = None
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert "Origen no registrado" in r.text
+        assert "No hay procedencia registrada" in r.text
+        assert "significa que el enriquecimiento no lo sobrescribe" not in r.text
+        assert "significa que lo has escrito tú" not in r.text
