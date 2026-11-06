@@ -207,7 +207,7 @@ async def _contexto_politica(db: AsyncSession, series: Series,
 
 
 @router.get("/{series_id}", response_class=HTMLResponse)
-async def detalle(series_id: UUID, request: Request, volver: str = Query(default="", max_length=2000),
+async def detalle(series_id: UUID, request: Request, volver: str = Query(default=""),
                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = (await db.execute(
         select(Series)
@@ -228,7 +228,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": await archivos_por_numero(db, series.id),
         "procedencia": procedencia_de_serie(series),
-        "volver": volver_segura(volver),
+        "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
     })
 

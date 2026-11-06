@@ -990,3 +990,17 @@ class TestVolverALaBiblioteca:
         r2 = self._get(series, dos)
         assert "q=uno&amp;page=1" in r1.text and "q=dos" not in r1.text
         assert "q=dos&amp;page=2" in r2.text and "q=uno" not in r2.text
+
+    def test_un_volver_demasiado_largo_cae_a_biblioteca_sin_422(self):
+        series = make_series(total_issues=3)
+        r = self._get(series, "/ui/biblioteca?q=" + "x" * 2100)
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text
+        assert "← Biblioteca" in r.text
+
+    def test_un_ancla_de_otra_serie_cae_a_biblioteca(self):
+        series = make_series(total_issues=3)
+        otra = uuid4()
+        r = self._get(series, f"/ui/biblioteca?page=1#serie-{otra}")
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text
