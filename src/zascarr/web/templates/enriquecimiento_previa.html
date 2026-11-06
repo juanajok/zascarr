@@ -17,6 +17,7 @@
   <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la ficha</a></p>
 {% else %}
   <p class="muted">Fuente: <strong>{{ plan.fuente_etiqueta }}</strong>. Revisa campo a campo y elige qué aplicar.</p>
+  {% for aviso in plan.avisos %}{{ ui.aviso("warn", aviso) }}{% endfor %}
 
   <form method="post" action="/ui/series/{{ series.id }}/enriquecimiento/aplicar">
     <input type="hidden" name="token" value="{{ plan.token }}">
