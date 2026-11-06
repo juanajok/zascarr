@@ -14,8 +14,10 @@ import tempfile
 import time
 import zipfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
+from uuid import UUID
 
 import structlog
 from fastapi import Request, Response
@@ -70,6 +72,62 @@ CACHE_VERSION = "v2"
 #: extensión, sin abrir el archivo. Esta constante y el extractor tienen que decir lo mismo,
 #: por eso el extractor la usa.
 EXTENSIONES_CON_PORTADA = frozenset({".cbz", ".zip"})
+
+
+#: #435 (BL-PORT5): ancho mínimo, INCLUSIVO, de una portada previa para conservarla en vez de
+#: sustituirla por la primera página del archivo. La antigua sacada de un CBZ mide ≤ 240 px y la de
+#: una descarga ≤ 320 (`_THUMB_MAX_WIDTH`, `_COVER_MAX_WIDTH`), así que cualquier valor en (240,
+#: 320] las separa. Es una constante del código, no un ajuste de usuario.
+UMBRAL_PORTADA_PREVIA_PX = 300
+
+#: Tope de bytes de una portada previa que se lee entera para medirla y servirla. Las hace ZascArr a
+#: ≤ 320 px (decenas de KB); una mayor no es una de ellas y no se sube a memoria en la Pi.
+MAX_BYTES_PORTADA_PREVIA = 8 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class PortadaPrevia:
+    """Una portada previa suficiente: la ruta (para el `ETag` por `mtime`), los bytes ya leídos
+    (los mismos que se miden y se sirven) y el ancho medido."""
+    ruta: Path
+    datos: bytes
+    ancho: int
+
+
+def rutas_de_portadas_previas(covers: Path, series_id: UUID | str) -> list[Path]:
+    """LA lista ordenada de portadas previas de solo lectura de una serie (#435): se prueban por
+    orden y se sirve la primera suficiente. Hoy solo la caché antigua `covers/<id>.jpg`; #418
+    añadirá `covers/externa/<id>.jpg` aquí y en ningún otro sitio."""
+    return [covers / f"{series_id}.jpg"]
+
+
+def portada_previa_suficiente(covers: Path, series_id: UUID | str) -> PortadaPrevia | None:
+    """La primera portada previa de la serie con ancho ≥ `UMBRAL_PORTADA_PREVIA_PX`, o `None`.
+
+    ÚNICA regla de «portada previa suficiente» (compartida con #418). No abre archivos de la
+    biblioteca, no usa la red y no escribe nada. El ancho sale de la CABECERA de la imagen (no se
+    decodifica). Lo que no se puede leer, no es un JPEG o supera el tope de bytes NO cuenta como
+    suficiente (falla cerrado): se sigue la cascada de siempre. El registro lleva el ancho y el
+    umbral, o solo el tipo de error: nunca rutas."""
+    for ruta in rutas_de_portadas_previas(covers, series_id):
+        try:
+            with open(ruta, "rb") as fh:
+                datos = fh.read(MAX_BYTES_PORTADA_PREVIA + 1)
+            if len(datos) > MAX_BYTES_PORTADA_PREVIA:
+                continue
+            with Image.open(io.BytesIO(datos)) as img:
+                if img.format != "JPEG":
+                    continue
+                ancho = img.width
+        except FileNotFoundError:
+            continue
+        except Exception as exc:   # OSError, imagen no válida, DecompressionBombError…
+            logger.warning("cover.previa_ilegible", motivo=type(exc).__name__)
+            continue
+        if ancho >= UMBRAL_PORTADA_PREVIA_PX:
+            logger.info("cover.previa_suficiente", ancho=ancho, umbral=UMBRAL_PORTADA_PREVIA_PX)
+            return PortadaPrevia(ruta, datos, ancho)
+    return None
 
 
 def puede_tener_portada(ruta: str | Path, formato_contenido: dict | None = None) -> bool:
