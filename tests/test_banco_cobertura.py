@@ -289,6 +289,79 @@ class TestRegresionesDeSeguridad:
             banco.validar_salida([{"campo_inventado": 1}], {"cobertura": "NOT RUN"})
 
 
+class TestAjustesRuntime:
+    """ADR 0013: los interruptores viven en runtime_settings, no en el .env."""
+
+    def test_el_overlay_de_ajustes_enciende_la_fuente(self, monkeypatch):
+        from zascarr.config import get_settings
+
+        async def valores(_url):
+            return {"comicvine_enabled": True, "comicvine_api_key": "clave"}
+
+        monkeypatch.setattr(banco, "_leer_valores_ajustes", valores)
+        settings = get_settings()
+        monkeypatch.setattr(settings, "comicvine_enabled", False)
+        monkeypatch.setattr(settings, "comicvine_api_key", "")
+        assert asyncio.run(banco.aplicar_ajustes_runtime("postgresql://x")) is True
+        assert settings.comicvine_enabled is True
+        assert banco._configuracion_fuente("comic_vine") == (True, None)
+
+    def test_sin_fila_sigue_con_el_env_y_da_fuente_apagada(self, monkeypatch):
+        from zascarr.config import get_settings
+
+        async def sin_fila(_url):
+            return None
+
+        monkeypatch.setattr(banco, "_leer_valores_ajustes", sin_fila)
+        monkeypatch.setattr(get_settings(), "comicvine_enabled", False)
+        assert asyncio.run(banco.aplicar_ajustes_runtime("postgresql://x")) is False
+        assert banco._configuracion_fuente("comic_vine") == (False, "fuente_apagada")
+
+    def test_sin_database_url_no_intenta_leer(self, monkeypatch):
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        monkeypatch.delenv("TEST_DATABASE_URL", raising=False)
+
+        async def prohibido(_url):
+            raise AssertionError("no se puede leer sin DATABASE_URL")
+        monkeypatch.setattr(banco, "_leer_valores_ajustes", prohibido)
+        assert asyncio.run(banco.aplicar_ajustes_runtime(None)) is False
+
+    def test_el_ejecutor_aplica_ajustes_antes_de_comprobar_la_fuente(self, monkeypatch):
+        corpus = _corpus_min(1)
+        auth = _auth(casos=[corpus["casos"][0]["caso_id"]])
+        aplicado = []
+
+        async def overlay():
+            aplicado.append(True)
+            monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+        monkeypatch.setattr(banco, "aplicar_ajustes_runtime", overlay)
+        plan = banco.plan_real(corpus, fuentes=["comic_vine"], unidades=["serie"])
+        filas = asyncio.run(banco.ejecutar_real(
+            plan, corpus, auth, max_peticiones=10, max_por_fuente=10,
+            salida=Path("/tmp/x"), corpus_sha="sha-corpus", fuentes=["comic_vine"],
+            cliente_factory=lambda _f: ClienteFalso(lambda q: [{"name": "x"}]),
+            sha_ejecutor="abc", aplicar_ajustes=True))
+        assert aplicado == [True]
+        assert filas[0]["estado_tecnico"] == "ok"
+
+
+class TestTextosDinamicosDelInforme:
+    def test_corpus_acreditado_revision_y_titulo_real(self, tmp_path):
+        corpus = _corpus()                     # 12 acreditados / 18 en borrador
+        filas: list[dict] = []
+        informe = banco.construir_informe(
+            registros=filas, corpus=corpus, corpus_sha="sha", modo="real",
+            autorizacion={"id": "a"}, errores_autorizacion=[], sha_ejecutor="abc")
+        pass_texto = " ".join(informe["pass_fail_not_run"]["PASS"])
+        not_run = " ".join(informe["pass_fail_not_run"]["NOT RUN"])
+        assert "12 acreditados / 18 en borrador" in pass_texto
+        assert "NOT RUN hasta la revisión humana" in not_run
+        assert "verificador: juanajok (PO)" in not_run
+        banco.escribir_informe(informe, filas, tmp_path)
+        md = (tmp_path / "informe.md").read_text(encoding="utf-8")
+        assert "— ejecución real" in md and "— preparación" not in md
+
+
 class TestAutorizacionEfectiva:
     def _base(self, **extra):
         ahora = datetime.now(UTC)
@@ -500,7 +573,8 @@ def _ejecutar(corpus, auth, *, max_peticiones=80, max_por_fuente=20, comportamie
         plan, corpus, auth, max_peticiones=max_peticiones,
         max_por_fuente=max_por_fuente, salida=Path("/tmp/salida-inexistente"),
         corpus_sha="sha-corpus", fuentes=["comic_vine"],
-        cliente_factory=factory, sha_ejecutor="abc")), llamadas
+        cliente_factory=factory, sha_ejecutor="abc",
+        aplicar_ajustes=False)), llamadas
 
 
 class TestEjecutorReal:
