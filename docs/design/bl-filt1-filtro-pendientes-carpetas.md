@@ -233,11 +233,12 @@ que ya comprueban las pruebas (`tests/test_web_carpetas_pg.py:307-330,371-380,70
 | Opción sin serie | «Sin serie» |
 | Opción con serie sugerida | «Con serie sugerida» |
 | Opción mixto | «Mezcla (sin serie y con serie sugerida)» |
-| Filtro de conflicto | «Solo carpetas con conflictos» |
+| Filtro de conflicto | «Solo carpetas cuyos datos no cuadran» |
+| Ayuda del filtro | «Cuando la carpeta, el título o el año no coinciden con la serie que ZascArr propone.» |
 | Botón de envío | «Filtrar» |
 | Enlace de quitar (cuando hay filtro) | «Quitar el filtro» |
 
-- **Revisión UI/UX del 2026-11-05:** la barra solo expone **«Solo carpetas con conflictos»**. `por_confirmar`
+- **Revisión UI/UX del 2026-11-05:** la barra solo expone **«Solo carpetas cuyos datos no cuadran»**. `por_confirmar`
   sigue en el contrato del servicio y de la URL por compatibilidad, pero **no se ofrece** en la interfaz: por
   construcción equivale a «hay algún archivo con serie sugerida», que ya eligen «Con serie sugerida» o «Mezcla».
   Dos marcas con esa solapadura no ayudaban a un coleccionista no técnico; el conflicto sí aporta información
