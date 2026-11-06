@@ -50,29 +50,36 @@
 
 {#- Filtro de la lista (BL-FILT1, #397): UN formulario GET, sin HTMX ni JavaScript. Los
     `hidden` van antes que los campos visibles para que el GET produzca la URL canónica
-    (limite, serie, nombre, estado, por_confirmar, en_conflicto) y vuelva a la página 1:
-    no se envía `desplazamiento`. -#}
-<form class="filter-bar" id="filtro-carpetas" action="/ui/pendientes/carpetas" method="get"
-      aria-label="Filtrar carpetas por nombre y estado">
+    (limite, serie, nombre, estado, en_conflicto) y vuelva a la página 1: no se envía
+    `desplazamiento`. `por_confirmar` sigue en el servicio y se acepta por URL, pero la
+    interfaz ya no lo ofrece (revisión UI/UX #397). -#}
+<form class="filter-bar carpetas-filtros" id="filtro-carpetas" action="/ui/pendientes/carpetas" method="get"
+      aria-label="Filtrar carpetas por nombre, estado y conflictos">
   <input type="hidden" name="limite" value="{{ limite }}">
   {% if serie_actual %}<input type="hidden" name="serie" value="{{ serie_actual.id }}">{% endif %}
-  <label for="f-nombre">Nombre de la carpeta</label>
-  <input id="f-nombre" type="search" name="nombre" maxlength="200" value="{{ filtros.nombre }}"
-         placeholder="Parte del nombre" autocomplete="off">
-  <label for="f-estado">Estado de la carpeta</label>
-  <select id="f-estado" name="estado">
-    <option value="todas"{% if not filtros.estado %} selected{% endif %}>Todas</option>
-    <option value="sin_serie"{% if filtros.estado == "sin_serie" %} selected{% endif %}>Sin serie</option>
-    <option value="serie_sugerida"{% if filtros.estado == "serie_sugerida" %} selected{% endif %}>Con serie sugerida</option>
-    <option value="mixto"{% if filtros.estado == "mixto" %} selected{% endif %}>Mezcla (sin serie y con serie sugerida)</option>
-  </select>
-  <fieldset class="filtro-marcas">
-    <legend>Marcas</legend>
-    <label><input type="checkbox" name="por_confirmar" value="1"{% if filtros.por_confirmar %} checked{% endif %}> Por confirmar</label>
-    <label><input type="checkbox" name="en_conflicto" value="1"{% if filtros.en_conflicto %} checked{% endif %}> En conflicto</label>
-    <p class="caption">Se suman al estado; no son estados.</p>
-  </fieldset>
-  <button type="submit">Filtrar</button>
+  <div class="filtro-campo">
+    <label for="f-nombre">Nombre de la carpeta</label>
+    <input id="f-nombre" type="search" name="nombre" maxlength="200" value="{{ filtros.nombre }}"
+           placeholder="Parte del nombre" autocomplete="off">
+  </div>
+  <div class="filtro-campo">
+    <label for="f-estado">Estado de la carpeta</label>
+    <select id="f-estado" name="estado">
+      <option value="todas"{% if not filtros.estado %} selected{% endif %}>Todas</option>
+      <option value="sin_serie"{% if filtros.estado == "sin_serie" %} selected{% endif %}>Sin serie</option>
+      <option value="serie_sugerida"{% if filtros.estado == "serie_sugerida" %} selected{% endif %}>Con serie sugerida</option>
+      <option value="mixto"{% if filtros.estado == "mixto" %} selected{% endif %}>Mezcla (sin serie y con serie sugerida)</option>
+    </select>
+  </div>
+  <div class="filtro-campo filtro-conflicto-campo">
+    <label class="filtro-conflicto">
+      <input type="checkbox" name="en_conflicto" value="1"{% if filtros.en_conflicto %} checked{% endif %}>
+      Solo carpetas con conflictos
+    </label>
+  </div>
+  <div class="filtro-campo filtro-accion">
+    <button type="submit">Filtrar</button>
+  </div>
 </form>
 
 {% if hay_filtro and coinciden %}

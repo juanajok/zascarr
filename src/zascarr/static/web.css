@@ -1598,11 +1598,78 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .quitar-filtro:hover,
 .limpiar-filtros:hover { background: var(--yellow); color: var(--on-yellow); }
 
+/* ── Filtro de «Pendientes por carpeta» (#397, revisión UI/UX) ───────────────
+   Cada campo es una celda de rejilla con su etiqueta encima; el único filtro de
+   marca que aporta algo es «en conflicto», porque «por confirmar» ya lo cubre el
+   estado. Los campos comparten alto y base para que la barra no parezca una caja
+   de controles sueltos. */
+.filter-bar.carpetas-filtros {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) minmax(320px, 1fr) minmax(275px, max-content) auto;
+  align-items: end;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 3px solid var(--ink);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  margin-bottom: 16px;
+}
+.carpetas-filtros .filtro-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.carpetas-filtros .filtro-campo > label {
+  color: var(--ink);
+  font-size: .875rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.carpetas-filtros input[type="search"],
+.carpetas-filtros select {
+  width: 100%;
+  /* Mismo alto y misma caja en los dos campos: antes el search medía 44,3 px y el
+     select 40 px, y sus bases no coincidían. */
+  height: 44px;
+  min-height: 44px;
+  padding-block: 0;
+}
+.carpetas-filtros .filtro-conflicto {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: .875rem;
+  font-weight: 400;
+}
+.carpetas-filtros .filtro-conflicto input { flex: none; }
+.carpetas-filtros .filtro-accion { display: flex; flex-direction: column; }
+.carpetas-filtros .filtro-accion > button {
+  height: 44px;
+  min-height: 44px;
+  padding-inline: 18px;
+}
+/* Anchos: 4 columnas solo con sitio de sobra. Entre 861 y 969 px el menú lateral
+   deja el contenido demasiado estrecho para dos columnas (el selector de estado
+   recortaría «Mezcla…»); allí se usa una sola columna. */
+@media (max-width: 1240px) {
+  .filter-bar.carpetas-filtros { grid-template-columns: 1fr; }
+  .carpetas-filtros .filtro-accion { justify-self: start; }
+}
+@media (min-width: 970px) and (max-width: 1240px),
+       (min-width: 761px) and (max-width: 860px) {
+  .filter-bar.carpetas-filtros { grid-template-columns: 1fr 1fr; }
+  .carpetas-filtros .filtro-conflicto-campo { grid-column: 1 / 2; }
+  .carpetas-filtros .filtro-accion { grid-column: 2 / 3; justify-self: end; }
+}
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
    puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
