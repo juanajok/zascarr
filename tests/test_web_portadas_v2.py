@@ -67,6 +67,9 @@ class _Resultado:
     def first(self):
         return self._filas[0] if self._filas else None
 
+    def all(self):
+        return self._filas
+
 
 class _SesionDePortada:
     """`get` devuelve la serie; `execute`, la misma fila de archivo en cada llamada.
