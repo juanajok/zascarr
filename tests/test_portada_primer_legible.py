@@ -223,8 +223,9 @@ class TestPortadaDelPrimerArchivoLegible:
 
         sql = sesion.sentencias[0]
         assert "is_missing" in sql and "sort_order" in sql
-        # recorre candidatos: el tope es de intentos, no de filas
-        assert "LIMIT" not in sql.upper()
+        # recorre candidatos: el tope de filas es el de archivos evaluados, no 1
+        assert wseries.MAX_EVALUADOS_PORTADA == 50
+        assert f"LIMIT {wseries.MAX_EVALUADOS_PORTADA}" in sql
 
     def test_un_candidato_fallido_se_registra_sin_ruta(self, tmp_path, montar):
         malo = _cbz_sin_imagenes(tmp_path / "secreto-no-salir.cbz")

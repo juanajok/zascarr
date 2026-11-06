@@ -63,6 +63,12 @@ logger = structlog.get_logger()
 #: fallo no se cachea, así que 3 acota el peor caso (tres aperturas por petición) sin recorrer
 #: una serie de cientos de archivos.
 MAX_INTENTOS_PORTADA = 3
+
+#: #419: cuántos archivos se EVALÚAN como máximo por petición, los que se descartan por firma o por
+#: formato conocido incluidos (leer la firma cuesta disco, y el fallo no se recuerda). Provisional (PO,
+#: 2026-11-06). Una serie con más de 50 archivos y el primer legible más allá del 50º no obtiene esa
+#: portada hasta que se rellene `formato_contenido` (y el orden los acerque).
+MAX_EVALUADOS_PORTADA = 50
 templates = crear_templates()
 
 router = APIRouter(prefix="/ui/series", tags=["ui"])
@@ -101,6 +107,37 @@ async def _cuantos_retirados(db: AsyncSession, series: Series) -> int:
         .where(Wishlist.origen == WishlistOrigin.POLICY)
         .where(Wishlist.status == WishlistStatus.RETIRADO)
     )).scalar() or 0
+
+
+def _stmt_archivos_de_portada(series_id: UUID):
+    """Archivos candidatos a portada de una serie: no ausentes, por `sort_order` ascendente con los sin
+    número al final y `File.id` como desempate, para que dos peticiones frías elijan el mismo archivo."""
+    return (
+        select(File.file_path, File.metadata_["formato_contenido"])
+        .join(Issue, File.issue_id == Issue.id)
+        .where(Issue.series_id == series_id)
+        .where(File.is_missing.is_(False))
+        .order_by(Issue.sort_order.asc().nulls_last(), File.id.asc())
+        .limit(MAX_EVALUADOS_PORTADA)
+    )
+
+
+def _primera_portada(archivos: list[tuple[str, dict | None]]) -> tuple[bytes, str] | None:
+    """Portada del primer archivo de `archivos` (ya ordenados y acotados) que la dé; todo en un solo
+    hilo. Solo gasta intento el que se llega a abrir como ZIP (firma o formato guardado); un fallo
+    se registra sin ruta ni nombre de archivo (CLAUDE.md §5.4)."""
+    intentos = 0
+    for ruta, formato in archivos:
+        if not es_candidato_de_portada(Path(ruta), formato):
+            continue
+        if intentos >= MAX_INTENTOS_PORTADA:
+            break
+        intentos += 1
+        result = extract_cover_thumbnail(Path(ruta), formato, ancho=SERIES_COVER_MAX_WIDTH)
+        if result:
+            return result
+        logger.info("cover.candidato_sin_portada", intento=intentos)
+    return None
 
 
 async def _veredicto(db: AsyncSession, series: Series, querer, politica: WishlistPolicy,
@@ -254,9 +291,9 @@ async def portada(series_id: UUID, request: Request,
 
     1. `covers/v2/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304).
     2. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419):
-       solo los que `es_candidato_de_portada` acepta (ausencia conocida o firma que no es ZIP: se saltan), con un tope de
-       `MAX_INTENTOS_PORTADA` aperturas → extraer su primera página a 600, escribir
-       `v2`, servirla. Si la escritura falla, se sirve igualmente lo extraído con
+       solo los que `es_candidato_de_portada` acepta (ausencia conocida o firma que no es ZIP:
+       se saltan), con un tope de `MAX_INTENTOS_PORTADA` aperturas y de `MAX_EVALUADOS_PORTADA`
+       archivos evaluados → extraer su primera página a 600, escribir `v2`, servirla. Si la escritura falla, se sirve igualmente lo extraído con
        un ETag de sus bytes (FR-11, PR-2).
     3. Si no hay archivo utilizable, `covers/<id>.jpg` legada → servirla **sin
        red y sin copiarla** a `v2` (respaldo que solo se lee).
@@ -286,30 +323,8 @@ async def portada(series_id: UUID, request: Request,
     # está en disco — sin este filtro, la portada podía intentar (y
     # fallar) extraer de un CBZ borrado en vez de probar el siguiente
     # número disponible o caer al cover_url externo.
-    archivos = (await db.execute(
-        select(File.file_path, File.metadata_["formato_contenido"])
-        .join(Issue, File.issue_id == Issue.id)
-        .where(Issue.series_id == series_id)
-        .where(File.is_missing.is_(False))
-        .order_by(Issue.sort_order.asc().nulls_last())
-    )).all()
-    result = None
-    intentos = 0
-    for ruta, formato in archivos:
-        # solo gasta intento el que se llega a abrir como ZIP (firma o formato guardado)
-        if not await asyncio.to_thread(es_candidato_de_portada, Path(ruta), formato):
-            continue
-        if intentos >= MAX_INTENTOS_PORTADA:
-            break
-        intentos += 1
-        result = await asyncio.to_thread(
-            extract_cover_thumbnail, Path(ruta), formato,
-            ancho=SERIES_COVER_MAX_WIDTH,
-        )
-        if result:
-            break
-        # sin ruta ni nombre de archivo (CLAUDE.md §5.4)
-        logger.info("cover.candidato_sin_portada", intento=intentos)
+    archivos = (await db.execute(_stmt_archivos_de_portada(series_id))).all()
+    result = await asyncio.to_thread(_primera_portada, [tuple(a) for a in archivos])
     if result:
         data, content_type = result
         try:
