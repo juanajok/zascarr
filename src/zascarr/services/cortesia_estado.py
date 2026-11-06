@@ -16,28 +16,31 @@ from zascarr.config import get_settings
 from zascarr.utils.cortesia import NOMBRES_DE_FUENTE, cortesia_de_proceso
 from zascarr.utils.url_portada import HOSTS_PERMITIDOS
 
-#: Textos §6.3; en un solo sitio para que Estado y las pruebas no divergan.
-SUBTITULO = "Cuánto se espera entre peticiones a cada fuente y qué está pasando ahora."
+#: Textos §6.3; en un solo sitio para que Estado y las pruebas no diverjan.
+#: #134: escritos para El Coleccionista; la tabla y la coordinación van plegadas.
+SUBTITULO = (
+    "ZascArr espera un poco entre consulta y consulta para no saturar las webs de las que saca "
+    "datos."
+)
 COORDINACION = (
-    "La espera se comparte dentro de este ZascArr. Si ejecutas varias copias o procesos, cada una "
-    "espera por su cuenta: no hay coordinación entre instalaciones."
+    "Esta espera vale para este ZascArr. Si tienes otra copia, cada una espera por su cuenta."
 )
 NOTA_BLOQUEOS = (
-    "Hay fuentes en espera por indicación del servicio. No se les hará ninguna petición durante el "
-    "tiempo indicado; después se volverá a intentar, sin garantía de que respondan. La espera es "
-    "local de este ZascArr."
+    "Algunas webs han pedido que no les preguntemos durante un rato. ZascArr esperará y volverá a "
+    "intentarlo; puede que sigan sin responder."
 )
 NOTA_APAGADA = "No se consulta ni se reintenta."
 
-#: Resultados de `ultimos_intentos` en llano (códigos de un conjunto cerrado, §6.1).
+#: Resultados de `ultimos_intentos` en llano (códigos de un conjunto cerrado, §6.1): el código
+#: HTTP no sale a pantalla; se cuenta qué pasó.
 RESULTADOS = {
     "ok": "Correcto",
     "red": "Sin conexión",
-    "408": "408",
-    "429": "429",
-    "4xx": "Error de la petición (4xx)",
-    "5xx": "Error del servidor (5xx)",
-    "redireccion": "Redirección",
+    "408": "No respondió a tiempo",
+    "429": "Nos pidió esperar",
+    "4xx": "Rechazó la consulta",
+    "5xx": "Falló",
+    "redireccion": "Nos redirigió",
 }
 
 
