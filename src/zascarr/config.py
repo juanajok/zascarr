@@ -162,6 +162,11 @@ class Settings(BaseSettings):
     # ── Orquestador ────────────────────────────────────────────────
     scan_interval_minutes: int = 60
     import_interval_minutes: int = 15
+    # BL-R9: cadencia del rescan de la biblioteca (nuevos, sustituidos, movidos y
+    # desaparecidos). 1440 = una vez al día (decisión del PO, ficha
+    # benchmark-BL-R9-rescan-biblioteca.md); 0 lo desactiva. Como los demás
+    # intervalos, se fija en el `.env` (no se edita desde Ajustes).
+    rescan_interval_minutes: int = Field(default=1440, ge=0)
     max_concurrent_downloads: int = 2
     # D1: cuánto esperar antes de reintentar un item sin resultados o cuya
     # descarga falló (mismo patrón que enrichment_attempted_at del enricher,
