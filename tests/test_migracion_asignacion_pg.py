@@ -577,6 +577,9 @@ class TestBajadaConcurrente:
     async def test_una_operacion_viva_confirmada_durante_la_bajada_la_hace_negarse(self):
         async with bd_efimera(URL) as url:
             migrar_a_head(url)
+            # Deja 0020 como punto de partida: la bajada concurrente ejercita solo la 0017 (y su
+            # LOCK TABLE), no el DROP COLUMN de la 0021, que bloquearía antes por el FK a files.
+            alembic(url, "downgrade", "0020")
             ids = await sembrar_a_0016(url)
             b = Banco(url)
             try:
@@ -614,6 +617,9 @@ class TestBajadaConcurrente:
     async def test_si_la_otra_sesion_se_revierte_la_bajada_procede(self):
         async with bd_efimera(URL) as url:
             migrar_a_head(url)
+            # Deja 0020 como punto de partida: la bajada concurrente ejercita solo la 0017 (y su
+            # LOCK TABLE), no el DROP COLUMN de la 0021, que bloquearía antes por el FK a files.
+            alembic(url, "downgrade", "0020")
             ids = await sembrar_a_0016(url)
             b = Banco(url)
             try:
