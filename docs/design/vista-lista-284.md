@@ -24,7 +24,7 @@ historia. Título completo siempre visible, sin `hover` ni portada.
 - El selector «Tarjetas / Lista» son enlaces GET que conservan `q`, tradición, editorial, personaje, saga y
   `page`; no hay ordenación nueva ni editor de columnas.
 - La presentación se conserva en paginación, retirada de chips, «Limpiar todos», reintento y enlace de vuelta
-  desde la ficha (que usa la URL canónica).
+  desde la ficha (que usa la URL canónica, incluido `vista`).
 - `vista` inválida: 200, aviso «La presentación pedida no existe; se muestran tarjetas.» y rejilla normal.
 - La vista no cambia la unidad: mismas series, mismo orden del servicio. Se añade `Series.id` como desempate
   final al `ORDER BY` para que dos series con mismo `sort_title`/año no se dupliquen ni se salten entre páginas.
