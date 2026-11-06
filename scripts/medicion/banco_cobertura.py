@@ -56,7 +56,7 @@ ESTADOS_FUENTE_133 = set(ESTADOS_DE_FUENTE)
 RESULTADOS_EDITORIALES = {"coincidencia_verificada", "ambiguo", "incorrecto"}
 MOTIVOS_NO_EJECUTADO = {
     "sin_autorizacion", "modo_seco", "fuente_apagada", "configuracion_incompleta",
-    "presupuesto_agotado", "sin_metodo_autorizado", "fuera_de_alcance",
+    "presupuesto_agotado", "limite_por_fuente", "sin_metodo_autorizado", "fuera_de_alcance",
 }
 UNIDADES = {"serie", "edicion", "publicacion", "numero", "formato", "campo"}
 ESTRATOS = {"serie", "edicion_publicacion", "numero_formato", "campo"}
@@ -791,9 +791,16 @@ async def ejecutar_real(
                       else "fuera_de_alcance")
             _no_ejecutado(celda, motivo, notas=f"detenido: {parada}", cuenta=True)
             continue
-        if peticiones >= max_peticiones or por_fuente[fuente] >= max_por_fuente:
+        if peticiones >= max_peticiones:
+            # Tope GLOBAL: detiene todo el banco.
             parada = "presupuesto"
-            _no_ejecutado(celda, "presupuesto_agotado", notas="parada por presupuesto",
+            _no_ejecutado(celda, "presupuesto_agotado", notas="parada por presupuesto global",
+                          cuenta=True)
+            continue
+        if por_fuente[fuente] >= max_por_fuente:
+            # Tope SOLO de esta fuente: sus celdas se saltan, las demás siguen.
+            _no_ejecutado(celda, "limite_por_fuente",
+                          notas=f"tope de {fuente} ({max_por_fuente}); las demás fuentes siguen",
                           cuenta=True)
             continue
         if celda["metodo"] is None:
@@ -1013,6 +1020,15 @@ def _estados_cubiertos(registros: Sequence[dict]) -> set[str]:
     return cubiertos
 
 
+def _autorizacion_publica(autorizacion: dict | None) -> dict | None:
+    """Solo los campos de permiso: nunca `concede`, `condiciones` ni nombres personales."""
+    if not autorizacion:
+        return None
+    claves = ("id", "ambito", "presupuesto_peticiones", "max_por_fuente",
+              "desde", "hasta", "sha_corpus")
+    return {clave: autorizacion.get(clave) for clave in claves}
+
+
 def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: str, modo: str,
                       autorizacion: dict | None, errores_autorizacion: Sequence[str],
                       sha_ejecutor: str) -> dict:
@@ -1038,14 +1054,20 @@ def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: st
     fail_ = list(errores_autorizacion)
     if modo == "seco" and faltan:
         fail_.append(f"Fixtures sin ejercitar estos estados: {', '.join(faltan)}.")
+    if autorizacion:
+        fecha_ejecucion = _iso(ahora_utc())[:10]
+        piloto = (f"Piloto: ejecutado el {fecha_ejecucion} con la autorización "
+                  f"`{autorizacion.get('id')}`.")
+    else:
+        piloto = "Piloto de 12 casos / 80 peticiones: no ejecutado en esta pasada."
     pass_fail = {
         "PASS": pass_,
         "FAIL": fail_,
         "NOT RUN": [
             "Cobertura real: NOT RUN hasta la revisión humana.",
-            "Revisión humana de candidatos: pendiente; verificador: juanajok (PO).",
+            "Revisión humana de candidatos: pendiente; verificador: el PO.",
             "Red real de las fuentes y comportamiento cambiante entre fechas: no medido.",
-            "Piloto de 12 casos / 80 peticiones: pendiente de autorización del PO.",
+            piloto,
         ],
     }
     meta = {
@@ -1054,7 +1076,7 @@ def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: st
         "sha_ejecutor": sha_ejecutor,
         "corpus_version": corpus.get("version"),
         "sha_corpus": corpus_sha,
-        "autorizacion": autorizacion,
+        "autorizacion": _autorizacion_publica(autorizacion),
         "errores_autorizacion": list(errores_autorizacion),
     }
     return {
