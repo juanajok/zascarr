@@ -37,6 +37,18 @@ def _antigua(covers: Path, serie, ancho: int, **kw) -> Path:
     return ruta
 
 
+def _jpeg_con_ruido(ancho: int = 320, alto: int = 480) -> bytes:
+    """JPEG grande (~100 KB) para poder cortarlo a mitad del cuerpo, con la cabecera intacta."""
+    import random
+    azar = random.Random(7)
+    img = Image.new("RGB", (ancho, alto))
+    img.putdata([(azar.randrange(256), azar.randrange(256), azar.randrange(256))
+                 for _ in range(ancho * alto)])
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=80)
+    return buf.getvalue()
+
+
 class TestUmbral:
     def test_el_umbral_es_300_e_inclusivo(self, tmp_path):
         """AC-03: 300 px es suficiente y 299 no."""
@@ -168,3 +180,135 @@ class TestRegistro:
         with structlog.testing.capture_logs() as registros:
             portada_previa_suficiente(tmp_path, serie)
         assert not [r for r in registros if r["event"] == "cover.previa_suficiente"]
+
+
+class TestRuidoEnElRegistro:
+    """Se evalúa en CADA petición (también las 304); una rejilla pide cientos de portadas."""
+
+    def test_el_acierto_se_registra_a_debug_no_a_info(self, tmp_path):
+        serie = uuid4()
+        _antigua(tmp_path, serie, 320)
+        with structlog.testing.capture_logs() as registros:
+            portada_previa_suficiente(tmp_path, serie)
+        evento = next(r for r in registros if r["event"] == "cover.previa_suficiente")
+        assert evento["log_level"] == "debug"
+
+    def test_sin_previa_no_emite_ningun_evento(self, tmp_path):
+        """El caso más común (serie sin antigua) no avisa: `FileNotFoundError` no es un fallo."""
+        with structlog.testing.capture_logs() as registros:
+            assert portada_previa_suficiente(tmp_path, uuid4()) is None
+        assert registros == []
+
+    def test_una_previa_ilegible_avisa_una_sola_vez_mientras_no_cambie(self, tmp_path):
+        serie = uuid4()
+        ruta = tmp_path / f"{serie}.jpg"
+        ruta.write_bytes(b"no soy una imagen")
+        with structlog.testing.capture_logs() as registros:
+            for _ in range(5):
+                assert portada_previa_suficiente(tmp_path, serie) is None
+        avisos = [r for r in registros if r["event"] == "cover.previa_ilegible"]
+        assert len(avisos) == 1 and avisos[0]["motivo"]
+        assert str(tmp_path) not in str(registros) and str(serie) not in str(registros)
+
+    def test_si_el_fichero_cambia_vuelve_a_avisar(self, tmp_path):
+        serie = uuid4()
+        ruta = tmp_path / f"{serie}.jpg"
+        ruta.write_bytes(b"no soy una imagen")
+        with structlog.testing.capture_logs() as registros:
+            portada_previa_suficiente(tmp_path, serie)
+            ruta.write_bytes(b"sigo sin ser una imagen, ahora mas largo")
+            portada_previa_suficiente(tmp_path, serie)
+        assert len([r for r in registros if r["event"] == "cover.previa_ilegible"]) == 2
+
+    def test_la_memoria_de_avisos_esta_acotada(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(zcover, "_MAX_ILEGIBLES_AVISADAS", 3)
+        zcover._ILEGIBLES_AVISADAS.clear()
+        for _ in range(10):
+            serie = uuid4()
+            (tmp_path / f"{serie}.jpg").write_bytes(b"x")
+            portada_previa_suficiente(tmp_path, serie)
+        assert len(zcover._ILEGIBLES_AVISADAS) <= 3
+
+
+class TestJpegTruncado:
+    """A-1 de QA: la cabecera de un JPEG cortado a mitad del cuerpo da el ancho de uno entero, pero
+    no se decodifica y el navegador la pinta a medias. Sin su marcador final, no cuenta."""
+
+    @pytest.mark.parametrize("corte", [0.6, 0.1, 700])
+    def test_una_antigua_cortada_no_cuenta_como_suficiente(self, tmp_path, corte):
+        serie = uuid4()
+        entero = _jpeg_con_ruido()
+        recortado = entero[:corte] if corte > 1 else entero[:int(len(entero) * corte)]
+        (tmp_path / f"{serie}.jpg").write_bytes(recortado)
+        with Image.open(io.BytesIO(recortado)) as img:
+            assert img.width == 320          # la cabecera sola engañaría: da el ancho de uno entero
+        assert portada_previa_suficiente(tmp_path, serie) is None
+
+    def test_la_misma_imagen_entera_si_cuenta(self, tmp_path):
+        serie = uuid4()
+        (tmp_path / f"{serie}.jpg").write_bytes(_jpeg_con_ruido())
+        assert portada_previa_suficiente(tmp_path, serie).ancho == 320
+
+    @pytest.mark.parametrize("sobrante", [b"\x00", b"\x00" * 16, b"basura"])
+    def test_bytes_sobrantes_tras_el_marcador_final_no_cuentan(self, tmp_path, sobrante):
+        """AC-08 (v1.1): termina EXACTAMENTE en `FF D9`; cae a la cascada, que es segura."""
+        serie = uuid4()
+        (tmp_path / f"{serie}.jpg").write_bytes(_jpeg_con_ruido() + sobrante)
+        assert portada_previa_suficiente(tmp_path, serie) is None
+
+    def test_un_ff_d9_en_mitad_del_fichero_no_basta(self, tmp_path):
+        """Una miniatura EXIF lleva su propio EOI en mitad del fichero: solo vale el del final."""
+        serie = uuid4()
+        entero = _jpeg_con_ruido()
+        corte = len(entero) // 2
+        con_eoi_en_medio = entero[:corte] + b"\xff\xd9" + entero[corte:corte + 500]
+        assert not con_eoi_en_medio.endswith(b"\xff\xd9")
+        (tmp_path / f"{serie}.jpg").write_bytes(con_eoi_en_medio)
+        assert portada_previa_suficiente(tmp_path, serie) is None
+
+    def test_sin_ff_d8_inicial_no_cuenta(self, tmp_path, monkeypatch):
+        """Aunque Pillow dijera JPEG y el ancho fuera 400, sin SOI no es una previa válida."""
+        serie = uuid4()
+        entero = _jpeg_con_ruido()
+        (tmp_path / f"{serie}.jpg").write_bytes(b"\x00\x00" + entero[2:])
+
+        class Falsa:
+            format, width = "JPEG", 400
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        monkeypatch.setattr(zcover.Image, "open", lambda *a, **k: Falsa())
+        assert portada_previa_suficiente(tmp_path, serie) is None
+
+    def test_ancho_comprobacion_y_servido_usan_los_mismos_bytes(self, tmp_path, monkeypatch):
+        """Una sola lectura: si el fichero se sustituye tras leerlo (aquí, al abrirlo con Pillow),
+        lo devuelto son los bytes que se midieron, no los nuevos."""
+        serie = uuid4()
+        ruta = _antigua(tmp_path, serie, 320)
+        medidos = ruta.read_bytes()
+        real_open = zcover.Image.open
+
+        def abrir_y_sustituir(*a, **k):
+            imagen = real_open(*a, **k)
+            ruta.write_bytes(_jpeg(500))      # el disco cambia a mitad
+            return imagen
+        monkeypatch.setattr(zcover.Image, "open", abrir_y_sustituir)
+
+        previa = portada_previa_suficiente(tmp_path, serie)
+
+        assert previa.datos == medidos and previa.ancho == 320
+        assert ruta.read_bytes() != medidos     # y el fichero sí cambió: la prueba es real
+
+    def test_el_truncado_avisa_una_vez_con_el_tipo_y_sin_ruta(self, tmp_path):
+        serie = uuid4()
+        entero = _jpeg_con_ruido()
+        (tmp_path / f"{serie}.jpg").write_bytes(entero[: len(entero) // 2])
+        with structlog.testing.capture_logs() as registros:
+            for _ in range(3):
+                portada_previa_suficiente(tmp_path, serie)
+        avisos = [r for r in registros if r["event"] == "cover.previa_ilegible"]
+        assert len(avisos) == 1 and avisos[0]["motivo"] == "PortadaPreviaTruncadaError"
+        assert str(tmp_path) not in str(registros) and str(serie) not in str(registros)

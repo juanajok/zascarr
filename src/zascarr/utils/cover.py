@@ -85,6 +85,39 @@ UMBRAL_PORTADA_PREVIA_PX = 300
 MAX_BYTES_PORTADA_PREVIA = 8 * 1024 * 1024
 
 
+#: Portadas previas ilegibles ya avisadas: `(ruta, mtime_ns, tamaño)`. Una portada corrupta se pide
+#: en cada carga de la rejilla; sin esto el aviso se repetiría en cada petición. Acotado (se vacía
+#: al llenarse) y nunca se registra: solo evita repetir el aviso mientras el fichero no cambie.
+_ILEGIBLES_AVISADAS: set[tuple[str, int, int]] = set()
+_MAX_ILEGIBLES_AVISADAS = 256
+
+
+def _avisar_previa_ilegible(ruta: Path, exc: Exception) -> None:
+    """Un solo aviso (sin ruta) por portada previa ilegible y versión del fichero."""
+    try:
+        estado = ruta.stat()
+        clave = (str(ruta), estado.st_mtime_ns, estado.st_size)
+    except OSError:
+        clave = (str(ruta), 0, 0)
+    if clave in _ILEGIBLES_AVISADAS:
+        return
+    if len(_ILEGIBLES_AVISADAS) >= _MAX_ILEGIBLES_AVISADAS:
+        _ILEGIBLES_AVISADAS.clear()
+    _ILEGIBLES_AVISADAS.add(clave)
+    logger.warning("cover.previa_ilegible", motivo=type(exc).__name__)
+
+
+class PortadaPreviaTruncadaError(ValueError):
+    """El JPEG no acaba en su marcador final (EOI): se cortó al escribirlo (disco lleno, caída)."""
+
+
+def _jpeg_terminado(datos: bytes) -> bool:
+    """¿Empieza el JPEG en `FF D8` (SOI) y termina exactamente en `FF D9` (EOI)? O(1) y sin
+    decodificar. Medir solo la cabecera da el ancho de un JPEG cortado a mitad del cuerpo, que el
+    navegador pintaría a medias; el de ZascArr (Pillow) acaba siempre en EOI, sin relleno."""
+    return datos.startswith(b"\xff\xd8") and datos.endswith(b"\xff\xd9")
+
+
 @dataclass(frozen=True)
 class PortadaPrevia:
     """Una portada previa suficiente: la ruta (para el `ETag` por `mtime`), los bytes ya leídos
@@ -94,21 +127,22 @@ class PortadaPrevia:
     ancho: int
 
 
-def rutas_de_portadas_previas(covers: Path, series_id: UUID | str) -> list[Path]:
+def rutas_de_portadas_previas(covers: Path, series_id: UUID) -> list[Path]:
     """LA lista ordenada de portadas previas de solo lectura de una serie (#435): se prueban por
     orden y se sirve la primera suficiente. Hoy solo la caché antigua `covers/<id>.jpg`; #418
     añadirá `covers/externa/<id>.jpg` aquí y en ningún otro sitio."""
     return [covers / f"{series_id}.jpg"]
 
 
-def portada_previa_suficiente(covers: Path, series_id: UUID | str) -> PortadaPrevia | None:
+def portada_previa_suficiente(covers: Path, series_id: UUID) -> PortadaPrevia | None:
     """La primera portada previa de la serie con ancho ≥ `UMBRAL_PORTADA_PREVIA_PX`, o `None`.
 
     ÚNICA regla de «portada previa suficiente» (compartida con #418). No abre archivos de la
     biblioteca, no usa la red y no escribe nada. El ancho sale de la CABECERA de la imagen (no se
-    decodifica). Lo que no se puede leer, no es un JPEG o supera el tope de bytes NO cuenta como
-    suficiente (falla cerrado): se sigue la cascada de siempre. El registro lleva el ancho y el
-    umbral, o solo el tipo de error: nunca rutas."""
+    decodifica). Lo que no se puede leer, no es un JPEG, está cortado (sin `FF D8`…`FF D9` exactos)
+    o supera el tope de bytes NO cuenta como suficiente (falla cerrado): se sigue la cascada de
+    siempre. El registro (`debug` el acierto, un solo aviso por fichero ilegible) lleva el ancho y
+    el umbral, o solo el tipo de error: nunca rutas."""
     for ruta in rutas_de_portadas_previas(covers, series_id):
         try:
             with open(ruta, "rb") as fh:
@@ -119,13 +153,16 @@ def portada_previa_suficiente(covers: Path, series_id: UUID | str) -> PortadaPre
                 if img.format != "JPEG":
                     continue
                 ancho = img.width
+            if not _jpeg_terminado(datos):
+                raise PortadaPreviaTruncadaError
         except FileNotFoundError:
             continue
         except Exception as exc:   # OSError, imagen no válida, DecompressionBombError…
-            logger.warning("cover.previa_ilegible", motivo=type(exc).__name__)
+            _avisar_previa_ilegible(ruta, exc)
             continue
         if ancho >= UMBRAL_PORTADA_PREVIA_PX:
-            logger.info("cover.previa_suficiente", ancho=ancho, umbral=UMBRAL_PORTADA_PREVIA_PX)
+            # debug: se evalúa en CADA petición (también las 304); una rejilla pide cientos
+            logger.debug("cover.previa_suficiente", ancho=ancho, umbral=UMBRAL_PORTADA_PREVIA_PX)
             return PortadaPrevia(ruta, datos, ancho)
     return None
 

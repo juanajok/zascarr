@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 import io
 import os
+import random
+import threading
 import zipfile
 from pathlib import Path
 from uuid import uuid4
@@ -309,3 +311,54 @@ class TestRegistroDeLaRuta:
         texto = str(registros)
         assert "secreto-no-salir" not in texto and str(tmp_path) not in texto
         assert str(series.id) not in texto and "Thorgal" not in texto
+
+
+class TestAntiguaTruncadaEnLaRuta:
+    """A-1 de QA, reproducido en servidor real: una antigua de 320 px cortada a mitad del cuerpo se
+    servía (~70 000 bytes que no se decodifican) en vez del CBZ legible a 600 px de la base."""
+
+    @pytest.mark.parametrize("corte", [0.6, 0.1, 700])
+    def test_una_antigua_cortada_no_se_sirve_y_sigue_la_cascada(self, tmp_path, montar, corte):
+        series, covers, _s, llamadas = montar([_cbz(tmp_path / "01.cbz")])
+        azar = random.Random(7)
+        img = Image.new("RGB", (320, 480))
+        img.putdata([(azar.randrange(256), azar.randrange(256), azar.randrange(256))
+                     for _ in range(320 * 480)])
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        entero = buf.getvalue()
+        recortado = entero[:corte] if corte > 1 else entero[:int(len(entero) * corte)]
+        (covers / f"{series.id}.jpg").write_bytes(recortado)
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 200 and llamadas == ["extractor"]
+        assert _ancho(r.content) == 600              # el CBZ, no la antigua rota
+        with Image.open(io.BytesIO(r.content)) as servida:
+            servida.load()                           # lo servido se decodifica entero
+
+
+class TestNoBloqueaElBucle:
+    def test_la_lectura_de_la_previa_va_en_otro_hilo(self, montar, monkeypatch):
+        """CLAUDE.md §4: hasta 8 MiB de lectura más Pillow no van en el event loop. Se compara el
+        hilo donde corre la regla con el del bucle (donde corre `db.get`)."""
+        series, covers, sesion, _l = montar([])
+        _antigua(covers, series, 320)
+        hilos: dict[str, int] = {}
+        real_get = sesion.get
+
+        async def get(modelo, id_):
+            hilos["bucle"] = threading.get_ident()
+            return await real_get(modelo, id_)
+        sesion.get = get
+        real = wseries.portada_previa_suficiente
+
+        def espia(*a, **k):
+            hilos["regla"] = threading.get_ident()
+            return real(*a, **k)
+        monkeypatch.setattr(wseries, "portada_previa_suficiente", espia)
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 200
+        assert hilos["regla"] != hilos["bucle"]
