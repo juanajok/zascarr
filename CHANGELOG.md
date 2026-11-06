@@ -5,6 +5,18 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Añadido
+
+- **«Reescanear la biblioteca», a demanda y solo** (BL-R9). Un botón en Auditoría y una cadencia diaria
+  configurable (`RESCAN_INTERVAL_MINUTES`, 1440 = una vez al día, 0 la apaga) reescanean la tebeoteca y
+  actualizan el catálogo: los tebeos nuevos se registran (a su serie si se reconocen, y a «Por revisar» si
+  no), los sustituidos se re-clasifican sobre la misma ficha (migración 0021: se guarda la fecha de cada
+  archivo junto a su hash), los movidos se reenlazan y los desaparecidos se marcan o se revierten — **sin
+  mover, renombrar ni borrar nada y sin consultar fuentes de datos**. El rescan comparte el turno con el
+  ciclo del importador (nunca coinciden dos paseos del disco) y deja su informe por categorías en
+  `import_runs`. Ficha de referencias: `docs/design/benchmark-BL-R9-rescan-biblioteca.md`;
+  especificación: `docs/design/especificacion-BL-R9-rescan-biblioteca.md`.
+
 ### Seguridad
 
 - **Los registros de acceso ya no llevan la query de las peticiones** (#361). uvicorn escribía `GET /ruta?clave=…&cursor=…&ref=…`, que puede incluir el nombre de una carpeta, un cursor que decodifica a un nombre de archivo o un token firmado de 24 h. Ahora queda la ruta y el estado. Además, los registros de los contenedores rotan (10 MB × 3 ficheros por contenedor, 30 MB nominales en disco). Las URLs y los enlaces no cambian.

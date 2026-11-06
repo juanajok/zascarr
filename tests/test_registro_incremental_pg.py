@@ -366,11 +366,20 @@ class TestEnSegundoPlanoYPantalla:
 
 
 def test_el_unico_que_lanza_el_registro_incremental_es_la_pantalla():
-    """Sin automatismo (D del alcance de #326): ningún ciclo, arranque ni servicio llama a `iniciar` ni a `adopt(alcance=...)`."""
+    """Sin automatismo (D del alcance de #326): ningún ciclo, arranque ni servicio llama a `iniciar`.
+
+    El REGISTRO INCREMENTAL (la operación con confirmación humana) solo lo lanza la pantalla. Desde
+    BL-R9 (decisión del PO, ficha `docs/design/benchmark-BL-R9-rescan-biblioteca.md`), el RESCAN de la
+    biblioteca —otra operación, sin confirmación por decisión explícita— usa `adopt(alcance=…)` como
+    motor para registrar lo nuevo; ese uso consta aquí en la lista blanca y es el único permitido
+    fuera de la pantalla."""
     raiz = Path(__file__).resolve().parents[1] / "src" / "zascarr"
     llamadores = sorted(str(p.relative_to(raiz)) for p in raiz.rglob("*.py")
-                        if "registro_biblioteca.iniciar(" in p.read_text() or "alcance=" in p.read_text() and ".adopt(" in p.read_text())
+                        if "registro_biblioteca.iniciar(" in p.read_text())
     assert llamadores == ["web/auditoria.py"]
+    adopt_alcance = sorted(str(p.relative_to(raiz)) for p in raiz.rglob("*.py")
+                           if "alcance=" in p.read_text() and ".adopt(" in p.read_text())
+    assert adopt_alcance == ["services/library_adopter.py"]
 
 
 class TestRecorridoIncompleto:

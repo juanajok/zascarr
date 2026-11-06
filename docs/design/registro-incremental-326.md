@@ -129,7 +129,11 @@ Un archivo que se puede `stat` pero falla al leer (`open`/`read`: permisos, erro
 - **Deriva de nombre o formato:** la guarda de coherencia mira tamaño y fecha, no el contenido: un archivo sustituido por otro de **otro formato o estructura interna** conservando ambos pasaría. Un mismo nombre con contenido en otro formato se trata por
   el triaje de #307 en el momento de leer (`triage` decide por contenido); este flujo no amplía eso. Si se amplía el flujo (p. ej. a otros contenedores), hay que revisar esta guarda.
 - **Cambios que conservan tamaño y fecha** no se detectan al leer (§6.1).
-- **Un contenido distinto en una ruta ya registrada** (archivo sustituido) no se detecta: es otro problema, no una alta.
+- **Un contenido distinto en una ruta ya registrada** (archivo sustituido): **cerrado por BL-R9** — el
+  RESCAN de la biblioteca (`LibraryAdopter.rescanear`, `docs/design/especificacion-BL-R9-rescan-biblioteca.md`)
+  lo detecta por el stat guardado (`file_mtime_ns`, migración 0021), lo re-tría y actualiza la MISMA fila o la
+  devuelve a revisión. El registro incremental de #326 **sigue sin detectarlo** (solo mira rutas nuevas): la
+  regla no cambia para esta operación.
 - **Los formatos fuera de `COMIC_EXTS`** (`.rar`, `.tar`…) no se cuentan aquí: los enseña «Revisar mi biblioteca».
 - **Rutas anteriores en otro disco:** un reenlace cuya ruta vieja cuelga de otro disco no se hace (no se puede afirmar que falte).
 - **Carpeta ilegible permanente:** si una carpeta no se puede leer y la causa no se corrige, la adopción inicial no se da por completa y el marcador no se pone sola. `completo` sigue exigiendo `ilegibles == 0`.
