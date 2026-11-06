@@ -1,0 +1,75 @@
+{
+  "version": "v1",
+  "descripcion": "Fixtures SANEADOS para validar el arnés en modo seco. No son respuestas reales ni acreditan cobertura.",
+  "seed": 135,
+  "ensayos": [
+    {
+      "caso_id": "ES-001", "fuente": "comic_vine", "capacidad": "busqueda_serie",
+      "unidad": "serie", "metodo": "ComicVineClient.search_series",
+      "estado_tecnico": "ok", "estado_fuente_133": "ok",
+      "candidatos": [{"rank": 1, "id_externo": "4050-1", "etiqueta_propuesta": "Candidata sintética 1"}],
+      "campos_evaluados": ["titulo", "sinopsis", "portada"],
+      "campos_presentes": ["titulo", "sinopsis"],
+      "campos_ausentes": ["portada"],
+      "notas": "fixture sintético (sin red)"
+    },
+    {
+      "caso_id": "ES-002", "fuente": "comic_vine", "capacidad": "busqueda_serie",
+      "unidad": "serie", "metodo": "ComicVineClient.search_series",
+      "estado_tecnico": "sin_resultados", "estado_fuente_133": "sin_resultados",
+      "candidatos": [], "campos_evaluados": ["titulo"],
+      "campos_presentes": [], "campos_ausentes": ["titulo"],
+      "notas": "fixture sintético (sin red)"
+    },
+    {
+      "caso_id": "ES-003", "fuente": "anilist", "capacidad": "busqueda_serie",
+      "unidad": "serie", "metodo": "AniListClient.search_manga",
+      "estado_tecnico": "fallo_transitorio", "estado_fuente_133": "fallo_transitorio",
+      "candidatos": [], "campos_evaluados": ["titulo"],
+      "campos_presentes": [], "campos_ausentes": [],
+      "notas": "fixture sintético de red caída"
+    },
+    {
+      "caso_id": "ES-004", "fuente": "gcd", "capacidad": "busqueda_serie",
+      "unidad": "serie", "metodo": "GCDClient.search_series",
+      "estado_tecnico": "limite_de_cortesia", "estado_fuente_133": "limite_de_cortesia",
+      "reintentar_en": 12, "candidatos": [], "campos_evaluados": [],
+      "campos_presentes": [], "campos_ausentes": [],
+      "notas": "fixture sintético de 429/cortesía"
+    },
+    {
+      "caso_id": "ES-005", "fuente": "tebeosfera", "capacidad": "busqueda_serie",
+      "unidad": "serie", "metodo": "TebeosferaClient.search_series",
+      "estado_tecnico": "no_ejecutado", "estado_fuente_133": "fuente_apagada",
+      "motivo_no_ejecutado": "fuente_apagada", "candidatos": [],
+      "campos_evaluados": [], "campos_presentes": [], "campos_ausentes": [],
+      "notas": "fixture sintético de fuente apagada (cero peticiones)"
+    },
+    {
+      "caso_id": "ES-006", "fuente": "comic_vine", "capacidad": "busqueda_serie",
+      "unidad": "serie", "metodo": "ComicVineClient.search_series",
+      "estado_tecnico": "no_ejecutado", "estado_fuente_133": "configuracion_incompleta",
+      "motivo_no_ejecutado": "configuracion_incompleta", "candidatos": [],
+      "campos_evaluados": [], "campos_presentes": [], "campos_ausentes": [],
+      "notas": "fixture sintético sin clave (cero peticiones)"
+    },
+    {
+      "caso_id": "ES-007", "fuente": "anilist", "capacidad": "identidad_edicion",
+      "unidad": "edicion", "metodo": null,
+      "estado_tecnico": "no_ejecutado", "estado_fuente_133": null,
+      "motivo_no_ejecutado": "sin_metodo_autorizado", "candidatos": [],
+      "campos_evaluados": [], "campos_presentes": [], "campos_ausentes": [],
+      "notas": "fixture sintético de unidad sin método autorizado"
+    },
+    {
+      "caso_id": "ES-008", "fuente": "comic_vine", "capacidad": "campo",
+      "unidad": "campo", "metodo": "ComicVineClient.get_issue_detail",
+      "estado_tecnico": "ok", "estado_fuente_133": "ok",
+      "candidatos": [{"rank": 1, "id_externo": "4000-8", "etiqueta_propuesta": "Candidata sintética 8"}],
+      "campos_evaluados": ["titulo", "sinopsis", "creditos", "formato"],
+      "campos_presentes": ["titulo", "sinopsis"],
+      "campos_ausentes": ["creditos", "formato"],
+      "notas": "fixture sintético (sin red): campo ausente con candidata"
+    }
+  ]
+}
