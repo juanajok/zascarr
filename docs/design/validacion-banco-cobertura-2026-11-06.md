@@ -39,7 +39,8 @@ python scripts/medicion/banco_cobertura.py --seco \
 ```
 
 Resultado: **8 ensayos**, informe con `cobertura: NOT RUN` y PASS/FAIL/NOT RUN separados;
-cero peticiones; sin sockets ni clientes. `tests/test_banco_cobertura.py`: **23 passed**.
+cero peticiones; sin sockets ni clientes. En subproceso se comprueba además que `httpx` y
+`zascarr.services.discovery` **no** se cargan. `tests/test_banco_cobertura.py`: **43 passed**.
 
 Cubierto por pruebas (PASS):
 
@@ -48,10 +49,14 @@ Cubierto por pruebas (PASS):
 - `--seco` de punta a punta, cobertura `NOT RUN`, JSONL sin URL/query/claves;
 - `--seco` no importa ni construye clientes ni llama a `pedir_con_cortesia` (doble que falla);
 - `--real` **sin autorización** → exit 2, cero peticiones y filas
-  `no_ejecutado: sin_autorizacion`; autorización caducada, fuera de ámbito, con SHA distinto o
-  sin presupuesto → rechazada;
+  `no_ejecutado: sin_autorizacion`; autorización caducada, fuera de ámbito (incluido por
+  capacidad/unidad/caso), con SHA distinto, fecha naive, tipos estrictos o sin presupuesto →
+  rechazada; el fichero no-UTF8 también sale con 2, nunca traceback;
 - mapeo de `CortesiaEnEspera`/`FuenteApagada`/`ReintentosAgotados(429/500)` a los estados de
   #133/#134;
+- SHA del corpus leído una vez en bytes y comparado con el manifiesto;
+- PASS calculado de los datos (no «30 casos» fijo), JSONL append-only, sin rutas ni SHA de
+  entorno en el informe, centinela de salida y lista blanca de campos.
 - métricas con n=0, n<10 (sin porcentaje), n≥10 (con denominador), no acreditadas, ausencias y
   campos faltantes por campo.
 

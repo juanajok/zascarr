@@ -33,7 +33,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
+import re
 import sys
 from collections import Counter
 from collections.abc import Iterable, Sequence
@@ -41,7 +41,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from zascarr.services.discovery import ESTADOS_DE_FUENTE
+from zascarr.services.estados_fuentes import ESTADOS_DE_FUENTE
 
 RAIZ = Path(__file__).resolve().parents[2]
 CORPUS_DEFECTO = RAIZ / "docs" / "design" / "corpus-cobertura-v1.json"
@@ -121,40 +121,73 @@ def sha256_archivo(path: Path) -> str:
     return sha256_bytes(path.read_bytes())
 
 
-def sha_ejecutor() -> str:
-    """SHA del árbol que ejecuta, si el entorno lo aporta; nunca inventa uno."""
-    return os.environ.get("GIT_SHA") or os.environ.get("GITHUB_SHA") or "no_disponible"
-
-
 def _leer_json(path: Path) -> Any:
+    """Lee JSON una vez, en bytes; un fichero no-UTF8 es un error del banco, no un traceback."""
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        datos = path.read_bytes()
     except OSError as exc:
         raise ErrorBanco(f"no se pudo leer {path.name}") from exc
-    except json.JSONDecodeError as exc:
-        raise ErrorBanco(f"{path.name} no es JSON válido") from exc
+    try:
+        return json.loads(datos.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ErrorBanco(f"{path.name} no es JSON UTF-8 válido") from exc
+
+
+MANIFIESTO_DEFECTO = RAIZ / "docs" / "design" / "banco-cobertura" / "manifiesto-corpus-v1.json"
+
+
+def _comparar_manifiesto(manifiesto: Path, *, sha: str, casos: int) -> None:
+    datos = _leer_json(manifiesto)
+    if not isinstance(datos, dict) or not isinstance(datos.get("sha256"), str):
+        raise ErrorBanco("manifiesto sin sha256")
+    if datos["sha256"] != sha:
+        raise ErrorBanco("el sha256 del corpus no coincide con el manifiesto")
+    if datos.get("casos") != casos:
+        raise ErrorBanco("el número de casos no coincide con el manifiesto")
 
 
 # ── Corpus ─────────────────────────────────────────────────────────────────────────────────────
 
+_PATRONES_SENSIBLES = (
+    re.compile(r"https?://", re.IGNORECASE),
+    re.compile(r"\b(?:ftp|file|smb|mailto|gopher)://", re.IGNORECASE),
+    re.compile(r"[a-z]:\\", re.IGNORECASE),                       # C:\...
+    re.compile(r"\b(?:api[_-]?key|token|password|passwd|secret|authorization|cookie|bearer)\b\s*[:=]",
+               re.IGNORECASE),
+    re.compile(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}", re.IGNORECASE),   # email
+    re.compile(r"[?&][a-z_][a-z0-9_]*=", re.IGNORECASE),            # query string
+)
+
+
 def _tiene_url_o_secreto(valor: Any) -> bool:
-    """Centinela de privacidad para corpus/fixtures/registro (§8): URL, query o clave."""
+    """Centinela de privacidad: URL de cualquier esquema, ruta Windows, query, token o email."""
     if isinstance(valor, dict):
         return any(_tiene_url_o_secreto(k) or _tiene_url_o_secreto(v) for k, v in valor.items())
     if isinstance(valor, (list, tuple)):
         return any(_tiene_url_o_secreto(v) for v in valor)
     if not isinstance(valor, str):
         return False
-    texto = valor.lower()
-    return any(pista in texto for pista in (
-        "http://", "https://", "api_key", "authorization", "cookie", ".env",
-        "?query=", "&query=", "?q=",
-    ))
+    return any(patron.search(valor) for patron in _PATRONES_SENSIBLES)
+
+
+CLAVES_CORPUS = {"version", "creado", "criterios_inclusion", "tamano_objetivo", "estratos",
+                 "acreditacion", "nota", "casos"}
+CLAVES_CASO = {"caso_id", "estrato", "consulta", "unidad_esperada", "etiqueta_editorial",
+               "identidad_acreditada", "acreditacion", "estado_identidad", "procedencia",
+               "evidencia", "verificador", "fecha_verificacion", "desacuerdo", "notas"}
+CLAVES_ETIQUETA = {"obra", "serie", "editorial", "coleccion", "pais", "idioma", "edicion",
+                   "numero", "formato", "anio", "campos"}
+CLAVES_FIXTURES = {"version", "descripcion", "seed", "ensayos"}
+CLAVES_ENSAYO = {"caso_id", "fuente", "capacidad", "unidad", "metodo", "estado_tecnico",
+                 "estado_fuente_133", "motivo_no_ejecutado", "reintentar_en", "candidatos",
+                 "campos_evaluados", "campos_presentes", "campos_ausentes", "notas"}
 
 
 def validar_corpus(datos: Any) -> None:
     if not isinstance(datos, dict):
         raise ErrorBanco("el corpus tiene que ser un objeto JSON")
+    if set(datos) - CLAVES_CORPUS:
+        raise ErrorBanco("el corpus tiene campos fuera de la lista blanca")
     for clave in ("version", "casos", "tamano_objetivo"):
         if clave not in datos:
             raise ErrorBanco(f"al corpus le falta «{clave}»")
@@ -169,6 +202,8 @@ def validar_corpus(datos: Any) -> None:
     for caso in casos:
         if not isinstance(caso, dict):
             raise ErrorBanco("cada caso tiene que ser un objeto")
+        if set(caso) - CLAVES_CASO:
+            raise ErrorBanco(f"{caso.get('caso_id', '?')}: campos fuera de la lista blanca")
         for clave in ("caso_id", "estrato", "consulta", "unidad_esperada",
                       "etiqueta_editorial", "identidad_acreditada", "acreditacion",
                       "procedencia", "verificador"):
@@ -194,6 +229,8 @@ def validar_corpus(datos: Any) -> None:
         etiqueta = caso["etiqueta_editorial"]
         if not isinstance(etiqueta, dict) or not isinstance(etiqueta.get("campos", {}), dict):
             raise ErrorBanco(f"{caso_id}: etiqueta_editorial inválida")
+        if set(etiqueta) - CLAVES_ETIQUETA:
+            raise ErrorBanco(f"{caso_id}: etiqueta con campos fuera de la lista blanca")
         for clave in ("obra", "serie", "editorial", "coleccion", "pais", "idioma",
                       "edicion", "numero", "formato", "anio", "campos"):
             if clave not in etiqueta:
@@ -204,10 +241,21 @@ def validar_corpus(datos: Any) -> None:
         raise ErrorBanco("«estratos» no suma el número de casos")
 
 
-def cargar_corpus(path: Path) -> tuple[dict, str]:
-    datos = _leer_json(path)
+def cargar_corpus(path: Path, manifiesto: Path | None = None) -> tuple[dict, str]:
+    """Lee el corpus UNA vez en bytes: hashea esos bytes, parsea de ahí y compara el manifiesto."""
+    try:
+        crudo = path.read_bytes()
+    except OSError as exc:
+        raise ErrorBanco(f"no se pudo leer {path.name}") from exc
+    sha = sha256_bytes(crudo)
+    try:
+        datos = json.loads(crudo.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ErrorBanco(f"{path.name} no es JSON UTF-8 válido") from exc
     validar_corpus(datos)
-    return datos, sha256_archivo(path)
+    if manifiesto is not None:
+        _comparar_manifiesto(manifiesto, sha=sha, casos=len(datos["casos"]))
+    return datos, sha
 
 
 def casos_por_id(corpus: dict) -> dict[str, dict]:
@@ -219,12 +267,16 @@ def casos_por_id(corpus: dict) -> dict[str, dict]:
 def validar_fixtures(datos: Any, corpus: dict) -> None:
     if not isinstance(datos, dict) or not isinstance(datos.get("ensayos"), list):
         raise ErrorBanco("las fixtures tienen que tener «ensayos»")
+    if set(datos) - CLAVES_FIXTURES:
+        raise ErrorBanco("las fixtures tienen campos fuera de la lista blanca")
     if _tiene_url_o_secreto(datos):
         raise ErrorBanco("las fixtures contienen URL, query o una clave")
     casos = casos_por_id(corpus)
     for ensayo in datos["ensayos"]:
         if not isinstance(ensayo, dict):
             raise ErrorBanco("un ensayo de fixture no es un objeto")
+        if set(ensayo) - CLAVES_ENSAYO:
+            raise ErrorBanco("un ensayo de fixture tiene campos fuera de la lista blanca")
         for clave in ("caso_id", "fuente", "capacidad", "unidad", "estado_tecnico"):
             if clave not in ensayo:
                 raise ErrorBanco(f"ensayo de fixture sin «{clave}»")
@@ -264,7 +316,7 @@ def _registro(
     campos_presentes: Sequence[str], campos_ausentes: Sequence[str],
     candidatos: Sequence[dict], modo: str, condiciones: dict,
     hash_respuesta: str | None = None, revision: dict | None = None,
-    notas: str = "",
+    notas: str = "", sha_ejecutor: str = "no_disponible",
 ) -> dict:
     ensayo_id = f"{caso['caso_id']}__{fuente}__{unidad}__1"
     return {
@@ -275,7 +327,7 @@ def _registro(
         "capacidad": capacidad,
         "unidad": unidad,
         "metodo": metodo,
-        "sha_ejecutor": sha_ejecutor(),
+        "sha_ejecutor": sha_ejecutor,
         "modo": modo,
         "autorizacion": None,
         "estado_tecnico": estado_tecnico,
@@ -297,7 +349,8 @@ def _registro(
     }
 
 
-def registros_seco(fixtures: dict, corpus: dict, autorizacion: dict | None = None) -> list[dict]:
+def registros_seco(fixtures: dict, corpus: dict, autorizacion: dict | None = None,
+                   *, sha_ejecutor: str = "no_disponible") -> list[dict]:
     """Convierte fixtures saneados en registros. NO ejecuta peticiones ni construye clientes."""
     casos = casos_por_id(corpus)
     condiciones = {
@@ -323,6 +376,7 @@ def registros_seco(fixtures: dict, corpus: dict, autorizacion: dict | None = Non
             campos_evaluados=campos_evaluados, campos_presentes=presentes,
             campos_ausentes=ausentes, candidatos=candidatos,
             modo="seco", condiciones={**condiciones, "parada": "final"},
+            sha_ejecutor=sha_ejecutor,
             hash_respuesta=_hash_saneado({"candidatos": candidatos,
                                           "campos": {"evaluados": campos_evaluados,
                                                      "presentes": presentes,
@@ -337,59 +391,129 @@ def registros_seco(fixtures: dict, corpus: dict, autorizacion: dict | None = Non
 
 # ── Autorización (modo real) ─────────────────────────────────────────────────────────────────
 
-def _parsear_fecha(valor: str | None) -> datetime | None:
+def _parsear_fecha(valor: Any) -> datetime | None:
+    """Fecha ISO; si no trae zona se interpreta como UTC (nunca revienta con TypeError)."""
     if not isinstance(valor, str) or not valor:
         return None
     try:
-        return datetime.fromisoformat(valor.replace("Z", "+00:00"))
-    except ValueError:
+        fecha = datetime.fromisoformat(valor.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
         return None
+    return fecha.replace(tzinfo=UTC) if fecha.tzinfo is None else fecha
+
+
+CLAVES_AUTORIZACION = {
+    "id", "ambito", "presupuesto_peticiones", "max_por_fuente", "casos",
+    "desde", "hasta", "concede", "condiciones", "sha_corpus",
+}
+
+
+def _ambito_valido(entrada: Any) -> bool:
+    if not isinstance(entrada, str) or not entrada.strip():
+        return False
+    if entrada.startswith("caso:"):
+        return bool(entrada[5:].strip())
+    partes = entrada.split(":")
+    if len(partes) == 1:
+        return partes[0] in FUENTES
+    if len(partes) != 2 or partes[0] not in FUENTES:
+        return False
+    return partes[1] in UNIDADES or partes[1] in CAPACIDAD_POR_UNIDAD.values()
+
+
+def _celda_autorizada(celda: dict, ambito: Sequence[str], casos_auth: set[str] | None) -> bool:
+    if casos_auth is not None and celda["caso"]["caso_id"] not in casos_auth:
+        return False
+    for entrada in ambito:
+        if entrada.startswith("caso:"):
+            if celda["caso"]["caso_id"] == entrada[5:]:
+                return True
+            continue
+        partes = entrada.split(":")
+        if len(partes) == 1:
+            if celda["fuente"] == partes[0]:
+                return True
+        elif (len(partes) == 2 and celda["fuente"] == partes[0]
+              and partes[1] in (celda["unidad"], celda["capacidad"])):
+            return True
+    return False
 
 
 def validar_autorizacion(datos: Any, *, sha_corpus: str, fuentes: Iterable[str],
-                         ahora: datetime | None = None) -> list[str]:
-    """Devuelve los errores de autorización; lista vacía = válida. No concede por defecto."""
+                         ahora: datetime | None = None,
+                         plan: Sequence[dict] | None = None) -> list[str]:
+    """Errores de autorización; lista vacía = válida. Tipos estrictos y ámbito por celda."""
     errores: list[str] = []
     if not isinstance(datos, dict):
         return ["autorizacion_no_es_objeto"]
+    claves = set(datos)
+    if claves - CLAVES_AUTORIZACION:
+        errores.append("claves_no_permitidas")
     for clave in ("id", "ambito", "presupuesto_peticiones", "desde", "hasta", "concede",
                   "condiciones", "sha_corpus"):
         if clave not in datos:
             errores.append(f"falta_{clave}")
     if errores:
         return errores
+    if not isinstance(datos["id"], str) or not datos["id"].strip():
+        errores.append("id_invalido")
     if datos.get("sha_corpus") != sha_corpus:
         errores.append("sha_corpus_distinto")
+    if not isinstance(datos["concede"], str) or not datos["concede"].strip():
+        errores.append("concede_invalido")
+    if not isinstance(datos["condiciones"], str):
+        errores.append("condiciones_invalidas")
     desde = _parsear_fecha(datos.get("desde"))
     hasta = _parsear_fecha(datos.get("hasta"))
     if desde is None or hasta is None:
         errores.append("fechas_invalidas")
+    elif desde > hasta:
+        errores.append("fechas_invertidas")
     else:
         momento = ahora or ahora_utc()
         if not (desde <= momento <= hasta):
             errores.append("fuera_de_vigencia")
     presupuesto = datos.get("presupuesto_peticiones")
-    if not isinstance(presupuesto, int) or presupuesto <= 0:
+    if type(presupuesto) is not int or presupuesto <= 0:   # bool también se rechaza
         errores.append("presupuesto_invalido")
-    ambito = datos.get("ambito")
-    if not isinstance(ambito, list) or not ambito:
-        errores.append("ambito_vacio")
-    else:
+    if "max_por_fuente" in datos:
+        maximo = datos["max_por_fuente"]
+        if type(maximo) is not int or maximo <= 0:
+            errores.append("max_por_fuente_invalido")
+    casos_auth: set[str] | None = None
+    if "casos" in datos:
+        casos = datos["casos"]
+        if (not isinstance(casos, list) or not casos
+                or any(not isinstance(c, str) or not c.strip() for c in casos)):
+            errores.append("casos_invalidos")
+        else:
+            casos_auth = set(casos)
+    ambito = datos["ambito"]
+    if not isinstance(ambito, list) or not ambito or not all(_ambito_valido(a) for a in ambito):
+        errores.append("ambito_invalido")
+        ambito = []
+    if not errores and plan:
+        if any(not _celda_autorizada(celda, ambito, casos_auth) for celda in plan):
+            errores.append("fuera_de_ambito")
+    elif not errores and not plan:
         permitidas = {str(a).split(":")[0] for a in ambito}
         if any(f not in permitidas for f in fuentes):
             errores.append("fuera_de_ambito")
+    # Sin plan no se puede comprobar el ámbito por caso/capacidad; lo hará `plan` en PR-3.
     return errores
 
 
 def cargar_autorizacion(path: Path | None, *, sha_corpus: str, fuentes: Iterable[str],
-                        ahora: datetime | None = None) -> tuple[dict | None, list[str]]:
+                        ahora: datetime | None = None,
+                        plan: Sequence[dict] | None = None) -> tuple[dict | None, list[str]]:
     if path is None:
         return None, ["sin_fichero_autorizacion"]
     try:
         datos = _leer_json(path)
     except ErrorBanco:
         return None, ["autorizacion_ilegible"]
-    errores = validar_autorizacion(datos, sha_corpus=sha_corpus, fuentes=fuentes, ahora=ahora)
+    errores = validar_autorizacion(datos, sha_corpus=sha_corpus, fuentes=fuentes,
+                                   ahora=ahora, plan=plan)
     return (datos if not errores else None), errores
 
 
@@ -410,7 +534,8 @@ def plan_real(corpus: dict, *, fuentes: Sequence[str], unidades: Sequence[str],
     return plan
 
 
-def registros_sin_autorizacion(plan: Sequence[dict], corpus: dict) -> list[dict]:
+def registros_sin_autorizacion(plan: Sequence[dict], corpus: dict,
+                                *, sha_ejecutor: str = "no_disponible") -> list[dict]:
     condiciones = {"fecha": _iso(ahora_utc()), "red": "real", "fuentes_encendidas": [],
                    "presupuesto": 0, "parada": "sin_autorizacion"}
     return [
@@ -422,6 +547,7 @@ def registros_sin_autorizacion(plan: Sequence[dict], corpus: dict) -> list[dict]
             resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
             campos_ausentes=[], candidatos=[], modo="real", condiciones=condiciones,
             notas="fail-closed: sin autorización válida no se hace ninguna petición",
+            sha_ejecutor=sha_ejecutor,
         )
         for celda in plan
     ]
@@ -686,7 +812,7 @@ def calcular_metricas(registros: Sequence[dict], corpus: dict) -> dict:
                     campos[clave][1] += 1
         salida[f"{fuente}__{unidad}"] = {
             "fuente": fuente, "unidad": unidad,
-            "planificados": len(filas),
+            "planificados": sum(1 for f in filas if f.get("metodo")),
             "ejecutados": len(ejecutados),
             "no_ejecutados": len(no_ejecutados),
             "no_ejecutados_por_motivo": dict(Counter(
@@ -727,23 +853,43 @@ def _linea_tasa(tasa: dict) -> str:
     return f"{tasa['numerador']}/{tasa['denominador']} ({tasa['porcentaje']} %)"
 
 
+def banco_estados_esperados() -> tuple[str, ...]:
+    """Estados que el arnés en seco debe ejercitar (los de #133 + `no_ejecutado`)."""
+    return tuple(sorted(ESTADOS_TECNICOS))
+
+
+def _estados_cubiertos(registros: Sequence[dict]) -> set[str]:
+    """Estados técnicos y estados de fuente #133 presentes (los `no_ejecutado` conservan causa)."""
+    cubiertos = {r["estado_tecnico"] for r in registros}
+    cubiertos |= {r["estado_fuente_133"] for r in registros if r.get("estado_fuente_133")}
+    return cubiertos
+
+
 def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: str, modo: str,
                       autorizacion: dict | None, errores_autorizacion: Sequence[str],
-                      salida: Path) -> dict:
+                      sha_ejecutor: str) -> dict:
     metricas = calcular_metricas(registros, corpus)
     cobertura = "NOT RUN"
+    estados = _estados_cubiertos(registros)
+    esperados = set(banco_estados_esperados()) if modo == "seco" else set()
+    faltan = sorted(esperados - estados)
+    pass_ = [
+        f"El corpus {corpus.get('version')} valida contra su esquema: "
+        f"{len(corpus['casos'])} casos (borrador).",
+        f"Se han cargado {len(registros)} registros del modo {modo}.",
+    ]
+    if modo == "seco":
+        pass_.append(
+            "Estados ejercitados por los fixtures: " + ", ".join(sorted(estados)) + ".")
+        if estados:
+            pass_.append(
+                f"Modo seco: {len(registros)} ensayos, cero peticiones y sin construir clientes.")
+    fail_ = list(errores_autorizacion)
+    if modo == "seco" and faltan:
+        fail_.append(f"Fixtures sin ejercitar estos estados: {', '.join(faltan)}.")
     pass_fail = {
-        "PASS": [
-            "El corpus v1 valida contra su esquema (30 casos propuestos, borrador).",
-            "Los fixtures saneados ejercitan los estados de #133 y `no_ejecutado`.",
-            "El registro JSONL y el informe validan su esquema y no contienen URL/query/claves.",
-            ("Modo seco: no se construyen clientes ni se llama a `pedir_con_cortesia`; "
-             "cero peticiones."),
-        ] if modo == "seco" else [
-            "La autorización se ha comprobado antes de cualquier petición (fail-closed).",
-            "El registro y el informe validan su esquema y no contienen URL/query/claves.",
-        ],
-        "FAIL": list(errores_autorizacion),
+        "PASS": pass_,
+        "FAIL": fail_,
         "NOT RUN": [
             "Cobertura real: no se ejecuta en esta entrega (PR-3, con permiso separado).",
             "Revisión humana de candidatos: sin verificador designado todavía.",
@@ -754,12 +900,11 @@ def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: st
     meta = {
         "modo": modo,
         "fecha": _iso(ahora_utc()),
-        "sha_ejecutor": sha_ejecutor(),
+        "sha_ejecutor": sha_ejecutor,
         "corpus_version": corpus.get("version"),
         "sha_corpus": corpus_sha,
         "autorizacion": autorizacion,
         "errores_autorizacion": list(errores_autorizacion),
-        "salida": str(salida),
     }
     return {
         "meta": meta,
@@ -771,11 +916,31 @@ def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: st
     }
 
 
+def validar_salida(registros: Sequence[dict], informe: dict) -> None:
+    """Escanea TODO lo que se va a escribir: registro e informe, no solo corpus/fixtures."""
+    contenido = json.dumps({"registro": list(registros), "informe": informe},
+                           ensure_ascii=False)
+    if _tiene_url_o_secreto(contenido):
+        raise ErrorBanco("la salida contiene URL, ruta, email o una clave")
+    campos_registro = {
+        "ensayo_id", "corpus_version", "caso_id", "fuente", "capacidad", "unidad", "metodo",
+        "sha_ejecutor", "modo", "autorizacion", "estado_tecnico", "estado_fuente_133",
+        "motivo_no_ejecutado", "peticiones", "reintentos", "resultado_editorial",
+        "campos_evaluados", "campos_presentes", "campos_ausentes", "candidatos", "revision",
+        "desacuerdo", "condiciones", "hash_respuesta", "notas",
+    }
+    for fila in registros:
+        if set(fila) != campos_registro:
+            raise ErrorBanco("el registro tiene campos fuera de la lista blanca")
+
+
 def escribir_informe(informe: dict, registros: Sequence[dict], salida: Path) -> None:
+    validar_salida(registros, informe)
     salida.mkdir(parents=True, exist_ok=True)
-    (salida / "registro.jsonl").write_text(
-        "\n".join(json.dumps(f, ensure_ascii=False) for f in registros) + "\n",
-        encoding="utf-8")
+    # Append-only: una ejecución añade sus líneas, no reescribe las anteriores.
+    with (salida / "registro.jsonl").open("a", encoding="utf-8") as fichero:
+        for fila in registros:
+            fichero.write(json.dumps(fila, ensure_ascii=False) + "\n")
     (salida / "informe.json").write_text(
         json.dumps(informe, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     lineas = [
@@ -808,11 +973,21 @@ def escribir_informe(informe: dict, registros: Sequence[dict], salida: Path) -> 
             f"- precisión editorial: {_linea_tasa(datos['precision_editorial'])}",
             f"- cobertura editorial verificada: "
             f"{_linea_tasa(datos['cobertura_editorial_verificada'])}",
+            f"- evaluables: {datos['evaluables']}; "
+            f"coincidencias: {datos['coincidencias_verificadas']}; "
+            f"ambiguos: {datos['ambiguos']}; incorrectos: {datos['incorrectos']}; "
+            f"no acreditadas: {datos['no_acreditadas']}",
             f"- ausencias: {_linea_tasa(datos['tasa_ausencia'])}; "
             f"campos faltantes: {datos['campos_faltantes']}",
             "",
         ]
-    lineas += ["## Límites", "",
+    lineas += ["## Campos (por fuente, denominadores explícitos)", ""]
+    for _clave, campo in informe["metricas"]["por_campo"].items():
+        lineas.append(
+            f"- {campo['fuente']} · {campo['campo']}: evaluados "
+            f"{campo['campos_evaluados']}, faltantes {campo['campos_faltantes']}, "
+            f"tasa {_linea_tasa(campo['tasa_campo'])}")
+    lineas += ["", "## Límites", "",
                "- El corpus es intencional (no aleatorio): no se extrapola a la población.",
                "- Un `--seco` demuestra el arnés, no la cobertura.",
                "- Sin ejecución real + revisión humana no se declara cobertura verificada.",
@@ -826,6 +1001,14 @@ def _lista(valor: str | None, defecto: Iterable[str]) -> list[str]:
     if not valor:
         return list(defecto)
     return [x.strip() for x in valor.split(",") if x.strip()]
+
+
+def _manifiesto_de(args: argparse.Namespace) -> Path | None:
+    if args.manifiesto:
+        return Path(args.manifiesto)
+    if Path(args.corpus).resolve() == CORPUS_DEFECTO.resolve():
+        return MANIFIESTO_DEFECTO
+    return None
 
 
 def _argumentos(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -847,31 +1030,39 @@ def _argumentos(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--casos", default=None)
     parser.add_argument("--max-peticiones", type=int, default=80)
     parser.add_argument("--max-por-fuente", type=int, default=20)
+    parser.add_argument("--sha-ejecutor", default="no_disponible",
+                        help="SHA del árbol ejecutor (explícito, nunca del entorno)")
+    parser.add_argument("--manifiesto", default=None,
+                        help="manifiesto sha256 del corpus; por defecto, el del corpus v1")
     return parser.parse_args(argv)
 
 
 def _main_seco(args: argparse.Namespace) -> int:
     try:
-        corpus, sha = cargar_corpus(Path(args.corpus))
+        corpus, sha = cargar_corpus(Path(args.corpus), _manifiesto_de(args))
         fixtures = cargar_fixtures(Path(args.fixtures), corpus)
     except ErrorBanco as exc:
         print(f"FAIL  {exc}", file=sys.stderr)
         return 1
     # Cinturón de seguridad: en modo seco no se importan ni construyen clientes de red.
-    registros = registros_seco(fixtures, corpus)
+    registros = registros_seco(fixtures, corpus, sha_ejecutor=args.sha_ejecutor)
     informe = construir_informe(
         registros=registros, corpus=corpus, corpus_sha=sha, modo="seco",
-        autorizacion=None, errores_autorizacion=[], salida=Path(args.salida))
-    escribir_informe(informe, registros, Path(args.salida))
+        autorizacion=None, errores_autorizacion=[], sha_ejecutor=args.sha_ejecutor)
+    try:
+        escribir_informe(informe, registros, Path(args.salida))
+    except ErrorBanco as exc:
+        print(f"FAIL  {exc}", file=sys.stderr)
+        return 1
     print(f"PASS  arnés en seco: {len(registros)} ensayos con fixtures saneados")
     print(f"      cobertura: {informe['cobertura']} (no se acredita con sintéticos)")
-    print(f"      informe: {Path(args.salida) / 'informe.md'}")
+    print("      informe: informe.md / informe.json / registro.jsonl (en --salida)")
     return 0
 
 
 def _main_real(args: argparse.Namespace) -> int:
     try:
-        corpus, sha = cargar_corpus(Path(args.corpus))
+        corpus, sha = cargar_corpus(Path(args.corpus), _manifiesto_de(args))
     except ErrorBanco as exc:
         print(f"FAIL  {exc}", file=sys.stderr)
         return 1
@@ -881,19 +1072,36 @@ def _main_real(args: argparse.Namespace) -> int:
     plan = plan_real(corpus, fuentes=fuentes, unidades=unidades, casos=casos)
     autorizacion, errores = cargar_autorizacion(
         Path(args.autorizacion) if args.autorizacion else None,
-        sha_corpus=sha, fuentes=fuentes)
+        sha_corpus=sha, fuentes=fuentes, plan=plan)
     if errores or autorizacion is None:
-        registros = registros_sin_autorizacion(plan, corpus)
+        registros = registros_sin_autorizacion(plan, corpus,
+                                               sha_ejecutor=args.sha_ejecutor)
         informe = construir_informe(
             registros=registros, corpus=corpus, corpus_sha=sha, modo="real",
-            autorizacion=None, errores_autorizacion=errores, salida=Path(args.salida))
-        escribir_informe(informe, registros, Path(args.salida))
+            autorizacion=None, errores_autorizacion=errores,
+            sha_ejecutor=args.sha_ejecutor)
+        try:
+            escribir_informe(informe, registros, Path(args.salida))
+        except ErrorBanco as exc:
+            print(f"FAIL  {exc}", file=sys.stderr)
+            return 1
         print("FAIL  sin autorización válida: 0 peticiones; informe con "
               "no_ejecutado: sin_autorizacion", file=sys.stderr)
         return 2
     # Con autorización válida el arnés está listo, pero esta entrega no ejecuta PR-3.
-    print("NOT RUN  ejecución real no lanzada en la entrega de preparación "
-          "(requiere PR-3 y revisores designados)", file=sys.stderr)
+    # Topes efectivos = mínimo(autorización, CLI); el plan se filtra por casos del permiso.
+    _presupuesto = min(args.max_peticiones, autorizacion["presupuesto_peticiones"])
+    _max_fuente = min(args.max_por_fuente,
+                      autorizacion.get("max_por_fuente", args.max_por_fuente))
+    casos_auth = set(autorizacion.get("casos") or [])
+    plan_autorizado = [c for c in plan
+                       if (not casos_auth or c["caso"]["caso_id"] in casos_auth)
+                       and _celda_autorizada(c, autorizacion["ambito"],
+                                             casos_auth or None)]
+    print(f"NOT RUN  ejecución real no lanzada en la entrega de preparación "
+          f"({len(plan_autorizado)} celdas autorizadas, presupuesto efectivo "
+          f"{_presupuesto}, max/fuente {_max_fuente}; requiere PR-3 y revisores)",
+          file=sys.stderr)
     return 3
 
 
