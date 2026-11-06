@@ -128,11 +128,29 @@ def _valor(clave: str, series: Series, id_presente: bool) -> str:
     return "Identificador registrado" if id_presente else "Sin identificar"
 
 
-def _origen(clave: str, series: Series, alta: dict) -> tuple[str | None, bool]:
+def _tiene_valor(clave: str, series: Series, id_presente: bool) -> bool:
+    """Un campo vacío no acredita que su origen lo haya rellenado."""
+    if clave == "title":
+        return bool(series.title)
+    if clave == "start_year":
+        return series.start_year is not None
+    if clave == "description":
+        return bool(series.description)
+    if clave == "cover_url":
+        return bool(series.cover_url)
+    if clave == "total_issues":
+        return series.total_issues is not None
+    return id_presente
+
+
+def _origen(clave: str, series: Series, alta: dict, id_presente: bool) -> tuple[str | None, bool]:
     """(texto de origen, es manual). Solo atribuye lo que el registro permite afirmar."""
     origen_alta = str(alta.get("origen") or "")
     fuente_alta = alta.get("fuente")
-    if origen_alta == "manual" or series.metadata_source == MetadataSource.MANUAL.value:
+    manual = origen_alta == "manual" or series.metadata_source == MetadataSource.MANUAL.value
+    if not _tiene_valor(clave, series, id_presente):
+        return None, manual
+    if manual:
         return "Introducido a mano", True
     if origen_alta == "descubrir" and clave in CAMPOS_DE_ALTA:
         return f"Alta desde {_fuente(fuente_alta)}", False
@@ -163,7 +181,7 @@ def procedencia_de_serie(series: Series) -> ProcedenciaDeSerie:
     hay_datos = False
     for clave, etiqueta in CAMPOS_GESTIONADOS:
         bloqueado = id_bloqueado if clave == "identidad" else clave in bloqueados
-        origen, manual = _origen(clave, series, alta)
+        origen, manual = _origen(clave, series, alta, id_presente)
         if origen is not None or bloqueado:
             hay_datos = True
         campos.append(CampoProcedencia(
@@ -176,7 +194,9 @@ def procedencia_de_serie(series: Series) -> ProcedenciaDeSerie:
             observaciones=_observaciones(clave, series, alta, bloqueado),
         ))
     fecha_alta = _fecha(alta.get("fecha"))
-    if hay_datos:
+    if hay_datos and all(c.origen is not None for c in campos):
+        resumen = "Esta serie tiene procedencia registrada para todos los datos visibles."
+    elif hay_datos:
         resumen = ("Esta serie tiene procedencia registrada para algunos datos; el resto aparece "
                    "como origen no registrado.")
     else:
