@@ -2,8 +2,6 @@
 """Snapshot publicable y filas de Estado/Ajustes (#134, PR-2; AC-09/AC-18)."""
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from zascarr.services.cortesia_estado import (
     NOTA_BLOQUEOS,
     filas_cortesia,
@@ -115,7 +113,7 @@ class TestFilasDeEstado:
         assert filas["Comicvine"]["estado"] == "Bloqueada temporalmente (~7 s)"
         assert filas["Comicvine"]["clase"] == "warn"
         assert filas["Comicvine"]["proxima"] == "En ~7 s"
-        assert filas["Comicvine"]["reintentos"] == "429 hace ~4 s"   # ceil(3.2) = 4
+        assert filas["Comicvine"]["reintentos"] == "Nos pidió esperar hace ~4 s"   # ceil(3.2) = 4
         assert filas["Anilist"]["estado"] == "Apagada"
         assert filas["Anilist"]["clase"] == "neutral"
         assert filas["Anilist"]["proxima"] == "—"
@@ -129,8 +127,17 @@ class TestFilasDeEstado:
         assert contexto["fuentes_bloqueadas"] == ["Comicvine"]
         assert contexto["nota_bloqueos"] == NOTA_BLOQUEOS
         assert contexto["nota_apagada"] == "No se consulta ni se reintenta."
-        assert "sin garantía" in contexto["nota_bloqueos"]
-        assert "varias copias" in contexto["coordinacion"]
+        assert "no les preguntemos" in contexto["nota_bloqueos"]
+        assert "puede que sigan sin responder" in contexto["nota_bloqueos"]
+        assert "otra copia" in contexto["coordinacion"]
+        assert "cada una espera por su cuenta" in contexto["coordinacion"]
+
+    def test_los_intentos_no_ensenan_codigos_http(self):
+        contexto = self._filas()
+        for fila in contexto["filas"]:
+            assert "429" not in fila["reintentos"]
+            assert "4xx" not in fila["reintentos"]
+            assert "5xx" not in fila["reintentos"]
 
     def test_apagadas_no_cuentan_como_fallo(self):
         contexto = self._filas()
@@ -149,7 +156,7 @@ class TestPoliticaDeAjustes:
         assert ("Cortesía: Comic Vine 1 s y 3 intentos; AniList 1,5 s y 3; "
                 "Tebeosfera 2,5 s y 1; GCD 2 s y 2.") in contexto["politica"]
         assert "sitio del que vienen y no se reintentan" in contexto["politica"]
-        assert "no hay coordinación entre instalaciones" in contexto["coordinacion"]
+        assert "cada una espera por su cuenta" in contexto["coordinacion"]
 
     def test_dice_que_fuentes_estan_apagadas(self):
         contexto = texto_politica_ajustes(Ajustes())
