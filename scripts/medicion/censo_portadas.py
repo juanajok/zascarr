@@ -95,9 +95,10 @@ ORDEN_CLASES: tuple[Clase, ...] = (
     Clase.ORIGINAL_PEQUENO, Clase.SIN_EXTRACTOR, Clase.SIN_FUENTE,
 )
 
-#: Lo que no se arregla solo al visitar la serie: la cifra de decisión de BL-PORT2 (§9.5).
+#: Clases que no se arreglan solas, salvo el caso de `sin_extractor` con portada externa,
+#: que la cascada resuelve al abrir la ficha. `sin_extractor` se cuenta aparte con su desglose.
 CLASES_QUE_QUEDAN: tuple[Clase, ...] = (
-    Clase.ORIGINAL_PEQUENO, Clase.EXTRAIBLE_MAS_ADELANTE, Clase.SIN_EXTRACTOR, Clase.SIN_FUENTE,
+    Clase.ORIGINAL_PEQUENO, Clase.EXTRAIBLE_MAS_ADELANTE, Clase.SIN_FUENTE,
 )
 
 
@@ -282,20 +283,54 @@ def recuento(clases: dict[str, Clase]) -> dict[Clase, int]:
     return {clase: conteo.get(clase, 0) for clase in ORDEN_CLASES}
 
 
-def cifra_bl_port2(conteo: dict[Clase, int]) -> int:
-    """Series que no se arreglan solas: la cifra que decide BL-PORT2 (§9.5)."""
-    return sum(conteo.get(c, 0) for c in CLASES_QUE_QUEDAN)
+@dataclass(frozen=True)
+class DesgloseSinExtractor:
+    """`sin_extractor` separado por si hay `cover_url`: la cascada la resuelve al abrir la ficha."""
+    con_portada_externa: int = 0
+    sin_portada_externa: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.con_portada_externa + self.sin_portada_externa
 
 
-def informe_json(clases: dict[str, Clase]) -> dict:
+def desglose_sin_extractor(series: Iterable[SerieCenso],
+                           clases: dict[str, Clase]) -> DesgloseSinExtractor:
+    """Cuenta `sin_extractor` con y sin `cover_url` (el dato que corrige la cifra de BL-PORT2)."""
+    con = sin = 0
+    for serie in series:
+        if clases.get(serie.serie_id) is not Clase.SIN_EXTRACTOR:
+            continue
+        if serie.cover_url:
+            con += 1
+        else:
+            sin += 1
+    return DesgloseSinExtractor(con_portada_externa=con, sin_portada_externa=sin)
+
+
+def cifra_bl_port2(conteo: dict[Clase, int], desglose: DesgloseSinExtractor) -> int:
+    """Series que no se arreglan solas y no tienen portada externa que las resuelva (§9.5).
+
+    `sin_extractor` con `cover_url` NO cuenta: la cascada descarga la portada externa a 600 al
+    abrir la ficha. Solo cuentan las que no tienen ninguna vía local ni externa.
+    """
+    return (sum(conteo.get(c, 0) for c in CLASES_QUE_QUEDAN)
+            + desglose.sin_portada_externa)
+
+
+def informe_json(clases: dict[str, Clase], series: Iterable[SerieCenso]) -> dict:
     """JSON publicable: solo `serie_id` y clase, sin rutas, nombres ni datos personales."""
+    series = list(series)
     conteo = recuento(clases)
+    desglose = desglose_sin_extractor(series, clases)
     return {
         "generado": datetime.now(UTC).isoformat(),
         "objetivo_px": OBJETIVO_PX,
         "total": len(clases),
         "clases": {c.value: conteo[c] for c in ORDEN_CLASES},
-        "cifra_bl_port2": cifra_bl_port2(conteo),
+        "sin_extractor_con_portada_externa": desglose.con_portada_externa,
+        "sin_extractor_sin_portada_externa": desglose.sin_portada_externa,
+        "cifra_bl_port2": cifra_bl_port2(conteo, desglose),
         "estado": {
             "lectura": "PASS" if clases else "NOT RUN",
             "clasificacion": "PASS" if clases else "NOT RUN",
@@ -306,7 +341,7 @@ def informe_json(clases: dict[str, Clase]) -> dict:
     }
 
 
-def imprimir_tabla(clases: dict[str, Clase]) -> None:
+def imprimir_tabla(clases: dict[str, Clase], desglose: DesgloseSinExtractor) -> None:
     conteo = recuento(clases)
     print(f"{'Clase':<26} {'Series':>7}")
     print("-" * 34)
@@ -318,7 +353,11 @@ def imprimir_tabla(clases: dict[str, Clase]) -> None:
     por_debajo = len(clases) - conteo[Clase.YA_EN_OBJETIVO]
     print(f"Por debajo del objetivo (no ya_en_objetivo): {por_debajo}")
     print(f"Cifra para decidir BL-PORT2 (original_pequeno + extraible_mas_adelante + "
-          f"sin_extractor + sin_fuente): {cifra_bl_port2(conteo)}")
+          f"sin_extractor_sin_portada_externa + sin_fuente): "
+          f"{cifra_bl_port2(conteo, desglose)}")
+    print(f"De los sin extractor: {desglose.con_portada_externa} con portada externa "
+          f"(se resuelven al abrir la ficha) · {desglose.sin_portada_externa} sin ninguna "
+          f"(necesitan BL-PORT2)")
     print()
     if clases:
         print(f"PASS  lectura de la base y clasificación de {len(clases)} series (solo lectura)")
@@ -327,11 +366,11 @@ def imprimir_tabla(clases: dict[str, Clase]) -> None:
     print("NOT RUN  decisión BL-PORT2: pendiente de valorar la cifra con el PO")
 
 
-def escribir_salida(clases: dict[str, Clase], *, json_path: str | None,
-                    csv_path: str | None) -> None:
+def escribir_salida(clases: dict[str, Clase], series: Iterable[SerieCenso], *,
+                    json_path: str | None, csv_path: str | None) -> None:
     if json_path:
         Path(json_path).write_text(
-            json.dumps(informe_json(clases), ensure_ascii=False, indent=2) + "\n",
+            json.dumps(informe_json(clases, series), ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8")
     if csv_path:
         lineas = ["serie_id,clase"]
@@ -366,9 +405,10 @@ async def _main(argv: Sequence[str] | None = None) -> int:
         return 1
     # Todo el I/O de disco (cabeceras de caché y páginas) va en un hilo, en bucle acotado.
     clases = await asyncio.to_thread(clasificar_series, series, Path(args.covers))
-    imprimir_tabla(clases)
+    desglose = desglose_sin_extractor(series, clases)
+    imprimir_tabla(clases, desglose)
     try:
-        escribir_salida(clases, json_path=args.json_path, csv_path=args.csv_path)
+        escribir_salida(clases, series, json_path=args.json_path, csv_path=args.csv_path)
     except OSError as exc:
         print(f"FAIL  no se pudo escribir el informe ({type(exc).__name__}).", file=sys.stderr)
         return 1
