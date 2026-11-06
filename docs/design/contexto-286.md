@@ -20,9 +20,9 @@ Solo se acepta:
 
 - ruta local exacta `/ui/biblioteca`;
 - query de la Biblioteca (`q`, `tradition`, `publisher_id`, `character_id`, `story_arc_id`, `page`);
-- ancla `serie-<uuid>` o ninguna;
+- ancla `serie-<uuid>` o ninguna; si hay ancla, debe ser la de **esta** ficha (un ancla de otra serie se descarta);
 - sin esquema, host, `//`, credenciales ni caracteres de control;
-- longitud máxima 2000.
+- longitud máxima 2000; un valor más largo cae a «← Biblioteca» sin 422.
 
 Se rechazan `https://…`, `//host`, `javascript:`, rutas ajenas, parámetros desconocidos y anclas que no sean la
 tarjeta. La Biblioteca vuelve a validar sus propios parámetros al abrirse; el retorno no relaja esa validación.

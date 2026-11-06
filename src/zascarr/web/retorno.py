@@ -26,13 +26,15 @@ def url_de_ficha(series_id: UUID | str, url_biblioteca: str) -> str:
     return f"/ui/series/{series_id}?volver={quote(destino, safe='')}"
 
 
-def volver_segura(valor: str | None) -> str | None:
+def volver_segura(valor: str | None, series_id: UUID | str | None = None) -> str | None:
     """La URL de vuelta si es local y tiene el contrato esperado; si no, `None`.
 
     Se rechazan URLs absolutas, esquemas (`javascript:`, `https:`), rutas ajenas,
-    parámetros desconocidos y anclas que no sean `serie-<uuid>`. No se normaliza
-    ni se reescribe el valor: se devuelve tal cual para que la Biblioteca aplique
-    su propia validación al abrirlo.
+    parámetros desconocidos y anclas que no sean `serie-<uuid>`. Si se pasa
+    `series_id`, el ancla debe ser la de ESA ficha: un ancla de otra serie no
+    aterrizaría en ninguna tarjeta y se descarta. No se normaliza ni se reescribe
+    el valor: se devuelve tal cual para que la Biblioteca aplique su propia
+    validación al abrirlo.
     """
     if not valor or len(valor) > 2000:
         return None
@@ -43,8 +45,11 @@ def volver_segura(valor: str | None) -> str | None:
         return None
     if partes.path != "/ui/biblioteca":
         return None
-    if partes.fragment and not _ANCLA_DE_SERIE.fullmatch(partes.fragment):
-        return None
+    if partes.fragment:
+        if not _ANCLA_DE_SERIE.fullmatch(partes.fragment):
+            return None
+        if series_id is not None and partes.fragment != f"serie-{series_id}":
+            return None
     parametros = parse_qs(partes.query, keep_blank_values=True)
     if set(parametros) - PARAMETROS_DE_VUELTA:
         return None

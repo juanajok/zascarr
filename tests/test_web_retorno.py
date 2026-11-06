@@ -46,3 +46,9 @@ def test_volver_sin_fragmento_tambien_vale():
 
 def test_volver_de_mas_de_2000_caracteres_se_rechaza():
     assert volver_segura("/ui/biblioteca?q=" + "x" * 1990) is None
+
+
+def test_el_ancla_debe_ser_la_de_esta_ficha():
+    sid, otra = uuid4(), uuid4()
+    assert volver_segura(f"/ui/biblioteca?page=1#serie-{sid}", sid) is not None
+    assert volver_segura(f"/ui/biblioteca?page=1#serie-{otra}", sid) is None
