@@ -19,20 +19,23 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr import database
+from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import ImportRun, Series
-from zascarr.services import registro_biblioteca
+from zascarr.services import registro_biblioteca, rescan_biblioteca
 from zascarr.services.aceptacion_adopcion import MAX_ILEGIBLES, aceptar, evaluar
 from zascarr.services.library_adopter import EstadoAdopcion, InventarioBiblioteca, LibraryAdopter
 from zascarr.services.library_audit import LibraryAudit
+from zascarr.web.disponibilidad import registrar_filtros
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
+registrar_filtros(templates)
 
 
 def _tamano(num_bytes: int | None) -> str:
@@ -168,3 +171,107 @@ async def registrar_nuevos(request: Request, huella: str = Form(...), db: AsyncS
         return await _fragmento_registro(request, db, inc=inv, cambio=True)
     registro_biblioteca.iniciar(database.async_session_factory, alcance=inv.rutas_nuevas)
     return await _fragmento_registro(request, db)
+
+
+# ── BL-R9: rescan de la biblioteca (a demanda; el periódico corre en main.py) ──
+
+_CAMPOS_RESUMEN = (
+    "files_scanned", "sin_cambios", "ya_registrados", "nuevos_entregados",
+    "nuevos_registrados", "nuevos_a_revisar", "repetidos", "reenlazados",
+    "re_triados", "re_triados_igual", "re_triados_cambiado",
+    "re_triados_a_revisar", "re_triados_descartado", "copias_de_otra",
+    "desaparecidos", "reaparecidos", "errores", "omitidos", "ambiguos",
+    "no_revisado", "unreadable", "por_comprobar", "resultado_biblioteca",
+)
+
+
+def _resumen(informe) -> dict | None:
+    """Normaliza el informe —en memoria (`RescanReport`) o persistido (dict de `_ultimo_rescan`)—
+    a un dict para la plantilla. Un informe persistido debe pintarse igual que uno en memoria:
+    tras un reinicio del proceso el estado en memoria ya no existe y la pantalla lee el `ImportRun`."""
+    if informe is None:
+        return None
+    fuente = informe.get if isinstance(informe, dict) else (lambda c: getattr(informe, c, None))
+    out: dict = {}
+    for c in _CAMPOS_RESUMEN:
+        v = fuente(c)
+        if c in ("errores", "omitidos", "ambiguos") or isinstance(v, (list, tuple)):
+            out[c] = list(v) if v else []
+        elif isinstance(v, bool):
+            out[c] = v
+        elif isinstance(v, (int, float)):
+            out[c] = v or 0
+        else:
+            out[c] = v or ""
+    out["disparador"] = fuente("disparador") or "manual"
+    out["started_at"] = fuente("started_at")
+    return out
+
+
+async def _ultimo_rescan(db: AsyncSession) -> dict | None:
+    """El último rescan persistido (`kind="rescan"`), para una página recién cargada."""
+    run = (await db.execute(
+        select(ImportRun)
+        .where(ImportRun.details["kind"].astext == "rescan")
+        .order_by(ImportRun.started_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if not run:
+        return None
+    detalles = dict(run.details or {})
+    detalles["started_at"] = run.started_at
+    detalles["files_scanned"] = run.files_scanned
+    detalles["errores"] = detalles.get("errores") or []
+    return detalles
+
+
+def _texto_cadencia() -> str:
+    minutos = get_settings().rescan_interval_minutes
+    if minutos <= 0:
+        return "El rescan automático está apagado."
+    if minutos == 1440:
+        return "Además, ZascArr lo hace solo una vez al día."
+    if minutos % 1440 == 0:
+        return f"Además, ZascArr lo hace solo cada {minutos // 1440} días."
+    if minutos % 60 == 0:
+        return f"Además, ZascArr lo hace solo cada {minutos // 60} horas."
+    return f"Además, ZascArr lo hace solo cada {minutos} minutos."
+
+
+async def _contexto_rescan(db: AsyncSession, *, recien_lanzada: bool = False,
+                           ya_en_curso: bool = False) -> dict:
+    """Contexto común de página y fragmento; solo lee."""
+    estado = rescan_biblioteca.estado_actual()
+    resumen = _resumen(estado.informe)
+    if resumen is None:
+        resumen = await _ultimo_rescan(db)
+    return {
+        "estado_rescan": estado,
+        "resumen": resumen,
+        "cadencia": _texto_cadencia(),
+        "recien_lanzada": recien_lanzada,
+        "ya_en_curso": ya_en_curso,
+        "recien_terminada": rescan_biblioteca.consumir_foco_resultado()
+        if estado.fase is rescan_biblioteca.FaseRescan.TERMINADO else False,
+    }
+
+
+@router.get("/rescanear", response_class=HTMLResponse)
+async def rescanear_estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Fragmento de estado del rescan. GET no lanza nada ni escribe: solo lee memoria e ImportRun."""
+    contexto = await _contexto_rescan(db)
+    respuesta = templates.TemplateResponse(request, "_rescan_biblioteca.html", contexto)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/rescanear", response_class=HTMLResponse)
+async def rescanear(request: Request, db: AsyncSession = Depends(get_db)):
+    """Lanza el rescan en segundo plano y responde ya. No espera a la operación."""
+    lanzada = rescan_biblioteca.iniciar_manual(database.async_session_factory)
+    if request.headers.get("HX-Request") != "true":
+        return RedirectResponse("/ui/auditoria", status_code=303)
+    contexto = await _contexto_rescan(db, recien_lanzada=lanzada, ya_en_curso=not lanzada)
+    respuesta = templates.TemplateResponse(request, "_rescan_biblioteca.html", contexto)
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta

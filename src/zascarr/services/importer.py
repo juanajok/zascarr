@@ -330,7 +330,10 @@ async def _reenlazar_fila(fila: File, tr: TriageResult, dest: Path) -> None:
     fila.file_path = str(dest)
     fila.file_name = dest.name
     fila.file_format = FileFormat(dest.suffix.lstrip(".").lower())
-    fila.file_size_bytes = dest.stat().st_size
+    stat_dest = dest.stat()
+    fila.file_size_bytes = stat_dest.st_size
+    # BL-R9: el stat guardado describe los bytes del hash guardado.
+    fila.file_mtime_ns = stat_dest.st_mtime_ns
     fila.sha256_hash = tr.sha256
     fila.is_missing = False
     fila.missing_since = None
@@ -371,7 +374,8 @@ async def _triage_sin_bloquear(path: Path) -> TriageResult:
 
 
 async def _triage_and_match(
-    db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None
+    db: AsyncSession, path: Path, pista: PistaDeCohorte | None = None,
+    excluir_fila: File | None = None,
 ) -> _Outcome:
     tr: TriageResult = await _triage_sin_bloquear(path)
 
@@ -384,6 +388,11 @@ async def _triage_and_match(
         # #326: hasta el fin de la transacción nadie más busca-e-inserta por contenido
         await tomar_cerrojo_de_contenido(db)
         coincidencias = await _coincidencias_de_hash(db, tr.sha256)
+        # BL-R9 (re-triaje de una ruta registrada): la fila que se está actualizando NO cuenta
+        # como coincidencia — su hash describe el contenido ANTERIOR. Sin la exclusión, un archivo
+        # cuyo contenido no cambió (solo su stat) se leería como «duplicado de sí mismo».
+        if excluir_fila is not None:
+            coincidencias = [c for c in coincidencias if c.id != excluir_fila.id]
         if coincidencias:
             if len(coincidencias) > 1:
                 # Integridad: la columna no es única; dos filas con el mismo
@@ -725,6 +734,7 @@ class Importer:
         # A3: mover a destino verificado — nunca sobreescribe y no borra el
         # original hasta que la copia está completa (ver utils/fs.safe_move).
         final_dest = await safe_move_async(path, dest)
+        dest_stat = final_dest.stat()
 
         metadata: dict = {
             "match_status": result.status,
@@ -745,7 +755,9 @@ class Importer:
             file_path=str(final_dest),
             file_name=final_dest.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
-            file_size_bytes=final_dest.stat().st_size,
+            file_size_bytes=dest_stat.st_size,
+            # BL-R9: el stat guardado describe los bytes del hash guardado.
+            file_mtime_ns=dest_stat.st_mtime_ns,
             sha256_hash=tr.sha256,
             source_tag=tr.source_tag,
             width_px=tr.width_px,

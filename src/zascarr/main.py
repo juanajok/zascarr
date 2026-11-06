@@ -83,6 +83,43 @@ async def _import_loop(interval_minutes: int) -> None:
         await asyncio.sleep(interval_minutes * 60)
 
 
+async def _rescan_loop(interval_minutes: int) -> None:
+    """Job periódico del rescan de la biblioteca (BL-R9): registra lo nuevo
+    (identificado → serie; si no → «Por revisar»), re-tría lo sustituido y
+    marca/revierte lo desaparecido, sin consultar fuentes ni mover nada.
+
+    El PRIMER paseo espera un intervalo completo: el primer rescan tras una actualización
+    es el más caro (línea de base `file_mtime_ns` NULL: lee todos los CBZ una vez) y no debe
+    competir con el arranque de la Pi; el checklist de despliegue recomienda lanzarlo a mano
+    en un momento tranquilo. Comparte el cerrojo de ciclo con el importador: si coinciden,
+    uno de los dos se salta ese turno (el rescan consta en el log y reintenta el siguiente).
+    """
+    from zascarr.database import async_session_factory
+    from zascarr.services import rescan_biblioteca
+
+    logger.info("rescan.first_delayed", minutos=interval_minutes)
+    await asyncio.sleep(interval_minutes * 60)
+    while True:
+        try:
+            informe = await rescan_biblioteca.ejecutar_automatico(async_session_factory)
+            if informe is not None and (
+                    informe.nuevos_entregados or informe.re_triados
+                    or informe.desaparecidos or informe.reaparecidos):
+                logger.info(
+                    "rescan.cycle_done",
+                    revisados=informe.files_scanned,
+                    nuevos=informe.nuevos_registrados + informe.nuevos_a_revisar,
+                    a_revisar=informe.nuevos_a_revisar,
+                    re_triados=informe.re_triados,
+                    reenlazados=informe.reenlazados,
+                    desaparecidos=informe.desaparecidos,
+                    reaparecidos=informe.reaparecidos,
+                )
+        except Exception:
+            logger.exception("rescan.cycle_failed")
+        await asyncio.sleep(interval_minutes * 60)
+
+
 async def _enrichment_loop(interval_minutes: int, batch_size: int) -> None:
     """Job periódico del enricher (B4): completa metadatos vía Comic Vine.
 
@@ -264,6 +301,10 @@ async def lifespan(app: FastAPI):
                 settings.scan_interval_minutes, settings.max_concurrent_downloads
             )),
         ]
+        # BL-R9: rescan periódico de la biblioteca; 0 lo desactiva.
+        if settings.rescan_interval_minutes > 0:
+            background_tasks.append(
+                asyncio.create_task(_rescan_loop(settings.rescan_interval_minutes)))
 
     yield
 
@@ -272,6 +313,8 @@ async def lifespan(app: FastAPI):
     app.state.db_degraded = False
     from zascarr.services.comprobacion_disco import detener as detener_comprobacion
     await detener_comprobacion()
+    from zascarr.services.rescan_biblioteca import detener as detener_rescan
+    await detener_rescan()
     for task in background_tasks:
         task.cancel()
     for task in background_tasks:

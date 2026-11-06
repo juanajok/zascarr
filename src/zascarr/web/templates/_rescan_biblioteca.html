@@ -1,0 +1,98 @@
+{%- macro cifra_rescan(n, singular, plural) -%}
+<strong>{{ n }}</strong> {{ singular if n == 1 else plural }}
+{%- endmacro -%}
+<section id="rescan-biblioteca" aria-labelledby="rescan-titulo"
+         {% if estado_rescan.en_curso %}hx-get="/ui/auditoria/rescanear" hx-trigger="every 5s"
+         hx-target="#rescan-biblioteca" hx-swap="outerHTML"{% endif %}>
+  <h2 id="rescan-titulo" class="seccion">Reescanear la biblioteca</h2>
+  <div id="rescan-aviso">
+    {% call ui.aviso("amber") %}<strong>Qué hace:</strong> actualiza el catálogo con lo que hay ahora en tu
+      biblioteca. <strong>No mueve, no renombra y no borra nada.</strong>
+      {{ cadencia }}
+      <details><summary>Qué mira en detalle</summary>
+        <p>Registra los tebeos nuevos (a su serie si los reconoce, y a «Por revisar» si no), re-clasifica los
+          que cambiaron de contenido y marca los que ya no están en su sitio. No consulta fuentes de datos.
+          Sigue en segundo plano: puedes cerrar esta página.</p>
+      </details>{% endcall %}
+  </div>
+  <form class="audit-lanzar" hx-post="/ui/auditoria/rescanear"
+        hx-target="#rescan-biblioteca" hx-swap="outerHTML" hx-disabled-elt="find button">
+    <button type="submit" class="btn-primary" aria-describedby="rescan-aviso"
+            {% if estado_rescan.en_curso or estado_rescan.fase.value == "ocupado" %}disabled{% endif %}>
+      {{ "Reescaneando…" if estado_rescan.en_curso else "Reescanear la biblioteca" }}
+    </button>
+  </form>
+  <div id="rescan-estado">
+    {% if estado_rescan.en_curso %}
+    <p role="status"{% if recien_lanzada %} tabindex="-1" autofocus{% endif %}>
+      {% if ya_en_curso %}Ya hay un rescan en curso.{% if estado_rescan.iniciado %} Empezó a las
+        {{ estado_rescan.iniciado | hora }}.{% endif %} No se ha lanzado otro.
+      {% else %}Rescan en curso. Empezó a las {{ estado_rescan.iniciado | hora }}.
+        Esta sección se actualiza sola.{% endif %}
+    </p>
+    {% elif estado_rescan.fase.value == "ocupado" %}
+    <p role="status"><strong>Ya hay una operación de disco en curso.</strong> No se ha lanzado otra.</p>
+    {% elif estado_rescan.fase.value == "error" %}
+    <p role="alert"><strong>El rescan no se pudo completar.</strong> Vuelve a intentarlo.
+      Si sigue fallando, revisa <a href="/estado">Estado</a>.</p>
+    {% endif %}
+
+    {% if estado_rescan.fase.value != "error" and resumen %}
+    <div class="resultado-comprobacion"
+         {% if recien_terminada %}tabindex="-1" autofocus{% endif %}>
+      <p class="muted">Último rescan: {{ resumen.started_at | fecha_con_antiguedad }},
+        {{ resumen.started_at | hora }} · {{ resumen.disparador | etiqueta_disparador }}.</p>
+      {% if resumen.no_revisado %}
+      <p class="audit-why"><strong>No se pudo revisar todo:</strong>
+        {{ cifra_rescan(resumen.unreadable, "carpeta o archivo quedó sin leer", "carpetas o archivos quedaron sin leer") }}.
+        Lo que no se pudo mirar no se da por revisado.</p>
+      {% endif %}
+      {% if resumen.resultado_biblioteca not in ("", "comprobada") %}
+      <p class="audit-why"><strong>La comprobación de disponibilidad no se completó.</strong>
+        {% if resumen.resultado_biblioteca == "raiz_inaccesible" -%}
+          La carpeta de la biblioteca no existía o no era una carpeta.
+        {%- elif resumen.resultado_biblioteca == "raiz_vacia" -%}
+          La carpeta de la biblioteca estaba vacía.
+        {%- elif resumen.resultado_biblioteca == "desaparicion_masiva" -%}
+          Parecían demasiados a la vez: más de la mitad de los registrados no estaban.
+        {%- else -%}
+          No se pudo terminar de comprobar.
+        {%- endif %}
+        <strong>No se han marcado archivos como no encontrados en este rescan.</strong></p>
+      {% endif %}
+      <ul class="audit-resumen">
+        <li>{{ cifra_rescan(resumen.files_scanned, "archivo mirado", "archivos mirados") }} en la biblioteca</li>
+        <li>{{ cifra_rescan(resumen.nuevos_registrados, "nuevo a su serie", "nuevos a su serie") }}</li>
+        <li>{{ cifra_rescan(resumen.nuevos_a_revisar, "nuevo a «Por revisar»", "nuevos a «Por revisar»") }}</li>
+        <li>{{ cifra_rescan(resumen.reenlazados, "reenlazado", "reenlazados") }} (estaba en otra carpeta)</li>
+        <li>{{ cifra_rescan(resumen.repetidos, "repetido", "repetidos") }}: no se añaden</li>
+        {% if resumen.re_triados %}
+        <li>{{ cifra_rescan(resumen.re_triados, "re-clasificado", "re-clasificados") }} por cambiar de contenido
+          ({{ resumen.re_triados_igual }} igual, {{ resumen.re_triados_cambiado }} otro número,
+          {{ resumen.re_triados_a_revisar }} a revisar, {{ resumen.re_triados_descartado }} descartado)</li>
+        {% endif %}
+        {% if resumen.copias_de_otra %}
+        <li>{{ cifra_rescan(resumen.copias_de_otra, "ahora es copia", "ahora son copias") }} idéntica de otro archivo registrado: se conserva su ficha</li>
+        {% endif %}
+        <li>{{ cifra_rescan(resumen.desaparecidos, "nuevo no disponible", "nuevos no disponibles") }}</li>
+        <li>{{ cifra_rescan(resumen.reaparecidos, "reaparecido", "reaparecidos") }}</li>
+        <li>{{ cifra_rescan(resumen.sin_cambios, "sin cambios", "sin cambios") }}</li>
+        {% if resumen.por_comprobar %}
+        <li>{{ cifra_rescan(resumen.por_comprobar, "por comprobar", "por comprobar") }}: el siguiente rescan lo revisará</li>
+        {% endif %}
+        <li>{{ cifra_rescan(resumen.errores | length, "con error", "con error") }}</li>
+      </ul>
+      {% if resumen.errores %}
+      <details><summary>Ver los problemas ({{ resumen.errores | length }})</summary>
+        <ul class="audit-resumen">
+          {% for e in resumen.errores[:10] %}<li>{{ e }}</li>{% endfor %}
+          {% if resumen.errores | length > 10 %}<li>… y {{ resumen.errores | length - 10 }} más.</li>{% endif %}
+        </ul>
+      </details>
+      {% endif %}
+    </div>
+    {% elif estado_rescan.fase.value == "inactivo" %}
+    <p class="muted">Todavía no se ha hecho ningún rescan.</p>
+    {% endif %}
+  </div>
+</section>
