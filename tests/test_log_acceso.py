@@ -353,6 +353,8 @@ PARAMETROS_DE_QUERY = frozenset({
     # BL-FILT1 (#397): filtro de «Pendientes por carpeta» (estado de la vista, no se registra).
     "nombre", "estado", "por_confirmar", "en_conflicto",
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
+    # BL-IT03 (#286): contexto de vuelta Biblioteca → ficha; solo ruta local validada.
+    "volver",
 })
 
 

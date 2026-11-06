@@ -947,3 +947,60 @@ class TestProcedenciaCamposC6:
         assert "No hay procedencia registrada" in r.text
         assert "significa que el enriquecimiento no lo sobrescribe" not in r.text
         assert "significa que lo has escrito tú" not in r.text
+
+
+class TestVolverALaBiblioteca:
+    """BL-IT03 (#286): vuelta al contexto o a Biblioteca, nunca a un destino abierto."""
+
+    def _get(self, series, volver=None):
+        params = {} if volver is None else {"volver": volver}
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            return client.get(f"/ui/series/{series.id}", params=params)
+
+    def test_con_contexto_valido_vuelve_a_la_biblioteca(self):
+        series = make_series(total_issues=3)
+        destino = f"/ui/biblioteca?q=thor&page=2#serie-{series.id}"
+        r = self._get(series, destino)
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca?q=thor&amp;page=2#serie-' in r.text
+        assert "Volver a la biblioteca" in r.text
+
+    def test_sin_contexto_ofrece_biblioteca_sin_inventar_busqueda(self):
+        series = make_series(total_issues=3)
+        r = self._get(series)
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text
+        assert "← Biblioteca" in r.text
+
+    def test_un_contexto_externo_o_manipulado_cae_a_biblioteca(self):
+        series = make_series(total_issues=3)
+        for valor in ("https%3A%2F%2Fevil.example", "%2F%2Fevil.example", "javascript%3Aalert(1)"):
+            r = self._get(series, valor)
+            assert r.status_code == 200
+            assert 'href="/ui/biblioteca" class="back-link"' in r.text
+            assert "evil" not in r.text and "javascript:" not in r.text
+
+    def test_dos_contextos_distintos_no_se_mezclan(self):
+        series = make_series(total_issues=3)
+        uno = f"/ui/biblioteca?q=uno&page=1#serie-{series.id}"
+        dos = f"/ui/biblioteca?q=dos&page=2#serie-{series.id}"
+        r1 = self._get(series, uno)
+        r2 = self._get(series, dos)
+        assert "q=uno&amp;page=1" in r1.text and "q=dos" not in r1.text
+        assert "q=dos&amp;page=2" in r2.text and "q=uno" not in r2.text
+
+    def test_un_volver_demasiado_largo_cae_a_biblioteca_sin_422(self):
+        series = make_series(total_issues=3)
+        r = self._get(series, "/ui/biblioteca?q=" + "x" * 2100)
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text
+        assert "← Biblioteca" in r.text
+
+    def test_un_ancla_de_otra_serie_cae_a_biblioteca(self):
+        series = make_series(total_issues=3)
+        otra = uuid4()
+        r = self._get(series, f"/ui/biblioteca?page=1#serie-{otra}")
+        assert r.status_code == 200
+        assert 'href="/ui/biblioteca" class="back-link"' in r.text

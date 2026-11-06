@@ -528,3 +528,21 @@ class TestPrivacidadYLogs:
         texto = " ".join(str(evento) for evento in registros)
         assert "secreto-mio" not in texto
         assert "SQLAlchemyError" in texto
+
+
+class TestContextoDeRetorno:
+    """BL-IT03 (#286): la tarjeta recuerda la URL canónica y su ancla."""
+
+    def test_la_tarjeta_lleva_volver_y_ancla_a_si_misma(self):
+        from urllib.parse import parse_qs, unquote, urlsplit
+        series = make_series("Thorgal")
+        session = FakeSession([FakeExecResult([]), FakeExecResult(1), FakeExecResult([series])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca?q=thor&page=1")
+        href = re.search(rf'<a class="library-card" id="serie-{series.id}" href="([^"]+)"', r.text)
+        assert href is not None
+        url = href.group(1).replace("&amp;", "&")
+        destino = unquote(parse_qs(urlsplit(url).query)["volver"][0])
+        assert urlsplit(destino).path == "/ui/biblioteca"
+        assert parse_qs(urlsplit(destino).query)["q"] == ["thor"]
+        assert urlsplit(destino).fragment == f"serie-{series.id}"
