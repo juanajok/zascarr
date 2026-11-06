@@ -1393,9 +1393,31 @@ Tras el inventario de V0 la historia no cabía en una PR sin mezclar un cambio d
 | R2 | Como coleccionista, quiero que ZascArr recuerde mis correcciones, para no corregir lo mismo dos veces | Al asignar un archivo a una serie se guarda el alias; las siguientes variantes se asignan solas con la confianza visible; las reglas se pueden ver y borrar; nunca asigna sin mostrarlo (coherente con U1) | P1 | M |
 | R3 | Como coleccionista, quiero saber por qué no se reconoció un archivo, para decidir qué hacer | En Pendientes: motivo en lenguaje llano ("no encuentro número", "varias series posibles"); sugerencia de la serie más probable | P2 | S |
 | R4 | Como coleccionista, quiero que una carpeta que no es una serie (recopilatorios, Omnigold, integrales) no se trate como tal | Resuelve B14/B15 y el conflicto Omnigold del changelog: modelo de "colección/tomo" separado del número; decisión documentada en un ADR; tests con casos reales | P1 | M |
+| BL-R9 | ~~Como coleccionista, quiero que ZascArr reescanee mi tebeoteca —a demanda o periódicamente— y actualice la biblioteca (archivos nuevos, movidos, sustituidos y desaparecidos) y añada a revisar lo que no identifique~~ | ~~Botón «Reescanear la biblioteca» en Auditoría + cadencia diaria configurable (`rescan_interval_minutes`, 0 la apaga). Registra lo nuevo (a su serie o a «Por revisar»), re-tría lo sustituido sobre la MISMA fila, reenlaza movidos y marca/revierte desaparecidos (B7), sin mover, renombrar ni borrar nada y sin consultar fuentes. Informe por categorías persistido en `import_runs` con `kind="rescan"`~~ | ✅ Hecho | M |
 
 **Encaje con lo ya registrado:**
 
+- **BL-R9 (2026-11-06, hecho):** «Reescanear la biblioteca» a demanda y periódico. Ficha de benchmark
+  (nivel 2, Sonarr/Komga/Kavita/Jellyfin/Plex/Kapowarr/Kodi con versión/commit y matriz ponderada):
+  `docs/design/benchmark-BL-R9-rescan-biblioteca.md`; especificación con las decisiones del PO y los 18
+  criterios↔pruebas: `docs/design/especificacion-BL-R9-rescan-biblioteca.md`. **Mecanismo:** migración 0021
+  (`files.file_mtime_ns`, nullable: NULL = línea de base sin fijar); todo escritor de un hash guarda el
+  stat que lo describe (importador, adoptador, reenlace, re-triaje, etiquetador B6); `LibraryAdopter.rescanear`
+  parte el paseo en nuevos/cambiados/iguales — los nuevos por `adopt(alcance=…)` (contrato #326, sin tocar su
+  marcador), los cambiados re-triados con `_triage_and_match(excluir_fila=…)` sobre la MISMA fila
+  (igual/otra publicación/a revisar/descartado sin reactivar/copia de otra) y los iguales sin abrir el CBZ —
+  y cierra con la comprobación B7 (`is_missing`/reaparición, guardarraíles). `services/rescan_biblioteca.py`
+  comparte el cerrojo de ciclo `(326,2)` con el importador (nunca dos paseos de disco a la vez) y un estado en
+  memoria; `main._rescan_loop` con `rescan_interval_minutes=1440` (0 lo apaga, también en compose/`.env.example`).
+  UI: bloque en Auditoría con la garantía U21 junto a la acción, polling mientras corre y resumen por
+  categorías. El test de #326 («solo la pantalla lanza el registro») se ajustó por decisión explícita del PO:
+  `registro_biblioteca.iniciar` sigue siendo solo de la pantalla; `adopt(alcance=…)` puede usarlo además el
+  rescan. Pruebas: `tests/test_rescan_biblioteca_pg.py` (16, Postgres y ficheros reales: línea de base, sin
+  lecturas de contenido con rutas iguales, límite tamaño+mtime, re-triaje en sus 5 salidas, movido, desaparecido/
+  reaparición, guardarraíles, cerrojo compartido, informe `kind="rescan"` excluido de la lectura de #231, sin
+  fuentes) y `tests/test_rescan_biblioteca.py` (9, estado y disparos). Medición sintética local: 1.300 archivos —
+  pasada sin cambios 0,28 s (solo stat), 1.200 nuevos 18,6 s / 88 MiB (`scripts/medicion/medir_rescan_biblioteca.py`);
+  coste en la Pi real: NOT RUN. Sin watchdog (decisión del PO; registrado como mejora futura).
 - **R1 — la línea base está desfasada.** El «28/41» es de la medición de v1.5.0 (2026-09-25); tras adoptar RF-07 (Omnigold sin número inventado) el mismo banco bajó a **26/41** con **0 errores** (antes 1), y desde entonces el parser ha cambiado (B14, B21). Hay que **re-medir** el banco de 41 rutas antes de fijar el objetivo; un ≥85 % sobre 200 rutas no es comparable con 41. Y, como siempre, el criterio duro es **errores = 0**, no solo aciertos: acertar más a costa de equivocarse en silencio contradice RF-07.
 - **R2 ≈ B13 (hecho).** `local_aliases` ya guarda el alias al asignar a mano y `SeriesMatcher.decide()` lo consulta antes del fuzzy. Lo que R2 añade de verdad es lo **visible**: ver, borrar y mostrar la confianza de las reglas. Reducir R2 a eso evita reimplementar B13. Ojo con «se asignan solas»: U1 exige confirmación explícita; la propuesta lo resuelve con «nunca asigna sin mostrarlo», pero conviene decidir si «mostrarlo» es avisar después o pedir confirmación antes.
 - **R3 ↔ U1.** La sugerencia a la vista es parte de U1; R3 aporta el *motivo*.
