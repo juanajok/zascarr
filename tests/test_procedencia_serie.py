@@ -98,3 +98,14 @@ def test_la_sinopsis_larga_se_recorta_y_la_portada_no_muestra_url():
     assert len(campos["description"].valor) <= 160
     assert campos["cover_url"].valor == "Portada guardada"
     assert "example.invalid" not in campos["cover_url"].valor
+
+
+def test_si_todos_los_campos_tienen_origen_el_resumen_no_dice_algunos():
+    proc = procedencia_de_serie(serie(
+        metadata_source=MetadataSource.COMIC_VINE.value, comic_vine_id=777,
+        metadata_={"alta": {"origen": "descubrir", "fuente": "comic_vine",
+                            "id_externo": "777", "fecha": "2026-11-06T10:00:00+00:00"}},
+    ))
+    assert all(c.origen is not None for c in proc.campos)
+    assert "todos los datos visibles" in proc.resumen
+    assert "algunos datos" not in proc.resumen
