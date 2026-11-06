@@ -1,5 +1,5 @@
 {
-  "id": "PENDIENTE_DE_FIRMAR_POR_EL_PO",
+  "id": "piloto-cobertura-2026-11-06",
   "ambito": [
     "comic_vine:serie",
     "comic_vine:edicion",
@@ -44,7 +44,7 @@
   ],
   "desde": "2026-11-06T00:00:00+00:00",
   "hasta": "2026-11-13T00:00:00+00:00",
-  "concede": "PENDIENTE_DE_FIRMAR_POR_EL_PO",
-  "condiciones": "Piloto de 12 casos, techo de 80 peticiones (20 por fuente). Alcance real del corpus actual: 33 celdas con método y ~26 peticiones HTTP; el resto son no_ejecutado sin método. Requiere PR-3 y revisores. Debe firmarlo el PO: sustituir id y concede; el sha_corpus es el del corpus corregido con evidencia, pendiente de que el PO acredite las 12 etiquetas.",
-  "sha_corpus": "7b9ca9da8f66033daf3ec6853b7d40334b5839b98d462adeed5775d7001a4753"
+  "concede": "juanajok (PO): aprobado en conversación el 2026-11-06",
+  "condiciones": "Piloto de 12 casos, techo de 80 peticiones (20 por fuente); alcance real 33 celdas con método y ~26 peticiones HTTP. Corpus acreditado por el PO el 2026-11-06. Ejecución secuencial por tandas, cortesía de #134, parada por presupuesto, fuente apagada o 3 fallos. Revisión: PO como verificador; sin segundo asignado, revision_simple. No autoriza integración ni despliegue.",
+  "sha_corpus": "7f1a0f1f916a8572278c3fea149490029c235b01e7293a9718fe9c8b300665b2"
 }

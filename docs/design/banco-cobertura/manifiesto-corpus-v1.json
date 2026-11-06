@@ -1,8 +1,8 @@
 {
   "version": "v1",
   "corpus": "docs/design/corpus-cobertura-v1.json",
-  "sha256": "7b9ca9da8f66033daf3ec6853b7d40334b5839b98d462adeed5775d7001a4753",
+  "sha256": "7f1a0f1f916a8572278c3fea149490029c235b01e7293a9718fe9c8b300665b2",
   "casos": 30,
-  "acreditacion": "borrador",
-  "nota": "12 casos con etiqueta corregida y evidencia adjunta pendientes de revisión del PO; 18 siguen en borrador. Ver evidencia-acreditacion-v1.md."
+  "acreditacion": "parcial_12_de_30",
+  "nota": "12 de 30 acreditados por el PO el 2026-11-06 (dossier de evidencia); 18 en borrador."
 }
