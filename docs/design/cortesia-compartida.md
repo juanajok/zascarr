@@ -36,7 +36,7 @@ peticiones de esa instancia de ZascArr, sin importar qué cliente, ruta o tarea 
 - El snapshot declara siempre `"coordinacion": "proceso"` (§6.1 de la spec).
 - **Ajustes → Fuentes de datos** dice en llano que la espera se comparte dentro de este ZascArr y
   que otras instalaciones no se coordinan.
-- **Estado → Cortesía con las fuentes** muestra el mismo alcance junto a la tabla.
+- **Estado → Esperas al pedir datos** muestra el mismo alcance junto a la tabla, plegado en «Ver el detalle por web».
 - `GET /api/estado/cortesia` devuelve el snapshot con `Cache-Control: no-store`; exige la misma
   sesión que el resto de `/api/` y no publica URL, query, claves, credenciales ni hosts fuera de la
   allowlist (solo nombre de host, contadores y segundos).

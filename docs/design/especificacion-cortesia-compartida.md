@@ -220,16 +220,15 @@ snapshot **en servidor**, sin JS nuevo.
 
 ### 6.3 Bloque en Estado
 
-Sección «**Cortesía con las fuentes**» bajo el resumen (`web/estado.py:36-50`, `estado.html`):
-- «Cuánto se espera entre peticiones a cada fuente y qué está pasando ahora.»
-- «La espera se comparte dentro de este ZascArr. Si ejecutas varias copias o procesos, cada una espera por su
-  cuenta: no hay coordinación entre instalaciones.»
-- Tabla **Fuente · Estado · Próxima petición · En espera · Reintentos recientes**. Estados «Disponible», «En
-  espera (~Ns)», «Bloqueada temporalmente (~Ns)», «Apagada» (gris, no es fallo), «Sin configurar» (foro).
-  Próxima «Ahora»/«En ~Ns»/«—»; reintentos «Ninguno» o «429 hace ~Ns».
-- Si hay bloqueos: «Hay fuentes en espera por indicación del servicio. No se les hará ninguna petición
-  durante el tiempo indicado; después se volverá a intentar, sin garantía de que respondan. La espera es local
-  de este ZascArr.»
+Sección «**Esperas al pedir datos**» bajo el resumen (`web/estado.py:36-50`, `estado.html`):
+- «ZascArr espera un poco entre consulta y consulta para no saturar las webs de las que saca datos.»
+- El detalle va plegado en `<details>` «Ver el detalle por web», con «Esta espera vale para este ZascArr.
+  Si tienes otra copia, cada una espera por su cuenta.» y la tabla **Web · Estado · Siguiente consulta ·
+  Esperando turno · Últimos intentos**. Estados «Disponible», «En espera (~Ns)», «Bloqueada temporalmente
+  (~Ns)», «Apagada» (gris, no es fallo), «Sin configurar» (foro). Siguiente «Ahora»/«En ~Ns»/«—»; intentos
+  «Ninguno» o «Nos pidió esperar hace ~Ns» (sin códigos HTTP).
+- Si hay bloqueos: «Algunas webs han pedido que no les preguntemos durante un rato. ZascArr esperará y
+  volverá a intentarlo; puede que sigan sin responder.»
 - Apagadas: «Apagada» y «No se consulta ni se reintenta».
 
 ### 6.4 Bloque en Ajustes

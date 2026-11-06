@@ -97,22 +97,35 @@ class TestEstadoHtml:
     def test_pinta_la_seccion_con_los_textos_y_estados_de_la_spec(self, entorno, cliente):
         r = cliente.get("/estado")
         assert r.status_code == 200
-        assert "Cortesía con las fuentes" in r.text
-        assert "Cuánto se espera entre peticiones a cada fuente" in r.text
-        assert "no hay coordinación entre instalaciones" in r.text
+        assert "Esperas al pedir datos" in r.text
+        assert "ZascArr espera un poco entre consulta y consulta" in r.text
+        assert "cada una espera por su cuenta" in r.text
         assert "Bloqueada temporalmente (~7 s)" in r.text
         assert "En espera" in r.text
         assert "Apagada" in r.text
         assert "Sin configurar" in r.text
         assert "No se consulta ni se reintenta." in r.text
-        assert "Hay fuentes en espera por indicación del servicio" in r.text
-        assert "sin garantía de que respondan" in r.text
-        assert "429 hace" in r.text
+        assert "Algunas webs han pedido que no les preguntemos" in r.text
+        assert "puede que sigan sin responder" in r.text
+        assert "Nos pidió esperar hace" in r.text
         # «Apagada» es gris (neutral), nunca un fallo en rojo.
         assert "cortesia-estado-neutral" in r.text
+        # #134: la tabla es detalle y va plegada; el texto de arriba no es jerga.
         seccion = r.text[r.text.index('id="cortesia"'):]
         seccion = seccion[:seccion.index("</section>")]
+        assert "Cortesía con las fuentes" not in seccion
         assert "https://" not in seccion and "api_key" not in seccion
+        assert "<details" in seccion
+        assert "<summary>Ver el detalle por web</summary>" in seccion
+        visible = seccion[:seccion.index("<details")]
+        for jerga in ("Cortesía", "peticiones", "procesos", "instalaciones", "coordinación"):
+            assert jerga not in visible, jerga
+        # La tabla está DENTRO del desplegable, con caption y cabeceras de columna.
+        assert seccion.index("<details") < seccion.index("<table") < seccion.index("</details>")
+        assert '<caption class="sr">' in seccion
+        assert 'scope="col"' in seccion and 'scope="row"' in seccion
+        for columna in ("Web", "Estado", "Siguiente consulta", "Esperando turno", "Últimos intentos"):
+            assert columna in seccion
 
     def test_no_promete_recuperacion_ni_fecha(self, entorno, cliente):
         r = cliente.get("/estado")
@@ -141,7 +154,7 @@ class TestAjustes:
         monkeypatch.setattr("zascarr.web.ajustes.get_settings", lambda: self._ajustes())
         r = TestClient(app).get("/ui/ajustes")
         assert "Cortesía: Comic Vine 1 s y 3 intentos; AniList 1,5 s y 3; Tebeosfera 2,5 s y 1; GCD 2 s y 2." in r.text
-        assert "La espera se comparte dentro de este ZascArr" in r.text
+        assert "cada una espera por su cuenta" in r.text
         assert "Apagada: No se consulta ni se reintenta." in r.text
 
     def test_la_espera_de_la_prueba_es_un_aviso_neutro(self):
