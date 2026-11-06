@@ -241,6 +241,10 @@ lo purga el desinstalador (`scripts/uninstall.sh:361`), luego `v2` no deja resto
 2. Regeneración **perezosa al pedir**, no en lote ni con tarea (ficha §5.3, §3.1-§3.2).
 3. **Legado antes que red**: una serie sin extractor y con caché antigua se sirve a 320/240 hasta BL-PORT2
    (ficha líneas 393-397). La tensión con el criterio 1 se eleva al PO en Q-1.
+   **Actualizado por BL-PORT5 (#435, 2026-11-06):** el archivo local ya no gana siempre a la antigua. Una
+   portada previa con ancho **≥ 300 px** (hoy, la caché antigua `covers/<id>.jpg`) se sirve **antes** que `v2` y
+   que los archivos, y una `v2` ya escrita de esa serie se ignora sin borrarla. Con una antigua menor (los 100×100
+   de Tebeosfera) o sin ella, la cascada de esta especificación no cambia. Ver `especificacion-BL-PORT5.md`.
 4. El **ancho es global para el uso «portada de serie»**, no configurable por la persona (ficha §4.2).
 5. Un único candidato `File` por petición (`limit(1)`), como hoy: no se busca «el siguiente extractable».
 
