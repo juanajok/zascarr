@@ -869,6 +869,7 @@ class TestProcedenciaCamposC6:
         assert "De dónde sale cada dato" in r.text
         assert "Alta desde Comic Vine" in r.text
         assert "Protegido: el enriquecimiento no lo sobrescribe." in r.text
+        assert "Protegido</strong> significa que el enriquecimiento no lo sobrescribe." in r.text
         assert "Identificador de la fuente" in r.text
         assert "777" not in r.text   # el id externo no se pinta
 
@@ -881,3 +882,5 @@ class TestProcedenciaCamposC6:
             r = client.get(f"/ui/series/{series.id}")
         assert "Origen no registrado" in r.text
         assert "No hay procedencia registrada" in r.text
+        assert "significa que el enriquecimiento no lo sobrescribe" not in r.text
+        assert "significa que lo has escrito tú" not in r.text

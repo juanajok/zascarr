@@ -45,6 +45,10 @@
 {% include "_politica_serie.html" %}
 
 {% if procedencia %}
+{#- «Manual» y «Protegido» se explican una vez, no por fila: la leyenda solo
+    aparece si de verdad hay alguno de los dos en la serie. -#}
+{% set hay_manual = procedencia.campos | selectattr("manual") | list %}
+{% set hay_bloqueado = procedencia.campos | selectattr("bloqueado") | list %}
 <details class="procedencia-serie" id="procedencia-serie">
   <summary>De dónde sale cada dato</summary>
   <p class="muted">{{ procedencia.resumen }}</p>
@@ -57,14 +61,20 @@
         <span class="procedencia-origen{% if c.manual %} manual{% endif %}">
           {%- if c.origen %}{{ c.origen }}{% else %}Origen no registrado{% endif -%}
         </span>
-        {% if c.manual %}{{ ui.chip("amber", "Manual") }}{% endif %}
-        {% if c.bloqueado %}{{ ui.chip("warn", "Protegido") }}{% endif %}
+        {% if c.manual %}{{ ui.chip("info", "Manual") }}{% endif %}
+        {% if c.bloqueado %}{{ ui.chip("ok", "Protegido") }}{% endif %}
         {% for o in c.observaciones %}<small class="muted">{{ o }}</small>{% endfor %}
       </dd>
     </div>
     {% endfor %}
   </dl>
-  <p class="caption">La protección es un estado del registro: un campo protegido conserva su valor aunque el enriquecimiento proponga otro. ZascArr no muestra propuestas que no tenga registradas.</p>
+  {% if hay_manual or hay_bloqueado %}
+  <p class="caption">
+    {%- if hay_manual %}<strong>Manual</strong> significa que lo has escrito tú. {% endif -%}
+    {%- if hay_bloqueado %}<strong>Protegido</strong> significa que el enriquecimiento no lo sobrescribe. {% endif -%}
+    ZascArr no muestra propuestas que no tenga registradas.
+  </p>
+  {% endif %}
 </details>
 {% endif %}
 
