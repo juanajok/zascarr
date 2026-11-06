@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -46,7 +47,17 @@ def test_rar_real_el_listado_trae_el_crc32_de_cada_pagina(nombre, tmp_path):
 
 @pytest.mark.parametrize("nombre", NOMBRES)
 def test_rar_real_la_portada_es_la_primera_pagina_y_decodifica(nombre, tmp_path):
-    jpeg, tipo = portada_de_rar(_fixture(nombre), tmp_path / "covers", ancho=600)
+    try:
+        jpeg, tipo = portada_de_rar(_fixture(nombre), tmp_path / "covers", ancho=600)
+    except ErrorRar as exc:
+        # diagnóstico: el lector no conserva el mensaje (podría llevar rutas); aquí sí se ve cómo contesta unar
+        salida = tmp_path / "diag"
+        salida.mkdir()
+        for orden in (["unar", "-v"], ["lsar", "-j", str(_fixture(nombre))],
+                      ["unar", "-D", "-f", "-i", "-o", str(salida), str(_fixture(nombre)), "0"]):
+            p = subprocess.run(orden, capture_output=True, text=True, cwd=tmp_path)   # noqa: S603
+            print(f"{orden[0]} rc={p.returncode}\nstdout={p.stdout[:600]!r}\nstderr={p.stderr[:600]!r}")
+        pytest.fail(f"{nombre}: {exc.motivo.value}; salida de lsar/unar arriba")
     assert tipo == "image/jpeg"
     with Image.open(io.BytesIO(jpeg)) as img:
         img.load()
