@@ -1012,3 +1012,18 @@ class TestVolverALaBiblioteca:
         assert r.status_code == 200
         assert "vista=lista&amp;page=2#serie-" in r.text
         assert "Volver a la biblioteca" in r.text
+
+
+class TestEnriquecimientoEnFicha:
+    """#128: la ficha ofrece revisar la propuesta, pero no la aplica sola."""
+
+    def test_la_ficha_ofrece_revisar_los_cambios(self):
+        series = make_series(total_issues=3)
+        session = FakeSession([FakeExecResult([series]), FakeExecResult([]), acuse(),
+                               retirados(), FakeExecResult([])])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert "Revisar cambios de datos" in r.text
+        assert f'action="/ui/series/{series.id}/enriquecimiento/previsualizar"' in r.text
+        assert "No se aplica nada hasta que lo confirmes" in r.text
