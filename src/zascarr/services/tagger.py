@@ -375,6 +375,7 @@ class TaggerService:
                     logger.info("tagger.reconciliado", file_id=file.id, path=str(path))
                     file.sha256_hash = sha
                     file.file_size_bytes = st.st_size
+                    file.file_mtime_ns = st.st_mtime_ns  # BL-R9: el stat describe el hash
         if not simular:
             self._poner_marca(file, ctx, st, sha, SALTADO)
         return reconciliado
@@ -522,6 +523,7 @@ class TaggerService:
         sha = await asyncio.to_thread(_sha256, path)
         file.sha256_hash = sha
         file.file_size_bytes = st.st_size
+        file.file_mtime_ns = st.st_mtime_ns  # BL-R9: el stat describe el hash
         if original_para_guardar is not None and file.original_sha256 is None:
             file.original_sha256 = original_para_guardar
         propio = dict((file.metadata_ or {}).get("comicinfo_propio") or {})

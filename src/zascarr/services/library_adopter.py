@@ -60,6 +60,7 @@ from zascarr.services.asignacion import _restriccion
 from zascarr.services.importer import (
     COMIC_EXTS,
     CerrojoDeContenidoOcupado,
+    Importer,
     _fichero_de_la_fila_existe,
     _reenlazar_fila,
     _triage_and_match,
@@ -170,6 +171,44 @@ class AdoptionReport:
     @property
     def error_count(self) -> int:
         return len(self.errors)
+
+
+@dataclass
+class RescanReport:
+    """BL-R9: informe honesto del rescan de la biblioteca, por categorías.
+
+    «Revisados» no es «cambiados»: lo que quedó igual no se toca (ni se abre), lo que cambió
+    se re-tría, lo nuevo se registra (identificado → serie; si no → «Por revisar»), lo
+    desaparecido se marca (B7, sin borrar nunca la fila). Con un recorrido incompleto
+    (`no_revisado`), nada se afirma como «sin cambios».
+    """
+    started_at: datetime
+    disparador: str = "manual"       # «manual» (botón) o «automatico» (cadencia)
+    finished_at: datetime | None = None
+    files_scanned: int = 0           # rutas recorridas en la biblioteca
+    unreadable: int = 0              # carpetas/archivos que no se pudieron leer (recorrido incompleto)
+    no_revisado: bool = False        # el recorrido no acredita haber visto toda la biblioteca
+    ya_registrados: int = 0          # rutas con fila en el catálogo
+    sin_cambios: int = 0             # rutas con fila y stat igual: no se abrió el CBZ
+    nuevos_entregados: int = 0       # rutas sin fila entregadas al registro (alcance de adopt)
+    nuevos_registrados: int = 0      # filas nuevas identificadas (a su serie)
+    nuevos_a_revisar: int = 0        # filas nuevas sin identificar → «Por revisar»
+    repetidos: int = 0               # rutas sin fila cuyo contenido ya estaba (copias: no se registran)
+    reenlazados: int = 0             # filas desaparecidas reenlazadas a una ruta nueva (movidos)
+    ambiguos: list[str] = field(default_factory=list)
+    re_triados: int = 0              # rutas con fila cuyo stat cambió (o línea de base): re-leídas
+    re_triados_igual: int = 0        #   mismo contenido o misma publicación: stat/hash actualizados
+    re_triados_cambiado: int = 0     #   ahora es otra publicación: vínculo actualizado
+    re_triados_a_revisar: int = 0    #   ya no se identifica: desvinculada → «Por revisar»
+    re_triados_descartado: int = 0   #   descartada a mano: solo el stat, no se reactiva (regla #326)
+    copias_de_otra: int = 0          #   ahora es copia idéntica de otra fila presente: vínculo conservado
+    errores: list[str] = field(default_factory=list)
+    omitidos: list[str] = field(default_factory=list)
+    por_comprobar: int = 0           # re-triajes cuyo commit no se pudo acreditar (el siguiente rescan los revisa)
+    desaparecidos: int = 0
+    reaparecidos: int = 0
+    resultado_biblioteca: str = ""   # del _comprobar_biblioteca (comprobada / raiz_* / desaparicion_masiva)
+    run_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -398,6 +437,287 @@ class LibraryAdopter:
         report.pending_count = 0
         return report
 
+    # ── BL-R9: rescan de la biblioteca (a demanda y periódico) ─────────────
+
+    async def rescanear(
+        self, *, progreso: Callable[[RescanReport], None] | None = None,
+        lote: int = _LOTE_POR_DEFECTO, disparador: str = "manual",
+    ) -> RescanReport:
+        """Reescanear la biblioteca: actualiza el catálogo por lo que hay AHORA en el disco.
+
+        - **Nuevos** (ruta sin fila): se registran con `adopt(alcance=…)` — el mismo contrato de #326
+          (identificado → serie; sin identificar → «Por revisar»; movidos → reenlace; copias → no se registran).
+        - **Cambiados** (ruta con fila cuyo `stat` difiere de lo guardado, o línea de base sin fijar): se
+          re-trían por contenido y la MISMA fila se actualiza (hash, tamaño, instante, vínculo) o se
+          desvincula a «Por revisar». Nunca se crea una segunda fila ni se borra la existente.
+        - **Iguales**: no se abren (solo el `stat`). **Desaparecidos**: `is_missing`/reaparición (B7).
+        - Un recorrido incompleto (`unreadable > 0`) no impide procesar lo visible, pero el informe lo dice
+          (`no_revisado`): nada se afirma como «sin cambios».
+
+        Idempotente: repetirlo no duplica filas y un archivo que cambió mientras se leía se omite con causa
+        (el siguiente rescan lo ve). El registro de los nuevos lo confirma `adopt` con su maquinaria de
+        lotes y acreditación; los re-triajes se confirman por lotes de `lote` (una sola lectura de contenido
+        por archivo, el `stat` del paseo es lo único que se paga por los que no cambiaron).
+        """
+        report = RescanReport(started_at=datetime.now(UTC), disparador=disparador)
+
+        # Un solo paseo de rutas (sin leer contenido) en un hilo (CLAUDE.md §4).
+        recorrido = await asyncio.to_thread(recorrer_comics, [self._library], COMIC_EXTS)
+        files = recorrido.archivos
+        report.files_scanned = len(files)
+        report.unreadable = recorrido.ilegibles
+        report.no_revisado = recorrido.ilegibles > 0
+
+        filas = {f.file_path: f for f in (await self._db.execute(select(File))).scalars().all()}
+        report.ya_registrados = sum(1 for f in files if str(f) in filas)
+
+        def _partir() -> tuple[list[Path], list[tuple[Path, File]], int]:
+            nuevos: list[Path] = []
+            cambiados: list[tuple[Path, File]] = []
+            sin_cambios = 0
+            for f in files:
+                fila = filas.get(str(f))
+                if fila is None:
+                    nuevos.append(f)
+                    continue
+                try:
+                    st = f.stat()
+                except OSError:
+                    continue    # no se pudo consultar: lo dirá la comprobación de desaparecidos o `ilegibles`
+                if fila.file_mtime_ns is None or (st.st_size, st.st_mtime_ns) != (
+                    fila.file_size_bytes, fila.file_mtime_ns
+                ):
+                    cambiados.append((f, fila))
+                else:
+                    sin_cambios += 1
+            return nuevos, cambiados, sin_cambios
+
+        nuevos, cambiados, sin_cambios = await asyncio.to_thread(_partir)
+        report.sin_cambios = sin_cambios
+        pistas = detectar_ordenes_de_lectura([f.name for f in files])
+
+        # Lo nuevo, con el contrato completo del registro incremental (sin tocar su marcador).
+        if nuevos:
+            try:
+                sub = await self.adopt(alcance=frozenset(str(f) for f in nuevos))
+                report.nuevos_entregados = sub.processed
+                report.nuevos_registrados = sub.registered_count - sub.relinked
+                report.nuevos_a_revisar = sub.unsorted_count
+                report.repetidos = sub.duplicate_count
+                report.reenlazados = sub.relinked
+                report.ambiguos += sub.ambiguous
+                report.errores += sub.errors
+                report.omitidos += sub.omitted
+            except CerrojoDeContenidoOcupado:
+                report.errores.append(
+                    "El catálogo estaba ocupado por otra operación; los archivos nuevos no se han "
+                    "registrado y se verán en el siguiente rescan")
+
+        # Lo cambiado, archivo a archivo, en la MISMA fila.
+        if cambiados:
+            pendientes = 0
+            for _n, (path, fila) in enumerate(sorted(cambiados, key=lambda t: str(t[0])), start=1):
+                try:
+                    async with self._db.begin_nested():
+                        await self._re_triar_cambio(path, fila, report, pistas.get(path.name))
+                    report.re_triados += 1
+                    pendientes += 1
+                except CerrojoDeContenidoOcupado:
+                    report.errores.append(
+                        "El catálogo estaba ocupado; el resto de archivos cambiados se verá en el siguiente rescan")
+                    break
+                except FileNotFoundError:
+                    report.omitidos.append(f"{path.name} — desapareció antes de leerlo")
+                except ArchivoCambiado:
+                    report.omitidos.append(
+                        f"{path.name} — cambió mientras se leía; se verá en el siguiente rescan")
+                except Exception as exc:
+                    logger.warning("library_adopter.retriaje_fallido", error=type(exc).__name__)
+                    report.errores.append(
+                        f"{path.name}: no se pudo re-clasificar ({type(exc).__name__})")
+                if progreso is not None:
+                    progreso(report)
+                if pendientes >= lote:
+                    if not await self._confirmar_lote_rescan(report, pendientes):
+                        pendientes = 0
+                        break
+                    pendientes = 0
+            await self._confirmar_lote_rescan(report, pendientes)
+
+        # B7: disponibilidad de lo registrado (marca `is_missing`/revierte), con sus guardarraíles.
+        try:
+            comprobacion = await Importer(self._db)._comprobar_biblioteca()
+            report.resultado_biblioteca = comprobacion.resultado.value
+            report.desaparecidos = len(comprobacion.desaparecidos)
+            report.reaparecidos = len(comprobacion.reaparecidos)
+        except Exception:
+            logger.exception("library_adopter.rescan_disponibilidad_fallida")
+            report.resultado_biblioteca = "fallo_deteccion"
+            report.errores.append(
+                "No se pudo comprobar qué archivos siguen en su sitio; no se ha marcado ninguno "
+                "como desaparecido")
+
+        report.finished_at = datetime.now(UTC)
+        try:
+            report.run_id = await self._persist_run_rescan(report)
+            await self._db.commit()
+        except Exception:
+            logger.exception("library_adopter.rescan_informe_fallido")
+            with contextlib.suppress(Exception):
+                await self._db.rollback()
+            report.run_id = None
+            report.errores.append("El rescan terminó pero su informe no se pudo guardar")
+        return report
+
+    async def _re_triar_cambio(
+        self, path: Path, fila: File, report: RescanReport, pista: PistaDeCohorte | None = None
+    ) -> None:
+        """Un archivo registrado cuyo contenido cambió (o cuya línea de base no está fijada): se re-tría
+        con el mismo pipeline que el registro (`_triage_and_match`) y se actualiza la MISMA fila.
+
+        - Descartado a mano (`review_dismissed`): solo el stat, no se reactiva el descarte (#326 §4.1).
+        - Ahora copia de otra fila presente: vínculo conservado (los bytes describen esa publicación).
+        - Coincide con una fila desaparecida: esta fila sigue en su ruta; nada que reenlazar.
+        - Identifica otra publicación: vínculo actualizado. No identifica: desvinculada → «Por revisar».
+        """
+        antes = await asyncio.to_thread(path.stat)
+        outcome = await _triage_and_match(self._db, path, pista, excluir_fila=fila)
+        if outcome.error_lectura:
+            report.errores.append(f"{path.name}: no se pudo leer ({outcome.error_lectura})")
+            return
+        despues = await asyncio.to_thread(path.stat)
+        if (antes.st_size, antes.st_mtime_ns) != (despues.st_size, despues.st_mtime_ns):
+            raise ArchivoCambiado(path.name)
+        tr = outcome.tr
+
+        if fila.review_dismissed:
+            # Regla #326 §4.1: no se reactiva ningún descarte. Solo se actualiza la descripción de
+            # los bytes (el stat debe describir el hash guardado, pase lo que pase con la clasificación).
+            fila.file_size_bytes = antes.st_size
+            fila.file_mtime_ns = antes.st_mtime_ns
+            fila.sha256_hash = tr.sha256
+            meta = dict(fila.metadata_ or {})
+            if tr.formato_contenido:
+                meta["formato_contenido"] = tr.formato_contenido
+            meta.pop("comicinfo_estado", None)
+            meta.pop("comicinfo_propio", None)
+            fila.metadata_ = meta
+            report.re_triados_descartado += 1
+            return
+
+        meta = dict(fila.metadata_ or {})
+        if tr.formato_contenido:
+            meta["formato_contenido"] = tr.formato_contenido
+
+        if outcome.duplicate_of or outcome.recuperar is not None:
+            # Los bytes nuevos ya constan en otra fila (presente o desaparecida): esta fila sigue en su
+            # ruta y conserva su vínculo; solo se actualiza la descripción de los bytes.
+            fila.file_size_bytes = antes.st_size
+            fila.file_mtime_ns = antes.st_mtime_ns
+            fila.sha256_hash = tr.sha256
+            fila.is_missing = False
+            fila.missing_since = None
+            meta.pop("comicinfo_estado", None)
+            meta.pop("comicinfo_propio", None)
+            fila.metadata_ = meta
+            if outcome.duplicate_of:
+                report.copias_de_otra += 1
+            report.re_triados_igual += 1
+            return
+
+        result = outcome.result
+        is_unsorted = result.status == MatchStatus.UNSORTED or not result.series_id
+        fila.file_size_bytes = antes.st_size
+        fila.file_mtime_ns = antes.st_mtime_ns
+        fila.sha256_hash = tr.sha256
+        fila.is_missing = False
+        fila.missing_since = None
+        meta.update({
+            "match_status": result.status,
+            "match_score": result.score,
+            "notes": result.notes,
+            "candidates": serialize_candidates(result.candidates),
+        })
+        if outcome.cohorte_explicacion:
+            meta["cohorte"] = outcome.cohorte_explicacion
+        if outcome.edition_kind:
+            meta["edicion"] = outcome.edition_kind
+        # El contenido cambió: las marcas de ComicInfo describían los bytes anteriores.
+        meta.pop("comicinfo_estado", None)
+        meta.pop("comicinfo_propio", None)
+        fila.metadata_ = meta
+        if is_unsorted:
+            if fila.issue_id is not None:
+                fila.issue_id = None
+                fila.metadata_source = None
+            report.re_triados_a_revisar += 1
+            return
+        nuevo_vinculo = str(result.issue_id) if result.issue_id else None
+        anterior = str(fila.issue_id) if fila.issue_id else None
+        fila.issue_id = nuevo_vinculo
+        fila.metadata_source = "comicinfo_xml" if tr.strong_candidate else None
+        if anterior == nuevo_vinculo:
+            report.re_triados_igual += 1
+        else:
+            report.re_triados_cambiado += 1
+
+    async def _confirmar_lote_rescan(self, report: RescanReport, mirados: int) -> bool:
+        """Commit del lote de re-triajes. Devuelve False si el commit falló: lo pendiente queda
+        «por comprobar» y el bucle se detiene (la sesión puede estar rota). Nada se pierde: las
+        actualizaciones son idempotentes y el siguiente rescan las rehace."""
+        if mirados == 0:
+            return True
+        try:
+            await self._db.commit()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("library_adopter.rescan_commit_fallido", error=type(exc).__name__)
+            with contextlib.suppress(Exception):
+                await self._db.rollback()
+            report.por_comprobar += mirados
+            return False
+
+    async def _persist_run_rescan(self, report: RescanReport) -> UUID:
+        run = ImportRun(
+            started_at=report.started_at,
+            finished_at=report.finished_at,
+            files_scanned=report.files_scanned,
+            imported_count=report.nuevos_registrados + report.nuevos_a_revisar,
+            duplicate_count=report.repetidos,
+            unsorted_count=report.nuevos_a_revisar + report.re_triados_a_revisar,
+            error_count=len(report.errores),
+            disappeared_count=report.desaparecidos,
+            details={
+                "kind": "rescan",
+                "disparador": report.disparador,
+                "unreadable": report.unreadable,
+                "no_revisado": report.no_revisado,
+                "ya_registrados": report.ya_registrados,
+                "sin_cambios": report.sin_cambios,
+                "nuevos_entregados": report.nuevos_entregados,
+                "nuevos_registrados": report.nuevos_registrados,
+                "nuevos_a_revisar": report.nuevos_a_revisar,
+                "repetidos": report.repetidos,
+                "reenlazados": report.reenlazados,
+                "re_triados": report.re_triados,
+                "re_triados_igual": report.re_triados_igual,
+                "re_triados_cambiado": report.re_triados_cambiado,
+                "re_triados_a_revisar": report.re_triados_a_revisar,
+                "re_triados_descartado": report.re_triados_descartado,
+                "copias_de_otra": report.copias_de_otra,
+                "desaparecidos": report.desaparecidos,
+                "reaparecidos": report.reaparecidos,
+                "resultado_biblioteca": report.resultado_biblioteca,
+                "por_comprobar": report.por_comprobar,
+                "ambiguos": report.ambiguos,
+                "omitidos": report.omitidos,
+                "errores": report.errores,
+            },
+        )
+        self._db.add(run)
+        await self._db.flush()
+        return run.id
+
     async def _confirmar_lote(
         self, en_lote: AdoptionReport, report: AdoptionReport, mirados: int,
         progreso: Callable[[AdoptionReport], None] | None, run_id: UUID | None = None,
@@ -576,6 +896,8 @@ class LibraryAdopter:
             file_name=path.name,
             file_format=FileFormat(path.suffix.lstrip(".").lower()),
             file_size_bytes=antes.st_size,
+            # BL-R9: el stat guardado describe los bytes del hash guardado.
+            file_mtime_ns=antes.st_mtime_ns,
             sha256_hash=tr.sha256,
             source_tag=tr.source_tag,
             width_px=tr.width_px,

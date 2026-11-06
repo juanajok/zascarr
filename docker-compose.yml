@@ -141,6 +141,8 @@ services:
       - RESTORE_STATUS_FILE=/run/backup-status/restore-status.json
       - COVERS_CACHE_PATH=/config/covers
       - TZ=${TZ:-Europe/Madrid}
+      # BL-R9: cadencia del rescan de la biblioteca (1440 = una vez al día; 0 lo apaga).
+      - RESCAN_INTERVAL_MINUTES=${RESCAN_INTERVAL_MINUTES:-1440}
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
       # contenedor (que no monta el .env). ALLOWED_HOSTS no tiene otra vía: no está
       # en Ajustes, y sin él quien entra por un nombre de equipo recibe 403 en todo.
