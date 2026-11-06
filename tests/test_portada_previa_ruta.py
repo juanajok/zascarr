@@ -307,7 +307,16 @@ class TestRegistroDeLaRuta:
         with structlog.testing.capture_logs() as registros:
             TestClient(app).get(f"/ui/series/{series.id}/portada")
 
-        assert any(r["event"] == "cover.previa_suficiente" for r in registros)
+        assert registros == []        # el acierto no registra nada (la app no filtra por nivel)
+
+    def test_una_antigua_ilegible_avisa_sin_ruta_ni_nombres(self, tmp_path, montar):
+        series, covers, _s, _l = montar([_cbz(tmp_path / "secreto-no-salir.cbz")])
+        (covers / f"{series.id}.jpg").write_bytes(b"no soy una imagen")
+
+        with structlog.testing.capture_logs() as registros:
+            TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert [r["event"] for r in registros].count("cover.previa_ilegible") == 1
         texto = str(registros)
         assert "secreto-no-salir" not in texto and str(tmp_path) not in texto
         assert str(series.id) not in texto and "Thorgal" not in texto

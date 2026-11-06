@@ -141,8 +141,8 @@ def portada_previa_suficiente(covers: Path, series_id: UUID) -> PortadaPrevia | 
     biblioteca, no usa la red y no escribe nada. El ancho sale de la CABECERA de la imagen (no se
     decodifica). Lo que no se puede leer, no es un JPEG, está cortado (sin `FF D8`…`FF D9` exactos)
     o supera el tope de bytes NO cuenta como suficiente (falla cerrado): se sigue la cascada de
-    siempre. El registro (`debug` el acierto, un solo aviso por fichero ilegible) lleva el ancho y
-    el umbral, o solo el tipo de error: nunca rutas."""
+    siempre. No registra nada en el acierto ni cuando no hay previa; avisa una sola vez por fichero
+    ilegible, solo con el tipo de error: nunca rutas."""
     for ruta in rutas_de_portadas_previas(covers, series_id):
         try:
             with open(ruta, "rb") as fh:
@@ -161,8 +161,8 @@ def portada_previa_suficiente(covers: Path, series_id: UUID) -> PortadaPrevia | 
             _avisar_previa_ilegible(ruta, exc)
             continue
         if ancho >= UMBRAL_PORTADA_PREVIA_PX:
-            # debug: se evalúa en CADA petición (también las 304); una rejilla pide cientos
-            logger.debug("cover.previa_suficiente", ancho=ancho, umbral=UMBRAL_PORTADA_PREVIA_PX)
+            # sin evento de acierto: se evalúa en CADA petición (también las 304) y la app no filtra
+            # por nivel; el ancho y el umbral los cubren las pruebas
             return PortadaPrevia(ruta, datos, ancho)
     return None
 
