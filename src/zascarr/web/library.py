@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
 from zascarr.services.series import SeriesService
+from zascarr.web.retorno import url_de_ficha
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
@@ -335,6 +336,7 @@ async def _contexto(
         "hay_filtros": bool(activos),
         "recuento": _texto_recuento(total, bool(activos)),
         "url_canonica": url_canonica,
+        "url_serie": lambda series_id: url_de_ficha(series_id, url_canonica),
         "url_pagina": lambda p: _url_pagina(filtros_finales, page=p),
         "url_fragmento": lambda p: _url_fragmento(filtros_finales, page=p),
         "url_reintento": url_canonica,

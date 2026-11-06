@@ -885,6 +885,8 @@ button[type="submit"].btn-sugerencia {
 .library-card {
   display: block; text-decoration: none; color: var(--ink);
   overflow: hidden; transition: transform .15s, box-shadow .15s;
+  /* BL-IT03 (#286): al volver con el ancla de la tarjeta, el foco no queda pegado al borde. */
+  scroll-margin-block-start: 16px;
 }
 .library-card .portada { border-bottom: 3px solid var(--ink); }
 .library-card-body { padding: 9px 11px 12px; }
