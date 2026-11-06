@@ -44,6 +44,30 @@
 <p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
 {% include "_politica_serie.html" %}
 
+{% if procedencia %}
+<details class="procedencia-serie" id="procedencia-serie">
+  <summary>De dónde sale cada dato</summary>
+  <p class="muted">{{ procedencia.resumen }}</p>
+  <dl class="procedencia-campos">
+    {% for c in procedencia.campos %}
+    <div class="procedencia-campo">
+      <dt>{{ c.etiqueta }}</dt>
+      <dd>
+        <span class="procedencia-valor">{{ c.valor }}</span>
+        <span class="procedencia-origen{% if c.manual %} manual{% endif %}">
+          {%- if c.origen %}{{ c.origen }}{% else %}Origen no registrado{% endif -%}
+        </span>
+        {% if c.manual %}{{ ui.chip("amber", "Manual") }}{% endif %}
+        {% if c.bloqueado %}{{ ui.chip("warn", "Protegido") }}{% endif %}
+        {% for o in c.observaciones %}<small class="muted">{{ o }}</small>{% endfor %}
+      </dd>
+    </div>
+    {% endfor %}
+  </dl>
+  <p class="caption">La protección es un estado del registro: un campo protegido conserva su valor aunque el enriquecimiento proponga otro. ZascArr no muestra propuestas que no tenga registradas.</p>
+</details>
+{% endif %}
+
 {% if missing %}
 <h2>Te faltan</h2>
 <div class="issue-grid">
