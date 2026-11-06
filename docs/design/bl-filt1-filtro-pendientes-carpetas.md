@@ -150,11 +150,13 @@ tampoco aparece). Esta regla conserva **literalmente** las URLs actuales cuando 
 que ya comprueban las pruebas (`tests/test_web_carpetas_pg.py:307-330,371-380,708-737`).
 
 - **Formulario de filtro:** GET a `/ui/pendientes/carpetas`; incluye `limite`, `serie` (solo si es válida) y
-  los cuatro filtros; **no incluye `desplazamiento`** → aplicar un filtro vuelve a la página 1.
+  los **tres filtros visibles** (`nombre`, `estado`, `en_conflicto`); **no incluye `por_confirmar`** (solo se
+  acepta por URL por compatibilidad y no tiene control) ni `desplazamiento` → aplicar un filtro vuelve a la
+  página 1.
 - **Quitar el filtro:** URL con `limite` y `serie` (si la hay), sin `desplazamiento` → página 1.
 - **Quitar la serie:** URL con `limite` y los filtros, sin `serie` y sin `desplazamiento` → página 1.
-- **Paginación:** conserva los cuatro filtros, `serie` y `limite`, y añade `desplazamiento`.
-- **Vuelta desde el asistente:** conserva los cuatro filtros, `serie`, `desplazamiento` y `limite` si no es 50
+- **Paginación:** conserva los filtros de la URL (incluido `por_confirmar` si venía), `serie` y `limite`, y añade `desplazamiento`.
+- **Vuelta desde el asistente:** conserva los filtros de la URL (incluido `por_confirmar` si venía), `serie`, `desplazamiento` y `limite` si no es 50
   (la página es parte del contexto que se recupera, ficha MEJORAR 1). No hay parámetro de retorno (§6.4).
 
 ### 3.4 Respuesta del servicio y recuentos
@@ -231,15 +233,37 @@ que ya comprueban las pruebas (`tests/test_web_carpetas_pg.py:307-330,371-380,70
 | Opción sin serie | «Sin serie» |
 | Opción con serie sugerida | «Con serie sugerida» |
 | Opción mixto | «Mezcla (sin serie y con serie sugerida)» |
-| Leyenda del grupo de marcas | «Marcas» |
-| Marca 1 | «Por confirmar» |
-| Marca 2 | «En conflicto» |
-| Nota de las marcas | «Se suman al estado; no son estados.» |
+| Filtro de conflicto | «Solo carpetas con conflictos» |
 | Botón de envío | «Filtrar» |
 | Enlace de quitar (cuando hay filtro) | «Quitar el filtro» |
 
+- **Revisión UI/UX del 2026-11-05:** la barra solo expone **«Solo carpetas con conflictos»**. `por_confirmar`
+  sigue en el contrato del servicio y de la URL por compatibilidad, pero **no se ofrece** en la interfaz: por
+  construcción equivale a «hay algún archivo con serie sugerida», que ya eligen «Con serie sugerida» o «Mezcla».
+  Dos marcas con esa solapadura no ayudaban a un coleccionista no técnico; el conflicto sí aporta información
+  distinta al estado.
 - Formulario **GET** a `/ui/pendientes/carpetas`; sin HTMX, sin JavaScript; **un solo** `<form>` y **un solo**
   `<button type="submit">` en toda la pantalla (precisión de la regla «sin acciones», §10.2).
+- La barra es una **rejilla** de campos con la etiqueta encima: **4 columnas** cuando el contenido deja sitio
+  (desde 1241 px), **2** en los tramos en que el menú deja ancho suficiente (970–1240 px y 761–860 px, este último
+  con la barra superior del móvil/tablet) y **1** en el resto (incluye 861–969 px, donde el menú lateral deja el
+  contenido estrecho, y el móvil). Los anchos mínimos de columna son 200 px (nombre), 320 px (estado, para que
+  «Mezcla (sin serie y con serie sugerida)» no se recorte), 275 px (conflicto, para que su texto quepa en una
+  línea) y el del botón. Los campos y el botón comparten **44 px** de alto y base; el checkbox se centra con ellos.
+  Antes el cambio a 2 columnas estaba en 900 px: a 960/901 px el botón se encogía hasta 10/0 px y la barra
+  desbordaba; a 861–985 px el selector recortaba «Mezcla…».
+- **Revisión PIXEL.ui (2026-11-05, Chrome 156 + Postgres real):** medido a 1722, 1280, 1241, 1240, 1100, 1000, 970,
+  969, 960, 901, 861, 768, 761, 760 y 390 px, **sin desbordes horizontales en la barra** y con los textos de los
+  controles completos en todos ellos. Se quitaron los dos `&nbsp;` `aria-hidden` que solo servían para alinear y se
+  pasó a `align-items: end`: sin ellos la rejilla no necesita huecos fantasma y en móvil no deja dos líneas en
+  blanco. Teclado: Tab `nombre → estado → conflicto → Filtrar`, foco visible de 3 px en todos (medido con teclado
+  real, no programático); el `aria-label` del formulario es «Filtrar carpetas por nombre, estado y conflictos».
+- El formulario no se presenta como una caja suelta de controles: la barra tiene su propio panel y el botón queda
+  alineado con la base de los campos.
+- **«Por confirmar» no se expone en la interfaz:** el servicio lo calcula como «hay algún archivo con serie sugerida»,
+  que ya se selecciona con «Con serie sugerida» o «Mezcla». Exponerlo como marca duplicaba el filtro y confundía.
+  El parámetro `por_confirmar` se conserva en el contrato del servicio por compatibilidad, pero la barra solo ofrece
+  «Solo carpetas con conflictos», que sí aporta información distinta al estado.
 - Los `hidden` `limite` y `serie` (si es válida) van **antes** de los campos visibles en el DOM: el GET
   serializa en ese orden y así el envío produce el orden canónico de §3.3.
 - `nombre` se pinta en `value` escapado; `estado` con `selected`; las marcas con `checked`; `serie` (si es

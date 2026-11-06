@@ -310,6 +310,7 @@ class TestSinLogicaPropia:
         assert cuerpo.count("<form") == 1
         formulario = re.search(r"<form\b[^>]*>", cuerpo).group(0)
         assert 'method="get"' in formulario and 'action="/ui/pendientes/carpetas"' in formulario
+        assert 'aria-label="Filtrar carpetas por nombre, estado y conflictos"' in formulario
         assert cuerpo.count('type="submit"') == 1
         for metodo in ("post", "put", "delete", "patch"):
             assert f'method="{metodo}"' not in cuerpo
@@ -606,31 +607,33 @@ class TestFormularioDeFiltro:
     async def test_textos_y_estructura_del_formulario(self, banco):
         await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
         html = (await pagina()).text
-        formulario = re.search(r'<form class="filter-bar".*?</form>', html, re.S).group(0)
+        formulario = re.search(r'<form class="filter-bar[^"]*".*?</form>', html, re.S).group(0)
         for exacto in ("Nombre de la carpeta", "Parte del nombre", "Estado de la carpeta",
                        "Todas", "Sin serie", "Con serie sugerida",
-                       "Mezcla (sin serie y con serie sugerida)", "Marcas", "Por confirmar",
-                       "En conflicto", "Se suman al estado; no son estados.", "Filtrar"):
+                       "Mezcla (sin serie y con serie sugerida)",
+                       "Solo carpetas con conflictos", "Filtrar"):
             assert exacto in formulario, exacto
         assert 'method="get"' in formulario and 'action="/ui/pendientes/carpetas"' in formulario
+        assert 'aria-label="Filtrar carpetas por nombre, estado y conflictos"' in formulario
         # Etiquetas visibles asociadas y campo de búsqueda nativo.
         assert 'for="f-nombre"' in formulario and 'id="f-nombre"' in formulario
         assert 'for="f-estado"' in formulario and 'id="f-estado"' in formulario
         assert 'type="search"' in formulario and 'name="nombre"' in formulario
-        assert "<legend>Marcas</legend>" in formulario
+        assert "por_confirmar" not in formulario   # redundante con el estado
+        assert formulario.count('class="filtro-campo') == 4   # nombre, estado, conflicto y acción
         # Los hidden van antes que los campos visibles (GET serializa en ese orden).
         assert formulario.index('name="limite"') < formulario.index('id="f-nombre"')
         # Sin desplazamiento: aplicar el filtro vuelve a la página 1.
         assert 'name="desplazamiento"' not in formulario
 
-    async def test_el_valor_y_las_marcas_se_recuerdan(self, banco):
+    async def test_el_valor_y_el_conflicto_se_recuerdan(self, banco):
         await banco.sembrar(archivo("Comics/G/Cosa 01.cbz"))
         html = (await pagina({"nombre": "cosa", "estado": "sin_serie",
-                              "por_confirmar": "1", "en_conflicto": "1"})).text
-        formulario = re.search(r'<form class="filter-bar".*?</form>', html, re.S).group(0)
+                              "en_conflicto": "1"})).text
+        formulario = re.search(r'<form class="filter-bar[^"]*".*?</form>', html, re.S).group(0)
         assert 'value="cosa"' in formulario
         assert re.search(r'<option value="sin_serie" selected>', formulario)
-        assert _marcada(formulario, "por_confirmar") and _marcada(formulario, "en_conflicto")
+        assert _marcada(formulario, "en_conflicto")
 
 
 class TestAccesoYEnlaces:
@@ -1209,7 +1212,7 @@ class TestPropagacionDelContexto:
             *(archivo(f"Comics/Otra {i:03d}/Cosa 01.cbz") for i in range(95)),
         )
         r = await pagina({"nombre": "coincide", "limite": 10, "desplazamiento": 10})
-        formulario = re.search(r'<form class="filter-bar".*?</form>', r.text, re.S).group(0)
+        formulario = re.search(r'<form class="filter-bar[^"]*".*?</form>', r.text, re.S).group(0)
         assert 'name="desplazamiento"' not in formulario
         assert 'action="/ui/pendientes/carpetas"' in formulario
         assert 'method="get"' in formulario
