@@ -514,6 +514,11 @@ class File(Base):
         nullable=False,
     )
     file_size_bytes:     Mapped[int|None]     = mapped_column(BigInteger)
+    # BL-R9 (rescan): instante de modificación (st_mtime_ns) del fichero que describen
+    # `file_size_bytes` y `sha256_hash`. Lo escribe TODO escritor de un hash (importador,
+    # adoptador, reenlace, re-triaje, etiquetador): el stat guardado describe los bytes del
+    # hash guardado. NULL = línea de base sin fijar (el rescan la re-tría una vez).
+    file_mtime_ns:       Mapped[int|None]     = mapped_column(BigInteger)
     sha256_hash:         Mapped[str|None]     = mapped_column(String(64), index=True)
     # Integridad (ficha benchmark-integridad-hash-dedupe): hash del fichero
     # TAL COMO SE IMPORTÓ, antes de la primera reescritura por B6 — escribir
