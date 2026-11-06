@@ -36,6 +36,10 @@ from zascarr.models import (
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.enricher import puede_enlazarse_con_comic_vine
+from zascarr.services.enriquecimiento_plan import (
+    EnriquecimientoPlanService,
+    ErrorDePlan,
+)
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     horas_minimas,
@@ -232,6 +236,54 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
     })
+
+
+async def _serie_o_404(db: AsyncSession, series_id: UUID) -> Series:
+    series = await db.get(Series, series_id)
+    if series is None:
+        raise HTTPException(status_code=404, detail="Serie no encontrada")
+    return series
+
+
+@router.post("/{series_id}/enriquecimiento/previsualizar", response_class=HTMLResponse)
+async def previsualizar_enriquecimiento(
+    series_id: UUID, request: Request, db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#128: construye y firma un plan por campo; no escribe ni aplica nada."""
+    series = await _serie_o_404(db, series_id)
+    servicio = EnriquecimientoPlanService(db, get_settings().secret_key)
+    try:
+        plan = await servicio.previsualizar(series_id)
+    except ErrorDePlan as exc:
+        return templates.TemplateResponse(
+            request, "enriquecimiento_previa.html",
+            {"series": series, "plan": None, "error": str(exc)},
+        )
+    return templates.TemplateResponse(
+        request, "enriquecimiento_previa.html",
+        {"series": series, "plan": plan, "error": None},
+    )
+
+
+@router.post("/{series_id}/enriquecimiento/aplicar", response_class=HTMLResponse)
+async def aplicar_enriquecimiento(
+    series_id: UUID, request: Request, token: str = Form(...),
+    campos: list[str] | None = Form(None), db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#128: aplica el MISMO plan firmado y solo los campos seleccionados."""
+    series = await _serie_o_404(db, series_id)
+    servicio = EnriquecimientoPlanService(db, get_settings().secret_key)
+    try:
+        resultado = await servicio.aplicar(token, campos or [], series_id)
+    except ErrorDePlan as exc:
+        return templates.TemplateResponse(
+            request, "enriquecimiento_resultado.html",
+            {"series": series, "resultado": None, "error": str(exc)},
+        )
+    return templates.TemplateResponse(
+        request, "enriquecimiento_resultado.html",
+        {"series": series, "resultado": resultado, "error": None},
+    )
 
 
 @router.post("/{series_id}/politica", response_class=HTMLResponse)

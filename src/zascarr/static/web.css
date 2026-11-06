@@ -1759,6 +1759,68 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .library-vista { min-height: 44px; }
 }
 
+/* ── #128: plan de enriquecimiento por campo ─────────────────────────────── */
+.series-enriquecimiento { margin: 14px 0 4px; }
+.series-enriquecimiento summary {
+  cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
+  padding: 8px 0; min-height: 40px;
+}
+.series-enriquecimiento form { margin-top: 4px; }
+.tabla-scroll { overflow-x: auto; }
+.enriquecimiento-tabla {
+  width: 100%; border-collapse: collapse; border: 2px solid var(--ink);
+  background: var(--paper); font-size: .875rem;
+}
+.enriquecimiento-tabla caption { text-align: left; }
+.enriquecimiento-tabla th, .enriquecimiento-tabla td {
+  padding: 8px 10px; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--ink-faint);
+}
+.enriquecimiento-tabla thead th { background: var(--paper-2); }
+.enriquecimiento-tabla tbody tr:last-child th,
+.enriquecimiento-tabla tbody tr:last-child td { border-bottom: 0; }
+.enriquecimiento-valor { overflow-wrap: anywhere; }
+.enriquecimiento-accion { display: block; font-weight: 700; }
+.enriquecimiento-observacion { display: block; margin-top: 2px; font-size: .875rem; }
+.enriquecimiento-check { display: inline-flex; align-items: center; min-width: 40px; min-height: 40px; }
+.enriquecimiento-check input { width: 24px; height: 24px; }
+.enriquecimiento-resultado { padding-left: 18px; }
+.enriquecimiento-resultado li { margin: 8px 0; }
+.enriquecimiento-resultado-aplicado strong { color: var(--ok-t); }
+.enriquecimiento-resultado-bloqueado strong { color: var(--warn-t); }
+.enriquecimiento-resultado-omitido strong,
+.enriquecimiento-resultado-no_aplicado strong { color: var(--ink-soft); }
+
+/* En táctil/estrecho, el resumen y las casillas alcanzan el objetivo de 44 px. */
+@media (max-width: 860px), (pointer: coarse) {
+  .series-enriquecimiento summary,
+  .enriquecimiento-check { min-height: 44px; }
+  .enriquecimiento-check { min-width: 44px; }
+}
+
+@media (max-width: 860px) {
+  .enriquecimiento-tabla { border: 0; }
+  .enriquecimiento-tabla thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .enriquecimiento-tabla, .enriquecimiento-tabla tbody, .enriquecimiento-tabla tr,
+  .enriquecimiento-tabla th, .enriquecimiento-tabla td { display: block; width: 100%; }
+  .enriquecimiento-tabla tr {
+    border: 2px solid var(--ink); border-radius: var(--radius-panel);
+    padding: 8px 10px; margin-bottom: 10px;
+  }
+  .enriquecimiento-tabla tbody th {
+    border: 0; padding: 0 0 4px; font-size: 1rem;
+  }
+  .enriquecimiento-tabla th, .enriquecimiento-tabla td { border: 0; padding: 4px 0; }
+  .enriquecimiento-tabla td::before {
+    content: attr(data-label); display: block;
+    color: var(--ink-soft); font-size: .875rem; font-weight: 700;
+  }
+  .enriquecimiento-tabla td:first-of-type { padding-top: 6px; }
+}
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
