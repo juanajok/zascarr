@@ -1,4 +1,11 @@
 {% extends "base.html" %}
+{% set acciones = {
+  "anadir": "Añadir",
+  "conservar": "Conservar",
+  "proponer_sustitucion": "Sustituir",
+  "omitir_por_ausencia": "Omitir",
+  "bloqueado": "Protegido",
+} %}
 {% block title %}Revisar datos de {{ series.title }} — ZascArr{% endblock %}
 {% block content %}
 <a class="back-link" href="/ui/series/{{ series.id }}">← {{ series.title }}</a>
@@ -30,18 +37,18 @@
           {% for campo in plan.campos %}
           <tr>
             <th scope="row">{{ campo.etiqueta }}</th>
-            <td class="enriquecimiento-valor">
+            <td class="enriquecimiento-valor" data-label="Ahora">
               {% if campo.actual is none or campo.actual == "" %}<span class="muted">No consta</span>{% else %}{{ campo.actual }}{% endif %}
             </td>
-            <td class="enriquecimiento-valor">
+            <td class="enriquecimiento-valor" data-label="Propuesta">
               {% if campo.propuesto is none or campo.propuesto == "" %}<span class="muted">No consta en la fuente</span>{% else %}{{ campo.propuesto }}{% endif %}
             </td>
-            <td><span class="muted">{{ campo.procedencia }}</span></td>
-            <td>
-              <span class="enriquecimiento-accion">{{ campo.accion|replace("_", " ") }}</span>
+            <td data-label="Origen"><span class="muted">{{ campo.procedencia }}</span></td>
+            <td data-label="Acción">
+              <span class="enriquecimiento-accion">{{ acciones.get(campo.accion, campo.accion) }}</span>
               <span class="muted enriquecimiento-observacion">{{ campo.observacion }}</span>
             </td>
-            <td>
+            <td data-label="Aplicar">
               {% if campo.aplicable %}
               <label class="enriquecimiento-check">
                 <input type="checkbox" name="campos" value="{{ campo.clave }}"
