@@ -53,6 +53,7 @@ from zascarr.utils.cover import (
     es_candidato_de_portada,
     extract_cover_thumbnail,
     fetch_and_cache_cover,
+    portada_previa_suficiente,
     write_cover_cache,
 )
 from zascarr.web.retorno import volver_segura
@@ -293,14 +294,17 @@ async def portada(series_id: UUID, request: Request,
                   db: AsyncSession = Depends(get_db)) -> Response:
     """Cascada de portada de serie (BL-PORT1, #300; antes C1):
 
+    0. Una portada previa con ancho suficiente (`portada_previa_suficiente`: hoy la caché
+       antigua `covers/<id>.jpg` con >= 300 px, #435) → servirla (ETag por su `mtime`, 304)
+       **sin** extraer, sin red, sin escribir y sin copiarla; una `v2` ya escrita se ignora.
     1. `covers/v2/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304).
     2. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419):
        solo los que `es_candidato_de_portada` acepta (ausencia conocida o firma que no es ZIP:
        se saltan), con un tope de `MAX_INTENTOS_PORTADA` aperturas y de `MAX_EVALUADOS_PORTADA`
-       archivos evaluados → extraer su primera página a 600, escribir `v2`, servirla. Si la escritura falla, se sirve igualmente lo extraído con
-       un ETag de sus bytes (FR-11, PR-2).
-    3. Si no hay archivo utilizable, `covers/<id>.jpg` legada → servirla **sin
-       red y sin copiarla** a `v2` (respaldo que solo se lee).
+       archivos evaluados → extraer su primera página a 600, escribir `v2`, servirla. Si la
+       escritura falla, se sirve igualmente lo extraído con un ETag de sus bytes (FR-11, PR-2).
+    3. Si no hay archivo utilizable, `covers/<id>.jpg` legada (de menos de 300 px) → servirla
+       **sin red y sin copiarla** a `v2` (respaldo que solo se lee).
     4. Si tampoco, `cover_url` externa → descargar una vez a 600, escribir
        `v2`, servirla.
     5. Nada de eso → 404: el `<img>` cae al marcador CSS, sin texto nuevo.
@@ -318,6 +322,17 @@ async def portada(series_id: UUID, request: Request,
     covers = get_settings().covers_cache_path
     v2_path = covers / CACHE_VERSION / f"{series_id}.jpg"
     legacy_path = covers / f"{series_id}.jpg"
+
+    # #435 (BL-PORT5): una portada previa con resolución suficiente (hoy la caché antigua, >= 300 px)
+    # se conserva: se sirve ANTES que `v2` y que los archivos, sin extraer, sin red y sin escribir ni
+    # copiar nada. Una `v2` ya escrita de esa serie queda en disco, sin uso.
+    previa = await asyncio.to_thread(portada_previa_suficiente, covers, series_id)
+    if previa is not None:
+        try:
+            etag = _etag_for(previa.ruta)
+        except OSError:       # desapareció entre leerla y servirla: el ETag sale de los bytes
+            etag = _etag_de_bytes(previa.datos)
+        return cached_image_response(request, previa.datos, "image/jpeg", etag)
 
     if await asyncio.to_thread(v2_path.exists):
         data = await asyncio.to_thread(v2_path.read_bytes)
