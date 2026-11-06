@@ -19,7 +19,7 @@
 Solo se acepta:
 
 - ruta local exacta `/ui/biblioteca`;
-- query de la Biblioteca (`q`, `tradition`, `publisher_id`, `character_id`, `story_arc_id`, `page`);
+- query de la Biblioteca (`q`, `tradition`, `publisher_id`, `character_id`, `story_arc_id`, `page`, `vista`);
 - ancla `serie-<uuid>` o ninguna; si hay ancla, debe ser la de **esta** ficha (un ancla de otra serie se descarta);
 - sin esquema, host, `//`, credenciales ni caracteres de control;
 - longitud máxima 2000; un valor más largo cae a «← Biblioteca» sin 422.
