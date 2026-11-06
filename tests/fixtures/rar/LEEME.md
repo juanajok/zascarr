@@ -25,19 +25,28 @@ rar a -ep -ma5 -m3    minimo_rar5.cbr 01.jpg 02.jpg
 rar a -ep -ma5 -m3 -s solido_rar5.cbr 01.jpg 02.jpg 03.jpg
 ```
 
-**`minimo_rar4.cbr` NO está creado:** `rar` 7.x ya no crea RAR 4 (`ERROR: Unknown option: ma4`). Hace falta un `rar`
-≤ 6.x (`rar a -ma4 -m3 minimo_rar4.cbr 01.jpg 02.jpg`); sin él, esa prueba se salta y el paso de CI que exige las
-pruebas de RAR real sigue en rojo.
+**`minimo_rar4.cbr`** (RAR 4) se creó el 2026-11-07 con **rar 6.24** (3 oct 2023), porque `rar` 7.x ya no crea RAR 4
+(`ERROR: Unknown option: ma4`; ni el de `stable` ni el de `bookworm` sirven: 7.11 y 7.01). Origen: paquete oficial
+`https://www.rarlab.com/rar/rarlinux-x64-624.tar.gz` (614 146 B), **SHA-256 `88e22a8e84125c947637bbf28c746e338a0a63279d80f9f9d7373603875db1eb`**.
+> **Aviso: ese hash no es verificable contra un valor publicado** (RARLAB no publica sumas ni firmas); solo se anota lo
+> descargado por HTTPS desde rarlab.com. El PO lo aceptó el 2026-11-07. El paquete se ejecutó únicamente dentro de un
+> contenedor desechable de `debian:bookworm-slim` (digest
+> `sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc`, Debian 12.15), con `--network none`, el
+> paquete montado en solo lectura y montando solo esta carpeta.
+
+```bash
+rar a -ep -ma4 -m3 minimo_rar4.cbr 01.jpg 02.jpg      # rar 6.24; imágenes 8×8: 01 = (220, 20, 20), 02 = (20, 20, 220)
+```
 
 ## Huellas
 
 | Fichero | Tamaño | SHA-256 |
 |---|---|---|
-| `minimo_rar4.cbr` | — | _pendiente (ver arriba)_ |
+| `minimo_rar4.cbr` | 982 B | `d6b611df379a9e8b503934641c7e72c0596ebf59e8fc47acb7f75607e0098fe4` |
 | `minimo_rar5.cbr` | 995 B | `0e1e5aedab26374fa2008ee274d05e6d3b9da098bfd5de4c3368addfe02a8c9a` |
 | `solido_rar5.cbr` | 642 B | `fe68f32b540dedc928e04d8c09ec6f387c3f76e0b09f414953027e1068155dbe` |
 
-Comprobado con `unrar lt` (UNRAR 7.20): `minimo_rar5` = «RAR 5» con `01.jpg`, `02.jpg`; `solido_rar5` = «RAR 5, solid» con
+Comprobado con `unrar lt` (UNRAR 7.20): `minimo_rar4` = firma `Rar!\x1a\x07\x00` (RAR 1.5–4.x; `unrar` lo llama «RAR 1.5») con `01.jpg`, `02.jpg`; `minimo_rar5` = «RAR 5» con `01.jpg`, `02.jpg`; `solido_rar5` = «RAR 5, solid» con
 las tres. Con `unar`/`lsar` reales no se ha comprobado aún (no hay en la máquina de desarrollo): lo hará la CI.
 
 ## Lo que NO hay (NOT RUN real)
