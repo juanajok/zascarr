@@ -59,7 +59,7 @@
 {% else %}
 <div class="library-grid">
   {% for series in items %}
-  <a class="library-card" href="/ui/series/{{ series.id }}">
+  <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
     <div class="library-card-body">
       <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
