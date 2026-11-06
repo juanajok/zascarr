@@ -1,0 +1,706 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maqueta de etiquetas — ZascArr</title>
+<!-- Maqueta estática generada con el entorno Jinja real del repo (macros ui.* y estructura de base.html). Se revisa con docs/design/ui-etiquetas.md. No es la app. -->
+<link rel="stylesheet" href="../../src/zascarr/static/web.css">
+<style>
+
+/* ── Solo maqueta ─────────────────────────────────────────────────────────── */
+body:has(#tema-oscuro:checked) {
+  color-scheme: dark;
+  --paper: #131316; --paper-2: #1b1b20; --ink: #f0ede4; --ink-soft: #b7b4ab;
+  --ink-faint: #9c9aa0; --caption-bg: #2b2617; --cyan: #38b6e8; --magenta: #f04d97;
+  --yellow: #ffd23f; --ok: #4cbf83; --warn: #f07167; --cyan-t: #5cc4f0;
+  --ok-t: #5fd096; --warn-t: #f58a80; --amber-t: #ffd23f; --mag-t: #f46aa7;
+  --ok-solid: #5fd096; --on-ok-solid: #0f2a1b; --warn-solid: #f58a80;
+  --on-warn-solid: #2a0f0c; --hot: #f46aa7; --on-hot: #1a0610;
+  --ok-bg: #16301f; --warn-bg: #3a1b17; --amber-bg: #35290c; --info-bg: #10293a;
+  --shadow-color: #6f6d76;
+}
+@font-face {
+  font-family: "ZascArr Anton";
+  src: url("../../src/zascarr/static/vendor/fonts/anton-latin-400-normal.woff2") format("woff2");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "ZascArr Archivo";
+  src: url("../../src/zascarr/static/vendor/fonts/archivo-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900; font-style: normal; font-display: swap;
+}
+.side .brand::before { background-image: url("../../src/zascarr/static/brand/zascarr-icono.svg"); }
+.maqueta-cabecera { margin-bottom: 22px; }
+.maqueta-barra { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 6px 0 10px; }
+.maqueta-toggle { display: inline-flex; gap: 8px; align-items: center; font-size: .875rem; font-weight: 700; }
+.maqueta-anclas { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .875rem; }
+.maqueta-anclas a { min-height: 24px; font-weight: 700; }
+.maqueta-detalle summary { cursor: pointer; font-size: .875rem; font-weight: 700; padding: 6px 0; }
+.maqueta-detalle ul { margin: 4px 0 0; padding-left: 20px; font-size: .875rem; }
+.maqueta-detalle li + li { margin-top: 4px; }
+.maqueta-pantalla { margin-top: 40px; padding-top: 18px; border-top: 3px dashed var(--ink-faint); }
+.maqueta-nota, .maqueta-ayuda { font-size: .875rem; color: var(--ink-soft); }
+.maqueta-ayuda { display: block; margin-top: 4px; }
+.maqueta-estado-titulo { font-size: .95rem; margin: 0 0 6px; }
+.maqueta-estados { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: var(--gutter); }
+.maqueta-serie-titulo { font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 40px);
+  line-height: 1.1; text-transform: uppercase; margin: 0 0 4px; }
+.maqueta-serie-titulo .subtitle { font-size: .55em; text-transform: none; font-family: var(--font-body); }
+.maqueta-subtitulo { margin: 22px 0 0; }
+.maqueta-estanteria { display: flex; gap: var(--gutter); overflow-x: auto; padding-bottom: 10px; }
+.maqueta-estanteria .library-card { flex: 0 0 150px; }
+.maqueta-enlace-fila { margin: 4px 0 12px; }
+/* Anexo A del diseño: clases propuestas para web.css */
+.filtros-etiquetas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip-etiqueta { text-decoration: none; cursor: pointer; min-height: 24px; font-variant-numeric: tabular-nums; }
+.chip-etiqueta:hover { background: var(--caption-bg); color: var(--ink); }
+.chip-etiqueta .quitar { width: 14px; height: 14px; flex: none; }
+.chip-etiqueta.excluir { background: var(--warn-bg); color: var(--warn-t); border-style: dashed; }
+.chip-prefijo { font-weight: 800; display: inline-flex; align-items: center; gap: 2px; }
+.chip .cuenta { font-size: .875rem; font-weight: 700; color: var(--ink-faint); }
+.chip-etiqueta:hover .cuenta { color: inherit; }
+.facetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--gutter); }
+.facetas .group { margin-bottom: 0; }
+.facetas-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px; }
+.facetas-chips .chip { text-decoration: none; }
+.facetas-chips .chip[aria-current="true"] { background: var(--ink); color: var(--paper); }
+.facetas-chips .chip[aria-current="true"] .cuenta { color: var(--paper); }
+.filter-search-box-etiquetas { flex: 0 1 380px; min-width: 320px; }
+.filter-search-box-etiquetas input[type="search"] { width: 100%; }
+.sugerencia-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 6px 0; border-bottom: 2px dashed color-mix(in srgb, var(--ink) 22%, transparent); }
+.sugerencia-fila:last-child { border-bottom: 0; }
+.sugerencia-fila form { margin: 0; }
+.sugerencia-fila button { min-height: 24px; padding: 2px 10px; box-shadow: none; }
+.sugerencia-etiqueta { flex: 1 1 10rem; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+.sugerencia-fila .cuenta { color: var(--ink-faint); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.sugerencia-fila a { min-height: 40px; }
+.etiquetas-serie { display: flex; flex-direction: column; gap: 12px; }
+.etiquetas-lista { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 12px 16px; }
+.etiquetas-lista form { margin: 0; display: inline-flex; align-items: center; gap: 2px; }
+.chip-quitar { min-height: 24px; min-width: 24px; padding: 2px; background: transparent;
+  border: 0; box-shadow: none; color: var(--ink-soft); cursor: pointer; }
+.chip-quitar:hover { color: var(--warn-t); transform: none; box-shadow: none; }
+.etiquetas-anadir { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+/* Solo maqueta: reserva sitio para que el desplegable de sugerencias de la ficha
+   no tape la sección siguiente; en la app flota sobre el contenido. */
+#seccion-ficha .etiquetas-serie { margin-bottom: 250px; }
+.etiquetas-anadir .filter-search-box { flex: 0 1 440px; }
+.etiquetas-anadir .filter-search-box .series-results { top: calc(100% + 4px); }
+@media (max-width: 860px), (pointer: coarse) {
+  .chip-quitar, .sugerencia-fila a, .sugerencia-fila button { min-height: 44px; min-width: 44px; }
+}
+@media (max-width: 860px) {
+  .filter-search-box-etiquetas { flex: 1 1 100%; min-width: 0; }
+}
+@media (max-width: 480px) {
+  .sugerencia-etiqueta { flex: 1 1 100%; }
+}
+
+</style>
+<link rel="icon" href="../../src/zascarr/static/brand/zascarr-favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../../src/zascarr/static/brand/zascarr-favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="../../src/zascarr/static/brand/apple-touch-icon.png">
+<!-- HTMX NO se carga a propósito: la maqueta es estática y no envía peticiones.
+     Los atributos hx-* quedan para revisar los contratos. -->
+<meta name="description" content="Maqueta estática del diseño de etiquetas de ZascArr">
+</head>
+<body>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <div class="app">
+    <div class="side">
+      <a href="/ui/" class="brand">ZascArr</a>
+      <nav class="nav" aria-label="Navegación principal">
+  <div class="nav-grupo" role="group" aria-label="Mi colección">
+    <span class="grp" aria-hidden="true">Mi colección</span>
+    <a href="/ui/" class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span class="nav-texto">Inicio</span></a>
+    <a href="/ui/pendientes" class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span class="nav-texto"><span class="nav-largo">Por revisar</span><span class="nav-corto" aria-hidden="true">Revisar</span></span><span id="cnt-pendientes" class="badge hot" hidden></span></a>
+    <a href="/ui/biblioteca" class="nav-enlace nav-secundaria" aria-current="page"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg></span><span class="nav-texto">Biblioteca</span></a>
+    <a href="/ui/auditoria" class="nav-enlace nav-secundaria"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></span><span class="nav-texto">Duplicados</span></a>
+  </div>
+  <div class="nav-grupo" role="group" aria-label="Añadir">
+    <span class="grp" aria-hidden="true">Añadir</span>
+    <a href="/ui/descubrir" class="nav-enlace nav-secundaria"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg></span><span class="nav-texto">Descubrir</span></a>
+    <a href="/ui/wishlist" class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></span><span class="nav-texto">Deseados</span><span id="cnt-deseados" class="badge" hidden></span></a>
+  </div>
+  <div class="nav-grupo" role="group" aria-label="Sistema">
+    <span class="grp" aria-hidden="true">Sistema</span>
+    <a href="/estado" class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg></span><span class="nav-texto">Estado</span><span id="cnt-estado" class="dot" hidden></span></a>
+    <a href="/ui/ajustes" class="nav-enlace nav-secundaria"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-texto">Ajustes</span></a>
+  </div>
+  <details class="nav-mas nav-mas-activa">
+    <summary class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span><span class="nav-texto">Más</span></summary>
+    <div class="nav-mas-panel">
+      <a href="/ui/biblioteca" class="nav-enlace" aria-current="page"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg></span><span class="nav-texto">Biblioteca</span></a>
+      <a href="/ui/auditoria" class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></span><span class="nav-texto">Duplicados</span></a>
+      <a href="/ui/descubrir" class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg></span><span class="nav-texto">Descubrir</span></a>
+      <a href="/ui/ajustes" class="nav-enlace"><span class="ico" aria-hidden="true"><svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nav-texto">Ajustes</span></a>
+    </div>
+  </details>
+  <span class="nav-sondeo" hidden hx-get="/ui/_nav/estado" hx-trigger="load, every 30s" hx-swap="none"></span>
+</nav>
+      
+    </div>
+    <main class="content" id="main" tabindex="-1">
+      
+<div class="maqueta-cabecera">
+  <div class="aviso info" role="status"><span class="aviso-icono" aria-hidden="true">i</span><div>
+    <strong>Maqueta estática.</strong> Enseña el aspecto y los fragmentos del diseño de etiquetas;
+    no hay servidor ni se envía nada. Series, etiquetas y recuentos son de ejemplo.
+  </div></div>
+  <div class="maqueta-barra">
+    <label class="maqueta-toggle"><input type="checkbox" id="tema-oscuro"> Ver en oscuro (solo maqueta)</label>
+    <nav class="maqueta-anclas" aria-label="Secciones de la maqueta">
+      <a href="#seccion-biblioteca">Biblioteca</a>
+      <a href="#seccion-ficha">Ficha de serie</a>
+      <a href="#seccion-estados">Estados</a>
+      <a href="#seccion-estanterias">Estanterías (fase 2)</a>
+    </nav>
+  </div>
+  <details class="maqueta-detalle">
+    <summary>Qué simula esta maqueta y qué no</summary>
+    <ul>
+      <li><strong>Sí:</strong> el aspecto con el <code>web.css</code> real (tokens y tipografías locales
+        si el fichero se sirve desde el repo); el shell, el menú, los avisos, los vacíos, las
+        regiones vivas y las portadas salen de las macros reales del repo
+        (<code>ui.menu</code>, <code>ui.aviso</code>, <code>ui.estado_vacio</code>,
+        <code>ui.region_viva</code>, <code>ui.portada</code>). Los bloques de datos (chips, facetas y
+        etiquetas de la ficha) se reescribieron sobre esa salida con los namespaces del MVP.</li>
+      <li><strong>Sí:</strong> la estructura de fragmentos y los atributos <code>hx-*</code> propuestos,
+        para revisarlos con <code>docs/design/ui-etiquetas.md</code>.</li>
+      <li><strong>Namespaces del MVP:</strong> solo <code>tema:</code>, <code>motivo:</code> y
+        <code>etiqueta:</code> (spec §2/§7.1); <code>genero</code>, <code>personaje</code>,
+        <code>formato</code>, <code>universo</code> y <code>publico</code> <strong>no</strong> son tags.</li>
+      <li><strong>No:</strong> no hay servidor ni HTMX cargado (a propósito): pulsar «Añadir», «Excluir»,
+        «Buscar», «Quitar» o un chip <strong>no envía ninguna petición</strong>; la maqueta no escribe nada.</li>
+      <li><strong>No:</strong> los enlaces a otras pantallas de la app no navegan. Las portadas son el marcador
+        local de <code>ui.portada</code>, sin imágenes y sin hotlinking.</li>
+      <li><strong>No:</strong> el conmutador claro/oscuro es solo de la maqueta; en la app decide
+        <code>prefers-color-scheme</code>. Los estados vacío y de error se enseñan aparte.</li>
+    </ul>
+  </details>
+</div>
+
+<section id="seccion-biblioteca" class="maqueta-pantalla" aria-labelledby="biblioteca-titulo">
+  <h1 id="biblioteca-titulo">Biblioteca</h1>
+  <p class="subtitle">34 series catalogadas. Filtra por lo que tratan.</p>
+  <form id="filtros" class="filter-bar" action="/ui/biblioteca" method="get"
+        hx-get="/ui/biblioteca/resultados" hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+        hx-trigger="submit, change from:#f-tradition, change from:#f-publisher"
+        hx-push-url="true" hx-indicator="#cargando-resultados" hx-sync="this:replace">
+    <label class="sr" for="f-q">Buscar por título</label>
+    <input type="search" name="q" id="f-q" placeholder="Buscar por título…">
+    <div class="filter-search-box filter-search-box-etiquetas">
+      <label class="sr" for="f-etiquetas">Buscar por etiqueta</label>
+      <input type="search" id="f-etiquetas" name="etiquetas" value="tema:humor -motivo:viajes"
+             placeholder="Etiqueta, p. ej. noir" aria-describedby="ayuda-etiquetas"
+             hx-get="/ui/biblioteca/etiquetas/sugerir" hx-trigger="input changed delay:300ms, search"
+             hx-target="#sugerencias-etiquetas" hx-swap="innerHTML" hx-sync="this:replace"
+             hx-indicator="#cargando-sugerencias" hx-include="closest form">
+      <span id="ayuda-etiquetas" class="maqueta-ayuda">Separa con espacios. Pon «-» delante para excluir.</span>
+      <span id="cargando-sugerencias" class="htmx-indicator indicador-diferido" role="status">Buscando etiquetas…</span>
+      <div id="sugerencias-etiquetas" class="series-results" aria-label="Sugerencias de etiquetas">
+        <ul class="series-list">
+          <li class="sugerencia-fila">
+            <span class="sugerencia-etiqueta">tema:humor-grafico</span>
+            <span class="cuenta">8 series</span>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Ahumor-grafico" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Ahumor-grafico"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Añadir tema:humor-grafico">Añadir</a>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-tema%3Ahumor-grafico" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-tema%3Ahumor-grafico"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Excluir tema:humor-grafico">Excluir</a>
+          </li>
+          <li class="sugerencia-fila">
+            <span class="sugerencia-etiqueta">tema:humor-negro</span>
+            <span class="cuenta">3 series</span>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Ahumor-negro" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Ahumor-negro"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Añadir tema:humor-negro">Añadir</a>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-tema%3Ahumor-negro" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-tema%3Ahumor-negro"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Excluir tema:humor-negro">Excluir</a>
+          </li>
+          <li class="sugerencia-fila">
+            <span class="sugerencia-etiqueta">motivo:humor-absurdo</span>
+            <span class="cuenta">2 series</span>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Ahumor-absurdo" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Ahumor-absurdo"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Añadir motivo:humor-absurdo">Añadir</a>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-motivo%3Ahumor-absurdo" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-motivo%3Ahumor-absurdo"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Excluir motivo:humor-absurdo">Excluir</a>
+          </li>
+          <li class="sugerencia-fila">
+            <span class="sugerencia-etiqueta">etiqueta:clasico</span>
+            <span class="cuenta">12 series</span>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Aclasico" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Aclasico"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Añadir etiqueta:clasico">Añadir</a>
+            <a href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-etiqueta%3Aclasico" hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20-etiqueta%3Aclasico"
+               hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+               aria-label="Excluir etiqueta:clasico">Excluir</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <button type="submit" class="btn">Buscar</button>
+    <span id="cargando-resultados" class="htmx-indicator" role="status">Buscando…</span>
+    <label class="sr" for="f-tradition">Tradición</label>
+    <select name="tradition" id="f-tradition">
+      <option value="">Todas las tradiciones</option>
+      <option value="american">Grapa americana</option>
+      <option value="franco_belgian">Franco-belga (BD)</option>
+      <option value="manga">Manga</option>
+      <option value="tebeo">Tebeo español</option>
+      <option value="fumetti">Fumetti</option>
+    </select>
+    <label class="sr" for="f-publisher">Editorial</label>
+    <select name="publisher_id" id="f-publisher">
+      <option value="">Todas las editoriales</option>
+      <option value="1" selected>Bruguera</option>
+      <option value="2">Ediciones B</option>
+      <option value="3">Norma</option>
+      <option value="4">Planeta</option>
+      <option value="5">Astiberri</option>
+    </select>
+    <input type="hidden" name="character_id" value="">
+    <input type="hidden" name="story_arc_id" value="">
+    <input type="hidden" name="page" value="1">
+
+  </form>
+
+  <div id="resultados-biblioteca">
+    <div id="filtros-activos" class="filtros-etiquetas" aria-label="Etiquetas activas">
+      <a class="chip chip-etiqueta" href="/ui/biblioteca?etiquetas=-motivo%3Aviajes"
+         hx-get="/ui/biblioteca/resultados?etiquetas=-motivo%3Aviajes"
+         hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+         hx-push-url="true" aria-label="Quitar etiqueta tema:humor">tema:humor <svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></a>
+      <a class="chip chip-etiqueta excluir" href="/ui/biblioteca?etiquetas=tema%3Ahumor"
+         hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor"
+         hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+         hx-push-url="true" aria-label="Quitar la exclusión de motivo:viajes">
+        <span class="chip-prefijo"><svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/></svg> Sin</span> motivo:viajes <svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></a>
+      <a class="btn ghost sm" href="/ui/biblioteca" hx-get="/ui/biblioteca/resultados"
+         hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true">Quitar etiquetas</a>
+    </div>
+    <h2 id="facetas-titulo" class="seccion">Etiquetas de tu biblioteca</h2>
+    <div id="facetas-biblioteca" class="facetas" aria-labelledby="facetas-titulo">
+      <div class="group" role="group" aria-label="Temas">
+  <div class="ghead"><h3>Temas</h3><span class="chip">6</span></div>
+        <div class="facetas-chips">
+          <a class="chip" href="/ui/biblioteca?etiquetas=-motivo%3Aviajes"
+             hx-get="/ui/biblioteca/resultados?etiquetas=-motivo%3Aviajes"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true" aria-current="true">tema:humor
+            <span class="cuenta">34</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Aaventuras"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Aaventuras"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">tema:aventuras
+            <span class="cuenta">21</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Asuperheroicos"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Asuperheroicos"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">tema:superheroicos
+            <span class="cuenta">17</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Acostumbrismo"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Acostumbrismo"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">tema:costumbrismo
+            <span class="cuenta">9</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Aciencia-ficcion"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Aciencia-ficcion"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">tema:ciencia-ficcion
+            <span class="cuenta">7</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Ahistorico"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20tema%3Ahistorico"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">tema:historico
+            <span class="cuenta">4</span></a>
+        </div>
+</div>
+      <div class="group" role="group" aria-label="Motivos">
+  <div class="ghead"><h3>Motivos</h3><span class="chip">6</span></div>
+        <div class="facetas-chips">
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aparodia"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aparodia"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">motivo:parodia
+            <span class="cuenta">22</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aespionaje"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aespionaje"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">motivo:espionaje
+            <span class="cuenta">15</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aescuela"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aescuela"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">motivo:escuela
+            <span class="cuenta">9</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aviajes"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aviajes"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">motivo:viajes
+            <span class="cuenta">8</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Acritica-social"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Acritica-social"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">motivo:critica-social
+            <span class="cuenta">6</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aabsurdo"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20motivo%3Aabsurdo"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">motivo:absurdo
+            <span class="cuenta">5</span></a>
+        </div>
+</div>
+      <div class="group" role="group" aria-label="Etiquetas">
+  <div class="ghead"><h3>Etiquetas</h3><span class="chip">5</span></div>
+        <div class="facetas-chips">
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Aclasico"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Aclasico"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">etiqueta:clasico
+            <span class="cuenta">12</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Acoleccion-ole"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Acoleccion-ole"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">etiqueta:coleccion-ole
+            <span class="cuenta">8</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Alectura-facil"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Alectura-facil"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">etiqueta:lectura-facil
+            <span class="cuenta">9</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Abolsillo"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Abolsillo"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">etiqueta:bolsillo
+            <span class="cuenta">7</span></a>
+          <a class="chip" href="/ui/biblioteca?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Areedicion"
+             hx-get="/ui/biblioteca/resultados?etiquetas=tema%3Ahumor%20-motivo%3Aviajes%20etiqueta%3Areedicion"
+             hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+             hx-push-url="true">etiqueta:reedicion
+            <span class="cuenta">6</span></a>
+        </div>
+</div>
+    </div>
+    <div id="estado-resultados" class="region-viva" aria-live="polite" aria-atomic="true">
+      34 series con <strong>tema:humor</strong>. No se muestran las de <strong>motivo:viajes</strong>.
+    </div>
+    <div class="library-grid">
+      
+      <a class="library-card" href="/ui/series/1">
+        <span class="portada portada-y"><span class="portada-marca" aria-hidden="true">M</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="Mortadelo y Filemón">Mortadelo y Filemón</div>
+          <div class="library-card-meta">1958 · Tebeo español</div>
+        </div>
+      </a>
+      
+      <a class="library-card" href="/ui/series/2">
+        <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">S</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="Superlópez">Superlópez</div>
+          <div class="library-card-meta">1973 · Tebeo español</div>
+        </div>
+      </a>
+      
+      <a class="library-card" href="/ui/series/3">
+        <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">Z</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="Zipi y Zape">Zipi y Zape</div>
+          <div class="library-card-meta">1948 · Tebeo español</div>
+        </div>
+      </a>
+      
+      <a class="library-card" href="/ui/series/4">
+        <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">1</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="13, Rue del Percebe">13, Rue del Percebe</div>
+          <div class="library-card-meta">1961 · Tebeo español</div>
+        </div>
+      </a>
+      
+      <a class="library-card" href="/ui/series/5">
+        <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">R</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="Rompetechos">Rompetechos</div>
+          <div class="library-card-meta">1964 · Tebeo español</div>
+        </div>
+      </a>
+      
+      <a class="library-card" href="/ui/series/6">
+        <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">D</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="Doña Urraca">Doña Urraca</div>
+          <div class="library-card-meta">1948 · Tebeo español</div>
+        </div>
+      </a>
+      
+      <a class="library-card" href="/ui/series/7">
+        <span class="portada portada-c"><span class="portada-marca" aria-hidden="true">A</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="Anacleto, agente secreto">Anacleto, agente secreto</div>
+          <div class="library-card-meta">1964 · Tebeo español</div>
+        </div>
+      </a>
+      
+      <a class="library-card" href="/ui/series/8">
+        <span class="portada portada-y"><span class="portada-marca" aria-hidden="true">E</span></span>
+        <div class="library-card-body">
+          <div class="library-card-title" title="El botones Sacarino">El botones Sacarino</div>
+          <div class="library-card-meta">1963 · Tebeo español</div>
+        </div>
+      </a>
+      
+    </div>
+    <div class="pagination" hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true">
+      <a class="page-link page-current" href="/ui/biblioteca?page=1&amp;etiquetas=tema%3Ahumor+-motivo%3Aviajes">1</a>
+      <a class="page-link" href="/ui/biblioteca?page=2&amp;etiquetas=tema%3Ahumor+-motivo%3Aviajes"
+         hx-get="/ui/biblioteca/resultados?page=2&amp;etiquetas=tema%3Ahumor+-motivo%3Aviajes">2</a>
+    </div>
+  </div>
+</section>
+
+<section id="seccion-ficha" class="maqueta-pantalla" aria-labelledby="ficha-titulo">
+  <h2 id="ficha-titulo" class="titulo-frase">Ficha de serie (simulada)</h2>
+  <p class="maqueta-nota">Así se ve <code>/ui/series/7</code> con la sección «Etiquetas» añadida.</p>
+  <div class="series-header">
+    <span class="portada portada-c series-cover"><span class="portada-marca" aria-hidden="true">M</span></span>
+    <div>
+      <p class="maqueta-serie-titulo">Mortadelo y Filemón <span class="subtitle">(1958)</span></p>
+      <p class="series-meta">Bruguera</p>
+      <p class="series-meta">Humor, aventuras</p>
+      <p class="subtitle">2.145 números en total — 812 en tu biblioteca, 1.333 te faltan.</p>
+    </div>
+  </div>
+  <h3 class="maqueta-subtitulo">Etiquetas</h3>
+  <p class="series-intro">Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos.</p>
+  <div id="etiquetas-serie" class="region-viva etiquetas-serie" aria-live="polite" aria-atomic="true">
+    <div class="group" role="group" aria-label="Temas">
+  <div class="ghead"><h3>Temas</h3><span class="chip">2</span></div>
+      <ul class="etiquetas-lista">
+        <li>
+          <form action="/ui/series/7/etiquetas/quitar" method="post"
+                hx-post="/ui/series/7/etiquetas/quitar" hx-target="#etiquetas-serie"
+                hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="etiqueta" value="tema:humor">
+            <span class="chip chip-etiqueta">tema:humor</span>
+            <button type="submit" class="chip-quitar" aria-label="Quitar tema:humor de esta serie"><svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </form>
+        </li>
+        <li>
+          <form action="/ui/series/7/etiquetas/quitar" method="post"
+                hx-post="/ui/series/7/etiquetas/quitar" hx-target="#etiquetas-serie"
+                hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="etiqueta" value="tema:aventuras">
+            <span class="chip chip-etiqueta">tema:aventuras</span>
+            <button type="submit" class="chip-quitar" aria-label="Quitar tema:aventuras de esta serie"><svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </form>
+        </li>
+      </ul>
+</div>
+    <div class="group" role="group" aria-label="Motivos">
+  <div class="ghead"><h3>Motivos</h3><span class="chip">2</span></div>
+      <ul class="etiquetas-lista">
+        <li>
+          <form action="/ui/series/7/etiquetas/quitar" method="post"
+                hx-post="/ui/series/7/etiquetas/quitar" hx-target="#etiquetas-serie"
+                hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="etiqueta" value="motivo:espionaje">
+            <span class="chip chip-etiqueta">motivo:espionaje</span>
+            <button type="submit" class="chip-quitar" aria-label="Quitar motivo:espionaje de esta serie"><svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </form>
+        </li>
+        <li>
+          <form action="/ui/series/7/etiquetas/quitar" method="post"
+                hx-post="/ui/series/7/etiquetas/quitar" hx-target="#etiquetas-serie"
+                hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="etiqueta" value="motivo:parodia">
+            <span class="chip chip-etiqueta">motivo:parodia</span>
+            <button type="submit" class="chip-quitar" aria-label="Quitar motivo:parodia de esta serie"><svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </form>
+        </li>
+      </ul>
+</div>
+    <div class="group" role="group" aria-label="Etiquetas">
+  <div class="ghead"><h3>Etiquetas</h3><span class="chip">2</span></div>
+      <ul class="etiquetas-lista">
+        <li>
+          <form action="/ui/series/7/etiquetas/quitar" method="post"
+                hx-post="/ui/series/7/etiquetas/quitar" hx-target="#etiquetas-serie"
+                hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="etiqueta" value="etiqueta:clasico">
+            <span class="chip chip-etiqueta">etiqueta:clasico</span>
+            <button type="submit" class="chip-quitar" aria-label="Quitar etiqueta:clasico de esta serie"><svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </form>
+        </li>
+        <li>
+          <form action="/ui/series/7/etiquetas/quitar" method="post"
+                hx-post="/ui/series/7/etiquetas/quitar" hx-target="#etiquetas-serie"
+                hx-swap="innerHTML" hx-disabled-elt="find button">
+            <input type="hidden" name="etiqueta" value="etiqueta:coleccion-ole">
+            <span class="chip chip-etiqueta">etiqueta:coleccion-ole</span>
+            <button type="submit" class="chip-quitar" aria-label="Quitar etiqueta:coleccion-ole de esta serie"><svg class="ico-svg quitar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </form>
+        </li>
+      </ul>
+</div>
+    <div class="etiquetas-anadir">
+      <div class="filter-search-box filter-search-box-etiquetas">
+        <label class="sr" for="f-etiqueta-serie">Añadir etiqueta</label>
+        <input id="f-etiqueta-serie" name="etiqueta" type="search" form="anadir-etiqueta-serie"
+               placeholder="Añadir una etiqueta…"
+               hx-get="/ui/series/7/etiquetas/sugerir" hx-trigger="input changed delay:300ms, search"
+               hx-target="#sugerencias-etiqueta-serie" hx-swap="innerHTML" hx-sync="this:replace">
+        <div id="sugerencias-etiqueta-serie" class="series-results" aria-label="Sugerencias de etiquetas">
+          <ul class="series-list">
+            <li class="sugerencia-fila">
+              <span class="sugerencia-etiqueta">tema:comedia</span>
+              <span class="cuenta">4 series</span>
+              <form action="/ui/series/7/etiquetas" method="post"
+                    hx-post="/ui/series/7/etiquetas" hx-target="#etiquetas-serie"
+                    hx-swap="innerHTML" hx-disabled-elt="find button">
+                <input type="hidden" name="etiqueta" value="tema:comedia">
+                <button type="submit" class="btn ghost sm">Añadir<span class="sr"> tema:comedia</span></button>
+              </form>
+            </li>
+            <li class="sugerencia-fila">
+              <span class="sugerencia-etiqueta">motivo:agencias</span>
+              <span class="cuenta">6 series</span>
+              <form action="/ui/series/7/etiquetas" method="post"
+                    hx-post="/ui/series/7/etiquetas" hx-target="#etiquetas-serie"
+                    hx-swap="innerHTML" hx-disabled-elt="find button">
+                <input type="hidden" name="etiqueta" value="motivo:agencias">
+                <button type="submit" class="btn ghost sm">Añadir<span class="sr"> motivo:agencias</span></button>
+              </form>
+            </li>
+            <li class="sugerencia-fila">
+              <span class="sugerencia-etiqueta">etiqueta:lectura-facil</span>
+              <span class="cuenta">9 series</span>
+              <form action="/ui/series/7/etiquetas" method="post"
+                    hx-post="/ui/series/7/etiquetas" hx-target="#etiquetas-serie"
+                    hx-swap="innerHTML" hx-disabled-elt="find button">
+                <input type="hidden" name="etiqueta" value="etiqueta:lectura-facil">
+                <button type="submit" class="btn ghost sm">Añadir<span class="sr"> etiqueta:lectura-facil</span></button>
+              </form>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <form id="anadir-etiqueta-serie" action="/ui/series/7/etiquetas" method="post"
+            hx-post="/ui/series/7/etiquetas" hx-target="#etiquetas-serie"
+            hx-swap="innerHTML" hx-disabled-elt="find button">
+        <button type="submit">Añadir</button>
+      </form>
+    </div>
+  </div>
+
+  <details class="series-fuentes">
+    <summary>¿De dónde salen?</summary>
+    <p class="legal-notice">Pueden venir de la propia ficha, de ComicInfo o de las fuentes de
+      metadatos. Aquí solo cambias las de esta serie.</p>
+  </details>
+</section>
+
+<section id="seccion-estados" class="maqueta-pantalla" aria-labelledby="estados-titulo">
+  <h2 id="estados-titulo">Estados (simulados)</h2>
+  <p class="maqueta-nota">Se enseñan aparte para revisión: en la app nunca conviven con la rejilla.</p>
+  <div class="maqueta-estados">
+    <div>
+      <h3 class="maqueta-estado-titulo titulo-frase">Sin resultados con estos filtros</h3>
+      <div class="empty-state">
+  <h3>Ninguna serie con estas etiquetas</h3>
+  <p>Quita una etiqueta o busca otra.</p>
+  <a class="btn primary" href="#seccion-biblioteca">Quitar etiquetas</a>
+</div>
+    </div>
+    <div>
+      <h3 class="maqueta-estado-titulo titulo-frase">Fallos recuperables, dentro del fragmento con 200</h3>
+      <div class="aviso warn" role="alert"><span class="aviso-icono" aria-hidden="true">!</span><div>No se pudieron cargar las etiquetas. Vuelve a intentarlo.
+        <a href="#seccion-biblioteca">Volver a la biblioteca</a>.</div></div>
+      <div class="aviso amber" role="status"><span class="aviso-icono" aria-hidden="true">?</span><div>No conocemos la etiqueta «tema:humorx». Búscala en la lista de etiquetas.</div></div>
+      <p class="maqueta-nota">Nunca un JSON de FastAPI: htmx 4 intercambia cualquier estado salvo 204/304.</p>
+    </div>
+  </div>
+</section>
+
+<section id="seccion-estanterias" class="maqueta-pantalla" aria-labelledby="estanterias-titulo">
+  <h2 id="estanterias-titulo">Explorar por etiqueta <span class="chip amber">Fase 2 — no en el MVP</span></h2>
+  <p class="maqueta-nota">Metáfora de estantería: filas de 8 tarjetas con carga
+    <code>hx-trigger="revealed"</code> (sin JS). Aquí, una fila de 6 tarjetas inventadas.</p>
+  <p class="maqueta-enlace-fila"><a href="#seccion-biblioteca" class="view-all">Ver las 9 series con tema:noir</a></p>
+  <div class="maqueta-estanteria">
+    
+    <a class="library-card" href="/ui/series/1">
+      <span class="portada portada-y"><span class="portada-marca" aria-hidden="true">B</span></span>
+      <div class="library-card-body">
+        <div class="library-card-title" title="Blacksad">Blacksad</div>
+        <div class="library-card-meta">2000 · Franco-belga (BD)</div>
+      </div>
+    </a>
+    
+    <a class="library-card" href="/ui/series/2">
+      <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">E</span></span>
+      <div class="library-card-body">
+        <div class="library-card-title" title="El Invierno del Dibujante">El Invierno del Dibujante</div>
+        <div class="library-card-meta">2010 · Tebeo español</div>
+      </div>
+    </a>
+    
+    <a class="library-card" href="/ui/series/3">
+      <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">L</span></span>
+      <div class="library-card-body">
+        <div class="library-card-title" title="Los surcos del azar">Los surcos del azar</div>
+        <div class="library-card-meta">2013 · Tebeo español</div>
+      </div>
+    </a>
+    
+    <a class="library-card" href="/ui/series/4">
+      <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">A</span></span>
+      <div class="library-card-body">
+        <div class="library-card-title" title="Ardalén">Ardalén</div>
+        <div class="library-card-meta">2012 · Tebeo español</div>
+      </div>
+    </a>
+    
+    <a class="library-card" href="/ui/series/5">
+      <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">E</span></span>
+      <div class="library-card-body">
+        <div class="library-card-title" title="El arte de volar">El arte de volar</div>
+        <div class="library-card-meta">2009 · Tebeo español</div>
+      </div>
+    </a>
+    
+    <a class="library-card" href="/ui/series/6">
+      <span class="portada portada-m"><span class="portada-marca" aria-hidden="true">R</span></span>
+      <div class="library-card-body">
+        <div class="library-card-title" title="Regreso al Edén">Regreso al Edén</div>
+        <div class="library-card-meta">2020 · Tebeo español</div>
+      </div>
+    </a>
+    
+  </div>
+  <p class="maqueta-nota">Las tarjetas de la estantería no son un carrusel: se desplazan con el dedo
+    o la rueda; no hay flechas que exijan JavaScript.</p>
+</section>
+
+      <footer class="site-footer">
+        
+        
+
+<p class="legal-notice legal-notice-footer">
+  ZascArr gestiona bibliotecas personales y no distribuye contenido.
+  <a href="/legal">Aviso legal</a>.
+</p>
+
+
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
