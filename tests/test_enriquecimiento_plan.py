@@ -5,7 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from zascarr.models import ComicTradition, MetadataSource, Series
+from zascarr.models import ComicTradition, Issue, MetadataSource, Series
+from zascarr.services.comic_vine import CVIssueResult
 from zascarr.services.enricher import SeriesMatch
 from zascarr.services.enriquecimiento_plan import (
     ANADIR,
@@ -176,3 +177,99 @@ def test_la_identidad_no_se_sustituye_por_otra():
     )
     identidad = next(c for c in campos if c.clave == "comic_vine_id")
     assert identidad.accion == CONSERVAR
+
+
+class ResultadoEscalars:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+
+class SesionConNumeros(Sesion):
+    def __init__(self, serie_, numeros):
+        super().__init__(serie_)
+        self.numeros = numeros
+        self.llamadas = 0
+
+    async def execute(self, _stmt):
+        self.llamadas += 1
+        if self.llamadas % 2 == 1:
+            return Resultado(self.serie)
+        return ResultadoEscalars(self.numeros)
+
+
+def issue_de(s, numero="1", **cambios) -> Issue:
+    base = dict(id=uuid4(), series_id=s.id, issue_number=numero, volume=1)
+    base.update(cambios)
+    return Issue(**base)
+
+
+def servicio_cv(s, m, issues, matches, **kwargs):
+    async def buscador(_serie, _source):
+        return m
+
+    async def buscador_issues(_serie, _match, _issues):
+        return matches
+
+    sesion = SesionConNumeros(s, issues)
+    return EnriquecimientoPlanService(sesion, "secreto-de-prueba", buscador=buscador,
+                                      buscador_issues=buscador_issues, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_plan_incluye_los_campos_de_los_numeros():
+    s = serie(tradition=ComicTradition.AMERICAN, comic_vine_id=77)
+    issue = issue_de(s, "1")
+    m = SeriesMatch(source_id=77, description="Serie", cover_url="https://s.jpg", count_of_issues=2)
+    cv = CVIssueResult(cv_id=901, description="Sinopsis del número.",
+                      image_url="https://i.jpg", credits=[])
+    svc = servicio_cv(s, m, [issue], {issue.id: cv})
+    plan = await svc.previsualizar(s.id)
+    por_clave = {c.clave: c for c in plan.campos}
+    prefijo = f"issue:{issue.id}:"
+    assert por_clave[prefijo + "comic_vine_id"].accion == ANADIR
+    assert por_clave[prefijo + "synopsis"].accion == ANADIR
+    assert por_clave[prefijo + "cover_url"].accion == ANADIR
+    assert "#1 · Sinopsis" in por_clave[prefijo + "synopsis"].etiqueta
+    assert issue.synopsis is None and issue.comic_vine_id is None
+
+
+@pytest.mark.asyncio
+async def test_aplicar_campos_de_numero_solo_seleccionados():
+    s = serie(tradition=ComicTradition.AMERICAN, comic_vine_id=77)
+    issue = issue_de(s, "1", synopsis="Sinopsis vieja.")
+    m = SeriesMatch(source_id=77, description="Serie", cover_url="https://s.jpg", count_of_issues=2)
+    cv = CVIssueResult(cv_id=901, description="Sinopsis nueva.",
+                      image_url="https://i.jpg", credits=[])
+    svc = servicio_cv(s, m, [issue], {issue.id: cv})
+    plan = await svc.previsualizar(s.id)
+    clave = f"issue:{issue.id}:synopsis"
+    resultado = await svc.aplicar(plan.token, [clave])
+    assert issue.synopsis == "Sinopsis nueva."
+    assert issue.comic_vine_id is None
+    assert issue.cover_url is None
+    estados = {c.clave: c.estado for c in resultado.campos}
+    assert estados[clave] == "aplicado"
+    assert all(v != "aplicado" for k, v in estados.items() if k != clave)
+
+
+@pytest.mark.asyncio
+async def test_bloqueo_y_plan_desactualizado_en_un_numero():
+    s = serie(tradition=ComicTradition.AMERICAN, comic_vine_id=77)
+    issue = issue_de(s, "1", locked_fields=["synopsis"])
+    m = SeriesMatch(source_id=77, description="Serie", cover_url="https://s.jpg", count_of_issues=2)
+    cv = CVIssueResult(cv_id=901, description="Sinopsis nueva.",
+                      image_url="https://i.jpg", credits=[])
+    svc = servicio_cv(s, m, [issue], {issue.id: cv})
+    plan = await svc.previsualizar(s.id)
+    clave = f"issue:{issue.id}:synopsis"
+    campo = next(c for c in plan.campos if c.clave == clave)
+    assert campo.accion == BLOQUEADO and not campo.aplicable
+    issue.synopsis = "Cambiada por otra pestaña."
+    with pytest.raises(PlanDesactualizado):
+        await svc.aplicar(plan.token, [clave])

@@ -14,9 +14,9 @@ Campos de **serie** que gestiona el enricher actual:
 | `cover_url` | Portada | ídem |
 | `total_issues` | Números en total | ídem |
 
-Los campos de los números (`Issue.synopsis`, portada, créditos, id) **no** se incluyen en esta vertical: el plan
-no los presenta como cubiertos y se dejan para una entrega específica. La ficha no cambia de unidad ni crea
-series, números, archivos o vínculos.
+También se incluyen los campos de los **números candidatos** de una serie de Comic Vine: identidad externa,
+sinopsis y portada de cada `Issue`. Los **créditos** quedan fuera de esta iteración: crear creadores y
+relaciones merece su propio contrato. La ficha no cambia de unidad ni crea series, números, archivos o vínculos.
 
 ## 2. Flujo y contrato
 
@@ -45,8 +45,9 @@ series, números, archivos o vínculos.
 
 ## 4. Verificación
 
-- `tests/test_enriquecimiento_plan.py`: acciones, bloqueo, omisión, aplicación selectiva, plan desactualizado,
-  token manipulado, serie manual, falta de coincidencia e identidad no sustituida.
+- `tests/test_enriquecimiento_plan.py`: acciones de serie y de número, bloqueo, omisión, aplicación selectiva,
+  plan desactualizado, token manipulado, serie manual, falta de coincidencia e identidad no sustituida.
+- La vista previa limita los números consultados a 50 y avisa si hay más; los créditos no se incluyen.
 - `tests/test_web_enriquecimiento.py`: vista previa, error de fuente, reenvío del token y resultado/fallo.
 - `tests/test_web_series.py`: la ficha ofrece revisar sin aplicar.
 - **NOT RUN:** consulta real a una fuente externa en navegador, lector de pantalla, móvil físico/zoom y Pi.
