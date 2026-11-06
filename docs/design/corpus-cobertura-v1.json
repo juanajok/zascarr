@@ -10,7 +10,7 @@
     "campo": 6
   },
   "acreditacion": "borrador",
-  "nota": "Corpus v1 propuesto para el DoR: las 30 etiquetas son propuestas editables y NO están acreditadas. El PO debe verificar/ajustar etiquetas y procedencia antes de la ejecución real (PR-3).",
+  "nota": "Corpus v1: 12 de los 30 casos llevan etiqueta corregida y evidencia pública adjunta (dossier de acreditación), pendientes de revisión del PO; los otros 18 siguen como propuestas de borrador. Ninguna cobertura está acreditada todavía.",
   "casos": [
     {
       "caso_id": "ES-001",
@@ -20,11 +20,11 @@
       "etiqueta_editorial": {
         "obra": "Mortadelo y Filemón",
         "serie": "Mortadelo y Filemón",
-        "editorial": "Ediciones B",
-        "coleccion": "Mortadelo y Filemón",
+        "editorial": "Bruguera",
+        "coleccion": "Olé! Mortadelo",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "serie principal",
+        "edicion": "serie de álbumes de la colección Olé! Mortadelo",
         "numero": null,
         "formato": "single_issue",
         "anio": 1958,
@@ -32,13 +32,13 @@
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "«Mortadelo Y Filemón. El 60 Aniversario (Olé! Mortadelo 209); «Mortadelo Y Filemón. Mundial 2022 (Olé! Mortadelo 220)»; Ed",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-002",
@@ -136,21 +136,21 @@
         "coleccion": "Thorgal",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición española",
+        "edicion": "edición española de Norma Editorial (Colección Pandora)",
         "numero": null,
         "formato": "album",
-        "anio": 1980,
+        "anio": 1990,
         "campos": {}
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "«Los ojos de Tanatloc / Rosinski, Van Hamme»; «Barcelona : N; «La maga traicionada / Rosinski, Van Hamme»; «Barcelona : No; «COLECCIÓN THORGAL»; series de la colección: «THORGAL (44 ÁL",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-006",
@@ -192,21 +192,21 @@
         "coleccion": "Dragon Ball",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición española",
+        "edicion": "edición Ultimate (34 tomos, Planeta DeAgostini, 2006)",
         "numero": null,
         "formato": "manga_tankobon",
-        "anio": 1984,
+        "anio": 2006,
         "campos": {}
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "«Dragon ball ultimate edition / Akira Toriyama ; [traducción",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-008",
@@ -273,7 +273,7 @@
         "obra": "Las aventuras de Tintín",
         "serie": "Las aventuras de Tintín",
         "editorial": "Juventud",
-        "coleccion": "Tintín",
+        "coleccion": "Las aventuras de Tintín",
         "pais": "ES",
         "idioma": "es",
         "edicion": "edición de 1985",
@@ -284,13 +284,13 @@
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "«Tintín en el Congo / Hergé ; [traducción de Concepción Zend",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-011",
@@ -388,21 +388,21 @@
         "coleccion": "Blueberry",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición integral de 2010",
+        "edicion": "edición integral (Norma Editorial, 2015)",
         "numero": null,
         "formato": "omnibus",
-        "anio": 2010,
+        "anio": 2015,
         "campos": {}
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "«Blueberry : integral / Charlier, Giraud ; [traducción, Norm; «COLECCIÓN BLUEBERRY»; series: «BLUEBERRY. EDICIÓN INTEGRAL ",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-015",
@@ -445,20 +445,20 @@
         "pais": "ES",
         "idioma": "es",
         "edicion": "edición de 2004",
-        "numero": null,
+        "numero": "1",
         "formato": "manga_tankobon",
         "anio": 2004,
         "campos": {}
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "title: «One Piece nº 01»; subtitle: «Amanecer de una aventur; «One piece»; «Barcelona : Planeta DeAgostini , D.L. 1999-»; ",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-017",
@@ -496,25 +496,25 @@
       "etiqueta_editorial": {
         "obra": "Las aventuras de Tintín",
         "serie": "Las aventuras de Tintín",
-        "editorial": "Juventud",
-        "coleccion": "Tintín",
+        "editorial": "Editorial Juventud",
+        "coleccion": "Las aventuras de Tintín (cartoné)",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición de 1985",
-        "numero": "Tintín El país del oro negro",
+        "edicion": "Tintín en el país del oro negro, cartoné (Juventud), 1989",
+        "numero": 15,
         "formato": "album",
-        "anio": 1985,
+        "anio": 1989,
         "campos": {}
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "\"ISBN: 978-84-261-0278-2\"; \"Editorial: Editorial Juventud, S; \"Tintín en el país del oro negro [historieta] [libro]. -- 24; \"ISBN: 978-84-261-0278-2\"; \"Encuadernación: Cartone\"; \"Año e",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-019",
@@ -525,24 +525,24 @@
         "obra": "Astérix",
         "serie": "Astérix",
         "editorial": "Salvat",
-        "coleccion": "Astérix",
+        "coleccion": "Astérix, la Gran Colección",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición de 1980",
-        "numero": "Astérix y los godos",
+        "edicion": "Astérix, la Gran Colección (Salvat), 2011",
+        "numero": 3,
         "formato": "album",
-        "anio": 1980,
+        "anio": 2011,
         "campos": {}
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "\"GC ASTÉRIX 03: ASTÉRIX Y LOS GODOS (LA GRAN COLECCIÓN)\" / e; Título: \"Astérix Y Los Godos. La Gran Colección\"; \"Nº página",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-020",
@@ -609,24 +609,24 @@
         "obra": "Blueberry",
         "serie": "Blueberry",
         "editorial": "Norma Editorial",
-        "coleccion": "Blueberry",
+        "coleccion": "Blueberry (Edición integral)",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición integral de 2010",
-        "numero": null,
+        "edicion": "Blueberry, edición integral, vol. 01 (Norma), 2015",
+        "numero": 1,
         "formato": "omnibus",
-        "anio": 2010,
+        "anio": 2015,
         "campos": {}
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "\"BLUEBERRY. EDICION INTEGRAL 1\"; \"Editorial: NORMA EDITORIAL; \"BLUEBERRY (Edición integral) 01\"; \"Editorial: Norma Editori; \"Con esta serie de ediciones integrales, Norma Editorial pon",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-023",
@@ -720,25 +720,27 @@
       "etiqueta_editorial": {
         "obra": "Las aventuras de Tintín",
         "serie": "Las aventuras de Tintín",
-        "editorial": "Juventud",
-        "coleccion": "Tintín",
+        "editorial": "Editorial Juventud",
+        "coleccion": "Las aventuras de Tintín (cartoné)",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición de 1985",
+        "edicion": "Tintín en el país del oro negro, cartoné (Juventud), 1989",
         "numero": null,
         "formato": "album",
-        "anio": 1985,
-        "campos": {}
+        "anio": 1989,
+        "campos": {
+          "portada": "cubierta de la edición Juventud, cartoné 1989, ISBN 978-84-261-0278-2 (ver dossier)"
+        }
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "Imagen de cubierta (JPEG 350x500) de la edición española de ; La ficha del ISBN 978-84-261-0278-2 publica la cubierta del ; \"Tintín en el país del oro negro / Hergé\"; \"Barcelona : Juve",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-027",
@@ -777,24 +779,26 @@
         "obra": "Mafalda",
         "serie": "Mafalda",
         "editorial": "Lumen",
-        "coleccion": "Mafalda",
+        "coleccion": "Lumen Gráfica",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición de 1993",
+        "edicion": "Todo Mafalda. Edición definitiva (Lumen), 2011",
         "numero": null,
-        "formato": "trade_paperback",
-        "anio": 1993,
-        "campos": {}
+        "formato": "hardcover",
+        "anio": 2011,
+        "campos": {
+          "paginas": 672
+        }
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "\"Todo Mafalda. Edición Definitiva\"; \"ISBN: 978-84-264-1923-1; Registro del mismo ISBN 9788426419231: \"Todo Mafalda / Quino",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-029",
@@ -805,24 +809,26 @@
         "obra": "Dragon Ball",
         "serie": "Dragon Ball",
         "editorial": "Planeta DeAgostini",
-        "coleccion": "Dragon Ball",
+        "coleccion": "Manga Shonen",
         "pais": "ES",
         "idioma": "es",
-        "edicion": "edición de 2001",
+        "edicion": "Dragon Ball, edición de 2007 (34 tomos)",
         "numero": null,
         "formato": "manga_tankobon",
-        "anio": 2001,
-        "campos": {}
+        "anio": 2007,
+        "campos": {
+          "tomos": 34
+        }
       },
       "identidad_acreditada": false,
       "acreditacion": "borrador",
-      "estado_identidad": "propuesta_pendiente_de_verificacion",
+      "estado_identidad": "evidencia_adjunta_pendiente_po",
       "procedencia": "catalogo_publico",
-      "evidencia": "PENDIENTE: propuesta de etiqueta; el PO debe adjuntar referencia pública antes de acreditar",
+      "evidencia": "\"title\": \"Dragon Ball nº 01/34\"; \"publishers\": [\"Planeta Cóm; \"Dragon Ball Ultimate nº 34/34\"; \"ISBN: 978-84-1341-882-7\"; ",
       "verificador": "pendiente_po",
       "fecha_verificacion": null,
       "desacuerdo": null,
-      "notas": "Caso propuesto en el corpus v1 (borrador). No usar como cobertura verificada."
+      "notas": "Etiqueta corregida con evidencia pública (dossier docs/design/banco-cobertura/evidencia-acreditacion-v1.md); pendiente de revisión del PO para acreditarla."
     },
     {
       "caso_id": "ES-030",
