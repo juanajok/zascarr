@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -87,7 +89,10 @@ class TestSeсoDePuntaAPunta:
         assert len(filas) == 8
         assert all(f["peticiones"] == 0 and f["modo"] == "seco" for f in filas)
         assert all(f["resultado_editorial"] is None for f in filas)
-        assert "PASS" in (tmp_path / "informe.md").read_text(encoding="utf-8")
+        informe_md = (tmp_path / "informe.md").read_text(encoding="utf-8")
+        assert "PASS" in informe_md and "NOT RUN" in informe_md
+        assert "evaluables:" in informe_md and "## Campos" in informe_md
+        assert "30 casos" in informe_md and "8 registros" in informe_md
         assert "NOT RUN" in capsys.readouterr().out
 
     def test_el_seco_no_importa_ni_construye_clientes_de_red(self, tmp_path, monkeypatch):
@@ -137,11 +142,20 @@ class TestRealFailClosed:
         }
         ruta = tmp_path / "auth.json"
         ruta.write_text(json.dumps(datos), encoding="utf-8")
-        assert banco.main(self._args(tmp_path, "--autorizacion", str(ruta))) == 2
-        datos["hasta"] = (ahora + timedelta(days=1)).isoformat()
-        datos["ambito"] = ["anilist"]                             # fuera de ámbito
-        ruta.write_text(json.dumps(datos), encoding="utf-8")
-        assert banco.main(self._args(tmp_path, "--autorizacion", str(ruta))) == 2
+        async def _prohibido(*_a, **_k):
+            raise AssertionError("no se puede llamar a un cliente sin autorización")
+        # monkeypatch local del test para la comprobación de cero peticiones
+        import scripts.medicion.banco_cobertura as modulo
+        original = modulo._llamar_cliente
+        modulo._llamar_cliente = _prohibido
+        try:
+            assert banco.main(self._args(tmp_path, "--autorizacion", str(ruta))) == 2
+            datos["hasta"] = (ahora + timedelta(days=1)).isoformat()
+            datos["ambito"] = ["anilist"]                             # fuera de ámbito
+            ruta.write_text(json.dumps(datos), encoding="utf-8")
+            assert banco.main(self._args(tmp_path, "--autorizacion", str(ruta))) == 2
+        finally:
+            modulo._llamar_cliente = original
 
     def test_autorizacion_con_sha_distinto_o_sin_presupuesto_es_invalida(self):
         ahora = datetime.now(UTC)
@@ -161,6 +175,150 @@ class TestRealFailClosed:
             fuentes=["comic_vine"], ahora=ahora)
         assert "fuera_de_ambito" in banco.validar_autorizacion(
             base, sha_corpus="sha-correcto", fuentes=["anilist"], ahora=ahora)
+
+
+class TestRegresionesDeSeguridad:
+    def test_el_seco_en_subproceso_no_carga_httpx_ni_clientes(self, tmp_path):
+        """El arnés seco no importa `discovery`, que arrastra httpx/lxml/sqlalchemy."""
+        codigo = (
+            "import sys;"
+            "from scripts.medicion import banco_cobertura as b;"
+            f"assert b.main(['--seco', '--salida', {str(tmp_path)!r}]) == 0;"
+            "assert 'httpx' not in sys.modules, 'httpx cargado en modo seco';"
+            "assert 'zascarr.services.discovery' not in sys.modules, 'discovery cargado';"
+        )
+        entorno = {"PYTHONPATH": str(banco.RAIZ / "src"), "PATH": "/usr/bin:/bin"}
+        resultado = subprocess.run([sys.executable, "-c", codigo], cwd=banco.RAIZ,
+                                   env=entorno, capture_output=True, text=True, timeout=90)
+        assert resultado.returncode == 0, resultado.stderr
+
+    def test_una_autorizacion_con_fecha_naive_no_revienta_y_se_interpreta_utc(self):
+        ahora = datetime.now(UTC)
+        datos = {
+            "id": "a", "ambito": ["comic_vine"],
+            "presupuesto_peticiones": 80,
+            "desde": (ahora - timedelta(days=1)).replace(tzinfo=None).isoformat(),
+            "hasta": (ahora + timedelta(days=1)).replace(tzinfo=None).isoformat(),
+            "concede": "PO", "condiciones": "", "sha_corpus": "sha",
+        }
+        assert banco.validar_autorizacion(datos, sha_corpus="sha",
+                                          fuentes=["comic_vine"], ahora=ahora) == []
+
+    def test_fichero_de_autorizacion_no_utf8_es_exit_2_sin_traceback(self, tmp_path):
+        ruta = tmp_path / "auth.bin"
+        ruta.write_bytes(b"\xff\xfe\x00no es json")
+        rc = banco.main(["--real", "--salida", str(tmp_path / "salida"),
+                         "--casos", "ES-001", "--fuentes", "comic_vine",
+                         "--unidades", "serie", "--autorizacion", str(ruta)])
+        assert rc == 2
+        assert (tmp_path / "salida" / "informe.json").exists()
+
+    def test_sin_autorizacion_caducada_no_llama_a_ningun_cliente(self, tmp_path, monkeypatch):
+        corpus, sha = banco.cargar_corpus(banco.CORPUS_DEFECTO)
+        ahora = datetime.now(UTC)
+        auth = {"id": "a", "ambito": ["comic_vine"], "presupuesto_peticiones": 80,
+                "desde": (ahora - timedelta(days=2)).isoformat(),
+                "hasta": (ahora - timedelta(days=1)).isoformat(),
+                "concede": "PO", "condiciones": "", "sha_corpus": sha}
+        ruta = tmp_path / "auth.json"
+        ruta.write_text(json.dumps(auth), encoding="utf-8")
+
+        async def _prohibido(*_a, **_k):
+            raise AssertionError("no se puede llamar a un cliente sin autorización")
+        monkeypatch.setattr(banco, "_llamar_cliente", _prohibido)
+        assert banco.main(["--real", "--salida", str(tmp_path / "salida"),
+                           "--casos", "ES-001", "--fuentes", "comic_vine",
+                           "--unidades", "serie", "--autorizacion", str(ruta)]) == 2
+
+    def test_el_sha_del_corpus_se_compara_con_el_manifiesto(self, tmp_path):
+        corpus, sha = banco.cargar_corpus(banco.CORPUS_DEFECTO, banco.MANIFIESTO_DEFECTO)
+        assert len(corpus["casos"]) == 30
+        malo = tmp_path / "manifiesto.json"
+        malo.write_text(json.dumps({"version": "v1", "sha256": "0" * 64, "casos": 30}),
+                        encoding="utf-8")
+        with pytest.raises(banco.ErrorBanco) as exc:
+            banco.cargar_corpus(banco.CORPUS_DEFECTO, malo)
+        assert "sha256" in str(exc.value)
+
+    def test_el_jsonl_es_append_only(self, tmp_path):
+        assert banco.main(["--seco", "--salida", str(tmp_path),
+                           "--sha-ejecutor", "abc123"]) == 0
+        assert banco.main(["--seco", "--salida", str(tmp_path),
+                           "--sha-ejecutor", "abc123"]) == 0
+        lineas = (tmp_path / "registro.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(lineas) == 16       # 8 por ejecución, no se reescribe
+        assert all(json.loads(x)["sha_ejecutor"] == "abc123" for x in lineas)
+
+    def test_el_informe_no_publica_rutas_y_usa_sha_explicito(self, tmp_path):
+        assert banco.main(["--seco", "--salida", str(tmp_path),
+                           "--sha-ejecutor", "abc123"]) == 0
+        texto = (tmp_path / "informe.json").read_text(encoding="utf-8")
+        assert str(tmp_path) not in texto
+        assert "abc123" in texto and "no_disponible" not in texto
+
+    def test_el_informe_calcula_el_tamano_real_del_corpus(self):
+        corpus = _corpus()
+        corpus["casos"] = corpus["casos"][:1]
+        corpus["tamano_objetivo"] = 1
+        corpus["estratos"] = {"serie": 1, "edicion_publicacion": 0,
+                              "numero_formato": 0, "campo": 0}
+        informe = banco.construir_informe(
+            registros=[], corpus=corpus, corpus_sha="x", modo="seco",
+            autorizacion=None, errores_autorizacion=[], sha_ejecutor="sha")
+        pass_texto = " ".join(informe["pass_fail_not_run"]["PASS"])
+        assert "1 casos" in pass_texto and "30 casos" not in pass_texto
+
+    @pytest.mark.parametrize("valor", [
+        "https://ejemplo.invalid", "ftp://servidor/x", "file:///etc/passwd",
+        "C:\\Users\\coleccionista\\x", "token=abc", "password=123",
+        "persona@ejemplo.invalid", "?q=secreto",
+    ])
+    def test_el_centinela_rechaza_esos_formatos(self, valor):
+        assert banco._tiene_url_o_secreto(valor) is True
+
+    def test_la_salida_se_escanea_antes_de_escribir_y_usa_lista_blanca(self):
+        with pytest.raises(banco.ErrorBanco):
+            banco.validar_salida([{"notas": "ftp://servidor/x"}], {"cobertura": "NOT RUN"})
+        with pytest.raises(banco.ErrorBanco):
+            banco.validar_salida([{"campo_inventado": 1}], {"cobertura": "NOT RUN"})
+
+
+class TestAutorizacionEfectiva:
+    def _base(self, **extra):
+        ahora = datetime.now(UTC)
+        datos = {"id": "a", "ambito": ["comic_vine"], "presupuesto_peticiones": 80,
+                 "desde": (ahora - timedelta(days=1)).isoformat(),
+                 "hasta": (ahora + timedelta(days=1)).isoformat(),
+                 "concede": "PO", "condiciones": "", "sha_corpus": "sha"}
+        datos.update(extra)
+        return datos
+
+    def _plan(self, casos, fuentes=("comic_vine",), unidades=("serie",)):
+        corpus = {"version": "v1", "casos": [{"caso_id": c} for c in casos]}
+        return banco.plan_real(corpus, fuentes=list(fuentes), unidades=list(unidades))
+
+    def test_tipos_estrictos_claves_no_permisibles_y_presupuesto_bool(self):
+        errores = banco.validar_autorizacion(
+            self._base(presupuesto_peticiones=True), sha_corpus="sha",
+            fuentes=["comic_vine"])
+        assert "presupuesto_invalido" in errores
+        assert "claves_no_permitidas" in banco.validar_autorizacion(
+            self._base(clave_extra=1), sha_corpus="sha", fuentes=["comic_vine"])
+        assert "ambito_invalido" in banco.validar_autorizacion(
+            self._base(ambito=["comic_vine:unidad_inventada"]), sha_corpus="sha",
+            fuentes=["comic_vine"])
+
+    def test_el_ambito_limita_capacidad_unidad_y_caso(self):
+        plan = self._plan(["ES-001", "ES-002"], unidades=("serie", "edicion"))
+        auth = self._base(ambito=["comic_vine:serie"])
+        assert "fuera_de_ambito" in banco.validar_autorizacion(
+            auth, sha_corpus="sha", fuentes=["comic_vine"], plan=plan)
+        auth2 = self._base(ambito=["caso:ES-001"])
+        assert "fuera_de_ambito" in banco.validar_autorizacion(
+            auth2, sha_corpus="sha", fuentes=["comic_vine"], plan=plan)
+        auth3 = self._base(ambito=["comic_vine"], casos=["ES-001", "ES-002"])
+        assert banco.validar_autorizacion(auth3, sha_corpus="sha",
+                                          fuentes=["comic_vine"], plan=plan) == []
 
 
 class TestMapeoDeEstados:
@@ -192,7 +350,7 @@ class TestMetricas:
                   campos=("titulo",), ausentes=(), fuente="comic_vine", unidad="serie"):
         return {
             "fuente": fuente, "unidad": unidad, "caso_id": caso_id,
-            "estado_tecnico": estado,
+            "metodo": "test.metodo", "estado_tecnico": estado,
             "resultado_editorial": editorial,
             "revision": ({"veredicto": editorial} if editorial else
                          {"veredicto": None}),
@@ -255,6 +413,19 @@ class TestMetricas:
         assert grupo["coincidencias_verificadas"] == 0
         assert grupo["incorrectos"] == 0
         assert grupo["cobertura_editorial_verificada"]["denominador"] == 1
+
+    def test_no_ejecutado_no_cuenta_como_ausencia_ni_como_planificado(self):
+        corpus = self._corpus(["S1", "S2"])
+        registros = [self._registro("S1", estado="sin_resultados"),
+                     self._registro("S2", estado="no_ejecutado")]
+        registros[1]["metodo"] = None
+        registros[1]["motivo_no_ejecutado"] = "fuente_apagada"
+        grupo = banco.calcular_metricas(registros, corpus)["por_fuente_unidad"]["comic_vine__serie"]
+        assert grupo["planificados"] == 1          # la celda sin método no se planifica
+        assert grupo["no_ejecutados"] == 1
+        assert grupo["ausencias"] == 1             # solo la sin_resultados acreditada
+        assert grupo["evaluables"] == 1
+        assert grupo["errores"] == 0               # no_ejecutado no es error
 
     def test_campos_faltantes_por_campo(self):
         corpus = self._corpus(["S1", "S2"])

@@ -55,24 +55,20 @@ ORDEN_DE_FUENTES: tuple[MetadataSource, ...] = (
     MetadataSource.TEBEOSFERA, MetadataSource.GCD,
 )
 
-#: Conjunto CERRADO de estados de una fuente para una capacidad (MIT-M8-US01, #133). La interfaz
-#: NO deduce causas: pinta el estado que decide este servicio. Un estado nuevo se añade aquí, no
-#: en cada pantalla.
-FUENTE_OK = "ok"
-FUENTE_SIN_RESULTADOS = "sin_resultados"
-FUENTE_FALLO_TRANSITORIO = "fallo_transitorio"
-FUENTE_CONFIGURACION_INCOMPLETA = "configuracion_incompleta"
-FUENTE_LIMITE_DE_CORTESIA = "limite_de_cortesia"
-FUENTE_APAGADA = "fuente_apagada"
-ESTADOS_DE_FUENTE = frozenset({
-    FUENTE_OK, FUENTE_SIN_RESULTADOS, FUENTE_FALLO_TRANSITORIO,
-    FUENTE_CONFIGURACION_INCOMPLETA, FUENTE_LIMITE_DE_CORTESIA, FUENTE_APAGADA,
-})
-
-#: Única capacidad VERIFICADA en esta entrega para las cuatro fuentes: **buscar series**. No se
-#: declaran metadatos ni portadas: no están contrastadas como capacidad en esta historia (que una
-#: fuente devuelva una descripción no la convierte en «capacidad verificada»).
-CAPACIDAD_BUSQUEDA = "busqueda"
+# #133: el conjunto cerrado y `EstadoFuente` viven en un módulo stdlib-only para que las
+# herramientas sin red (banco de cobertura, #135) los reutilicen sin cargar los clientes. Aquí se
+# reexportan: el contrato público de `discovery` no cambia.
+from zascarr.services.estados_fuentes import (  # noqa: E402,F401 — reexportados
+    CAPACIDAD_BUSQUEDA,
+    ESTADOS_DE_FUENTE,
+    FUENTE_APAGADA,
+    FUENTE_CONFIGURACION_INCOMPLETA,
+    FUENTE_FALLO_TRANSITORIO,
+    FUENTE_LIMITE_DE_CORTESIA,
+    FUENTE_OK,
+    FUENTE_SIN_RESULTADOS,
+    EstadoFuente,
+)
 
 #: Metadatos de cada fuente que no están en `MetadataSource`: su interruptor de Ajustes.
 _INTERRUPTOR = {
@@ -81,20 +77,6 @@ _INTERRUPTOR = {
     MetadataSource.TEBEOSFERA: "tebeosfera_enabled",
     MetadataSource.GCD: "gcd_enabled",
 }
-
-
-@dataclass(frozen=True)
-class EstadoFuente:
-    """En qué quedó UNA fuente para UNA capacidad.
-
-    `motivo` es texto en español para la persona (nunca un identificador ni una causa inventada);
-    `reintentar_en` son segundos y solo va relleno si el contrato los aportó.
-    """
-    fuente: str
-    capacidad: str
-    estado: str
-    motivo: str | None = None
-    reintentar_en: int | None = None
 
 
 def _estado(fuente: MetadataSource, estado: str, motivo: str | None = None,
