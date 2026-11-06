@@ -34,6 +34,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -658,11 +659,67 @@ def _candidatos_saneados(resultados: Sequence[Any]) -> list[dict]:
     return sanitizados
 
 
+async def _leer_valores_ajustes(database_url: str) -> dict | None:
+    """Lee SOLO la fila runtime_settings (sin crearla ni escribir) con SQLAlchemy async.
+
+    Reutiliza el mismo camino de valores que `RuntimeSettingsService.get_overrides()`: la fila
+    JSONB contiene los overrides que Ajustes aplicó; los `SECRET_FIELDS` no se descifran aquí,
+    solo se pasan a `apply_overrides` (que ya conoce la lista blanca). Si no hay fila, `None`.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    from zascarr.models import RuntimeSetting
+
+    url = database_url
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+            values = (await db.execute(
+                select(RuntimeSetting.values).where(RuntimeSetting.id == 1)
+            )).scalar_one_or_none()
+    except Exception:  # noqa: BLE001 — sin BD se sigue con .env; no es un fallo del banco
+        return None
+    finally:
+        await engine.dispose()
+    return dict(values) if isinstance(values, dict) else None
+
+
+async def aplicar_ajustes_runtime(database_url: str | None = None) -> bool:
+    """Aplica a `get_settings()` los overrides de Ajustes; False si no hay BD/fila.
+
+    ADR 0013: los interruptores de fuentes viven en Postgres, no en el `.env`; sin esto el
+    ejecutor vería `comicvine_enabled=False` aunque la UI las tenga encendidas.
+    """
+    url = database_url or os.environ.get("DATABASE_URL") or os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        return False
+    valores = await _leer_valores_ajustes(url)
+    if not valores:
+        return False
+    from zascarr.services.runtime_settings import apply_overrides
+    apply_overrides(valores)
+    return True
+
+
+#: `MetadataSource` → campo de Settings (no es `{fuente}_enabled`: `comic_vine` es
+#: `comicvine_enabled`, `tebeosfera` es `tebeosfera_enabled`).
+_ATRIBUTO_ENABLED = {
+    "comic_vine": "comicvine_enabled",
+    "anilist": "anilist_enabled",
+    "tebeosfera": "tebeosfera_enabled",
+    "gcd": "gcd_enabled",
+}
+
+
 def _configuracion_fuente(fuente: str) -> tuple[bool, str | None]:
     """(se_puede_consultar, estado #133 si no). Sin tráfico; lee Ajustes de solo lectura."""
     from zascarr.config import get_settings
     s = get_settings()
-    atributo = f"{fuente}_enabled"
+    atributo = _ATRIBUTO_ENABLED.get(fuente, f"{fuente}_enabled")
     if not getattr(s, atributo, False):
         return False, "fuente_apagada"
     if fuente == "comic_vine" and not getattr(s, "comicvine_api_key", ""):
@@ -677,7 +734,7 @@ async def ejecutar_real(
     max_peticiones: int, max_por_fuente: int, salida: Path,
     corpus_sha: str, fuentes: Sequence[str] | None = None,
     cliente_factory=None, sha_ejecutor: str = "no_disponible",
-    ahora: datetime | None = None,
+    ahora: datetime | None = None, aplicar_ajustes: bool = True,
 ) -> list[dict]:
     """Ejecuta el plan real con la cortesía de #134. No se lanza en tests ni en PR-3 aquí.
 
@@ -685,6 +742,8 @@ async def ejecutar_real(
     ámbito/casos/topes y se detiene por presupuesto, cortesía, fuente apagada o 3 fallos
     consecutivos. Las celdas no ejecutadas quedan `no_ejecutado` con su motivo.
     """
+    if aplicar_ajustes:
+        await aplicar_ajustes_runtime()
     fuentes = list(fuentes or sorted({c["fuente"] for c in plan}))
     errores = validar_autorizacion(autorizacion, sha_corpus=corpus_sha, fuentes=fuentes,
                                    ahora=ahora, plan=plan)
@@ -962,9 +1021,12 @@ def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: st
     estados = _estados_cubiertos(registros)
     esperados = set(banco_estados_esperados()) if modo == "seco" else set()
     faltan = sorted(esperados - estados)
+    acreditados = sum(1 for c in corpus["casos"] if c.get("identidad_acreditada"))
+    en_borrador = len(corpus["casos"]) - acreditados
     pass_ = [
         f"El corpus {corpus.get('version')} valida contra su esquema: "
-        f"{len(corpus['casos'])} casos (borrador).",
+        f"{len(corpus['casos'])} casos ({acreditados} acreditados / "
+        f"{en_borrador} en borrador).",
         f"Se han cargado {len(registros)} registros del modo {modo}.",
     ]
     if modo == "seco":
@@ -980,8 +1042,8 @@ def construir_informe(*, registros: Sequence[dict], corpus: dict, corpus_sha: st
         "PASS": pass_,
         "FAIL": fail_,
         "NOT RUN": [
-            "Cobertura real: no se ejecuta en esta entrega (PR-3, con permiso separado).",
-            "Revisión humana de candidatos: sin verificador designado todavía.",
+            "Cobertura real: NOT RUN hasta la revisión humana.",
+            "Revisión humana de candidatos: pendiente; verificador: juanajok (PO).",
             "Red real de las fuentes y comportamiento cambiante entre fechas: no medido.",
             "Piloto de 12 casos / 80 peticiones: pendiente de autorización del PO.",
         ],
@@ -1033,7 +1095,9 @@ def escribir_informe(informe: dict, registros: Sequence[dict], salida: Path) -> 
     (salida / "informe.json").write_text(
         json.dumps(informe, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     lineas = [
-        "# Informe del banco de cobertura española (#135) — preparación",
+        ("# Informe del banco de cobertura española (#135) — ejecución real"
+         if informe["meta"]["modo"] == "real"
+         else "# Informe del banco de cobertura española (#135) — validación en seco"),
         "",
         f"- Modo: **{informe['meta']['modo']}**",
         f"- Fecha: {informe['meta']['fecha']}",

@@ -3,25 +3,26 @@
 > **Estado:** **PASS del arnés en seco**; **cobertura real NOT RUN** (no se ha lanzado ninguna
 > petición) y **revisión humana NOT RUN**. Este documento no declara cobertura.
 > **Base:** `main` al 2026-11-06. Sin dependencias nuevas, sin migración, sin red en las
-> pruebas. Corpus v1: `sha256:1c9a5d0f5e8cc7dd95771aa6ec8d131b4e3ec55b55878a2e8eeaf6d6a9cdd6dd`.
+> pruebas. Corpus v1: `sha256:7f1a0f1f916a8572278c3fea149490029c235b01e7293a9718fe9c8b300665b2`.
 
 ## 1. Qué se entrega (preparación y ejecutor real)
 
-- **Corpus v1 en borrador**: 30 casos (8 serie, 8 edición/publicación, 8 número/formato,
-  6 campo), 6 editoriales y formatos variados. **Todas las etiquetas son propuestas**:
-  `acreditacion: "borrador"`, `identidad_acreditada: false`; **2 casos** están marcados
-  además `sin_identidad_acreditada` para comprobar que no suman a coincidencias. El PO debe
-  verificar/ajustar etiquetas y procedencia antes de la ejecución real.
+- **Corpus v1**: 30 casos (8 serie, 8 edición/publicación, 8 número/formato, 6 campo),
+  6 editoriales y formatos variados; **12 acreditados** y **18 en borrador** (2 de ellos
+  `sin_identidad_acreditada`). Las etiquetas acreditadas llevan evidencia y verificador
+  `juanajok (PO)`; las de borrador siguen propuestas y no suman a coincidencias. El PO
+  puede corregir/retirar casos antes de la ejecución real.
 - **Fixtures saneados** (`docs/design/fixtures-cobertura/seco.json`): 8 ensayos que ejercitan
   `ok`, `sin_resultados`, `fallo_transitorio`, `limite_de_cortesia`, `fuente_apagada`,
   `configuracion_incompleta`, `sin_metodo_autorizado` y un campo ausente. Sin URL ni claves.
 - **Arnés** `scripts/medicion/banco_cobertura.py`: `--seco` valida corpus, fixtures, parser,
   registro, métricas e informe; `--real` exige autorización versionada (ámbito, presupuesto,
   caducidad y SHA del corpus) y, sin ella, sale con **exit 2 y cero peticiones**. Con
-  autorización válida, el ejecutor revalida el permiso, llama a los clientes existentes (que
-  pasan por `pedir_con_cortesia` de #134), respeta los topes efectivos y para por presupuesto,
-  cortesía, fuente apagada o 3 fallos consecutivos. **No se ha ejecutado con datos reales**:
-  el estado de cobertura sigue `NOT RUN`.
+  autorización válida, el ejecutor revalida el permiso, **carga los interruptores de Ajustes
+  desde `runtime_settings`** (ADR 0013; si no hay BD/fila sigue con el `.env`), llama a los
+  clientes existentes (que pasan por `pedir_con_cortesia` de #134), respeta los topes
+  efectivos y para por presupuesto, cortesía, fuente apagada o 3 fallos consecutivos.
+  **No se ha ejecutado con datos reales**: el estado de cobertura sigue `NOT RUN`.
 - **Métricas con denominadores**: por fuente × unidad, separando disponibilidad técnica de
   precisión/cobertura editorial; sin porcentajes con denominador 0 y solo cantidades si n<10;
   `sin_extractor`/estados no se mezclan con editorial.
@@ -43,7 +44,7 @@ python scripts/medicion/banco_cobertura.py --seco \
 
 Resultado: **8 ensayos**, informe con `cobertura: NOT RUN` y PASS/FAIL/NOT RUN separados;
 cero peticiones; sin sockets ni clientes. En subproceso se comprueba además que `httpx` y
-`zascarr.services.discovery` **no** se cargan. `tests/test_banco_cobertura.py`: **50 passed**.
+`zascarr.services.discovery` **no** se cargan. `tests/test_banco_cobertura.py`: **55 passed**.
 
 Cubierto por pruebas (PASS):
 
@@ -63,6 +64,8 @@ Cubierto por pruebas (PASS):
 - ejecutor real con cliente inyectado (cero red): ejecuta y para por presupuesto; fuente
   apagada → cero peticiones; 429 → `limite_de_cortesia` sin reintento extra; 3 fallos →
   parada; revalidación final del permiso (SHA/ámbito/casos) antes de cualquier petición;
+- **overlay de Ajustes**: un `comicvine_enabled=True` en `runtime_settings` deja de dar
+  `fuente_apagada`; sin fila/BD se mantiene el `.env` y `fuente_apagada`;
 - métricas con n=0, n<10 (sin porcentaje), n≥10 (con denominador), no acreditadas, ausencias y
   campos faltantes por campo.
 
@@ -70,8 +73,8 @@ Cubierto por pruebas (PASS):
 
 - **Cobertura editorial real**: no hay ejecución autorizada; ninguna cifra de cobertura. Un
   `--seco` con sintéticos **no** acredita cobertura (criterio 9).
-- **Revisión humana**: sin verificadores designados; no hay `coincidencia_verificada`, ni
-  `ambiguo`/`incorrecto` reales, ni `revision_simple` declarada.
+- **Revisión humana**: verificador `juanajok (PO)`; sin `coincidencia_verificada`,
+  `ambiguo`/`incorrecto` reales ni `revision_simple` declarada todavía.
 - **Piloto de 12 casos / 80 peticiones**: no autorizado ni ejecutado; el ejecutor está
   conectado, pero solo debe lanzarlo el PO en la Pi con la autorización de su rama.
 - **Red real y disponibilidad de fuentes**: no medida; los fixtures no la representan.
@@ -80,15 +83,15 @@ Cubierto por pruebas (PASS):
 
 ## 4. Qué falta para autorizar el piloto
 
-1. **PO acepta o corrige el corpus v1** y acredita etiquetas con evidencia (§3.2/§3.3 de la
-   spec): hoy las 30 son borrador y ninguna suma a coincidencias. Los 2 casos
+1. **PO acepta o corrige el corpus v1**: hay 12 etiquetas acreditadas con evidencia y 18
+   en borrador; solo las acreditadas suman a coincidencias. Los 2 casos
    `sin_identidad_acreditada` deben seguir marcados.
 2. **Autorización versionada** con `id`, `ambito`, `presupuesto_peticiones` (80),
    `max_por_fuente` (20), `desde`/`hasta`, `concede` (persona del PO), `condiciones` y
    `sha_corpus` igual al del manifiesto. Copiar la plantilla a
    `docs/design/banco-cobertura/autorizacion-<id>.json`.
-3. **Revisores designados**: verificador editorial y, si se quieren revisar desacuerdos, un
-   segundo; si no hay segundo, el informe declarará `revision_simple`.
+3. **Revisores designados**: verificador editorial `juanajok (PO)`; si se quieren revisar
+   desacuerdos, un segundo; si no hay segundo, el informe declarará `revision_simple`.
 4. **Fuentes encendidas y configuradas** en Ajustes (nunca por el arnés) y **ejecución
    secuencial** con `--real --autorizacion <ruta> --casos ... --max-peticiones 80`; parada por
    presupuesto, cortesía o 3 fallos transitorios. Después, revisión humana y actualización del
