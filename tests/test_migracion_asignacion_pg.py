@@ -12,7 +12,7 @@ import re
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import insert, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -422,7 +422,18 @@ async def sembrar_a_0016(url: str) -> dict:
         await s.flush()
         s.add_all([manual, otro])
         await s.flush()
-        s.add_all([f_manual, f_ignorado, alias, deseo])
+        # Los dos archivos por SQL Core: el modelo File tiene columnas posteriores a 0016
+        # (`file_mtime_ns`, 0021) y un INSERT del ORM las incluiría y reventaría aquí.
+        await s.execute(insert(File.__table__).values([
+            {"id": f_manual.id, "file_path": f_manual.file_path, "file_name": f_manual.file_name,
+             "file_format": FileFormat.CBZ, "sha256_hash": SHA, "issue_id": manual.id,
+             "metadata_source": MetadataSource.MANUAL.value, "review_dismissed": False},
+            {"id": f_ignorado.id, "file_path": f_ignorado.file_path,
+             "file_name": f_ignorado.file_name, "file_format": FileFormat.CBZ,
+             "sha256_hash": "b" * 64, "review_dismissed": True,
+             "metadata": {"match_status": "unsorted", "review_motivo": "colision"}},
+        ]))
+        s.add_all([alias, deseo])
         await s.commit()
         ids = {"serie": serie.id, "manual": manual.id, "f_manual": f_manual.id, "f_ignorado": f_ignorado.id}
     await motor.dispose()
