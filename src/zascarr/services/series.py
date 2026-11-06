@@ -104,7 +104,7 @@ class SeriesService:
         )).scalar() or 0
 
         pagina = pagina_efectiva(page, total, page_size) if corregir_pagina else page
-        query = query.order_by(Series.sort_title, Series.start_year)
+        query = query.order_by(Series.sort_title, Series.start_year, Series.id)
         query = query.offset((pagina - 1) * page_size).limit(page_size)
         items = list((await self.db.execute(query)).scalars().all())
         return items, total, pagina

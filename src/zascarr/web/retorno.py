@@ -15,6 +15,7 @@ from uuid import UUID
 #: cualquier otro se rechaza en vez de reenviarlo a ciegas.
 PARAMETROS_DE_VUELTA = frozenset({
     "q", "tradition", "publisher_id", "character_id", "story_arc_id", "page",
+    "vista",
 })
 
 _ANCLA_DE_SERIE = re.compile(r"^serie-[0-9a-fA-F-]{36}$")
