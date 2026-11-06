@@ -351,15 +351,25 @@ class TestTextosDinamicosDelInforme:
         filas: list[dict] = []
         informe = banco.construir_informe(
             registros=filas, corpus=corpus, corpus_sha="sha", modo="real",
-            autorizacion={"id": "a"}, errores_autorizacion=[], sha_ejecutor="abc")
+            autorizacion={"id": "piloto-cobertura-2026-11-06",
+                          "concede": "juanajok (PO)",
+                          "condiciones": "no publicar"},
+            errores_autorizacion=[], sha_ejecutor="abc")
         pass_texto = " ".join(informe["pass_fail_not_run"]["PASS"])
         not_run = " ".join(informe["pass_fail_not_run"]["NOT RUN"])
         assert "12 acreditados / 18 en borrador" in pass_texto
         assert "NOT RUN hasta la revisión humana" in not_run
-        assert "verificador: juanajok (PO)" in not_run
+        assert "verificador: el PO" in not_run
+        assert "ejecutado el" in not_run and "piloto-cobertura-2026-11-06" in not_run
+        assert "pendiente de autorización" not in not_run
         banco.escribir_informe(informe, filas, tmp_path)
         md = (tmp_path / "informe.md").read_text(encoding="utf-8")
         assert "— ejecución real" in md and "— preparación" not in md
+        serializado = json.dumps(informe, ensure_ascii=False)
+        assert "concede" not in serializado and "juanajok" not in serializado
+        assert set(informe["meta"]["autorizacion"]) == {
+            "id", "ambito", "presupuesto_peticiones", "max_por_fuente",
+            "desde", "hasta", "sha_corpus"}
 
 
 class TestAutorizacionEfectiva:
@@ -559,6 +569,9 @@ class ClienteFalso:
     async def search_series(self, consulta):
         return self._comportamiento(consulta)
 
+    async def search_manga(self, consulta):
+        return self._comportamiento(consulta)
+
 
 def _ejecutar(corpus, auth, *, max_peticiones=80, max_por_fuente=20, comportamiento=None,
               llamadas=None):
@@ -672,3 +685,68 @@ class TestEjecutorReal:
             asyncio.run(banco.ejecutar_real(
                 plan, corpus, auth, max_peticiones=10, max_por_fuente=10,
                 salida=Path("/tmp/x"), corpus_sha="sha-corpus", fuentes=["comic_vine"]))
+
+
+class TestTopePorFuente:
+    def _plan_dos_fuentes(self, corpus):
+        return banco.plan_real(corpus, fuentes=["comic_vine", "anilist"],
+                               unidades=["serie"])
+
+    def _auth_dos(self, corpus):
+        return _auth(casos=[c["caso_id"] for c in corpus["casos"]],
+                     ambito=["comic_vine", "anilist"])
+
+    def test_el_tope_de_una_fuente_no_detiene_a_las_demas(self, monkeypatch):
+        corpus = _corpus_min(2)
+        auth = self._auth_dos(corpus)
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+        plan = self._plan_dos_fuentes(corpus)
+        # Orden explícito: primero las dos celdas de CV, luego las de AniList.
+        plan = ([c for c in plan if c["fuente"] == "comic_vine"]
+                + [c for c in plan if c["fuente"] == "anilist"])
+        llamadas = []
+        filas = asyncio.run(banco.ejecutar_real(
+            plan, corpus, auth, max_peticiones=10, max_por_fuente=1,
+            salida=Path("/tmp/x"), corpus_sha="sha-corpus",
+            fuentes=["comic_vine", "anilist"],
+            cliente_factory=lambda _f: ClienteFalso(
+                lambda q: (llamadas.append(q) or [{"name": "x"}])),
+            sha_ejecutor="abc", aplicar_ajustes=False))
+        assert len(llamadas) == 2                       # una por fuente
+        assert filas[0]["estado_tecnico"] == "ok"        # CV case1
+        assert filas[1]["motivo_no_ejecutado"] == "limite_por_fuente"
+        assert filas[2]["estado_tecnico"] == "ok"        # AniList sigue
+        assert filas[3]["motivo_no_ejecutado"] == "limite_por_fuente"
+        assert all(f["condiciones"]["parada"] == "final" for f in filas)
+
+    def test_el_tope_global_si_detiene_todo(self, monkeypatch):
+        corpus = _corpus_min(2)
+        auth = self._auth_dos(corpus)
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+        plan = self._plan_dos_fuentes(corpus)
+        llamadas = []
+        filas = asyncio.run(banco.ejecutar_real(
+            plan, corpus, auth, max_peticiones=1, max_por_fuente=10,
+            salida=Path("/tmp/x"), corpus_sha="sha-corpus",
+            fuentes=["comic_vine", "anilist"],
+            cliente_factory=lambda _f: ClienteFalso(
+                lambda q: (llamadas.append(q) or [{"name": "x"}])),
+            sha_ejecutor="abc", aplicar_ajustes=False))
+        assert len(llamadas) == 1
+        assert filas[0]["estado_tecnico"] == "ok"
+        assert all(f["motivo_no_ejecutado"] == "presupuesto_agotado" for f in filas[1:])
+        assert filas[-1]["condiciones"]["parada"] == "presupuesto"
+
+    def test_limite_por_fuente_no_se_presenta_como_presupuesto_agotado(self, monkeypatch):
+        corpus = _corpus_min(2)
+        auth = self._auth_dos(corpus)
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+        plan = banco.plan_real(corpus, fuentes=["comic_vine"], unidades=["serie"])
+        filas = asyncio.run(banco.ejecutar_real(
+            plan, corpus, auth, max_peticiones=10, max_por_fuente=1,
+            salida=Path("/tmp/x"), corpus_sha="sha-corpus", fuentes=["comic_vine"],
+            cliente_factory=lambda _f: ClienteFalso(lambda q: [{"name": "x"}]),
+            sha_ejecutor="abc", aplicar_ajustes=False))
+        assert filas[1]["motivo_no_ejecutado"] == "limite_por_fuente"
+        assert filas[1]["motivo_no_ejecutado"] != "presupuesto_agotado"
+        assert "limite_por_fuente" in banco.MOTIVOS_NO_EJECUTADO
