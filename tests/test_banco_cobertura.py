@@ -750,3 +750,19 @@ class TestTopePorFuente:
         assert filas[1]["motivo_no_ejecutado"] == "limite_por_fuente"
         assert filas[1]["motivo_no_ejecutado"] != "presupuesto_agotado"
         assert "limite_por_fuente" in banco.MOTIVOS_NO_EJECUTADO
+
+
+class TestCandidatosAniList:
+    def test_ani_list_usa_title_romaji_o_title_english_y_solo_id_y_etiqueta(self):
+        from zascarr.services.anilist import AniListResult
+
+        romaji = AniListResult(anilist_id=42, title_romaji="Dragon Ball",
+                               title_english="Dragon Ball Z")
+        sin_romaji = AniListResult(anilist_id=43, title_romaji=None,
+                                   title_english="One Piece")
+        candidatos = banco._candidatos_saneados([romaji, sin_romaji])
+        assert candidatos[0] == {"rank": 1, "id_externo": "42",
+                                 "etiqueta_propuesta": "Dragon Ball"}
+        assert candidatos[1]["etiqueta_propuesta"] == "One Piece"
+        assert all(set(c) == {"rank", "id_externo", "etiqueta_propuesta"}
+                   for c in candidatos)
