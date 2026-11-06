@@ -16,6 +16,7 @@ import pytest
 import structlog
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy.dialects import postgresql
 
 import zascarr.web.series as wseries
 from zascarr.config import get_settings
@@ -34,6 +35,14 @@ def _jpeg(color: tuple[int, int, int]) -> bytes:
 def _cbz(path: Path, color: tuple[int, int, int] = (120, 40, 200)) -> Path:
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr("001.jpg", _jpeg(color))
+    return path
+
+
+def _tebeo_zip(path: Path, color: tuple[int, int, int] = (120, 40, 200)) -> Path:
+    """ZIP con 12 páginas: un tebeo comprobado (un .cbr que es ZIP solo se lee así; ver #307)."""
+    with zipfile.ZipFile(path, "w") as zf:
+        for i in range(12):
+            zf.writestr(f"{i + 1:03d}.jpg", _jpeg(color))
     return path
 
 
@@ -67,7 +76,8 @@ class _Sesion:
         return self._series
 
     async def execute(self, statement):
-        self.sentencias.append(str(statement))
+        self.sentencias.append(str(statement.compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})))
         return _Resultado(self._archivos)
 
 
@@ -118,7 +128,7 @@ class TestPortadaDelPrimerArchivoLegible:
     def test_primer_archivo_ilegible_no_impide_usar_un_cbz_posterior(self, tmp_path, montar):
         """Regresión (#419): el `limit(1)` miraba solo el primer archivo; con un .cbz roto delante,
         la serie se quedaba sin portada aunque el siguiente número era un CBZ perfecto."""
-        malo = _cbz_roto(tmp_path / "01.cbz")
+        malo = _cbz_sin_imagenes(tmp_path / "01.cbz")
         bueno = _cbz(tmp_path / "02.cbz", color=(200, 30, 30))
         series, covers, _s, aperturas = montar([(malo, None), (bueno, None)])
 
@@ -179,7 +189,7 @@ class TestPortadaDelPrimerArchivoLegible:
     def test_el_tope_de_intentos_acota_las_aperturas_por_peticion(self, tmp_path, montar):
         """Con N archivos plausibles que fallan no se abre uno más, aunque detrás haya un bueno."""
         tope = wseries.MAX_INTENTOS_PORTADA
-        rotos = [(_cbz_roto(tmp_path / f"{i:02d}.cbz"), None)
+        rotos = [(_cbz_sin_imagenes(tmp_path / f"{i:02d}.cbz"), None)
                  for i in range(tope)]
         bueno = _cbz(tmp_path / "99.cbz")
         series, covers, _s, aperturas = montar([*rotos, (bueno, None)])
@@ -217,7 +227,7 @@ class TestPortadaDelPrimerArchivoLegible:
         assert "LIMIT" not in sql.upper()
 
     def test_un_candidato_fallido_se_registra_sin_ruta(self, tmp_path, montar):
-        malo = _cbz_roto(tmp_path / "secreto-no-salir.cbz")
+        malo = _cbz_sin_imagenes(tmp_path / "secreto-no-salir.cbz")
         bueno = _cbz(tmp_path / "02.cbz")
         series, _c, _s, _a = montar([(malo, None), (bueno, None)])
 
@@ -226,3 +236,71 @@ class TestPortadaDelPrimerArchivoLegible:
 
         assert any(r["event"] == "cover.candidato_sin_portada" for r in registros)
         assert "secreto-no-salir" not in str(registros) and str(tmp_path) not in str(registros)
+
+
+class TestFormatoDesconocidoSeDecidePorFirma:
+    """#422, criterio 2 de #419: solo se descarta sin leer la ausencia CONOCIDA. Con el formato sin
+    guardar (o ilegible) un `.cbr` que por dentro es ZIP sigue dando portada, como hoy; un RAR no
+    gasta intento."""
+
+    def test_cbr_zip_sin_formato_guardado_sigue_dando_portada_por_firma(self, tmp_path, montar):
+        """Regresión: descartar por extensión saltaba este .cbr, que hoy sí da portada."""
+        cbr = _tebeo_zip(tmp_path / "01.cbr", color=(200, 30, 30))
+        series, covers, _s, aperturas = montar([(cbr, None)])
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 200 and aperturas == ["01.cbr"]
+        assert _color_medio(r.content)[0] > 150
+
+    def test_cbr_zip_con_lectura_ilegible_guardada_se_decide_por_firma(self, tmp_path, montar):
+        cbr = _tebeo_zip(tmp_path / "01.cbr", color=(200, 30, 30))
+        series, _c, _s, aperturas = montar([(cbr, {"firma": "ilegible"})])
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 200 and aperturas == ["01.cbr"]
+
+    def test_cbr_rar_sin_formato_guardado_no_gasta_intento_ni_se_abre(self, tmp_path, montar):
+        """Mutación: si un RAR sin formato consumiera intento, estos 4 agotarían el tope de 3."""
+        rars = []
+        for i in range(wseries.MAX_INTENTOS_PORTADA + 1):
+            rar = tmp_path / f"{i:02d}.cbr"
+            rar.write_bytes(b"Rar!\x1a\x07\x01\x00relleno")
+            rars.append((rar, None))
+        bueno = _cbz(tmp_path / "99.cbz")
+        series, _c, _s, aperturas = montar([*rars, (bueno, None)])
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 200 and aperturas == ["99.cbz"]
+
+    def test_un_cbz_que_por_firma_no_es_zip_no_se_abre_ni_gasta_intento(self, tmp_path, montar):
+        rotos = [(_cbz_roto(tmp_path / f"{i:02d}.cbz"), None)
+                 for i in range(wseries.MAX_INTENTOS_PORTADA + 1)]
+        bueno = _cbz(tmp_path / "99.cbz")
+        series, _c, _s, aperturas = montar([*rotos, (bueno, None)])
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 200 and aperturas == ["99.cbz"]
+
+    def test_la_consulta_trae_solo_el_formato_y_no_todo_el_metadato(self, tmp_path, montar):
+        series, _c, sesion, _a = montar([])
+        series.cover_url = None
+
+        TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        sql = sesion.sentencias[0]
+        assert "formato_contenido" in sql
+
+    def test_la_ausencia_conocida_se_descarta_sin_leer_el_archivo(self, tmp_path, montar):
+        """El formato guardado manda sobre la firma: si dice RAR no se abre ni gasta intento,
+        aunque el archivo (cambiado después) sea ahora un ZIP."""
+        cambiado = _tebeo_zip(tmp_path / "01.cbr")
+        bueno = _cbz(tmp_path / "02.cbz")
+        series, _c, _s, aperturas = montar([(cambiado, {"firma": "rar"}), (bueno, None)])
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 200 and aperturas == ["02.cbz"]

@@ -49,16 +49,16 @@ from zascarr.utils.cover import (
     CACHE_VERSION,
     SERIES_COVER_MAX_WIDTH,
     cached_image_response,
+    es_candidato_de_portada,
     extract_cover_thumbnail,
     fetch_and_cache_cover,
-    puede_tener_portada,
     write_cover_cache,
 )
 from zascarr.web.routes import crear_templates
 
 logger = structlog.get_logger()
 
-#: #419: cuántos archivos «plausibles» (los que `puede_tener_portada` no descarta) se abren como
+#: #419: cuántos archivos «plausibles» (los que `es_candidato_de_portada` acepta) se abren como
 #: máximo en una petición fría de portada. Los descartados no se abren ni gastan intento. El
 #: fallo no se cachea, así que 3 acota el peor caso (tres aperturas por petición) sin recorrer
 #: una serie de cientos de archivos.
@@ -254,7 +254,7 @@ async def portada(series_id: UUID, request: Request,
 
     1. `covers/v2/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304).
     2. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419):
-       solo los que `puede_tener_portada` no descarta, con un tope de
+       solo los que `es_candidato_de_portada` acepta (ausencia conocida o firma que no es ZIP: se saltan), con un tope de
        `MAX_INTENTOS_PORTADA` aperturas → extraer su primera página a 600, escribir
        `v2`, servirla. Si la escritura falla, se sirve igualmente lo extraído con
        un ETag de sus bytes (FR-11, PR-2).
@@ -287,7 +287,7 @@ async def portada(series_id: UUID, request: Request,
     # fallar) extraer de un CBZ borrado en vez de probar el siguiente
     # número disponible o caer al cover_url externo.
     archivos = (await db.execute(
-        select(File.file_path, File.metadata_)
+        select(File.file_path, File.metadata_["formato_contenido"])
         .join(Issue, File.issue_id == Issue.id)
         .where(Issue.series_id == series_id)
         .where(File.is_missing.is_(False))
@@ -295,9 +295,9 @@ async def portada(series_id: UUID, request: Request,
     )).all()
     result = None
     intentos = 0
-    for ruta, metadata in archivos:
-        formato = (metadata or {}).get("formato_contenido")
-        if not puede_tener_portada(ruta, formato):
+    for ruta, formato in archivos:
+        # solo gasta intento el que se llega a abrir como ZIP (firma o formato guardado)
+        if not await asyncio.to_thread(es_candidato_de_portada, Path(ruta), formato):
             continue
         if intentos >= MAX_INTENTOS_PORTADA:
             break
