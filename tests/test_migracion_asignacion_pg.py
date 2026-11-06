@@ -433,8 +433,14 @@ async def foto(url: str, ids: dict) -> dict:
     motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
     fab = async_sessionmaker(motor, expire_on_commit=False)
     async with fab() as s:
-        f_m = await s.get(File, ids["f_manual"])
-        f_i = await s.get(File, ids["f_ignorado"])
+        # SQL explícito y no el modelo: esta foto se toma también con la BD en 0016, y el modelo
+        # actual tiene columnas posteriores (`file_mtime_ns`, 0021) que allí no existen.
+        f_m = (await s.execute(text(
+            "SELECT file_path, issue_id::text AS issue_id, metadata_source, sha256_hash "
+            "FROM files WHERE id = :id"), {"id": str(ids["f_manual"])})).one()
+        f_i = (await s.execute(text(
+            "SELECT review_dismissed, metadata FROM files WHERE id = :id"),
+            {"id": str(ids["f_ignorado"])})).one()
         i_m = await s.get(Issue, ids["manual"])
         res = dict(
             series=(await s.execute(text("SELECT count(*) FROM series"))).scalar(),
@@ -443,7 +449,7 @@ async def foto(url: str, ids: dict) -> dict:
             alias=[a.pattern_norm for a in (await s.execute(select(LocalAlias))).scalars()],
             wishlist=(await s.execute(text("SELECT count(*) FROM wishlist"))).scalar(),
             f_manual=(f_m.file_path, f_m.issue_id, f_m.metadata_source, f_m.sha256_hash),
-            f_ignorado=(f_i.review_dismissed, dict(f_i.metadata_)),
+            f_ignorado=(f_i.review_dismissed, dict(f_i.metadata)),
             i_manual=(i_m.metadata_source, list(i_m.locked_fields)),
         )
     await motor.dispose()
