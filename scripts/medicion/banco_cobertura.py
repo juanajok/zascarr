@@ -647,13 +647,18 @@ def _candidatos_saneados(resultados: Sequence[Any]) -> list[dict]:
     for rank, resultado in enumerate(resultados, start=1):
         if isinstance(resultado, dict):
             id_externo = resultado.get("id") or resultado.get("external_id") or ""
-            etiqueta = resultado.get("name") or resultado.get("title") or ""
+            etiqueta = (resultado.get("name") or resultado.get("title")
+                        or resultado.get("title_romaji") or resultado.get("title_english")
+                        or "")
         else:
             id_externo = (getattr(resultado, "cv_id", None)
                           or getattr(resultado, "anilist_id", None)
                           or getattr(resultado, "gcd_id", None)
                           or getattr(resultado, "slug", "") or "")
-            etiqueta = getattr(resultado, "name", None) or getattr(resultado, "title", "")
+            # AniListResult no tiene `name`/`title`: sus campos son title_romaji/title_english.
+            etiqueta = (getattr(resultado, "name", None) or getattr(resultado, "title", None)
+                        or getattr(resultado, "title_romaji", None)
+                        or getattr(resultado, "title_english", None) or "")
         sanitizados.append({"rank": rank, "id_externo": str(id_externo),
                             "etiqueta_propuesta": str(etiqueta)[:120]})
     return sanitizados
