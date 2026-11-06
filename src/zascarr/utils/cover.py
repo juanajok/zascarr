@@ -92,6 +92,22 @@ _COVER_MAX_WIDTH = 320
 _COVER_FETCH_SEMAPHORE = asyncio.Semaphore(2)
 
 
+def es_candidato_de_portada(path: Path, formato_contenido: dict | None = None) -> bool:
+    """¿Merece la pena abrir este archivo para sacar la portada de una serie (y gastar un intento)?
+
+    Solo se descarta SIN leer el archivo la ausencia CONOCIDA (`puede_dar_portada(...) is False`: un
+    `formato_contenido` guardado que dice que no es un ZIP legible). Lo desconocido (nada guardado o
+    una lectura fallida antigua) se decide por la firma, 512 bytes como máximo: un `.cbr` que por
+    dentro es ZIP se abre, uno que es RAR no. Así un RAR sin formato guardado no agota el tope de
+    intentos antes de llegar a un CBZ, y un tebeo que hoy da portada sigue dándola (#419, criterio
+    2)."""
+    ext = path.suffix.lower()
+    guardado = puede_dar_portada(ext, formato_contenido)
+    if guardado is not None:
+        return guardado
+    return se_lee_como_zip(ext, firma_de(path))
+
+
 def extract_cover_thumbnail(path: Path,
                             formato_contenido: dict | None = None,
                             *, ancho: int = _THUMB_MAX_WIDTH) -> tuple[bytes, str] | None:
