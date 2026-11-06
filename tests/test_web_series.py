@@ -1004,3 +1004,11 @@ class TestVolverALaBiblioteca:
         r = self._get(series, f"/ui/biblioteca?page=1#serie-{otra}")
         assert r.status_code == 200
         assert 'href="/ui/biblioteca" class="back-link"' in r.text
+
+    def test_desde_la_vista_lista_vuelve_a_la_lista(self):
+        series = make_series(total_issues=3)
+        destino = f"/ui/biblioteca?vista=lista&page=2#serie-{series.id}"
+        r = self._get(series, destino)
+        assert r.status_code == 200
+        assert "vista=lista&amp;page=2#serie-" in r.text
+        assert "Volver a la biblioteca" in r.text
