@@ -27,24 +27,21 @@ anota; el ejecutor no revisa la tanda que él mismo lanzó salvo autorización e
 ## 2. Antes de la primera petición
 
 - [ ] **PR-3 desplegado.** Sin él, `--real` sale con 3 y `NOT RUN`: no hay ejecución que revisar.
-- [ ] **Corpus acreditado por el PO.** Los **12 casos del piloto** ya llevan la etiqueta **corregida**
-      (años de la edición española, no de la obra; `numero` numérico) y un dossier de evidencia pública
-      en [`banco-cobertura/evidencia-acreditacion-v1.md`](banco-cobertura/evidencia-acreditacion-v1.md).
-      Siguen en `acreditacion: "borrador"` a propósito: **el PO revisa el dossier y los pasa a
-      `verificada`** (o corrige). Los otros 18 casos no entran en el piloto y siguen como propuesta.
-      Hasta esa revisión, lo editorial queda `no_acreditada` y el piloto no puede hablar de aciertos.
-- [ ] **SHA vigente.** `sha256sum docs/design/corpus-cobertura-v1.json` debe coincidir con
-      `sha_corpus`. Al acreditar el corpus cambia: actualiza también
-      [`banco-cobertura/manifiesto-corpus-v1.json`](banco-cobertura/manifiesto-corpus-v1.json); si no,
-      el arnés rechaza por `sha_corpus_distinto`.
-- [ ] **Autorización firmada.** Sustituir `PENDIENTE_DE_FIRMAR_POR_EL_PO` en `id` y `concede`; revisar
-      `desde`/`hasta` (2026-11-06 → 2026-11-13, `+00:00`), `presupuesto_peticiones: 80`,
-      `max_por_fuente: 20`, los 12 `casos` y los 24 pares `fuente:unidad`.
-      **El arnés no detecta el placeholder**: `concede` no vacío pasa la validación; la puerta es
-      humana.
-- [ ] **Clave `nota` del JSON (ya resuelta).** Se retiró del fichero: el contrato del arnés
+- [x] **Corpus acreditado por el PO (2026-11-06).** Los **12 casos del piloto** están en
+      `acreditacion: "verificada"`, `identidad_acreditada: true`, verificador `juanajok (PO)`, a partir
+      del dossier [`banco-cobertura/evidencia-acreditacion-v1.md`](banco-cobertura/evidencia-acreditacion-v1.md).
+      Los otros 18 siguen en borrador y no suman a coincidencias.
+- [x] **SHA vigente.** El corpus acreditado tiene SHA nuevo; el manifiesto y `sha_corpus` de la
+      autorización están actualizados y el arnés lo valida.
+- [x] **Autorización firmada (2026-11-06).** `id: piloto-cobertura-2026-11-06` y
+      `concede: juanajok (PO)`, con la aprobación registrada en `condiciones`. Vigencia 2026-11-06 →
+      2026-11-13 (`+00:00`), techo 80 peticiones, 20 por fuente, 12 casos y 24 pares `fuente:unidad`.
+- [x] **Clave `nota` del JSON (ya resuelta).** Se retiró del fichero: el contrato del arnés
       (`CLAVES_AUTORIZACION`) no admite claves fuera de su lista. El aviso de firma y de SHA vive en
       `condiciones`. Si se vuelve a añadir, `--real` sale con 2 y cero peticiones.
+- [ ] **IDs de Comic Vine (decisión del PO).** Sin `volume_id`/`issue_id`, **7 celdas** de CV
+      (`publicacion`, `numero`, `campo`) quedan `no_ejecutado: fuera_de_alcance`. O se aportan, o esa
+      tanda no se ejecuta y así se declara en el informe.
 - [ ] **Fuentes encendidas y configuradas en Ajustes** (Comic Vine con su clave; AniList, Tebeosfera y
       GCD encendidas). No se activan por `.env` ni por el arnés. Una fuente apagada o incompleta deja
       `no_ejecutado` con su causa y **sin petición**.
@@ -52,7 +49,9 @@ anota; el ejecutor no revisa la tanda que él mismo lanzó salvo autorización e
       acordada. La cortesía de #134 es compartida por proceso.
 - [ ] **Salida nueva:** `docs/design/medicion-cobertura-2026-11-06-piloto/<tanda>/`, vacía.
       `registro.jsonl` es append-only: no reutilizar una carpeta de una ejecución anterior.
-- [ ] **Revisores designados** (`[VERIFICADOR]` y `[SEGUNDO]`, o `revision_simple` declarada).
+- [x] **Revisores designados.** `[EJECUTOR]`: el PO en la Pi. `[VERIFICADOR]`: `juanajok (PO)`.
+      `[SEGUNDO]`: **no asignado** → se aplica `revision_simple` y así se declara en el informe. Si se
+      suma una segunda persona, se anota aquí antes de la ejecución.
 
 ## 3. Orden de ejecución: secuencial, una fuente a la vez
 

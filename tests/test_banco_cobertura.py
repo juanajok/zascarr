@@ -22,13 +22,17 @@ def _corpus() -> dict:
 
 
 class TestCorpus:
-    def test_el_corpus_v1_es_borrador_de_30_casos_y_su_sha_coincide(self):
+    def test_el_corpus_v1_tiene_30_casos_12_acreditados_y_su_sha_coincide(self):
         corpus, sha = banco.cargar_corpus(banco.CORPUS_DEFECTO)
         assert len(corpus["casos"]) == 30
         assert corpus["tamano_objetivo"] == 30
         assert sha == banco.sha256_archivo(banco.CORPUS_DEFECTO)
-        assert all(c["acreditacion"] == "borrador" for c in corpus["casos"])
-        assert all(not c["identidad_acreditada"] for c in corpus["casos"])
+        # El piloto se acreditó el 2026-11-06; el resto sigue en borrador y no suma.
+        acreditados = [c for c in corpus["casos"] if c["identidad_acreditada"]]
+        assert len(acreditados) == 12
+        assert all(c["acreditacion"] == "verificada" for c in acreditados)
+        assert all(c["acreditacion"] == "borrador"
+                   for c in corpus["casos"] if not c["identidad_acreditada"])
         sin_identidad = [c for c in corpus["casos"]
                          if c["estado_identidad"] == "sin_identidad_acreditada"]
         assert len(sin_identidad) == 2
@@ -53,7 +57,8 @@ class TestCorpus:
 
     def test_una_etiqueta_no_puede_ser_verificada_en_borrador(self):
         datos = _corpus()
-        datos["casos"][0]["identidad_acreditada"] = True   # sin acreditacion=verificada
+        borrador = next(c for c in datos["casos"] if c["acreditacion"] == "borrador")
+        borrador["identidad_acreditada"] = True   # sin acreditacion=verificada
         with pytest.raises(banco.ErrorBanco):
             banco.validar_corpus(datos)
 
