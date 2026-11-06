@@ -177,20 +177,46 @@ class TestCifraYRecuento:
             "d": censo.Clase.SIN_EXTRACTOR,
             "e": censo.Clase.SIN_FUENTE,
         }
+        series = [censo.SerieCenso("b", None), censo.SerieCenso("c", None),
+                  censo.SerieCenso("d", None), censo.SerieCenso("e", None),
+                  censo.SerieCenso("a", None)]
         conteo = censo.recuento(clases)
+        desglose = censo.desglose_sin_extractor(series, clases)
         assert conteo[censo.Clase.REGENERABLE_AL_PEDIR] == 1
-        assert censo.cifra_bl_port2(conteo) == 4   # no incluye regenerable
+        assert desglose == censo.DesgloseSinExtractor(con_portada_externa=0,
+                                                      sin_portada_externa=1)
+        assert censo.cifra_bl_port2(conteo, desglose) == 4   # no incluye regenerable
 
     def test_cada_serie_cae_en_una_sola_clase_y_hay_seis(self):
         assert len(censo.ORDEN_CLASES) == 6
         assert len(set(censo.ORDEN_CLASES)) == 6
         assert set(censo.ORDEN_CLASES) == {c for c in censo.Clase}
 
+    def test_la_tabla_desglosa_los_sin_extractor(self, capsys):
+        clases = {}
+        series = []
+        for i in range(11):
+            sid = f"cbr-{i}"
+            clases[sid] = censo.Clase.SIN_EXTRACTOR
+            series.append(censo.SerieCenso(sid, "https://example.invalid/p.jpg"))
+        desglose = censo.desglose_sin_extractor(series, clases)
+        censo.imprimir_tabla(clases, desglose)
+        salida = capsys.readouterr().out
+        assert "De los sin extractor: 11 con portada externa" in salida
+        assert "0 sin ninguna" in salida
+        assert "sin_extractor_sin_portada_externa + sin_fuente" in salida
+        assert "Cifra para decidir BL-PORT2" in salida
+
     def test_el_json_solo_tiene_ids_y_clases_sin_rutas(self):
         clases = {"11111111-1111-1111-1111-111111111111": censo.Clase.ORIGINAL_PEQUENO}
-        info = censo.informe_json(clases)
+        series = [censo.SerieCenso("11111111-1111-1111-1111-111111111111", None)]
+        info = censo.informe_json(clases, series)
         assert set(info) == {"generado", "objetivo_px", "total", "clases",
+                             "sin_extractor_con_portada_externa",
+                             "sin_extractor_sin_portada_externa",
                              "cifra_bl_port2", "estado", "series"}
+        assert info["sin_extractor_con_portada_externa"] == 0
+        assert info["sin_extractor_sin_portada_externa"] == 0
         assert info["series"] == [{"serie_id": "11111111-1111-1111-1111-111111111111",
                                    "clase": "original_pequeno"}]
         serializado = json.dumps(info, ensure_ascii=False)
@@ -270,7 +296,49 @@ class TestCensoCompleto:
             "sin_fuente": censo.Clase.SIN_FUENTE,
         }
         assert len(set(clases.values())) == 6
-        assert censo.cifra_bl_port2(censo.recuento(clases)) == 4
+        desglose = censo.desglose_sin_extractor(series, clases)
+        assert desglose == censo.DesgloseSinExtractor(con_portada_externa=0,
+                                                      sin_portada_externa=1)
+        assert censo.cifra_bl_port2(censo.recuento(clases), desglose) == 4
+
+    def test_un_cbr_con_cover_url_sigue_sin_extractor_pero_no_cuenta_en_bl_port2(self, tmp_path):
+        """La cascada descargará su portada externa a 600 al abrir la ficha: no es un problema."""
+        cbr = tmp_path / "real.cbr"
+        cbr.write_bytes(b"Rar!\x1a\x07\x00")
+        serie = censo.SerieCenso("con", "https://example.invalid/portada.jpg",
+                                 [censo.FicheroResumen(str(cbr))])
+        clases = self._censo(tmp_path, [serie])
+        assert clases["con"] == censo.Clase.SIN_EXTRACTOR
+        desglose = censo.desglose_sin_extractor([serie], clases)
+        assert desglose == censo.DesgloseSinExtractor(con_portada_externa=1,
+                                                      sin_portada_externa=0)
+        assert censo.cifra_bl_port2(censo.recuento(clases), desglose) == 0
+
+    def test_un_cbr_sin_cover_url_si_cuenta_en_bl_port2(self, tmp_path):
+        cbr = tmp_path / "real.cbr"
+        cbr.write_bytes(b"Rar!\x1a\x07\x00")
+        serie = censo.SerieCenso("sin", None, [censo.FicheroResumen(str(cbr))])
+        clases = self._censo(tmp_path, [serie])
+        assert clases["sin"] == censo.Clase.SIN_EXTRACTOR
+        desglose = censo.desglose_sin_extractor([serie], clases)
+        assert desglose == censo.DesgloseSinExtractor(con_portada_externa=0,
+                                                      sin_portada_externa=1)
+        assert censo.cifra_bl_port2(censo.recuento(clases), desglose) == 1
+
+    def test_mezcla_de_cbr_con_y_sin_portada_solo_cuenta_el_segundo(self, tmp_path):
+        cbr = tmp_path / "real.cbr"
+        cbr.write_bytes(b"Rar!\x1a\x07\x00")
+        series = [
+            censo.SerieCenso("con", "https://example.invalid/portada.jpg",
+                             [censo.FicheroResumen(str(cbr))]),
+            censo.SerieCenso("sin", None, [censo.FicheroResumen(str(cbr))]),
+        ]
+        clases = self._censo(tmp_path, series)
+        assert set(clases.values()) == {censo.Clase.SIN_EXTRACTOR}
+        desglose = censo.desglose_sin_extractor(series, clases)
+        assert desglose == censo.DesgloseSinExtractor(con_portada_externa=1,
+                                                      sin_portada_externa=1)
+        assert censo.cifra_bl_port2(censo.recuento(clases), desglose) == 1
 
     def test_una_v2_pequena_no_cuenta_como_objetivo(self, tmp_path):
         big = _cbz_de(tmp_path / "big.cbz", 1600, 2400)
@@ -282,7 +350,8 @@ class TestCensoCompleto:
         big = _cbz_de(tmp_path / "big.cbz", 1600, 2400)
         clases = {"id-1": censo.Clase.REGENERABLE_AL_PEDIR}
         json_path, csv_path = tmp_path / "informe.json", tmp_path / "informe.csv"
-        censo.escribir_salida(clases, json_path=str(json_path), csv_path=str(csv_path))
+        censo.escribir_salida(clases, [censo.SerieCenso("id-1", None)],
+                              json_path=str(json_path), csv_path=str(csv_path))
         texto = json_path.read_text(encoding="utf-8")
         assert str(big) not in texto and "file_path" not in texto
         assert json.loads(texto)["series"] == [
