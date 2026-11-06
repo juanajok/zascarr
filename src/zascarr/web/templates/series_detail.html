@@ -78,6 +78,14 @@
 </details>
 {% endif %}
 
+<details class="series-enriquecimiento">
+  <summary>Revisar cambios de datos</summary>
+  <p class="muted">Consulta la fuente y revisa campo a campo qué cambiaría. No se aplica nada hasta que lo confirmes.</p>
+  <form method="post" action="/ui/series/{{ series.id }}/enriquecimiento/previsualizar">
+    <button class="btn ghost" type="submit">Ver propuesta de la fuente</button>
+  </form>
+</details>
+
 {% if missing %}
 <h2>Te faltan</h2>
 <div class="issue-grid">

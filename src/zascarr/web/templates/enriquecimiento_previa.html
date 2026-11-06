@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Revisar datos de {{ series.title }} — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ series.id }}">← {{ series.title }}</a>
+<h1>Revisar datos de la fuente</h1>
+<p class="subtitle">Esto es una propuesta: no se ha cambiado nada de tu ficha.</p>
+
+{% if error %}
+  {{ ui.aviso("warn", error) }}
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la ficha</a></p>
+{% else %}
+  <p class="muted">Fuente: <strong>{{ plan.fuente_etiqueta }}</strong>. Revisa campo a campo y elige qué aplicar.</p>
+
+  <form method="post" action="/ui/series/{{ series.id }}/enriquecimiento/aplicar">
+    <input type="hidden" name="token" value="{{ plan.token }}">
+    <div class="tabla-scroll">
+      <table class="tabla-datos enriquecimiento-tabla">
+        <caption class="sr">Campos propuestos por {{ plan.fuente_etiqueta }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Campo</th>
+            <th scope="col">Ahora</th>
+            <th scope="col">Propuesta</th>
+            <th scope="col">Origen</th>
+            <th scope="col">Acción</th>
+            <th scope="col">Aplicar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for campo in plan.campos %}
+          <tr>
+            <th scope="row">{{ campo.etiqueta }}</th>
+            <td class="enriquecimiento-valor">
+              {% if campo.actual is none or campo.actual == "" %}<span class="muted">No consta</span>{% else %}{{ campo.actual }}{% endif %}
+            </td>
+            <td class="enriquecimiento-valor">
+              {% if campo.propuesto is none or campo.propuesto == "" %}<span class="muted">No consta en la fuente</span>{% else %}{{ campo.propuesto }}{% endif %}
+            </td>
+            <td><span class="muted">{{ campo.procedencia }}</span></td>
+            <td>
+              <span class="enriquecimiento-accion">{{ campo.accion|replace("_", " ") }}</span>
+              <span class="muted enriquecimiento-observacion">{{ campo.observacion }}</span>
+            </td>
+            <td>
+              {% if campo.aplicable %}
+              <label class="enriquecimiento-check">
+                <input type="checkbox" name="campos" value="{{ campo.clave }}"
+                       {% if campo.accion == "anadir" %}checked{% endif %}>
+                <span class="sr">Aplicar {{ campo.etiqueta }}</span>
+              </label>
+              {% else %}
+              <span class="muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="series-acciones">
+      <button class="btn primary" type="submit" {% if not plan.aplicables %}disabled{% endif %}>Aplicar lo seleccionado</button>
+      <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
+    </p>
+    <p class="muted">Solo se aplican los campos marcados. Lo que no selecciones se queda como está.</p>
+  </form>
+{% endif %}
+{% endblock %}
