@@ -18,4 +18,7 @@
 
 {#- Registro de la biblioteca: se pide al cargar (el recorrido del disco no retrasa la página). -#}
 <div id="registro" hx-get="/ui/auditoria/registro" hx-trigger="load" hx-swap="outerHTML"></div>
+
+{#- BL-R9: rescan de la biblioteca (a demanda; el periódico corre solo). Se pide al cargar. -#}
+<div id="rescan" hx-get="/ui/auditoria/rescanear" hx-trigger="load" hx-swap="outerHTML"></div>
 {% endblock %}
