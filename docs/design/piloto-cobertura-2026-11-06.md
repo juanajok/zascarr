@@ -62,7 +62,9 @@ Contraste de los candidatos devueltos contra la etiqueta acreditada del corpus.
 4. **Tebeosfera devuelve resultados ajenos por su propio ranking.** Diagnóstico con HTML real (una petición, 70 354 bytes, 83 filas, todas dentro del contenedor): buscando «Dragon Ball» el sitio pone BATMAN antes que BOLA DE DRAC. **No es un fallo del parser ni del formulario**; ver `diagnostico-tebeosfera-135-2026-11-06.md`.
 5. **GCD no filtra por idioma**: para Thorgal devuelve la edición francesa.
 
-## 5. PASS / FAIL / NOT RUN
+## 5. PASS / FAIL / NOT RUN (primera fase, sin detalle)
+
+> Los resultados con detalle están en §8 y **actualizan** el FAIL de esta sección: hay 1 coincidencia verificada.
 
 - **PASS**: ejecución autorizada (72 peticiones, 0 errores); las cuatro fuentes responden; 8/12 resuelven la serie; el arnés detecta y corrige sus propios fallos; registro e informe saneados (sin URL, sin nombres, sin claves).
 - **FAIL**: 0/12 acreditan la edición española; 2 casos no encuentran ni la obra (ES-018, ES-019); GCD devuelve ediciones de otro idioma.
@@ -81,3 +83,30 @@ Contraste de los candidatos devueltos contra la etiqueta acreditada del corpus.
 - Solo se probaron los métodos de búsqueda por serie y el buscador de Tebeosfera.
 - Un único ejecutor y una sola fecha; el comportamiento de las fuentes cambia.
 - La revisión es `revision_simple` (sin segundo revisor), declarada de antemano.
+
+## 8. Contraste con detalle (2026-11-07)
+
+Segunda fase: el banco obtiene el **detalle** del primer candidato y lo contrasta con la etiqueta
+acreditada. Autorización `piloto-cobertura-detalle-2026-11-07` (150 peticiones, 45 por fuente),
+ejecutada **por tandas** (una fuente por pasada) para no chocar con la cortesía.
+
+| Fuente | Casos con contraste | Resultado |
+|---|---:|---|
+| Comic Vine | 12/12 | **12 `incorrecto`**: su volumen es la edición USA (Viz), no la española |
+| Tebeosfera | 4/12 | **1 `coincidencia_verificada`** (ES-014, Blueberry integral de Norma) · 3 `incorrecto` (ES-001, ES-005, ES-007) · `ambiguo` en `publicacion`/`formato` |
+| GCD | 0 | **NOT RUN**: 429 a la primera petición (límite de cortesía del servicio) |
+| AniList | 0 | sin método de edición (por diseño) |
+
+- **Primera coincidencia editorial verificada del proyecto: ES-014** (Blueberry, edición integral de
+  Norma). El camino del detalle de edición funciona.
+- **Los `incorrecto` de Tebeosfera no son un fallo del contraste**: el candidato que devuelve su
+  buscador no es la edición de la etiqueta (el ranking del sitio sigue siendo el límite conocido).
+- **Solo 4 de 12 casos tuvieron candidato de Tebeosfera** en esta pasada; el resto no llegó al
+  contraste. Con ellos no se puede decir nada.
+- **El detalle de número no se ejercitó**: los casos con número (ES-018, ES-019) no estaban entre los
+  cuatro con candidato. Queda **NOT RUN**, no fallido.
+
+Conclusión revisada: **la edición española se puede acreditar** (1 de 1 intento con candidato
+correcto), pero el cuello de botella ya no es el detalle: es **que el buscador de Tebeosfera
+devuelva el candidato adecuado** y que GCD no nos frene. Ambas cosas son historias de selección y
+ritmo, no de contrato.
