@@ -37,6 +37,7 @@ from zascarr.services.detalle_edicion import (
     detalle_desde_coleccion,
     detalle_desde_cv_volumen,
     detalle_desde_gcd_serie,
+    detalle_desde_numero,
 )
 from zascarr.services.gcd import GCDClient, GCDSerie, es_edicion_espanola
 from zascarr.services.tebeosfera import TebeosferaClient
@@ -176,6 +177,19 @@ class DiscoveryService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _slug_numero(resultado: DiscoveryResult) -> str | None:
+        """Slug de número si el candidato lo declara; si no, `None` (sin inventar)."""
+        external = (resultado.external_id or "").strip()
+        site = (resultado.site_url or "").strip()
+        if external.startswith("numero:"):
+            return external.split(":", 1)[1].strip() or None
+        if "/numeros/" in external:
+            return external.split("/numeros/", 1)[1].split(".html", 1)[0].strip("/") or None
+        if "/numeros/" in site:
+            return site.split("/numeros/", 1)[1].split(".html", 1)[0].strip("/") or None
+        return None
+
     async def detalle_de(self, resultado: DiscoveryResult, *,
                          unidad: str = "edicion") -> ResultadoDetalle:
         """Pide la ficha de detalle del candidato, sin cambiar `DiscoveryResult`/`Busqueda`.
@@ -207,13 +221,22 @@ class DiscoveryService:
                         fuente, FUENTE_SIN_RESULTADOS,
                         "El volumen no existe en Comic Vine."), None)
             elif fuente is MetadataSource.TEBEOSFERA:
+                slug_numero = self._slug_numero(resultado)
                 async with TebeosferaClient() as cliente:
-                    coleccion = await cliente.get_collection(resultado.external_id)
-                if coleccion is None:
-                    return ResultadoDetalle(_estado_detalle(
-                        fuente, FUENTE_SIN_RESULTADOS,
-                        "La ficha no existe o no es de colección."), None)
-                detalle = detalle_desde_coleccion(coleccion)
+                    if slug_numero is not None:
+                        numero = await cliente.get_numero(slug_numero)
+                        if numero is None:
+                            return ResultadoDetalle(_estado_detalle(
+                                fuente, FUENTE_SIN_RESULTADOS,
+                                "La ficha de número no existe."), None)
+                        detalle = detalle_desde_numero(numero)
+                    else:
+                        coleccion = await cliente.get_collection(resultado.external_id)
+                        if coleccion is None:
+                            return ResultadoDetalle(_estado_detalle(
+                                fuente, FUENTE_SIN_RESULTADOS,
+                                "La ficha no existe o no es de colección."), None)
+                        detalle = detalle_desde_coleccion(coleccion)
             elif fuente is MetadataSource.GCD:
                 detalle = await self._detalle_gcd(resultado)
                 if detalle is None:

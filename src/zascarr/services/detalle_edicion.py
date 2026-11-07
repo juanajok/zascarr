@@ -45,6 +45,8 @@ class DetalleEdicion:
     #: como `numero_publicacion`: no identifica el ejemplar concreto. No forma parte del
     #: conjunto `campos_ausentes` de la spec, que se reserva a los campos de contraste.
     recuento_numeros: int | None = None
+    #: Fecha de publicación si la fuente la da en la ficha de número (#489); evidencia.
+    fecha_publicacion: str | None = None
 
 
 @dataclass(frozen=True)
@@ -119,7 +121,7 @@ def mapa_formato(texto: str | None) -> IssueFormat | None:
     for formato in IssueFormat:
         if v == formato.value:
             return formato
-    if "cuaderno" in v and "grapa" in v:
+    if "cuaderno" in v and ("grapa" in v or "encolado" in v):
         return IssueFormat.SINGLE_ISSUE
     if "grapa" in v:
         return IssueFormat.SINGLE_ISSUE
@@ -240,6 +242,30 @@ def detalle_desde_cv_volumen(volumen: Any) -> DetalleEdicion:
         peticiones=getattr(volumen, "peticiones", 1),
         url_ficha=None,
         recuento_numeros=getattr(volumen, "count_of_issues", None),
+    )
+    return DetalleEdicion(**{**detalle.__dict__, "campos_ausentes": _campos_ausentes(detalle)})
+
+
+def detalle_desde_numero(numero: Any) -> DetalleEdicion:
+    """Normaliza un `TebeosferaNumero` a `DetalleEdicion` (sin red).
+
+    Aporta el `numero_publicacion` que la ficha de colección no tiene; editorial/año/fecha,
+    páginas y formato solo si la ficha real de número los trae.
+    """
+    detalle = DetalleEdicion(
+        fuente=MetadataSource.TEBEOSFERA,
+        external_id=getattr(numero, "slug", ""),
+        metodo="get_numero",
+        editorial=getattr(numero, "editorial", None),
+        sello=getattr(numero, "sello", None),
+        anio=getattr(numero, "anio", None),
+        numero_publicacion=getattr(numero, "numero_publicacion", None),
+        paginas=getattr(numero, "paginas", None),
+        formato=mapa_formato(getattr(numero, "formato_fuente", None)),
+        formato_fuente=getattr(numero, "formato_fuente", None),
+        fecha_publicacion=getattr(numero, "fecha", None),
+        peticiones=getattr(numero, "peticiones", 1),
+        url_ficha=getattr(numero, "url_ficha", None),
     )
     return DetalleEdicion(**{**detalle.__dict__, "campos_ausentes": _campos_ausentes(detalle)})
 
@@ -437,5 +463,6 @@ __all__ = [
     "detalle_desde_coleccion",
     "detalle_desde_cv_volumen",
     "detalle_desde_gcd_serie",
+    "detalle_desde_numero",
     "mapa_formato",
 ]
