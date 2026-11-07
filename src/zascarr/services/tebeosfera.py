@@ -49,7 +49,8 @@ import re
 import time
 import unicodedata
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from typing import Any
+from urllib.parse import quote, urlsplit
 
 import httpx
 import structlog
@@ -65,6 +66,7 @@ from zascarr.utils.peticiones import (
     DemasiadasRedirecciones,
     ErrorDePeticion,
     RedireccionNoPermitida,
+    RespuestaNoTransitoria,
     pedir_con_cortesia,
 )
 
@@ -192,6 +194,36 @@ def ordenar_por_relevancia(resultados: list[TebeosferaResult],
     )]
 
 
+@dataclass(frozen=True)
+class TebeosferaColeccion:
+    """Campos CRUDOS de una ficha de colección de Tebeosfera (#465).
+
+    El servicio `detalle_edicion` los normaliza a `DetalleEdicion`; aquí no se mapea el
+    formato ni se inventan campos que la ficha no trae. `idioma` siempre es `None` hasta
+    que la ficha lo exponga (hoy no tiene campo).
+    """
+    slug: str
+    editorial: str | None = None
+    sello: str | None = None
+    anio: int | None = None
+    anio_fin: int | None = None
+    numeracion_inicio: int | None = None
+    numeracion_fin: int | None = None
+    numeracion_texto: str | None = None
+    numero_publicacion: str | None = None
+    paginas: int | None = None
+    formato_fuente: str | None = None
+    pais: str | None = None
+    idioma: str | None = None
+    url_ficha: str | None = None
+    peticiones: int = 1
+
+    @property
+    def formato(self) -> str | None:
+        """Texto crudo del formato; el servicio lo mapea a `IssueFormat`."""
+        return self.formato_fuente
+
+
 class TebeosferaClient:
     def __init__(self, transporte: httpx.AsyncBaseTransport | None = None, *,
                  politica: PoliticaFuente | None = None,
@@ -273,6 +305,137 @@ class TebeosferaClient:
         sagas = await self._search_table("T3_series", "saga", query)
         # Ordenar ANTES de recortar: el acierto puede venir más allá del límite del sitio.
         return ordenar_por_relevancia(collections + sagas, query)[:limit]
+
+    async def get_collection(self, slug: str, *,
+                             espera_max_s: float = 30.0) -> TebeosferaColeccion | None:
+        """Lee UNA ficha de colección por `pedir_con_cortesia` (misma cortesía, 1 petición).
+
+        Solo se pide la ficha HTML, nunca la galería de portadas ni imágenes. Un 404/HTML sin
+        ficha devuelve `None`; los estados de #133 los decide quien consuma el resultado.
+        """
+        slug = (slug or "").strip()
+        if not slug or self._client is None:
+            return None
+        url = f"{_BASE_URL}/colecciones/{quote(slug, safe='-_.~')}.html"
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", url,
+                politica=self._politica, espera_max_s=espera_max_s,
+                cortesia=self._cortesia_efectiva(), reloj=self._reloj,
+                dormir=self._dormir,
+            )
+        except (RespuestaNoTransitoria, ErrorDePeticion, httpx.HTTPError):
+            logger.warning("tebeosfera.get_collection_failed", slug=slug)
+            return None
+        return _parse_collection(r.text, slug)
+
+
+def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | None:
+    """Parser defensivo de la ficha de colección; cada campo ausente queda `None`."""
+    if not html_fragment:
+        return None
+    try:
+        tree = lxml_html.fromstring(html_fragment)
+    except Exception:
+        logger.warning("tebeosfera.parse_collection_failed", slug=slug)
+        return None
+    ficha = tree.xpath('//div[@id="div_ficha"]')
+    if not ficha:
+        ficha = tree.xpath('//div[@id="cuerpo2_ficha"]')
+    if not ficha:
+        return None
+    ficha = ficha[0]
+
+    editorial = sello = None
+    titulo = ficha.xpath('.//div[contains(@class,"titulo")]')
+    if titulo:
+        enlaces = titulo[0].xpath('.//a[contains(@href,"/entidades/")]')
+        textos = [(a.text_content() or "").strip() for a in enlaces]
+        textos = [t for t in textos if t]
+        if textos:
+            editorial = textos[0]
+        if len(textos) > 1:
+            sello = textos[1]
+
+    pais = None
+    bandera = ficha.xpath(
+        './/*[@title="España" or @title="Espanya" or @title="Spain" '
+        'or contains(@src,"spain.png")]')
+    if bandera:
+        pais = "ES"
+
+    fechas = _texto_dato(ficha, "Fechas:")
+    anio = anio_fin = None
+    if fechas:
+        años = [int(m.group(0)) for m in _YEAR_RE.finditer(fechas)]
+        if años:
+            anio = años[0]
+            if len(años) > 1 and años[-1] != anio:
+                anio_fin = años[-1]
+    if anio is None:
+        # La ficha a veces repite el año en el título; solo como fallback del mismo bloque.
+        titulo_texto = " ".join(t for t in (ficha.xpath('.//h1//text()') or []) if t)
+        años_titulo = [int(m.group(0)) for m in _YEAR_RE.finditer(titulo_texto)]
+        if años_titulo:
+            anio = años_titulo[0]
+
+    numeracion_texto = None
+    inicio = fin = None
+    nodos_num = ficha.xpath('.//*[contains(text(),"Numeración:")]')
+    if nodos_num:
+        texto_num = " ".join(nodos_num[0].getparent().text_content().split())
+        m = re.search(r"Numeración:\s*(\d+)\s*(?:a|–|-)\s*(\d+)", texto_num,
+                      re.IGNORECASE)
+        if m:
+            numeracion_texto = f"{m.group(1)} a {m.group(2)}"
+            inicio, fin = int(m.group(1)), int(m.group(2))
+        else:
+            m1 = re.search(r"Numeración:\s*(\d+)", texto_num, re.IGNORECASE)
+            if m1:
+                numeracion_texto = m1.group(1)
+                inicio = int(m1.group(1))
+
+    formato_fuente = _texto_dato(ficha, "Formato:")
+    if formato_fuente:
+        formato_fuente = re.sub(r"\[\s*\d+(?:\s*-\s*\d+)?\s*\]", "", formato_fuente)
+        formato_fuente = " ".join(formato_fuente.split()).strip(" /") or None
+
+    paginas = None
+    paginacion = _texto_dato(ficha, "Paginación:")
+    if paginacion:
+        valores = {int(n) for n in re.findall(r"(\d+)\s*pp\.", paginacion, re.IGNORECASE)}
+        if len(valores) == 1:
+            paginas = valores.pop()
+
+    return TebeosferaColeccion(
+        slug=slug,
+        editorial=editorial,
+        sello=sello,
+        anio=anio,
+        anio_fin=anio_fin,
+        numeracion_inicio=inicio,
+        numeracion_fin=fin,
+        numeracion_texto=numeracion_texto,
+        numero_publicacion=None,       # la ficha de colección no da el ejemplar
+        paginas=paginas,
+        formato_fuente=formato_fuente,
+        pais=pais,
+        idioma=None,                   # hoy no hay campo de idioma en la ficha
+        url_ficha=f"{_BASE_URL}/colecciones/{quote(slug, safe='-_.~')}.html",
+        peticiones=1,
+    )
+
+
+def _texto_dato(ficha: Any, etiqueta: str) -> str | None:
+    """Texto del `.dato` hermano de una etiqueta (`Fechas:`, `Formato:`...), o `None`."""
+    etiquetas = ficha.xpath('.//*[contains(@class,"etiqueta")]')
+    for label in etiquetas:
+        if (label.text_content() or "").strip().startswith(etiqueta):
+            fila = label.getparent()
+            datos = fila.xpath('.//*[contains(@class,"dato")]')
+            if datos:
+                return " ".join(datos[0].text_content().split())
+    return None
 
 
 def _parse_results(html_fragment: str, kind: str) -> list[TebeosferaResult]:
