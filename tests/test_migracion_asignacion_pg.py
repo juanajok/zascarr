@@ -607,7 +607,9 @@ class TestBajadaConcurrente:
             finally:
                 await b.cerrar()
             assert r.returncode != 0 and "operaciones de asignación vivas" in r.stderr
-            assert await version(url) == cabeza() and await existe_tabla_y_tipo(url) == (True, True)
+            # La bajada se niega y la base se queda donde estaba: 0020 (punto de partida del test),
+            # con la tabla de la 0017 intacta.
+            assert await version(url) == "0020" and await existe_tabla_y_tipo(url) == (True, True)
             motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
             async with motor.connect() as c:
                 assert (await c.execute(text("SELECT estado::text FROM asignacion_operaciones"))).scalar() == "preparada"
