@@ -34,7 +34,7 @@ def upgrade() -> None:
         LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
         AS $$
             SELECT btrim(regexp_replace(
-                regexp_replace(lower(f_unaccent($1)), '[^[:alnum:] ]', ' ', 'g'),
+                regexp_replace(lower(public.unaccent('public.unaccent', $1)), '[^[:alnum:] ]', ' ', 'g'),
                 '\\s+', ' ', 'g'
             ))
         $$
