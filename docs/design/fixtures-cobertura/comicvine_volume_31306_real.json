@@ -1,0 +1,16 @@
+{
+  "_fixture": "REAL capturada con scripts/medicion/verificar_cv_detalle.py en la Pi",
+  "capturado": {
+    "fecha": "2026-11-07T15:20:37+00:00",
+    "sha_ejecutor": "fe60b3a2905471863a14c52767e075609f3393ea"
+  },
+  "estado": "ok",
+  "id": 31306,
+  "name": "Dragon Ball",
+  "publisher": "Viz",
+  "start_year": 2003,
+  "count_of_issues": 16,
+  "first_issue": {"id": 194861, "issue_number": "1"},
+  "last_issue": {"id": 294807, "issue_number": "16"},
+  "issue": {"id": 194861, "issue_number": "1", "cover_date": "2003-05-01"}
+}
