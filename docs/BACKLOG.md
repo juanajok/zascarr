@@ -477,8 +477,8 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
 
 **Origen:** propuesta externa pegada por el PO el 2026-11-04 (namespaces, alias,
 padres, `source`/`weight`, ComicInfo, enricher, UI HTMX), contrastada contra el
-código y las referencias. **Feature en el tablero: #402**; primera historia:
-**#403 (BL-ETQ1)**. Ficha §13: `docs/design/benchmark-etiquetas.md`
+código y las referencias. **Feature en el tablero: #402**; historias:
+**#403 (BL-ETQ1a)** y **#431 (BL-ETQ1b)**. Ficha §13: `docs/design/benchmark-etiquetas.md`
 (**CONSTRUIR SOBRE LO PROPIO**, 4,35/5: statu quo 3,00 · propuesta literal 3,05 ·
 booru completo 2,40). Evaluación: `docs/design/evaluacion-propuesta-etiquetas.md`.
 Especificación: `docs/design/especificacion-etiquetas.md`. UI:
@@ -487,27 +487,39 @@ Especificación: `docs/design/especificacion-etiquetas.md`. UI:
 **Resumen del encaje:** la propuesta literal no se adopta (ids `int`, migración
 «0010», `tag`/`serie_tag` nuevas, duplicar `genero`/`personaje`/`formato`). Se
 reutilizan `tags`/`issue_tags` (UUID, migración 0001), se añade `series_tags` y la
-migración **0021**; se pueblan `Series.genres`/`Issue.characters` en vez de
-duplicarlos; `<Tags>` de ComicInfo se lee antes de escribir; alias/padres y
-enriquecimiento van por fases. `source` reutiliza `MetadataSource`; `weight` es
-relevancia (no confianza); `manual` gana.
+migración **0022** (`down_revision="0021"`, porque BL-R9 ya ocupó la 0021); se
+pueblan `Series.genres`/`Issue.characters` en vez de duplicarlos; `<Tags>` de
+ComicInfo se lee antes de escribir; alias/padres y enriquecimiento van por fases.
+`source` reutiliza `MetadataSource`; `weight` es relevancia (no confianza); `manual`
+gana. **Un solo espacio visible en el MVP: `etiqueta`** (D-1); la persona escribe el
+nombre sin prefijo.
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| ETQ1 | Como coleccionista, quiero etiquetar series con mis palabras y filtrar la biblioteca por ellas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #403; AC-01…AC-20 de `especificacion-etiquetas.md`; migración 0021; reutiliza `tags`/`issue_tags` y añade `series_tags`; `manual` gana; sin leer/escribir ComicInfo en esta entrega; UI según `ui-etiquetas.md` | P1 | L |
+| ETQ1a | Como coleccionista, quiero etiquetar una serie con mis palabras desde su ficha (añadir, quitar y crear), para describir lo que trata sin tocar archivos | #403; AC-01…AC-05, AC-07 (ficha), AC-10, AC-12…AC-16 y AC-19 de `especificacion-etiquetas.md`; migración **0022**; reutiliza `tags`/`issue_tags` y añade `series_tags`; `manual` gana; D-6 ratificada (crear desde la ficha); UI según `ui-etiquetas.md` | P1 | M |
+| ETQ1b | Como coleccionista, quiero filtrar la biblioteca por etiquetas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #431; AC-06, AC-07 (Biblioteca), AC-08, AC-09, AC-11, AC-17, AC-18 y NFR-07; filtro sobre `#rejilla`; facetas de un solo grupo; **bloqueada hasta fusionar ETQ1a** | P1 | M |
 | ETQ2 | Como coleccionista, quiero que las etiquetas que ya traen mis CBZ en ComicInfo aparezcan en ZascArr, para no teclearlas | `<Tags>`/`<Genre>` leídos con `source='comicinfo_xml'`, topes de volumen (hallazgo ALTO de seguridad), idempotente, sin pisar manual, sin escribir XML | P1 | M |
 | ETQ3 | Como coleccionista, quiero que géneros y personajes de las fuentes se guarden de verdad (hoy las tablas están dormidas), para filtrar por ellos | Poblar `Series.genres`/`Issue.characters` con los `field_list` actuales ampliados en la misma petición; respeta `locked_fields`; Tebeosfera sigue sin género (no se inventa) | P1 | M–L |
-| ETQ4 | Como coleccionista, quiero que las fuentes propongan etiquetas de tema sin pisar las mías | Mapeo a los namespaces ratificados; `weight` = `rank` real de AniList; caché negativa H2 y espaciados de cortesía; `manual` no se toca | P2 | M |
+| ETQ4 | Como coleccionista, quiero que las fuentes propongan etiquetas de tema sin pisar las mías | Mapeo al espacio `etiqueta` (D-1); `weight` = `rank` real de AniList; caché negativa H2 y espaciados de cortesía; `manual` no se toca | P2 | M |
 | ETQ5 | Como coleccionista, quiero que «super-man» y «superman» sean la misma etiqueta y que buscar una traiga sus implicaciones | Alias único normalizado, implicaciones sin ciclos ni autoimplicación, resueltas en consulta a profundidad ≤2; curación manual y confirmada | P2 | L |
 | ETQ6 | Como coleccionista, quiero que mis etiquetas viajen al `ComicInfo.xml` para que Kavita las lea | **NO APTO hoy**: exige extender el contrato B6 (plan, autoría, canonicidad, tope, política de `source`, ida/vuelta) y B20; no se autoriza antes | P2 | L |
 
-**Decisiones del PO pendientes (bloquean el DoR de ETQ1):** namespaces finales
-(recomendación `tema`/`motivo`/`etiqueta`), idioma de las etiquetas, `publico`/
-`AgeRating` como columna estructurada (no tag), export fuera del MVP, curación
-manual de alias y **si se pueden crear etiquetas desde la ficha en ETQ1** (si se
-rechaza, el MVP se queda sin datos con los que probarse). Detalle en
-`docs/design/especificacion-etiquetas.md` §10.1. Publicar la tarjeta **no
-autoriza código, migraciones en producción ni despliegue**.
+**Decisiones del PO ratificadas el 2026-11-06** (detalle en
+`docs/design/especificacion-etiquetas.md` §0.1 y en el comentario de #402):
+
+- **D-1:** un solo espacio visible, `etiqueta`; sin prefijos. La columna `namespace`
+  se crea con `CHECK ('etiqueta')` y se amplía con otra migración.
+- **D-2:** español escrito a mano en el MVP.
+- **D-3:** público/edad fuera de etiquetas; columna estructurada en otra historia.
+- **D-4:** export a ComicInfo/Kavita fuera del MVP (BL-ETQ6, NO APTO hasta B6).
+- **D-5:** alias e implicaciones solo manuales y confirmados (BL-ETQ5).
+- **D-6:** **sí** se crean etiquetas desde la ficha, como acción explícita.
+- **D-7:** orden 1a → 1b y medir antes de seguir.
+
+La **migración es la 0022** (`down_revision="0021"`); la 0021 la ocupa BL-R9. ETQ1a
+(#403) y ETQ1b (#431) están en «Lista para desarrollar»; **1b queda bloqueada** hasta
+que 1a esté fusionada. Publicar la tarjeta **no autoriza código, migraciones en
+producción ni despliegue**.
 
 ### Épica D — "El sistema busca lo que me falta"
 

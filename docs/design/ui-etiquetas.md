@@ -1,15 +1,15 @@
 # Etiquetas — diseño de la experiencia (Jinja2 + HTMX, sin SPA)
 
-> **Estado (2026-11-06):** **leer primero §0**, que recoge las decisiones del PO (un solo espacio de
-> nombres visible) y la reconciliación de Biblioteca con BL-IT01 (#283) y manda sobre el resto. La v0.1
-> decía: el MVP usa los namespaces **`tema`**, **`motivo`** y **`etiqueta`**. **No implementado.** No autoriza
-> cambios en `src/`, `tests/` ni migraciones. El modelo y los namespaces están ratificados por la
-> especificación (task-4) a partir del benchmark (task-1); este documento fija **qué ve y qué hace
-> El Coleccionista**, con contratos verificables.
+> **Estado (2026-11-07):** **leer primero §0**, que recoge las decisiones del PO (un solo espacio de
+> nombres visible, `etiqueta`) y la reconciliación de Biblioteca con BL-IT01 (#283), re-verificada tras
+> #284/#286, y manda sobre el resto. La v0.1 decía: el MVP usa los namespaces **`tema`**, **`motivo`** y
+> **`etiqueta`**. **No implementado.** No autoriza cambios en `src/`, `tests/` ni migraciones. El modelo
+> y el espacio único están ratificados por la especificación (v0.3, migración **0022**); este documento
+> fija **qué ve y qué hace El Coleccionista**, con contratos verificables.
 >
-> **Base leída** (commit `35283b5`, 2026-11-04): `CLAUDE.md` §3.1 y §6,
+> **Base leída** (commit `61c85d6`, 2026-11-07): `CLAUDE.md` §3.1 y §6,
 > `docs/design/ui-migracion.md`, `docs/design/propuesta-externa-etiquetas.md` §4,
-> `docs/design/especificacion-etiquetas.md` §2/§7.1 (namespaces ratificados),
+> `docs/design/especificacion-etiquetas.md` §2/§7.1 (espacio único ratificado),
 > `src/zascarr/web/templates/{base,biblioteca,series_detail,pendientes,_componentes,_rejilla_biblioteca,_resultados_serie}.html`,
 > `src/zascarr/web/{library,componentes,iconos,menu}.py`, `src/zascarr/static/web.css`,
 > `src/zascarr/models/__init__.py` (`tags`, `issue_tags`, `Series.genres`, `Issue.characters`),
@@ -23,7 +23,7 @@
 
 **Manda sobre el resto del documento** donde lo contradiga; el cuerpo se conserva como historial. Detalle en `especificacion-etiquetas.md` §0.
 
-1. **Un solo espacio de nombres visible (D-1).** La persona escribe y ve **el nombre** (`noir`, `space-opera`), sin prefijos. Donde este documento dice `tema:noir` o `motivo:escuela`, léase `noir` o `escuela`. Los grupos de facetas por espacio de nombres se reducen a **un solo grupo** («Etiquetas»). El aviso de etiqueta ambigua entre espacios desaparece.
+1. **Un solo espacio de nombres visible (D-1).** La persona escribe y ve **el nombre** (`noir`, `space-opera`), sin prefijos. Donde este documento dice `tema:noir` o `motivo:escuela`, léase `noir` o `escuela`. Los grupos de facetas por espacio de nombres se reducen a **un solo grupo** («Etiquetas»). El aviso de etiqueta ambigua entre espacios desaparece. La migración es la **0022** (`down_revision="0021"`), no la 0021: BL-R9 ya ocupó esa revisión.
 2. **Biblioteca, sobre el contrato de BL-IT01 (#283):**
    - **No se crea `#resultados-biblioteca`.** El destino sigue siendo **`#rejilla`**, y el fragmento de `/ui/biblioteca/resultados` es el de BL-IT01 (`_rejilla_biblioteca.html`), ampliado.
    - **No se crea otro `#filtros-activos`.** Las etiquetas activas son **más chips de la lista existente** (`FiltroActivo`), con su «Quitar» y dentro de «Limpiar todos». La exclusión se distingue con «Sin», borde discontinuo e icono `minus`.
@@ -42,8 +42,8 @@
    etiquetas activas se ven como chips; varias etiquetas **se suman** (AND) y una etiqueta con
    `-` delante **excluye**. Nunca se exige aprender sintaxis: cada sugerencia ofrece «Añadir» y
    «Excluir» como dos enlaces reales, y la sintaxis queda visible en el campo.
-2. **Una sola región que se sustituye:** `#resultados-biblioteca` (chips activos + facetas +
-   recuento + rejilla + paginación). Un solo viaje por cambio de filtro, no uno por cada pieza.
+2. **Una sola región que se sustituye:** `#rejilla` (chips activos + facetas + recuento + rejilla +
+   paginación), como en BL-IT01. Un solo viaje por cambio de filtro, no uno por cada pieza.
    Quitar un chip, pulsar una faceta y elegir una sugerencia apuntan a esa misma región.
 3. **Edición en la ficha de serie, como la bandeja de pendientes:** cada etiqueta se quita con su
    propio `hx-post` y se añade con un buscador con sugerencias; el fragmento `#etiquetas-serie` se
@@ -57,7 +57,7 @@
 5. **Metáfora Netflix solo para descubrir, no para buscar.** Las «estanterías» por etiqueta
    (filas de tarjetas) van a una fase posterior con carga diferida `hx-trigger="revealed"`;
    el MVP muestra un panel de facetas. No se copia la estética ni el motor de recomendación.
-6. **Namespaces del MVP: `tema`, `motivo` y `etiqueta`** (spec §2/§7.1). `genero`, `personaje`,
+6. **Un solo espacio visible en el MVP: `etiqueta`** (D-1, spec §2/§7.1). `genero`, `personaje`,
    `universo`, `formato` y `publico` **no son tags**: viven en sus columnas/relaciones o se
    deciden aparte (§4.4). La UI no los ofrece en la barra ni en las facetas.
 
@@ -69,7 +69,7 @@
 | `ui.aviso(tipo, texto)` | ídem | avisos de error/confirmación **dentro** del fragmento (nunca JSON) |
 | `ui.estado_vacio(titulo, texto, accion)` | ídem | sin resultados, biblioteca sin etiquetas |
 | `ui.region_viva(id)` | ídem (`aria-live="polite"`) | recuento y panel de etiquetas de la ficha |
-| `ui.grupo(titulo, recuento)` | ídem | facetas por namespace y etiquetas agrupadas en la ficha |
+| `ui.grupo(titulo, recuento)` | ídem | un solo grupo de facetas («Etiquetas») y etiquetas de la ficha |
 | `ui.portada(...)` | ídem; `web/portada_marca.py` | tarjetas de la rejilla (marcador local, sin hotlinking) |
 | `.filter-bar`, `.filter-search-box`, `.series-results`, `.series-list` | `web.css` | campo de etiqueta y lista de sugerencias con el estilo que ya usan personaje/saga |
 | `.chip`, `.chip.ok/.warn/.amber/.info`, `.group`, `.ghead`, `.empty-state`, `.aviso`, `.muted` | `web.css` §16c | componentes de base |
@@ -83,12 +83,12 @@
 | `_rejilla_biblioteca.html` | plantilla existente | se amplía con chips/facetas; **la URL de paginación debe incluir `etiquetas`** (§11.5) |
 
 **Lo que ya está ratificado por la especificación (§2 y §7.1) y esta UI no reabre:** conviven
-`tags`/`issue_tags` (UUID) y se añade `series_tags` en la migración 0021; `tags` gana `namespace`
-con la lista del MVP (`tema`, `motivo`, `etiqueta`) y `issue_tags` queda **dormida**. `Series.genres`
-e `Issue.characters` existen y **no** se convierten en tags (§4.4). El identificador de superficie
-es siempre texto `namespace:nombre` (p. ej. `tema:noir`), nunca un UUID ni un `id`; si una fase
-posterior cambia el nivel o el modelo, solo cambia el servicio que resuelve el texto, no las rutas
-ni los fragmentos.
+`tags`/`issue_tags` (UUID) y se añade `series_tags` en la migración **0022**; `tags` gana `namespace`
+con un único valor visible (`etiqueta`) y `issue_tags` queda **dormida**. `Series.genres` e
+`Issue.characters` existen y **no** se convierten en tags (§4.4). El identificador de superficie es
+siempre el **nombre** normalizado (p. ej. `noir`, `space-opera`), nunca un UUID ni un `id`; si una
+fase posterior añade otro espacio, solo cambia el servicio que resuelve el texto, no las rutas ni
+los fragmentos.
 
 ## 3. Patrones de referencia y anti-patrones
 
@@ -96,8 +96,8 @@ ni los fragmentos.
 
 | Referencia | Se adopta / adapta | Se descarta | Cómo se ve en esta UI |
 |---|---|---|---|
-| **Hydrus / boorus** (búsqueda de tags) | Lenguaje de consulta simple y **visible**: espacio = AND, `-` = exclusión, `namespace:nombre`. Sugerencias con recuento. | Sintaxis obligatoria, operadores OR/`~`/regex, paréntesis, «siblings» invisibles, teclado de poder. | Campo con la expresión (`tema:noir -motivo:escuela`) + chips derivados. «Añadir»/«Excluir» explícitos. Nada de OR en el MVP. |
-| **Kavita smart filters** | Recuentos junto al filtro; «limpiar filtros» a la vista; filtro = colección de condiciones. | Constructor de reglas con muchos campos, guardar filtros como objetos, vistas materializadas. | Facetas por namespace con recuento (`tema:noir · 34`); «Quitar etiquetas». Guardar filtros = fase posterior. |
+| **Hydrus / boorus** (búsqueda de tags) | Lenguaje de consulta simple y **visible**: espacio = AND, `-` = exclusión, nombre sin prefijo. Sugerencias con recuento. | Sintaxis obligatoria, operadores OR/`~`/regex, paréntesis, «siblings» invisibles, teclado de poder. | Campo con la expresión (`noir -escuela`) + chips derivados. «Añadir»/«Excluir» explícitos. Nada de OR en el MVP. |
+| **Kavita smart filters** | Recuentos junto al filtro; «limpiar filtros» a la vista; filtro = colección de condiciones. | Constructor de reglas con muchos campos, guardar filtros como objetos, vistas materializadas. | Un solo grupo de facetas con recuento (`noir · 34`); «Quitar etiquetas». Guardar filtros = fase posterior. |
 | **Calibre-Web typeahead** | Escribir, ver pocas sugerencias, elegir con clic; el campo no pierde lo elegido. | Lista completa de la tabla de tags, orden alfabético ciego, autocompletado solo con ratón. | Sugerencias **máx. 8**, ordenadas por uso/similitud, con recuento; enlaces enfocables con Tab; Enter envía la expresión. |
 | **Netflix (descubrimiento)** | Metáfora de **estanterías por tema**, sin busca: filas de carátulas que invitan a explorar. | Recomendación personalizada, hero gigante, autoplay, carrusel con flechas (exigiría JS), filas infinitas. | Fase 2: 3 filas («Noir», «Escuela», «Space opera»), 8 tarjetas, desplazamiento con CSS y carga por `hx-trigger="revealed"`. El MVP muestra facetas, no estanterías. |
 | **LANraragi / Komga** (tan solo como contraste) | Idea de que las etiquetas conviven con filtros estructurados (editorial, tradición), no los sustituyen. | Sustituir los filtros cerrados por etiquetas libres. | Los filtros actuales (tradición, editorial, personaje, saga) **se quedan**; las etiquetas se suman. |
@@ -108,10 +108,10 @@ ni los fragmentos.
 1. **No convertir el campo de título en un cajón de sintaxis.** `q` sigue buscando por título;
    las etiquetas tienen su campo. Un usuario que escribe `noir` en título no espera tags.
 2. **No ocultar la lógica AND.** Si el recuento baja al añadir una etiqueta, el texto lo dice
-   («34 series con `tema:noir` y `motivo:escuela`»); nunca un «filtrando…» ambiguo.
-3. **No usar solo el color para excluir ni para el namespace.** La exclusión lleva borde
-   discontinuo, icono `minus` y la palabra «Sin»; el namespace va **escrito** (`tema:`, `motivo:`
-   o `etiqueta:`), no solo con un punto de color. (El color puede acompañar, nunca informar solo.)
+   («34 series con `noir` y `escuela`»); nunca un «filtrando…» ambiguo.
+3. **No usar solo el color para excluir.** La exclusión lleva borde discontinuo, icono `minus` y la
+   palabra «Sin»; el nombre va **escrito**, no solo con un punto de color. (El color puede acompañar,
+   nunca informar solo.)
 4. **No pedir facetas por tecla.** El autocompletado pide sugerencias (1 consulta limitada);
    las facetas se recalculan **solo al cambiar un filtro** (§9).
 5. **No dar de alta etiquetas nuevas desde el buscador principal.** Un `Enter` sobre texto libre
@@ -144,20 +144,19 @@ ni los fragmentos.
 │ 34 series catalogadas. Filtra por lo que tratan.        (≤20 palabras)   │
 │                                                                          │
 │ [Buscar por título…] [Tradición ▾] [Editorial ▾]                          │
-│ [Buscar por etiqueta: tema:noir            ] [Buscar]   ← NUEVO          │
+│ [Buscar por etiqueta: noir                 ] [Buscar]   ← NUEVO          │
 │   ┌──────────────────────────────────────────────┐                       │
-│   │ tema:noir              34   [Añadir][Excluir]│  ← sugerencias (≤8)   │
-│   │ tema:noir-back          3   [Añadir][Excluir]│                       │
+│   │ noir                   34   [Añadir][Excluir]│  ← sugerencias (≤8)   │
+│   │ noir-back               3   [Añadir][Excluir]│                       │
 │   └──────────────────────────────────────────────┘                       │
-│ [tema:noir ×] [Sin motivo:escuela ×]  Quitar etiquetas   ← chips activos │
+│ [noir ×] [Sin escuela ×]  Quitar etiquetas            ← chips activos    │
 │                                                                          │
 │ Etiquetas de tu biblioteca                    (faceta; solo al cambiar)  │
-│ ┌ Temas ───────────┐ ┌ Motivos ──────────┐ ┌ Etiquetas ─────┐            │
-│ │ noir · 34        │ │ escuela · 18      │ │ clásico · 12   │            │
-│ │ superheroicos ·  │ │ venganza · 9      │ │ bolsillo · 7   │            │
-│ └──────────────────┘ └───────────────────┘ └────────────────┘            │
+│ ┌ Etiquetas ────────────────────────────────────────────────┐            │
+│ │ noir · 34   escuela · 18   clásico · 12   bolsillo · 7    │            │
+│ └───────────────────────────────────────────────────────────┘            │
 │                                                                          │
-│ 34 series con tema:noir. No se muestran las de motivo:escuela.           │
+│ 34 series con noir. No se muestran las de escuela.                       │
 │ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                              │
 │ │card│ │card│ │card│ │card│ │card│ │card│                              │
 │ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘                              │
@@ -182,13 +181,9 @@ el único botón principal, CLAUDE.md §6).
 ```
 Etiquetas                                                    ← h2
 Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos. (≤20 palabras)
-┌ Temas · 2 ─────────────────────────┐ ┌ Motivos · 2 ─────────────────────┐
-│ [tema:humor ×] [tema:aventuras ×]  │ │ [motivo:espionaje ×]             │
-│                                    │ │ [motivo:parodia ×]               │
-└────────────────────────────────────┘ └──────────────────────────────────┘
-┌ Etiquetas · 2 ─────────────────────┐
-│ [etiqueta:clasico ×] [etiqueta:coleccion-ole ×] │
-└────────────────────────────────────┘
+┌ Etiquetas · 4 ──────────────────────────────────────────────────────────┐
+│ [humor ×] [aventuras ×] [espionaje ×] [parodia ×]                       │
+└─────────────────────────────────────────────────────────────────────────┘
 [ Añadir una etiqueta… (sugerencias) ] [Añadir]       ← neutro, no amarillo
 ▸ ¿De dónde salen?                                    ← <details>, no compite
 ```
@@ -202,24 +197,22 @@ Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos. (≤20 pal
 
 | Escribes | Significa | Chip | Texto del recuento |
 |---|---|---|---|
-| `tema:noir` | la serie **tiene** esa etiqueta | `tema:noir ×` | «34 series con tema:noir.» |
-| `tema:noir motivo:escuela` | las tiene **todas** (AND) | dos chips | «5 series con tema:noir y motivo:escuela.» |
-| `-motivo:escuela` | **excluye** esas series | `Sin motivo:escuela ×` | «No se muestran las de motivo:escuela.» |
-| `noir` (sin namespace) | atajo: solo si el nombre es único en toda la biblioteca | `noir ×` | igual; el campo se normaliza a `tema:noir` si es unívoco |
-| `motivo:` | prefijo de un namespace del MVP | — | sugerencias de ese namespace |
-| `etiqueta:clasico` | cajón libre del MVP (lo que llega sin curar) | `etiqueta:clasico ×` | «12 series con etiqueta:clasico.» |
+| `noir` | la serie **tiene** esa etiqueta | `noir ×` | «34 series con noir.» |
+| `noir escuela` | las tiene **todas** (AND) | dos chips | «5 series con noir y escuela.» |
+| `-escuela` | **excluye** esas series | `Sin escuela ×` | «No se muestran las de escuela.» |
+| `space-opera` | nombre con guion interno | `space-opera ×` | «12 series con space-opera.» |
 
 - Separación por **espacios**; no hay comillas, paréntesis, OR ni comodines en el MVP. Se
   documenta en `<details>` («¿Cómo busco?»), no como muro de texto.
 - El servidor normaliza (minúsculas, sin acentos, espacios colapsados), limita a **12 tokens** y
   a 100 caracteres; un token desconocido no rompe la pantalla: se pinta un aviso con la salida.
 - La URL canónica lleva la expresión en **un** parámetro `etiquetas` (URL-encoded):
-  `/ui/biblioteca?etiquetas=tema%3Anoir+-motivo%3Aescuela&page=1`.
+  `/ui/biblioteca?etiquetas=noir+-escuela&page=1`.
 
 ### 4.4 Namespaces que **no** son tags en este MVP
 
-La especificación (§2.3 y §7.1) ratifica solo `tema`, `motivo` y `etiqueta`. Estos nombres **no**
-aparecen en la barra de etiquetas ni en las facetas de esta UI, y la maqueta ya no los inventa:
+La especificación (§2.3 y §7.1) ratifica un solo espacio visible, `etiqueta` (D-1). Estos nombres
+**no** aparecen en la barra de etiquetas ni en las facetas de esta UI, y la maqueta ya no los inventa:
 
 | Nombre que se ve en la app | Dónde vive de verdad | Por qué no es una etiqueta |
 |---|---|---|
@@ -250,7 +243,7 @@ lo que se ve mientras; éxito = lo que sustituye; error = fragmento con 200 y av
   filtros; la ruta ignora los parámetros que no declara).
 - **Carga:** a los 400 ms aparece «Buscando etiquetas…» (clase `indicador-diferido`); una
   respuesta rápida no parpadea. El campo no se bloquea.
-- **Éxito:** lista de ≤8 sugerencias; cada fila: `tema:noir` · `34 series` · enlaces
+- **Éxito:** lista de ≤8 sugerencias; cada fila: `noir` · `34 series` · enlaces
   «Añadir» y «Excluir». Tab llega a los enlaces; Enter sobre el campo envía la expresión.
 - **Vacío:** «Sin coincidencias. Prueba con otras letras.»
 - **Error de red:** el fragmento anterior se queda; el aviso del servidor (si llega) aparece
@@ -261,9 +254,9 @@ lo que se ve mientras; éxito = lo que sustituye; error = fragmento con 200 y av
 
 - **Entrada:** sugerencias visibles o panel de facetas.
 - **Acción:** «Añadir» de una sugerencia (o clic en una faceta) = **AND**; «Excluir» = **NOT**.
-  También se puede escribir `-motivo:escuela` y pulsar Enter/Buscar.
+  También se puede escribir `-escuela` y pulsar Enter/Buscar.
 - **HTMX:** el enlace ya trae la URL resuelta por el servidor (con la expresión actual más el
-  token); `hx-get` a `/ui/biblioteca/resultados`, `hx-target="#resultados-biblioteca"`,
+  token); `hx-get` a `/ui/biblioteca/resultados`, `hx-target="#rejilla"`,
   `hx-swap="innerHTML"`, `hx-push-url="true"`, `hx-indicator="#cargando-resultados"`. El `href`
   es la misma URL: **sin JS funciona como navegación normal**.
 - **Carga:** «Buscando…» junto al botón; la rejilla anterior sigue visible hasta que llega el
@@ -271,7 +264,7 @@ lo que se ve mientras; éxito = lo que sustituye; error = fragmento con 200 y av
 - **Éxito:** chips actualizados, recuento en región viva, facetas recalculadas, rejilla nueva.
   El campo de texto se sincroniza con la expresión aplicada (swap fuera de banda, §7.4).
 - **Error de etiqueta inexistente:** aviso ámbar en el fragmento: «No conocemos la etiqueta
-  «tema:noirx». Búscala en la lista de etiquetas.» Los filtros previos **no** se pierden.
+  «noirx». Búscala en la lista de etiquetas.» Los filtros previos **no** se pierden.
 - **Repetida:** si la etiqueta ya estaba, no se duplica el chip; se marca el chip existente y el
   recuento no cambia.
 - **Exclusión sobre una etiqueta ya incluida:** es un cambio de signo, no un error: el chip pasa
@@ -283,7 +276,7 @@ lo que se ve mientras; éxito = lo que sustituye; error = fragmento con 200 y av
 - **Acción A — quitar uno:** el chip es un enlace con el icono `x` (SVG); su `href` es la expresión sin ese
   token (los demás filtros intactos). **Acción B — quitar todas las etiquetas:** enlace «Quitar
   etiquetas»; conserva tradición/editorial/personaje/saga/búsqueda por título.
-- **HTMX:** misma región `#resultados-biblioteca`, `hx-push-url="true"`.
+- **HTMX:** misma región `#rejilla`, `hx-push-url="true"`.
 - **Carga:** igual que F2. **Éxito:** el chip desaparece, el foco va al campo de etiqueta
   (el fragmento devuelve el campo con `autofocus` en esta respuesta, §7.4), recuento actualizado.
 - **Vacío resultante:** si al quitar se llega a «sin filtros de etiqueta», se ve el panel de
@@ -296,7 +289,7 @@ lo que se ve mientras; éxito = lo que sustituye; error = fragmento con 200 y av
 - **Acción A — añadir:** escribe ≥2 letras en «Añadir una etiqueta…», elige una sugerencia
   (`hx-get /ui/series/{id}/etiquetas/sugerir`, mismo debounce, target
   `#sugerencias-etiqueta-serie`), y pulsa «Añadir» o Enter. También se puede escribir
-  `tema:noir` completo y pulsar «Añadir».
+  `noir` completo y pulsar «Añadir».
 - **Acción B — quitar:** botón con el icono `x` de un chip (formulario con `input hidden name="etiqueta"`).
 - **HTMX:** `hx-post="/ui/series/{id}/etiquetas"` / `…/etiquetas/quitar`, `hx-target="#etiquetas-serie"`,
   `hx-swap="innerHTML"`, `hx-disabled-elt="find button"` (evita doble envío), sin `hx-confirm`.
@@ -306,8 +299,8 @@ lo que se ve mientras; éxito = lo que sustituye; error = fragmento con 200 y av
   botón «Añadir»: así no se anidan formularios (HTML inválido) y todo funciona sin JS. La ruta de
   sugerencias recibe `etiqueta` = lo tecleado.
 - **Carga:** el botón se deshabilita; la región conserva lo anterior.
-- **Éxito:** región viva con chips agrupados por namespace + aviso `ok` breve («Etiqueta añadida.» /
-  «Etiqueta quitada.»). El foco vuelve al campo de añadir (autofocus del fragmento).
+- **Éxito:** región viva con los chips en un solo grupo («Etiquetas») + aviso `ok` breve («Etiqueta
+  añadida.» / «Etiqueta quitada.»). El foco vuelve al campo de añadir (autofocus del fragmento).
 - **Error de validación:** 200 con `ui.aviso("warn", …)` dentro de la región:
   «Esa etiqueta no existe. Elige una de las sugerencias.» / «Esa etiqueta ya estaba en la serie.»
 - **Error de servidor:** «No se pudo guardar. Vuelve a intentarlo.»; los chips anteriores se
@@ -353,7 +346,7 @@ se conservan tal cual para no romper enlaces existentes.
 
 | Método | Ruta | Parámetros (Form/Query) | Fragmento | Uso |
 |---|---|---|---|---|
-| GET | `/ui/biblioteca/resultados` | los mismos que la página | `_resultados_biblioteca.html` | sustituye `#resultados-biblioteca` |
+| GET | `/ui/biblioteca/resultados` | los mismos que la página | `_rejilla_biblioteca.html` ampliado | sustituye `#rejilla` (1b) |
 | GET | `/ui/biblioteca/etiquetas/sugerir` | `etiquetas` (expresión; el **último token** se usa como prefijo, ≥2) | `_sugerencias_etiquetas.html` | lista de ≤8 sugerencias |
 | GET | `/ui/series/{series_id}/etiquetas/sugerir` | `etiqueta` (lo tecleado, ≥2) | `_sugerencias_etiqueta_serie.html` | sugerencias de la ficha |
 | POST | `/ui/series/{series_id}/etiquetas` | `etiqueta`* (Form) | `_etiquetas_serie.html` | añade una etiqueta a la serie |
@@ -363,8 +356,8 @@ Reglas de diseño de backend (no código aquí):
 
 - Los routers son finos; la lógica va a `services/` (`CLAUDE.md` §3.1.1): `buscar_etiquetas`,
   `facetas`, `etiquetas_de_serie`, `anadir_etiqueta`, `quitar_etiqueta`. La plantilla **no**
-  parsea la expresión ni resuelve namespaces.
-- Campos `Form(...)` explícitos, validados (patrón `nombre:namespace`, ≤100 caracteres, 1 token);
+  parsea la expresión ni resuelve nombres.
+- Campos `Form(...)` explícitos, validados (nombre normalizado, ≤100 caracteres, 1 token);
   nada de `Model(**data)` ni `setattr` sobre cuerpo crudo (§3.1.3).
 - Sin gate legal: etiquetar no descarga ni envía nada. Sin `hx-confirm`: no hay efecto
   destructivo.
@@ -377,14 +370,13 @@ Reglas de diseño de backend (no código aquí):
 - `Cache-Control: no-store` en fragmentos con estado (mismo criterio que las vistas previas del
   repo), para que el botón Atrás no mezcle filtros.
 
-### 6.3 El fragmento `_resultados_biblioteca.html`
+### 6.3 El fragmento `_rejilla_biblioteca.html` ampliado (1b)
 
 Un solo fragmento, en este orden (los ids se usan como destino/region):
 
 1. `#filtros-activos` — chips de etiqueta (`.chip-etiqueta`, `.excluir`) + «Quitar etiquetas».
-2. `<h2>Etiquetas de tu biblioteca</h2>` + `#facetas-biblioteca` — un `ui.grupo` por namespace
-   visible (los 3 del MVP: `tema`, `motivo` y `etiqueta`; la spec permite hasta 4; máx. 8 por
-   grupo) con chips-enlace y recuento. El `h2` va **dentro**
+2. `<h2>Etiquetas de tu biblioteca</h2>` + `#facetas-biblioteca` — **un solo** `ui.grupo`
+   («Etiquetas», máx. 8 chips) con chips-enlace y recuento. El `h2` va **dentro**
    del fragmento para que no queden `h3` (`ui.grupo`) colgando del `h1` tras el intercambio.
 3. `#estado-resultados` — `ui.region_viva`: recuento en español llano.
 4. Rejilla o `ui.estado_vacio`.
@@ -399,13 +391,13 @@ El fragmento **no** repite layout, `<h1>`, nav ni pie (misma regla que `test_web
 
 | Elemento | Atributos |
 |---|---|
-| `<form id="filtros">` | `action="/ui/biblioteca" method="get" hx-get="/ui/biblioteca/resultados" hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-trigger="submit, change from:#f-tradition, change from:#f-publisher" hx-push-url="true" hx-indicator="#cargando-resultados" hx-sync="this:replace"` |
+| `<form id="filtros">` | `action="/ui/biblioteca" method="get" hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML" hx-trigger="submit, change from:#f-tradition, change from:#f-publisher" hx-push-url="true" hx-indicator="#cargando-resultados" hx-sync="this:replace"` |
 | `<input type="search">` de etiqueta | `name="etiquetas" hx-get="/ui/biblioteca/etiquetas/sugerir" hx-trigger="input changed delay:300ms, search" hx-target="#sugerencias-etiquetas" hx-swap="innerHTML" hx-sync="this:replace" hx-include="closest form" hx-indicator="#cargando-sugerencias" aria-describedby="ayuda-etiquetas"` |
-| Enlace «Añadir»/«Excluir»/faceta/chip | `href` real + `hx-get` + `hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"` |
+| Enlace «Añadir»/«Excluir»/faceta/chip | `href` real + `hx-get` + `hx-target="#rejilla" hx-swap="innerHTML" hx-push-url="true"` |
 | Formulario de quitar etiqueta (ficha) | `action="/ui/series/{id}/etiquetas/quitar" method="post"` + `hx-post=… hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button"` |
 | Formulario de añadir (ficha) | `action="/ui/series/{id}/etiquetas" method="post"` + `hx-post=… hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button"`; el campo se asocia con `form="anadir-etiqueta-serie"` |
 | Sugerencia de la ficha | formulario POST propio (`action`/`method` + `hx-post` + `input hidden name="etiqueta"` + botón «Añadir»); nunca dentro de otro `<form>` |
-| Enlace «Añadir»/«Excluir» de sugerencia (biblioteca) | `href` real a `/ui/biblioteca/resultados?etiquetas=…` + `hx-get` a la misma URL + `hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"` |
+| Enlace «Añadir»/«Excluir» de sugerencia (biblioteca) | `href` real a `/ui/biblioteca/resultados?etiquetas=…` + `hx-get` a la misma URL + `hx-target="#rejilla" hx-swap="innerHTML" hx-push-url="true"` |
 | Indicadores | `<span id="cargando-resultados" class="htmx-indicator" role="status">Buscando…</span>` y `<span id="cargando-sugerencias" class="htmx-indicator indicador-diferido" role="status">Buscando etiquetas…</span>` |
 
 **Todos los controles tienen `href`/`action` reales.** Sin htmx (o sin JavaScript) la búsqueda y
@@ -418,7 +410,7 @@ normales. Esto es requisito, no extra.
 |---|---:|---|
 | Mínimo de caracteres para sugerir | 2 | menos = ruido y consulta cara |
 | Sugerencias por respuesta | 8 | se leen sin scroll; HTML ≤ ~4 KB |
-| Namespaces con facetas visibles | 3 (`tema`, `motivo`, `etiqueta`) en el MVP (la spec permite hasta 4) | son los únicos namespaces ratificados (spec §2.3/§7.1); el resto de nombres no son tags (§4.4) |
+| Grupos de facetas visibles | 1 («Etiquetas») en el MVP | es el único espacio ratificado (D-1, spec §2.3/§7.1); el resto de nombres no son tags (§4.4) |
 | Etiquetas por grupo de faceta | 8 | el resto, tras «Ver todas las etiquetas» (fase 2) |
 | Tokens de filtro por búsqueda | 12 | presupuesto de consulta y de URL |
 | Resultados por página | 24 (existente) | no se cambia |
@@ -463,7 +455,7 @@ sugerencias **no** cambian la URL (son una ayuda de escritura).
     (marcado NOT RUN en §12; si no lo hiciera, se resuelve con `hx-focus` o dejando el foco en el
     destino, no con JS a mano).
 - La lista de sugerencias **no** se limpia por swap fuera de banda: vive fuera de
-  `#resultados-biblioteca`, así que el fragmento no la sustituye; se queda hasta la siguiente
+  `#rejilla`, así que el fragmento no la sustituye; se queda hasta la siguiente
   pulsación de tecla (permite añadir varias etiquetas seguidas sin perder el foco).
 
 ### 7.5 Códigos y errores
@@ -509,13 +501,13 @@ sugerencias **no** cambian la URL (son una ayuda de escritura).
 |---|---|
 | Etiqueta del campo | «Buscar por etiqueta» (visible solo para lector de pantalla; placeholder «Etiqueta, p. ej. noir») |
 | Ayuda bajo el campo | «Separa con espacios. Pon «-» delante para excluir.» |
-| Sugerencias | «Añadir» / «Excluir» (con `aria-label` «Añadir tema:noir» / «Excluir tema:noir») |
+| Sugerencias | «Añadir» / «Excluir» (con `aria-label` «Añadir noir» / «Excluir noir») |
 | Recuento sugerencia | «34 series» / «1 serie» |
-| Chip de exclusión | «Sin motivo:escuela» (con icono `minus` y borde discontinuo) |
-| Quitar chip | `aria-label` «Quitar etiqueta tema:noir» / «Quitar la exclusión de motivo:escuela» |
+| Chip de exclusión | «Sin escuela» (con icono `minus` y borde discontinuo) |
+| Quitar chip | `aria-label` «Quitar etiqueta noir» / «Quitar la exclusión de escuela» |
 | Quitar todas | «Quitar etiquetas» |
 | Panel de facetas | «Etiquetas de tu biblioteca» |
-| Recuento resultados | «34 series con tema:noir.» / «5 series con tema:noir y motivo:escuela.» / «No se muestran las de motivo:escuela.» |
+| Recuento resultados | «34 series con noir.» / «5 series con noir y escuela.» / «No se muestran las de escuela.» |
 | Cargando | «Buscando…» / «Buscando etiquetas…» |
 | Sugerencias vacías | «Sin coincidencias. Prueba con otras letras.» |
 | Etiqueta desconocida | «No conocemos la etiqueta «{x}». Búscala en la lista de etiquetas.» |
@@ -525,7 +517,7 @@ sugerencias **no** cambian la URL (son una ayuda de escritura).
 | Ficha, título de sección | «Etiquetas» |
 | Ficha, introducción | «Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos.» |
 | Ficha, añadir | «Añadir una etiqueta…» / botón «Añadir» (neutro) |
-| Ficha, quitar | `aria-label` «Quitar tema:noir de esta serie» |
+| Ficha, quitar | `aria-label` «Quitar noir de esta serie» |
 | Ficha, éxito | «Etiqueta añadida.» / «Etiqueta quitada.» |
 | Ficha, duplicada | «Esa etiqueta ya estaba en la serie.» |
 | Ficha, inexistente | «Esa etiqueta no existe. Elige una de las sugerencias.» |
@@ -534,9 +526,9 @@ sugerencias **no** cambian la URL (son una ayuda de escritura).
 | Details ficha | «¿De dónde salen?» → «Pueden venir de la propia ficha, de ComicInfo o de las fuentes de metadatos. Aquí solo cambias las de esta serie.» (**21 palabras**) |
 
 Nada de «token», «API», «filtro booleano», «namespace», «exit code», «error 500» ni códigos
-internos en superficie. Los tres grupos del MVP se rotulan en español llano (**Temas**, **Motivos**
-y **Etiquetas**) y en la sintaxis van en minúscula (`tema:`, `motivo:`, `etiqueta:`). `genero`,
-`personaje`, `universo`, `formato` y `publico` no son tags en este MVP (§4.4).
+internos en superficie. El único grupo del MVP se rotula en español llano (**Etiquetas**) y en la
+sintaxis va el nombre en minúscula, sin prefijo (`noir`). `genero`, `personaje`, `universo`,
+`formato` y `publico` no son tags en este MVP (§4.4).
 
 ## 9. Accesibilidad
 
@@ -557,7 +549,7 @@ y **Etiquetas**) y en la sintaxis van en minúscula (`tema:`, `motivo:`, `etique
 Cálculo reproducido con la fórmula de luminancia relativa de WCAG 2.x sobre los valores de
 `web.css` (script de ~20 líneas, ver §12). Ninguna clase nueva de este diseño usa un relleno
 (`--cyan`, `--ok`, `--warn`, `--magenta`, `--yellow`) como color de texto. La exclusión **no** se
-transmite solo por color: borde discontinuo + icono `minus` + la palabra «Sin». El namespace va
+transmite solo por color: borde discontinuo + icono `minus` + la palabra «Sin». El nombre va
 escrito.
 
 ### 9.2 Foco y teclado
@@ -578,10 +570,10 @@ escrito.
 
 - Recuento y panel de etiquetas: `ui.region_viva` (`aria-live="polite"`, `aria-atomic="true"`),
   **corto** (una frase). La rejilla de tarjetas **no** es región viva (sería un muro de texto).
-- Cada chip de quitar es un control con nombre accesible: «Quitar etiqueta tema:noir». El
+- Cada chip de quitar es un control con nombre accesible: «Quitar etiqueta noir». El
   icono `×` es `aria-hidden="true"`; el texto del chip es el nombre de la etiqueta.
 - Las sugerencias son una `<ul aria-label="Sugerencias de etiquetas">` con enlaces; los recuentos
-  se leen como parte del enlace («Añadir tema:noir, 34 series»). No se usa `role="listbox"`
+  se leen como parte del enlace («Añadir noir, 34 series»). No se usa `role="listbox"`
   porque no hay navegación con flechas: sería un rol que promete un teclado que no existe.
 - El aviso de error es `ui.aviso("amber"|"warn")` (`role="status"`/`alert`), nunca un `div` mudo.
 - Los iconos decorativos (`x`, `minus`, `tag`, `search`) son SVG `aria-hidden="true"`; los
@@ -603,7 +595,7 @@ escrito.
 - `prefers-reduced-motion`: sin animaciones nuevas (no hay transiciones en los chips nuevos).
   `prefers-contrast: more`/`forced-colors`: los chips usan tokens que ya se recomputan; no se
   añade trama nueva.
-- **No depender solo del color:** ya cubierto (texto de namespace, borde discontinuo + icono en
+- **No depender solo del color:** ya cubierto (nombre escrito, borde discontinuo + icono en
   exclusión, `aria-current`/estado seleccionado además del relleno).
 
 ## 10. Rendimiento en la Pi (presupuesto)
@@ -611,8 +603,8 @@ escrito.
 | Interacción | Consultas | Límites duros | Notas |
 |---|---:|---|---|
 | Teclear en el campo de etiqueta | 1 por pausa de 300 ms; la anterior se descarta | `q` ≥2 chars; `LIMIT 8`; 1 consulta con `GROUP BY` | Sin facetas, sin contar la biblioteca entera. Índice trigram sobre el nombre (ya propuesto en el anexo; **sin verificar** que `pg_trgm`/`unaccent` estén en la instalación: lo comprueba `task-1`/`task-5`). |
-| Enviar búsqueda / añadir / quitar chip / faceta | ≤3: resultados + total, facetas, (sin más) | 24 por página; facetas 3×8; `COUNT(DISTINCT)` solo si hay joins | Un solo viaje: chips+facetas+rejilla van en **el mismo** fragmento. Nada de una petición por chip. |
-| Carga inicial de Biblioteca sin filtros | ≤2 (serie + facetas) | facetas 3×8 | Las «estanterías» de descubrimiento (fase 2) cargan por `hx-trigger="revealed"`: 3 filas × 1 consulta, **solo al entrar en pantalla**. |
+| Enviar búsqueda / añadir / quitar chip / faceta | ≤3: resultados + total, facetas, (sin más) | 24 por página; facetas 1×8; `COUNT(DISTINCT)` solo si hay joins | Un solo viaje: chips+facetas+rejilla van en **el mismo** fragmento. Nada de una petición por chip. |
+| Carga inicial de Biblioteca sin filtros | ≤2 (serie + facetas) | facetas 1×8 | Las «estanterías» de descubrimiento (fase 2) cargan por `hx-trigger="revealed"`: 3 filas × 1 consulta, **solo al entrar en pantalla**. |
 | Añadir/quitar etiqueta en ficha | 1–2 (serie + etiquetas) | 1 etiqueta por envío | Sin mover archivos ni tocar el importador (`CLAUDE.md` §3.1.2 no aplica aquí). |
 | Paginación | 1 (reutiliza el fragmento) | 24 | La URL de página **debe** conservar `etiquetas`; si se pierde, el bug es de datos, no de rendimiento. |
 
@@ -637,15 +629,15 @@ Reglas:
 ## 11. Riesgos y lo que NO se diseña todavía
 
 1. **Modelo ratificado (spec §2/§7.1), riesgo residual en la UI.** `tags` gana `namespace` y se
-   añade `series_tags` en 0021; `issue_tags` queda dormida. El contrato de superficie usa
-   `namespace:nombre` y **no** filtra UUIDs; si una fase posterior cambia el nivel, solo cambia el
-   servicio que traduce, no las rutas.
+   añade `series_tags` en **0022**; `issue_tags` queda dormida. El contrato de superficie usa el
+   **nombre** normalizado y **no** filtra UUIDs; si una fase posterior cambia el nivel, solo cambia
+   el servicio que traduce, no las rutas.
 2. **Etiquetado por número (fase posterior).** El MVP es a nivel de **serie** (spec §2.2) y no
    agrega etiquetas de número en silencio. Si se activa `issue_tags` en una fase posterior, el
    filtro pasa a `EXISTS` sobre números: más caro en la Pi y otra UX (¿qué número?). No diseñado.
-3. **Sintaxis sin OR/alias/implicaciones.** Un `noir` sin namespace que exista a la vez en `tema`
-   y `motivo` **no** se aplica: aviso de ambigüedad (spec AC-09), nunca una elección silenciosa.
-   Las sugerencias siempre muestran el token completo; alias e implicaciones son fase posterior.
+3. **Sintaxis sin OR/alias/implicaciones.** Un token desconocido **no** se aplica: aviso (spec
+   AC-09), nunca una elección silenciosa. Las sugerencias muestran el nombre normalizado; alias e
+   implicaciones son fase posterior.
 4. **Facetas y exclusiones (ratificado).** Los recuentos cuentan con los tokens positivos y las
    exclusiones **no** descuentan (spec FR-08/AC-08); el texto del recuento lo aclara.
 5. **Paginación que pierde `etiquetas`.** `_rejilla_biblioteca.html::pagina_url` construye la URL a
@@ -683,6 +675,12 @@ Reglas:
     (`CLAUDE.md` §13): se copian patrones, y los iconos nuevos son de Lucide con su aviso.
 
 ## 12. Verificación de la maqueta (honesta)
+
+> **Nota de vigencia (2026-11-07).** Las medidas de esta sección se tomaron sobre la maqueta con
+> los tres espacios antiguos (`tema`, `motivo`, `etiqueta`). Siguen siendo válidas para el
+> **aspecto**, el contraste, el tamaño táctil y el reflow; **no** para el número de grupos ni los
+> prefijos, que la v0.3 reduce a un solo grupo («Etiquetas») sin prefijo. La maqueta no se
+> regeneró para no reescribir la evidencia.
 
 Entorno: **`google-chrome 156.0.8078.47`** headless, sin backend ni Postgres. La maqueta se sirvió
 desde un `http.server` **temporal y de solo lectura** (script de ~20 líneas que sirve la raíz del
@@ -736,10 +734,10 @@ implementarlos.
 
 ## 13. Decisiones ratificadas y huecos que quedan
 
-**Fijadas por `especificacion-etiquetas.md` (D-1…D-6 pendientes de ratificación del PO; aquí no se reabren):**
+**Fijadas por `especificacion-etiquetas.md` (D-1…D-7 ratificadas por el PO el 2026-11-06; aquí no se reabren):**
 
-1. **Namespaces del MVP:** `tema`, `motivo` y `etiqueta` (spec §2.3/§7.1, D-1 propuesta a).
-   `genero`, `personaje`, `universo`, `formato` y `publico` no son tags (§4.4).
+1. **Espacio visible del MVP:** `etiqueta` (spec §2.3/§7.1, D-1). La persona escribe el nombre sin
+   prefijo; `genero`, `personaje`, `universo`, `formato` y `publico` no son tags (§4.4).
 2. **Nivel serie:** `series_tags`; `issue_tags` dormida (spec §2.2). La UI no agrega etiquetas de
    número.
 3. **Facetas y exclusiones:** recuentos con los tokens positivos; las exclusiones no descuentan
@@ -751,12 +749,13 @@ implementarlos.
 
 **Huecos que siguen abiertos (no bloquean este diseño de UI):**
 
-- **D-6 — crear etiquetas desde la ficha.** Si se aprueba, será una acción explícita «Crear» con
-  confirmación; si se rechaza, el MVP depende de una siembra. La UI v1 solo asigna existentes y la
-  maqueta no muestra «Crear».
 - **D-2 — idioma de las etiquetas de fuentes.** Afecta a textos y normalización, no al layout.
 - **D-3 — `publico`/`AgeRating`.** Columna estructurada en historia aparte; nunca un namespace de
   texto.
+
+**D-6 (ratificada el 2026-11-06):** crear etiquetas desde la ficha es una acción explícita
+(«Crear «…»») con confirmación y `source='manual'`; forma parte de BL-ETQ1a. La maqueta anterior no
+muestra «Crear» y no se regeneró.
 
 ## Anexo A — CSS propuesto (para `web.css`, sección nueva)
 
@@ -805,7 +804,7 @@ tokens existentes; una prueba de contraste debe cubrirlo cuando entre.
 .sugerencia-fila .cuenta { color: var(--ink-faint); font-size: .875rem; font-variant-numeric: tabular-nums; }
 .sugerencia-fila a { min-height: 40px; }
 
-/* Ficha de serie: etiquetas por namespace y formulario de añadir */
+/* Ficha de serie: etiquetas en un solo grupo y formulario de añadir */
 .etiquetas-serie { display: flex; flex-direction: column; gap: 12px; }
 .etiquetas-lista { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 12px 16px; }
 .etiquetas-lista form { margin: 0; display: inline-flex; align-items: center; gap: 2px; }
@@ -851,27 +850,27 @@ Se copian de `lucide-static` 1.60.0 (ISC, aviso ya en `web/iconos.py`), como man
 
 ## Anexo C — Fragmentos de referencia (Jinja, orientativos)
 
-Los ejemplos usan los namespaces del MVP (`tema:`, `motivo:` y `etiqueta:`); la plantilla no
-concatena URLs de filtros ni parsea la expresión: eso es del servicio.
+Los ejemplos usan el nombre sin prefijo (`noir`, `space-opera`); la plantilla no concatena URLs de
+filtros ni parsea la expresión: eso es del servicio.
 
-`_resultados_biblioteca.html` (esqueleto):
+`_rejilla_biblioteca.html` ampliado (esqueleto, 1b):
 
 ```jinja
 <div id="filtros-activos" class="filtros-etiquetas" aria-label="Etiquetas activas">
   {% for t in filtros %}{{ chip_filtro(t) }}{% endfor %}
   {% if filtros %}<a class="btn ghost sm" href="{{ url_sin_etiquetas }}"
-    hx-get="{{ url_sin_etiquetas }}" hx-target="#resultados-biblioteca" hx-swap="innerHTML"
+    hx-get="{{ url_sin_etiquetas }}" hx-target="#rejilla" hx-swap="innerHTML"
     hx-push-url="true">Quitar etiquetas</a>{% endif %}
 </div>
 <h2>Etiquetas de tu biblioteca</h2>
 <div id="facetas-biblioteca" class="facetas">
-  {% for f in facetas %}{% call ui.grupo(f.nombre, f.etiquetas|length) %}
-    <div class="facetas-chips">{% for e in f.etiquetas %}
+  {% call ui.grupo("Etiquetas", facetas|length) %}
+    <div class="facetas-chips">{% for e in facetas %}
       <a class="chip" href="{{ e.url }}" hx-get="{{ e.url }}"
-         hx-target="#resultados-biblioteca" hx-swap="innerHTML" hx-push-url="true"
+         hx-target="#rejilla" hx-swap="innerHTML" hx-push-url="true"
          {% if e.activa %}aria-current="true"{% endif %}>{{ e.clave }} <span class="cuenta">{{ e.series }}</span></a>
     {% endfor %}</div>
-  {% endcall %}{% endfor %}
+  {% endcall %}
 </div>
 {% call ui.region_viva("estado-resultados") %}{{ resumen }}{% endcall %}
 {% if not items %}{{ ui.estado_vacio("Ninguna serie con estas etiquetas", "Quita una etiqueta o busca otra.",
@@ -890,9 +889,9 @@ concatena URLs de filtros ni parsea la expresión: eso es del servicio.
   <li class="sugerencia-fila">
     <span class="sugerencia-etiqueta">{{ s.clave }}</span>
     <span class="cuenta">{{ s.series }} {{ "serie" if s.series == 1 else "series" }}</span>
-    <a href="{{ s.url_and }}" hx-get="{{ s.url_and }}" hx-target="#resultados-biblioteca"
+    <a href="{{ s.url_and }}" hx-get="{{ s.url_and }}" hx-target="#rejilla"
        hx-swap="innerHTML" hx-push-url="true" aria-label="Añadir {{ s.clave }}">Añadir</a>
-    <a href="{{ s.url_not }}" hx-get="{{ s.url_not }}" hx-target="#resultados-biblioteca"
+    <a href="{{ s.url_not }}" hx-get="{{ s.url_not }}" hx-target="#rejilla"
        hx-swap="innerHTML" hx-push-url="true" aria-label="Excluir {{ s.clave }}">Excluir</a>
   </li>
   {% endfor %}
@@ -906,10 +905,10 @@ anidar formularios):
 
 ```jinja
 {% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto) }}{% endif %}
-{% if not grupos %}<p class="empty">Sin etiquetas todavía. Añade una para encontrar esta serie por lo que trata.</p>{% endif %}
-{% for g in grupos %}{% call ui.grupo(g.nombre, g.etiquetas|length) %}
+{% if not etiquetas %}<p class="empty">Sin etiquetas todavía. Añade una para encontrar esta serie por lo que trata.</p>{% endif %}
+{% if etiquetas %}{% call ui.grupo("Etiquetas", etiquetas|length) %}
   <ul class="etiquetas-lista">
-    {% for e in g.etiquetas %}<li>
+    {% for e in etiquetas %}<li>
       <form action="/ui/series/{{ series_id }}/etiquetas/quitar" method="post"
             hx-post="/ui/series/{{ series_id }}/etiquetas/quitar"
             hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
@@ -920,7 +919,7 @@ anidar formularios):
       </form>
     </li>{% endfor %}
   </ul>
-{% endcall %}{% endfor %}
+{% endcall %}{% endif %}
 <div class="etiquetas-anadir">
   <div class="filter-search-box filter-search-box-etiquetas">
     <label class="sr" for="f-etiqueta-serie">Añadir etiqueta</label>

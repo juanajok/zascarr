@@ -7,6 +7,13 @@
 > aprobación. **Commit contrastado: `35283b5` (2026-11-04, `origin/main`).** Fecha de la
 > ficha: 2026-11-04. Caduca: 2027-01-03 (~60 días).
 
+> **Nota de vigencia (2026-11-07).** Esta ficha se contrastó con `35283b5`; entonces el head era
+> **0020** y la siguiente migración, la **0021**. BL-R9 (#457, PR #459) ocupó después la 0021 con
+> `files.file_mtime_ns`, así que **la migración de etiquetas es la 0022** (`down_revision="0021"`).
+> D-1 ratificó un **único espacio visible, `etiqueta`**, sin prefijos `tema:`/`motivo:`. Las
+> menciones a 0021 y a los tres espacios se conservan como **historial de la medición**; la
+> referencia normativa es `especificacion-etiquetas.md` v0.3.
+
 ## 1. Problema local (código vigente, no la propuesta)
 
 **Historia / problema observado.** El coleccionista busca «noir», «escuela», «Batman» o
