@@ -24,6 +24,10 @@ ESTADOS_DE_FUENTE = frozenset({
 #: Única capacidad VERIFICADA en esta entrega para las cuatro fuentes: **buscar series**.
 CAPACIDAD_BUSQUEDA = "busqueda"
 
+#: Capacidad de #465 (detalle de edición). No es un estado nuevo: reutiliza el conjunto
+#: cerrado de #133; solo identifica QUÉ se estaba consultando al fijar el estado.
+CAPACIDAD_DETALLE = "detalle"
+
 
 @dataclass(frozen=True)
 class EstadoFuente:
