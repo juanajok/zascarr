@@ -161,7 +161,10 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
     marcas = covers / CACHE_VERSION
     intentos = 0
     limite = time.monotonic() + presupuesto_s
-    herramienta = None          # se comprueba una sola vez y solo si aparece un RAR
+    # Con el interruptor apagado (`LECTOR_RAR_ENABLED=false`) ningún RAR se envía a `unar`: no es candidato,
+    # no gasta intento y no deja marca; la herramienta ni se busca. Si no, se comprueba una sola vez y solo
+    # si aparece un RAR.
+    herramienta = None if get_settings().lector_rar_enabled else False
     for file_id, ruta, formato in archivos:
         path = Path(ruta)
         es_rar = es_rar_candidato(path, formato)

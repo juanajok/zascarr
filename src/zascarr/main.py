@@ -194,7 +194,9 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("zascarr.starting", version=settings.app_version)
     # #418: observacional, no bloqueante (CLAUDE.md §3.2): sin `unar` solo faltan portadas de .cbr.
-    if not lector_rar.disponible():
+    if not settings.lector_rar_enabled:
+        logger.info("lector_rar.apagado")
+    elif not lector_rar.disponible():
         logger.warning("lector_rar.no_disponible")
     # B-4 (SecOps): temporales de lectura que dejó un proceso muerto (OOM, kill -9)
     huerfanos = await asyncio.to_thread(barrer_temporales, settings.covers_cache_path)

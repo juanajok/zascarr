@@ -38,7 +38,7 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
   `gnustep-base` `1.28.1+really1.28.0-5`; aceptado el 2026-11-07. No hay análisis del código ni de RAR hostiles reales más allá de las pruebas
   de la CI. Mitigaciones: subproceso sin shell, grupo propio, tiempo, memoria, salida y bytes escritos acotados, un
   lector a la vez, extracción por índice verificada, `no-new-privileges` y un tope de procesos en el compose, y sin los
-  ejecutables de GNUstep en la imagen. El PO aceptó este riesgo por escrito: [ADR 0015](docs/adr/0015-lector-de-rar-con-unar.md).
+  ejecutables de GNUstep en la imagen. Se apaga sin reconstruir con `LECTOR_RAR_ENABLED=false` en el `.env`. El PO aceptó este riesgo por escrito: [ADR 0015](docs/adr/0015-lector-de-rar-con-unar.md).
 
 ## Si quieres acceder desde fuera de la Pi
 
