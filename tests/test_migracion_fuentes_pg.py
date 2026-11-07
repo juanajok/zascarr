@@ -42,6 +42,11 @@ async def version(url: str) -> str:
     return (await consultar(url, "SELECT version_num FROM alembic_version"))[0][0]
 
 
+def cabeza() -> str:
+    """La revisión `head` de las migraciones (no se fija a mano: crece con el proyecto)."""
+    return alembic(URL, "heads").stdout.split()[0]
+
+
 async def a_la_0019(url: str) -> None:
     alembic(url, "upgrade", "0019")
     assert await version(url) == "0019"
@@ -99,7 +104,7 @@ class TestLosCuatroCasosDeLaDecision:
     async def test_4_instalacion_nueva_nace_apagada_y_sin_marcador(self):
         async with bd_efimera(URL) as url:
             subir(url)
-            assert await version(url) == "0020" and await valores(url) == {}
+            assert await version(url) == cabeza() and await valores(url) == {}
 
 
 class TestInstalacionConUso:
