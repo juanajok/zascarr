@@ -319,6 +319,8 @@ def _registro(
     candidatos: Sequence[dict], modo: str, condiciones: dict,
     hash_respuesta: str | None = None, revision: dict | None = None,
     notas: str = "", sha_ejecutor: str = "no_disponible",
+    detalle: dict | None = None, contraste: str | None = None,
+    estado_detalle: str | None = None, motivo_detalle: str | None = None,
 ) -> dict:
     ensayo_id = f"{caso['caso_id']}__{fuente}__{unidad}__1"
     return {
@@ -338,6 +340,11 @@ def _registro(
         "peticiones": peticiones,
         "reintentos": reintentos,
         "resultado_editorial": resultado_editorial,
+        # #135 + BL-FU2: evidencia del detalle y su contraste, separada de la búsqueda.
+        "detalle": detalle,
+        "contraste": contraste,
+        "estado_detalle": estado_detalle,
+        "motivo_detalle": motivo_detalle,
         "campos_evaluados": list(campos_evaluados),
         "campos_presentes": list(campos_presentes),
         "campos_ausentes": list(campos_ausentes),
@@ -606,6 +613,76 @@ async def _invocar(cliente: Any, fuente: str, metodo: str | None, caso: dict) ->
     raise _SinDatos()
 
 
+def _detalle_saneado(detalle: Any) -> dict[str, Any]:
+    """Solo campos de evidencia del detalle; nunca URL, raw ni clave."""
+    formato = getattr(detalle, "formato", None)
+    return {
+        "fuente": getattr(getattr(detalle, "fuente", None), "value", None),
+        "external_id": getattr(detalle, "external_id", None),
+        "metodo": getattr(detalle, "metodo", None),
+        "editorial": getattr(detalle, "editorial", None),
+        "sello": getattr(detalle, "sello", None),
+        "anio": getattr(detalle, "anio", None),
+        "anio_fin": getattr(detalle, "anio_fin", None),
+        "numeracion_inicio": getattr(detalle, "numeracion_inicio", None),
+        "numeracion_fin": getattr(detalle, "numeracion_fin", None),
+        "numeracion_texto": getattr(detalle, "numeracion_texto", None),
+        "numero_publicacion": getattr(detalle, "numero_publicacion", None),
+        "paginas": getattr(detalle, "paginas", None),
+        "formato": getattr(formato, "value", formato),
+        "formato_fuente": getattr(detalle, "formato_fuente", None),
+        "pais": getattr(detalle, "pais", None),
+        "idioma": getattr(detalle, "idioma", None),
+        "campos_ausentes": sorted(getattr(detalle, "campos_ausentes", ())),
+        "peticiones": getattr(detalle, "peticiones", 0),
+    }
+
+
+def _resultado_para_detalle(fuente: str, candidato: Any, caso: dict) -> Any | None:
+    """Adapta el resultado crudo de búsqueda a `DiscoveryResult` para `detalle_de`."""
+    from zascarr.models import MetadataSource
+    from zascarr.services.discovery import DiscoveryResult
+
+    mapping = {
+        "comic_vine": (MetadataSource.COMIC_VINE, "cv_id"),
+        "anilist": (MetadataSource.ANILIST, "anilist_id"),
+        "tebeosfera": (MetadataSource.TEBEOSFERA, "slug"),
+        "gcd": (MetadataSource.GCD, "gcd_id"),
+    }
+    if fuente not in mapping:
+        return None
+    source, atributo = mapping[fuente]
+    external_id = getattr(candidato, atributo, None)
+    if external_id is None:
+        return None
+    titulo = (getattr(candidato, "name", None) or getattr(candidato, "title", None)
+              or caso.get("consulta", ""))
+    resultado = DiscoveryResult(
+        source=source, external_id=str(external_id), title=str(titulo),
+        start_year=getattr(candidato, "start_year", None),
+        description=None, cover_url=None, site_url=None,
+    )
+    # GCD: el raw de búsqueda permite detalle con 0 peticiones (PR-2).
+    if fuente == "gcd" and getattr(candidato, "raw", None):
+        resultado.raw = candidato.raw
+    return resultado
+
+
+def _coste_detalle(fuente: str, candidato: Any) -> int:
+    """Peticiones previstas del detalle: GCD con raw y AniList no piden nada."""
+    if fuente == "anilist":
+        return 0
+    if fuente == "gcd" and getattr(candidato, "raw", None):
+        return 0
+    return 1
+
+
+def _etiqueta_contraste(caso: dict) -> dict:
+    etiqueta = dict(caso.get("etiqueta_editorial") or {})
+    etiqueta["identidad_acreditada"] = bool(caso.get("identidad_acreditada"))
+    return etiqueta
+
+
 async def _llamar_cliente(fuente: str, metodo: str | None, caso: dict, *,
                           cliente_factory=None) -> list[Any]:
     """Llamada real a un método autorizado. Solo se usa en `--real` con autorización válida.
@@ -740,6 +817,7 @@ async def ejecutar_real(
     corpus_sha: str, fuentes: Sequence[str] | None = None,
     cliente_factory=None, sha_ejecutor: str = "no_disponible",
     ahora: datetime | None = None, aplicar_ajustes: bool = True,
+    con_detalle: bool = False, detalle_service_factory=None,
 ) -> list[dict]:
     """Ejecuta el plan real con la cortesía de #134. No se lanza en tests ni en PR-3 aquí.
 
@@ -905,7 +983,47 @@ async def ejecutar_real(
             campos_ausentes=[], candidatos=candidatos, modo="real",
             condiciones=condiciones, hash_respuesta=_hash_saneado(candidatos),
             notas="candidatos pendientes de revisión humana", sha_ejecutor=sha_ejecutor))
-        filas[-1]["autorizacion"] = {"id": autorizacion.get("id")}
+        fila = filas[-1]
+        if con_detalle and estado == "ok" and candidatos:
+            candidato = resultados[0]
+            coste = _coste_detalle(fuente, candidato)
+            if (peticiones + coste > max_peticiones
+                    or por_fuente[fuente] + coste > max_por_fuente):
+                fila["estado_detalle"] = "no_ejecutado"
+                fila["motivo_detalle"] = "presupuesto_agotado"
+            else:
+                adaptado = _resultado_para_detalle(fuente, candidato, caso)
+                if adaptado is not None:
+                    if detalle_service_factory is not None:
+                        servicio = detalle_service_factory()
+                    else:
+                        from zascarr.services.discovery import DiscoveryService
+                        servicio = DiscoveryService(db=None)
+                    resultado_detalle = await servicio.detalle_de(
+                        adaptado, unidad=celda["unidad"])
+                    peticiones_detalle = coste
+                    if resultado_detalle.detalle is not None:
+                        peticiones_detalle = max(
+                            peticiones_detalle, resultado_detalle.detalle.peticiones)
+                    peticiones += peticiones_detalle
+                    por_fuente[fuente] += peticiones_detalle
+                    fila["peticiones"] = 1 + peticiones_detalle
+                    fila["reintentos"] = max(0, peticiones_detalle - 1)
+                    fila["estado_detalle"] = resultado_detalle.estado.estado
+                    fila["motivo_detalle"] = resultado_detalle.motivo
+                    if (resultado_detalle.estado.estado == "ok"
+                            and resultado_detalle.detalle is not None):
+                        from zascarr.services.detalle_edicion import contrastar
+                        contraste = contrastar(
+                            resultado_detalle.detalle, _etiqueta_contraste(caso),
+                            unidad=celda["unidad"])
+                        fila["detalle"] = _detalle_saneado(resultado_detalle.detalle)
+                        fila["contraste"] = contraste.resultado or "sin_veredicto"
+                        fila["resultado_editorial"] = contraste.resultado
+                    else:
+                        fila["detalle"] = None
+                        fila["contraste"] = None
+        fila["autorizacion"] = {"id": autorizacion.get("id")}
     for fila in filas:
         fila["condiciones"] = {**fila["condiciones"], "parada": parada or "final"}
     return filas
@@ -924,17 +1042,28 @@ def _tasa(numerador: int, denominador: int) -> dict:
     return {**base, "porcentaje": round(100.0 * numerador / denominador, 1), "nota": None}
 
 
+def _contraste_de(fila: dict) -> str | None:
+    """Contraste del detalle; fallback al campo antiguo para registros ya existentes."""
+    if "contraste" in fila:
+        return fila.get("contraste")
+    return fila.get("resultado_editorial")
+
+
 def _es_evaluable(fila: dict, casos: dict[str, dict]) -> bool:
     """Un caso acreditado con respuesta válida entra en el universo editorial.
 
-    `sin_resultados` cuenta aunque no tenga veredicto (ausencia, no `incorrecto`); `ok` solo
-    cuenta como evaluable si la revisión humana ya le puso veredicto editorial.
+    Con detalle (#135/BL-FU2), el veredicto sale de `contraste`; `sin_veredicto` no cuenta.
+    Sin campo `contraste` se conserva el criterio anterior (revisión humana) para no romper
+    registros históricos. `sin_resultados` sigue contando como ausencia, no como incorrecto.
     """
     caso = casos.get(fila["caso_id"], {})
     if not caso.get("identidad_acreditada"):
         return False
     if fila["estado_tecnico"] == "sin_resultados":
         return True
+    if "contraste" in fila:
+        contraste = fila.get("contraste")
+        return contraste in RESULTADOS_EDITORIALES
     revision = fila.get("revision") or {}
     return (fila["estado_tecnico"] == "ok"
             and revision.get("veredicto") in RESULTADOS_EDITORIALES)
@@ -957,9 +1086,9 @@ def calcular_metricas(registros: Sequence[dict], corpus: dict) -> dict:
                    ("fallo_transitorio", "limite_de_cortesia")]
         evaluables = [f for f in filas if _es_evaluable(f, casos)]
         coincidencias = [f for f in evaluables
-                         if f["resultado_editorial"] == "coincidencia_verificada"]
-        ambiguos = [f for f in evaluables if f["resultado_editorial"] == "ambiguo"]
-        incorrectos = [f for f in evaluables if f["resultado_editorial"] == "incorrecto"]
+                         if _contraste_de(f) == "coincidencia_verificada"]
+        ambiguos = [f for f in evaluables if _contraste_de(f) == "ambiguo"]
+        incorrectos = [f for f in evaluables if _contraste_de(f) == "incorrecto"]
         ausencias = [f for f in evaluables if f["estado_tecnico"] == "sin_resultados"]
         no_acreditadas = [f for f in ejecutados
                           if not casos.get(f["caso_id"], {}).get("identidad_acreditada")]
@@ -1106,6 +1235,7 @@ def validar_salida(registros: Sequence[dict], informe: dict) -> None:
         "motivo_no_ejecutado", "peticiones", "reintentos", "resultado_editorial",
         "campos_evaluados", "campos_presentes", "campos_ausentes", "candidatos", "revision",
         "desacuerdo", "condiciones", "hash_respuesta", "notas",
+        "detalle", "contraste", "estado_detalle", "motivo_detalle",
     }
     for fila in registros:
         if set(fila) != campos_registro:
@@ -1214,10 +1344,16 @@ def _argumentos(argv: Sequence[str] | None = None) -> argparse.Namespace:
                         help="SHA del árbol ejecutor (explícito, nunca del entorno)")
     parser.add_argument("--manifiesto", default=None,
                         help="manifiesto sha256 del corpus; por defecto, el del corpus v1")
+    parser.add_argument("--detalle", action="store_true",
+                        help="con --real: pide detalle del primer candidato y contrasta")
     return parser.parse_args(argv)
 
 
 def _main_seco(args: argparse.Namespace) -> int:
+    if args.detalle:
+        print("FAIL  --detalle solo tiene sentido con --real; en seco no se piden fichas.",
+              file=sys.stderr)
+        return 2
     try:
         corpus, sha = cargar_corpus(Path(args.corpus), _manifiesto_de(args))
         fixtures = cargar_fixtures(Path(args.fixtures), corpus)
@@ -1285,7 +1421,8 @@ def _main_real(args: argparse.Namespace) -> int:
         registros = asyncio.run(ejecutar_real(
             plan, corpus, autorizacion, max_peticiones=presupuesto,
             max_por_fuente=max_fuente, salida=Path(args.salida), corpus_sha=sha,
-            fuentes=fuentes, sha_ejecutor=args.sha_ejecutor))
+            fuentes=fuentes, sha_ejecutor=args.sha_ejecutor,
+            con_detalle=args.detalle))
     except PermissionError as exc:
         print(f"FAIL  revalidación de autorización: {exc}", file=sys.stderr)
         return 2
