@@ -21,7 +21,7 @@ from zascarr.utils.lector_rar import ErrorRar, carpeta_temporal, listar
 from zascarr.utils.portada_rar import portada_de_rar
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rar"
-NOMBRES = ["minimo_rar4.cbr", "minimo_rar5.cbr", "solido_rar5.cbr"]
+NOMBRES = ["minimo_rar4.cbr", "minimo_rar5.cbr", "solido_rar4.cbr"]
 
 pytestmark = pytest.mark.skipif(
     shutil.which("unar") is None or shutil.which("lsar") is None, reason="unar/lsar no instalados")
@@ -65,6 +65,16 @@ def test_rar_real_la_portada_es_la_primera_pagina_y_decodifica(nombre, tmp_path)
         r, g, b = img.convert("RGB").getpixel((img.width // 2, img.height // 2))
     assert r > 150 and g < 100 and b < 100          # 01.jpg es rojo (LEEME.md)
     assert not (tmp_path / "covers" / ".rar-tmp").exists() or not list((tmp_path / "covers" / ".rar-tmp").iterdir())
+
+
+@pytest.mark.xfail(strict=True, raises=ErrorRar, reason=(
+    "limitación de unar: no extrae un RAR 5 SÓLIDO (creado con rar 7.11): «Attempted to read more data "
+    "than was available». Medido con unar/lsar 1.10.1 (el que empaqueta Debian bookworm, imagen de "
+    "producción) y con 1.10.8 (runner de CI). Efecto: `ilegible` → marca de fallo → cascada, sin 500. "
+    "Si una versión futura lo arregla, esta prueba pasa a XPASS y (strict) falla: hay que retirar el xfail."))
+def test_rar_real_un_rar5_solido_no_se_lee_limitacion_conocida_de_unar(tmp_path):
+    jpeg, _ = portada_de_rar(_fixture("solido_rar5.cbr"), tmp_path / "covers", ancho=600)
+    assert jpeg
 
 
 def test_rar_real_un_archivo_truncado_no_da_portada(tmp_path):

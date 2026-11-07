@@ -27,6 +27,12 @@ def test_una_saltada_es_roja(tmp_path):
     assert any("saltadas" in m for m in ci.motivos(_informe(tmp_path, casos)))
 
 
+def test_un_xfail_ejecutado_no_cuenta_como_saltado(tmp_path):
+    """pytest registra un xfail como `<skipped type="pytest.xfail">`: se ejecutó, no se saltó."""
+    casos = [""] * (ci.MINIMO_DE_PRUEBAS - 1) + ['<skipped type="pytest.xfail" message="x"/>']
+    assert ci.motivos(_informe(tmp_path, casos)) == []
+
+
 def test_un_fallo_es_rojo(tmp_path):
     casos = [""] * (ci.MINIMO_DE_PRUEBAS - 1) + ["<failure/>"]
     assert any("fallo" in m for m in ci.motivos(_informe(tmp_path, casos)))
