@@ -215,6 +215,9 @@ Puntuación 1–5 por enfoque de **conversión** (la parte que toca ficheros):
 4. **Qué queda para los archivos compartidos:** seguir siendo CBR. Una alternativa futura,
    fuera de esta feature, es generar la copia convertida y etiquetada en el árbol de lectura
    de B20 (#149), a costa de espacio. Decide el PO cuando haya cifras.
+6. **Riesgo aceptado por el PO (2026-11-07):** hasta que BL-CNV6 (#488) esté hecha, el
+   comando de B6 (`scripts/etiquetar.sh --apply`) puede reescribir un archivo compartido. No
+   se añade un parche provisional; BL-CNV6 sigue siendo requisito de BL-CNV1 y BL-CNV3.
 5. **BL-CNV0 debe medir cuántos CBR se comparten**: si son casi todos, el valor de
    BL-CNV1/2 baja y conviene repriorizar.
 
