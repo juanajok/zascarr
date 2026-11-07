@@ -65,6 +65,7 @@ from zascarr.utils.peticiones import (
     DemasiadasRedirecciones,
     ErrorDePeticion,
     RedireccionNoPermitida,
+    RespuestaNoTransitoria,
     pedir_con_cortesia,
 )
 
@@ -191,6 +192,29 @@ def ordenar_por_relevancia(resultados: list[TebeosferaResult],
         key=lambda par: (-_puntuacion_relevancia(par[1], consulta), par[0]),
     )]
 
+@dataclass(frozen=True)
+class TebeosferaColeccion:
+    """Ficha de colección de Tebeosfera, sin normalizar a IssueFormat.
+
+    Es un objeto de lectura: no se persiste y no toca Series/Issue. Los campos que la ficha
+    no trae quedan None; el servicio de detalle los declara ausentes (nunca los inventa).
+    """
+
+    slug: str
+    url_ficha: str
+    editorial: str | None = None
+    sello: str | None = None
+    pais: str | None = None
+    anio: int | None = None
+    anio_fin: int | None = None
+    numeracion_inicio: int | None = None
+    numeracion_fin: int | None = None
+    numeracion_texto: str | None = None
+    numero_publicacion: str | None = None
+    formato_fuente: str | None = None
+    paginas: int | None = None
+    peticiones: int = 1
+
 
 class TebeosferaClient:
     def __init__(self, transporte: httpx.AsyncBaseTransport | None = None, *,
@@ -273,6 +297,129 @@ class TebeosferaClient:
         sagas = await self._search_table("T3_series", "saga", query)
         # Ordenar ANTES de recortar: el acierto puede venir más allá del límite del sitio.
         return ordenar_por_relevancia(collections + sagas, query)[:limit]
+
+    async def get_collection(self, slug: str, *, espera_max_s: float = 30.0
+                             ) -> TebeosferaColeccion | None:
+        """Pide la ficha de una colección (1 petición) y la parsea.
+
+        Devuelve None solo si la ficha no existe (404): un fallo de red o de
+        cortesía se propaga para que el servicio lo traduzca a un estado de
+        fuente; no se convierte en «sin resultados». La galería de portadas no
+        se descarga.
+        """
+        if self._client is None:
+            raise RuntimeError("Cliente de Tebeosfera sin abrir: úsalo con `async with`.")
+        url = f"{_BASE_URL}/colecciones/{slug}.html"
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", url,
+                politica=self._politica, espera_max_s=espera_max_s,
+                cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
+            )
+        except RespuestaNoTransitoria as exc:
+            if exc.codigo == 404:
+                return None
+            raise
+        except (RedireccionNoPermitida, DemasiadasRedirecciones) as exc:
+            logger.warning("tebeosfera.redireccion_rechazada", motivo=type(exc).__name__)
+            raise
+        except (httpx.HTTPError, ErrorDePeticion):
+            logger.warning("tebeosfera.collection_failed")
+            raise
+        return parse_collection(r.text, url_ficha=url, slug=slug)
+
+
+_FECHAS_RE = re.compile(r"Fechas?\s*:\s*([^·<]{3,80})", re.IGNORECASE)
+_NUMERACION_RE = re.compile(
+    r"Numeraci[oó]n\s*:\s*(\d{1,5})\s*(?:a|[-–])\s*(\d{1,5})", re.IGNORECASE)
+_FORMATO_RE = re.compile(
+    r"Formato\s*:\s*([^·<\n]{2,120}?)(?=\s+(?:Paginaci[oó]n|N[uú]meros|Fechas|"
+    r"Edici[oó]n|Vinculaci[oó]n)\b|$)",
+    re.IGNORECASE,
+)
+_PAGINAS_RE = re.compile(r"(\d{1,5})\s*pp?\.", re.IGNORECASE)
+_PAIS_FLAG = {
+    "spain": "ES", "españa": "ES", "espana": "ES", "es": "ES",
+}
+
+
+def _texto_limpio(nodo) -> str:
+    return " ".join((nodo.text_content() or "").split()) if nodo is not None else ""
+
+
+def _map_pais(texto: str | None) -> str | None:
+    if not texto:
+        return None
+    limpio = " ".join(texto.split()).strip().lower()
+    for clave, iso in _PAIS_FLAG.items():
+        if clave in limpio:
+            return iso
+    return None
+
+
+def parse_collection(html_text: str, *, url_ficha: str, slug: str) -> TebeosferaColeccion | None:
+    """Parser tolerante de la ficha de colección (§3.1 de la spec FU2).
+
+    No lanza por una maqueta distinta: cada campo que no encuentra queda None.
+    La ficha de saga no produce una colección (no tiene el bloque de edición).
+    """
+    if not html_text:
+        return None
+    try:
+        tree = lxml_html.fromstring(html_text)
+    except Exception:
+        logger.warning("tebeosfera.collection_parse_failed", slug=slug)
+        return None
+
+    # Si el HTML es la ficha de una saga, no hay div.titulo de entidad ni
+    # numeración de colección: se rechaza en vez de inventar una edición.
+    entidades = tree.xpath('//div[contains(@class, "titulo")]//a[contains(@href, "/entidades/")]')
+    editorial = sello = None
+    if entidades:
+        editorial = " ".join((entidades[0].text_content() or "").split()) or None
+        if len(entidades) > 1:
+            sello = " ".join((entidades[1].text_content() or "").split()) or None
+
+    texto = " ".join(tree.text_content().split())
+    fechas = _FECHAS_RE.search(texto)
+    anio = anio_fin = None
+    if fechas:
+        años = [int(m.group(0)) for m in _YEAR_RE.finditer(fechas.group(1))]
+        if años:
+            anio = años[0]
+            anio_fin = años[1] if len(años) > 1 else None
+    numeracion = _NUMERACION_RE.search(texto)
+    numeracion_inicio = int(numeracion.group(1)) if numeracion else None
+    numeracion_fin = int(numeracion.group(2)) if numeracion else None
+    numeracion_texto = numeracion.group(0).split(":", 1)[-1].strip() if numeracion else None
+
+    formato = _FORMATO_RE.search(texto)
+    formato_fuente = formato.group(1).strip() if formato else None
+
+    paginas = None
+    pagina_match = re.search(r"Paginaci[oó]n\s*:\s*([^<]{1,300})", texto, re.IGNORECASE)
+    if pagina_match:
+        valores = {int(n) for n in _PAGINAS_RE.findall(pagina_match.group(1))}
+        if len(valores) == 1:
+            paginas = valores.pop()
+
+    pais = None
+    flags = tree.xpath('//img[contains(@src, "banderas")]')
+    for flag in flags:
+        pais = _map_pais(flag.get("title") or flag.get("alt") or flag.get("src"))
+        if pais:
+            break
+    # Una ficha sin ninguno de los datos de edición no es una colección útil.
+    if not any((editorial, sello, numeracion_inicio, formato_fuente, pais)):
+        return None
+
+    return TebeosferaColeccion(
+        slug=slug, url_ficha=url_ficha, editorial=editorial, sello=sello, pais=pais,
+        anio=anio, anio_fin=anio_fin,
+        numeracion_inicio=numeracion_inicio, numeracion_fin=numeracion_fin,
+        numeracion_texto=numeracion_texto, numero_publicacion=None,
+        formato_fuente=formato_fuente, paginas=paginas, peticiones=1,
+    )
 
 
 def _parse_results(html_fragment: str, kind: str) -> list[TebeosferaResult]:
