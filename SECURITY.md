@@ -34,7 +34,7 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 - **Lector de `.cbr` (`unar`), riesgo aceptado.** Para sacar la portada de un `.cbr` que de verdad es RAR, ZascArr
   lanza `unar`/`lsar` por subproceso: un analizador de ficheros de terceros (C/Objective-C) sobre archivos que pueden
   llegar por P2P, ejecutado como el mismo usuario y en el mismo contenedor que la aplicación (con `DATABASE_URL` en su
-  entorno. Debian bookworm empaqueta `unar`/`lsar` `1.10.7+ds1+really1.10.1-2+b2` (código de la v1.10.1) y
+  entorno). Debian bookworm empaqueta `unar`/`lsar` `1.10.7+ds1+really1.10.1-2+b2` (código de la v1.10.1) y
   `gnustep-base` `1.28.1+really1.28.0-5`; aceptado el 2026-11-07. No hay análisis del código ni de RAR hostiles reales más allá de las pruebas
   de la CI. Mitigaciones: subproceso sin shell, grupo propio, tiempo, memoria, salida y bytes escritos acotados, un
   lector a la vez, extracción por índice verificada, `no-new-privileges` y un tope de procesos en el compose, y sin los

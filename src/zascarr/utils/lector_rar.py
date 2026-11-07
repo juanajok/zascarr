@@ -56,6 +56,8 @@ _ENTORNO_PATH = "/usr/bin:/bin"
 _SONDEO_S = 0.02
 
 _SEMAFORO = threading.BoundedSemaphore(RAR_SIMULTANEOS)
+#: El hilo que ya tiene el turno (ver `turno`): sus llamadas a `_ejecutar` no lo vuelven a pedir.
+_TURNO = threading.local()
 
 
 class ErrorRar(Exception):  # noqa: N818
@@ -144,6 +146,24 @@ def _leer_acotado(flujo, tope: int, destino: bytearray, desbordado: threading.Ev
         destino.extend(trozo)
 
 
+@contextlib.contextmanager
+def turno():
+    """El turno del único lector del proceso, con espera acotada (`RAR_ESPERA_TURNO_S`, si no `OCUPADO`).
+    Reentrante en el hilo: quien lo toma para varias llamadas seguidas (listar y luego leer una entrada)
+    lo conserva entre ellas y no lo pierde a mitad (dictamen SecOps N-2 b)."""
+    if getattr(_TURNO, "tomado", False):
+        yield
+        return
+    if not _SEMAFORO.acquire(timeout=RAR_ESPERA_TURNO_S):
+        raise ErrorRar(MotivoRar.OCUPADO)
+    _TURNO.tomado = True
+    try:
+        yield
+    finally:
+        _TURNO.tomado = False
+        _SEMAFORO.release()
+
+
 def _ejecutar(argv: list[str], *, home: Path, timeout: float, tope_salida: int,
               vigilar: Path | None = None, tope_escrito: int | None = None) -> tuple[int, bytes, bytes]:
     """Lanza `argv` sin shell, en grupo propio, y devuelve `(código, stdout, stderr)`. Un solo lector
@@ -152,13 +172,9 @@ def _ejecutar(argv: list[str], *, home: Path, timeout: float, tope_salida: int,
     Falla con `ErrorRar`: `TIEMPO` si vence (se mata el grupo), `DEMASIADO_GRANDE` si la salida, lo
     escrito en `vigilar` o la memoria pasan del tope (se mata el grupo), `HERRAMIENTA_AUSENTE` si no
     arranca, `OCUPADO` si no hubo turno."""
-    if not _SEMAFORO.acquire(timeout=RAR_ESPERA_TURNO_S):
-        raise ErrorRar(MotivoRar.OCUPADO)
-    try:
+    with turno():
         return _ejecutar_con_turno(argv, home=home, timeout=timeout, tope_salida=tope_salida,
                                    vigilar=vigilar, tope_escrito=tope_escrito)
-    finally:
-        _SEMAFORO.release()
 
 
 def _ejecutar_con_turno(argv: list[str], *, home: Path, timeout: float, tope_salida: int,

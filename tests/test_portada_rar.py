@@ -303,7 +303,7 @@ class TestFalloRecordado:
         series, covers, _ = mundo([(rar, None)])
         _pedir(series)
         texto = _marcas(covers)[0].read_text()
-        assert set(json.loads(texto)) == {"v", "motivo", "tamano", "mtime_ns", "t"}
+        assert set(json.loads(texto)) == {"v", "motivo", "tamano", "mtime_ns"}     # `t` solo en `tiempo` (FR-29)
         assert "Thorgal" not in texto and str(tmp_path) not in texto
 
     def test_marca_sin_huella_reabriria_un_archivo_cambiado(self, tmp_path, mundo, falso):
@@ -477,6 +477,69 @@ class TestDictamenSecOps:
                                        "tamano": st.st_size, "mtime_ns": st.st_mtime_ns}))
         assert portada_rar.marca_vigente(covers, fid, rar) is False
 
+    def test_g1_solo_la_marca_de_tiempo_lleva_fecha(self, tmp_path):
+        covers = tmp_path / "v3"
+        rar = _rar(tmp_path / "a.cbr")
+        t, c = uuid4(), uuid4()
+        portada_rar.escribir_marca(covers, t, rar, MotivoRar.TIEMPO)
+        portada_rar.escribir_marca(covers, c, rar, MotivoRar.CIFRADO)
+        assert "t" in json.loads(portada_rar.ruta_de_marca(covers, t).read_text())
+        assert "t" not in json.loads(portada_rar.ruta_de_marca(covers, c).read_text())
+
+    def test_la_caducidad_y_los_topes_son_los_de_la_spec(self, monkeypatch, tmp_path):
+        """QA (mutante N21): las pruebas pasan los tiempos por parámetro; aquí se afirman los valores reales."""
+        assert portada_rar.CADUCIDAD_TIEMPO_S == 24 * 3600
+        assert lector_rar.RAR_ESPERA_TURNO_S == 2.5
+        assert lector_rar.RAR_MAX_RSS == 128 * 1024 * 1024
+        covers = tmp_path / "v3"
+        rar = _rar(tmp_path / "a.cbr")
+        fid = uuid4()
+        portada_rar.escribir_marca(covers, fid, rar, MotivoRar.TIEMPO)
+        ahora = time.time()
+        monkeypatch.setattr(portada_rar.time, "time", lambda: ahora + portada_rar.CADUCIDAD_TIEMPO_S - 5)
+        assert portada_rar.marca_vigente(covers, fid, rar) is True              # justo antes de las 24 h
+
+    def test_n2a_tras_ocupado_no_se_abren_mas_rar_pero_el_cbz_siguiente_si_se_evalua(self, tmp_path, monkeypatch):
+        abiertos = []
+
+        def _ocupado(path, covers, *, ancho):
+            abiertos.append(path.name)
+            raise ErrorRar(MotivoRar.OCUPADO)
+
+        monkeypatch.setattr(wseries, "portada_de_rar", _ocupado)
+        monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: True)
+        archivos = [(uuid4(), str(_rar(tmp_path / "1.cbr", 11)), None),
+                    (uuid4(), str(_rar(tmp_path / "2.cbr", 22)), None),
+                    (uuid4(), str(_cbz(tmp_path / "3.cbz")), None)]
+        estado: dict = {}
+        resultado = wseries._primera_portada(archivos, tmp_path / "c", estado=estado)
+        assert abiertos == ["1.cbr"], "tras `ocupado` no se abre ningún otro RAR (QA N01)"
+        assert resultado is not None, "el CBZ posterior sí se evalúa (SecOps N-2 a)"
+        assert estado == {"ocupado": True}
+
+    def test_n2b_listar_y_leer_comparten_un_turno(self, tmp_path, falso, monkeypatch):
+        """Un solo turno: el semáforo se toma una vez y sigue tomado entre el listado y la lectura."""
+        _listado_de_una_pagina(falso)
+        tomas = []
+        real = lector_rar._SEMAFORO
+
+        class _Contador:
+            def acquire(self, *a, **k):
+                tomas.append(1)
+                return real.acquire(*a, **k)
+
+            def release(self):
+                real.release()
+
+        monkeypatch.setattr(lector_rar, "_SEMAFORO", _Contador())
+        durante_la_lectura = []
+        real_leer = lector_rar.leer_entrada
+        monkeypatch.setattr(lector_rar, "leer_entrada", lambda *a, **k: (
+            durante_la_lectura.append(real.acquire(blocking=False)), real_leer(*a, **k))[1])
+        portada_rar.portada_de_rar(_rar(tmp_path / "01.cbr"), tmp_path / "covers", ancho=600)
+        assert tomas == [1], "listar y leer deben usar UN turno"
+        assert durante_la_lectura == [False], "entre el listado y la lectura el turno sigue tomado"
+
     def test_b4_se_barren_los_temporales_huerfanos_y_nada_mas(self, tmp_path):
         covers = tmp_path / "covers"
         for n in ("rar-aaa", "rar-bbb"):
@@ -632,6 +695,42 @@ class TestInterruptorLectorRar:
             assert "lector_rar" not in TestClient(app).get("/api/health").json()["warnings"]
         finally:
             app.dependency_overrides.pop(get_db, None)
+
+
+# ── Arranque (AC-40, AC-48) ────────────────────────────────────────────────────────────────────────
+class TestArranque:
+    @staticmethod
+    def _arrancar(monkeypatch, covers: Path, *, habilitado: bool):
+        from zascarr import main as principal
+        ajustes = get_settings().model_copy(update={"covers_cache_path": covers, "lector_rar_enabled": habilitado})
+        monkeypatch.setattr(principal, "get_settings", lambda: ajustes)
+        with structlog.testing.capture_logs() as logs, TestClient(principal.app):
+            pass
+        return logs
+
+    def test_ac48_apagado_el_arranque_deja_una_sola_linea_sin_rutas(self, tmp_path, monkeypatch):
+        covers = tmp_path / "Secreto"
+        logs = self._arrancar(monkeypatch, covers, habilitado=False)
+        lineas = [e for e in logs if str(e["event"]).startswith("lector_rar.")]
+        assert [e["event"] for e in lineas] == ["lector_rar.apagado"]
+        assert "Secreto" not in json.dumps(lineas, default=str)
+
+    def test_ac48_encendido_y_sin_herramienta_avisa_una_vez(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(lector_rar, "disponible", lambda: False)
+        logs = self._arrancar(monkeypatch, tmp_path / "covers", habilitado=True)
+        assert [e["event"] for e in logs if str(e["event"]).startswith("lector_rar.")] == ["lector_rar.no_disponible"]
+
+    def test_ac40_el_arranque_barre_los_temporales_huerfanos(self, tmp_path, monkeypatch):
+        covers = tmp_path / "covers"
+        for n in ("rar-aaa", "rar-bbb"):
+            (covers / ".rar-tmp" / n / "salida").mkdir(parents=True)
+            (covers / ".rar-tmp" / n / "salida" / "p.jpg").write_bytes(b"x")
+        (covers / "v3").mkdir()
+        (covers / "v3" / "no-tocar.jpg").write_bytes(b"x")
+        logs = self._arrancar(monkeypatch, covers, habilitado=True)
+        assert list((covers / ".rar-tmp").iterdir()) == [] and (covers / "v3" / "no-tocar.jpg").exists()
+        barrido = [e for e in logs if e["event"] == "lector_rar.temporales_barridos"]
+        assert barrido and barrido[0]["cantidad"] == 2
 
 
 # ── Presupuesto (AC-21) y una generación por serie (AC-34) ───────────────────────────────────────
