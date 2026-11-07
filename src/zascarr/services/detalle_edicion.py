@@ -41,6 +41,10 @@ class DetalleEdicion:
     campos_ausentes: frozenset[str] = frozenset()
     peticiones: int = 1
     url_ficha: str | None = None
+    #: Recuento de números si la fuente lo da como recuento (Comic Vine). NUNCA se usa
+    #: como `numero_publicacion`: no identifica el ejemplar concreto. No forma parte del
+    #: conjunto `campos_ausentes` de la spec, que se reserva a los campos de contraste.
+    recuento_numeros: int | None = None
 
 
 @dataclass(frozen=True)
@@ -208,6 +212,34 @@ def detalle_desde_gcd_serie(serie: Any, *, editorial: str | None = None,
         idioma=_idioma_normalizado(getattr(serie, "language", None)),
         peticiones=(getattr(serie, "peticiones", 0) if peticiones is None else peticiones),
         url_ficha=getattr(serie, "site_url", None),
+    )
+    return DetalleEdicion(**{**detalle.__dict__, "campos_ausentes": _campos_ausentes(detalle)})
+
+
+def detalle_desde_cv_volumen(volumen: Any) -> DetalleEdicion:
+    """Normaliza un `CVVolume` a `DetalleEdicion` (sin red).
+
+    Comic Vine da editorial y año, y un **recuento** de números; no da formato, país ni
+    idioma. `count_of_issues` se guarda en `recuento_numeros`, nunca en
+    `numero_publicacion` (`first_issue`/`last_issue` son referencias, no el ejemplar).
+    """
+    detalle = DetalleEdicion(
+        fuente=MetadataSource.COMIC_VINE,
+        external_id=str(getattr(volumen, "cv_id", "")),
+        metodo="get_volume",
+        editorial=getattr(volumen, "publisher", None),
+        sello=None,
+        anio=getattr(volumen, "start_year", None),
+        anio_fin=None,
+        numero_publicacion=None,
+        paginas=None,
+        formato=None,
+        formato_fuente=None,
+        pais=None,
+        idioma=None,
+        peticiones=getattr(volumen, "peticiones", 1),
+        url_ficha=None,
+        recuento_numeros=getattr(volumen, "count_of_issues", None),
     )
     return DetalleEdicion(**{**detalle.__dict__, "campos_ausentes": _campos_ausentes(detalle)})
 
@@ -403,6 +435,7 @@ __all__ = [
     "ResultadoDetalle",
     "contrastar",
     "detalle_desde_coleccion",
+    "detalle_desde_cv_volumen",
     "detalle_desde_gcd_serie",
     "mapa_formato",
 ]
