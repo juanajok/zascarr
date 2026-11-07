@@ -146,14 +146,18 @@ def _stmt_archivos_de_portada(series_id: UUID):
 
 
 def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path,
-                     *, presupuesto_s: float = PRESUPUESTO_PORTADA_S) -> tuple[bytes, str] | None:
+                     *, presupuesto_s: float = PRESUPUESTO_PORTADA_S,
+                     estado: dict | None = None) -> tuple[bytes, str] | None:
     """Portada del primer archivo de `archivos` (ya ordenados y acotados) que la dé; todo en un solo
     hilo. Solo gasta intento el que se llega a abrir (ZIP por firma o formato guardado; RAR por
     firma); un fallo se registra sin ruta ni nombre de archivo (CLAUDE.md §5.4).
 
     #418: un RAR se lee con `utils/portada_rar`. Un RAR cuya portada ya falló y no ha cambiado (marca
     vigente en `covers/<CACHE_VERSION>/fallos`) se salta SIN abrirlo y sin gastar intento; un fallo del archivo deja
-    marca, uno del entorno (herramienta ausente, error inesperado) no. Los ZIP se reintentan siempre."""
+    marca, uno del entorno (herramienta ausente, error inesperado) no. Los ZIP se reintentan siempre.
+
+    Si el lector está ocupado (otra generación tiene el turno) no se gasta intento ni se marca nada, se
+    deja de abrir RAR en esta petición y `estado["ocupado"]` lo dice (dictamen SecOps M-2)."""
     marcas = covers / CACHE_VERSION
     intentos = 0
     limite = time.monotonic() + presupuesto_s
@@ -183,6 +187,11 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
         try:
             return portada_de_rar(path, covers, ancho=SERIES_COVER_MAX_WIDTH)
         except ErrorRar as exc:
+            if exc.motivo is MotivoRar.OCUPADO:
+                logger.info("cover.lector_ocupado", intento=intentos)
+                if estado is not None:
+                    estado["ocupado"] = True
+                break
             logger.info("cover.candidato_sin_portada", intento=intentos, motivo=exc.motivo.value)
             if exc.motivo in MOTIVOS_DEL_ARCHIVO:
                 escribir_marca(marcas, file_id, path, exc.motivo)
@@ -192,13 +201,20 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
     return None
 
 
+#: Resultado de una generación que no pudo ni intentarse porque el lector tenía otro turno: la ausencia es
+#: pasajera (la respuesta no se cachea) y no hay nada que recordar.
+LECTOR_OCUPADO = "ocupado"
+
+
 def _generar_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path,
-                     destino: Path) -> tuple[bytes, str, bool] | None:
+                     destino: Path) -> tuple[bytes, str, bool] | str | None:
     """Saca la portada de los archivos y la escribe en `destino` (`v3`). `(bytes, tipo, escrita)`:
-    si la caché no se puede escribir, `escrita` es `False` y se sirve igualmente lo extraído."""
-    result = _primera_portada(archivos, covers)
+    si la caché no se puede escribir, `escrita` es `False` y se sirve igualmente lo extraído. `None`:
+    no hay; `LECTOR_OCUPADO`: no la hay *ahora* por falta de turno del lector."""
+    estado: dict = {}
+    result = _primera_portada(archivos, covers, estado=estado)
     if result is None:
-        return None
+        return LECTOR_OCUPADO if estado.get("ocupado") else None
     data, content_type = result
     try:
         write_cover_cache(destino, data)
@@ -212,7 +228,7 @@ def _generar_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
 
 
 async def _portada_de_archivos(series_id: UUID, archivos: list[tuple[UUID, str, dict | None]],
-                               covers: Path, destino: Path) -> tuple[bytes, str, bool] | None:
+                               covers: Path, destino: Path) -> tuple[bytes, str, bool] | str | None:
     """Una sola generación por serie a la vez (FR-18): quien llega con otra en curso espera su
     resultado. Los fallos de la primera no se propagan a las que esperan (la siguiente petición
     reintenta)."""
@@ -436,7 +452,8 @@ async def portada(series_id: UUID, request: Request,
     # número disponible o caer al cover_url externo.
     archivos = [(a[0], a[1], a[2]) for a in (await db.execute(_stmt_archivos_de_portada(series_id))).all()]
     result = await _portada_de_archivos(series_id, archivos, covers, v3_path)
-    if result:
+    ocupado = result == LECTOR_OCUPADO
+    if result and not ocupado:
         data, content_type, escrita = result
         etag = _etag_for(v3_path) if escrita else _etag_de_bytes(data)
         return cached_image_response(request, data, content_type, etag)
@@ -466,7 +483,8 @@ async def portada(series_id: UUID, request: Request,
 
     # Una espera de cortesía no es un «no hay portada» definitivo: el navegador no debe
     # cachear la ausencia (mañana podría descargarse).
-    cabeceras = {"Cache-Control": "no-store"} if "cortesia" in motivo_fallo else None
+    # Tampoco lo es un lector ocupado (#418): la portada puede salir en cuanto quede libre.
+    cabeceras = {"Cache-Control": "no-store"} if ("cortesia" in motivo_fallo or ocupado) else None
     raise HTTPException(status_code=404, detail="Sin portada disponible", headers=cabeceras)
 
 

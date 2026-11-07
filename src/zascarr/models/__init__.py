@@ -122,6 +122,7 @@ class MotivoRar(enum.StrEnum):
     TIEMPO           = "tiempo"
     HERRAMIENTA_AUSENTE = "herramienta_ausente"   # entorno
     INESPERADO       = "inesperado"               # entorno
+    OCUPADO          = "ocupado"                  # entorno: otro lector tiene el turno; sin marca
 
 
 class Tratamiento(enum.StrEnum):

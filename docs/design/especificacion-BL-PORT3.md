@@ -423,32 +423,45 @@ Si hay una portada previa con ancho ≥ umbral, **se conserva** y no se extrae n
 - El umbral lo decide #435 (300 px propuesto); #418 no lo fija.
 - Hallazgo menor de D-2: el salto a `v3` deja `covers/v2` huérfano; las portadas externas que estaban en `v2` se **volverían a descargar** una vez (hay cortesía y semáforo de 2). Si se quiere evitarlo, `v2` puede quedar como respaldo de solo lectura **detrás** de los candidatos y de la antigua (no se puede tratar como «previa suficiente» porque no se sabe si es local o externa). **No cambia la spec aceptada**; lo anoto para el Brain.
 
-## 17. Implementación (PR de #418) — qué se hizo y qué NO se ejecutó
+## 17. Implementación (PR #455 de #418) — qué se hizo y qué NO se ejecutó
 
-> Nota del implementador (builder), 2026-11-06. Esta sección no cambia la spec: registra cómo se cumplió y
-> lo que sigue sin comprobarse. Las decisiones D-1..D-6 y Q-7..Q-11 se implementaron tal como se aceptaron.
+> Nota del implementador (builder). Esta sección no cambia la spec: registra cómo se cumplió, las desviaciones y lo que
+> sigue sin comprobarse. Las decisiones D-1..D-6 y Q-7..Q-11 se implementaron tal como se aceptaron.
 
-**Piezas.** `utils/lector_rar.py` (FR-02..09, sin portadas; `MotivoRar` en `models`), `utils/portada_rar.py`
-(elegir página, recorte, marca de fallo `covers/v3/fallos/<file_id>.json`), `web/series.py` (candidato RAR en
-`_primera_portada`, presupuesto de 20 s, una generación por serie, `v3`/`externa`), `utils/cover.py`
-(`CACHE_VERSION = "v3"`, `covers/externa` en la **única** lista de previas de #435, `es_candidato_de_portada`
-acepta el RAR por firma), `api/health.py` + `main.py` (aviso `lector_rar`, registro único), `Dockerfile`
-(`unar` solo en `runtime`), `ci.yml` (`unar` en el job, prueba anti-salto, `lsar` en la imagen).
+**Piezas.** `utils/lector_rar.py` (FR-02..09, sin portadas; `MotivoRar` en `models`), `utils/portada_rar.py` (elegir página,
+recorte, marca de fallo `covers/v3/fallos/<file_id>.json`, barrido de temporales), `web/series.py` (candidato RAR en
+`_primera_portada`, presupuesto de 20 s, una generación por serie, `v3`/`externa`), `utils/cover.py` (`CACHE_VERSION = "v3"`,
+`covers/externa` en la **única** lista de previas de #435, `es_candidato_de_portada` acepta el RAR por firma), `api/health.py` +
+`main.py` (aviso `lector_rar`, registro único, barrido), `Dockerfile` (`unar` solo en `runtime`), `ci.yml` (`unar` en el job, prueba
+anti-salto, `lsar` en la imagen).
 
 **Decisiones de implementación que la spec dejaba abiertas.**
-- *R-6 (`RLIMIT_FSIZE`):* no se usa `preexec_fn` en un proceso con hilos; el tope de lo escrito se **vigila**
-  (sondeo del directorio temporal cada 20 ms) y se mata el grupo al pasarlo. Lo prueba AC-10 con un `unar` falso.
+- *R-6 (`RLIMIT_FSIZE`):* sin `preexec_fn` en un proceso con hilos; lo escrito se **vigila** (sondeo del temporal cada 20 ms) y
+  se mata el grupo al pasar el tope (AC-10).
+- *Memoria (dictamen SecOps M-1):* el mismo bucle lee la memoria residente del proceso y sus descendientes (`/proc`) y mata el
+  grupo por encima de 128 MiB (máximo medido en #308: 25,8 MiB). Sigue sin `RLIMIT_AS`.
+- *Espera del turno (SecOps M-2 / QA F-1):* el semáforo de un lector se espera como mucho 2,5 s; si no, `OCUPADO`: no gasta
+  intento, no deja marca, no se cachea la ausencia (404 `no-store`) y no se abren más RAR en esa petición.
+- *Valores de `lsar` (SecOps B-1/B-2):* índice dentro de rango, tamaño ≥ 0 y ruta absoluta, o `ilegible`.
+- *Marca de `tiempo` (SecOps B-3):* caduca a las 24 h (guarda su fecha); los demás motivos duran hasta que cambie el archivo.
+- *Temporales huérfanos (SecOps B-4):* se barren al arrancar.
 - *Una sola función de decisión (R-8):* `es_candidato_de_portada` y `_primera_portada` usan `es_rar_candidato`.
-- *CRC32:* se toma de la primera clave de la entrada de `lsar -j` que lleve «CRC» (entero u 8 cifras hex). Si el
-  listado no lo trae, la verificación queda en tamaño + `Image.load()` (S-1 de §13).
+- *CRC32:* la primera clave de la entrada de `lsar -j` que lleve «CRC» (confirmada con `unar`/`lsar` reales: `RAR5CRC32`/`CRC32`).
+
+**Desviación de AC-07 (RAR 5 sólido).** `unar` **no extrae** un RAR 5 sólido (probado con `solido_rar5.cbr`, rar 7.11): «Attempted to
+read more data than was available», con `unar`/`lsar` **v1.10.1** (Debian bookworm, imagen de producción; Debian empaqueta la 1.10.1
+bajo el número 1.10.7) y con **v1.10.8** (CI). Efecto: `ilegible` → marca → cascada, sin 500. Los fixtures reales son cuatro:
+`minimo_rar4`, `minimo_rar5`, `solido_rar4` y `solido_rar5` (este último, con `xfail(strict)` que documenta la limitación). Cuántos
+RAR 5 sólidos hay en la biblioteca real: no medido.
+
+**Cruce con #435 (QA F-3).** Una portada externa de **≥ 300 px** cuenta como previa suficiente y gana a `v3` y a los archivos: esa
+serie no cambia sola a la portada del RAR (lo prevé §16 y lo prueba `test_una_externa_suficiente_se_conserva_sin_abrir_archivos`).
+**Coste de desplegar (QA F-2):** `v2` se ignora, así que las series cuya portada vino de `cover_url` y vivía en `v2` se vuelven a
+descargar una vez a `covers/externa/`.
 
 **NOT RUN (se suma a §12).**
-1. **`unar`/`lsar` reales no se ejecutaron al construir esto** (no están instalados en la máquina de desarrollo):
-   todo el lector se probó con `lsar`/`unar` **falsos** (`tests/_rar_falso.py`). El formato real del JSON de
-   `lsar -j` (claves `XADIndex`, `XADFileName`, `XADFileSize`, `XADIsDirectory`, `XADIsEncrypted`, clave del
-   CRC32) es **supuesto** de la evaluación de #308; `tests/test_lector_rar_real.py` lo comprueba y es lo
-   primero que se debe ver en verde en CI.
-2. **Los tres fixtures RAR no están en el repositorio** (D-4: creación a mano con permiso del PO): hasta que
-   se añadan, las 8 pruebas de RAR real se saltan y el paso `ci_rar_real.py` de la CI **falla a propósito**.
-3. P-1..P-6 de §10.1 siguen intactas (SecOps, bomba, cifrado, USB, imagen ARM, medición en la Pi).
-4. La imagen Docker no se construyó localmente.
+1. Imagen en ARM y P-1..P-6 de §10.1 (SecOps de `unar`/GNUstep, bomba de descompresión real, RAR cifrado y multivolumen reales,
+   lectura en frío desde el USB, medición en la Pi). La imagen x86 la construyó QA (+21,1 MiB).
+2. Los seis RAR hostiles de SecOps (traversal, ruta absoluta, enlace, comodines, salto de línea, tamaño falso) con `unar` real:
+   se ejecutan por primera vez en la CI.
+3. El hash del paquete `rar` 6.24 de RARLAB (usado para los RAR 4) no es verificable contra un valor publicado (`LEEME.md` de los fixtures).

@@ -42,6 +42,13 @@ RAR_MAX_SALIDA_ERROR = 64 * 1024
 RAR_TIMEOUT_LISTAR_S = 15.0
 RAR_TIMEOUT_EXTRAER_S = 10.0
 RAR_SIMULTANEOS = 1
+#: Tope de memoria residente del lector (proceso y descendientes), vigilado en el bucle de 20 ms: sin
+#: `RLIMIT_AS` (rompe `unar`), un diccionario hostil de RAR 5 podría dejar al OOM del contenedor elegir
+#: víctima entre `unar` y la app. El máximo medido en #308 fue 25,8 MiB (dictamen SecOps M-1).
+RAR_MAX_RSS = 128 * 1024 * 1024
+#: Cuánto espera un hilo su turno de lector antes de rendirse (`OCUPADO`): sin tope, una rejilla fría
+#: de portadas RAR dejaría los hilos del ejecutor esperando el semáforo (dictamen SecOps M-2).
+RAR_ESPERA_TURNO_S = 2.5
 
 #: Un listado vacío de un archivo mayor que esto no es «sin entradas» sino un archivo truncado.
 _UMBRAL_LISTADO_VACIO = 1024 * 1024
@@ -101,6 +108,28 @@ def _matar_grupo(proc: subprocess.Popen) -> None:
         proc.wait(timeout=5)
 
 
+def _rss_del_grupo(pid: int) -> int:
+    """Memoria residente (bytes) del proceso `pid` y sus descendientes, leída de `/proc`; lo que no se
+    puede leer cuenta 0 (un `/proc` sin `children` degrada a solo el proceso). Acotado a 64 procesos."""
+    pagina = os.sysconf("SC_PAGE_SIZE")
+    total, visitados, pendientes = 0, set(), [pid]
+    while pendientes and len(visitados) < 64:
+        actual = pendientes.pop()
+        if actual in visitados:
+            continue
+        visitados.add(actual)
+        try:
+            with open(f"/proc/{actual}/statm") as fh:
+                total += int(fh.read().split()[1]) * pagina
+        except (OSError, ValueError, IndexError):
+            continue
+        with contextlib.suppress(OSError, ValueError):
+            for tid in os.listdir(f"/proc/{actual}/task"):
+                with open(f"/proc/{actual}/task/{tid}/children") as fh:
+                    pendientes.extend(int(x) for x in fh.read().split())
+    return total
+
+
 def _leer_acotado(flujo, tope: int, destino: bytearray, desbordado: threading.Event) -> None:
     """Lee `flujo` hasta el final guardando como mucho `tope` bytes; si lo pasa, avisa y sigue
     vaciando para que el proceso no se bloquee escribiendo."""
@@ -117,49 +146,63 @@ def _leer_acotado(flujo, tope: int, destino: bytearray, desbordado: threading.Ev
 
 def _ejecutar(argv: list[str], *, home: Path, timeout: float, tope_salida: int,
               vigilar: Path | None = None, tope_escrito: int | None = None) -> tuple[int, bytes, bytes]:
-    """Lanza `argv` sin shell, en grupo propio, y devuelve `(código, stdout, stderr)`.
+    """Lanza `argv` sin shell, en grupo propio, y devuelve `(código, stdout, stderr)`. Un solo lector
+    vivo en todo el proceso: el turno se espera como mucho `RAR_ESPERA_TURNO_S`, si no `OCUPADO`.
 
-    Falla con `ErrorRar`: `TIEMPO` si vence (se mata el grupo), `DEMASIADO_GRANDE` si la salida o lo
-    escrito en `vigilar` pasa del tope (se mata el grupo), `HERRAMIENTA_AUSENTE` si no arranca."""
+    Falla con `ErrorRar`: `TIEMPO` si vence (se mata el grupo), `DEMASIADO_GRANDE` si la salida, lo
+    escrito en `vigilar` o la memoria pasan del tope (se mata el grupo), `HERRAMIENTA_AUSENTE` si no
+    arranca, `OCUPADO` si no hubo turno."""
+    if not _SEMAFORO.acquire(timeout=RAR_ESPERA_TURNO_S):
+        raise ErrorRar(MotivoRar.OCUPADO)
+    try:
+        return _ejecutar_con_turno(argv, home=home, timeout=timeout, tope_salida=tope_salida,
+                                   vigilar=vigilar, tope_escrito=tope_escrito)
+    finally:
+        _SEMAFORO.release()
+
+
+def _ejecutar_con_turno(argv: list[str], *, home: Path, timeout: float, tope_salida: int,
+                        vigilar: Path | None, tope_escrito: int | None) -> tuple[int, bytes, bytes]:
+    """Con el turno ya tomado: lanza, vigila y mata el grupo (ver `_ejecutar`)."""
     entorno = {"PATH": _ENTORNO_PATH, "HOME": str(home), "LANG": "C.UTF-8", "TMPDIR": str(home)}
-    with _SEMAFORO:
-        try:
-            proc = subprocess.Popen(                      # noqa: S603 — sin shell, lista, ruta absoluta
-                argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                env=entorno, cwd=home, start_new_session=True, close_fds=True)
-        except OSError as exc:
-            raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE) from exc
-        salida, error = bytearray(), bytearray()
-        desbordado = threading.Event()
-        hilos = [
-            threading.Thread(target=_leer_acotado, args=(proc.stdout, tope_salida, salida, desbordado), daemon=True),
-            threading.Thread(target=_leer_acotado, args=(proc.stderr, RAR_MAX_SALIDA_ERROR, error, threading.Event()), daemon=True),
-        ]
+    try:
+        proc = subprocess.Popen(                      # noqa: S603 — sin shell, lista, ruta absoluta
+            argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=entorno, cwd=home, start_new_session=True, close_fds=True)
+    except OSError as exc:
+        raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE) from exc
+    salida, error = bytearray(), bytearray()
+    desbordado = threading.Event()
+    hilos = [
+        threading.Thread(target=_leer_acotado, args=(proc.stdout, tope_salida, salida, desbordado), daemon=True),
+        threading.Thread(target=_leer_acotado, args=(proc.stderr, RAR_MAX_SALIDA_ERROR, error, threading.Event()), daemon=True),
+    ]
+    for h in hilos:
+        h.start()
+    limite = time.monotonic() + timeout
+    motivo: MotivoRar | None = None
+    try:
+        while proc.poll() is None:
+            if time.monotonic() >= limite:
+                motivo = MotivoRar.TIEMPO
+            elif (desbordado.is_set()
+                    or (vigilar is not None and tope_escrito is not None
+                        and _tamano_directorio(vigilar) > tope_escrito)
+                    or _rss_del_grupo(proc.pid) > RAR_MAX_RSS):
+                motivo = MotivoRar.DEMASIADO_GRANDE
+            if motivo is not None:
+                break
+            time.sleep(_SONDEO_S)
+    finally:
+        # el grupo se mata siempre al salir: también si el hijo ya terminó pero dejó nietos
+        _matar_grupo(proc)
         for h in hilos:
-            h.start()
-        limite = time.monotonic() + timeout
-        motivo: MotivoRar | None = None
-        try:
-            while proc.poll() is None:
-                if time.monotonic() >= limite:
-                    motivo = MotivoRar.TIEMPO
-                elif desbordado.is_set() or (
-                        vigilar is not None and tope_escrito is not None
-                        and _tamano_directorio(vigilar) > tope_escrito):
-                    motivo = MotivoRar.DEMASIADO_GRANDE
-                if motivo is not None:
-                    break
-                time.sleep(_SONDEO_S)
-        finally:
-            # el grupo se mata siempre al salir: también si el hijo ya terminó pero dejó nietos
-            _matar_grupo(proc)
-            for h in hilos:
-                h.join(timeout=2)
-        if motivo is not None:
-            raise ErrorRar(motivo)
-        if desbordado.is_set():
-            raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
-        return proc.returncode, bytes(salida), bytes(error)
+            h.join(timeout=2)
+    if motivo is not None:
+        raise ErrorRar(motivo)
+    if desbordado.is_set():
+        raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
+    return proc.returncode, bytes(salida), bytes(error)
 
 
 def _motivo_por_mensaje(texto: bytes) -> MotivoRar:
@@ -171,6 +214,13 @@ def _motivo_por_mensaje(texto: bytes) -> MotivoRar:
     if b"volume" in t or b"next part" in t or b"multi" in t:
         return MotivoRar.MULTIVOLUMEN
     return MotivoRar.ILEGIBLE
+
+
+def _exigir_ruta_absoluta(ruta: Path) -> None:
+    """Una ruta relativa que empezara por `-` sería una opción de `lsar`/`unar` (SecOps B-2). Las de la
+    biblioteca son siempre absolutas."""
+    if not ruta.is_absolute():
+        raise ErrorRar(MotivoRar.ILEGIBLE)
 
 
 def _entero(valor: object) -> int | None:
@@ -218,6 +268,7 @@ def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S)
     lsar = _localizar("lsar")
     if lsar is None:
         raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE)
+    _exigir_ruta_absoluta(ruta)
     codigo, salida, error = _ejecutar(
         [lsar, "-j", str(ruta)], home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
     if codigo != 0:
@@ -228,6 +279,10 @@ def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S)
         entradas = tuple(_entrada_de(e, i) for i, e in enumerate(contenido))
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ErrorRar(MotivoRar.ILEGIBLE) from exc
+    # lo que llega de `lsar` es una entrada, no una verdad: un índice fuera de rango iría a `argv` y un
+    # tamaño negativo eludiría el tope de bytes declarados (dictamen SecOps B-1)
+    if any(not 0 <= e.indice < len(entradas) or e.tamano < 0 for e in entradas):
+        raise ErrorRar(MotivoRar.ILEGIBLE)
     if len(entradas) > RAR_MAX_ENTRADAS or sum(e.tamano for e in entradas) > RAR_MAX_BYTES_DECLARADOS:
         raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
     if any(e.cifrada for e in entradas):
@@ -269,6 +324,9 @@ def leer_entrada(ruta: Path, entrada: EntradaRar, tope: int, *, temporal: Path,
     unar = _localizar("unar")
     if unar is None:
         raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE)
+    _exigir_ruta_absoluta(ruta)
+    if entrada.indice < 0 or entrada.tamano < 0:
+        raise ErrorRar(MotivoRar.ILEGIBLE)
     if entrada.es_directorio or entrada.tamano > tope:
         raise ErrorRar(MotivoRar.DEMASIADO_GRANDE)
     destino = temporal / "salida"

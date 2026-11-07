@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Un `lsar` y un `unar` FALSOS para probar el lector de RAR sin RAR ni la herramienta real (#418).
 
 Son scripts de `sh` en una carpeta que se pone la primera en el `PATH`. Cada uno lee su «modo» de un
@@ -17,6 +18,7 @@ _LSAR = """#!/bin/sh
 d=$(dirname "$0")
 echo "lsar $*" >> "$d/llamadas.log"
 echo "HOME=$HOME" >> "$d/entornos.log"
+echo "PATH=$PATH" >> "$d/entornos.log"
 case "$(cat "$d/modo_lsar")" in
   ok) cat "$d/listado.json" ;;
   rc1) echo "$(cat "$d/mensaje")" >&2; exit 1 ;;
@@ -30,6 +32,7 @@ _UNAR = """#!/bin/sh
 d=$(dirname "$0")
 echo "unar $*" >> "$d/llamadas.log"
 echo "HOME=$HOME" >> "$d/entornos.log"
+echo "PATH=$PATH" >> "$d/entornos.log"
 for a; do ultimo=$a; done
 while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift ;; esac; shift; done
 case "$(cat "$d/modo_unar")" in
@@ -42,10 +45,11 @@ case "$(cat "$d/modo_unar")" in
   rc1) echo "$(cat "$d/mensaje")" >&2; exit 1 ;;
   cuelga) sleep 60 & echo $! > "$d/hijo.pid"; wait ;;
   enorme) head -c 3000000 /dev/zero > "$out/p.jpg"; sleep 30 ;;
+  memoria) sleep 60 & echo $! > "$d/hijo.pid"; python3 -c 'x = b"x" * (150 * 1024 * 1024); import time; time.sleep(30)' ;;
   lento) sleep 0.4; cp "$d/contenido.bin" "$out/p.jpg" ;;
   exclusivo)
     mkdir "$d/candado" 2>/dev/null || echo violacion >> "$d/violaciones.log"
-    sleep 0.15; rmdir "$d/candado"; cp "$d/contenido.bin" "$out/p.jpg" ;;
+    sleep 0.5; rmdir "$d/candado"; cp "$d/contenido.bin" "$out/p.jpg" ;;
 esac
 """
 

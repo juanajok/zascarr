@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -48,6 +50,10 @@ MOTIVOS_DEL_ARCHIVO = frozenset({
     MotivoRar.CIFRADO, MotivoRar.MULTIVOLUMEN, MotivoRar.ILEGIBLE, MotivoRar.SIN_IMAGENES,
     MotivoRar.PAQUETE, MotivoRar.DEMASIADO_GRANDE, MotivoRar.TIEMPO,
 })
+
+#: El fallo por `tiempo` depende de la carga de la máquina, no del archivo: caduca y se reintenta
+#: (dictamen SecOps B-3). Los demás motivos son del contenido y duran hasta que el archivo cambie.
+CADUCIDAD_TIEMPO_S = 24 * 3600
 
 _CARPETA_FALLOS = "fallos"
 _CARPETA_TEMPORAL = ".rar-tmp"
@@ -144,8 +150,12 @@ def marca_vigente(carpeta_cache: Path, file_id: UUID, path: Path) -> bool:
         return False
     try:
         marca = json.loads(ruta_de_marca(carpeta_cache, file_id).read_text())
-        return (marca["v"] == CONTRATO_PORTADA_RAR and marca["tamano"] == huella.tamano
-                and marca["mtime_ns"] == huella.mtime_ns)
+        if not (marca["v"] == CONTRATO_PORTADA_RAR and marca["tamano"] == huella.tamano
+                and marca["mtime_ns"] == huella.mtime_ns):
+            return False
+        if marca["motivo"] == MotivoRar.TIEMPO.value:
+            return 0 <= time.time() - float(marca["t"]) < CADUCIDAD_TIEMPO_S
+        return True
     except (OSError, ValueError, KeyError, TypeError):
         return False
 
@@ -158,7 +168,8 @@ def escribir_marca(carpeta_cache: Path, file_id: UUID, path: Path, motivo: Motiv
         return
     destino = ruta_de_marca(carpeta_cache, file_id)
     contenido = json.dumps({"v": CONTRATO_PORTADA_RAR, "motivo": motivo.value,
-                            "tamano": huella.tamano, "mtime_ns": huella.mtime_ns}).encode()
+                            "tamano": huella.tamano, "mtime_ns": huella.mtime_ns,
+                            "t": int(time.time())}).encode()
     try:
         # import local: `cover` importa este módulo para decidir qué es candidato
         from zascarr.utils.cover import write_cover_cache
@@ -166,3 +177,19 @@ def escribir_marca(carpeta_cache: Path, file_id: UUID, path: Path, motivo: Motiv
     except OSError as exc:
         logger.warning("cover.marca_sin_escribir", motivo=type(exc).__name__,
                        errno=getattr(exc, "errno", None))
+
+
+def barrer_temporales(covers: Path) -> int:
+    """Borra los temporales de lectura que dejó un proceso muerto (OOM, `kill -9`) en
+    `covers/.rar-tmp` (dictamen SecOps B-4). Se llama al arrancar, con un solo worker: ninguno está en
+    uso. Devuelve cuántos borró; nunca lanza."""
+    carpeta = covers / _CARPETA_TEMPORAL
+    borrados = 0
+    try:
+        hijos = list(carpeta.iterdir())
+    except OSError:
+        return 0
+    for hijo in hijos:
+        shutil.rmtree(hijo, ignore_errors=True)
+        borrados += 1
+    return borrados
