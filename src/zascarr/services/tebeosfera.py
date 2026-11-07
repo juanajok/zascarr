@@ -132,6 +132,25 @@ _STOPWORDS = {
 }
 
 
+def _consulta_simplificada(consulta: str) -> str | None:
+    """Título principal de la consulta o sus 3 primeras palabras significativas.
+
+    Corta en `:` o en ` - ` (subtítulo) y quita artículos/palabras vacías. Devuelve `None`
+    si no hay nada que simplificar (una palabra, o el resultado normalizado no cambia):
+    en ese caso no se hace el fallback.
+    """
+    texto = (consulta or "").strip()
+    if not texto:
+        return None
+    titulo = re.split(r"\s*:\s*|\s+-\s+", texto, maxsplit=1)[0].strip()
+    palabras = re.findall(r"[^\W_]+", titulo, flags=re.UNICODE)
+    significativas = [p for p in palabras if _normalizar(p) not in _STOPWORDS]
+    corta = " ".join(significativas[:3]).strip()
+    if not corta or _normalizar(corta) == _normalizar(texto):
+        return None
+    return corta
+
+
 def _normalizar(texto: str) -> str:
     """Minúsculas, sin acentos y solo letras/dígitos separados por espacios."""
     descompuesto = unicodedata.normalize("NFKD", texto or "")
@@ -334,8 +353,17 @@ class TebeosferaClient:
         AniList — ver la nota de rate limit en config.py."""
         collections = await self._search_table("T3_publicaciones", "collection", query)
         sagas = await self._search_table("T3_series", "saga", query)
-        # Ordenar ANTES de recortar: el acierto puede venir más allá del límite del sitio.
-        return ordenar_por_relevancia(collections + sagas, query)[:limit]
+        resultados = collections + sagas
+        if not resultados:
+            # Fallback SOLO si la consulta completa no dio nada (máx. 2 POST extra).
+            corta = _consulta_simplificada(query)
+            if corta:
+                collections = await self._search_table(
+                    "T3_publicaciones", "collection", corta)
+                sagas = await self._search_table("T3_series", "saga", corta)
+                resultados = collections + sagas
+        # Ordenar ANTES de recortar con la consulta ORIGINAL; los empates conservan el sitio.
+        return ordenar_por_relevancia(resultados, query)[:limit]
 
     async def get_collection(self, slug: str, *,
                              espera_max_s: float = 30.0) -> TebeosferaColeccion | None:
