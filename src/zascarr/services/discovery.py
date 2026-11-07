@@ -35,6 +35,7 @@ from zascarr.services.detalle_edicion import (
     DetalleEdicion,
     ResultadoDetalle,
     detalle_desde_coleccion,
+    detalle_desde_cv_volumen,
     detalle_desde_gcd_serie,
 )
 from zascarr.services.gcd import GCDClient, GCDSerie, es_edicion_espanola
@@ -198,14 +199,14 @@ class DiscoveryService:
             return ResultadoDetalle(_estado_detalle(
                 fuente, "sin_metodo_autorizado",
                 "AniList no tiene detalle de edición."), None)
-        if fuente is MetadataSource.COMIC_VINE:
-            # PR-3: get_volume/get_issue; hasta entonces no se inventa un detalle.
-            return ResultadoDetalle(_estado_detalle(
-                fuente, "sin_metodo_autorizado",
-                "El detalle de Comic Vine llega en PR-3."), None)
-
         try:
-            if fuente is MetadataSource.TEBEOSFERA:
+            if fuente is MetadataSource.COMIC_VINE:
+                detalle = await self._detalle_cv(resultado)
+                if detalle is None:
+                    return ResultadoDetalle(_estado_detalle(
+                        fuente, FUENTE_SIN_RESULTADOS,
+                        "El volumen no existe en Comic Vine."), None)
+            elif fuente is MetadataSource.TEBEOSFERA:
                 async with TebeosferaClient() as cliente:
                     coleccion = await cliente.get_collection(resultado.external_id)
                 if coleccion is None:
@@ -246,6 +247,18 @@ class DiscoveryService:
             return ResultadoDetalle(_estado_detalle(
                 fuente, FUENTE_FALLO_TRANSITORIO, "No se pudo leer la ficha."), None)
         return ResultadoDetalle(_estado_detalle(fuente, FUENTE_OK), detalle)
+
+    async def _detalle_cv(self, resultado: DiscoveryResult) -> DetalleEdicion | None:
+        """Comic Vine: `get_volume` (1 petición) → detalle; sin clave no se llama."""
+        try:
+            volume_id = int(resultado.external_id)
+        except (TypeError, ValueError):
+            return None
+        async with ComicVineClient() as cliente:
+            volumen = await cliente.get_volume(volume_id)
+        if volumen is None:
+            return None
+        return detalle_desde_cv_volumen(volumen)
 
     async def _detalle_gcd(self, resultado: DiscoveryResult) -> DetalleEdicion | None:
         """GCD: usa `raw` de búsqueda si existe (0 peticiones de serie); si no, get_series."""
