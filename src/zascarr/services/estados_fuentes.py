@@ -23,6 +23,9 @@ ESTADOS_DE_FUENTE = frozenset({
 
 #: Única capacidad VERIFICADA en esta entrega para las cuatro fuentes: **buscar series**.
 CAPACIDAD_BUSQUEDA = "busqueda"
+#: Capacidad de contrato de BL-FU2 (#465): pedir el detalle de una edición/candidato. No se
+#: publica en la UI como «disponible»; describe el resultado del método de detalle.
+CAPACIDAD_DETALLE = "detalle_edicion"
 
 
 @dataclass(frozen=True)
