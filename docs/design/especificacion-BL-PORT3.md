@@ -1,6 +1,10 @@
-# SPEC: «Portada de los CBR, leída del propio archivo» (BL-PORT3, issue #418) — v1.0
+# SPEC: «Portada de los CBR, leída del propio archivo» (BL-PORT3, issue #418) — v1.1
 
-> **Estado:** **v1.0** (2026-11-06). **Sin decisiones abiertas del PO:** las seis decisiones (D-1 a D-6) se
+> **v1.1 (2026-11-07) — qué cambia sobre v1.0 (resumen; detalle en §15.1).** **Por orden del PO**, un **RAR 5 sólido sale sin portada por una limitación de `unar`**: es el resultado esperado y se documenta (AC-07, FR-33), no un fallo. Se incorporan las **condiciones que aceptó el PO** (riesgo de `unar` aceptado **por escrito** en ADR y `SECURITY.md`; `no-new-privileges` y `pids_limit` en el compose; retirada de `gdomap`, `gdnc` y `gpbs` de la imagen), las **correcciones del dictamen de SecOps** (`dictamen-PR455-unar.md`: M-1 tope de memoria por RSS, M-2 espera acotada del turno, M-3 RAR hostiles reales en CI, B-1, B-2, caducidad de la marca de `tiempo`, barrido de `.rar-tmp`) y lo que aporta el informe de QA (`verify-qa-pr455-bl-port3.md`). §17 se rehace contra la cabeza de la PR. **La spec sigue sin autorizar despliegue** (§10.1).
+> **Base contrastada de v1.1:** `origin/main` = `ea64d73c8db4ef77aa538e0a7e133be922f42af6` (fetch del 2026-11-07); PR #455 en la cabeza `7d4c2d1b66719e6a55a6259f6a52ead4891f9df1` (borrador; **leída, no ejecutada por mí**: `git show` de los ficheros). v1.0 se conserva en `especificacion-BL-PORT3-v1.0.md` (sha256 `ff33f783…1a75`).
+
+
+> **Estado:** **v1.0** (2026-11-06; vigente salvo lo que diga el bloque v1.1 de arriba). **Sin decisiones abiertas del PO:** las seis decisiones (D-1 a D-6) se
 > aceptaron con mi recomendación y las cinco menores (Q-7 a Q-11) con su valor por defecto, el 2026-11-06 («sí a todo»);
 > el registro, con las alternativas descartadas, está en §11. Siguen vigentes los supuestos (§13), los NOT RUN (§12) y las
 > **puertas de despliegue** de §10.1 (revisión de SecOps de `unar`/GNUstep, bomba de descompresión, RAR cifrado, lectura en
@@ -40,6 +44,8 @@ junto a él; sin red.
 **Entrega.** Una historia = **una PR** (regla del PO), con cuatro commits (§10). Cuatro puertas antes de fusionar: la
 revisión de SecOps de `unar`/GNUstep (DoR pendiente de #418), la medición en la Pi (AC-22..24), el fixture RAR creado a
 mano con permiso del PO (D-4) y la decisión de D-1..D-6.
+
+**Qué añade la v1.1 (resumen).** (1) **Desviación aceptada por el PO:** `unar` 1.10.1 (Debian bookworm, la de la imagen de producción) y 1.10.8 **no extraen un RAR 5 sólido** creado con `rar` 7.11; ese archivo no da portada y cae a `ilegible` → marca → cascada, **sin 500** (AC-07, FR-33). *No se sabe cuántos RAR 5 sólidos hay en la biblioteca real*: el censo del encargo da RAR 5 ≈ 13 % y sólidos ≈ 7 % de los archivos (cifras del Brain; **no las he verificado ni el censo las cruza**), de modo que, **como máximo, ≈ 7 %** de los archivos podrían quedar sin portada por esta causa (cota lógica, no medida; R-10). (2) **Condiciones del PO** sobre la superficie de `unar` (FR-31, FR-32). (3) **Correcciones de SecOps** (FR-26…FR-30, AC-35…AC-40). (4) Los fixtures reales pasan de tres a cuatro (§9.2).
 
 **Las seis decisiones, en una línea cada una** (detalle en §11):
 | # | Decisión | Recomendación |
@@ -111,6 +117,8 @@ salud si falta la herramienta.
 | Benchmark: adoptar una sola página como flujo; adaptar nombre de portada y descarte de `__MACOSX` (opcional); sin 500 ante cifrado/multivolumen y con motivo sin rutas; descartar librería RAR embebida y leer entradas enteras en memoria | 2026-11-05 | FR-04, FR-05, FR-14 |
 | **Recordar el fallo por archivo** (motivo, sin ruta; no se reabre hasta que cambie). Sustituye, para este caso, al «nunca se cachea una ausencia» de `portada`; criterio 7 del cuerpo | 2026-11-05/06 | FR-10..FR-13 |
 | Pendientes de #308 antes de desplegar: revisión de vulnerabilidades de `unar`/GNUstep (SecOps), bomba real, RAR cifrado, lectura en frío desde el USB | 2026-10-28 | §12 (NOT RUN) y puerta de despliegue |
+| **Un RAR 5 sólido sale sin portada** (limitación de `unar`; no se busca otra herramienta ni versión en esta historia) | 2026-11-07 | AC-07, FR-33, R-10 |
+| **Riesgo de `unar` aceptado por escrito** (ADR y `SECURITY.md`) con su alcance; `no-new-privileges` y `pids_limit` en el compose; retirar `gdomap`, `gdnc` y `gpbs` de la imagen | 2026-11-07 | FR-31, FR-32, R-11 |
 
 ## 4. Requisitos funcionales (EARS)
 
@@ -128,16 +136,16 @@ Origen: I = issue #418, B = benchmark aceptado, E = evaluación de `unar` (§6),
 - FR-03 (ubicuo) El listado deberá **verificarse como entrada, no como verdad**: un listado vacío o con menos entradas que las esperadas por un truncado no es «sin imágenes» sino sospechoso. SI el listado termina con código 0 pero la lista está vacía y el archivo pesa más de 1 MiB, ENTONCES el motivo es `ilegible`. *(V11: `lsar` lista un truncado con código 0)*
 - FR-04 (evento) CUANDO el listado es válido, el sistema deberá elegir como portada **la primera imagen en orden natural** (`natural_key`, la misma regla que el ZIP) entre las entradas que no sean directorios y tengan extensión de imagen, **descartando** `__MACOSX/` y los nombres que empiezan por `._`. SI no hay ninguna, ENTONCES el motivo es `sin_imagenes`. SI el archivo no es `.cbr` y no cumple `MIN_IMAGENES` ni `FRACCION_IMAGENES`, o contiene entradas con extensión de contenedor (`.cbz`, `.cbr`, `.zip`, `.rar`, `.7z`, `.pdf`, `.epub`), ENTONCES es un paquete y el motivo es `paquete`. *(B adaptar; E §6.2; la preferencia por un nombre de portada queda fuera de v1: Q-9)*
 - FR-05 (evento) CUANDO hay una entrada elegida, el sistema deberá **extraerla sola**, por **índice** (nunca por nombre), a un directorio temporal propio y vacío, y **verificar** antes de usarla: que existe un único fichero regular dentro del directorio (sin enlaces simbólicos ni rutas que escapen), que su **tamaño** y su **CRC32** coinciden con el listado, que sus píxeles no superan `MAX_PIXELES_PORTADA` (comprobado con la cabecera, sin decodificar) y que `Image.load()` decodifica. Cualquier discrepancia es un fallo con motivo `ilegible`. Un código de salida 0 **no** es prueba de nada. *(E §6.3-6.4; V10, V11)*
-- FR-06 (ubicuo) El subproceso deberá lanzarse **sin shell**, con argumentos en lista, ruta absoluta, entorno mínimo (incluido un `HOME` dentro del directorio temporal), en un **grupo de procesos propio**, con **tiempo máximo** tras el cual se **mata el grupo entero**, **tope de tamaño de fichero escrito** (`RLIMIT_FSIZE` o una vigilancia equivalente) y **tope de salida** de `stdout`/`stderr`. **No** se usará `RLIMIT_AS`. Se leerán `stdout` y `stderr`; no se asumirá que `-q` conserva los mensajes. *(E §4.4, §6.3, §6.5; V10; la mecánica de `RLIMIT_FSIZE` en un proceso con hilos la decide quien implemente, ver R-6)*
+- FR-06 (ubicuo) El subproceso deberá lanzarse **sin shell**, con argumentos en lista, ruta absoluta, entorno mínimo (incluido un `HOME` dentro del directorio temporal), en un **grupo de procesos propio**, con **tiempo máximo** tras el cual se **mata el grupo entero**, **tope de tamaño de fichero escrito** (`RLIMIT_FSIZE` o una vigilancia equivalente) y **tope de salida** de `stdout`/`stderr`. **No** se usará `RLIMIT_AS`; **sí** un tope de memoria residente vigilado (FR-26). Se leerán `stdout` y `stderr`; no se asumirá que `-q` conserva los mensajes. *(E §4.4, §6.3, §6.5; V10; la mecánica de `RLIMIT_FSIZE` en un proceso con hilos la decide quien implemente, ver R-6)*
 - FR-07 (ubicuo) El directorio temporal deberá estar **dentro de la caché de portadas** (nunca junto al original), crearse con permisos privados y **borrarse siempre**, también ante excepción, tiempo agotado o muerte del grupo. El archivo original no se abre para escritura, no se renombra y no se mueve. *(I criterio 2, E §6.7)*
-- FR-08 (ubicuo) El sistema no deberá ejecutar a la vez más de **N procesos del lector RAR** en todo el proceso de ZascArr (recomendado N = 1). *(RAM: 25,8 MiB por proceso en una Pi de 512 MB; D-5)*
+- FR-08 (ubicuo) El sistema no deberá ejecutar a la vez más de **N procesos del lector RAR** en todo el proceso de ZascArr (recomendado N = 1), **y la espera del turno estará acotada** (FR-27). *(RAM: 25,8 MiB por proceso en una Pi de 512 MB; D-5; SecOps M-2)*
 - FR-09 (ubicuo) El envoltorio deberá exponer una interfaz que **no conozca portadas**: `disponible()`, `listar(ruta)` y `leer_entrada(ruta, entrada, tope)` con errores tipados y motivos en un enum de dominio (`models`/`core`, sin magic strings). #344 la reutilizará. *(D-3)*
 
 **Portada**
-- FR-10 (evento) CUANDO la extracción de un archivo RAR falla por una causa **del archivo** (`cifrado`, `multivolumen`, `ilegible`, `sin_imagenes`, `paquete`, `demasiado_grande`, `tiempo`), el sistema deberá **recordar el fallo por archivo**: motivo + huella del archivo (tamaño y `mtime_ns`) + versión del contrato, **sin ruta ni nombre**, en el lugar que decida D-1. *(Decisión del PO; I criterio 7)*
+- FR-10 (evento) CUANDO la extracción de un archivo RAR falla por una causa **del archivo** (`cifrado`, `multivolumen`, `ilegible`, `sin_imagenes`, `paquete`, `demasiado_grande`, `tiempo`), el sistema deberá **recordar el fallo por archivo** (el de `tiempo` **caduca**, FR-29): motivo + huella del archivo (tamaño y `mtime_ns`) + versión del contrato, **sin ruta ni nombre**, en el lugar que decida D-1. *(Decisión del PO; I criterio 7)*
 - FR-11 (estado) MIENTRAS exista una marca de fallo vigente para un archivo, el sistema **no deberá abrirlo** ni lanzar `lsar`/`unar`: lo saltará **sin gastar intento** de `MAX_INTENTOS_PORTADA` y seguirá con el siguiente candidato. *(O-5)*
 - FR-12 (evento) CUANDO la huella del archivo (tamaño o `mtime_ns`) cambie, o cambie la versión del contrato, la marca deja de ser vigente y el archivo vuelve a intentarse. *(I criterio 7)*
-- FR-13 (no deseado) SI la causa del fallo es **del entorno** —herramienta ausente, el proceso muerto por el cgroup, error inesperado— ENTONCES no se recordará como fallo del archivo (se reintentará en la petición siguiente). `herramienta_ausente` se detecta antes de abrir ningún archivo y no gasta intento. *(propuesta mía; Q-7)*
+- FR-13 (no deseado) SI la causa del fallo es **del entorno** —herramienta ausente, el proceso muerto por el cgroup, error inesperado— ENTONCES no se recordará como fallo del archivo (se reintentará en la petición siguiente); tampoco `OCUPADO` (FR-27). `herramienta_ausente` se detecta antes de abrir ningún archivo y no gasta intento. *(propuesta mía; Q-7)*
 - FR-14 (no deseado) SI falla escribir la marca (disco lleno, permisos), ENTONCES se registra el tipo de error y la petición sigue: ni 500 ni portada perdida. *(patrón de FR-11 de BL-PORT1)*
 - FR-15 (ubicuo) La portada obtenida deberá pasar por el **mismo tratamiento que la de un ZIP**: `Image.thumbnail` a `SERIES_COVER_MAX_WIDTH` (600) **sin ampliar**, JPEG calidad 80, escritura atómica en la caché y las mismas cabeceras (`ETag` por `mtime`, `Cache-Control: private, max-age=86400`, 304). *(O-2; BL-PORT1)*
 - FR-16 (ubicuo) Un fallo de un candidato RAR deberá seguir la cascada actual (siguiente candidato → caché antigua → portada externa → 404) y **dejar un evento de registro** con `motivo` y `intento`, **sin ruta, nombre de archivo ni nombre de serie**. *(BR-04, B)*
@@ -157,6 +165,16 @@ Origen: I = issue #418, B = benchmark aceptado, E = evaluación de `unar` (§6),
 - FR-24 (ubicuo) La imagen del `Dockerfile` deberá incluir `unar` **solo en la etapa `runtime`** y la imagen resultante deberá poder listar y extraer un RAR de prueba como el usuario `zascarr`. *(D-5)*
 - FR-25 (estado) MIENTRAS `lsar`/`unar` no estén disponibles, `/api/health` deberá dar un **aviso** (no un error) en `warnings` y el arranque no se bloqueará; el registro lo dirá una vez al arrancar. *(CLAUDE.md §3.2 y §6: observacional, no bloqueante; D-5)*
 
+**Correcciones de SecOps, condiciones del PO y desviación aceptada (v1.1)**
+- FR-26 (ubicuo) El bucle de vigilancia del subproceso (sondeo cada 20 ms) deberá leer la **memoria residente** del proceso y de sus descendientes (`/proc/<pid>/statm`) y **matar el grupo entero** si supera `RAR_MAX_RSS` (propuesta: **128 MiB**; máximo medido en #308: 25,8 MiB); el motivo es `demasiado_grande`. Sigue sin `RLIMIT_AS` (mata a `unar` con SIGSEGV a 96 MiB); `RLIMIT_DATA` como complemento **no está evaluado**. *(SecOps M-1: con un `unar` falso que tocaba 700 MiB el lector devolvió bytes sin cortar. Sustituye al supuesto S-3: el cgroup deja de ser la única red.)*
+- FR-27 (ubicuo) La espera del turno del lector (FR-08, N = 1) deberá tener **tiempo máximo** (propuesta: **2,5 s**) o hacerse fuera del pool compartido de hilos (ejecutor propio de un hilo). SI vence, ENTONCES el motivo es `OCUPADO`: **no gasta intento** de `MAX_INTENTOS_PORTADA`, **no deja marca**, **no se cachea la ausencia** (404 con `no-store`) y **no se abren más RAR en esa petición** (la siguiente lo reintenta). *(SecOps M-2, QA F-1: con 12 series RAR en frío, un `to_thread` ajeno esperó 5,0 s en la sonda de SecOps y 13,4 s en la de QA, con el pool por defecto.)*
+- FR-28 (ubicuo) Todo valor que llegue de `lsar` deberá **validarse al construir la entrada**: `0 ≤ índice < nº de entradas` y `tamaño ≥ 0`; si no, `ilegible`. La ruta del archivo que se pasa a `lsar`/`unar` deberá ser **absoluta** (`ruta.is_absolute()`), si no, `ilegible` (una ruta relativa que empezara por `-` sería una opción). *(SecOps B-1: un `XADFileSize` negativo dejaba pasar el tope de 500 MiB; B-2.)*
+- FR-29 (estado) La marca de fallo con motivo `tiempo` deberá **caducar a las 24 h** (la marca guarda su fecha) en lugar de durar hasta que cambie el archivo: un tiempo agotado por la carga de la Pi (copia diaria, Transmission) no debe dejar a un RAR bueno sin portada. Los demás motivos duran hasta que cambie la huella (FR-12). *(SecOps B-3; **24 h está implementado en la PR y lo ratifica el PO**: es una enmienda a Q-7.)*
+- FR-30 (evento) Al arrancar, la aplicación deberá **barrer los temporales huérfanos** `covers/.rar-tmp/rar-*` (un proceso muerto por OOM o `kill -9` no ejecuta el `finally` de FR-07), en el mismo punto donde avisa de `lector_rar`. *(SecOps B-4; hasta 32 MiB por temporal.)*
+- FR-31 (ubicuo) *[condición aceptada por el PO, 2026-11-07]* El servicio de la app en `docker-compose.yml` deberá llevar `security_opt: [no-new-privileges:true]` y un `pids_limit`, y el `Dockerfile` deberá **borrar de la imagen los binarios `gdomap`, `gdnc` y `gpbs`** que trae `gnustep-base-runtime` y que aquí nadie usa. El arranque como root + `runuser` (`docker-entrypoint.sh`) **debe seguir funcionando** (HIPÓTESIS: no es incompatible; se comprueba al construir). El valor de `pids_limit` lo fija quien implemente, midiendo. *(SecOps A-1 b y d. **A fecha de la cabeza `7d4c2d1` el compose no lleva ninguna de las dos opciones y el `Dockerfile` no borra esos binarios**: está pendiente.)*
+- FR-32 (ubicuo) *[condición aceptada por el PO]* La PR deberá dejar **por escrito, en un ADR y en `SECURITY.md`**, que `unar`/`lsar` —un analizador de archivos de terceros que llegan por P2P— se ejecuta como el **mismo usuario y en el mismo contenedor** que la app (con `DATABASE_URL` en su entorno y la biblioteca montada en lectura y escritura) y que el PO **acepta ese riesgo** con ese alcance y con las medidas de FR-06, FR-26, FR-27 y FR-31. Dirá también que SecOps, en tres búsquedas, **no encontró ninguna CVE de `unar`/XADMaster aplicable a Linux** (la única, CVE-2024-22405, es de macOS y está corregida en 1.10.8), que **ausencia de hallazgos no es ausencia de fallos** (el paquete de bookworm es código de la 1.10.1 bajo el número 1.10.7; no consta *fuzzing*) y que la evaluación de #308 midió RAR **legítimos y dañados, no hostiles**. *(SecOps A-1 a; CLAUDE.md §3.1.5. El número del ADR es el siguiente libre al fusionar.)*
+- FR-33 (estado) *[desviación aceptada por el PO, 2026-11-07]* SI el archivo es un **RAR 5 sólido**, ENTONCES `unar` **no lo extrae** (`unar`/`lsar` **1.10.8** y **1.10.1** de Debian bookworm —la de la imagen de producción—, sobre un archivo creado con `rar` 7.11: «Attempted to read more data than was available») y el resultado **esperado** es: `lsar` lista, `unar` sale con 1 → motivo `ilegible` → **marca de fallo** → cascada (siguiente candidato → caché antigua → externa → 404), **sin 500** y sin ruta en el registro. Esa serie **queda sin portada de archivo** hasta que cambie el archivo o `CONTRATO_PORTADA_RAR`. **Esta historia no busca otra herramienta ni otra versión.** SI una versión futura de `unar` lo extrae, el `xfail(strict)` de AC-07 falla y **obliga a revisar esta decisión** y a subir `CONTRATO_PORTADA_RAR`. *(QA, reproducido en la imagen de producción, **no** en la Pi.)*
+
 ## 5. Contratos y datos
 
 ### 5.1 Ruta `GET /ui/series/{series_id}/portada` (existente)
@@ -171,6 +189,7 @@ Mismo contrato. Cascada resultante:
 `covers/v3/fallos/<file_id>.json`, escrita atómicamente (`_publicar_atomico`), permisos del proceso:
 ```json
 {"v": 1, "motivo": "cifrado", "tamano": 73400320, "mtime_ns": 1730851200123456789}
+Para `tiempo`, la marca guarda además su fecha de creación (FR-29); el resto de campos no cambia.
 ```
 Sin ruta, nombre de archivo ni de serie. `file_id` es el UUID de `File`. Vigente si `tamano` y `mtime_ns` coinciden con `stat()` y `v` es la versión del contrato vigente.
 
@@ -186,6 +205,9 @@ Sin ruta, nombre de archivo ni de serie. `file_id` es el UUID de `File`. Vigente
 | `PRESUPUESTO_PORTADA_S` | 20 s | propuesta (FR-17) |
 | `RAR_SIMULTANEOS` | 1 | D-5 |
 | `CONTRATO_PORTADA_RAR` | 1 | FR-12 |
+| `RAR_MAX_RSS` | 128 MiB | FR-26 (máximo medido: 25,8 MiB) |
+| `RAR_ESPERA_TURNO_S` | 2,5 s | FR-27 |
+| `RAR_CADUCIDAD_TIEMPO_H` | 24 h | FR-29 |
 
 ### 5.4 Datos que se leen
 `File.file_path`, `File.id`, `files.metadata["formato_contenido"]`, `stat()` del archivo. **Sin cambios de modelo ni migración** (si D-1 = fichero). Ningún dato nuevo en `files.metadata`.
@@ -212,10 +234,10 @@ Nada nuevo: el `<img>` de Biblioteca/Inicio/ficha muestra la portada de su archi
 - AC-01 *(FR-01)* Dado un archivo con firma RAR y extensión `.cbr`, cuando se evalúa, entonces es candidato; con firma ZIP y extensión `.cbr`, sigue el camino ZIP; con firma RAR y extensión `.txt`, no es candidato.
 - AC-02 *(FR-02)* Dado un listado de 1001 entradas, o 501 MiB declarados, o una salida de listado mayor que el tope, cuando se lee, entonces no se extrae nada y el motivo es `demasiado_grande`.
 - AC-03 *(FR-03)* Dado `lsar` con código 0 y lista vacía sobre un archivo de 5 MiB, cuando se lee, entonces el motivo es `ilegible`, no `sin_imagenes`.
-- AC-04 *(FR-04)* Dado un listado `["10.jpg","2.jpg","__MACOSX/1.jpg","._1.jpg"]`, cuando se elige página, entonces es `2.jpg`; dado un listado sin imágenes, el motivo es `sin_imagenes`; dado un `.rar` con extensiones de contenedor, el motivo es `paquete`.
+- AC-04 *(FR-04)* Dado un listado `["10.jpg","2.jpg","__MACOSX/1.jpg","._1.jpg"]`, cuando se elige página, entonces es `2.jpg` (*QA: este ejemplo no discrimina —los mutantes «no descartar `__MACOSX`» y «no descartar `._*`» sobreviven porque el orden natural ya deja ese ruido detrás—; la prueba debe usar nombres cuyo ruido ordene **antes** de la página real, p. ej. `._cover.jpg` o `__MACOSX/cover.jpg`, y el caso de un contenedor dentro de un `.cbr`*); dado un listado sin imágenes, el motivo es `sin_imagenes`; dado un `.rar` con extensiones de contenedor, el motivo es `paquete`.
 - AC-05 *(FR-05)* Dado `unar` que sale con 0 pero no escribe nada, o escribe un fichero de otro tamaño, o con CRC distinto, o un enlace simbólico, o dos ficheros, cuando se verifica, entonces es un fallo `ilegible` y no se usa nada.
 - AC-06 *(FR-05)* Dada una imagen con más de `MAX_PIXELES_PORTADA` píxeles en su cabecera, cuando se verifica, entonces falla `demasiado_grande` **sin decodificar**.
-- AC-07 *(FR-05, real)* Dado un RAR4, un RAR5 y un RAR5 sólido del fixture, cuando se genera la portada, entonces el JPEG decodifica, mide ≤ 600 de ancho y es la primera página.
+- AC-07 *(FR-05, FR-33, real)* Dado un RAR 4, un RAR 5 y un **RAR 4 sólido** del fixture, cuando se genera la portada, entonces el JPEG decodifica, mide ≤ 600 de ancho y es la primera página. Dado el **RAR 5 sólido** (`solido_rar5.cbr`, `rar` 7.11), entonces `unar` falla y el resultado es `ilegible` → marca de fallo → cascada, **sin 500** y sin ruta en el registro; esa prueba va marcada `xfail(strict)`: **si algún día pasa, la suite falla** y obliga a revisar FR-33. *(v1.0 decía «un RAR 5 sólido del fixture … el JPEG decodifica»: era un supuesto no comprobado con `unar` real; QA lo desmintió con `unar` 1.10.8 y 1.10.1, y el PO aceptó el resultado el 2026-11-07.)*
 - AC-08 *(FR-06)* Dados `lsar`/`unar` invocados, entonces el argv es una lista (sin shell), la entrada se pasa por índice, el entorno no hereda `HOME`, y se capturan `stdout` y `stderr`.
 - AC-09 *(FR-06, NFR-04)* Dado un `unar` falso que no termina, cuando vence el tiempo, entonces se mata el **grupo** de procesos, no queda ningún hijo vivo y el motivo es `tiempo`.
 - AC-10 *(FR-06)* Dado un `unar` falso que escribe más del tope de fichero, cuando se ejecuta, entonces se interrumpe y el motivo es `demasiado_grande`.
@@ -254,19 +276,30 @@ Nada nuevo: el `<img>` de Biblioteca/Inicio/ficha muestra la portada de su archi
 - AC-34 *(FR-18)* Dadas dos peticiones simultáneas de la portada de la misma serie, entonces el lector se invoca **una sola vez** y ambas reciben la misma imagen; con dos series distintas, una generación por serie.
 - AC-33 *(FR-25)* Con `unar` ausente, `/api/health` responde 200 con un aviso `lector_rar`, y el arranque no falla.
 
+**Correcciones de SecOps, condiciones del PO y desviación (v1.1)**
+- AC-35 *(FR-26)* Dado un `unar` falso que reserva 700 MiB, entonces el lector mata el grupo al pasar `RAR_MAX_RSS`, el motivo es `demasiado_grande`, no queda ningún hijo vivo y el pico de memoria de los hijos no supera el tope más un margen de sondeo.
+- AC-36 *(FR-27)* Dadas 12 portadas RAR en frío a la vez con un ejecutor de 8 hilos, entonces una tarea ajena (otra portada ZIP, cualquier `to_thread`) consigue hilo en el tiempo de espera acotado más un margen (**no** en 5–13 s); un turno vencido da `OCUPADO`: **sin marca**, sin gastar intento, 404 `no-store` y sin abrir más RAR en esa petición.
+- AC-37 *(FR-05, FR-06; real, CI)* Los **seis RAR hostiles** (traversal `../`, ruta absoluta, enlace simbólico, comodines, salto de línea, tamaño declarado falso; generador `encargos/rar-hostiles/gen_rar4_hostiles.py` de SecOps, RAR 4 «stored») pasados por `unar`/`lsar` **reales**: no aparece nada fuera del temporal (p. ej. en `/tmp/secops-*`), no hay 500 y ningún nombre sale en los registros. *(Se ejecutan por primera vez en la CI; hasta entonces NOT RUN.)*
+- AC-38 *(FR-28)* Dados un índice negativo o ≥ nº de entradas, un tamaño negativo (que con 600 MiB + (−200 MiB) pasaba el tope) y una ruta relativa `-x.cbr`, entonces el resultado es `ilegible` y no se lanza ningún proceso.
+- AC-39 *(FR-29)* Dada una marca `tiempo` de hace 25 h, el archivo se reintenta; de hace 23 h, no; los demás motivos no caducan por tiempo.
+- AC-40 *(FR-30)* Dado un `covers/.rar-tmp/rar-*` huérfano, tras el arranque ya no existe y no se toca ningún otro fichero.
+- AC-41 *(FR-31)* El servicio de la app lleva `no-new-privileges:true` y `pids_limit`, sigue sin `docker.sock`, `privileged` ni `cap_add`, y arranca (root + `runuser`) con ellos.
+- AC-42 *(FR-31; real, NOT RUN hasta construir)* En la imagen construida, `gdomap`, `gdnc` y `gpbs` **no existen**, `find / -xdev -perm /6000 -type f` **no** lista ningún `setuid`/`setgid` nuevo frente a la imagen base y `lsar --version` sigue funcionando como `zascarr`.
+- AC-43 *(FR-32)* Existen el ADR y la línea de `SECURITY.md` con el alcance de FR-32 (mismo usuario y contenedor, riesgo aceptado por el PO, ausencia de CVE ≠ ausencia de fallos).
+
 ## 9. Plan de pruebas
 
 ### 9.1 Pruebas automáticas
 | Capa | Qué | Cómo |
 |---|---|---|
 | Lógica del lector (AC-01..06, 08..13) | listado, topes, elección de página, verificación, argv, procesos, limpieza | **`lsar`/`unar` falsos** (scripts en un `PATH` de prueba) que simulan cada trampa de la evaluación: código 0 sin salida, lista truncada, tamaño/CRC distinto, cuelgue, salida enorme, enlace simbólico. **No necesitan RAR ni la herramienta real** |
-| Integración real (AC-07, AC-05 real) | un RAR4, un RAR5 y un RAR5 sólido pequeños | `unar` real; `@pytest.mark.skipif(shutil.which("unar") is None)` **más** la prueba de «no se saltaron» (D-4) |
+| Integración real (AC-07, AC-05 real, AC-37) | un RAR 4, un RAR 5, un RAR 4 sólido y un RAR 5 sólido pequeños, y los seis RAR hostiles de SecOps | `unar` real; `@pytest.mark.skipif(shutil.which("unar") is None)` **más** la prueba de «no se saltaron» (D-4). El RAR 5 sólido es `xfail(strict)` (FR-33) |
 | Portada y marca (AC-14..21, 25, 29..31) | cascada, marcas, recorrido de #419, `v3`/`externa` | `FakeSession` + lector falso + `tmp_path` para la caché |
 | Estructura (AC-26, 27, 32, 33) | diff, «Por revisar», imagen, salud | pytest + un paso de CI de `docker build` y `run` |
 | Mutaciones (una prueba por mutación) | no contar el intento de un marcado; reabrir un marcado; marca sin huella; matar solo el proceso y no el grupo; no borrar el temporal; aceptar `rc 0` sin verificar; extraer por nombre; ampliar una imagen pequeña; que «Por revisar» llame al lector; servir `v2` | cada una rompe al menos un AC |
 
 ### 9.2 Fixtures y CI (D-4)
-- **Fixtures** (`tests/fixtures/rar/`), **creados a mano con permiso del PO** (no puedo generarlos aquí: crear RAR exige `rar`, que no es libre): `minimo_rar4.cbr` (RAR4, 2 JPEG de 8×8), `minimo_rar5.cbr` (RAR5, 2 JPEG) y `solido_rar5.cbr` (RAR5 sólido, 3 JPEG). Imágenes **sintéticas** (sin contenido de la biblioteca real); cada uno < 5 KB; se registran su SHA-256 y el comando que los creó. Faltan por poder fabricarse: **RAR cifrado** y **multivolumen** (quedan NOT RUN reales y se prueban solo con el falso).
+- **Fixtures** (`tests/fixtures/rar/`), **creados a mano con permiso del PO** (no puedo generarlos aquí: crear RAR exige `rar`, que no es libre): **cuatro**: `minimo_rar4.cbr` (RAR 4, `rar` 6.24 de RARLAB, 2 JPEG de 8×8), `minimo_rar5.cbr` (RAR 5, 2 JPEG), `solido_rar4.cbr` (RAR 4 sólido) y `solido_rar5.cbr` (RAR 5 sólido, `rar` 7.11, **ilegible para `unar`**: va con `xfail(strict)`, FR-33). Imágenes **sintéticas** (sin contenido de la biblioteca real); cada uno < 5 KB; se registran su SHA-256 y el comando que los creó. *El hash del paquete `rar` 6.24 de RARLAB **no es verificable contra un valor publicado*** (el riesgo queda acotado a esos cuatro ficheros, pequeños, benignos y verificables). Faltan por poder fabricarse: **RAR cifrado** y **multivolumen** (quedan NOT RUN reales y se prueban solo con el falso). Los **seis RAR hostiles** (AC-37) los genera el script estándar de SecOps, sin `rar`.
 - **CI:** el job «Suite unitaria» instala `unar` (`apt-get install -y --no-install-recommends unar`) para que las pruebas reales **no se salten** (el propio `ci.yml` ya recuerda que «una prueba saltada no es una pasada»); un paso final falla si alguna prueba marcada `rar_real` figura como saltada (mismo patrón que `scripts/ci_postgres.py`). El job de Docker construye la imagen y ejecuta `lsar --version` dentro. **No hay construcción ARM en CI**: la imagen ARM solo se verifica en la Pi (AC-24, NOT RUN).
 
 ### 9.3 Mediciones en la Pi (puertas)
@@ -285,13 +318,15 @@ Una historia = **una PR** (regla del PO). Cuatro commits, en este orden:
 ### 10.1 Qué queda ANTES DE DESPLEGAR (no impide fusionar; impide poner `unar` en la Pi)
 | # | Puerta | Quién / cómo | Estado |
 |---|---|---|---|
-| P-1 | **Revisión de SecOps de vulnerabilidades de `unar` y del runtime de GNUstep** (12 paquetes; superficie nueva: un parser de archivos de terceros), incluida la comprobación de que no escribe en `$HOME` | SecOps; DoR pendiente de #418 | **NOT RUN** |
+| P-1 | **Revisión de SecOps de vulnerabilidades de `unar` y del runtime de GNUstep** (12 paquetes; superficie nueva: un parser de archivos de terceros), incluida la comprobación de que no escribe en `$HOME` | SecOps hizo la revisión **del diff** (`dictamen-PR455-unar.md`, sobre `0fab248`) y pidió M-1, M-2, M-3, B-1, B-2 (incorporados como FR-26…FR-30) y la decisión A-1 del PO (FR-31, FR-32); **no** revisó `unar` real ni hizo *fuzzing*; falta su pasada breve sobre la cabeza nueva | **Parcial** |
 | P-2 | **Bomba de descompresión real** | No hay forma de crear una con las herramientas libres; se cubre con topes (FR-02, FR-05, FR-06) y se prueba solo con el `unar` falso. Decisión de despliegue: aceptar el riesgo residual con los topes, o conseguir una muestra | **NOT RUN** |
 | P-3 | **RAR cifrado** (y multivolumen) | 0 de 1208 en el censo y no se puede fabricar uno sin `rar`; solo prueba con el falso. Cómo informa `lsar -j` del cifrado: sin probar | **NOT RUN** |
 | P-4 | **Lectura en frío desde el disco USB de la biblioteca** (todo lo medido fue desde el disco del sistema) | Medición en la Pi con autorización por tanda | **NOT RUN** |
 | P-5 | **Imagen ARM**: construcción, tamaño (≤ +30 MiB) y `lsar` dentro como `zascarr`; la CI solo construye la del ejecutor | Construcción en la Pi (AC-24, AC-32) | **NOT RUN** |
 | P-6 | Medición del coste integrado (AC-22, AC-23) sobre las series reales sin tocar originales | Pi, autorización por tanda | **NOT RUN** |
 | P-7 | Orden de despliegue con #435 (§16) | PO | Recomendación en §16 |
+| P-8 | **Comprobar la imagen** (AC-42): sin `gdomap`/`gdnc`/`gpbs`, sin `setuid`/`setgid` nuevos, `lsar` funciona como `zascarr`, y `no-new-privileges` + `pids_limit` no rompen el arranque (root + `runuser`) | Construcción de la imagen (CI o equipo con Docker); QA ya construyó la x86 de la PR **sin** estos cambios | **NOT RUN** |
+| P-9 | **Contar los RAR 5 sólidos de la biblioteca real** (R-10): cuántos archivos quedan sin portada por FR-33 | Censo sobre la biblioteca (solo lectura; con autorización por tanda); el censo de #308 no cruza «RAR 5» con «sólido» | **NOT RUN** |
 
 ## 11. Registro de decisiones (resueltas por el PO el 2026-11-06, «sí a todo»)
 
@@ -361,13 +396,18 @@ Si `extract_cover_thumbnail` aprendiera RAR, `web/pendientes.py` (que llama a `p
 8. Los valores de `RAR_*` de §5.3 los fijo yo a partir de #308; no hay medición de bombas ni de discos USB.
 9. Convergencia en la Pi con varias series de más de 3 RAR ilegibles seguidos.
 10. Que las pruebas «existentes» citadas se ejecuten en la CI de `main` (no re-verificado).
+11. **Cuántos RAR 5 sólidos hay en la biblioteca real** (R-10, P-9). Cifras del encargo: RAR 5 ≈ 13 % y sólidos ≈ 7 % del censo; el cruce no está medido.
+12. Los **seis RAR hostiles** con `unar` real: SecOps verificó cabeceras y CRC con un analizador propio, **no** los pasó por `unar`; se ejecutan por primera vez en la CI (AC-37).
+13. La imagen con `no-new-privileges`, `pids_limit` y sin `gdomap`/`gdnc`/`gpbs`: sin construir (P-8). **ARM** y la Pi: sin construir ni medir.
+14. **Python 3.11** (la CI lo usa; QA, 3.14.4), cifrado y multivolumen reales (no fabricables), nombres con corchetes o acentos dentro de un RAR real, y el `logging` estándar en AC-18 (la prueba captura `structlog`).
+15. El fallo `test_ensayo_f1bis_arnes.py::…mata_el_grupo_entero` (falla en la base `6828bed` y en la cabeza; ajeno a #455, causa no investigada).
 
 ## 13. Supuestos y riesgo si son erróneos
 | Id | Supuesto | Riesgo |
 |---|---|---|
 | S-1 | `lsar -j` devuelve índice, nombre, tamaño y CRC32 por entrada (la evaluación lo usó así) | Si falta el CRC, FR-05 pierde la verificación de contenido y solo queda `Image.load()` |
 | S-2 | `unar` admite el patrón `-D -f -i -o <dir> <fichero> <índice>` (banco_rar.py:103) sin `-q` | Las opciones exactas se fijan al implementar con la medición de #308 |
-| S-3 | El cgroup del contenedor mata al proceso si se excede la memoria (no se usa `RLIMIT_AS`) | Un pico no previsto afectaría a todo el contenedor |
+| S-3 | ~~El cgroup mata al proceso si se excede la memoria (no se usa `RLIMIT_AS`)~~ **Reemplazado en v1.1 por FR-26:** la memoria se vigila y se corta por RSS (128 MiB); el cgroup sigue siendo la última red | Sin el tope, un RAR hostil de diccionario enorme dejaba que el OOM del cgroup eligiera víctima entre `unar` y la app (SecOps M-1) |
 | S-4 | `v3` regenerado una vez no sobrecarga la Pi (200 series × ≤ 0,33 s + Pillow) | La primera carga tras el despliegue sería lenta (lazy; la rejilla pide imágenes en paralelo) |
 | S-5 | El PO mantiene `MAX_INTENTOS_PORTADA = 3` para RAR y ZIP juntos | Con RAR sólidos de 4 s, 3 intentos son hasta 12 s; FR-17 lo acota |
 | S-6 | Una sola instalación de la Pi es representativa | Los umbrales pueden requerir ajuste |
@@ -375,7 +415,7 @@ Si `extract_cover_thumbnail` aprendiera RAR, `web/pendientes.py` (que llama a `p
 ## 14. Riesgos
 | Id | Riesgo | Mitigación |
 |---|---|---|
-| R-1 | Vulnerabilidad en `unar`/GNUstep (superficie nueva: un parser de archivos de terceros) | Revisión de SecOps antes de desplegar; subproceso sin shell, sin red, grupo propio, `HOME` temporal, tope de salida, de tiempo y de tamaño; originales de solo lectura; sin `RLIMIT_AS` |
+| R-1 | Vulnerabilidad en `unar`/GNUstep (superficie nueva: un parser de archivos de terceros) | Subproceso sin shell, sin red, grupo propio, `HOME` temporal, tope de salida, de tiempo, de tamaño y **de memoria (FR-26)**; originales de solo lectura; sin `RLIMIT_AS`; **riesgo aceptado por el PO por escrito (FR-32, R-11)**; revisión de SecOps del diff hecha (P-1, parcial) |
 | R-2 | Latencia en frío: sólidos de 4 s × 3 intentos en una sola petición | FR-17, FR-11 (los fallidos no se reabren), perezosa y cacheada |
 | R-3 | La rejilla fría lanza decenas de generaciones | FR-08 (N = 1), FR-18 (una por serie) |
 | R-4 | Marca de fallo que oculta una portada que sí se podría leer | Huella (tamaño + `mtime_ns`) + versión del contrato; las causas del entorno no se recuerdan |
@@ -384,6 +424,10 @@ Si `extract_cover_thumbnail` aprendiera RAR, `web/pendientes.py` (que llama a `p
 | R-7 | Cambiar el contrato de caché (D-2 B) rompe supuestos de BL-PORT1 | AC-29..31; actualizar `especificacion-BL-PORT1.md` (nota) |
 | R-8 | Desajuste entre `es_candidato_de_portada` (decide) y el lector (abre) | Una sola función de decisión para ambos (BR-02) |
 | R-9 | Rutas o nombres en el registro (CLAUDE.md §5.4) | FR-16, AC-18 |
+| R-10 | **Un RAR 5 sólido no da portada** (limitación de `unar`, FR-33): esas series quedan sin portada de archivo y se sirven por la cascada (caché antigua → externa → 404). **No se sabe cuántos hay en la biblioteca real**: RAR 5 ≈ 13 % y sólidos ≈ 7 % del censo (cifras del encargo; **como máximo ≈ 7 %** de los archivos, cota lógica no medida) | Resultado esperado y documentado (AC-07), sin 500 y con marca (no se reabre); `xfail(strict)` que avisa si una versión futura de `unar` lo arregla; P-9 mide el alcance real | **Aceptado por el PO (2026-11-07)**; revisar si P-9 da una cifra alta. Alternativas (otra herramienta, `unrar` no libre) **fuera de esta historia** |
+| R-11 | **`unar` corre sin aislamiento respecto de los secretos de la app** (mismo usuario y contenedor; `DATABASE_URL` en su entorno; biblioteca en lectura y escritura; hoy sin `no-new-privileges`, `pids_limit` ni `cap_drop`). El `env` mínimo del lector protege lo que se le hereda, no lo que puede leer (`/proc/<ppid>/environ`) | **Aceptado por escrito** (FR-32); `no-new-privileges` y `pids_limit` (FR-31); quitar `gdomap`/`gdnc`/`gpbs`; *opinión de SecOps, a probar y no exigida:* `PR_SET_DUMPABLE=0` en la app al arrancar | Un fallo de ejecución en `unar` equivaldría a comprometer la app; **aceptado por el PO** |
+| R-12 | **Inanición del pool de hilos**: el semáforo de un lector se esperaba dentro de `asyncio.to_thread` y una rejilla fría bloqueaba cualquier otro `to_thread` del proceso (5,0 s en la sonda de SecOps, 13,4 s en la de QA) | FR-27, AC-36 | Bajo si se cumple; **no medido en la Pi** |
+| R-13 | **Memoria sin tope**: un RAR de diccionario enorme (RAR 5: hasta 1 GiB o más; los sólidos decodifican entradas anteriores) hacía que el OOM del cgroup eligiera víctima (en la Pi, 512 MB compartidos) | FR-26, AC-35; ΔRSS real NOT RUN (AC-23) | Medio hasta medir en la Pi |
 
 ## 15. Registro de decisiones y trazabilidad
 | Objetivo | FR | AC | Commit |
@@ -394,6 +438,12 @@ Si `extract_cover_thumbnail` aprendiera RAR, `web/pendientes.py` (que llama a `p
 | O-6 coste en Pi | 08, 17–18, 24–25 | 12, 22–24, 32–34 | 1, 4 |
 | O-7 CBZ/ZIP intactos | 22–23 | 25–28 | 3 |
 | Reutilización con #344 | 09 | 13 | 1 |
+
+### 15.1 Registro de cambios
+| Versión | Fecha | Cambio |
+|---|---|---|
+| v1.0 | 2026-11-06 | Primera versión cerrada; D-1…D-6 y Q-7…Q-11 aceptadas por el PO («sí a todo»). **Se conserva en `especificacion-BL-PORT3-v1.0.md`** (sha256 `ff33f783…1a75`). |
+| **v1.1** | 2026-11-07 | **AC-07** → resultado esperado y motivo del RAR 5 sólido (FR-33, R-10); fixtures de tres a cuatro (§9.2, §9.1). **Condiciones del PO** → FR-31 (`no-new-privileges`, `pids_limit`, retirar `gdomap`/`gdnc`/`gpbs`), FR-32 (riesgo de `unar` por escrito en ADR y `SECURITY.md`), AC-41…AC-43, R-11, §3. **SecOps** → M-1 FR-26/AC-35/R-13 (**S-3 reemplazado**); M-2 FR-27/FR-08/AC-36/R-12; M-3 AC-37 (seis RAR hostiles reales en CI, NOT RUN hasta la CI); B-1 y B-2 FR-28/AC-38; B-3 FR-29/AC-39 (24 h, enmienda a Q-7, la ratifica el PO); B-4 FR-30/AC-40; A-1 en R-1 y R-11; P-1 parcial, P-8, P-9. **QA** → huecos de prueba de AC-04 (ejemplo que no discrimina); `OCUPADO` en FR-13; NOT RUN de §12 ampliado (items 11–15). **§17** rehecho contra la cabeza `7d4c2d1`. Cifras de la biblioteca (RAR 5 ≈ 13 %, sólidos ≈ 7 %): del encargo, **no verificadas** por mí. Sin otros cambios. |
 
 **Autorrevisión.** *Vaguedad:* los umbrales de NFR y de topes son números propuestos con su origen, no adjetivos. *Compuestos:* FR-10..FR-13 separan guardar, saltar, reintentar y no recordar. *Contradicciones a la superficie:* (a) la ficha daba por pendiente S2 y **ya está en `main`** (#419); (b) `v2` también contiene portadas externas, no solo de «un número posterior» (V4), lo que cambia D-2; (c) «Por revisar» ganaría RAR solo si `extract_cover_thumbnail` lo aprende (D-6); (d) el encargo habla de `Dockerfile` multietapa: solo la etapa `runtime` necesita `unar`. *FR sin AC:* ninguno (FR-18 → AC-34, por hipótesis Q-11). *Estado:* v1.0: ninguna decisión abierta del PO; con 10 NOT RUN, supuestos y las puertas de despliegue de §10.1; no cierra el despliegue.
 
@@ -423,45 +473,44 @@ Si hay una portada previa con ancho ≥ umbral, **se conserva** y no se extrae n
 - El umbral lo decide #435 (300 px propuesto); #418 no lo fija.
 - Hallazgo menor de D-2: el salto a `v3` deja `covers/v2` huérfano; las portadas externas que estaban en `v2` se **volverían a descargar** una vez (hay cortesía y semáforo de 2). Si se quiere evitarlo, `v2` puede quedar como respaldo de solo lectura **detrás** de los candidatos y de la antigua (no se puede tratar como «previa suficiente» porque no se sabe si es local o externa). **No cambia la spec aceptada**; lo anoto para el Brain.
 
+
 ## 17. Implementación (PR #455 de #418) — qué se hizo y qué NO se ejecutó
 
-> Nota del implementador (builder). Esta sección no cambia la spec: registra cómo se cumplió, las desviaciones y lo que
-> sigue sin comprobarse. Las decisiones D-1..D-6 y Q-7..Q-11 se implementaron tal como se aceptaron.
+> **Contrastado con la cabeza `7d4c2d1b66719e6a55a6259f6a52ead4891f9df1` de la PR #455 (borrador): leí los ficheros con `git show`; no ejecuté nada.** La nota del implementador que trae la PR en su copia de esta spec la he **reconciliado** con el informe de QA (que verificó la cabeza anterior `0fab248`) y con el dictamen de SecOps. Esta sección **no cambia la spec**: registra cómo se cumplió, las desviaciones y lo que sigue sin comprobarse. D-1…D-6 y Q-7…Q-11 se implementaron como se aceptaron (con la enmienda de FR-29).
 
-**Piezas.** `utils/lector_rar.py` (FR-02..09, sin portadas; `MotivoRar` en `models`), `utils/portada_rar.py` (elegir página,
-recorte, marca de fallo `covers/v3/fallos/<file_id>.json`, barrido de temporales), `web/series.py` (candidato RAR en
-`_primera_portada`, presupuesto de 20 s, una generación por serie, `v3`/`externa`), `utils/cover.py` (`CACHE_VERSION = "v3"`,
-`covers/externa` en la **única** lista de previas de #435, `es_candidato_de_portada` acepta el RAR por firma), `api/health.py` +
-`main.py` (aviso `lector_rar`, registro único, barrido), `Dockerfile` (`unar` solo en `runtime`), `ci.yml` (`unar` en el job, prueba
-anti-salto, `lsar` en la imagen).
+**Piezas.** `utils/lector_rar.py` (FR-02…09, FR-26…28; `MotivoRar` en `models`), `utils/portada_rar.py` (elegir página, recorte, marca de fallo `covers/v3/fallos/<file_id>.json`, barrido de temporales), `web/series.py` (candidato RAR en `_primera_portada`, presupuesto de 20 s, una generación por serie, `v3`/`externa`), `utils/cover.py` (`CACHE_VERSION = "v3"`, `covers/externa` en la **única** lista de previas de #435, `es_candidato_de_portada` acepta el RAR por firma), `api/health.py` + `main.py` (aviso `lector_rar`, registro único, barrido), `Dockerfile` (`unar` solo en `runtime`), `ci.yml` (`unar` en el job, prueba anti-salto, `lsar` en la imagen).
 
 **Decisiones de implementación que la spec dejaba abiertas.**
-- *R-6 (`RLIMIT_FSIZE`):* sin `preexec_fn` en un proceso con hilos; lo escrito se **vigila** (sondeo del temporal cada 20 ms) y
-  se mata el grupo al pasar el tope (AC-10).
-- *Memoria (dictamen SecOps M-1):* el mismo bucle lee la memoria residente del proceso y sus descendientes (`/proc`) y mata el
-  grupo por encima de 128 MiB (máximo medido en #308: 25,8 MiB). Sigue sin `RLIMIT_AS`.
-- *Espera del turno (SecOps M-2 / QA F-1):* el semáforo de un lector se espera como mucho 2,5 s; si no, `OCUPADO`: no gasta
-  intento, no deja marca, no se cachea la ausencia (404 `no-store`) y no se abren más RAR en esa petición.
-- *Valores de `lsar` (SecOps B-1/B-2):* índice dentro de rango, tamaño ≥ 0 y ruta absoluta, o `ilegible`.
-- *Marca de `tiempo` (SecOps B-3):* caduca a las 24 h (guarda su fecha); los demás motivos duran hasta que cambie el archivo.
-- *Temporales huérfanos (SecOps B-4):* se barren al arrancar.
+- *R-6 (`RLIMIT_FSIZE`):* sin `preexec_fn` en un proceso con hilos; lo escrito se **vigila** (sondeo del temporal cada 20 ms) y se mata el grupo al pasar el tope (AC-10).
+- *Memoria (SecOps M-1, FR-26):* el mismo bucle lee la memoria residente del proceso y de sus descendientes (`/proc`) y mata el grupo por encima de **128 MiB**. Sigue sin `RLIMIT_AS`.
+- *Turno (SecOps M-2 / QA F-1, FR-27):* el semáforo se espera como mucho **2,5 s**; si no, `OCUPADO` (sin intento, sin marca, 404 `no-store`, sin abrir más RAR en esa petición).
+- *Valores de `lsar` (SecOps B-1 / B-2, FR-28):* índice en rango, tamaño ≥ 0 y ruta absoluta, o `ilegible`.
+- *Marca de `tiempo` (SecOps B-3, FR-29):* caduca a las **24 h**; los demás motivos duran hasta que cambie el archivo.
+- *Temporales huérfanos (SecOps B-4, FR-30):* se barren al arrancar.
 - *Una sola función de decisión (R-8):* `es_candidato_de_portada` y `_primera_portada` usan `es_rar_candidato`.
-- *CRC32:* la primera clave de la entrada de `lsar -j` que lleve «CRC» (confirmada con `unar`/`lsar` reales: `RAR5CRC32`/`CRC32`).
+- *CRC32:* la primera clave de la entrada de `lsar -j` que lleve «CRC» (confirmada con `unar`/`lsar` reales: `RAR5CRC32` / `CRC32`).
 
-**Desviación de AC-07 (RAR 5 sólido).** `unar` **no extrae** un RAR 5 sólido (probado con `solido_rar5.cbr`, rar 7.11): «Attempted to
-read more data than was available», con `unar`/`lsar` **v1.10.1** (Debian bookworm, imagen de producción; Debian empaqueta la 1.10.1
-bajo el número 1.10.7) y con **v1.10.8** (CI). Efecto: `ilegible` → marca → cascada, sin 500. Los fixtures reales son cuatro:
-`minimo_rar4`, `minimo_rar5`, `solido_rar4` y `solido_rar5` (este último, con `xfail(strict)` que documenta la limitación). Cuántos
-RAR 5 sólidos hay en la biblioteca real: no medido.
+**Desviación de AC-07 (RAR 5 sólido), aceptada por el PO el 2026-11-07.** Ver FR-33 y AC-07. `unar` no extrae `solido_rar5.cbr` (`rar` 7.11): «Attempted to read more data than was available», con `unar`/`lsar` **1.10.1** (Debian bookworm, imagen de producción; Debian la empaqueta bajo el número 1.10.7) y con **1.10.8** (CI). Efecto: `ilegible` → marca → cascada, sin 500. Los fixtures reales son **cuatro** (`minimo_rar4`, `minimo_rar5`, `solido_rar4`, `solido_rar5`; el último con `xfail(strict)`). Cuántos RAR 5 sólidos hay en la biblioteca real: **no medido** (R-10, P-9).
 
-**Cruce con #435 (QA F-3).** Una portada externa de **≥ 300 px** cuenta como previa suficiente y gana a `v3` y a los archivos: esa
-serie no cambia sola a la portada del RAR (lo prevé §16 y lo prueba `test_una_externa_suficiente_se_conserva_sin_abrir_archivos`).
-**Coste de desplegar (QA F-2):** `v2` se ignora, así que las series cuya portada vino de `cover_url` y vivía en `v2` se vuelven a
-descargar una vez a `covers/externa/`.
+**Endurecimiento hecho (FR-31, FR-32; implementador, 2026-11-07).** `docker-compose.yml`: `security_opt: [no-new-privileges:true]` y
+256 procesos como máximo (`deploy.resources.limits.pids`: este Compose rechaza `pids_limit` junto a `deploy.resources.limits`, «can't set
+distinct values»). `Dockerfile`: se borran **todos los ficheros ejecutables y de servicio de `gnustep-base-runtime`** (`/usr/bin`, `/usr/sbin`,
+`/etc/init.d`, `/etc/default`, por su lista de `dpkg -L`: `gdomap`, `gdnc`, `defaults`, `pl*`, `xmlparse`…; `gpbs` no existe en bookworm), pues
+es dependencia dura de `unar` (dictamen SecOps C-3). `scripts/comprobar_imagen_rar.py` lo comprueba en la CI dentro de la imagen
+(también `setuid` y los fixtures con el `unar` v1.10.1 de bookworm, no el 1.10.8 del ejecutor: SecOps C-4). ADR 0015 y viñeta de `SECURITY.md` con el riesgo aceptado.
+**Medido en la imagen x86** (`docker build` local, 2026-11-07): sin `gdomap`/`gdnc`/`gpbs`; `lsar`/`unar` v1.10.1 leen el fixture como
+`zascarr`; **519 918 985 B**, es decir, +22,3 MB (+21,3 MiB) sobre la imagen de `main` que midió QA (497 596 591 B), ≤ +30 MiB; los
+únicos `setuid`/`setgid` son los de la base de Debian (`chage`, `chfn`, `chsh`, `expiry`, `gpasswd`, `mount`, `newgrp`, `passwd`, `su`,
+`umount`, `unix_chkpwd`), ninguno nuevo; **el arranque con `no-new-privileges`, 256 procesos y 512 MB funciona** (el entrypoint root +
+`groupmod` + `runuser` deja el proceso con el UID pedido, y el `CMD` real llega a pedir la base de datos), con el mismo tiempo de
+importación (≈ 5 s) que sin las opciones. **No medido:** ARM, la Pi, y que `pids: 256` baste con una rejilla fría real (el pico no se midió).
+
+**Cruce con #435 (QA F-3).** Una portada externa de **≥ 300 px** cuenta como previa suficiente y gana a `v3` y a los archivos: esa serie no cambia sola a la portada del RAR (lo prevé §16 y lo prueba `test_una_externa_suficiente_se_conserva_sin_abrir_archivos`). Con los datos del encargo, afecta a las 2 series de Comic Vine a 320 px. **Coste de desplegar (QA F-2):** `v2` se ignora, así que las series cuya portada vino de `cover_url` y vivía en `v2` se vuelven a descargar una vez a `covers/externa/`; el plan de despliegue (§16.3) debe decirlo.
+
+**Observaciones de QA que no cambian la spec.** *F-5:* el orden real de commits no es el de §10 (el commit 2, «fixtures + CI», trajo la CI y la puerta anti-salto **sin fixtures**: llegaron en los commits 6, 8 y 9); con una sola PR no afecta a `main` pero rompe `git bisect`. *F-6:* 19 avisos de `ruff` (informativo) en ficheros nuevos de pruebas. *F-7:* un fallo de la suite ajeno a la PR (§12, item 15). *Huecos de prueba por mutación* (QA §3): `AC-04` (ejemplo que no discrimina), tamaño y CRC sin la comprobación doble, N = 2 de AC-12 (detección probabilística: 4 de 5 ejecuciones), `PATH` completo heredado y contenedor dentro de un `.cbr`; **ninguno cambia el resultado de lo que hoy hace el código**; se recomienda cerrarlos con pruebas, no con requisitos nuevos.
 
 **NOT RUN (se suma a §12).**
-1. Imagen en ARM y P-1..P-6 de §10.1 (SecOps de `unar`/GNUstep, bomba de descompresión real, RAR cifrado y multivolumen reales,
-   lectura en frío desde el USB, medición en la Pi). La imagen x86 la construyó QA (+21,1 MiB).
-2. Los seis RAR hostiles de SecOps (traversal, ruta absoluta, enlace, comodines, salto de línea, tamaño falso) con `unar` real:
-   se ejecutan por primera vez en la CI.
-3. El hash del paquete `rar` 6.24 de RARLAB (usado para los RAR 4) no es verificable contra un valor publicado (`LEEME.md` de los fixtures).
+1. Imagen en ARM y P-1…P-6 de §10.1 (revisión de `unar`/GNUstep real, bomba de descompresión real, RAR cifrado y multivolumen reales, lectura en frío desde el USB, medición en la Pi). La imagen x86 la midió QA con el `Dockerfile` anterior a FR-31 (+21,1 MiB) y el implementador con el endurecido (+21,3 MiB).
+2. Los **seis RAR hostiles** (traversal, ruta absoluta, enlace, comodines, salto de línea, tamaño falso) con `unar` real: se ejecutan por primera vez en la CI (AC-37).
+3. El hash del paquete `rar` 6.24 de RARLAB (usado para los RAR 4) **no es verificable** contra un valor publicado (`LEEME.md` de los fixtures).
+4. Cuántos RAR 5 sólidos hay en la biblioteca real (P-9).

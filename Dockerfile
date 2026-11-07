@@ -31,6 +31,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 # `unar` (con `lsar`) lee la portada de los .cbr que son RAR (#418): solo en `runtime`, el
 # `builder` no lo necesita. Se lanza a demanda por subproceso, así que no cambia el arranque.
+# `gnustep-base-runtime` es dependencia DURA de `unar` (`--no-install-recommends` no evita sus ejecutables):
+# trae demonios de objetos distribuidos (`gdomap`, `gdnc`) y una veintena de herramientas (`defaults`,
+# `pl*`, `xmlparse`, `cvtenc`…) que nadie usa aquí y que ampliarían la superficie de la imagen (ADR 0015,
+# dictamen SecOps A-1 y C-3). Se borran TODOS los ejecutables y scripts de servicio del paquete, por su lista
+# de ficheros; `lsar`/`unar` solo necesitan las bibliotecas. (`gpbs` no existe en bookworm.) El job de Docker de
+# la CI lo comprueba dentro de la imagen y que los fixtures RAR se siguen leyendo.
+RUN dpkg -L gnustep-base-runtime \
+        | grep -E '^/(usr/bin|usr/sbin|etc/init\.d|etc/default)/[^/]+$' | xargs -r rm -f \
+    && find /usr /etc -type f \( -name gdomap -o -name gdnc -o -name gpbs \) -delete
 # usermod/groupmod (paquete "passwd") y runuser (paquete "util-linux") ya
 # vienen en python:3.11-slim-bookworm — sin dependencia nueva.
 
