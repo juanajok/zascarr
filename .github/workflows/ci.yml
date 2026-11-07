@@ -18,12 +18,18 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -e ".[dev]"
+      # #418: `unar` (con `lsar`) para las pruebas con RAR REAL: sin él se SALTAN, y una prueba saltada no es una pasada.
+      - name: unar para las pruebas de RAR
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends unar
       # Las pruebas de credenciales (ADR 0012) usan Docker real: el servicio `credenciales` de Compose necesita la imagen
       # de PostgreSQL ya descargada, y los guiones de tests/escenarios/ corren como root en este ejecutor desechable
       # (CI=true + sudo sin clave) con usuarios sintéticos. Sin esto se SALTAN, y una prueba saltada no es una pasada.
       - name: Imagen de PostgreSQL para las pruebas de Compose
         run: docker pull -q postgres:15-alpine
-      - run: pytest -q -rs
+      - run: pytest -q -rs --junitxml=suite.xml
+      # #418: ninguna prueba marcada `rar_real` puede haberse saltado (mismo patrón que `ci_postgres.py`).
+      - name: Exigir que las pruebas de RAR real se ejecutaron
+        run: python scripts/ci_rar_real.py suite.xml
 
   postgres:
     name: Pruebas con Postgres real
@@ -128,3 +134,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t zascarr:ci .
+      # #418: la imagen lleva `unar` y lo ejecuta el usuario de servicio (no solo root).
+      - name: lsar dentro de la imagen, como el usuario de servicio
+        run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- lsar --version

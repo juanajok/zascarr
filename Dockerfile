@@ -27,8 +27,10 @@ RUN pip install --no-cache-dir --prefix=/install .
 FROM python:3.11-slim-bookworm AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpq5 libxml2 libxslt1.1 tini \
+        libpq5 libxml2 libxslt1.1 tini unar \
     && rm -rf /var/lib/apt/lists/*
+# `unar` (con `lsar`) lee la portada de los .cbr que son RAR (#418): solo en `runtime`, el
+# `builder` no lo necesita. Se lanza a demanda por subproceso, así que no cambia el arranque.
 # usermod/groupmod (paquete "passwd") y runuser (paquete "util-linux") ya
 # vienen en python:3.11-slim-bookworm — sin dependencia nueva.
 

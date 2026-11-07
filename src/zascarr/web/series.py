@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
 from pathlib import Path
 from uuid import UUID
 
@@ -27,6 +28,7 @@ from zascarr.database import get_db
 from zascarr.models import (
     File,
     Issue,
+    MotivoRar,
     Series,
     Wishlist,
     WishlistOrigin,
@@ -52,6 +54,7 @@ from zascarr.services.procedencia import procedencia_de_serie
 from zascarr.services.series import razon_de_no_calculable
 from zascarr.utils.cover import (
     CACHE_VERSION,
+    CARPETA_EXTERNA,
     SERIES_COVER_MAX_WIDTH,
     cached_image_response,
     es_candidato_de_portada,
@@ -59,6 +62,15 @@ from zascarr.utils.cover import (
     fetch_and_cache_cover,
     portada_previa_suficiente,
     write_cover_cache,
+)
+from zascarr.utils.lector_rar import ErrorRar
+from zascarr.utils.lector_rar import disponible as lector_rar_disponible
+from zascarr.utils.portada_rar import (
+    MOTIVOS_DEL_ARCHIVO,
+    es_rar_candidato,
+    escribir_marca,
+    marca_vigente,
+    portada_de_rar,
 )
 from zascarr.web.retorno import volver_segura
 from zascarr.web.routes import crear_templates
@@ -76,6 +88,14 @@ MAX_INTENTOS_PORTADA = 3
 #: 2026-11-06). Una serie con más de 50 archivos y el primer legible más allá del 50º no obtiene esa
 #: portada hasta que se rellene `formato_contenido` (y el orden los acerque).
 MAX_EVALUADOS_PORTADA = 50
+
+#: #418 (FR-17): tiempo total que una petición fría puede gastar abriendo candidatos. Agotado, no se
+#: abren más (los siguientes se intentan en las peticiones que vengan: los fallidos quedan marcados).
+PRESUPUESTO_PORTADA_S = 20.0
+
+#: #418 (FR-18): generaciones de portada en curso, por serie. Una segunda petición de la misma serie
+#: (la ficha y la rejilla se solapan) espera a la primera en vez de abrir otra vez los archivos.
+_GENERANDO: dict[UUID, asyncio.Future] = {}
 templates = crear_templates()
 
 router = APIRouter(prefix="/ui/series", tags=["ui"])
@@ -120,7 +140,7 @@ def _stmt_archivos_de_portada(series_id: UUID):
     """Archivos candidatos a portada de una serie: no ausentes, por `sort_order` ascendente con los sin
     número al final y `File.id` como desempate, para que dos peticiones frías elijan el mismo archivo."""
     return (
-        select(File.file_path, File.metadata_["formato_contenido"])
+        select(File.id, File.file_path, File.metadata_["formato_contenido"])
         .join(Issue, File.issue_id == Issue.id)
         .where(Issue.series_id == series_id)
         .where(File.is_missing.is_(False))
@@ -129,22 +149,90 @@ def _stmt_archivos_de_portada(series_id: UUID):
     )
 
 
-def _primera_portada(archivos: list[tuple[str, dict | None]]) -> tuple[bytes, str] | None:
+def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path,
+                     *, presupuesto_s: float = PRESUPUESTO_PORTADA_S) -> tuple[bytes, str] | None:
     """Portada del primer archivo de `archivos` (ya ordenados y acotados) que la dé; todo en un solo
-    hilo. Solo gasta intento el que se llega a abrir como ZIP (firma o formato guardado); un fallo
-    se registra sin ruta ni nombre de archivo (CLAUDE.md §5.4)."""
+    hilo. Solo gasta intento el que se llega a abrir (ZIP por firma o formato guardado; RAR por
+    firma); un fallo se registra sin ruta ni nombre de archivo (CLAUDE.md §5.4).
+
+    #418: un RAR se lee con `utils/portada_rar`. Un RAR cuya portada ya falló y no ha cambiado (marca
+    vigente en `covers/<CACHE_VERSION>/fallos`) se salta SIN abrirlo y sin gastar intento; un fallo del archivo deja
+    marca, uno del entorno (herramienta ausente, error inesperado) no. Los ZIP se reintentan siempre."""
+    marcas = covers / CACHE_VERSION
     intentos = 0
-    for ruta, formato in archivos:
-        if not es_candidato_de_portada(Path(ruta), formato):
+    limite = time.monotonic() + presupuesto_s
+    herramienta = None          # se comprueba una sola vez y solo si aparece un RAR
+    for file_id, ruta, formato in archivos:
+        path = Path(ruta)
+        es_rar = es_rar_candidato(path, formato)
+        if not es_rar and not es_candidato_de_portada(path, formato):
             continue
+        if es_rar:
+            if herramienta is None:
+                herramienta = lector_rar_disponible()
+            if not herramienta or marca_vigente(marcas, file_id, path):
+                continue
         if intentos >= MAX_INTENTOS_PORTADA:
             break
+        if time.monotonic() >= limite:
+            logger.info("cover.presupuesto_agotado", intento=intentos)
+            break
         intentos += 1
-        result = extract_cover_thumbnail(Path(ruta), formato, ancho=SERIES_COVER_MAX_WIDTH)
-        if result:
-            return result
-        logger.info("cover.candidato_sin_portada", intento=intentos)
+        if not es_rar:
+            result = extract_cover_thumbnail(path, formato, ancho=SERIES_COVER_MAX_WIDTH)
+            if result:
+                return result
+            logger.info("cover.candidato_sin_portada", intento=intentos)
+            continue
+        try:
+            return portada_de_rar(path, covers, ancho=SERIES_COVER_MAX_WIDTH)
+        except ErrorRar as exc:
+            logger.info("cover.candidato_sin_portada", intento=intentos, motivo=exc.motivo.value)
+            if exc.motivo in MOTIVOS_DEL_ARCHIVO:
+                escribir_marca(marcas, file_id, path, exc.motivo)
+        except Exception as exc:      # error de entorno inesperado: se reintentará, sin marca
+            logger.warning("cover.candidato_sin_portada", intento=intentos,
+                           motivo=MotivoRar.INESPERADO.value, tipo=type(exc).__name__)
     return None
+
+
+def _generar_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path,
+                     destino: Path) -> tuple[bytes, str, bool] | None:
+    """Saca la portada de los archivos y la escribe en `destino` (`v3`). `(bytes, tipo, escrita)`:
+    si la caché no se puede escribir, `escrita` es `False` y se sirve igualmente lo extraído."""
+    result = _primera_portada(archivos, covers)
+    if result is None:
+        return None
+    data, content_type = result
+    try:
+        write_cover_cache(destino, data)
+    except OSError as exc:
+        # FR-11 (#300): disco lleno, permiso denegado… El nombre del evento se conserva
+        # (`cover.cache_sin_espacio`) porque hay alertas montadas sobre él.
+        logger.warning("cover.cache_sin_espacio", motivo=type(exc).__name__,
+                       errno=getattr(exc, "errno", None))
+        return data, content_type, False
+    return data, content_type, True
+
+
+async def _portada_de_archivos(series_id: UUID, archivos: list[tuple[UUID, str, dict | None]],
+                               covers: Path, destino: Path) -> tuple[bytes, str, bool] | None:
+    """Una sola generación por serie a la vez (FR-18): quien llega con otra en curso espera su
+    resultado. Los fallos de la primera no se propagan a las que esperan (la siguiente petición
+    reintenta)."""
+    en_curso = _GENERANDO.get(series_id)
+    if en_curso is not None:
+        return await asyncio.shield(en_curso)
+    futuro = asyncio.get_running_loop().create_future()
+    _GENERANDO[series_id] = futuro
+    try:
+        resultado = await asyncio.to_thread(_generar_portada, archivos, covers, destino)
+        futuro.set_result(resultado)
+        return resultado
+    finally:
+        if not futuro.done():
+            futuro.set_result(None)
+        _GENERANDO.pop(series_id, None)
 
 
 async def _veredicto(db: AsyncSession, series: Series, querer, politica: WishlistPolicy,
@@ -344,40 +432,44 @@ async def cambiar_politica(series_id: UUID, request: Request,
 @router.get("/{series_id}/portada")
 async def portada(series_id: UUID, request: Request,
                   db: AsyncSession = Depends(get_db)) -> Response:
-    """Cascada de portada de serie (BL-PORT1, #300; antes C1):
+    """Cascada de portada de serie (BL-PORT1, #300; #435, #418):
 
-    0. Una portada previa con ancho suficiente (`portada_previa_suficiente`: hoy la caché
-       antigua `covers/<id>.jpg` con >= 300 px, #435) → servirla (ETag por su `mtime`, 304)
-       **sin** extraer, sin red, sin escribir y sin copiarla; una `v2` ya escrita se ignora.
-    1. `covers/v2/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304).
-    2. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419):
-       solo los que `es_candidato_de_portada` acepta (ausencia conocida o firma que no es ZIP:
-       se saltan), con un tope de `MAX_INTENTOS_PORTADA` aperturas y de `MAX_EVALUADOS_PORTADA`
-       archivos evaluados → extraer su primera página a 600, escribir `v2`, servirla. Si la
-       escritura falla, se sirve igualmente lo extraído con un ETag de sus bytes (FR-11, PR-2).
+    0. Una portada previa con ancho suficiente (`portada_previa_suficiente`: la caché antigua
+       `covers/<id>.jpg` o la externa `covers/externa/<id>.jpg`, con >= 300 px, #435) → servirla
+       (ETag por su `mtime`, 304) **sin** extraer, sin red, sin escribir y sin copiarla.
+    1. `covers/v3/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304). `v3` guarda SOLO portadas
+       sacadas de un archivo; una `v2` anterior se ignora (no se borra).
+    2. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419): solo los que
+       `es_candidato_de_portada` acepta (ZIP por contenido o RAR por firma, #418; ausencia conocida o
+       firma ajena se saltan), con un tope de `MAX_INTENTOS_PORTADA` aperturas, de
+       `MAX_EVALUADOS_PORTADA` archivos evaluados y de `PRESUPUESTO_PORTADA_S` segundos → extraer su
+       primera página a 600, escribir `v3`, servirla. Un RAR que ya falló y no ha cambiado se salta
+       sin abrirlo (marca por archivo). Si la escritura falla, se sirve igualmente lo extraído con
+       un ETag de sus bytes (FR-11, PR-2). Una sola generación por serie a la vez (FR-18).
     3. Si no hay archivo utilizable, `covers/<id>.jpg` legada (de menos de 300 px) → servirla
-       **sin red y sin copiarla** a `v2` (respaldo que solo se lee).
-    4. Si tampoco, `cover_url` externa → descargar una vez a 600, escribir
-       `v2`, servirla.
+       **sin red y sin copiarla** (respaldo que solo se lee).
+    4. Si tampoco, la externa pequeña ya descargada, o `cover_url` → descargar una vez a 600,
+       escribir `covers/externa/` (nunca en `v3`), servirla.
     5. Nada de eso → 404: el `<img>` cae al marcador CSS, sin texto nuevo.
 
     La regeneración es **perezosa**: solo al pedir la imagen; el HTML de
-    Biblioteca/Inicio/ficha no extrae ni escribe nada (FR-16). Nunca se cachea
-    una ausencia: la próxima petición vuelve a intentarlo. Todo el trabajo
-    bloqueante (zipfile, Pillow, disco, red) va en `asyncio.to_thread` o en un
-    cliente async, para no congelar el event loop.
+    Biblioteca/Inicio/ficha no extrae ni escribe nada (FR-16). Una ausencia de portada
+    no se cachea (los archivos se reintentan), salvo los RAR que fallaron por una causa suya.
+    Todo el trabajo bloqueante (zipfile, Pillow, disco, subprocesos, red) va en
+    `asyncio.to_thread` o en un cliente async, para no congelar el event loop.
     """
     series = await db.get(Series, series_id)
     if not series:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
 
     covers = get_settings().covers_cache_path
-    v2_path = covers / CACHE_VERSION / f"{series_id}.jpg"
+    v3_path = covers / CACHE_VERSION / f"{series_id}.jpg"
     legacy_path = covers / f"{series_id}.jpg"
+    externa_path = covers / CARPETA_EXTERNA / f"{series_id}.jpg"
 
-    # #435 (BL-PORT5): una portada previa con resolución suficiente (hoy la caché antigua, >= 300 px)
-    # se conserva: se sirve ANTES que `v2` y que los archivos, sin extraer, sin red y sin escribir ni
-    # copiar nada. Una `v2` ya escrita de esa serie queda en disco, sin uso.
+    # #435 (BL-PORT5): una portada previa con resolución suficiente (la caché antigua o la externa, >=
+    # 300 px) se conserva: se sirve ANTES que `v3` y que los archivos, sin extraer, sin red y sin
+    # escribir ni copiar nada. Una `v2` ya escrita queda en disco, sin uso (#418).
     previa = await asyncio.to_thread(portada_previa_suficiente, covers, series_id)
     if previa is not None:
         try:
@@ -386,50 +478,43 @@ async def portada(series_id: UUID, request: Request,
             etag = _etag_de_bytes(previa.datos)
         return cached_image_response(request, previa.datos, "image/jpeg", etag)
 
-    if await asyncio.to_thread(v2_path.exists):
-        data = await asyncio.to_thread(v2_path.read_bytes)
-        return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
+    if await asyncio.to_thread(v3_path.exists):
+        data = await asyncio.to_thread(v3_path.read_bytes)
+        return cached_image_response(request, data, "image/jpeg", _etag_for(v3_path))
 
     # B7 (revisión de PR, 2026-09-26): un File con is_missing=True ya no
     # está en disco — sin este filtro, la portada podía intentar (y
     # fallar) extraer de un CBZ borrado en vez de probar el siguiente
     # número disponible o caer al cover_url externo.
-    archivos = (await db.execute(_stmt_archivos_de_portada(series_id))).all()
-    result = await asyncio.to_thread(_primera_portada, [tuple(a) for a in archivos])
+    archivos = [(a[0], a[1], a[2]) for a in (await db.execute(_stmt_archivos_de_portada(series_id))).all()]
+    result = await _portada_de_archivos(series_id, archivos, covers, v3_path)
     if result:
-        data, content_type = result
-        try:
-            await asyncio.to_thread(write_cover_cache, v2_path, data)
-        except OSError as exc:
-            # FR-11 (#300): si la caché no se puede escribir (disco lleno, permiso
-            # denegado…), se sirve igualmente la portada ya extraída, con un ETag
-            # derivado de sus bytes. Antes se pedía el `mtime` de un fichero que no
-            # existía: el `stat()` lanzaba FileNotFoundError y la petición daba 500.
-            # El nombre del evento se conserva (`cover.cache_sin_espacio`) porque hay
-            # alertas montadas sobre él; `motivo` y `errno` distinguen la causa real.
-            logger.warning(
-                "cover.cache_sin_espacio",
-                motivo=type(exc).__name__,
-                errno=getattr(exc, "errno", None),
-            )
-            return cached_image_response(request, data, content_type, _etag_de_bytes(data))
-        return cached_image_response(request, data, content_type, _etag_for(v2_path))
+        data, content_type, escrita = result
+        etag = _etag_for(v3_path) if escrita else _etag_de_bytes(data)
+        return cached_image_response(request, data, content_type, etag)
 
-    # Respaldo: la caché antigua (240/320) se sirve sin red y no se copia a v2. Si hay
-    # un CBZ utilizable se regenera arriba; esta rama es para CBR, archivos ausentes o
-    # series que ya solo conservan la caché vieja (Q-1 del PO).
+    # Respaldo: la caché antigua (240/320) se sirve sin red y no se copia. Si hay un archivo
+    # utilizable se regenera arriba; esta rama es para archivos ausentes o ilegibles, o series que ya
+    # solo conservan la caché vieja (Q-1 del PO).
     if await asyncio.to_thread(legacy_path.exists):
         data = await asyncio.to_thread(legacy_path.read_bytes)
         return cached_image_response(request, data, "image/jpeg", _etag_for(legacy_path))
 
+    # #418: la portada externa vive APARTE de `v3`: mientras no haya portada de archivo se siguen
+    # evaluando los candidatos (barato: los fallidos están marcados) y la serie cambia sola cuando uno
+    # se hace legible.
+    if await asyncio.to_thread(externa_path.exists):
+        data = await asyncio.to_thread(externa_path.read_bytes)
+        return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
+
     # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
     motivo_fallo: list[str] = []
     if (series.cover_url and not es_portada_de_relleno(series.cover_url)
-            and await fetch_and_cache_cover(series.cover_url, v2_path,
+            and await fetch_and_cache_cover(series.cover_url, externa_path,
                                             ancho=SERIES_COVER_MAX_WIDTH,
                                             motivo_fallo=motivo_fallo)):
-        data = await asyncio.to_thread(v2_path.read_bytes)
-        return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
+        data = await asyncio.to_thread(externa_path.read_bytes)
+        return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
 
     # Una espera de cortesía no es un «no hay portada» definitivo: el navegador no debe
     # cachear la ausencia (mañana podría descargarse).

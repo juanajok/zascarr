@@ -69,7 +69,8 @@ class _Resultado:
 class _Sesion:
     def __init__(self, series: Series, archivos: list[tuple[str, dict | None]]):
         self._series = series
-        self._archivos = archivos
+        # la consulta real trae (id, ruta, formato): el id lo usa la marca de fallo de los RAR (#418)
+        self._archivos = [(uuid4(), *a) for a in archivos]
         self.sentencias: list[str] = []
 
     async def get(self, _model, _id):
@@ -262,19 +263,41 @@ class TestFormatoDesconocidoSeDecidePorFirma:
 
         assert r.status_code == 200 and aperturas == ["01.cbr"]
 
-    def test_cbr_rar_sin_formato_guardado_no_gasta_intento_ni_se_abre(self, tmp_path, montar):
-        """Mutación: si un RAR sin formato consumiera intento, estos 4 agotarían el tope de 3."""
+    def _cuatro_rar_y_un_cbz(self, tmp_path):
         rars = []
         for i in range(wseries.MAX_INTENTOS_PORTADA + 1):
             rar = tmp_path / f"{i:02d}.cbr"
             rar.write_bytes(b"Rar!\x1a\x07\x01\x00relleno")
             rars.append((rar, None))
-        bueno = _cbz(tmp_path / "99.cbz")
-        series, _c, _s, aperturas = montar([*rars, (bueno, None)])
+        return [*rars, (_cbz(tmp_path / "99.cbz"), None)]
+
+    def test_cbr_rar_sin_herramienta_no_gasta_intento_ni_se_abre(self, tmp_path, montar, monkeypatch):
+        """Sin `unar` (FR-13, entorno) un RAR ni se abre ni gasta intento: se llega al CBZ. Se fija
+        `disponible` para que la prueba no dependa de la máquina."""
+        monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: False)
+        series, _c, _s, aperturas = montar(self._cuatro_rar_y_un_cbz(tmp_path))
 
         r = TestClient(app).get(f"/ui/series/{series.id}/portada")
 
         assert r.status_code == 200 and aperturas == ["99.cbz"]
+
+    def test_cbr_rar_con_herramienta_es_candidato_y_gasta_intento(self, tmp_path, montar, monkeypatch):
+        """#418 cambia el contrato de #419: un RAR de verdad (por firma) ES candidato y gasta intento;
+        con 3 RAR ilegibles delante el tope se agota antes del CBZ (los marcados no se reabrirán)."""
+        monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: True)
+        abiertos = []
+
+        def _ilegible(path, covers, *, ancho):
+            abiertos.append(path.name)
+            raise wseries.ErrorRar(wseries.MotivoRar.ILEGIBLE)
+
+        monkeypatch.setattr(wseries, "portada_de_rar", _ilegible)
+        series, covers, _s, aperturas = montar(self._cuatro_rar_y_un_cbz(tmp_path))
+
+        r = TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+        assert r.status_code == 404 and aperturas == []
+        assert abiertos == ["00.cbr", "01.cbr", "02.cbr"]
 
     def test_un_cbz_que_por_firma_no_es_zip_no_se_abre_ni_gasta_intento(self, tmp_path, montar):
         rotos = [(_cbz_roto(tmp_path / f"{i:02d}.cbz"), None)
@@ -295,13 +318,22 @@ class TestFormatoDesconocidoSeDecidePorFirma:
         sql = sesion.sentencias[0]
         assert "formato_contenido" in sql
 
-    def test_la_ausencia_conocida_se_descarta_sin_leer_el_archivo(self, tmp_path, montar):
-        """El formato guardado manda sobre la firma: si dice RAR no se abre ni gasta intento,
-        aunque el archivo (cambiado después) sea ahora un ZIP."""
+    def test_la_ausencia_conocida_se_descarta_sin_leer_el_archivo(self, tmp_path, montar, monkeypatch):
+        """El formato guardado manda sobre la firma: si dice RAR no se lee como ZIP (ni se abre con el
+        extractor de ZIP), aunque el archivo (cambiado después) sea ahora un ZIP: va al lector de RAR.
+        #418: antes se descartaba sin abrir; ahora se intenta con el lector (aquí, ilegible)."""
+        monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: True)
+        leidos = []
+
+        def _ilegible(path, covers, *, ancho):
+            leidos.append(path.name)
+            raise wseries.ErrorRar(wseries.MotivoRar.ILEGIBLE)
+
+        monkeypatch.setattr(wseries, "portada_de_rar", _ilegible)
         cambiado = _tebeo_zip(tmp_path / "01.cbr")
         bueno = _cbz(tmp_path / "02.cbz")
         series, _c, _s, aperturas = montar([(cambiado, {"firma": "rar"}), (bueno, None)])
 
         r = TestClient(app).get(f"/ui/series/{series.id}/portada")
 
-        assert r.status_code == 200 and aperturas == ["02.cbz"]
+        assert r.status_code == 200 and leidos == ["01.cbr"] and aperturas == ["02.cbz"]

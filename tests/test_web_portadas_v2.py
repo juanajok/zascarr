@@ -77,7 +77,7 @@ class _SesionDePortada:
 
     def __init__(self, series: Series, filas: list):
         self._series = series
-        self._filas = list(filas)
+        self._filas = [(uuid4(), *f) for f in filas]   # la consulta real trae (id, ruta, formato)
         self.statements: list[str] = []
 
     async def get(self, _model, _id):
@@ -263,8 +263,10 @@ class TestSinTrabajoSiYaEsta:
         assert r.status_code == 200
         assert len(llamadas) == 1
         assert llamadas[0][1]["ancho"] == SERIES_COVER_MAX_WIDTH
-        assert m.v2.exists()
-        with Image.open(m.v2) as img:
+        # #418 (FR-20, AC-30): la externa va APARTE de `v3`, que es solo de portadas de archivo
+        externa = m.covers / "externa" / f"{m.series.id}.jpg"
+        assert externa.exists() and not m.v2.exists()
+        with Image.open(externa) as img:
             assert img.width == 600
 
 
@@ -453,7 +455,7 @@ class TestUsaLaVersionEnLaRuta:
 
         TestClient(app).get(m.url())
 
-        assert CACHE_VERSION == "v2"
+        assert CACHE_VERSION == "v3"
         assert m.v2.exists()
         assert not m.legado.exists()
 

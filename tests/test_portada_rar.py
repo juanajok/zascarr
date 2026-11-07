@@ -1,0 +1,574 @@
+"""#418 (BL-PORT3) commit 3: la portada de serie sale del propio RAR, con `lsar`/`unar` FALSOS.
+
+Cubre AC-01, 04, 06, 14..21, 25, 27..31, 33 y 34 de la spec. Los archivos RAR son ficheros con la
+firma `Rar!\\x1a\\x07\\x00` (la firma es lo que decide); el contenido lo «extrae» el `unar` falso.
+Cada prueba nombra el mecanismo que protege.
+"""
+from __future__ import annotations
+
+import asyncio
+import io
+import json
+import time
+import zipfile
+from pathlib import Path
+from uuid import UUID, uuid4
+
+import httpx
+import pytest
+import structlog
+from fastapi.testclient import TestClient
+from PIL import Image
+
+from tests._rar_falso import entrada, instalar
+from zascarr.config import get_settings
+from zascarr.core.formato_contenedor import tratamiento
+from zascarr.database import get_db
+from zascarr.main import app
+from zascarr.models import ComicTradition, Firma, MotivoRar, Series, Tratamiento
+from zascarr.utils import lector_rar, portada_rar
+from zascarr.utils.cover import (
+    CACHE_VERSION,
+    es_candidato_de_portada,
+    extract_cover_thumbnail,
+    puede_tener_portada,
+)
+from zascarr.utils.lector_rar import EntradaRar, ErrorRar, Listado
+from zascarr.utils.portada_rar import elegir_pagina, es_rar_candidato
+from zascarr.web import series as wseries
+
+FIRMA_RAR = b"Rar!\x1a\x07\x00"
+
+
+def _jpeg(ancho: int, alto: int = 0, color=(200, 30, 30)) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (ancho, alto or ancho * 3 // 2), color).save(buf, format="JPEG", quality=90)
+    return buf.getvalue()
+
+
+def _rar(ruta: Path, relleno: int = 100) -> Path:
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    ruta.write_bytes(FIRMA_RAR + b"x" * relleno)
+    return ruta
+
+
+def _cbz(ruta: Path, color=(30, 30, 200)) -> Path:
+    with zipfile.ZipFile(ruta, "w") as zf:
+        for i in range(12):
+            zf.writestr(f"{i:03d}.jpg", _jpeg(500, 750, color))
+    return ruta
+
+
+def _cbz_roto(ruta: Path) -> Path:
+    ruta.write_bytes(b"PK\x03\x04" + b"no es un zip de verdad")
+    return ruta
+
+
+class _Resultado:
+    def __init__(self, filas):
+        self._filas = filas
+
+    def all(self):
+        return self._filas
+
+
+class _Sesion:
+    def __init__(self, series, archivos):
+        self._series = series
+        self.archivos = [(uuid4(), str(p), fc) for p, fc in archivos]
+
+    async def get(self, _model, _id):
+        return self._series
+
+    async def execute(self, _statement):
+        return _Resultado(self.archivos)
+
+
+@pytest.fixture
+def falso(tmp_path, monkeypatch):
+    f = instalar(tmp_path / "bin", monkeypatch)
+    f.contenido(_jpeg(1800))
+    return f
+
+
+@pytest.fixture
+def mundo(tmp_path, monkeypatch, falso):
+    """`mundo(archivos)` → (series, covers, sesión). La caché va a `tmp_path`, nunca a la real."""
+    covers = tmp_path / "covers"
+    settings = get_settings().model_copy(update={"covers_cache_path": covers})
+    monkeypatch.setattr("zascarr.web.series.get_settings", lambda: settings)
+
+    def _montar(archivos, cover_url=None):
+        series = Series(id=uuid4(), title="Thorgal", tradition=ComicTradition.FRANCO_BELGIAN,
+                        start_year=1977, cover_url=cover_url)
+        sesion = _Sesion(series, archivos)
+
+        async def _get_db():
+            yield sesion
+
+        app.dependency_overrides[get_db] = _get_db
+        return series, covers, sesion
+
+    try:
+        yield _montar
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def _pedir(series) -> httpx.Response:
+    return TestClient(app).get(f"/ui/series/{series.id}/portada")
+
+
+def _ancho(contenido: bytes) -> int:
+    with Image.open(io.BytesIO(contenido)) as img:
+        return img.width
+
+
+def _unars(falso) -> list[str]:
+    return [x for x in falso.llamadas() if x.startswith("unar")]
+
+
+def _lsars(falso) -> list[str]:
+    return [x for x in falso.llamadas() if x.startswith("lsar")]
+
+
+def _listado_de_una_pagina(falso, nombre="01.jpg"):
+    datos = (falso.carpeta / "contenido.bin").read_bytes()
+    import zlib
+    falso.listado([entrada(0, nombre, len(datos), zlib.crc32(datos))])
+
+
+def _marcas(covers: Path) -> list[Path]:
+    carpeta = covers / CACHE_VERSION / "fallos"
+    return sorted(carpeta.glob("*.json")) if carpeta.exists() else []
+
+
+# ── Quién es candidato (AC-01, R-8) ────────────────────────────────────────────────────────────────
+class TestCandidatoRar:
+    def test_firma_rar_con_cbr_es_candidato_firma_zip_sigue_el_camino_zip(self, tmp_path):
+        assert es_candidato_de_portada(_rar(tmp_path / "a.cbr")) is True
+        assert es_rar_candidato(_rar(tmp_path / "b.cbr")) is True
+        zip_cbr = _cbz(tmp_path / "c.cbr")
+        assert es_candidato_de_portada(zip_cbr) is True
+        assert es_rar_candidato(zip_cbr) is False        # un ZIP disfrazado NO va por el lector RAR
+
+    def test_firma_rar_con_otra_extension_no_es_candidato(self, tmp_path):
+        assert es_candidato_de_portada(_rar(tmp_path / "a.txt")) is False
+        assert es_candidato_de_portada(_rar(tmp_path / "a.cb7")) is False
+
+    @pytest.mark.parametrize("nombre", ["a.rar", "a"])
+    def test_rar_y_sin_extension_con_firma_rar_se_intentan(self, tmp_path, nombre):
+        assert es_rar_candidato(_rar(tmp_path / nombre)) is True
+
+    def test_con_formato_guardado_no_se_lee_el_disco(self, tmp_path):
+        inexistente = tmp_path / "no_existe.cbr"
+        assert es_rar_candidato(inexistente, {"firma": "rar"}) is True
+        assert es_rar_candidato(inexistente, {"firma": "zip", "clase": "tebeo"}) is False
+
+    def test_un_cbr_que_no_es_rar_ni_zip_no_es_candidato(self, tmp_path):
+        f = tmp_path / "a.cbr"
+        f.write_bytes(b"texto cualquiera")
+        assert es_candidato_de_portada(f) is False
+
+    def test_la_extension_no_decide_un_cbr_zip_con_formato_ilegible_guardado(self, tmp_path):
+        assert es_rar_candidato(_rar(tmp_path / "a.cbr"), {"firma": "ilegible"}) is True
+
+
+# ── Elegir la página (AC-04) ──────────────────────────────────────────────────────────────────────
+def _e(i, nombre, directorio=False):
+    return EntradaRar(i, nombre, 10, None, directorio, False)
+
+
+class TestElegirPagina:
+    def test_primera_en_orden_natural_sin_macosx_ni_apple_double(self):
+        lis = Listado((_e(0, "10.jpg"), _e(1, "2.jpg"), _e(2, "__MACOSX/1.jpg"), _e(3, "._1.jpg")))
+        assert elegir_pagina(lis, ".cbr").nombre == "2.jpg"
+
+    def test_sin_imagenes(self):
+        with pytest.raises(ErrorRar) as exc:
+            elegir_pagina(Listado((_e(0, "ComicInfo.xml"), _e(1, "carpeta", True))), ".cbr")
+        assert exc.value.motivo is MotivoRar.SIN_IMAGENES
+
+    def test_con_contenedores_dentro_es_un_paquete(self):
+        lis = Listado((_e(0, "01.jpg"), _e(1, "otro.cbz")))
+        with pytest.raises(ErrorRar) as exc:
+            elegir_pagina(lis, ".rar")
+        assert exc.value.motivo is MotivoRar.PAQUETE
+
+    def test_un_rar_que_no_es_cbr_exige_ser_un_tebeo(self):
+        pocas = Listado(tuple(_e(i, f"{i}.jpg") for i in range(3)))
+        with pytest.raises(ErrorRar) as exc:
+            elegir_pagina(pocas, ".rar")
+        assert exc.value.motivo is MotivoRar.PAQUETE
+        assert elegir_pagina(pocas, ".cbr").nombre == "0.jpg"      # un .cbr corto sí
+
+    def test_un_tebeo_en_rar_sin_extension_cbr_pasa_con_suficientes_imagenes(self):
+        lis = Listado(tuple(_e(i, f"{i:02d}.jpg") for i in range(12)) + (_e(12, "ComicInfo.xml"),))
+        assert elegir_pagina(lis, ".rar").nombre == "00.jpg"
+
+
+# ── La portada por la ruta (O-1, AC-07 con falsos, AC-20) ─────────────────────────────────────────
+class TestPortadaPorLaRuta:
+    def test_un_cbr_rar_da_portada_en_v3_a_600(self, tmp_path, mundo, falso):
+        _listado_de_una_pagina(falso)
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        r = _pedir(series)
+        assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+        v3 = covers / "v3" / f"{series.id}.jpg"
+        assert v3.exists() and _ancho(r.content) == 600
+        assert r.content == v3.read_bytes()
+        assert r.headers["etag"] == f'"{v3.stat().st_mtime}"'
+
+    def test_la_segunda_peticion_sale_de_v3_sin_lanzar_nada(self, tmp_path, mundo, falso):
+        _listado_de_una_pagina(falso)
+        series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        _pedir(series)
+        llamadas = len(falso.llamadas())
+        assert _pedir(series).status_code == 200
+        assert len(falso.llamadas()) == llamadas
+
+    def test_nunca_se_amplia_una_portada_pequena(self, tmp_path, mundo, falso):
+        """Mutación: ampliar una imagen pequeña a 600."""
+        falso.contenido(_jpeg(300))
+        _listado_de_una_pagina(falso)
+        series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        assert _ancho(_pedir(series).content) == 300
+
+    def test_se_pide_la_pagina_elegida_por_indice(self, tmp_path, mundo, falso):
+        datos = (falso.carpeta / "contenido.bin").read_bytes()
+        falso.listado([entrada(4, "10.jpg", len(datos)), entrada(9, "2.jpg", len(datos))])
+        series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        _pedir(series)
+        assert _unars(falso)[0].split()[-1] == "9"
+
+    def test_una_imagen_con_mas_pixeles_que_el_tope_falla_sin_decodificar(self, monkeypatch):
+        """AC-06: se mide la CABECERA; `Image.load` no llega a llamarse."""
+        grande = _jpeg(200)
+        monkeypatch.setattr(portada_rar, "MAX_PIXELES_PORTADA", 100)
+        cargas = []
+        real = Image.Image.load
+        monkeypatch.setattr(Image.Image, "load", lambda self, *a, **k: (cargas.append(1), real(self, *a, **k))[1])
+        with pytest.raises(ErrorRar) as exc:
+            portada_rar._jpeg_de(grande, 600)
+        assert exc.value.motivo is MotivoRar.DEMASIADO_GRANDE and cargas == []
+
+    def test_imagen_que_no_decodifica_es_ilegible(self):
+        with pytest.raises(ErrorRar) as exc:
+            portada_rar._jpeg_de(b"no soy una imagen", 600)
+        assert exc.value.motivo is MotivoRar.ILEGIBLE
+
+    def test_un_zip_con_extension_cbr_sigue_el_camino_zip_sin_lanzar_el_lector(self, tmp_path, mundo, falso):
+        series, covers, _ = mundo([(_cbz(tmp_path / "01.cbr"), None)])
+        assert _pedir(series).status_code == 200
+        assert falso.llamadas() == []
+
+
+# ── El fallo recordado (AC-14..19) ────────────────────────────────────────────────────────────────
+class TestFalloRecordado:
+    def _cifrado(self, falso):
+        falso.modo(lsar="rc1", mensaje="This archive requires a password")
+
+    def test_cifrado_deja_marca_y_la_segunda_peticion_no_lanza_nada(self, tmp_path, mundo, falso):
+        """Mutación: reabrir un archivo marcado."""
+        self._cifrado(falso)
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        assert _pedir(series).status_code == 404            # sin portada: sigue la cascada, ni 500 ni v3
+        assert len(_lsars(falso)) == 1
+        (marca,) = _marcas(covers)
+        assert json.loads(marca.read_text())["motivo"] == "cifrado"
+        assert _pedir(series).status_code == 404
+        assert len(_lsars(falso)) == 1 and _unars(falso) == []
+
+    def test_la_marca_no_lleva_ruta_ni_nombre(self, tmp_path, mundo, falso):
+        self._cifrado(falso)
+        rar = _rar(tmp_path / "Thorgal 01.cbr")
+        series, covers, _ = mundo([(rar, None)])
+        _pedir(series)
+        texto = _marcas(covers)[0].read_text()
+        assert set(json.loads(texto)) == {"v", "motivo", "tamano", "mtime_ns"}
+        assert "Thorgal" not in texto and str(tmp_path) not in texto
+
+    def test_marca_sin_huella_reabriria_un_archivo_cambiado(self, tmp_path, mundo, falso):
+        """AC-15 / mutación «marca sin huella»: si cambia el tamaño o el mtime, se reintenta."""
+        self._cifrado(falso)
+        rar = _rar(tmp_path / "01.cbr")
+        series, _c, _ = mundo([(rar, None)])
+        _pedir(series)
+        assert len(_lsars(falso)) == 1
+        _pedir(series)
+        assert len(_lsars(falso)) == 1                        # igual: no se reabre
+        rar.write_bytes(FIRMA_RAR + b"y" * 200)               # cambia el tamaño
+        _pedir(series)
+        assert len(_lsars(falso)) == 2
+        import os
+        st = rar.stat()
+        os.utime(rar, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))   # solo el mtime
+        _pedir(series)
+        assert len(_lsars(falso)) == 3
+
+    def test_cambia_solo_el_tamano_con_el_mismo_mtime_y_se_reintenta(self, tmp_path, mundo, falso):
+        """Mutación «marca sin tamaño»: una sustitución que conserva el mtime también invalida."""
+        import os
+        self._cifrado(falso)
+        rar = _rar(tmp_path / "01.cbr")
+        series, _c, _ = mundo([(rar, None)])
+        _pedir(series)
+        mtime = rar.stat().st_mtime_ns
+        rar.write_bytes(FIRMA_RAR + b"z" * 300)
+        os.utime(rar, ns=(mtime, mtime))
+        assert rar.stat().st_mtime_ns == mtime
+        _pedir(series)
+        assert len(_lsars(falso)) == 2
+
+    @pytest.mark.parametrize("motivo", [MotivoRar.HERRAMIENTA_AUSENTE, MotivoRar.INESPERADO])
+    def test_un_motivo_del_entorno_que_llega_como_error_rar_no_deja_marca(
+            self, tmp_path, mundo, falso, monkeypatch, motivo):
+        """Mutación: recordar causas del entorno (FR-13)."""
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+
+        def _falla(*a, **k):
+            raise ErrorRar(motivo)
+
+        monkeypatch.setattr(wseries, "portada_de_rar", _falla)
+        assert _pedir(series).status_code == 404
+        assert _marcas(covers) == []
+
+    def test_otra_version_del_contrato_reintenta(self, tmp_path, mundo, falso, monkeypatch):
+        self._cifrado(falso)
+        series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        _pedir(series)
+        _pedir(series)
+        assert len(_lsars(falso)) == 1
+        monkeypatch.setattr(portada_rar, "CONTRATO_PORTADA_RAR", portada_rar.CONTRATO_PORTADA_RAR + 1)
+        _pedir(series)
+        assert len(_lsars(falso)) == 2
+
+    def test_herramienta_ausente_no_da_500_ni_marca_y_se_reintenta_despues(
+            self, tmp_path, mundo, falso, monkeypatch):
+        """AC-16: causa del ENTORNO: no se recuerda."""
+        _listado_de_una_pagina(falso)
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        con_herramientas = monkeypatch.setenv
+        vacio = tmp_path / "vacio"
+        vacio.mkdir()
+        import os
+        ruta_buena = os.environ["PATH"]
+        con_herramientas("PATH", str(vacio))
+        assert _pedir(series).status_code == 404
+        assert _marcas(covers) == []
+        con_herramientas("PATH", ruta_buena)
+        assert _pedir(series).status_code == 200            # la siguiente petición vuelve a comprobar
+
+    def test_error_inesperado_no_se_recuerda(self, tmp_path, mundo, falso, monkeypatch):
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+
+        def _revienta(*a, **k):
+            raise RuntimeError("fallo del entorno")
+
+        monkeypatch.setattr(wseries, "portada_de_rar", _revienta)
+        assert _pedir(series).status_code == 404
+        assert _marcas(covers) == []
+
+    def test_fallo_al_escribir_la_marca_se_registra_y_la_peticion_sigue(self, tmp_path, mundo, falso, monkeypatch):
+        """AC-17."""
+        falso.modo(lsar="rc1", mensaje="")
+        series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+
+        def _sin_espacio(*a, **k):
+            raise OSError(28, "No space left")
+
+        monkeypatch.setattr("zascarr.utils.cover.write_cover_cache", _sin_espacio)
+        with structlog.testing.capture_logs() as logs:
+            r = _pedir(series)
+        assert r.status_code == 404
+        evento = [e for e in logs if e["event"] == "cover.marca_sin_escribir"]
+        assert evento and evento[0]["motivo"] == "OSError" and evento[0]["errno"] == 28
+
+    def test_el_registro_no_lleva_ruta_nombre_de_archivo_ni_de_serie(self, tmp_path, mundo, falso):
+        """AC-18 / NFR-05."""
+        falso.modo(lsar="rc1", mensaje="")
+        series, _c, _ = mundo([(_rar(tmp_path / "Secreto Thorgal 01.cbr"), None)])
+        with structlog.testing.capture_logs() as logs:
+            _pedir(series)
+        eventos = [e for e in logs if e["event"] == "cover.candidato_sin_portada"]
+        assert eventos and eventos[0]["motivo"] == "ilegible" and eventos[0]["intento"] == 1
+        volcado = json.dumps(logs, default=str)
+        assert "Secreto" not in volcado and str(tmp_path) not in volcado and "Thorgal" not in volcado
+
+    def test_cinco_rar_ilegibles_y_un_cbz_convergen_sin_gastar_intento_en_los_marcados(
+            self, tmp_path, mundo, falso):
+        """AC-19 (#419): la 1.ª abre 3 y marca 3; la 2.ª los salta, abre 2 y llega al CBZ."""
+        falso.modo(lsar="rc1", mensaje="")
+        archivos = [(_rar(tmp_path / f"{i}.cbr", 100 + i), None) for i in range(5)]
+        archivos.append((_cbz(tmp_path / "9.cbz"), None))
+        series, covers, _ = mundo(archivos)
+        assert _pedir(series).status_code == 404
+        assert len(_lsars(falso)) == 3 and len(_marcas(covers)) == 3
+        r = _pedir(series)
+        assert r.status_code == 200
+        assert len(_lsars(falso)) == 5 and len(_marcas(covers)) == 5   # solo se abrieron 2 más
+        assert (covers / "v3" / f"{series.id}.jpg").exists()
+
+    def test_un_zip_que_falla_se_reintenta_siempre_sin_marca(self, tmp_path, mundo, falso, monkeypatch):
+        """AC-25 / FR-22: la marca es solo para RAR."""
+        series, covers, _ = mundo([(_cbz_roto(tmp_path / "01.cbz"), None)])
+        aperturas = []
+        real = wseries.extract_cover_thumbnail
+        monkeypatch.setattr(wseries, "extract_cover_thumbnail",
+                            lambda *a, **k: (aperturas.append(1), real(*a, **k))[1])
+        assert _pedir(series).status_code == 404
+        assert _pedir(series).status_code == 404
+        assert len(aperturas) == 2 and _marcas(covers) == []
+
+    def test_un_rar_marcado_no_gasta_intento_de_los_tres(self, tmp_path):
+        """Mutación: contar el intento de un marcado (aquí 3 marcados + un CBZ legible)."""
+        covers = tmp_path / "covers"
+        archivos = []
+        for i in range(3):
+            f = _rar(tmp_path / f"{i}.cbr", 50 + i)
+            fid = uuid4()
+            portada_rar.escribir_marca(covers / "v3", fid, f, MotivoRar.CIFRADO)
+            archivos.append((fid, str(f), None))
+        archivos.append((uuid4(), str(_cbz(tmp_path / "9.cbz")), None))
+        assert wseries._primera_portada(archivos, covers) is not None
+
+
+# ── Presupuesto (AC-21) y una generación por serie (AC-34) ───────────────────────────────────────
+class TestPresupuestoYConcurrencia:
+    def test_sin_presupuesto_no_se_abre_ninguno(self, tmp_path, falso):
+        archivos = [(uuid4(), str(_rar(tmp_path / "a.cbr")), None)]
+        assert wseries._primera_portada(archivos, tmp_path / "c", presupuesto_s=0.0) is None
+        assert falso.llamadas() == []
+
+    def test_agotado_en_mitad_no_abre_mas(self, tmp_path, falso, monkeypatch):
+        abiertos = []
+
+        def _lento(path, covers, *, ancho):
+            abiertos.append(path.name)
+            time.sleep(0.08)
+            raise ErrorRar(MotivoRar.ILEGIBLE)
+
+        monkeypatch.setattr(wseries, "portada_de_rar", _lento)
+        archivos = [(uuid4(), str(_rar(tmp_path / f"{i}.cbr", 10 + i)), None) for i in range(3)]
+        assert wseries._primera_portada(archivos, tmp_path / "c", presupuesto_s=0.05) is None
+        assert abiertos == ["0.cbr"]
+
+    @pytest.mark.asyncio
+    async def test_dos_peticiones_de_la_misma_serie_lanzan_el_lector_una_sola_vez(
+            self, tmp_path, mundo, falso):
+        _listado_de_una_pagina(falso)
+        falso.modo(unar="lento")
+        series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        transporte = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transporte, base_url="http://localhost", headers={"Origin": "http://localhost"}) as cliente:
+            a, b = await asyncio.gather(*(cliente.get(f"/ui/series/{series.id}/portada") for _ in range(2)))
+        assert a.status_code == b.status_code == 200 and a.content == b.content
+        assert len(_unars(falso)) == 1 and len(_lsars(falso)) == 1
+        assert wseries._GENERANDO == {}
+
+    @pytest.mark.asyncio
+    async def test_dos_series_distintas_generan_cada_una_la_suya(self, tmp_path, falso):
+        _listado_de_una_pagina(falso)
+        falso.modo(unar="lento")
+        covers = tmp_path / "covers"
+        s1, s2 = uuid4(), uuid4()
+        f1 = [(uuid4(), str(_rar(tmp_path / "a.cbr")), None)]
+        f2 = [(uuid4(), str(_rar(tmp_path / "b.cbr", 77)), None)]
+        a, b = await asyncio.gather(
+            wseries._portada_de_archivos(s1, f1, covers, covers / "v3" / f"{s1}.jpg"),
+            wseries._portada_de_archivos(s2, f2, covers, covers / "v3" / f"{s2}.jpg"))
+        assert a is not None and b is not None
+        assert len(_unars(falso)) == 2
+        assert wseries._GENERANDO == {}
+
+
+# ── «Por revisar» y formato intactos (AC-27, AC-28) ──────────────────────────────────────────────
+class TestSinEfectosColaterales:
+    def test_por_revisar_no_gana_miniatura_de_rar_ni_lanza_el_lector(self, tmp_path, falso):
+        rar = _rar(tmp_path / "01.cbr")
+        assert puede_tener_portada(rar, {"firma": "rar"}) is False
+        assert puede_tener_portada(rar) is False
+        assert extract_cover_thumbnail(rar, {"firma": "rar"}) is None
+        assert extract_cover_thumbnail(rar) is None
+        assert falso.llamadas() == []
+
+    def test_pendientes_no_importa_el_lector(self):
+        fuente = (Path(wseries.__file__).parent / "pendientes.py").read_text()
+        assert "lector_rar" not in fuente and "portada_rar" not in fuente
+
+    def test_el_tratamiento_de_un_rar_sigue_siendo_solo_hash(self):
+        assert tratamiento(".cbr", Firma.RAR) is Tratamiento.SOLO_HASH
+
+    def test_generar_la_portada_no_escribe_nada_en_el_original_ni_junto_a_el(self, tmp_path, mundo, falso):
+        _listado_de_una_pagina(falso)
+        rar = _rar(tmp_path / "serie" / "01.cbr")
+        antes = (rar.read_bytes(), rar.stat().st_mtime_ns)
+        series, covers, _ = mundo([(rar, None)])
+        _pedir(series)
+        assert (rar.read_bytes(), rar.stat().st_mtime_ns) == antes
+        assert [p.name for p in rar.parent.iterdir()] == ["01.cbr"]
+        assert list((covers / ".rar-tmp").iterdir()) == []              # el temporal se borró
+
+
+# ── Sustituir lo ya guardado (AC-29..31) ─────────────────────────────────────────────────────────
+class TestV3YExterna:
+    def test_una_v2_ya_escrita_no_se_sirve_ni_se_borra(self, tmp_path, mundo, falso):
+        """AC-29 / mutación «servir v2»."""
+        _listado_de_una_pagina(falso)
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        v2 = covers / "v2" / f"{series.id}.jpg"
+        v2.parent.mkdir(parents=True)
+        v2.write_bytes(_jpeg(100, color=(0, 255, 0)))
+        antes = (v2.read_bytes(), v2.stat().st_mtime_ns)
+        r = _pedir(series)
+        assert r.status_code == 200 and _ancho(r.content) == 600
+        assert (covers / "v3" / f"{series.id}.jpg").exists()
+        assert (v2.read_bytes(), v2.stat().st_mtime_ns) == antes
+
+    def test_la_externa_pequena_va_aparte_y_cede_ante_un_archivo_que_se_hace_legible(
+            self, tmp_path, mundo, falso, monkeypatch):
+        """AC-30: la externa no bloquea; al aparecer un archivo legible, la serie cambia sola."""
+        series, covers, sesion = mundo([(_rar(tmp_path / "01.cbr"), None)],
+                                       cover_url="https://comicvine.gamespot.com/a/uploads/c.jpg")
+        falso.modo(lsar="rc1", mensaje="")
+
+        async def _externa(url, dest, **kwargs):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(_jpeg(100, color=(0, 255, 0)))
+            return True
+
+        monkeypatch.setattr("zascarr.web.series.fetch_and_cache_cover", _externa)
+        r = _pedir(series)
+        externa = covers / "externa" / f"{series.id}.jpg"
+        assert r.status_code == 200 and _ancho(r.content) == 100
+        assert externa.exists() and not (covers / "v3" / f"{series.id}.jpg").exists()
+        # el primer archivo pasa a ser legible (otro archivo nuevo entra en la serie)
+        sesion.archivos.append((uuid4(), str(_cbz(tmp_path / "02.cbz")), None))
+        r = _pedir(series)
+        assert _ancho(r.content) == 500 and (covers / "v3" / f"{series.id}.jpg").exists()
+
+    def test_la_antigua_se_sirve_solo_sin_v3_ni_candidato_y_no_se_copia(self, tmp_path, mundo, falso):
+        """AC-31."""
+        falso.modo(lsar="rc1", mensaje="")
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        antigua = covers / f"{series.id}.jpg"
+        antigua.parent.mkdir(parents=True)
+        antigua.write_bytes(_jpeg(120))
+        r = _pedir(series)
+        assert r.status_code == 200 and _ancho(r.content) == 120
+        assert not (covers / "v3" / f"{series.id}.jpg").exists()
+
+    def test_una_externa_suficiente_se_conserva_sin_abrir_archivos(self, tmp_path, mundo, falso):
+        """Cruce con #435: la externa >= 300 px se sirve antes que los candidatos."""
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        externa = covers / "externa" / f"{series.id}.jpg"
+        externa.parent.mkdir(parents=True)
+        externa.write_bytes(_jpeg(500))
+        assert _ancho(_pedir(series).content) == 500
+        assert falso.llamadas() == []
+
+
+def test_ids_de_archivo_son_uuid_en_la_consulta():
+    """La consulta de candidatos trae `File.id` primero: la marca de fallo lo necesita."""
+    sentencia = str(wseries._stmt_archivos_de_portada(UUID(int=1)))
+    assert sentencia.index("files.id") < sentencia.index("files.file_path")
