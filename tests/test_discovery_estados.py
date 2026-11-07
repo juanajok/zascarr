@@ -68,7 +68,7 @@ def _ajustes(**kw) -> SimpleNamespace:
 CV = [CVResult(cv_id=1, name="Batman", start_year=2011)]
 AL = [AniListResult(anilist_id=2, title_romaji="Naruto")]
 TB = [TebeosferaResult(slug="thorgal_1981", title="Thorgal", kind="saga")]
-GC = [GCDResult(gcd_id=3, name="Batman", language="en", country="us")]
+GC = [GCDResult(gcd_id=3, name="Batman", language="es", country="ES")]
 
 
 async def _busca(monkeypatch, *, ajustes=None, cv=None, al=None, tb=None, gc=None):
