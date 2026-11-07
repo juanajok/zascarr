@@ -12,7 +12,7 @@ import re
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import insert, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -422,7 +422,17 @@ async def sembrar_a_0016(url: str) -> dict:
         await s.flush()
         s.add_all([manual, otro])
         await s.flush()
-        s.add_all([f_manual, f_ignorado, alias, deseo])
+        # Los dos archivos por SQL Core: el modelo File tiene columnas posteriores a 0016
+        # (`file_mtime_ns`, 0021) y un INSERT del ORM las incluiría y reventaría aquí.
+        await s.execute(insert(File.__table__).values(
+            id=f_manual.id, file_path=f_manual.file_path, file_name=f_manual.file_name,
+            file_format=FileFormat.CBZ, sha256_hash=SHA, issue_id=manual.id,
+            metadata_source=MetadataSource.MANUAL.value, review_dismissed=False))
+        await s.execute(insert(File.__table__).values(
+            id=f_ignorado.id, file_path=f_ignorado.file_path, file_name=f_ignorado.file_name,
+            file_format=FileFormat.CBZ, sha256_hash="b" * 64, review_dismissed=True,
+            metadata={"match_status": "unsorted", "review_motivo": "colision"}))
+        s.add_all([alias, deseo])
         await s.commit()
         ids = {"serie": serie.id, "manual": manual.id, "f_manual": f_manual.id, "f_ignorado": f_ignorado.id}
     await motor.dispose()
@@ -433,8 +443,14 @@ async def foto(url: str, ids: dict) -> dict:
     motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
     fab = async_sessionmaker(motor, expire_on_commit=False)
     async with fab() as s:
-        f_m = await s.get(File, ids["f_manual"])
-        f_i = await s.get(File, ids["f_ignorado"])
+        # SQL explícito y no el modelo: esta foto se toma también con la BD en 0016, y el modelo
+        # actual tiene columnas posteriores (`file_mtime_ns`, 0021) que allí no existen.
+        f_m = (await s.execute(text(
+            "SELECT file_path, issue_id::text AS issue_id, metadata_source, sha256_hash "
+            "FROM files WHERE id = :id"), {"id": str(ids["f_manual"])})).one()
+        f_i = (await s.execute(text(
+            "SELECT review_dismissed, metadata FROM files WHERE id = :id"),
+            {"id": str(ids["f_ignorado"])})).one()
         i_m = await s.get(Issue, ids["manual"])
         res = dict(
             series=(await s.execute(text("SELECT count(*) FROM series"))).scalar(),
@@ -443,7 +459,7 @@ async def foto(url: str, ids: dict) -> dict:
             alias=[a.pattern_norm for a in (await s.execute(select(LocalAlias))).scalars()],
             wishlist=(await s.execute(text("SELECT count(*) FROM wishlist"))).scalar(),
             f_manual=(f_m.file_path, f_m.issue_id, f_m.metadata_source, f_m.sha256_hash),
-            f_ignorado=(f_i.review_dismissed, dict(f_i.metadata_)),
+            f_ignorado=(f_i.review_dismissed, dict(f_i.metadata)),
             i_manual=(i_m.metadata_source, list(i_m.locked_fields)),
         )
     await motor.dispose()
@@ -561,6 +577,9 @@ class TestBajadaConcurrente:
     async def test_una_operacion_viva_confirmada_durante_la_bajada_la_hace_negarse(self):
         async with bd_efimera(URL) as url:
             migrar_a_head(url)
+            # Deja 0020 como punto de partida: la bajada concurrente ejercita solo la 0017 (y su
+            # LOCK TABLE), no el DROP COLUMN de la 0021, que bloquearía antes por el FK a files.
+            alembic(url, "downgrade", "0020")
             ids = await sembrar_a_0016(url)
             b = Banco(url)
             try:
@@ -588,7 +607,9 @@ class TestBajadaConcurrente:
             finally:
                 await b.cerrar()
             assert r.returncode != 0 and "operaciones de asignación vivas" in r.stderr
-            assert await version(url) == cabeza() and await existe_tabla_y_tipo(url) == (True, True)
+            # La bajada se niega y la base se queda donde estaba: 0020 (punto de partida del test),
+            # con la tabla de la 0017 intacta.
+            assert await version(url) == "0020" and await existe_tabla_y_tipo(url) == (True, True)
             motor = create_async_engine(url_asyncpg(url), poolclass=NullPool)
             async with motor.connect() as c:
                 assert (await c.execute(text("SELECT estado::text FROM asignacion_operaciones"))).scalar() == "preparada"
@@ -598,6 +619,9 @@ class TestBajadaConcurrente:
     async def test_si_la_otra_sesion_se_revierte_la_bajada_procede(self):
         async with bd_efimera(URL) as url:
             migrar_a_head(url)
+            # Deja 0020 como punto de partida: la bajada concurrente ejercita solo la 0017 (y su
+            # LOCK TABLE), no el DROP COLUMN de la 0021, que bloquearía antes por el FK a files.
+            alembic(url, "downgrade", "0020")
             ids = await sembrar_a_0016(url)
             b = Banco(url)
             try:
