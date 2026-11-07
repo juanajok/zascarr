@@ -473,6 +473,42 @@ contra fixtures. El resultado corrigió la hipótesis de partida, que era
     `covers_cache_path` (`/mnt/nvme/tebeoteca/config/covers`, mismo
     patrón que `config/{postgres,redis}`).
 
+### Épica ETQ — "Busco mis tebeos por lo que tratan" (etiquetas)
+
+**Origen:** propuesta externa pegada por el PO el 2026-11-04 (namespaces, alias,
+padres, `source`/`weight`, ComicInfo, enricher, UI HTMX), contrastada contra el
+código y las referencias. **Feature en el tablero: #402**; primera historia:
+**#403 (BL-ETQ1)**. Ficha §13: `docs/design/benchmark-etiquetas.md`
+(**CONSTRUIR SOBRE LO PROPIO**, 4,35/5: statu quo 3,00 · propuesta literal 3,05 ·
+booru completo 2,40). Evaluación: `docs/design/evaluacion-propuesta-etiquetas.md`.
+Especificación: `docs/design/especificacion-etiquetas.md`. UI:
+`docs/design/ui-etiquetas.md` + `docs/design/maqueta-etiquetas.html`.
+
+**Resumen del encaje:** la propuesta literal no se adopta (ids `int`, migración
+«0010», `tag`/`serie_tag` nuevas, duplicar `genero`/`personaje`/`formato`). Se
+reutilizan `tags`/`issue_tags` (UUID, migración 0001), se añade `series_tags` y la
+migración **0021**; se pueblan `Series.genres`/`Issue.characters` en vez de
+duplicarlos; `<Tags>` de ComicInfo se lee antes de escribir; alias/padres y
+enriquecimiento van por fases. `source` reutiliza `MetadataSource`; `weight` es
+relevancia (no confianza); `manual` gana.
+
+| ID | Historia | Aceptación | P | Est |
+|---|---|---|---|---|
+| ETQ1 | Como coleccionista, quiero etiquetar series con mis palabras y filtrar la biblioteca por ellas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #403; AC-01…AC-20 de `especificacion-etiquetas.md`; migración 0021; reutiliza `tags`/`issue_tags` y añade `series_tags`; `manual` gana; sin leer/escribir ComicInfo en esta entrega; UI según `ui-etiquetas.md` | P1 | L |
+| ETQ2 | Como coleccionista, quiero que las etiquetas que ya traen mis CBZ en ComicInfo aparezcan en ZascArr, para no teclearlas | `<Tags>`/`<Genre>` leídos con `source='comicinfo_xml'`, topes de volumen (hallazgo ALTO de seguridad), idempotente, sin pisar manual, sin escribir XML | P1 | M |
+| ETQ3 | Como coleccionista, quiero que géneros y personajes de las fuentes se guarden de verdad (hoy las tablas están dormidas), para filtrar por ellos | Poblar `Series.genres`/`Issue.characters` con los `field_list` actuales ampliados en la misma petición; respeta `locked_fields`; Tebeosfera sigue sin género (no se inventa) | P1 | M–L |
+| ETQ4 | Como coleccionista, quiero que las fuentes propongan etiquetas de tema sin pisar las mías | Mapeo a los namespaces ratificados; `weight` = `rank` real de AniList; caché negativa H2 y espaciados de cortesía; `manual` no se toca | P2 | M |
+| ETQ5 | Como coleccionista, quiero que «super-man» y «superman» sean la misma etiqueta y que buscar una traiga sus implicaciones | Alias único normalizado, implicaciones sin ciclos ni autoimplicación, resueltas en consulta a profundidad ≤2; curación manual y confirmada | P2 | L |
+| ETQ6 | Como coleccionista, quiero que mis etiquetas viajen al `ComicInfo.xml` para que Kavita las lea | **NO APTO hoy**: exige extender el contrato B6 (plan, autoría, canonicidad, tope, política de `source`, ida/vuelta) y B20; no se autoriza antes | P2 | L |
+
+**Decisiones del PO pendientes (bloquean el DoR de ETQ1):** namespaces finales
+(recomendación `tema`/`motivo`/`etiqueta`), idioma de las etiquetas, `publico`/
+`AgeRating` como columna estructurada (no tag), export fuera del MVP, curación
+manual de alias y **si se pueden crear etiquetas desde la ficha en ETQ1** (si se
+rechaza, el MVP se queda sin datos con los que probarse). Detalle en
+`docs/design/especificacion-etiquetas.md` §10.1. Publicar la tarjeta **no
+autoriza código, migraciones en producción ni despliegue**.
+
 ### Épica D — "El sistema busca lo que me falta"
 
 | ID | Historia | Aceptación | P | Est |
