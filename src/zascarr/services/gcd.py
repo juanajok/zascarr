@@ -53,6 +53,27 @@ _LANGUAGE_TRADITION = {
 }
 _BRITISH_COUNTRIES = {"gb", "uk"}
 
+#: País/idioma que identifican una edición española en GCD. GCD usa códigos ISO de dos
+#: letras y, según la ficha, el nombre del idioma; se aceptan las variantes en minúsculas.
+_PAIS_ESPANOL = "es"
+_IDIOMAS_ESPANOLES = {"es", "spanish", "español", "espanol"}
+
+
+def es_edicion_espanola(resultado: GCDResult) -> bool | None:
+    """Clasifica una edición de GCD para el flujo de tebeo español.
+
+    - `True`: país `ES` o idioma español (`es`/`spanish`/`español`, sin distinguir caja).
+    - `False`: tiene país/idioma informado y no es español.
+    - `None`: no informa ni país ni idioma; no se puede descartar (se conserva y se marca).
+
+    Es una función pura: no toca red, ni base de datos, ni el contrato de `search_series`.
+    """
+    pais = (resultado.country or "").strip().lower()
+    idioma = (resultado.language or "").strip().lower()
+    if not pais and not idioma:
+        return None
+    return pais == _PAIS_ESPANOL or idioma in _IDIOMAS_ESPANOLES
+
 
 @dataclass
 class GCDResult:
