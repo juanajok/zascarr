@@ -1,0 +1,36 @@
+<section id="etiquetas-serie" class="series-etiquetas" aria-labelledby="etiquetas-titulo">
+  <h2 id="etiquetas-titulo">Etiquetas</h2>
+  <p class="muted">Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos.</p>
+  {% if error %}{{ ui.aviso("warn", error) }}{% endif %}
+  {% if mensaje %}{{ ui.aviso("ok", mensaje) }}{% endif %}
+  <div class="etiquetas-lista" aria-live="polite">
+    {% if etiquetas %}
+      {% for tag in etiquetas %}
+      <span class="etiqueta-chip">
+        {{ tag.name }}
+        <form method="post" action="/ui/series/{{ series.id }}/etiquetas/quitar"
+              hx-post="/ui/series/{{ series.id }}/etiquetas/quitar"
+              hx-target="#etiquetas-serie" hx-swap="outerHTML" class="etiqueta-quitar">
+          <input type="hidden" name="etiqueta" value="{{ tag.name }}">
+          <button type="submit" class="etiqueta-x" aria-label="Quitar {{ tag.name }}">Quitar</button>
+        </form>
+      </span>
+      {% endfor %}
+    {% else %}
+      <p class="muted">Todavía no tiene etiquetas.</p>
+    {% endif %}
+  </div>
+  <form method="post" action="/ui/series/{{ series.id }}/etiquetas"
+        hx-post="/ui/series/{{ series.id }}/etiquetas"
+        hx-target="#etiquetas-serie" hx-swap="outerHTML"
+        hx-sync="this:replace" class="etiqueta-form">
+    <label for="etiqueta-nueva">Añadir una etiqueta</label>
+    <input id="etiqueta-nueva" name="etiqueta" type="text" maxlength="64"
+           autocomplete="off" placeholder="noir, aventuras…"
+           hx-get="/ui/series/{{ series.id }}/etiquetas/sugerir"
+           hx-trigger="keyup changed delay:300ms"
+           hx-target="#sugerencias-etiqueta" hx-sync="this:replace">
+    <button class="btn ghost" type="submit">Añadir</button>
+  </form>
+  <div id="sugerencias-etiqueta" class="series-results"></div>
+</section>

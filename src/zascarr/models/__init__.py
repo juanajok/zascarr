@@ -227,6 +227,31 @@ issue_tags = Table(
     ),
 )
 
+# BL-ETQ1a (#403): asignación de etiqueta a serie con procedencia y protección.
+series_tags = Table(
+    "series_tags",
+    Base.metadata,
+    Column(
+        "series_id", UUID(as_uuid=True),
+        ForeignKey("series.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column(
+        "tag_id", UUID(as_uuid=True),
+        ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column("source", String(20), nullable=False, server_default="manual"),
+    Column("weight", SmallInteger),
+    Column("oculta", Boolean, nullable=False, server_default="false"),
+    Column("created_at", DateTime(timezone=True), server_default=func.now()),
+    Column("updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
+    CheckConstraint(
+        "source IN ('comic_vine','gcd','anilist','tebeosfera','comicinfo_xml','manual')",
+        name="ck_series_tags_source",
+    ),
+    CheckConstraint("weight IS NULL OR weight BETWEEN 0 AND 100",
+                    name="ck_series_tags_weight"),
+)
+
 
 # ── Modelos ────────────────────────────────────────────────────────────────────
 
@@ -403,6 +428,8 @@ class Series(Base):
         back_populates="series", cascade="all, delete-orphan"
     )
     genres:    Mapped[list["Genre"]]     = relationship(secondary=series_genres)
+    # BL-ETQ1a: relación de lectura; el servicio filtra `oculta=false`.
+    tags:      Mapped[list["Tag"]]       = relationship(secondary=series_tags)
 
 
 class StoryArc(Base):
@@ -497,8 +524,16 @@ class StoryArcIssue(Base):
 class Tag(Base):
     __tablename__ = "tags"
     id:    Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name:  Mapped[str]      = mapped_column(String(100), unique=True, nullable=False)
+    name:  Mapped[str]      = mapped_column(String(100), nullable=False)
+    # D-1: único espacio visible del MVP; el CHECK de 0022 lo limita.
+    namespace: Mapped[str] = mapped_column(String(16), nullable=False, default="etiqueta",
+                                            server_default="etiqueta")
+    # Generada por Postgres (f_tag_norm(name)); nunca se asigna desde Python.
+    name_norm: Mapped[str | None] = mapped_column(
+        Text, Computed("f_tag_norm(name)", persisted=True)
+    )
     color: Mapped[str|None] = mapped_column(String(7))
+    series: Mapped[list["Series"]] = relationship(secondary=series_tags, back_populates="tags")
 
 
 class File(Base):
