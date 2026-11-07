@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -191,7 +192,8 @@ class DiscoveryService:
         return None
 
     async def detalle_de(self, resultado: DiscoveryResult, *,
-                         unidad: str = "edicion") -> ResultadoDetalle:
+                         unidad: str = "edicion",
+                         numero_esperado: Any | None = None) -> ResultadoDetalle:
         """Pide la ficha de detalle del candidato, sin cambiar `DiscoveryResult`/`Busqueda`.
 
         Despacho por fuente: Tebeosfera `get_collection`; GCD `get_series` (+`get_publisher`
@@ -229,6 +231,14 @@ class DiscoveryService:
                             return ResultadoDetalle(_estado_detalle(
                                 fuente, FUENTE_SIN_RESULTADOS,
                                 "La ficha de número no existe."), None)
+                        detalle = detalle_desde_numero(numero)
+                    elif numero_esperado is not None:
+                        numero = await cliente.get_numero_de_coleccion(
+                            resultado.external_id, numero_esperado)
+                        if numero is None:
+                            return ResultadoDetalle(_estado_detalle(
+                                fuente, FUENTE_SIN_RESULTADOS,
+                                "No hay ficha de número para ese ejemplar."), None)
                         detalle = detalle_desde_numero(numero)
                     else:
                         coleccion = await cliente.get_collection(resultado.external_id)
