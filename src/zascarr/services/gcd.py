@@ -25,14 +25,18 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 import structlog
 
 from zascarr.config import get_settings
 from zascarr.utils.cortesia import CortesiaProceso, PoliticaFuente, politica_de
-from zascarr.utils.peticiones import ErrorDePeticion, pedir_con_cortesia
+from zascarr.utils.peticiones import (
+    ErrorDePeticion,
+    RespuestaNoTransitoria,
+    pedir_con_cortesia,
+)
 
 logger = structlog.get_logger()
 
@@ -98,6 +102,60 @@ class GCDResult:
         return _LANGUAGE_TRADITION.get((self.language or "").lower())
 
 
+@dataclass(frozen=True)
+class GCDSerie:
+    """Respuesta CRUDA de `GET /api/series/{id}/` para el detalle de edición (#465).
+
+    El servicio `detalle_edicion` la normaliza a `DetalleEdicion`; aquí no se inventan campos
+    que la API no traiga. `publisher` es la URL de la editorial: el nombre exige otra petición
+    (`get_publisher`) y, sin ella, queda como campo ausente.
+    """
+    gcd_id: int
+    name: str
+    year_began: int | None = None
+    year_ended: int | None = None
+    publisher: str | None = None       # URL de la editorial, NO su nombre
+    language: str | None = None
+    country: str | None = None
+    publishing_format: str | None = None
+    binding: str | None = None
+    issue_count: int | None = None
+    active_issues: list | None = None
+    issue_descriptors: list | None = None
+    raw: dict | None = None
+    peticiones: int = 1
+
+    @classmethod
+    def desde_raw(cls, raw: dict, gcd_id: int) -> GCDSerie:
+        """Construye la serie desde el `raw` de la búsqueda (0 peticiones de serie)."""
+        return cls(
+            gcd_id=gcd_id, name=str(raw.get("name") or ""),
+            year_began=raw.get("year_began"), year_ended=raw.get("year_ended"),
+            publisher=(raw.get("publisher") or None),
+            language=raw.get("language"), country=raw.get("country"),
+            publishing_format=raw.get("publishing_format"), binding=raw.get("binding"),
+            issue_count=raw.get("issue_count"), active_issues=raw.get("active_issues"),
+            issue_descriptors=raw.get("issue_descriptors"), raw=raw, peticiones=0,
+        )
+
+    @property
+    def site_url(self) -> str:
+        return f"https://www.comics.org/series/{self.gcd_id}/"
+
+
+def _url_de_gcd(url: str) -> bool:
+    """Solo se piden URLs del mismo origen de la API (la publisher_url viene de la API)."""
+    if not isinstance(url, str) or not url:
+        return False
+    try:
+        destino, base = urlsplit(url), urlsplit(_BASE_URL)
+        return (destino.scheme == base.scheme and destino.hostname == base.hostname
+                and destino.port in (None, base.port, 443)
+                and destino.username is None and destino.password is None)
+    except ValueError:
+        return False
+
+
 class GCDClient:
     def __init__(self, *, politica: PoliticaFuente | None = None,
                  cortesia: CortesiaProceso | None = None,
@@ -126,6 +184,66 @@ class GCDClient:
     async def __aexit__(self, *args):
         if self._client:
             await self._client.aclose()
+
+    async def get_series(self, gcd_id: int) -> GCDSerie | None:
+        """`GET /api/series/{id}/` por `pedir_con_cortesia` (1 petición, sin atajos)."""
+        if self._client is None:
+            raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
+        if not isinstance(gcd_id, int) or gcd_id <= 0:
+            return None
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", f"{_BASE_URL}/series/{gcd_id}/",
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                cortesia=self._cortesia,
+                reloj=self._reloj, dormir=self._dormir,
+            )
+            data = r.json()
+        except (RespuestaNoTransitoria, ErrorDePeticion, httpx.HTTPError, ValueError):
+            logger.warning("gcd.get_series_failed", gcd_id=gcd_id)
+            return None
+        if not isinstance(data, dict):
+            return None
+        publisher = data.get("publisher")
+        if isinstance(publisher, dict):
+            publisher = publisher.get("url") or publisher.get("api_url")
+        if not isinstance(publisher, str) or not publisher:
+            publisher = None
+        return GCDSerie(
+            gcd_id=gcd_id, name=str(data.get("name") or ""),
+            year_began=data.get("year_began"), year_ended=data.get("year_ended"),
+            publisher=publisher,
+            language=data.get("language"), country=data.get("country"),
+            publishing_format=data.get("publishing_format"), binding=data.get("binding"),
+            issue_count=data.get("issue_count"),
+            active_issues=(data.get("active_issues")
+                           if isinstance(data.get("active_issues"), list) else None),
+            issue_descriptors=(data.get("issue_descriptors")
+                                if isinstance(data.get("issue_descriptors"), list) else None),
+            raw=data, peticiones=1,
+        )
+
+    async def get_publisher(self, publisher_url: str) -> str | None:
+        """Nombre de la editorial de GCD, o `None`; 1 petición y solo al origen de la API."""
+        if self._client is None:
+            raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
+        if not publisher_url or not _url_de_gcd(publisher_url):
+            return None
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", publisher_url,
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                cortesia=self._cortesia,
+                reloj=self._reloj, dormir=self._dormir,
+            )
+            data = r.json()
+        except (RespuestaNoTransitoria, ErrorDePeticion, httpx.HTTPError, ValueError):
+            logger.warning("gcd.get_publisher_failed")
+            return None
+        if not isinstance(data, dict):
+            return None
+        nombre = data.get("name")
+        return str(nombre).strip() if nombre else None
 
     async def search_series(self, query: str, limit: int = 10) -> list[GCDResult]:
         query = (query or "").strip()
