@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """#418: `scripts/ci_rar_real.py` falla si las pruebas de RAR real se saltaron (una saltada no es una pasada)."""
 from __future__ import annotations
 

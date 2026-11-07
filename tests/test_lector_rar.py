@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """#418 (BL-PORT3) commit 1: el lector de RAR por subproceso, con `lsar`/`unar` FALSOS.
 
 Cubre AC-02, 03, 05, 08..13 de la spec. No necesita RAR ni la herramienta real (esa parte, con
@@ -5,8 +6,8 @@ fixtures, va en `test_lector_rar_real.py`). Cada prueba nombra el mecanismo que 
 """
 from __future__ import annotations
 
-import os
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,14 @@ import pytest
 from tests._rar_falso import entrada, instalar
 from zascarr.models import MotivoRar
 from zascarr.utils import lector_rar
-from zascarr.utils.lector_rar import ErrorRar, carpeta_temporal, disponible, leer_entrada, listar
+from zascarr.utils.lector_rar import (
+    EntradaRar,
+    ErrorRar,
+    carpeta_temporal,
+    disponible,
+    leer_entrada,
+    listar,
+)
 
 JPEG = b"\xff\xd8" + b"0123456789" * 20 + b"\xff\xd9"
 
@@ -193,9 +201,25 @@ def test_argv_sin_shell_entorno_sin_home_heredado_y_home_temporal(falso, rar, ba
     crc = falso.contenido(JPEG)
     with carpeta_temporal(base) as tmp:
         leer_entrada(rar, _a_entrada(entrada(0, "01.jpg", len(JPEG), crc)), 1 << 20, temporal=tmp)
-        home_visto = falso.entornos()[-1]
-        assert home_visto == f"HOME={tmp}"
+        assert f"HOME={tmp}" in falso.entornos()
     assert all("secreto" not in x for x in falso.entornos())
+
+
+def test_el_entorno_del_subproceso_lleva_un_path_minimo_no_el_del_proceso(falso, rar, base):
+    """FR-06 (QA, mutante 39): el hijo no hereda el `PATH` del proceso (que aquí incluye el de pruebas)."""
+    crc = falso.contenido(JPEG)
+    _leer(rar, base, entrada(0, "01.jpg", len(JPEG), crc))
+    paths = [x for x in falso.entornos() if x.startswith("PATH=")]
+    assert paths and set(paths) == {"PATH=/usr/bin:/bin"}
+
+
+def test_sin_crc_y_de_otro_tamano_no_se_acepta(falso, rar, base):
+    """QA (mutantes 06a+06b): con listado SIN CRC solo queda el tamaño, y un fichero de otro tamaño falla."""
+    falso.contenido(JPEG)
+    falso.modo(unar="otro_tamano")
+    with pytest.raises(ErrorRar) as exc:
+        _leer(rar, base, entrada(0, "01.jpg", len(JPEG), None))
+    assert exc.value.motivo is MotivoRar.ILEGIBLE
 
 
 def test_cuelgue_mata_el_grupo_entero_y_el_motivo_es_tiempo(falso, rar, base):
@@ -231,7 +255,7 @@ def test_el_temporal_se_borra_siempre_y_el_original_no_cambia(falso, rar, base, 
     crc = falso.contenido(JPEG)
     falso.modo(unar=modo)
     antes = (rar.read_bytes(), rar.stat().st_mtime_ns, rar.stat().st_size)
-    with pytest.raises(ErrorRar) if modo != "ok" else _nulo():
+    with pytest.raises(ErrorRar) if modo != "ok" else _Nulo():
         _leer(rar, base, entrada(0, "01.jpg", len(JPEG), crc), timeout=0.6)
     assert list(base.iterdir()) == []
     assert (rar.read_bytes(), rar.stat().st_mtime_ns, rar.stat().st_size) == antes
@@ -251,7 +275,7 @@ def test_el_temporal_es_privado(base):
         assert tmp.parent == base
 
 
-class _nulo:
+class _Nulo:
     def __enter__(self):
         return self
 
@@ -268,7 +292,8 @@ def test_cinco_lecturas_simultaneas_nunca_son_mas_de_un_unar(falso, rar, base):
     def lanzar():
         resultados.append(_leer(rar, base, entrada(0, "01.jpg", len(JPEG), crc)))
 
-    hilos = [threading.Thread(target=lanzar) for _ in range(5)]
+    salida = threading.Barrier(5)
+    hilos = [threading.Thread(target=lambda: (salida.wait(), lanzar())) for _ in range(5)]
     for h in hilos:
         h.start()
     for h in hilos:
@@ -281,10 +306,83 @@ def test_cinco_lecturas_simultaneas_nunca_son_mas_de_un_unar(falso, rar, base):
 def test_el_modulo_no_conoce_portadas_ni_la_web():
     codigo = Path(lector_rar.__file__).read_text()
     cuerpo = codigo.split('"""', 2)[2]          # sin el docstring de cabecera
-    assert "web" not in {l.split()[1].split(".")[1] for l in cuerpo.splitlines()
-                         if l.startswith("from zascarr")}
+    assert "web" not in {ln.split()[1].split(".")[1] for ln in cuerpo.splitlines()
+                         if ln.startswith("from zascarr")}
     for nombre in ("listar", "leer_entrada"):
         doc = getattr(lector_rar, nombre).__doc__ or ""
         assert "portada" not in doc.lower()
-    importados = [l for l in cuerpo.splitlines() if l.startswith("from zascarr")]
+    importados = [ln for ln in cuerpo.splitlines() if ln.startswith("from zascarr")]
     assert importados == ["from zascarr.models import MotivoRar"]
+
+
+# ── Dictamen de SecOps sobre #455 ─────────────────────────────────────────────────────────────────
+def test_m1_la_memoria_del_lector_tiene_tope_y_se_mata_el_grupo(falso, rar, base, monkeypatch):
+    """M-1: un `unar` que reserva memoria de más se corta (no hay `RLIMIT_AS`: rompe unar)."""
+    monkeypatch.setattr(lector_rar, "RAR_MAX_RSS", 40 * 1024 * 1024)
+    crc = falso.contenido(JPEG)
+    falso.modo(unar="memoria")
+    with pytest.raises(ErrorRar) as exc:
+        _leer(rar, base, entrada(0, "01.jpg", len(JPEG), crc), timeout=20)
+    assert exc.value.motivo is MotivoRar.DEMASIADO_GRANDE
+    assert falso.hijo_vivo() is False
+
+
+def test_m1_el_rss_se_lee_de_proc_y_suma_descendientes():
+    import subprocess
+    import sys
+    hijo = subprocess.Popen([sys.executable, "-c", "x = b'x' * (60 * 1024 * 1024); import time; time.sleep(30)"])
+    try:
+        deadline = __import__("time").monotonic() + 10
+        while __import__("time").monotonic() < deadline and lector_rar._rss_del_grupo(hijo.pid) < 50 * 1024 * 1024:
+            __import__("time").sleep(0.05)
+        assert lector_rar._rss_del_grupo(hijo.pid) >= 50 * 1024 * 1024
+        assert lector_rar._rss_del_grupo(2 ** 31 - 1) == 0          # un pid que no existe cuenta 0
+    finally:
+        hijo.kill()
+        hijo.wait()
+
+
+def test_m2_sin_turno_en_el_tiempo_dado_es_ocupado_sin_lanzar_nada(falso, rar, base, monkeypatch):
+    """M-2: ni espera sin fin dentro de un hilo del ejecutor, ni condena al archivo."""
+    monkeypatch.setattr(lector_rar, "RAR_ESPERA_TURNO_S", 0.1)
+    assert lector_rar._SEMAFORO.acquire(timeout=1)
+    inicio = time.monotonic()
+    try:
+        with pytest.raises(ErrorRar) as exc:
+            _listar(rar, base)
+    finally:
+        lector_rar._SEMAFORO.release()
+    assert time.monotonic() - inicio < 3, "la espera por el turno debe estar acotada"
+    assert exc.value.motivo is MotivoRar.OCUPADO and falso.llamadas() == []
+    _listar(rar, base)                                           # el turno se liberó: ya se puede
+
+
+@pytest.mark.parametrize("entradas", [
+    [entrada(-5, "01.jpg", 10)],                                # índice negativo iría a argv
+    [entrada(3, "01.jpg", 10)],                                 # índice fuera de rango
+    [entrada(0, "a.jpg", 600 * 1024 * 1024), entrada(1, "b.jpg", -200 * 1024 * 1024)],   # tamaño negativo
+])
+def test_b1_indices_y_tamanos_de_lsar_se_validan(falso, rar, base, entradas):
+    falso.listado(entradas)
+    with pytest.raises(ErrorRar) as exc:
+        _listar(rar, base)
+    assert exc.value.motivo in {MotivoRar.ILEGIBLE, MotivoRar.DEMASIADO_GRANDE}
+    assert not [x for x in falso.llamadas() if x.startswith("unar")]
+
+
+def test_b1_leer_entrada_rechaza_indice_o_tamano_negativos(falso, rar, base):
+    for e in (EntradaRar(-1, "01.jpg", 10, None, False, False), EntradaRar(0, "01.jpg", -1, None, False, False)):
+        with pytest.raises(ErrorRar) as exc, carpeta_temporal(base) as tmp:
+            leer_entrada(rar, e, 1 << 20, temporal=tmp)
+        assert exc.value.motivo is MotivoRar.ILEGIBLE
+    assert falso.llamadas() == []
+
+
+def test_b2_una_ruta_relativa_no_llega_a_la_herramienta(falso, base):
+    """B-2: `-x.cbr` sería una opción de `lsar`."""
+    with pytest.raises(ErrorRar) as exc, carpeta_temporal(base) as tmp:
+        listar(Path("-x.cbr"), temporal=tmp)
+    assert exc.value.motivo is MotivoRar.ILEGIBLE
+    with pytest.raises(ErrorRar), carpeta_temporal(base) as tmp:
+        leer_entrada(Path("-x.cbr"), EntradaRar(0, "a.jpg", 1, None, False, False), 10, temporal=tmp)
+    assert falso.llamadas() == []

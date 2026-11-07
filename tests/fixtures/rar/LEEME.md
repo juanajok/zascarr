@@ -60,8 +60,9 @@ fallo → cascada de portada, sin error 500. La prueba `test_rar_real_un_rar5_so
 | `solido_rar4.cbr` | 641 B | `b211713ecd440a6b07bb0607bad507a167da9c22f063cf7e3f956fad1abf17af` |
 | `solido_rar5.cbr` | 642 B | `fe68f32b540dedc928e04d8c09ec6f387c3f76e0b09f414953027e1068155dbe` |
 
-Comprobado con `unrar lt` (UNRAR 7.20): `minimo_rar4` = firma `Rar!\x1a\x07\x00` (RAR 1.5–4.x; `unrar` lo llama «RAR 1.5») con `01.jpg`, `02.jpg`; `minimo_rar5` = «RAR 5» con `01.jpg`, `02.jpg`; `solido_rar5` = «RAR 5, solid» con
-las tres. Con `unar`/`lsar` reales no se ha comprobado aún (no hay en la máquina de desarrollo): lo hará la CI.
+Comprobado con `unrar lt` (UNRAR 7.20): `minimo_rar4` y `solido_rar4` = firma `Rar!\x1a\x07\x00` (RAR 1.5–4.x; `unrar` lo llama
+«RAR 1.5»; el sólido, «solid»); `minimo_rar5` = «RAR 5»; `solido_rar5` = «RAR 5, solid». Con `unar`/`lsar` **reales** (CI, v1.10.8, y
+bookworm, v1.10.1) los cuatro se listan bien; `minimo_rar4`, `minimo_rar5` y `solido_rar4` se extraen; `solido_rar5` no (ver arriba).
 
 ## Lo que NO hay (NOT RUN real)
 

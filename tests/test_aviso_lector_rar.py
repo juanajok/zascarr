@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """#418 (AC-33): sin `unar`, /api/health avisa (no es un error) y el arranque no falla."""
 from __future__ import annotations
 

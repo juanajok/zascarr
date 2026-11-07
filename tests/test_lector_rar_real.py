@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """#418 (BL-PORT3) commit 2: el lector de RAR con `unar` REAL y tres RAR mínimos (AC-07, AC-05 real).
 
 Los tres ficheros de `tests/fixtures/rar/` se crearon a mano con `rar` (no es libre y no se puede
@@ -15,6 +16,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from tests._rar_hostiles import CASOS, generar
 from zascarr.models import MotivoRar
 from zascarr.utils import lector_rar
 from zascarr.utils.lector_rar import ErrorRar, carpeta_temporal, listar
@@ -89,3 +91,30 @@ def test_rar_real_un_archivo_truncado_no_da_portada(tmp_path):
 
 def test_rar_real_la_herramienta_esta_disponible():
     assert lector_rar.disponible() is True
+
+
+def _foto(raiz: Path) -> set[str]:
+    return {str(p.relative_to(raiz)) for p in raiz.rglob("*")}
+
+
+@pytest.mark.parametrize("caso", sorted(CASOS))
+def test_rar_real_hostil_no_escribe_fuera_ni_da_error_ni_deja_rastro(caso, tmp_path):
+    """M-3 (SecOps): traversal, ruta absoluta, enlace simbólico, comodines, salto de línea y tamaño falso
+    leídos con `unar` REAL. Sea cual sea el resultado (portada o un motivo de dominio), nunca aparece nada
+    fuera del temporal, el temporal se borra, ningún nombre llega al mensaje del error y no hay otra
+    excepción que `ErrorRar`."""
+    ruta = generar(tmp_path / "entrada", caso)
+    covers = tmp_path / "covers"
+    covers.mkdir()
+    antes = _foto(tmp_path)
+    try:
+        jpeg, _ = portada_de_rar(ruta, covers, ancho=600)
+    except ErrorRar as exc:
+        assert "secops" not in str(exc).lower() and "passwd" not in str(exc).lower()
+        assert exc.motivo in set(MotivoRar)
+    else:
+        assert jpeg                                         # si hubo portada, es el único fichero regular
+    nuevos = _foto(tmp_path) - antes
+    assert nuevos <= {".rar-tmp"} | {"covers/.rar-tmp"}, f"escribió fuera del temporal: {sorted(nuevos)}"
+    assert not list((covers / ".rar-tmp").iterdir()) if (covers / ".rar-tmp").exists() else True
+    assert not list(Path("/tmp").glob("secops-*")), "escribió en /tmp fuera del destino"

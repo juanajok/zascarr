@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """#418 (BL-PORT3) commit 3: la portada de serie sale del propio RAR, con `lsar`/`unar` FALSOS.
 
 Cubre AC-01, 04, 06, 14..21, 25, 27..31, 33 y 34 de la spec. Los archivos RAR son ficheros con la
@@ -184,6 +185,23 @@ class TestElegirPagina:
         lis = Listado((_e(0, "10.jpg"), _e(1, "2.jpg"), _e(2, "__MACOSX/1.jpg"), _e(3, "._1.jpg")))
         assert elegir_pagina(lis, ".cbr").nombre == "2.jpg"
 
+    def test_el_ruido_de_sistema_se_descarta_aunque_ordene_antes_que_la_portada(self):
+        """QA (mutantes 21/21b): con estos nombres el orden natural pondría el ruido PRIMERO."""
+        lis = Listado((_e(0, "._portada.jpg"), _e(1, "__MACOSX/portada.jpg"), _e(2, "portada.jpg")))
+        assert sorted(e.nombre.lower() for e in lis.entradas)[0] == "._portada.jpg"       # la trampa existe
+        assert elegir_pagina(lis, ".cbr").nombre == "portada.jpg"
+        solo_ruido = Listado((_e(0, "._a.jpg"), _e(1, "__MACOSX/a.jpg")))
+        with pytest.raises(ErrorRar) as exc:
+            elegir_pagina(solo_ruido, ".cbr")
+        assert exc.value.motivo is MotivoRar.SIN_IMAGENES
+
+    def test_con_contenedores_dentro_de_un_cbr_tambien_es_un_paquete(self):
+        """QA (mutante 35): el caso `.cbr` (con `.rar` ya lo da MIN_IMAGENES)."""
+        lis = Listado((_e(0, "01.jpg"), _e(1, "otro.cbz")))
+        with pytest.raises(ErrorRar) as exc:
+            elegir_pagina(lis, ".cbr")
+        assert exc.value.motivo is MotivoRar.PAQUETE
+
     def test_sin_imagenes(self):
         with pytest.raises(ErrorRar) as exc:
             elegir_pagina(Listado((_e(0, "ComicInfo.xml"), _e(1, "carpeta", True))), ".cbr")
@@ -236,10 +254,10 @@ class TestPortadaPorLaRuta:
 
     def test_se_pide_la_pagina_elegida_por_indice(self, tmp_path, mundo, falso):
         datos = (falso.carpeta / "contenido.bin").read_bytes()
-        falso.listado([entrada(4, "10.jpg", len(datos)), entrada(9, "2.jpg", len(datos))])
+        falso.listado([entrada(0, "10.jpg", len(datos)), entrada(1, "2.jpg", len(datos))])
         series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
         _pedir(series)
-        assert _unars(falso)[0].split()[-1] == "9"
+        assert _unars(falso)[0].split()[-1] == "1"
 
     def test_una_imagen_con_mas_pixeles_que_el_tope_falla_sin_decodificar(self, monkeypatch):
         """AC-06: se mide la CABECERA; `Image.load` no llega a llamarse."""
@@ -285,7 +303,7 @@ class TestFalloRecordado:
         series, covers, _ = mundo([(rar, None)])
         _pedir(series)
         texto = _marcas(covers)[0].read_text()
-        assert set(json.loads(texto)) == {"v", "motivo", "tamano", "mtime_ns"}
+        assert set(json.loads(texto)) == {"v", "motivo", "tamano", "mtime_ns", "t"}
         assert "Thorgal" not in texto and str(tmp_path) not in texto
 
     def test_marca_sin_huella_reabriria_un_archivo_cambiado(self, tmp_path, mundo, falso):
@@ -431,6 +449,73 @@ class TestFalloRecordado:
             archivos.append((fid, str(f), None))
         archivos.append((uuid4(), str(_cbz(tmp_path / "9.cbz")), None))
         assert wseries._primera_portada(archivos, covers) is not None
+
+
+# ── Dictamen de SecOps sobre #455 ─────────────────────────────────────────────────────────────────
+class TestDictamenSecOps:
+    def test_b3_el_fallo_por_tiempo_caduca_y_los_demas_no(self, tmp_path, monkeypatch):
+        """B-3: un tiempo agotado por carga de la máquina no condena al archivo para siempre."""
+        covers = tmp_path / "v3"
+        rar = _rar(tmp_path / "a.cbr")
+        tiempo, cifrado = uuid4(), uuid4()
+        portada_rar.escribir_marca(covers, tiempo, rar, MotivoRar.TIEMPO)
+        portada_rar.escribir_marca(covers, cifrado, rar, MotivoRar.CIFRADO)
+        assert portada_rar.marca_vigente(covers, tiempo, rar) and portada_rar.marca_vigente(covers, cifrado, rar)
+        ahora = time.time()
+        monkeypatch.setattr(portada_rar.time, "time", lambda: ahora + portada_rar.CADUCIDAD_TIEMPO_S + 1)
+        assert portada_rar.marca_vigente(covers, tiempo, rar) is False      # caducó: se reintenta
+        assert portada_rar.marca_vigente(covers, cifrado, rar) is True      # del contenido: sigue
+
+    def test_b3_una_marca_de_tiempo_sin_fecha_no_vale(self, tmp_path):
+        covers = tmp_path / "v3"
+        rar = _rar(tmp_path / "a.cbr")
+        fid = uuid4()
+        st = rar.stat()
+        destino = portada_rar.ruta_de_marca(covers, fid)
+        destino.parent.mkdir(parents=True)
+        destino.write_text(json.dumps({"v": portada_rar.CONTRATO_PORTADA_RAR, "motivo": "tiempo",
+                                       "tamano": st.st_size, "mtime_ns": st.st_mtime_ns}))
+        assert portada_rar.marca_vigente(covers, fid, rar) is False
+
+    def test_b4_se_barren_los_temporales_huerfanos_y_nada_mas(self, tmp_path):
+        covers = tmp_path / "covers"
+        for n in ("rar-aaa", "rar-bbb"):
+            (covers / ".rar-tmp" / n / "salida").mkdir(parents=True)
+            (covers / ".rar-tmp" / n / "salida" / "p.jpg").write_bytes(b"x")
+        v3 = covers / "v3"
+        v3.mkdir()
+        (v3 / "no-tocar.jpg").write_bytes(b"x")
+        assert portada_rar.barrer_temporales(covers) == 2
+        assert list((covers / ".rar-tmp").iterdir()) == [] and (v3 / "no-tocar.jpg").exists()
+        assert portada_rar.barrer_temporales(tmp_path / "no-existe") == 0
+
+    def test_m2_lector_ocupado_no_gasta_intento_no_marca_y_no_cachea_la_ausencia(
+            self, tmp_path, mundo, falso, monkeypatch):
+        """M-2: sin turno no se espera sin fin ni se condena al archivo; el 404 no se cachea."""
+        _listado_de_una_pagina(falso)
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        monkeypatch.setattr(lector_rar, "RAR_ESPERA_TURNO_S", 0.1)
+        assert lector_rar._SEMAFORO.acquire(timeout=1)          # otro lector tiene el turno
+        inicio = time.monotonic()
+        try:
+            r = _pedir(series)
+        finally:
+            lector_rar._SEMAFORO.release()
+        assert time.monotonic() - inicio < 3, "la petición no puede esperar sin fin el turno"
+        assert r.status_code == 404 and r.headers["cache-control"] == "no-store"
+        assert _marcas(covers) == [] and falso.llamadas() == []
+        assert _pedir(series).status_code == 200                # libre otra vez: sale la portada
+
+    def test_m2_el_ocupado_no_agota_los_intentos_de_los_zip_siguientes(self, tmp_path, monkeypatch):
+        def _ocupado(*a, **k):
+            raise ErrorRar(MotivoRar.OCUPADO)
+
+        monkeypatch.setattr(wseries, "portada_de_rar", _ocupado)
+        monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: True)
+        estado: dict = {}
+        archivos = [(uuid4(), str(_rar(tmp_path / "a.cbr")), None)]
+        assert wseries._primera_portada(archivos, tmp_path / "c", estado=estado) is None
+        assert estado == {"ocupado": True}
 
 
 # ── Presupuesto (AC-21) y una generación por serie (AC-34) ───────────────────────────────────────
