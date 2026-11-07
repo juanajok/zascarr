@@ -217,6 +217,30 @@ editorial/año **podría** ahorrar la ficha cuando solo se necesitan esos dos ca
 evidencia de una fila; esta spec lo deja como **mejora posterior**, no como parte del contrato de
 #465.
 
+### 3.1.1 Tebeosfera — ficha de número (#489)
+
+**Método:** `TebeosferaClient.get_numero(slug: str, *, espera_max_s: float = 30.0)
+-> TebeosferaNumero | None`.
+
+- **Petición:** `GET https://www.tebeosfera.com/numeros/<slug>.html` por
+  `pedir_con_cortesia`, **1 petición**, misma política de 2,5 s/origen y headers; sin galería ni
+  imágenes. 404/HTML sin ficha → `None`.
+- **Cuándo se usa:** cuando el candidato declara un slug de número (p. ej. `site_url` con
+  `/numeros/` o `external_id` con prefijo `numero:`). Si no lo declara, se sigue usando la ficha
+  de colección y el número queda `campo_ausente`/`ambiguo`: no se inventa un slug.
+- **Campos observados en la ficha real** (`docs/design/fixtures-cobertura/
+  tebeosfera_numero_bola_de_drac_2017_super_roja_1.html`, captura recortada del 2026-11-07):
+  `numero_publicacion` («Nº 1 de…»), `editorial`/`sello` (entidades), `anio`/`fecha`
+  («21-III-2017»), `paginas` («32 págs.») y `formato_fuente` («CUADERNO · ENCOLADO»).
+- **Salida:** `TebeosferaNumero` crudo; el servicio lo normaliza a `DetalleEdicion` con
+  `numero_publicacion` y, si constan, editorial/sello/año/fecha/páginas/formato.
+- **Contraste:** con número presente y etiqueta que lo trae, editorial+año+número iguales →
+  `coincidencia_verificada`; número distinto → `incorrecto`; número ausente → `ambiguo`
+  (la ficha de colección no acredita el ejemplar).
+- **Límites:** se verificó **una** ficha de número (grapa encolada de 2017); otras maquetas
+  (tomo, álbum, número sin fecha/páginas) son **NOT RUN**. Una segunda petición solo sería
+  necesaria si en el futuro se quiere resolver primero la colección; este método no la hace.
+
 ### 3.2 Comic Vine — volumen (adaptar; `[sin verificar]`)
 
 **Métodos:** `ComicVineClient.get_volume(volume_id: int) -> CVVolume | None` y, para número,
@@ -467,8 +491,9 @@ el campo queda ausente, y el contraste **no** convierte una diferencia de taxono
    `[sin verificar]`. Sin clave no se pide; tests con fixture manual cuando exista.
 2. **CV edición española:** no se comprobó si CV tiene alguna edición ES de los casos; el volumen
    probado es la USA de Viz. El detalle sirve de contraste, no de resolución.
-3. **Tebeosfera ficha de número:** no abierta; `/numeros/` es `[sin verificar]`. No se acredita número
-   concreto con la ficha de colección (§2.4).
+3. **Tebeosfera ficha de número:** implementada en §3.1.1 (#489) con una ficha real recortada de
+   grapa encolada de 2017; la generalización a tomo/álbum y otras maquetas sigue **NOT RUN**. La
+   ficha de colección por sí sola no acredita el número concreto (§2.4).
 4. **Generalización de la ficha de colección:** una sola colección; no consta que todas traigan entidad,
    bandera o numeración. El parser debe marcar ausencias; la generalización es NOT RUN.
 5. **Ficha de saga:** una sola; se descarta por nivel obra, sin generalizar.
@@ -548,11 +573,12 @@ Se propone:
 |---|---|---|---|
 | **PR-1** | Núcleo: `services/detalle_edicion.py` (`DetalleEdicion`, `ResultadoDetalle`, estados, `contrastar`), Tebeosfera `get_collection` + parser + fixtures + tests; **sin** wiring en Discovery | no | benchmark + esta spec |
 | **PR-2** | Integración: `DiscoveryService.detalle_de`, GCD `get_series`/`get_publisher` (y reutilización de `raw`), mapa de detalle del banco, tests; sin UI ni escritura en BD | no | PR-1 |
-| **PR-3** | Comic Vine `get_volume`/`get_issue` cuando haya clave (`COMICVINE_API_KEY`), fixture manual, tests y NOT RUN sin clave; ficha de número de Tebeosfera solo si se autoriza y verifica | no (fixtures) / real solo banco autorizado | PR-1/PR-2 + clave/permiso |
+| **PR-3** | Comic Vine `get_volume`/`get_issue` cuando haya clave (`COMICVINE_API_KEY`), fixture manual, tests y NOT RUN sin clave; ficha de número de Tebeosfera en #489 (§3.1.1) | no (fixtures) / real solo banco autorizado | PR-1/PR-2 + clave/permiso |
 
 **Qué entra primero:** PR-1, Tebeosfera, porque es el único método que llena la edición española y no
-depende de clave. **Qué queda NOT RUN:** PR-3 completo sin clave; ficha de número de Tebeosfera;
-generalización de la ficha a más colecciones; y la **cobertura real**, que no se declara en esta spec.
+depende de clave. **Qué queda NOT RUN:** PR-3 completo sin clave; generalización de la ficha de número a más
+maquetas; generalización de la ficha de colección a más colecciones; y la **cobertura real**, que no
+se declara en esta spec.
 PR-2 no se abre hasta que PR-1 tenga parser y contraste verdes.
 
 ---
