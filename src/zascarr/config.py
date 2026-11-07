@@ -135,6 +135,11 @@ class Settings(BaseSettings):
     # C1: caché unificada de portadas (extraídas de CBZ o descargadas de
     # fuentes externas una sola vez) — ver utils/cover.py.
     covers_cache_path: Path = Field(default=Path("/config/covers"))
+    # #418 (ADR 0015): interruptor del lector de .cbr que son RAR (`unar`/`lsar`). `true` por
+    # defecto (el lector está adoptado); `false` lo apaga sin reconstruir la imagen: ningún RAR se
+    # envía a `unar`, el recorrido de portada lo trata como no candidato SIN gastar intento ni dejar
+    # marca, y la cascada sigue.
+    lector_rar_enabled: bool = Field(default=True)
     # #123b: rutas LOCALES (dentro del contenedor) para el aviso de disco.
     # Lista separada por comas; no se mira la biblioteca de red. `/config/covers`
     # cuelga del volumen de datos y es local; de cada ruta se usa su primer ancestro existente;

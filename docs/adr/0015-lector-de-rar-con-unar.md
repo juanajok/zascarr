@@ -57,7 +57,12 @@ la misma PR que introduce el lector:
 - Si aparece una CVE de `unar`/XADMaster/GNUstep aplicable a Linux, **se retira el lector** (la portada vuelve a la cascada
   sin RAR) hasta actualizar; basta con quitar `unar` de la imagen: el aviso de `/api/health` ya contempla su ausencia.
 - Antes de desplegar siguen abiertas las puertas P-1..P-6 de la spec (imagen ARM, medición en la Pi, etc.).
+- **Cómo apagarlo sin reconstruir la imagen:** `LECTOR_RAR_ENABLED=false` en el `.env` (declarada solo en `config.py`; por defecto `true`;
+  el compose la pasa al contenedor). Apagado, ningún RAR se envía a `unar`/`lsar`: el recorrido de portada lo trata como no candidato
+  **sin gastar intento ni dejar marca**, la cascada sigue (antigua → externa → 404, sin 500) y `/api/health` no avisa de que falta la
+  herramienta. Los `.cbr` que son ZIP y los CBZ no cambian. Volver a encenderlo reintenta los RAR (no se marcó nada).
 - **En cada actualización de la imagen base** (`python:3.11-slim-bookworm`) o del paquete `unar` hay que repasar el *tracker* de
   `unar`/XADMaster y de GNUstep (CVE y arreglos de la 1.10.8 que la 1.10.1 de Debian no lleva) y volver a correr
   `scripts/comprobar_imagen_rar.py`. Pasar a otra base (por ejemplo `trixie`) y un interruptor para apagar el lector son opciones
-  que quedan **pendientes de decisión del PO**; no se hacen aquí.
+  se **descartaron** el 2026-11-07: el interruptor sí se hace (`LECTOR_RAR_ENABLED`, arriba) y la imagen base **no cambia** en esta PR
+  (`python:3.11-slim-trixie` traería `unar` 1.10.8, pero es una historia aparte, con su propia medición).

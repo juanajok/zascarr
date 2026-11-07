@@ -518,6 +518,122 @@ class TestDictamenSecOps:
         assert estado == {"ocupado": True}
 
 
+# ── Interruptor LECTOR_RAR_ENABLED (decisión del PO, 2026-11-07) ─────────────────────────────────
+class TestInterruptorLectorRar:
+    @staticmethod
+    def _fijar(monkeypatch, valor: bool):
+        base = get_settings().model_copy(update={"covers_cache_path": Path("/nada")})
+        real = wseries.get_settings
+
+        def _con_interruptor():
+            return real().model_copy(update={"lector_rar_enabled": valor})
+
+        monkeypatch.setattr(wseries, "get_settings", _con_interruptor)
+        return base
+
+    def test_por_defecto_esta_encendido_y_se_lee_del_entorno(self, monkeypatch):
+        from zascarr.config import Settings
+        assert Settings().lector_rar_enabled is True
+        for texto, esperado in (("false", False), ("true", True), ("0", False), ("1", True)):
+            monkeypatch.setenv("LECTOR_RAR_ENABLED", texto)
+            assert Settings().lector_rar_enabled is esperado
+
+    def test_encendido_el_rar_se_envia_a_unar(self, tmp_path, mundo, falso, monkeypatch):
+        _listado_de_una_pagina(falso)
+        series, _c, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+        self._fijar(monkeypatch, True)
+        assert _pedir(series).status_code == 200
+        assert _lsars(falso) and _unars(falso)
+
+    def test_apagado_ningun_rar_llega_a_unar_ni_gasta_intento_ni_deja_marca(self, tmp_path, mundo, falso, monkeypatch):
+        """Con cuatro RAR delante (más que `MAX_INTENTOS_PORTADA`) se llega al CBZ: ni un subproceso, ni intento, ni marca."""
+        lanzados = []
+        real_popen = lector_rar.subprocess.Popen
+        monkeypatch.setattr(lector_rar.subprocess, "Popen", lambda *a, **k: (lanzados.append(a), real_popen(*a, **k))[1])
+        falso.modo(lsar="rc1", mensaje="")                      # si se lanzara, dejaría marca
+        archivos = [(_rar(tmp_path / f"{i}.cbr", 100 + i), None) for i in range(wseries.MAX_INTENTOS_PORTADA + 1)]
+        archivos.append((_cbz(tmp_path / "9.cbz"), None))
+        series, covers, _ = mundo(archivos)
+        self._fijar(monkeypatch, False)
+        r = _pedir(series)
+        assert r.status_code == 200 and _ancho(r.content) == 500       # la portada es la del CBZ
+        assert falso.llamadas() == [] and _marcas(covers) == [] and lanzados == []   # ni un `Popen` del lector
+
+    def test_apagado_sin_otra_cosa_la_cascada_sigue_sin_500_y_sin_ruta_en_el_registro(
+            self, tmp_path, mundo, falso, monkeypatch):
+        series, covers, _ = mundo([(_rar(tmp_path / "Secreto 01.cbr"), None)],
+                                  cover_url="https://comicvine.gamespot.com/a/uploads/c.jpg")
+        self._fijar(monkeypatch, False)
+        antigua = covers / f"{series.id}.jpg"
+        antigua.parent.mkdir(parents=True)
+        antigua.write_bytes(_jpeg(120))
+        with structlog.testing.capture_logs() as logs:
+            r = _pedir(series)
+        assert r.status_code == 200 and _ancho(r.content) == 120       # cae a la antigua
+        assert falso.llamadas() == [] and _marcas(covers) == []
+        assert "Secreto" not in json.dumps(logs, default=str) and str(tmp_path) not in json.dumps(logs, default=str)
+
+    def test_apagado_conserva_lo_generado_y_las_marcas_y_al_volver_a_encender_las_respeta(
+            self, tmp_path, mundo, falso, monkeypatch):
+        """AC-47: lo ya generado se sigue sirviendo, las marcas no se tocan, y al volver a `true` un archivo
+        con marca vigente no se reabre y uno sin marca vuelve a intentarse."""
+        falso.modo(lsar="rc1", mensaje="")
+        marcado = _rar(tmp_path / "a.cbr", 101)
+        limpio = _rar(tmp_path / "b.cbr", 202)
+        series, covers, sesion = mundo([(marcado, None)])
+        self._fijar(monkeypatch, True)
+        assert _pedir(series).status_code == 404                # `a.cbr` falla y queda marcado
+        (marca,) = _marcas(covers)
+        antes = (marca.read_bytes(), marca.stat().st_mtime_ns)
+        v3 = covers / "v3" / f"{series.id}.jpg"
+        v3.parent.mkdir(parents=True, exist_ok=True)
+        v3.write_bytes(_jpeg(500, color=(0, 255, 0)))           # una portada generada antes
+        self._fijar(monkeypatch, False)
+        assert _ancho(_pedir(series).content) == 500            # se sigue sirviendo con el lector apagado
+        assert [(m.read_bytes(), m.stat().st_mtime_ns) for m in _marcas(covers)] == [antes]
+        v3.unlink()
+        sesion.archivos.append((uuid4(), str(limpio), None))
+        self._fijar(monkeypatch, True)
+        lsars_antes = len(_lsars(falso))
+        _pedir(series)
+        assert len(_lsars(falso)) == lsars_antes + 1            # solo `b.cbr` se intenta: `a.cbr` sigue marcado
+
+    def test_apagado_un_zip_con_extension_cbr_sigue_igual(self, tmp_path, mundo, falso, monkeypatch):
+        series, _c, _ = mundo([(_cbz(tmp_path / "01.cbr"), None)])
+        self._fijar(monkeypatch, False)
+        assert _pedir(series).status_code == 200 and falso.llamadas() == []
+
+    def test_apagado_la_herramienta_ni_se_busca(self, tmp_path, falso, monkeypatch):
+        """`herramienta` arranca en `False`: ni se llama a `disponible()`."""
+        self._fijar(monkeypatch, False)
+        llamadas = []
+        monkeypatch.setattr(wseries, "lector_rar_disponible", lambda: llamadas.append(1) or True)
+        archivos = [(uuid4(), str(_rar(tmp_path / "a.cbr")), None)]
+        assert wseries._primera_portada(archivos, tmp_path / "c") is None
+        assert llamadas == [] and falso.llamadas() == []
+
+    def test_apagado_a_proposito_no_es_un_aviso_de_salud(self, monkeypatch):
+        from zascarr.api.health import AVISO_LECTOR_RAR
+
+        class _Db:
+            async def execute(self, _s):
+                return None
+
+        async def _get_db():
+            yield _Db()
+
+        app.dependency_overrides[get_db] = _get_db
+        try:
+            monkeypatch.setattr(lector_rar, "disponible", lambda: False)
+            ajustes = get_settings()
+            monkeypatch.setattr(ajustes, "lector_rar_enabled", True)
+            assert TestClient(app).get("/api/health").json()["warnings"]["lector_rar"] == AVISO_LECTOR_RAR
+            monkeypatch.setattr(ajustes, "lector_rar_enabled", False)
+            assert "lector_rar" not in TestClient(app).get("/api/health").json()["warnings"]
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+
 # ── Presupuesto (AC-21) y una generación por serie (AC-34) ───────────────────────────────────────
 class TestPresupuestoYConcurrencia:
     def test_sin_presupuesto_no_se_abre_ninguno(self, tmp_path, falso):

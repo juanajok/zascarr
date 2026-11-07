@@ -140,6 +140,8 @@ services:
       - BACKUP_STATUS_FILE=/run/backup-status/status.json
       - RESTORE_STATUS_FILE=/run/backup-status/restore-status.json
       - COVERS_CACHE_PATH=/config/covers
+      # #418 (ADR 0015): interruptor del lector de .cbr con `unar` (por defecto, encendido)
+      - LECTOR_RAR_ENABLED=${LECTOR_RAR_ENABLED:-true}
       - TZ=${TZ:-Europe/Madrid}
       # A6/E6: sin estas dos, lo que el operador pone en el .env NO llega al
       # contenedor (que no monta el .env). ALLOWED_HOSTS no tiene otra vía: no está

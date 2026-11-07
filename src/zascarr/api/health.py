@@ -443,7 +443,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     if exposicion:
         warnings["exposicion"] = exposicion
     # #418: sin `unar` no se leen las portadas de los .cbr. Solo avisa (ni estado ni bloqueo).
-    if not lector_rar.disponible():
+    # (apagado a propósito con LECTOR_RAR_ENABLED=false no es un fallo: no se avisa)
+    if settings.lector_rar_enabled and not lector_rar.disponible():
         warnings["lector_rar"] = AVISO_LECTOR_RAR
 
     return {
