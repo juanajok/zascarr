@@ -1,42 +1,54 @@
-# Comic Vine en el detalle de edición (#465, PR-3) — NOT RUN
+# Comic Vine en el detalle de edición (#465, PR-3) — verificado el 2026-11-07
 
-> **Estado:** método implementado y probado con una **fixture manual documentada**, pero la
-> respuesta real de `/volume/` y `/issue/` sigue **sin verificar**. No hay `COMICVINE_API_KEY`
-> en el repo ni en esta sesión, así que no se ha abierto ninguna respuesta real.
+> **Estado:** la respuesta real de `/volume/` y `/issue/` **ya está verificada** contra la API con la
+> clave de Ajustes de la Pi (2 peticiones, cortesía de 1 s). Fixture real:
+> [`fixtures-cobertura/comicvine_volume_31306_real.json`](fixtures-cobertura/comicvine_volume_31306_real.json).
 
-## Qué queda NOT RUN
+## Qué se verificó
 
-- Forma real del objeto `publisher` y de `first_issue`/`last_issue` en `/volume/`.
-- Valores reales de `start_year`/`count_of_issues` para los casos del corpus.
-- Campos reales de `/issue/` (`issue_number`, `cover_date`, `volume`).
-- Que el volumen que CV indexa sea la edición española: la evidencia del benchmark dice que
-  suele ser la USA (Viz); el detalle sirve de **contraste**, no de resolución.
+Volumen **31306** (`Dragon Ball`) y su primer número:
 
-## Verificación exacta cuando el PO tenga la clave en la Pi
-
-Una petición por endpoint, con la cortesía de 1 s del cliente y **sin volcar la clave**;
-el comando usa `verificar_cv_detalle.py` y `ComicVineClient`, que ya pasan por `pedir_con_cortesia`
-y añaden la clave internamente (la script la lee de `runtime_settings`). No se imprime la clave ni
-la URL con parámetros.
-
-```bash
-mkdir -p /tmp/cv-detalle
-docker compose run --rm --no-deps --entrypoint python \
-  -v "$PWD/scripts/medicion/verificar_cv_detalle.py:/app/scripts/medicion/verificar_cv_detalle.py:ro" \
-  -v "$PWD/src/zascarr/services/comic_vine.py:/app/src/zascarr/services/comic_vine.py:ro" \
-  -v /tmp/cv-detalle:/verificacion \
-  zascarr scripts/medicion/verificar_cv_detalle.py \
-    --volume 31306 \
-    --sha-ejecutor "$(git rev-parse HEAD)" \
-    --salida /verificacion/comicvine_volume_31306_real.json
+```
+name:             "Dragon Ball"
+publisher:        "Viz"          ← cadena, no objeto/URL
+start_year:        2003
+count_of_issues:   16
+first_issue:      {id: 194861, issue_number: "1"}
+last_issue:       {id: 294807, issue_number: "16"}
+issue 194861:     issue_number "1", cover_date "2003-05-01"
 ```
 
-Si no hay clave, `get_volume`/`get_issue` levantan `RuntimeError` **antes** de cualquier
-petición; Discovery sigue devolviendo `configuracion_incompleta` sin red.
+- `publisher` llega como **nombre** (`"Viz"`), no como URL: el parser no necesita resolverlo.
+- `first_issue`/`last_issue` son objetos con `id` y `issue_number`.
+- La forma del `field_list` y el `format=json` son correctos (la respuesta es `results`).
 
-## Límites
+## Qué significa para el corpus
 
-- El fixture `docs/design/fixtures-cobertura/comicvine_volume_31306.json` es manual y está
-  marcado como tal; no es una captura.
-- Cualquier verificación real debe hacerse en una ejecución autorizada y no se versiona la
-  respuesta completa.
+El volumen que Comic Vine indexa para «Dragon Ball» es **la edición USA de Viz (2003, 16 tomos)**,
+no la Ultimate de Planeta de 2006 que pide el caso ES-007. Confirma lo que decía el benchmark:
+
+- **Comic Vine sirve como contraste**, no para resolver la edición española.
+- `detalle_desde_cv_volumen` devolverá editorial `Viz` y año 2003; frente a la etiqueta acreditada
+  (Planeta, 2006) el contraste será **`incorrecto`**, y es el resultado honesto.
+
+## Qué sigue NOT RUN
+
+- Que exista en Comic Vine una edición **española** de cualquiera de los 12 casos (la búsqueda por
+  volumen no se ha hecho para todos; el volumen conocido es USA).
+- Los demás volúmenes del corpus: solo se verificó el 31306.
+- La ficha de número de Tebeosfera (`/numeros/…`), que sigue sin abrirse.
+
+## Cómo repetirlo
+
+Una petición por endpoint, cortesía de 1 s, sin volcar la clave:
+
+```bash
+docker compose run --rm --no-deps --entrypoint python \
+  -v "$PWD/scripts/medicion/verificar_cv_detalle.py:/app/scripts/medicion/verificar_cv_detalle.py:ro" \
+  -v "$PWD/src/zascarr:/app/src/zascarr:ro" \
+  -v /tmp/cv-detalle:/verificacion \
+  zascarr scripts/medicion/verificar_cv_detalle.py \
+    --volume 31306 --salida /verificacion/comicvine_volume_31306_real.json
+```
+
+Sin clave en Ajustes sale con código 2 y **cero peticiones**.
