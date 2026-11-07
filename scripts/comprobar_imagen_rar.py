@@ -8,7 +8,7 @@ La suite de la CI prueba con el `unar` del ejecutor (v1.10.8); la imagen lleva e
 comprueba, con el `unar` de la imagen y como el usuario de servicio: que los ejecutables de `gnustep-base-runtime` ya no
 están, que no hay ningún `setuid`/`setgid` nuevo, y que el lector lee los fixtures RAR (los tres legibles dan portada; el
 RAR 5 sólido falla con `ilegible`, limitación conocida de `unar`) y que los seis RAR 4 hostiles de SecOps (N-1) no escriben
-fuera del temporal, ni dan otra excepción que un motivo de dominio, ni dejan rastro. Imprime las versiones para dejar rastro.
+fuera del temporal, ni dan otra excepción que un motivo de dominio, ni dejan rastro, y dan el resultado ESPERADO de cada caso. Imprime las versiones para dejar rastro.
 Sale con 1 si algo no cuadra.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # para `tests._rar_hostiles` (stdlib; viaja en la imagen)
 
-from tests._rar_hostiles import CASOS, generar  # noqa: E402
+from tests._rar_hostiles import CASOS, ESPERADO, generar  # noqa: E402
 from zascarr.models import MotivoRar
 from zascarr.utils.lector_rar import ErrorRar
 from zascarr.utils.portada_rar import portada_de_rar
@@ -91,7 +91,9 @@ def main() -> int:
                 problemas.append(f"hostil {caso}: escribió fuera del temporal: {sorted(nuevos)}")
             if (covers / ".rar-tmp").exists() and list((covers / ".rar-tmp").iterdir()):
                 problemas.append(f"hostil {caso}: dejó un temporal")
-            print(f"hostil {caso}: {resultado}")
+            if resultado != ESPERADO[caso]:
+                problemas.append(f"hostil {caso}: salió {resultado!r}, se esperaba {ESPERADO[caso]!r}")
+            print(f"hostil {caso}: {resultado} (esperado {ESPERADO[caso]})")
     if list(Path("/tmp").glob("secops-*")):
         problemas.append("algún hostil escribió en /tmp fuera del destino")
     print("uid:", os.getuid())

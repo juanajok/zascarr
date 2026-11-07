@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from tests._rar_hostiles import CASOS, generar
+from tests._rar_hostiles import CASOS, ESPERADO, generar
 from zascarr.models import MotivoRar
 from zascarr.utils import lector_rar
 from zascarr.utils.lector_rar import ErrorRar, carpeta_temporal, listar
@@ -98,10 +98,11 @@ def _foto(raiz: Path) -> set[str]:
 
 
 @pytest.mark.parametrize("caso", sorted(CASOS))
-def test_rar_real_hostil_no_escribe_fuera_ni_da_error_ni_deja_rastro(caso, tmp_path):
-    """M-3 (SecOps): traversal, ruta absoluta, enlace simbólico, comodines, salto de línea y tamaño falso
-    leídos con `unar` REAL. Sea cual sea el resultado (portada o un motivo de dominio), nunca aparece nada
-    fuera del temporal, el temporal se borra, ningún nombre llega al mensaje del error y no hay otra
+def test_rar_real_hostil_da_el_resultado_esperado_y_no_escribe_fuera(caso, tmp_path):
+    """M-3 y N-1 (SecOps, generador v2): traversal, ruta absoluta, comodines, salto de línea, enlace simbólico y dos
+    tamaños que mienten, leídos con `unar` REAL. Cada caso da el resultado ESPERADO (`ESPERADO`, no «cualquier
+    motivo»: si un `unar` sanea distinto, la prueba falla y hay que documentarlo, no suavizarla); nunca aparece
+    nada fuera del temporal, el temporal se borra, ningún nombre llega al mensaje del error y no hay otra
     excepción que `ErrorRar`."""
     ruta = generar(tmp_path / "entrada", caso)
     covers = tmp_path / "covers"
@@ -109,11 +110,13 @@ def test_rar_real_hostil_no_escribe_fuera_ni_da_error_ni_deja_rastro(caso, tmp_p
     antes = _foto(tmp_path)
     try:
         jpeg, _ = portada_de_rar(ruta, covers, ancho=600)
+        resultado = "portada"
+        assert jpeg
     except ErrorRar as exc:
         assert "secops" not in str(exc).lower() and "passwd" not in str(exc).lower()
         assert exc.motivo in set(MotivoRar)
-    else:
-        assert jpeg                                         # si hubo portada, es el único fichero regular
+        resultado = exc.motivo.value
+    assert resultado == ESPERADO[caso], f"{caso}: salió {resultado!r}, se esperaba {ESPERADO[caso]!r}"
     nuevos = _foto(tmp_path) - antes
     assert nuevos <= {".rar-tmp"} | {"covers/.rar-tmp"}, f"escribió fuera del temporal: {sorted(nuevos)}"
     assert not list((covers / ".rar-tmp").iterdir()) if (covers / ".rar-tmp").exists() else True
