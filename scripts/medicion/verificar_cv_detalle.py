@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import sys
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -182,6 +183,8 @@ def main(argv: list[str] | None = None, *, cliente_factory=None) -> int:
         salida, fixture = asyncio.run(verificar(
             args.volume, args.issue, cliente_factory=cliente_factory))
     except Exception as exc:  # noqa: BLE001 — se informa sin volcar clave/URL
+        # La traza va a stderr (local, para diagnosticar); el JSON sigue saneado.
+        traceback.print_exc(file=sys.stderr)
         print(json.dumps({"estado": "error", "detalle": type(exc).__name__},
                          ensure_ascii=False))
         return 1
