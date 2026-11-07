@@ -31,7 +31,7 @@ from zascarr.config import get_settings
 from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
-from zascarr.services.gcd import GCDClient
+from zascarr.services.gcd import GCDClient, es_edicion_espanola
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 from zascarr.utils.peticiones import ReintentosAgotados
@@ -143,6 +143,10 @@ class DiscoveryResult:
     # `DESCONOCIDA`; es lo que ocurre con los tokens emitidos antes de #276, que no llevaban
     # procedencia.
     tradition_provenance: ProcedenciaTradicion | None = None
+    # Aditivo para #464: GCD puede devolver una edición sin país ni idioma. No se descarta
+    # (podría ser española y GCD no lo informa); se conserva y se marca para que la UI y la
+    # revisión humana sepan que el filtro de idioma no pudo aplicarse.
+    idioma_no_informado: bool = False
 
     @property
     def procedencia(self) -> ProcedenciaTradicion | None:
@@ -310,8 +314,13 @@ class DiscoveryService:
     async def _search_gcd(self, query: str, limit: int) -> list[DiscoveryResult]:
         async with GCDClient() as client:
             hits = await client.search_series(query, limit=limit)
-        return [
-            DiscoveryResult(
+        resultados: list[DiscoveryResult] = []
+        for h in hits:
+            clasificacion = es_edicion_espanola(h)
+            if clasificacion is False:
+                # Edición con país/idioma informado y no español: no entra como candidata.
+                continue
+            resultados.append(DiscoveryResult(
                 source=MetadataSource.GCD, external_id=str(h.gcd_id),
                 title=h.name, start_year=h.year_began,
                 # El endpoint de BÚSQUEDA de GCD no devuelve sinopsis ni
@@ -325,7 +334,8 @@ class DiscoveryService:
                                  else ComicTradition(h.tradition_guess)),
                 tradition_provenance=(None if h.tradition_guess is None
                                       else ProcedenciaTradicion.TRANSFORMADA),
-            )
-            for h in hits
-        ]
+                # Sin país ni idioma no se descarta: se conserva y se marca (#464).
+                idioma_no_informado=clasificacion is None,
+            ))
+        return resultados
 

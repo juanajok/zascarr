@@ -67,7 +67,7 @@ class TestSearch:
         cv = [CVResult(cv_id=1, name="Batman", start_year=2011)]
         anilist = [AniListResult(anilist_id=2, title_romaji="Naruto")]
         tebeo = [TebeosferaResult(slug="thorgal_1981", title="Thorgal", kind="saga")]
-        gcd = [GCDResult(gcd_id=3, name="Batman", language="en", country="us")]
+        gcd = [GCDResult(gcd_id=3, name="Batman", language="es", country="ES")]
 
         with patch("zascarr.services.discovery.ComicVineClient", _client_ctx(cv)), \
              patch("zascarr.services.discovery.AniListClient", _client_ctx(anilist)), \
@@ -105,6 +105,7 @@ class TestSearch:
             resultados, _ = await DiscoveryService(db=FakeSession()).search("algo")
         (r,) = resultados
         assert r.tradition_guess is None and r.procedencia is None
+        assert r.idioma_no_informado is True
 
     @pytest.mark.asyncio
     async def test_sin_api_key_de_comic_vine_avisa_y_no_lo_intenta(self, monkeypatch):
