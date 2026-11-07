@@ -12,6 +12,12 @@
 > un MVP pequeño a nivel de serie que reutiliza lo que ya existe, y dejar
 > alias/padres/enriquecimiento/ComicInfo-export para fases posteriores.
 >
+> **Nota de vigencia (2026-11-07).** Esta evaluación se escribió contra `35283b5`; su «la migración
+> nueva es la 0021» era correcto entonces. BL-R9 ocupó después la 0021, así que **la migración de
+> etiquetas es la 0022** (`down_revision="0021"`). D-1 ratificó un **único espacio visible,
+> `etiqueta`**, sin prefijos; las menciones a `tema:`/`motivo:` se conservan como historial del
+> análisis. La referencia normativa es `especificacion-etiquetas.md` v0.3.
+>
 > **Contraste ya cerrado (2026-11-04):** `docs/design/benchmark-etiquetas.md`
 > puntúa 4,35/5 la opción «construir sobre lo propio» frente a 3,05 de la
 > propuesta literal, 3,00 del statu quo y 2,40 del booru completo, y recomienda
