@@ -661,12 +661,37 @@ def _resultado_para_detalle(fuente: str, candidato: Any, caso: dict) -> Any | No
     resultado = DiscoveryResult(
         source=source, external_id=str(external_id), title=str(titulo),
         start_year=getattr(candidato, "start_year", None),
-        description=None, cover_url=None, site_url=None,
+        description=None, cover_url=None,
+        site_url=getattr(candidato, "site_url", None),
     )
     # GCD: el raw de búsqueda permite detalle con 0 peticiones (PR-2).
     if fuente == "gcd" and getattr(candidato, "raw", None):
         resultado.raw = candidato.raw
     return resultado
+
+
+def _kind_candidato(candidato: Any) -> str | None:
+    if isinstance(candidato, dict):
+        return candidato.get("kind")
+    return getattr(candidato, "kind", None)
+
+
+def _candidato_para_detalle(fuente: str, resultados: Sequence[Any]) -> Any | None:
+    """Elige el candidato contrastable: en Tebeosfera, colección antes que saga.
+
+    Una saga no tiene ficha de colección que `get_collection` pueda leer; se prefiere una
+    colección si el ranking ya la trajo. Si solo hay sagas, `None` (el llamador registra
+    `no_ejecutado: candidato_sin_coleccion`, nunca lo deja en silencio).
+    """
+    if not resultados:
+        return None
+    if fuente == "tebeosfera":
+        colecciones = [r for r in resultados if _kind_candidato(r) == "collection"]
+        if colecciones:
+            return colecciones[0]
+        if all(_kind_candidato(r) == "saga" for r in resultados):
+            return None
+    return resultados[0]
 
 
 def _coste_detalle(fuente: str, candidato: Any,
@@ -999,50 +1024,61 @@ async def ejecutar_real(
             notas="candidatos pendientes de revisión humana", sha_ejecutor=sha_ejecutor))
         fila = filas[-1]
         if con_detalle and estado == "ok" and candidatos:
-            candidato = resultados[0]
+            candidato = _candidato_para_detalle(fuente, resultados)
             numero_esperado = _numero_esperado(caso)
-            coste = _coste_detalle(fuente, candidato, numero_esperado)
-            if (peticiones + coste > max_peticiones
-                    or por_fuente[fuente] + coste > max_por_fuente):
+            if candidato is None:
                 fila["estado_detalle"] = "no_ejecutado"
-                fila["motivo_detalle"] = "presupuesto_agotado"
+                fila["motivo_detalle"] = "candidato_sin_coleccion"
             else:
-                adaptado = _resultado_para_detalle(fuente, candidato, caso)
-                if adaptado is not None:
-                    if detalle_service_factory is not None:
-                        servicio = detalle_service_factory()
+                coste = _coste_detalle(fuente, candidato, numero_esperado)
+                if (peticiones + coste > max_peticiones
+                        or por_fuente[fuente] + coste > max_por_fuente):
+                    fila["estado_detalle"] = "no_ejecutado"
+                    fila["motivo_detalle"] = "presupuesto_agotado"
+                else:
+                    adaptado = _resultado_para_detalle(fuente, candidato, caso)
+                    if adaptado is None:
+                        fila["estado_detalle"] = "no_ejecutado"
+                        fila["motivo_detalle"] = "candidato_sin_detalle"
                     else:
-                        from zascarr.services.discovery import DiscoveryService
-                        servicio = DiscoveryService(db=None)
-                    if numero_esperado is None:
-                        resultado_detalle = await servicio.detalle_de(
-                            adaptado, unidad=celda["unidad"])
-                    else:
-                        resultado_detalle = await servicio.detalle_de(
-                            adaptado, unidad=celda["unidad"],
-                            numero_esperado=numero_esperado)
-                    peticiones_detalle = coste
-                    if resultado_detalle.detalle is not None:
-                        peticiones_detalle = max(
-                            peticiones_detalle, resultado_detalle.detalle.peticiones)
-                    peticiones += peticiones_detalle
-                    por_fuente[fuente] += peticiones_detalle
-                    fila["peticiones"] = 1 + peticiones_detalle
-                    fila["reintentos"] = max(0, peticiones_detalle - 1)
-                    fila["estado_detalle"] = resultado_detalle.estado.estado
-                    fila["motivo_detalle"] = resultado_detalle.motivo
-                    if (resultado_detalle.estado.estado == "ok"
-                            and resultado_detalle.detalle is not None):
-                        from zascarr.services.detalle_edicion import contrastar
-                        contraste = contrastar(
-                            resultado_detalle.detalle, _etiqueta_contraste(caso),
-                            unidad=celda["unidad"])
-                        fila["detalle"] = _detalle_saneado(resultado_detalle.detalle)
-                        fila["contraste"] = contraste.resultado or "sin_veredicto"
-                        fila["resultado_editorial"] = contraste.resultado
-                    else:
-                        fila["detalle"] = None
-                        fila["contraste"] = None
+                        if detalle_service_factory is not None:
+                            servicio = detalle_service_factory()
+                        else:
+                            from zascarr.services.discovery import DiscoveryService
+                            servicio = DiscoveryService(db=None)
+                        if numero_esperado is None:
+                            resultado_detalle = await servicio.detalle_de(
+                                adaptado, unidad=celda["unidad"])
+                        else:
+                            resultado_detalle = await servicio.detalle_de(
+                                adaptado, unidad=celda["unidad"],
+                                numero_esperado=numero_esperado)
+                        peticiones_detalle = coste
+                        if resultado_detalle.detalle is not None:
+                            peticiones_detalle = max(
+                                peticiones_detalle, resultado_detalle.detalle.peticiones)
+                        peticiones += peticiones_detalle
+                        por_fuente[fuente] += peticiones_detalle
+                        fila["peticiones"] = 1 + peticiones_detalle
+                        fila["reintentos"] = max(0, peticiones_detalle - 1)
+                        fila["estado_detalle"] = resultado_detalle.estado.estado
+                        # Un detalle no-ok siempre deja motivo; el ok lo sustituye el contraste.
+                        fila["motivo_detalle"] = (
+                            resultado_detalle.motivo
+                            or (None if resultado_detalle.estado.estado == "ok"
+                                else resultado_detalle.estado.estado))
+                        if (resultado_detalle.estado.estado == "ok"
+                                and resultado_detalle.detalle is not None):
+                            from zascarr.services.detalle_edicion import contrastar
+                            contraste = contrastar(
+                                resultado_detalle.detalle, _etiqueta_contraste(caso),
+                                unidad=celda["unidad"])
+                            fila["detalle"] = _detalle_saneado(resultado_detalle.detalle)
+                            fila["contraste"] = contraste.resultado or "sin_veredicto"
+                            fila["resultado_editorial"] = contraste.resultado
+                        else:
+                            fila["detalle"] = None
+                            fila["contraste"] = None
         fila["autorizacion"] = {"id": autorizacion.get("id")}
     for fila in filas:
         fila["condiciones"] = {**fila["condiciones"], "parada": parada or "final"}
@@ -1136,6 +1172,14 @@ def calcular_metricas(registros: Sequence[dict], corpus: dict) -> dict:
             "ausencias": len(ausencias),
             "no_acreditadas": len(no_acreditadas),
             "campos_faltantes": sum(len(f.get("campos_ausentes") or []) for f in filas),
+            "con_contraste": sum(1 for f in filas if f.get("contraste") is not None),
+            "sin_contraste_con_motivo": sum(
+                1 for f in filas
+                if f.get("contraste") is None and f.get("estado_detalle") is not None),
+            "candidatos_sin_detalle_ni_motivo": sum(
+                1 for f in filas
+                if f.get("candidatos") and f.get("contraste") is None
+                and f.get("estado_detalle") is None),
             "disponibilidad_tecnica": _tasa(len(ok), len(ejecutados)),
             "precision_editorial": _tasa(
                 len(coincidencias), len(coincidencias) + len(ambiguos) + len(incorrectos)),
@@ -1309,6 +1353,9 @@ def escribir_informe(informe: dict, registros: Sequence[dict], salida: Path) -> 
             f"no acreditadas: {datos['no_acreditadas']}",
             f"- ausencias: {_linea_tasa(datos['tasa_ausencia'])}; "
             f"campos faltantes: {datos['campos_faltantes']}",
+            f"- detalle: {datos['con_contraste']} con contraste; "
+            f"{datos['sin_contraste_con_motivo']} sin contraste con motivo; "
+            f"{datos['candidatos_sin_detalle_ni_motivo']} con candidato y sin ninguno",
             "",
         ]
     lineas += ["## Campos (por fuente, denominadores explícitos)", ""]

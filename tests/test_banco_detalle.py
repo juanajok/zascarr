@@ -63,15 +63,19 @@ def _auth():
 
 
 class _Candidato:
-    def __init__(self, slug):
+    def __init__(self, slug, *, kind="collection"):
         self.slug = slug
         self.title = "Dragon Ball"
         self.start_year = 1992
+        self.kind = kind
+        carpeta = "sagas" if kind == "saga" else "colecciones"
+        self.site_url = f"https://www.tebeosfera.com/{carpeta}/{slug}.html"
 
 
 class _BusquedaFalsa:
-    def __init__(self):
-        self.search_series = AsyncMock(return_value=[_Candidato("dragon_ball")])
+    def __init__(self, candidatos=None):
+        self.search_series = AsyncMock(
+            return_value=candidatos or [_Candidato("dragon_ball")])
 
     async def __aenter__(self):
         return self
@@ -203,3 +207,55 @@ def test_el_banco_pasa_el_numero_esperado_de_la_etiqueta(monkeypatch):
     assert numero_esperado == 15
     # búsqueda (1) + resolución colección+número (2)
     assert filas[0]["peticiones"] == 3
+
+
+class TestCandidatoContrastable:
+    def _corpus_12(self):
+        return {
+            "version": "v1",
+            "casos": [_caso(f"C{i}") for i in range(1, 13)],
+        }
+
+    def _ejecutar_con(self, corpus, candidatos, respuestas, *, plan=None,
+                      max_peticiones=100):
+        servicio = _DetalleFalso(respuestas)
+        auth = _auth()
+        auth["max_por_fuente"] = 100
+        filas = asyncio.run(banco.ejecutar_real(
+            plan or _plan(corpus), corpus, auth, max_peticiones=max_peticiones,
+            max_por_fuente=100, salida=Path("/tmp/x"), corpus_sha="sha-corpus",
+            fuentes=["tebeosfera"],
+            cliente_factory=lambda _f: _BusquedaFalsa(candidatos),
+            detalle_service_factory=lambda: servicio, sha_ejecutor="abc",
+            aplicar_ajustes=False, con_detalle=True))
+        return filas, servicio
+
+    def test_prefiere_la_coleccion_aunque_la_saga_vaya_primero(self):
+        corpus = self._corpus_12()
+        saga = _Candidato("thorgal_saga", kind="saga")
+        coleccion = _Candidato("thorgal_coleccion", kind="collection")
+        filas, servicio = self._ejecutar_con(
+            corpus, [saga, coleccion], [_ok(_detalle())], plan=_plan(corpus)[:1])
+        assert filas[0]["contraste"] == "coincidencia_verificada"
+        assert servicio.llamadas[0][0].external_id == "thorgal_coleccion"
+
+    def test_solo_sagas_deja_motivo_y_no_pide_detalle(self):
+        corpus = self._corpus_12()
+        filas, servicio = self._ejecutar_con(
+            corpus, [_Candidato("thorgal_saga", kind="saga")], [],
+            plan=_plan(corpus)[:1])
+        fila = filas[0]
+        assert fila["estado_detalle"] == "no_ejecutado"
+        assert fila["motivo_detalle"] == "candidato_sin_coleccion"
+        assert fila["contraste"] is None
+        assert servicio.llamadas == []
+
+    def test_los_12_casos_con_candidato_nunca_quedan_en_silencio(self):
+        corpus = self._corpus_12()
+        filas, _ = self._ejecutar_con(
+            corpus, [_Candidato("dragon_ball")], [_ok(_detalle())] * 12)
+        assert all(f.get("contraste") is not None or f.get("estado_detalle") is not None
+                   for f in filas)
+        metricas = banco.calcular_metricas(filas, corpus)["por_fuente_unidad"]
+        assert metricas["tebeosfera__serie"]["candidatos_sin_detalle_ni_motivo"] == 0
+        assert metricas["tebeosfera__serie"]["con_contraste"] == 12
