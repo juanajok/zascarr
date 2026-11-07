@@ -85,8 +85,8 @@ class _DetalleFalso:
         self.respuestas = list(respuestas)
         self.llamadas = []
 
-    async def detalle_de(self, resultado, *, unidad):
-        self.llamadas.append((resultado, unidad))
+    async def detalle_de(self, resultado, *, unidad, numero_esperado=None):
+        self.llamadas.append((resultado, unidad, numero_esperado))
         return self.respuestas.pop(0)
 
 
@@ -177,11 +177,29 @@ class TestContrasteDelBanco:
             detalle_service_factory=lambda: detalle, sha_ejecutor="abc",
             aplicar_ajustes=False, con_detalle=True))
         assert len(detalle.llamadas) == 1
-        resultado, unidad = detalle.llamadas[0]
+        resultado, unidad, numero_esperado = detalle.llamadas[0]
         assert resultado.external_id == "dragon_ball" and unidad == "serie"
+        assert numero_esperado is None
         assert filas[0]["detalle"]["editorial"] == "Planeta DeAgostini"
 
 
 def test_detalle_en_seco_es_error_claro(tmp_path):
     rc = banco.main(["--seco", "--detalle", "--salida", str(tmp_path)])
     assert rc == 2
+
+
+def test_el_banco_pasa_el_numero_esperado_de_la_etiqueta(monkeypatch):
+    monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+    corpus = _corpus()
+    corpus["casos"][0]["etiqueta_editorial"]["numero"] = 15
+    detalle = _DetalleFalso([_ok(_detalle())])
+    filas = asyncio.run(banco.ejecutar_real(
+        _plan(corpus)[:1], corpus, _auth(), max_peticiones=10, max_por_fuente=20,
+        salida=Path("/tmp/x"), corpus_sha="sha-corpus", fuentes=["tebeosfera"],
+        cliente_factory=lambda _f: _BusquedaFalsa(),
+        detalle_service_factory=lambda: detalle, sha_ejecutor="abc",
+        aplicar_ajustes=False, con_detalle=True))
+    _, _, numero_esperado = detalle.llamadas[0]
+    assert numero_esperado == 15
+    # búsqueda (1) + resolución colección+número (2)
+    assert filas[0]["peticiones"] == 3

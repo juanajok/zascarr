@@ -633,6 +633,7 @@ def _detalle_saneado(detalle: Any) -> dict[str, Any]:
         "formato_fuente": getattr(detalle, "formato_fuente", None),
         "pais": getattr(detalle, "pais", None),
         "idioma": getattr(detalle, "idioma", None),
+        "fecha_publicacion": getattr(detalle, "fecha_publicacion", None),
         "campos_ausentes": sorted(getattr(detalle, "campos_ausentes", ())),
         "peticiones": getattr(detalle, "peticiones", 0),
     }
@@ -668,13 +669,26 @@ def _resultado_para_detalle(fuente: str, candidato: Any, caso: dict) -> Any | No
     return resultado
 
 
-def _coste_detalle(fuente: str, candidato: Any) -> int:
-    """Peticiones previstas del detalle: GCD con raw y AniList no piden nada."""
+def _coste_detalle(fuente: str, candidato: Any,
+                    numero_esperado: int | None = None) -> int:
+    """Peticiones previstas del detalle.
+
+    GCD con raw y AniList no piden nada. En Tebeosfera, resolver un número dentro de la
+    colección cuesta 2 (ficha de colección + ficha de número); el resto, 1.
+    """
     if fuente == "anilist":
         return 0
     if fuente == "gcd" and getattr(candidato, "raw", None):
         return 0
+    if fuente == "tebeosfera" and numero_esperado is not None:
+        return 2
     return 1
+
+
+def _numero_esperado(caso: dict) -> int | None:
+    """Número del ejemplar de la etiqueta acreditada, solo si es un entero real."""
+    numero = (caso.get("etiqueta_editorial") or {}).get("numero")
+    return numero if type(numero) is int else None
 
 
 def _etiqueta_contraste(caso: dict) -> dict:
@@ -986,7 +1000,8 @@ async def ejecutar_real(
         fila = filas[-1]
         if con_detalle and estado == "ok" and candidatos:
             candidato = resultados[0]
-            coste = _coste_detalle(fuente, candidato)
+            numero_esperado = _numero_esperado(caso)
+            coste = _coste_detalle(fuente, candidato, numero_esperado)
             if (peticiones + coste > max_peticiones
                     or por_fuente[fuente] + coste > max_por_fuente):
                 fila["estado_detalle"] = "no_ejecutado"
@@ -999,8 +1014,13 @@ async def ejecutar_real(
                     else:
                         from zascarr.services.discovery import DiscoveryService
                         servicio = DiscoveryService(db=None)
-                    resultado_detalle = await servicio.detalle_de(
-                        adaptado, unidad=celda["unidad"])
+                    if numero_esperado is None:
+                        resultado_detalle = await servicio.detalle_de(
+                            adaptado, unidad=celda["unidad"])
+                    else:
+                        resultado_detalle = await servicio.detalle_de(
+                            adaptado, unidad=celda["unidad"],
+                            numero_esperado=numero_esperado)
                     peticiones_detalle = coste
                     if resultado_detalle.detalle is not None:
                         peticiones_detalle = max(

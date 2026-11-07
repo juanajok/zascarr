@@ -217,6 +217,8 @@ class TebeosferaColeccion:
     idioma: str | None = None
     url_ficha: str | None = None
     peticiones: int = 1
+    #: Slugs de las fichas de número enlazadas desde la colección (para resolver un nº).
+    numeros_slugs: tuple[str, ...] = ()
 
     @property
     def formato(self) -> str | None:
@@ -383,6 +385,34 @@ class TebeosferaClient:
         return _parse_numero(r.text, slug)
 
 
+    async def get_numero_de_coleccion(self, coleccion_slug: str, numero: Any, *,
+                                      espera_max_s: float = 30.0) -> TebeosferaNumero | None:
+        """Resuelve un número concreto dentro de una colección: 2 peticiones.
+
+        1) ficha de colección (para obtener los enlaces `/numeros/`);
+        2) ficha del número cuyo slug termina en `-<numero>` o `_<numero>`.
+        Ambas por `pedir_con_cortesia`; si no hay enlace para ese número, `None`.
+        """
+        try:
+            objetivo = str(int(numero))
+        except (TypeError, ValueError):
+            return None
+        coleccion = await self.get_collection(coleccion_slug, espera_max_s=espera_max_s)
+        if coleccion is None:
+            return None
+        candidatos = [
+            slug for slug in coleccion.numeros_slugs
+            if re.search(rf"(?:^|[-_]){re.escape(objetivo)}$", slug)
+        ]
+        if not candidatos:
+            return None
+        numero_detalle = await self.get_numero(candidatos[0], espera_max_s=espera_max_s)
+        if numero_detalle is None:
+            return None
+        from dataclasses import replace
+        return replace(numero_detalle, peticiones=2)
+
+
 def _parse_numero(html_fragment: str, slug: str) -> TebeosferaNumero | None:
     """Parser defensivo de la ficha de número; los campos ausentes quedan `None`."""
     if not html_fragment:
@@ -459,7 +489,11 @@ def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | No
     ficha = ficha[0]
 
     editorial = sello = None
-    titulo = ficha.xpath('.//div[contains(@class,"titulo")]')
+    # La ficha completa trae avisos con clase `tebeoaviso_titulo`; el bloque real está en
+    # `#cuerpo1_ficha`. Se busca la clase EXACTA `titulo`, no una subcadena.
+    cabecera = ficha.xpath('.//div[@id="cuerpo1_ficha"]')
+    scope = cabecera[0] if cabecera else ficha
+    titulo = scope.xpath('.//div[contains(concat(" ", normalize-space(@class), " "), " titulo ")]')
     if titulo:
         enlaces = titulo[0].xpath('.//a[contains(@href,"/entidades/")]')
         textos = [(a.text_content() or "").strip() for a in enlaces]
@@ -519,6 +553,15 @@ def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | No
         if len(valores) == 1:
             paginas = valores.pop()
 
+    numeros_slugs: list[str] = []
+    for enlace in ficha.xpath('.//a[contains(@href,"/numeros/")]'):
+        href = enlace.get("href") or ""
+        if "/numeros/" not in href:
+            continue
+        slug_numero = href.split("/numeros/", 1)[1].split(".html", 1)[0].strip("/")
+        if slug_numero and slug_numero not in numeros_slugs:
+            numeros_slugs.append(slug_numero)
+
     return TebeosferaColeccion(
         slug=slug,
         editorial=editorial,
@@ -535,6 +578,7 @@ def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | No
         idioma=None,                   # hoy no hay campo de idioma en la ficha
         url_ficha=f"{_BASE_URL}/colecciones/{quote(slug, safe='-_.~')}.html",
         peticiones=1,
+        numeros_slugs=tuple(numeros_slugs),
     )
 
 
