@@ -13,7 +13,7 @@ import structlog
 
 from zascarr.config import get_settings
 from zascarr.utils.cortesia import PoliticaFuente, politica_de
-from zascarr.utils.peticiones import pedir_con_cortesia
+from zascarr.utils.peticiones import RespuestaNoTransitoria, pedir_con_cortesia
 
 logger = structlog.get_logger()
 
@@ -52,6 +52,25 @@ class CVResult:
 
 
 @dataclass
+class CVVolume:
+    """Volumen de Comic Vine para detalle de edición (#465, PR-3).
+
+    Campos observados/documentados de `/volume/4050-{id}/`; `publisher` es el nombre ya
+    resuelto por la API (si viene como objeto) o `None`. `count_of_issues` es un RECUENTO,
+    no el número del ejemplar.
+    """
+    cv_id: int
+    name: str
+    publisher: str | None = None
+    start_year: int | None = None
+    count_of_issues: int | None = None
+    first_issue: dict | None = None
+    last_issue: dict | None = None
+    raw: dict | None = None
+    peticiones: int = 1
+
+
+@dataclass
 class CVCredit:
     """Un creador citado en person_credits, con uno o más roles.
 
@@ -73,6 +92,10 @@ class CVIssueResult:
     cover_date: str | None = None
     credits: list[CVCredit] = field(default_factory=list)
     raw: dict | None = None
+
+
+#: Alias de lectura para quien llame al detalle de número.
+CVIssue = CVIssueResult
 
 
 class ComicVineClient:
@@ -134,6 +157,47 @@ class ComicVineClient:
             raw=item,
         ) for item in data.get("results", [])]
 
+    async def get_volume(self, volume_id: int) -> CVVolume | None:
+        """`GET /volume/4050-{id}/`; 1 petición y `None` en 404.
+
+        Sin `comicvine_api_key` NO se hace ninguna petición: el método levanta
+        `RuntimeError` antes de construirla (la clave solo la añade `_get`).
+        """
+        if not self._api_key:
+            raise RuntimeError("Comic Vine sin clave: no se puede pedir el volumen.")
+        try:
+            data = await self._get(
+                f"/volume/4050-{int(volume_id)}/",
+                {"field_list": ("id,name,publisher,start_year,count_of_issues,"
+                                "first_issue,last_issue")},
+            )
+        except RespuestaNoTransitoria as exc:
+            if exc.codigo == 404:
+                return None
+            raise
+        item = data.get("results")
+        if not isinstance(item, dict) or not item:
+            return None
+        return _parse_cv_volume(item)
+
+    async def get_issue(self, issue_id: int) -> CVIssueResult | None:
+        """`GET /issue/4000-{id}/`; 1 petición y `None` en 404."""
+        if not self._api_key:
+            raise RuntimeError("Comic Vine sin clave: no se puede pedir el número.")
+        try:
+            data = await self._get(
+                f"/issue/4000-{int(issue_id)}/",
+                {"field_list": "id,issue_number,cover_date,volume"},
+            )
+        except RespuestaNoTransitoria as exc:
+            if exc.codigo == 404:
+                return None
+            raise
+        item = data.get("results")
+        if not isinstance(item, dict) or not item:
+            return None
+        return _parse_issue(item)
+
     async def get_issue_detail(self, issue_id: int) -> dict[str, Any]:
         data = await self._get(
             f"/issue/4000-{issue_id}/",
@@ -178,6 +242,33 @@ def _parse_issue(item: dict) -> CVIssueResult:
         cover_date=item.get("cover_date"),
         credits=credits,
         raw=item,
+    )
+
+
+def _nombre_editorial(valor: Any) -> str | None:
+    """La API documenta `publisher` como objeto; se acepta también nombre plano."""
+    if isinstance(valor, dict):
+        nombre = valor.get("name")
+    elif isinstance(valor, str):
+        nombre = valor
+    else:
+        nombre = None
+    return str(nombre).strip() if nombre else None
+
+
+def _parse_cv_volume(item: dict) -> CVVolume:
+    first = item.get("first_issue")
+    last = item.get("last_issue")
+    return CVVolume(
+        cv_id=int(item.get("id") or 0),
+        name=str(item.get("name") or ""),
+        publisher=_nombre_editorial(item.get("publisher")),
+        start_year=_safe_int(item.get("start_year")),
+        count_of_issues=_safe_int(item.get("count_of_issues")),
+        first_issue=first if isinstance(first, dict) else None,
+        last_issue=last if isinstance(last, dict) else None,
+        raw=item,
+        peticiones=1,
     )
 
 

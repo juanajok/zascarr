@@ -1,0 +1,20 @@
+{
+  "_fixture": "MANUAL/DOCUMENTADA, NO capturada de la API real",
+  "_nota": "Forma declarada por la documentación de Comic Vine para /volume/4050-{id}/ y por el benchmark BL-FU2 §2.1. La respuesta real sigue SIN VERIFICAR por falta de COMICVINE_API_KEY; no se inventan campos que la doc no liste.",
+  "id": 31306,
+  "name": "Dragon Ball",
+  "publisher": {
+    "id": 4050,
+    "name": "Viz"
+  },
+  "start_year": 2003,
+  "count_of_issues": 16,
+  "first_issue": {
+    "id": 4000,
+    "issue_number": "1"
+  },
+  "last_issue": {
+    "id": 4000,
+    "issue_number": "16"
+  }
+}
