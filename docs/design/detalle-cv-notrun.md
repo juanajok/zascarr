@@ -15,34 +15,20 @@
 ## Verificación exacta cuando el PO tenga la clave en la Pi
 
 Una petición por endpoint, con la cortesía de 1 s del cliente y **sin volcar la clave**;
-el comando usa `ComicVineClient`, que ya pasa por `pedir_con_cortesia` y añade la clave
-internamente. No se imprime la clave ni la URL con parámetros.
+el comando usa `verificar_cv_detalle.py` y `ComicVineClient`, que ya pasan por `pedir_con_cortesia`
+y añaden la clave internamente (la script la lee de `runtime_settings`). No se imprime la clave ni
+la URL con parámetros.
 
 ```bash
-docker compose run --rm --no-deps --entrypoint python zascarr - <<'PY'
-import asyncio, json
-from zascarr.services.comic_vine import ComicVineClient
-
-VOLUME_ID = 31306      # el del fixture manual; sustituir por el que se quiera verificar
-ISSUE_ID = 1           # sustituir por un id 4000-... concreto
-
-async def main():
-    async with ComicVineClient() as cliente:
-        volumen = await cliente.get_volume(VOLUME_ID)
-        print("volume:", None if volumen is None else {
-            "id": volumen.cv_id, "name": volumen.name,
-            "publisher": volumen.publisher, "start_year": volumen.start_year,
-            "count_of_issues": volumen.count_of_issues,
-            "first_issue": volumen.first_issue, "last_issue": volumen.last_issue,
-        })
-        issue = await cliente.get_issue(ISSUE_ID)
-        print("issue:", None if issue is None else {
-            "id": issue.cv_id, "issue_number": issue.issue_number,
-            "cover_date": issue.cover_date,
-        })
-
-asyncio.run(main())
-PY
+mkdir -p /tmp/cv-detalle
+docker compose run --rm --no-deps --entrypoint python \
+  -v "$PWD/scripts/medicion/verificar_cv_detalle.py:/app/scripts/medicion/verificar_cv_detalle.py:ro" \
+  -v "$PWD/src/zascarr/services/comic_vine.py:/app/src/zascarr/services/comic_vine.py:ro" \
+  -v /tmp/cv-detalle:/verificacion \
+  zascarr scripts/medicion/verificar_cv_detalle.py \
+    --volume 31306 \
+    --sha-ejecutor "$(git rev-parse HEAD)" \
+    --salida /verificacion/comicvine_volume_31306_real.json
 ```
 
 Si no hay clave, `get_volume`/`get_issue` levantan `RuntimeError` **antes** de cualquier
