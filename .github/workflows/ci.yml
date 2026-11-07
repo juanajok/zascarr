@@ -137,3 +137,21 @@ jobs:
       # #418: la imagen lleva `unar` y lo ejecuta el usuario de servicio (no solo root).
       - name: lsar dentro de la imagen, como el usuario de servicio
         run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- lsar --version
+      # #418 (ADR 0015): sin los demonios GNUstep que nadie usa, y `lsar` sigue leyendo un RAR de verdad.
+      - name: sin gdomap/gdnc/gpbs y con lsar funcionando sobre un RAR
+        run: |
+          docker run --rm --entrypoint sh zascarr:ci -c '
+            for b in gdomap gdnc gpbs; do
+              if [ -n "$(find / -xdev -type f -name "$b" 2>/dev/null)" ]; then echo "::error::$b sigue en la imagen"; exit 1; fi
+            done
+            runuser -u zascarr -- lsar -j /app/tests/fixtures/rar/minimo_rar5.cbr | grep -q "01.jpg"
+            echo "setuid/setgid de la imagen:"; find / -xdev -perm /6000 -type f 2>/dev/null | head -20'
+      # #418 (SecOps C-4): la suite usa el `unar` del ejecutor (1.10.8); la imagen lleva el de bookworm (1.10.1).
+      - name: lector RAR con el unar de la imagen de producción (ejecutables de GNUstep fuera, sin setuid nuevo, fixtures)
+        run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- python /app/scripts/comprobar_imagen_rar.py
+      - name: tamaño de la imagen
+        run: docker image ls zascarr:ci --format '{{.Size}}'
+      - name: arranque con la imagen endurecida
+        run: |
+          docker run --rm --security-opt no-new-privileges:true --pids-limit 256 --entrypoint runuser zascarr:ci \
+            -u zascarr -- python -c "import zascarr.main"

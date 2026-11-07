@@ -164,6 +164,12 @@ services:
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/vpn-state:/run/vpn-state:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/backup-status:/run/backup-status:ro
       - ${ZASCARR_DATA_DIR:-/var/lib/zascarr}/covers:/config/covers
+    # #418 (ADR 0015): esta app abre con `unar` archivos de terceros que llegan por P2P. Sin
+    # `no-new-privileges` ningún proceso del contenedor puede ganar privilegios (setuid); el tope de
+    # procesos (`deploy.resources.limits.pids`, abajo) acota una bifurcación descontrolada. El arranque
+    # como root + `runuser` no los necesita.
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       credenciales:
         condition: service_completed_successfully
@@ -173,3 +179,4 @@ services:
       resources:
         limits:
           memory: 512M
+          pids: 256
