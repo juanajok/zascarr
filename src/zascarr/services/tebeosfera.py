@@ -224,6 +224,35 @@ class TebeosferaColeccion:
         return self.formato_fuente
 
 
+@dataclass(frozen=True)
+class TebeosferaNumero:
+    """Campos CRUDOS de una ficha de número de Tebeosfera (#489).
+
+    La ficha de número sí identifica el ejemplar (`numero_publicacion`), a diferencia de la
+    colección. `fecha`/`paginas`/`formato_fuente` solo van si la ficha los trae.
+    """
+    slug: str
+    numero_publicacion: str | None = None
+    fecha: str | None = None
+    paginas: int | None = None
+    formato_fuente: str | None = None
+    editorial: str | None = None
+    sello: str | None = None
+    anio: int | None = None
+    url_ficha: str | None = None
+    peticiones: int = 1
+
+    @property
+    def numero(self) -> str | None:
+        """Alias de lectura del número del ejemplar."""
+        return self.numero_publicacion
+
+    @property
+    def formato(self) -> str | None:
+        """Texto crudo del formato; el servicio lo mapea a `IssueFormat`."""
+        return self.formato_fuente
+
+
 class TebeosferaClient:
     def __init__(self, transporte: httpx.AsyncBaseTransport | None = None, *,
                  politica: PoliticaFuente | None = None,
@@ -328,6 +357,89 @@ class TebeosferaClient:
             logger.warning("tebeosfera.get_collection_failed", slug=slug)
             return None
         return _parse_collection(r.text, slug)
+
+
+    async def get_numero(self, slug: str, *,
+                         espera_max_s: float = 30.0) -> TebeosferaNumero | None:
+        """Lee UNA ficha de número (`/numeros/<slug>.html`) por `pedir_con_cortesia`.
+
+        Sin galería ni imágenes; un 404/HTML sin ficha devuelve `None`. No toca la ficha de
+        colección ni hace una segunda petición.
+        """
+        slug = (slug or "").strip()
+        if not slug or self._client is None:
+            return None
+        url = f"{_BASE_URL}/numeros/{quote(slug, safe='-_.~')}.html"
+        try:
+            r = await pedir_con_cortesia(
+                self._client, "GET", url,
+                politica=self._politica, espera_max_s=espera_max_s,
+                cortesia=self._cortesia_efectiva(), reloj=self._reloj,
+                dormir=self._dormir,
+            )
+        except (RespuestaNoTransitoria, ErrorDePeticion, httpx.HTTPError):
+            logger.warning("tebeosfera.get_numero_failed", slug=slug)
+            return None
+        return _parse_numero(r.text, slug)
+
+
+def _parse_numero(html_fragment: str, slug: str) -> TebeosferaNumero | None:
+    """Parser defensivo de la ficha de número; los campos ausentes quedan `None`."""
+    if not html_fragment:
+        return None
+    try:
+        tree = lxml_html.fromstring(html_fragment)
+    except Exception:
+        logger.warning("tebeosfera.parse_numero_failed", slug=slug)
+        return None
+    ficha = tree.xpath('//div[@id="cuerpo2_ficha"]')
+    if not ficha:
+        ficha = tree.xpath('//div[@id="div_ficha"]')
+    if not ficha:
+        return None
+    ficha = ficha[0]
+    texto = " ".join(ficha.text_content().split())
+
+    numero = None
+    m_numero = re.search(r"N[º°]\s*(\d+)\s+de\b", texto, re.IGNORECASE)
+    if m_numero:
+        numero = str(int(m_numero.group(1)))
+    else:
+        m_numero = re.search(r"N[º°]\s*(\d+)\b", texto, re.IGNORECASE)
+        if m_numero:
+            numero = str(int(m_numero.group(1)))
+
+    fecha = None
+    m_fecha = re.search(r"\b(\d{1,2}-[IVXLC]+-\d{4})\b", texto)
+    if m_fecha:
+        fecha = m_fecha.group(1)
+    anio = None
+    if fecha:
+        m_anio = re.search(r"(\d{4})$", fecha)
+        if m_anio:
+            anio = int(m_anio.group(1))
+
+    paginas = None
+    m_paginas = re.search(r"(\d+)\s*p[áa]gs?\.", texto, re.IGNORECASE)
+    if m_paginas:
+        paginas = int(m_paginas.group(1))
+
+    formato_fuente = _texto_dato(ficha, "Formato:")
+    editorial = sello = None
+    entidades = ficha.xpath('.//a[contains(@href,"/entidades/")]')
+    nombres = [(a.text_content() or "").strip() for a in entidades]
+    nombres = [n for n in nombres if n]
+    if nombres:
+        editorial = nombres[0]
+    if len(nombres) > 1:
+        sello = nombres[1]
+
+    return TebeosferaNumero(
+        slug=slug, numero_publicacion=numero, fecha=fecha, paginas=paginas,
+        formato_fuente=formato_fuente, editorial=editorial, sello=sello, anio=anio,
+        url_ficha=f"{_BASE_URL}/numeros/{quote(slug, safe='-_.~')}.html",
+        peticiones=1,
+    )
 
 
 def _parse_collection(html_fragment: str, slug: str) -> TebeosferaColeccion | None:
