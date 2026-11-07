@@ -116,7 +116,8 @@ def _jpeg_de(datos: bytes, ancho: int) -> tuple[bytes, str]:
 def portada_de_rar(path: Path, covers: Path, *, ancho: int) -> tuple[bytes, str]:
     """(JPEG, content-type) de la primera página de un RAR. Falla con `ErrorRar`; el temporal se
     crea dentro de `covers` y se borra siempre."""
-    with lector_rar.carpeta_temporal(covers / _CARPETA_TEMPORAL) as tmp:
+    # un solo turno para listar y leer: no se pierde a mitad bajo carga (dictamen SecOps N-2 b)
+    with lector_rar.turno(), lector_rar.carpeta_temporal(covers / _CARPETA_TEMPORAL) as tmp:
         listado = lector_rar.listar(path, temporal=tmp)
         pagina = elegir_pagina(listado, path.suffix.lower())
         datos = lector_rar.leer_entrada(path, pagina, MAX_ENTRADA_LEIDA, temporal=tmp)
@@ -167,9 +168,11 @@ def escribir_marca(carpeta_cache: Path, file_id: UUID, path: Path, motivo: Motiv
     if huella is None:
         return
     destino = ruta_de_marca(carpeta_cache, file_id)
-    contenido = json.dumps({"v": CONTRATO_PORTADA_RAR, "motivo": motivo.value,
-                            "tamano": huella.tamano, "mtime_ns": huella.mtime_ns,
-                            "t": int(time.time())}).encode()
+    marca = {"v": CONTRATO_PORTADA_RAR, "motivo": motivo.value,
+             "tamano": huella.tamano, "mtime_ns": huella.mtime_ns}
+    if motivo is MotivoRar.TIEMPO:
+        marca["t"] = int(time.time())        # solo `tiempo` caduca (FR-29): la fecha no se guarda en las demás
+    contenido = json.dumps(marca).encode()
     try:
         # import local: `cover` importa este módulo para decidir qué es candidato
         from zascarr.utils.cover import write_cover_cache

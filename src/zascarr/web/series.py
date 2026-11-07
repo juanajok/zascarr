@@ -157,7 +157,8 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
     marca, uno del entorno (herramienta ausente, error inesperado) no. Los ZIP se reintentan siempre.
 
     Si el lector está ocupado (otra generación tiene el turno) no se gasta intento ni se marca nada, se
-    deja de abrir RAR en esta petición y `estado["ocupado"]` lo dice (dictamen SecOps M-2)."""
+    dejan de abrir RAR en esta petición (los ZIP siguientes sí se evalúan) y `estado["ocupado"]` lo dice
+    (dictamen SecOps M-2 y N-2)."""
     marcas = covers / CACHE_VERSION
     intentos = 0
     limite = time.monotonic() + presupuesto_s
@@ -165,6 +166,7 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
     # no gasta intento y no deja marca; la herramienta ni se busca. Si no, se comprueba una sola vez y solo
     # si aparece un RAR.
     herramienta = None if get_settings().lector_rar_enabled else False
+    rar_ocupado = False         # tras un turno vencido no se abren más RAR en esta petición, pero sí los ZIP
     for file_id, ruta, formato in archivos:
         path = Path(ruta)
         es_rar = es_rar_candidato(path, formato)
@@ -173,7 +175,7 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
         if es_rar:
             if herramienta is None:
                 herramienta = lector_rar_disponible()
-            if not herramienta or marca_vigente(marcas, file_id, path):
+            if rar_ocupado or not herramienta or marca_vigente(marcas, file_id, path):
                 continue
         if intentos >= MAX_INTENTOS_PORTADA:
             break
@@ -191,10 +193,14 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
             return portada_de_rar(path, covers, ancho=SERIES_COVER_MAX_WIDTH)
         except ErrorRar as exc:
             if exc.motivo is MotivoRar.OCUPADO:
+                # sin turno: este RAR no gastó intento y los siguientes se saltan en esta petición; los ZIP
+                # que vengan después sí se evalúan (no necesitan el lector). Nada que recordar.
                 logger.info("cover.lector_ocupado", intento=intentos)
+                intentos -= 1
+                rar_ocupado = True
                 if estado is not None:
                     estado["ocupado"] = True
-                break
+                continue
             logger.info("cover.candidato_sin_portada", intento=intentos, motivo=exc.motivo.value)
             if exc.motivo in MOTIVOS_DEL_ARCHIVO:
                 escribir_marca(marcas, file_id, path, exc.motivo)
