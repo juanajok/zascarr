@@ -7,7 +7,9 @@
 La suite de la CI prueba con el `unar` del ejecutor (v1.10.8); la imagen lleva el de Debian bookworm (v1.10.1). Aquí se
 comprueba, con el `unar` de la imagen y como el usuario de servicio: que los ejecutables de `gnustep-base-runtime` ya no
 están, que no hay ningún `setuid`/`setgid` nuevo, y que el lector lee los fixtures RAR (los tres legibles dan portada; el
-RAR 5 sólido falla con `ilegible`, limitación conocida de `unar`). Imprime las versiones para dejar rastro. Sale con 1 si algo no cuadra.
+RAR 5 sólido falla con `ilegible`, limitación conocida de `unar`) y que los seis RAR 4 hostiles de SecOps (N-1) no escriben
+fuera del temporal, ni dan otra excepción que un motivo de dominio, ni dejan rastro. Imprime las versiones para dejar rastro.
+Sale con 1 si algo no cuadra.
 """
 from __future__ import annotations
 
@@ -17,6 +19,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # para `tests._rar_hostiles` (stdlib; viaja en la imagen)
+
+from tests._rar_hostiles import CASOS, generar  # noqa: E402
 from zascarr.models import MotivoRar
 from zascarr.utils.lector_rar import ErrorRar
 from zascarr.utils.portada_rar import portada_de_rar
@@ -61,6 +66,34 @@ def main() -> int:
             if exc.motivo is not MotivoRar.ILEGIBLE:
                 problemas.append(f"solido_rar5.cbr: motivo inesperado {exc.motivo.value}")
             print("solido_rar5.cbr: ilegible (limitación conocida de unar)")
+    # N-1 (SecOps): los seis RAR hostiles con el unar de ESTA imagen y como este usuario, con el mismo criterio que
+    # `tests/test_lector_rar_real.py::test_rar_real_hostil_…`: nada fuera del temporal, el temporal se borra, ningún
+    # nombre en el mensaje y solo `ErrorRar` como fallo.
+    for caso in sorted(CASOS):
+        with tempfile.TemporaryDirectory() as tmp:
+            raiz = Path(tmp)
+            ruta = generar(raiz / "entrada", caso)
+            covers = raiz / "covers"
+            covers.mkdir()
+            antes = {str(p.relative_to(raiz)) for p in raiz.rglob("*")}
+            try:
+                portada_de_rar(ruta, covers, ancho=600)
+                resultado = "portada"
+            except ErrorRar as exc:
+                resultado = exc.motivo.value
+                if "secops" in str(exc).lower() or "passwd" in str(exc).lower():
+                    problemas.append(f"hostil {caso}: el mensaje del error lleva un nombre")
+            except Exception as exc:                       # noqa: BLE001
+                problemas.append(f"hostil {caso}: excepción que no es ErrorRar: {type(exc).__name__}")
+                continue
+            nuevos = {str(p.relative_to(raiz)) for p in raiz.rglob("*")} - antes
+            if nuevos - {"covers/.rar-tmp"}:
+                problemas.append(f"hostil {caso}: escribió fuera del temporal: {sorted(nuevos)}")
+            if (covers / ".rar-tmp").exists() and list((covers / ".rar-tmp").iterdir()):
+                problemas.append(f"hostil {caso}: dejó un temporal")
+            print(f"hostil {caso}: {resultado}")
+    if list(Path("/tmp").glob("secops-*")):
+        problemas.append("algún hostil escribió en /tmp fuera del destino")
     print("uid:", os.getuid())
     for p in problemas:
         print(f"::error::{p}", file=sys.stderr)

@@ -61,6 +61,10 @@ la misma PR que introduce el lector:
   el compose la pasa al contenedor). Apagado, ningún RAR se envía a `unar`/`lsar`: el recorrido de portada lo trata como no candidato
   **sin gastar intento ni dejar marca**, la cascada sigue (antigua → externa → 404, sin 500) y `/api/health` no avisa de que falta la
   herramienta. Los `.cbr` que son ZIP y los CBZ no cambian. Volver a encenderlo reintenta los RAR (no se marcó nada).
+- **Comportamiento conocido (G-2, aceptado por el PO el 2026-11-07):** si el turno del lector (2,5 s) vence porque otra portada lo tiene,
+  la petición da 404 `no-store` y el `<img>` cae al marcador hasta recargar. En una rejilla fría de 12 series RAR, QA midió 11 de 12
+  con portada con ≈ 0,3 s/serie y 3 de 12 con ≈ 2 s/serie (no medido en la Pi). Se mide en la Pi y, si sale mal, se sube el turno o se
+  precalienta la caché: historia aparte.
 - **En cada actualización de la imagen base** (`python:3.11-slim-bookworm`) o del paquete `unar` hay que repasar el *tracker* de
   `unar`/XADMaster y de GNUstep (CVE y arreglos de la 1.10.8 que la 1.10.1 de Debian no lleva) y volver a correr
   `scripts/comprobar_imagen_rar.py`. Pasar a otra base (por ejemplo `trixie`) y un interruptor para apagar el lector son opciones
