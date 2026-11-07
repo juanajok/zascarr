@@ -1,0 +1,14 @@
+{% if sugerencias %}
+<ul class="series-list">
+  {% for tag in sugerencias %}
+  <li>
+    <form method="post" action="/ui/series/{{ series.id }}/etiquetas"
+          hx-post="/ui/series/{{ series.id }}/etiquetas"
+          hx-target="#etiquetas-serie" hx-swap="outerHTML">
+      <input type="hidden" name="etiqueta" value="{{ tag.name }}">
+      <button type="submit" class="btn ghost sm">Añadir «{{ tag.name }}»</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
