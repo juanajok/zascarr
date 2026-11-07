@@ -47,6 +47,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -120,6 +121,75 @@ class TebeosferaResult:
     cover_url: str | None = None
     description: str | None = None  # solo disponible a veces, en sagas
     site_url: str | None = None
+
+
+#: Palabras vacías que no aportan relevancia al comparar títulos.
+_STOPWORDS = {
+    "de", "del", "la", "el", "los", "las", "y", "en", "con", "por", "para",
+    "un", "una", "unos", "unas", "al", "a",
+}
+
+
+def _normalizar(texto: str) -> str:
+    """Minúsculas, sin acentos y solo letras/dígitos separados por espacios."""
+    descompuesto = unicodedata.normalize("NFKD", texto or "")
+    sin_acentos = "".join(c for c in descompuesto if not unicodedata.combining(c))
+    return " ".join(re.findall(r"[a-z0-9]+", sin_acentos.lower()))
+
+
+def _tokens_relevantes(texto: str) -> set[str]:
+    tokens = set(_normalizar(texto).split())
+    utiles = tokens - _STOPWORDS
+    return utiles or tokens
+
+
+def _trigramas(texto: str) -> set[str]:
+    compacto = _normalizar(texto).replace(" ", "")
+    return {compacto[i:i + 3] for i in range(len(compacto) - 2)}
+
+
+def _puntuacion_relevancia(resultado: TebeosferaResult, consulta: str) -> float:
+    """Puntuación de un resultado para una consulta; 0 si no hay relación detectable.
+
+    Combina coincidencia normalizada exacta/contenida, tokens útiles y trigramas de
+    caracteres. Los trigramas son los que permiten relacionar «Dragon Ball» con «BOLA DE
+    DRAC» (comparten «dra») sin inventar equivalencias. No es una métrica de calidad
+    editorial: solo ordena candidatos, nunca descarta.
+    """
+    consulta_norm = _normalizar(consulta)
+    titulo_norm = _normalizar(resultado.title)
+    if not consulta_norm or not titulo_norm:
+        return 0.0
+    if titulo_norm == consulta_norm:
+        return 1000.0
+    puntuacion = 0.0
+    if consulta_norm in titulo_norm:
+        puntuacion += 500.0
+    elif titulo_norm in consulta_norm:
+        puntuacion += 300.0
+    tokens_consulta = _tokens_relevantes(consulta)
+    if tokens_consulta:
+        coincidencias = tokens_consulta & _tokens_relevantes(resultado.title)
+        puntuacion += 100.0 * len(coincidencias) / len(tokens_consulta)
+    trigramas_consulta = _trigramas(consulta)
+    if trigramas_consulta:
+        comunes = trigramas_consulta & _trigramas(resultado.title)
+        if comunes:
+            puntuacion += 50.0 * len(comunes) / len(trigramas_consulta)
+    return puntuacion
+
+
+def ordenar_por_relevancia(resultados: list[TebeosferaResult],
+                           consulta: str) -> list[TebeosferaResult]:
+    """Reordena candidatos por relación con la consulta; **no descarta ninguno**.
+
+    Orden estable: los empates (incluidos los 0 sin relación) conservan el orden del sitio.
+    Función pura: no toca red, parser ni cortesía.
+    """
+    return [resultado for _, resultado in sorted(
+        enumerate(resultados),
+        key=lambda par: (-_puntuacion_relevancia(par[1], consulta), par[0]),
+    )]
 
 
 class TebeosferaClient:
@@ -201,7 +271,8 @@ class TebeosferaClient:
         AniList — ver la nota de rate limit en config.py."""
         collections = await self._search_table("T3_publicaciones", "collection", query)
         sagas = await self._search_table("T3_series", "saga", query)
-        return (collections + sagas)[:limit]
+        # Ordenar ANTES de recortar: el acierto puede venir más allá del límite del sitio.
+        return ordenar_por_relevancia(collections + sagas, query)[:limit]
 
 
 def _parse_results(html_fragment: str, kind: str) -> list[TebeosferaResult]:
