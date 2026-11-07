@@ -31,7 +31,13 @@ from zascarr.config import get_settings
 from zascarr.models import ComicTradition, MetadataSource
 from zascarr.services.anilist import AniListClient
 from zascarr.services.comic_vine import ComicVineClient
-from zascarr.services.gcd import GCDClient, es_edicion_espanola
+from zascarr.services.detalle_edicion import (
+    DetalleEdicion,
+    ResultadoDetalle,
+    detalle_desde_coleccion,
+    detalle_desde_gcd_serie,
+)
+from zascarr.services.gcd import GCDClient, GCDSerie, es_edicion_espanola
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
 from zascarr.utils.peticiones import ReintentosAgotados
@@ -60,6 +66,7 @@ ORDEN_DE_FUENTES: tuple[MetadataSource, ...] = (
 # reexportan: el contrato público de `discovery` no cambia.
 from zascarr.services.estados_fuentes import (  # noqa: E402,F401 — reexportados
     CAPACIDAD_BUSQUEDA,
+    CAPACIDAD_DETALLE,
     ESTADOS_DE_FUENTE,
     FUENTE_APAGADA,
     FUENTE_CONFIGURACION_INCOMPLETA,
@@ -83,6 +90,13 @@ def _estado(fuente: MetadataSource, estado: str, motivo: str | None = None,
             reintentar_en: int | None = None) -> EstadoFuente:
     return EstadoFuente(fuente=fuente.value, capacidad=CAPACIDAD_BUSQUEDA, estado=estado,
                         motivo=motivo, reintentar_en=reintentar_en)
+
+
+def _estado_detalle(fuente: MetadataSource, estado: str,
+                    motivo: str | None = None) -> EstadoFuente:
+    """Estado de la capacidad `detalle`; reutiliza el vocabulario de #133."""
+    return EstadoFuente(fuente=fuente.value, capacidad=CAPACIDAD_DETALLE,
+                        estado=estado, motivo=motivo)
 
 
 @dataclass
@@ -160,6 +174,104 @@ class DiscoveryResult:
 class DiscoveryService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def detalle_de(self, resultado: DiscoveryResult, *,
+                         unidad: str = "edicion") -> ResultadoDetalle:
+        """Pide la ficha de detalle del candidato, sin cambiar `DiscoveryResult`/`Busqueda`.
+
+        Despacho por fuente: Tebeosfera `get_collection`; GCD `get_series` (+`get_publisher`
+        solo para el nombre) o `raw` de búsqueda sin petición de serie; Comic Vine sin clave
+        → `configuracion_incompleta` sin red (el método llega en PR-3); AniList no tiene
+        método → `sin_metodo_autorizado`. Los estados son los de #133, capacidad `detalle`.
+        """
+        del unidad  # el contraste/la unidad se decide en el consumidor; aquí no cambia la petición
+        fuente = resultado.source
+        settings = get_settings()
+        if not getattr(settings, _INTERRUPTOR[fuente], False):
+            return ResultadoDetalle(_estado_detalle(
+                fuente, FUENTE_APAGADA, "Está apagada en Ajustes."), None)
+        if fuente is MetadataSource.COMIC_VINE and not settings.comicvine_api_key:
+            return ResultadoDetalle(_estado_detalle(
+                fuente, FUENTE_CONFIGURACION_INCOMPLETA,
+                "Falta su clave en Ajustes."), None)
+        if fuente is MetadataSource.ANILIST:
+            return ResultadoDetalle(_estado_detalle(
+                fuente, "sin_metodo_autorizado",
+                "AniList no tiene detalle de edición."), None)
+        if fuente is MetadataSource.COMIC_VINE:
+            # PR-3: get_volume/get_issue; hasta entonces no se inventa un detalle.
+            return ResultadoDetalle(_estado_detalle(
+                fuente, "sin_metodo_autorizado",
+                "El detalle de Comic Vine llega en PR-3."), None)
+
+        try:
+            if fuente is MetadataSource.TEBEOSFERA:
+                async with TebeosferaClient() as cliente:
+                    coleccion = await cliente.get_collection(resultado.external_id)
+                if coleccion is None:
+                    return ResultadoDetalle(_estado_detalle(
+                        fuente, FUENTE_SIN_RESULTADOS,
+                        "La ficha no existe o no es de colección."), None)
+                detalle = detalle_desde_coleccion(coleccion)
+            elif fuente is MetadataSource.GCD:
+                detalle = await self._detalle_gcd(resultado)
+                if detalle is None:
+                    return ResultadoDetalle(_estado_detalle(
+                        fuente, FUENTE_SIN_RESULTADOS, "La serie no existe."), None)
+            else:
+                return ResultadoDetalle(_estado_detalle(
+                    fuente, "sin_metodo_autorizado", "Sin método de detalle."), None)
+        except FuenteApagada:
+            return ResultadoDetalle(_estado_detalle(
+                fuente, FUENTE_APAGADA, "Está apagada en Ajustes."), None)
+        except CortesiaEnEspera as exc:
+            reintentar = (max(1, int(exc.espera_estimada_s + 0.999))
+                          if exc.espera_estimada_s > 0 else None)
+            estado = _estado_detalle(
+                fuente, FUENTE_LIMITE_DE_CORTESIA,
+                "Hay que esperar por cortesía antes de volver a pedir la ficha.")
+            estado = EstadoFuente(estado.fuente, estado.capacidad, estado.estado,
+                                  estado.motivo, reintentar)
+            return ResultadoDetalle(estado, None)
+        except ReintentosAgotados as exc:
+            estado = (FUENTE_LIMITE_DE_CORTESIA if exc.ultimo_codigo == 429
+                      else FUENTE_FALLO_TRANSITORIO)
+            motivo = ("Ha pedido esperar antes de volver a consultarla."
+                      if estado == FUENTE_LIMITE_DE_CORTESIA
+                      else "No ha respondido ahora mismo.")
+            return ResultadoDetalle(_estado_detalle(fuente, estado, motivo), None)
+        except Exception as exc:  # noqa: BLE001 — red/parseo: estado #133, nunca traceback
+            logger.warning("discovery.detalle_failed", source=fuente.value,
+                           error=type(exc).__name__)
+            return ResultadoDetalle(_estado_detalle(
+                fuente, FUENTE_FALLO_TRANSITORIO, "No se pudo leer la ficha."), None)
+        return ResultadoDetalle(_estado_detalle(fuente, FUENTE_OK), detalle)
+
+    async def _detalle_gcd(self, resultado: DiscoveryResult) -> DetalleEdicion | None:
+        """GCD: usa `raw` de búsqueda si existe (0 peticiones de serie); si no, get_series."""
+        raw = getattr(resultado, "raw", None)
+        if isinstance(raw, dict) and raw:
+            try:
+                gcd_id = int(resultado.external_id)
+            except (TypeError, ValueError):
+                return None
+            serie = GCDSerie.desde_raw(raw, gcd_id)
+            editorial = raw.get("publisher_name")
+            return detalle_desde_gcd_serie(
+                serie, editorial=(str(editorial) if editorial else None),
+                peticiones=0, metodo="raw")
+        try:
+            gcd_id = int(resultado.external_id)
+        except (TypeError, ValueError):
+            return None
+        async with GCDClient() as cliente:
+            serie = await cliente.get_series(gcd_id)
+            if serie is None:
+                return None
+            editorial = await cliente.get_publisher(serie.publisher) if serie.publisher else None
+        peticiones = serie.peticiones + (1 if serie.publisher else 0)
+        return detalle_desde_gcd_serie(serie, editorial=editorial,
+                                       peticiones=peticiones, metodo="get_series")
 
     async def search(self, query: str, limit: int = 10) -> tuple[list[DiscoveryResult], list[str]]:
         """Devuelve (resultados, avisos). Los avisos son texto en español

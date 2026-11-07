@@ -13,11 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from zascarr.models import IssueFormat, MetadataSource
-from zascarr.services.estados_fuentes import EstadoFuente
-
-#: Capacidad de #133 para la ficha de detalle. No se añade al conjunto cerrado de
-#: `ESTADOS_DE_FUENTE`: reutiliza sus estados, solo identifica qué se estaba consultando.
-CAPACIDAD_DETALLE = "detalle"
+from zascarr.services.estados_fuentes import CAPACIDAD_DETALLE, EstadoFuente
 
 RESULTADOS_CONTRASTE = ("coincidencia_verificada", "ambiguo", "incorrecto")
 
@@ -121,10 +117,21 @@ def mapa_formato(texto: str | None) -> IssueFormat | None:
             return formato
     if "cuaderno" in v and "grapa" in v:
         return IssueFormat.SINGLE_ISSUE
+    if "grapa" in v:
+        return IssueFormat.SINGLE_ISSUE
     if "cartone" in v:
         return IssueFormat.HARDCOVER
     if "album" in v:
         return IssueFormat.ALBUM
+    # GCD usa "publishing_format"/"binding" en inglés; solo equivalencias inequívocas.
+    if "comic book" in v:
+        return IssueFormat.SINGLE_ISSUE
+    if "hardcover" in v:
+        return IssueFormat.HARDCOVER
+    if "trade paperback" in v or "paperback" in v:
+        return IssueFormat.TRADE_PAPERBACK
+    if "manga" in v:
+        return IssueFormat.MANGA_TANKOBON
     return None
 
 
@@ -170,6 +177,37 @@ def detalle_desde_coleccion(coleccion: Any, *,
         idioma=getattr(coleccion, "idioma", None),
         peticiones=getattr(coleccion, "peticiones", 1),
         url_ficha=getattr(coleccion, "url_ficha", None),
+    )
+    return DetalleEdicion(**{**detalle.__dict__, "campos_ausentes": _campos_ausentes(detalle)})
+
+
+def detalle_desde_gcd_serie(serie: Any, *, editorial: str | None = None,
+                            peticiones: int | None = None,
+                            metodo: str = "get_series") -> DetalleEdicion:
+    """Normaliza un `GCDSerie` (o su `raw` ya convertido) sin inventar editorial ni número.
+
+    `editorial` solo se rellena si quien llama obtuvo el nombre con `get_publisher`; si no,
+    queda como campo ausente. `issue_count`/`active_issues` NO son `numero_publicacion`.
+    """
+    partes_formato = [str(x) for x in (
+        getattr(serie, "publishing_format", None), getattr(serie, "binding", None)) if x]
+    formato_fuente = " / ".join(partes_formato) or None
+    detalle = DetalleEdicion(
+        fuente=MetadataSource.GCD,
+        external_id=str(getattr(serie, "gcd_id", "")),
+        metodo=metodo,
+        editorial=editorial,
+        sello=None,
+        anio=getattr(serie, "year_began", None),
+        anio_fin=getattr(serie, "year_ended", None),
+        numero_publicacion=None,
+        paginas=None,
+        formato=mapa_formato(formato_fuente),
+        formato_fuente=formato_fuente,
+        pais=_pais_normalizado(getattr(serie, "country", None)),
+        idioma=_idioma_normalizado(getattr(serie, "language", None)),
+        peticiones=(getattr(serie, "peticiones", 0) if peticiones is None else peticiones),
+        url_ficha=getattr(serie, "site_url", None),
     )
     return DetalleEdicion(**{**detalle.__dict__, "campos_ausentes": _campos_ausentes(detalle)})
 
@@ -365,5 +403,6 @@ __all__ = [
     "ResultadoDetalle",
     "contrastar",
     "detalle_desde_coleccion",
+    "detalle_desde_gcd_serie",
     "mapa_formato",
 ]
