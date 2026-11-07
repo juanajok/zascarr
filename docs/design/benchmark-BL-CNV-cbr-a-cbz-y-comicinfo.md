@@ -180,21 +180,43 @@ Puntuación 1–5 por enfoque de **conversión** (la parte que toca ficheros):
 - Funcionar en la Pi sin `rar` propietario (Kapowarr no puede: §4.1).
 - Proponer metadatos campo a campo con su procedencia (Komf agrega a ciegas: §4.2).
 
-## 11. Decisiones para el PO
+## 11. Decisiones del PO (2026-11-07)
 
-- **D1. Garantía «no se mueve ni se renombra nada».** Convertir cambia la extensión y el
-  hash. Propuesta: la conversión es una acción explícita con su propia garantía («tu
-  original queda apartado y puedes deshacerlo») y la promesa actual sigue para todo lo
-  demás.
-- **D2. Qué pasa con el original.** Propuesta: apartarlo en una carpeta de ZascArr en el
-  mismo disco (sin copiar: `os.replace`), con «Vaciar» separado y confirmado. Coste: hasta
-  ~202 GiB más mientras no se vacíe; caben (1,1 TiB libres), pero conviene por tandas.
-- **D3. Archivos que comparte un cliente P2P.** Si Transmission o aMule sirven archivos de
-  la biblioteca, convertirlos rompe el compartido. ¿Se excluyen? ¿Cómo se detecta (carpeta
-  configurada, cliente de descargas)?
-- **D4. Conversión automática al descargar.** Propuesta: no, por ahora (I7).
-- **D5. `.cbr` que ya es un ZIP.** Propuesta: «convertir» = renombrar a `.cbz` sin tocar el
-  contenido, por el mismo flujo (vista previa, deshacer).
+| # | Decisión | Resultado |
+|---|---|---|
+| D1 | Garantía «no se mueve ni se renombra nada» | **Aceptada la propuesta.** La conversión es una acción explícita con su propia garantía («tu original queda apartado y puedes deshacerlo»), dicha junto al botón y en la confirmación; la promesa actual sigue para todo lo demás. |
+| D2 | Qué pasa con el original | **Aceptada la propuesta.** Se aparta en una carpeta de ZascArr en el mismo disco (`os.replace`, sin copiar), con «Vaciar» separado y confirmado. Por tandas. |
+| D3 | Archivos que comparte un cliente P2P | **Sí se comparten** archivos de la biblioteca. Consecuencias abajo. |
+| D4 | Conversión automática al descargar | **Aceptada la propuesta:** no, por ahora. |
+| D5 | `.cbr` que ya es un ZIP | **Aceptada la propuesta:** se renombra a `.cbz` sin tocar el contenido, por el mismo flujo (vista previa, deshacer). |
+
+### 11.1 Consecuencias de D3
+
+1. **Alcanza a toda escritura, no solo a convertir.** Reescribir un CBZ para guardar su
+   `ComicInfo.xml` (B6, BL-CNV3–5) cambia sus bytes igual que convertirlo: Transmission
+   marca piezas erróneas al verificar y aMule deja de servir el archivo con su hash
+   anterior. **Hoy `services/tagger.py` no comprueba si un archivo se comparte**
+   (`origin/main` `56c782a`): el comando `scripts/etiquetar.sh --apply` puede estropear un
+   torrent en siembra.
+2. **Regla propuesta:** ZascArr no reescribe, convierte ni aparta un archivo que se
+   comparte; lo dice en la vista previa con su motivo. Es la misma postura que «el
+   software gestiona, nunca facilita»: no se toca el cliente (no se quita el torrent ni se
+   deja de compartir desde ZascArr).
+3. **Detección propuesta (BL-CNV6), de más simple a más precisa:**
+   - **Carpetas compartidas declaradas en Ajustes** («carpetas que comparten tus programas
+     de descargas»). Cubre aMule, que comparte por carpeta.
+   - **Transmission, si su integración está encendida:** `torrent-get` con `downloadDir` y
+     `files` (el cliente ya pide esos campos en `services/transmission.py::list_completed`)
+     da las rutas exactas en siembra, traducidas a rutas del contenedor.
+   - **aMule, si su integración está encendida:** lista de compartidos de `amuleweb`,
+     emparejada por nombre y tamaño (NOT RUN: comprobar qué expone).
+   - **Valor por defecto seguro:** si no hay ninguna de las tres, ZascArr no puede saber qué
+     se comparte y **no escribe** en la biblioteca; la pantalla explica cómo declararlo.
+4. **Qué queda para los archivos compartidos:** seguir siendo CBR. Una alternativa futura,
+   fuera de esta feature, es generar la copia convertida y etiquetada en el árbol de lectura
+   de B20 (#149), a costa de espacio. Decide el PO cuando haya cifras.
+5. **BL-CNV0 debe medir cuántos CBR se comparten**: si son casi todos, el valor de
+   BL-CNV1/2 baja y conviene repriorizar.
 
 ## 12. NOT RUN
 
@@ -207,6 +229,7 @@ Puntuación 1–5 por enfoque de **conversión** (la parte que toca ficheros):
 - Sonarr/Radarr y Kavita/Komga: no se ha leído su código en esta ronda (no reescriben el
   archivo de medios según la ficha B6, sin revalidar).
 - Estado de la petición #50 de Kapowarr.
+- Cuántos archivos de la biblioteca se comparten y qué expone `amuleweb` de sus compartidos (D3).
 
 ## 13. Caducidad
 
