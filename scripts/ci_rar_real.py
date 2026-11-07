@@ -15,14 +15,17 @@ import sys
 import xml.etree.ElementTree as ET
 
 FICHERO = "test_lector_rar_real"
-#: 3 + 3 + 1 + 1 (ver el fichero). Bajarlo es una decisión consciente, no un descuido.
-MINIMO_DE_PRUEBAS = 8
+#: 3 + 3 + 1 (xfail estricto) + 1 + 1 (ver el fichero). Bajarlo es una decisión consciente, no un descuido.
+MINIMO_DE_PRUEBAS = 9
 
 
 def motivos(ruta: str, minimo: int = MINIMO_DE_PRUEBAS) -> list[str]:
     raiz = ET.parse(ruta).getroot()
     casos = [c for c in raiz.iter("testcase") if FICHERO in c.get("classname", "")]
-    saltadas = [c for c in casos if c.find("skipped") is not None]
+    # un `xfail` (fallo esperado, estricto) figura en el informe como «skipped» de tipo `pytest.xfail`: se
+    # EJECUTÓ y falló como se esperaba, no es una prueba saltada
+    saltadas = [c for c in casos
+                if c.find("skipped") is not None and c.find("skipped").get("type") != "pytest.xfail"]
     rotas = [c for c in casos if c.find("failure") is not None or c.find("error") is not None]
     out = []
     if len(casos) < minimo:
