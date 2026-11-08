@@ -357,6 +357,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "volver",
     # BL-IT02 (#284): presentación tarjetas/lista de la Biblioteca.
     "vista",
+    # BL-ETQ1a (#403): texto tecleado en el autocompletado de la ficha.
+    "etiqueta",
 })
 
 
