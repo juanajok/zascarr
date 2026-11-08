@@ -15,6 +15,7 @@ ESPERADO de cada caso. Imprime las versiones para dejar rastro. Sale con 1 si al
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,15 @@ def main() -> int:
     problemas: list[str] = []
     print("unar:", _salida("unar", "-v"), "| lsar:", _salida("lsar", "-v"))
     print(_salida("dpkg-query", "-W", "-f", "${Package} ${Version}\\n", "unar", "gnustep-base-runtime", "libgnustep-base1.31"))
+
+    # #530 C2: `lsar`/`unar` (GNUstep) invocan `dpkg-architecture` en runtime para DEB_HOST_MULTIARCH;
+    # sin él abortan (SIGABRT) y el lector entero deja de funcionar. Y es un script Perl. La limpieza
+    # de trixie borra ejecutables de construcción, pero estas dos piezas son dependencias de RUNTIME.
+    for herramienta, motivo in (
+            ("dpkg-architecture", "GNUstep lo invoca en runtime (DEB_HOST_MULTIARCH)"),
+            ("perl", "dpkg-architecture es un script Perl")):
+        if shutil.which(herramienta) is None:
+            problemas.append(f"falta {herramienta}: {motivo}")
 
     ficheros = _salida("dpkg", "-L", "gnustep-base-runtime").splitlines()
     sobran = [f for f in ficheros if f.startswith(("/usr/bin/", "/usr/sbin/", "/etc/init.d/", "/etc/default/"))
