@@ -183,13 +183,24 @@ class TestFijarSeguridad:
         assert guardado
 
     @pytest.mark.asyncio
-    async def test_sin_cambios_de_credenciales_no_se_cierran_las_sesiones(self, ajustes):
-        """Guardar solo la `base_url` no debe invalidar la sesión de nadie."""
+    async def test_sin_cambios_de_credenciales_no_se_cierran_las_sesiones(self, ajustes, monkeypatch):
+        """Guardar solo la `base_url` no debe invalidar la sesión de nadie.
+
+        Adaptación de BL-OPS3 (#456): cambiar la dirección con contraseña en vigor exige la actual; aquí se
+        da por buena (la comprobación se prueba en `tests/test_reautenticacion.py`)."""
+        from zascarr.services import seguridad as mod_seguridad
+        from zascarr.services.reautenticacion import Reauth, ResultadoReauth
+
+        async def _ok(*_a, **_k):
+            return ResultadoReauth(Reauth.OK)
+
+        monkeypatch.setattr(mod_seguridad, "comprobar_contrasena_actual", _ok)
         actuales, guardado, limpiar = ajustes
         actuales.auth_mode = "password"
         actuales.auth_password_hash = "pbkdf2…"
         r = await fijar_seguridad(
-            MagicMock(), modo="password", usuario="", password="", base_url="https://a.org/")
+            MagicMock(), modo="password", usuario="", password="", base_url="https://a.org/",
+            contrasena_actual="la-que-sea")
         assert not r.cambia_credenciales
         assert "auth_session_version" not in guardado[0]
         assert guardado[0]["base_url"] == "https://a.org"      # sin barra final

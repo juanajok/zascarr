@@ -28,7 +28,12 @@ from zascarr.services.auth import (
 from zascarr.services.cortesia_estado import texto_politica_ajustes
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
-from zascarr.services.seguridad import MODOS, fijar_seguridad
+from zascarr.services.seguridad import (
+    MENSAJE_NO_COINCIDEN,
+    MODOS,
+    fijar_seguridad,
+    hay_contrasena,
+)
 from zascarr.utils.cortesia import (
     CortesiaEnEspera,
     FuenteApagada,
@@ -120,6 +125,7 @@ def _contexto() -> dict:
         "auth_mode": s.auth_mode,
         "auth_username": s.auth_username,
         "auth_password_configurada": bool(s.auth_password_hash),
+        "hay_contrasena": hay_contrasena(s),
         "base_url": s.base_url,
         "webhook_enabled": s.webhook_enabled,
         "webhook_type": s.webhook_type,
@@ -290,38 +296,79 @@ async def guardar_amule(
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
 
 
+def _contexto_seguridad() -> dict:
+    """Lo que pinta la tarjeta de Seguridad, siempre desde el estado ACTUAL."""
+    s = get_settings()
+    return {
+        "auth_mode": s.auth_mode,
+        "auth_username": s.auth_username,
+        "auth_password_configurada": bool(s.auth_password_hash),
+        "hay_contrasena": hay_contrasena(s),
+        "base_url": s.base_url,
+    }
+
+
 @router.post("/guardar/seguridad", response_class=HTMLResponse)
 async def guardar_seguridad(
-    request: Request, auth_mode: str = Form(...),
+    request: Request,
+    # BL-OPS3 (#456): todos `str = Form(default="")` y SIN restricciones de campo (`min_length`,
+    # `max_length`, `Literal`…): con una restricción incumplida, el 422 de FastAPI devolvería lo
+    # escrito (una contraseña). La validación es manual y cada respuesta lleva un texto fijo.
+    auth_mode: str = Form(default=""),
     auth_username: str = Form(default=""), auth_password: str = Form(default=""),
+    auth_password_actual: str = Form(default=""), auth_password_repetida: str = Form(default=""),
     base_url: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     if auth_mode not in MODOS:
         raise HTTPException(status_code=400, detail="Modo de autenticación no reconocido")
 
-    # La regla (longitud, no dejar la app sin forma de entrar, versión de sesión)
-    # vive en services/seguridad.py y la comparte el instalador (A11).
+    # La regla (longitud, no dejar la app sin forma de entrar, versión de sesión y la contraseña
+    # ACTUAL para cambiar cómo se entra) vive en services/seguridad.py. El router nunca usa la
+    # variante sin contraseña actual: es solo del instalador.
     resultado = await fijar_seguridad(
         db, modo=auth_mode, usuario=auth_username, password=auth_password, base_url=base_url,
+        contrasena_actual=auth_password_actual, password_repetida=auth_password_repetida,
     )
     if resultado.error:
+        motivo = resultado.motivo_rechazo
+        if motivo:
+            logger.info("ajustes.seguridad_rechazada", motivo=motivo)
         return templates.TemplateResponse(request, "_ajustes_guardado.html", {
             "nombre": "Seguridad", "error": resultado.error,
+            # la actual se vacía ante falta, incorrecta, cola llena y bloqueo (inválida si falta
+            # o es incorrecta); las nuevas, ante bloqueo y si no coinciden
+            "vaciar_actual": motivo is not None,
+            "actual_invalida": motivo in ("falta_actual", "actual_incorrecta"),
+            "vaciar_nuevas": motivo == "bloqueada" or resultado.error == MENSAJE_NO_COINCIDEN,
+            "auth_password_configurada": bool(get_settings().auth_password_hash),
         })
 
-    respuesta = templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Seguridad", "aviso": resultado.aviso})
-    if resultado.cambia_credenciales:
-        # Re-emite la cookie con la versión nueva: quien cambia la contraseña
-        # conserva SU sesión (las demás se cierran). Sin esto, su siguiente clic
-        # le llevaría a /login sin explicación.
-        settings = get_settings()
-        cookie = crear_cookie_sesion(settings.secret_key, settings.auth_session_version)
-        respuesta.set_cookie(
-            COOKIE_NAME, cookie,
-            max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
-        )
+    if resultado.cambios:
+        logger.info("ajustes.seguridad_cambiada", cambios=list(resultado.cambios))
+    if not resultado.cambia_credenciales:
+        # Solo la dirección (o nada): como antes, al hueco del resultado, vaciando lo escrito.
+        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Seguridad", "aviso": resultado.aviso,
+            "vaciar_actual": True, "vaciar_nuevas": True,
+            "auth_password_configurada": bool(get_settings().auth_password_hash),
+        })
+
+    # Cambio de credenciales: se sustituye TODA la tarjeta, pintada desde el estado nuevo (ya trae o
+    # quita el campo de la contraseña actual, sin ningún `value`). El `Set-Cookie` viaja en la misma
+    # respuesta: quien cambia la contraseña conserva SU sesión (las demás se cierran).
+    respuesta = templates.TemplateResponse(request, "_ajustes_seguridad.html", {
+        **_contexto_seguridad(), "mensaje_exito": True, "cambia_credenciales": True,
+        "aviso": resultado.aviso,
+    })
+    respuesta.headers["HX-Retarget"] = "#tarjeta-seguridad"
+    respuesta.headers["HX-Reswap"] = "outerHTML"
+    settings = get_settings()
+    cookie = crear_cookie_sesion(settings.secret_key, settings.auth_session_version)
+    respuesta.set_cookie(
+        COOKIE_NAME, cookie,
+        max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
+    )
     return respuesta
 
 

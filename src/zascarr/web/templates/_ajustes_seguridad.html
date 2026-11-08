@@ -1,0 +1,49 @@
+{% from "_campos_contrasena.html" import campo_nueva, campo_repetida, campo_actual %}
+  <fieldset class="ajustes-card" id="tarjeta-seguridad">
+    <legend>Seguridad</legend>
+    <p class="ajustes-desc">Pide contraseña para entrar en ZascArr. Sin ella, cualquiera que llegue a su dirección entra directo: actívala si abres ZascArr a otros equipos de tu casa o a Internet.</p>
+    <form hx-post="/ui/ajustes/guardar/seguridad" hx-target="#resultado-seguridad" hx-swap="innerHTML">
+      <label>Modo
+        <select name="auth_mode">
+          <option value="none" {% if auth_mode == "none" %}selected{% endif %}>Sin contraseña</option>
+          <option value="password" {% if auth_mode == "password" %}selected{% endif %}>Solo contraseña</option>
+          <option value="user_password" {% if auth_mode == "user_password" %}selected{% endif %}>Usuario y contraseña</option>
+        </select>
+      </label>
+      <label>Usuario (solo si eliges "Usuario y contraseña")
+        <input type="text" name="auth_username" value="{{ auth_username }}" autocomplete="off">
+      </label>
+      <label>Contraseña nueva
+        {{ campo_nueva(auth_password_configurada) }}
+      </label>
+      <label>Repite la contraseña nueva
+        {{ campo_repetida() }}
+      </label>
+      <label>Dirección desde Internet (opcional)
+        <input type="text" name="base_url" value="{{ base_url }}" placeholder="https://zascarr.tudominio.com">
+      </label>
+      <p class="ajustes-hint">Solo si entras a ZascArr desde Internet con un dominio propio. Si solo lo usas en casa, déjala vacía.</p>
+      <details class="ajustes-mas">
+        <summary>Detalle técnico</summary>
+        <p class="ajustes-hint">Detrás de un proxy inverso que no conserva el <code>Host</code> (nginx lo cambia por defecto), ZascArr necesita tu dominio público para validar el origen de los formularios; sin él responde 403. También se puede fijar con <code>BASE_URL</code> en el <code>.env</code>, útil si el 403 ya no te deja entrar a Ajustes.</p>
+      </details>
+      {% if hay_contrasena %}
+      <label>Tu contraseña actual
+        {{ campo_actual() }}
+      </label>
+      <p class="ajustes-hint">Hace falta para cambiar la contraseña, el modo, el usuario o la dirección.</p>
+      <details class="ajustes-mas">
+        <summary>¿La has olvidado?</summary>
+        <p class="ajustes-hint">Para quien instaló ZascArr: se puede poner una contraseña nueva desde el equipo, con el instalador. Más detalle en <code>SECURITY.md</code>.</p>
+      </details>
+      {% endif %}
+      <div class="ajustes-actions">
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+    <div id="resultado-seguridad" aria-live="polite">{% if mensaje_exito %}
+      <p class="caption">Seguridad: guardado y aplicado — ya activo, sin reiniciar.</p>
+      {% if cambia_credenciales %}<p class="ajustes-hint">Tu sesión sigue abierta; las de otros aparatos se han cerrado.</p>{% endif %}
+      {% if aviso %}<p class="ajustes-hint">{{ aviso }}</p>{% endif %}
+    {% endif %}</div>
+  </fieldset>

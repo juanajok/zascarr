@@ -1,0 +1,22 @@
+{# BL-OPS3 (#456): los campos de contraseña de la tarjeta de Seguridad, como macros para poder pintarlos
+   tanto en la tarjeta como suelto (`oob`: sustituyen al campo del navegador por uno VACÍO tras responder).
+   Ningún campo de contraseña lleva nunca `value`: lo escrito no se devuelve (ni siquiera en un error). #}
+{% macro campo_nueva(configurada, oob=False) -%}
+<input id="auth-password" type="password" name="auth_password" autocomplete="new-password"
+       aria-label="Contraseña nueva"
+       placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if configurada else 'sin configurar' }}"
+       {% if oob %}hx-swap-oob="true"{% endif %}>
+{%- endmacro %}
+
+{% macro campo_repetida(oob=False) -%}
+<input id="auth-password-repetida" type="password" name="auth_password_repetida" autocomplete="new-password"
+       aria-label="Repite la contraseña nueva"
+       {% if oob %}hx-swap-oob="true"{% endif %}>
+{%- endmacro %}
+
+{% macro campo_actual(invalido=False, oob=False) -%}
+<input id="auth-password-actual" type="password" name="auth_password_actual" autocomplete="current-password"
+       aria-label="Tu contraseña actual"
+       {% if invalido %}aria-invalid="true"{% endif %}
+       {% if oob %}hx-swap-oob="true"{% endif %}>
+{%- endmacro %}
