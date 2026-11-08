@@ -59,7 +59,7 @@ class TestSegundoEscalon:
         assert all(query != "Astérix" for _, _, query in llamadas)
 
     @pytest.mark.asyncio
-    async def test_consulta_de_una_palabra_no_tiene_escalones(self):
+    async def test_consulta_de_una_palabra_sin_acento_no_tiene_escalones(self):
         cliente = TebeosferaClient()
         llamadas = []
 
@@ -68,7 +68,7 @@ class TestSegundoEscalon:
             return []
 
         cliente._search_table = tabla
-        assert await cliente.search_series("Astérix") == []
+        assert await cliente.search_series("Asterix") == []
         assert len(llamadas) == 2
 
     @pytest.mark.asyncio

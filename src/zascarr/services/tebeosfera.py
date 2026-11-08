@@ -151,6 +151,12 @@ def _consulta_simplificada(consulta: str) -> str | None:
     return corta
 
 
+def _sin_diacriticos(texto: str) -> str:
+    """Quita solo las marcas combinantes (NFD): «Tintín» → «Tintin»."""
+    descompuesto = unicodedata.normalize("NFD", texto or "")
+    return "".join(c for c in descompuesto if not unicodedata.combining(c))
+
+
 def _primera_palabra_significativa(consulta: str) -> str | None:
     """Primera palabra útil (sin artículos vacíos) para el segundo escalón del fallback."""
     texto = (consulta or "").strip()
@@ -364,27 +370,30 @@ class TebeosferaClient:
         """Busca en colecciones (ediciones/tiradas concretas) y sagas (la
         obra en su conjunto): dos peticiones, el doble que Comic Vine/
         AniList — ver la nota de rate limit en config.py."""
-        collections = await self._search_table("T3_publicaciones", "collection", query)
-        sagas = await self._search_table("T3_series", "saga", query)
-        resultados = collections + sagas
+        async def buscar(consulta: str) -> list[TebeosferaResult]:
+            colecciones = await self._search_table(
+                "T3_publicaciones", "collection", consulta)
+            sagas = await self._search_table("T3_series", "saga", consulta)
+            return colecciones + sagas
+
+        resultados = await buscar(query)
         if not resultados:
-            # Fallback SOLO si la consulta completa no dio nada (máx. 2 POST extra).
+            # Escalón 1: título principal / 3 palabras significativas.
             corta = _consulta_simplificada(query)
             if corta:
-                collections = await self._search_table(
-                    "T3_publicaciones", "collection", corta)
-                sagas = await self._search_table("T3_series", "saga", corta)
-                resultados = collections + sagas
-                if not resultados:
-                    # Segundo escalón: si 3 palabras tampoco dan, la primera útil (2 POST).
-                    primera = _primera_palabra_significativa(query)
-                    if (primera is not None
-                            and _normalizar(primera) != _normalizar(corta)):
-                        collections = await self._search_table(
-                            "T3_publicaciones", "collection", primera)
-                        sagas = await self._search_table(
-                            "T3_series", "saga", primera)
-                        resultados = collections + sagas
+                resultados = await buscar(corta)
+            # Escalón 2: primera palabra significativa (aunque la consulta tenga
+            # exactamente 3 palabras y no haya podido acortarse a 3).
+            primera = _primera_palabra_significativa(query)
+            if (not resultados and primera is not None
+                    and _normalizar(primera) != _normalizar(query)
+                    and (not corta or _normalizar(primera) != _normalizar(corta))):
+                resultados = await buscar(primera)
+            # Escalón 3 (último): misma palabra sin diacríticos, solo si cambia.
+            if not resultados and primera is not None:
+                sin_tilde = _sin_diacriticos(primera)
+                if sin_tilde != primera:
+                    resultados = await buscar(sin_tilde)
         # Ordenar ANTES de recortar con la consulta ORIGINAL; los empates conservan el sitio.
         return ordenar_por_relevancia(resultados, query)[:limit]
 
