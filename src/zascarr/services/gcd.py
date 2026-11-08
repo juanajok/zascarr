@@ -128,10 +128,15 @@ class GCDSerie:
     @classmethod
     def desde_raw(cls, raw: dict, gcd_id: int) -> GCDSerie:
         """Construye la serie desde el `raw` de la búsqueda (0 peticiones de serie)."""
+        publisher = raw.get("publisher")
+        if isinstance(publisher, dict):
+            publisher = publisher.get("url") or publisher.get("api_url")
+        if not isinstance(publisher, str) or not publisher:
+            publisher = None
         return cls(
             gcd_id=gcd_id, name=str(raw.get("name") or ""),
             year_began=raw.get("year_began"), year_ended=raw.get("year_ended"),
-            publisher=(raw.get("publisher") or None),
+            publisher=publisher,
             language=raw.get("language"), country=raw.get("country"),
             publishing_format=raw.get("publishing_format"), binding=raw.get("binding"),
             issue_count=raw.get("issue_count"), active_issues=raw.get("active_issues"),

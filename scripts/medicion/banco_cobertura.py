@@ -694,17 +694,30 @@ def _candidato_para_detalle(fuente: str, resultados: Sequence[Any]) -> Any | Non
     return resultados[0]
 
 
+def _raw_gcd_tiene_editorial(raw: dict) -> bool:
+    if raw.get("publisher_name"):
+        return True
+    publisher = raw.get("publisher")
+    if isinstance(publisher, dict):
+        return bool(publisher.get("name"))
+    return isinstance(publisher, str) and not publisher.startswith("http")
+
+
 def _coste_detalle(fuente: str, candidato: Any,
                     numero_esperado: int | None = None) -> int:
     """Peticiones previstas del detalle.
 
-    GCD con raw y AniList no piden nada. En Tebeosfera, resolver un número dentro de la
-    colección cuesta 2 (ficha de colección + ficha de número); el resto, 1.
+    GCD con raw solo gasta 1 si la editorial viene como URL y hay que resolver el nombre;
+    con el nombre ya en el raw, 0. AniList no pide nada. En Tebeosfera, resolver un número
+    dentro de la colección cuesta 2 (ficha de colección + ficha de número); el resto, 1.
     """
     if fuente == "anilist":
         return 0
-    if fuente == "gcd" and getattr(candidato, "raw", None):
-        return 0
+    raw = getattr(candidato, "raw", None)
+    if fuente == "gcd" and isinstance(raw, dict) and raw:
+        if _raw_gcd_tiene_editorial(raw):
+            return 0
+        return 1 if raw.get("publisher") else 0
     if fuente == "tebeosfera" and numero_esperado is not None:
         return 2
     return 1
