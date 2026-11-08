@@ -268,27 +268,75 @@ class GCDClient:
         nombre = data.get("name")
         return str(nombre).strip() if nombre else None
 
-    async def search_series(self, query: str, limit: int = 10) -> list[GCDResult]:
+    async def search_series(self, query: str, limit: int = 10,
+                            anio: int | None = None) -> list[GCDResult]:
         """Busca series y devuelve hasta `limit`, paginando SOLO si no hay españolas suficientes.
 
         - Página 1 siempre; páginas 2 y 3 como máximo (tope duro 3) cuando aún no hay `limit`
           resultados españoles y la respuesta indica que hay más.
         - El filtro `es_edicion_espanola` se aplica en cada página ANTES de acumular: no se
           recorta a `limit` hasta tener los españoles (incluidos los sin país/idioma).
-        - Caché por consulta normalizada en memoria del proceso, TTL 15 min: la cuota anónima
-          de GCD es 30 peticiones/hora y una misma búsqueda no debe repetir tráfico. En una
-          instalación con `uvicorn --workers 1` es la caché de toda la app.
+        - Si se pasa `anio`, se intenta antes el path `/series/name/<q>/year/<y>/` (1
+          petición); si 404/falla, se cae al path normal sin romper.
+        - Caché por consulta normalizada (y año, si se pasó) en memoria del proceso, TTL 15
+          min: la cuota anónima de GCD es 30 peticiones/hora y una misma búsqueda no debe
+          repetir tráfico. En una instalación con `uvicorn --workers 1` es la caché de toda
+          la app.
         """
         query = (query or "").strip()
         if not query:
             return []
-        clave = _clave_cache(query)
+        if anio is not None:
+            try:
+                anio = int(anio)
+            except (TypeError, ValueError):
+                anio = None
+        clave = _clave_cache(query) + (f"|anio:{anio}" if anio is not None else "")
         ahora = time.monotonic()
         cacheado = _CACHE_BUSQUEDAS.get(clave)
         if cacheado is not None and cacheado[0] > ahora:
             return list(cacheado[1])[:limit]
         if self._client is None:
             raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
+        if anio is not None:
+            # El filtro de año de la API evita traer una edición equivocada de la página 1.
+            try:
+                r_anio = await pedir_con_cortesia(
+                    self._client, "GET",
+                    f"{_BASE_URL}/series/name/{quote(query, safe='')}/year/{anio}/",
+                    politica=self._politica, espera_max_s=self._espera_max_s,
+                    cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
+                )
+                data_anio = r_anio.json()
+            except (RespuestaNoTransitoria, ErrorDePeticion, httpx.HTTPError, ValueError):
+                # 404/fallo del filtro de año: se usa el path normal, sin romper.
+                logger.warning("gcd.year_filter_failed", anio=anio)
+                data_anio = None
+            if isinstance(data_anio, dict):
+                items_anio = data_anio.get("results")
+                if isinstance(items_anio, list):
+                    acumulados_anio: list[GCDResult] = []
+                    for item in items_anio:
+                        gcd_id = _id_from_api_url(item.get("api_url", ""))
+                        if gcd_id is None:
+                            continue
+                        resultado_anio = GCDResult(
+                            gcd_id=gcd_id, name=item.get("name", ""),
+                            year_began=item.get("year_began"),
+                            year_ended=item.get("year_ended"),
+                            language=item.get("language"), country=item.get("country"),
+                            site_url=f"https://www.comics.org/series/{gcd_id}/",
+                            raw=item,
+                        )
+                        if es_edicion_espanola(resultado_anio) is False:
+                            continue
+                        acumulados_anio.append(resultado_anio)
+                        if len(acumulados_anio) >= limit:
+                            break
+                    final_anio = tuple(acumulados_anio[:limit])
+                    _CACHE_BUSQUEDAS[clave] = (
+                        time.monotonic() + _TTL_CACHE_BUSQUEDAS_S, final_anio)
+                    return list(final_anio)
         acumulados: list[GCDResult] = []
         for pagina in range(1, _PAGINAS_MAX_BUSQUEDA + 1):
             try:
