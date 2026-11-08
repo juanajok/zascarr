@@ -75,8 +75,17 @@ la misma PR que introduce el lector:
 - **En cada actualización de la imagen base** (`python:3.11-slim-trixie` desde #528) o del paquete `unar` hay que repasar el *tracker* de
   `unar`/XADMaster y de GNUstep y volver a correr
   `scripts/comprobar_imagen_rar.py`. El PO descartó el 2026-11-07 cambiar de base en la PR de #455 ("historia aparte"); esa
-  historia es la **#528 (2026-11-09)**, que pasa a `trixie` (`unar`/`lsar` 1.10.8, GNUstep Base 1.31.1) y usa
+  historia es la **#528 (2026-11-09, condiciones #530)**, que pasa a `trixie` (`unar`/`lsar` 1.10.8, GNUstep Base 1.31.1) y usa
   `lsar -j -json-skip-solid-information` para que el listado de un sólido grande no reviente el tope de 4 MiB. Los topes de
-  entradas/bytes/salida siguen igual; `listar` reintenta una vez sin el flag si el binario es antiguo (1.10.1). La medición en
-  la Pi del pico de memoria con una salida grande queda **NOT RUN** (no se toca la Pi en #528). El interruptor
-  (`LECTOR_RAR_ENABLED`) sigue siendo la palanca para apagarlo sin reconstruir.
+  entradas/bytes/salida siguen igual; `listar` decide una vez por proceso si el binario soporta el flag, deja un único aviso
+  `cover.lsar_sin_flag` sin rutas y reintenta una sola vez sin el flag **solo** con la firma exacta de 1.10.1. La base va por
+  **tag mutable**: observado el 2026-11-09 (amd64) `python@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535`
+  (`python:3.11-slim-trixie`, Python 3.11.18); si cambia, aplica la revisión de este bullet. La CI exige `unar`/`lsar` 1.10.8 y
+  el flag tanto en la suite como en la imagen final, y un presupuesto de imagen de 750 MiB (medido: 722 MB antes de limpiar,
+  691,7 MiB después de retirar ejecutables de `dpkg-dev`/`gnutls-bin`/`make`/`patch`/`binutils`/`graphviz`/utilidades de `perl`,
+  y 687,8 MiB con `.dockerignore`). Se conservan `dpkg-architecture`, `perl-base`, `libdpkg-perl` y `perl-modules-5.40`: GNUstep
+  invoca `dpkg-architecture` en runtime y sin él `lsar`/`unar` abortan (verificado; el script de imagen lo comprueba). El
+  `.dockerignore` deja fuera `.env`/`.env.*` (salvo `.env.example`), `.git`, cachés y scratch; probado con un `.env` centinela
+  que no llega a `/app`. La medición en la Pi del pico de memoria con una salida grande, la portada de un RAR sólido real de
+  ≥220 páginas y **arm64** quedan **NOT RUN** (no se toca la Pi en #528). El interruptor (`LECTOR_RAR_ENABLED`) sigue siendo la
+  palanca para apagarlo sin reconstruir.
