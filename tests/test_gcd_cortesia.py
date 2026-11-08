@@ -17,7 +17,7 @@ from zascarr.utils.cortesia import CortesiaProceso
 BASE = "https://www.comics.org/api"
 JSON = {"results": [{"api_url": "https://www.comics.org/api/series/42/",
                      "name": "Batman", "year_began": 2011,
-                     "language": "en", "country": "us"}]}
+                     "language": "es", "country": "es"}]}
 
 
 class Reloj:
