@@ -59,3 +59,14 @@ def test_manual_no_se_pisa_por_una_fuente():
     assert puede_escribir({"source": "manual"}, "manual") is True
     assert puede_escribir({"source": "manual"}, "comicinfo_xml") is False
     assert puede_escribir({"source": "comicinfo_xml"}, "comicinfo_xml") is True
+
+
+def test_expresion_and_exclusion_y_topes():
+    from zascarr.services.etiquetas import MAX_TOKENS, parse_expresion
+
+    e = parse_expresion("noir -escuela Nóir")
+    assert e.positivas == ("noir",)
+    assert e.negativas == ("escuela",)
+    assert parse_expresion("noir " + " ".join(f"t{i}" for i in range(20))).avisos
+    assert len(parse_expresion(" ".join(f"t{i}" for i in range(20))).positivas) == MAX_TOKENS
+    assert parse_expresion("x" * 150).avisos

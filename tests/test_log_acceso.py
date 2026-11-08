@@ -359,6 +359,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "vista",
     # BL-ETQ1a (#403): texto tecleado en el autocompletado de la ficha.
     "etiqueta",
+    # BL-ETQ1b (#431): expresión de etiquetas de Biblioteca.
+    "etiquetas",
 })
 
 

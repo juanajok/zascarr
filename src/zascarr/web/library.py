@@ -30,6 +30,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
+from zascarr.services.etiquetas import (
+    ExpresionEtiquetas,
+    facetas_etiquetas,
+    parse_expresion,
+    resolver_etiquetas,
+    sugerencias_filtro,
+)
 from zascarr.services.series import SeriesService
 from zascarr.web.retorno import url_de_ficha
 from zascarr.web.routes import crear_templates
@@ -99,6 +106,7 @@ class Filtros:
     publisher_id: str = ""
     character_id: str = ""
     story_arc_id: str = ""
+    etiquetas: str = ""
     page: int = 1
     vista: str = "tarjetas"
     avisos: tuple[str, ...] = ()
@@ -128,6 +136,7 @@ def _leer_filtros(
     character_id: str,
     story_arc_id: str,
     vista: str = "tarjetas",
+    etiquetas: str = "",
 ) -> Filtros:
     """Normaliza y valida la entrada de la URL; nunca lanza por un valor inválido.
 
@@ -177,12 +186,18 @@ def _leer_filtros(
     if vista_limpia not in ("", "tarjetas", "lista"):
         avisos.append("La presentación pedida no existe; se muestran tarjetas.")
         vista_limpia = "tarjetas"
+    expresion = parse_expresion(etiquetas)
+    avisos.extend(expresion.avisos)
+    texto_etiquetas = " ".join(
+        ["-" + t for t in expresion.negativas] + list(expresion.positivas)
+    )
     return Filtros(
         q=texto,
         tradition=tradicion,
         publisher_id=_uuid(publisher_id, "editorial"),
         character_id=_uuid(character_id, "personaje"),
         story_arc_id=_uuid(story_arc_id, "saga"),
+        etiquetas=texto_etiquetas,
         page=pagina,
         vista="lista" if vista_limpia == "lista" else "tarjetas",
         avisos=tuple(avisos),
@@ -201,6 +216,7 @@ def _qs(filtros: Filtros, *, page: int, omitir: str | None = None) -> str:
         "publisher_id": filtros.publisher_id,
         "character_id": filtros.character_id,
         "story_arc_id": filtros.story_arc_id,
+        "etiquetas": filtros.etiquetas,
         "vista": "lista" if filtros.vista == "lista" else "",
     }
     if omitir:
@@ -248,6 +264,42 @@ def _filtros_activos(filtros: Filtros, nombres: dict[str, str | None]) -> list[F
     return activos
 
 
+def _expresion_con(filtros: Filtros, token: str) -> str:
+    """Añade o cambia el signo de un token, conservando el resto."""
+    partes = filtros.etiquetas.split()
+    nombre = token.lstrip("-")
+    partes = [p for p in partes if p.lstrip("-") != nombre]
+    partes.append(token)
+    return " ".join(partes)
+
+
+def _url_con_etiqueta(filtros: Filtros, token: str) -> str:
+    return _url_pagina(replace(filtros, etiquetas=_expresion_con(filtros, token)), page=1)
+
+
+def _url_fragmento_con_etiqueta(filtros: Filtros, token: str) -> str:
+    return _url_fragmento(replace(filtros, etiquetas=_expresion_con(filtros, token)), page=1)
+
+
+def _texto_recuento_etiquetas(total: int, activas: list[dict]) -> str | None:
+    """Frase exacta de AC-06 cuando hay etiquetas; None si no hay."""
+    positivas = [a["nombre"] for a in activas if not a["negativa"]]
+    negativas = [a["nombre"] for a in activas if a["negativa"]]
+    if not positivas and not negativas:
+        return None
+    base = "1 serie" if total == 1 else f"{total} series"
+    if positivas:
+        if len(positivas) == 1:
+            base += f" con {positivas[0]}"
+        elif len(positivas) == 2:
+            base += f" con {positivas[0]} y {positivas[1]}"
+        else:
+            base += " con " + ", ".join(positivas[:-1]) + f" y {positivas[-1]}"
+    if negativas:
+        base += ". No se muestran las de " + ", ".join(negativas)
+    return base + "."
+
+
 def _texto_recuento(total: int, con_filtros: bool) -> str:
     if total == 0:
         return (
@@ -280,8 +332,34 @@ async def _contexto(
     items = []
     pagina = filtros.page
     error = False
+    etiquetas_activas: list[dict] = []
+    facetas: list[dict] = []
+    expresion: ExpresionEtiquetas = parse_expresion(filtros.etiquetas)
 
     try:
+        resueltas = await resolver_etiquetas(
+            db, list(expresion.positivas) + list(expresion.negativas))
+        for normalizado in list(expresion.positivas) + list(expresion.negativas):
+            if normalizado not in resueltas:
+                avisos.append(
+                    f"No conocemos la etiqueta «{normalizado}». Búscala en la lista de etiquetas."
+                )
+        positivas = tuple(n for n in expresion.positivas if n in resueltas)
+        negativas = tuple(n for n in expresion.negativas if n in resueltas)
+        for normalizado in list(expresion.positivas) + list(expresion.negativas):
+            if normalizado in resueltas:
+                negativa = normalizado in expresion.negativas
+                sin = " ".join(
+                    p for p in filtros.etiquetas.split()
+                    if p.lstrip("-") != normalizado
+                )
+                sin_filtros = replace(filtros, etiquetas=sin)
+                etiquetas_activas.append({
+                    "nombre": resueltas[normalizado].name,
+                    "negativa": negativa,
+                    "url_quitar": _url_pagina(sin_filtros, page=1),
+                    "url_quitar_fragmento": _url_fragmento(sin_filtros, page=1),
+                })
         items, total, pagina = await service.list_series_paginado(
             page=pagina,
             page_size=_PAGE_SIZE,
@@ -290,9 +368,21 @@ async def _contexto(
             publisher_id=filtros.uuid("publisher_id"),
             character_id=filtros.uuid("character_id"),
             story_arc_id=filtros.uuid("story_arc_id"),
+            etiquetas_positivas=positivas,
+            etiquetas_negativas=negativas,
         )
         if pagina != filtros.page and total:
             avisos.append("La página pedida no existe; se muestra la última.")
+        if not error and (positivas or negativas):
+            facetas = [
+                {
+                    "nombre": tag.name,
+                    "total": cantidad,
+                    "url_anadir": _url_con_etiqueta(filtros, tag.name),
+                    "url_excluir": _url_con_etiqueta(filtros, "-" + tag.name),
+                }
+                for tag, cantidad in await facetas_etiquetas(db, positivas)
+            ]
         if any((filtros.publisher_id, filtros.character_id, filtros.story_arc_id)):
             try:
                 nombres.update(await service.nombres_de_filtros(
@@ -327,6 +417,7 @@ async def _contexto(
         publisher_id=filtros.publisher_id,
         character_id=filtros.character_id,
         story_arc_id=filtros.story_arc_id,
+        etiquetas=filtros.etiquetas,
         page=pagina,
         vista=filtros.vista,
         avisos=tuple(avisos),
@@ -343,8 +434,11 @@ async def _contexto(
         "filtros": filtros_finales,
         "vista": filtros_finales.vista,
         "filtros_activos": activos,
-        "hay_filtros": bool(activos),
-        "recuento": _texto_recuento(total, bool(activos)),
+        "etiquetas_activas": etiquetas_activas,
+        "facetas": facetas,
+        "hay_filtros": bool(activos) or bool(etiquetas_activas),
+        "recuento": (_texto_recuento_etiquetas(total, etiquetas_activas)
+                     or _texto_recuento(total, bool(activos))),
         "url_canonica": url_canonica,
         "url_serie": lambda series_id: url_de_ficha(series_id, url_canonica),
         "url_pagina": lambda p: _url_pagina(filtros_finales, page=p),
@@ -354,10 +448,10 @@ async def _contexto(
         "url_vista_tarjetas": _url_pagina(replace(filtros_finales, vista="tarjetas"), page=pagina),
         "url_vista_lista": _url_pagina(replace(filtros_finales, vista="lista"), page=pagina),
         "url_limpiar": _url_pagina(replace(filtros_finales, q="", tradition="", publisher_id="",
-                                           character_id="", story_arc_id=""), page=1),
+                                           character_id="", story_arc_id="", etiquetas=""), page=1),
         "url_limpiar_fragmento": _url_fragmento(
             replace(filtros_finales, q="", tradition="", publisher_id="", character_id="",
-                    story_arc_id=""), page=1) + "&quitar=todos",
+                    story_arc_id="", etiquetas=""), page=1) + "&quitar=todos",
     }
 
 
@@ -380,13 +474,45 @@ def _respuesta_auxiliar(request: Request, plantilla: str, ctx: dict) -> Response
     return respuesta
 
 
+@router.get("/etiquetas/sugerir", response_class=HTMLResponse)
+async def sugerir_etiquetas(
+    request: Request, etiquetas: str = "", q: str = "", tradition: str = "",
+    publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
+    vista: str = "", db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    filtros = _leer_filtros(
+        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
+    tokens = etiquetas.strip().split()
+    prefijo = tokens[-1].lstrip("-") if tokens else ""
+    sin_prefijo = replace(filtros, etiquetas=" ".join(tokens[:-1]))
+    sugerencias = []
+    if len(prefijo) >= 2:
+        sugerencias = await sugerencias_filtro(db, prefijo)
+    aplicadas = set(parse_expresion(" ".join(tokens[:-1])).positivas) | set(
+        parse_expresion(" ".join(tokens[:-1])).negativas)
+    datos = [
+        {"nombre": tag.name, "total": total,
+         "url_anadir": _url_con_etiqueta(sin_prefijo, tag.name),
+         "url_excluir": _url_con_etiqueta(sin_prefijo, "-" + tag.name)}
+        for tag, total in sugerencias
+        if tag.name_norm not in aplicadas
+    ]
+    respuesta = templates.TemplateResponse(
+        request, "_sugerencias_etiquetas.html",
+        {"sugerencias": datos},
+    )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
 @router.get("", response_class=HTMLResponse)
 async def index(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
-    vista: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    filtros = _leer_filtros(page, q, tradition, publisher_id, character_id, story_arc_id, vista)
+    filtros = _leer_filtros(
+        page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
     publishers: list = []
     editoriales_error = False
     try:
@@ -413,9 +539,10 @@ async def index(
 async def resultados(
     request: Request, page: str = "1", tradition: str = "", publisher_id: str = "",
     character_id: str = "", story_arc_id: str = "", q: str = "",
-    vista: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
-    filtros = _leer_filtros(page, q, tradition, publisher_id, character_id, story_arc_id, vista)
+    filtros = _leer_filtros(
+        page, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
     return _respuesta_fragmento(request, await _contexto(db, filtros))
 
 
@@ -427,6 +554,7 @@ def _enlace_con_filtro(filtros: Filtros, clave: str, valor: str) -> str:
         "publisher_id": filtros.publisher_id,
         "character_id": filtros.character_id,
         "story_arc_id": filtros.story_arc_id,
+        "etiquetas": filtros.etiquetas,
         "vista": "lista" if filtros.vista == "lista" else "",
         clave: valor,
         "page": "1",
@@ -446,13 +574,14 @@ async def _buscar(filtros: Filtros, clave: str, encontrados: list) -> list[tuple
 async def buscar_personaje(
     request: Request, personaje: str = "", q: str = "", tradition: str = "",
     publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
-    vista: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(personaje)
     if not texto and q:
         # Compatibilidad con el contrato anterior (`?q=` era el texto del buscador).
         texto, q = _texto_buscador(q), ""
-    filtros = _leer_filtros(1, q, tradition, publisher_id, character_id, story_arc_id, vista)
+    filtros = _leer_filtros(
+        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
     service = SeriesService(db)
     encontrados: list = []
     try:
@@ -471,12 +600,13 @@ async def buscar_personaje(
 async def buscar_saga(
     request: Request, saga: str = "", q: str = "", tradition: str = "",
     publisher_id: str = "", character_id: str = "", story_arc_id: str = "",
-    vista: str = "", db: AsyncSession = Depends(get_db),
+    vista: str = "", etiquetas: str = "", db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     texto = _texto_buscador(saga)
     if not texto and q:
         texto, q = _texto_buscador(q), ""
-    filtros = _leer_filtros(1, q, tradition, publisher_id, character_id, story_arc_id, vista)
+    filtros = _leer_filtros(
+        1, q, tradition, publisher_id, character_id, story_arc_id, vista, etiquetas)
     service = SeriesService(db)
     encontrados: list = []
     try:

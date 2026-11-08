@@ -29,6 +29,16 @@
   <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
   <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
   <input type="hidden" name="page" value="1">
+  <div class="filter-search-box">
+    <label class="sr" for="f-etiquetas">Buscar por etiqueta</label>
+    <input type="search" id="f-etiquetas" name="etiquetas" value="{{ filtros.etiquetas }}"
+           placeholder="Buscar por etiqueta…" autocomplete="off"
+           hx-get="/ui/biblioteca/etiquetas/sugerir"
+           hx-trigger="keyup changed delay:300ms"
+           hx-target="#sugerencias-etiquetas" hx-swap="innerHTML"
+           hx-include="#filtros" hx-sync="this:replace">
+    <div id="sugerencias-etiquetas" class="series-results" aria-live="polite"></div>
+  </div>
 </form>
 
 <div class="filter-bar filter-bar-secondary">
