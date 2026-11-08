@@ -119,9 +119,9 @@ class TestDetalleDe:
         fake.get_publisher.assert_awaited_once_with("https://www.comics.org/api/publisher/2/")
 
     @pytest.mark.asyncio
-    async def test_gcd_con_raw_no_pide_la_serie(self, monkeypatch):
+    async def test_gcd_con_raw_resuelve_la_editorial_sin_pedir_la_serie(self, monkeypatch):
         monkeypatch.setattr(modulo, "get_settings", lambda: _settings())
-        fake = _FakeGCD(_serie())
+        fake = _FakeGCD(_serie(), editorial="Panini España")
         monkeypatch.setattr(modulo, "GCDClient", lambda: fake)
         resultado = _resultado()
         resultado.raw = {"name": "Thorgal", "year_began": 1990,
@@ -130,9 +130,47 @@ class TestDetalleDe:
                          "publishing_format": "comic book"}
         r = await DiscoveryService(db=MagicMock()).detalle_de(resultado)
         assert r.estado.estado == "ok" and r.detalle is not None
+        assert r.detalle.editorial == "Panini España"
+        assert r.detalle.peticiones == 1
+        fake.get_series.assert_not_awaited()
+        fake.get_publisher.assert_awaited_once_with(
+            "https://www.comics.org/api/publisher/2/")
+
+    @pytest.mark.asyncio
+    async def test_gcd_con_raw_y_nombre_ya_presente_no_pide_nada(self, monkeypatch):
+        monkeypatch.setattr(modulo, "get_settings", lambda: _settings())
+        fake = _FakeGCD(_serie())
+        monkeypatch.setattr(modulo, "GCDClient", lambda: fake)
+        resultado = _resultado()
+        resultado.raw = {"name": "Thorgal", "year_began": 1990,
+                         "publisher_name": "Panini España",
+                         "language": "Spanish", "country": "Spain"}
+        r = await DiscoveryService(db=MagicMock()).detalle_de(resultado)
+        assert r.detalle is not None and r.detalle.editorial == "Panini España"
         assert r.detalle.peticiones == 0
         fake.get_series.assert_not_awaited()
         fake.get_publisher.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_gcd_publisher_que_falla_deja_editorial_ausente(self, monkeypatch):
+        from zascarr.services.detalle_edicion import contrastar
+        monkeypatch.setattr(modulo, "get_settings", lambda: _settings())
+        fake = _FakeGCD(_serie())
+        fake.get_publisher = AsyncMock(side_effect=RuntimeError("red"))
+        monkeypatch.setattr(modulo, "GCDClient", lambda: fake)
+        resultado = _resultado()
+        resultado.raw = {"name": "Thorgal", "year_began": 1990,
+                         "publisher": "https://www.comics.org/api/publisher/2/",
+                         "language": "Spanish", "country": "Spain"}
+        r = await DiscoveryService(db=MagicMock()).detalle_de(resultado)
+        assert r.estado.estado == "ok" and r.detalle is not None
+        assert r.detalle.editorial is None
+        assert "editorial" in r.detalle.campos_ausentes
+        assert r.detalle.peticiones == 1
+        etiqueta = {"identidad_acreditada": True, "editorial": "Panini España",
+                    "anio": 1990, "numero": None, "pais": "ES", "idioma": "es",
+                    "formato": "single_issue", "campos": {}}
+        assert contrastar(r.detalle, etiqueta, unidad="serie").resultado == "ambiguo"
 
     @pytest.mark.asyncio
     async def test_gcd_sin_serie_es_sin_resultados(self, monkeypatch):
@@ -239,3 +277,18 @@ def test_detalle_desde_gcd_serie_no_inventa_numero_ni_editorial():
     assert detalle.pais == "ES" and detalle.idioma == "es"
     assert "editorial" in detalle.campos_ausentes
     assert "numero_publicacion" in detalle.campos_ausentes
+
+
+def test_coste_del_detalle_gcd_con_raw_url_o_nombre():
+    """El banco presupuesta 1 petición si el raw trae URL; 0 si ya trae el nombre (#516)."""
+    from scripts.medicion import banco_cobertura as banco
+    from zascarr.services.gcd import GCDResult
+
+    con_url = GCDResult(gcd_id=1, name="Thorgal", raw={
+        "name": "Thorgal", "publisher": "https://www.comics.org/api/publisher/2/"})
+    con_nombre = GCDResult(gcd_id=1, name="Thorgal", raw={
+        "name": "Thorgal", "publisher_name": "Panini España"})
+    sin_publisher = GCDResult(gcd_id=1, name="Thorgal", raw={"name": "Thorgal"})
+    assert banco._coste_detalle("gcd", con_url) == 1
+    assert banco._coste_detalle("gcd", con_nombre) == 0
+    assert banco._coste_detalle("gcd", sin_publisher) == 0
