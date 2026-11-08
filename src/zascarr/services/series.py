@@ -29,7 +29,9 @@ from zascarr.models import (
     Series,
     StoryArc,
     StoryArcIssue,
+    Tag,
     issue_characters,
+    series_tags,
 )
 
 
@@ -60,6 +62,8 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        etiquetas_positivas: tuple[str, ...] = (),
+        etiquetas_negativas: tuple[str, ...] = (),
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -96,6 +100,18 @@ class SeriesService:
             )
             needs_distinct = True
 
+        # BL-ETQ1b: EXISTS/NOT EXISTS por token; nunca JOIN+DISTINCT.
+        for normalizado in etiquetas_positivas:
+            query = query.where(Series.id.in_(
+                select(series_tags.c.series_id).join(Tag, Tag.id == series_tags.c.tag_id)
+                .where(Tag.name_norm == normalizado, series_tags.c.oculta.is_(False))
+            ))
+        for normalizado in etiquetas_negativas:
+            query = query.where(Series.id.not_in(
+                select(series_tags.c.series_id).join(Tag, Tag.id == series_tags.c.tag_id)
+                .where(Tag.name_norm == normalizado, series_tags.c.oculta.is_(False))
+            ))
+
         if needs_distinct:
             query = query.distinct()
 
@@ -119,12 +135,17 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        etiquetas_positivas: tuple[str, ...] = (),
+        etiquetas_negativas: tuple[str, ...] = (),
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
             page=page, page_size=page_size, tradition=tradition, status=status,
             search=search, publisher_id=publisher_id, character_id=character_id,
-            story_arc_id=story_arc_id, corregir_pagina=False,
+            story_arc_id=story_arc_id,
+            etiquetas_positivas=etiquetas_positivas,
+            etiquetas_negativas=etiquetas_negativas,
+            corregir_pagina=False,
         )
         return items, total
 
@@ -138,6 +159,8 @@ class SeriesService:
         publisher_id: UUID | None = None,
         character_id: UUID | None = None,
         story_arc_id: UUID | None = None,
+        etiquetas_positivas: tuple[str, ...] = (),
+        etiquetas_negativas: tuple[str, ...] = (),
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -148,6 +171,8 @@ class SeriesService:
             page=page, page_size=page_size, tradition=tradition, status=status,
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
+            etiquetas_positivas=etiquetas_positivas,
+            etiquetas_negativas=etiquetas_negativas,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:
