@@ -79,6 +79,19 @@ def test_rar_real_un_rar5_solido_no_se_lee_limitacion_conocida_de_unar(tmp_path)
     assert jpeg
 
 
+def test_rar_real_el_enlace_simbolico_se_extrae_como_enlace_dentro_del_destino(tmp_path):
+    """SecOps (opcional): `unar` directo sobre el RAR del enlace deja un SYMLINK en el destino, no un fichero:
+    por eso el lector (que lo rechaza con `lstat`) es la línea de defensa y no `unar`."""
+    ruta = generar(tmp_path / "entrada", "enlace.cbr")
+    destino = tmp_path / "salida"
+    destino.mkdir()
+    p = subprocess.run(["unar", "-D", "-f", "-i", "-o", str(destino), str(ruta), "0"],   # noqa: S603
+                       capture_output=True, text=True, cwd=tmp_path)
+    enlaces = [x for x in destino.rglob("*") if x.is_symlink()]
+    assert p.returncode == 0 and len(enlaces) == 1, f"rc={p.returncode} {p.stdout!r}"
+    assert not (tmp_path / "etc").exists()                  # y nada fuera del destino
+
+
 def test_rar_real_un_archivo_truncado_no_da_portada(tmp_path):
     """Trampa medida en #308: `lsar` lista un truncado con código 0. No debe salir una portada."""
     original = _fixture("minimo_rar5.cbr").read_bytes()
