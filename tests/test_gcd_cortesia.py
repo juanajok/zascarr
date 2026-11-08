@@ -13,6 +13,7 @@ import pytest
 
 from zascarr.services.gcd import GCDClient
 from zascarr.utils.cortesia import CortesiaProceso
+from zascarr.utils.peticiones import ErrorDePeticion, ReintentosAgotados
 
 BASE = "https://www.comics.org/api"
 JSON = {"results": [{"api_url": "https://www.comics.org/api/series/42/",
@@ -111,7 +112,8 @@ class TestGCDPorLaCola:
 
         cliente = _cliente(handler, entorno)
         try:
-            assert await cliente.search_series("batman") == []
+            with pytest.raises(ErrorDePeticion):
+                await cliente.search_series("batman")
         finally:
             await _cerrar(cliente)
         assert len(peticiones) == 1
@@ -149,7 +151,8 @@ class TestGCD429YReintentos:
 
         cliente = _cliente(handler, entorno)
         try:
-            assert await cliente.search_series("batman") == []   # GCD conserva su tolerancia
+            with pytest.raises(ReintentosAgotados):
+                await cliente.search_series("batman")   # el fallo técnico se propaga
         finally:
             await _cerrar(cliente)
         assert len(peticiones) == 2                                  # política de GCD: 2 intentos
