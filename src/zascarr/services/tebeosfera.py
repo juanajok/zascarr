@@ -151,6 +151,19 @@ def _consulta_simplificada(consulta: str) -> str | None:
     return corta
 
 
+def _primera_palabra_significativa(consulta: str) -> str | None:
+    """Primera palabra útil (sin artículos vacíos) para el segundo escalón del fallback."""
+    texto = (consulta or "").strip()
+    if not texto:
+        return None
+    titulo = re.split(r"\s*:\s*|\s+-\s+", texto, maxsplit=1)[0].strip()
+    palabras = re.findall(r"[^\W_]+", titulo, flags=re.UNICODE)
+    for palabra in palabras:
+        if _normalizar(palabra) not in _STOPWORDS:
+            return palabra
+    return None
+
+
 def _normalizar(texto: str) -> str:
     """Minúsculas, sin acentos y solo letras/dígitos separados por espacios."""
     descompuesto = unicodedata.normalize("NFKD", texto or "")
@@ -362,6 +375,16 @@ class TebeosferaClient:
                     "T3_publicaciones", "collection", corta)
                 sagas = await self._search_table("T3_series", "saga", corta)
                 resultados = collections + sagas
+                if not resultados:
+                    # Segundo escalón: si 3 palabras tampoco dan, la primera útil (2 POST).
+                    primera = _primera_palabra_significativa(query)
+                    if (primera is not None
+                            and _normalizar(primera) != _normalizar(corta)):
+                        collections = await self._search_table(
+                            "T3_publicaciones", "collection", primera)
+                        sagas = await self._search_table(
+                            "T3_series", "saga", primera)
+                        resultados = collections + sagas
         # Ordenar ANTES de recortar con la consulta ORIGINAL; los empates conservan el sitio.
         return ordenar_por_relevancia(resultados, query)[:limit]
 
