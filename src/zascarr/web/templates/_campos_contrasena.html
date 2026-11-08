@@ -16,7 +16,7 @@
 
 {% macro campo_actual(invalido=False, oob=False) -%}
 <input id="auth-password-actual" type="password" name="auth_password_actual" autocomplete="current-password"
-       aria-label="Tu contraseña actual"
+       aria-label="Tu contraseña actual" aria-describedby="resultado-seguridad"
        {% if invalido %}aria-invalid="true"{% endif %}
        {% if oob %}hx-swap-oob="true"{% endif %}>
 {%- endmacro %}

@@ -2,7 +2,7 @@
 {% if error %}
 <p class="ajustes-error">{{ error }}</p>
 {% else %}
-<p class="caption">{{ nombre }}: guardado y aplicado — ya activo, sin reiniciar.</p>
+<p class="caption" role="status">{{ nombre }}: guardado y aplicado — ya activo, sin reiniciar.</p>
 {% if aviso %}<p class="ajustes-hint">{{ aviso }}</p>{% endif %}
 {% endif %}
 {# BL-OPS3: el campo de la contraseña actual se sustituye por uno vacío (y marcado como inválido si falta o es

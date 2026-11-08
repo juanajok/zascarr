@@ -38,11 +38,11 @@
       </details>
       {% endif %}
       <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
+        <button type="submit" id="guardar-seguridad">Guardar</button>
       </div>
     </form>
     <div id="resultado-seguridad" aria-live="polite">{% if mensaje_exito %}
-      <p class="caption">Seguridad: guardado y aplicado — ya activo, sin reiniciar.</p>
+      <p class="caption" role="status">Seguridad: guardado y aplicado — ya activo, sin reiniciar.</p>
       {% if cambia_credenciales %}<p class="ajustes-hint">Tu sesión sigue abierta; las de otros aparatos se han cerrado.</p>{% endif %}
       {% if aviso %}<p class="ajustes-hint">{{ aviso }}</p>{% endif %}
     {% endif %}</div>

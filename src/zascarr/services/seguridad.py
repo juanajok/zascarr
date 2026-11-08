@@ -243,45 +243,54 @@ def exige_contrasena_actual(settings, *, modo: str, usuario: str, password: str,
         _cambios_pedidos(settings, modo=modo, usuario=usuario, password=password, base_url=base_url))
 
 
-async def _fijar(
-    db: AsyncSession, *, modo: str, usuario: str, password: str, base_url: str | None,
-    comprobar_actual: bool, contrasena_actual: str = "", password_repetida: str | None = None,
-) -> ResultadoSeguridad:
-    """Cuerpo común de `fijar_seguridad` (web, con la contraseña actual) y de
-    `fijar_seguridad_desde_el_equipo` (instalador, sin ella).
-
-    Orden: primero las reglas de forma, que no dependen de secretos (modo, contraseña y usuario
-    obligatorios, longitud y repetición de la nueva); después, solo si hace falta, la contraseña actual;
-    y solo si pasa, el guardado. Un formulario mal rellenado no gasta intentos, y en todo rechazo no se
-    guarda nada, no se sube la versión de sesión y no se vacía ninguna caché."""
+def _comprobar_forma(
+    settings, *, modo: str, usuario: str, password: str, password_repetida: str | None,
+) -> tuple[ResultadoSeguridad | None, str | None]:
+    """Las reglas de FORMA, que no dependen de secretos: modo conocido, contraseña y usuario obligatorios,
+    longitud y repetición de la nueva. `(rechazo, aviso)`: un rechazo no gasta intentos de contraseña."""
     if modo not in MODOS:
         raise ValueError(f"modo de autenticación no reconocido: {modo!r}")
-
-    settings = get_settings()
     if modo in ("password", "user_password") and not password and not settings.auth_password_hash:
-        return ResultadoSeguridad(error=MENSAJE_SIN_CONTRASENA)
+        return ResultadoSeguridad(error=MENSAJE_SIN_CONTRASENA), None
     if modo == "user_password" and not usuario and not settings.auth_username:
-        return ResultadoSeguridad(error=MENSAJE_SIN_USUARIO)
-
+        return ResultadoSeguridad(error=MENSAJE_SIN_USUARIO), None
     error, aviso = validar_contrasena(password)
     if error:
-        return ResultadoSeguridad(error=error)
+        return ResultadoSeguridad(error=error), None
     if password and password_repetida is not None and password != password_repetida:
-        return ResultadoSeguridad(error=MENSAJE_NO_COINCIDEN)
+        return ResultadoSeguridad(error=MENSAJE_NO_COINCIDEN), None
+    return None, aviso
 
-    if comprobar_actual and exige_contrasena_actual(
-            settings, modo=modo, usuario=usuario, password=password, base_url=base_url):
-        if not contrasena_actual:
-            return ResultadoSeguridad(error=MENSAJE_FALTA_ACTUAL, motivo_rechazo="falta_actual")
-        reauth = await comprobar_contrasena_actual(contrasena_actual, settings)
-        if reauth.resultado is Reauth.BLOQUEADA:
-            return ResultadoSeguridad(error=mensaje_bloqueada(reauth.hasta_epoch or 0.0),
-                                      motivo_rechazo="bloqueada")
-        if reauth.resultado is Reauth.OCUPADA:
-            return ResultadoSeguridad(error=MENSAJE_COLA_LLENA, motivo_rechazo="ocupada")
-        if reauth.resultado is not Reauth.OK:
-            return ResultadoSeguridad(error=MENSAJE_ACTUAL_INCORRECTA, motivo_rechazo="actual_incorrecta")
 
+async def _comprobar_actual(
+    settings, *, modo: str, usuario: str, password: str, base_url: str | None, contrasena_actual: str,
+) -> ResultadoSeguridad | None:
+    """La contraseña ACTUAL, si este envío la exige. `None` = puede seguir; si no, el rechazo (no se
+    guarda nada, no se sube la versión y no se vacía ninguna caché)."""
+    if not exige_contrasena_actual(settings, modo=modo, usuario=usuario, password=password,
+                                   base_url=base_url):
+        return None
+    if not contrasena_actual:
+        return ResultadoSeguridad(error=MENSAJE_FALTA_ACTUAL, motivo_rechazo="falta_actual")
+    reauth = await comprobar_contrasena_actual(contrasena_actual, settings)
+    if reauth.resultado is Reauth.OK:
+        return None
+    if reauth.resultado is Reauth.BLOQUEADA:
+        return ResultadoSeguridad(error=mensaje_bloqueada(reauth.hasta_epoch or 0.0),
+                                  motivo_rechazo="bloqueada")
+    if reauth.resultado is Reauth.OCUPADA:
+        return ResultadoSeguridad(error=MENSAJE_COLA_LLENA, motivo_rechazo="ocupada")
+    return ResultadoSeguridad(error=MENSAJE_ACTUAL_INCORRECTA, motivo_rechazo="actual_incorrecta")
+
+
+async def _guardar_seguridad(
+    db: AsyncSession, settings, *, modo: str, usuario: str, password: str, base_url: str | None,
+    aviso: str | None,
+) -> ResultadoSeguridad:
+    """El ÚNICO punto que escribe modo, usuario, contraseña y dirección. Es privado: lo llaman solo las
+    dos funciones públicas, cada una tras sus comprobaciones (una prueba estática lo exige). No hay un
+    parámetro que salte la comprobación de la contraseña actual: esa decisión es de quien llama, y
+    `fijar_seguridad` la toma siempre."""
     cambios_pedidos = _cambios_pedidos(settings, modo=modo, usuario=usuario, password=password,
                                        base_url=base_url)
     cambios: dict = {"auth_mode": modo, "auth_username": usuario}
@@ -319,9 +328,18 @@ async def fijar_seguridad(
     vacía significa «vuelve al valor del `.env`»). Nunca deja la app en un modo que nadie pueda
     desbloquear (A6): activar contraseña sin ninguna —ni recién escrita ni ya guardada— se rechaza en
     vez de dejar al coleccionista fuera de su propia instalación."""
-    return await _fijar(db, modo=modo, usuario=usuario, password=password, base_url=base_url,
-                        comprobar_actual=True, contrasena_actual=contrasena_actual,
-                        password_repetida=password_repetida)
+    settings = get_settings()
+    rechazo, aviso = _comprobar_forma(
+        settings, modo=modo, usuario=usuario, password=password, password_repetida=password_repetida)
+    if rechazo:
+        return rechazo
+    rechazo = await _comprobar_actual(
+        settings, modo=modo, usuario=usuario, password=password, base_url=base_url,
+        contrasena_actual=contrasena_actual)
+    if rechazo:
+        return rechazo
+    return await _guardar_seguridad(db, settings, modo=modo, usuario=usuario, password=password,
+                                    base_url=base_url, aviso=aviso)
 
 
 async def fijar_seguridad_desde_el_equipo(
@@ -331,5 +349,10 @@ async def fijar_seguridad_desde_el_equipo(
     instalador, que corre en el equipo y como root, y es la vía de recuperación si se olvida la
     contraseña). Con dos funciones de nombre distinto, y no un booleano que salte la comprobación, una
     revisión o un `grep` ven quién la usa (hay una prueba que lo exige): el router nunca la importa."""
-    return await _fijar(db, modo=modo, usuario=usuario, password=password, base_url=base_url,
-                        comprobar_actual=False)
+    settings = get_settings()
+    rechazo, aviso = _comprobar_forma(
+        settings, modo=modo, usuario=usuario, password=password, password_repetida=None)
+    if rechazo:
+        return rechazo
+    return await _guardar_seguridad(db, settings, modo=modo, usuario=usuario, password=password,
+                                    base_url=base_url, aviso=aviso)
