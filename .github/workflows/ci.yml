@@ -21,6 +21,15 @@ jobs:
       # #418: `unar` (con `lsar`) para las pruebas con RAR REAL: sin él se SALTAN, y una prueba saltada no es una pasada.
       - name: unar para las pruebas de RAR
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends unar
+      # #530 C3: la suite debe correr con el MISMO 1.10.8 y el flag; el fallback no puede convertir
+      # en verde un runner antiguo (1.10.1 no conocería el flag).
+      - name: unar/lsar 1.10.8 y flag en el runner de la suite
+        run: |
+          for b in unar lsar; do
+            v="$($b -v)"; echo "$b: $v"
+            case "$v" in *"1.10.8"*) ;; *) echo "::error::$b no es 1.10.8 ($v)"; exit 1;; esac
+          done
+          lsar --help 2>&1 | grep -q -- "-json-skip-solid-information" || { echo "::error::lsar no conoce el flag del listado de sólidos"; exit 1; }
       # Las pruebas de credenciales (ADR 0012) usan Docker real: el servicio `credenciales` de Compose necesita la imagen
       # de PostgreSQL ya descargada, y los guiones de tests/escenarios/ corren como root en este ejecutor desechable
       # (CI=true + sudo sin clave) con usuarios sintéticos. Sin esto se SALTAN, y una prueba saltada no es una pasada.
@@ -156,8 +165,15 @@ jobs:
       # #418 (SecOps C-4): la suite y la imagen usan ya el mismo `unar` 1.10.8 (trixie desde #528).
       - name: lector RAR con el unar de la imagen de producción (ejecutables de GNUstep fuera, sin setuid nuevo, fixtures)
         run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- python /app/scripts/comprobar_imagen_rar.py
-      - name: tamaño de la imagen
-        run: docker image ls zascarr:ci --format '{{.Size}}'
+      - name: presupuesto de tamaño de la imagen (#530 C2)
+        run: |
+          bytes=$(docker image inspect zascarr:ci --format '{{.Size}}')
+          mib=$((bytes / 1048576))
+          echo "imagen: ${mib} MiB (presupuesto: 750 MiB)"
+          if [ "$mib" -gt 750 ]; then
+            echo "::error::la imagen mide ${mib} MiB y supera el presupuesto de 750 MiB"
+            exit 1
+          fi
       - name: arranque con la imagen endurecida
         run: |
           docker run --rm --security-opt no-new-privileges:true --pids-limit 256 --entrypoint runuser zascarr:ci \

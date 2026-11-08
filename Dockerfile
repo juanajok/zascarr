@@ -45,6 +45,27 @@ RUN dpkg -L gnustep-base-runtime \
     && find /usr /etc /var/lib/systemd -type f \( -name 'gdomap*' -o -name gdnc -o -name gpbs -o -name 'gpbs*' \) -delete
 # usermod/groupmod (paquete "passwd") y runuser (paquete "util-linux") ya
 # vienen en python:3.11-slim-trixie — sin dependencia nueva.
+# #530 C2: trixie arrastra por `gnustep-base-runtime` y sus dependencias herramientas de
+# construcción (dpkg-dev, make, patch, binutils, perl) y utilidades que el runtime no usa
+# (gnutls-bin, graphviz). Se borran sus ejecutables/scripts; las bibliotecas se conservan (son
+# dependencias duras o las carga `unar`). DOS excepciones obligatorias:
+#   · `dpkg-architecture`: GNUstep lo invoca EN RUNTIME para DEB_HOST_MULTIARCH; sin él
+#     `lsar`/`unar` abortan (SIGABRT). No se borra.
+#   · `perl-base` + `libdpkg-perl` + `perl-modules-5.40`: `dpkg-architecture` es un script Perl y
+#     necesita el intérprete y sus módulos. Solo se limpian las utilidades del paquete `perl`, no
+#     el intérprete. (Sin esta excepción, `lsar`/`unar` dejan de funcionar y la verificación de la
+#     imagen lo detecta.)
+# Verificado con `lsar`/`unar`, los fixtures y los hostiles en `scripts/comprobar_imagen_rar.py`;
+# la CI tiene un presupuesto de 750 MiB.
+RUN for paquete in gnutls-bin make patch binutils binutils-x86-64-linux-gnu graphviz perl; do \
+        dpkg -L "$paquete" 2>/dev/null \
+            | grep -E '^/(usr/bin|usr/sbin|etc/init\.d|etc/default|usr/libexec)/[^/]+$' \
+            | xargs -r rm -f; \
+    done \
+    && dpkg -L dpkg-dev 2>/dev/null \
+        | grep -E '^/(usr/bin|usr/sbin|etc/init\.d|etc/default|usr/libexec)/[^/]+$' \
+        | grep -v '^/usr/bin/dpkg-architecture$' \
+        | xargs -r rm -f
 
 RUN groupadd -g 1000 zascarr && \
     useradd -u 1000 -g zascarr -m -s /bin/bash zascarr
