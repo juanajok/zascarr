@@ -63,10 +63,10 @@ def _auth():
 
 
 class _Candidato:
-    def __init__(self, slug, *, kind="collection"):
+    def __init__(self, slug, *, kind="collection", anio=1992):
         self.slug = slug
         self.title = "Dragon Ball"
-        self.start_year = 1992
+        self.start_year = anio
         self.kind = kind
         carpeta = "sagas" if kind == "saga" else "colecciones"
         self.site_url = f"https://www.tebeosfera.com/{carpeta}/{slug}.html"
@@ -259,3 +259,27 @@ class TestCandidatoContrastable:
         metricas = banco.calcular_metricas(filas, corpus)["por_fuente_unidad"]
         assert metricas["tebeosfera__serie"]["candidatos_sin_detalle_ni_motivo"] == 0
         assert metricas["tebeosfera__serie"]["con_contraste"] == 12
+
+
+def test_el_banco_elige_por_anio_esperado(monkeypatch):
+    monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+    corpus = {"version": "v1", "casos": [_caso("C1", anio=2006)]}
+    candidatos = [_Candidato("old_1992", anio=1992), _Candidato("ultimate_2006", anio=2006)]
+    servicio = _DetalleFalso([_ok(_detalle(anio=2006))])
+    filas = asyncio.run(banco.ejecutar_real(
+        _plan(corpus), corpus, _auth(), max_peticiones=10, max_por_fuente=20,
+        salida=Path("/tmp/x"), corpus_sha="sha-corpus", fuentes=["tebeosfera"],
+        cliente_factory=lambda _f: _BusquedaFalsa(candidatos),
+        detalle_service_factory=lambda: servicio, sha_ejecutor="abc",
+        aplicar_ajustes=False, con_detalle=True))
+    assert filas[0]["contraste"] is not None
+    assert servicio.llamadas[0][0].external_id == "ultimate_2006"
+
+
+def test_el_banco_pasa_el_anio_a_la_busqueda_de_gcd():
+    from unittest.mock import AsyncMock
+    cliente = _BusquedaFalsa()
+    cliente.search_series = AsyncMock(return_value=[])
+    asyncio.run(banco._invocar(cliente, "gcd", "search_series", {
+        "consulta": "Dragon Ball", "etiqueta_editorial": {"anio": 2006}}))
+    cliente.search_series.assert_awaited_once_with("Dragon Ball", anio=2006)

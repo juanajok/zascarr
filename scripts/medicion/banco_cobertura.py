@@ -608,7 +608,12 @@ async def _invocar(cliente: Any, fuente: str, metodo: str | None, caso: dict) ->
             return [await cliente.get_issue_detail(int(issue_id))]
     if fuente == "anilist":
         return list(await cliente.search_manga(caso["consulta"]))
-    if fuente in ("tebeosfera", "gcd"):
+    if fuente == "tebeosfera":
+        return list(await cliente.search_series(caso["consulta"]))
+    if fuente == "gcd":
+        anio = etiqueta.get("anio")
+        if type(anio) is int:
+            return list(await cliente.search_series(caso["consulta"], anio=anio))
         return list(await cliente.search_series(caso["consulta"]))
     raise _SinDatos()
 
@@ -676,22 +681,30 @@ def _kind_candidato(candidato: Any) -> str | None:
     return getattr(candidato, "kind", None)
 
 
-def _candidato_para_detalle(fuente: str, resultados: Sequence[Any]) -> Any | None:
-    """Elige el candidato contrastable: en Tebeosfera, colección antes que saga.
+def _candidato_para_detalle(fuente: str, resultados: Sequence[Any], *,
+                             consulta: str = "",
+                             anio_esperado: int | None = None,
+                             editorial_esperada: str | None = None) -> Any | None:
+    """Elige el candidato contrastable, con ranking explicable (#526).
 
-    Una saga no tiene ficha de colección que `get_collection` pueda leer; se prefiere una
-    colección si el ranking ya la trajo. Si solo hay sagas, `None` (el llamador registra
-    `no_ejecutado: candidato_sin_coleccion`, nunca lo deja en silencio).
+    En Tebeosfera se prefiere una colección (una saga no tiene ficha de colección); si solo
+    hay sagas, `None` para que el llamador deje el motivo. Entre los candidatos válidos se
+    usa `ordenar_candidatos` con las expectativas de la etiqueta; nunca se descarta por no
+    tener año/editorial: esos campos solo no suman.
     """
     if not resultados:
         return None
+    candidatos = list(resultados)
     if fuente == "tebeosfera":
-        colecciones = [r for r in resultados if _kind_candidato(r) == "collection"]
+        colecciones = [r for r in candidatos if _kind_candidato(r) == "collection"]
         if colecciones:
-            return colecciones[0]
-        if all(_kind_candidato(r) == "saga" for r in resultados):
+            candidatos = colecciones
+        elif all(_kind_candidato(r) == "saga" for r in candidatos):
             return None
-    return resultados[0]
+    from zascarr.services.descubrimiento_grupo import ordenar_candidatos
+    return ordenar_candidatos(
+        candidatos, consulta, anio_esperado=anio_esperado,
+        editorial_esperada=editorial_esperada)[0]
 
 
 def _raw_gcd_tiene_editorial(raw: dict) -> bool:
@@ -1037,7 +1050,14 @@ async def ejecutar_real(
             notas="candidatos pendientes de revisión humana", sha_ejecutor=sha_ejecutor))
         fila = filas[-1]
         if con_detalle and estado == "ok" and candidatos:
-            candidato = _candidato_para_detalle(fuente, resultados)
+            etiqueta = caso.get("etiqueta_editorial") or {}
+            anio_esperado = etiqueta.get("anio") if type(etiqueta.get("anio")) is int else None
+            editorial_esperada = (etiqueta.get("editorial")
+                                  if isinstance(etiqueta.get("editorial"), str) else None)
+            candidato = _candidato_para_detalle(
+                fuente, resultados, consulta=caso.get("consulta", ""),
+                anio_esperado=anio_esperado,
+                editorial_esperada=editorial_esperada)
             numero_esperado = _numero_esperado(caso)
             if candidato is None:
                 fila["estado_detalle"] = "no_ejecutado"
