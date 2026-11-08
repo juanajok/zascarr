@@ -38,6 +38,9 @@ class FakeExecResult:
     def scalar(self):
         return self._value
 
+    def all(self):
+        return self._value
+
 
 class FakeSession:
     def __init__(self, queue: list | None = None, error: Exception | None = None):
@@ -650,3 +653,49 @@ class TestOrdenDeterminista:
         assert "ORDER BY series.sort_title" in consulta
         assert "series.start_year" in consulta
         assert "series.id" in consulta
+
+
+class TestEtiquetasBiblioteca:
+    """BL-ETQ1b (#431): etiquetas como filtro más sobre #rejilla."""
+
+    def test_filtra_y_excluye_con_chips(self):
+        from zascarr.models import Tag
+        tag = Tag(id=uuid4(), name="noir", namespace="etiqueta", name_norm="noir")
+        escuela = Tag(id=uuid4(), name="escuela", namespace="etiqueta", name_norm="escuela")
+        series = make_series("Noir")
+        session = FakeSession([
+            FakeExecResult([tag, escuela]),     # resolver
+            FakeExecResult(1),                  # count
+            FakeExecResult([series]),           # página
+            FakeExecResult([(tag, 1)]),         # facetas
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?etiquetas=noir+-escuela")
+        assert r.status_code == 200
+        assert "noir" in r.text and "Sin escuela" in r.text
+        assert "No conocemos la etiqueta" not in r.text
+        assert "facetas-biblioteca" in r.text
+        assert "1 serie con noir" in r.text
+
+    def test_etiqueta_desconocida_no_rompe(self):
+        session = FakeSession([
+            FakeExecResult([]),                 # resolver
+            FakeExecResult(0),                  # count
+            FakeExecResult([]),                 # página
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/resultados?etiquetas=noirx")
+        assert r.status_code == 200
+        assert "No conocemos la etiqueta «noirx»" in r.text
+        assert "Tu biblioteca todavía no tiene series." in r.text
+
+    def test_sugerencias_muestran_conteo_y_acciones(self):
+        from zascarr.models import Tag
+        tag = Tag(id=uuid4(), name="noir", namespace="etiqueta", name_norm="noir")
+        session = FakeSession([FakeExecResult([(tag, 34)])])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca/etiquetas/sugerir?etiquetas=noi")
+        assert r.status_code == 200
+        assert "noir" in r.text and "34 series" in r.text
+        assert "Añadir" in r.text and "Excluir" in r.text
+        assert "etiquetas=noir" in r.text and "etiquetas=-noir" in r.text
