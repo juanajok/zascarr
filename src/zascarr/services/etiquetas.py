@@ -29,6 +29,15 @@ MAX_SUGERENCIAS = 8
 
 _ESPACIOS = re.compile(r"\s+")
 _NO_ALFANUMERICO = re.compile(r"[^0-9a-z ]+")
+#: Letras que `unaccent` translitera y NFKD **no** descompone. Sin esta tabla,
+#: `normalize_tag` y `f_tag_norm` divergen en nombres como «Smørrebrød»,
+#: «Æon Flux» o «Straße»: la ficha no encontraría la etiqueta que la BD sí
+#: guardó. No pretende cubrir todo el diccionario de `unaccent` (símbolos,
+#: superíndices, alfabetos no latinos): solo letras de nombres europeos.
+_TRANSLITERACION = str.maketrans({
+    "ø": "o", "æ": "ae", "œ": "oe", "ß": "ss", "ł": "l", "đ": "d", "ð": "d",
+    "þ": "th", "ı": "i", "ħ": "h", "ŋ": "n", "ŧ": "t", "ĸ": "q",
+})
 
 
 class EtiquetaInvalida(ValueError):  # noqa: N818 — nombre de dominio
@@ -44,12 +53,21 @@ class ResultadoEtiqueta:
 
 def normalize_tag(texto: str | None) -> str:
     """Espejo Python de `f_tag_norm`: NFKC/NFKD, sin acentos, minúsculas y
-    solo alfanumérico separado por espacios. Conserva artículos."""
+    solo alfanumérico separado por espacios. Conserva artículos.
+
+    Las letras que `unaccent` translitera y NFKD no descompone (`ø`, `æ`, `œ`,
+    `ß`, `ł`, `đ`, `ð`, `þ`, `ı`, `ħ`, `ŋ`, `ŧ`, `ĸ`) pasan por
+    `_TRANSLITERACION` para que el `name_norm` calculado en Python coincida con
+    el de la columna generada. El resto del diccionario de `unaccent`
+    (símbolos, superíndices, alfabetos no latinos) queda fuera de este espejo.
+    """
     if not texto:
         return ""
     descompuesto = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", texto))
     sin_acentos = "".join(c for c in descompuesto if not unicodedata.combining(c))
-    limpio = _NO_ALFANUMERICO.sub(" ", sin_acentos.lower())
+    limpio = _NO_ALFANUMERICO.sub(
+        " ", sin_acentos.lower().translate(_TRANSLITERACION)
+    )
     return " ".join(_ESPACIOS.sub(" ", limpio).split())
 
 
