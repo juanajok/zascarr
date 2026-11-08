@@ -1,6 +1,11 @@
+{% from "_campos_contrasena.html" import campo_nueva, campo_repetida, campo_actual %}
 {% if error %}
 <p class="ajustes-error">{{ error }}</p>
 {% else %}
 <p class="caption">{{ nombre }}: guardado y aplicado — ya activo, sin reiniciar.</p>
 {% if aviso %}<p class="ajustes-hint">{{ aviso }}</p>{% endif %}
 {% endif %}
+{# BL-OPS3: el campo de la contraseña actual se sustituye por uno vacío (y marcado como inválido si falta o es
+   incorrecta); las nuevas, solo si toca vaciarlas. Nunca se devuelve lo escrito. #}
+{% if vaciar_actual %}{{ campo_actual(invalido=actual_invalida, oob=True) }}{% endif %}
+{% if vaciar_nuevas %}{{ campo_nueva(auth_password_configurada, oob=True) }}{{ campo_repetida(oob=True) }}{% endif %}

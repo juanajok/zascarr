@@ -157,38 +157,7 @@
     <div id="prueba-amule"></div>
   </fieldset>
 
-  <fieldset class="ajustes-card">
-    <legend>Seguridad</legend>
-    <p class="ajustes-desc">Pide contraseña para entrar en ZascArr. Sin ella, cualquiera que llegue a su dirección entra directo: actívala si abres ZascArr a otros equipos de tu casa o a Internet.</p>
-    <form hx-post="/ui/ajustes/guardar/seguridad" hx-target="#resultado-seguridad" hx-swap="innerHTML">
-      <label>Modo
-        <select name="auth_mode">
-          <option value="none" {% if auth_mode == "none" %}selected{% endif %}>Sin contraseña</option>
-          <option value="password" {% if auth_mode == "password" %}selected{% endif %}>Solo contraseña</option>
-          <option value="user_password" {% if auth_mode == "user_password" %}selected{% endif %}>Usuario y contraseña</option>
-        </select>
-      </label>
-      <label>Usuario (solo si eliges "Usuario y contraseña")
-        <input type="text" name="auth_username" value="{{ auth_username }}" autocomplete="off">
-      </label>
-      <label>Contraseña
-        <input type="password" name="auth_password" autocomplete="new-password"
-               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if auth_password_configurada else 'sin configurar' }}">
-      </label>
-      <label>Dirección desde Internet (opcional)
-        <input type="text" name="base_url" value="{{ base_url }}" placeholder="https://zascarr.tudominio.com">
-      </label>
-      <p class="ajustes-hint">Solo si entras a ZascArr desde Internet con un dominio propio. Si solo lo usas en casa, déjala vacía.</p>
-      <details class="ajustes-mas">
-        <summary>Detalle técnico</summary>
-        <p class="ajustes-hint">Detrás de un proxy inverso que no conserva el <code>Host</code> (nginx lo cambia por defecto), ZascArr necesita tu dominio público para validar el origen de los formularios; sin él responde 403. También se puede fijar con <code>BASE_URL</code> en el <code>.env</code>, útil si el 403 ya no te deja entrar a Ajustes.</p>
-      </details>
-      <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
-      </div>
-    </form>
-    <div id="resultado-seguridad"></div>
-  </fieldset>
+  {% include "_ajustes_seguridad.html" %}
 
   <fieldset class="ajustes-card">
     <legend>Avisos</legend>

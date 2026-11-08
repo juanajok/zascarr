@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Seguridad de acceso: la regla de contraseña y su guardado, en un solo sitio.
 
 Antes esta lógica vivía dentro del router de Ajustes (`web/ajustes.py`). A11
@@ -9,6 +10,7 @@ El router y el comando son ahora finos y comparten `fijar_seguridad`.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -16,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.services.auth import hash_password_async, limpiar_cache_basic
+from zascarr.services.reautenticacion import Reauth, comprobar_contrasena_actual
 from zascarr.services.runtime_settings import RuntimeSettingsService
 
 MODOS = ("none", "password", "user_password")
@@ -39,6 +42,26 @@ MENSAJE_SIN_CONTRASENA = (
     "Pon una contraseña antes de activar este modo — si no, no podrás volver a entrar."
 )
 MENSAJE_SIN_USUARIO = "Este modo necesita también un nombre de usuario."
+# BL-OPS3 (#456): cambiar cómo se entra exige la contraseña actual. Textos fijos, sin repetir lo escrito.
+MENSAJE_FALTA_ACTUAL = (
+    "Para cambiar esto, escribe tu contraseña actual. Si no ves el campo, recarga la página."
+)
+MENSAJE_ACTUAL_INCORRECTA = "La contraseña actual no es correcta."
+MENSAJE_COLA_LLENA = "ZascArr está ocupado. Espera unos segundos e inténtalo otra vez."
+MENSAJE_NO_COINCIDEN = "Las dos contraseñas nuevas no coinciden."
+_MENSAJE_BLOQUEADA = (
+    "Has fallado la contraseña varias veces. Por seguridad, no se pueden cambiar estos ajustes hasta "
+    "las {hora}. Puedes seguir usando ZascArr con normalidad. Si la has olvidado, quien instaló ZascArr "
+    "puede poner una nueva."
+)
+#: Qué se ha cambiado (para el registro, nunca los valores).
+CAMBIO_CONTRASENA, CAMBIO_MODO, CAMBIO_USUARIO, CAMBIO_DIRECCION = (
+    "contrasena", "modo", "usuario", "direccion")
+
+
+def mensaje_bloqueada(hasta_epoch: float) -> str:
+    """El aviso de bloqueo, con la hora de fin en la zona horaria del servidor (`TZ`)."""
+    return _MENSAJE_BLOQUEADA.format(hora=time.strftime("%H:%M", time.localtime(hasta_epoch)))
 
 
 #: Nombres de host que cuentan como «esta máquina» (para bind y para BASE_URL).
@@ -132,6 +155,11 @@ class ResultadoSeguridad:
     aviso: str | None = None
     #: ¿Cambió contraseña, usuario o modo? Quien llama debe re-emitir la cookie.
     cambia_credenciales: bool = False
+    #: BL-OPS3: por qué se rechazó por la contraseña actual (`falta_actual`, `actual_incorrecta`,
+    #: `bloqueada`, `ocupada`); `None` si no fue por eso. Es lo que registra el router (sin valores).
+    motivo_rechazo: str | None = None
+    #: BL-OPS3: qué cambió en un guardado aplicado (subconjunto de `CAMBIO_*`).
+    cambios: tuple[str, ...] = ()
 
 
 def validar_contrasena(password: str) -> tuple[str | None, str | None]:
@@ -184,19 +212,48 @@ def url_publica_valida(url: str) -> bool:
     return True
 
 
-async def fijar_seguridad(
-    db: AsyncSession, *, modo: str, usuario: str, password: str, base_url: str | None,
-) -> ResultadoSeguridad:
-    """Guarda modo, usuario, contraseña (hasheada) y `base_url`.
+def _direccion_normalizada(base_url: str | None) -> str:
+    return (base_url or "").rstrip("/")
 
-    `password` vacío = conservar la que ya hay. `base_url=None` = no tocar la que
-    haya (el formulario de Ajustes pasa siempre una cadena, y vacía significa «vuelve
-    al valor del `.env`»; el instalador no debe pisar lo que se puso en Ajustes).
-    Nunca deja la app en un modo que
-    nadie pueda desbloquear (A6): activar contraseña sin ninguna —ni recién
-    escrita ni ya guardada— se rechaza en vez de dejar al coleccionista fuera de
-    su propia instalación.
-    """
+
+def _cambios_pedidos(settings, *, modo: str, usuario: str, password: str,
+                     base_url: str | None) -> tuple[str, ...]:
+    """Qué de lo guardado cambiaría este envío (sin valores). `base_url=None` no la toca; las dos
+    direcciones se normalizan con `rstrip("/")`: un `BASE_URL` del `.env` con «/» final no cuenta
+    como cambio al guardar el mismo valor."""
+    cambios = []
+    if password:
+        cambios.append(CAMBIO_CONTRASENA)
+    if modo != settings.auth_mode:
+        cambios.append(CAMBIO_MODO)
+    if usuario != settings.auth_username:
+        cambios.append(CAMBIO_USUARIO)
+    if base_url is not None and _direccion_normalizada(base_url) != _direccion_normalizada(settings.base_url):
+        cambios.append(CAMBIO_DIRECCION)
+    return tuple(cambios)
+
+
+def exige_contrasena_actual(settings, *, modo: str, usuario: str, password: str,
+                            base_url: str | None) -> bool:
+    """¿Este envío pide la contraseña actual? (BL-OPS3, FR-01.) `True` si y solo si hay contraseña en vigor
+    y cambia algo que podría debilitar o secuestrar el acceso: contraseña nueva, modo, usuario o dirección
+    pública. Activar la contraseña por primera vez (no hay «actual»), guardar sin cambios y conservar la
+    contraseña en blanco no la piden. Es la ÚNICA fuente de la regla: el router no la repite."""
+    return hay_contrasena(settings) and bool(
+        _cambios_pedidos(settings, modo=modo, usuario=usuario, password=password, base_url=base_url))
+
+
+async def _fijar(
+    db: AsyncSession, *, modo: str, usuario: str, password: str, base_url: str | None,
+    comprobar_actual: bool, contrasena_actual: str = "", password_repetida: str | None = None,
+) -> ResultadoSeguridad:
+    """Cuerpo común de `fijar_seguridad` (web, con la contraseña actual) y de
+    `fijar_seguridad_desde_el_equipo` (instalador, sin ella).
+
+    Orden: primero las reglas de forma, que no dependen de secretos (modo, contraseña y usuario
+    obligatorios, longitud y repetición de la nueva); después, solo si hace falta, la contraseña actual;
+    y solo si pasa, el guardado. Un formulario mal rellenado no gasta intentos, y en todo rechazo no se
+    guarda nada, no se sube la versión de sesión y no se vacía ninguna caché."""
     if modo not in MODOS:
         raise ValueError(f"modo de autenticación no reconocido: {modo!r}")
 
@@ -209,7 +266,24 @@ async def fijar_seguridad(
     error, aviso = validar_contrasena(password)
     if error:
         return ResultadoSeguridad(error=error)
+    if password and password_repetida is not None and password != password_repetida:
+        return ResultadoSeguridad(error=MENSAJE_NO_COINCIDEN)
 
+    if comprobar_actual and exige_contrasena_actual(
+            settings, modo=modo, usuario=usuario, password=password, base_url=base_url):
+        if not contrasena_actual:
+            return ResultadoSeguridad(error=MENSAJE_FALTA_ACTUAL, motivo_rechazo="falta_actual")
+        reauth = await comprobar_contrasena_actual(contrasena_actual, settings)
+        if reauth.resultado is Reauth.BLOQUEADA:
+            return ResultadoSeguridad(error=mensaje_bloqueada(reauth.hasta_epoch or 0.0),
+                                      motivo_rechazo="bloqueada")
+        if reauth.resultado is Reauth.OCUPADA:
+            return ResultadoSeguridad(error=MENSAJE_COLA_LLENA, motivo_rechazo="ocupada")
+        if reauth.resultado is not Reauth.OK:
+            return ResultadoSeguridad(error=MENSAJE_ACTUAL_INCORRECTA, motivo_rechazo="actual_incorrecta")
+
+    cambios_pedidos = _cambios_pedidos(settings, modo=modo, usuario=usuario, password=password,
+                                       base_url=base_url)
     cambios: dict = {"auth_mode": modo, "auth_username": usuario}
     if base_url is not None:
         cambios["base_url"] = base_url.rstrip("/")
@@ -229,4 +303,33 @@ async def fijar_seguridad(
         # La caché de aciertos de Basic Auth queda inservible al cambiar las
         # credenciales: sus entradas viejas no deben seguir dando acceso.
         limpiar_cache_basic()
-    return ResultadoSeguridad(aviso=aviso, cambia_credenciales=cambia)
+    return ResultadoSeguridad(aviso=aviso, cambia_credenciales=cambia, cambios=cambios_pedidos)
+
+
+async def fijar_seguridad(
+    db: AsyncSession, *, modo: str, usuario: str, password: str, base_url: str | None,
+    contrasena_actual: str = "", password_repetida: str | None = None,
+) -> ResultadoSeguridad:
+    """Guarda modo, usuario, contraseña (hasheada) y `base_url`: la vía de la WEB.
+
+    Con una contraseña en vigor, cualquier cambio que pueda debilitar o secuestrar el acceso exige
+    `contrasena_actual` (ver `exige_contrasena_actual`). `password` vacío = conservar la que ya hay.
+    `password_repetida`, si no es `None`, debe coincidir con `password` (el formulario de Ajustes la
+    pide). `base_url=None` = no tocar la que haya (el formulario de Ajustes pasa siempre una cadena, y
+    vacía significa «vuelve al valor del `.env`»). Nunca deja la app en un modo que nadie pueda
+    desbloquear (A6): activar contraseña sin ninguna —ni recién escrita ni ya guardada— se rechaza en
+    vez de dejar al coleccionista fuera de su propia instalación."""
+    return await _fijar(db, modo=modo, usuario=usuario, password=password, base_url=base_url,
+                        comprobar_actual=True, contrasena_actual=contrasena_actual,
+                        password_repetida=password_repetida)
+
+
+async def fijar_seguridad_desde_el_equipo(
+    db: AsyncSession, *, modo: str, usuario: str, password: str, base_url: str | None,
+) -> ResultadoSeguridad:
+    """Lo mismo que `fijar_seguridad` SIN pedir la contraseña actual: solo para `cli/seguridad.py` (el
+    instalador, que corre en el equipo y como root, y es la vía de recuperación si se olvida la
+    contraseña). Con dos funciones de nombre distinto, y no un booleano que salte la comprobación, una
+    revisión o un `grep` ven quién la usa (hay una prueba que lo exige): el router nunca la importa."""
+    return await _fijar(db, modo=modo, usuario=usuario, password=password, base_url=base_url,
+                        comprobar_actual=False)

@@ -46,7 +46,7 @@ from zascarr.services.runtime_settings import (
 from zascarr.services.seguridad import (
     base_url_es_publica,
     estado_de_seguridad,
-    fijar_seguridad,
+    fijar_seguridad_desde_el_equipo,
     hay_contrasena,
 )
 
@@ -61,7 +61,8 @@ async def fijar_contrasena(db, linea: str) -> tuple[int, str, str | None]:
     if not linea:
         return RECHAZADA, "No he recibido ninguna contraseña por la entrada estándar.", None
     s = get_settings()
-    resultado = await fijar_seguridad(
+    # Vía de recuperación: en el equipo y como root, sin pedir la actual (BL-OPS3, FR-08).
+    resultado = await fijar_seguridad_desde_el_equipo(
         db, modo="password",
         # No toca el usuario ni la `base_url` que ya hubiera: este comando solo
         # fija la contraseña.

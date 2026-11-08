@@ -140,7 +140,8 @@ class TestGuardarSeguridad:
         try:
             client = TestClient(app)
             r = client.post("/ui/ajustes/guardar/seguridad", data={
-                "auth_mode": "password", "auth_password": "contrasena-larga", "base_url": "",
+                "auth_mode": "password", "auth_password": "contrasena-larga",
+                "auth_password_repetida": "contrasena-larga", "base_url": "",
             })
         finally:
             app.dependency_overrides.pop(get_db, None)
@@ -161,10 +162,11 @@ class TestGuardarSeguridad:
         app.dependency_overrides[get_db] = _override_get_db(FakeSession())
         try:
             client = TestClient(app)
-            return client.post("/ui/ajustes/guardar/seguridad", data={
-                "auth_mode": "password", "auth_username": "", "auth_password": "",
-                "base_url": "", **campos,
-            })
+            datos = {"auth_mode": "password", "auth_username": "", "auth_password": "",
+                     "base_url": "", **campos}
+            # BL-OPS3 (Q-11): el formulario pide repetir la contraseña nueva; las pruebas la repiten
+            datos.setdefault("auth_password_repetida", datos["auth_password"])
+            return client.post("/ui/ajustes/guardar/seguridad", data=datos)
         finally:
             app.dependency_overrides.pop(get_db, None)
 

@@ -34,13 +34,16 @@ def _limpiar_estado_auth():
         limpiar_fallos,
         reiniciar_estado_concurrencia,
     )
+    from zascarr.services.reautenticacion import reiniciar_estado as reiniciar_reauth
     limpiar_fallos()
     limpiar_cache_basic()
     reiniciar_estado_concurrencia()
+    reiniciar_reauth()
     yield
     limpiar_fallos()
     limpiar_cache_basic()
     reiniciar_estado_concurrencia()
+    reiniciar_reauth()
 
 
 @pytest.fixture(autouse=True)
