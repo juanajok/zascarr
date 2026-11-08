@@ -143,11 +143,13 @@ class ComicVineClient:
         return data
 
     async def search_series(self, query: str, limit: int = 10) -> list[CVResult]:
+        # La API admite 50-100 por página; pedimos 50 y recortamos a `limit` después,
+        # para no perder candidatos por pedir solo los primeros 10.
         data = await self._get("/search/", {
-            "query": query, "resources": "volume", "limit": limit,
+            "query": query, "resources": "volume", "limit": 50,
             "field_list": "id,name,description,image,start_year,count_of_issues,site_detail_url",
         })
-        return [CVResult(
+        resultados = [CVResult(
             cv_id=item["id"], name=item.get("name", ""),
             description=item.get("description"),
             image_url=_portada(item),
@@ -156,6 +158,7 @@ class ComicVineClient:
             site_url=item.get("site_detail_url"),
             raw=item,
         ) for item in data.get("results", [])]
+        return resultados[:limit]
 
     async def get_volume(self, volume_id: int) -> CVVolume | None:
         """`GET /volume/4050-{id}/`; 1 petición y `None` en 404.

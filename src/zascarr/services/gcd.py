@@ -277,17 +277,24 @@ class GCDClient:
             logger.warning("gcd.invalid_json", error=type(exc).__name__)
             return []
         results = []
-        for item in data.get("results", [])[:limit]:
+        # Filtrar ANTES de recortar: si los primeros son extranjeros, la edición
+        # española que viene detrás no se pierde sin pedir otra página.
+        for item in data.get("results", []):
             gcd_id = _id_from_api_url(item.get("api_url", ""))
             if gcd_id is None:
                 continue
-            results.append(GCDResult(
+            resultado = GCDResult(
                 gcd_id=gcd_id, name=item.get("name", ""),
                 year_began=item.get("year_began"), year_ended=item.get("year_ended"),
                 language=item.get("language"), country=item.get("country"),
                 site_url=f"https://www.comics.org/series/{gcd_id}/",
                 raw=item,
-            ))
+            )
+            if es_edicion_espanola(resultado) is False:
+                continue
+            results.append(resultado)
+            if len(results) >= limit:
+                break
         return results
 
 
