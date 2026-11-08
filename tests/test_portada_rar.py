@@ -908,3 +908,24 @@ def test_ids_de_archivo_son_uuid_en_la_consulta():
     """La consulta de candidatos trae `File.id` primero: la marca de fallo lo necesita."""
     sentencia = str(wseries._stmt_archivos_de_portada(UUID(int=1)))
     assert sentencia.index("files.id") < sentencia.index("files.file_path")
+
+
+def test_506_respaldo_viejo_con_lector_ocupado_lleva_no_store(
+        tmp_path, mundo, falso, monkeypatch):
+    """#506: si el lector está ocupado, el respaldo 100×100 no se cachea un día."""
+    _listado_de_una_pagina(falso)
+    series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None)])
+    antigua = covers / f"{series.id}.jpg"
+    antigua.parent.mkdir(parents=True)
+    antigua.write_bytes(_jpeg(120))
+    monkeypatch.setattr(lector_rar, "RAR_ESPERA_TURNO_S", 0.1)
+    assert lector_rar._SEMAFORO.acquire(timeout=1)
+    try:
+        r = _pedir(series)
+    finally:
+        lector_rar._SEMAFORO.release()
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    # Libre otra vez: la portada buena se genera en v3 y se cachea con la cabecera normal.
+    r2 = _pedir(series)
+    assert r2.status_code == 200 and r2.headers["cache-control"] == "private, max-age=86400"
+    assert (covers / "v3" / f"{series.id}.jpg").exists()
