@@ -355,6 +355,9 @@ PARAMETROS_DE_QUERY = frozenset({
     "series_id", "source", "status", "story_arc_id", "titulo", "tradition", "ultimo", "url",
     # BL-IT03 (#286): contexto de vuelta Biblioteca → ficha; solo ruta local validada.
     "volver",
+    # BL-ETQ1a (#403): lo tecleado en «Añadir una etiqueta…» (sugerencias de la ficha); nombre que
+    # escribe la persona, se quita del registro de acceso como el resto de la query.
+    "etiqueta",
     # BL-IT02 (#284): presentación tarjetas/lista de la Biblioteca.
     "vista",
 })

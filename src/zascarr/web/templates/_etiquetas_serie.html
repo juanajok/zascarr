@@ -1,0 +1,47 @@
+{# Etiquetas de la ficha de serie (BL-ETQ1a, #403).
+
+   Es un partial porque los POST de añadir/quitar/crear lo devuelven tal cual para que htmx
+   sustituya solo el bloque `#etiquetas-serie`, sin recargar la página. Va dentro de
+   `ui.region_viva("etiquetas-serie")` en la ficha.
+
+   El campo «Añadir una etiqueta…» queda FUERA del `<form>` (form="anadir-etiqueta-serie")
+   para no anidar formularios: junto a él va el desplegable de sugerencias, cuyas filas son
+   formularios POST independientes (HTML válido y funcional sin JS). `sugerencias` no se pinta
+   aquí: la llena la ruta GET …/etiquetas/sugerir sobre `#sugerencias-etiqueta-serie`. #}
+{% if aviso %}{{ ui.aviso(aviso.tipo, aviso.texto) }}{% endif %}
+{% if not etiquetas %}
+<p class="empty">Sin etiquetas todavía. Añade una para encontrar esta serie por lo que trata.</p>
+{% else %}
+{% call ui.grupo("Etiquetas", etiquetas|length) %}
+  <ul class="etiquetas-lista">
+    {% for e in etiquetas %}
+    <li>
+      <form action="/ui/series/{{ series_id }}/etiquetas/quitar" method="post"
+            hx-post="/ui/series/{{ series_id }}/etiquetas/quitar"
+            hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
+        <input type="hidden" name="etiqueta" value="{{ e.clave }}">
+        {{ ui.chip("neutro", e.clave) }}
+        <button type="submit" class="chip-quitar" aria-label="Quitar {{ e.clave }} de esta serie">
+          {{ ui.icono("x") }}</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+{% endcall %}
+{% endif %}
+<div class="etiquetas-anadir">
+  <div class="filter-search-box filter-search-box-etiquetas">
+    <label class="sr" for="f-etiqueta-serie">Añadir etiqueta</label>
+    <input id="f-etiqueta-serie" name="etiqueta" type="search" form="anadir-etiqueta-serie"
+           placeholder="Añadir una etiqueta…"
+           hx-get="/ui/series/{{ series_id }}/etiquetas/sugerir"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#sugerencias-etiqueta-serie" hx-swap="innerHTML" hx-sync="this:replace">
+    <div id="sugerencias-etiqueta-serie" class="series-results" aria-label="Sugerencias de etiquetas"></div>
+  </div>
+  <form id="anadir-etiqueta-serie" action="/ui/series/{{ series_id }}/etiquetas" method="post"
+        hx-post="/ui/series/{{ series_id }}/etiquetas"
+        hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <button type="submit">Añadir</button>
+  </form>
+</div>

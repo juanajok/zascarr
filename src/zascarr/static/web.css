@@ -1821,12 +1821,50 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .enriquecimiento-tabla td:first-of-type { padding-top: 6px; }
 }
 
+/* ── 17a. ETIQUETAS (BL-ETQ1a, #403) ────────────────────────────────────────
+   Todo sale de tokens existentes; no se añade ningún color nuevo. La fila de sugerencias
+   reutiliza el separador discontinuo de `.series-results li` (§16). */
+
+/* Ficha de serie: etiquetas en un solo grupo y formulario de añadir. */
+.etiquetas-serie { display: flex; flex-direction: column; gap: 12px; }
+.etiquetas-lista {
+  display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 12px 16px;
+}
+.etiquetas-lista form { margin: 0; display: inline-flex; align-items: center; gap: 2px; }
+.etiquetas-lista li { display: inline-flex; }
+.chip-quitar {
+  min-height: 24px; min-width: 24px; padding: 2px;
+  background: transparent; border: 0; box-shadow: none; color: var(--ink-soft); cursor: pointer;
+}
+.chip-quitar .ico-svg { width: 14px; height: 14px; flex: none; display: block; }
+.chip-quitar:hover { color: var(--warn-t); transform: none; box-shadow: none; }
+.etiquetas-anadir { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.etiquetas-anadir .filter-search-box { flex: 0 1 440px; }
+.etiquetas-anadir .filter-search-box .series-results { top: calc(100% + 4px); }
+
+/* Campo de búsqueda de etiquetas y desplegable de sugerencias (reutiliza
+   .filter-search-box/.series-results; solo se fija el ancho). */
+.filter-search-box-etiquetas { flex: 0 1 380px; min-width: 320px; }
+.filter-search-box-etiquetas input[type="search"] { width: 100%; }
+.sugerencia-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.sugerencia-fila form { margin: 0; }
+.sugerencia-fila button { min-height: 24px; padding: 2px 10px; box-shadow: none; }
+.sugerencia-etiqueta { flex: 1 1 10rem; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+.sugerencia-fila .cuenta { color: var(--ink-faint); font-size: .875rem; font-variant-numeric: tabular-nums; }
+
+/* Táctil y pantallas estrechas: el control de quitar y las acciones de sugerencia a 44 px. */
+@media (max-width: 860px), (pointer: coarse) {
+  .chip-quitar, .sugerencia-fila button { min-height: 44px; min-width: 44px; }
+}
+@media (max-width: 860px) {
+  .filter-search-box-etiquetas { flex: 1 1 100%; min-width: 0; }
+}
+
 /* ── 17b. CONTRASTE ALTO ─────────────────────────────────────────────────────
    La trama y el desalineamiento del rótulo de error son decoración: quien pide más contraste o
    colores forzados los ve como ruido. Se apagan todos; cada trama nueva (un `radial-gradient` de
    puntos) se añade aquí (lo comprueba test_web_componentes). Va al FINAL del fichero: con la misma
    especificidad gana la regla que va después, y si no, un `text-shadow` posterior volvería a pintarse. */
-
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,

@@ -21,6 +21,7 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    and_,
     func,
     text,
 )
@@ -227,6 +228,47 @@ issue_tags = Table(
     ),
 )
 
+# BL-ETQ1a (#403): asignación serie↔etiqueta. `issue_tags` queda dormida (etiquetar números es una
+# fase posterior). `source` dice de dónde salió cada asignación; `oculta` permite retirar de la
+# vista una fila no manual sin borrarla (BL-ETQ2/4). El índice parcial y los checks viven en 0022.
+series_tags = Table(
+    "series_tags",
+    Base.metadata,
+    Column(
+        "series_id",
+        UUID(as_uuid=True),
+        ForeignKey("series.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tag_id", UUID(as_uuid=True), ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column("source", String(20), nullable=False, server_default="manual"),
+    Column("weight", SmallInteger, nullable=True),
+    Column("oculta", Boolean, nullable=False, server_default=text("false")),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+    Column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    ),
+    CheckConstraint(
+        "source IN ('comic_vine','gcd','anilist','tebeosfera','comicinfo_xml','manual')",
+        name="ck_series_tags_source",
+    ),
+    CheckConstraint(
+        "weight IS NULL OR weight BETWEEN 0 AND 100", name="ck_series_tags_weight"
+    ),
+    Index(
+        "ix_series_tags_tag_visible",
+        "tag_id",
+        "series_id",
+        postgresql_where=text("oculta = false"),
+    ),
+)
+
 
 # ── Modelos ────────────────────────────────────────────────────────────────────
 
@@ -403,6 +445,18 @@ class Series(Base):
         back_populates="series", cascade="all, delete-orphan"
     )
     genres:    Mapped[list["Genre"]]     = relationship(secondary=series_genres)
+    # BL-ETQ1a (#403): solo las asignaciones visibles (`oculta=false`). La escritura va por
+    # `services/etiquetas.py` (relación viewonly): así una fila oculta de una fuente no se pinta.
+    tags:      Mapped[list["Tag"]]       = relationship(
+        secondary=series_tags,
+        primaryjoin=lambda: and_(
+            Series.id == series_tags.c.series_id, series_tags.c.oculta.is_(False)
+        ),
+        secondaryjoin=lambda: Tag.id == series_tags.c.tag_id,
+        viewonly=True,
+        order_by=lambda: Tag.name_norm,
+        overlaps="series",
+    )
 
 
 class StoryArc(Base):
@@ -496,9 +550,46 @@ class StoryArcIssue(Base):
 
 class Tag(Base):
     __tablename__ = "tags"
+    __table_args__ = (
+        UniqueConstraint(
+            "namespace", "name_norm", name="uq_tags_namespace_name_norm"
+        ),
+        CheckConstraint("namespace IN ('etiqueta')", name="ck_tags_namespace"),
+        CheckConstraint(
+            "char_length(name) BETWEEN 1 AND 64 AND name_norm <> ''",
+            name="ck_tags_name",
+        ),
+    )
     id:    Mapped[str]      = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    name:  Mapped[str]      = mapped_column(String(100), unique=True, nullable=False)
+    # D-1: único espacio visible en el MVP. La columna queda preparada para ampliarse con otra
+    # migración; hoy el CHECK solo admite 'etiqueta'.
+    namespace: Mapped[str]  = mapped_column(
+        String(16), nullable=False, default="etiqueta", server_default="etiqueta"
+    )
+    name:  Mapped[str]      = mapped_column(String(100), nullable=False)
+    # Espejo SQL (0022) de services/etiquetas.py::normalize_tag. Nunca se asigna desde Python.
+    name_norm: Mapped[str | None] = mapped_column(
+        Text, Computed("f_tag_norm(name)", persisted=True)
+    )
     color: Mapped[str|None] = mapped_column(String(7))
+    series: Mapped[list["Series"]] = relationship(
+        secondary=series_tags,
+        primaryjoin=lambda: Tag.id == series_tags.c.tag_id,
+        secondaryjoin=lambda: Series.id == series_tags.c.series_id,
+        viewonly=True,
+        overlaps="tags",
+    )
+
+    @property
+    def clave(self) -> str:
+        """Token canónico que ve la persona: `name_norm` con los espacios como guiones.
+
+        Se calcula desde `name_norm` cuando está disponible (fila leída de la BD) y, si no
+        (objeto recién creado antes del `flush`), desde `name`, que el servicio escribe ya
+        normalizado.
+        """
+        base = self.name_norm or self.name
+        return base.replace(" ", "-")
 
 
 class File(Base):

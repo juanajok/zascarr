@@ -44,6 +44,14 @@
 <p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
 {% include "_politica_serie.html" %}
 
+<section class="etiquetas-serie" aria-labelledby="etiquetas-titulo">
+  <h2 id="etiquetas-titulo">Etiquetas</h2>
+  <p class="subtitle">Lo que tratan tus tebeos. Se guarda al momento; no toca los archivos.</p>
+  {% call ui.region_viva("etiquetas-serie") %}
+  {% include "_etiquetas_serie.html" %}
+  {% endcall %}
+</section>
+
 {% if procedencia %}
 {#- «Manual» y «Protegido» se explican una vez, no por fila: la leyenda solo
     aparece si de verdad hay alguno de los dos en la serie. -#}

@@ -40,6 +40,15 @@ from zascarr.services.enriquecimiento_plan import (
     EnriquecimientoPlanService,
     ErrorDePlan,
 )
+from zascarr.services.etiquetas import (
+    EtiquetaDeSerie,
+    EtiquetasService,
+    NombreDeEtiquetaInvalidoError,
+    Resultado,
+    clave_de,
+    normalize_tag,
+    validar_nombre,
+)
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     horas_minimas,
@@ -216,7 +225,11 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = (await db.execute(
         select(Series)
-        .options(selectinload(Series.publisher), selectinload(Series.genres))
+        .options(
+            selectinload(Series.publisher),
+            selectinload(Series.genres),
+            selectinload(Series.tags),
+        )
         .where(Series.id == series_id)
     )).scalar_one_or_none()
     if not series:
@@ -226,7 +239,7 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     huecos = await huecos_de_serie(db, series, poseidos)
 
     politica = await _contexto_politica(db, series)
-    return templates.TemplateResponse(request, "series_detail.html", {
+    respuesta = templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
         "missing": huecos.faltantes, "huecos": huecos,
         **politica,
@@ -235,7 +248,12 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "procedencia": procedencia_de_serie(series),
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
+        # BL-ETQ1a (#403): etiquetas visibles de la serie (ya cargadas con selectinload).
+        "series_id": series.id,
+        "etiquetas": [EtiquetaDeSerie(clave=tag.clave) for tag in series.tags],
     })
+    # FR-13: la ficha lleva estado (etiquetas) y no se cachea.
+    return _sin_cache(respuesta)
 
 
 async def _serie_o_404(db: AsyncSession, series_id: UUID) -> Series:
@@ -243,6 +261,113 @@ async def _serie_o_404(db: AsyncSession, series_id: UUID) -> Series:
     if series is None:
         raise HTTPException(status_code=404, detail="Serie no encontrada")
     return series
+
+
+# ── Etiquetas por serie (BL-ETQ1a, #403) ────────────────────────────────────────
+
+def _sin_cache(resp: HTMLResponse) -> HTMLResponse:
+    """Los fragmentos con estado no se cachean: Atrás/recargar no debe mezclar etiquetas."""
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def _fragmento_etiquetas(
+    request: Request,
+    series_id: UUID,
+    etiquetas: list[EtiquetaDeSerie],
+    aviso: dict | None = None,
+) -> HTMLResponse:
+    return templates.TemplateResponse(request, "_etiquetas_serie.html", {
+        "series_id": series_id,
+        "etiquetas": etiquetas,
+        "aviso": aviso,
+    })
+
+
+async def _existe_serie(db: AsyncSession, series_id: UUID) -> bool:
+    return (
+        await db.execute(select(Series.id).where(Series.id == series_id))
+    ).first() is not None
+
+
+@router.get("/{series_id}/etiquetas/sugerir", response_class=HTMLResponse)
+async def sugerir_etiqueta(
+    series_id: UUID, request: Request, etiqueta: str = Query(default=""),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Sugerencias del campo «Añadir una etiqueta…». <2 caracteres → fragmento vacío sin consulta."""
+    texto = etiqueta.strip()
+    if len(texto) < 2:
+        return _sin_cache(HTMLResponse(content=""))
+    servicio = EtiquetasService(db)
+    sugerencias = await servicio.sugerir(series_id, texto)
+    q_norm = normalize_tag(texto)
+    # «Crear «…»» (D-6): nombre válido que aún no existe como etiqueta.
+    creable = bool(q_norm) and all(s.clave != q_norm for s in sugerencias)
+    try:
+        validar_nombre(texto)
+    except NombreDeEtiquetaInvalidoError:
+        creable = False
+    return _sin_cache(templates.TemplateResponse(request, "_sugerencias_etiqueta_serie.html", {
+        "series_id": series_id,
+        "sugerencias": sugerencias,
+        "creable": creable,
+        "crear_clave": clave_de(q_norm) if creable else None,
+    }))
+
+
+@router.post("/{series_id}/etiquetas", response_class=HTMLResponse)
+async def anadir_etiqueta(
+    series_id: UUID, request: Request, etiqueta: str = Form(...),
+    crear: str | None = Form(None), db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Añade `etiqueta` a la serie; con `crear=1` (D-6) la crea si no existe.
+
+    La escritura valida solo el campo `etiqueta` (nunca el body crudo): `source='manual'` y
+    `weight=NULL` los fija el servicio, y un `source`/`namespace`/`weight` inyectados se ignoran.
+    Errores recuperables → 200 con el fragmento y su aviso (htmx no intercambia los 4xx).
+    """
+    if not await _existe_serie(db, series_id):
+        return _sin_cache(_fragmento_etiquetas(
+            request, series_id, [], {"tipo": "warn", "texto": "No se pudo guardar. Vuelve a intentarlo."}
+        ))
+    servicio = EtiquetasService(db)
+    try:
+        resultado = await servicio.anadir(series_id, etiqueta, crear=(crear == "1"))
+    except Exception as exc:  # noqa: BLE001 — la BD caída responde 200 con aviso, nunca JSON (AC-12)
+        # FR-13: sin traceback ni mensaje de la excepción — SQLAlchemy puede incluir el nombre
+        # tecleado entre los parámetros de la sentencia. El tipo basta para diagnosticar.
+        logger.error("etiquetas.anadir_fallo", tipo=type(exc).__name__)
+        resultado = Resultado(False, "warn", "No se pudo guardar. Vuelve a intentarlo.")
+    etiquetas = await servicio.de_serie(series_id)
+    return _sin_cache(_fragmento_etiquetas(
+        request, series_id, etiquetas,
+        {"tipo": resultado.aviso_tipo, "texto": resultado.aviso},
+    ))
+
+
+@router.post("/{series_id}/etiquetas/quitar", response_class=HTMLResponse)
+async def quitar_etiqueta(
+    series_id: UUID, request: Request, etiqueta: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Quita `etiqueta` de la serie. Una fila manual se borra; una de fuente se marca `oculta=true`."""
+    if not await _existe_serie(db, series_id):
+        return _sin_cache(_fragmento_etiquetas(
+            request, series_id, [], {"tipo": "warn", "texto": "No se pudo guardar. Vuelve a intentarlo."}
+        ))
+    servicio = EtiquetasService(db)
+    try:
+        resultado = await servicio.quitar(series_id, etiqueta)
+    except Exception as exc:  # noqa: BLE001 — ver `anadir_etiqueta`
+        # FR-13: igual que en `anadir_etiqueta`, sin traceback que arrastre el nombre.
+        logger.error("etiquetas.quitar_fallo", tipo=type(exc).__name__)
+        resultado = Resultado(False, "warn", "No se pudo guardar. Vuelve a intentarlo.")
+    etiquetas = await servicio.de_serie(series_id)
+    return _sin_cache(_fragmento_etiquetas(
+        request, series_id, etiquetas,
+        {"tipo": resultado.aviso_tipo, "texto": resultado.aviso},
+    ))
 
 
 @router.post("/{series_id}/enriquecimiento/previsualizar", response_class=HTMLResponse)

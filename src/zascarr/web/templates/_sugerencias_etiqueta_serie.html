@@ -1,0 +1,36 @@
+{# Sugerencias de etiqueta para la ficha (BL-ETQ1a, #403). Fragmento que la ruta
+   GET …/etiquetas/sugerir intercambia en `#sugerencias-etiqueta-serie`.
+
+   Cada fila es un formulario POST independiente (no se anidan formularios); «Añadir» envía la
+   etiqueta elegida a POST …/etiquetas. Cuando lo tecleado es un nombre válido que aún no existe,
+   aparece la acción explícita «Crear «…»» (D-6) con `crear=1`. #}
+{% if sugerencias or creable %}
+<ul class="series-list" aria-label="Sugerencias de etiquetas">
+  {% for s in sugerencias %}
+  <li class="sugerencia-fila">
+    <span class="sugerencia-etiqueta">{{ s.clave }}</span>
+    <span class="cuenta">{{ s.series }} {{ "serie" if s.series == 1 else "series" }}</span>
+    <form action="/ui/series/{{ series_id }}/etiquetas" method="post"
+          hx-post="/ui/series/{{ series_id }}/etiquetas"
+          hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="etiqueta" value="{{ s.clave }}">
+      <button type="submit" class="btn ghost sm">Añadir<span class="sr"> {{ s.clave }}</span></button>
+    </form>
+  </li>
+  {% endfor %}
+  {% if creable %}
+  <li class="sugerencia-fila crear">
+    <span class="sugerencia-etiqueta">Crear «{{ crear_clave }}»</span>
+    <form action="/ui/series/{{ series_id }}/etiquetas" method="post"
+          hx-post="/ui/series/{{ series_id }}/etiquetas"
+          hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="etiqueta" value="{{ crear_clave }}">
+      <input type="hidden" name="crear" value="1">
+      <button type="submit" class="btn ghost sm">Crear<span class="sr"> {{ crear_clave }}</span></button>
+    </form>
+  </li>
+  {% endif %}
+</ul>
+{% else %}
+<p class="empty">Sin coincidencias. Prueba con otras letras.</p>
+{% endif %}

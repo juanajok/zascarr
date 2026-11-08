@@ -162,6 +162,24 @@ class TestFichaSerie:
         assert "Añadir números del disco" in r.text
         assert "Vincular no mueve ni renombra el archivo." in r.text
 
+    def test_muestra_la_seccion_de_etiquetas_vacia(self):
+        """BL-ETQ1a (#403): la ficha enseña la sección aunque no haya etiquetas, con su campo
+        de añadir y el destino de las sugerencias (el fragmento se pide por htmx)."""
+        series = make_series(total_issues=3)
+        session = FakeSession([
+            FakeExecResult([series]),
+            FakeExecResult([]),
+            acuse(), retirados(), FakeExecResult([]),
+        ])
+        with use_fake_session(session) as client:
+            r = client.get(f"/ui/series/{series.id}")
+        assert r.status_code == 200
+        assert 'id="etiquetas-serie"' in r.text
+        assert "Sin etiquetas todavía." in r.text
+        assert f'hx-get="/ui/series/{series.id}/etiquetas/sugerir"' in r.text
+        assert 'id="sugerencias-etiqueta-serie"' in r.text
+        assert f'action="/ui/series/{series.id}/etiquetas"' in r.text
+
     def test_regresion_annual_1_5_no_oculta_el_hueco_del_1(self):
         series = make_series(total_issues=2)
         session = FakeSession([
