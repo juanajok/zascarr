@@ -283,3 +283,94 @@ def test_el_banco_pasa_el_anio_a_la_busqueda_de_gcd():
     asyncio.run(banco._invocar(cliente, "gcd", "search_series", {
         "consulta": "Dragon Ball", "etiqueta_editorial": {"anio": 2006}}))
     cliente.search_series.assert_awaited_once_with("Dragon Ball", anio=2006)
+
+
+class _BusquedaGCD:
+    def __init__(self, *, resultados=None, error=None, peticiones=1):
+        self.ultimas_peticiones = peticiones
+        self._resultados = resultados or []
+        self._error = error
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_exc):
+        return None
+
+    async def search_series(self, _consulta, **_kwargs):
+        if self._error is not None:
+            raise self._error
+        return self._resultados
+
+
+def _plan_gcd(corpus):
+    return [{"caso": c, "fuente": "gcd", "unidad": "serie",
+             "capacidad": "busqueda", "metodo": "search_series"}
+            for c in corpus["casos"]]
+
+
+def _auth_gcd():
+    auth = _auth()
+    auth["ambito"] = ["gcd"]
+    return auth
+
+
+class TestContabilidadGCD:
+    def _ejecutar(self, monkeypatch, *, resultados=None, error=None, peticiones=1,
+                  celdas=1):
+        from zascarr.services.gcd import GCDResult
+
+        corpus = _corpus()
+        auth = _auth_gcd()
+        cliente = _BusquedaGCD(
+            resultados=resultados if resultados is not None else [
+                GCDResult(gcd_id=1, name="Dragon Ball", year_began=1992,
+                          language="es", country="es")],
+            error=error, peticiones=peticiones)
+        monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+        return asyncio.run(banco.ejecutar_real(
+            _plan_gcd(corpus)[:celdas], corpus, auth, max_peticiones=4,
+            max_por_fuente=20, salida=Path("/tmp/x"), corpus_sha="sha-corpus",
+            fuentes=["gcd"], cliente_factory=lambda _f: cliente,
+            sha_ejecutor="abc", aplicar_ajustes=False))
+
+    def test_anota_las_peticiones_reales_y_respeta_el_tope(self, monkeypatch):
+        filas = self._ejecutar(monkeypatch, peticiones=4, celdas=2)
+        assert filas[0]["estado_tecnico"] == "ok"
+        assert filas[0]["peticiones"] == 4
+        assert filas[1]["estado_tecnico"] == "no_ejecutado"
+        assert filas[1]["motivo_no_ejecutado"] == "presupuesto_agotado"
+
+    def test_429_es_limite_de_cortesia_y_no_ausencia(self, monkeypatch):
+        from zascarr.utils.peticiones import ReintentosAgotados
+
+        filas = self._ejecutar(monkeypatch, error=ReintentosAgotados("gcd", 3, 429))
+        assert filas[0]["estado_tecnico"] == "limite_de_cortesia"
+        grupo = banco.calcular_metricas(filas, _corpus())["por_fuente_unidad"][
+            "gcd__serie"]
+        assert grupo["ausencias"] == 0
+
+    def test_503_es_fallo_transitorio_y_no_ausencia(self, monkeypatch):
+        from zascarr.utils.peticiones import ReintentosAgotados
+
+        filas = self._ejecutar(monkeypatch, error=ReintentosAgotados("gcd", 2, 503))
+        assert filas[0]["estado_tecnico"] == "fallo_transitorio"
+        grupo = banco.calcular_metricas(filas, _corpus())["por_fuente_unidad"][
+            "gcd__serie"]
+        assert grupo["ausencias"] == 0
+
+
+def test_el_detalle_recomprueba_el_presupuesto_con_el_gasto_real(monkeypatch):
+    monkeypatch.setattr(banco, "_configuracion_fuente", lambda _f: (True, None))
+    corpus = _corpus()
+    plan = _plan(corpus)[:2]
+    servicio = _DetalleFalso([_ok(_detalle(peticiones=3))])
+    filas = asyncio.run(banco.ejecutar_real(
+        plan, corpus, _auth(), max_peticiones=3, max_por_fuente=20,
+        salida=Path("/tmp/x"), corpus_sha="sha-corpus", fuentes=["tebeosfera"],
+        cliente_factory=lambda _f: _BusquedaFalsa(),
+        detalle_service_factory=lambda: servicio, sha_ejecutor="abc",
+        aplicar_ajustes=False, con_detalle=True))
+    assert filas[0]["peticiones"] == 4       # 1 búsqueda + 3 reales del detalle
+    assert filas[1]["estado_tecnico"] == "no_ejecutado"
+    assert filas[1]["motivo_no_ejecutado"] == "presupuesto_agotado"
