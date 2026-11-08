@@ -77,7 +77,8 @@ class TestGCDPorLaCola:
         b = _cliente(handler, entorno)
         try:
             assert [r.name for r in await a.search_series("batman")] == ["Batman"]
-            assert [r.name for r in await b.search_series("batman")] == ["Batman"]
+            # Consulta distinta para el segundo cliente: la caché (#523) es por consulta.
+            assert [r.name for r in await b.search_series("robin")] == ["Batman"]
         finally:
             await _cerrar(a)
             await _cerrar(b)
