@@ -102,3 +102,25 @@ Para poder pasar a «adoptar» (o a «descartar») faltan, en este orden:
 5. **Más muestras sólidas** de otro tamaño y, si se quiere, más paquetes como `m04` (la discrepancia de `bsdtar` está descrita, no explicada).
 
 Esta ficha **no decide** la implementación ni autoriza renombrar, convertir, mover o adoptar ningún fichero de la biblioteca. Los 1234 `.cbr` siguen sin abrirse hoy; lo que cambiaría una implementación futura (portada y metadatos para esos ficheros) **no está medido** y depende de que cada fichero contenga imágenes legibles.
+
+## 9. Actualización 2026-11-09 — #528: base trixie, `unar` 1.10.8 y flag de sólidos
+
+> **No reescribe la medición de arriba.** Las tablas de §2–§7 se midieron con `unar`/`lsar` **1.10.1** de bookworm (`1.10.7+ds1+really1.10.1-2+b2`) sobre las 11 muestras del #308; siguen siendo la referencia histórica. Esta nota registra lo que cambia con la implementación de **#528 (opción 1 del PO)**.
+
+| Dato | Antes (medición / bookworm) | Ahora (#528) |
+|---|---|---|
+| Imagen base | `python:3.11-slim-bookworm` | **`python:3.11-slim-trixie`** (builder y runtime), Python 3.11.18 |
+| `unar`/`lsar` | 1.10.7+ds1+really**1.10.1**-2+b2 | **1.10.8+ds1-9** (`v1.10.8`; lo comprueba la CI dentro de la imagen) |
+| GNUstep Base | 1.28.1+really1.28.0-5 | **1.31.1-3** (`libgnustep-base1.31`) |
+| Listado | `lsar -j` | **`lsar -j -json-skip-solid-information`** |
+
+**Por qué el flag.** En un RAR sólido, `lsar -j` repite en **cada** entrada el objeto interno del sólido (`XADSolidObject`, ≈29 KB). Con ~140 páginas el JSON supera `RAR_MAX_SALIDA_LISTADO` (4 MiB) y el lector devuelve `demasiado_grande`: el caso real de #528, con 216–246 páginas (≈12,9 MiB de salida). `-json-skip-solid-information` (`-jss`) omite ese objeto; el resto del contrato (índice, nombre, tamaño, CRC, cifrado, directorio) no cambia.
+
+**Lo que NO se relaja.** Los topes de `utils/lector_rar.py` siguen igual: 1000 entradas, 500 MiB declarados, 4 MiB de salida de listado, 128 MiB de RSS, timeout y un solo lector. El flag no añade permisos ni rutas; solo reduce el JSON. La extracción por índice y la verificación por tamaño/CRC no dependen del flag.
+
+**Compatibilidad con 1.10.1.** Si el binario no conoce el flag (bookworm), `listar` lo reintenta **una sola vez** sin él y sigue leyendo; en ese runtime el sólido grande vuelve a quedar limitado por el tope de 4 MiB (comportamiento anterior, no una regresión nueva). Hay prueba con el `lsar` falso que imita el mensaje real («Unknown option -json-skip-solid-information.»).
+
+**Cobertura.** Pruebas unitarias (`tests/test_lector_rar.py`, `tests/_rar_falso.py`): el flag queda fijado en `llamadas.log`; sólido sintético de **220** entradas con salida compacta con flag y >4 MiB sin flag; extracción con CRC; y el reintento único para el binario viejo. Imagen y CI: el job `docker-build` comprueba `unar -v`/`lsar -v` = 1.10.8, que `lsar --help` incluye el flag, y lo usa sobre el fixture sólido real; `scripts/comprobar_imagen_rar.py` sigue validando GNUstep limpio, sin setuid nuevos y los fixtures/hostiles.
+
+**NOT RUN / pendiente (no se toca la Pi).** Medir en la Pi el pico de memoria de la aplicación al interpretar una salida de listado grande con el flag (el tope de 4 MiB acota lo que se guarda y parsea, pero no hay medida en hardware real); extraer una portada de un RAR sólido real de ≥220 páginas (ese caso no está en `tests/fixtures/rar/`: la prueba de las 220 entradas es sintética); lectura en frío desde el USB de la biblioteca. La limitación conocida de extraer un **RAR 5 sólido** sigue igual y es de `unar` 1.10.8 (ver `test_lector_rar_real.py::test_rar_real_un_rar5_solido_no_se_lee_limitacion_conocida_de_unar`); #528 solo arregla el **listado** del sólido, no la extracción de ese caso de RAR 5.
+
