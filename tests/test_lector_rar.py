@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -34,6 +35,8 @@ def _a_entrada(e):
 
 @pytest.fixture
 def falso(tmp_path, monkeypatch):
+    # El soporte del flag se cachea por proceso (#530 C4): cada prueba arranca sin decisión.
+    monkeypatch.setattr(lector_rar, "_SOPORTA_EL_FLAG", None)
     return instalar(tmp_path / "bin", monkeypatch)
 
 
@@ -116,6 +119,36 @@ def test_sin_el_flag_se_reintenta_una_sola_vez_y_sigue_leyendo(falso, rar, base)
     assert [e.nombre for e in lis.entradas] == ["ComicInfo.xml", "01.jpg"]
     llamadas = [x for x in falso.llamadas() if x.startswith("lsar")]
     assert llamadas == [f"lsar -j -json-skip-solid-information {rar}", f"lsar -j {rar}"]
+
+
+def test_el_soporte_del_flag_se_cachea_y_el_aviso_sale_una_sola_vez(falso, rar, base, monkeypatch):
+    """#530 C4: tras detectar 1.10.1 no se vuelve a probar el flag ni se repite el aviso."""
+    falso.listado([entrada(0, "01.jpg", 1, 0)])
+    falso.modo(lsar="sin_flag")
+    avisos = MagicMock()
+    monkeypatch.setattr(lector_rar, "logger", MagicMock(warning=avisos))
+    _listar(rar, base)
+    _listar(rar, base)
+    llamadas = [x for x in falso.llamadas() if x.startswith("lsar")]
+    assert llamadas == [f"lsar -j -json-skip-solid-information {rar}", f"lsar -j {rar}",
+                        f"lsar -j {rar}"]          # la segunda ya no prueba el flag
+    assert lector_rar._SOPORTA_EL_FLAG is False
+    avisos.assert_called_once_with("cover.lsar_sin_flag")
+
+
+@pytest.mark.parametrize("mensaje", [
+    "unknown option -otro-flag",
+    "Unknown error mientras se lee",
+    "unrecognized option -json-skip-solid-information",
+    "invalid option en el archivo",
+])
+def test_no_reintenta_si_no_es_la_firma_exacta_de_1_10_1(falso, rar, base, mensaje):
+    """#530 C4: solo la firma exacta de 1.10.1 dispara el reintento; un error real, no."""
+    falso.modo(lsar="rc1", mensaje=mensaje)
+    with pytest.raises(ErrorRar) as exc:
+        _listar(rar, base)
+    assert exc.value.motivo is MotivoRar.ILEGIBLE
+    assert len([x for x in falso.llamadas() if x.startswith("lsar")]) == 1
 
 
 def test_demasiadas_entradas_no_extrae_nada(falso, rar, base):
