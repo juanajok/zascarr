@@ -1,0 +1,12 @@
+{% if sugerencias %}
+<ul class="series-list">
+  {% for s in sugerencias %}
+  <li>
+    <span class="sugerencia-nombre">{{ s.nombre }}</span>
+    <span class="muted">{{ s.total }} series</span>
+    <a class="btn ghost sm" href="{{ s.url_anadir }}">Añadir</a>
+    <a class="btn ghost sm" href="{{ s.url_excluir }}">Excluir</a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

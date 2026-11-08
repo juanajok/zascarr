@@ -19,7 +19,7 @@ from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from zascarr.models import Tag, series_tags
+from zascarr.models import Series, Tag, series_tags
 
 NAMESPACE = "etiqueta"
 SOURCE_MANUAL = "manual"
@@ -207,3 +207,104 @@ async def sugerencias_etiqueta(db: AsyncSession, texto: str, *, series_id: UUID 
         .limit(limite)
     )
     return list((await db.execute(consulta)).scalars().all())
+
+
+# ── Expresión de filtro de Biblioteca (BL-ETQ1b, #431) ───────────────────────
+
+MAX_EXPRESION = 100
+MAX_TOKENS = 12
+
+
+@dataclass(frozen=True)
+class ExpresionEtiquetas:
+    positivas: tuple[str, ...]
+    negativas: tuple[str, ...]
+    avisos: tuple[str, ...] = ()
+
+    @property
+    def vacia(self) -> bool:
+        return not self.positivas and not self.negativas
+
+
+def parse_expresion(texto: str | None) -> ExpresionEtiquetas:
+    """Parsea `noir -escuela`: nombres normalizados, AND y exclusión.
+
+    Sin prefijos de namespace. El primer signo manda; repetir un token cambia
+    su signo (el segundo gana). Aplica los topes de 100 caracteres y 12 tokens
+    y devuelve avisos para la UI; nunca lanza.
+    """
+    avisos: list[str] = []
+    bruto = (texto or "").strip()
+    if len(bruto) > MAX_EXPRESION:
+        bruto = bruto[:MAX_EXPRESION]
+        avisos.append("La búsqueda de etiquetas era demasiado larga; se ha recortado.")
+    tokens = bruto.split()
+    if len(tokens) > MAX_TOKENS:
+        tokens = tokens[:MAX_TOKENS]
+        avisos.append("Hay demasiadas etiquetas a la vez. Quita alguna.")
+    por_sentido: dict[str, bool] = {}
+    for token in tokens:
+        negativo = token.startswith("-")
+        nombre = normalize_tag(token[1:] if negativo else token)
+        if not nombre:
+            continue
+        # El segundo signo del mismo token gana, como en la UI.
+        por_sentido[nombre] = negativo
+    positivas = tuple(n for n, neg in por_sentido.items() if not neg)
+    negativas = tuple(n for n, neg in por_sentido.items() if neg)
+    return ExpresionEtiquetas(positivas, negativas, tuple(avisos))
+
+
+async def resolver_etiquetas(db: AsyncSession, normalizados: list[str]) -> dict[str, Tag]:
+    if not normalizados:
+        return {}
+    filas = await db.execute(
+        select(Tag).where(Tag.namespace == NAMESPACE,
+                          Tag.name_norm.in_(tuple(set(normalizados))))
+    )
+    return {tag.name_norm: tag for tag in filas.scalars().all()}
+
+
+async def facetas_etiquetas(db: AsyncSession, positivas: tuple[str, ...],
+                            limite: int = MAX_SUGERENCIAS) -> list[tuple[Tag, int]]:
+    """Conteo de etiquetas visibles entre las series que cumplen los positivos.
+
+    Una serie excluida sigue contando en la faceta (solo se aplican positivos),
+    como exige AC-08. Una sola consulta agregada.
+    """
+    subconsulta = select(Series.id)
+    for normalizado in positivas:
+        subconsulta = subconsulta.where(Series.id.in_(
+            select(series_tags.c.series_id).join(
+                Tag, Tag.id == series_tags.c.tag_id
+            ).where(Tag.name_norm == normalizado, series_tags.c.oculta.is_(False))
+        ))
+    consulta = (
+        select(Tag, func.count(series_tags.c.series_id))
+        .join(series_tags, series_tags.c.tag_id == Tag.id)
+        .where(series_tags.c.oculta.is_(False), series_tags.c.series_id.in_(subconsulta))
+        .group_by(Tag.id)
+        .order_by(func.count(series_tags.c.series_id).desc(), Tag.name_norm)
+        .limit(limite)
+    )
+    return [(tag, int(total)) for tag, total in (await db.execute(consulta)).all()]
+
+
+async def sugerencias_filtro(db: AsyncSession, texto: str, *,
+                             limite: int = MAX_SUGERENCIAS) -> list[tuple[Tag, int]]:
+    """Sugerencias de Biblioteca: prefijo normalizado, con su recuento visible."""
+    normalizado = normalize_tag(texto)[:MAX_NOMBRE]
+    if len(normalizado) < MIN_SUGERENCIA:
+        return []
+    consulta = (
+        select(Tag, func.count(series_tags.c.series_id))
+        .join(series_tags, series_tags.c.tag_id == Tag.id)
+        .where(Tag.namespace == NAMESPACE,
+               Tag.name_norm.like(f"{normalizado}%"),
+               series_tags.c.oculta.is_(False))
+        .group_by(Tag.id)
+        .order_by(func.similarity(Tag.name_norm, normalizado).desc(),
+                  func.count(series_tags.c.series_id).desc(), Tag.name_norm)
+        .limit(limite)
+    )
+    return [(tag, int(total)) for tag, total in (await db.execute(consulta)).all()]
