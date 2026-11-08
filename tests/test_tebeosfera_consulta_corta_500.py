@@ -70,7 +70,7 @@ class TestSearchSeriesFallback:
         assert len(llamadas) == 2 and all(q == "Tintín" for _, _, q in llamadas)
 
     @pytest.mark.asyncio
-    async def test_consulta_de_una_palabra_vacia_no_reintenta(self):
+    async def test_consulta_de_una_palabra_sin_acento_no_reintenta(self):
         cliente = TebeosferaClient()
         llamadas = []
 
@@ -79,7 +79,7 @@ class TestSearchSeriesFallback:
             return []
 
         cliente._search_table = tabla
-        assert await cliente.search_series("Tintín") == []
+        assert await cliente.search_series("Tintin") == []
         assert len(llamadas) == 2
 
     @pytest.mark.asyncio
