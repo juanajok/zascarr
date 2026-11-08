@@ -79,6 +79,24 @@ def es_edicion_espanola(resultado: GCDResult) -> bool | None:
     return pais == _PAIS_ESPANOL or idioma in _IDIOMAS_ESPANOLES
 
 
+#: Caché de búsquedas por consulta normalizada, SOLO en este proceso. La cuota anónima de
+#: GCD es de 30 peticiones/hora; una TTL corta evita repetir la misma búsqueda en una pasada
+#: del banco o en la UI sin retener datos indefinidamente. Se invalida sola al vencer; en
+#: pruebas se limpia con `limpiar_cache_busquedas()`.
+_TTL_CACHE_BUSQUEDAS_S = 900.0
+_CACHE_BUSQUEDAS: dict[str, tuple[float, tuple[GCDResult, ...]]] = {}
+_PAGINAS_MAX_BUSQUEDA = 3
+
+
+def limpiar_cache_busquedas() -> None:
+    """Vacía la caché de búsquedas (pruebas y reinicios de proceso)."""
+    _CACHE_BUSQUEDAS.clear()
+
+
+def _clave_cache(query: str) -> str:
+    return " ".join(query.split()).casefold()
+
+
 @dataclass
 class GCDResult:
     gcd_id: int
@@ -251,51 +269,75 @@ class GCDClient:
         return str(nombre).strip() if nombre else None
 
     async def search_series(self, query: str, limit: int = 10) -> list[GCDResult]:
+        """Busca series y devuelve hasta `limit`, paginando SOLO si no hay españolas suficientes.
+
+        - Página 1 siempre; páginas 2 y 3 como máximo (tope duro 3) cuando aún no hay `limit`
+          resultados españoles y la respuesta indica que hay más.
+        - El filtro `es_edicion_espanola` se aplica en cada página ANTES de acumular: no se
+          recorta a `limit` hasta tener los españoles (incluidos los sin país/idioma).
+        - Caché por consulta normalizada en memoria del proceso, TTL 15 min: la cuota anónima
+          de GCD es 30 peticiones/hora y una misma búsqueda no debe repetir tráfico. En una
+          instalación con `uvicorn --workers 1` es la caché de toda la app.
+        """
         query = (query or "").strip()
         if not query:
             return []
+        clave = _clave_cache(query)
+        ahora = time.monotonic()
+        cacheado = _CACHE_BUSQUEDAS.get(clave)
+        if cacheado is not None and cacheado[0] > ahora:
+            return list(cacheado[1])[:limit]
         if self._client is None:
             raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
-        try:
-            # Sin cadencia por instancia: cada petición y salto pasa por la cortesía del proceso.
-            r = await pedir_con_cortesia(
-                self._client, "GET", f"{_BASE_URL}/series/name/{quote(query, safe='')}/",
-                politica=self._politica, espera_max_s=self._espera_max_s,
-                cortesia=self._cortesia,
-                reloj=self._reloj, dormir=self._dormir,
-            )
-            data = r.json()
-        except ErrorDePeticion:
-            # Sin query en el registro (privacidad §6.6).
-            logger.warning("gcd.request_failed")
-            return []
-        except ValueError as exc:
-            # JSON inválido (p.ej. Cloudflare interponiendo una página de
-            # verificación en vez de la API): "sin resultado", nunca una
-            # excepción que tumbe la búsqueda — mismo criterio que
-            # Tebeosfera (services/tebeosfera.py) ante fallos de parseo.
-            logger.warning("gcd.invalid_json", error=type(exc).__name__)
-            return []
-        results = []
-        # Filtrar ANTES de recortar: si los primeros son extranjeros, la edición
-        # española que viene detrás no se pierde sin pedir otra página.
-        for item in data.get("results", []):
-            gcd_id = _id_from_api_url(item.get("api_url", ""))
-            if gcd_id is None:
-                continue
-            resultado = GCDResult(
-                gcd_id=gcd_id, name=item.get("name", ""),
-                year_began=item.get("year_began"), year_ended=item.get("year_ended"),
-                language=item.get("language"), country=item.get("country"),
-                site_url=f"https://www.comics.org/series/{gcd_id}/",
-                raw=item,
-            )
-            if es_edicion_espanola(resultado) is False:
-                continue
-            results.append(resultado)
-            if len(results) >= limit:
+        acumulados: list[GCDResult] = []
+        for pagina in range(1, _PAGINAS_MAX_BUSQUEDA + 1):
+            try:
+                url = f"{_BASE_URL}/series/name/{quote(query, safe='')}/?page={pagina}"
+                r = await pedir_con_cortesia(
+                    self._client, "GET", url,
+                    politica=self._politica, espera_max_s=self._espera_max_s,
+                    cortesia=self._cortesia,
+                    reloj=self._reloj, dormir=self._dormir,
+                )
+                data = r.json()
+            except ErrorDePeticion:
+                # Sin query en el registro (privacidad §6.6).
+                logger.warning("gcd.request_failed", pagina=pagina)
                 break
-        return results
+            except ValueError as exc:
+                # JSON inválido (p. ej. Cloudflare): "sin resultado", nunca excepción.
+                logger.warning("gcd.invalid_json", error=type(exc).__name__)
+                break
+            items = data.get("results") if isinstance(data, dict) else None
+            if not isinstance(items, list) or not items:
+                break
+            for item in items:
+                gcd_id = _id_from_api_url(item.get("api_url", ""))
+                if gcd_id is None:
+                    continue
+                resultado = GCDResult(
+                    gcd_id=gcd_id, name=item.get("name", ""),
+                    year_began=item.get("year_began"), year_ended=item.get("year_ended"),
+                    language=item.get("language"), country=item.get("country"),
+                    site_url=f"https://www.comics.org/series/{gcd_id}/",
+                    raw=item,
+                )
+                if es_edicion_espanola(resultado) is False:
+                    continue
+                acumulados.append(resultado)
+                if len(acumulados) >= limit:
+                    break
+            if len(acumulados) >= limit:
+                break
+            # DRF devuelve `next`; si no está en el doble, una página llena (>= limit) se
+            # considera "puede haber más". Sin más páginas, parar.
+            hay_mas = bool(data.get("next")) if "next" in data else len(items) >= limit
+            if not hay_mas:
+                break
+        resultado_final = tuple(acumulados[:limit])
+        _CACHE_BUSQUEDAS[clave] = (
+            time.monotonic() + _TTL_CACHE_BUSQUEDAS_S, resultado_final)
+        return list(resultado_final)
 
 
 def _id_from_api_url(api_url: str) -> int | None:
