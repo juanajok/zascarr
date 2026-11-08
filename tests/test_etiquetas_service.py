@@ -18,6 +18,26 @@ from zascarr.services.etiquetas import (
     ("S.H.I.E.L.D.", "s h i e l d"),
     ("space--opera", "space opera"),
     ("  Aventuras  ", "aventuras"),
+    # Letras que `unaccent` translitera y NFKD no descompone: sin la tabla,
+    # Python las borraba y no coincidía con el `name_norm` de la BD.
+    ("ø", "o"), ("Ø", "o"),
+    ("æ", "ae"), ("Æ", "ae"),
+    ("œ", "oe"), ("Œ", "oe"),
+    ("ß", "ss"), ("ẞ", "ss"),
+    ("ł", "l"), ("Ł", "l"),
+    ("đ", "d"), ("Đ", "d"),
+    ("ð", "d"), ("Ð", "d"),
+    ("þ", "th"), ("Þ", "th"),
+    ("ı", "i"), ("ħ", "h"), ("Ħ", "h"),
+    ("ŋ", "n"), ("Ŋ", "n"), ("ŧ", "t"), ("Ŧ", "t"), ("ĸ", "q"),
+    ("Smørrebrød", "smorrebrod"),
+    ("Æon Flux", "aeon flux"),
+    ("Straße", "strasse"),
+    ("Łódź", "lodz"),
+    ("Đà Nẵng", "da nang"),
+    ("Þór", "thor"),
+    ("Mjølnir", "mjolnir"),
+    ("Ħal Qormi", "hal qormi"),
 ])
 def test_normaliza_como_la_funcion_sql(entrada, esperado):
     assert normalize_tag(entrada) == esperado

@@ -44,6 +44,12 @@ CASOS = [
     "Ghost World", "Maus", "Persepolis", "Fun Home", "Watchmen", "V de Vendetta",
     "From Hell", "The League of Extraordinary Gentlemen", "Saga",
     "Y: The Last Man", "Fables", "Hellboy", "Usagi Yojimbo", "Cerebus",
+    # Letras europeas que `unaccent` translitera y NFKD no descompone: la
+    # columna generada las convierte a ASCII y Python tiene que hacer lo mismo.
+    "ø", "Ø", "æ", "Æ", "œ", "Œ", "ß", "ẞ", "ł", "Ł", "đ", "Đ", "ð", "Ð",
+    "þ", "Þ", "ı", "ħ", "Ħ", "ŋ", "Ŋ", "ŧ", "Ŧ", "ĸ",
+    "Smørrebrød", "Æon Flux", "Straße", "Łódź", "Đà Nẵng", "Þór",
+    "Mjølnir", "Ħal Qormi",
 ]
 
 
