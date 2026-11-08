@@ -586,6 +586,11 @@ class _SinDatos(Exception):  # noqa: N818 — marcador interno, no se publica
     """El caso no trae el dato que el método autorizado necesita (p. ej. volume_id)."""
 
 
+class _ResultadosBusqueda(list):
+    """Lista de resultados con el coste HTTP real de la búsqueda (p. ej. GCD paginado)."""
+    peticiones: int = 1
+
+
 async def _invocar(cliente: Any, fuente: str, metodo: str | None, caso: dict) -> list[Any]:
     """Invoca el método autorizado sobre un cliente ya construido (real o inyectado)."""
     if metodo is None:
@@ -613,8 +618,13 @@ async def _invocar(cliente: Any, fuente: str, metodo: str | None, caso: dict) ->
     if fuente == "gcd":
         anio = etiqueta.get("anio")
         if type(anio) is int:
-            return list(await cliente.search_series(caso["consulta"], anio=anio))
-        return list(await cliente.search_series(caso["consulta"]))
+            bruto = await cliente.search_series(caso["consulta"], anio=anio)
+        else:
+            bruto = await cliente.search_series(caso["consulta"])
+        resultado = _ResultadosBusqueda(bruto)
+        resultado.peticiones = int(getattr(
+            cliente, "ultimas_peticiones", getattr(bruto, "peticiones", 1)) or 0)
+        return resultado
     raise _SinDatos()
 
 
@@ -731,6 +741,9 @@ def _coste_detalle(fuente: str, candidato: Any,
         if _raw_gcd_tiene_editorial(raw):
             return 0
         return 1 if raw.get("publisher") else 0
+    if fuente == "gcd":
+        # get_series + get_publisher (si la serie trae URL de editorial).
+        return 2
     if fuente == "tebeosfera" and numero_esperado is not None:
         return 2
     return 1
@@ -1036,6 +1049,13 @@ async def ejecutar_real(
             continue
         if filas and filas[-1] is None:
             filas.pop()
+        # Coste real: GCD puede haber hecho hasta 4 HTTP (año + 3 páginas); una
+        # respuesta de caché declara 0. Se ajusta lo provisional (1).
+        coste_busqueda = int(getattr(resultados, "peticiones", 1) or 0)
+        peticiones += coste_busqueda - 1
+        por_fuente[fuente] += coste_busqueda - 1
+        if peticiones > max_peticiones or por_fuente[fuente] > max_por_fuente:
+            parada = "presupuesto"
         fallos_consecutivos[fuente] = 0
         candidatos = _candidatos_saneados(resultados)
         estado = "ok" if resultados else "sin_resultados"
@@ -1043,7 +1063,7 @@ async def ejecutar_real(
             caso=caso, corpus_version=corpus["version"], fuente=fuente,
             capacidad=celda["capacidad"], unidad=celda["unidad"], metodo=celda["metodo"],
             estado_tecnico=estado, estado_fuente_133=estado,
-            motivo_no_ejecutado=None, peticiones=1, reintentos=0,
+            motivo_no_ejecutado=None, peticiones=coste_busqueda, reintentos=0,
             resultado_editorial=None, campos_evaluados=[], campos_presentes=[],
             campos_ausentes=[], candidatos=candidatos, modo="real",
             condiciones=condiciones, hash_respuesta=_hash_saneado(candidatos),
@@ -1092,8 +1112,12 @@ async def ejecutar_real(
                                 peticiones_detalle, resultado_detalle.detalle.peticiones)
                         peticiones += peticiones_detalle
                         por_fuente[fuente] += peticiones_detalle
-                        fila["peticiones"] = 1 + peticiones_detalle
+                        fila["peticiones"] = coste_busqueda + peticiones_detalle
                         fila["reintentos"] = max(0, peticiones_detalle - 1)
+                        if (peticiones > max_peticiones
+                                or por_fuente[fuente] > max_por_fuente):
+                            # El detalle declaró más de lo previsto: se corta lo siguiente.
+                            parada = "presupuesto"
                         fila["estado_detalle"] = resultado_detalle.estado.estado
                         # Un detalle no-ok siempre deja motivo; el ok lo sustituye el contraste.
                         fila["motivo_detalle"] = (

@@ -143,10 +143,10 @@ class ComicVineClient:
         return data
 
     async def search_series(self, query: str, limit: int = 10) -> list[CVResult]:
-        # La API admite 50-100 por página; pedimos 50 y recortamos a `limit` después,
-        # para no perder candidatos por pedir solo los primeros 10.
+        # Comic Vine no expone país/idioma ni filtramos después: pedir 50 sería 5x payload
+        # inútil en la Pi. Se pide `limit` y se recorta por si la API devuelve más.
         data = await self._get("/search/", {
-            "query": query, "resources": "volume", "limit": 50,
+            "query": query, "resources": "volume", "limit": limit,
             "field_list": "id,name,description,image,start_year,count_of_issues,site_detail_url",
         })
         resultados = [CVResult(
