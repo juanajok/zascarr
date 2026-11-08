@@ -12,7 +12,11 @@ indica «la mejor»; el orden es el fijo de las fuentes y luego el título. La r
 """
 from __future__ import annotations
 
+import re
+import unicodedata
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
@@ -26,7 +30,6 @@ from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.discovery import (
     CAMPO_ID_EXTERNO,
     CAMPOS_ID_DE_TEXTO,
-    ORDEN_DE_FUENTES,
     Busqueda,
     DiscoveryResult,
     DiscoveryService,
@@ -149,6 +152,143 @@ def _a_serie_local(s: Series) -> SerieLocal:
     return SerieLocal(series_id=str(s.id), titulo=s.title, anio=s.start_year, tradicion=s.tradition.value)
 
 
+#: Palabras vacías para comparar títulos en el ranking explicable.
+_STOPWORDS_RANKING = {
+    "de", "del", "la", "el", "los", "las", "y", "en", "con", "por", "para",
+    "un", "una", "unos", "unas", "al", "a",
+}
+
+
+def _normalizar_ranking(texto: str | None) -> str:
+    if not texto:
+        return ""
+    descompuesto = unicodedata.normalize("NFKD", str(texto))
+    sin_acentos = "".join(c for c in descompuesto if not unicodedata.combining(c))
+    return " ".join(re.findall(r"[a-z0-9]+", sin_acentos.lower()))
+
+
+def _titulo_ranking(resultado: Any) -> str:
+    for atributo in ("title", "name", "title_romaji", "title_english"):
+        valor = getattr(resultado, atributo, None)
+        if valor:
+            return str(valor)
+    return ""
+
+
+def _anio_ranking(resultado: Any) -> int | None:
+    for atributo in ("start_year", "year_began", "anio"):
+        valor = getattr(resultado, atributo, None)
+        if isinstance(valor, int):
+            return valor
+    return None
+
+
+def _editorial_ranking(resultado: Any) -> str | None:
+    for atributo in ("editorial", "sello", "publisher"):
+        valor = getattr(resultado, atributo, None)
+        if isinstance(valor, dict):
+            valor = valor.get("name")
+        if isinstance(valor, str) and valor.strip() and not valor.startswith("http"):
+            return valor.strip()
+    raw = getattr(resultado, "raw", None)
+    if isinstance(raw, Mapping):
+        valor = raw.get("publisher_name")
+        if not valor:
+            publisher = raw.get("publisher")
+            if isinstance(publisher, Mapping):
+                valor = publisher.get("name")
+            elif isinstance(publisher, str) and not publisher.startswith("http"):
+                valor = publisher
+        if valor:
+            return str(valor).strip()
+    return None
+
+
+def _pais_ranking(resultado: Any) -> str | None:
+    for atributo in ("pais", "country"):
+        valor = getattr(resultado, atributo, None)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip().lower()
+    return None
+
+
+def _idioma_ranking(resultado: Any) -> str | None:
+    for atributo in ("idioma", "language"):
+        valor = getattr(resultado, atributo, None)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip().lower()
+    return None
+
+
+def _trigramas_ranking(texto: str) -> set[str]:
+    compacto = _normalizar_ranking(texto).replace(" ", "")
+    return {compacto[i:i + 3] for i in range(len(compacto) - 2)}
+
+
+def _puntuacion_candidato(resultado: Any, consulta: str, *,
+                          anio_esperado: int | None = None,
+                          editorial_esperada: str | None = None) -> float:
+    """Puntuación explicable; los campos ausentes no suman ni descartan."""
+    titulo = _normalizar_ranking(_titulo_ranking(resultado))
+    consulta_norm = _normalizar_ranking(consulta)
+    puntos = 0.0
+    if consulta_norm and titulo:
+        if titulo == consulta_norm:
+            puntos += 100.0
+        elif consulta_norm in titulo:
+            puntos += 60.0
+        tokens_consulta = set(consulta_norm.split()) - _STOPWORDS_RANKING
+        tokens_titulo = set(titulo.split()) - _STOPWORDS_RANKING
+        if tokens_consulta:
+            puntos += 30.0 * len(tokens_consulta & tokens_titulo) / len(tokens_consulta)
+        trigramas = _trigramas_ranking(consulta_norm)
+        if trigramas:
+            puntos += 10.0 * len(trigramas & _trigramas_ranking(titulo)) / len(trigramas)
+    anio = _anio_ranking(resultado)
+    if anio_esperado is not None and anio is not None:
+        diferencia = abs(anio - anio_esperado)
+        if diferencia == 0:
+            puntos += 50.0
+        elif diferencia <= 1:
+            puntos += 25.0
+    editorial = _editorial_ranking(resultado)
+    if editorial_esperada and editorial:
+        esperada = _normalizar_ranking(editorial_esperada)
+        actual = _normalizar_ranking(editorial)
+        if actual == esperada:
+            puntos += 40.0
+        elif (esperada and actual
+              and (actual.startswith(esperada + " ") or esperada.startswith(actual + " ")
+                   or actual.endswith(" " + esperada) or esperada.endswith(" " + actual))):
+            puntos += 20.0
+    pais = _pais_ranking(resultado)
+    idioma = _idioma_ranking(resultado)
+    if pais in {"es", "espana", "spain"} or idioma in {"es", "spanish", "espanol", "español"}:
+        puntos += 5.0
+    return puntos
+
+
+def ordenar_candidatos(resultados: Sequence[Any], consulta: str, *,
+                       anio_esperado: int | None = None,
+                       editorial_esperada: str | None = None) -> list[Any]:
+    """Ordena candidatos por relevancia explicable; **nunca descarta**.
+
+    Mira, si existen: título normalizado (sin mayúsculas/acentos; exacto/contenido/tokens/trigramas),
+    año de inicio (`start_year`/`year_began`, exacto suma 50 y ±1 suma 25), editorial
+    (`editorial`/`sello`/`publisher`/`publisher_name`; exacta suma 40, alias por palabra 20) y
+    país/idioma español (suma 5). Los campos que falten simplemente **no suman**; los empates
+    conservan el orden de entrada (estable), por lo que sin expectativas el resultado es
+    determinista y explicable. No toca red ni BD.
+    """
+    pares = list(enumerate(resultados))
+    return [resultado for _, resultado in sorted(
+        pares,
+        key=lambda par: (-_puntuacion_candidato(
+            par[1], consulta, anio_esperado=anio_esperado,
+            editorial_esperada=editorial_esperada), par[0]),
+    )]
+
+
 def _anios_compatibles(a: int | None, b: int | None) -> bool:
     """Un año desconocido no descarta (se avisa de más antes que de menos); dos conocidos, a ±1."""
     return a is None or b is None or abs(a - b) <= 1
@@ -189,7 +329,7 @@ class DescubrimientoDeGrupo:
         # Primero se PREPARA cada resultado (lo que se firmará, se mostrará y se usará en las consultas), y solo después
         # se consulta la base: un resultado que no se puede dar de alta (título o identificador que no caben en lo que se
         # guarda, o con caracteres no firmables) no llega a ninguna consulta, ni a la BD ni al token. Se avisa, no se calla.
-        preparados, omitidas = self._preparar(self._ordenar(busqueda))
+        preparados, omitidas = self._preparar(self._ordenar(busqueda, usada))
         locales = await self._buscar_locales(preparados)
         avisos = list(busqueda.avisos)
         if omitidas:
@@ -214,10 +354,9 @@ class DescubrimientoDeGrupo:
         return next((t for t in candidatos if t and any(c.isalpha() for c in t)), "")
 
     @staticmethod
-    def _ordenar(b: Busqueda) -> list[DiscoveryResult]:
-        """Orden NEUTRO y determinista: el fijo de las fuentes y luego el título. Nunca «la mejor primero»."""
-        orden = {f: i for i, f in enumerate(ORDEN_DE_FUENTES)}
-        return sorted(b.resultados, key=lambda r: (orden.get(r.source, 99), r.title.casefold(), r.external_id))
+    def _ordenar(b: Busqueda, consulta: str) -> list[DiscoveryResult]:
+        """Criterio explicable de título (#526); sin expectativas no se inventa «la mejor»."""
+        return ordenar_candidatos(b.resultados, consulta)
 
     @staticmethod
     def _preparar(resultados: list[DiscoveryResult]) -> tuple[list[_Preparado], int]:
