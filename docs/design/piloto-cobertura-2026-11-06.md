@@ -110,3 +110,30 @@ Conclusión revisada: **la edición española se puede acreditar** (1 de 1 inten
 correcto), pero el cuello de botella ya no es el detalle: es **que el buscador de Tebeosfera
 devuelva el candidato adecuado** y que GCD no nos frene. Ambas cosas son historias de selección y
 ritmo, no de contrato.
+
+### 8.1 Pasada final de Tebeosfera (2026-11-08)
+
+Tras corregir la recall de la búsqueda (#497, #500, #502), Tebeosfera se ejecutó sola y con la
+unidad `serie` (el detalle sale del mismo candidato en `serie`, `edicion` y `campo`):
+
+| Resultado | Casos |
+|---|---|
+| `coincidencia_verificada` | **ES-014 y ES-022** (los dos integrales de Blueberry de Norma) |
+| `incorrecto` | ES-001, ES-005, ES-007, ES-016, ES-028, ES-029 |
+| `ambiguo` | ES-019 (la ficha no da año/país) |
+| `sin_resultados` en el detalle | ES-018 |
+| sin candidato | ES-010 y ES-026 |
+
+- **2 de 12 verificadas**, y son la **misma edición** (Blueberry integral): el acierto es coherente,
+  no un golpe de suerte del buscador.
+- Los 5 `incorrecto` de Tebeosfera son candidatos que no son la edición de la etiqueta; el contraste
+  hace su trabajo al decirlo.
+- **Los dos casos de Tintín sin candidato** (ES-010, ES-026) buscan con tilde («Tintín»). La hipótesis
+  abierta es que el buscador distinga acentos; no se ha verificado. Queda como límite conocido, no
+  como fallo del banco.
+- El **detalle de número no llegó a contrastar**: ES-018 encontró candidato pero su detalle salió
+  `sin_resultados`. Sigue NOT RUN en la práctica.
+
+Con esto, el balance del bloque es: **el contrato de detalle funciona (2 verificadas), Comic Vine no
+sirve para ediciones españolas (12/12 incorrecto), GCD quedó NOT RUN por 429 y la recall de
+Tebeosfera ya solo deja 2 casos fuera.**
