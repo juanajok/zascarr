@@ -155,3 +155,33 @@ Con el último escalón (sin tilde), la pasada de `--fuentes tebeosfera --unidad
 - **ES-018 sigue sin detalle**: encontró candidato, pero la ficha de número no se localizó
   (`sin_resultados`). El detalle de número queda **NOT RUN** en la práctica.
 - Balance del banco: **2 verificadas de 12**, 8 incorrectas y 1 ambigua; ninguna silenciada.
+
+### 8.3 GCD con editorial resuelta (2026-11-08)
+
+Tras resolver el nombre de la editorial (#516), GCD da veredicto en sus 4 casos con candidato:
+
+| Resultado | Casos |
+|---|---|
+| `coincidencia_verificada` | **ES-022** (integral de Blueberry de Norma) |
+| `incorrecto` | ES-001, ES-005, ES-007 |
+| sin candidato | los otros 8 (su búsqueda solo mira la primera página) |
+
+**ES-022 queda acreditada por dos fuentes independientes** (Tebeosfera y GCD): es la señal más
+fuerte del piloto. Comic Vine sigue sin acreditar ninguna (12/12 `incorrecto`) y AniList no tiene
+método de edición.
+
+### 8.4 Balance final del bloque
+
+| Fuente | Con veredicto | Verificadas | Incorrectas | Ambiguas | Sin candidato |
+|---|---:|---:|---:|---:|---:|
+| Comic Vine | 12/12 | 0 | 12 | 0 | 0 |
+| Tebeosfera | 11/12 | 2 | 8 | 1 | 0 (1 sin detalle) |
+| GCD | 4/12 | 1 | 3 | 0 | 8 |
+| AniList | 0/12 | — | — | — | sin método |
+
+- **2 ediciones acreditadas**: ES-014 y ES-022, los dos integrales de Blueberry de Norma. ES-022,
+  además, por dos fuentes.
+- **Comic Vine no sirve para la edición española** (12/12 incorrecto): su volumen es la USA.
+- **La recall sigue siendo el límite**: GCD solo mira la primera página (8 sin candidato) y Tebeosfera
+  deja 1 caso sin detalle de número (ES-018).
+- **El contrato de detalle funciona**: distingue acierto, error y ambigüedad sin inventar.
