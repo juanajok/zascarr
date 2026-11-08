@@ -81,5 +81,5 @@ class TestComicVinePide50YRecorta:
         assert len(resultados) == 3
         assert [r.cv_id for r in resultados] == [0, 1, 2]
         params = cliente._get.await_args.args[1]
-        assert params["limit"] == 50
+        assert params["limit"] == 3
         assert params["resources"] == "volume"

@@ -86,11 +86,22 @@ def es_edicion_espanola(resultado: GCDResult) -> bool | None:
 _TTL_CACHE_BUSQUEDAS_S = 900.0
 _CACHE_BUSQUEDAS: dict[str, tuple[float, tuple[GCDResult, ...]]] = {}
 _PAGINAS_MAX_BUSQUEDA = 3
+_MAX_ENTRADAS_CACHE = 128
 
 
 def limpiar_cache_busquedas() -> None:
     """Vacía la caché de búsquedas (pruebas y reinicios de proceso)."""
     _CACHE_BUSQUEDAS.clear()
+
+
+def _guardar_cache(clave: str, resultados: tuple[GCDResult, ...]) -> None:
+    """Guarda solo respuestas VÁLIDAS; poda caducadas y acota a 128 entradas."""
+    ahora = time.monotonic()
+    for vieja in [k for k, (vence, _) in _CACHE_BUSQUEDAS.items() if vence <= ahora]:
+        _CACHE_BUSQUEDAS.pop(vieja, None)
+    _CACHE_BUSQUEDAS[clave] = (ahora + _TTL_CACHE_BUSQUEDAS_S, resultados)
+    while len(_CACHE_BUSQUEDAS) > _MAX_ENTRADAS_CACHE:
+        _CACHE_BUSQUEDAS.pop(next(iter(_CACHE_BUSQUEDAS)))
 
 
 def _clave_cache(query: str) -> str:
@@ -190,6 +201,8 @@ class GCDClient:
         self._dormir = dormir
         self._espera_max_s = espera_max_s
         self._client: httpx.AsyncClient | None = None
+        #: Peticiones HTTP reales de la última búsqueda (0 si fue caché).
+        self.ultimas_peticiones = 0
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
@@ -277,11 +290,14 @@ class GCDClient:
         - El filtro `es_edicion_espanola` se aplica en cada página ANTES de acumular: no se
           recorta a `limit` hasta tener los españoles (incluidos los sin país/idioma).
         - Si se pasa `anio`, se intenta antes el path `/series/name/<q>/year/<y>/` (1
-          petición); si 404/falla, se cae al path normal sin romper.
-        - Caché por consulta normalizada (y año, si se pasó) en memoria del proceso, TTL 15
-          min: la cuota anónima de GCD es 30 peticiones/hora y una misma búsqueda no debe
-          repetir tráfico. En una instalación con `uvicorn --workers 1` es la caché de toda
-          la app.
+          petición); 404/fallo o `results: []` caen al path normal sin romper.
+        - Caché por consulta normalizada + `limit` + año en memoria del proceso, TTL 15 min,
+          máximo 128 entradas y poda de caducadas. Solo se cachean respuestas VÁLIDAS: un
+          error de red/HTTP/JSON se propaga (el banco/discovery lo mapean a #133) y no deja
+          «sin resultados» durante 15 minutos. En `uvicorn --workers 1` es la caché de toda
+          la app; la cuota anónima de GCD es 30 peticiones/hora.
+        - `ultimas_peticiones` expone las peticiones HTTP reales de esta llamada (0 si fue
+          caché), para que el banco cargue el coste real al presupuesto.
         """
         query = (query or "").strip()
         if not query:
@@ -291,100 +307,92 @@ class GCDClient:
                 anio = int(anio)
             except (TypeError, ValueError):
                 anio = None
-        clave = _clave_cache(query) + (f"|anio:{anio}" if anio is not None else "")
+        clave = _clave_cache(query) + f"|limit:{limit}"
+        if anio is not None:
+            clave += f"|anio:{anio}"
         ahora = time.monotonic()
         cacheado = _CACHE_BUSQUEDAS.get(clave)
         if cacheado is not None and cacheado[0] > ahora:
+            self.ultimas_peticiones = 0
             return list(cacheado[1])[:limit]
         if self._client is None:
             raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
+        self.ultimas_peticiones = 0
+
+        def _resultado(item: dict) -> GCDResult | None:
+            gcd_id = _id_from_api_url(item.get("api_url", ""))
+            if gcd_id is None:
+                return None
+            resultado = GCDResult(
+                gcd_id=gcd_id, name=item.get("name", ""),
+                year_began=item.get("year_began"), year_ended=item.get("year_ended"),
+                language=item.get("language"), country=item.get("country"),
+                site_url=f"https://www.comics.org/series/{gcd_id}/",
+                raw=item,
+            )
+            return None if es_edicion_espanola(resultado) is False else resultado
+
+        async def _pedir(url: str) -> httpx.Response:
+            self.ultimas_peticiones += 1
+            return await pedir_con_cortesia(
+                self._client, "GET", url,
+                politica=self._politica, espera_max_s=self._espera_max_s,
+                cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
+            )
+
         if anio is not None:
             # El filtro de año de la API evita traer una edición equivocada de la página 1.
             try:
-                r_anio = await pedir_con_cortesia(
-                    self._client, "GET",
-                    f"{_BASE_URL}/series/name/{quote(query, safe='')}/year/{anio}/",
-                    politica=self._politica, espera_max_s=self._espera_max_s,
-                    cortesia=self._cortesia, reloj=self._reloj, dormir=self._dormir,
-                )
+                r_anio = await _pedir(
+                    f"{_BASE_URL}/series/name/{quote(query, safe='')}/year/{anio}/")
                 data_anio = r_anio.json()
             except (RespuestaNoTransitoria, ErrorDePeticion, httpx.HTTPError, ValueError):
-                # 404/fallo del filtro de año: se usa el path normal, sin romper.
                 logger.warning("gcd.year_filter_failed", anio=anio)
                 data_anio = None
-            if isinstance(data_anio, dict):
-                items_anio = data_anio.get("results")
-                if isinstance(items_anio, list):
+            if isinstance(data_anio, dict) and isinstance(data_anio.get("results"), list):
+                items_anio = data_anio["results"]
+                # `results: []` no es una respuesta útil: cae al path normal.
+                if items_anio:
                     acumulados_anio: list[GCDResult] = []
                     for item in items_anio:
-                        gcd_id = _id_from_api_url(item.get("api_url", ""))
-                        if gcd_id is None:
-                            continue
-                        resultado_anio = GCDResult(
-                            gcd_id=gcd_id, name=item.get("name", ""),
-                            year_began=item.get("year_began"),
-                            year_ended=item.get("year_ended"),
-                            language=item.get("language"), country=item.get("country"),
-                            site_url=f"https://www.comics.org/series/{gcd_id}/",
-                            raw=item,
-                        )
-                        if es_edicion_espanola(resultado_anio) is False:
+                        resultado_anio = _resultado(item)
+                        if resultado_anio is None:
                             continue
                         acumulados_anio.append(resultado_anio)
                         if len(acumulados_anio) >= limit:
                             break
                     final_anio = tuple(acumulados_anio[:limit])
-                    _CACHE_BUSQUEDAS[clave] = (
-                        time.monotonic() + _TTL_CACHE_BUSQUEDAS_S, final_anio)
+                    _guardar_cache(clave, final_anio)
                     return list(final_anio)
+
         acumulados: list[GCDResult] = []
         for pagina in range(1, _PAGINAS_MAX_BUSQUEDA + 1):
+            r = await _pedir(
+                f"{_BASE_URL}/series/name/{quote(query, safe='')}/?page={pagina}")
             try:
-                url = f"{_BASE_URL}/series/name/{quote(query, safe='')}/?page={pagina}"
-                r = await pedir_con_cortesia(
-                    self._client, "GET", url,
-                    politica=self._politica, espera_max_s=self._espera_max_s,
-                    cortesia=self._cortesia,
-                    reloj=self._reloj, dormir=self._dormir,
-                )
                 data = r.json()
-            except ErrorDePeticion:
-                # Sin query en el registro (privacidad §6.6).
-                logger.warning("gcd.request_failed", pagina=pagina)
-                break
             except ValueError as exc:
-                # JSON inválido (p. ej. Cloudflare): "sin resultado", nunca excepción.
-                logger.warning("gcd.invalid_json", error=type(exc).__name__)
-                break
-            items = data.get("results") if isinstance(data, dict) else None
-            if not isinstance(items, list) or not items:
+                # No es «sin resultados»: un JSON roto es un fallo técnico y se propaga.
+                raise ErrorDePeticion("respuesta JSON inválida de GCD") from exc
+            if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+                raise ErrorDePeticion("respuesta inválida de GCD")
+            items = data["results"]
+            if not items:
                 break
             for item in items:
-                gcd_id = _id_from_api_url(item.get("api_url", ""))
-                if gcd_id is None:
-                    continue
-                resultado = GCDResult(
-                    gcd_id=gcd_id, name=item.get("name", ""),
-                    year_began=item.get("year_began"), year_ended=item.get("year_ended"),
-                    language=item.get("language"), country=item.get("country"),
-                    site_url=f"https://www.comics.org/series/{gcd_id}/",
-                    raw=item,
-                )
-                if es_edicion_espanola(resultado) is False:
+                resultado = _resultado(item)
+                if resultado is None:
                     continue
                 acumulados.append(resultado)
                 if len(acumulados) >= limit:
                     break
             if len(acumulados) >= limit:
                 break
-            # DRF devuelve `next`; si no está en el doble, una página llena (>= limit) se
-            # considera "puede haber más". Sin más páginas, parar.
             hay_mas = bool(data.get("next")) if "next" in data else len(items) >= limit
             if not hay_mas:
                 break
         resultado_final = tuple(acumulados[:limit])
-        _CACHE_BUSQUEDAS[clave] = (
-            time.monotonic() + _TTL_CACHE_BUSQUEDAS_S, resultado_final)
+        _guardar_cache(clave, resultado_final)
         return list(resultado_final)
 
 
