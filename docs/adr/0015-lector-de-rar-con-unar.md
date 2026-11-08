@@ -65,6 +65,10 @@ la misma PR que introduce el lector:
   la petición da 404 `no-store` y el `<img>` cae al marcador hasta recargar. En una rejilla fría de 12 series RAR, QA midió 11 de 12
   con portada con ≈ 0,3 s/serie y 3 de 12 con ≈ 2 s/serie (no medido en la Pi). Se mide en la Pi y, si sale mal, se sube el turno o se
   precalienta la caché: historia aparte.
+- **H-1 (decisión del PO, 2026-11-07):** si en el recorrido se saltó un RAR candidato **por falta de turno** y aun así sale la portada de
+  un archivo posterior, esa portada se sirve **sin escribir `covers/v3` y con `Cache-Control: no-store`**: la siguiente petición, con el lector
+  libre, prueba el RAR y guarda la correcta. Así un RAR legible no pierde para siempre su portada frente a un CBZ posterior por una carga
+  pasajera. Un RAR saltado por tener marca vigente no cuenta como ocupado; una serie solo de CBZ se cachea como antes.
 - **En cada actualización de la imagen base** (`python:3.11-slim-bookworm`) o del paquete `unar` hay que repasar el *tracker* de
   `unar`/XADMaster y de GNUstep (CVE y arreglos de la 1.10.8 que la 1.10.1 de Debian no lleva) y volver a correr
   `scripts/comprobar_imagen_rar.py`. Pasar a otra base (por ejemplo `trixie`) y un interruptor para apagar el lector son opciones

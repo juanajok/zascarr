@@ -661,6 +661,42 @@ class TestInterruptorLectorRar:
         _pedir(series)
         assert len(_lsars(falso)) == lsars_antes + 1            # solo `b.cbr` se intenta: `a.cbr` sigue marcado
 
+    def test_h1_con_el_lector_ocupado_la_portada_del_cbz_es_efimera_y_luego_gana_el_rar(
+            self, tmp_path, mundo, falso, monkeypatch):
+        """H-1 (SecOps y QA): serie [RAR legible, CBZ]. Sin turno el RAR se salta y sale el CBZ, pero NO se
+        guarda en `v3` ni se cachea; con el lector libre la siguiente petición da la del RAR y esa sí se guarda."""
+        _listado_de_una_pagina(falso)                           # el RAR da una portada roja de 1800 px → 600
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None), (_cbz(tmp_path / "02.cbz"), None)])
+        monkeypatch.setattr(lector_rar, "RAR_ESPERA_TURNO_S", 0.1)
+        v3 = covers / "v3" / f"{series.id}.jpg"
+        assert lector_rar._SEMAFORO.acquire(timeout=1)          # otro lector tiene el turno
+        try:
+            r = _pedir(series)
+        finally:
+            lector_rar._SEMAFORO.release()
+        assert r.status_code == 200 and _ancho(r.content) == 500          # la del CBZ
+        assert r.headers["cache-control"] == "no-store" and "etag" not in r.headers
+        assert not v3.exists(), "la portada efímera no puede quedar en v3"
+        assert _marcas(covers) == []
+        r2 = _pedir(series)                                     # lector libre
+        assert r2.status_code == 200 and _ancho(r2.content) == 600        # ahora la del RAR
+        assert v3.exists() and _ancho(v3.read_bytes()) == 600
+        assert _ancho(_pedir(series).content) == 600            # y ya sale de `v3`
+
+    def test_h1_una_serie_solo_cbz_se_cachea_como_antes(self, tmp_path, mundo, falso):
+        series, covers, _ = mundo([(_cbz(tmp_path / "01.cbz"), None)])
+        r = _pedir(series)
+        assert r.status_code == 200 and r.headers["cache-control"] == "private, max-age=86400"
+        assert (covers / "v3" / f"{series.id}.jpg").exists() and falso.llamadas() == []
+
+    def test_h1_un_rar_marcado_no_hace_efimera_la_del_cbz(self, tmp_path, mundo, falso):
+        """Un RAR saltado por tener MARCA vigente (no por falta de turno) no es «ocupado»: se cachea como siempre."""
+        falso.modo(lsar="rc1", mensaje="")
+        series, covers, _ = mundo([(_rar(tmp_path / "01.cbr"), None), (_cbz(tmp_path / "02.cbz"), None)])
+        r1 = _pedir(series)                 # el RAR falla (ilegible) y queda marcado; sale el CBZ y se guarda
+        assert r1.status_code == 200 and r1.headers["cache-control"] == "private, max-age=86400"
+        assert (covers / "v3" / f"{series.id}.jpg").exists()
+
     def test_apagado_un_zip_con_extension_cbr_sigue_igual(self, tmp_path, mundo, falso, monkeypatch):
         series, _c, _ = mundo([(_cbz(tmp_path / "01.cbr"), None)])
         self._fijar(monkeypatch, False)

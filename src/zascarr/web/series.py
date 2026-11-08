@@ -216,15 +216,22 @@ LECTOR_OCUPADO = "ocupado"
 
 
 def _generar_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path,
-                     destino: Path) -> tuple[bytes, str, bool] | str | None:
-    """Saca la portada de los archivos y la escribe en `destino` (`v3`). `(bytes, tipo, escrita)`:
+                     destino: Path) -> tuple[bytes, str, bool, bool] | str | None:
+    """Saca la portada de los archivos y la escribe en `destino` (`v3`). `(bytes, tipo, escrita, efimera)`:
     si la caché no se puede escribir, `escrita` es `False` y se sirve igualmente lo extraído. `None`:
-    no hay; `LECTOR_OCUPADO`: no la hay *ahora* por falta de turno del lector."""
+    no hay; `LECTOR_OCUPADO`: no la hay *ahora* por falta de turno del lector.
+
+    H-1 (SecOps y QA): si se saltó un RAR candidato por falta de turno y aun así sale la portada de un
+    archivo POSTERIOR, esa portada es **efímera**: se sirve pero NO se escribe en `v3` (ni se cachea en el
+    navegador), para que la siguiente petición, con el lector libre, pruebe el RAR y guarde la correcta."""
     estado: dict = {}
     result = _primera_portada(archivos, covers, estado=estado)
     if result is None:
         return LECTOR_OCUPADO if estado.get("ocupado") else None
     data, content_type = result
+    if estado.get("ocupado"):
+        logger.info("cover.portada_efimera_por_lector_ocupado")
+        return data, content_type, False, True
     try:
         write_cover_cache(destino, data)
     except OSError as exc:
@@ -232,12 +239,12 @@ def _generar_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
         # (`cover.cache_sin_espacio`) porque hay alertas montadas sobre él.
         logger.warning("cover.cache_sin_espacio", motivo=type(exc).__name__,
                        errno=getattr(exc, "errno", None))
-        return data, content_type, False
-    return data, content_type, True
+        return data, content_type, False, False
+    return data, content_type, True, False
 
 
 async def _portada_de_archivos(series_id: UUID, archivos: list[tuple[UUID, str, dict | None]],
-                               covers: Path, destino: Path) -> tuple[bytes, str, bool] | str | None:
+                               covers: Path, destino: Path) -> tuple[bytes, str, bool, bool] | str | None:
     """Una sola generación por serie a la vez (FR-18): quien llega con otra en curso espera su
     resultado. Los fallos de la primera no se propagan a las que esperan (la siguiente petición
     reintenta)."""
@@ -418,7 +425,9 @@ async def portada(series_id: UUID, request: Request,
        `MAX_EVALUADOS_PORTADA` archivos evaluados y de `PRESUPUESTO_PORTADA_S` segundos → extraer su
        primera página a 600, escribir `v3`, servirla. Un RAR que ya falló y no ha cambiado se salta
        sin abrirlo (marca por archivo). Si la escritura falla, se sirve igualmente lo extraído con
-       un ETag de sus bytes (FR-11, PR-2). Una sola generación por serie a la vez (FR-18).
+       un ETag de sus bytes (FR-11, PR-2). Una sola generación por serie a la vez (FR-18). Si un RAR
+       candidato se saltó por falta de turno y sale la portada de un archivo posterior, esa portada se
+       sirve sin escribir `v3` y con `no-store` (H-1): la siguiente petición prueba el RAR.
     3. Si no hay archivo utilizable, `covers/<id>.jpg` legada (de menos de 300 px) → servirla
        **sin red y sin copiarla** (respaldo que solo se lee).
     4. Si tampoco, la externa pequeña ya descargada, o `cover_url` → descargar una vez a 600,
@@ -463,7 +472,10 @@ async def portada(series_id: UUID, request: Request,
     result = await _portada_de_archivos(series_id, archivos, covers, v3_path)
     ocupado = result == LECTOR_OCUPADO
     if result and not ocupado:
-        data, content_type, escrita = result
+        data, content_type, escrita, efimera = result
+        if efimera:
+            # H-1: salió de un archivo posterior porque un RAR anterior no tuvo turno; no se cachea
+            return Response(content=data, media_type=content_type, headers={"Cache-Control": "no-store"})
         etag = _etag_for(v3_path) if escrita else _etag_de_bytes(data)
         return cached_image_response(request, data, content_type, etag)
 

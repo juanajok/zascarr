@@ -15,8 +15,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 FICHERO = "test_lector_rar_real"
-#: 3 + 3 + 1 (xfail estricto) + 1 + 1 + 7 hostiles (ver el fichero). Bajarlo es una decisión consciente.
-MINIMO_DE_PRUEBAS = 16
+#: 3 + 3 + 1 (xfail estricto) + 1 + 1 + 7 hostiles + 1 del enlace (ver el fichero). Bajarlo es una decisión consciente.
+MINIMO_DE_PRUEBAS = 17
 
 
 def motivos(ruta: str, minimo: int = MINIMO_DE_PRUEBAS) -> list[str]:
