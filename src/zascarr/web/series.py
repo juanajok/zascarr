@@ -574,6 +574,7 @@ async def portada(series_id: UUID, request: Request,
 
     covers = get_settings().covers_cache_path
     v3_path = covers / CACHE_VERSION / f"{series_id}.jpg"
+    v2_path = covers / "v2" / f"{series_id}.jpg"
     legacy_path = covers / f"{series_id}.jpg"
     externa_path = covers / CARPETA_EXTERNA / f"{series_id}.jpg"
 
@@ -607,11 +608,25 @@ async def portada(series_id: UUID, request: Request,
         etag = _etag_for(v3_path) if escrita else _etag_de_bytes(data)
         return cached_image_response(request, data, content_type, etag)
 
+    # #506: si no hay archivo disponible que dé portada, una `v2` ya extraída de un archivo real
+    # sigue siendo mejor que el marcador y que el respaldo viejo. Se sirve sin copiarla ni borrarla.
+    # Con el lector ocupado es un sustituto pasajero: no se cachea (la próxima petición puede
+    # generar la `v3` correcta).
+    if await asyncio.to_thread(v2_path.exists):
+        data = await asyncio.to_thread(v2_path.read_bytes)
+        if ocupado:
+            return Response(content=data, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
+        return cached_image_response(request, data, "image/jpeg", _etag_for(v2_path))
+
     # Respaldo: la caché antigua (240/320) se sirve sin red y no se copia. Si hay un archivo
     # utilizable se regenera arriba; esta rama es para archivos ausentes o ilegibles, o series que ya
     # solo conservan la caché vieja (Q-1 del PO).
     if await asyncio.to_thread(legacy_path.exists):
         data = await asyncio.to_thread(legacy_path.read_bytes)
+        if ocupado:
+            return Response(content=data, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
         return cached_image_response(request, data, "image/jpeg", _etag_for(legacy_path))
 
     # #418: la portada externa vive APARTE de `v3`: mientras no haya portada de archivo se siguen
@@ -619,6 +634,9 @@ async def portada(series_id: UUID, request: Request,
     # se hace legible.
     if await asyncio.to_thread(externa_path.exists):
         data = await asyncio.to_thread(externa_path.read_bytes)
+        if ocupado:
+            return Response(content=data, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
         return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
 
     # #311: si guardó la imagen de relleno de Comic Vine («Blank!»), no tiene portada.
@@ -628,6 +646,9 @@ async def portada(series_id: UUID, request: Request,
                                             ancho=SERIES_COVER_MAX_WIDTH,
                                             motivo_fallo=motivo_fallo)):
         data = await asyncio.to_thread(externa_path.read_bytes)
+        if ocupado:
+            return Response(content=data, media_type="image/jpeg",
+                            headers={"Cache-Control": "no-store"})
         return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
 
     # Una espera de cortesía no es un «no hay portada» definitivo: el navegador no debe
