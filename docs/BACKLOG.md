@@ -496,8 +496,8 @@ nombre sin prefijo.
 
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
-| ETQ1a | Como coleccionista, quiero etiquetar una serie con mis palabras desde su ficha (añadir, quitar y crear), para describir lo que trata sin tocar archivos | #403; AC-01…AC-05, AC-07 (ficha), AC-10, AC-12…AC-16 y AC-19 de `especificacion-etiquetas.md`; migración **0022**; reutiliza `tags`/`issue_tags` y añade `series_tags`; `manual` gana; D-6 ratificada (crear desde la ficha); UI según `ui-etiquetas.md` | P1 | M |
-| ETQ1b | Como coleccionista, quiero filtrar la biblioteca por etiquetas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #431; AC-06, AC-07 (Biblioteca), AC-08, AC-09, AC-11, AC-17, AC-18 y NFR-07; filtro sobre `#rejilla`; facetas de un solo grupo; **bloqueada hasta fusionar ETQ1a** | P1 | M |
+| ETQ1a | Como coleccionista, quiero etiquetar una serie con mis palabras desde su ficha (añadir, quitar y crear), para describir lo que trata sin tocar archivos | #403; AC-01…AC-05, AC-07 (ficha), AC-10, AC-12…AC-16 y AC-19 de `especificacion-etiquetas.md`; migración **0022**; reutiliza `tags`/`issue_tags` y añade `series_tags`; `manual` gana; D-6 ratificada (crear desde la ficha); UI según `ui-etiquetas.md` | P1 | ✅ Hecho (desplegado 2026-11-08) |
+| ETQ1b | Como coleccionista, quiero filtrar la biblioteca por etiquetas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #431; AC-06, AC-07 (Biblioteca), AC-08, AC-09, AC-11, AC-17, AC-18 y NFR-07; filtro sobre `#rejilla`; facetas de un solo grupo; **desbloqueada por ETQ1a** (fusionada en #499 y desplegada el 2026-11-08) | P1 | M |
 | ETQ2 | Como coleccionista, quiero que las etiquetas que ya traen mis CBZ en ComicInfo aparezcan en ZascArr, para no teclearlas | `<Tags>`/`<Genre>` leídos con `source='comicinfo_xml'`, topes de volumen (hallazgo ALTO de seguridad), idempotente, sin pisar manual, sin escribir XML | P1 | M |
 | ETQ3 | Como coleccionista, quiero que géneros y personajes de las fuentes se guarden de verdad (hoy las tablas están dormidas), para filtrar por ellos | Poblar `Series.genres`/`Issue.characters` con los `field_list` actuales ampliados en la misma petición; respeta `locked_fields`; Tebeosfera sigue sin género (no se inventa) | P1 | M–L |
 | ETQ4 | Como coleccionista, quiero que las fuentes propongan etiquetas de tema sin pisar las mías | Mapeo al espacio `etiqueta` (D-1); `weight` = `rank` real de AniList; caché negativa H2 y espaciados de cortesía; `manual` no se toca | P2 | M |
@@ -517,9 +517,21 @@ nombre sin prefijo.
 - **D-7:** orden 1a → 1b y medir antes de seguir.
 
 La **migración es la 0022** (`down_revision="0021"`); la 0021 la ocupa BL-R9. ETQ1a
-(#403) y ETQ1b (#431) están en «Lista para desarrollar»; **1b queda bloqueada** hasta
-que 1a esté fusionada. Publicar la tarjeta **no autoriza código, migraciones en
-producción ni despliegue**.
+(#403) está fusionada (#499, `c8bd267`) y **desplegada en la Pi el 2026-11-08 sobre
+`20e5f9f`**, con el arreglo de paridad Python/SQL de `normalize_tag` (#510, PR #512);
+ETQ1b (#431) queda **desbloqueada** y sigue en «Lista para desarrollar». Publicar la
+tarjeta **no autoriza código, migraciones en producción ni despliegue**.
+
+- **ETQ1a desplegada en la Pi (2026-11-08, `20e5f9f`).** El PO desplegó el código ya
+  fusionado de #403 junto con la corrección de paridad de `normalize_tag` (#510, PR
+  #512, merge commit `20e5f9f`). El arreglo **no añade migración**: el esquema sigue
+  en **0022** y solo cambia `services/etiquetas.py` con sus pruebas, así que no hay
+  pasos de datos ni cambios de archivos. La paridad cubre `ø, æ, œ, ß, ł, đ, ð, þ, ı,
+  ħ, ŋ, ŧ, ĸ`; el resto del diccionario de `unaccent` (símbolos, superíndices,
+  alfabetos no latinos) queda como límite conocido. CI de `main` en `20e5f9f`:
+  [run 42511658970](https://github.com/juanajok/zascarr/actions/runs/42511658970),
+  `success`. **Registro hecho a partir de la confirmación del PO; la Pi no se ha
+  verificado desde aquí.**
 
 ### Épica D — "El sistema busca lo que me falta"
 
