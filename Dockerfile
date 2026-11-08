@@ -13,7 +13,7 @@
 # contenedor donde era ciega.
 # =============================================================================
 
-FROM python:3.11-slim-bookworm AS builder
+FROM python:3.11-slim-trixie AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential libpq-dev libxml2-dev libxslt-dev \
@@ -24,24 +24,27 @@ COPY pyproject.toml .
 COPY src ./src
 RUN pip install --no-cache-dir --prefix=/install .
 
-FROM python:3.11-slim-bookworm AS runtime
+FROM python:3.11-slim-trixie AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 libxml2 libxslt1.1 tini unar \
     && rm -rf /var/lib/apt/lists/*
 # `unar` (con `lsar`) lee la portada de los .cbr que son RAR (#418): solo en `runtime`, el
 # `builder` no lo necesita. Se lanza a demanda por subproceso, así que no cambia el arranque.
+# Base Debian trixie (#528): trae `unar`/`lsar` 1.10.8, que conoce `-json-skip-solid-information`.
+# Es el flag que evita que un sólido grande repita ~29 KB por entrada y supere el tope de salida.
 # `gnustep-base-runtime` es dependencia DURA de `unar` (`--no-install-recommends` no evita sus ejecutables):
-# trae demonios de objetos distribuidos (`gdomap`, `gdnc`) y una veintena de herramientas (`defaults`,
-# `pl*`, `xmlparse`, `cvtenc`…) que nadie usa aquí y que ampliarían la superficie de la imagen (ADR 0015,
-# dictamen SecOps A-1 y C-3). Se borran TODOS los ejecutables y scripts de servicio del paquete, por su lista
-# de ficheros; `lsar`/`unar` solo necesitan las bibliotecas. (`gpbs` no existe en bookworm.) El job de Docker de
-# la CI lo comprueba dentro de la imagen y que los fixtures RAR se siguen leyendo.
+# trae demonios de objetos distribuidos (`gdomap`, `gdnc`) y sus ficheros de servicio, y una veintena de
+# herramientas (`defaults`, `pl*`, `xmlparse`, `cvtenc`…) que nadie usa aquí y que ampliarían la superficie
+# de la imagen (ADR 0015, dictamen SecOps A-1 y C-3). Se borran TODOS los ejecutables y scripts de servicio
+# del paquete, por su lista de ficheros y por nombre (trixie añade `gdomap-helper`, `gdomap.service` y
+# `gdomap_probes`; `gpbs` no existe en trixie). `lsar`/`unar` solo necesitan las bibliotecas. El job de Docker
+# de la CI lo comprueba dentro de la imagen y que los fixtures RAR se siguen leyendo.
 RUN dpkg -L gnustep-base-runtime \
         | grep -E '^/(usr/bin|usr/sbin|etc/init\.d|etc/default)/[^/]+$' | xargs -r rm -f \
-    && find /usr /etc -type f \( -name gdomap -o -name gdnc -o -name gpbs \) -delete
+    && find /usr /etc /var/lib/systemd -type f \( -name 'gdomap*' -o -name gdnc -o -name gpbs -o -name 'gpbs*' \) -delete
 # usermod/groupmod (paquete "passwd") y runuser (paquete "util-linux") ya
-# vienen en python:3.11-slim-bookworm — sin dependencia nueva.
+# vienen en python:3.11-slim-trixie — sin dependencia nueva.
 
 RUN groupadd -g 1000 zascarr && \
     useradd -u 1000 -g zascarr -m -s /bin/bash zascarr

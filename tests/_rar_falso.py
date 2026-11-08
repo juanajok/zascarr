@@ -19,8 +19,17 @@ d=$(dirname "$0")
 echo "lsar $*" >> "$d/llamadas.log"
 echo "HOME=$HOME" >> "$d/entornos.log"
 echo "PATH=$PATH" >> "$d/entornos.log"
+flag=0
+for a in "$@"; do [ "$a" = "-json-skip-solid-information" ] && flag=1; done
 case "$(cat "$d/modo_lsar")" in
   ok) cat "$d/listado.json" ;;
+  # #528: sólido sintético. Con el flag, el listado compacto; sin él, el que repetiría el objeto
+  # interno del sólido en cada entrada (el que supera el tope de 4 MiB).
+  solido) if [ "$flag" = "1" ]; then cat "$d/listado_solido.json"; else cat "$d/listado_solido_sin_flag.json"; fi ;;
+  # Un lsar 1.10.1 (bookworm): el flag no existe y lo dice por stdout, como la herramienta real.
+  sin_flag)
+    if [ "$flag" = "1" ]; then echo "Unknown option -json-skip-solid-information."; exit 1; fi
+    cat "$d/listado.json" ;;
   rc1) echo "$(cat "$d/mensaje")" >&2; exit 1 ;;
   cuelga) sleep 60 & echo $! > "$d/hijo.pid"; wait ;;
   enorme) head -c 6000000 /dev/zero | tr '\\0' 'a' ;;
@@ -67,6 +76,19 @@ class RarFalso:
 
     def listado(self, entradas: list[dict]) -> None:
         (self.carpeta / "listado.json").write_text(json.dumps({"lsarContents": entradas}))
+
+    def solido(self, n: int = 220, relleno: int = 29_000) -> list[dict]:
+        """Sólido sintético de `n` entradas (#528).
+
+        Deja dos listados: el compacto que devuelve `lsar -j -json-skip-solid-information` y el que
+        devolvería sin el flag, con el objeto interno del sólido (~29 KB) repetido en cada entrada.
+        Con 220 entradas el segundo supera de sobra `RAR_MAX_SALIDA_LISTADO` (4 MiB), que es el bug.
+        """
+        compacto = [entrada(i, f"{i:03d}.jpg", 100) for i in range(n)]
+        (self.carpeta / "listado_solido.json").write_text(json.dumps({"lsarContents": compacto}))
+        grande = [{**e, "XADSolidObject": "S" * relleno} for e in compacto]
+        (self.carpeta / "listado_solido_sin_flag.json").write_text(json.dumps({"lsarContents": grande}))
+        return compacto
 
     def contenido(self, datos: bytes) -> int:
         (self.carpeta / "contenido.bin").write_bytes(datos)

@@ -42,6 +42,12 @@ RAR_MAX_SALIDA_ERROR = 64 * 1024
 RAR_TIMEOUT_LISTAR_S = 15.0
 RAR_TIMEOUT_EXTRAER_S = 10.0
 RAR_SIMULTANEOS = 1
+#: #528: `lsar -j` repite el objeto interno del sólido (~29 KB) en CADA entrada; con ~140 páginas
+#: la salida pasa de 4 MiB. `-json-skip-solid-information` lo omite y deja el JSON en lo que hace
+#: falta (índice, nombre, tamaño y CRC). Requiere `unar` 1.10.8 (Debian trixie). En un binario
+#: antiguo (1.10.1 de bookworm) el flag no existe: `listar` lo reintenta UNA vez sin él para no
+#: romper ese runtime, y el sólido grande vuelve a quedar limitado por el tope de salida.
+_FLAG_SIN_SOLIDOS = "-json-skip-solid-information"
 #: Tope de memoria residente del lector (proceso y descendientes), vigilado en el bucle de 20 ms: sin
 #: `RLIMIT_AS` (rompe `unar`), un diccionario hostil de RAR 5 podría dejar al OOM del contenedor elegir
 #: víctima entre `unar` y la app. El máximo medido en #308 fue 25,8 MiB (dictamen SecOps M-1).
@@ -232,6 +238,15 @@ def _motivo_por_mensaje(texto: bytes) -> MotivoRar:
     return MotivoRar.ILEGIBLE
 
 
+def _opcion_desconocida(codigo: int, salida: bytes, error: bytes) -> bool:
+    """¿El fallo es que ESTE `lsar` no conoce `-json-skip-solid-information`? (1.10.1 lo dice por
+    stdout: «Unknown option -json-skip-solid-information.»; otras versiones, por stderr.) Se exige
+    el nombre del flag en el mensaje para no reintentar ante un error real del archivo."""
+    texto = (error + salida[:4096]).lower()
+    return codigo != 0 and _FLAG_SIN_SOLIDOS.encode() in texto and (
+        b"unknown option" in texto or b"unrecognized option" in texto or b"invalid option" in texto)
+
+
 def _exigir_ruta_absoluta(ruta: Path) -> None:
     """Una ruta relativa que empezara por `-` sería una opción de `lsar`/`unar` (SecOps B-2). Las de la
     biblioteca son siempre absolutas."""
@@ -278,7 +293,13 @@ def _entrada_de(bruto: dict, posicion: int) -> EntradaRar:
 
 
 def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S) -> Listado:
-    """Lista un RAR con `lsar -j` y comprueba los topes (nº de entradas, bytes declarados, salida).
+    """Lista un RAR con `lsar -j -json-skip-solid-information` y comprueba los topes (nº de entradas,
+    bytes declarados, salida).
+
+    El flag #528 evita que un sólido grande repita el objeto interno del sólido en cada entrada
+    (con ~140 páginas la salida superaba el tope de 4 MiB). Si el `lsar` instalado es anterior a
+    1.10.8 y no conoce el flag, se reintenta **una sola vez** sin él: no se rompe ese runtime, pero
+    el sólido grande sigue sujeto al tope de salida (comportamiento anterior).
 
     `temporal` es una carpeta propia y vacía (se usa de `HOME`). Falla con `ErrorRar`."""
     lsar = _localizar("lsar")
@@ -286,7 +307,12 @@ def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S)
         raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE)
     _exigir_ruta_absoluta(ruta)
     codigo, salida, error = _ejecutar(
-        [lsar, "-j", str(ruta)], home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+        [lsar, "-j", _FLAG_SIN_SOLIDOS, str(ruta)],
+        home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+    if _opcion_desconocida(codigo, salida, error):
+        codigo, salida, error = _ejecutar(
+            [lsar, "-j", str(ruta)],
+            home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
     if codigo != 0:
         raise ErrorRar(_motivo_por_mensaje(error + salida[:4096]))
     try:
