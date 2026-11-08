@@ -282,6 +282,8 @@ class TestRouter:
         assert not sesion_valida(crear_cookie_sesion(secreto, 1), secreto, 2)
         assert all("value=" not in i for i in _inputs_de_contrasena(r.text))
         assert "Tu contraseña actual" in r.text                     # ya trae el campo de la actual
+        assert 'id="guardar-seguridad"' in r.text                   # el foco vuelve al botón (UX)
+        assert 'role="status"' in r.text                            # el éxito se anuncia a lectores de pantalla
 
     def test_actual_incorrecta_no_cambia_nada(self, con_contrasena):
         """AC-03."""
@@ -339,6 +341,27 @@ class TestRouter:
         volcado = json.dumps(logs, default=str)
         assert NUEVA not in volcado and ACTUAL not in volcado
 
+    def test_el_registro_de_cambio_y_de_rechazo_no_lleva_valores(self, con_contrasena):
+        """QA W08/W09 (el más serio: el registro es donde acabaría una contraseña): se piden usuario, contraseña
+        nueva, actual y dirección con valores reconocibles y NINGUNO llega a un evento de registro."""
+        valores = ("USUARIO-RECONOCIBLE", NUEVA, ACTUAL, "https://reconocible.example.org", "mal-intento-9z")
+        get_settings().auth_mode = "user_password"
+        get_settings().auth_username = "usuario-viejo"
+        con_contrasena.correcta = False
+        with structlog.testing.capture_logs() as logs:
+            _post(_cliente(), auth_mode="user_password", auth_username=valores[0], auth_password=valores[1],
+                  auth_password_repetida=valores[1], auth_password_actual=valores[4], base_url=valores[3])
+            con_contrasena.correcta = True
+            _post(_cliente(), auth_mode="user_password", auth_username=valores[0], auth_password=valores[1],
+                  auth_password_repetida=valores[1], auth_password_actual=ACTUAL, base_url=valores[3])
+        eventos = [e["event"] for e in logs]
+        assert "ajustes.seguridad_rechazada" in eventos and "ajustes.seguridad_cambiada" in eventos
+        volcado = json.dumps(logs, default=str)
+        for valor in valores:
+            assert valor not in volcado, f"un valor del formulario llegó al registro: {valor!r}"
+        cambiada = next(e for e in logs if e["event"] == "ajustes.seguridad_cambiada")
+        assert set(cambiada["cambios"]) == {"contrasena", "usuario", "direccion"}
+
     @pytest.mark.parametrize("campo", ["auth_password", "auth_password_actual", "auth_username", "base_url"])
     def test_el_centinela_no_aparece_en_ninguna_respuesta_ni_en_el_registro(self, con_contrasena, campo):
         """AC-07, contra la ruta real y la versión de FastAPI instalada: nunca un 422 que repita lo escrito."""
@@ -381,6 +404,10 @@ class TestPlantilla:
         nueva = next(i for i in _inputs_de_contrasena(tarjeta) if 'name="auth_password"' in i)
         assert 'autocomplete="new-password"' in nueva           # el gestor no rellena la antigua
         assert 'aria-live="polite"' in tarjeta and "¿La has olvidado?" in tarjeta
+        # UX (foco): al sustituir la tarjeta el botón se elimina; htmx restaura el foco al elemento con el MISMO
+        # id, así que el botón lleva uno estable (sin él el foco volvería a BODY)
+        assert 'id="guardar-seguridad"' in tarjeta
+        assert 'aria-describedby="resultado-seguridad"' in tarjeta       # el campo de la actual apunta al resultado
         assert all("value=" not in i for i in _inputs_de_contrasena(tarjeta))
 
     def test_sin_contrasena_en_vigor_no_aparece_el_campo(self):
@@ -390,7 +417,52 @@ class TestPlantilla:
         assert "Tu contraseña actual" not in tarjeta and "auth_password_actual" not in tarjeta
 
 
-# ── Pruebas estáticas (AC-08, AC-12) ─────────────────────────────────────────────────────────────
+# ── Pruebas estáticas (AC-08, AC-12; SecOps A-1) ──────────────────────────────────────────────────
+CLAVES_DE_ACCESO = {"auth_mode", "auth_username", "auth_password_hash", "auth_session_version",
+                    "secret_key", "base_url"}
+#: Dónde puede escribirse el acceso: el servicio, el rehash de `/login`, el instalador y el propio servicio de
+#: ajustes en tiempo de ejecución (`ensure_secret_key`).
+ESCRIBEN_ACCESO = {"services/seguridad.py", "web/auth.py", "cli/seguridad.py", "services/runtime_settings.py"}
+#: `.save(...)` de Pillow, que no es el servicio de ajustes.
+SAVE_DE_IMAGENES = {"utils/cover.py", "utils/portada_rar.py"}
+ESCRITOR_PRIVADO = {"_guardar_seguridad", "_comprobar_actual", "_comprobar_forma"}
+
+
+def _saves_sospechosos(fuente: str, ruta: str) -> list[int]:
+    """Líneas de `.save(...)` que pueden escribir claves de acceso desde un sitio NO permitido: un diccionario
+    literal con alguna de esas claves (o con `**`), o cualquier primer argumento que no sea un diccionario
+    literal (una variable `cambios`, una llamada…), que es como se evadía la versión anterior de la prueba."""
+    if ruta in ESCRIBEN_ACCESO:
+        return []
+    marcadas = []
+    for nodo in ast.walk(ast.parse(fuente)):
+        if not (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Attribute)
+                and nodo.func.attr == "save" and nodo.args):
+            continue
+        primero = nodo.args[0]
+        if isinstance(primero, ast.Dict):
+            llaves = [k.value if isinstance(k, ast.Constant) else None for k in primero.keys]
+            if None in llaves or set(llaves) & CLAVES_DE_ACCESO:
+                marcadas.append(nodo.lineno)
+        elif ruta not in SAVE_DE_IMAGENES:
+            marcadas.append(nodo.lineno)
+    return marcadas
+
+
+def _usos_del_escritor_privado(fuente: str) -> list[str]:
+    """Nombres del escritor privado de seguridad usados en este código: como nombre, atributo o importación
+    (con o sin alias)."""
+    usos = []
+    for nodo in ast.walk(ast.parse(fuente)):
+        if isinstance(nodo, ast.Name) and nodo.id in ESCRITOR_PRIVADO:
+            usos.append(nodo.id)
+        elif isinstance(nodo, ast.Attribute) and nodo.attr in ESCRITOR_PRIVADO:
+            usos.append(nodo.attr)
+        elif isinstance(nodo, ast.ImportFrom):
+            usos += [a.name for a in nodo.names if a.name in ESCRITOR_PRIVADO]
+    return usos
+
+
 class TestEstaticas:
     def test_los_parametros_del_router_son_str_form_vacio_sin_restricciones(self):
         """AC-08: ninguna restricción de campo (con una incumplida el 422 devolvería lo escrito)."""
@@ -416,22 +488,55 @@ class TestEstaticas:
         assert sorted(usuarios) == ["cli/seguridad.py", "services/seguridad.py"]
         assert "desde_el_equipo" not in (RAIZ / "web" / "ajustes.py").read_text(encoding="utf-8")
 
-    def test_solo_los_sitios_previstos_escriben_las_claves_de_acceso(self):
-        """AC-12 (a): una ruta nueva que guarde `auth_*`, `secret_key` o `base_url` rompe esta prueba."""
-        claves = {"auth_mode", "auth_username", "auth_password_hash", "auth_session_version", "secret_key",
-                  "base_url"}
-        permitidos = {"web/auth.py", "cli/seguridad.py", "services/runtime_settings.py"}
-        hallados = set()
+    def test_el_escritor_privado_solo_aparece_en_el_servicio(self):
+        """SecOps A-1 (b): el escritor privado que no pide la actual y sus comprobaciones solo se nombran en
+        `services/seguridad.py`, ni como nombre, ni como atributo, ni importado (con o sin alias)."""
+        fuera = {}
         for ruta in RAIZ.rglob("*.py"):
-            for nodo in ast.walk(ast.parse(ruta.read_text(encoding="utf-8"))):
-                if (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Attribute)
-                        and nodo.func.attr == "save" and nodo.args and isinstance(nodo.args[0], ast.Dict)):
-                    llaves = {k.value for k in nodo.args[0].keys if isinstance(k, ast.Constant)}
-                    if llaves & claves:
-                        hallados.add(ruta.relative_to(RAIZ).as_posix())
-        assert hallados <= permitidos, f"escriben claves de acceso fuera de lo previsto: {hallados - permitidos}"
-        # el router de Ajustes escribe seguridad SOLO por `fijar_seguridad`
-        assert "web/ajustes.py" not in hallados
+            rel = ruta.relative_to(RAIZ).as_posix()
+            if rel == "services/seguridad.py":
+                continue
+            usos = _usos_del_escritor_privado(ruta.read_text(encoding="utf-8"))
+            if usos:
+                fuera[rel] = usos
+        assert fuera == {}, f"el escritor privado de seguridad se usa fuera del servicio: {fuera}"
+
+    def test_solo_los_sitios_previstos_escriben_las_claves_de_acceso(self):
+        """AC-12 (a), SecOps A-1 (a): nada fuera de la lista guarda claves de acceso, ni con un diccionario
+        literal ni con una variable (`cambios = {...}; save(cambios)`)."""
+        hallados = {}
+        for ruta in RAIZ.rglob("*.py"):
+            rel = ruta.relative_to(RAIZ).as_posix()
+            lineas = _saves_sospechosos(ruta.read_text(encoding="utf-8"), rel)
+            if lineas:
+                hallados[rel] = lineas
+        assert hallados == {}, f".save(...) a revisar fuera de los sitios previstos: {hallados}"
+
+    # el análisis es la prueba: se comprueba con el código malo que SecOps usó para evadirlo
+    @pytest.mark.parametrize("fuente", [
+        'await RuntimeSettingsService(db).save({"auth_mode": "none"})',
+        'cambios = {"auth_mode": "none"}\nawait RuntimeSettingsService(db).save(cambios)',     # variable
+        'await RuntimeSettingsService(db).save({**extra})',                                    # desempaquetado
+        'await servicio.save(construir())',                                                    # llamada
+        'await svc.save({"secret_key": "x"})',
+        'await svc.save({"base_url": ""})',
+    ])
+    def test_el_analisis_marca_las_escrituras_que_se_evadian(self, fuente):
+        assert _saves_sospechosos(fuente, "web/otra_ruta.py") == [fuente.count("\n") + 1]
+
+    @pytest.mark.parametrize("fuente", [
+        'await RuntimeSettingsService(db).save({"prowlarr_url": "x"})',                        # otras claves
+        'await RuntimeSettingsService(db).save({"amule_enabled": True, "amule_url": "u"})',
+    ])
+    def test_el_analisis_no_marca_las_escrituras_de_otras_claves(self, fuente):
+        assert _saves_sospechosos(fuente, "web/ajustes.py") == []
+
+    def test_el_analisis_marca_el_uso_del_escritor_privado_aunque_sea_con_alias(self):
+        for fuente in ("from zascarr.services.seguridad import _guardar_seguridad as g",
+                       "from zascarr.services import seguridad\nseguridad._guardar_seguridad(db)",
+                       "_comprobar_actual(settings)"):
+            assert _usos_del_escritor_privado(fuente), fuente
+        assert _usos_del_escritor_privado("from zascarr.services.seguridad import fijar_seguridad") == []
 
 
 class TestCli:

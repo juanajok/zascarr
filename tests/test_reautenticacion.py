@@ -149,5 +149,54 @@ async def test_en_una_rafaga_se_cuelan_como_mucho_dos_intentos_de_mas(pbkdf2):
     assert sum(r.resultado in (Reauth.OCUPADA, Reauth.BLOQUEADA) for r in resultados) >= 5
 
 
+@pytest.mark.asyncio
+async def test_el_bloqueo_se_cuenta_desde_el_ultimo_fallo_no_desde_el_primero(pbkdf2):
+    """QA R11, AC-05: «30 min desde el ÚLTIMO fallo»."""
+    reloj = Reloj()
+    await _fallar(UMBRAL_FALLOS - 1, reloj)
+    reloj.t += 600                                   # el 5.º llega 10 min después del primero
+    await comprobar_contrasena_actual("mal", AJUSTES, reloj=reloj)
+    quinto = reloj.t
+    reloj.t = quinto + BLOQUEO_S - 1
+    r = await comprobar_contrasena_actual("bien", AJUSTES, reloj=reloj)
+    assert r.resultado is Reauth.BLOQUEADA and r.hasta_epoch == quinto + BLOQUEO_S
+    pbkdf2.correcta = True
+    reloj.t = quinto + BLOQUEO_S + 1
+    assert (await comprobar_contrasena_actual("bien", AJUSTES, reloj=reloj)).resultado is Reauth.OK
+
+
+@pytest.mark.asyncio
+async def test_se_reautentica_con_el_usuario_guardado_no_con_uno_vacio(monkeypatch):
+    """QA R12: en modo usuario y contraseña la comprobación usa `settings.auth_username`."""
+    vistos = []
+
+    async def espia(usuario, password, settings):
+        vistos.append(usuario)
+        return True
+
+    monkeypatch.setattr(reautenticacion, "intentar_credenciales", espia)
+    await comprobar_contrasena_actual("bien", SimpleNamespace(auth_username="ana", auth_mode="user_password"))
+    assert vistos == ["ana"]
+
+
+def test_la_hora_del_bloqueo_sale_en_la_zona_del_servidor(monkeypatch):
+    """QA S17: `TZ` manda, no UTC."""
+    import time
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from zascarr.services.seguridad import mensaje_bloqueada
+    hasta = 1_700_000_000.0                         # 22:13 UTC
+    try:
+        monkeypatch.setenv("TZ", "Asia/Tokyo")
+        time.tzset()
+        texto = mensaje_bloqueada(hasta)
+        assert datetime.fromtimestamp(hasta, ZoneInfo("Asia/Tokyo")).strftime("hasta las %H:%M") in texto
+        assert "hasta las 22:13" not in texto        # no UTC
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+
+
 def test_las_constantes_son_las_de_la_spec_y_estan_en_un_solo_sitio():
     assert (UMBRAL_FALLOS, VENTANA_S, BLOQUEO_S) == (5, 15 * 60, 30 * 60)
