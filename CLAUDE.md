@@ -112,6 +112,11 @@ Sigue las guías oficiales con estas precisiones locales:
   cached_image_response`). `/static` va con `Cache-Control: no-cache`
   (`main.py::RevalidatedStaticFiles`): el navegador revalida con el ETag y recibe un 304
   vacío si nada cambió. Sin ello, tras `update.sh` seguía pintando el CSS antiguo.
+- **Portada de serie** (#418, BL-PORT3): `covers/v3/<id>.jpg` guarda solo portadas sacadas de un archivo; la
+  externa va a `covers/externa/`. Un `.cbr` que de verdad es RAR se lee con `unar` (`utils/lector_rar.py`,
+  por subproceso acotado, uno a la vez, solo en la etapa `runtime` de la imagen); un fallo por causa del
+  archivo se recuerda en `covers/v3/fallos/<file_id>.json` (sin ruta ni nombre) hasta que el archivo cambie.
+  Ver `docs/design/especificacion-BL-PORT3.md`.
 - El refresco periódico del orchestrator/importer corre en el propio proceso (un solo worker), con los
   intervalos de `config.py`; no hay cola ni caché externa (ADR-0011: Redis retirado).
 
@@ -301,7 +306,7 @@ como marco permanente.
 | Doc | Rol |
 |---|---|
 | `docs/BACKLOG.md` | Prioridades P0-P2, historias, estimaciones y decisión de hecho/cierre con nota mecánica de cómo se logró cada historia |
-| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`; 0006–0010 en el propio directorio) |
+| `docs/adr/` | Decisiones de arquitectura y de postura del producto (0001 UI, 0002 alcance del enricher, 0003 identidad editorial, 0004 exposición de red, 0005 migración de la UI, 0011 retirar Redis, 0012 credenciales del `.env`, 0015 lector de RAR con `unar` y riesgo aceptado; 0006–0010 en el propio directorio) |
 | `docs/design/ui-migracion.md` | Inventario de la UI (plantillas, rutas, contratos HTMX), maqueta frente a la realidad y estimaciones de la Épica V. **Consultar antes de tocar una plantilla o un contrato `hx-*`** |
 | `src/zascarr/LEGAL.md` | Marco legal activo; si se actualiza, hay que el mismo día versionar/rehacer `legal_version` en services/legal.py (hash del fichero) |
 | `pyproject.toml` | Fuente única de metadatos del paquete (nombre, license, deps) |

@@ -13,8 +13,10 @@ from sqlalchemy.exc import ProgrammingError
 
 from zascarr.config import get_settings
 from zascarr.services.ciclo_importador import ejecutar_ciclo_y_avisar
+from zascarr.utils import lector_rar
 from zascarr.utils.credenciales import CredencialesNoSegurasError, problema_de_credenciales
 from zascarr.utils.log_acceso import instalar_filtro_de_acceso
+from zascarr.utils.portada_rar import barrer_temporales
 
 logger = structlog.get_logger()
 
@@ -228,6 +230,15 @@ async def _library_audit_task() -> None:
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("zascarr.starting", version=settings.app_version)
+    # #418: observacional, no bloqueante (CLAUDE.md §3.2): sin `unar` solo faltan portadas de .cbr.
+    if not settings.lector_rar_enabled:
+        logger.info("lector_rar.apagado")
+    elif not lector_rar.disponible():
+        logger.warning("lector_rar.no_disponible")
+    # B-4 (SecOps): temporales de lectura que dejó un proceso muerto (OOM, kill -9)
+    huerfanos = await asyncio.to_thread(barrer_temporales, settings.covers_cache_path)
+    if huerfanos:
+        logger.info("lector_rar.temporales_barridos", cantidad=huerfanos)
     from sqlalchemy import text
 
     from zascarr.database import async_session_factory, engine

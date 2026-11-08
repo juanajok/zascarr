@@ -108,6 +108,23 @@ class ClaseZip(enum.StrEnum):
     LIMITE   = "limite"        # demasiadas entradas
 
 
+class MotivoRar(enum.StrEnum):
+    """#418 (BL-PORT3): por qué no se pudo leer algo de un RAR. Es lo único que se registra y se
+    recuerda de un fallo: nunca la ruta ni el nombre del archivo (CLAUDE.md §5.4). Los cinco
+    primeros más `TIEMPO` son causas DEL ARCHIVO (se recuerdan); los dos últimos, del ENTORNO
+    (se reintentan en la petición siguiente)."""
+    CIFRADO          = "cifrado"
+    MULTIVOLUMEN     = "multivolumen"
+    ILEGIBLE         = "ilegible"
+    SIN_IMAGENES     = "sin_imagenes"
+    PAQUETE          = "paquete"
+    DEMASIADO_GRANDE = "demasiado_grande"
+    TIEMPO           = "tiempo"
+    HERRAMIENTA_AUSENTE = "herramienta_ausente"   # entorno
+    INESPERADO       = "inesperado"               # entorno
+    OCUPADO          = "ocupado"                  # entorno: otro lector tiene el turno; sin marca
+
+
 class Tratamiento(enum.StrEnum):
     # ComicInfo, anchura y portada con el lector ZIP; nunca se escribe
     LEER_COMO_ZIP = "leer_como_zip"

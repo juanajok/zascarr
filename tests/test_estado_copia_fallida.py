@@ -69,6 +69,13 @@ JERGA = ("pg_dump", "gzip", "alembic", "sha256", "manifest", ".sql", "_failed", 
          "unexpected", "traceback", "undefined", "null", "none")
 
 
+@pytest.fixture(autouse=True)
+def _lector_rar_presente(monkeypatch):
+    """Estas pruebas cuentan los avisos de Estado: el del lector de RAR (#418) depende de si la máquina
+    tiene `unar`, no de la copia de seguridad."""
+    monkeypatch.setattr("zascarr.utils.lector_rar.disponible", lambda: True)
+
+
 class _SesionFalsa:
     async def execute(self, _sentencia):
         return None

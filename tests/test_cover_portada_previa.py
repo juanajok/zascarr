@@ -137,9 +137,11 @@ class TestSoloCabecera:
 
 
 class TestUnaSolaRegla:
-    def test_la_lista_de_previas_vive_en_un_sitio_y_hoy_es_solo_la_antigua(self, tmp_path):
+    def test_la_lista_de_previas_vive_en_un_sitio_y_son_la_antigua_y_la_externa(self, tmp_path):
+        """#418 añadió `covers/externa/<id>.jpg` en esa única lista, detrás de la antigua."""
         serie = uuid4()
-        assert rutas_de_portadas_previas(tmp_path, serie) == [tmp_path / f"{serie}.jpg"]
+        assert rutas_de_portadas_previas(tmp_path, serie) == [
+            tmp_path / f"{serie}.jpg", tmp_path / "externa" / f"{serie}.jpg"]
 
     def test_con_dos_previas_devuelve_la_primera_suficiente_en_orden(self, tmp_path, monkeypatch):
         """AC-11: #418 añadirá `covers/externa/<id>.jpg` con una línea; el orden manda."""

@@ -35,8 +35,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.services.seguridad import aviso_de_exposicion, estado_de_seguridad
+from zascarr.utils import lector_rar
 
 logger = structlog.get_logger()
+
+#: #418: texto para el coleccionista si falta la herramienta de los .cbr (qué falla y qué hacer).
+AVISO_LECTOR_RAR = (
+    "Falta el programa que lee los archivos .cbr, así que sus portadas no se pueden mostrar. "
+    "Actualiza ZascArr a la última imagen.")
 
 router = APIRouter(tags=["health"])
 
@@ -436,6 +442,10 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     exposicion = aviso_de_exposicion(settings)
     if exposicion:
         warnings["exposicion"] = exposicion
+    # #418: sin `unar` no se leen las portadas de los .cbr. Solo avisa (ni estado ni bloqueo).
+    # (apagado a propósito con LECTOR_RAR_ENABLED=false no es un fallo: no se avisa)
+    if settings.lector_rar_enabled and not lector_rar.disponible():
+        warnings["lector_rar"] = AVISO_LECTOR_RAR
 
     return {
         "status": status_str,
