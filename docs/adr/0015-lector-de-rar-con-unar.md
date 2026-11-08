@@ -60,7 +60,10 @@ la misma PR que introduce el lector:
 - **Cómo apagarlo sin reconstruir la imagen:** `LECTOR_RAR_ENABLED=false` en el `.env` (declarada solo en `config.py`; por defecto `true`;
   el compose la pasa al contenedor). Apagado, ningún RAR se envía a `unar`/`lsar`: el recorrido de portada lo trata como no candidato
   **sin gastar intento ni dejar marca**, la cascada sigue (antigua → externa → 404, sin 500) y `/api/health` no avisa de que falta la
-  herramienta. Los `.cbr` que son ZIP y los CBZ no cambian. Volver a encenderlo reintenta los RAR (no se marcó nada).
+  herramienta. Los `.cbr` que son ZIP y los CBZ no cambian. **Apagarlo conserva lo ya generado (H-3, aceptado por el PO el 2026-11-08):** las portadas
+  de RAR ya guardadas en `covers/v3` se siguen sirviendo y las marcas de fallo existentes no se tocan ni se borran; apagarlo solo impide
+  leer RAR nuevos. Quien quiera retirar también lo ya generado debe borrar a mano esos ficheros de `covers/v3` (nada los borra solo).
+  Al volver a encenderlo, un archivo con marca vigente no se reabre y uno sin marca se vuelve a intentar.
 - **Comportamiento conocido (G-2, aceptado por el PO el 2026-11-07):** si el turno del lector (2,5 s) vence porque otra portada lo tiene,
   la petición da 404 `no-store` y el `<img>` cae al marcador hasta recargar. En una rejilla fría de 12 series RAR, QA midió 11 de 12
   con portada con ≈ 0,3 s/serie y 3 de 12 con ≈ 2 s/serie (no medido en la Pi). Se mide en la Pi y, si sale mal, se sube el turno o se
