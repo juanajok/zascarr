@@ -59,7 +59,7 @@ async def _sembrar_y_leer(url, archivos, *, otra_serie=()):
         await s.commit()
         filas = (await s.execute(_stmt_archivos_de_portada(propia.id))).all()
     await motor.dispose()
-    return [f[0].rsplit("/", 1)[1].removesuffix(".cbz") for f in filas]
+    return [f[1].rsplit("/", 1)[1].removesuffix(".cbz") for f in filas]
 
 
 @PG

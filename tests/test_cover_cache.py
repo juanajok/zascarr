@@ -258,7 +258,7 @@ class _SesionDePortada:
         return self._series
 
     async def execute(self, _statement):
-        return _FakeResult([(str(self._cbz), None)])
+        return _FakeResult([(uuid4(), str(self._cbz), None)])
 
 
 @pytest.fixture
