@@ -52,7 +52,7 @@ class TestRanking:
             [sin_datos, con_datos], "Dragon Ball", anio_esperado=2006)
         assert orden[0] is con_datos
 
-    def test_descubrimiento_grupo_ordena_sin_expectativas(self):
+    def test_el_orden_publico_de_grupo_sigue_siendo_fijo_por_fuente_y_titulo(self):
         from zascarr.services.descubrimiento_grupo import DescubrimientoDeGrupo
 
         resultados = [
@@ -63,11 +63,8 @@ class TestRanking:
                             start_year=2000, description=None, cover_url=None,
                             site_url=None),
         ]
-        busqueda = Busqueda(resultados, [], {})
-        orden = DescubrimientoDeGrupo._ordenar(busqueda, "consulta")
-        assert len(orden) == 2
-        assert [r.title for r in orden] == [
-            r.title for r in DescubrimientoDeGrupo._ordenar(busqueda, "consulta")]
+        orden = DescubrimientoDeGrupo._ordenar(Busqueda(resultados, [], {}))
+        assert [r.title for r in orden] == ["Alfa", "Zeta"]
 
 
 class TestGCDConAnio:

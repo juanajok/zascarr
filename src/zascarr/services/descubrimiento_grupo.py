@@ -30,6 +30,7 @@ from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.discovery import (
     CAMPO_ID_EXTERNO,
     CAMPOS_ID_DE_TEXTO,
+    ORDEN_DE_FUENTES,
     Busqueda,
     DiscoveryResult,
     DiscoveryService,
@@ -329,7 +330,7 @@ class DescubrimientoDeGrupo:
         # Primero se PREPARA cada resultado (lo que se firmará, se mostrará y se usará en las consultas), y solo después
         # se consulta la base: un resultado que no se puede dar de alta (título o identificador que no caben en lo que se
         # guarda, o con caracteres no firmables) no llega a ninguna consulta, ni a la BD ni al token. Se avisa, no se calla.
-        preparados, omitidas = self._preparar(self._ordenar(busqueda, usada))
+        preparados, omitidas = self._preparar(self._ordenar(busqueda))
         locales = await self._buscar_locales(preparados)
         avisos = list(busqueda.avisos)
         if omitidas:
@@ -354,9 +355,15 @@ class DescubrimientoDeGrupo:
         return next((t for t in candidatos if t and any(c.isalpha() for c in t)), "")
 
     @staticmethod
-    def _ordenar(b: Busqueda, consulta: str) -> list[DiscoveryResult]:
-        """Criterio explicable de título (#526); sin expectativas no se inventa «la mejor»."""
-        return ordenar_candidatos(b.resultados, consulta)
+    def _ordenar(b: Busqueda) -> list[DiscoveryResult]:
+        """Orden PÚBLICO fijo de la superficie (#276): primero fuente, luego título.
+
+        No se usa el ranking de #526 aquí: ese ranking es para elegir el candidato
+        interno al detalle (banco), no para reordenar la lista que ve la persona.
+        """
+        orden = {f: i for i, f in enumerate(ORDEN_DE_FUENTES)}
+        return sorted(b.resultados, key=lambda r: (
+            orden.get(r.source, 99), r.title.casefold(), r.external_id))
 
     @staticmethod
     def _preparar(resultados: list[DiscoveryResult]) -> tuple[list[_Preparado], int]:
