@@ -472,3 +472,20 @@ class TestUsaLaVersionEnLaRuta:
         assert con_query.headers["etag"] == sin_query.headers["etag"]
         assert con_query.headers["cache-control"] == "private, max-age=86400"
         assert con_query.content == sin_query.content
+
+
+class TestRespaldoV2Tras506:
+    """#506: una `v2` previa se sirve si ningún archivo puede dar portada."""
+
+    def test_sin_archivos_utilizables_sirve_la_v2_sin_escribir_v3(self, mundo):
+        m = mundo([])
+        previa = m.covers / "v2" / f"{m.series.id}.jpg"
+        previa.parent.mkdir(parents=True)
+        datos = _jpeg(600, 900)
+        previa.write_bytes(datos)
+        r = TestClient(app).get(m.url())
+        assert r.status_code == 200
+        assert r.content == datos
+        assert r.headers["cache-control"] == "private, max-age=86400"
+        assert not m.v2.exists(), "la v2 no se copia a v3"
+        assert previa.read_bytes() == datos, "la v2 no se borra ni se pisa"
