@@ -174,6 +174,18 @@ class DiscoveryResult:
         return self.tradition_provenance or ProcedenciaTradicion.DESCONOCIDA
 
 
+def _editorial_desde_raw(raw: dict) -> str | None:
+    """Nombre ya presente en el `raw` de búsqueda (nunca una URL)."""
+    valor = raw.get("publisher_name")
+    if not valor:
+        publisher = raw.get("publisher")
+        if isinstance(publisher, dict):
+            valor = publisher.get("name")
+        elif isinstance(publisher, str) and not publisher.startswith("http"):
+            valor = publisher
+    return str(valor).strip() if valor else None
+
+
 class DiscoveryService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -302,10 +314,19 @@ class DiscoveryService:
             except (TypeError, ValueError):
                 return None
             serie = GCDSerie.desde_raw(raw, gcd_id)
-            editorial = raw.get("publisher_name")
+            editorial = _editorial_desde_raw(raw)
+            peticiones = 0
+            if editorial is None and serie.publisher:
+                # La búsqueda trae la editorial como URL; el nombre exige 1 petición.
+                peticiones = 1
+                try:
+                    async with GCDClient() as cliente:
+                        editorial = await cliente.get_publisher(serie.publisher)
+                except Exception:  # noqa: BLE001 — sin editorial el contraste sigue ambiguo
+                    logger.warning("discovery.gcd_publisher_failed")
+                    editorial = None
             return detalle_desde_gcd_serie(
-                serie, editorial=(str(editorial) if editorial else None),
-                peticiones=0, metodo="raw")
+                serie, editorial=editorial, peticiones=peticiones, metodo="raw")
         try:
             gcd_id = int(resultado.external_id)
         except (TypeError, ValueError):
