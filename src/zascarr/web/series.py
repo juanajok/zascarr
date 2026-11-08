@@ -40,6 +40,13 @@ from zascarr.services.enriquecimiento_plan import (
     EnriquecimientoPlanService,
     ErrorDePlan,
 )
+from zascarr.services.etiquetas import (
+    EtiquetaInvalida,
+    anadir_etiqueta,
+    etiquetas_de_serie,
+    quitar_etiqueta,
+    sugerencias_etiqueta,
+)
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     horas_minimas,
@@ -284,6 +291,75 @@ async def aplicar_enriquecimiento(
         request, "enriquecimiento_resultado.html",
         {"series": series, "resultado": resultado, "error": None},
     )
+
+
+@router.get("/{series_id}/etiquetas", response_class=HTMLResponse)
+async def panel_etiquetas(series_id: UUID, request: Request,
+                          db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Panel perezoso de etiquetas de la ficha (BL-ETQ1a)."""
+    series = await _serie_o_404(db, series_id)
+    etiquetas = await etiquetas_de_serie(db, series.id)
+    respuesta = templates.TemplateResponse(
+        request, "_etiquetas_serie.html",
+        {"series": series, "etiquetas": etiquetas, "mensaje": None, "error": None},
+    )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/{series_id}/etiquetas/sugerir", response_class=HTMLResponse)
+async def sugerir_etiqueta(series_id: UUID, request: Request, etiqueta: str = "",
+                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    if not etiqueta.strip():
+        return HTMLResponse("")
+    series = await _serie_o_404(db, series_id)
+    sugerencias = await sugerencias_etiqueta(db, etiqueta, series_id=series.id)
+    respuesta = templates.TemplateResponse(
+        request, "_sugerencias_etiqueta_serie.html",
+        {"series": series, "sugerencias": sugerencias},
+    )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/etiquetas", response_class=HTMLResponse)
+async def anadir_etiqueta_web(series_id: UUID, request: Request,
+                              etiqueta: str = Form(...),
+                              db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    mensaje = error = None
+    try:
+        resultado = await anadir_etiqueta(db, series.id, etiqueta)
+        mensaje = resultado.mensaje
+    except EtiquetaInvalida as exc:
+        error = str(exc)
+    etiquetas = await etiquetas_de_serie(db, series.id)
+    respuesta = templates.TemplateResponse(
+        request, "_etiquetas_serie.html",
+        {"series": series, "etiquetas": etiquetas, "mensaje": mensaje, "error": error},
+    )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/etiquetas/quitar", response_class=HTMLResponse)
+async def quitar_etiqueta_web(series_id: UUID, request: Request,
+                              etiqueta: str = Form(...),
+                              db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    mensaje = error = None
+    try:
+        resultado = await quitar_etiqueta(db, series.id, etiqueta)
+        mensaje = resultado.mensaje
+    except EtiquetaInvalida as exc:
+        error = str(exc)
+    etiquetas = await etiquetas_de_serie(db, series.id)
+    respuesta = templates.TemplateResponse(
+        request, "_etiquetas_serie.html",
+        {"series": series, "etiquetas": etiquetas, "mensaje": mensaje, "error": error},
+    )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @router.post("/{series_id}/politica", response_class=HTMLResponse)
