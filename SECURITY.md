@@ -128,7 +128,18 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
 - **Sin hotlinking**: las portadas siempre se sirven desde caché local o
   extracción del propio CBZ, nunca `src` externo directo.
 - **XSS**: las plantillas Jinja2 escapan por defecto; `|safe` solo se usa
-  para el Markdown del propio `LEGAL.md`, ya controlado.
+  para el Markdown del propio `LEGAL.md`, ya controlado. Los SVG de
+  `ui.icono` se construyen como `Markup` **solo** desde la allowlist
+  `web/iconos.py::ICONOS` (un nombre desconocido lanza `ValueError`), nunca
+  desde texto de la persona.
+- **Etiquetas = datos de la persona**: el nombre tecleado en la ficha viaja
+  en `?etiqueta=…` y el registro de acceso lo elimina con el resto de la
+  query (ver «Registros de acceso»). La aplicación no escribe el texto de la
+  etiqueta en `structlog`: si falla la escritura, el aviso es genérico y solo
+  se registra el tipo de excepción, sin traceback que pueda arrastrar el
+  nombre entre los parámetros de la sentencia (FR-13 de
+  `docs/design/especificacion-etiquetas.md`). La ficha y los fragmentos de
+  etiquetas responden `Cache-Control: no-store`.
 - **CORS**: sin middleware CORS — UI y API viven en el mismo origen, cero
   peticiones cross-origin legítimas.
 - **La sesión se cierra al cambiar las credenciales.** La cookie lleva, firmado,

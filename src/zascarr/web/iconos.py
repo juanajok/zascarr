@@ -77,6 +77,15 @@ ICONOS: dict[str, str] = {
     "mas": (  # ellipsis
         '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'
     ),
+    # BL-ETQ1a (#403): acciones de la ficha de etiquetas (Anexo B de ui-etiquetas.md). Lucide 1.60.0.
+    "x": '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',  # x (quitar etiqueta)
+    "minus": '<path d="M5 12h14"/>',  # minus (exclusión)
+    "plus": '<path d="M5 12h14"/><path d="M12 5v14"/>',  # plus (añadir)
+    "tag": (  # tag
+        '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414'
+        'l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/>'
+        '<circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>'
+    ),
     # Glifos de los puntos de estado de /estado (`.estado-dot`): los mismos que los chips de su color
     # (web/componentes.py::ASPECTOS: ✓ ok, ! warn, ? amber). Sin el círculo exterior de Lucide: el
     # punto ya es un círculo.

@@ -76,7 +76,9 @@ def tipo_aviso(tipo: str) -> TipoAviso:
 
 
 #: macros de `_componentes.html`, disponibles en las plantillas como `ui.<macro>`.
-MACROS = ("chip", "aviso", "grupo", "estado_vacio", "progreso", "region_viva", "menu", "portada")
+MACROS = (
+    "chip", "aviso", "icono", "grupo", "estado_vacio", "progreso", "region_viva", "menu", "portada",
+)
 PLANTILLA = "_componentes.html"
 #: ÚNICO nombre que se añade al entorno de Jinja.
 ESPACIO_DE_NOMBRES = "ui"
@@ -98,6 +100,8 @@ def registrar(env: Environment) -> None:
         "aspecto": aspecto, "tipo_aviso": tipo_aviso,
         # V3: los datos del menú (web/menu.py) tampoco son globales del entorno.
         "ENTRADAS": ENTRADAS, "GRUPOS": GRUPOS, "entrada_activa": entrada_activa,
-        "icono": icono, "marca_de_portada": marca_de_portada,
+        # BL-ETQ1a (#403): `_icono` es la función real; la macro `ui.icono` la envuelve para que
+        # las plantillas sueltas no dependan de un global suelto.
+        "_icono": icono, "marca_de_portada": marca_de_portada,
     }).module
     env.globals[ESPACIO_DE_NOMBRES] = modulo
