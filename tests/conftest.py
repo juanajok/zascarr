@@ -25,6 +25,15 @@ def _limpiar_cortesia():
 
 
 @pytest.fixture(autouse=True)
+def _limpiar_cache_gcd():
+    """La caché de búsquedas GCD es estado de módulo: no debe filtrarse entre tests."""
+    from zascarr.services.gcd import limpiar_cache_busquedas
+    limpiar_cache_busquedas()
+    yield
+    limpiar_cache_busquedas()
+
+
+@pytest.fixture(autouse=True)
 def _limpiar_estado_auth():
     """El retraso progresivo, la caché de Basic y las primitivas de concurrencia
     (candado/semáforo) son estado de módulo: se limpian entre tests para que no
