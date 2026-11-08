@@ -137,3 +137,21 @@ unidad `serie` (el detalle sale del mismo candidato en `serie`, `edicion` y `cam
 Con esto, el balance del bloque es: **el contrato de detalle funciona (2 verificadas), Comic Vine no
 sirve para ediciones españolas (12/12 incorrecto), GCD quedó NOT RUN por 429 y la recall de
 Tebeosfera ya solo deja 2 casos fuera.**
+
+### 8.2 Cierre de Tebeosfera (2026-11-08, pasada final)
+
+Con el último escalón (sin tilde), la pasada de `--fuentes tebeosfera --unidades serie` deja
+**11 de 12 casos con veredicto o motivo**:
+
+| Resultado | Casos |
+|---|---|
+| `coincidencia_verificada` | **ES-014 y ES-022** (integrales de Blueberry de Norma) |
+| `incorrecto` | ES-001, ES-005, ES-007, ES-010, ES-016, ES-026, ES-028, ES-029 |
+| `ambiguo` | ES-019 |
+| `sin_resultados` en el detalle | ES-018 |
+
+- **La hipótesis del acento se confirmó**: ES-010 y ES-026 («Tintín…») ya encuentran candidato
+  sin tilde. Que el candidato no sea la edición correcta (`incorrecto`) es un resultado, no un fallo.
+- **ES-018 sigue sin detalle**: encontró candidato, pero la ficha de número no se localizó
+  (`sin_resultados`). El detalle de número queda **NOT RUN** en la práctica.
+- Balance del banco: **2 verificadas de 12**, 8 incorrectas y 1 ambigua; ninguna silenciada.
