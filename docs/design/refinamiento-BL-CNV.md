@@ -15,6 +15,12 @@
 > modelos `File`/`Issue`. **Método:** lectura de código y documentos; **sin pruebas ejecutadas, sin
 > fuentes reales, sin Pi y sin abrir conversiones**.
 
+> **Enmienda del PO (2026-11-09):** en #488 **no se bloquea** por «compartido» o «no se sabe».
+> Se muestra una advertencia clara y la persona decide continuar mediante una **confirmación explícita**;
+> sin esa confirmación no se escribe, con ella sí. En B6/CLI será una advertencia + opción explícita.
+> Donde el resto de este documento diga «no se escribe / no se convierte» por compartido, léase
+> «advertencia + confirmación; sin confirmación no se escribe». No hay bypass silencioso.
+
 ---
 
 ## 1. Problema local, cifras y frontera
@@ -87,19 +93,21 @@ verificables, sin reabrir su sentido.
   inválido. Es una dependencia que el PO debe aceptar (P11) y que se implementa en el mismo corte de
   #478 o en un corte previo mínimo.
 
-### D3 · Archivos compartidos: guardián único y fallo cerrado
+### D3 · Archivos compartidos: guardián único y advertencia con decisión
 
-- **Regla:** ZascArr **no reescribe, convierte, renombra ni aparta** un archivo que pueda estar
-  compartido por Transmission o aMule. Se dice en la vista previa con la causa y **no** se ofrece
-  quitar el torrent ni dejar de compartir.
+- **Regla:** si el archivo puede estar compartido por Transmission o aMule, ZascArr **avisa** en la
+  vista previa con la causa y ofrece continuar mediante una **confirmación explícita**. Sin esa
+  confirmación no se escribe; con ella, la persona decide y la escritura sigue. No se ofrece quitar el
+  torrent ni dejar de compartir, ni hay bypass silencioso.
 - **Alcance:** toda escritura de bytes, no solo convertir: también B6 (el comando `etiquetar.sh
   --apply` y #480), porque reescribir un CBZ cambia su hash y rompe la siembra. Hoy `tagger.py` **no
   lo comprueba** (ficha §11.1); #488 lo cierra.
 - **Un único servicio** responde «¿se comparte?»; conversión y etiquetado lo consumen; **sin socket
   Docker ni root** (§5).
-- **Fallo cerrado:** si no hay ninguna fuente de información (ni carpetas declaradas ni cliente
+- **Desconocido:** si no hay ninguna fuente de información (ni carpetas declaradas ni cliente
   disponible), o si una fuente habilitada falla o no se puede traducir una ruta, el resultado es
-  `no_se_sabe` y **no se escribe**; la pantalla explica cómo declarar las carpetas.
+  `no_se_sabe`; se advierte y se pide la misma confirmación explícita, explicando cómo declarar las
+  carpetas.
 - **Riesgo aceptado (ficha §11.1):** hasta que #488 esté fusionada, el comando de B6 puede tocar un
   archivo compartido. No se añade un parche provisional; #488 es requisito de #478 y #480.
 
@@ -501,7 +509,7 @@ de #480. XL; probable partición al refinar; depende de #480/#481/#109/#449.
 
 | ID | Riesgo | Prob./impacto | Mitigación |
 |---|---|---|---|
-| R1 | La conversión rompe un torrent en siembra | Alta/alta | #488 antes de #478/#480; fallo cerrado; re-consulta antes de publicar; riesgo residual declarado |
+| R1 | La conversión rompe un torrent en siembra | Alta/alta | #488 antes de #478/#480; advertencia + confirmación explícita; re-consulta antes de publicar; riesgo residual declarado y decidido por la persona |
 | R2 | `.zascarr/` dentro de la biblioteca lo registra el rescan/registro como archivos nuevos | Media/alta | Exclusión explícita en `recorrer_comics`/rescan/auditoría (P11); prueba de regresión |
 | R3 | Espacio insuficiente en el disco USB (original + temporal) | Media/alta | `comprobar_espacio` con suma descomprimida + margen; aborta antes; cifras de #477; «Vaciar» por tandas |
 | R4 | 202 GiB de originales apartados duplican la colección | Media/media | Cuarentena solo hasta «Vaciar»; aviso de espacio; #477 mide; topes en #479 |
@@ -549,7 +557,7 @@ campos de hash/ruta necesarios; la cuarentena puede vivir en JSONB + diario sin 
 
 | # | Decisión | Opciones | Recomendación |
 |---|---|---|---|
-| P1 | ¿Se exige declarar carpetas compartidas para habilitar conversión/ComicInfo? | (a) sí, fallo cerrado; (b) permitir con aviso «no lo sé» | **(a)** (D3); con aviso de cómo declararlas |
+| P1 | ¿Se exige declarar carpetas compartidas para habilitar conversión/ComicInfo? | (a) sí, bloqueo; (b) aviso y decisión de la persona | **(b)** (enmienda PO 2026-11-09): si no consta, `no_se_sabe` + advertencia + confirmación |
 | P2 | «Vaciar» la cuarentena | (a) borrar definitivo con confirmación y tandas; (b) mover a papelera del sistema | **(a)**, sin depender del escritorio; solo bajo `.zascarr` |
 | P3 | Deshacer: qué pasa con el `.cbz` generado | (a) moverlo a la cuarentena de la operación; (b) borrarlo | **(a)** (no borrar nada sin confirmación específica) |
 | P4 | ¿Migración/tabla de operaciones de conversión? | (a) no: JSONB+diario; (b) tabla nueva + migración | **(a)**; si #479 necesita consultas masivas, se decide entonces (ADR y migración aparte) |
