@@ -883,3 +883,35 @@ class TestFuentesDesactivadas:
         assert not anilist.search_manga.called
         assert series.enrichment_attempted_at is None
         assert report.series_enriched == []
+
+
+class _FakeSessionSinReclamar(FakeSession):
+    """H9: otra operación reclamó la identidad antes de nuestro UPDATE."""
+
+    async def execute(self, _statement):
+        if _statement.__class__.__name__ == "Update":
+            return SimpleNamespace(rowcount=0)
+        return await super().execute(_statement)
+
+
+class TestH9RowcountCero:
+    @pytest.mark.asyncio
+    async def test_no_escribe_identidad_ni_metadatos_ni_marca_el_intento(self):
+        series = make_series("Batman")
+        client = AsyncMock()
+        client.search_series.return_value = [CVResult(
+            cv_id=99, name="Batman", description="CV desc",
+            image_url="http://cv/img.jpg", count_of_issues=850)]
+        db = _FakeSessionSinReclamar([FakeExecResult([series])])
+        report = EnrichmentReport()
+
+        await EnrichmentService(db=db)._enrich_series_batch(
+            client, AsyncMock(), AsyncMock(), 10, report)
+
+        assert series.comic_vine_id is None
+        assert series.description is None and series.cover_url is None
+        assert series.total_issues is None and series.metadata_source is None
+        # H9: rowcount=0 no deja `enrichment_attempted_at` sucio ni flush de metadatos.
+        assert series.enrichment_attempted_at is None
+        db.flush.assert_not_awaited()
+        assert report.series_enriched == []
