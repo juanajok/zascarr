@@ -460,11 +460,11 @@ caracteres y pruebas de ida/vuelta; mientras, el veredicto de seguridad es **NO 
 | **BL-ETQ5** Alias / implicaciones / reglas | tablas de alias/padres, validación de ciclos, reglas propuestas, `regla` en `MetadataSource` (si se aprueba) | ETQ1a, ETQ4 | 1 PR | L | ciclos, fusión silenciosa, coste de CTE; ¿quién cura? (D-5) |
 | **BL-ETQ6** Export ComicInfo/Kavita | extender B6 + escritura de `<Tags>` + B20 | ETQ1a, contrato B6 | 1 PR (no autorizada antes de extender B6) | L | corromper CBZ / pisar ajeno; **NO APTO** hasta B6 |
 
-Reglas del reparto: **BL-ETQ1a (#403)** y **BL-ETQ1b (#431)** ya tienen tarjeta; la 1b queda
-**bloqueada** hasta que la 1a esté fusionada. BL-ETQ2…6 quedan **propuestas** al PO, sin tarjeta, y
-no empiezan sin su decisión. Una historia = una PR; la ficha de benchmark de una fase nueva se abre
-si toca modelo/ficheros. Orden recomendado: 1a → 1b → 2 → 3 → 4 → 5 → 6, con 3 en paralelo a 2 si
-conviene (comparten clientes, no plantillas).
+Reglas del reparto: **BL-ETQ1a (#403)** y **BL-ETQ1b (#431)** están fusionadas y desplegadas;
+**BL-ETQ2 ya tiene tarjeta (#538)** por decisión del PO, sin implementar. BL-ETQ3…6 quedan
+**propuestas** al PO, sin tarjeta, y no empiezan sin su decisión. Una historia = una PR; la ficha de
+benchmark de una fase nueva se abre si toca modelo/ficheros. Orden recomendado: 1a → 1b → 2 → 3 → 4
+→ 5 → 6, con 3 en paralelo a 2 si conviene (comparten clientes, no plantillas).
 
 ## 10. Decisiones abiertas del PO y DoR
 
