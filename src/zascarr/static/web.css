@@ -594,6 +594,11 @@ button[type="submit"].neutro {
 
 /* ── 8. PEGATINAS / BADGES ───────────────────────────────────────────────── */
 .issue-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
   font-size: .875rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;   /* los números de una rejilla de grapas se alinean */
@@ -1940,6 +1945,31 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .discrepancias-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .discrepancia { border-left: 3px solid var(--amber-t); padding-left: 10px; }
 .discrepancia-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; align-items: center; }
+
+
+
+/* #447: ficha de serie y de número (solo lectura) */
+.ficha-serie-datos, .ficha-serie-datos ~ section, .issue-header { margin-top: 18px; }
+.ficha-sinopsis { max-width: 70ch; line-height: 1.6; overflow-wrap: anywhere; }
+.ficha-serie-meta, .ficha-autores { display: grid; gap: 6px 18px; margin: 10px 0; }
+.ficha-serie-meta > div, .ficha-autores > div { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr; gap: 8px; }
+.ficha-serie-meta dt, .ficha-autores dt { font-weight: 700; }
+.ficha-serie-meta dd, .ficha-autores dd { margin: 0; overflow-wrap: anywhere; }
+.issue-header { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; align-items: start; }
+.issue-cover { width: 120px; max-width: 100%; }
+.issue-portada { min-width: 0; }
+.subtitulo-numero { margin: 2px 0 8px; font-weight: 700; overflow-wrap: anywhere; }
+.issue-archivos { margin: 8px 0 8px 1.1rem; padding: 0; }
+.issue-archivos li { margin: 6px 0; overflow-wrap: anywhere; }
+.contador-numero { font-variant-numeric: tabular-nums; }
+.archivos-numero-titulo a { display: inline-flex; align-items: center; min-height: 40px; padding: 4px 6px; }
+.tabla-ficha { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 10px 0; }
+.tabla-ficha caption { text-align: left; font-weight: 700; margin-bottom: 6px; }
+.tabla-ficha th, .tabla-ficha td { text-align: left; vertical-align: top; padding: 6px; border-bottom: 1px solid var(--linea); overflow-wrap: anywhere; font-size: .875rem; }
+@media (max-width: 480px) {
+  .ficha-serie-meta > div, .ficha-autores > div { grid-template-columns: 1fr; gap: 2px; }
+  .issue-header { grid-template-columns: 1fr; }
+}
 
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,

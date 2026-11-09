@@ -41,12 +41,34 @@
   </div>
 </div>
 
-<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
-<section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
-         hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
-{% include "_politica_serie.html" %}
-
-{% if procedencia %}
+<section class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
+  <h2 id="ficha-serie-datos-titulo" class="titulo-frase">{{ textos_ficha.serie_bloque }}</h2>
+  {% if serie_vacia %}
+  <p class="ficha-sinopsis">{{ textos_ficha.sin_datos }}</p>
+  {% else %}
+  <div class="ficha-sinopsis">
+    {% if sinopsis_visible %}<p>{{ sinopsis_visible }}</p>{% else %}<p>{{ textos_ficha.sin_sinopsis }}</p>{% endif %}
+    {% if sinopsis_resto %}<details><summary>{{ textos_ficha.sinopsis_completa }}</summary><p>{{ sinopsis_resto }}</p></details>{% endif %}
+  </div>
+  <dl class="ficha-serie-meta">
+    <div><dt>{{ textos_ficha.editorial }}</dt><dd>{% if series.publisher %}{{ series.publisher.name }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
+    <div><dt>{{ textos_ficha.inicio }}</dt><dd>{% if series.start_year %}{{ series.start_year }}{% else %}{{ textos_ficha.sin_dato }}{% endif %}</dd></div>
+    {% if series.end_year %}<div><dt>{{ textos_ficha.fin }}</dt><dd>{{ series.end_year }}</dd></div>{% endif %}
+  </dl>
+  <h3>{{ textos_ficha.autores }}</h3>
+  <p class="caption">Los que más números firman, según los datos de la serie.</p>
+  {% if ficha and ficha.autores %}
+  <dl class="ficha-autores">
+    {% for clave, etiqueta in roles_ficha %}
+    {% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}
+    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{{ a.nombre }} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+    {% endif %}
+    {% endfor %}
+  </dl>
+  {% else %}
+  <p class="muted">{{ textos_ficha.sin_autores }}</p>
+  {% endif %}
+  {% if procedencia and not serie_vacia %}{% if procedencia %}
 {#- «Manual» y «Protegido» se explican una vez, no por fila: la leyenda solo
     aparece si de verdad hay alguno de los dos en la serie. -#}
 {% set hay_manual = procedencia.campos | selectattr("manual") | list %}
@@ -63,6 +85,9 @@
   </ul>
   {% endif %}
   <dl class="procedencia-campos">
+    <div class="procedencia-campo"><dt>Editorial</dt><dd><span class="procedencia-valor">{% if series.publisher %}{{ series.publisher.name }}{% else %}Sin dato{% endif %}</span><span class="procedencia-origen">Origen no registrado</span></dd></div>
+    {% if series.end_year %}<div class="procedencia-campo"><dt>Año de fin</dt><dd><span class="procedencia-valor">{{ series.end_year }}</span><span class="procedencia-origen">Origen no registrado</span></dd></div>{% endif %}
+    <div class="procedencia-campo"><dt>Autores principales</dt><dd><span class="procedencia-valor">{% if ficha and ficha.autores_texto %}{{ ficha.autores_texto }}{% else %}Sin dato{% endif %}</span><span class="procedencia-origen">{{ ficha.origen_autores if ficha else "Origen no registrado" }}</span></dd></div>
     {% for c in procedencia.campos %}
     <div class="procedencia-campo">
       <dt>{{ c.etiqueta }}</dt>
@@ -86,7 +111,19 @@
   </p>
   {% endif %}
 </details>
-{% endif %}
+{% endif %}{% endif %}
+  {% endif %}
+</section>
+
+<p class="series-intro">Consulta tus números y ajusta la búsqueda automática.</p>
+<section id="etiquetas-serie" class="series-etiquetas" aria-label="Etiquetas"
+         hx-get="/ui/series/{{ series.id }}/etiquetas" hx-trigger="load" hx-swap="outerHTML"></section>
+{% include "_politica_serie.html" %}
+
+
+
+
+
 
 <section class="series-otras-fuentes" aria-labelledby="otras-fuentes-titulo">
   <h2 id="otras-fuentes-titulo">Otras fuentes</h2>
@@ -123,7 +160,8 @@
 <h2>En tu biblioteca</h2>
 <div class="issue-grid">
   {% for n in present %}
-  <span class="issue-chip issue-present">#{{ n }}</span>
+  {% set enlace = ficha.enlace_para_numero(n) if ficha else none %}
+  {% if enlace %}<a class="issue-chip issue-present" href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>{% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
   {% endfor %}
 </div>
 {% endif %}
@@ -136,7 +174,7 @@
   <ul class="archivos-numeros">
     {% for n in archivos_por_numero %}
     <li class="archivos-numero" data-numero="{{ n.numero }}">
-      <h3 class="archivos-numero-titulo">#{{ n.numero }}</h3>
+      <h3 class="archivos-numero-titulo"><a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">#{{ n.numero }}<span class="sr"> ver información del número {{ n.numero }}</span></a></h3>
       <ul class="archivos-lista">
         {% for a in n.archivos %}
         <li class="archivo-fila" data-archivo="{{ a.id }}">

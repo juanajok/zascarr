@@ -59,6 +59,7 @@ class FakeExecResult:
 
 class FakeSession:
     def __init__(self, queue: list, series=None):
+        # Cola ESTRICTA: si una ruta pide una consulta no declarada, falla.
         self._queue = list(queue)
         self._series = series
         self.flush = AsyncMock()
@@ -91,7 +92,11 @@ def override_get_db(session):
     return _get_db
 
 
-def use_fake_session(session):
+def use_fake_session(session, *, ficha=True):
+    # Las tres lecturas fijas de la ficha (#447) se declaran aquí, en el borde del test,
+    # para que la sesión siga siendo estricta y una consulta inesperada falle.
+    if ficha:
+        session._queue.extend([FakeExecResult([]), FakeExecResult([]), FakeExecResult([])])
     class _Ctx:
         def __enter__(self):
             app.dependency_overrides[get_db] = override_get_db(session)
@@ -377,7 +382,7 @@ class TestPoliticaBusquedaD8:
             *sin_otras(),                     # cota: lo ya buscándose y las demás series
             retirados(),
         ])
-        with use_fake_session(session) as client:
+        with use_fake_session(session, ficha=False) as client:
             r = client.post(f"/ui/series/{series.id}/politica",
                             data={"wishlist_policy": "faltantes"})
 
@@ -397,7 +402,7 @@ class TestPoliticaBusquedaD8:
             acuse(),                                  # contexto (predicado NONE: sin consultas)
             retirados(5),                             # total acumulado de la serie
         ])
-        with use_fake_session(session) as client:
+        with use_fake_session(session, ficha=False) as client:
             r = client.post(f"/ui/series/{series.id}/politica",
                             data={"wishlist_policy": "ninguno"})
 
@@ -416,7 +421,7 @@ class TestPoliticaBusquedaD8:
         session = FakeSession([
             FakeExecResult([series]), FakeExecResult([], rowcount=1), acuse(), retirados(1),
         ])
-        with use_fake_session(session) as client:
+        with use_fake_session(session, ficha=False) as client:
             r = client.post(f"/ui/series/{series.id}/politica",
                             data={"wishlist_policy": "ninguno"})
 
@@ -435,7 +440,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),         # puerta legal: SIN acuse
             retirados(),                # contexto del fragmento sin cambios (predicado NONE: sin más consultas)
         ])
-        with use_fake_session(session) as client:
+        with use_fake_session(session, ficha=False) as client:
             r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "faltantes"})
 
         assert r.status_code == 200
@@ -456,7 +461,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([]),               # contexto: sin acuse (no se consultó antes para desactivar)
             retirados(2),
         ])
-        with use_fake_session(session) as client:
+        with use_fake_session(session, ficha=False) as client:
             r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "ninguno"})
 
         assert r.status_code == 200
@@ -469,7 +474,7 @@ class TestPoliticaBusquedaD8:
         series.wishlist_policy = WishlistPolicy.NONE
         session = FakeSession([FakeExecResult([series]), acuse(), FakeExecResult([]), FakeExecResult([]),
                                FakeExecResult([], rowcount=0), *sin_otras(), retirados()])
-        with use_fake_session(session) as client:
+        with use_fake_session(session, ficha=False) as client:
             r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "faltantes"})
         assert r.status_code == 200 and series.wishlist_policy == WishlistPolicy.MISSING
         assert 'href="/ui/legal"' not in r.text
@@ -545,6 +550,9 @@ class TestPresupuestoTextoU21:
         # Presupuesto explícito de #304: .series-acciones tiene su propio límite
         # (test_presupuesto_de_la_accion_nueva); este cómputo mide la entrada de #208.
         antes = re.sub(r'<p class="series-acciones">.*?</p>', '', antes, flags=re.S)
+        # BL-INF1 (#447): el bloque informativo va después de la cabecera y no compite
+        # con el presupuesto de la entrada de #208.
+        antes = re.sub(r'<section class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
         # El contenido de un <details> cerrado no cuenta, pero su <summary>
         # visible sí (contrato de medición de #208).
         antes = re.sub(

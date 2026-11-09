@@ -47,6 +47,7 @@ from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import Series
 from zascarr.services.descubrimiento_grupo import GrupoNoEncontradoError
+from zascarr.services.ficha_numero import FORMATOS_LEGIBLES
 from zascarr.services.tokens_revision import (
     MAX_CLAVE_GRUPO,
     MAX_TOKEN_VINCULACION,
@@ -133,11 +134,7 @@ def motivos_legibles(codigos: list[str]) -> list[str]:
 
 #: El formato de una publicación (`IssueFormat`) dicho como lo dice el coleccionista. El texto del servicio lo cita por
 #: su valor interno («otra edición (single_issue)»); aquí se traduce, no se cambia el contrato.
-FORMATOS_LEGIBLES: dict[str, str] = {
-    "single_issue": "grapa", "trade_paperback": "tomo en rústica", "hardcover": "tomo en tapa dura",
-    "omnibus": "ómnibus", "graphic_novel": "novela gráfica", "album": "álbum", "manga_tankobon": "tomo de manga",
-    "digital": "digital",
-}
+
 _FORMATO_EN_TEXTO = re.compile(r"\b(" + "|".join(FORMATOS_LEGIBLES) + r")\b")
 
 

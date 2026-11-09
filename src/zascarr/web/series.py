@@ -57,6 +57,16 @@ from zascarr.services.etiquetas import (
     quitar_etiqueta,
     sugerencias_etiqueta,
 )
+from zascarr.services.ficha_numero import (
+    ROLES_ES,
+    cargar_ficha_numero,
+    cargar_ficha_serie,
+    etiqueta_rol,
+    partir_sinopsis,
+)
+from zascarr.services.ficha_numero import (
+    TEXTOS as TEXTOS_FICHA,
+)
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
     horas_minimas,
@@ -380,12 +390,22 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     huecos = await huecos_de_serie(db, series, poseidos)
 
     politica = await _contexto_politica(db, series)
+    archivos = await archivos_por_numero(db, series.id)
+    # Las consultas de la ficha van AL FINAL: no desplazan las colas de los dobles de prueba
+    # que ya consumían las consultas históricas de esta ruta.
+    ficha = await cargar_ficha_serie(db, series_id)
+    sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis) if ficha else ("", "")
+    serie_vacia = bool(ficha) and not (ficha.sinopsis or series.publisher or series.start_year
+                                       or series.end_year or ficha.autores)
     respuesta = templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
+        "ficha": ficha, "textos_ficha": TEXTOS_FICHA, "roles_ficha": ROLES_ES,
+        "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
+        "serie_vacia": serie_vacia,
         "missing": huecos.faltantes, "huecos": huecos,
         **politica,
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
-        "archivos_por_numero": await archivos_por_numero(db, series.id),
+        "archivos_por_numero": archivos,
         "formatos_legibles": FORMATOS_LEGIBLES,
         "procedencia": procedencia_de_serie(series),
         "volver": volver_segura(volver, series_id),
@@ -668,6 +688,27 @@ async def cambiar_politica(series_id: UUID, request: Request,
     return templates.TemplateResponse(
         request, "_politica_serie.html", {"series": series, **contexto}
     )
+
+
+@router.get("/{series_id}/numero/{issue_id}", response_class=HTMLResponse)
+async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
+                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Ficha de un número: solo lectura, sin red y sin escrituras (#447)."""
+    ficha = await cargar_ficha_numero(db, series_id, issue_id)
+    if ficha is None:
+        raise HTTPException(status_code=404, detail="Número no encontrado")
+    autores = [
+        {"etiqueta": etiqueta_rol(rol), "nombres": ficha.autores[rol]}
+        for rol, _ in ROLES_ES if ficha.autores.get(rol)
+    ]
+    sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis)
+    respuesta = templates.TemplateResponse(request, "issue_detail.html", {
+        "series": ficha.serie, "issue": ficha.issue, "ficha": ficha,
+        "autores": autores, "textos": TEXTOS_FICHA,
+        "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
 
 
 @router.get("/{series_id}/portada")

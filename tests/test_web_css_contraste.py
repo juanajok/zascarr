@@ -478,6 +478,7 @@ class TestEstructura:
         ".topnav a", ".series-search", ".issue-input", ".search-input",
         ".politica-form select", '.ajustes-card input[type="text"]',
         '.login-form input[type="text"]', ".page-link", ".back-link",
+        ".issue-chip", ".archivos-numero-titulo a",
     ])
     def test_controles_con_altura_minima_de_40_px(self, selector):
         alturas = [d.get("min-height") for s, d in _reglas()
