@@ -2,8 +2,13 @@
 
 > **Estado:** propuesta de refinamiento para el PO. **No implementa código, no crea migración, no
 > consulta fuentes reales y no ejecuta pruebas.**
-> **Contraste:** `origin/main` en **`04ab6eea58e0deb98d1f12f6fb7d9d69e4f3f7ad`** (2026-11-09), worktree
-> `.squad/wt-129`, rama `docs/129-refinamiento`. Toda cita `fichero:línea` se refiere a ese SHA.
+> **v1.1 (2026-11-09):** revisión de Seguridad H1-H17 sobre B y C; **el contrato vigente de B y C es
+> §8** y sustituye §4.2-§4.6/§5.1 donde contradiga. A está fusionada (#542) pero **sin token**: el
+> delta de §8.1 es obligatorio antes de B.
+> **Contraste:** `origin/main` en **`04ab6eea58e0deb98d1f12f6fb7d9d69e4f3f7ad`** para la v1.0
+> (2026-11-09; worktree `.squad/wt-129`, rama `docs/129-refinamiento`) y **`a87eabd`** para §8
+> (2026-11-09; worktree `.squad/wt-129b-spec`). Las citas `fichero:línea` de §8 se refieren a
+> `a87eabd`; las de §1-§7, a `04ab6ee`.
 > **Insumos:** #129 (historia), #109 (contrato compartido), #124/#182 (identidad editorial), #133/#134
 > (estados y cortesía), #128 (plan de enriquecimiento por campo), #127 (procedencia visible).
 > **Método:** lectura de código y documentos en ese SHA; no se ejecutaron pruebas ni peticiones a
@@ -342,6 +347,9 @@ confirmar. **No escribe.**
 
 ### 4.2 Entrega B · Confirmar la asociación
 
+> **v1.1:** este apartado queda como histórico; el contrato vigente de B está en §8.2-§8.5 y §8.12.
+> Donde contradiga (token, idempotencia caducada, purga, columna/JSONB, enricher), manda §8.
+
 **Qué es.** Consumir el **mismo token** que se vio y guardar la correspondencia con procedencia, sin
 fusionar, sin enriquecer y sin tocar archivos ni `locked_fields`.
 
@@ -496,6 +504,9 @@ dato de la fuente, no como identificador interno.
 
 ### 5.1 Cortes propuestos
 
+> **v1.1:** el corte vigente es el de §8.13 (PR-S1 delta de A, PR-B, PR-C); el de esta sección queda
+> como histórico y se actualiza allí.
+
 | Corte | Contenido | Estimación | ¿Migración? | ¿UI? | Por qué en este orden |
 |---|---|---|---|---|---|
 | **1 · A** | `services/asociar_fuente.py` (propuesta), `buscar_en` de una fuente con #133, campo `kind`, token `asociar_fuente`, rutas `/buscar` y `/previsualizar`, plantilla de comparación, pruebas con fuentes simuladas | **M (5)** | **No** | Sí | Es el valor visible y no escribe: se puede revisar sin riesgo. Sin A no hay token que B consuma. |
@@ -610,3 +621,504 @@ incierto), `tests/test_desvinculacion_pg.py` (historial), `tests/test_alta_serie
 | `docs/adr/0006-asignacion-recuperable.md` | Resultado desconocido y reconciliación. |
 | `docs/adr/0007-vincular-en-su-sitio.md` | Vincular no mueve nada; una operación con efecto se confirma aparte de revisarla. |
 | `docs/adr/0009-contrato-comun-de-creacion-y-borrado-de-series.md` | Comprobantes que sobreviven a la entidad y orden de bloqueos (aceptado parcialmente). |
+
+---
+
+## 8. Revisión v1.1 — contrato de B y C con las condiciones de Seguridad (H1-H17)
+
+> **Vigente desde 2026-11-09.** Esta sección **sustituye** §4.2, §4.3, §4.4, §4.5, §4.6 y §5.1
+> donde contradigan. §4.1 (A) se conserva, pero **necesita el delta obligatorio de §8.1**.
+> **Base de esta revisión:** `origin/main` **`a87eabd`** (2026-11-09; merge de A, PR #542). La v1.0
+> se contrastó en `04ab6ee`; las citas de esta sección se han vuelto a comprobar en `a87eabd`.
+> **Aviso de bloqueo:** A está fusionada, pero su implementación actual **no emite token**
+> (`services/asociar_fuente.py:92-139`; `web/asociar_fuente.py:74-101`). Sin el delta de §8.1 no
+> existe la propuesta firmada que B necesita y **B no puede implementarse**.
+> **Decisiones del PO:** **D-A/H10** (restricción de A, §8.6) y **D-H16** (fuente apagada entre A
+> y B, §8.8). Todo lo demás de esta sección es **implementación obligatoria**.
+> **No implementa código, no ejecuta pruebas, no consulta fuentes y no crea migración.**
+
+### 8.1 Delta obligatorio de A: token con `entidad` y `kind` (H1, H6, H7, H17)
+
+La A actual es solo lectura y devuelve `Comparacion`/`CandidataComparada`
+(`services/asociar_fuente.py:36-63`) sin token. La v1.0 ya exigía token; la implementación no lo
+emitió. Para que B sea posible y seguro:
+
+**H13-H15 no se reabren:** A ya implementa el coste/una acción de búsqueda (docstring
+`services/asociar_fuente.py:1-15`), `_url_segura` (H14, `:77-90`) y `normalizar_consulta` acotada
+(H15, `:69-75`); sus pruebas se conservan y B/C no las cambian.
+
+1. **Añadir el propósito y la estructura firmada** en `services/tokens_revision.py`
+   (`PROPOSITO_ASOCIAR = "asociar_fuente"`), junto a los propósitos existentes
+   (`:37-42`). El token se firma con la clave del servidor y TTL de **15 min**
+   (`TTL_SEGUNDOS`, `:30`; `crear_token`, `:90-102`).
+2. **Firmar `entidad` y `kind`** (H1), además de lo que ya se veía:
+
+```text
+AsociacionFirmada
+  version=1
+  entidad="serie"            # obligatorio; B rechaza cualquier otro valor
+  kind="collection" | null   # Tebeosfera; B rechaza "saga"
+  fuente                     # comic_vine | anilist | tebeosfera | gcd
+  id_externo                 # canónico y acotado (§8.9)
+  titulo, anio               # lo visto; para la huella y el mensaje
+  sitio_url | null           # http(s), sin credenciales y acotada (§8.9)
+  huella                     # SHA-256 hex de §8.10
+  operacion                  # UUID de la operación
+  caduca                     # epoch; el contexto es el series_id
+```
+
+3. **Un token por candidata seleccionable**, emitido al comparar (no se confía en datos del
+   formulario): `CandidataComparada` gana un campo opaco `token`; la vista B1 lo recibe como
+   `<input type="hidden">`. Una candidata `kind == "saga"` o no seleccionable **no** lleva token
+   (hoy se filtra en `services/asociar_fuente.py:108-118`). Repetir la búsqueda emite tokens nuevos
+   con `operacion_id` nuevo; A no escribe.
+4. **A no emite token si la identidad del candidato no es canónica**: `_valor_de_id` y las cotas de
+   §8.9 se aplican **antes** de firmar. Un id inválido no produce candidata seleccionable ni token
+   (mismo criterio que el alta, `services/alta_serie.py:230-236`).
+5. **Huella canónica** de §8.10 calculada en A y recalculada en B; A incluye la identidad de la
+   candidata y el estado de la serie. `entidad`/`kind` van **dentro de la huella y del token**.
+6. **Cota del token** (§8.9): `MAX_TOKEN_ASOCIACION`, calculada con la serialización real como
+   `MAX_TOKEN_RETIRADA` (`tokens_revision.py:700-755`); el campo del formulario usa exactamente esa
+   cota. `sitio_url` se omite del token si supera la cota (no se trunca).
+7. **H10 (decisión del PO, §8.6):** si se aprueba restringir A, `comparar` rechaza una serie sin
+   ninguna de las cuatro identidades **antes** de consultar la fuente, sin tráfico.
+
+**Pruebas de A (delta):** token ausente/inválido/caducado; `entidad`/`kind` firmados; saga sin token;
+id no canónico sin token; `sitio_url` inválida o larga se omite; huella reproducible; repetición no
+duplica; cero escrituras y cero peticiones extra (las de A ya están cubiertas por #542).
+
+### 8.2 B · verificación previa e idempotencia con token caducado (H1, H2, H3)
+
+**Entrada:** solo `token` (`Form(..., min_length=1, max_length=MAX_TOKEN_ASOCIACION)`); el
+`series_id` de la URL coincide con el contexto firmado.
+
+Orden obligatorio, **antes de cualquier escritura**:
+
+1. **Verificar firma, propósito y contexto.** Si falla → `token_invalido` (sin escritura). Después,
+   **leer el token aunque esté caducado** con `verificar_token_asociacion(..., ignorar_caducidad=True)`,
+   igual que `retirada_serie.py:318` y `tokens_revision.py:126-143`; `vigente` se calcula aparte con
+   la verificación normal. Un token manipulado no se lee ni con `ignorar_caducidad`.
+2. **H1 antes de escribir:** si `entidad != "serie"` o `kind == "saga"`/un `kind` no admitido →
+   `omitida` · `propuesta_no_asociable`. No se escribe, no se consulta nada. La regla se aplica
+   también si el token está caducado.
+3. **Candado consultivo por `operacion_id`** (`pg_advisory_xact_lock`, patrón
+   `vinculacion.py:222-225`; `retirada_serie.py:335-338`): dos envíos simultáneos se serializan.
+4. **Comprobante previo** en `vinculacion_operaciones` por `operacion_id` (`models:729-748`):
+   - si existe con `resultado.tipo == "asociar_fuente"` y coincide `series_id`, fuente e id →
+     devolver el mismo resultado con `repetida: true` (cero escrituras);
+   - si existe con otro `tipo` u otra serie → `conflicto_operacion` (no se reutiliza un comprobante
+     ajeno).
+5. **Evidencia durable en `metadata_`** (H2/H3): si no hay comprobante, buscar `operacion_id` en
+   `metadata.asociaciones` y en `metadata.asociaciones_historial` (validados, §8.5):
+   - entrada activa con el mismo `operacion_id` y el id igual al token → `repetida: true`, sin
+     escribir;
+   - entrada en historial con `deshecho` para ese `operacion_id` → `ya_retirada`, sin escribir (la
+     operación se aplicó y luego se retiró; no se vuelve a asociar);
+   - entrada con el mismo `operacion_id` pero id distinto → `procedencia_invalida`, sin escribir.
+6. **Token caducado sin evidencia:** `token_caducado`. Se distingue —como en retirada
+   (`retirada_serie.py:347-352`)— si pudo haberse aplicado (`ahora >= firma + RETENCION_HORAS`) o no.
+   El mensaje no anuncia «no se ha cambiado nada» cuando no puede probarlo.
+7. **`SELECT … FOR UPDATE` de la serie** (H4/H8). Si no existe → `serie_inexistente`, sin escritura.
+8. **Recalcular la huella** (§8.10) y comparar con la firmada. Si difiere →
+   `propuesta_desactualizada`, sin escritura. `updated_at` **no** decide nada (v1 §D5).
+9. Convertir/validar el id con `_valor_de_id` y las reglas de §8.9; si no coincide con el firmado →
+   `token_invalido`/`identificador_invalido`, sin escritura.
+10. Continuar en §8.3.
+
+**H2/H3/H5 (idempotencia y purga):**
+
+- La evidencia durable es **el comprobante (24 h) → la entrada activa de `metadata.asociaciones` →
+  la entrada de `asociaciones_historial` por `operacion_id`**. Tres niveles, en ese orden; ninguno
+  escribe si ya hay resultado.
+- **Purga propia del tipo** (H5): B añade `_purgar("asociar_fuente")` con el patrón acotado de
+  `retirada_serie.py:441-448`:
+  ```sql
+  DELETE FROM vinculacion_operaciones
+  WHERE operacion_id IN (
+    SELECT operacion_id FROM vinculacion_operaciones
+    WHERE resultado ->> 'tipo' = :tipo
+      AND creada < now() - make_interval(hours => :h)
+      AND token_hasta < now()
+    ORDER BY creada LIMIT :n FOR UPDATE SKIP LOCKED)
+  ```
+  `tipo = "asociar_fuente"`; **no** toca `retirada_serie` ni vinculaciones. La purga existente de
+  `retirada_serie` solo purga su tipo (`retirada_serie.py:441-448`); la de `vinculacion.py:437-445`
+  no filtra tipo y **no se usa** para B/C. C tiene su propia purga con `tipo="retirar_asociacion"`.
+- Un `operacion_id` ocupado por otro tipo **nunca** se reutiliza ni se devuelve como asociación.
+
+### 8.3 B · transacción, columnas y los tres desenlaces R2 (H4, H8, H9)
+
+Con la serie bloqueada y la huella vigente:
+
+1. **La columna es la autoridad de unicidad** (H8/H11). Pre-comprobar para el mensaje, pero la
+   garantía final es el índice `UNIQUE` de `Series.comic_vine_id`/`anilist_id`/`tebeosfera_slug`/
+   `gcd_id` (`models/__init__.py:410-421`). El JSONB **nunca** decide unicidad ni sustituye a la
+   columna.
+2. **R2, tres desenlaces** (con respuestas en §8.11):
+   - **Mismo id y misma serie:** si ya está en la columna → `ya_asociada` (sin escribir); si es una
+     repetición con el mismo `operacion_id`/comprobante → `asociada` con `repetida: true` (sin
+     escribir).
+   - **Mismo `(serie, fuente)` con otro id:** `omitida` ·
+     `ya_tiene_identidad_en_esa_fuente`; no se sobrescribe; el mensaje remite a retirar primero.
+   - **El id pertenece a otra serie:** `omitida` · `conflicto_identificador`; se informa del título
+     de la otra serie y **no se reasigna**.
+3. **Carrera de unicidad:** si el `UNIQUE` salta al hacer `flush`/`commit`, capturar `IntegrityError`
+   y devolver **el mismo** `conflicto_identificador`; `rollback` completo, sin asociación parcial ni
+   comprobante. Nunca un 500.
+4. **Escritura exacta** (solo si procede):
+   - `UPDATE series SET <columna_fuente> = :id, metadata_ = fusionar_metadata(...)`;
+   - una entrada en `metadata_["asociaciones"]` y, si existía otra activa de esa fuente, no se
+     duplica (R2 la rechaza antes);
+   - `INSERT` del comprobante en `vinculacion_operaciones` con `tipo="asociar_fuente"`;
+   - `updated_at` solo por `onupdate`.
+   **No** se toca `metadata_source`, `locked_fields`, `enrichment_attempted_at`, `Issue`, `File` ni
+   archivos. Un `ya_asociada` no escribe ni inventa procedencia.
+5. **Purga acotada** de B (§8.2) en la misma transacción, antes del `commit`.
+6. **`commit` al final**; preparar la respuesta antes de pedirlo. Si falla después de pedirlo →
+   `resultado_incierto` (503), nunca «no se ha cambiado nada»; el reintento del mismo token relee
+   comprobante/JSONB y no duplica.
+7. **Carrera con el enricher (H9):** B bloquea la fila con `FOR UPDATE`; el enricher debe usar
+   `UPDATE ... WHERE id = :serie AND <id_col> IS NULL` (o revalidar bajo bloqueo) y, si `rowcount=0`,
+   **no** escribir identidad ni metadatos de esa serie. Ver §8.6.
+
+**Efectos exactos cuando escribe:** `{campos_serie:1, asociaciones:1, comprobantes:1, numeros:0,
+archivos:0, metadatos_aplicados:0}`. Un `ya_asociada`/`omitida` deja todos los contadores a 0.
+
+### 8.4 C · retirar una asociación (H4)
+
+**Qué es.** Retirar **solo** la identidad de una fuente de una serie, con historial, sin tocar la
+serie, sus números, sus archivos, las demás fuentes, `metadata_source` ni `locked_fields`.
+
+**Previsualización (GET, no escribe):**
+
+- Desde la ficha, «Retirar» de la fuente; verifica que la serie y la columna de esa fuente existen;
+  si no hay asociación, muestra `ya_retirada` (o 404 de asociación) sin token.
+- Emite `RetirarAsociacionFirmada` con propósito `PROPOSITO_RETIRAR_ASOCIACION =
+  "retirar_asociacion"`, contexto `series_id`, y payload:
+  `version=1`, `entidad="serie"`, `fuente`, `id_externo` (el de la columna, canónico), `huella` de
+  **la asociación** (§8.10), `operacion`, `caduca`. TTL 15 min; `MAX_TOKEN_RETIRAR_ASOCIACION`
+  calculada igual que las demás (§8.9).
+- La huella incluye la columna de esa fuente y su entrada activa (o `null`) **solo** de esa fuente;
+  no incluye título/año ni las demás fuentes, para no bloquear una retirada por cambios ajenos.
+- No se consulta la fuente; no se escribe.
+
+**Confirmación (POST, solo token):**
+
+1. Verificar firma/propósito/contexto; leer con `ignorar_caducidad=True` y calcular `vigente`.
+   `entidad != "serie"` → `token_invalido`, sin escritura.
+2. Candado consultivo por `operacion_id`.
+3. Comprobante previo con `tipo="retirar_asociacion"`: mismo resultado `repetida: true`; otro tipo →
+   conflicto.
+4. Evidencia durable en `asociaciones_historial` por `operacion_id` (original o `deshecho`): si ya
+   está retirada → `ya_retirada`, sin escribir. Token caducado sin evidencia → `token_caducado` con
+   la distinción del paso 6 de §8.2.
+5. `SELECT … FOR UPDATE` de la serie; si no existe → `serie_inexistente`.
+6. Recalcular la huella de la asociación; si la columna cambió, se retiró o se sustituyó →
+   `propuesta_desactualizada`, sin escritura. Si la columna es `NULL` → `ya_retirada`. Si la columna
+   tiene **otro** id → `propuesta_desactualizada` (no se retira la nueva).
+7. Escritura exacta:
+   - quitar la entrada activa de esa fuente de `metadata_["asociaciones"]`;
+   - añadir a `metadata_["asociaciones_historial"]` la entrada **íntegra** con
+     `deshecho:{operacion_id, fecha, motivo:"retirada"}` y `previo` (fuente, id, entidad, kind,
+     fecha, operación, origen, modo); si no había entrada activa, `previo` lleva lo que conste de la
+     columna y `procedencia: "desconocida"` (se puede retirar igual, D9/BL-R1);
+   - `UPDATE series SET <columna_fuente> = NULL, metadata_ = fusionar_metadata(...)`;
+   - `INSERT` del comprobante con `tipo="retirar_asociacion"`.
+   **No** se toca ninguna otra columna/fuente, ni `metadata_source`, ni `locked_fields`, ni
+   `Issue`/`File`.
+8. Purga propia `retirar_asociacion` (§8.2) y `commit` al final; fallo tras pedirlo →
+   `resultado_incierto` (503 + comprobar resultado). Repetir el mismo token devuelve el mismo
+   resultado sin duplicar historial ni comprobante.
+9. **Resultados:** `retirada` (con `repetida:false`) / `ya_retirada` (`repetida:true` si se repite) /
+   `omitida` con `propuesta_desactualizada`, `serie_inexistente`, `conflicto_operacion`,
+   `conflicto_de_bloqueo`; `resultado_incierto` es un 503 aparte. Textos: los de
+   `ui-M6-US03-asociar-fuente.md` §7-§8, sin jerga interna.
+10. **C y B se entregan en el mismo release** (P8/D4): sin C, una asociación equivocada es permanente.
+
+### 8.5 JSONB: esquema, validación al leer/escribir y reparación (H8, H11)
+
+**La columna es la autoridad; `metadata_` es procedencia e historial.** No se escribe el JSONB antes
+que la columna ni se usa para decidir unicidad.
+
+**Esquema activo (`metadata_["asociaciones"]`, lista; una por fuente):**
+
+```json
+{
+  "version": 1,
+  "fuente": "gcd",
+  "id_externo": "1234567",
+  "entidad": "serie",
+  "kind": "collection",
+  "fecha": "2026-11-09T10:00:00+00:00",
+  "operacion_id": "0f0c…",
+  "origen": "confirmada",
+  "modo": "busqueda"
+}
+```
+
+**Historial (`metadata_["asociaciones_historial"]`, lista append-only):** la entrada anterior más
+`deshecho: {operacion_id, fecha, motivo}` y `previo` (la entrada íntegra). La retirada nunca borra la
+entrada: la mueve al historial.
+
+**Validación (obligatoria al leer y al escribir):**
+
+- `metadata_` debe ser un objeto; `asociaciones`/`asociaciones_historial`, listas (o ausentes).
+- `version == 1`; `fuente` ∈ cuatro; `id_externo` canónico (§8.9); `entidad == "serie"`;
+  `kind` ∈ `{null, "collection", "saga"}` (B solo escribe `null`/`"collection"`); `fecha` ISO 8601
+  con zona; `operacion_id` UUID; `origen` ∈ `{confirmada, enriquecimiento}`; `modo` ∈
+  `{busqueda, id_exacto}`; campos desconocidos → entrada inválida (no se interpreta).
+- **Al escribir:** B/C validan el JSONB resultante **antes** del `UPDATE`; si el estado actual es
+  inválido donde afecta (p. ej. una entrada activa de la misma fuente), B devuelve
+  `procedencia_invalida` y no escribe. C puede retirar la columna aunque la entrada sea inválida,
+  moviéndola al historial con `procedencia: "invalida"`.
+- **Al leer:** una entrada inválida **no** se usa como identidad ni como evidencia de idempotencia;
+  la ficha muestra «procedencia no registrada»; nunca se lanza una excepción de parseo por JSONB
+  ajeno. La identidad vigente sigue siendo la columna.
+
+**Entradas huérfanas (H11):**
+
+| Caso | Definición | Tratamiento |
+|---|---|---|
+| **Activa huérfana** | entrada activa con id distinto de la columna, o columna `NULL` | no acredita identidad; se puede **reparar** moviéndola al historial |
+| **Duplicada** | más de una entrada activa para la misma fuente | la columna manda; las demás al historial en la reparación |
+| **Inválida** | no cumple el esquema | no se interpreta; reparación explícita |
+| **Columna sin procedencia** | columna con id pero sin entrada activa (legacy) | **no** es huérfana: se muestra «origen no registrado» y se puede retirar; no se inventa procedencia |
+
+- `auditar_asociaciones(series)` es **solo lectura** y devuelve las incidencias; no repara.
+- `reparar_asociaciones(series_id, *, confirmar=True)` es **explícita, idempotente y sin red**:
+  mueve las entradas huérfanas/duplicadas/inválidas al historial con
+  `deshecho: {operacion_id: null, fecha, motivo: "reparacion"}` y `previo`; **no toca la columna**
+  (no inventa ni borra identidad), no consulta la fuente y no se ejecuta automáticamente en B/C.
+  Si el PO quiere superficie de UI para reparar, es otro corte; aquí se define el servicio/pruebas.
+- **Pruebas:** lectura con JSONB corrupto no rompe la ficha; B rechaza JSONB inválido; C retira con
+  entrada inválida; reparación mueve al historial y deja la columna intacta; columna sin procedencia
+  no se «repara» inventando.
+
+### 8.6 Carrera con el enricher (H9) y «asociar deja de enriquecer» (H10)
+
+**H9 — obligatorio.** El enricher selecciona series con las cuatro columnas `NULL`
+(`enricher.py:190-202`) y luego hace `setattr` del id (`:262-263`, `:281-299`). Si B asocia entre la
+selección y la escritura, el enricher podría pisar la identidad. Contrato:
+
+- El enricher escribe la identidad con un `UPDATE series SET <id_col> = :id ... WHERE id = :serie AND
+  <id_col> IS NULL` (o `SELECT … FOR UPDATE` y revalidar) y comprueba `rowcount`.
+- Si `rowcount == 0`, **no** escribe id, descripción, portada, total ni `metadata_source` de esa
+  serie en ese ciclo: otra operación la identificó y no se pisa. No se lanza excepción; se registra
+  sin datos del coleccionista.
+- Prueba de dos sesiones (B asocia mientras el enricher intenta) → una sola identidad, sin pérdida.
+
+**H10 — decisión del PO.** Asociar escribe una identidad; el enricher excluye **cualquier** serie con
+una identidad (`enricher.py:190-202`). Por tanto, asociar una serie que **no tenía ninguna** la saca
+del enriquecimiento automático. Dos opciones:
+
+| Opción | Efecto | Recomendación |
+|---|---|---|
+| **D-A/H10 (recomendada): restringir A a series con ≥1 identidad** | «asociar otra fuente» exige una primera; no se apaga el enricher de una serie sin identidad; no hay efecto colateral nuevo | **Sí**; encaja con el título y con «otra fuente»; implementar en A antes de B |
+| Alternativa: permitir series sin identidad | asociar deja de enriquecer; hay que **declararlo** en B1/B2 y probarlo | Solo si el PO lo decide; texto explícito y test de que el enricher no la toca después |
+
+- Si se restringe: A devuelve `serie_sin_identidad` **sin tráfico**; la ficha no ofrece «Otras
+  fuentes» o muestra «Primero identifica esta serie con una fuente». Es un cambio de A (hoy permite
+  cualquier serie, `services/asociar_fuente.py:92-139`).
+- Si se permite: B1/B2 advierte «Esta serie no tenía ninguna fuente; al asociarla dejará de
+  enriquecerse automáticamente»; prueba de que tras B el enricher no la selecciona; se documenta.
+- **Esto es decisión del PO**, no de la implementación.
+
+### 8.7 Procedencia por fuente en la ficha (H12)
+
+`services/procedencia.py:107-112` hoy elige **una** columna (`next(...)`) y pinta una fila agrupada;
+con varias fuentes hay que mostrar **una línea por fuente**, sin ids internos:
+
+- Para cada una de las cuatro columnas no nulas: nombre público de la fuente y, si hay entrada activa
+  válida en `metadata.asociaciones`, fecha de asociación; si no, «origen no registrado».
+- Varias fuentes → varias líneas, sin fusionar ni elegir una «principal»; no se pinta el id interno
+  (la persona no lo necesita; si se muestra la ficha externa, es como dato de la fuente, no interno).
+- JSONB inválido o entrada huérfana → «procedencia no registrada», sin romper la ficha; la identidad
+  sigue saliendo de la columna.
+- `procedencia.py` conserva su resumen y sus avisos; el cambio es aditivo. Pruebas: dos fuentes con
+  procedencia, una legacy sin entrada, una inválida; el HTML no contiene ids internos ni jerga.
+
+### 8.8 Fuente apagada entre A y B (H16) — decisión del PO
+
+A comprueba la fuente antes de consultar. Entre A y B no hay red: B solo persiste lo ya firmado.
+Opciones:
+
+| Opción | Comportamiento | Recomendación |
+|---|---|---|
+| **D-H16 (recomendada): B guarda aunque la fuente esté apagada** | no se consulta la fuente; la propuesta se firmó cuando estaba encendida; B escribe igual y muestra un aviso neutro «La fuente está apagada en Ajustes; la asociación se guarda porque no se ha consultado» | **Sí**: apagar una fuente no revoca una identidad ya confirmada; B no hace red |
+| Alternativa: B rechaza con `fuente_apagada` | exige volver a encender la fuente y repetir A; no escribe | Solo si el PO prefiere bloquear |
+
+- En ambos casos la decisión se toma **antes** de escribir y se prueba explícitamente (token de A,
+  apagar la fuente, B; con la opción recomendada: escritura y cero peticiones; con la alternativa:
+  `omitida` y cero escrituras). No se consulta la fuente en B.
+
+### 8.9 Cotas de token y URL (H6) e id canónico (H17)
+
+**Token (H6, reutilizando `tokens_revision`):**
+
+- `MAX_TOKEN_ASOCIACION` y `MAX_TOKEN_RETIRAR_ASOCIACION` se calculan con la **serialización real**
+  del peor caso, como `MAX_TOKEN_RETIRADA` (`tokens_revision.py:700-755`), no con un número redondo.
+- Cotas de campos: `MAX_ID_EXTERNO=255`, `MAX_TITULO=500`, `MAX_COVER_URL` (`LONGITUD_MAXIMA_URL`) y
+  años `ANIO_MIN/MAX_FIRMABLE` (`tokens_revision.py:47-54`). `MAX_SITIO_URL = MAX_COVER_URL` (alias
+  explícito para la ficha); si la supera o no es http(s) con host y sin credenciales, se firma `null`
+  (no se trunca). El formulario usa exactamente `MAX_TOKEN_ASOCIACION`
+  (`Form(..., max_length=...)`); un cuerpo mayor → 422, sin procesar.
+- La huella es de 64 hex; UUIDs canónicos; `version=1`; `entidad`/`kind` dentro del token (H1).
+
+**Id por fuente (H17):**
+
+| Fuente | Campo | Tipo canónico | Regla |
+|---|---|---|---|
+| Comic Vine | `comic_vine_id` | entero positivo | ASCII `^[1-9][0-9]{0,18}$`, ≤ `2^63-1`; sin ceros a la izquierda, signos, espacios ni Unicode |
+| AniList | `anilist_id` | entero positivo | ídem |
+| GCD | `gcd_id` | entero positivo | ídem |
+| Tebeosfera | `tebeosfera_slug` | texto | 1–255, `texto_firmable`, sin espacios/controles ni `/`, `?`, `#`; no es una URL |
+
+- `_valor_de_id` (`alta_serie.py:230-236`) se reutiliza para la conversión, pero **envolviéndolo** en
+  una validación estricta: `int("+1")`, espacios y dígitos Unicode no valen; el canónico se firma
+  como `str(int)` para numéricos. A y B aplican la misma función; un id no canónico no produce token
+  y B lo rechaza antes de escribir (`identificador_invalido`).
+- `CAMPOS_ID_DE_TEXTO` (`discovery.py:50`) decide el tipo; no se duplica el mapa.
+
+### 8.10 Huella canónica (H7)
+
+`huella_de_asociacion(series, candidata)` (A/B) y `huella_de_asociacion_actual(series, fuente)` (C):
+
+- Se construye un `dict` con claves explícitas y se serializa **siempre** con
+  `json.dumps(datos, ensure_ascii=False, sort_keys=True, separators=(",", ":"))` y SHA-256.
+  `sort_keys` ya es el patrón de `enriquecimiento_plan._huella`
+  (`enriquecimiento_plan.py:161`) y `retirada_serie.huella_de_estado` (`:205-207`).
+- **Listas ordenadas**: `locked_fields` ordenado; `asociaciones` activas ordenadas por
+  `(fuente, id_externo, operacion_id)`; ids de fuentes con valor fijo; sin `updated_at`.
+- **Fechas ISO**: `fecha` y cualquier fecha del JSONB se convierten a `isoformat()` UTC antes de
+  serializar; no se comparan objetos `datetime` con zona distinta.
+- **A/B** incluyen: `version`, `serie_id`, `titulo`, `anio`, `tradicion`, los cuatro ids,
+  `metadata_source`, `locked_fields`, `asociaciones` activas, y la identidad de la candidata
+  (`fuente`, `id_externo`, `entidad`, `kind`, `titulo`, `anio`, `sitio_url` normalizada). **C**
+  incluye solo: `version`, `serie_id`, `fuente`, `id_externo`, `entidad` y la entrada activa (o
+  `null`) de esa fuente; no título/año ni otras fuentes.
+- Misma entrada → misma huella en A y B; cualquier cambio relevante → distinta; cambio de
+  `updated_at` o de una fuente ajena → no cambia (C). Pruebas de reproducibilidad y de orden de
+  listas.
+
+### 8.11 Respuestas de los tres desenlaces R2 y de C (códigos y textos)
+
+| Caso | `resultado` | `motivo` | `repetida` | Escrituras | Superficie |
+|---|---|---|---|---|---|
+| Mismo id, misma serie, operación repetida | `asociada` | `null` | `true` | 0 | B2 «Ya estaba asociada» |
+| Mismo id, misma serie, ya en columna sin comprobante | `ya_asociada` | `null` | `false` | 0 | B2 «Ya estaba asociada» |
+| Otro id de la misma fuente | `omitida` | `ya_tiene_identidad_en_esa_fuente` | `false` | 0 | B2 «Ya tiene ficha» + enlace a C |
+| Id en otra serie | `omitida` | `conflicto_identificador` | `false` | 0 | B2 «Ficha ocupada» + otra serie |
+| Huella distinta | `omitida` | `propuesta_desactualizada` | `false` | 0 | B2 «Ficha desactualizada» |
+| Token caducado sin evidencia | `omitida` | `token_caducado` | `false` | 0 | B2 «Propuesta caducada» |
+| Entidad/kind no asociable | `omitida` | `propuesta_no_asociable` | `false` | 0 | B2 error |
+| C: retirada | `retirada` | `null` | `false` | 1 columna + historial + comprobante | C2 «Asociación retirada» |
+| C: repetida / ya no estaba | `ya_retirada` | `null` | `true`/`false` | 0 | C2 «Ya estaba retirada» |
+| C: cambió la asociación | `omitida` | `propuesta_desactualizada` | `false` | 0 | C2 «Ficha desactualizada» |
+| C: otra operación | `omitida` | `conflicto_operacion` | `false` | 0 | C2 «Ya no estaba»/reintentar |
+
+Textos exactos en `ui-M6-US03-asociar-fuente.md` §6 y §8; no se introducen ids internos, «token» ni
+códigos en superficie. `resultado_incierto` es siempre 503 con «Comprobar el resultado», nunca éxito
+sin releer.
+
+### 8.12 Pruebas obligatorias de esta revisión (H1-H17)
+
+> H13-H15 ya están cubiertas por A (#542): coste/peticiones, `_url_segura` y `normalizar_consulta`;
+> esta revisión las conserva y no las reabre. Las filas siguientes se centran en B/C y en el delta
+> de A.
+
+Sin red; PostgreSQL real para persistencia; fixtures simuladas para A. Se añaden a las de §7 del
+documento UI y a las futuras de B/C:
+
+| H | Prueba |
+|---|---|
+| H1 | token con `entidad="serie"`/`kind="collection"` pasa; `entidad="issue"`, `kind="saga"` o `kind` desconocido → `omitida`, sin escritura; token manipulado no se lee |
+| H2 | mismo token tras 16 min con comprobante → mismo resultado; con comprobante purgado pero entrada activa → repetida; sin evidencia → `token_caducado` |
+| H3 | evidencia en `asociaciones_historial` por `operacion_id` (activa retirada) → `ya_retirada`, sin escribir |
+| H4 | C: token/huella, candado, `FOR UPDATE`, comprobante, `ya_retirada`, resultado incierto; C no toca otra fuente |
+| H5 | purga de `asociar_fuente` y `retirar_asociacion` acotada; no purga `retirada_serie` ni vinculaciones |
+| H6 | `MAX_TOKEN_ASOCIACION`/`MAX_TOKEN_RETIRAR_ASOCIACION` son el peor caso emitible; Form lo aplica; `sitio_url` larga se omite |
+| H7 | huella reproducible con `sort_keys`/listas ordenadas/fechas ISO; cambia si cambia lo relevante; C no cambia por otras fuentes |
+| H8 | columna única manda; `IntegrityError` → conflicto; JSONB inválido no se usa como identidad |
+| H9 | dos sesiones: enricher no pisa el id asociado; `rowcount=0` no escribe metadatos |
+| H10 | restricción A sin identidad: cero tráfico; o (si PO decide) efecto declarado y probado |
+| H11 | auditoría de huérfanas; reparación explícita mueve al historial sin tocar columna; lectura no rompe |
+| H12 | ficha con dos fuentes muestra dos líneas, sin ids internos; legacy dice «origen no registrado» |
+| H16 | token de A, apagar fuente, B: opción recomendada escribe sin peticiones; alternativa `omitida` sin escritura |
+| H17 | ids inválidos (`+1`, ` 1`, `001`, Unicode, 0, >2^63, slug con `/`) no emiten token y B los rechaza |
+| R2 | los tres desenlaces con sus códigos, sin reasignar, sin duplicar, sin 500 |
+| C | retirar solo esa columna; historial con `previo` y `deshecho`; repetir no duplica; resultado incierto releyendo |
+
+### 8.13 Corte y PRs actualizado
+
+A (#542) está fusionada, pero **sin token**: el primer paso es un delta de A. B y C no existen.
+
+| PR | Contenido | Por qué |
+|---|---|---|
+| **PR-S1 · delta de A** | `PROPOSITO_ASOCIAR`, `AsociacionFirmada` con `entidad`/`kind`, emisión de token por candidata seleccionable, huella §8.10, id canónico §8.9, cota de token/URL; H10 si el PO lo aprueba | Sin token no hay B; es lo que H1/H6/H7/H17 exigen antes de escribir |
+| **PR-B · confirmar** | Transacción B (§8.2-8.3), R2, idempotencia comprobante/JSONB/historial, purga propia, H8/H11 (validación/auditoría/reparación), H9 enricher, H12 procedencia, H16 según PO; pruebas PostgreSQL | Persistencia real; no migración |
+| **PR-C · retirar** | Token/huella C, transacción C, historial, purga propia, estados y UI C1/C2; pruebas | **Mismo release que B** (P8/D4); sin C no hay corrección |
+| **No entra** | Tabla nueva/migración, UI de reparación, automatismos de identidad, activar fuentes, #233 | Fuera de alcance / ADR |
+
+**Orden:** PR-S1 → PR-B ∥ pruebas de C → PR-C en el mismo release. Si el PO elige la opción
+alternativa de H10/H16, el PR correspondiente añade el aviso y la prueba, pero **no** cambia el
+contrato de B/C más que en ese punto. **NOT RUN:** no se ha implementado nada de B/C; no se han
+ejecutado pruebas ni tocado PostgreSQL; A no emite token todavía.
+
+### 8.14 Criterios de aceptación de esta revisión (Given/When/Then)
+
+**AC-S1 (H1/H6/H7/H17).** Given una comparación con candidata seleccionable, When se emite la
+propuesta, Then el token firma `entidad="serie"` y `kind`, el id es canónico, la huella es
+reproducible y el token cabe en su cota; una saga o un id inválido no producen token.
+
+**AC-S2 (H1).** Given un token con `kind="saga"` o `entidad!="serie"`, When B lo recibe, Then
+`omitida`/`propuesta_no_asociable` **antes de escribir**, sin peticiones y sin comprobante.
+
+**AC-B1 (H2/H3).** Given un token caducado, When B lo repite, Then lee comprobante/JSONB/historial
+con `ignorar_caducidad`; si hay evidencia devuelve el mismo resultado sin escribir; si no, distingue
+`token_caducado` de «pudo aplicarse».
+
+**AC-B2 (R2/H8).** Given los tres desenlaces, When se confirman, Then se devuelven `asociada`
+repetida, `ya_tiene_identidad_en_esa_fuente` o `conflicto_identificador`, sin reasignar, sin
+sobrescribir y sin 500; la columna manda y el JSONB no decide unicidad.
+
+**AC-B3 (H4/H5).** Given una escritura de B, When termina, Then el comprobante es
+`tipo="asociar_fuente"`, la purga es propia y acotada y no toca otros tipos; un fallo tras `commit`
+es `resultado_incierto`.
+
+**AC-B4 (H8/H11).** Given un JSONB inválido u huérfano, When se lee/escribe/repara, Then no se usa
+como identidad, B no escribe si afecta, C puede retirar, la reparación explícita mueve al historial
+sin tocar la columna y la lectura no rompe.
+
+**AC-B5 (H9).** Given B y el enricher en paralelo, When ambos intentan escribir, Then el enricher no
+pisa la identidad (`UPDATE ... WHERE id IS NULL`/`rowcount=0`) y no escribe metadatos de esa serie.
+
+**AC-C1 (H4).** Given una asociación, When se retira, Then se quita solo esa columna, se conserva el
+historial con `previo`/`deshecho`, no se tocan otras fuentes ni archivos y repetir no duplica;
+resultado incierto se relee.
+
+**AC-P1 (H12).** Given una serie con dos fuentes, When se abre la ficha, Then la procedencia muestra
+una línea por fuente, sin ids internos; una fuente legacy dice «origen no registrado».
+
+**AC-P2 (H10/H16).** Given la decisión del PO, When se ejecuta, Then la restricción de A o el aviso
+de H16 se prueba con el caso elegido y no se cambia el contrato sin registro.
+
+### 8.15 Decisiones del PO (explícitas)
+
+| ID | Decisión | Recomendación | Consecuencia si se elige la alternativa |
+|---|---|---|---|
+| **D-A/H10** | ¿A solo para series con ≥1 identidad? | **Sí, restringir** | Si se permite, asociar una serie sin identidad la saca del enricher: hay que declararlo en B1/B2 y probarlo; no se puede presentar como efecto neutro |
+| **D-H16** | ¿B guarda si la fuente se apaga entre A y B? | **Sí, guardar sin red** (aviso neutro) | Si se rechaza, B devuelve `fuente_apagada` y no escribe; hay que probarlo y explicarlo en B2 |
+
+Todo lo demás (H1-H9, H11-H17, R2, C) es **implementación obligatoria**, no decisión de producto.
+La restricción de A y la decisión H16 se registran en la spec/BACKLOG antes de implementar; sin
+ellas, B no se declara Ready.
+
+### 8.16 NOT RUN de esta revisión
+
+- **Código B/C:** no existe; no se ha implementado nada en esta entrega.
+- **A token:** la A fusionada no emite token; el delta §8.1 está pendiente.
+- **Pruebas:** no se ha ejecutado la suite ni PostgreSQL; las pruebas de §8.12 están definidas, no
+  ejecutadas.
+- **Fuentes reales:** ninguna; no se ha comprobado `kind`/editorial en vivo.
+- **PO:** D-A/H10 y D-H16 pendientes.
+- **SHA:** `a87eabd`; si `main` avanza antes de implementar, re-ejecutar las citas.
