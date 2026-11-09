@@ -28,7 +28,12 @@ from zascarr.services.auth import (
 from zascarr.services.cortesia_estado import texto_politica_ajustes
 from zascarr.services.notifier import TIPOS_CONOCIDOS, Notifier, url_valida
 from zascarr.services.runtime_settings import SECRET_FIELDS, RuntimeSettingsService
-from zascarr.services.seguridad import MODOS, fijar_seguridad
+from zascarr.services.seguridad import (
+    MENSAJE_NO_COINCIDEN,
+    MODOS,
+    fijar_seguridad,
+    hay_contrasena,
+)
 from zascarr.utils.cortesia import (
     CortesiaEnEspera,
     FuenteApagada,
@@ -98,6 +103,12 @@ def _mensaje_conexion_fallida(exc: httpx.HTTPError) -> str:
 router = APIRouter(prefix="/ui/ajustes", tags=["ui"])
 
 
+def _sin_cache(respuesta: HTMLResponse) -> HTMLResponse:
+    """AC-07/ajustes: ninguna respuesta con datos de acceso se sirve de caché."""
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
 def _contexto() -> dict:
     s = get_settings()
     return {
@@ -120,6 +131,7 @@ def _contexto() -> dict:
         "auth_mode": s.auth_mode,
         "auth_username": s.auth_username,
         "auth_password_configurada": bool(s.auth_password_hash),
+        "hay_contrasena": hay_contrasena(s),
         "base_url": s.base_url,
         "webhook_enabled": s.webhook_enabled,
         "webhook_type": s.webhook_type,
@@ -133,7 +145,7 @@ def _contexto() -> dict:
 
 @router.get("", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "ajustes.html", _contexto())
+    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", _contexto()))
 
 
 @router.post("/guardar/comic-vine", response_class=HTMLResponse)
@@ -290,38 +302,96 @@ async def guardar_amule(
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
 
 
+def _contexto_seguridad(*, incluir_valores: bool = True) -> dict:
+    """Lo que pinta la tarjeta de Seguridad, siempre desde el estado ACTUAL.
+
+    En la respuesta de ÉXITO que sustituye la tarjeta no se repintan `auth_username` ni
+    `base_url`: AC-07 exige que ningún valor del request (aunque se haya guardado) se
+    refleje en esa respuesta. La página completa, tras recargar, sí los muestra.
+    """
+    s = get_settings()
+    return {
+        "auth_mode": s.auth_mode,
+        "auth_username": s.auth_username if incluir_valores else "",
+        "auth_password_configurada": bool(s.auth_password_hash),
+        "hay_contrasena": hay_contrasena(s),
+        "base_url": s.base_url if incluir_valores else "",
+    }
+
+
 @router.post("/guardar/seguridad", response_class=HTMLResponse)
 async def guardar_seguridad(
-    request: Request, auth_mode: str = Form(...),
+    request: Request,
+    # BL-OPS3 (#456): todos `str = Form(default="")` y SIN restricciones de campo (`min_length`,
+    # `max_length`, `Literal`…): con una restricción incumplida, el 422 de FastAPI devolvería lo
+    # escrito (una contraseña). La validación es manual y cada respuesta lleva un texto fijo.
+    auth_mode: str = Form(default=""),
     auth_username: str = Form(default=""), auth_password: str = Form(default=""),
-    base_url: str = Form(default=""),
+    auth_password_actual: str = Form(default=""), auth_password_repetida: str = Form(default=""),
+    base_url: str = Form(default=""), conservar_identidad: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     if auth_mode not in MODOS:
-        raise HTTPException(status_code=400, detail="Modo de autenticación no reconocido")
+        raise HTTPException(
+            status_code=400, detail="Modo de autenticación no reconocido",
+            headers={"Cache-Control": "no-store"},
+        )
 
-    # La regla (longitud, no dejar la app sin forma de entrar, versión de sesión)
-    # vive en services/seguridad.py y la comparte el instalador (A11).
+    # La tarjeta de éxito no repinta usuario/dirección (AC-07), así que un segundo
+    # guardado sin recargar los enviaría vacíos. `conservar_identidad` (solo lo pone
+    # esa tarjeta) significa «no tocar»: se recuperan los valores guardados. Sin el
+    # marcador, un `base_url` vacío sigue significando «vuelve al .env».
+    if conservar_identidad:
+        actuales = get_settings()
+        auth_username = auth_username or actuales.auth_username
+        base_url = base_url or actuales.base_url
+
+    # La regla (longitud, no dejar la app sin forma de entrar, versión de sesión y la contraseña
+    # ACTUAL para cambiar cómo se entra) vive en services/seguridad.py. El router nunca usa la
+    # variante sin contraseña actual: es solo del instalador.
     resultado = await fijar_seguridad(
         db, modo=auth_mode, usuario=auth_username, password=auth_password, base_url=base_url,
+        contrasena_actual=auth_password_actual, password_repetida=auth_password_repetida,
     )
     if resultado.error:
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        motivo = resultado.motivo_rechazo
+        if motivo:
+            logger.info("ajustes.seguridad_rechazada", motivo=motivo)
+        return _sin_cache(templates.TemplateResponse(request, "_ajustes_guardado.html", {
             "nombre": "Seguridad", "error": resultado.error,
-        })
+            # la actual se vacía ante falta, incorrecta, cola llena y bloqueo (inválida si falta
+            # o es incorrecta); las nuevas, ante bloqueo y si no coinciden
+            "vaciar_actual": motivo is not None,
+            "actual_invalida": motivo in ("falta_actual", "actual_incorrecta"),
+            "vaciar_nuevas": motivo == "bloqueada" or resultado.error == MENSAJE_NO_COINCIDEN,
+            "auth_password_configurada": bool(get_settings().auth_password_hash),
+        }))
 
-    respuesta = templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Seguridad", "aviso": resultado.aviso})
-    if resultado.cambia_credenciales:
-        # Re-emite la cookie con la versión nueva: quien cambia la contraseña
-        # conserva SU sesión (las demás se cierran). Sin esto, su siguiente clic
-        # le llevaría a /login sin explicación.
-        settings = get_settings()
-        cookie = crear_cookie_sesion(settings.secret_key, settings.auth_session_version)
-        respuesta.set_cookie(
-            COOKIE_NAME, cookie,
-            max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
-        )
+    if resultado.cambios:
+        logger.info("ajustes.seguridad_cambiada", cambios=list(resultado.cambios))
+    if not resultado.cambia_credenciales:
+        # Solo la dirección (o nada): como antes, al hueco del resultado, vaciando lo escrito.
+        return _sin_cache(templates.TemplateResponse(request, "_ajustes_guardado.html", {
+            "nombre": "Seguridad", "aviso": resultado.aviso,
+            "vaciar_actual": True, "vaciar_nuevas": True,
+            "auth_password_configurada": bool(get_settings().auth_password_hash),
+        }))
+
+    # Cambio de credenciales: se sustituye TODA la tarjeta, pintada desde el estado nuevo (ya trae o
+    # quita el campo de la contraseña actual, sin ningún `value`). El `Set-Cookie` viaja en la misma
+    # respuesta: quien cambia la contraseña conserva SU sesión (las demás se cierran).
+    respuesta = _sin_cache(templates.TemplateResponse(request, "_ajustes_seguridad.html", {
+        **_contexto_seguridad(incluir_valores=False), "mensaje_exito": True,
+        "cambia_credenciales": True, "aviso": resultado.aviso,
+    }))
+    respuesta.headers["HX-Retarget"] = "#tarjeta-seguridad"
+    respuesta.headers["HX-Reswap"] = "outerHTML"
+    settings = get_settings()
+    cookie = crear_cookie_sesion(settings.secret_key, settings.auth_session_version)
+    respuesta.set_cookie(
+        COOKIE_NAME, cookie,
+        max_age=SESSION_MAX_AGE, httponly=True, samesite="lax",
+    )
     return respuesta
 
 
