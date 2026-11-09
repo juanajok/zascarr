@@ -5,9 +5,11 @@ asignación manual también releen y escriben `metadata_`/`issue_id`, así que t
 **la misma** clave de advisory lock. Si cada uno usara la suya, dos escritores podrían leer la
 misma fila y el último commit pisaría `mantenida`, `discrepancias` o el vínculo.
 
-La clave es la misma que usaba `services/tagger.py` (blake2b de 64 bits del UUID, con signo)
-para no cambiar el bloqueo ya probado del etiquetador. Es `pg_advisory_xact_lock`: se suelta
-con el COMMIT/ROLLBACK de la transacción que lo pide, sin `unlock` explícito.
+La clave es blake2b de 64 bits del UUID (con signo), en su propio espacio. El tagger usa
+además un segundo advisory lock para el **CBZ** en una conexión dedicada, con una clave
+prefijada distinta: si compartieran clave, la sesión esperaría un lock que ya tiene su propia
+otra conexión. Este de aquí es el de **metadata/relación** y se suelta con el COMMIT/ROLLBACK
+de la transacción que lo pide, sin `unlock` explícito.
 """
 from __future__ import annotations
 

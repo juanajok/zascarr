@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -42,7 +43,7 @@ from zascarr.core.comicinfo_write import (
 )
 from zascarr.models import File, FileFormat, Issue, Publisher, Series
 from zascarr.utils import cbz as zcbz
-from zascarr.utils.bloqueo_archivo import clave_de_fichero
+from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.cbz import (
     CbzError,
     CbzInvalidoError,
@@ -151,8 +152,17 @@ def _estado(path: Path) -> tuple[int, int]:
 
 
 def _clave_de(file_id) -> int:
-    """Clave del advisory lock por `File.id`; la MISMA que rescan/mantener/asignación."""
-    return clave_de_fichero(file_id)
+    """Clave del advisory lock de **CBZ** por `File.id`.
+
+    Va en un espacio distinto al de `utils/bloqueo_archivo` (metadata/relación):
+    el tagger toma ese lock de metadata en la transacción de su sesión y el de
+    CBZ en una conexión dedicada; si ambos usaran la misma clave, la sesión se
+    bloquearía a sí misma esperando el lock que ya tiene su otra conexión.
+    """
+    return int.from_bytes(
+        hashlib.blake2b(b"cbz:" + uuid.UUID(str(file_id)).bytes, digest_size=8).digest(),
+        "big", signed=True,
+    )
 
 
 def motor_de(db: AsyncSession) -> AsyncEngine:
@@ -394,28 +404,55 @@ class TaggerService:
         self, file: File, ctx: _Contexto, path: Path, *,
         dry_run: bool, solo_rellenar: bool, reconciliar_todo: bool,
     ) -> ResultadoEtiquetado:
-        # Guardas comunes a `ejecutar()` y `run()`: un fichero que ya no está
-        # (borrado a mano, disco de red caído) se salta, nunca aborta el lote.
+        # Guarda barata de formato (también la usa el constructor de pruebas sin
+        # sesión); para la escritura real se vuelve a comprobar tras releer.
         if file.file_format is not FileFormat.CBZ:
-            return ResultadoEtiquetado(file.id, file.file_name, SALTADO,
-                                       motivo="formato no parcheable (solo CBZ)",
-                                       gasta_cupo=False)
-        if file.is_missing or not path.exists():
-            return ResultadoEtiquetado(file.id, file.file_name, SALTADO,
-                                       motivo="archivo ausente", gasta_cupo=False)
+            return ResultadoEtiquetado(
+                file.id, file.file_name, SALTADO,
+                motivo="formato no parcheable (solo CBZ)", gasta_cupo=False)
+        # Vista previa: puede usar lo cargado antes (no escribe).
         if dry_run:
+            if file.is_missing or not path.exists():
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="archivo ausente", gasta_cupo=False)
             return await self._simular(file, ctx, path, solo_rellenar, reconciliar_todo)
 
-        # Escritura real: bloqueo por fichero desde la lectura/plan hasta
-        # después del reemplazo. Dos etiquetados del mismo tebeo no se
-        # intercalan, ni siquiera entre procesos.
+        # Escritura real. Dos locks por `File.id`, con espacios distintos:
+        #  - `bloquear_archivo` en la transacción de la SESIÓN (la que escribe
+        #    `metadata_`): se mantiene hasta el commit/rollback del lote, así
+        #    rescan/mantener/asignación no pueden leer una versión anterior
+        #    entre el flush y el commit.
+        #  - `bloqueo_de_fichero` en una conexión dedicada para el reemplazo
+        #    atómico del CBZ; no debe ser la misma clave que el de arriba o la
+        #    sesión esperaría un lock de su propia otra conexión.
+        await bloquear_archivo(self.db, file.id)
         async with bloqueo_de_fichero(motor_de(self.db), file.id):
+            # Releer DESPUÉS de ambos locks: el `file`/`ctx`/`path` recibidos se
+            # cargaron antes y pueden estar obsoletos (otra operación pudo
+            # cambiar la relación, la ruta o `metadata_`).
+            fresco = (await self.db.execute(
+                select(File).where(File.id == file.id).execution_options(populate_existing=True)
+            )).scalar_one_or_none()
+            if fresco is None:
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="archivo ya no está en la BD", gasta_cupo=False)
+            file = fresco
+            path = Path(file.file_path)
+            ctx = await self._contexto(file)
+            if file.file_format is not FileFormat.CBZ:
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="formato no parcheable (solo CBZ)", gasta_cupo=False)
+            if file.is_missing or not path.exists():
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="archivo ausente", gasta_cupo=False)
             resultado = await self._escribir(
                 file, ctx, path, solo_rellenar, reconciliar_todo)
-            # El flush (que escribe `metadata_`) va DENTRO del bloqueo: si se hiciera después de
-            # soltarlo, un rescan/mantener podría releer la fila antes de este cambio y pisarla.
-            # El bloqueo vive en su propia transacción corta; el flush usa la sesión normal.
             await self.db.flush()
+        # El lock de la sesión sigue vivo hasta que el llamante haga commit/rollback.
         return resultado
 
     async def _sesion_utilizable(self) -> bool:
