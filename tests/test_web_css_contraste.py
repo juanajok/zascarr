@@ -291,6 +291,13 @@ EXCLUSIONES: dict[tuple[str, str, str], str] = {
     # (test_portada_marca.py::TestContrasteDeLaInicial lo comprueba en las tres tintas y los dos temas).
     (".portada-m", "var(--on-yellow)", "var(--magenta)"):
         "inicial decorativa y enorme de la portada que falta (texto grande, 3:1; 3,68:1 medido)",
+    # Cabeceras de acto de Ajustes: el filete de tinta que cierra la línea y la viñeta amarilla de
+    # marca son pseudo-elementos decorativos (`content: ""`), sin texto y fuera del árbol de
+    # accesibilidad. La comprobación los ve como «texto heredado» solo por tener fondo propio.
+    (".ajustes-acto::after", "var(--ink)", "var(--ink)"):
+        "filete decorativo sin texto (content: '', no es contenido legible)",
+    (".ajustes-acto::before", "var(--ink)", "var(--yellow)"):
+        "viñeta decorativa sin texto (content: '', no es contenido legible)",
 }
 
 
