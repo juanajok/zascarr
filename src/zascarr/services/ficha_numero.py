@@ -51,6 +51,14 @@ TEXTOS = {
     "glosario_texto": "Guion: quién escribe el texto. Dibujo: quién dibuja las páginas. Tinta: quién entinta el dibujo. Color: quién da el color. Rotulación: quién rotula el texto. Portada: quién hizo la portada. Edición: quién coordina la publicación; no es una edición distinta del número. Traducción: quién traduce esta versión.",
 }
 
+#: Una sola tabla de formatos de publicación (la comparte la ficha; el asistente la reexporta).
+FORMATOS_LEGIBLES: dict[str, str] = {
+    "single_issue": "grapa", "trade_paperback": "tomo en rústica",
+    "hardcover": "tomo en tapa dura", "omnibus": "ómnibus",
+    "graphic_novel": "novela gráfica", "album": "álbum",
+    "manga_tankobon": "tomo de manga", "digital": "digital",
+}
+
 ROLES_ES: tuple[tuple[str, str], ...] = (
     ("writer", "Guion"),
     ("penciler", "Dibujo"),
@@ -97,6 +105,13 @@ class FichaSerie:
     numeros_por_id: dict[str, NumeroEnlace] = field(default_factory=dict)
     origen_autores: str = "Origen no registrado"
 
+    def enlace_para_numero(self, numero: object) -> NumeroEnlace | None:
+        """Enlace robusto para el chip: normaliza «01»/1 y prefiere el número con archivos."""
+        cands = [n for n in self.numeros if natural_key(n.numero) == natural_key(str(numero))]
+        if not cands:
+            return None
+        return next((n for n in cands if n.tiene_archivos), cands[0])
+
 
 @dataclass
 class FichaNumero:
@@ -138,7 +153,8 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
         getattr(i, "sort_order", None) is None, getattr(i, "sort_order", None) or 0.0,
         natural_key(i.issue_number or ""), str(i.id)))
     filas = (await db.execute(
-        select(IssueCreator.role, Creator.name, func.count(func.distinct(IssueCreator.issue_id)))
+        select(IssueCreator.role, Creator.name, func.max(Creator.metadata_source),
+               func.count(func.distinct(IssueCreator.issue_id)))
         .join(Creator, Creator.id == IssueCreator.creator_id)
         .join(Issue, Issue.id == IssueCreator.issue_id)
         .where(Issue.series_id == series_id)
@@ -148,24 +164,24 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
     autores: dict[str, list[AutorPrincipal]] = {}
     # Solo Guion y Dibujo son «autores principales» de la serie (UX §2.4).
     todas: dict[str, list[AutorPrincipal]] = {}
-    for rol, nombre, cantidad in filas:
+    fuentes_creditos: set[str] = set()
+    for rol, nombre, fuente_credito, cantidad in filas:
         clave = rol.value if hasattr(rol, "value") else str(rol)
         if clave in ("writer", "penciler"):
             todas.setdefault(clave, []).append(
                 AutorPrincipal(nombre=nombre, papel=clave, numeros=int(cantidad)))
+            if fuente_credito:
+                fuentes_creditos.add(str(fuente_credito))
     for clave, lista in todas.items():
         lista.sort(key=lambda a: (-a.numeros, natural_key(a.nombre)))
         autores[clave] = lista[:_TOPE_AUTORES]
     numeros = [NumeroEnlace(id=str(i.id), numero=i.issue_number or "(sin número)",
                             tiene_archivos=bool(getattr(i, "files", None))) for i in issues]
-    fuentes = {getattr(i, "metadata_source", None) for i in issues
-               if getattr(i, "credits", None)}
-    fuentes.discard(None)
     if not autores:
         origen = "Origen no registrado"
-    elif len(fuentes) == 1:
-        origen = _procedencia(next(iter(fuentes)), True)
-    elif len(fuentes) > 1:
+    elif len(fuentes_creditos) == 1:
+        origen = _procedencia(next(iter(fuentes_creditos)), True)
+    elif len(fuentes_creditos) > 1:
         origen = "Varias fuentes"
     else:
         origen = "Origen no registrado"
@@ -197,23 +213,28 @@ async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
     archivos = [ArchivoDeNumero(
         id=str(f.id), nombre=f.file_name, formato=f.file_format.value,
         tamano=f.file_size_bytes, falta_en_disco=bool(f.is_missing),
-    ) for f in sorted(getattr(issue, "files", None) or [], key=lambda f: f.file_name)]
-    procedencia = {}
+    ) for f in sorted(getattr(issue, "files", None) or [],
+                      key=lambda f: natural_key(f.file_name))]
+    procedencia: dict[str, dict[str, str]] = {}
+    nombre_fuente = _procedencia(getattr(issue, "metadata_source", None), True)
     if issue.synopsis:
-        procedencia[TEXTOS["sinopsis"]] = _procedencia(getattr(issue, "metadata_source", None), True)
-    if getattr(issue, "release_date", None) is not None:
-        procedencia[TEXTOS["fecha"]] = _procedencia(getattr(issue, "metadata_source", None), True)
-    if getattr(issue, "page_count", None) is not None:
-        procedencia[TEXTOS["paginas"]] = _procedencia(getattr(issue, "metadata_source", None), True)
+        procedencia[TEXTOS["sinopsis"]] = {"valor": issue.synopsis and _texto_sinopsis(issue.synopsis),
+                                           "origen": nombre_fuente}
+    fecha = getattr(issue, "release_date", None)
+    if fecha is not None:
+        procedencia[TEXTOS["fecha"]] = {"valor": fecha_larga(fecha), "origen": nombre_fuente}
+    paginas = getattr(issue, "page_count", None)
+    if paginas is not None:
+        procedencia[TEXTOS["paginas"]] = {
+            "valor": f"{paginas} página" if paginas == 1 else f"{paginas} páginas",
+            "origen": nombre_fuente}
     if autores:
-        fuentes = {getattr(issue, "metadata_source", None)}
-        fuentes.discard(None)
-        procedencia[TEXTOS["autores_numero"]] = (
-            _procedencia(next(iter(fuentes)), True) if len(fuentes) == 1
-            else ("Varias fuentes" if len(fuentes) > 1 else "Origen no registrado"))
+        nombres = ", ".join(n for lista in autores.values() for n in lista)
+        procedencia[TEXTOS["autores_numero"]] = {"valor": nombres, "origen": nombre_fuente}
     if archivos:
-        procedencia[TEXTOS["archivos"]] = "El propio archivo"
-    formato = _FORMATO.get(getattr(getattr(issue, "format", None), "value", None), "")
+        procedencia[TEXTOS["archivos"]] = {
+            "valor": ", ".join(a.nombre for a in archivos), "origen": "El propio archivo"}
+    formato = FORMATOS_LEGIBLES.get(getattr(getattr(issue, "format", None), "value", None), "")
     fecha = getattr(issue, "release_date", None)
     paginas = getattr(issue, "page_count", None)
     tiene_datos = bool(issue.synopsis or fecha or paginas or autores or archivos)

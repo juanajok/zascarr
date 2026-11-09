@@ -58,13 +58,16 @@ class FakeExecResult:
 
 
 class FakeSession:
-    def __init__(self, queue: list, series=None):
-        self._queue = list(queue)
+    def __init__(self, queue: list, series=None, *, ficha=True):
+        # La ficha de #447 añade tres lecturas fijas al final de la ruta; se declaran
+        # explícitamente para que la cola siga siendo estricta (sin fallback).
+        extra = [FakeExecResult([]), FakeExecResult([]), FakeExecResult([])] if ficha else []
+        self._queue = [*queue, *extra]
         self._series = series
         self.flush = AsyncMock()
 
     async def execute(self, _statement):
-        return self._queue.pop(0) if self._queue else FakeExecResult([])
+        return self._queue.pop(0)
 
     async def get(self, _model, _id):
         return self._series
@@ -434,7 +437,7 @@ class TestPoliticaBusquedaD8:
             FakeExecResult([series]),   # la serie
             FakeExecResult([]),         # puerta legal: SIN acuse
             retirados(),                # contexto del fragmento sin cambios (predicado NONE: sin más consultas)
-        ])
+        ], ficha=False)
         with use_fake_session(session) as client:
             r = client.post(f"/ui/series/{series.id}/politica", data={"wishlist_policy": "faltantes"})
 

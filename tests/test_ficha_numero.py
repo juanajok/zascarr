@@ -11,6 +11,8 @@ import pytest
 from zascarr.models import CreatorRole, FileFormat, IssueFormat
 from zascarr.services.ficha_numero import (
     TEXTOS,
+    FichaSerie,
+    NumeroEnlace,
     cargar_ficha_numero,
     cargar_ficha_serie,
     partir_sinopsis,
@@ -41,8 +43,8 @@ class _DB:
         return self.respuestas.pop(0)
 
 
-def _autor(nombre, rol, cantidad):
-    return (rol, nombre, cantidad)
+def _autor(nombre, rol, cantidad, fuente="comic_vine"):
+    return (rol, nombre, fuente, cantidad)
 
 
 def _serie(**extra):
@@ -94,7 +96,8 @@ async def test_ficha_numero_agrupa_autores_archivos_y_texto_plano():
     assert ficha.sinopsis == "Thorgal llega a un país."
     assert ficha.autores["writer"] == ["Ana"] and ficha.autores["penciler"] == ["Bea"]
     assert ficha.archivos[0].nombre == "Thorgal 03.cbz"
-    assert ficha.procedencia[TEXTOS["sinopsis"]] == "Puesto a mano"
+    assert ficha.procedencia[TEXTOS["sinopsis"]]["origen"] == "Puesto a mano"
+    assert "Thorgal" in ficha.procedencia[TEXTOS["sinopsis"]]["valor"]
     assert db.llamadas == 2
 
 
@@ -105,7 +108,8 @@ async def test_ausencias_no_son_none():
     db = _DB([_Res([issue]), _Res([serie])])
     ficha = await cargar_ficha_numero(db, serie.id, issue.id)
     assert ficha.sinopsis == ""
-    assert all("None" not in v for v in ficha.procedencia.values())
+    assert all("None" not in d["origen"] and "None" not in d["valor"]
+               for d in ficha.procedencia.values())
     assert TEXTOS["autores_numero"] not in ficha.procedencia
 
 
@@ -136,3 +140,21 @@ def test_formato_fecha_y_paginas_del_numero():
     assert ficha.fecha_larga == "1 de junio de 1981"
     assert ficha.paginas_texto == "1 página"
     assert ficha.tiene_datos is True
+
+
+def test_enlace_para_numero_normaliza_ceros_y_prefiere_con_archivo():
+    ficha = FichaSerie(serie=_serie(), sinopsis="", numeros=[
+        NumeroEnlace(id="sin-archivo", numero="01", tiene_archivos=False),
+        NumeroEnlace(id="con-archivo", numero="1", tiene_archivos=True),
+    ])
+    assert ficha.enlace_para_numero("1").id == "con-archivo"
+    assert ficha.enlace_para_numero("01").id == "con-archivo"
+    assert ficha.enlace_para_numero("9") is None
+
+
+def test_formato_reutiliza_tabla_compartida():
+    from zascarr.services.ficha_numero import FORMATOS_LEGIBLES
+    from zascarr.web.asistente_vinculacion import FORMATOS_LEGIBLES as WEB
+    assert FORMATOS_LEGIBLES is WEB
+    assert FORMATOS_LEGIBLES["hardcover"] == "tomo en tapa dura"
+    assert FORMATOS_LEGIBLES["manga_tankobon"] == "tomo de manga"

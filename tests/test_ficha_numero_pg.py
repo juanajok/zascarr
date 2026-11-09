@@ -103,3 +103,26 @@ async def test_ficha_numero_con_autores_archivos_pg(entorno):
     assert ficha.autores["writer"] == ["Ana", "Bea", "Carla"]
     assert ficha.archivos and ficha.archivos[0].nombre == "Thorgal 01.cbz"
     assert ficha.sinopsis == "Sinopsis"
+
+
+@pytest.mark.asyncio
+async def test_corte_top3_y_archivos_orden_natural_pg(entorno):
+    sid, iid, _ = await _sembrar(entorno)
+    async with entorno.banco.fabrica() as s:
+        from sqlalchemy import select
+
+        from zascarr.models import Creator, Issue, IssueCreator
+        extra = Creator(id=uuid4(), name="Zoe")
+        s.add(extra)
+        await s.flush()
+        first = (await s.execute(select(Issue).where(Issue.series_id == sid, Issue.issue_number == "1"))).scalar_one()
+        s.add(IssueCreator(issue_id=first.id, creator_id=extra.id, role=CreatorRole.WRITER))
+        for nombre in ("10.cbz", "2.cbz"):
+            s.add(File(id=uuid4(), issue_id=first.id, file_path=f"/tmp/{nombre}",
+                       file_name=nombre, file_format=FileFormat.CBZ, file_size_bytes=1))
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        ficha = await cargar_ficha_serie(s, sid)
+        numero = await cargar_ficha_numero(s, sid, first.id)
+    assert "Zoe" not in [a.nombre for a in ficha.autores["writer"]]
+    assert [a.nombre for a in numero.archivos] == ["2.cbz", "10.cbz", "Thorgal 01.cbz"]

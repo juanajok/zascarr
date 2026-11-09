@@ -594,6 +594,11 @@ button[type="submit"].neutro {
 
 /* ── 8. PEGATINAS / BADGES ───────────────────────────────────────────────── */
 .issue-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 12px;
   font-size: .875rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;   /* los números de una rejilla de grapas se alinean */
@@ -1908,6 +1913,8 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .subtitulo-numero { margin: 2px 0 8px; font-weight: 700; overflow-wrap: anywhere; }
 .issue-archivos { margin: 8px 0 8px 1.1rem; padding: 0; }
 .issue-archivos li { margin: 6px 0; overflow-wrap: anywhere; }
+.contador-numero { font-variant-numeric: tabular-nums; }
+.archivos-numero-titulo a { display: inline-flex; align-items: center; min-height: 40px; padding: 4px 6px; }
 .tabla-ficha { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 10px 0; }
 .tabla-ficha caption { text-align: left; font-weight: 700; margin-bottom: 6px; }
 .tabla-ficha th, .tabla-ficha td { text-align: left; vertical-align: top; padding: 6px; border-bottom: 1px solid var(--linea); overflow-wrap: anywhere; font-size: .875rem; }

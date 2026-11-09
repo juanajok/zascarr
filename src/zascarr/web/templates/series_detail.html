@@ -34,11 +34,11 @@
       <a class="btn ghost" href="/ui/series/{{ series.id }}/retirar">Retirar de mi biblioteca</a>
       <span class="muted">Quita la serie de ZascArr, pero no borra, mueve ni renombra los archivos del disco.</span>
     </p>
+    <details class="series-fuentes">
+      <summary>Fuentes y atribución</summary>
+      {{ legal_disclaimer("metadata") }}
+    </details>
   </div>
-  <details class="series-fuentes">
-    <summary>Fuentes y atribución</summary>
-    {{ legal_disclaimer("metadata") }}
-  </details>
 </div>
 
 <section class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
@@ -56,11 +56,12 @@
     {% if series.end_year %}<div><dt>{{ textos_ficha.fin }}</dt><dd>{{ series.end_year }}</dd></div>{% endif %}
   </dl>
   <h3>{{ textos_ficha.autores }}</h3>
+  <p class="caption">Los que más números firman, según los datos de la serie.</p>
   {% if ficha and ficha.autores %}
   <dl class="ficha-autores">
     {% for clave, etiqueta in roles_ficha %}
     {% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}
-    <div><dt>{{ etiqueta }}</dt><dd>{% for a in ficha.autores[clave] %}{{ a.nombre }} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
+    <div><dt>{{ etiqueta }}</dt><dd class="contador-numero">{% for a in ficha.autores[clave] %}{{ a.nombre }} ({{ a.numeros }} {{ "número" if a.numeros == 1 else "números" }}){% if not loop.last %}, {% endif %}{% endfor %}</dd></div>
     {% endif %}
     {% endfor %}
   </dl>
@@ -86,7 +87,7 @@
   <dl class="procedencia-campos">
     <div class="procedencia-campo"><dt>Editorial</dt><dd><span class="procedencia-valor">{% if series.publisher %}{{ series.publisher.name }}{% else %}Sin dato{% endif %}</span><span class="procedencia-origen">Origen no registrado</span></dd></div>
     {% if series.end_year %}<div class="procedencia-campo"><dt>Año de fin</dt><dd><span class="procedencia-valor">{{ series.end_year }}</span><span class="procedencia-origen">Origen no registrado</span></dd></div>{% endif %}
-    <div class="procedencia-campo"><dt>Autores principales</dt><dd><span class="procedencia-valor">Autores principales</span><span class="procedencia-origen">{{ ficha.origen_autores if ficha else "Origen no registrado" }}</span></dd></div>
+    <div class="procedencia-campo"><dt>Autores principales</dt><dd><span class="procedencia-valor">{% if ficha and ficha.autores %}{% for clave, etiqueta in roles_ficha %}{% if clave in ("writer", "penciler") and ficha.autores.get(clave) %}{{ etiqueta }}: {% for a in ficha.autores[clave] %}{{ a.nombre }}{% if not loop.last %}, {% endif %}{% endfor %}{% if not loop.last %}; {% endif %}{% endif %}{% endfor %}{% else %}Sin dato{% endif %}</span><span class="procedencia-origen">{{ ficha.origen_autores if ficha else "Origen no registrado" }}</span></dd></div>
     {% for c in procedencia.campos %}
     <div class="procedencia-campo">
       <dt>{{ c.etiqueta }}</dt>
@@ -159,7 +160,7 @@
 <h2>En tu biblioteca</h2>
 <div class="issue-grid">
   {% for n in present %}
-  {% set enlace = ficha.numeros_por_id.get(n|string) if ficha else none %}
+  {% set enlace = ficha.enlace_para_numero(n) if ficha else none %}
   {% if enlace %}<a class="issue-chip issue-present" href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>{% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
   {% endfor %}
 </div>

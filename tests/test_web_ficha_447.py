@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from tests.test_web_series import FakeExecResult, FakeSession, make_series, use_fake_session
@@ -47,6 +48,8 @@ def test_ficha_de_numero_muestra_texto_plano_autores_y_archivos():
     assert "Guion" in r.text and "Dibujo" in r.text
     assert "Thorgal 03.cbz" in r.text
     assert "De dónde sale cada dato" in r.text
+    assert "Puesto a mano" in r.text
+    assert "Origen no registrado" not in r.text
     assert "None" not in r.text
 
 
@@ -64,7 +67,8 @@ def test_ficha_de_numero_sin_datos_dice_que_falta():
 
 def test_ficha_de_serie_incluye_bloque_y_ordena_sin_romper():
     serie = make_series(total_issues=3)
-    with use_fake_session(FakeSession([FakeExecResult([serie])])) as client:
+    with use_fake_session(FakeSession([FakeExecResult([serie])]
+                                      + [FakeExecResult([])] * 12)) as client:
         r = client.get(f"/ui/series/{serie.id}")
     assert r.status_code == 200
     assert "Sobre esta serie" in r.text
@@ -72,3 +76,53 @@ def test_ficha_de_serie_incluye_bloque_y_ordena_sin_romper():
     assert "No consta todavía" in r.text
     # La acción principal sigue antes del bloque nuevo (presupuesto #208/#304).
     assert r.text.index("Añadir números del disco") < r.text.index("Sobre esta serie")
+
+
+def test_ficha_de_numero_404_y_no_store():
+    serie = _serie()
+    with use_fake_session(FakeSession([FakeExecResult([])])) as client:
+        r = client.get(f"/ui/series/{serie.id}/numero/{uuid4()}")
+    assert r.status_code == 404
+    # La ruta de una ficha existente no-store se comprueba en el caso 200.
+    issue = _issue(series_id=serie.id)
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie])])) as client:
+        ok = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
+    assert ok.status_code == 200 and ok.headers["cache-control"] == "no-store"
+
+
+def test_ficha_de_numero_parcial_sin_autores_ni_archivos():
+    serie = _serie()
+    issue = _issue(series_id=serie.id, credits=[], files=[])
+    with use_fake_session(FakeSession([FakeExecResult([issue]), FakeExecResult([serie])])) as client:
+        r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
+    assert r.status_code == 200
+    assert "No constan todavía los autores" in r.text
+    assert "No hay ningún archivo vinculado" in r.text
+    assert "Todavía no hay información de este número" not in r.text
+
+
+def test_series_fuentes_sigue_dentro_de_la_cabecera_y_chip_con_sr():
+    serie = make_series(total_issues=1)
+    with use_fake_session(FakeSession([FakeExecResult([serie])]
+                                      + [FakeExecResult([])] * 12)) as client:
+        r = client.get(f"/ui/series/{serie.id}")
+    html = r.text
+    assert html.index("Fuentes y atribución") < html.index("Sobre esta serie")
+    assert 'class="caption">Los que más números firman' in html
+    with open("src/zascarr/static/web.css", encoding="utf-8") as css:
+        assert "min-height: 40px" in css.read()
+
+
+def test_procedencia_de_autores_muestra_nombres_y_origen(monkeypatch):
+    from zascarr.services.ficha_numero import AutorPrincipal, FichaSerie
+    from zascarr.web import series as web_series
+    serie = make_series(total_issues=1)
+    ficha = FichaSerie(serie=serie, sinopsis="", autores={
+        "writer": [AutorPrincipal(nombre="Ana", papel="writer", numeros=3)]},
+        origen_autores="Comic Vine")
+    monkeypatch.setattr(web_series, "cargar_ficha_serie", AsyncMock(return_value=ficha))
+    with use_fake_session(FakeSession([FakeExecResult([serie])]
+                                      + [FakeExecResult([])] * 12)) as client:
+        r = client.get(f"/ui/series/{serie.id}")
+    assert "Guion: Ana" in r.text
+    assert "Comic Vine" in r.text
