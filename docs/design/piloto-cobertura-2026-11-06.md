@@ -185,3 +185,24 @@ método de edición.
 - **La recall sigue siendo el límite**: GCD solo mira la primera página (8 sin candidato) y Tebeosfera
   deja 1 caso sin detalle de número (ES-018).
 - **El contrato de detalle funciona**: distingue acierto, error y ambigüedad sin inventar.
+
+### 8.5 GCD con filtro de año: ES-007 verificada (2026-11-09)
+
+Tras el ranking explicable y el filtro de año (#526), la búsqueda de GCD con `anio=2006` devuelve
+**«Dragon Ball. Ultimate Edition»** y el contraste la acredita:
+
+```
+ES-007 | contraste=coincidencia_verificada | detalle=ok | peticiones=2
+   editorial=Planeta DeAgostini | anio=2006 | candidato=Dragon Ball. Ultimate Edition
+```
+
+- **3 ediciones acreditadas** ya en el bloque: ES-007 y ES-022 por GCD, ES-014 y ES-022 por Tebeosfera.
+- **ES-022 queda acreditada por dos fuentes** independientes.
+- La afirmación de §8.3 («GCD: 8 sin candidato») era cierta **sin filtro de año**; con él, la edición
+  correcta aparece. La frase correcta es «no estaba en la primera página ni sin filtro».
+- **GCD sigue pendiente de repetir el resto de casos** con el código final (cuota 30/h); los no
+  medidos quedan **NOT RUN**, no fallidos.
+
+El cuello de botella original —«las fuentes no tienen la edición española»— era falso: la tienen, y
+lo que fallaba era **cómo la buscábamos** (recorte antes del filtro, primera página, sin año,
+sin ranking).
