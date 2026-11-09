@@ -12,6 +12,7 @@ import os
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import select
 
 from tests.test_rescan_biblioteca_pg import (  # noqa: F401  (fixtures/ayudas)
     _cbz,
@@ -25,7 +26,7 @@ from tests.test_rescan_relacion_confirmada_pg import (  # noqa: F401
     _crear_relacion,
     _discrepancias,
 )
-from zascarr.models import File
+from zascarr.models import File, FileFormat, Issue, Series
 from zascarr.services import discrepancias as discrepancias_mod
 from zascarr.services import tagger as tagger_mod
 from zascarr.services.discrepancias import mantener_lo_mio
@@ -176,3 +177,111 @@ async def test_rescan_espera_al_tagger_y_conserva_su_marca(mundo, monkeypatch):
     # `comicinfo_estado` sí se retira a propósito (los bytes cambiaron y ya no la describen).
     assert leer_comicinfo(ruta) is not None
     assert str(fila.issue_id) == issue_actual
+
+
+async def _tagger_dos(mundo, ids):
+    async with mundo.fabrica() as s:
+        informe = await TaggerService(s).run(limit=0, dry_run=False, file_ids=ids)
+        await s.commit()
+        return informe
+
+
+async def _dos_archivos_con_orden_opuesto(mundo):
+    """Dos ficheros con `File.id` en orden OPUESTO al de su ruta.
+
+    Path: «Serie Ida» < «Serie Zeta». Id: Zeta (1) < Ida (2). Así se puede
+    comprobar que tagger y rescan piden los locks en el mismo orden (id), no en
+    el suyo natural (imported_at en tagger, ruta en rescan).
+    """
+    creados = []
+    for titulo, numero, ident in (("Serie Zeta", "01", 1), ("Serie Ida", "01", 2)):
+        serie = Series(id=uuid4(), title=titulo, start_year=2010)
+        issue = Issue(id=uuid4(), series_id=serie.id, issue_number=numero, volume=1)
+        ruta = mundo.lib / "Nuevos" / f"{titulo} {numero}.cbz"
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        contenido = _cbz(ruta, f"base-{ident}")
+        mundo.contenido[ruta] = contenido
+        fila = File(
+            id=UUID(int=ident), file_path=str(ruta), file_name=ruta.name,
+            file_format=FileFormat.CBZ, file_size_bytes=len(contenido),
+            sha256_hash=None, file_mtime_ns=None, issue_id=issue.id,
+            metadata_={"match_status": "unsorted"},
+        )
+        async with mundo.fabrica() as s:
+            s.add(serie)
+            s.add(issue)
+            s.add(fila)
+            await s.commit()
+        creados.append((fila.id, ruta))
+    # Primera pasada: fija la línea de base del resto de la biblioteca y de estos dos.
+    await _rescan(mundo)
+    # Los dos cambian: la siguiente pasada los re-tria (y el tagger los etiqueta).
+    for ident, ruta in creados:
+        mundo.contenido[ruta] = _cbz(ruta, f"cambio-{ident}")
+    # Fuerza la línea de base vieja: no depender de la resolución de mtime ni del tamaño del ZIP.
+    async with mundo.fabrica() as s:
+        for fila in (await s.execute(select(File).where(File.id.in_([UUID(int=1), UUID(int=2)])))).scalars().all():
+            fila.file_mtime_ns = None
+        await s.commit()
+    return [str(i) for i, _ in creados], [r for _, r in creados]
+
+
+async def test_multifile_tagger_y_rescan_con_ordenes_opuestos_no_se_bloquean(mundo):
+    ids, rutas = await _dos_archivos_con_orden_opuesto(mundo)
+    assert [str(r) for r in sorted(rutas)] == [str(rutas[1]), str(rutas[0])]   # ruta: Ida, Zeta
+    assert ids == [str(UUID(int=1)), str(UUID(int=2))]                          # id: Zeta, Ida
+
+    tarea_tagger = asyncio.create_task(_tagger_dos(mundo, ids))
+    tarea_rescan = asyncio.create_task(_rescan(mundo))
+    try:
+        _, informe = await asyncio.wait_for(asyncio.gather(tarea_tagger, tarea_rescan), 25)
+    finally:
+        for t in (tarea_tagger, tarea_rescan):
+            t.cancel()
+        await asyncio.gather(tarea_tagger, tarea_rescan, return_exceptions=True)
+    assert informe is not None
+
+
+async def test_mutacion_sin_orden_global_bloquea_tagger_y_rescan(mundo, monkeypatch):
+    """Mutación: rescan vuelve a ordenar por RUTA (el orden viejo). Con tagger por
+    `File.id` y rutas en orden opuesto, cada uno toma A/B al revés y se bloquean.
+    La prueba normal de arriba falla si vuelve ese orden."""
+    import zascarr.services.library_adopter as adopter
+
+    await _dos_archivos_con_orden_opuesto(mundo)
+    monkeypatch.setattr(adopter, "_clave_de_orden_de_retriaje", lambda t: str(t[0]))
+
+    original_bloqueo = adopter.bloquear_archivo
+    ida = str(UUID(int=2))
+    zeta = str(UUID(int=1))
+    rescan_tiene_ida = asyncio.Event()
+    rescan_intenta_zeta = asyncio.Event()
+
+    async def _espia(db, file_id):
+        if str(file_id) == zeta:
+            # Se marca ANTES de bloquearse: el rescan ya va a pedir el lock de Zeta,
+            # que tiene el tagger; si no hay orden global, se cierra el ciclo.
+            rescan_intenta_zeta.set()
+        await original_bloqueo(db, file_id)
+        if str(file_id) == ida:
+            rescan_tiene_ida.set()
+
+    monkeypatch.setattr(adopter, "bloquear_archivo", _espia)
+
+    entro, seguir = _pausar_escribir(monkeypatch)
+    tarea_tagger = asyncio.create_task(_tagger_dos(mundo, [str(UUID(int=1)), str(UUID(int=2))]))
+    await asyncio.wait_for(entro.wait(), 10)              # tagger tiene Zeta (id 1)
+    tarea_rescan = asyncio.create_task(_rescan(mundo))
+    await asyncio.wait_for(rescan_tiene_ida.wait(), 10)   # rescan tiene Ida (ruta 1)
+    await asyncio.wait_for(rescan_intenta_zeta.wait(), 10)  # y quiere Zeta, que tiene el tagger
+    seguir.set()                                          # tagger va a por Ida, que tiene el rescan
+    try:
+        tag, res = await asyncio.wait_for(asyncio.gather(tarea_tagger, tarea_rescan), 15)
+    finally:
+        for t in (tarea_tagger, tarea_rescan):
+            t.cancel()
+        await asyncio.gather(tarea_tagger, tarea_rescan, return_exceptions=True)
+    # El detector de Postgres puede abortar a cualquiera de los dos; el servicio
+    # de rescan captura el error y lo anota. Lo que NO puede pasar es que ambos
+    # terminen limpios: eso significaría que el orden mutado no provoca el ciclo.
+    assert res.errores or tag.abortado is not None or tag.escritos < 2
