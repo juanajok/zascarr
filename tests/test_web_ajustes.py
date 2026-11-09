@@ -532,6 +532,7 @@ class TestCarpetasCompartidas:
         finally:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200 and "guardado" in r.text.lower()
+        assert r.headers.get("cache-control") == "no-store"
         assert s.carpetas_compartidas == [str(s.library_path), str(s.downloads_path)]
 
     def test_guardar_sin_ninguna_raiz_deja_lista_vacia(self, restaurar_settings):

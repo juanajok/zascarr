@@ -23,7 +23,8 @@ def _settings(tmp_path: Path, **kw) -> SimpleNamespace:
         d.mkdir(exist_ok=True)
     datos = dict(
         library_path=lib, downloads_path=desc, amule_incoming_dir=amule,
-        host_library_dir="", transmission_download_dir="", transmission_enabled=False,
+        host_library_dir="", host_downloads_dir="", host_amule_incoming_dir="",
+        transmission_download_dir="", transmission_enabled=False,
         amule_enabled=False, carpetas_compartidas=[],
     )
     datos.update(kw)
@@ -105,13 +106,43 @@ async def test_transmission_traduce_host_a_contenedor(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_transmission_traduce_descargas(tmp_path):
+async def test_transmission_traduce_host_downloads_a_contenedor(tmp_path):
+    host_desc = tmp_path / "host-desc"
+    host_desc.mkdir()
+    s = _settings(tmp_path, host_downloads_dir=str(host_desc), transmission_enabled=True)
+    cliente = _Transmission([_torrent(str(host_desc), "x.cbz")])
+    d = await estado_de_comparticion(tmp_path / "desc" / "x.cbz", settings=s,
+                                     transmission=cliente)
+    assert d.estado is EstadoComparticion.COMPARTIDO
+
+
+async def test_transmission_con_ruta_de_contenedor_no_necesita_host(tmp_path):
+    """Por defecto (sin HOST_DOWNLOADS_DIR) una ruta del contenedor se reconoce sin traducir."""
+    s = _settings(tmp_path, transmission_enabled=True)
+    cliente = _Transmission([_torrent(str(tmp_path / "desc" / "comics"), "x.cbz")])
+    d = await estado_de_comparticion(
+        tmp_path / "desc" / "comics" / "x.cbz", settings=s, transmission=cliente)
+    assert d.estado is EstadoComparticion.COMPARTIDO
+
+
+async def test_transmission_download_dir_no_se_usa_como_origen_host(tmp_path):
+    """`transmission_download_dir` es una ruta DEL CONTENEDOR: no debe traducir una host."""
     host_desc = tmp_path / "host-desc"
     host_desc.mkdir()
     s = _settings(tmp_path, transmission_download_dir=str(host_desc), transmission_enabled=True)
     cliente = _Transmission([_torrent(str(host_desc), "x.cbz")])
     d = await estado_de_comparticion(tmp_path / "desc" / "x.cbz", settings=s,
                                      transmission=cliente)
+    assert d.estado is EstadoComparticion.NO_SE_SABE
+
+
+async def test_amule_traduce_host_incoming(tmp_path):
+    host_in = tmp_path / "host-amule"
+    host_in.mkdir()
+    s = _settings(tmp_path, host_amule_incoming_dir=str(host_in), amule_enabled=True,
+                  carpetas_compartidas=[str(tmp_path / "lib")])
+    d = await estado_de_comparticion(tmp_path / "amule" / "x.cbz", settings=s,
+                                     amule=_AMule(compartidos=[str(host_in)]))
     assert d.estado is EstadoComparticion.COMPARTIDO
 
 
