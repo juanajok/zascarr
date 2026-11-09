@@ -97,6 +97,10 @@ class ResultadoEtiquetado:
     #: gastar el cupo de `--limit`, o una biblioteca con rutas rotas dejaría
     #: fuera al resto para siempre.
     gasta_cupo: bool = True
+    #: #488: aviso del guardián de compartidos. No impide escribir por sí solo:
+    #: el llamante debe pasar `forzar_compartido=True` para aplicar.
+    advertencia: str | None = None
+    forzado_compartido: bool = False
 
     def __post_init__(self) -> None:
         # El ORM entrega `File.id` como UUID y esto acaba serializándose a JSON
@@ -392,28 +396,33 @@ class TaggerService:
 
     async def ejecutar(
         self, file: File, *, dry_run: bool = True, solo_rellenar: bool = False,
-        reconciliar_todo: bool = False,
+        reconciliar_todo: bool = False, forzar_compartido: bool = False,
     ) -> ResultadoEtiquetado:
         """Evalúa **siempre** este fichero (no consulta la marca de revisión:
         eso lo hace `run()` para acotar el lote)."""
         return await self._ejecutar_con(
             file, await self._contexto(file), Path(file.file_path),
             dry_run=dry_run, solo_rellenar=solo_rellenar,
-            reconciliar_todo=reconciliar_todo)
+            reconciliar_todo=reconciliar_todo,
+            forzar_compartido=forzar_compartido)
 
-    async def _bloqueo_por_compartido(self, file: File, path: Path) -> ResultadoEtiquetado | None:
-        """#488: fallo cerrado del guardián de compartidos (solo lectura)."""
+    async def _advertencia_por_compartido(self, file: File, path: Path) -> str | None:
+        """#488: aviso del guardián (solo lectura). El tagger/CLI decide si continuar."""
         decision = await estado_de_comparticion(path)
         if not decision.bloquea:
             return None
-        logger.info("tagger.compartido_bloqueado", file_id=file.id,
+        logger.info("tagger.compartido_advierte", file_id=file.id,
                     estado=decision.estado.value)
-        return ResultadoEtiquetado(file.id, file.file_name, SALTADO,
-                                   motivo=decision.mensaje, gasta_cupo=False)
+        return (
+            f"{decision.mensaje} Si escribes de todos modos, Transmission/aMule pueden dejar de "
+            "compartir bien este archivo. Para continuar hace falta una confirmación explícita "
+            "(--forzar en el comando)."
+        )
 
     async def _ejecutar_con(
         self, file: File, ctx: _Contexto, path: Path, *,
         dry_run: bool, solo_rellenar: bool, reconciliar_todo: bool,
+        forzar_compartido: bool = False,
     ) -> ResultadoEtiquetado:
         # Guarda barata de formato (también la usa el constructor de pruebas sin
         # sesión); para la escritura real se vuelve a comprobar tras releer.
@@ -427,10 +436,11 @@ class TaggerService:
                 return ResultadoEtiquetado(
                     file.id, file.file_name, SALTADO,
                     motivo="archivo ausente", gasta_cupo=False)
-            bloqueo = await self._bloqueo_por_compartido(file, path)
-            if bloqueo is not None:
-                return bloqueo
-            return await self._simular(file, ctx, path, solo_rellenar, reconciliar_todo)
+            advertencia = await self._advertencia_por_compartido(file, path)
+            resultado = await self._simular(file, ctx, path, solo_rellenar, reconciliar_todo)
+            if advertencia is not None:
+                resultado.advertencia = advertencia
+            return resultado
 
         # Escritura real. Dos locks por `File.id`, con espacios distintos:
         #  - `bloquear_archivo` en la transacción de la SESIÓN (la que escribe
@@ -463,11 +473,16 @@ class TaggerService:
                 return ResultadoEtiquetado(
                     file.id, file.file_name, SALTADO,
                     motivo="archivo ausente", gasta_cupo=False)
-            bloqueo = await self._bloqueo_por_compartido(file, path)
-            if bloqueo is not None:
-                return bloqueo
+            advertencia = await self._advertencia_por_compartido(file, path)
+            if advertencia is not None and not forzar_compartido:
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo=advertencia, gasta_cupo=False, advertencia=advertencia)
             resultado = await self._escribir(
                 file, ctx, path, solo_rellenar, reconciliar_todo)
+            if advertencia is not None:
+                resultado.advertencia = advertencia
+                resultado.forzado_compartido = True
             await self.db.flush()
         # El lock de la sesión sigue vivo hasta que el llamante haga commit/rollback.
         return resultado
@@ -630,6 +645,7 @@ class TaggerService:
     async def run(
         self, limit: int = 20, *, dry_run: bool = True, solo_rellenar: bool = False,
         file_ids: list[str] | None = None, reconciliar_todo: bool = False,
+        forzar_compartido: bool = False,
     ) -> InformeEtiquetado:
         """Recorre los CBZ con `Issue` enlazado y evalúa solo lo pendiente.
 
@@ -659,7 +675,8 @@ class TaggerService:
                 r = await self._ejecutar_con(file, ctx, Path(file.file_path),
                                              dry_run=dry_run,
                                              solo_rellenar=solo_rellenar,
-                                             reconciliar_todo=reconciliar_todo)
+                                             reconciliar_todo=reconciliar_todo,
+                                             forzar_compartido=forzar_compartido)
                 sesion_rota = False
             except Exception as exc:  # noqa: BLE001
                 logger.exception("tagger.fallo_inesperado", file_id=file.id)

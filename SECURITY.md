@@ -203,5 +203,7 @@ El registro de acceso de uvicorn **no incluye la query** de las peticiones (`?cl
   mientras pueda estar compartido por Transmission o aMule: la vista previa y la escritura de ComicInfo consultan un
   único guardián (`services/compartidos.py`). Las carpetas que comparten esos programas se declaran en Ajustes
   («Archivos compartidos»). Sin carpetas declaradas y sin clientes encendidos, o si un cliente falla, una ruta no se
-  puede traducir o aMule no expone sus compartidos, el guardián responde «no se sabe» y **no se escribe**. No usa el
-  socket de Docker, ni root, ni modifica torrents o la configuración de los clientes.
+  puede traducir o aMule no expone sus compartidos, el guardián responde «no se sabe»: ZascArr **avisa y no escribe
+  sin una confirmación explícita**; con ella sí puede escribir (el riesgo para la siembra es de la persona). En el
+  comando de etiquetado la confirmación es `--forzar`. No usa el socket de Docker, ni root, ni modifica torrents o la
+  configuración de los clientes.

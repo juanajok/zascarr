@@ -56,6 +56,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--reconciliar-todo", action="store_true",
                    help="revisarlo todo otra vez, aunque ya esté revisado, y "
                         "recalcular sha256/tamaño aunque el fichero no haya cambiado")
+    p.add_argument("--forzar", action="store_true", dest="forzar",
+                   help="aplica aunque el archivo parezca compartido por Transmission/aMule "
+                        "o no se pueda saber; úsalo solo si entiendes el riesgo para la siembra")
     p.add_argument("--json", action="store_true", help="informe legible por máquina")
     return p
 
@@ -73,6 +76,10 @@ def _imprimir_texto(informe: InformeEtiquetado, *, aplicar: bool) -> None:
         print(f"{r.nombre}")
         if r.motivo:
             print(f"  · {r.accion}: {r.motivo}")
+        if r.advertencia:
+            print(f"  · AVISO: {r.advertencia}")
+        if r.forzado_compartido:
+            print("  · aplicado con confirmación explícita (--forzar)")
         for c in r.campos:
             actual = f"«{c.actual}»" if c.actual else "—"
             nuevo = f"«{c.nuevo}»" if c.nuevo else "—"
@@ -118,6 +125,7 @@ def _salida_json(informe: InformeEtiquetado, *, aplicar: bool) -> None:
             {
                 "file_id": r.file_id, "nombre": r.nombre, "accion": r.accion,
                 "motivo": r.motivo, "reconciliado": r.reconciliado,
+                "advertencia": r.advertencia, "forzado_compartido": r.forzado_compartido,
                 "campos": [_campo_json(c) for c in r.campos],
             }
             for r in informe.resultados
@@ -135,6 +143,7 @@ async def _ejecutar(args: argparse.Namespace) -> int:
             solo_rellenar=args.no_overwrite,
             file_ids=args.file_ids,
             reconciliar_todo=args.reconciliar_todo,
+            forzar_compartido=args.forzar,
         )
         if aplicar:
             # Un solo commit al final: si falla, el CBZ ya está reescrito

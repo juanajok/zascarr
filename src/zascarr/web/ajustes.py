@@ -130,9 +130,13 @@ def _contexto() -> dict:
         "amule_enabled": s.amule_enabled,
         "carpetas_compartidas": list(getattr(s, "carpetas_compartidas", []) or []),
         "carpetas_disponibles": [
-            {"ruta": str(s.library_path), "nombre": "Biblioteca"},
-            {"ruta": str(s.downloads_path), "nombre": "Descargas"},
-            {"ruta": str(s.amule_incoming_dir), "nombre": "Incoming de aMule"},
+            {"ruta": str(ruta), "nombre": nombre}
+            for campo, nombre in (
+                ("library_path", "Biblioteca"),
+                ("downloads_path", "Descargas"),
+                ("amule_incoming_dir", "Incoming de aMule"),
+            )
+            if (ruta := getattr(s, campo, None))
         ],
         "auth_mode": s.auth_mode,
         "auth_username": s.auth_username,
