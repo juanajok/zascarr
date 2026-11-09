@@ -71,6 +71,10 @@
           ({{ resumen.re_triados_igual }} igual, {{ resumen.re_triados_cambiado }} otro número,
           {{ resumen.re_triados_a_revisar }} a revisar, {{ resumen.re_triados_descartado }} descartado)</li>
         {% endif %}
+        {% if resumen.re_triados_protegidos %}
+        <li>{{ cifra_rescan(resumen.re_triados_protegidos, "relación confirmada conservada", "relaciones confirmadas conservadas") }}
+          ({{ resumen.discrepancias_registradas }} propuesta{{ "s" if resumen.discrepancias_registradas != 1 }} distinta{{ "s" if resumen.discrepancias_registradas != 1 }} sin aplicar)</li>
+        {% endif %}
         {% if resumen.copias_de_otra %}
         <li>{{ cifra_rescan(resumen.copias_de_otra, "ahora es copia", "ahora son copias") }} idéntica de otro archivo registrado: se conserva su ficha</li>
         {% endif %}

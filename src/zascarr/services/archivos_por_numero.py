@@ -10,6 +10,7 @@ bloqueada: esta lista solo decide si se OFRECE el botón y, si no, qué razón s
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import select
@@ -17,6 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.importer_triage import natural_key
 from zascarr.models import ASIGNACION_ESTADOS_VIVOS, AsignacionOperacion, File, Issue
+from zascarr.services.discrepancias import pendientes
+from zascarr.services.relacion_confirmada import (
+    es_protegida,
+    estado_de_relacion,
+    relacion_actual,
+)
 
 
 @dataclass(frozen=True)
@@ -27,6 +34,11 @@ class ArchivoDeNumero:
     falta_en_disco: bool
     #: `None` = se puede ofrecer «Deshacer»; si no, el código de la vista previa (`en_curso`).
     bloqueo: str | None
+    #: Formato de la PUBLICACIÓN (`Issue.format`), no del contenedor; para no enseñar `single_issue`.
+    formato_publicacion: str = ""
+    #: #233/BL-R4: discrepancias `pendientes` de la relación actual de este archivo (D4). Lista de
+    #: dicts tal cual se guardan en `metadata_`; la web decide cómo mostrarlos.
+    discrepancias: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -40,7 +52,9 @@ async def archivos_por_numero(db: AsyncSession, series_id: UUID) -> list[NumeroC
     """Los números de la serie que tienen al menos un archivo, en orden de lectura, cada uno con sus archivos por nombre."""
     filas = (await db.execute(
         select(File.id, File.file_name, File.file_format, File.is_missing,
-               Issue.id.label("issue_id"), Issue.issue_number, Issue.sort_order)
+               File.metadata_source, File.metadata_,
+               Issue.id.label("issue_id"), Issue.issue_number, Issue.sort_order,
+               Issue.series_id, Issue.format)
         .join(Issue, File.issue_id == Issue.id).where(Issue.series_id == series_id))).all()
     if not filas:
         return []
@@ -52,8 +66,16 @@ async def archivos_por_numero(db: AsyncSession, series_id: UUID) -> list[NumeroC
     for f in sorted(filas, key=lambda f: (f.sort_order is None, f.sort_order or 0.0, natural_key(f.issue_number or ""),
                                           natural_key(f.file_name))):
         bloqueo = "en_curso" if str(f.id) in vivas else None
+        # D3/D4 (#233): la relación se clasifica aquí, sin consultas extra, y solo se muestran las
+        # discrepancias de la relación ACTUAL (si el vínculo cambió, las viejas no aplican).
+        archivo = SimpleNamespace(issue_id=f.issue_id, metadata_source=f.metadata_source, metadata_=f.metadata_)
+        issue = SimpleNamespace(id=f.issue_id, series_id=f.series_id, issue_number=f.issue_number, format=f.format)
+        visibles: list[dict] = []
+        if es_protegida(estado_de_relacion(archivo, issue)):
+            visibles = pendientes(f.metadata_, relacion_actual(archivo, issue))
         n = por_numero.setdefault(str(f.issue_id), NumeroConArchivos(str(f.issue_id), f.issue_number or "(sin número)"))
         orden.setdefault(str(f.issue_id), (f.sort_order is None, f.sort_order or 0.0, natural_key(f.issue_number or "")))
         n.archivos.append(ArchivoDeNumero(
-            id=str(f.id), nombre=f.file_name, formato=f.file_format.value, falta_en_disco=bool(f.is_missing), bloqueo=bloqueo))
+            id=str(f.id), nombre=f.file_name, formato=f.file_format.value, falta_en_disco=bool(f.is_missing),
+            bloqueo=bloqueo, formato_publicacion=f.format.value, discrepancias=visibles))
     return [por_numero[k] for k in sorted(por_numero, key=lambda k: orden[k])]
