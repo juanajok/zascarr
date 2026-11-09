@@ -989,3 +989,74 @@ def _longitud_peor_caso_del_token_de_mantener() -> int:
 
 #: El límite del campo `token` de la confirmación de «Mantener lo mío»: acotado e IGUAL al peor caso emitible.
 MAX_TOKEN_MANTENER = _longitud_peor_caso_del_token_de_mantener()
+
+# ── Token de retirar una asociación de fuente (#129 C) ──────────────────────────────────────────
+
+PROPOSITO_RETIRAR_ASOCIACION = "retirar_asociacion"
+VERSION_TOKEN_RETIRAR_ASOCIACION = 1
+
+
+@dataclass(frozen=True)
+class RetirarAsociacionFirmada:
+    version: int
+    entidad: str
+    fuente: str
+    id_externo: str
+    huella: str
+    operacion: str
+    serie_id: str
+    caduca: int = 0
+
+
+def crear_token_retirar_asociacion(d: RetirarAsociacionFirmada, secret: str, *,
+                                   ahora: float | None = None) -> str:
+    if d.entidad != "serie" or d.fuente not in {f.value for f in MetadataSource}:
+        raise ValueError("La asociación no se puede firmar: entidad o fuente inválida.")
+    canonico = id_canonico(d.fuente, d.id_externo)
+    if canonico is None or canonico != d.id_externo or not _hex64(d.huella):
+        raise ValueError("La asociación no se puede firmar: id o huella inválida.")
+    return crear_token(PROPOSITO_RETIRAR_ASOCIACION, d.serie_id, {
+        "version": d.version, "entidad": d.entidad, "fuente": d.fuente,
+        "id_externo": canonico, "huella": d.huella, "operacion": d.operacion,
+        "serie_id": d.serie_id,
+    }, secret, ahora=ahora)
+
+
+def verificar_token_retirar_asociacion(
+        token: str, secret: str, *, ahora: float | None = None,
+        ignorar_caducidad: bool = False) -> RetirarAsociacionFirmada | None:
+    serie_id = _contexto_del_token(token, secret)
+    if serie_id is None or not _uuid_texto(serie_id):
+        return None
+    verificado = _verificar(token, PROPOSITO_RETIRAR_ASOCIACION, serie_id, secret,
+                            ahora=ahora, ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    if d.get("version") != VERSION_TOKEN_RETIRAR_ASOCIACION or isinstance(d.get("version"), bool):
+        return None
+    if d.get("entidad") != "serie" or d.get("serie_id") != serie_id:
+        return None
+    fuente = d.get("fuente")
+    if not isinstance(fuente, str) or fuente not in {f.value for f in MetadataSource}:
+        return None
+    id_externo = d.get("id_externo")
+    if id_canonico(fuente, id_externo) != id_externo:
+        return None
+    if not _hex64(d.get("huella")) or not _uuid_texto(d.get("operacion")):
+        return None
+    return RetirarAsociacionFirmada(1, "serie", fuente, id_externo, d["huella"],
+                                    d["operacion"], serie_id, caduca)
+
+
+def _longitud_peor_caso_token_retirar_asociacion() -> int:
+    ident = "00000000-0000-4000-8000-000000000000"
+    ch = "\U0001F600"
+    caso = RetirarAsociacionFirmada(
+        version=1, entidad="serie", fuente="tebeosfera",
+        id_externo=ch * MAX_ID_ASOCIACION, huella="f" * 64, operacion=ident,
+        serie_id=ident)
+    return len(crear_token_retirar_asociacion(caso, "x" * 32, ahora=EPOCA_DEL_PEOR_CASO))
+
+
+MAX_TOKEN_RETIRAR_ASOCIACION = _longitud_peor_caso_token_retirar_asociacion()
