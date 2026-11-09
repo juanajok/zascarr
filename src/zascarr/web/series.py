@@ -38,6 +38,7 @@ from zascarr.models import (
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
+from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.discrepancias import (
     clave_valida,
     mantener_lo_mio,
@@ -83,6 +84,7 @@ from zascarr.services.relacion_confirmada import (
 )
 from zascarr.services.series import razon_de_no_calculable
 from zascarr.services.tokens_revision import (
+    MAX_TOKEN_CONVERSION,
     MAX_TOKEN_MANTENER,
     SIN_PROCEDENCIA,
     MantenerFirmada,
@@ -841,3 +843,76 @@ def _etag_de_bytes(data: bytes) -> str:
     servidos, así que el mismo dato da el mismo ETag y la segunda petición recibe un 304,
     sin depender del `mtime` de un fichero que no llegó a escribirse."""
     return f'"{hashlib.sha256(data).hexdigest()}"'
+
+
+# ── #478/BL-CNV1: conversión CBR→CBZ (vista previa + confirmación) ───────────────────────────────
+
+def _servicio_conversion(db):
+    return ConversionDeArchivo(db, secret=get_settings().secret_key)
+
+
+async def _serie_para_conversion(db, series_id, file_id):
+    series = await _serie_o_404(db, series_id)
+    return series
+
+
+@router.get("/{series_id}/archivos/{file_id}/convertir", response_class=HTMLResponse)
+async def convertir_vista_previa(series_id: UUID, file_id: UUID, request: Request,
+                                 db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_para_conversion(db, series_id, file_id)
+    try:
+        vista = await _servicio_conversion(db).previsualizar(series_id, file_id)
+    except Exception as exc:  # noqa: BLE001 — archivo/serie no encontrado
+        if exc.__class__.__name__ in ("TokenInvalidoError", "SerieNoEncontrada"):
+            raise HTTPException(status_code=404, detail="Archivo no encontrado") from None
+        raise
+    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_previa.html", {
+        "series": series, "vista": vista, "modo": "convertir"}))
+
+
+@router.post("/{series_id}/archivos/{file_id}/convertir", response_class=HTMLResponse)
+async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
+                              token: str = Form(..., max_length=MAX_TOKEN_CONVERSION),
+                              forzar_compartido: str = Form(default=""),
+                              db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    try:
+        resultado = await _servicio_conversion(db).confirmar(
+            token, forzar_compartido=bool(forzar_compartido))
+    except Exception as exc:  # noqa: BLE001
+        if exc.__class__.__name__ == "TokenCaducadoError":
+            raise HTTPException(status_code=410, detail=str(exc)) from None
+        if exc.__class__.__name__ == "TokenInvalidoError":
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        raise
+    return _sin_cache_conversion(templates.TemplateResponse(
+        request, "conversion_resultado.html", {"series": series, "resultado": resultado}))
+
+
+@router.get("/{series_id}/archivos/{file_id}/convertir/deshacer", response_class=HTMLResponse)
+async def deshacer_conversion_previa(series_id: UUID, file_id: UUID, request: Request,
+                                     db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    try:
+        vista = await _servicio_conversion(db).previsualizar_deshacer(series_id, file_id)
+    except Exception:  # noqa: BLE001
+        raise HTTPException(status_code=404, detail="No hay conversión que deshacer") from None
+    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_previa.html", {
+        "series": series, "vista": vista, "modo": "deshacer"}))
+
+
+@router.post("/{series_id}/archivos/{file_id}/convertir/deshacer", response_class=HTMLResponse)
+async def deshacer_conversion_confirmar(series_id: UUID, file_id: UUID, request: Request,
+                                        token: str = Form(..., max_length=MAX_TOKEN_CONVERSION),
+                                        forzar_compartido: str = Form(default=""),
+                                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    resultado = await _servicio_conversion(db).deshacer(
+        token, forzar_compartido=bool(forzar_compartido))
+    return _sin_cache_conversion(templates.TemplateResponse(
+        request, "conversion_resultado.html", {"series": series, "resultado": resultado}))
+
+
+def _sin_cache_conversion(respuesta: HTMLResponse) -> HTMLResponse:
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta

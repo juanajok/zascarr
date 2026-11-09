@@ -1060,3 +1060,68 @@ def _longitud_peor_caso_token_retirar_asociacion() -> int:
 
 
 MAX_TOKEN_RETIRAR_ASOCIACION = _longitud_peor_caso_token_retirar_asociacion()
+
+
+# ── Token de conversión CBR→CBZ (#478, BL-CNV1) ─────────────────────────────────────────────────
+
+PROPOSITO_CONVERTIR = "convertir_cbr"
+VERSION_TOKEN_CONVERSION = 1
+
+
+@dataclass(frozen=True)
+class ConversionFirmada:
+    """Lo que la persona vio en la vista previa de una conversión (o de su deshacer).
+
+    El contexto es el `file_id`; la ruta/stat/hash y el método se firman para detectar cambios entre
+    la vista previa y la confirmación. `accion` distingue convertir de deshacer.
+    """
+    file_id: str
+    operacion: str
+    ruta: str
+    tamano: int
+    mtime_ns: int
+    sha256: str
+    metodo: str
+    accion: str
+    caduca: int = 0
+
+
+def crear_token_conversion(d: ConversionFirmada, secret: str, *, ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_CONVERTIR, d.file_id, {
+        "version": VERSION_TOKEN_CONVERSION, "file_id": d.file_id, "operacion": d.operacion,
+        "ruta": d.ruta, "tamano": d.tamano, "mtime_ns": d.mtime_ns, "sha256": d.sha256,
+        "metodo": d.metodo, "accion": d.accion,
+    }, secret, ahora=ahora)
+
+
+def verificar_token_conversion(token: str, secret: str, *, ahora: float | None = None,
+                               ignorar_caducidad: bool = False) -> ConversionFirmada | None:
+    file_id = _contexto_del_token(token, secret)
+    if file_id is None or not _uuid_texto(file_id):
+        return None
+    verificado = _verificar(token, PROPOSITO_CONVERTIR, file_id, secret, ahora=ahora,
+                            ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    if d.get("version") != VERSION_TOKEN_CONVERSION or isinstance(d.get("version"), bool):
+        return None
+    if not all(_uuid_texto(d.get(k)) for k in ("file_id", "operacion")):
+        return None
+    if d.get("file_id") != file_id or d.get("accion") not in ("convertir", "deshacer"):
+        return None
+    if d.get("metodo") not in ("recomprimir", "renombrar_zip"):
+        return None
+    if not isinstance(d.get("ruta"), str) or not d["ruta"] or len(d["ruta"]) > 1000:
+        return None
+    for campo in ("tamano", "mtime_ns"):
+        if not isinstance(d.get(campo), int) or isinstance(d.get(campo), bool) or d[campo] < 0:
+            return None
+    if not _hex64(d.get("sha256")):
+        return None
+    return ConversionFirmada(file_id, d["operacion"], d["ruta"], d["tamano"], d["mtime_ns"],
+                             d["sha256"], d["metodo"], d["accion"], caduca)
+
+
+#: Cota holgada: ruta de 1000 + hashes/UUIDs y la firma; el formulario la usa como máximo.
+MAX_TOKEN_CONVERSION = 4096

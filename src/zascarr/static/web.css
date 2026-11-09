@@ -1971,6 +1971,11 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .issue-header { grid-template-columns: 1fr; }
 }
 
+
+/* #478: conversión CBR→CBZ (vista previa y resultado). */
+.conversion-previa, .conversion-resultado { display: grid; gap: 8px; margin-top: 8px; }
+.conversion-previa form { display: grid; gap: 8px; justify-items: start; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
