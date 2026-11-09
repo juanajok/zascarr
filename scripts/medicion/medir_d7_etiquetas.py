@@ -28,11 +28,32 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from zascarr.config import get_settings
-from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES
-from zascarr.core.importer_triage import (
-    MAX_TOKENS_TOTAL,
-    _leer_lista,
-)
+
+#: La imagen de la Pi puede ser ANTERIOR a ETQ2 (#538): se reutilizan sus topes si
+#: existen y, si no, se replican aquí (mismos valores de la especificación §7.4).
+try:
+    from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES
+except ImportError:  # instalación antigua
+    MAX_COMICINFO_BYTES = 1 * 1024 * 1024
+
+try:
+    from zascarr.core.importer_triage import MAX_TOKENS_TOTAL, _leer_lista
+except ImportError:  # instalación anterior a ETQ2: mismos topes, sin abandonar la medición
+    MAX_CAMPO_LISTA_BYTES = 32 * 1024
+    MAX_TOKENS_POR_CAMPO = 200
+    MAX_TOKENS_TOTAL = 400
+    MAX_LARGO_TOKEN = 64
+
+    def _leer_lista(root, etiqueta, *, avisos, restantes):  # noqa: ANN001, ANN202
+        el = root.find(etiqueta)
+        if el is None or not el.text:
+            return []
+        bruto = el.text
+        if len(bruto.encode("utf-8")) > MAX_CAMPO_LISTA_BYTES:
+            bruto = bruto.encode("utf-8")[:MAX_CAMPO_LISTA_BYTES].decode("utf-8", "ignore")
+        valores = [v.strip() for v in bruto.split(",")]
+        valores = [v for v in valores if v][:MAX_TOKENS_POR_CAMPO][:restantes]
+        return [v for v in valores if len(v) <= MAX_LARGO_TOKEN]
 
 #: Cuántos ficheros se recuerdan para el resumen de errores (sin rutas completas: solo nombre).
 _MAX_EJEMPLOS = 5
