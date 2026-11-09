@@ -296,10 +296,13 @@ class GCDClient:
           error de red/HTTP/JSON se propaga (el banco/discovery lo mapean a #133) y no deja
           «sin resultados» durante 15 minutos. En `uvicorn --workers 1` es la caché de toda
           la app; la cuota anónima de GCD es 30 peticiones/hora.
-        - `ultimas_peticiones` expone las peticiones HTTP reales de esta llamada (0 si fue
-          caché), para que el banco cargue el coste real al presupuesto.
+        - `ultimas_peticiones` expone las llamadas lógicas HTTP de esta búsqueda (0 si fue
+          caché; se reinicia al empezar, también con consulta vacía), para que el banco
+          cargue el coste real. Los reintentos internos de `pedir_con_cortesia` no se suman.
         """
         query = (query or "").strip()
+        # Se reinicia SIEMPRE al empezar, también en el retorno temprano por consulta vacía.
+        self.ultimas_peticiones = 0
         if not query:
             return []
         if anio is not None:
@@ -317,7 +320,6 @@ class GCDClient:
             return list(cacheado[1])[:limit]
         if self._client is None:
             raise RuntimeError("Cliente de GCD sin abrir: úsalo con `async with`.")
-        self.ultimas_peticiones = 0
 
         def _resultado(item: dict) -> GCDResult | None:
             gcd_id = _id_from_api_url(item.get("api_url", ""))
@@ -346,8 +348,12 @@ class GCDClient:
                 r_anio = await _pedir(
                     f"{_BASE_URL}/series/name/{quote(query, safe='')}/year/{anio}/")
                 data_anio = r_anio.json()
-            except (RespuestaNoTransitoria, ErrorDePeticion, httpx.HTTPError, ValueError):
-                logger.warning("gcd.year_filter_failed", anio=anio)
+            except RespuestaNoTransitoria as exc:
+                # SOLO un 404 real significa «no hay filtro por año»; 403/429/5xx se
+                # propagan para que el banco los mapee a limite/fallo, nunca a [].
+                if exc.codigo != 404:
+                    raise
+                logger.warning("gcd.year_filter_404", anio=anio)
                 data_anio = None
             if isinstance(data_anio, dict) and isinstance(data_anio.get("results"), list):
                 items_anio = data_anio["results"]
