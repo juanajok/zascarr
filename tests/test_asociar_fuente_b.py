@@ -7,13 +7,18 @@ from uuid import uuid4
 
 import pytest
 
-from zascarr.services.asociacion_fuente import AsociacionDeFuente
+from zascarr.services.asociacion_fuente import (
+    MENSAJE_CADUCADO_SIN_APLICAR,
+    MENSAJE_CADUCADO_SIN_INFORME,
+    AsociacionDeFuente,
+)
 from zascarr.services.asociar_fuente import CandidataComparada, huella_de_asociacion
 from zascarr.services.tokens_revision import (
     AsociacionFirmada,
     crear_token_asociacion,
     verificar_token_asociacion,
 )
+from zascarr.services.vinculacion import TokenInvalidoError
 
 SECRETO = "x" * 32
 
@@ -200,3 +205,100 @@ def test_huella_y_token_redondean_entidad_kind():
     firmada = verificar_token_asociacion(token, SECRETO)
     assert firmada is not None and firmada.entidad == "serie"
     assert firmada.kind == "collection"
+
+
+def _entrada(fuente="gcd", id_externo="123", *, op=None, extra=None):
+    entrada = {
+        "version": 1, "fuente": fuente, "id_externo": id_externo, "entidad": "serie",
+        "kind": "collection", "fecha": "2026-11-09T10:00:00+00:00",
+        "operacion_id": op or str(uuid4()), "origen": "confirmada", "modo": "busqueda",
+    }
+    if extra:
+        entrada.update(extra)
+    return entrada
+
+
+class TestR2YValidacion:
+
+    @pytest.mark.asyncio
+    async def test_ya_asociada_no_escribe(self):
+        serie = _serie(gcd_id=123)
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        resultado = await _servicio(db).confirmar(_token(serie))
+        assert resultado.resultado == "ya_asociada" and resultado.repetida is False
+        assert resultado.efectos["campos_serie"] == 0
+        assert db.valores is None and db.added == [] and db.commits == 1
+
+    @pytest.mark.asyncio
+    async def test_serie_esperada_distinta_no_consulta_ni_escribe(self):
+        serie = _serie()
+        otra = uuid4()
+        db = _DB([])
+        with pytest.raises(TokenInvalidoError, match="otra serie"):
+            await _servicio(db).confirmar(_token(serie), serie_esperada=otra)
+        assert db.llamadas == 0 and db.commits == 0
+
+    @pytest.mark.asyncio
+    async def test_token_invalido_no_consulta_ni_escribe(self):
+        db = _DB([])
+        with pytest.raises(TokenInvalidoError):
+            await _servicio(db).confirmar("no-es-un-token")
+        assert db.llamadas == 0 and db.commits == 0
+
+    @pytest.mark.asyncio
+    async def test_token_caducado_dentro_de_retencion_no_afirma_lo_que_no_sabe(self):
+        serie = _serie()
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        # Caducó hace 1 s (TTL 900), dentro de las 24 h de retención: no llegó a aplicarse.
+        resultado = await _servicio(db, ahora=10**9 + 901).confirmar(
+            _token(serie, ahora=10**9))
+        assert resultado.motivo == "token_caducado"
+        assert resultado.mensaje == MENSAJE_CADUCADO_SIN_APLICAR
+        assert "no se ha asociado nada" in resultado.mensaje
+        assert db.valores is None
+
+    @pytest.mark.asyncio
+    async def test_token_caducado_pasada_la_retencion_no_afirma_que_no_cambio_nada(self):
+        serie = _serie()
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        resultado = await _servicio(db, ahora=10**9 + 900 + 25 * 3600).confirmar(
+            _token(serie, ahora=10**9))
+        assert resultado.motivo == "token_caducado"
+        assert resultado.mensaje == MENSAJE_CADUCADO_SIN_INFORME
+        assert "no se ha cambiado nada" not in resultado.mensaje.lower()
+        assert "no se puede saber" in resultado.mensaje
+
+    @pytest.mark.asyncio
+    async def test_jsonb_corrupto_es_procedencia_invalida(self):
+        serie = _serie(metadata_={"asociaciones": "no-es-una-lista"})
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        resultado = await _servicio(db).confirmar(_token(serie))
+        assert resultado.motivo == "procedencia_invalida"
+        assert db.valores is None and db.added == []
+
+    @pytest.mark.asyncio
+    async def test_entrada_con_campo_desconocido_es_invalida(self):
+        serie = _serie(metadata_={"asociaciones": [
+            _entrada("comic_vine", "1", extra={"campo_desconocido": "x"})]})
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        resultado = await _servicio(db).confirmar(_token(serie))
+        assert resultado.motivo == "procedencia_invalida"
+        assert db.valores is None and db.added == []
+
+    @pytest.mark.asyncio
+    async def test_entrada_incompleta_de_otra_fuente_no_se_propaga(self):
+        incompleta = {"version": 1, "fuente": "comic_vine", "id_externo": "1"}
+        serie = _serie(metadata_={"asociaciones": [incompleta]})
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        resultado = await _servicio(db).confirmar(_token(serie))
+        assert resultado.motivo == "procedencia_invalida"
+        assert db.valores is None and db.added == []
+
+    @pytest.mark.asyncio
+    async def test_entrada_valida_de_otra_fuente_se_conserva(self):
+        serie = _serie(metadata_={"asociaciones": [_entrada("comic_vine", "1")]})
+        db = _DB([_Res(), _Res(), _Res(scalar=serie), _Res(first=None), _Res(rowcount=1), _Res()])
+        resultado = await _servicio(db).confirmar(_token(serie))
+        assert resultado.resultado == "asociada"
+        fuentes = [e["fuente"] for e in db.valores["metadata"]["asociaciones"]]
+        assert fuentes == ["comic_vine", "gcd"]

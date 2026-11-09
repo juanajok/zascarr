@@ -26,6 +26,7 @@ from zascarr.models import MetadataSource, Series, VinculacionOperacion
 from zascarr.services.asociar_fuente import CandidataComparada, huella_de_asociacion
 from zascarr.services.discovery import CAMPO_ID_EXTERNO
 from zascarr.services.tokens_revision import (
+    TTL_SEGUNDOS,
     AsociacionFirmada,
     id_canonico,
     verificar_token_asociacion,
@@ -63,10 +64,23 @@ MENSAJES = {
     "conflicto_identificador": "Esa ficha ya está asociada a otra serie. No se ha cambiado nada.",
     "conflicto_operacion": "El identificador de esta operación ya está ocupado. No se ha cambiado nada.",
     "serie_inexistente": "Esta serie ya no está en tu biblioteca.",
-    "token_caducado": "Han pasado más de 15 minutos. No se ha cambiado nada; vuelve a buscar la ficha.",
     "procedencia_invalida": "La procedencia guardada de esta serie no es válida. No se ha cambiado nada.",
     "conflicto_de_bloqueo": "Otra operación coincidió con esta. No se ha cambiado nada.",
 }
+#: H2 (#129 B): no se puede afirmar «no se ha cambiado nada» si el comprobante ya pudo purgarse.
+MENSAJE_CADUCADO_SIN_APLICAR = (
+    "Han pasado más de 15 minutos y esta confirmación no llegó a guardarse: no se ha asociado "
+    "nada. Vuelve a buscar la ficha."
+)
+MENSAJE_CADUCADO_SIN_INFORME = (
+    "Han pasado más de 15 minutos y ya no se conserva el registro de esta operación: no se puede "
+    "saber si llegó a asociarse. Vuelve a buscar la ficha para ver el estado actual."
+)
+#: H8: campos admitidos en una entrada activa; uno desconocido invalida la entrada.
+_CLAVES_ENTRADA = frozenset({
+    "version", "fuente", "id_externo", "entidad", "kind", "fecha", "operacion_id",
+    "origen", "modo",
+})
 
 
 @dataclass
@@ -115,7 +129,7 @@ def _nombre(fuente: str) -> str:
 
 
 def _entrada_valida(e: object) -> bool:
-    if not isinstance(e, dict) or e.get("version") != 1:
+    if not isinstance(e, dict) or set(e) != _CLAVES_ENTRADA or e.get("version") != 1:
         return False
     if e.get("fuente") not in {f.value for f in _NOMBRES}:
         return False
@@ -140,7 +154,10 @@ def _metadata(serie: Series) -> dict | None:
     if meta is None:
         return None
     for clave in ("asociaciones", "asociaciones_historial"):
-        if meta.get(clave) is not None and not isinstance(meta.get(clave), list):
+        lista = meta.get(clave)
+        if lista is None:
+            continue
+        if not isinstance(lista, list) or any(not isinstance(e, dict) for e in lista):
             return None
     return meta
 
@@ -170,12 +187,17 @@ class AsociacionDeFuente:
             self._ahora if self._ahora is not None else time.time(), UTC
         ).isoformat()
 
-    async def confirmar(self, token: str) -> ResultadoAsociacion:
+    async def confirmar(self, token: str, *, serie_esperada: UUID | str | None = None) -> ResultadoAsociacion:
         firmada = verificar_token_asociacion(
             token, self._secret, ahora=self._ahora, ignorar_caducidad=True
         )
         if firmada is None:
             raise TokenInvalidoError("La propuesta no es válida: vuelve a buscarla.")
+        # F2 (#129 B): el contexto de la URL manda; un token de A no se aplica en B.
+        if serie_esperada is not None and firmada.serie_id != str(serie_esperada):
+            raise TokenInvalidoError(
+                "La propuesta pertenece a otra serie; no se ha asociado nada. Vuelve a abrirla "
+                "desde su serie.")
         vigente = verificar_token_asociacion(token, self._secret, ahora=self._ahora) is not None
         try:
             return await self._transaccion(firmada, vigente)
@@ -226,7 +248,10 @@ class AsociacionDeFuente:
             return self._omitida(firmada, "propuesta_no_asociable")
 
         serie = (
-            await db.execute(select(Series).where(Series.id == sid).with_for_update())
+            await db.execute(
+                select(Series).where(Series.id == sid).with_for_update()
+                .execution_options(populate_existing=True)
+            )
         ).scalar_one_or_none()
         if serie is None:
             await db.commit()
@@ -261,8 +286,15 @@ class AsociacionDeFuente:
                 await db.commit()
                 return self._ya_retirada(firmada)
         if not vigente:
+            ahora = self._ahora if self._ahora is not None else time.time()
+            firma = firmada.caduca - TTL_SEGUNDOS
+            puede_haberse_aplicado = ahora >= firma + RETENCION_HORAS * 3600
             await db.commit()
-            return self._omitida(firmada, "token_caducado")
+            return self._omitida(
+                firmada, "token_caducado",
+                mensaje=(MENSAJE_CADUCADO_SIN_INFORME if puede_haberse_aplicado
+                         else MENSAJE_CADUCADO_SIN_APLICAR),
+            )
 
         col = _columna(firmada.fuente)
         actual = getattr(serie, col)
@@ -303,6 +335,11 @@ class AsociacionDeFuente:
             if e.get("fuente") == firmada.fuente:
                 await db.commit()
                 return self._omitida(firmada, "procedencia_invalida")
+        # H8: no se propaga JSONB inválido ni siquiera de otras fuentes; la lista
+        # resultante tiene que ser íntegramente válida antes del UPDATE.
+        if any(not _entrada_valida(e) for e in activas):
+            await db.commit()
+            return self._omitida(firmada, "procedencia_invalida")
 
         fecha = self._fecha()
         entrada = {
@@ -402,7 +439,8 @@ class AsociacionDeFuente:
         }
 
     def _omitida(
-        self, firmada: AsociacionFirmada, motivo: str, *, otra_serie: str | None = None
+        self, firmada: AsociacionFirmada, motivo: str, *, otra_serie: str | None = None,
+        mensaje: str | None = None,
     ) -> ResultadoAsociacion:
         return ResultadoAsociacion(
             version=VERSION_RESULTADO,
@@ -411,7 +449,7 @@ class AsociacionDeFuente:
             series_id=firmada.serie_id,
             resultado="omitida",
             motivo=motivo,
-            mensaje=MENSAJES.get(motivo, "No se ha cambiado nada."),
+            mensaje=mensaje or MENSAJES.get(motivo, "No se ha cambiado nada."),
             fuente=firmada.fuente,
             id_externo=firmada.id_externo,
             titulo=firmada.titulo,

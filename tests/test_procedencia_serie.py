@@ -109,3 +109,51 @@ def test_si_todos_los_campos_tienen_origen_el_resumen_no_dice_algunos():
     assert all(c.origen is not None for c in proc.campos)
     assert "todos los datos visibles" in proc.resumen
     assert "algunos datos" not in proc.resumen
+
+
+def _entrada(fuente="gcd", id_externo="77", **extra):
+    entrada = {
+        "version": 1, "fuente": fuente, "id_externo": id_externo, "entidad": "serie",
+        "kind": None, "fecha": "2026-11-09T10:00:00+00:00",
+        "operacion_id": str(uuid4()), "origen": "confirmada", "modo": "busqueda",
+    }
+    entrada.update(extra)
+    return entrada
+
+
+def test_h12_columna_sin_entrada_no_inventa_procedencia():
+    proc = procedencia_de_serie(serie(gcd_id=77, metadata_={}))
+    (identidad,) = proc.identidades
+    assert identidad.fuente == "GCD" and identidad.fecha is None
+    assert identidad.procedencia == "no registrada"
+
+
+def test_h12_entrada_valida_da_fecha_y_procedencia_registrada():
+    proc = procedencia_de_serie(serie(gcd_id=77, metadata_={"asociaciones": [_entrada()]}))
+    (identidad,) = proc.identidades
+    assert identidad.fecha == "2026-11-09"
+    assert identidad.procedencia == "registrada"
+
+
+def test_h8_jsonb_corrupto_o_invalido_no_rompe_la_ficha():
+    for metadata in (None, {"asociaciones": "no-lista"},
+                     {"asociaciones": [None, "x", 3]},
+                     {"asociaciones": [{"version": 1}]},
+                     {"asociaciones": [{"version": 2, "fuente": "gcd", "id_externo": "77"}]}):
+        proc = procedencia_de_serie(serie(gcd_id=77, metadata_=metadata))
+        (identidad,) = proc.identidades
+        assert identidad.procedencia == "no registrada"
+
+
+def test_h8_campo_desconocido_invalida_la_entrada():
+    proc = procedencia_de_serie(serie(
+        gcd_id=77, metadata_={"asociaciones": [_entrada(campo_desconocido="x")]}))
+    (identidad,) = proc.identidades
+    assert identidad.procedencia == "no registrada" and identidad.fecha is None
+
+
+def test_h8_id_no_canonico_invalida_la_entrada():
+    proc = procedencia_de_serie(serie(
+        gcd_id=77, metadata_={"asociaciones": [_entrada(id_externo="077")]}))
+    (identidad,) = proc.identidades
+    assert identidad.procedencia == "no registrada"
