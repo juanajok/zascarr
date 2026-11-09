@@ -42,14 +42,14 @@ class _Servicio:
     async def previsualizar(self, *_a):
         return self.vista
 
-    async def confirmar(self, _token, *, forzar_compartido=False):
+    async def confirmar(self, _token, *, forzar_compartido=False, **_kw):
         self.forzado = forzar_compartido
         return self.resultado
 
     async def previsualizar_deshacer(self, *_a):
         return self.vista
 
-    async def deshacer(self, _token, *, forzar_compartido=False):
+    async def deshacer(self, _token, *, forzar_compartido=False, **_kw):
         return self.deshacer_resultado
 
 

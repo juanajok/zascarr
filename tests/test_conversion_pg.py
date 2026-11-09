@@ -15,6 +15,7 @@ from sqlalchemy import select
 from tests.test_asociar_fuente_b_pg import entorno_base, url_bd  # noqa: F401
 from tests.test_vinculacion_previa_pg import serie_de_prueba
 from zascarr.models import File, FileFormat, Issue
+from zascarr.services import conversion as mod
 from zascarr.services.conversion import ConversionDeArchivo
 from zascarr.services.conversion_cbr import MAX_CBR_BYTES
 
@@ -62,8 +63,9 @@ class _EntornoConversion:
             host_library_dir="", host_downloads_dir="", host_amule_incoming_dir="")
 
 
-async def _montar(entorno_base, tmp_path, *, contenido=b"RAR-falso", nombre="Tebeo 01.cbr"):
-    sid = await serie_de_prueba(entorno_base, comic_vine_id=1)
+async def _montar(entorno_base, tmp_path, *, contenido=b"RAR-falso", nombre="Tebeo 01.cbr",
+                  comic_vine_id=1):
+    sid = await serie_de_prueba(entorno_base, comic_vine_id=comic_vine_id)
     ruta = tmp_path / nombre
     ruta.write_bytes(contenido)
     lector = _Lector([_Entrada("001.jpg", b"pagina uno"), _Entrada("ComicInfo.xml", b"<ComicInfo/>")])
@@ -193,6 +195,10 @@ async def test_diario_vaciar_y_reconciliar(entorno_base, tmp_path):
     diario = tmp_path / ".zascarr" / "diario" / str(fid) / f"{r.operacion_id}.json"
     assert diario.exists() and "publicado" in diario.read_text()
     assert any((tmp_path / ".zascarr" / "originales").iterdir())
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        assert await servicio.reconciliar_diario() >= 1
+    assert not diario.exists()
     assert servicio.vaciar_originales() >= 1
     assert not any((tmp_path / ".zascarr" / "originales").iterdir())
 
@@ -207,3 +213,86 @@ async def test_diario_vaciar_y_reconciliar(entorno_base, tmp_path):
     async with entorno_base.banco.fabrica() as s:
         f = (await s.execute(select(File).where(File.id == fid))).scalar_one()
         assert Path(f.file_path).name.endswith(".cbz") and f.sha256_hash != "0" * 64
+
+
+@pytest.mark.asyncio
+async def test_token_de_otro_archivo_no_escribe(entorno_base, tmp_path):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path)
+    sid2, fid2, ruta2, lector2 = await _montar(
+        entorno_base, tmp_path, nombre="Otro.cbr", comic_vine_id=2)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        from zascarr.services.vinculacion import TokenInvalidoError
+        with pytest.raises(TokenInvalidoError):
+            await servicio.confirmar(vista.token, file_id_esperado=fid2,
+                                     serie_id_esperado=sid2)
+    assert ruta.exists() and not ruta.with_suffix(".cbz").exists()
+
+
+@pytest.mark.asyncio
+async def test_token_caducado_por_cambio_de_archivo(entorno_base, tmp_path):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        ruta.write_bytes(b"RAR-cambiado")
+        resultado = await servicio.confirmar(vista.token)
+        assert resultado.resultado == "omitida" and resultado.motivo == "propuesta_desactualizada"
+    assert ruta.read_bytes() == b"RAR-cambiado"
+
+
+@pytest.mark.asyncio
+async def test_si_el_destino_aparece_tras_las_comprobaciones_se_restaura(entorno_base, tmp_path, monkeypatch):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    original = ruta.read_bytes()
+
+    def _existe(_origen, _destino):
+        raise FileExistsError("destino apareció")
+
+    monkeypatch.setattr(mod, "_publicar_sin_sobrescribir", _existe)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        resultado = await servicio.confirmar(vista.token)
+        assert resultado.resultado == "omitida"
+    assert ruta.read_bytes() == original
+    assert not ruta.with_suffix(".cbz").exists()
+    diario = tmp_path / ".zascarr" / "diario" / str(fid)
+    assert any("fallo_publicacion" in p.read_text() for p in diario.glob("*.json"))
+
+
+@pytest.mark.asyncio
+async def test_undo_rechaza_operacion_anterior_y_cbz_tocado(entorno_base, tmp_path):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        await servicio.confirmar(vista.token)
+        previa = await servicio.previsualizar_deshacer(sid, fid)
+        f = (await s.execute(select(File).where(File.id == fid))).scalar_one()
+        meta = __import__("copy").deepcopy(f.metadata_)
+        meta["conversion"]["operacion_id"] = str(uuid4())
+        f.metadata_ = meta
+        await s.commit()
+        r = await servicio.deshacer(previa.token)
+        assert r.resultado == "omitida" and r.motivo == "propuesta_desactualizada"
+        assert Path(f.file_path).exists()
+
+
+@pytest.mark.asyncio
+async def test_undo_rechaza_un_cbz_manipulado(entorno_base, tmp_path):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path, comic_vine_id=3)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        vista = await servicio.previsualizar(sid, fid)
+        await servicio.confirmar(vista.token)
+        previa = await servicio.previsualizar_deshacer(sid, fid)
+        f = (await s.execute(select(File).where(File.id == fid))).scalar_one()
+        Path(f.file_path).write_bytes(b"CBZ-tocado")
+        assert (await servicio.deshacer(previa.token)).resultado == "omitida"

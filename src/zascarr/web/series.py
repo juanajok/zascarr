@@ -878,7 +878,8 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
     series = await _serie_o_404(db, series_id)
     try:
         resultado = await _servicio_conversion(db).confirmar(
-            token, forzar_compartido=bool(forzar_compartido))
+            token, forzar_compartido=bool(forzar_compartido),
+            file_id_esperado=file_id, serie_id_esperado=series_id)
     except Exception as exc:  # noqa: BLE001
         if exc.__class__.__name__ == "TokenCaducadoError":
             raise HTTPException(status_code=410, detail=str(exc)) from None
@@ -908,7 +909,8 @@ async def deshacer_conversion_confirmar(series_id: UUID, file_id: UUID, request:
                                         db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = await _serie_o_404(db, series_id)
     resultado = await _servicio_conversion(db).deshacer(
-        token, forzar_compartido=bool(forzar_compartido))
+        token, forzar_compartido=bool(forzar_compartido),
+        file_id_esperado=file_id, serie_id_esperado=series_id)
     return _sin_cache_conversion(templates.TemplateResponse(
         request, "conversion_resultado.html", {"series": series, "resultado": resultado}))
 

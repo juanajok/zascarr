@@ -171,7 +171,14 @@ def analizar(ruta: Path, *, lector=lector_rar) -> Analisis:
     """Clasifica la conversión sin escribir nada (solo lista el RAR o mira la firma)."""
     comprobar_tamano(ruta)
     if firma_de(ruta) is Firma.ZIP:
-        return Analisis("renombrar_zip", 0, 0, ruta.stat().st_size)
+        # D5: no se publica un ZIP dañado solo porque la extensión sea .cbr.
+        try:
+            marcas = _manifiesto_de_zip(ruta)
+        except (zipfile.BadZipFile, OSError) as exc:
+            raise ConversionBloqueadaError(MotivoConversion.ILEGIBLE,
+                                           _MENSAJES[MotivoConversion.ILEGIBLE]) from exc
+        total = sum(m.tamano for m in marcas)
+        return Analisis("renombrar_zip", len(marcas), total, total)
     if not ruta.suffix.lower() == ".cbr":
         raise ConversionBloqueadaError(MotivoConversion.NO_ES_CBR,
                                 "Ese archivo no es un CBR; no se toca.")
@@ -233,11 +240,16 @@ def construir_cbz(original: Path, temporal: Path, *, lector=lector_rar) -> Const
         manifiesto: list[EntradaManifiesto] = []
         with zipfile.ZipFile(temporal, "w", compression=zipfile.ZIP_STORED) as zf:
             for entrada in regulares:
-                try:
-                    datos = lector.leer_entrada(original, entrada, MAX_ENTRADA, temporal=casa)
-                except lector_rar.ErrorRar as exc:
-                    motivo = _motivo_de_error(exc)
-                    raise ConversionBloqueadaError(motivo, _MENSAJES[motivo]) from exc
+                # #564: cada extracción necesita una carpeta temporal PROPIA. `unar` escribe
+                # el archivo con su nombre y dos entradas en la misma carpeta colisionan
+                # (`FileExistsError` en la segunda, incluso en un RAR válido de 2 páginas).
+                with tempfile.TemporaryDirectory() as entrada_home:
+                    try:
+                        datos = lector.leer_entrada(
+                            original, entrada, MAX_ENTRADA, temporal=Path(entrada_home))
+                    except lector_rar.ErrorRar as exc:
+                        motivo = _motivo_de_error(exc)
+                        raise ConversionBloqueadaError(motivo, _MENSAJES[motivo]) from exc
                 if len(datos) != entrada.tamano:
                     raise ConversionBloqueadaError(
                         MotivoConversion.ILEGIBLE, _MENSAJES[MotivoConversion.ILEGIBLE])

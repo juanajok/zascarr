@@ -195,6 +195,8 @@ def listar_comics(dirs, extensiones) -> list[Path]:
             continue
         for ext in extensiones:
             for f in d.rglob(f"*{ext}"):
+                if ".zascarr" in f.parts:
+                    continue
                 try:
                     st = f.stat()
                 except OSError:
@@ -239,7 +241,12 @@ def recorrer_comics(dirs, extensiones) -> Recorrido:
         if not d.is_dir():
             ilegibles += 1
             continue
-        for carpeta, _subcarpetas, nombres in os.walk(d, onerror=_fallo):
+        for carpeta, subcarpetas, nombres in os.walk(d, onerror=_fallo):
+            # #478/#564: la cuarentena y el diario de conversión viven bajo
+            # `.zascarr/` dentro de la biblioteca; no son cómics que registrar.
+            subcarpetas[:] = [c for c in subcarpetas if c != ".zascarr"]
+            if ".zascarr" in Path(carpeta).parts:
+                continue
             for nombre in nombres:
                 if not nombre.endswith(exts):
                     continue
