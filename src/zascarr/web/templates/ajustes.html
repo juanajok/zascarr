@@ -2,206 +2,232 @@
 {% block title %}Ajustes — ZascArr{% endblock %}
 {% block content %}
 <h1>Ajustes</h1>
-<p class="subtitle">Conecta ZascArr con las webs de datos y con tus programas de descarga. Cada cambio se aplica al guardar, sin reiniciar.</p>
+<p class="subtitle">Conecta ZascArr con las webs de datos y tus programas de descarga. Cada cambio se aplica al guardar.</p>
 
-<div class="ajustes-grid">
+{#- Tres grupos: fuentes de datos, descargas y lo propio de ZascArr. El pie de cada tarjeta no cambia:
+    todo técnico va plegado en <details> para no tapar la tarea (presupuesto de texto, CLAUDE.md §6). -#}
+<div class="ajustes-pagina">
+  <h2 class="ajustes-acto" id="ajustes-fuentes">Fuentes de datos</h2>
 
-  <fieldset class="ajustes-card">
-    <legend>Fuentes de datos</legend>
-    <p class="ajustes-desc">Webs de las que ZascArr saca portadas, números y datos de tus series. Vienen apagadas: al encender una, ZascArr le envía los títulos de tu biblioteca.</p>
-    <details class="ajustes-mas">
-      <summary>Más detalles</summary>
-      <p class="ajustes-hint">Apagar una fuente no borra lo que ya trajo: solo deja de preguntarle, también en Descubrir. Si la vuelves a encender, las series que se le consultaron hace poco esperan 30 días antes de preguntarle otra vez. GCD, por ahora, solo sirve para buscar series en Descubrir; no completa las que ya tienes.</p>
-    </details>
-    {% if fuentes_heredadas %}
-    <p class="ajustes-desc" id="aviso-fuentes-heredadas"><strong>Las fuentes de metadatos externas están activadas por compatibilidad con tu instalación anterior.</strong> Consultan Internet con los títulos de tu biblioteca. Las instalaciones nuevas las traen apagadas. Puedes desactivarlas aquí: pulsa Guardar para confirmar tu elección (aunque no cambies nada) y este aviso desaparecerá.</p>
-    {% endif %}
-    <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
-      <label class="legal-checkbox">
-        <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>
-        Comic Vine (grapa americana y británica)
-      </label>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="anilist_enabled" value="true" {% if anilist_enabled %}checked{% endif %}>
-        AniList (manga, manhwa y manhua)
-      </label>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="tebeosfera_enabled" value="true" {% if tebeosfera_enabled %}checked{% endif %}>
-        Tebeosfera (tebeo y BD)
-      </label>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="gcd_enabled" value="true" {% if gcd_enabled %}checked{% endif %}>
-        GCD (solo para buscar series en Descubrir)
-      </label>
-      <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
-      </div>
-    </form>
-    <div id="resultado-fuentes"></div>
 
-    <p class="ajustes-hint" id="cortesia-fuentes">{{ cortesia.politica }}</p>
-    <p class="ajustes-hint">{{ cortesia.coordinacion }}</p>
-    {% for nombre in cortesia.apagadas %}
-    <p class="ajustes-hint">{{ nombre }}: <strong>Apagada: {{ cortesia.nota_apagada }}</strong></p>
-    {% endfor %}
-  </fieldset>
+    <fieldset class="ajustes-card ajustes-card--ancha">
+      <legend>Fuentes de metadatos</legend>
+      <p class="ajustes-desc">Webs de las que saca portadas, números y datos de tus series. Si enciendes una, se le envían tus títulos.</p>
+      <form hx-post="/ui/ajustes/guardar/fuentes" hx-target="#resultado-fuentes" hx-swap="innerHTML">
+        <label class="legal-checkbox">
+          <input type="checkbox" name="comicvine_enabled" value="true" {% if comicvine_enabled %}checked{% endif %}>
+          Comic Vine (grapa americana y británica)
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="anilist_enabled" value="true" {% if anilist_enabled %}checked{% endif %}>
+          AniList (manga, manhwa y manhua)
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="tebeosfera_enabled" value="true" {% if tebeosfera_enabled %}checked{% endif %}>
+          Tebeosfera (tebeo y BD)
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="gcd_enabled" value="true" {% if gcd_enabled %}checked{% endif %}>
+          GCD (solo para buscar series en Descubrir)
+        </label>
+        {% if fuentes_heredadas %}
+        <div id="aviso-fuentes-heredadas">
+          {% call ui.aviso("amber") %}<strong>Encendidas por compatibilidad con tu instalación anterior.</strong>
+            Consultan Internet con los títulos de tu biblioteca. Pulsa Guardar para confirmar tu elección
+            (aunque no cambies nada) y quitar este aviso.{% endcall %}
+        </div>
+        {% endif %}
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+        </div>
+      </form>
+      <div id="resultado-fuentes" aria-live="polite"></div>
 
-  <fieldset class="ajustes-card">
-    <legend>Comic Vine</legend>
-    <p class="ajustes-desc">Datos de grapa americana y británica. Necesita una clave gratuita que se pide en la web de Comic Vine.</p>
-    <form hx-post="/ui/ajustes/guardar/comic-vine" hx-target="#resultado-comic-vine" hx-swap="innerHTML">
-      <label>Clave de Comic Vine
-        <input type="password" name="comicvine_api_key" autocomplete="off"
-               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if comicvine_api_key_configurada else 'sin configurar' }}">
-      </label>
-      <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
-        <button type="button" hx-post="/ui/ajustes/probar/comic-vine" hx-include="closest form"
-                hx-target="#prueba-comic-vine" hx-swap="innerHTML">Probar conexión</button>
-      </div>
-    </form>
-    <div id="resultado-comic-vine"></div>
-    <div id="prueba-comic-vine"></div>
-  </fieldset>
-
-  <fieldset class="ajustes-card">
-    <legend>Prowlarr</legend>
-    <p class="ajustes-desc">Busca dónde descargar lo que tienes en Deseados.</p>
-    <form hx-post="/ui/ajustes/guardar/prowlarr" hx-target="#resultado-prowlarr" hx-swap="innerHTML">
-      <label>Dirección
-        <input type="text" name="prowlarr_url" value="{{ prowlarr_url }}" placeholder="http://host.docker.internal:9696">
-      </label>
-      <p class="ajustes-hint">Si Prowlarr está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:9696</code>.</p>
       <details class="ajustes-mas">
-        <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
-        <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
+        <summary>Qué pasa al apagar una fuente</summary>
+        <p class="ajustes-hint">Apagar una fuente no borra lo que ya trajo: solo deja de preguntarle, también en Descubrir. Si la vuelves a encender, las series que se le consultaron hace poco esperan 30 días antes de preguntarle otra vez. GCD, por ahora, solo sirve para buscar series en Descubrir; no completa las que ya tienes.</p>
       </details>
-      <label>Clave de Prowlarr <span class="ajustes-donde">(en Prowlarr: Settings › General)</span>
-        <input type="password" name="prowlarr_api_key" autocomplete="off"
-               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if prowlarr_api_key_configurada else 'sin configurar' }}">
-      </label>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="prowlarr_enabled" value="true" {% if prowlarr_enabled %}checked{% endif %}>
-        Activar Prowlarr en las búsquedas de Deseados
-      </label>
-      <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
-        <button type="button" hx-post="/ui/ajustes/probar/prowlarr" hx-include="closest form"
-                hx-target="#prueba-prowlarr" hx-swap="innerHTML">Probar conexión</button>
-      </div>
-    </form>
-    <div id="resultado-prowlarr"></div>
-    <div id="prueba-prowlarr"></div>
-  </fieldset>
-
-  <fieldset class="ajustes-card">
-    <legend>Transmission</legend>
-    <p class="ajustes-desc">Programa que descarga los torrents.</p>
-    <form hx-post="/ui/ajustes/guardar/transmission" hx-target="#resultado-transmission" hx-swap="innerHTML">
-      <label>Dirección
-        <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://host.docker.internal:9091">
-      </label>
-      <p class="ajustes-hint">Si Transmission está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:9091</code>.</p>
       <details class="ajustes-mas">
-        <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
-        <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
+        <summary>Cortesía y esperas</summary>
+        <p class="ajustes-hint">{{ cortesia.politica }}</p>
+        <p class="ajustes-hint">{{ cortesia.coordinacion }}</p>
+        {% for nombre in cortesia.apagadas %}
+        <p class="ajustes-hint">{{ nombre }}: <strong>Apagada: {{ cortesia.nota_apagada }}</strong></p>
+        {% endfor %}
       </details>
-      <label>Usuario
-        <input type="text" name="transmission_username" value="{{ transmission_username }}" autocomplete="off">
-      </label>
-      <label>Contraseña
-        <input type="password" name="transmission_password" autocomplete="off"
-               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if transmission_password_configurada else 'sin configurar' }}">
-      </label>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="transmission_enabled" value="true" {% if transmission_enabled %}checked{% endif %}>
-        Activar Transmission para descargas de Deseados
-      </label>
-      <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
-        <button type="button" hx-post="/ui/ajustes/probar/transmission" hx-include="closest form"
-                hx-target="#prueba-transmission" hx-swap="innerHTML">Probar conexión</button>
-      </div>
-    </form>
-    <div id="resultado-transmission"></div>
-    <div id="prueba-transmission"></div>
-  </fieldset>
+    </fieldset>
 
-  <fieldset class="ajustes-card">
-    <legend>aMule</legend>
-    <p class="ajustes-desc">Programa que descarga de la red de eMule, a través de su página web (amuleweb).</p>
-    <form hx-post="/ui/ajustes/guardar/amule" hx-target="#resultado-amule" hx-swap="innerHTML">
-      <label>Dirección de amuleweb
-        <input type="text" name="amule_url" value="{{ amule_url }}" placeholder="http://host.docker.internal:4711">
-      </label>
-      <p class="ajustes-hint">Si aMule está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:4711</code>.</p>
+    <fieldset class="ajustes-card ajustes-card--estrecha">
+      <legend>Comic Vine</legend>
+      <p class="ajustes-desc">Datos de grapa americana y británica. Necesita una clave gratuita de Comic Vine.</p>
+      <form hx-post="/ui/ajustes/guardar/comic-vine" hx-target="#resultado-comic-vine" hx-swap="innerHTML">
+        <label>Clave de Comic Vine
+          <input type="password" name="comicvine_api_key" autocomplete="off"
+                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if comicvine_api_key_configurada else 'sin configurar' }}">
+        </label>
+        <p class="ajustes-hint">Consigue una clave gratis en
+          <a href="https://comicvine.gamespot.com/api/" target="_blank" rel="noopener noreferrer">comicvine.gamespot.com/api</a>.</p>
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/comic-vine" hx-include="closest form"
+                  hx-target="#prueba-comic-vine" hx-swap="innerHTML">Probar conexión</button>
+        </div>
+      </form>
+      <div id="resultado-comic-vine" aria-live="polite"></div>
+      <div id="prueba-comic-vine" aria-live="polite"></div>
       <details class="ajustes-mas">
-        <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
-        <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
+        <summary>Qué hace «Probar conexión»</summary>
+        <p class="ajustes-hint">Hace una búsqueda de prueba con tu clave. No descarga nada ni cambia tu catálogo.</p>
       </details>
-      <label>Contraseña
-        <input type="password" name="amule_password" autocomplete="off"
-               placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if amule_password_configurada else 'sin configurar' }}">
-      </label>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="amule_enabled" value="true" {% if amule_enabled %}checked{% endif %}>
-        Activar aMule para descargas de Deseados
-      </label>
-      <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
-        <button type="button" hx-post="/ui/ajustes/probar/amule" hx-include="closest form"
-                hx-target="#prueba-amule" hx-swap="innerHTML">Probar conexión</button>
-      </div>
-    </form>
-    <div id="resultado-amule"></div>
-    <div id="prueba-amule"></div>
-  </fieldset>
+    </fieldset>
 
-  {% include "_ajustes_seguridad.html" %}
 
-  <fieldset class="ajustes-card">
-    <legend>Avisos</legend>
-    <p class="ajustes-desc">Un aviso en el móvil cada vez que ZascArr importa tebeos nuevos, por Gotify, ntfy, Telegram o una dirección propia. Viene apagado. Si el aviso no llega, la importación sigue igual.</p>
-    <form hx-post="/ui/ajustes/guardar/avisos" hx-target="#resultado-avisos" hx-swap="innerHTML">
-      <label>Tipo
-        <select name="webhook_type">
-          <option value="generic" {% if webhook_type == "generic" %}selected{% endif %}>Dirección propia (JSON)</option>
-          <option value="gotify" {% if webhook_type == "gotify" %}selected{% endif %}>Gotify</option>
-          <option value="ntfy" {% if webhook_type == "ntfy" %}selected{% endif %}>ntfy</option>
-          <option value="telegram" {% if webhook_type == "telegram" %}selected{% endif %}>Telegram</option>
-        </select>
-      </label>
-      <label>Dirección (no hace falta con Telegram)
-        <input type="text" name="webhook_url" value="{{ webhook_url }}" placeholder="https://ntfy.sh/mi-tema">
-      </label>
-      <label>Clave o token (Gotify, ntfy o el bot de Telegram)
-        <input type="password" name="webhook_token" autocomplete="off"
-               placeholder="{{ 'ya configurado — deja en blanco para no cambiarlo' if webhook_token_configurado else 'sin configurar' }}">
-      </label>
-      <label>Chat ID (solo Telegram)
-        <input type="text" name="webhook_chat_id" value="{{ webhook_chat_id }}" placeholder="123456789">
-      </label>
-      <p class="ajustes-hint">Con Telegram basta el token del bot y el chat ID: el campo «Dirección» no se usa.</p>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="webhook_incluir_nombres" value="true" {% if webhook_incluir_nombres %}checked{% endif %}>
-        Incluir los nombres de los ficheros en el aviso
-      </label>
-      <p class="ajustes-hint">Sin marcar, el aviso solo dice cuántos. Márcalo solo si el destino es privado: en un tema público de ntfy, cualquiera podría leer los nombres.</p>
-      <label class="legal-checkbox">
-        <input type="checkbox" name="webhook_enabled" value="true" {% if webhook_enabled %}checked{% endif %}>
-        Activar avisos de importación
-      </label>
-      <div class="ajustes-actions">
-        <button type="submit">Guardar</button>
-        <button type="button" hx-post="/ui/ajustes/probar/avisos" hx-include="closest form"
-                hx-target="#prueba-avisos" hx-swap="innerHTML">Enviar aviso de prueba</button>
-      </div>
-    </form>
-    <div id="prueba-avisos"></div>
-    <div id="resultado-avisos"></div>
-  </fieldset>
+  <h2 class="ajustes-acto" id="ajustes-descargas">Descargas</h2>
 
-</div>
+
+    <fieldset class="ajustes-card ajustes-card--tercio">
+      <legend>Prowlarr</legend>
+      <p class="ajustes-desc">Busca dónde descargar lo que tienes en Deseados.</p>
+      <form hx-post="/ui/ajustes/guardar/prowlarr" hx-target="#resultado-prowlarr" hx-swap="innerHTML">
+        <label>Dirección
+          <input type="text" name="prowlarr_url" value="{{ prowlarr_url }}" placeholder="http://host.docker.internal:9696">
+        </label>
+        <p class="ajustes-hint">Si Prowlarr está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:9696</code>.</p>
+        <details class="ajustes-mas">
+          <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
+          <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
+        </details>
+        <label>Clave de Prowlarr <span class="ajustes-donde">(en Prowlarr: Settings › General)</span>
+          <input type="password" name="prowlarr_api_key" autocomplete="off"
+                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if prowlarr_api_key_configurada else 'sin configurar' }}">
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="prowlarr_enabled" value="true" {% if prowlarr_enabled %}checked{% endif %}>
+          Activar Prowlarr en las búsquedas de Deseados
+        </label>
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/prowlarr" hx-include="closest form"
+                  hx-target="#prueba-prowlarr" hx-swap="innerHTML">Probar conexión</button>
+        </div>
+      </form>
+      <div id="resultado-prowlarr" aria-live="polite"></div>
+      <div id="prueba-prowlarr" aria-live="polite"></div>
+    </fieldset>
+
+    <fieldset class="ajustes-card ajustes-card--tercio">
+      <legend>Transmission</legend>
+      <p class="ajustes-desc">Programa que descarga los torrents.</p>
+      <form hx-post="/ui/ajustes/guardar/transmission" hx-target="#resultado-transmission" hx-swap="innerHTML">
+        <label>Dirección
+          <input type="text" name="transmission_url" value="{{ transmission_url }}" placeholder="http://host.docker.internal:9091">
+        </label>
+        <p class="ajustes-hint">Si Transmission está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:9091</code>.</p>
+        <details class="ajustes-mas">
+          <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
+          <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
+        </details>
+        <label>Usuario
+          <input type="text" name="transmission_username" value="{{ transmission_username }}" autocomplete="off">
+        </label>
+        <label>Contraseña
+          <input type="password" name="transmission_password" autocomplete="off"
+                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if transmission_password_configurada else 'sin configurar' }}">
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="transmission_enabled" value="true" {% if transmission_enabled %}checked{% endif %}>
+          Activar Transmission para descargas de Deseados
+        </label>
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/transmission" hx-include="closest form"
+                  hx-target="#prueba-transmission" hx-swap="innerHTML">Probar conexión</button>
+        </div>
+      </form>
+      <div id="resultado-transmission" aria-live="polite"></div>
+      <div id="prueba-transmission" aria-live="polite"></div>
+    </fieldset>
+
+    <fieldset class="ajustes-card ajustes-card--tercio">
+      <legend>aMule</legend>
+      <p class="ajustes-desc">Programa que descarga de la red de eMule, a través de su página web (amuleweb).</p>
+      <form hx-post="/ui/ajustes/guardar/amule" hx-target="#resultado-amule" hx-swap="innerHTML">
+        <label>Dirección de amuleweb
+          <input type="text" name="amule_url" value="{{ amule_url }}" placeholder="http://host.docker.internal:4711">
+        </label>
+        <p class="ajustes-hint">Si aMule está en esta misma Raspberry Pi, la dirección es <code>http://host.docker.internal:4711</code>.</p>
+        <details class="ajustes-mas">
+          <summary>¿Por qué no <code>127.0.0.1</code>?</summary>
+          <p class="ajustes-hint">ZascArr funciona dentro de un contenedor de Docker, y para él <code>127.0.0.1</code> es el propio contenedor, no tu Pi. <code>host.docker.internal</code> es su forma de decir «la máquina que me aloja».</p>
+        </details>
+        <label>Contraseña
+          <input type="password" name="amule_password" autocomplete="off"
+                 placeholder="{{ 'ya configurada — deja en blanco para no cambiarla' if amule_password_configurada else 'sin configurar' }}">
+        </label>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="amule_enabled" value="true" {% if amule_enabled %}checked{% endif %}>
+          Activar aMule para descargas de Deseados
+        </label>
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/amule" hx-include="closest form"
+                  hx-target="#prueba-amule" hx-swap="innerHTML">Probar conexión</button>
+        </div>
+      </form>
+      <div id="resultado-amule" aria-live="polite"></div>
+      <div id="prueba-amule" aria-live="polite"></div>
+    </fieldset>
+
+
+  <h2 class="ajustes-acto" id="ajustes-propio">Tu ZascArr</h2>
+
+
+    {% include "_ajustes_seguridad.html" %}
+
+    <fieldset class="ajustes-card">
+      <legend>Avisos</legend>
+      <p class="ajustes-desc">Un aviso en el móvil cuando ZascArr importa tebeos nuevos (Gotify, ntfy, Telegram o tu dirección). Viene apagado.</p>
+      <form hx-post="/ui/ajustes/guardar/avisos" hx-target="#resultado-avisos" hx-swap="innerHTML">
+        <label>Tipo
+          <select name="webhook_type">
+            <option value="generic" {% if webhook_type == "generic" %}selected{% endif %}>Dirección propia (JSON)</option>
+            <option value="gotify" {% if webhook_type == "gotify" %}selected{% endif %}>Gotify</option>
+            <option value="ntfy" {% if webhook_type == "ntfy" %}selected{% endif %}>ntfy</option>
+            <option value="telegram" {% if webhook_type == "telegram" %}selected{% endif %}>Telegram</option>
+          </select>
+        </label>
+        <label>Dirección (no hace falta con Telegram)
+          <input type="text" name="webhook_url" value="{{ webhook_url }}" placeholder="https://ntfy.sh/mi-tema">
+        </label>
+        <label>Clave o token (Gotify, ntfy o el bot de Telegram)
+          <input type="password" name="webhook_token" autocomplete="off"
+                 placeholder="{{ 'ya configurado — deja en blanco para no cambiarlo' if webhook_token_configurado else 'sin configurar' }}">
+        </label>
+        <label>Chat ID (solo Telegram)
+          <input type="text" name="webhook_chat_id" value="{{ webhook_chat_id }}" placeholder="123456789">
+        </label>
+        <p class="ajustes-hint">Con Telegram basta el token del bot y el chat ID: el campo «Dirección» no se usa.</p>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="webhook_incluir_nombres" value="true" {% if webhook_incluir_nombres %}checked{% endif %}>
+          Incluir los nombres de los ficheros en el aviso
+        </label>
+        <p class="ajustes-hint">Sin marcar, el aviso solo dice cuántos. Márcalo solo si el destino es privado: en un tema público de ntfy, cualquiera podría leer los nombres.</p>
+        <label class="legal-checkbox">
+          <input type="checkbox" name="webhook_enabled" value="true" {% if webhook_enabled %}checked{% endif %}>
+          Activar avisos de importación
+        </label>
+        <p class="ajustes-hint">Si el aviso no llega, la importación sigue igual.</p>
+        <div class="ajustes-actions">
+          <button type="submit">Guardar</button>
+          <button type="button" hx-post="/ui/ajustes/probar/avisos" hx-include="closest form"
+                  hx-target="#prueba-avisos" hx-swap="innerHTML">Enviar aviso de prueba</button>
+        </div>
+      </form>
+      <div id="prueba-avisos" aria-live="polite"></div>
+      <div id="resultado-avisos" aria-live="polite"></div>
+    </fieldset>
+
+  </div>
 
 {% from "_legal_disclaimer.html" import legal_disclaimer %}
 {{ legal_disclaimer("ajustes") }}
