@@ -159,7 +159,7 @@
     {#- #488/BL-CNV6: guardián de archivos compartidos. Fallo cerrado si no se declara nada. -#}
     <fieldset class="ajustes-card" id="archivos-compartidos">
       <legend>Archivos compartidos</legend>
-      <p class="ajustes-desc">Marca las carpetas que comparten tus programas de descargas. Si ZascArr no sabe si un archivo se comparte, no lo toca.</p>
+      <p class="ajustes-desc">Marca las carpetas que comparten tus programas de descargas. Si ZascArr no sabe si un archivo se comparte, te avisará antes de escribir.</p>
       <form hx-post="/ui/ajustes/guardar/compartidos" hx-target="#resultado-compartidos" hx-swap="innerHTML">
         {% for c in carpetas_disponibles %}
         <label>
@@ -167,7 +167,7 @@
           {{ c.nombre }} <span class="muted">({{ c.ruta }})</span>
         </label>
         {% endfor %}
-        <p class="ajustes-hint">Mientras no declares ninguna, ZascArr no escribe en la biblioteca: no puede saber si un archivo se está compartiendo.</p>
+        <p class="ajustes-hint">Mientras no declares ninguna, ZascArr te pedirá confirmación antes de escribir: no puede saber si un archivo se está compartiendo.</p>
         <div class="ajustes-actions"><button type="submit">Guardar carpetas compartidas</button></div>
       </form>
       <div id="resultado-compartidos"></div>

@@ -49,10 +49,13 @@ class Decision:
     @property
     def mensaje(self) -> str:
         if self.estado is EstadoComparticion.COMPARTIDO:
-            return f"No se toca: {self.causa}"
+            return (
+                f"Cuidado: este archivo parece compartido ({self.causa}). "
+                "Escribir puede romper la siembra."
+            )
         if self.estado is EstadoComparticion.NO_SE_SABE:
             return (
-                "No podemos saber si se comparte; no se toca. "
+                "No podemos saber si este archivo se comparte; escribir puede romper la siembra. "
                 "Declara las carpetas en Ajustes («Archivos compartidos»)."
             )
         return "No consta que se comparta."
