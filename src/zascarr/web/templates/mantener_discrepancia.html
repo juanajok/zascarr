@@ -18,13 +18,13 @@
   Confirmaste el número #{{ issue.issue_number }} ({{ formatos_legibles.get(issue.format.value, issue.format.value) }}) de {{ serie.title }}.
   {% if prop.numero %}
     La actualización propone el número #{{ prop.numero }}{% if prop.formato %} ({{ formatos_legibles.get(prop.formato, prop.formato) }}){% endif %}
-    {%- if prop.serie_destino_id and prop.serie_destino_id != serie.id %} en otra serie{% endif %}.
+    {%- if prop.serie_destino_id and prop.serie_destino_id|string != serie.id|string %} en otra serie{% endif %}.
   {% else %}
     La actualización no encuentra ninguna publicación de esta serie para el archivo.
   {% endif %}
 </p>
 <form method="post"
-      action="/ui/series/{{ serie.id }}/archivos/{{ archivo.id }}/discrepancias/{{ discrepancia.clave }}/mantener">
+      action="/ui/series/{{ serie.id }}/archivos/{{ archivo.id }}/discrepancias/{{ discrepancia.clave|urlencode }}/mantener">
   <input type="hidden" name="token" value="{{ token }}">
   <button class="btn primary" type="submit">Mantener lo mío</button>
 </form>

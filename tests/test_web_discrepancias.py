@@ -54,6 +54,7 @@ def _fila_archivo(series_id=None) -> SimpleNamespace:
     vinculo["serie_id"] = str(serie)
     d = _discrepancia()
     d["relacion"]["serie_id"] = str(serie)
+    d["propuesta"]["serie_destino_id"] = str(serie)   # misma serie por defecto
     return SimpleNamespace(
         id=FILE, file_name="Thorgal 01.cbz", file_format=FileFormat.CBZ, is_missing=False,
         metadata_source="manual", metadata_={"vinculo": vinculo, "discrepancias": [d]},
@@ -94,13 +95,29 @@ def test_la_ficha_avisa_que_la_propuesta_no_se_ha_aplicado_y_ofrece_las_dos_sali
     assert texto.count('class="btn primary"') == 1
 
 
+def _bloque_discrepancias(texto: str) -> str:
+    return texto.split('id="discrepancias-')[-1].split("</div>")[0]
+
+
+def test_misma_serie_no_dice_otra_serie_ni_manda_a_asociar():
+    '''F2: comparar UUID y string como strings; la misma serie va a /deshacer.'''
+    texto, series = _ficha()
+    bloque = _bloque_discrepancias(texto)
+    assert "en otra serie" not in bloque
+    assert "/asociar" not in bloque
+    assert f'href="/ui/series/{series.id}/archivos/{FILE}/deshacer"' in bloque
+
+
 def test_una_propuesta_de_otra_serie_manda_revisar_la_identidad_de_la_serie():
     d = _discrepancia()
     d["propuesta"]["serie_destino_id"] = str(uuid4())
     fila = _fila_archivo()
     fila.metadata_ = {"vinculo": _vinculo(), "discrepancias": [d]}
     texto, series = _ficha(archivos=fila)
-    assert f'href="/ui/series/{series.id}/asociar"' in texto
+    bloque = _bloque_discrepancias(texto)
+    assert "en otra serie" in " ".join(bloque.split())
+    assert f'href="/ui/series/{series.id}/asociar"' in bloque
+    assert f'href="/ui/series/{series.id}/archivos/{FILE}/deshacer"' not in bloque
 
 
 def test_sin_discrepancias_la_ficha_no_pinta_el_aviso():
@@ -136,6 +153,15 @@ def test_la_confirmacion_muestra_el_token_y_no_escribe(secreto):
     assert "Mantener lo mío" in r.text and 'name="token"' in r.text
     assert "La propuesta no se ha aplicado." in r.text
     assert "Confirmaste el número #1" in r.text
+    assert "en otra serie" not in " ".join(r.text.split())
+    assert "/asociar" not in r.text
+
+
+def test_clave_invalida_no_consulta_ni_abre_la_confirmacion(secreto):
+    session = FakeSession([], series=SimpleNamespace(id=SERIE, title="Thorgal"))
+    with use_fake_session(session) as client:
+        r = client.get(f"/ui/series/{SERIE}/archivos/{FILE}/discrepancias/no-es-clave/mantener")
+    assert r.status_code == 404
 
 
 def test_confirmar_con_token_valido_muestra_el_resultado(secreto, monkeypatch):
