@@ -31,7 +31,8 @@ Series con géneros: 0 · asignaciones de género: 0 · personajes de número: 0
 
 **Lectura**
 
-1. **Uso real de etiquetas: incipiente.** 3 etiquetas, 3 asignaciones y 2 series, todas `manual`.
+1. **Uso real de etiquetas: incipiente.** 3 etiquetas, 3 asignaciones y 2 series, todas `manual`
+   (2 de las 28 series de la colección, ~7 %; ver el denominador abajo).
    Es lo esperado dos días después de desplegar 1a/1b (2026-11-08/09) y no permite concluir
    adopción: la biblioteca tiene 5.066 tebeos y la función acaba de estrenarse. No hay señal de NO
    uso, pero tampoco de que ampliar la feature sea lo urgente.
@@ -48,9 +49,10 @@ Series con géneros: 0 · asignaciones de género: 0 · personajes de número: 0
 
 **Consecuencia para D-7**
 
-- **ETQ2: desplegar** (ya fusionada en #544). Aunque `<Tags>` sea 0, hay 76 CBZ con `<Genre>`:
-  poblará `Series.genres` (idempotente, sin pisar `manual`) y deja el camino listo para cuando
-  lleguen CBZ con etiquetas (BL-CNV ampliará el universo). Es barato y ya está hecho.
+- **ETQ2: desplegar** (ya fusionada en #544; desplegada el 2026-11-10 en `265a250`). Aunque
+  `<Tags>` sea 0, hay 76 CBZ con `<Genre>`: poblará `Series.genres` (idempotente, sin pisar
+  `manual`) en las importaciones nuevas o re-triadas, y deja el camino listo para cuando lleguen
+  CBZ con etiquetas (BL-CNV ampliará el universo).
 - **ETQ3: no abrir todavía.** La premisa técnica se confirma, pero D-7 pedía medir antes de seguir
   y la señal de uso es mínima (2 series etiquetadas, 0 géneros); además el 90 % de la biblioteca
   son CBR, fuera del alcance de la lectura de ComicInfo hasta la conversión. Se queda en
@@ -69,5 +71,6 @@ Series con géneros: 0 · asignaciones de género: 0 · personajes de número: 0
 
 - Los 4.548 CBR no se han leído: no se conoce el porcentaje de ComicInfo con `<Tags>`/`<Genre>` en
   RAR. No es accionable para ETQ2 (no puede leerlos), pero sí lo será tras BL-CNV.
-- El total de series y números no se midió en esta pasada; la herramienta ya lo incluye para la
-  siguiente ejecución.
+- **Denominador** (verificación de restore del propio update, 2026-11-10): **28 series, 1.295
+  números y 5.063 ficheros registrados**. El uso de etiquetas es, por tanto, 2 de 28 series
+  (~7 %). La herramienta incluye ya estos totales para la próxima medición.
