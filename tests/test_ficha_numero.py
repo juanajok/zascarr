@@ -85,8 +85,8 @@ async def test_ficha_serie_autores_principales_tope_y_texto_plano():
 async def test_ficha_numero_agrupa_autores_archivos_y_texto_plano():
     serie = _serie()
     issue = _issue(credits=[
-        SimpleNamespace(role=CreatorRole.WRITER, creator=SimpleNamespace(name="Ana")),
-        SimpleNamespace(role=CreatorRole.PENCILER, creator=SimpleNamespace(name="Bea")),
+        SimpleNamespace(role=CreatorRole.WRITER, creator=SimpleNamespace(name="Ana", metadata_source="manual")),
+        SimpleNamespace(role=CreatorRole.PENCILER, creator=SimpleNamespace(name="Bea", metadata_source="manual")),
     ], files=[
         SimpleNamespace(id=uuid4(), file_name="Thorgal 03.cbz", file_format=FileFormat.CBZ,
                         file_size_bytes=2 * 1048576, is_missing=False),
@@ -158,3 +158,61 @@ def test_formato_reutiliza_tabla_compartida():
     assert FORMATOS_LEGIBLES is WEB
     assert FORMATOS_LEGIBLES["hardcover"] == "tomo en tapa dura"
     assert FORMATOS_LEGIBLES["manga_tankobon"] == "tomo de manga"
+
+
+def _issue_con_creditos(fuentes):
+    return _issue(credits=[
+        SimpleNamespace(role=CreatorRole.WRITER,
+                        creator=SimpleNamespace(name=f"A{i}", metadata_source=f))
+        for i, f in enumerate(fuentes)])
+
+
+@pytest.mark.asyncio
+async def test_origen_autores_numero_sale_de_creditos():
+    serie = _serie()
+    issue = _issue_con_creditos([None])
+    db = _DB([_Res([issue]), _Res([serie])])
+    ficha = await cargar_ficha_numero(db, serie.id, issue.id)
+    # Sin fuente en el crédito no se atribuye al issue (manual).
+    assert ficha.procedencia[TEXTOS["autores_numero"]]["origen"] == "Origen no registrado"
+
+
+@pytest.mark.asyncio
+async def test_origen_autores_numero_mezcla_y_manual():
+    serie = _serie()
+    issue = _issue_con_creditos(["manual", "anilist"])
+    db = _DB([_Res([issue]), _Res([serie])])
+    ficha = await cargar_ficha_numero(db, serie.id, issue.id)
+    assert ficha.procedencia[TEXTOS["autores_numero"]]["origen"] == "Varias fuentes"
+
+    issue = _issue_con_creditos(["comic_vine", "comic_vine"])
+    db = _DB([_Res([issue]), _Res([serie])])
+    ficha = await cargar_ficha_numero(db, serie.id, issue.id)
+    assert ficha.procedencia[TEXTOS["autores_numero"]]["origen"] == "Comic Vine"
+
+
+@pytest.mark.asyncio
+async def test_autores_principales_sin_atribuir_si_falta_una_fuente():
+    serie = _serie()
+    issue = _issue()
+    filas = [_autor("Ana", CreatorRole.WRITER, 2, "comic_vine"),
+             _autor("Bea", CreatorRole.PENCILER, 1, None)]
+    db = _DB([_Res([serie]), _Res([issue]), _Res(filas)])
+    ficha = await cargar_ficha_serie(db, serie.id)
+    assert ficha.origen_autores == "Origen no registrado"
+    assert ficha.autores_texto == "Guion: Ana; Dibujo: Bea"
+
+
+def test_archivos_del_numero_en_orden_natural_unitario():
+    serie = _serie()
+    issue = _issue(files=[
+        SimpleNamespace(id=uuid4(), file_name="2.cbz", file_format=FileFormat.CBZ,
+                        file_size_bytes=1, is_missing=False),
+        SimpleNamespace(id=uuid4(), file_name="10.cbz", file_format=FileFormat.CBZ,
+                        file_size_bytes=1, is_missing=False),
+        SimpleNamespace(id=uuid4(), file_name="1.cbz", file_format=FileFormat.CBZ,
+                        file_size_bytes=1, is_missing=False),
+    ])
+    db = _DB([_Res([issue]), _Res([serie])])
+    ficha = __import__("asyncio").run(cargar_ficha_numero(db, serie.id, issue.id))
+    assert [a.nombre for a in ficha.archivos] == ["1.cbz", "2.cbz", "10.cbz"]
