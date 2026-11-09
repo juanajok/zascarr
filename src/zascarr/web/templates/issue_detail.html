@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Número{% endif %} — {{ series.title }} — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ series.id }}">{{ textos.volver }}</a>
+<div class="issue-header">
+  <div class="issue-portada">
+    {{ ui.portada(issue.title or series.title, issue.id, "/ui/series/%s/portada?v=2" % series.id, "issue-cover") }}
+    <p class="caption">{{ textos.portada_serie }}</p>
+  </div>
+  <div>
+    <h1>{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Número{% endif %}</h1>
+    {% if issue.title %}<p class="titulo-frase subtitulo-numero">{{ issue.title }}</p>{% elif not issue.issue_number %}<p class="subtitle">Sin número</p>{% endif %}
+    <p class="series-intro">Todo lo que ZascArr sabe de este número.</p>
+  </div>
+</div>
+{% if not ficha.tiene_datos %}
+<p class="ficha-sinopsis">{{ textos.sin_datos_numero }}</p>
+{% else %}
+<section aria-labelledby="issue-datos-titulo">
+  <h2 id="issue-datos-titulo" class="titulo-frase">Datos del número</h2>
+  <dl class="ficha-serie-meta">
+    <div><dt>{{ textos.serie }}</dt><dd><a href="/ui/series/{{ series.id }}">{{ series.title }}</a></dd></div>
+    <div><dt>{{ textos.formato }}</dt><dd>{% if ficha.formato %}{{ ficha.formato }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
+    <div><dt>{{ textos.fecha }}</dt><dd>{% if ficha.fecha_larga %}{{ ficha.fecha_larga }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
+    <div><dt>{{ textos.paginas }}</dt><dd>{% if ficha.paginas_texto %}{{ ficha.paginas_texto }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
+  </dl>
+</section>
+<section aria-labelledby="issue-sinopsis-titulo">
+  <h2 id="issue-sinopsis-titulo">{{ textos.sinopsis }}</h2>
+  {% if sinopsis_visible %}
+  <p class="ficha-sinopsis">{{ sinopsis_visible }}</p>
+  {% if sinopsis_resto %}<details><summary>{{ textos.sinopsis_completa }}</summary><p>{{ sinopsis_resto }}</p></details>{% endif %}
+  {% else %}
+  <p class="muted">{{ textos.sin_sinopsis_numero }}</p>
+  {% endif %}
+</section>
+<section aria-labelledby="issue-autores-titulo">
+  <h2 id="issue-autores-titulo">{{ textos.autores_numero }}</h2>
+  {% if autores %}
+  <dl class="ficha-autores">
+    {% for grupo in autores %}
+    <div><dt>{{ grupo.etiqueta }}</dt><dd>{{ grupo.nombres|join(", ") }}</dd></div>
+    {% endfor %}
+  </dl>
+  <details><summary>{{ textos.glosario }}</summary><p class="caption">{{ textos.glosario_texto }}</p></details>
+  {% else %}
+  <p class="muted">{{ textos.sin_autores_numero }}</p>
+  {% endif %}
+</section>
+<section aria-labelledby="issue-archivos-titulo">
+  <h2 id="issue-archivos-titulo">{{ textos.archivos }}</h2>
+  {% if ficha.archivos %}
+  <ul class="archivos-lista issue-archivos">
+    {% for a in ficha.archivos %}
+    <li class="archivo-fila"><span class="nombre-archivo">{{ a.nombre }}</span> <span class="muted">{{ a.formato|upper }}</span> {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">{{ textos.sin_archivos }}</p>
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">{{ textos.ir_serie }}</a></p>
+  {% endif %}
+</section>
+{% if ficha.procedencia %}
+<details class="procedencia-serie">
+  <summary>{{ textos.procedencia }}</summary>
+  <dl class="procedencia-campos">
+    {% for campo, origen in ficha.procedencia.items() %}
+    <div class="procedencia-campo"><dt>{{ campo }}</dt><dd><span class="procedencia-valor">{{ origen or textos.sin_procedencia }}</span><span class="procedencia-origen">Origen no registrado</span></dd></div>
+    {% endfor %}
+  </dl>
+</details>
+{% endif %}
+{% endif %}
+{% endblock %}
