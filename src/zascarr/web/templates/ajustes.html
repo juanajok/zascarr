@@ -179,6 +179,23 @@
     </fieldset>
 
 
+    <fieldset class="ajustes-card ajustes-card--ancha" id="archivos-compartidos">
+      <legend>Archivos compartidos</legend>
+      <p class="ajustes-desc">Carpetas que comparten tus programas de descargas. Si no se sabe, ZascArr avisa antes de escribir.</p>
+      <form hx-post="/ui/ajustes/guardar/compartidos" hx-target="#resultado-compartidos" hx-swap="innerHTML">
+        {% for c in carpetas_disponibles %}
+        <label class="legal-checkbox">
+          <input type="checkbox" name="carpetas_compartidas" value="{{ c.ruta }}" {% if c.ruta in carpetas_compartidas %}checked{% endif %}>
+          {{ c.nombre }} <span class="muted">({{ c.ruta }})</span>
+        </label>
+        {% endfor %}
+        <p class="ajustes-hint">Mientras no declares ninguna, ZascArr pedirá confirmación antes de escribir: no puede saber si un archivo se comparte.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar carpetas compartidas</button></div>
+      </form>
+      <div id="resultado-compartidos" aria-live="polite"></div>
+    </fieldset>
+
+
   <h2 class="ajustes-acto" id="ajustes-propio">Tu ZascArr</h2>
 
 
