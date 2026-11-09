@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Mantener lo mío — ZascArr{% endblock %}
+{% block content %}
+<a href="/ui/series/{{ serie.id }}" class="back-link">← Volver a {{ serie.title }}</a>
+<h1>Mantener lo mío</h1>
+
+{% if fallo %}
+{{ ui.aviso("warn", fallo) }}
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% elif r %}
+{{ ui.aviso("ok" if r.resultado != "omitido" else "amber", r.mensaje) }}
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% else %}
+<p class="subtitle">Una actualización propone otra publicación para este archivo. Tu relación confirmada no se ha tocado.</p>
+{{ ui.aviso("amber", "La propuesta no se ha aplicado.") }}
+{% set prop = discrepancia.propuesta %}
+<p class="caption">
+  Confirmaste el número #{{ issue.issue_number }} ({{ formatos_legibles.get(issue.format.value, issue.format.value) }}) de {{ serie.title }}.
+  {% if prop.numero %}
+    La actualización propone el número #{{ prop.numero }}{% if prop.formato %} ({{ formatos_legibles.get(prop.formato, prop.formato) }}){% endif %}
+    {%- if prop.serie_destino_id and prop.serie_destino_id|string != serie.id|string %} en otra serie{% endif %}.
+  {% else %}
+    La actualización no encuentra ninguna publicación de esta serie para el archivo.
+  {% endif %}
+</p>
+<form method="post"
+      action="/ui/series/{{ serie.id }}/archivos/{{ archivo.id }}/discrepancias/{{ discrepancia.clave|urlencode }}/mantener">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button class="btn primary" type="submit">Mantener lo mío</button>
+</form>
+<p class="caption">Mantener no cambia la publicación ni toca los archivos. La fuente se seguirá consultando: una
+  propuesta distinta volverá a aparecer.</p>
+{% endif %}
+{% endblock %}

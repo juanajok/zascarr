@@ -43,6 +43,7 @@ PROPOSITO_DESVINCULAR = "desvincular"
 PROPOSITO_ASOCIAR = "asociar_fuente"
 #: BL-SER1 (#303): retirar una serie de la biblioteca (sin tocar el disco).
 PROPOSITO_RETIRAR = "retirar_serie"
+PROPOSITO_MANTENER = "mantener_lo_mio"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
 MAX_DESCRIPCION = 1000
 
@@ -884,3 +885,69 @@ def _longitud_peor_caso_token_asociacion() -> int:
 
 #: Cota exacta del campo `token` de previsualizar/asociar (#129 PR-S1, H6).
 MAX_TOKEN_ASOCIACION = _longitud_peor_caso_token_asociacion()
+
+
+# ── Token de «Mantener lo mío» (BL-R4, #233) ─────────────────────────────────────────────────────
+
+VERSION_TOKEN_MANTENER = 1
+
+
+@dataclass(frozen=True)
+class MantenerFirmada:
+    """Lo que la persona vio al abrir la confirmación de «Mantener lo mío». El contexto firmado es el
+    `file_id` (un token de un archivo no sirve en otro). La relación vista se firma con su `issue_id`,
+    `serie_id` y la operación del `metadata.vinculo` (o `SIN_PROCEDENCIA`), de modo que un cambio de
+    vínculo desde que se abrió la ficha invalida la confirmación. La `clave` es la huella estable de
+    ESA propuesta; el `operacion` UUID da idempotencia y comprobante."""
+    file_id: str
+    clave: str
+    issue_id: str
+    serie_id: str
+    vinculo_operacion: str
+    operacion: str
+    caduca: int = 0
+
+
+def crear_token_mantener(m: MantenerFirmada, secret: str, *, ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_MANTENER, m.file_id, {
+        "version": VERSION_TOKEN_MANTENER, "clave": m.clave, "issue_id": m.issue_id,
+        "serie_id": m.serie_id, "vinculo_operacion": m.vinculo_operacion, "operacion": m.operacion,
+    }, secret, ahora=ahora)
+
+
+def verificar_token_mantener(token: str, secret: str, *, ahora: float | None = None,
+                             ignorar_caducidad: bool = False) -> MantenerFirmada | None:
+    """La confirmación firmada, o `None`. Firma, propósito (`mantener_lo_mio`: no sirve para vincular,
+    dar de alta, desvincular ni retirar), contexto (el `file_id`, leído del propio token porque la
+    confirmación recibe solo el token), caducidad y ESQUEMA: UUID canónicos, `clave` de 64
+    hexadecimales y `version` 1."""
+    file_id = _contexto_del_token(token, secret)
+    if file_id is None or not _uuid_texto(file_id):
+        return None
+    verificado = _verificar(token, PROPOSITO_MANTENER, file_id, secret, ahora=ahora,
+                            ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    version = d.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != VERSION_TOKEN_MANTENER:
+        return None
+    if not _hex64(d.get("clave")):
+        return None
+    if not all(_uuid_texto(d.get(k)) for k in ("issue_id", "serie_id", "vinculo_operacion", "operacion")):
+        return None
+    return MantenerFirmada(file_id, d["clave"], d["issue_id"], d["serie_id"], d["vinculo_operacion"],
+                          d["operacion"], caduca)
+
+
+def _longitud_peor_caso_del_token_de_mantener() -> int:
+    """Cota de la longitud de un token `mantener_lo_mio` válido: todos los campos son de tamaño fijo
+    (UUID canónicos y una clave de 64 hexadecimales), así que sale de la serialización, la codificación
+    y la firma reales con la época más larga."""
+    ident = "00000000-0000-4000-8000-000000000000"
+    return len(crear_token_mantener(MantenerFirmada(ident, "f" * 64, ident, ident, ident, ident), "x" * 32,
+                                    ahora=EPOCA_DEL_PEOR_CASO))
+
+
+#: El límite del campo `token` de la confirmación de «Mantener lo mío»: acotado e IGUAL al peor caso emitible.
+MAX_TOKEN_MANTENER = _longitud_peor_caso_del_token_de_mantener()

@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import select, text, tuple_
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
 from zascarr.core.comicinfo_write import (
@@ -43,6 +43,7 @@ from zascarr.core.comicinfo_write import (
 )
 from zascarr.models import File, FileFormat, Issue, Publisher, Series
 from zascarr.utils import cbz as zcbz
+from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.cbz import (
     CbzError,
     CbzInvalidoError,
@@ -151,9 +152,15 @@ def _estado(path: Path) -> tuple[int, int]:
 
 
 def _clave_de(file_id) -> int:
-    """Clave de 64 bits estable a partir del UUID del `File`."""
+    """Clave del advisory lock de **CBZ** por `File.id`.
+
+    Va en un espacio distinto al de `utils/bloqueo_archivo` (metadata/relación):
+    el tagger toma ese lock de metadata en la transacción de su sesión y el de
+    CBZ en una conexión dedicada; si ambos usaran la misma clave, la sesión se
+    bloquearía a sí misma esperando el lock que ya tiene su otra conexión.
+    """
     return int.from_bytes(
-        hashlib.blake2b(uuid.UUID(str(file_id)).bytes, digest_size=8).digest(),
+        hashlib.blake2b(b"cbz:" + uuid.UUID(str(file_id)).bytes, digest_size=8).digest(),
         "big", signed=True,
     )
 
@@ -397,26 +404,55 @@ class TaggerService:
         self, file: File, ctx: _Contexto, path: Path, *,
         dry_run: bool, solo_rellenar: bool, reconciliar_todo: bool,
     ) -> ResultadoEtiquetado:
-        # Guardas comunes a `ejecutar()` y `run()`: un fichero que ya no está
-        # (borrado a mano, disco de red caído) se salta, nunca aborta el lote.
+        # Guarda barata de formato (también la usa el constructor de pruebas sin
+        # sesión); para la escritura real se vuelve a comprobar tras releer.
         if file.file_format is not FileFormat.CBZ:
-            return ResultadoEtiquetado(file.id, file.file_name, SALTADO,
-                                       motivo="formato no parcheable (solo CBZ)",
-                                       gasta_cupo=False)
-        if file.is_missing or not path.exists():
-            return ResultadoEtiquetado(file.id, file.file_name, SALTADO,
-                                       motivo="archivo ausente", gasta_cupo=False)
+            return ResultadoEtiquetado(
+                file.id, file.file_name, SALTADO,
+                motivo="formato no parcheable (solo CBZ)", gasta_cupo=False)
+        # Vista previa: puede usar lo cargado antes (no escribe).
         if dry_run:
+            if file.is_missing or not path.exists():
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="archivo ausente", gasta_cupo=False)
             return await self._simular(file, ctx, path, solo_rellenar, reconciliar_todo)
 
-        # Escritura real: bloqueo por fichero desde la lectura/plan hasta
-        # después del reemplazo. Dos etiquetados del mismo tebeo no se
-        # intercalan, ni siquiera entre procesos.
+        # Escritura real. Dos locks por `File.id`, con espacios distintos:
+        #  - `bloquear_archivo` en la transacción de la SESIÓN (la que escribe
+        #    `metadata_`): se mantiene hasta el commit/rollback del lote, así
+        #    rescan/mantener/asignación no pueden leer una versión anterior
+        #    entre el flush y el commit.
+        #  - `bloqueo_de_fichero` en una conexión dedicada para el reemplazo
+        #    atómico del CBZ; no debe ser la misma clave que el de arriba o la
+        #    sesión esperaría un lock de su propia otra conexión.
+        await bloquear_archivo(self.db, file.id)
         async with bloqueo_de_fichero(motor_de(self.db), file.id):
+            # Releer DESPUÉS de ambos locks: el `file`/`ctx`/`path` recibidos se
+            # cargaron antes y pueden estar obsoletos (otra operación pudo
+            # cambiar la relación, la ruta o `metadata_`).
+            fresco = (await self.db.execute(
+                select(File).where(File.id == file.id).execution_options(populate_existing=True)
+            )).scalar_one_or_none()
+            if fresco is None:
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="archivo ya no está en la BD", gasta_cupo=False)
+            file = fresco
+            path = Path(file.file_path)
+            ctx = await self._contexto(file)
+            if file.file_format is not FileFormat.CBZ:
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="formato no parcheable (solo CBZ)", gasta_cupo=False)
+            if file.is_missing or not path.exists():
+                return ResultadoEtiquetado(
+                    file.id, file.file_name, SALTADO,
+                    motivo="archivo ausente", gasta_cupo=False)
             resultado = await self._escribir(
                 file, ctx, path, solo_rellenar, reconciliar_todo)
-        # La sesión se toca DESPUÉS de soltar el bloqueo (ver `bloqueo_de_fichero`).
-        await self.db.flush()
+            await self.db.flush()
+        # El lock de la sesión sigue vivo hasta que el llamante haga commit/rollback.
         return resultado
 
     async def _sesion_utilizable(self) -> bool:
@@ -544,7 +580,11 @@ class TaggerService:
             .outerjoin(Publisher, Series.publisher_id == Publisher.id)
             .where(File.file_format == FileFormat.CBZ)
             .where(File.is_missing.is_(False))
-            .order_by(File.imported_at, File.id)
+            # Orden GLOBAL por `File.id` (y no por imported_at): rescan ordena
+            # igual sus cambios y los advisory locks se piden en el mismo orden.
+            # Sin esto, dos procesos multi-fichero podían tomar A/B en órdenes
+            # opuestos y bloquearse mutuamente.
+            .order_by(File.id)
         )
         if file_ids is not None:
             q = q.where(File.id.in_(file_ids))
@@ -560,7 +600,7 @@ class TaggerService:
         while True:
             q = self._consulta(file_ids).limit(PAGINA)
             if ultimo is not None:
-                q = q.where(tuple_(File.imported_at, File.id) > tuple_(*ultimo))
+                q = q.where(File.id > ultimo)
             filas = (await self.db.execute(q)).all()
             if not filas:
                 return
@@ -568,7 +608,7 @@ class TaggerService:
                 yield fila
             if len(filas) < PAGINA:
                 return
-            ultimo = (filas[-1][0].imported_at, filas[-1][0].id)
+            ultimo = filas[-1][0].id
 
     async def run(
         self, limit: int = 20, *, dry_run: bool = True, solo_rellenar: bool = False,

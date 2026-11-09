@@ -140,6 +140,7 @@
           {% else %}
           <span class="muted archivo-razon" data-razon="{{ a.bloqueo }}">{{ razones_sin_boton[a.bloqueo] }}</span>
           {% endif %}
+          {% include "_discrepancias_serie.html" %}
         </li>
         {% endfor %}
       </ul>
