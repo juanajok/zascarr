@@ -15,7 +15,7 @@
 <p><a class="btn ghost" href="/ui/series/{{ serie.id }}/asociar">Volver a buscar</a></p>
 {% elif resultado and resultado.resultado == "asociada" %}
 <h1>{{ "Ya estaba asociada" if resultado.repetida else "Ficha asociada" }}</h1>
-<p>{{ resultado.mensaje }}</p>
+<p>{% if resultado.repetida %}Es la misma asociación que acabas de guardar. No se ha duplicado nada.{% else %}{{ resultado.mensaje }}{% endif %}</p>
 {% if resultado.aviso %}<p class="caption">{{ resultado.aviso }}</p>{% endif %}
 <p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
 <details><summary>Qué ha cambiado</summary><p>Se ha guardado la ficha {{ resultado.id_externo }} de {{ resultado.nombre_fuente }} en esta serie y una entrada en su historial. No se han tocado números, archivos ni metadatos.</p></details>
@@ -29,13 +29,14 @@
 <p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
 {% elif resultado and resultado.motivo == "conflicto_identificador" %}
 <h1>Ficha ocupada</h1>
-<p class="caption" role="alert">La ficha {{ resultado.id_externo }} de {{ resultado.nombre_fuente }} ya está asociada a «{{ resultado.otra_serie }}». No se ha cambiado nada.</p>
+<p class="caption" role="alert">La ficha {{ resultado.id_externo }} de {{ resultado.nombre_fuente }} ya está asociada{% if resultado.otra_serie %} a «{{ resultado.otra_serie }}»{% else %} a otra serie{% endif %}. No se ha cambiado nada.</p>
 <p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a mi serie</a>
-<a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% if resultado.otra_serie_id %}<a class="btn ghost" href="/ui/series/{{ resultado.otra_serie_id }}">Ver la otra serie</a>{% endif %}</p>
 {% elif resultado and resultado.motivo == "ya_tiene_identidad_en_esa_fuente" %}
 <h1>Ya tiene ficha</h1>
 <p class="caption" role="alert">Esta serie ya tiene otra ficha de esa web. Retírala primero si quieres cambiarla.</p>
-<p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}/asociar/{{ resultado.fuente }}/retirar">Retirar la ficha actual</a>
+<a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
 {% elif resultado and resultado.motivo == "propuesta_desactualizada" %}
 <h1>Ficha desactualizada</h1>
 <p class="caption" role="alert">Tu serie ha cambiado desde que buscaste. No se ha asociado nada; vuelve a buscarla.</p>
@@ -43,6 +44,9 @@
 {% elif resultado and resultado.motivo == "token_caducado" %}
 <h1>Propuesta caducada</h1>
 <p class="caption" role="alert">{{ resultado.mensaje }}</p>
+{% elif resultado and resultado.motivo == "conflicto_operacion" %}
+<h1>Vuelve a intentarlo</h1>
+<p class="caption" role="alert">Otra acción coincidió con esta. No se ha cambiado nada.</p>
 <p><a class="btn primary" href="/ui/series/{{ serie.id }}/asociar">Volver a buscar</a></p>
 {% else %}
 <h1>No se ha asociado</h1>

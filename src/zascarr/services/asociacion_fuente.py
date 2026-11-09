@@ -98,6 +98,7 @@ class ResultadoAsociacion:
     titulo: str | None = None
     aviso: str | None = None
     otra_serie: str | None = None
+    otra_serie_id: str | None = None
     fecha: str | None = None
     efectos: dict = field(default_factory=dict)
 
@@ -314,7 +315,8 @@ class AsociacionDeFuente:
         ).first()
         if otra is not None:
             await db.commit()
-            return self._omitida(firmada, "conflicto_identificador", otra_serie=otra.title)
+            return self._omitida(firmada, "conflicto_identificador", otra_serie=otra.title,
+                                     otra_serie_id=(str(otra.id) if getattr(otra, "id", None) else None))
 
         candidata = CandidataComparada(
             titulo=firmada.titulo,
@@ -399,7 +401,13 @@ class AsociacionDeFuente:
             await db.rollback()
             return self._omitida(firmada, "conflicto_identificador")
         self._commit_pedido = True
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            # Un UNIQUE que salta en el commit es definitivo: no es un resultado incierto.
+            await db.rollback()
+            self._commit_pedido = False
+            return self._omitida(firmada, "conflicto_identificador")
         return ResultadoAsociacion(
             **{k: informe[k] for k in ResultadoAsociacion.__dataclass_fields__ if k in informe}
         )
@@ -440,7 +448,7 @@ class AsociacionDeFuente:
 
     def _omitida(
         self, firmada: AsociacionFirmada, motivo: str, *, otra_serie: str | None = None,
-        mensaje: str | None = None,
+        otra_serie_id: str | None = None, mensaje: str | None = None,
     ) -> ResultadoAsociacion:
         return ResultadoAsociacion(
             version=VERSION_RESULTADO,
@@ -454,6 +462,7 @@ class AsociacionDeFuente:
             id_externo=firmada.id_externo,
             titulo=firmada.titulo,
             otra_serie=otra_serie,
+            otra_serie_id=otra_serie_id,
             efectos={
                 k: 0
                 for k in (
@@ -558,3 +567,116 @@ class AsociacionDeFuente:
             ),
             {"tipo": TIPO_INFORME, "h": RETENCION_HORAS, "n": LOTE_DE_PURGA},
         )
+
+
+# ── H11: auditoría y reparación de la procedencia JSONB ─────────────────────────────────────────
+
+@dataclass(frozen=True)
+class IncidenciaAsociacion:
+    tipo: str
+    fuente: str | None
+    detalle: str
+
+
+@dataclass(frozen=True)
+class ReparacionAsociaciones:
+    incidencias: tuple[IncidenciaAsociacion, ...]
+    movidas: int
+    reparada: bool
+
+
+def _entradas_activas(meta: dict) -> list[object]:
+    return meta.get("asociaciones") if isinstance(meta.get("asociaciones"), list) else []
+
+
+def auditar_asociaciones(series: Series) -> tuple[IncidenciaAsociacion, ...]:
+    """Solo lectura: entradas activas huérfanas, duplicadas o inválidas (H11).
+
+    Una columna con id sin entrada activa es LEGACY, no huérfana; no se repara ni se inventa
+    procedencia. La columna sigue siendo la autoridad y no se toca.
+    """
+    meta = series.metadata_ if isinstance(series.metadata_, dict) else None
+    if meta is None:
+        return (IncidenciaAsociacion("json_invalido", None, "metadata no es un objeto"),)
+    if "asociaciones" in meta and not isinstance(meta.get("asociaciones"), list):
+        return (IncidenciaAsociacion("json_invalido", None, "asociaciones no es una lista"),)
+    if "asociaciones_historial" in meta and not isinstance(meta.get("asociaciones_historial"), list):
+        return (IncidenciaAsociacion("json_invalido", None, "asociaciones_historial no es una lista"),)
+    incidencias: list[IncidenciaAsociacion] = []
+    vistos: dict[str, int] = {}
+    for e in _entradas_activas(meta):
+        if not isinstance(e, dict):
+            incidencias.append(IncidenciaAsociacion("invalida", None, "entrada no es un objeto"))
+            continue
+        fuente = e.get("fuente")
+        if not _entrada_valida(e):
+            incidencias.append(IncidenciaAsociacion(
+                "invalida", str(fuente) if fuente is not None else None,
+                "no cumple el esquema activo"))
+            continue
+        vistos[str(fuente)] = vistos.get(str(fuente), 0) + 1
+        if vistos[str(fuente)] > 1:
+            incidencias.append(IncidenciaAsociacion(
+                "duplicada", str(fuente), "más de una entrada activa para la misma fuente"))
+            continue
+        try:
+            col = _columna(str(fuente))
+        except (KeyError, ValueError):
+            incidencias.append(IncidenciaAsociacion("invalida", str(fuente), "fuente desconocida"))
+            continue
+        actual = getattr(series, col, None)
+        if actual is None or str(actual) != str(e.get("id_externo")):
+            incidencias.append(IncidenciaAsociacion(
+                "huerfana", str(fuente),
+                "la entrada activa no coincide con la columna de la fuente"))
+    return tuple(incidencias)
+
+
+async def reparar_asociaciones(db: AsyncSession, series_id: UUID, *,
+                               confirmar: bool = True) -> ReparacionAsociaciones:
+    """Explícita e idempotente: mueve huérfanas/duplicadas/inválidas al historial SIN tocar la columna.
+
+    Nunca se ejecuta automáticamente desde B/C y no inventa identidad: la columna manda.
+    """
+    serie = (await db.execute(
+        select(Series).where(Series.id == series_id).with_for_update())).scalar_one_or_none()
+    if serie is None:
+        raise LookupError("serie inexistente")
+    incidencias = auditar_asociaciones(serie)
+    if not confirmar or not incidencias:
+        return ReparacionAsociaciones(incidencias, 0, False)
+    meta = copy.deepcopy(serie.metadata_ if isinstance(serie.metadata_, dict) else {})
+    activas = _entradas_activas(meta)
+    nuevas: list[object] = []
+    historial = meta.get("asociaciones_historial")
+    historial = list(historial) if isinstance(historial, list) else []
+    movidas = 0
+    conservadas: set[str] = set()
+    for e in activas:
+        if not isinstance(e, dict) or not _entrada_valida(e):
+            historial.append({"previo": e, "deshecho": {
+                "operacion_id": None, "fecha": datetime.now(UTC).isoformat(), "motivo": "reparacion"}})
+            movidas += 1
+            continue
+        fuente = str(e.get("fuente"))
+        try:
+            col = _columna(fuente)
+        except (KeyError, ValueError):
+            historial.append({"previo": e, "deshecho": {
+                "operacion_id": None, "fecha": datetime.now(UTC).isoformat(), "motivo": "reparacion"}})
+            movidas += 1
+            continue
+        actual = getattr(serie, col, None)
+        if fuente in conservadas or actual is None or str(actual) != str(e.get("id_externo")):
+            historial.append({"previo": e, "deshecho": {
+                "operacion_id": None, "fecha": datetime.now(UTC).isoformat(), "motivo": "reparacion"}})
+            movidas += 1
+            continue
+        conservadas.add(fuente)
+        nuevas.append(e)
+    meta["asociaciones"] = nuevas
+    meta["asociaciones_historial"] = historial
+    await db.execute(update(Series).where(Series.id == series_id)
+                     .values({"metadata_": meta}).execution_options(synchronize_session=False))
+    await db.commit()
+    return ReparacionAsociaciones(incidencias, movidas, True)
