@@ -42,6 +42,7 @@ from zascarr.core.comicinfo_write import (
     plan,
 )
 from zascarr.models import File, FileFormat, Issue, Publisher, Series
+from zascarr.services.compartidos import estado_de_comparticion
 from zascarr.utils import cbz as zcbz
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.cbz import (
@@ -400,6 +401,16 @@ class TaggerService:
             dry_run=dry_run, solo_rellenar=solo_rellenar,
             reconciliar_todo=reconciliar_todo)
 
+    async def _bloqueo_por_compartido(self, file: File, path: Path) -> ResultadoEtiquetado | None:
+        """#488: fallo cerrado del guardián de compartidos (solo lectura)."""
+        decision = await estado_de_comparticion(path)
+        if not decision.bloquea:
+            return None
+        logger.info("tagger.compartido_bloqueado", file_id=file.id,
+                    estado=decision.estado.value)
+        return ResultadoEtiquetado(file.id, file.file_name, SALTADO,
+                                   motivo=decision.mensaje, gasta_cupo=False)
+
     async def _ejecutar_con(
         self, file: File, ctx: _Contexto, path: Path, *,
         dry_run: bool, solo_rellenar: bool, reconciliar_todo: bool,
@@ -416,6 +427,9 @@ class TaggerService:
                 return ResultadoEtiquetado(
                     file.id, file.file_name, SALTADO,
                     motivo="archivo ausente", gasta_cupo=False)
+            bloqueo = await self._bloqueo_por_compartido(file, path)
+            if bloqueo is not None:
+                return bloqueo
             return await self._simular(file, ctx, path, solo_rellenar, reconciliar_todo)
 
         # Escritura real. Dos locks por `File.id`, con espacios distintos:
@@ -449,6 +463,9 @@ class TaggerService:
                 return ResultadoEtiquetado(
                     file.id, file.file_name, SALTADO,
                     motivo="archivo ausente", gasta_cupo=False)
+            bloqueo = await self._bloqueo_por_compartido(file, path)
+            if bloqueo is not None:
+                return bloqueo
             resultado = await self._escribir(
                 file, ctx, path, solo_rellenar, reconciliar_todo)
             await self.db.flush()

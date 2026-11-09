@@ -128,6 +128,12 @@ def _contexto() -> dict:
         "amule_url": s.amule_url,
         "amule_password_configurada": bool(s.amule_password),
         "amule_enabled": s.amule_enabled,
+        "carpetas_compartidas": list(getattr(s, "carpetas_compartidas", []) or []),
+        "carpetas_disponibles": [
+            {"ruta": str(s.library_path), "nombre": "Biblioteca"},
+            {"ruta": str(s.downloads_path), "nombre": "Descargas"},
+            {"ruta": str(s.amule_incoming_dir), "nombre": "Incoming de aMule"},
+        ],
         "auth_mode": s.auth_mode,
         "auth_username": s.auth_username,
         "auth_password_configurada": bool(s.auth_password_hash),
@@ -300,6 +306,28 @@ async def guardar_amule(
         "amule_enabled": amule_enabled,
     })
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
+
+
+@router.post("/guardar/compartidos", response_class=HTMLResponse)
+async def guardar_compartidos(
+    request: Request,
+    carpetas_compartidas: list[str] = Form(default=[]),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """#488: carpetas que comparten los programas de descargas.
+
+    Solo se aceptan las raíces conocidas del contenedor: una ruta relativa, con `..` o
+    inventada desde el formulario se descarta (y si no queda ninguna, el guardián fallará
+    cerrado). Se guarda en la misma fila JSONB de ajustes; sin migración."""
+    s = get_settings()
+    permitidas = {str(s.library_path), str(s.downloads_path), str(s.amule_incoming_dir)}
+    elegidas = []
+    for ruta in carpetas_compartidas:
+        if ruta in permitidas and ruta not in elegidas:
+            elegidas.append(ruta)
+    await RuntimeSettingsService(db).save({"carpetas_compartidas": elegidas})
+    return templates.TemplateResponse(
+        request, "_ajustes_guardado.html", {"nombre": "Archivos compartidos"})
 
 
 def _contexto_seguridad(*, incluir_valores: bool = True) -> dict:

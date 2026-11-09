@@ -48,8 +48,12 @@ class TransmissionClient:
             logger.info("transmission.added", name=added.get("name", ""))
         return added
 
-    async def list_completed(self, download_dir: str | None = None) -> list[dict]:
-        s = get_settings()
+    async def list_torrents(self) -> list[dict]:
+        """Todos los torrents con su carpeta y sus archivos (#488: guardián de compartidos).
+
+        No filtra por completados ni por carpeta: un archivo de la biblioteca puede estar en
+        cualquier torrent que Transmission conozca (incluido uno aún descargando o sembrando).
+        """
         data = await self._rpc(
             "torrent-get",
             {
@@ -64,8 +68,12 @@ class TransmissionClient:
                 ]
             },
         )
+        return list(data.get("arguments", {}).get("torrents", []))
+
+    async def list_completed(self, download_dir: str | None = None) -> list[dict]:
+        s = get_settings()
         target = download_dir or s.transmission_download_dir
-        return [t for t in data.get("arguments", {}).get("torrents", [])
+        return [t for t in await self.list_torrents()
                 if t.get("percentDone", 0) == 1 and target in t.get("downloadDir", "")]
 
     async def remove_torrent(self, torrent_id: int, delete_data: bool = False) -> bool:

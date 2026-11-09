@@ -155,6 +155,23 @@
     </form>
     <div id="resultado-amule"></div>
     <div id="prueba-amule"></div>
+
+    {#- #488/BL-CNV6: guardián de archivos compartidos. Fallo cerrado si no se declara nada. -#}
+    <fieldset class="ajustes-card" id="archivos-compartidos">
+      <legend>Archivos compartidos</legend>
+      <p class="ajustes-desc">Marca las carpetas que comparten tus programas de descargas. Si ZascArr no sabe si un archivo se comparte, no lo toca.</p>
+      <form hx-post="/ui/ajustes/guardar/compartidos" hx-target="#resultado-compartidos" hx-swap="innerHTML">
+        {% for c in carpetas_disponibles %}
+        <label>
+          <input type="checkbox" name="carpetas_compartidas" value="{{ c.ruta }}" {% if c.ruta in carpetas_compartidas %}checked{% endif %}>
+          {{ c.nombre }} <span class="muted">({{ c.ruta }})</span>
+        </label>
+        {% endfor %}
+        <p class="ajustes-hint">Mientras no declares ninguna, ZascArr no escribe en la biblioteca: no puede saber si un archivo se está compartiendo.</p>
+        <div class="ajustes-actions"><button type="submit">Guardar carpetas compartidas</button></div>
+      </form>
+      <div id="resultado-compartidos"></div>
+    </fieldset>
   </fieldset>
 
   {% include "_ajustes_seguridad.html" %}
