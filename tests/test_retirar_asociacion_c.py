@@ -9,6 +9,8 @@ import pytest
 
 from zascarr.models import MetadataSource
 from zascarr.services.retirar_asociacion import (
+    MENSAJE_CADUCADO_SIN_APLICAR,
+    MENSAJE_CADUCADO_SIN_INFORME,
     RetirarAsociacionDeFuente,
     huella_de_asociacion_actual,
 )
@@ -42,8 +44,12 @@ class _DB:
         self.commits = 0
         self.rollbacks = 0
         self.valores = None
+        self.llamadas = 0
+        self.sentencias = []
 
     async def execute(self, statement, *_a, **_k):
+        self.llamadas += 1
+        self.sentencias.append(statement)
         if hasattr(statement, "_values"):
             self.valores = {getattr(k, "name", k): getattr(v, "value", v)
                             for k, v in statement._values.items()}
@@ -63,12 +69,14 @@ class _DB:
         self.added.clear()
 
 
-def _entrada(fuente="gcd", id_externo="123", operacion=None, deshecho=None):
+def _entrada(fuente="gcd", id_externo="123", operacion=None, deshecho=None, previo=None):
     e = {"version": 1, "fuente": fuente, "id_externo": id_externo, "entidad": "serie",
          "kind": "collection", "fecha": "2026-11-09T10:00:00+00:00",
          "operacion_id": operacion or str(uuid4()), "origen": "confirmada", "modo": "busqueda"}
     if deshecho:
         e["deshecho"] = deshecho
+    if previo:
+        e["previo"] = previo
     return e
 
 
@@ -152,9 +160,10 @@ class TestConfirmar:
     async def test_historial_con_operacion_es_ya_retirada(self):
         serie = _serie()
         op = str(uuid4())
+        previo = _entrada(operacion=str(uuid4()))
         serie.metadata_ = {"asociaciones": [], "asociaciones_historial": [_entrada(
-            operacion=str(uuid4()), deshecho={"operacion_id": op, "fecha": "2026-11-09T10:00:00+00:00",
-                                              "motivo": "retirada"})]}
+            operacion=op, deshecho={"operacion_id": op, "fecha": "2026-11-09T10:00:00+00:00",
+                                    "motivo": "retirada"}, previo=previo)]}
         db = _DB([_Res(), _Res(), _Res(scalar=serie)])
         resultado = await _servicio(db).confirmar(_token(serie, op=op))
         assert resultado.resultado == "ya_retirada"
@@ -185,3 +194,84 @@ class TestConfirmar:
         hist = db.valores["metadata"]["asociaciones_historial"][0]
         assert hist["previo"]["procedencia"] == "desconocida"
         assert db.valores["gcd_id"] is None
+
+
+class TestF2YH2:
+    @pytest.mark.asyncio
+    async def test_token_de_otra_serie_no_consulta_ni_escribe(self):
+        serie = _serie()
+        db = _DB([])
+        from zascarr.services.vinculacion import TokenInvalidoError
+        with pytest.raises(TokenInvalidoError, match="otra serie"):
+            await _servicio(db).confirmar(_token(serie), serie_esperada=uuid4())
+        assert db.llamadas == 0 and db.commits == 0
+
+    @pytest.mark.asyncio
+    async def test_token_invalido_no_consulta_ni_escribe(self):
+        db = _DB([])
+        from zascarr.services.vinculacion import TokenInvalidoError
+        with pytest.raises(TokenInvalidoError):
+            await _servicio(db).confirmar("no-es-token")
+        assert db.llamadas == 0
+
+    @pytest.mark.asyncio
+    async def test_caducado_dentro_de_retencion_dice_que_no_se_aplico(self):
+        serie = _serie()
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        r = await _servicio(db, ahora=10**9 + 901).confirmar(_token(serie, ahora=10**9))
+        assert r.motivo == "token_caducado" and r.mensaje == MENSAJE_CADUCADO_SIN_APLICAR
+        assert "no se ha retirado nada" in r.mensaje
+
+    @pytest.mark.asyncio
+    async def test_caducado_pasada_la_retencion_no_afirma_que_no_cambio_nada(self):
+        serie = _serie()
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        r = await _servicio(db, ahora=10**9 + 900 + 25 * 3600).confirmar(
+            _token(serie, ahora=10**9))
+        assert r.motivo == "token_caducado" and r.mensaje == MENSAJE_CADUCADO_SIN_INFORME
+        assert "no se ha cambiado nada" not in r.mensaje.lower()
+        assert "no se puede saber" in r.mensaje
+
+
+class TestH8:
+    @pytest.mark.asyncio
+    async def test_entrada_activa_invalida_se_mueve_con_procedencia_invalida(self):
+        serie = _serie(metadata_={"asociaciones": [
+            {**_entrada(), "campo_desconocido": "x"}]})
+        db = _DB([_Res(), _Res(), _Res(scalar=serie), _Res(rowcount=1), _Res()])
+        r = await _servicio(db).confirmar(_token(serie))
+        assert r.resultado == "retirada" and db.valores["gcd_id"] is None
+        hist = db.valores["metadata"]["asociaciones_historial"][0]
+        assert hist["procedencia"] == "invalida"
+        assert hist["previo"]["campo_desconocido"] == "x"
+
+    @pytest.mark.asyncio
+    async def test_historial_invalido_no_es_evidencia(self):
+        op = str(uuid4())
+        serie = _serie(metadata_={
+            "asociaciones": [],
+            "asociaciones_historial": [{"version": 1, "fuente": "gcd", "id_externo": "123",
+                                        "operacion_id": op, "deshecho": {"operacion_id": op}}],
+        })
+        db = _DB([_Res(), _Res(), _Res(scalar=serie), _Res(rowcount=1), _Res()])
+        r = await _servicio(db).confirmar(_token(serie, op=op))
+        assert r.resultado == "retirada"   # no se cree el historial incompleto
+
+    @pytest.mark.asyncio
+    async def test_jsonb_corrupto_no_retira(self):
+        serie = _serie(metadata_={"asociaciones": "no-lista"})
+        db = _DB([_Res(), _Res(), _Res(scalar=serie)])
+        r = await _servicio(db).confirmar(_token(serie))
+        assert r.motivo == "propuesta_desactualizada"
+        assert db.valores is None
+
+
+class TestUpdateCondicionado:
+    @pytest.mark.asyncio
+    async def test_el_update_exige_la_columna_igual_al_id_firmado(self):
+        serie = _serie()
+        db = _DB([_Res(), _Res(), _Res(scalar=serie), _Res(rowcount=1), _Res()])
+        await _servicio(db).confirmar(_token(serie))
+        update_stmt = next(s for s in db.sentencias if s.__class__.__name__ == "Update")
+        columnas = {getattr(c.left, "name", None) for c in update_stmt._where_criteria}
+        assert "gcd_id" in columnas   # no basta con IS NOT NULL: exige el id firmado

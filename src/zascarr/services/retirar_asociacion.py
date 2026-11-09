@@ -23,13 +23,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.models import MetadataSource, Series, VinculacionOperacion
 from zascarr.services.asociacion_fuente import (
+    _CLAVES_ENTRADA,
     _columna,
+    _entrada_valida,
     _metadata,
     _nombre,
+    _valor,
 )
 from zascarr.services.tokens_revision import (
+    TTL_SEGUNDOS,
     RetirarAsociacionFirmada,
     crear_token_retirar_asociacion,
+    id_canonico,
     verificar_token_retirar_asociacion,
 )
 from zascarr.services.vinculacion import (
@@ -47,10 +52,19 @@ _ESPACIO_OPERACION = "ret_asoc_op:"
 MENSAJES = {
     "propuesta_desactualizada": "La asociación cambió desde que abriste la vista previa. No se ha retirado nada; vuelve a revisarla.",
     "serie_inexistente": "Esta serie ya no está en tu biblioteca.",
-    "token_caducado": "Han pasado más de 15 minutos. No se ha cambiado nada; vuelve a revisar la ficha.",
     "conflicto_operacion": "El identificador de esta operación ya está ocupado. No se ha cambiado nada.",
     "conflicto_de_bloqueo": "Otra operación coincidió con esta. No se ha cambiado nada.",
 }
+#: H2: dentro de la retención no hay comprobante/historial, pero sí consta que no se aplicó.
+MENSAJE_CADUCADO_SIN_APLICAR = (
+    "Han pasado más de 15 minutos y esta confirmación no llegó a aplicarse: no se ha retirado "
+    "nada. Vuelve a revisar la ficha."
+)
+MENSAJE_CADUCADO_SIN_INFORME = (
+    "Han pasado más de 15 minutos y ya no se conserva el registro de esta operación: no se puede "
+    "saber si llegó a retirarse. Vuelve a revisar la ficha para ver el estado actual."
+)
+_CLAVES_HISTORIAL = _CLAVES_ENTRADA | {"deshecho", "previo", "procedencia"}
 
 
 @dataclass(frozen=True)
@@ -121,6 +135,38 @@ def _fecha(valor: object) -> str | None:
     return f.date().isoformat() if f.tzinfo else None
 
 
+def _historial_valido(entrada: dict) -> bool:
+    """H8: una entrada del historial solo acredita una retirada si su forma es válida.
+
+    El historial de C es «entrada activa + deshecho + previo»; las entradas
+    inválidas/marcadas como `procedencia: "invalida"` no se usan como evidencia.
+    """
+    if not isinstance(entrada, dict) or not set(entrada) <= _CLAVES_HISTORIAL:
+        return False
+    if not set(entrada) >= _CLAVES_ENTRADA:
+        return False
+    deshecho = entrada.get("deshecho")
+    if not isinstance(deshecho, dict) or not isinstance(entrada.get("previo"), dict):
+        return False
+    try:
+        UUID(str(deshecho.get("operacion_id")))
+        fecha = datetime.fromisoformat(str(deshecho.get("fecha")))
+    except (ValueError, TypeError):
+        return False
+    if fecha.tzinfo is None or not isinstance(deshecho.get("motivo"), str):
+        return False
+    procedencia = entrada.get("procedencia")
+    if procedencia == "invalida":
+        return False
+    if procedencia == "desconocida":
+        return (entrada.get("origen") == "desconocida"
+                and entrada.get("fecha") is None
+                and id_canonico(str(entrada.get("fuente")), entrada.get("id_externo"))
+                == entrada.get("id_externo"))
+    base = {k: entrada.get(k) for k in _CLAVES_ENTRADA}
+    return _entrada_valida(base)
+
+
 class RetirarAsociacionDeFuente:
     def __init__(self, db: AsyncSession, *, secret: str, ahora: float | None = None):
         self._db = db
@@ -161,11 +207,15 @@ class RetirarAsociacionDeFuente:
             "registrada" if active is not None else "no registrada", "ok",
             "Vas a quitar la ficha de esta serie. No se borra nada.", token)
 
-    async def confirmar(self, token: str) -> ResultadoRetirarAsociacion:
+    async def confirmar(self, token: str, *, serie_esperada: UUID | str | None = None) -> ResultadoRetirarAsociacion:
         firmada = verificar_token_retirar_asociacion(
             token, self._secret, ahora=self._ahora, ignorar_caducidad=True)
         if firmada is None:
             raise TokenInvalidoError("La propuesta no es válida: vuelve a revisar la ficha.")
+        if serie_esperada is not None and firmada.serie_id != str(serie_esperada):
+            raise TokenInvalidoError(
+                "La propuesta pertenece a otra serie; no se ha retirado nada. Vuelve a abrirla "
+                "desde su serie.")
         vigente = verificar_token_retirar_asociacion(token, self._secret, ahora=self._ahora) is not None
         try:
             return await self._transaccion(firmada, vigente)
@@ -199,7 +249,10 @@ class RetirarAsociacionDeFuente:
         if firmada.entidad != "serie" or firmada.fuente not in {f.value for f in MetadataSource}:
             await db.commit()
             return self._omitida(firmada, "token_invalido")
-        serie = (await db.execute(select(Series).where(Series.id == sid).with_for_update())).scalar_one_or_none()
+        serie = (await db.execute(
+            select(Series).where(Series.id == sid).with_for_update()
+            .execution_options(populate_existing=True)
+        )).scalar_one_or_none()
         if serie is None:
             await db.commit()
             return self._omitida(firmada, "serie_inexistente")
@@ -210,14 +263,23 @@ class RetirarAsociacionDeFuente:
         activas = [e for e in (meta.get("asociaciones") or []) if isinstance(e, dict)]
         historial = [e for e in (meta.get("asociaciones_historial") or []) if isinstance(e, dict)]
         for e in historial:
+            if not _historial_valido(e):
+                continue
             if e.get("operacion_id") == firmada.operacion or (
                     isinstance(e.get("deshecho"), dict)
                     and e["deshecho"].get("operacion_id") == firmada.operacion):
                 await db.commit()
                 return self._ya_retirada(firmada, repetida=True)
         if not vigente:
+            ahora = self._ahora if self._ahora is not None else time.time()
+            firma = firmada.caduca - TTL_SEGUNDOS
+            puede_haberse_aplicado = ahora >= firma + RETENCION_HORAS * 3600
             await db.commit()
-            return self._omitida(firmada, "token_caducado")
+            return self._omitida(
+                firmada, "token_caducado",
+                mensaje=(MENSAJE_CADUCADO_SIN_INFORME if puede_haberse_aplicado
+                         else MENSAJE_CADUCADO_SIN_APLICAR),
+            )
         col = _columna(firmada.fuente)
         actual = getattr(serie, col)
         if actual is None:
@@ -235,6 +297,10 @@ class RetirarAsociacionDeFuente:
         if activa is not None:
             previo_dato = dict(activa)
             entrada = {**activa}
+            if not _entrada_valida(activa):
+                # H8: se retira igual, pero el historial deja constancia de que la
+                # procedencia era inválida y no sirve como evidencia.
+                entrada["procedencia"] = "invalida"
         else:
             previo_dato = {
                 "version": 1, "fuente": firmada.fuente, "id_externo": firmada.id_externo,
@@ -252,7 +318,10 @@ class RetirarAsociacionDeFuente:
         informe = self._informe(firmada, fecha, "retirada", False, activa is not None)
         try:
             resultado = await db.execute(
-                update(Series).where(Series.id == sid, getattr(Series, col).is_not(None))
+                update(Series).where(
+                    Series.id == sid,
+                    getattr(Series, col) == _valor(firmada.fuente, firmada.id_externo),
+                )
                 .values({col: None, "metadata_": nueva})
                 .execution_options(synchronize_session=False))
             if resultado.rowcount != 1:
@@ -282,11 +351,12 @@ class RetirarAsociacionDeFuente:
                         "numeros": 0, "archivos": 0, "metadatos_aplicados": 0},
         }
 
-    def _omitida(self, firmada, motivo):
+    def _omitida(self, firmada, motivo, *, mensaje=None):
         return ResultadoRetirarAsociacion(
             version=VERSION_RESULTADO, tipo=TIPO_INFORME, operacion_id=firmada.operacion,
             series_id=firmada.serie_id, resultado="omitida", motivo=motivo,
-            mensaje=MENSAJES.get(motivo, "No se ha cambiado nada."), fuente=firmada.fuente,
+            mensaje=mensaje or MENSAJES.get(motivo, "No se ha cambiado nada."),
+            fuente=firmada.fuente,
             id_externo=firmada.id_externo,
             efectos={k: 0 for k in ("campos_serie", "asociaciones", "comprobantes", "numeros", "archivos", "metadatos_aplicados")})
 

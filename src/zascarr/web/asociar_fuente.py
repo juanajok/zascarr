@@ -205,7 +205,8 @@ async def confirmar_retirada(series_id: UUID, request: Request,
     serie = await _serie(db, series_id)
     servicio = RetirarAsociacionDeFuente(db, secret=get_settings().secret_key)
     try:
-        resultado: ResultadoRetirarAsociacion = await servicio.confirmar(token)
+        resultado: ResultadoRetirarAsociacion = await servicio.confirmar(
+            token, serie_esperada=series_id)
     except ResultadoInciertoError:
         return _sin_cache(templates.TemplateResponse(
             request, "asociar_fuente_retirar_resultado.html",
