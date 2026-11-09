@@ -42,3 +42,26 @@ def test_un_fallo_es_rojo(tmp_path):
 def test_sin_pruebas_de_rar_real_es_rojo_no_verde_vacio(tmp_path):
     """Si el fichero de pruebas desapareciera o no se recogiera, el informe vacío NO es verde."""
     assert any("solo 0" in m for m in ci.motivos(_informe(tmp_path, [])))
+
+
+# ── #530 C3: el runner de la suite tiene que ser el de producción (1.10.8 + flag) ─────────────
+
+def test_sin_unar_ni_lsar_en_el_runner_es_rojo(monkeypatch):
+    monkeypatch.setattr(ci.shutil, "which", lambda nombre: None)
+    problemas = ci.problemas_de_la_herramienta()
+    assert any("falta unar" in p for p in problemas) and any("falta lsar" in p for p in problemas)
+
+
+def test_un_runner_con_1_10_1_es_rojo_aunque_el_fallback_lo_tapara(monkeypatch):
+    monkeypatch.setattr(ci.shutil, "which", lambda nombre: f"/usr/bin/{nombre}")
+    monkeypatch.setattr(ci, "_salida", lambda *orden: "v1.10.1" if "-v" in orden else "sin flag")
+    problemas = ci.problemas_de_la_herramienta()
+    assert any("unar no es 1.10.8" in p for p in problemas)
+    assert any("lsar no es 1.10.8" in p for p in problemas)
+    assert any(ci.FLAG_SOLIDOS in p for p in problemas)
+
+
+def test_el_runner_correcto_pasa(monkeypatch):
+    monkeypatch.setattr(ci.shutil, "which", lambda nombre: f"/usr/bin/{nombre}")
+    monkeypatch.setattr(ci, "_salida", lambda *orden: "v1.10.8" if "-v" in orden else ci.FLAG_SOLIDOS)
+    assert ci.problemas_de_la_herramienta() == []

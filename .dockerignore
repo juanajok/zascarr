@@ -1,0 +1,24 @@
+# #530 C1 — contexto de la imagen: ni secretos ni cachés de desarrollo/CI.
+# El `.env` real NUNCA debe entrar en la imagen (solo `.env.example`, que no tiene valores).
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.worktrees
+.squad
+.tmp-*
+.*-scratch
+*.scratch
+.venv*
+node_modules
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.log
+*.prof
+*.dump
+.coverage
+htmlcov

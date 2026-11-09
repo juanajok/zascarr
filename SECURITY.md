@@ -34,11 +34,23 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
 - **Lector de `.cbr` (`unar`), riesgo aceptado.** Para sacar la portada de un `.cbr` que de verdad es RAR, ZascArr
   lanza `unar`/`lsar` por subproceso: un analizador de ficheros de terceros (C/Objective-C) sobre archivos que pueden
   llegar por P2P, ejecutado como el mismo usuario y en el mismo contenedor que la aplicación (con `DATABASE_URL` en su
-  entorno). Debian bookworm empaqueta `unar`/`lsar` `1.10.7+ds1+really1.10.1-2+b2` (código de la v1.10.1) y
-  `gnustep-base` `1.28.1+really1.28.0-5`; aceptado el 2026-11-07. No hay análisis del código ni de RAR hostiles reales más allá de las pruebas
+  entorno). Debian trixie empaqueta `unar`/`lsar` `1.10.8+ds1-9` y `gnustep-base` `1.31.1-3` (base de la imagen desde
+  la #528, 2026-11-09; antes bookworm traía el código de la v1.10.1); riesgo aceptado el 2026-11-07 y actualizado al cambiar
+  la base. La base va por **tag mutable**: observado el 2026-11-09 (amd64) `python@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535`
+  (`python:3.11-slim-trixie`, Python 3.11.18); **arm64 no verificado**. No hay análisis del código ni de RAR hostiles reales más allá de las pruebas
   de la CI. Mitigaciones: subproceso sin shell, grupo propio, tiempo, memoria, salida y bytes escritos acotados, un
-  lector a la vez, extracción por índice verificada, `no-new-privileges` y un tope de procesos en el compose, y sin los
-  ejecutables de GNUstep en la imagen. Se apaga sin reconstruir con `LECTOR_RAR_ENABLED=false` en el `.env`. El PO aceptó este riesgo por escrito: [ADR 0015](docs/adr/0015-lector-de-rar-con-unar.md).
+  lector a la vez, extracción por índice verificada, `no-new-privileges` y un tope de procesos en el compose, sin los
+  ejecutables de GNUstep en la imagen, y sin los ejecutables de herramienta de trixie que el runtime no usa
+  (`dpkg-dev` salvo `dpkg-architecture` —GNUstep lo invoca en runtime—, `gnutls-bin`, `make`, `patch`, `binutils`,
+  `graphviz` y utilidades de `perl`; se conservan `perl-base`/`libdpkg-perl`, que `dpkg-architecture` necesita). El
+  `.dockerignore` deja fuera `.env`/`.env.*` (salvo `.env.example`), `.git`, cachés y scratch: probado con un `.env`
+  centinela que no llega a la imagen. La CI exige `unar`/`lsar` 1.10.8 y el flag en la suite (runner fijado a
+  `ubuntu-26.04`; si cambiara, el gate falla alto) y en la imagen, y un presupuesto de 750 MiB. La limpieza de
+  ejecutables va en una **capa posterior**: **no reduce los bytes de la imagen** (medido 721.109.591 B antes /
+  721.174.975 B después, ≈687,8 MiB), pero sí el sistema de ficheros en ejecución (~11 MB en `/usr`); el
+  `.dockerignore` evita `.git`/scratch en el contexto (y en CI que `.git`, ≈51 MB, entre en la imagen). Se apaga sin
+  reconstruir con `LECTOR_RAR_ENABLED=false` en el `.env`. El PO aceptó este riesgo por escrito:
+  [ADR 0015](docs/adr/0015-lector-de-rar-con-unar.md).
 
 ## Si quieres acceder desde fuera de la Pi
 

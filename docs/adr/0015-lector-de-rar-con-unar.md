@@ -16,7 +16,7 @@ Hechos (dictamen de SecOps sobre #455, `0fab248`):
 |---|---|
 | Superficie nueva | `unar`/GNUstep es un analizador de ficheros de terceros en C/Objective-C. Abre archivos de la biblioteca, que **llegan por P2P** (aMule y Transmission la alimentan) |
 | Sin aislamiento respecto de la aplicación | corre como el **mismo usuario y en el mismo contenedor**: ve `DATABASE_URL` en el entorno del padre y la biblioteca montada en lectura y escritura |
-| Versión | Debian bookworm empaqueta `unar`/`lsar` `1.10.7+ds1+really1.10.1-2+b2`: **código de la v1.10.1**, anterior a la 1.10.8; con `gnustep-base-runtime`/`libgnustep-base1.28` `1.28.1+really1.28.0-5` (medido en la imagen el 2026-11-07) |
+| Versión | Debian bookworm empaquetaba `unar`/`lsar` `1.10.7+ds1+really1.10.1-2+b2`: **código de la v1.10.1**, anterior a la 1.10.8; con `gnustep-base-runtime`/`libgnustep-base1.28` `1.28.1+really1.28.0-5` (medido en la imagen el 2026-11-07). **Desde #528 (2026-11-09) la imagen es trixie y lleva `unar`/`lsar` `1.10.8+ds1-9` con `gnustep-base` `1.31.1-3`** |
 | Vulnerabilidades conocidas | en tres búsquedas SecOps no halló CVE aplicable a Linux (la de XADMaster, CVE-2024-22405, es de macOS; las de GNUstep son de `gdomap`, antiguas). **Ausencia de resultados no es ausencia de fallos**: no hay análisis del código ni *fuzzing* |
 | Limitación funcional | `unar` no extrae un RAR 5 **sólido** (v1.10.1 y 1.10.8): da `ilegible` → marca → cascada de portada, sin error 500 (AC-07 aceptado) |
 
@@ -36,7 +36,7 @@ la misma PR que introduce el lector:
    (`/usr/bin`, `/usr/sbin`, `/etc/init.d`, `/etc/default`: `gdomap`, `gdnc`, `defaults`, `pl*`, `xmlparse`, `sfparse`, `cvtenc`…;
    `gpbs` no existe en bookworm) por su lista de `dpkg -L`; `lsar`/`unar` solo necesitan las bibliotecas. La CI comprueba **dentro de la
    imagen de producción** (`scripts/comprobar_imagen_rar.py`, como `zascarr`): que no quedan, que no hay `setuid`/`setgid` fuera de la base
-   de Debian, y que se leen los fixtures RAR con el `unar` v1.10.1 de la imagen (la suite usa el 1.10.8 del ejecutor).
+   de Debian, y que se leen los fixtures RAR con el `unar` v1.10.8 de la imagen (la suite usa el 1.10.8 del ejecutor).
 4. **Pruebas**: `lsar`/`unar` falsos para la lógica, RAR reales mínimos (RAR 4, RAR 5, RAR 4 sólido) y los seis RAR 4 hostiles
    del generador de SecOps (traversal, ruta absoluta, enlace simbólico, comodines, salto de línea, tamaño falso) con `unar` real
    en la CI, con una puerta que falla si alguna se salta.
@@ -72,8 +72,22 @@ la misma PR que introduce el lector:
   un archivo posterior, esa portada se sirve **sin escribir `covers/v3` y con `Cache-Control: no-store`**: la siguiente petición, con el lector
   libre, prueba el RAR y guarda la correcta. Así un RAR legible no pierde para siempre su portada frente a un CBZ posterior por una carga
   pasajera. Un RAR saltado por tener marca vigente no cuenta como ocupado; una serie solo de CBZ se cachea como antes.
-- **En cada actualización de la imagen base** (`python:3.11-slim-bookworm`) o del paquete `unar` hay que repasar el *tracker* de
-  `unar`/XADMaster y de GNUstep (CVE y arreglos de la 1.10.8 que la 1.10.1 de Debian no lleva) y volver a correr
-  `scripts/comprobar_imagen_rar.py`. Pasar a otra base (por ejemplo `trixie`) y un interruptor para apagar el lector son opciones
-  se **descartaron** el 2026-11-07: el interruptor sí se hace (`LECTOR_RAR_ENABLED`, arriba) y la imagen base **no cambia** en esta PR
-  (`python:3.11-slim-trixie` traería `unar` 1.10.8, pero es una historia aparte, con su propia medición).
+- **En cada actualización de la imagen base** (`python:3.11-slim-trixie` desde #528) o del paquete `unar` hay que repasar el *tracker* de
+  `unar`/XADMaster y de GNUstep y volver a correr
+  `scripts/comprobar_imagen_rar.py`. El PO descartó el 2026-11-07 cambiar de base en la PR de #455 ("historia aparte"); esa
+  historia es la **#528 (2026-11-09, condiciones #530)**, que pasa a `trixie` (`unar`/`lsar` 1.10.8, GNUstep Base 1.31.1) y usa
+  `lsar -j -json-skip-solid-information` para que el listado de un sólido grande no reviente el tope de 4 MiB. Los topes de
+  entradas/bytes/salida siguen igual; `listar` decide una vez por proceso si el binario soporta el flag, deja un único aviso
+  `cover.lsar_sin_flag` sin rutas y reintenta una sola vez sin el flag **solo** con la firma exacta de 1.10.1. La base va por
+  **tag mutable**: observado el 2026-11-09 (amd64) `python@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535`
+  (`python:3.11-slim-trixie`, Python 3.11.18); si cambia, aplica la revisión de este bullet. La CI exige `unar`/`lsar` 1.10.8 y
+  el flag tanto en la suite como en la imagen final, y un presupuesto de imagen de 750 MiB. La limpieza de ejecutables va en
+  una **capa posterior**: **no reduce los bytes de la imagen** (721.109.591 B antes / 721.174.975 B después, ≈687,8 MiB); sí
+  reduce el sistema de ficheros en ejecución (~11 MB en `/usr`), y el `.dockerignore` evita `.git`/scratch en el contexto (en
+  CI, ≈51 MB de `.git`). La imagen final medida es 687,8 MiB. Se conservan `dpkg-architecture`, `perl-base`, `libdpkg-perl` y
+  `perl-modules-5.40`: GNUstep invoca `dpkg-architecture` en runtime y sin él `lsar`/`unar` abortan (verificado; el script de
+  imagen lo comprueba, junto con la ausencia de las herramientas retiradas). El `.dockerignore` deja fuera `.env`/`.env.*`
+  (salvo `.env.example`), `.git`, cachés y scratch; probado en CI con un `.env` centinela que no llega a `/app`. La medición en
+  la Pi del pico de memoria con una salida grande, la portada de un RAR sólido real de ≥220 páginas y **arm64** quedan
+  **NOT RUN** (no se toca la Pi en #528). El interruptor (`LECTOR_RAR_ENABLED`) sigue siendo la
+  palanca para apagarlo sin reconstruir.

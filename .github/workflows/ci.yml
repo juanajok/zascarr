@@ -10,7 +10,9 @@ on:
 jobs:
   test:
     name: Suite unitaria
-    runs-on: ubuntu-latest
+    # #530 R4: imagen fijada (26.04) con unar/lsar 1.10.8; `ubuntu-latest` podría cambiar. El gate
+    # de versión de más abajo sigue fallando alto si la imagen no trae 1.10.8, así que no pasa inadvertido.
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,6 +23,15 @@ jobs:
       # #418: `unar` (con `lsar`) para las pruebas con RAR REAL: sin él se SALTAN, y una prueba saltada no es una pasada.
       - name: unar para las pruebas de RAR
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends unar
+      # #530 C3: la suite debe correr con el MISMO 1.10.8 y el flag; el fallback no puede convertir
+      # en verde un runner antiguo (1.10.1 no conocería el flag).
+      - name: unar/lsar 1.10.8 y flag en el runner de la suite
+        run: |
+          for b in unar lsar; do
+            v="$($b -v)"; echo "$b: $v"
+            case "$v" in *"1.10.8"*) ;; *) echo "::error::$b no es 1.10.8 ($v)"; exit 1;; esac
+          done
+          lsar --help 2>&1 | grep -q -- "-json-skip-solid-information" || { echo "::error::lsar no conoce el flag del listado de sólidos"; exit 1; }
       # Las pruebas de credenciales (ADR 0012) usan Docker real: el servicio `credenciales` de Compose necesita la imagen
       # de PostgreSQL ya descargada, y los guiones de tests/escenarios/ corren como root en este ejecutor desechable
       # (CI=true + sudo sin clave) con usuarios sintéticos. Sin esto se SALTAN, y una prueba saltada no es una pasada.
@@ -133,25 +144,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # #530 R3: centinela de contexto. Si `.dockerignore` dejara de excluir `.env`, el build metería
+      # este fichero en la imagen y el paso de verificación de abajo fallaría.
+      - name: centinela .env para el contexto (#530 R3)
+        run: printf 'ZASCARR_CENTINELA=no-debe-entrar-en-la-imagen\n' > .env
       - run: docker build -t zascarr:ci .
-      # #418: la imagen lleva `unar` y lo ejecuta el usuario de servicio (no solo root).
-      - name: lsar dentro de la imagen, como el usuario de servicio
-        run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- lsar --version
+      # #530 R3: el centinela NO puede estar en /app; `.env.example` sí (no tiene valores).
+      - name: el centinela .env no entra en la imagen (#530 R3)
+        run: |
+          docker run --rm --entrypoint sh zascarr:ci -c 'test ! -e /app/.env' || \
+            { echo "::error::/app/.env entró en la imagen (¿se perdió el .dockerignore?)"; exit 1; }
+          docker run --rm --entrypoint sh zascarr:ci -c 'test -e /app/.env.example' || \
+            { echo "::error::/app/.env.example no está en la imagen"; exit 1; }
+          echo ".env ausente y .env.example presente en /app"
+      # #528: la base trixie trae `unar`/`lsar` 1.10.8 y el flag que evita que un sólido grande repita
+      # ~29 KB por entrada y reviente el tope de salida. Se comprueba VERSIÓN y FLAG en la imagen final.
+      - name: unar/lsar 1.10.8 y el flag del listado de sólidos
+        run: |
+          docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- sh -c '
+            unar -v | grep -q "1\.10\.8" || { echo "::error::unar no es 1.10.8 ($(unar -v))"; exit 1; }
+            lsar -v | grep -q "1\.10\.8" || { echo "::error::lsar no es 1.10.8 ($(lsar -v))"; exit 1; }
+            lsar --help 2>&1 | grep -q -- "-json-skip-solid-information" || \
+              { echo "::error::lsar no conoce -json-skip-solid-information"; exit 1; }'
       # #418 (ADR 0015): sin los demonios GNUstep que nadie usa, y `lsar` sigue leyendo un RAR de verdad.
-      - name: sin gdomap/gdnc/gpbs y con lsar funcionando sobre un RAR
+      - name: sin gdomap/gdnc/gpbs ni sus ficheros de servicio y con lsar funcionando sobre RAR (incluido sólido)
         run: |
           docker run --rm --entrypoint sh zascarr:ci -c '
-            for b in gdomap gdnc gpbs; do
+            for b in "gdomap*" gdnc "gpbs*"; do
               if [ -n "$(find / -xdev -type f -name "$b" 2>/dev/null)" ]; then echo "::error::$b sigue en la imagen"; exit 1; fi
             done
-            runuser -u zascarr -- lsar -j /app/tests/fixtures/rar/minimo_rar5.cbr | grep -q "01.jpg"
+            runuser -u zascarr -- lsar -j -json-skip-solid-information /app/tests/fixtures/rar/minimo_rar5.cbr | grep -q "01.jpg"
+            runuser -u zascarr -- lsar -j -json-skip-solid-information /app/tests/fixtures/rar/solido_rar4.cbr | grep -q "01.jpg"
             echo "setuid/setgid de la imagen:"; find / -xdev -perm /6000 -type f 2>/dev/null | head -20'
-      # #418 (SecOps C-4): la suite usa el `unar` del ejecutor (1.10.8); la imagen lleva el de bookworm (1.10.1).
+      # #418 (SecOps C-4): la suite y la imagen usan ya el mismo `unar` 1.10.8 (trixie desde #528).
       - name: lector RAR con el unar de la imagen de producción (ejecutables de GNUstep fuera, sin setuid nuevo, fixtures)
         run: docker run --rm --entrypoint runuser zascarr:ci -u zascarr -- python /app/scripts/comprobar_imagen_rar.py
-      - name: tamaño de la imagen
-        run: docker image ls zascarr:ci --format '{{.Size}}'
+      - name: presupuesto de tamaño de la imagen (#530 C2)
+        run: |
+          bytes=$(docker image inspect zascarr:ci --format '{{.Size}}')
+          mib=$((bytes / 1048576))
+          echo "imagen: ${mib} MiB (presupuesto: 750 MiB)"
+          if [ "$mib" -gt 750 ]; then
+            echo "::error::la imagen mide ${mib} MiB y supera el presupuesto de 750 MiB"
+            exit 1
+          fi
       - name: arranque con la imagen endurecida
         run: |
           docker run --rm --security-opt no-new-privileges:true --pids-limit 256 --entrypoint runuser zascarr:ci \
             -u zascarr -- python -c "import zascarr.main"
+      # #530 R3: limpiar el centinela aunque algo haya fallado antes.
+      - name: limpiar el centinela .env (#530 R3)
+        if: always()
+        run: rm -f .env
