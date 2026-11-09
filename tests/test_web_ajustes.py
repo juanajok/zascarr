@@ -270,6 +270,46 @@ class TestProbar:
         assert "✓" in r.text
         assert "Conexión correcta" in r.text
 
+    def test_la_prueba_de_comic_vine_manda_el_user_agent_de_zascarr(self):
+        """Bug real (2026-11-09): GameSpot bloquea con 403 el User-Agent genérico de httpx
+        (`python-httpx/…`). La prueba creaba un cliente sin cabecera y daba «HTTP 403» con una
+        clave válida. Debe mandar el MISMO User-Agent que el cliente real."""
+        capturado: dict = {}
+        respuesta = MagicMock(status_code=200)
+        respuesta.json.return_value = {"error": "OK"}
+
+        async def get(self, *args, **kwargs):
+            capturado["ua"] = self.headers.get("user-agent")
+            return respuesta
+
+        with patch("httpx.AsyncClient.get", get):
+            client = TestClient(app)
+            r = client.post(
+                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+        assert "Conexión correcta" in r.text
+        assert capturado["ua"] == "ZascArr/0.1"
+
+    def test_comic_vine_401_lo_dice_como_clave_rechazada(self):
+        respuesta = MagicMock(status_code=401)
+        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
+            client = TestClient(app)
+            r = client.post(
+                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-mala"})
+        assert "✗" in r.text
+        assert "rechazó la clave (HTTP 401)" in r.text
+
+    def test_comic_vine_403_habla_del_bloqueo_anti_bots_y_de_la_vpn(self):
+        """El 403 de GameSpot no significa «clave mala»: es su protección contra programas o la
+        red. El mensaje no debe hacer pensar que la clave está mal y debe decir qué probar."""
+        respuesta = MagicMock(status_code=403)
+        with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):
+            client = TestClient(app)
+            r = client.post(
+                "/ui/ajustes/probar/comic-vine", data={"comicvine_api_key": "clave-valida"})
+        assert "✗" in r.text
+        assert "bloqueó la conexión (HTTP 403)" in r.text
+        assert "protección contra programas" in r.text and "VPN" in r.text
+
     def test_prowlarr_clave_rechazada(self):
         respuesta = MagicMock(status_code=401)
         with patch("httpx.AsyncClient.get", AsyncMock(return_value=respuesta)):

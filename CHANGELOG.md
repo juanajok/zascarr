@@ -5,6 +5,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ## [No publicado]
 
+### Corregido
+
+- **«Probar conexión» de Comic Vine daba un 403 engañoso con una clave válida.** GameSpot bloquea con
+  HTTP 403 («Anonymous Bot or Scraper Blocked») las peticiones cuyo `User-Agent` es el genérico de las
+  librerías Python o no existe; el cliente real de ZascArr manda uno propio y funcionaba, pero la prueba
+  de Ajustes creaba un cliente sin esa cabecera. Ahora la prueba usa el mismo `User-Agent` que el cliente
+  real (constante única) y los mensajes distinguen la causa: 401 = clave rechazada, 403 = bloqueo
+  anti-bots o de la red (VPN/proxy). Regresión con el `User-Agent` capturado y con ambos códigos.
+
 ### Añadido
 
 - **«Reescanear la biblioteca», a demanda y solo** (BL-R9). Un botón en Auditoría y una cadencia diaria
