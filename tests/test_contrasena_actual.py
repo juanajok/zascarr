@@ -610,3 +610,45 @@ class TestNoStoreYSentinelasDeExito:
         for centinela in (usuario, direccion, nueva, actual):
             assert centinela not in r.text
         assert r.headers.get("cache-control") == "no-store"
+
+
+class TestSegundoGuardadoDesdeLaTarjeta:
+    def _preparar_user_password(self):
+        s = get_settings()
+        s.auth_mode, s.auth_username = "user_password", "ana"
+        s.base_url = "https://viejo.example.org"
+        s.auth_password_hash = "hash-guardado"
+        return s
+
+    def test_el_segundo_post_de_la_tarjeta_no_vacia_usuario_ni_direccion(self, con_contrasena):
+        """La tarjeta de éxito no repinta valores; su segundo POST envía vacíos y un
+        marcador `conservar_identidad` que el router traduce a «no tocar»."""
+        s = self._preparar_user_password()
+        cliente = _cliente()
+        primera = _post(
+            cliente, auth_mode="user_password", auth_username="ana",
+            base_url="https://viejo.example.org", auth_password=NUEVA,
+            auth_password_repetida=NUEVA, auth_password_actual=ACTUAL)
+        assert primera.status_code == 200 and primera.headers.get("HX-Retarget")
+        assert 'name="conservar_identidad" value="1"' in primera.text
+        assert 'name="auth_username" value=""' in primera.text
+        assert 'name="base_url" value=""' in primera.text
+        version = s.auth_session_version
+        # Envía EXACTAMENTE los campos que muestra la tarjeta de éxito (los inputs con
+        # value y el modo seleccionado; los campos de contraseña van vacíos por defecto).
+        datos = dict(re.findall(r'<input[^>]*name="([^"]+)"[^>]*value="([^"]*)"', primera.text))
+        modo = re.search(r'<select name="auth_mode">.*?<option value="([^"]+)" selected', primera.text, re.S)
+        assert modo is not None
+        datos["auth_mode"] = modo.group(1)
+        segunda = cliente.post("/ui/ajustes/guardar/seguridad", data=datos)
+        assert segunda.status_code == 200
+        assert s.auth_mode == "user_password" and s.auth_username == "ana"
+        assert s.base_url == "https://viejo.example.org"
+        assert s.auth_session_version == version
+
+    def test_user_password_vacio_sin_marcador_se_rechaza_y_no_vacia(self, con_contrasena):
+        s = self._preparar_user_password()
+        r = _post(_cliente(), auth_mode="user_password", auth_username="", base_url="",
+                  auth_password="", auth_password_repetida="")
+        assert r.status_code == 200 and "nombre de usuario" in r.text
+        assert s.auth_mode == "user_password" and s.auth_username == "ana"
