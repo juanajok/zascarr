@@ -34,7 +34,7 @@ from zascarr.services.estados_fuentes import (
 from zascarr.services.tokens_revision import (
     AsociacionFirmada,
     crear_token_asociacion,
-    id_canonico,
+    normalizar_candidata_asociacion,
 )
 
 MAX_CONSULTA = 200
@@ -173,23 +173,28 @@ async def comparar(db: AsyncSession, series_id: UUID, fuente: MetadataSource,
     candidatas: list[CandidataComparada] = []
     secreto = get_settings().secret_key
     for r in busqueda.resultados[:LIMITE_CANDIDATAS]:
-        sagas = fuente is MetadataSource.TEBEOSFERA and r.kind == "saga"
-        canonico = id_canonico(fuente.value, r.external_id)
-        seleccionable = not sagas and canonico is not None
+        # Cualquier fuente puede devolver una saga: no es una colección asociable (H1/QA S1).
+        sagas = r.kind == "saga"
+        normal = normalizar_candidata_asociacion(
+            fuente=fuente.value, id_externo=r.external_id, titulo=r.title,
+            anio=r.start_year, sitio_url=r.site_url)
+        seleccionable = not sagas and normal is not None
         motivo = None
         if sagas:
             motivo = "Es una ficha de saga (obra), no de colección."
-        elif canonico is None:
-            motivo = "El identificador de esa ficha no es válido."
+        elif normal is None:
+            motivo = "La ficha no tiene datos válidos para proponerla."
         candidata = CandidataComparada(
-            titulo=r.title, anio=r.start_year, editorial=r.editorial, pais=r.pais,
-            idioma=r.idioma, id_externo=canonico or r.external_id,
-            sitio_url=_url_segura(r.site_url),
+            titulo=normal["titulo"] if normal is not None else r.title,
+            anio=normal["anio"] if normal is not None else r.start_year,
+            editorial=r.editorial, pais=r.pais, idioma=r.idioma,
+            id_externo=(normal["id_externo"] if normal is not None else r.external_id),
+            sitio_url=(normal["sitio_url"] if normal is not None else None),
             tradicion=(r.tradition_guess.value if r.tradition_guess is not None else None),
             kind=r.kind, seleccionable=seleccionable,
             motivo_no_seleccionable=motivo, fuente=fuente.value,
         )
-        if seleccionable and secreto:
+        if seleccionable and normal is not None and secreto:
             huella = huella_de_asociacion(serie, candidata)
             firmada = AsociacionFirmada(
                 version=1, entidad="serie", kind=r.kind, fuente=fuente.value,

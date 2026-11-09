@@ -2,6 +2,11 @@
 {% block title %}Asociar esta ficha — ZascArr{% endblock %}
 {% block content %}
 <a class="back-link" href="/ui/series/{{ serie.id }}">← Volver a la serie</a>
+{% if error %}
+<h1>Propuesta no válida</h1>
+<p class="caption" role="alert">{{ error }}</p>
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}/asociar">Volver a buscar</a></p>
+{% else %}
 <h1>Asociar esta ficha</h1>
 <p>Revisa lo que se guardará. Hasta que confirmes, no cambia nada.</p>
 <dl class="asociar-preview">
@@ -19,4 +24,5 @@
 <a class="btn ghost" href="/ui/series/{{ serie.id }}">Cancelar</a>
 <details><summary>Volver a comparar</summary><p>Vuelve a la búsqueda para cambiar de ficha.</p></details>
 <details><summary>Qué hay ahora en esta serie</summary><p>La serie ya tiene al menos una fuente asociada.</p></details>
+{% endif %}
 {% endblock %}
