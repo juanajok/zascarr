@@ -1869,6 +1869,23 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   border-radius: var(--radius-panel); padding: 6px;
 }
 
+
+
+/* #129 A: asociar fuente (solo lectura, 360 px sin desbordes) */
+.asociar-form { max-width: 640px; }
+.asociar-form fieldset { border: 0; padding: 0; margin: 12px 0; }
+.asociar-form legend { font-weight: 700; margin-bottom: 6px; }
+.asociar-opcion { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--linea); }
+.asociar-opcion.apagada { color: var(--ink-soft); }
+.asociar-opcion small { margin-left: 24px; }
+.asociar-candidatas { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
+.asociar-candidata { border: 1px solid var(--linea); padding: 12px; min-width: 0; }
+.asociar-candidata h3 { overflow-wrap: anywhere; }
+.asociar-candidata table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.asociar-candidata th, .asociar-candidata td { text-align: left; vertical-align: top; padding: 4px 6px; border-bottom: 1px solid var(--linea); overflow-wrap: anywhere; }
+.asociar-candidata caption { text-align: left; font-weight: 700; margin-bottom: 6px; }
+@media (max-width: 480px) { .asociar-candidatas { grid-template-columns: 1fr; } .asociar-candidata table { font-size: .875rem; } }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

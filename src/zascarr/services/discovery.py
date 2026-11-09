@@ -43,7 +43,7 @@ from zascarr.services.detalle_edicion import (
 from zascarr.services.gcd import GCDClient, GCDSerie, es_edicion_espanola
 from zascarr.services.tebeosfera import TebeosferaClient
 from zascarr.utils.cortesia import CortesiaEnEspera, FuenteApagada
-from zascarr.utils.peticiones import ReintentosAgotados
+from zascarr.utils.peticiones import ReintentosAgotados, RespuestaNoTransitoria
 
 logger = structlog.get_logger()
 
@@ -164,6 +164,12 @@ class DiscoveryResult:
     # (podría ser española y GCD no lo informa); se conserva y se marca para que la UI y la
     # revisión humana sepan que el filtro de idioma no pudo aplicarse.
     idioma_no_informado: bool = False
+    # Del D-A1/#129: Tebeosfera distingue colección de saga; el resto no lo informa.
+    kind: str | None = None
+    # Discriminantes que el cliente ya devuelve; None = «no consta».
+    editorial: str | None = None
+    pais: str | None = None
+    idioma: str | None = None
 
     @property
     def procedencia(self) -> ProcedenciaTradicion | None:
@@ -184,6 +190,44 @@ def _editorial_desde_raw(raw: dict) -> str | None:
         elif isinstance(publisher, str) and not publisher.startswith("http"):
             valor = publisher
     return str(valor).strip() if valor else None
+
+
+def _clasificar_outcome(fuente: MetadataSource, nombre: str,
+                        outcome: object) -> tuple[EstadoFuente, list[DiscoveryResult], list[str]]:
+    """Clasifica el desenlace de UNA fuente con el vocabulario CERRADO de #133.
+
+    Lo comparten `search_detallada` y `buscar_en` de #129 A: una sola definición de
+    `limite_de_cortesia`/`fallo_transitorio`/`fuente_apagada`/etc., sin copiar el camino
+    que se traga `CortesiaEnEspera`.
+    """
+    if isinstance(outcome, FuenteApagada):
+        return _estado(fuente, FUENTE_APAGADA, "Está apagada en Ajustes."), [], []
+    if isinstance(outcome, CortesiaEnEspera):
+        reintentar = (max(1, int(outcome.espera_estimada_s + 0.999))
+                      if outcome.espera_estimada_s > 0 else None)
+        espera = f" ~{reintentar} s" if reintentar else ""
+        estado = _estado(
+            fuente, FUENTE_LIMITE_DE_CORTESIA,
+            f"No se ha consultado: hay que esperar{espera} por cortesía. "
+            "No se ha enviado nada; vuelve a intentarlo en un momento.", reintentar)
+        return estado, [], [f"{nombre}: ha pedido esperar antes de volver a consultarla."]
+    if isinstance(outcome, ReintentosAgotados) and outcome.ultimo_codigo == 429:
+        estado = _estado(fuente, FUENTE_LIMITE_DE_CORTESIA,
+                         "Ha pedido esperar antes de volver a consultarla.")
+        return estado, [], [f"{nombre}: ha pedido esperar antes de volver a consultarla."]
+    if (isinstance(outcome, RespuestaNoTransitoria)
+            and outcome.codigo in (401, 403) and fuente is MetadataSource.COMIC_VINE):
+        # H15: una clave inválida de CV es configuración, no un fallo transitorio.
+        return _estado(fuente, FUENTE_CONFIGURACION_INCOMPLETA,
+                       "La clave de Comic Vine no se ha aceptado."), [], []
+    if isinstance(outcome, BaseException):
+        logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
+        return (_estado(fuente, FUENTE_FALLO_TRANSITORIO, "No ha respondido ahora mismo."),
+                [], [f"{nombre}: no se pudo consultar ahora mismo."])
+    if outcome:
+        return _estado(fuente, FUENTE_OK), list(outcome), []
+    return (_estado(fuente, FUENTE_SIN_RESULTADOS,
+                    "Ha respondido, pero no hay coincidencias."), [], [])
 
 
 class DiscoveryService:
@@ -399,46 +443,48 @@ class DiscoveryService:
 
         results: list[DiscoveryResult] = []
         for (fuente, nombre, _), outcome in zip(fuentes, outcomes, strict=True):
-            if isinstance(outcome, FuenteApagada):
-                # #134 puede lanzarlo si el ajuste cambia entre la comprobación y la petición.
-                detalles[fuente.value] = _estado(
-                    fuente, FUENTE_APAGADA, "Está apagada en Ajustes.")
-                continue
-            if isinstance(outcome, CortesiaEnEspera):
-                # La fuente pidió esperar y la espera no cabía en el presupuesto: es cortesía,
-                # no un fallo. El plazo solo va si el contrato lo trae.
-                reintentar = (max(1, int(outcome.espera_estimada_s + 0.999))
-                              if outcome.espera_estimada_s > 0 else None)
-                # #134 §6.5: el motivo es el aviso de espera por cortesía, con estimación si consta.
-                # El estado sigue siendo el del conjunto cerrado de #133 (`limite_de_cortesia`).
-                espera = f" ~{reintentar} s" if reintentar else ""
-                detalles[fuente.value] = _estado(
-                    fuente, FUENTE_LIMITE_DE_CORTESIA,
-                    f"No se ha consultado: hay que esperar{espera} por cortesía. "
-                    "No se ha enviado nada; vuelve a intentarlo en un momento.", reintentar)
-                avisos.append(f"{nombre}: ha pedido esperar antes de volver a consultarla.")
-                continue
-            if isinstance(outcome, ReintentosAgotados) and outcome.ultimo_codigo == 429:
-                # 429 tras agotar reintentos: tampoco es un fallo transitorio.
-                detalles[fuente.value] = _estado(
-                    fuente, FUENTE_LIMITE_DE_CORTESIA,
-                    "Ha pedido esperar antes de volver a consultarla.")
-                avisos.append(f"{nombre}: ha pedido esperar antes de volver a consultarla.")
-                continue
-            if isinstance(outcome, BaseException):
-                logger.warning("discovery.source_failed", source=nombre, error=str(outcome))
-                avisos.append(f"{nombre}: no se pudo consultar ahora mismo.")
-                detalles[fuente.value] = _estado(
-                    fuente, FUENTE_FALLO_TRANSITORIO, "No ha respondido ahora mismo.")
-                continue
-            if outcome:
-                detalles[fuente.value] = _estado(fuente, FUENTE_OK)
-                results.extend(outcome)
-            else:
-                detalles[fuente.value] = _estado(
-                    fuente, FUENTE_SIN_RESULTADOS, "Ha respondido, pero no hay coincidencias.")
+            estado, encontrados, avisos_fuente = _clasificar_outcome(fuente, nombre, outcome)
+            detalles[fuente.value] = estado
+            results.extend(encontrados)
+            avisos.extend(avisos_fuente)
         estados = {nombre: detalle.estado for nombre, detalle in detalles.items()}
         return Busqueda(results, avisos, estados, detalles)
+
+    async def buscar_en(self, fuente: MetadataSource, query: str,
+                        limit: int = 10) -> Busqueda:
+        """Consulta UNA sola fuente (capacidad `busqueda`) reutilizando #133.
+
+        A de #129 no consulta «por si acaso» las demás. Fuente apagada o CV sin clave
+        no instancian cliente. La clasificación de errores/cortesía es la misma que en
+        `search_detallada` (ayudante compartido).
+        """
+        query = (query or "").strip()
+        settings = get_settings()
+        if not getattr(settings, _INTERRUPTOR[fuente]):
+            detalle = _estado(fuente, FUENTE_APAGADA, "Está apagada en Ajustes.")
+            return Busqueda([], [], {fuente.value: detalle.estado}, {fuente.value: detalle})
+        if fuente is MetadataSource.COMIC_VINE and not settings.comicvine_api_key:
+            detalle = _estado(fuente, FUENTE_CONFIGURACION_INCOMPLETA,
+                              "Falta su clave en Ajustes.")
+            return Busqueda([], [], {fuente.value: detalle.estado}, {fuente.value: detalle})
+        if not query:
+            detalle = _estado(fuente, FUENTE_SIN_RESULTADOS,
+                              "No se ha consultado: no hay consulta que buscar.")
+            return Busqueda([], [], {fuente.value: detalle.estado}, {fuente.value: detalle})
+        nombre = fuente.value
+        constructores = {
+            MetadataSource.COMIC_VINE: self._search_comic_vine,
+            MetadataSource.ANILIST: self._search_anilist,
+            MetadataSource.TEBEOSFERA: self._search_tebeosfera,
+            MetadataSource.GCD: self._search_gcd,
+        }
+        try:
+            outcome = await constructores[fuente](query, limit)
+        except Exception as exc:  # noqa: BLE001 — se clasifica con #133, sin tumbar la UI
+            outcome = exc
+        estado, encontrados, avisos = _clasificar_outcome(fuente, nombre, outcome)
+        return Busqueda(encontrados, avisos, {fuente.value: estado.estado},
+                        {fuente.value: estado})
 
     async def _search_comic_vine(self, query: str, limit: int) -> list[DiscoveryResult]:
         # Sin API key, la petición está condenada (401) — no la intentamos.
@@ -486,6 +532,7 @@ class DiscoveryService:
                 # por ficha.
                 tradition_guess=ComicTradition.TEBEO,
                 tradition_provenance=ProcedenciaTradicion.POR_DEFECTO,
+                kind=h.kind,
             )
             for h in hits
         ]
@@ -515,6 +562,7 @@ class DiscoveryService:
                                       else ProcedenciaTradicion.TRANSFORMADA),
                 # Sin país ni idioma no se descarta: se conserva y se marca (#464).
                 idioma_no_informado=clasificacion is None,
+                pais=h.country, idioma=h.language,
             ))
         return resultados
 

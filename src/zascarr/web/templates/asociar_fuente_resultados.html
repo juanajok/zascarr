@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Fichas en {{ nombre_fuente }} — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ serie.id }}">← Volver a la serie</a>
+{% set estado = comparacion.estado.estado %}
+{% if estado == "ok" and comparacion.candidatas %}
+<h2 class="titulo-frase">Fichas encontradas en {{ nombre_fuente }}</h2>
+<p>Estas fichas podrían ser tu serie, pero no se sabe seguro. Compáralas antes de elegir.</p>
+<p class="muted">Tu serie: {{ comparacion.titulo_local }}{% if comparacion.anio_local %} ({{ comparacion.anio_local }}){% endif %}</p>
+{% if comparacion.candidatas|length == 1 %}
+<p class="caption">Solo hay una ficha. Compruébala antes de asociarla.</p>
+{% endif %}
+<div class="asociar-candidatas">
+{% for c in comparacion.candidatas %}
+<article class="asociar-candidata">
+  <h3>{{ c.titulo }}</h3>
+  {% if c.sitio_url %}<a href="{{ c.sitio_url }}" target="_blank" rel="noopener noreferrer">Ver la ficha en {{ nombre_fuente }}<span class="sr"> (se abre en otra pestaña)</span> ↗</a>{% endif %}
+  <table>
+    <caption>Comparación de datos de «{{ c.titulo }}»</caption>
+    <thead><tr><th scope="col">Dato</th><th scope="col">Tu serie</th><th scope="col">Esta ficha</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">Título</th><td>{{ comparacion.titulo_local or "No consta" }}</td><td>{{ c.titulo or "No consta" }}</td></tr>
+      <tr><th scope="row">Año</th><td>{{ comparacion.anio_local or "No consta" }}</td><td>{{ c.anio or "No consta" }}</td></tr>
+      <tr><th scope="row">Editorial</th><td>{{ comparacion.editorial_local or "No consta" }}</td><td>{{ c.editorial or "No consta" }}</td></tr>
+      <tr><th scope="row">País</th><td>{{ comparacion.pais_local or "No consta" }}</td><td>{{ c.pais or "No consta" }}</td></tr>
+      <tr><th scope="row">Idioma</th><td>{{ comparacion.idioma_local or "No consta" }}</td><td>{{ c.idioma or "No consta" }}</td></tr>
+    </tbody>
+  </table>
+  {% if c.seleccionable %}
+  <button class="btn ghost" type="button" disabled title="La confirmación llega en la siguiente entrega">Elegir esta ficha</button>
+  <p class="caption">Solo lectura en esta entrega: aquí no se asocia nada.</p>
+  {% else %}
+  <p class="caption">Obra, no serie: {{ c.motivo_no_seleccionable }}</p>
+  {% endif %}
+</article>
+{% endfor %}
+</div>
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}/asociar">Buscar otra web</a></p>
+{% elif comparacion.candidatas and estado == "sin_resultados" %}
+<h2 class="titulo-frase">Sin fichas en {{ nombre_fuente }}</h2>
+<p>{{ nombre_fuente }} solo devolvió fichas de saga, no de colecciones. No se puede asociar una saga a una serie.</p>
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}/asociar">Probar con otro título</a></p>
+{% else %}
+<h2 class="titulo-frase">{% if estado in ("fuente_apagada", "configuracion_incompleta", "limite_de_cortesia", "fallo_transitorio") %}No se ha consultado{% else %}Sin fichas en {{ nombre_fuente }}{% endif %}</h2>
+{% if estado == "fuente_apagada" %}<p>{{ nombre_fuente }} está apagada en Ajustes. No se ha consultado.</p>
+{% elif estado == "configuracion_incompleta" %}<p>{{ nombre_fuente }} no está configurada: falta su clave en Ajustes. No se ha consultado.</p>
+{% elif estado == "limite_de_cortesia" %}<p>{{ nombre_fuente }} ha pedido esperar un poco. No se ha consultado nada. Vuelve a intentarlo en un momento.</p>
+{% elif estado == "fallo_transitorio" %}<p>No se ha podido consultar {{ nombre_fuente }}. No es que no exista: es un fallo pasajero.</p>
+{% else %}<p>{{ nombre_fuente }} no tiene ninguna ficha con ese título. Prueba con otro título o con otra web.</p>{% endif %}
+{% for aviso in comparacion.avisos %}<p class="caption">{{ aviso }}</p>{% endfor %}
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}/asociar">Cambiar la búsqueda</a></p>
+{% endif %}
+{% endblock %}
