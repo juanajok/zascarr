@@ -13,7 +13,8 @@ import asyncio
 import hashlib
 import time
 from pathlib import Path
-from uuid import UUID
+from types import SimpleNamespace
+from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -37,6 +38,12 @@ from zascarr.models import (
 )
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
+from zascarr.services.discrepancias import (
+    entrada as entrada_discrepancia,
+)
+from zascarr.services.discrepancias import (
+    mantener_lo_mio,
+)
 from zascarr.services.enricher import puede_enlazarse_con_comic_vine
 from zascarr.services.enriquecimiento_plan import (
     EnriquecimientoPlanService,
@@ -58,7 +65,25 @@ from zascarr.services.politica import (
     texto_de_cota,
 )
 from zascarr.services.procedencia import procedencia_de_serie
+from zascarr.services.relacion_confirmada import (
+    es_protegida,
+    estado_de_relacion,
+    relacion_actual,
+)
 from zascarr.services.series import razon_de_no_calculable
+from zascarr.services.tokens_revision import (
+    MAX_TOKEN_MANTENER,
+    SIN_PROCEDENCIA,
+    MantenerFirmada,
+    crear_token_mantener,
+    verificar_token_mantener,
+)
+from zascarr.services.vinculacion import (
+    ConflictoDeBloqueoError,
+    ResultadoInciertoError,
+    TokenCaducadoError,
+    TokenInvalidoError,
+)
 from zascarr.utils.cover import (
     CACHE_VERSION,
     CARPETA_EXTERNA,
@@ -79,6 +104,7 @@ from zascarr.utils.portada_rar import (
     marca_vigente,
     portada_de_rar,
 )
+from zascarr.web.asistente_vinculacion import FORMATOS_LEGIBLES
 from zascarr.web.retorno import volver_segura
 from zascarr.web.routes import crear_templates
 
@@ -353,16 +379,120 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     huecos = await huecos_de_serie(db, series, poseidos)
 
     politica = await _contexto_politica(db, series)
-    return templates.TemplateResponse(request, "series_detail.html", {
+    respuesta = templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
         "missing": huecos.faltantes, "huecos": huecos,
         **politica,
         # BL-R1b: los archivos de cada número (consulta fija, no una por archivo).
         "archivos_por_numero": await archivos_por_numero(db, series.id),
+        "formatos_legibles": FORMATOS_LEGIBLES,
         "procedencia": procedencia_de_serie(series),
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
     })
+    # #233/BL-R4: el aviso de una propuesta sin aplicar y sus acciones no se sirven de caché.
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+# ── BL-R4 (#233): «Mantener lo mío» sobre una discrepancia concreta ───────────────────────────────
+
+_FALLOS_MANTENER: dict[str, str] = {
+    "token_invalido": "Esa confirmación no es válida. No se ha cambiado nada: vuelve a abrirla desde la serie.",
+    "token_caducado": "Esa confirmación ha caducado. No se ha cambiado nada: vuelve a abrirla desde la serie.",
+    "resultado_incierto": "No sabemos si se llegó a guardar. Repite la operación: es segura y no duplica.",
+    "conflicto_de_bloqueo": "Ahora mismo ZascArr está trabajando con este archivo. No se ha cambiado nada: vuelve a intentarlo.",
+    "error_inesperado": "No se ha podido completar. No se ha cambiado nada.",
+}
+
+
+async def _archivo_e_issue(db: AsyncSession, series_id: UUID, file_id: UUID):
+    """El archivo, su número y la relación D3 ACTUAL. Solo lectura."""
+    f = (await db.execute(select(
+        File.id, File.file_name, File.file_format, File.issue_id, File.metadata_source, File.metadata_,
+    ).where(File.id == file_id))).first()
+    if f is None:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    issue = None
+    if f.issue_id is not None:
+        issue = (await db.execute(select(Issue.series_id, Issue.issue_number, Issue.format)
+                                  .where(Issue.id == f.issue_id))).first()
+    if issue is None or str(issue.series_id) != str(series_id):
+        raise HTTPException(status_code=404, detail="Ese archivo no pertenece a esta serie")
+    archivo = SimpleNamespace(issue_id=f.issue_id, metadata_source=f.metadata_source, metadata_=f.metadata_)
+    issue_obj = SimpleNamespace(series_id=issue.series_id, issue_number=issue.issue_number, format=issue.format)
+    return f, issue, archivo, issue_obj
+
+
+async def _discrepancia_pendiente(db: AsyncSession, series_id: UUID, file_id: UUID, clave: str):
+    """La entrada de D4 que se puede mantener: existe, está pendiente y es de la relación actual."""
+    f, issue, archivo, issue_obj = await _archivo_e_issue(db, series_id, file_id)
+    if not es_protegida(estado_de_relacion(archivo, issue_obj)):
+        raise HTTPException(status_code=404, detail="Ese archivo no tiene una relación protegida")
+    relacion = relacion_actual(archivo, issue_obj)
+    d = entrada_discrepancia(f.metadata_, clave)
+    if d is None or d.get("estado") != "pendiente" or d.get("relacion") != relacion:
+        raise HTTPException(status_code=404, detail="Esa propuesta ya no está pendiente en esta ficha")
+    return f, issue, d, relacion
+
+
+def _mantener_no_store(resp: HTMLResponse) -> HTMLResponse:
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.get("/{series_id}/archivos/{file_id}/discrepancias/{clave}/mantener", response_class=HTMLResponse)
+async def mantener_discrepancia(
+    series_id: UUID, file_id: UUID, clave: str, request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Confirmación explícita de «Mantener lo mío»: qué se mantiene y el token firmado; no escribe."""
+    series = await _serie_o_404(db, series_id)
+    f, issue, d, relacion = await _discrepancia_pendiente(db, series_id, file_id, clave)
+    secreto = get_settings().secret_key
+    if not secreto:
+        raise HTTPException(status_code=503, detail="ZascArr no tiene clave para firmar; reinícialo.")
+    token = crear_token_mantener(MantenerFirmada(
+        file_id=str(f.id), clave=clave, issue_id=relacion["issue_id"], serie_id=relacion["serie_id"],
+        vinculo_operacion=relacion["operacion_id"] or SIN_PROCEDENCIA, operacion=str(uuid4()),
+    ), secreto)
+    return _mantener_no_store(templates.TemplateResponse(request, "mantener_discrepancia.html", {
+        "serie": series, "archivo": f, "issue": issue, "discrepancia": d, "fase": "vista_previa",
+        "formatos_legibles": FORMATOS_LEGIBLES, "token": token, "r": None, "fallo": None,
+    }))
+
+
+@router.post("/{series_id}/archivos/{file_id}/discrepancias/{clave}/mantener", response_class=HTMLResponse)
+async def confirmar_mantener_discrepancia(
+    series_id: UUID, file_id: UUID, clave: str, request: Request,
+    token: str = Form(..., min_length=1, max_length=MAX_TOKEN_MANTENER),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    """Ejecuta «Mantener lo mío» con SU token. No cambia la publicación ni toca archivos."""
+    series = await _serie_o_404(db, series_id)
+    base = {"serie": series, "archivo": None, "discrepancia": None, "fase": "resultado",
+            "token": token, "r": None, "fallo": None}
+    secreto = get_settings().secret_key
+    firmado = verificar_token_mantener(token, secreto, ignorar_caducidad=True) if secreto else None
+    if (firmado is None or firmado.file_id != str(file_id) or firmado.serie_id != str(series_id)
+            or firmado.clave != clave):
+        return _mantener_no_store(templates.TemplateResponse(request, "mantener_discrepancia.html", {
+            **base, "fallo": _FALLOS_MANTENER["token_invalido"]}))
+    try:
+        r = await mantener_lo_mio(db, token, secret=secreto)
+    except TokenInvalidoError:
+        return _mantener_no_store(templates.TemplateResponse(request, "mantener_discrepancia.html",
+                                                             {**base, "fallo": _FALLOS_MANTENER["token_invalido"]}))
+    except TokenCaducadoError:
+        return _mantener_no_store(templates.TemplateResponse(request, "mantener_discrepancia.html",
+                                                             {**base, "fallo": _FALLOS_MANTENER["token_caducado"]}))
+    except ResultadoInciertoError:
+        return _mantener_no_store(templates.TemplateResponse(request, "mantener_discrepancia.html",
+                                                             {**base, "fallo": _FALLOS_MANTENER["resultado_incierto"], "token": token}))
+    except ConflictoDeBloqueoError:
+        return _mantener_no_store(templates.TemplateResponse(request, "mantener_discrepancia.html",
+                                                             {**base, "fallo": _FALLOS_MANTENER["conflicto_de_bloqueo"]}))
+    return _mantener_no_store(templates.TemplateResponse(request, "mantener_discrepancia.html", {**base, "r": r}))
 
 
 async def _serie_o_404(db: AsyncSession, series_id: UUID) -> Series:
