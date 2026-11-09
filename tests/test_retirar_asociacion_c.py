@@ -275,3 +275,19 @@ class TestUpdateCondicionado:
         update_stmt = next(s for s in db.sentencias if s.__class__.__name__ == "Update")
         columnas = {getattr(c.left, "name", None) for c in update_stmt._where_criteria}
         assert "gcd_id" in columnas   # no basta con IS NOT NULL: exige el id firmado
+
+
+class TestSelectFresco:
+    @pytest.mark.asyncio
+    async def test_el_select_de_la_serie_pide_populate_existing(self):
+        serie = _serie()
+        db = _DB([_Res(), _Res(), _Res(scalar=serie), _Res(rowcount=1), _Res()])
+        await _servicio(db).confirmar(_token(serie))
+        selects = [
+            s for s in db.sentencias
+            if s.__class__.__name__ == "Select"
+            and s.column_descriptions
+            and s.column_descriptions[0].get("entity").__name__ == "Series"
+        ]
+        assert selects
+        assert selects[0].get_execution_options().get("populate_existing") is True
