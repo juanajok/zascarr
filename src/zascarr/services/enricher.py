@@ -253,17 +253,18 @@ class EnrichmentService:
                 continue
 
             # H2: se marca el intento tanto si hay match como si no.
-            series.enrichment_attempted_at = datetime.now(UTC)
-
             if match is None:
+                series.enrichment_attempted_at = datetime.now(UTC)
                 report.series_no_match.append(series.title)
                 continue
 
             # H9 (#129 B): reclamar la identidad con un UPDATE condicional. Si otra
             # operación (p. ej. una asociación confirmada) ya la escribió, rowcount=0 y
-            # NO se tocan ni el id ni los metadatos de esa serie.
+            # NO se tocan ni el id ni los metadatos de esa serie. En ese caso tampoco se
+            # marca `enrichment_attempted_at`: esa serie ya no es nuestra.
             if id_field in (series.locked_fields or []):
                 self._apply_series_match(series, match, id_field, source_value)
+                series.enrichment_attempted_at = datetime.now(UTC)
             else:
                 reclamada = await self.db.execute(
                     update(Series).where(Series.id == series.id,
@@ -274,6 +275,7 @@ class EnrichmentService:
                     logger.info("enricher.identity_claimed", series=series.title,
                                 source=source_label)
                     continue
+                series.enrichment_attempted_at = datetime.now(UTC)
                 self._apply_series_match(series, match, id_field, source_value)
             await self.db.flush()
             report.series_enriched.append(series.title)
