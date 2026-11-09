@@ -3,6 +3,7 @@
     <legend>Seguridad</legend>
     <p class="ajustes-desc">Pide contraseña para entrar en ZascArr. Sin ella, cualquiera que llegue a su dirección entra directo: actívala si abres ZascArr a otros equipos de tu casa o a Internet.</p>
     <form hx-post="/ui/ajustes/guardar/seguridad" hx-target="#resultado-seguridad" hx-swap="innerHTML">
+      {% if mensaje_exito %}<input type="hidden" name="conservar_identidad" value="1">{% endif %}
       <label>Modo
         <select name="auth_mode">
           <option value="none" {% if auth_mode == "none" %}selected{% endif %}>Sin contraseña</option>

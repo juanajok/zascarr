@@ -328,7 +328,7 @@ async def guardar_seguridad(
     auth_mode: str = Form(default=""),
     auth_username: str = Form(default=""), auth_password: str = Form(default=""),
     auth_password_actual: str = Form(default=""), auth_password_repetida: str = Form(default=""),
-    base_url: str = Form(default=""),
+    base_url: str = Form(default=""), conservar_identidad: str = Form(default=""),
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     if auth_mode not in MODOS:
@@ -336,6 +336,15 @@ async def guardar_seguridad(
             status_code=400, detail="Modo de autenticación no reconocido",
             headers={"Cache-Control": "no-store"},
         )
+
+    # La tarjeta de éxito no repinta usuario/dirección (AC-07), así que un segundo
+    # guardado sin recargar los enviaría vacíos. `conservar_identidad` (solo lo pone
+    # esa tarjeta) significa «no tocar»: se recuperan los valores guardados. Sin el
+    # marcador, un `base_url` vacío sigue significando «vuelve al .env».
+    if conservar_identidad:
+        actuales = get_settings()
+        auth_username = auth_username or actuales.auth_username
+        base_url = base_url or actuales.base_url
 
     # La regla (longitud, no dejar la app sin forma de entrar, versión de sesión y la contraseña
     # ACTUAL para cambiar cómo se entra) vive en services/seguridad.py. El router nunca usa la

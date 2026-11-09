@@ -154,6 +154,16 @@ class TestFijarSeguridad:
         assert r.error == seguridad.MENSAJE_SIN_USUARIO
 
     @pytest.mark.asyncio
+    async def test_user_password_sin_usuario_se_rechaza_aunque_haya_guardado(self, ajustes):
+        actuales, guardado, _ = ajustes
+        actuales.auth_mode, actuales.auth_username = "user_password", "ana"
+        actuales.auth_password_hash = "pbkdf2…"
+        r = await fijar_seguridad(
+            MagicMock(), modo="user_password", usuario="", password="", base_url="")
+        assert r.error == seguridad.MENSAJE_SIN_USUARIO
+        assert guardado == []
+
+    @pytest.mark.asyncio
     async def test_contrasena_corta_se_rechaza_y_no_guarda_nada(self, ajustes):
         _, guardado, _ = ajustes
         r = await fijar_seguridad(

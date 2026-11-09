@@ -252,7 +252,10 @@ def _comprobar_forma(
         raise ValueError(f"modo de autenticación no reconocido: {modo!r}")
     if modo in ("password", "user_password") and not password and not settings.auth_password_hash:
         return ResultadoSeguridad(error=MENSAJE_SIN_CONTRASENA), None
-    if modo == "user_password" and not usuario and not settings.auth_username:
+    if modo == "user_password" and not usuario:
+        # Aunque haya un usuario guardado, el formulario debe traerlo: un guardado
+        # normal no puede vaciarlo y dejar la instalación inaccesible. La tarjeta de
+        # éxito conserva el valor con `conservar_identidad` (ver router).
         return ResultadoSeguridad(error=MENSAJE_SIN_USUARIO), None
     error, aviso = validar_contrasena(password)
     if error:
