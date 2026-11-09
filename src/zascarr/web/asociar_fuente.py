@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import MetadataSource, Series
+from zascarr.services.asociacion_fuente import AsociacionDeFuente, ResultadoAsociacion
 from zascarr.services.asociar_fuente import (
     MAX_CONSULTA,
     Comparacion,
@@ -25,6 +26,7 @@ from zascarr.services.tokens_revision import (
     MAX_TOKEN_ASOCIACION,
     verificar_token_asociacion,
 )
+from zascarr.services.vinculacion import ResultadoInciertoError, VinculacionError
 from zascarr.web.routes import crear_templates
 
 templates = crear_templates()
@@ -144,3 +146,28 @@ async def previsualizar(series_id: UUID, request: Request,
         {**_contexto(serie), "firmada": firmada, "nombre_fuente": nombre,
          "token": token, "puede_asociar": tiene_identidad(serie), "error": error},
         status_code=400 if error else 200))
+
+
+@router.post("/asociar/confirmar", response_class=HTMLResponse)
+async def confirmar(series_id: UUID, request: Request,
+                    token: str = Form(..., max_length=MAX_TOKEN_ASOCIACION),
+                    db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """B2: confirma el token; escribe en una transacción y devuelve el resultado."""
+    serie = await _serie(db, series_id)
+    servicio = AsociacionDeFuente(db, secret=get_settings().secret_key)
+    try:
+        resultado: ResultadoAsociacion = await servicio.confirmar(token)
+    except ResultadoInciertoError:
+        return _sin_cache(templates.TemplateResponse(
+            request, "asociar_fuente_resultado.html",
+            {**_contexto(serie), "resultado": None, "incierto": True, "token": token,
+             "error": None}, status_code=503))
+    except VinculacionError as exc:
+        return _sin_cache(templates.TemplateResponse(
+            request, "asociar_fuente_resultado.html",
+            {**_contexto(serie), "resultado": None, "incierto": False, "token": token,
+             "error": str(exc)}, status_code=400))
+    return _sin_cache(templates.TemplateResponse(
+        request, "asociar_fuente_resultado.html",
+        {**_contexto(serie), "resultado": resultado, "incierto": False, "token": token,
+         "error": None}))
