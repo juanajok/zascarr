@@ -1113,12 +1113,22 @@ Todo lo demás (H1-H9, H11-H17, R2, C) es **implementación obligatoria**, no de
 La restricción de A y la decisión H16 se registran en la spec/BACKLOG antes de implementar; sin
 ellas, B no se declara Ready.
 
+**Registro del PO (2026-11-09).** Se **eligen** las dos recomendaciones:
+
+- **D-A/H10:** A solo se ofrece para series que **ya tienen al menos una identidad** (`comic_vine_id`,
+  `anilist_id`, `tebeosfera_slug` o `gcd_id`). Sin identidad no se consulta, no se emite token y el
+  enlace «Buscar en otra fuente» queda deshabilitado con el motivo en llano. Evita que asociar saque
+  a la serie del enricher sin una explicación explícita.
+- **D-H16:** si la fuente se apaga entre A y B, **B guardará sin red y avisará** («La fuente está
+  apagada en Ajustes; la asociación se guarda porque no se ha consultado»). No se revalida la fuente
+  ni se consulta red; se probará en B. A no se ve afectada porque comprueba la fuente antes.
+
 ### 8.16 NOT RUN de esta revisión
 
 - **Código B/C:** no existe; no se ha implementado nada en esta entrega.
-- **A token:** la A fusionada no emite token; el delta §8.1 está pendiente.
+- **A token:** implementado en PR-S1 (token por candidata seleccionable, preview B1 sin escribir); B de persistencia sigue pendiente.
 - **Pruebas:** no se ha ejecutado la suite ni PostgreSQL; las pruebas de §8.12 están definidas, no
   ejecutadas.
 - **Fuentes reales:** ninguna; no se ha comprobado `kind`/editorial en vivo.
-- **PO:** D-A/H10 y D-H16 pendientes.
+- **PO:** D-A/H10 y D-H16 **decididas el 2026-11-09** (restringir A y guardar H16 sin red); B las implementará.
 - **SHA:** `a87eabd`; si `main` avanza antes de implementar, re-ejecutar las citas.
