@@ -68,7 +68,7 @@ class TestGCDAntesDeRecortar:
         assert [r.name for r in resultados] == ["Sin dato", "ES 1"]
 
 
-class TestComicVinePide50YRecorta:
+class TestComicVinePideLimitYRecorta:
     @pytest.mark.asyncio
     async def test_pide_50_y_entrega_limit(self):
         cliente = ComicVineClient()
