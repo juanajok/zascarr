@@ -1,7 +1,7 @@
 {% if aviso %}
 <p class="caption ajustes-aviso" role="status">! {{ mensaje }}</p>
+{% elif ok %}
+<p class="caption ajustes-ok" role="status">✓ {{ mensaje }}</p>
 {% else %}
-<p class="caption {{ 'ajustes-ok' if ok else 'ajustes-error' }}">
-  {{ "✓" if ok else "✗" }} {{ mensaje }}
-</p>
+<p class="caption ajustes-error" role="alert">✗ {{ mensaje }}</p>
 {% endif %}

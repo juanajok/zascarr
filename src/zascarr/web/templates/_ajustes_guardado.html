@@ -1,6 +1,6 @@
 {% from "_campos_contrasena.html" import campo_nueva, campo_repetida, campo_actual %}
 {% if error %}
-<p class="ajustes-error">{{ error }}</p>
+<p class="ajustes-error" role="alert">{{ error }}</p>
 {% else %}
 <p class="caption" role="status">{{ nombre }}: guardado y aplicado — ya activo, sin reiniciar.</p>
 {% if aviso %}<p class="ajustes-hint">{{ aviso }}</p>{% endif %}
