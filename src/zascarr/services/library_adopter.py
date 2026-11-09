@@ -53,10 +53,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
-from zascarr.core.cohort import PistaDeCohorte, detectar_ordenes_de_lectura
-from zascarr.core.matcher import MatchStatus
-from zascarr.models import File, FileFormat, ImportRun, Series
+from zascarr.core.cohort import (
+    PistaDeCohorte,
+    detectar_ordenes_de_lectura,
+    quitar_prefijo_de_cohorte,
+)
+from zascarr.core.matcher import MatchStatus, normalize_title
+from zascarr.models import File, FileFormat, ImportRun, Issue, Series
 from zascarr.services.asignacion import _restriccion
+from zascarr.services.discrepancias import (
+    ORIGEN_COMICINFO,
+    ORIGEN_RESCAN,
+    Propuesta,
+    crear_discrepancia,
+    marcar_estado_por_relacion,
+    registrar,
+)
 from zascarr.services.importer import (
     COMIC_EXTS,
     CerrojoDeContenidoOcupado,
@@ -66,7 +78,14 @@ from zascarr.services.importer import (
     _triage_and_match,
     serialize_candidates,
 )
+from zascarr.services.relacion_confirmada import (
+    es_protegida,
+    estado_de_relacion,
+    relacion_actual,
+)
+from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.fs import recorrer_comics
+from zascarr.utils.naming import parse_comic_filename
 
 logger = structlog.get_logger()
 
@@ -202,6 +221,8 @@ class RescanReport:
     re_triados_a_revisar: int = 0    #   ya no se identifica: desvinculada → «Por revisar»
     re_triados_descartado: int = 0   #   descartada a mano: solo el stat, no se reactiva (regla #326)
     copias_de_otra: int = 0          #   ahora es copia idéntica de otra fila presente: vínculo conservado
+    re_triados_protegidos: int = 0   # #233/BL-R4: relación confirmada/manual protegida, no se cambió el vínculo
+    discrepancias_registradas: int = 0  # #233/BL-R4: propuestas distintas registradas (deduplicadas por clave)
     errores: list[str] = field(default_factory=list)
     omitidos: list[str] = field(default_factory=list)
     por_comprobar: int = 0           # re-triajes cuyo commit no se pudo acreditar (el siguiente rescan los revisa)
@@ -249,6 +270,17 @@ class InventarioBiblioteca:
         """Resumen estable de QUÉ rutas nuevas se enseñaron (solo nombres, ningún archivo se lee). La confirmación la lleva consigo:
         si al confirmar la carpeta ya no da la misma huella, no se registra nada y se vuelve a enseñar lo que hay ahora."""
         return hashlib.sha256("\n".join(sorted(self.rutas_nuevas)).encode()).hexdigest()
+
+
+def _clave_de_orden_de_retriaje(fila_y_ruta: tuple) -> str:
+    """Orden GLOBAL de re-triaje por `File.id` (mismo que el tagger).
+
+    Los advisory locks se retienen hasta el commit del lote; si el tagger y el
+    rescan piden los locks de varios ficheros en órdenes distintos (tagger por
+    `imported_at,id`, rescan por ruta), dos procesos pueden tomar A/B al revés
+    y bloquearse mutuamente. Ordenar ambos por `File.id` elimina el ciclo.
+    """
+    return str(fila_y_ruta[1].id)
 
 
 class LibraryAdopter:
@@ -529,16 +561,19 @@ class LibraryAdopter:
                 honestidad que los lotes de `adopt`: solo cuenta lo acreditado)."""
                 return (report.re_triados, report.re_triados_igual, report.re_triados_cambiado,
                         report.re_triados_a_revisar, report.re_triados_descartado,
-                        report.copias_de_otra, len(report.errores), len(report.omitidos))
+                        report.copias_de_otra, report.re_triados_protegidos,
+                        report.discrepancias_registradas, len(report.errores), len(report.omitidos))
 
             def _deshacer_lote(marca: tuple) -> None:
                 (report.re_triados, report.re_triados_igual, report.re_triados_cambiado,
                  report.re_triados_a_revisar, report.re_triados_descartado,
-                 report.copias_de_otra) = marca[:6]
-                del report.errores[marca[6]:]
-                del report.omitidos[marca[7]:]
+                 report.copias_de_otra, report.re_triados_protegidos,
+                 report.discrepancias_registradas) = marca[:8]
+                del report.errores[marca[8]:]
+                del report.omitidos[marca[9]:]
 
-            for _n, (path, fila) in enumerate(sorted(cambiados, key=lambda t: str(t[0])), start=1):
+            for _n, (path, fila) in enumerate(
+                    sorted(cambiados, key=_clave_de_orden_de_retriaje), start=1):
                 if pendientes == 0:
                     marca = _marca_del_lote()   # foto al EMPEZAR el lote: lo no acreditado se revierte a esto
                 try:
@@ -618,6 +653,18 @@ class LibraryAdopter:
             raise ArchivoCambiado(path.name)
         tr = outcome.tr
 
+        # F1 (#545): tagger, rescan, «Mantener lo mío» y la asignación manual comparten un
+        # advisory lock por `File.id`. Hay que tomarlo ANTES de releer y mantenerlo hasta el
+        # commit; si no, el rescan escribiría un `metadata_` leído antes de que «Mantener lo
+        # mío» confirmara y se perdería `mantenida`/`discrepancias`.
+        await bloquear_archivo(self._db, fila.id)
+        fila = (await self._db.execute(
+            select(File).where(File.id == fila.id).with_for_update()
+            .execution_options(populate_existing=True)
+        )).scalar_one_or_none()
+        if fila is None:
+            raise FileNotFoundError(str(path))
+
         if fila.review_dismissed:
             # Regla #326 §4.1: no se reactiva ningún descarte. Solo se actualiza la descripción de
             # los bytes (el stat debe describir el hash guardado, pase lo que pase con la clasificación).
@@ -673,6 +720,32 @@ class LibraryAdopter:
         # El contenido cambió: las marcas de ComicInfo describían los bytes anteriores.
         meta.pop("comicinfo_estado", None)
         meta.pop("comicinfo_propio", None)
+
+        # D3-B4 (#233): ¿la relación ACTUAL es una aceptación humana? Si lo es, ninguna actualización
+        # automática la cambia ni la vacía. Solo se actualizan los datos no relacionales y, si la
+        # propuesta es otra publicación (o ninguna), se registra la discrepancia.
+        issue_actual = None
+        if fila.issue_id is not None:
+            issue_actual = (await self._db.execute(
+                select(Issue.series_id, Issue.issue_number, Issue.format)
+                .where(Issue.id == fila.issue_id))).first()
+        estado = estado_de_relacion(fila, issue_actual)
+        if es_protegida(estado):
+            relacion = relacion_actual(fila, issue_actual)
+            meta = marcar_estado_por_relacion(meta, relacion)
+            propuesta = await self._propuesta_del_cambio(tr, result, pista)
+            anterior = str(fila.issue_id) if fila.issue_id else None
+            nuevo = str(result.issue_id) if result.issue_id else None
+            if anterior != nuevo and relacion is not None:
+                meta, registrada = registrar(meta, crear_discrepancia(propuesta, relacion))
+                report.re_triados_protegidos += 1
+                if registrada:  # F4: repetir la misma observación no es una discrepancia nueva
+                    report.discrepancias_registradas += 1
+            elif anterior == nuevo:
+                report.re_triados_igual += 1
+            fila.metadata_ = meta
+            return
+
         fila.metadata_ = meta
         if is_unsorted:
             if fila.issue_id is not None:
@@ -692,6 +765,29 @@ class LibraryAdopter:
             report.re_triados_igual += 1
         else:
             report.re_triados_cambiado += 1
+
+    async def _propuesta_del_cambio(self, tr, resultado, pista: PistaDeCohorte | None) -> Propuesta:
+        """La afirmación de la actualización, apta para la clave estable de D4: destino propuesto y
+        discriminantes; sin ruta, nombre de archivo, score ni fecha."""
+        destino = None
+        if resultado.issue_id is not None:
+            destino = (await self._db.execute(
+                select(Issue.series_id, Issue.issue_number, Issue.format)
+                .where(Issue.id == resultado.issue_id))).first()
+        nombre = tr.path.name
+        if pista is not None:
+            nombre = quitar_prefijo_de_cohorte(nombre, pista)
+        parsed = parse_comic_filename(nombre)
+        return Propuesta(
+            origen=ORIGEN_COMICINFO if tr.strong_candidate else ORIGEN_RESCAN,
+            serie_destino_id=(str(destino.series_id) if destino is not None
+                              else (str(resultado.series_id) if resultado.series_id else None)),
+            issue_destino_uuid=str(resultado.issue_id) if resultado.issue_id else None,
+            numero=destino.issue_number if destino is not None else (parsed.issue_number or None),
+            formato=destino.format.value if destino is not None else (tr.file_format or parsed.format or None),
+            titulo_norm=normalize_title(parsed.series) if parsed.series else None,
+            anio=parsed.year,
+        )
 
     async def _confirmar_lote_rescan(self, report: RescanReport, mirados: int) -> bool:
         """Commit del lote de re-triajes. Devuelve False si el commit falló: lo pendiente queda
@@ -737,6 +833,8 @@ class LibraryAdopter:
                 "re_triados_a_revisar": report.re_triados_a_revisar,
                 "re_triados_descartado": report.re_triados_descartado,
                 "copias_de_otra": report.copias_de_otra,
+                "re_triados_protegidos": report.re_triados_protegidos,
+                "discrepancias_registradas": report.discrepancias_registradas,
                 "desaparecidos": report.desaparecidos,
                 "reaparecidos": report.reaparecidos,
                 "resultado_biblioteca": report.resultado_biblioteca,

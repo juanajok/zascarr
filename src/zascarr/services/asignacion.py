@@ -60,6 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
 from zascarr.services.importer import build_library_path
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
+from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.espacio import EspacioInsuficienteError, comprobar_espacio
 from zascarr.utils.naming import parse_comic_filename
 
@@ -560,6 +561,9 @@ class AsignacionService:
                         {"i": op["id"], "ep": prop.epoca})).first() is None:
                     await s.rollback()
                     return Resultado("propiedad_perdida", "Otra ejecución tomó la operación; no se confirma", op["destino"])
+                # Mismo advisory lock por File.id que rescan/tagger/mantener: serializa la
+                # relectura y la escritura de la relación/metadata de ESTE archivo.
+                await bloquear_archivo(s, op["file_id"])
                 file = await s.get(File, op["file_id"], with_for_update=True)
                 serie = await s.get(Series, op["series_id"])
                 issue = (await s.execute(select(Issue).where(
