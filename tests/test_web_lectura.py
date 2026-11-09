@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
@@ -92,3 +93,97 @@ def test_ruta_lectura_compartida_y_control_segmentado(monkeypatch):
     assert 'name="estado"' in r.text
     assert "Sin leer" in r.text and "Leyendo" in r.text and "Leído" in r.text
     assert "Guardar mi lectura" not in r.text  # la fila no lleva botón
+
+
+def _render_control(monkeypatch, **extra):
+    from zascarr.web.routes import crear_templates
+    env = crear_templates()
+    from zascarr.services.lectura import TEXTOS_LECTURA
+    estados = ((ReadingStatus.UNREAD, "Sin leer"), (ReadingStatus.READING, "Leyendo"),
+               (ReadingStatus.COMPLETED, "Leído"))
+    ctx = {"series": SimpleNamespace(id=uuid4()), "issue_id": str(uuid4()),
+           "lectura": None, "textos_lectura": TEXTOS_LECTURA, "modo": "fila",
+           "estados_lectura": estados, **extra}
+    return env.get_template("_lectura_control.html").render(**ctx)
+
+
+def test_control_de_fila_pinta_el_estado_guardado_y_autofocus():
+    html = _render_control(None, lectura=_estado(ReadingStatus.READING, rating=None, nota=None))
+    compacto = " ".join(html.split())
+    assert 'value="reading"' in compacto and "checked" in compacto and "autofocus" in compacto
+    assert "Leyendo" in html
+
+
+def test_bloque_de_numero_mantiene_rating_nota_y_boton():
+    html = _render_control(None, modo="bloque")
+    assert 'name="rating"' in html and 'name="nota"' in html
+    assert "Guardar mi lectura" in html
+    assert 'name="origen" value="numero"' in html
+
+
+def test_post_de_fila_no_envia_rating_ni_nota(monkeypatch):
+    _override()
+    marca = AsyncMock(return_value=_estado())
+    monkeypatch.setattr(web_series, "marcar", marca)
+    sid, iid = uuid4(), uuid4()
+    try:
+        TestClient(app).post(f"/ui/series/{sid}/numero/{iid}/lectura",
+                             data={"estado": "reading"}, headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert marca.await_args.kwargs.get("rating") is None
+    assert marca.await_args.kwargs.get("nota") is None
+
+
+def test_bloque_303_va_a_la_ficha_del_numero(monkeypatch):
+    _override()
+    monkeypatch.setattr(web_series, "marcar", AsyncMock(return_value=_estado()))
+    sid, iid = uuid4(), uuid4()
+    try:
+        r = TestClient(app).post(f"/ui/series/{sid}/numero/{iid}/lectura",
+                                 data={"estado": "completed", "origen": "numero"},
+                                 follow_redirects=False)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 303
+    assert r.headers["location"].endswith(f"/ui/series/{sid}/numero/{iid}")
+
+
+def test_bloque_hx_conserva_campos(monkeypatch):
+    _override()
+    monkeypatch.setattr(web_series, "marcar", AsyncMock(return_value=_estado()))
+    sid, iid = uuid4(), uuid4()
+    try:
+        r = TestClient(app).post(f"/ui/series/{sid}/numero/{iid}/lectura",
+                                 data={"estado": "completed", "origen": "numero",
+                                       "rating": "5", "nota": "Conservar"},
+                                 headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert 'name="rating"' in r.text and 'name="nota"' in r.text
+    assert "Guardar mi lectura" in r.text
+
+
+@pytest.mark.asyncio
+async def test_recuento_biblioteca_usa_el_total_no_la_pagina(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from tests.test_web_library import FakeSession
+    from zascarr.web import library as lib
+
+    class _Servicio:
+        def __init__(self, _db):
+            pass
+
+        async def list_series_paginado(self, **_kwargs):
+            if _kwargs.get("leido") == "si":
+                return [], 3, 1
+            if _kwargs.get("leido") == "leyendo":
+                return [], 2, 1
+            return [], 30, 1
+
+    monkeypatch.setattr(lib, "SeriesService", _Servicio)
+    monkeypatch.setattr(lib, "resolver_etiquetas", AsyncMock(return_value={}))
+    filtros = lib._leer_filtros(1, "", "", "", "", "", "tarjetas", "", "si")
+    ctx = await lib._contexto(FakeSession([]), filtros)
+    assert ctx["recuento_lectura"] == "3 de 30 series con algún número leído."
