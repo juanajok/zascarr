@@ -463,3 +463,19 @@ fuentes.
 - **Caducidad:** revisar cuando cambie el contrato de #128/#233, cuando se decida el modelo de
   edición (#184) o si `main` avanza (re-ejecutar las citas). Fecha de este documento: 2026-11-09;
   contraste `5f27b3e`.
+
+---
+
+## 9. Implementación de BL-R4 (2026-11-09, #233)
+
+Se implementan D3-B4 y D4-B4 **sin migración y sin tocar archivos**:
+
+| Pieza | Dónde | Contrato |
+|---|---|---|
+| Predicado D3 puro | `src/zascarr/services/relacion_confirmada.py` | `estado_de_relacion(file, issue)` → `sin_relacion`/`confirmada`/`manual_sin_comprobante`/`automatica`; `es_protegida`; `vinculo_valido` exige UUID de operación, serie del `Issue`, `version` entera y `fecha` ISO; `relacion_actual` devuelve `{issue_id, serie_id, operacion_id}` sin ruta ni usuario |
+| Guardián del rescan | `services/library_adopter.py::_re_triar_cambio` | Una relación protegida **no cambia ni vacía** `issue_id`; actualiza stat/hash/metadatos no relacionales y registra la discrepancia (incluida «ninguna publicación»). `metadata_source` y `metadata.vinculo` se conservan. Solo esta vía automática hoy; el helper es reutilizable |
+| Discrepancia D4 | `services/discrepancias.py` | `File.metadata_["discrepancias"]` (lista versionada; tope 20 activas, archivo de 50). `clave = sha256` del JSON canónico de `{origen, fuente, id_externo, serie_destino_id, issue_destino_uuid, numero, formato, titulo_norm, anio}`; **sin** fecha/score/ruta/nombre. Dedupe por clave; ciclo `pendiente → mantenida/resuelta/obsoleta`; `origen` cerrado (`rescan`, `comicinfo`, `importador`, `fuente:*`). Sin usuario/IP/token |
+| «Mantener lo mío» | `services/discrepancias.py::mantener_lo_mio` + `services/tokens_revision.py` | Token nuevo `mantener_lo_mio`, contexto `file_id`, caducidad 15 min; actualiza **esa** clave a `mantenida` con `mantenida_en`/`operacion_id` e inserta el comprobante inmutable `vinculacion_operaciones` (`resultado.tipo="mantener_lo_mio"`, purga 24 h). Idempotente; no cambia la publicación ni silencia la fuente |
+| UI | `web/series.py`, `templates/series_detail.html`, `_discrepancias_serie.html`, `mantener_discrepancia.html`, `web.css` | Aviso «una actualización propone otra publicación; no se ha aplicado», qué propone vs qué se confirmó, «Mantener lo mío» (confirmación aparte con token) y «Revisar» (publicación → deshacer BL-R1; serie → `/ui/series/{id}/asociar` de #129 A). `no-store`; sin JS propio |
+
+Pruebas: `tests/test_relacion_confirmada.py` y `tests/test_discrepancias.py` (puros), `tests/test_rescan_relacion_confirmada_pg.py` (Postgres: confirmada, manual sin comprobante, automática, ninguna publicación, dedupe, mutación e idempotencia) y `tests/test_web_discrepancias.py` (ficha, confirmación y token). **PASS** en estas suites; **NOT RUN** en navegador real y en la Pi (esta entrega no consulta fuentes ni usa ficheros reales de biblioteca), como en el resto de #129. El marcado `obsoleta`/`resuelta` por cambio de relación se aplica al volver a re-triar el archivo; una entrada de una relación que ya no coincide no se muestra en la ficha (`pendientes` exige la relación actual).
