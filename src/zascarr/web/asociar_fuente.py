@@ -156,7 +156,7 @@ async def confirmar(series_id: UUID, request: Request,
     serie = await _serie(db, series_id)
     servicio = AsociacionDeFuente(db, secret=get_settings().secret_key)
     try:
-        resultado: ResultadoAsociacion = await servicio.confirmar(token)
+        resultado: ResultadoAsociacion = await servicio.confirmar(token, serie_esperada=series_id)
     except ResultadoInciertoError:
         return _sin_cache(templates.TemplateResponse(
             request, "asociar_fuente_resultado.html",
