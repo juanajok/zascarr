@@ -57,9 +57,15 @@ Series con géneros: 0 · asignaciones de género: 0 · personajes de número: 0
   refinamiento (tarjeta #565): se vuelve a medir después de desplegar ETQ2 y de que BL-CNV avance;
   entonces la señal (géneros poblados, etiquetas usadas) dirá si toca abrirla.
 - **Cierre de #402:** como MVP (1a + 1b + ETQ2), cuando ETQ2 esté desplegada y su despliegue
-  conste (registro como #515/#534). Decisión final del PO.
+  conste (registro como #515/#534). **Decisión del PO (2026-11-10): cerrar como MVP**; ETQ3 queda
+  en refinamiento hasta que el uso lo pida.
 
 **Limitaciones**
+
+- ETQ2 aplica al **importar** o al re-triar un fichero que cambió (`rescan` no re-lee los
+  intactos, `library_adopter.py::rescanear`): los 76 CBZ con `<Genre>` ya registrados no se
+  poblarán solos. Si se quieren sus géneros sin esperar a reimportarlos, hace falta una relectura
+  de la biblioteca registrada — historia aparte, no parte del cierre del MVP.
 
 - Los 4.548 CBR no se han leído: no se conoce el porcentaje de ComicInfo con `<Tags>`/`<Genre>` en
   RAR. No es accionable para ETQ2 (no puede leerlos), pero sí lo será tras BL-CNV.
