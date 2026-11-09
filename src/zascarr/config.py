@@ -132,6 +132,11 @@ class Settings(BaseSettings):
     # su archivo (utils/ruta_visible.py).
     host_library_dir: str = Field(default="")
     downloads_path: Path = Field(default=Path("/media/downloads"))
+    # #488/BL-CNV6: carpetas que la persona declara compartidas por sus programas de
+    # descargas. Lista de rutas absolutas DENTRO del contenedor; se editan en Ajustes
+    # (checkboxes de las raíces conocidas) y se guardan en runtime_settings (JSONB,
+    # sin migración). El guardián nunca escribe un archivo bajo una de ellas.
+    carpetas_compartidas: list[str] = Field(default_factory=list)
     # C1: caché unificada de portadas (extraídas de CBZ o descargadas de
     # fuentes externas una sola vez) — ver utils/cover.py.
     covers_cache_path: Path = Field(default=Path("/config/covers"))

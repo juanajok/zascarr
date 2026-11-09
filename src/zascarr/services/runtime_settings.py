@@ -48,6 +48,8 @@ OVERRIDABLE_FIELDS: dict[str, tuple[str, ...]] = {
         "transmission_password", "transmission_enabled",
     ),
     "amule": ("amule_url", "amule_password", "amule_enabled"),
+    # #488/BL-CNV6: carpetas declaradas compartidas (lista de rutas absolutas del contenedor).
+    "compartidos": ("carpetas_compartidas",),
     # A6: auth_password_hash nunca llega aquí en claro — web/ajustes.py lo
     # calcula (services/auth.py::hash_password) ANTES de llamar a save().
     "seguridad": ("auth_mode", "auth_username", "auth_password_hash", "base_url"),

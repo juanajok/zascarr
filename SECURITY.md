@@ -198,3 +198,10 @@ El registro de acceso de uvicorn **no incluye la query** de las peticiones (`?cl
 **Límites:** la protección alcanza solo a ese registro. No acredita que otros registros, excepciones o el proxy inverso estén saneados. **Nota para quien opera el proxy:** si el proxy inverso registra la URI con su query, debe configurarse también para no hacerlo; ZascArr no puede comprobarlo desde dentro. (Pista: Caddy no registra el acceso salvo que se active la directiva `log`; si se activa, el codificador `filter` permite quitar la query.)
 
 **Fuera de alcance de esta protección (historia aparte):** los registros estructurados de la aplicación (`structlog`) que escriben rutas de la biblioteca o mensajes de excepción, y las trazas de error 5xx cuyo mensaje puede llevar rutas.
+
+- **Archivos compartidos por los programas de descargas (#488).** ZascArr no reescribe ni convierte un archivo
+  mientras pueda estar compartido por Transmission o aMule: la vista previa y la escritura de ComicInfo consultan un
+  único guardián (`services/compartidos.py`). Las carpetas que comparten esos programas se declaran en Ajustes
+  («Archivos compartidos»). Sin carpetas declaradas y sin clientes encendidos, o si un cliente falla, una ruta no se
+  puede traducir o aMule no expone sus compartidos, el guardián responde «no se sabe» y **no se escribe**. No usa el
+  socket de Docker, ni root, ni modifica torrents o la configuración de los clientes.

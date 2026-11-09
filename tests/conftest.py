@@ -146,3 +146,20 @@ def _esquema_de_pruebas(request):
 
     if os.environ.get("TEST_DATABASE_URL"):
         request.getfixturevalue("_bd_de_pruebas_al_dia")
+
+
+@pytest.fixture(autouse=True)
+def _guardian_compartidos_por_defecto(monkeypatch):
+    """#488: las pruebas que ya existían no declaran fuentes de compartidos.
+
+    El guardián real (fallo cerrado) se prueba en `test_compartidos.py` y en
+    `test_tagger_compartido.py`, que lo sustituyen explícitamente. Para el resto
+    de la suite, el tagger parte de «no compartido» para no cambiar su contrato.
+    """
+    from zascarr.services import tagger as tagger_mod
+    from zascarr.services.compartidos import Decision, EstadoComparticion
+
+    async def _no_compartido(path, **_kw):
+        return Decision(EstadoComparticion.NO_COMPARTIDO, "pruebas")
+
+    monkeypatch.setattr(tagger_mod, "estado_de_comparticion", _no_compartido)
