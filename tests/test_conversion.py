@@ -49,6 +49,13 @@ class _Lector:
         return SimpleNamespace(entradas=tuple(self.entradas))
 
     def leer_entrada(self, _ruta, entrada, _tope, *, temporal):
+        # Imita a `unar`: reutilizar la misma salida en dos entradas daría FileExistsError.
+        usadas = getattr(self, "_temporales", None)
+        if usadas is None:
+            usadas = self._temporales = set()
+        if str(temporal) in usadas:
+            raise FileExistsError(str(temporal))
+        usadas.add(str(temporal))
         return self.datos_alternativos.get(entrada.nombre, self.datos[entrada.nombre])
 
 
@@ -153,3 +160,54 @@ def test_unar_caido_o_cifrado_bloquea_con_motivo(tmp_path):
     with pytest.raises(ConversionBloqueadaError) as exc:
         construir_cbz(_cbr(tmp_path), tmp_path / "x.cbz", lector=_FallaExtraccion([ent]))
     assert exc.value.motivo is MotivoConversion.ILEGIBLE
+
+
+def test_el_recorrido_no_entra_en_la_cuarentena_zascarr(tmp_path):
+    from zascarr.utils.fs import listar_comics, recorrer_comics
+
+    (tmp_path / "serie").mkdir()
+    real = tmp_path / "serie" / "01.cbr"
+    real.write_bytes(b"x")
+    cuarentena = tmp_path / ".zascarr" / "originales" / "abc" / "op"
+    cuarentena.mkdir(parents=True)
+    (cuarentena / "viejo.cbr").write_bytes(b"y")
+    (tmp_path / ".zascarr" / "diario").mkdir()
+    assert listar_comics([tmp_path], (".cbr", ".cbz")) == [real]
+    assert recorrer_comics([tmp_path], (".cbr", ".cbz")).archivos == [real]
+
+
+def test_d5_no_publica_un_zip_danado(tmp_path):
+    ruta = tmp_path / "Roto.cbr"
+    ruta.write_bytes(b"PK\x03\x04" + b"basura" * 20)
+    with pytest.raises(ConversionBloqueadaError):
+        analizar(ruta, lector=_Lector([]))
+
+
+def test_cada_entrada_tiene_su_carpeta_temporal(tmp_path):
+    ruta = _cbr(tmp_path)
+    lector = _Lector([_Entrada("001.jpg", b"uno"), _Entrada("002.jpg", b"dos", indice=1)])
+    construccion = construir_cbz(ruta, tmp_path / "dos.cbz", lector=lector)
+    assert [m.nombre for m in construccion.manifiesto] == ["001.jpg", "002.jpg"]
+    assert len(lector._temporales) == 2
+
+
+@pytest.mark.skipif(not __import__("zascarr.utils.lector_rar", fromlist=["disponible"]).disponible(),
+                    reason="requiere unar/lsar reales (no están en este entorno)")
+@pytest.mark.parametrize("fixture", ["minimo_rar4.cbr", "minimo_rar5.cbr"])
+def test_rar_real_con_dos_entradas(tmp_path, fixture):
+    """Regresión real del fallo multi-entrada: dos páginas, dos carpetas temporales."""
+    from zascarr.utils import lector_rar
+
+    origen = Path(__file__).parent / "fixtures" / "rar" / fixture
+    destino = tmp_path / f"{fixture}.cbz"
+    construccion = construir_cbz(origen, destino, lector=lector_rar)
+    assert len(construccion.manifiesto) >= 2
+    with zipfile.ZipFile(destino) as zf:
+        assert zf.testzip() is None
+
+
+def test_el_cli_expone_reconciliar_y_vaciar():
+    from zascarr.cli.originales import _parser
+
+    assert _parser().parse_args(["reconciliar"]).accion == "reconciliar"
+    assert _parser().parse_args(["vaciar", "--lote", "5"]).lote == 5

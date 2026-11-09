@@ -69,6 +69,11 @@ UMBRAL_SOLAPE_CARPETA = 0.5
 MIN_ARCHIVOS_COMUNES = 2
 
 
+def _fuera_de_zascarr(ruta: Path) -> bool:
+    """#564: `.zascarr` (cuarentena/diario de conversión) no es biblioteca."""
+    return ".zascarr" not in ruta.parts
+
+
 @dataclass
 class MismoContenido:
     """SHA256 idéntico: literalmente el mismo archivo en varios sitios."""
@@ -200,6 +205,8 @@ class LibraryAudit:
         archivos: list[tuple[Path, int]] = []
         for ext in COMIC_EXTS:
             for f in self._library.rglob(f"*{ext}"):
+                if not _fuera_de_zascarr(f):
+                    continue
                 try:
                     st = f.stat()
                 except OSError:
@@ -298,7 +305,8 @@ class LibraryAudit:
         subcarpetas igual de vacías, informar de las 21 es ruido que
         esconde el hallazgo ("puede que falte contenido aquí")."""
         vacias: list[CarpetaVacia] = []
-        for carpeta in sorted(d for d in self._library.rglob("*") if d.is_dir()):
+        for carpeta in sorted(d for d in self._library.rglob("*")
+                              if d.is_dir() and _fuera_de_zascarr(d)):
             if any(carpeta.is_relative_to(Path(v.ruta)) for v in vacias):
                 continue  # ya cubierta por una rama vacía de más arriba
             if self._tiene_algun_comic(carpeta):
@@ -308,7 +316,8 @@ class LibraryAudit:
         report.carpetas_vacias = vacias
 
     def _tiene_algun_comic(self, carpeta: Path) -> bool:
-        return any(next(carpeta.rglob(f"*{ext}"), None) is not None for ext in COMIC_EXTS)
+        return any(next((f for f in carpeta.rglob(f"*{ext}") if _fuera_de_zascarr(f)), None)
+                   is not None for ext in COMIC_EXTS)
 
     def _detectar_no_reconocidos(self, report: AuditReport) -> None:
         """RF-02: dos formas concretas de "parece un tebeo, no lo es para
@@ -316,6 +325,8 @@ class LibraryAudit:
         hallados: list[NoReconocido] = []
         for ext in CONTENEDORES_NO_SOPORTADOS:
             for f in self._library.rglob(f"*{ext}"):
+                if not _fuera_de_zascarr(f):
+                    continue
                 hallados.append(NoReconocido(
                     ruta=str(f),
                     motivo=aviso_de_extension(ext),
@@ -347,7 +358,8 @@ class LibraryAudit:
         # ComicInfo).
         ya = {h.ruta for h in hallados}
         for f in self._library.rglob("*"):
-            if not f.is_file() or f.name.startswith(".") or str(f) in ya:
+            if not f.is_file() or not _fuera_de_zascarr(f) or f.name.startswith(".") \
+                    or str(f) in ya:
                 continue
             ext = f.suffix.lower()
             if ext not in ("", ".cbz", ".cbr", ".cb7"):
