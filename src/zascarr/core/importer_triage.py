@@ -136,16 +136,60 @@ class ComicInfo:
     year: int | None = None
     publisher: str | None = None
     summary: str | None = None
-    genre: str | None = None
+    #: ETQ2: valores de `<Tags>` y `<Genre>` ya separados por coma y acotados.
+    tags: list[str] = field(default_factory=list)
+    genres: list[str] = field(default_factory=list)
     language_iso: str | None = None
     page_count: int | None = None
     credits: dict[str, list[str]] = field(default_factory=dict)  # rol → nombres
+    #: avisos de los topes de ETQ2 (§7.4); el importador los lleva al informe.
+    warnings: list[str] = field(default_factory=list)
+
+
+# ETQ2 (#538): topes de lectura de <Tags>/<Genre> fijados en
+# `docs/design/especificacion-etiquetas.md` §7.4. Lo que exceda se ignora con
+# aviso y NUNCA aborta el ciclo de importación.
+MAX_CAMPO_LISTA_BYTES = 32 * 1024
+MAX_TOKENS_POR_CAMPO = 200
+MAX_TOKENS_TOTAL = 400
+MAX_LARGO_TOKEN = 64
 
 
 def _text(el: ElementTree.Element | None) -> str | None:
     if el is not None and el.text and el.text.strip():
         return el.text.strip()
     return None
+
+
+def _leer_lista(root: ElementTree.Element, etiqueta: str, *,
+                avisos: list[str], restantes: int) -> list[str]:
+    """Valores separados por coma de `<Tags>`/`<Genre>`, con los topes de §7.4.
+
+    El XML entero ya viene acotado a 1 MiB por `triage()`; aquí se acota el
+    campo (32 KiB), el número de valores (200 por campo, 400 en total) y el
+    largo de cada valor (64). Cada recorte deja un aviso para el informe.
+    """
+    el = root.find(etiqueta)
+    if el is None or not el.text:
+        return []
+    bruto = el.text
+    if len(bruto.encode("utf-8")) > MAX_CAMPO_LISTA_BYTES:
+        bruto = bruto.encode("utf-8")[:MAX_CAMPO_LISTA_BYTES].decode("utf-8", "ignore")
+        avisos.append(f"<{etiqueta}> supera 32 KiB; se recorta")
+    valores = [v.strip() for v in bruto.split(",")]
+    valores = [v for v in valores if v]
+    if len(valores) > MAX_TOKENS_POR_CAMPO:
+        valores = valores[:MAX_TOKENS_POR_CAMPO]
+        avisos.append(f"<{etiqueta}> trae más de 200 valores; se usan los primeros")
+    if len(valores) > restantes:
+        valores = valores[:restantes]
+        avisos.append("ComicInfo trae más de 400 valores entre <Tags> y <Genre>; "
+                      "se usan los primeros")
+    largos = [v for v in valores if len(v) > MAX_LARGO_TOKEN]
+    if largos:
+        valores = [v for v in valores if len(v) <= MAX_LARGO_TOKEN]
+        avisos.append(f"<{etiqueta}> tiene valores de más de 64 caracteres; se ignoran")
+    return valores
 
 
 def parse_comic_info(data: bytes) -> ComicInfo:
@@ -159,11 +203,17 @@ def parse_comic_info(data: bytes) -> ComicInfo:
 
     scalars = {
         "Series": "series", "Number": "number", "Publisher": "publisher",
-        "Summary": "summary", "Genre": "genre", "LanguageISO": "language_iso",
+        "Summary": "summary", "LanguageISO": "language_iso",
     }
     for tag, attr in scalars.items():
         if v := _text(root.find(tag)):
             setattr(info, attr, v)
+
+    info.tags = _leer_lista(
+        root, "Tags", avisos=info.warnings, restantes=MAX_TOKENS_TOTAL)
+    info.genres = _leer_lista(
+        root, "Genre", avisos=info.warnings,
+        restantes=MAX_TOKENS_TOTAL - len(info.tags))
 
     for tag, attr in (("Volume", "volume"), ("Year", "year"),
                       ("PageCount", "page_count")):
