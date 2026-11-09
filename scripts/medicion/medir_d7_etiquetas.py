@@ -83,6 +83,8 @@ class Medicion:
     etiquetas_en_uso: int = 0
     por_fuente: dict[str, int] = field(default_factory=dict)
     top: list[tuple[str, int]] = field(default_factory=list)
+    series_totales: int = 0
+    issues_totales: int = 0
     series_con_generos: int = 0
     generos_asignados: int = 0
     personajes_asignados: int = 0
@@ -113,6 +115,7 @@ class Medicion:
                 "por_fuente": self.por_fuente,
                 "top": self.top,
             },
+            "coleccion": {"series": self.series_totales, "issues": self.issues_totales},
             "identidad_estructurada": {
                 "series_con_generos": self.series_con_generos,
                 "generos_asignados": self.generos_asignados,
@@ -242,6 +245,7 @@ def imprimir(m: Medicion) -> None:
     print("=== Etiquetas en la base de datos ===")
     print(f"Etiquetas (espacio «etiqueta»): {m.tags_totales}")
     print(f"Asignaciones: {m.asignaciones} (visibles {m.visibles}, ocultas {m.ocultas})")
+    print(f"Series en la colección: {m.series_totales} · números: {m.issues_totales}")
     print(f"Series con al menos una etiqueta: {m.series_con_etiquetas} · "
           f"etiquetas distintas en uso: {m.etiquetas_en_uso}")
     if m.por_fuente:
