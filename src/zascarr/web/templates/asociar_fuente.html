@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Asociar fuente — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ serie.id }}">← Volver a la serie</a>
+<h1>Asociar fuente</h1>
+<p>Elige en qué web buscar esta serie. No se guarda nada hasta que lo confirmes.</p>
+<form method="post" action="/ui/series/{{ serie.id }}/asociar/buscar" class="asociar-form">
+  <label for="q">Buscar por título</label>
+  <input id="q" name="q" value="{{ q }}" maxlength="200" autocomplete="off">
+  <p class="caption">Puedes cambiarlo para buscar con otro nombre.</p>
+  <fieldset>
+    <legend>Web</legend>
+    {% for o in opciones %}
+    <label class="asociar-opcion{% if not o.disponible %} apagada{% endif %}">
+      <input type="radio" name="fuente" value="{{ o.clave }}"{% if not o.disponible %} disabled{% endif %}>
+      <span>{{ o.nombre }}</span>
+      <small class="muted">{{ o.detalle }}{% if o.disponible %} · {{ o.coste }}{% endif %}</small>
+    </label>
+    {% endfor %}
+  </fieldset>
+  {% if hay_disponibles %}
+  <button class="btn primary" type="submit">Buscar</button>
+  {% else %}
+  <p class="caption">Ninguna web está encendida. Enciéndela en Ajustes si quieres buscar.</p>
+  <a class="btn ghost" href="/ui/ajustes">Ir a Ajustes</a>
+  {% endif %}
+  <p class="caption">Buscar no cambia nada: solo consulta la web que elijas.</p>
+</form>
+{% endblock %}
