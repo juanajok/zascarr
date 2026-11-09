@@ -647,7 +647,8 @@ class LibraryAdopter:
         # mío» confirmara y se perdería `mantenida`/`discrepancias`.
         await bloquear_archivo(self._db, fila.id)
         fila = (await self._db.execute(
-            select(File).where(File.id == fila.id).execution_options(populate_existing=True)
+            select(File).where(File.id == fila.id).with_for_update()
+            .execution_options(populate_existing=True)
         )).scalar_one_or_none()
         if fila is None:
             raise FileNotFoundError(str(path))
