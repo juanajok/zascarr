@@ -1,14 +1,14 @@
 # Benchmark M6-US03 · Varios identificadores de fuente por entidad (#129)
 
 > Ficha de **nivel 2** según `docs/design/benchmark-referencias.md` (CLAUDE.md §13).
-> **Historia:** #129 «Asociar otra fuente explícitamente» (MIT-M6-US03), pendiente de DoR.
-> **Fecha:** 2026-11-09. **SHA de ZascArr:** `ea230e570c3ade9d47a6d3274004caeaa014b816`
-> (`origin/main`, 2026-11-09). La especificación hermana
-> `docs/design/especificacion-M6-US03-asociar-fuente.md` se contrastó en `04ab6ee`; las citas de
-> ZascArr se han vuelto a comprobar en `ea230e5` y no cambian.
+> **Historia:** #129 «Asociar otra fuente explícitamente» (MIT-M6-US03). **Refinamiento P1–P9 ratificado por el PO (2026-11-09).**
+> **Fecha:** 2026-11-09. **SHA de ZascArr:** `7c7e3d9` (`origin/main`). El código no cambió entre
+> `ea230e5` (contraste original) y `7c7e3d9`: las citas se mantienen. La especificación hermana
+> `docs/design/especificacion-M6-US03-asociar-fuente.md` se contrastó en `04ab6ee`.
 > **Referencias:** Sonarr `c018578e` (2026-11-02) · Radarr `7e3f80c9` (2026-11-08) ·
-> Kapowarr `c191dda6` (v1.3.2, 2026-09-14) · Mylar3 `cdc94a44` (v0.8.3, 2025-08-17).
-> Las cuatro son **GPL-3.0**. Inspirarse en un patrón no es copiar código.
+> Kapowarr `c191dda6` (v1.3.2, 2026-09-14) · Mylar3 `cdc94a44` (v0.8.3, 2025-08-17) ·
+> Kavita `9e17770` (0.9.1.18, 2026-11-01). Las cinco son **GPL-3.0**. Inspirarse en un patrón no
+> es copiar código.
 > **Método:** lectura de repositorios y documentos. **No** se ejecutó la aplicación ni pruebas,
 > **no** se consultaron fuentes reales, **no** se tocó la base de datos. Lo no comprobado va
 > `[sin verificar]` o NOT RUN. **Caduca:** ~60 días (2027-01-08), o antes si cambia la historia o
@@ -117,12 +117,14 @@ estado que no existe.
 | **Radarr** | `7e3f80c98d01481430ab356f6d7322fc5dc381ee` | 2026-11-08 | rama `develop` | GPL-3.0 | `Movies/Movie.cs`, `MovieMetadata`, `AddMovieService`, `MovieService`, `RefreshMovieService`, `MovieMetadataRepository`, `MovieExistsValidator`, `MovieLookupController`, migraciones 106/161/186/207, modal de edición, alta, tests. |
 | **Kapowarr** | `c191dda6617929c81292483a8cc07f631111dae2` | 2026-09-14 | `V1.3.2` | GPL-3.0 | `implementations/volumes.py`, `internals/db.py`, `features/library_import.py`, `implementations/matching.py`, `implementations/comicvine.py`, `base/custom_exceptions.py`, UI de alta e importación, esquema y migraciones. |
 | **Mylar3** | `cdc94a44425b6f3f9cdb9b6e5f9d88ae2fee3316` | 2025-08-17 | `v0.8.3` | GPL-3.0 | Esquema de `comics`/`issues`/`annuals` y `comicbookdb.py`; control de que el ecosistema de cómic no tiene un marco multi-fuente. |
+| **Kavita** | `9e177701c359090fa62e2e90aba571567c6cc680` | 2026-11-01 | `0.9.1.18` | GPL-3.0 | `Kavita.Models/Entities` (ids de `Series`/`Volume`/`Chapter`), `IUpdateExternalMetadataIds`, `ExternalMetadataIdHelper`, `UpdateSeriesDto`, migraciones `20260313194040`/`20260502195543`, `ExternalMetadataService`, `SeriesController`/`VolumeController`. |
 
-Sonarr, Radarr y Kapowarr están activos; Mylar3 no tiene commits desde 2025-08-17 (v0.8.3) y se usa
-como control histórico del ecosistema de cómic. No se examinaron Kavita, Komga, Suwayomi ni Comicarr
-para esta ficha: se consideraron menos pertinentes para el problema de identidad multi-fuente de una
-serie (Kavita/Komga leen ficheros; Suwayomi indexa capítulos). Se declara como límite, no como
-ausencia.
+Sonarr, Radarr, Kapowarr y Kavita están activos; Mylar3 se usa como control histórico. **Kavita se
+añade en esta validación** porque sus entidades `Series`/`Volume`/`Chapter` llevan varios ids externos escalares
+(AniList, MAL, MangaBaka, Hardcover, Metron, ComicVine, Cbr) sin `UNIQUE` en la migración, editables por
+`UpdateSeriesDto`, y su auto-match **sobrescribe** ids sin procedencia por id ni conflicto. **Komga
+se omite con evidencia:** no modela ids de fuente (solo lee ComicInfo; el único `externalIds` es de
+Kobo); Suwayomi/Comicarr quedan fuera (indexan capítulos). Límite declarado, no ausencia.
 
 ### 3.2 Qué se ejecutó
 
@@ -524,6 +526,21 @@ pero no como operación persistida.
 4. **Medir antes de implementar**: el censo #181 no cuenta series con varios ids; el `UNIQUE` no
    sustituye a la medición.
 
+### 10.1 Validación contra el refinamiento ratificado (P1–P9)
+
+| Refinamiento | D1–D5 del benchmark | Estado |
+|---|---|---|
+| **P1 · entidad serie** | D1 | **PASS**: la ficha confirma serie (no `Issue`, edición ni obra). |
+| **P2 · una por `(serie, fuente)`, varias fuentes** | D2 | **PASS**: coincide; añade pre-comprobar + `UNIQUE`, validar cardinalidad y medir. |
+| **P3–P5 y P9 · #233/BL-R4, UX y evidencia** | — | **Fuera de #129**: D3-B4/D4-B4, destino de «Revisar» y no usar `asignacion_operaciones`; no se benchmarkean aquí. |
+| **P6 · A → #233 ∥ (B+B2)** | D4/D5 | **Compatible**: la ficha recomienda B+C en el mismo release; no contradice el paralelismo de #233. |
+| **P7 · benchmark §13 antes de A/B** | esta ficha | **PASS**: es el objeto de este documento. |
+| **P8 · B2 en el mismo release que B** | D4 | **PASS**: misma recomendación (sin retirada, el error es permanente). |
+| **P9 · no usar `asignacion_operaciones` como evidencia** | — | **Compatible**: la ficha no la usa; es decisión de #233. |
+
+**D3-B4/D4-B4 no se validan aquí:** son de #233/BL-R4 y tienen su propio contrato; tampoco se
+confunde con la procedencia de asociación (#129). No hay contradicción detectada.
+
 ---
 
 ## 11. Casos de prueba antes de implementar (no ejecutados)
@@ -661,8 +678,9 @@ ids por fuente (como Sonarr con MAL/AniList), o si cambia la unidad de asociaci�
 esos casos, la decisión es arquitectónica y duradera, no un detalle de implementación.
 
 **Recomendación:** A + R1-R5, con la entrega B (persistir) y el corte C (retirar) en el mismo
-release (sin corrección, la asociación equivocada es permanente). El PO decide D1-D5; esta ficha
-solo argumenta.
+release (sin corrección, la asociación equivocada es permanente). **Tras el refinamiento:** P1/P2
+ratificados; P8 coincide con B2 en el mismo release; P6 no contradice A → #233 ∥ (B+B2);
+P3/P4/P5/P9 y D3-B4/D4-B4 son de #233/BL-R4 y no se deciden aquí. P7 queda cumplido.
 
 ---
 
@@ -686,6 +704,14 @@ solo argumenta.
   - `db.py`: <https://github.com/Casvt/Kapowarr/blob/c191dda6617929c81292483a8cc07f631111dae2/backend/internals/db.py>
 - Mylar3, `v0.8.3` en `cdc94a44425b6f3f9cdb9b6e5f9d88ae2fee3316`:
   <https://github.com/mylar3/mylar3/tree/cdc94a44425b6f3f9cdb9b6e5f9d88ae2fee3316>
+- Kavita, `0.9.1.18` en `9e177701c359090fa62e2e90aba571567c6cc680`:
+  <https://github.com/Kareadita/Kavita/tree/9e177701c359090fa62e2e90aba571567c6cc680>
+  - `ExternalMetadataIdHelper`: <https://github.com/Kareadita/Kavita/blob/9e177701c359090fa62e2e90aba571567c6cc680/Kavita.Server/Helpers/ExternalMetadataIdHelper.cs>
+
+**Barrera legal (§13).** Sonarr, Radarr, Kapowarr, Mylar3 y Kavita son GPL-3.0. De ellas se toman
+patrones y contratos (campos, rutas, migraciones citadas como evidencia), nunca código, textos,
+plantillas, migraciones ni diseño. Kavita se cita solo como contrato de ids externos. ZascArr es
+GPL-3.0; esta ficha no cambia la licencia.
 
 ---
 
@@ -693,10 +719,14 @@ solo argumenta.
 
 Esta ficha caduca el **2027-01-08** (~60 días) o antes si:
 
-- cambia #129, D1-D5 o la especificación hermana;
-- cambia una referencia (nuevo commit en Sonarr/Radarr/Kapowarr/Mylar3) en los ficheros citados;
+- cambia #129, D1-D5, el refinamiento P1–P9 o la especificación hermana;
+- cambia una referencia (nuevo commit en Sonarr/Radarr/Kapowarr/Mylar3/Kavita) en los ficheros citados;
 - el PO decide la opción C (tabla) o varios ids por fuente;
 - se mide el recuento de series con varios ids y contradice el supuesto de D2.
+
+**PASS/FAIL/NOT RUN de esta validación.** PASS: P1/P2/P6/P7/P8 compatibles; Kavita revisada y Komga
+omitida con evidencia; cabecera al SHA `7c7e3d9`. FAIL: ninguno. NOT RUN: P3–P5/P9 y D3-B4/D4-B4
+(#233/BL-R4); sin código, pruebas, fuentes reales ni Pi; sin medir series con varios ids.
 
 Al caducar, se rehacen las citas sobre el SHA vigente de ZascArr y se actualiza la tabla de
 referencias. Lo no ejecutado sigue siendo NOT RUN hasta que se ejecute.
