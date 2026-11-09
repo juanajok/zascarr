@@ -11,11 +11,11 @@
 # =============================================================================
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+MEDICION_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "${MEDICION_DIR}/../.." && pwd)"
 
 # shellcheck source=../_comun.sh
 source "${REPO_DIR}/scripts/_comun.sh"
 
 info "Midiendo D-7 dentro del contenedor (solo lectura; puede tardar en una biblioteca grande)…"
-"${COMPOSE[@]}" exec -T zascarr python - < "${SCRIPT_DIR}/medir_d7_etiquetas.py" "$@"
+"${COMPOSE[@]}" exec -T zascarr python - < "${MEDICION_DIR}/medir_d7_etiquetas.py" "$@"
