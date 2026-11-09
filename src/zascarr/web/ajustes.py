@@ -330,8 +330,8 @@ async def guardar_compartidos(
         if ruta in permitidas and ruta not in elegidas:
             elegidas.append(ruta)
     await RuntimeSettingsService(db).save({"carpetas_compartidas": elegidas})
-    return templates.TemplateResponse(
-        request, "_ajustes_guardado.html", {"nombre": "Archivos compartidos"})
+    return _sin_cache(templates.TemplateResponse(
+        request, "_ajustes_guardado.html", {"nombre": "Archivos compartidos"}))
 
 
 def _contexto_seguridad(*, incluir_valores: bool = True) -> dict:

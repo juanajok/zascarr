@@ -100,8 +100,9 @@ def _pares_host_a_contenedor(settings) -> list[tuple[str, str]]:
     pares: list[tuple[str, str]] = []
     for origen, destino in (
         (getattr(settings, "host_library_dir", ""), getattr(settings, "library_path", None)),
-        (getattr(settings, "transmission_download_dir", ""),
-         getattr(settings, "downloads_path", None)),
+        (getattr(settings, "host_downloads_dir", ""), getattr(settings, "downloads_path", None)),
+        (getattr(settings, "host_amule_incoming_dir", ""),
+         getattr(settings, "amule_incoming_dir", None)),
     ):
         if not origen or destino is None:
             continue
