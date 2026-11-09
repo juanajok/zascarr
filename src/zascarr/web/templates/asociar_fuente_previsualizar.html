@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Asociar esta ficha — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ serie.id }}">← Volver a la serie</a>
+<h1>Asociar esta ficha</h1>
+<p>Revisa lo que se guardará. Hasta que confirmes, no cambia nada.</p>
+<dl class="asociar-preview">
+  <dt>Tu serie</dt><dd>{{ serie.title }}{% if serie.start_year %} ({{ serie.start_year }}){% endif %}</dd>
+  <dt>Web</dt><dd>{{ nombre_fuente }}</dd>
+  <dt>Ficha</dt><dd>{{ firmada.id_externo }}{% if firmada.sitio_url %} <a href="{{ firmada.sitio_url }}" target="_blank" rel="noopener noreferrer">Ver la ficha en {{ nombre_fuente }}<span class="sr"> (se abre en otra pestaña)</span> ↗</a>{% endif %}</dd>
+  <dt>Tipo</dt><dd>Serie</dd>
+</dl>
+<p class="caption">No se fusiona nada, no se copian datos de esa web y no se tocan tus archivos. Solo se guarda la relación; repetir no duplica.</p>
+<form method="post" action="/ui/series/{{ serie.id }}/asociar/confirmar">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button class="btn primary" type="submit" disabled title="La confirmación llega en la siguiente entrega">Asociar esta ficha</button>
+</form>
+<p class="caption">Solo vista previa: aquí todavía no se guarda nada.</p>
+<a class="btn ghost" href="/ui/series/{{ serie.id }}">Cancelar</a>
+<details><summary>Volver a comparar</summary><p>Vuelve a la búsqueda para cambiar de ficha.</p></details>
+<details><summary>Qué hay ahora en esta serie</summary><p>La serie ya tiene al menos una fuente asociada.</p></details>
+{% endblock %}
