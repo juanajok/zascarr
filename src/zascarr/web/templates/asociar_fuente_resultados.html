@@ -2,6 +2,7 @@
 {% block title %}Fichas en {{ nombre_fuente }} — ZascArr{% endblock %}
 {% block content %}
 <a class="back-link" href="/ui/series/{{ serie.id }}">← Volver a la serie</a>
+<div aria-live="polite" role="status">
 {% set estado = comparacion.estado.estado %}
 {% if estado == "ok" and comparacion.candidatas %}
 <h2 class="titulo-frase">Fichas encontradas en {{ nombre_fuente }}</h2>
@@ -14,6 +15,7 @@
 {% for c in comparacion.candidatas %}
 <article class="asociar-candidata">
   <h3>{{ c.titulo }}</h3>
+  <p class="caption">Ficha {{ c.id_externo }}</p>
   {% if c.sitio_url %}<a href="{{ c.sitio_url }}" target="_blank" rel="noopener noreferrer">Ver la ficha en {{ nombre_fuente }}<span class="sr"> (se abre en otra pestaña)</span> ↗</a>{% endif %}
   <table>
     <caption>Comparación de datos de «{{ c.titulo }}»</caption>
@@ -26,10 +28,12 @@
       <tr><th scope="row">Idioma</th><td>{{ comparacion.idioma_local or "No consta" }}</td><td>{{ c.idioma or "No consta" }}</td></tr>
     </tbody>
   </table>
-  {% if c.seleccionable %}
-  <button class="btn ghost" type="button" disabled title="La confirmación llega en la siguiente entrega">Elegir esta ficha</button>
-  <p class="caption">Solo lectura en esta entrega: aquí no se asocia nada.</p>
-  {% else %}
+  {% if c.seleccionable and c.token %}
+  <form method="post" action="/ui/series/{{ serie.id }}/asociar/previsualizar">
+    <input type="hidden" name="token" value="{{ c.token }}">
+    <button class="btn primary" type="submit">Elegir esta ficha</button>
+  </form>
+  {% elif c.seleccionable %}
   <p class="caption">Obra, no serie: {{ c.motivo_no_seleccionable }}</p>
   {% endif %}
 </article>
@@ -43,11 +47,12 @@
 {% else %}
 <h2 class="titulo-frase">{% if estado in ("fuente_apagada", "configuracion_incompleta", "limite_de_cortesia", "fallo_transitorio") %}No se ha consultado{% else %}Sin fichas en {{ nombre_fuente }}{% endif %}</h2>
 {% if estado == "fuente_apagada" %}<p>{{ nombre_fuente }} está apagada en Ajustes. No se ha consultado.</p>
-{% elif estado == "configuracion_incompleta" %}<p>{{ nombre_fuente }} no está configurada: falta su clave en Ajustes. No se ha consultado.</p>
+{% elif estado == "configuracion_incompleta" %}<p>{{ comparacion.estado.motivo or (nombre_fuente ~ " no está configurada: falta su clave en Ajustes.") }}</p>
 {% elif estado == "limite_de_cortesia" %}<p>{{ nombre_fuente }} ha pedido esperar un poco. No se ha consultado nada. Vuelve a intentarlo en un momento.</p>
 {% elif estado == "fallo_transitorio" %}<p>No se ha podido consultar {{ nombre_fuente }}. No es que no exista: es un fallo pasajero.</p>
 {% else %}<p>{{ nombre_fuente }} no tiene ninguna ficha con ese título. Prueba con otro título o con otra web.</p>{% endif %}
 {% for aviso in comparacion.avisos %}<p class="caption">{{ aviso }}</p>{% endfor %}
 <p><a class="btn ghost" href="/ui/series/{{ serie.id }}/asociar">Cambiar la búsqueda</a></p>
 {% endif %}
+</div>
 {% endblock %}
