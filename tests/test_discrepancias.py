@@ -19,6 +19,7 @@ from zascarr.services.discrepancias import (
     TOPE_ARCHIVADAS,
     Propuesta,
     clave_de,
+    clave_valida,
     crear_discrepancia,
     entrada,
     mantener,
@@ -79,10 +80,21 @@ def test_la_entrada_no_lleva_usuario_ip_ni_ruta():
 
 def test_dedupe_por_clave_no_duplica_la_misma_afirmacion():
     meta = registrar(None, _entrada())[0]
-    meta, _ = registrar(meta, _entrada(ahora="2026-11-09T01:00:00+00:00"))
+    meta, novedad = registrar(meta, _entrada(ahora="2026-11-09T01:00:00+00:00"))
     activas = meta[CLAVE_METADATA]
     assert len(activas) == 1
     assert activas[0]["observada_en"] == "2026-11-09T01:00:00+00:00"   # refresca la observación, no duplica
+    assert novedad is False                                            # F4: solo observada no cuenta
+
+
+def test_reobservar_no_es_una_discrepancia_nueva_pero_reabrir_obsoleta_si():
+    meta = registrar(None, _entrada())[0]
+    meta, novedad = registrar(meta, _entrada(ahora="2026-11-09T01:00:00+00:00"))
+    assert novedad is False
+    obsoleta = marcar_estado_por_relacion(meta, {**RELACION, "issue_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"})
+    assert entrada(obsoleta, _entrada()["clave"])["estado"] == OBSOLETA
+    _meta, novedad = registrar(obsoleta, _entrada(ahora="2026-11-09T02:00:00+00:00"))
+    assert novedad is True
 
 
 def test_mantener_no_se_pisa_por_una_repeticion_posterior():
@@ -90,8 +102,8 @@ def test_mantener_no_se_pisa_por_una_repeticion_posterior():
     meta, actualizada = mantener(meta, _entrada()["clave"], operacion_id="55555555-5555-4555-8555-555555555555",
                                  fecha="2026-11-09T02:00:00+00:00")
     assert actualizada and entrada(meta, _entrada()["clave"])["estado"] == MANTENIDA
-    meta, actualizada = registrar(meta, _entrada(ahora="2026-11-09T03:00:00+00:00"))
-    assert actualizada and entrada(meta, _entrada()["clave"])["estado"] == MANTENIDA
+    meta, novedad = registrar(meta, _entrada(ahora="2026-11-09T03:00:00+00:00"))
+    assert novedad is False and entrada(meta, _entrada()["clave"])["estado"] == MANTENIDA
 
 
 def test_afirmacion_distinta_genera_otra_entrada():
@@ -162,6 +174,17 @@ def test_mantener_solo_desde_pendiente_y_es_idempotente():
                                   fecha="2026-11-09T02:00:00+00:00")
     assert not actualizada and meta2 == meta
     assert mantener(meta, "no-existe", operacion_id="55555555-5555-4555-8555-555555555555", fecha="x") == (None, False)
+    assert mantener(meta, "no-es-una-clave", operacion_id="55555555-5555-4555-8555-555555555555", fecha="x") == (None, False)
+    assert entrada(meta, "no-es-una-clave") is None
+
+
+def test_clave_valida_es_64_hex_minusculas():
+    assert clave_valida(_entrada()["clave"]) is True
+    assert clave_valida("A" * 64) is False
+    assert clave_valida("a" * 63) is False
+    assert clave_valida("a" * 65) is False
+    assert clave_valida("g" * 64) is False
+    assert clave_valida(None) is False
 
 
 def test_el_token_de_mantener_esta_atado_al_archivo_y_a_esa_clave():

@@ -8,6 +8,7 @@ ahora. «Mantener lo mio» deja comprobante inmutable e es idempotente. Sin efec
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from uuid import uuid4
 
@@ -122,11 +123,13 @@ async def test_dedupe_y_repetir_el_rescan_no_duplica_ni_cambia(mundo):
     clave = _discrepancias(fila1)[0]["clave"]
     # Otros bytes, misma afirmación: el rescan vuelve a re-triar y debe reutilizar la entrada.
     _cbz(ruta, "otra-marca-sin-cambiar-la-afirmacion")
-    await _rescan(mundo)
+    informe2 = await _rescan(mundo)
     fila2 = (await _filas(mundo))[str(ruta)]
     (d,) = _discrepancias(fila2)
     assert d["clave"] == clave and len(_discrepancias(fila2)) == 1
     assert fila1.id == fila2.id                                     # la MISMA fila
+    assert informe2.re_triados_protegidos == 1
+    assert informe2.discrepancias_registradas == 0                  # F4: solo se re-observó
 
 
 async def test_mantener_lo_mio_deja_comprobante_e_es_idempotente(mundo):
@@ -192,3 +195,56 @@ async def test_el_informe_persiste_el_contador(mundo):
 async def _comprobantes_de(s, file_id) -> int:
     return (await s.execute(select(func.count()).select_from(VinculacionOperacion).where(
         VinculacionOperacion.resultado["file_id"].astext == str(file_id)))).scalar()
+
+
+async def _mantener_en_otra_sesion(mundo, token):
+    async with mundo.fabrica() as s:
+        return await mantener_lo_mio(s, token, secret=SECRETO)
+
+
+async def test_concurrencia_rescan_y_mantener_no_pierden_mantenida(mundo, monkeypatch):
+    """F1: el rescan no escribe un `metadata_` leído antes de que «Mantener lo mío» confirme.
+
+    Se pausa el rescan justo después de tomar el lock y antes de `registrar` (ya tiene su copia de
+    `meta` en memoria). Si no compartiera el lock, «Mantener» commitearía `mantenida`, el rescan
+    reanudaría y escribiría su copia vieja (pendiente): se perdería la decisión. Con el lock
+    compartido, «Mantener» espera al commit del rescan y luego relee la fila fresca.
+    """
+    ruta, file_id, issue_actual, _ = await _crear_relacion(mundo)
+    await _rescan(mundo)
+    fila = (await _filas(mundo))[str(ruta)]
+    (d,) = _discrepancias(fila)
+    token = crear_token_mantener(MantenerFirmada(
+        file_id=str(file_id), clave=d["clave"], issue_id=d["relacion"]["issue_id"],
+        serie_id=d["relacion"]["serie_id"], vinculo_operacion=d["relacion"]["operacion_id"],
+        operacion=str(uuid4())), SECRETO)
+
+    import zascarr.services.library_adopter as adopter
+    original = adopter.LibraryAdopter._propuesta_del_cambio
+    entro = asyncio.Event()
+    seguir = asyncio.Event()
+
+    async def pausa(self, tr, resultado, pista):
+        entro.set()
+        await seguir.wait()
+        return await original(self, tr, resultado, pista)
+
+    monkeypatch.setattr(adopter.LibraryAdopter, "_propuesta_del_cambio", pausa)
+    _cbz(ruta, f"segunda-pasada-{uuid4().hex[:6]}")
+    tarea_rescan = asyncio.create_task(_rescan(mundo))
+    await asyncio.wait_for(entro.wait(), 10)
+    tarea_mantener = asyncio.create_task(_mantener_en_otra_sesion(mundo, token))
+    try:
+        await asyncio.sleep(0.4)
+        assert not tarea_mantener.done(), "«Mantener» debe esperar el lock del rescan"
+    finally:
+        seguir.set()
+    informe = await tarea_rescan
+    resultado = await tarea_mantener
+
+    assert resultado.resultado == "mantenida"
+    fila = (await _filas(mundo))[str(ruta)]
+    assert str(fila.issue_id) == issue_actual                          # no se pisó la relación
+    assert _discrepancias(fila)[0]["estado"] == "mantenida"            # no se perdió la decisión
+    assert informe.re_triados_protegidos == 1
+    assert informe.discrepancias_registradas == 0                      # solo observada (F4)

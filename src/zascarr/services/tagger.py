@@ -20,7 +20,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
-import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -43,6 +42,7 @@ from zascarr.core.comicinfo_write import (
 )
 from zascarr.models import File, FileFormat, Issue, Publisher, Series
 from zascarr.utils import cbz as zcbz
+from zascarr.utils.bloqueo_archivo import clave_de_fichero
 from zascarr.utils.cbz import (
     CbzError,
     CbzInvalidoError,
@@ -151,11 +151,8 @@ def _estado(path: Path) -> tuple[int, int]:
 
 
 def _clave_de(file_id) -> int:
-    """Clave de 64 bits estable a partir del UUID del `File`."""
-    return int.from_bytes(
-        hashlib.blake2b(uuid.UUID(str(file_id)).bytes, digest_size=8).digest(),
-        "big", signed=True,
-    )
+    """Clave del advisory lock por `File.id`; la MISMA que rescan/mantener/asignación."""
+    return clave_de_fichero(file_id)
 
 
 def motor_de(db: AsyncSession) -> AsyncEngine:
@@ -415,8 +412,10 @@ class TaggerService:
         async with bloqueo_de_fichero(motor_de(self.db), file.id):
             resultado = await self._escribir(
                 file, ctx, path, solo_rellenar, reconciliar_todo)
-        # La sesión se toca DESPUÉS de soltar el bloqueo (ver `bloqueo_de_fichero`).
-        await self.db.flush()
+            # El flush (que escribe `metadata_`) va DENTRO del bloqueo: si se hiciera después de
+            # soltarlo, un rescan/mantener podría releer la fila antes de este cambio y pisarla.
+            # El bloqueo vive en su propia transacción corta; el flush usa la sesión normal.
+            await self.db.flush()
         return resultado
 
     async def _sesion_utilizable(self) -> bool:

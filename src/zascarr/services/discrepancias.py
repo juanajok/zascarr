@@ -43,6 +43,7 @@ from zascarr.services.vinculacion import (
     TokenInvalidoError,
     _es_interbloqueo,
 )
+from zascarr.utils.bloqueo_archivo import bloquear_archivo
 
 VERSION = 1
 CLAVE_METADATA = "discrepancias"
@@ -124,6 +125,14 @@ def _canonico(propuesta: Propuesta) -> str:
     return json.dumps(propuesta.como_dict(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+_HEX = frozenset("0123456789abcdef")
+
+
+def clave_valida(clave: object) -> bool:
+    """¿Es una clave emitida por `clave_de` (SHA-256 hex de 64)? Valida también lo que llega de una URL."""
+    return isinstance(clave, str) and len(clave) == 64 and all(c in _HEX for c in clave)
+
+
 def clave_de(propuesta: Propuesta) -> str:
     """Clave estable (SHA-256 hex) de la afirmación. Sin fecha, score, nombre de archivo ni ruta."""
     return hashlib.sha256(_canonico(propuesta).encode("utf-8")).hexdigest()
@@ -198,17 +207,20 @@ def leer(metadata_: dict | None) -> list[dict]:
 
 
 def entrada(metadata_: dict | None, clave: str) -> dict | None:
+    if not clave_valida(clave):
+        return None
     return next((e for e in _lista(metadata_, CLAVE_METADATA) if e.get("clave") == clave), None)
 
 
 def registrar(metadata_: dict | None, nueva: dict, *, ahora: datetime | str | float | None = None) -> tuple[dict, bool]:
-    """Registra (o reutiliza) una discrepancia. Devuelve `(metadata nuevo, cambió)`.
+    """Registra (o reutiliza) una discrepancia. Devuelve `(metadata nuevo, es_novedad)`.
 
-    - Misma clave y misma relación: se reutiliza la entrada. Si estaba `obsoleta`, vuelve a
-      `pendiente`; si estaba `mantenida`, sigue mantenida (la decisión de la persona no se pisa).
+    - Misma clave y misma relación: se reutiliza la entrada y **solo se refresca la observación**
+      (no es novedad). Si estaba `obsoleta`, vuelve a `pendiente` (sí es novedad); si estaba
+      `mantenida`, sigue mantenida (la decisión de la persona no se pisa).
     - Misma clave con OTRA relación: la anterior pasa al archivo como `obsoleta` y la afirmación
-      vuelve como `pendiente` para la relación actual.
-    - Clave nueva: se añade como `pendiente`.
+      vuelve como `pendiente` para la relación actual (sí es novedad).
+    - Clave nueva: se añade como `pendiente` (sí es novedad).
     """
     activas = _lista(metadata_, CLAVE_METADATA)
     archivadas = _lista(metadata_, CLAVE_ARCHIVADAS)
@@ -224,7 +236,7 @@ def registrar(metadata_: dict | None, nueva: dict, *, ahora: datetime | str | fl
             else:
                 # No duplica ni cambia la decisión; solo refresca cuándo se volvió a observar.
                 activas[i] = {**e, "observada_en": ahora_iso}
-            return _guardar(metadata_, *(_limitar(activas, archivadas))), True
+            return _guardar(metadata_, *(_limitar(activas, archivadas))), estado == OBSOLETA
         archivadas.append({**e, "estado": OBSOLETA})
         activas[i] = {**nueva, "observada_en": ahora_iso}
         return _guardar(metadata_, *(_limitar(activas, archivadas))), True
@@ -266,6 +278,8 @@ def mantener(metadata_: dict | None, clave: str, *, operacion_id: str, fecha: st
     - `(metadata, False)` si ya estaba `mantenida`: idempotente, sin escribir de nuevo.
     - `(metadata, True)` si pasa de `pendiente` a `mantenida`.
     """
+    if not clave_valida(clave):
+        return None, False
     activas = _lista(metadata_, CLAVE_METADATA)
     for i, e in enumerate(activas):
         if e.get("clave") != clave:
@@ -333,6 +347,9 @@ async def _en_transaccion(db: AsyncSession, firmado: MantenerFirmada, vigente: b
     clave = firmado.clave
     await db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k || :o, 0))"),
                      {"k": _ESPACIO_OPERACION, "o": firmado.operacion})
+    # F1 (#545): mismo advisory lock por `File.id` que rescan/tagger/asignación, ANTES de
+    # leer la fila. La relectura con FOR UPDATE es fresca y no se puede pisar `mantenida`.
+    await bloquear_archivo(db, file_id)
 
     # 1. ¿Ya se aplicó ESTA operación? El comprobante inmutable es la fuente.
     previo = (await db.execute(select(VinculacionOperacion).where(
