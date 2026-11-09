@@ -97,6 +97,13 @@ class CVIssueResult:
 #: Alias de lectura para quien llame al detalle de número.
 CVIssue = CVIssueResult
 
+#: `User-Agent` de ZascArr para Comic Vine, en UN SOLO sitio. GameSpot bloquea con HTTP 403
+#: («Anonymous Bot or Scraper Blocked») las peticiones con el User-Agent genérico de las
+#: librerías (python-httpx, python-requests) o sin él; con uno propio responde normal (200, o
+#: 401 «Invalid API Key» si la clave no vale). Lo usan el cliente real y la prueba de conexión
+#: de Ajustes: si se separan, el botón da un 403 engañoso con una clave buena.
+USER_AGENT = "ZascArr/0.1"
+
 
 class ComicVineClient:
     BASE_URL = "https://comicvine.gamespot.com/api"
@@ -118,7 +125,7 @@ class ComicVineClient:
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
             base_url=self.BASE_URL, timeout=30.0, follow_redirects=False,
-            headers={"User-Agent": "ZascArr/0.1"})
+            headers={"User-Agent": USER_AGENT})
         return self
 
     async def __aexit__(self, *args):
