@@ -508,9 +508,12 @@ nombre sin prefijo.
 ETQ1b (#431, 2026-11-09); ETQ2 (#538) **fusionada en #544**, con el **despliegue pendiente** de
 confirmar. **D-7 medida el 2026-11-10** (`docs/design/medicion-D7-etiquetas-2026-11-10.md`): 518
 CBZ, 145 con ComicInfo, **0 con `<Tags>` y 76 con `<Genre>`**; 3 etiquetas manuales en 2 series;
-0 géneros y 0 personajes. ETQ2 tiene datos de género que leer; ETQ3 queda como fase siguiente con
-su tarjeta (#565), **en refinamiento hasta que el uso lo pida** (re-medir tras desplegar ETQ2 y tras
-BL-CNV, que convierte los CBR que hoy ETQ2 no puede leer); ETQ4–ETQ5, solo si el uso lo pide;
+0 géneros y 0 personajes. ETQ2 tiene datos de género que leer (aunque solo se aplican al importar o
+re-triar un fichero cambiado: los ya registrados no se releen solos); **decisión del PO
+(2026-11-10): cerrar #402 como MVP** (1a + 1b + ETQ2) cuando ETQ2 esté desplegada y registrada.
+ETQ3 queda como fase siguiente con su tarjeta (#565), **en refinamiento hasta que el uso lo pida**
+(re-medir tras desplegar ETQ2 y tras BL-CNV, que convierte los CBR que hoy ETQ2 no puede leer);
+ETQ4–ETQ5, solo si el uso lo pide;
 ETQ6, NO APTO hasta extender el contrato B6. La feature #402 se cierra como MVP cuando ETQ2 esté
 desplegada y su despliegue conste (registro como #515/#534). La nota de cierre y la decisión por
 hacer están en el comentario del 2026-11-10 de #402.
