@@ -180,6 +180,7 @@ _CAMPOS_RESUMEN = (
     "nuevos_registrados", "nuevos_a_revisar", "repetidos", "reenlazados",
     "re_triados", "re_triados_igual", "re_triados_cambiado",
     "re_triados_a_revisar", "re_triados_descartado", "copias_de_otra",
+    "re_triados_protegidos", "discrepancias_registradas",
     "desaparecidos", "reaparecidos", "errores", "omitidos", "ambiguos",
     "no_revisado", "unreadable", "por_comprobar", "resultado_biblioteca",
 )
