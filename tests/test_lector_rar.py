@@ -9,6 +9,7 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -34,6 +35,8 @@ def _a_entrada(e):
 
 @pytest.fixture
 def falso(tmp_path, monkeypatch):
+    # El soporte del flag se cachea por proceso (#530 C4): cada prueba arranca sin decisión.
+    monkeypatch.setattr(lector_rar, "_SOPORTA_EL_FLAG", None)
     return instalar(tmp_path / "bin", monkeypatch)
 
 
@@ -84,6 +87,68 @@ def test_listado_ok_trae_indice_nombre_tamano_y_crc(falso, rar, base):
     lis = _listar(rar, base)
     assert [(e.indice, e.nombre, e.tamano, e.crc32) for e in lis.entradas] == [
         (0, "ComicInfo.xml", 10, None), (1, "01.jpg", 123, 0xDEADBEEF)]
+    # #528: el flag va justo después de -j y antes de la ruta (orden validado por QA).
+    assert falso.llamadas() == [f"lsar -j -json-skip-solid-information {rar}"]
+
+
+def test_solido_de_220_entradas_se_lista_con_el_flag_y_extrae_con_crc(falso, rar, base):
+    """#528: sin el flag, 220 entradas de un sólido daban >4 MiB de JSON y `demasiado_grande`; con
+    `-json-skip-solid-information` la salida es compacta, se acepta y la extracción sigue verificando CRC."""
+    crc = falso.contenido(JPEG)
+    falso.solido(220)
+    falso.modo(lsar="solido", unar="ok")
+    with carpeta_temporal(base) as tmp:
+        lis = listar(rar, temporal=tmp)
+    assert len(lis.entradas) == 220 and lis.entradas[0].nombre == "000.jpg"
+    assert all(not e.cifrada for e in lis.entradas)
+    # el argv exacto que pide la historia
+    llamada = [x for x in falso.llamadas() if x.startswith("lsar")][0]
+    assert llamada == f"lsar -j -json-skip-solid-information {rar}"
+    # la premisa del bug: sin el flag ESTE listado supera el tope; con el flag, no
+    assert (falso.carpeta / "listado_solido_sin_flag.json").stat().st_size > lector_rar.RAR_MAX_SALIDA_LISTADO
+    assert (falso.carpeta / "listado_solido.json").stat().st_size < lector_rar.RAR_MAX_SALIDA_LISTADO
+    assert _leer(rar, base, entrada(0, "000.jpg", len(JPEG), crc)) == JPEG
+
+
+def test_sin_el_flag_se_reintenta_una_sola_vez_y_sigue_leyendo(falso, rar, base):
+    """Compatibilidad con el `lsar` 1.10.1 de bookworm: no conoce el flag y lo dice; se reintenta
+    UNA vez sin él (y no se convierte en un fallo del archivo)."""
+    falso.listado([entrada(0, "ComicInfo.xml", 10), entrada(1, "01.jpg", 123)])
+    falso.modo(lsar="sin_flag")
+    lis = _listar(rar, base)
+    assert [e.nombre for e in lis.entradas] == ["ComicInfo.xml", "01.jpg"]
+    llamadas = [x for x in falso.llamadas() if x.startswith("lsar")]
+    assert llamadas == [f"lsar -j -json-skip-solid-information {rar}", f"lsar -j {rar}"]
+
+
+def test_el_soporte_del_flag_se_cachea_y_el_aviso_sale_una_sola_vez(falso, rar, base, monkeypatch):
+    """#530 C4: tras detectar 1.10.1 no se vuelve a probar el flag ni se repite el aviso."""
+    falso.listado([entrada(0, "01.jpg", 1, 0)])
+    falso.modo(lsar="sin_flag")
+    avisos = MagicMock()
+    monkeypatch.setattr(lector_rar, "logger", MagicMock(warning=avisos))
+    _listar(rar, base)
+    _listar(rar, base)
+    llamadas = [x for x in falso.llamadas() if x.startswith("lsar")]
+    assert llamadas == [f"lsar -j -json-skip-solid-information {rar}", f"lsar -j {rar}",
+                        f"lsar -j {rar}"]          # la segunda ya no prueba el flag
+    assert lector_rar._SOPORTA_EL_FLAG is False
+    avisos.assert_called_once_with("cover.lsar_sin_flag")
+
+
+@pytest.mark.parametrize("mensaje", [
+    "unknown option -otro-flag",
+    "Unknown error mientras se lee",
+    "unrecognized option -json-skip-solid-information",
+    "invalid option en el archivo",
+])
+def test_no_reintenta_si_no_es_la_firma_exacta_de_1_10_1(falso, rar, base, mensaje):
+    """#530 C4: solo la firma exacta de 1.10.1 dispara el reintento; un error real, no."""
+    falso.modo(lsar="rc1", mensaje=mensaje)
+    with pytest.raises(ErrorRar) as exc:
+        _listar(rar, base)
+    assert exc.value.motivo is MotivoRar.ILEGIBLE
+    assert len([x for x in falso.llamadas() if x.startswith("lsar")]) == 1
 
 
 def test_demasiadas_entradas_no_extrae_nada(falso, rar, base):
@@ -141,6 +206,8 @@ def test_codigo_distinto_de_cero_se_mapea_a_un_motivo_de_dominio(falso, rar, bas
     with pytest.raises(ErrorRar) as exc:
         _listar(rar, base)
     assert exc.value.motivo is motivo
+    # un fallo real del archivo NO dispara el reintento del flag (#528)
+    assert len([x for x in falso.llamadas() if x.startswith("lsar")]) == 1
 
 
 def test_entrada_cifrada_en_el_listado(falso, rar, base):

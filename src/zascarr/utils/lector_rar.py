@@ -32,7 +32,11 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
+import structlog
+
 from zascarr.models import MotivoRar
+
+logger = structlog.get_logger()
 
 #: Topes de lectura (spec §5.3). Los máximos observados en #308 fueron 324 entradas y 221 MiB.
 RAR_MAX_ENTRADAS = 1000
@@ -42,6 +46,15 @@ RAR_MAX_SALIDA_ERROR = 64 * 1024
 RAR_TIMEOUT_LISTAR_S = 15.0
 RAR_TIMEOUT_EXTRAER_S = 10.0
 RAR_SIMULTANEOS = 1
+#: #528: `lsar -j` repite el objeto interno del sólido (~29 KB) en CADA entrada; con ~140 páginas
+#: la salida pasa de 4 MiB. `-json-skip-solid-information` lo omite y deja el JSON en lo que hace
+#: falta (índice, nombre, tamaño y CRC). Requiere `unar` 1.10.8 (Debian trixie). En un binario
+#: antiguo (1.10.1 de bookworm) el flag no existe: `listar` lo reintenta UNA vez sin él para no
+#: romper ese runtime, y el sólido grande vuelve a quedar limitado por el tope de salida.
+_FLAG_SIN_SOLIDOS = "-json-skip-solid-information"
+#: Firma EXACTA que da el `lsar` 1.10.1 al no conocer el flag (`Unknown option …`, por stdout).
+#: El reintento se limita a ella: no basta con que el mensaje diga «unknown».
+_FIRMA_1_10_1_SIN_FLAG = b"unknown option -json-skip-solid-information"
 #: Tope de memoria residente del lector (proceso y descendientes), vigilado en el bucle de 20 ms: sin
 #: `RLIMIT_AS` (rompe `unar`), un diccionario hostil de RAR 5 podría dejar al OOM del contenedor elegir
 #: víctima entre `unar` y la app. El máximo medido en #308 fue 25,8 MiB (dictamen SecOps M-1).
@@ -58,6 +71,23 @@ _SONDEO_S = 0.02
 _SEMAFORO = threading.BoundedSemaphore(RAR_SIMULTANEOS)
 #: El hilo que ya tiene el turno (ver `turno`): sus llamadas a `_ejecutar` no lo vuelven a pedir.
 _TURNO = threading.local()
+#: ¿El `lsar` de este proceso conoce `_FLAG_SIN_SOLIDOS`? Se decide UNA vez y se recuerda: `None`
+#: = todavía no se sabe (se prueba con el flag), `True` = sí (1.10.8), `False` = no (1.10.1). Así
+#: el reintento no repite la comprobación en cada listado y el aviso sale una sola vez.
+_SOPORTA_EL_FLAG: bool | None = None
+_CANDADO_SOPORTE = threading.Lock()
+
+
+def _decidir_soporte(soportado: bool) -> None:
+    """Guarda el soporte del flag la PRIMERA vez que se sabe. Si no lo soporta, deja un único aviso
+    de observabilidad, sin ruta ni nombre de archivo (`cover.lsar_sin_flag`)."""
+    global _SOPORTA_EL_FLAG
+    with _CANDADO_SOPORTE:
+        if _SOPORTA_EL_FLAG is not None:
+            return
+        _SOPORTA_EL_FLAG = soportado
+    if not soportado:
+        logger.warning("cover.lsar_sin_flag")
 
 
 class ErrorRar(Exception):  # noqa: N818
@@ -232,6 +262,14 @@ def _motivo_por_mensaje(texto: bytes) -> MotivoRar:
     return MotivoRar.ILEGIBLE
 
 
+def _opcion_desconocida(codigo: int, salida: bytes, error: bytes) -> bool:
+    """¿El fallo es EXACTAMENTE la firma de `lsar` 1.10.1 al no conocer el flag? (lo dice por stdout:
+    «Unknown option -json-skip-solid-information.»). No se reintenta con cualquier «unknown»: un
+    error real del archivo con esa palabra no debe disparar una segunda consulta."""
+    texto = (error + salida[:4096]).lower()
+    return codigo != 0 and _FIRMA_1_10_1_SIN_FLAG in texto
+
+
 def _exigir_ruta_absoluta(ruta: Path) -> None:
     """Una ruta relativa que empezara por `-` sería una opción de `lsar`/`unar` (SecOps B-2). Las de la
     biblioteca son siempre absolutas."""
@@ -278,15 +316,33 @@ def _entrada_de(bruto: dict, posicion: int) -> EntradaRar:
 
 
 def listar(ruta: Path, *, temporal: Path, timeout: float = RAR_TIMEOUT_LISTAR_S) -> Listado:
-    """Lista un RAR con `lsar -j` y comprueba los topes (nº de entradas, bytes declarados, salida).
+    """Lista un RAR con `lsar -j -json-skip-solid-information` y comprueba los topes (nº de entradas,
+    bytes declarados, salida).
+
+    El flag #528 evita que un sólido grande repita el objeto interno del sólido en cada entrada
+    (con ~140 páginas la salida superaba el tope de 4 MiB). Si el `lsar` instalado es anterior a
+    1.10.8 y no conoce el flag, se reintenta **una sola vez** sin él: no se rompe ese runtime, pero
+    el sólido grande sigue sujeto al tope de salida (comportamiento anterior). El soporte del flag
+    se decide una vez por proceso (`_SOPORTA_EL_FLAG`) y, si falta, deja un único aviso
+    `cover.lsar_sin_flag` sin ruta.
 
     `temporal` es una carpeta propia y vacía (se usa de `HOME`). Falla con `ErrorRar`."""
     lsar = _localizar("lsar")
     if lsar is None:
         raise ErrorRar(MotivoRar.HERRAMIENTA_AUSENTE)
     _exigir_ruta_absoluta(ruta)
+    con_flag = _SOPORTA_EL_FLAG is not False
+    argv = ([lsar, "-j", _FLAG_SIN_SOLIDOS, str(ruta)] if con_flag
+            else [lsar, "-j", str(ruta)])
     codigo, salida, error = _ejecutar(
-        [lsar, "-j", str(ruta)], home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+        argv, home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+    if con_flag and _opcion_desconocida(codigo, salida, error):
+        _decidir_soporte(False)
+        codigo, salida, error = _ejecutar(
+            [lsar, "-j", str(ruta)],
+            home=temporal, timeout=timeout, tope_salida=RAR_MAX_SALIDA_LISTADO)
+    elif con_flag and codigo == 0:
+        _decidir_soporte(True)
     if codigo != 0:
         raise ErrorRar(_motivo_por_mensaje(error + salida[:4096]))
     try:
