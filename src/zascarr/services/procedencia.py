@@ -76,6 +76,7 @@ class CampoProcedencia:
 @dataclass(frozen=True)
 class IdentidadDeFuente:
     """Una línea por fuente con identidad en la columna; nunca pinta el id interno (H12)."""
+    clave: str
     fuente: str
     fecha: str | None
     procedencia: str
@@ -271,10 +272,10 @@ def identidades_de_fuente(series: Series) -> tuple[IdentidadDeFuente, ...]:
         entrada = validas.get(fuente)
         if entrada is not None and str(entrada.get("id_externo")) == str(valor):
             lineas.append(IdentidadDeFuente(
-                fuente=NOMBRE_DE_FUENTE[fuente], fecha=_fecha(entrada.get("fecha")),
-                procedencia="registrada"))
+                clave=fuente, fuente=NOMBRE_DE_FUENTE[fuente],
+                fecha=_fecha(entrada.get("fecha")), procedencia="registrada"))
         else:
             lineas.append(IdentidadDeFuente(
-                fuente=NOMBRE_DE_FUENTE[fuente], fecha=None,
+                clave=fuente, fuente=NOMBRE_DE_FUENTE[fuente], fecha=None,
                 procedencia="no registrada"))
     return tuple(lineas)
