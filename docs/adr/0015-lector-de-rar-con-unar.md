@@ -81,11 +81,13 @@ la misma PR que introduce el lector:
   `cover.lsar_sin_flag` sin rutas y reintenta una sola vez sin el flag **solo** con la firma exacta de 1.10.1. La base va por
   **tag mutable**: observado el 2026-11-09 (amd64) `python@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535`
   (`python:3.11-slim-trixie`, Python 3.11.18); si cambia, aplica la revisión de este bullet. La CI exige `unar`/`lsar` 1.10.8 y
-  el flag tanto en la suite como en la imagen final, y un presupuesto de imagen de 750 MiB (medido: 722 MB antes de limpiar,
-  691,7 MiB después de retirar ejecutables de `dpkg-dev`/`gnutls-bin`/`make`/`patch`/`binutils`/`graphviz`/utilidades de `perl`,
-  y 687,8 MiB con `.dockerignore`). Se conservan `dpkg-architecture`, `perl-base`, `libdpkg-perl` y `perl-modules-5.40`: GNUstep
-  invoca `dpkg-architecture` en runtime y sin él `lsar`/`unar` abortan (verificado; el script de imagen lo comprueba). El
-  `.dockerignore` deja fuera `.env`/`.env.*` (salvo `.env.example`), `.git`, cachés y scratch; probado con un `.env` centinela
-  que no llega a `/app`. La medición en la Pi del pico de memoria con una salida grande, la portada de un RAR sólido real de
-  ≥220 páginas y **arm64** quedan **NOT RUN** (no se toca la Pi en #528). El interruptor (`LECTOR_RAR_ENABLED`) sigue siendo la
+  el flag tanto en la suite como en la imagen final, y un presupuesto de imagen de 750 MiB. La limpieza de ejecutables va en
+  una **capa posterior**: **no reduce los bytes de la imagen** (721.109.591 B antes / 721.174.975 B después, ≈687,8 MiB); sí
+  reduce el sistema de ficheros en ejecución (~11 MB en `/usr`), y el `.dockerignore` evita `.git`/scratch en el contexto (en
+  CI, ≈51 MB de `.git`). La imagen final medida es 687,8 MiB. Se conservan `dpkg-architecture`, `perl-base`, `libdpkg-perl` y
+  `perl-modules-5.40`: GNUstep invoca `dpkg-architecture` en runtime y sin él `lsar`/`unar` abortan (verificado; el script de
+  imagen lo comprueba, junto con la ausencia de las herramientas retiradas). El `.dockerignore` deja fuera `.env`/`.env.*`
+  (salvo `.env.example`), `.git`, cachés y scratch; probado en CI con un `.env` centinela que no llega a `/app`. La medición en
+  la Pi del pico de memoria con una salida grande, la portada de un RAR sólido real de ≥220 páginas y **arm64** quedan
+  **NOT RUN** (no se toca la Pi en #528). El interruptor (`LECTOR_RAR_ENABLED`) sigue siendo la
   palanca para apagarlo sin reconstruir.

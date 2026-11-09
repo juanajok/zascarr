@@ -31,10 +31,33 @@ from zascarr.utils.portada_rar import portada_de_rar
 FIXTURES = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "rar"
 LEGIBLES = ("minimo_rar4.cbr", "minimo_rar5.cbr", "solido_rar4.cbr")
 SETUID_DE_LA_BASE = {"chage", "chfn", "chsh", "expiry", "gpasswd", "mount", "newgrp", "passwd", "su", "umount", "unix_chkpwd"}
+#: #530 R1: ejecutables de trixie que la limpieza debe haber retirado del runtime. Se comprueban con
+#: `shutil.which` (lo que de verdad se puede ejecutar), no con el listado de paquetes de dpkg.
+HERRAMIENTAS_QUE_NO_DEBEN_ESTAR = (
+    "gnutls-cli", "gnutls-serv", "certtool", "make", "patch", "dpkg-buildpackage",
+    "dpkg-shlibdeps", "dot", "as", "ld", "ar", "corelist", "cpan", "prove", "perlbug",
+)
+#: Excepciones de RUNTIME que sí deben seguir: GNUstep y sus dependencias inmediatas.
+HERRAMIENTAS_QUE_DEBEN_ESTAR = ("dpkg-architecture", "perl", "dpkg", "lsar", "unar")
 
 
 def _salida(*orden: str) -> str:
     return subprocess.run(orden, capture_output=True, text=True, check=False).stdout.strip()   # noqa: S603
+
+
+def problemas_de_herramientas(which=shutil.which) -> list[str]:
+    """#530 R1: ausencia de las herramientas de trixie y presencia de las excepciones de runtime.
+
+    `which` se inyecta para poder probarlo sin depender de la imagen; en la imagen es `shutil.which`.
+    """
+    out: list[str] = []
+    for nombre in HERRAMIENTAS_QUE_NO_DEBEN_ESTAR:
+        if which(nombre) is not None:
+            out.append(f"sigue en la imagen: {nombre}")
+    for nombre in HERRAMIENTAS_QUE_DEBEN_ESTAR:
+        if which(nombre) is None:
+            out.append(f"falta en la imagen: {nombre}")
+    return out
 
 
 def main() -> int:
@@ -42,14 +65,11 @@ def main() -> int:
     print("unar:", _salida("unar", "-v"), "| lsar:", _salida("lsar", "-v"))
     print(_salida("dpkg-query", "-W", "-f", "${Package} ${Version}\\n", "unar", "gnustep-base-runtime", "libgnustep-base1.31"))
 
-    # #530 C2: `lsar`/`unar` (GNUstep) invocan `dpkg-architecture` en runtime para DEB_HOST_MULTIARCH;
+    # #530 C2/R1: `lsar`/`unar` (GNUstep) invocan `dpkg-architecture` en runtime para DEB_HOST_MULTIARCH;
     # sin él abortan (SIGABRT) y el lector entero deja de funcionar. Y es un script Perl. La limpieza
-    # de trixie borra ejecutables de construcción, pero estas dos piezas son dependencias de RUNTIME.
-    for herramienta, motivo in (
-            ("dpkg-architecture", "GNUstep lo invoca en runtime (DEB_HOST_MULTIARCH)"),
-            ("perl", "dpkg-architecture es un script Perl")):
-        if shutil.which(herramienta) is None:
-            problemas.append(f"falta {herramienta}: {motivo}")
+    # de trixie borra ejecutables de construcción: aquí se exige que no quede ninguno de la lista y que
+    # sigan las excepciones de runtime.
+    problemas += problemas_de_herramientas()
 
     ficheros = _salida("dpkg", "-L", "gnustep-base-runtime").splitlines()
     sobran = [f for f in ficheros if f.startswith(("/usr/bin/", "/usr/sbin/", "/etc/init.d/", "/etc/default/"))
