@@ -52,6 +52,12 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
   reconstruir con `LECTOR_RAR_ENABLED=false` en el `.env`. El PO aceptó este riesgo por escrito:
   [ADR 0015](docs/adr/0015-lector-de-rar-con-unar.md).
 
+- **Cambiar cómo se entra exige la contraseña actual.** Cambiar la contraseña, el usuario, el modo de acceso o la
+  dirección pública en Ajustes pide «Tu contraseña actual», aunque ya hayas entrado: una sesión robada no basta para
+  quedarse con la instalación. Tras 5 fallos en 15 minutos esa comprobación se bloquea 30 minutos (entrar por la pantalla
+  de acceso sigue funcionando). Si olvidas la contraseña, se restablece con el instalador, **lo que exige poder ejecutar
+  la herramienta en el equipo** (`docker compose run … zascarr`).
+
 ## Si quieres acceder desde fuera de la Pi
 
 **La vía recomendada es el instalador** (A11): vuelve a ejecutar `bootstrap.sh`
