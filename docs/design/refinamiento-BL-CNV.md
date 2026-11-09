@@ -21,6 +21,12 @@
 > Donde el resto de este documento diga «no se escribe / no se convierte» por compartido, léase
 > «advertencia + confirmación; sin confirmación no se escribe». No hay bypass silencioso.
 
+> **Cierre de #477 (2026-11-09):** la medición con `unar` 1.10.8 confirma los FAIL (pico de 512 MiB en
+> CBR de 215,8/296,6 MiB y 3/24 extracciones fallidas). El streaming por índice se descartó (no baja el
+> pico, multiplica el tiempo y trunca con `rc=0`). **Decisión PO: #478 queda acotada a CBR ≤150 MiB**;
+> los mayores se bloquean con motivo, sin conversión, hasta otra fase. Los fallos de `unar` también se
+> bloquean con motivo. Evidencia: PR #561.
+
 ---
 
 ## 1. Problema local, cifras y frontera
@@ -411,8 +417,9 @@ flag #528); una muestra que no se pueda clasificar queda **NOT RUN**, nunca se e
 
 ### 6.6 Límites, errores, idempotencia y resultado incierto
 
-- **Límites:** un trabajo a la vez; ≤1000 entradas/≤500 MiB declarados (lector); entrada individual
-  ≤32 MiB; memoria del proceso dentro de 512 MiB (pico medido por #477); espacio necesario =
+- **Límites:** un trabajo a la vez; **tamaño del CBR ≤150 MiB** (decisión PO tras #477; los mayores se
+  bloquean con motivo); ≤1000 entradas/≤500 MiB declarados (lector); entrada individual ≤32 MiB;
+  memoria del proceso dentro de 512 MiB (pico medido por #477); espacio necesario =
   descomprimido + margen (`utils/espacio.py`); cuarentena en la misma unidad; tope de lote de «Vaciar».
 - **Errores** (códigos de dominio, textos en español llano): `archivo_ausente`, `no_es_cbr`,
   `ya_existe_cbz`, `sin_espacio`, `otro_disco`, `compartido`, `no_se_sabe`, `cifrado`, `multivolumen`,
