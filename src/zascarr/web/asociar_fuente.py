@@ -13,10 +13,17 @@ from zascarr.config import get_settings
 from zascarr.database import get_db
 from zascarr.models import MetadataSource, Series
 from zascarr.services.asociar_fuente import (
+    MAX_CONSULTA,
     Comparacion,
     SerieNoEncontradaError,
+    SerieSinIdentidadError,
     comparar,
     normalizar_consulta,
+    tiene_identidad,
+)
+from zascarr.services.tokens_revision import (
+    MAX_TOKEN_ASOCIACION,
+    verificar_token_asociacion,
 )
 from zascarr.web.routes import crear_templates
 
@@ -69,7 +76,8 @@ def _opciones() -> list[dict]:
 
 def _contexto(serie: Series, **extra) -> dict:
     return {"serie": serie, "opciones": _opciones(),
-            "hay_disponibles": any(o["disponible"] for o in _opciones()), **extra}
+            "hay_disponibles": any(o["disponible"] for o in _opciones()),
+            "puede_asociar": tiene_identidad(serie), **extra}
 
 
 @router.get("/asociar", response_class=HTMLResponse)
@@ -77,14 +85,24 @@ async def formulario(series_id: UUID, request: Request,
                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     serie = await _serie(db, series_id)
     return _sin_cache(templates.TemplateResponse(request, "asociar_fuente.html", {
-        **_contexto(serie), "q": serie.title}))
+        **_contexto(serie), "q": serie.title, "error_fuente": None}))
 
 
 @router.post("/asociar/buscar", response_class=HTMLResponse)
 async def buscar(series_id: UUID, request: Request,
-                 fuente: str = Form(...), q: str = Form(default=""),
+                 fuente: str = Form(default=""), q: str = Form(default="", max_length=MAX_CONSULTA),
                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     serie = await _serie(db, series_id)
+    if not tiene_identidad(serie):
+        return _sin_cache(templates.TemplateResponse(
+            request, "asociar_fuente.html",
+            {**_contexto(serie), "q": serie.title, "error_fuente": None}, status_code=409))
+    if not fuente:
+        # Sin fuente no se consulta ninguna: estado claro en la misma pantalla (no 422 crudo).
+        return _sin_cache(templates.TemplateResponse(
+            request, "asociar_fuente.html",
+            {**_contexto(serie), "q": normalizar_consulta(q) or serie.title,
+             "error_fuente": "Elige una web antes de buscar."}, status_code=400))
     try:
         elegida = MetadataSource(fuente)
     except ValueError:
@@ -96,7 +114,30 @@ async def buscar(series_id: UUID, request: Request,
         comparacion: Comparacion = await comparar(db, series_id, elegida, consulta)
     except SerieNoEncontradaError:
         raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+    except SerieSinIdentidadError:
+        return _sin_cache(templates.TemplateResponse(
+            request, "asociar_fuente.html",
+            {**_contexto(serie), "q": serie.title, "error_fuente": None}, status_code=409))
     return _sin_cache(templates.TemplateResponse(
         request, "asociar_fuente_resultados.html",
         {**_contexto(serie), "comparacion": comparacion,
          "nombre_fuente": dict((f.value, n) for f, n, _ in _FUENTES)[elegida.value]}))
+
+
+@router.post("/asociar/previsualizar", response_class=HTMLResponse)
+async def previsualizar(series_id: UUID, request: Request,
+                        token: str = Form(..., max_length=MAX_TOKEN_ASOCIACION),
+                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """Vista previa B1: verifica el token y pinta lo que se guardará; NO escribe."""
+    serie = await _serie(db, series_id)
+    secreto = get_settings().secret_key
+    firmada = (verificar_token_asociacion(token, secreto) if secreto else None)
+    if firmada is None or firmada.serie_id != str(series_id):
+        raise HTTPException(status_code=400, detail="La propuesta no es válida.")
+    if firmada.entidad != "serie" or firmada.kind == "saga":
+        raise HTTPException(status_code=400, detail="Esa ficha no es una serie.")
+    nombre = dict((f.value, n) for f, n, _ in _FUENTES).get(firmada.fuente, firmada.fuente)
+    return _sin_cache(templates.TemplateResponse(
+        request, "asociar_fuente_previsualizar.html",
+        {**_contexto(serie), "firmada": firmada, "nombre_fuente": nombre,
+         "token": token, "puede_asociar": tiene_identidad(serie)}))
