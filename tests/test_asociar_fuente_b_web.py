@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from tests.test_asociar_fuente_b import _token
 from zascarr.database import get_db
 from zascarr.main import app
 from zascarr.services.asociacion_fuente import ResultadoAsociacion
@@ -72,7 +73,7 @@ def test_b2_exito_con_no_store(monkeypatch):
     app.dependency_overrides[get_db] = _db
     try:
         r = TestClient(app).post(f"/ui/series/{serie.id}/asociar/confirmar",
-                                 data={"token": "x" * 10})
+                                 data={"token": _token(serie)})
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert r.status_code == 200
@@ -92,7 +93,7 @@ def test_b2_conflicto_nombra_la_otra_serie(monkeypatch):
     app.dependency_overrides[get_db] = _db
     try:
         r = TestClient(app).post(f"/ui/series/{serie.id}/asociar/confirmar",
-                                 data={"token": "x" * 10})
+                                 data={"token": _token(serie)})
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert "Ficha ocupada" in r.text and "Otra serie" in r.text
