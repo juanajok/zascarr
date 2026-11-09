@@ -390,13 +390,21 @@ async def _test_comic_vine(api_key: str) -> tuple[bool, str]:
 
     Es la excepción explícita a «fuente apagada» (acción del operador) y **no reintenta**: un
     presupuesto de 10 s para una acción interactiva, con la política de Comic Vine a un intento.
+
+    Manda el MISMO `User-Agent` que el cliente real (`services/comic_vine.USER_AGENT`): GameSpot
+    bloquea con 403 el genérico de `httpx` (`python-httpx/…`), y sin esto el botón daba «HTTP 403»
+    con una clave perfectamente válida (bug real, 2026-11-09). El 401 sí es clave rechazada.
     """
     if not api_key:
         return False, "Falta la clave de API."
     from dataclasses import replace
+
+    from zascarr.services.comic_vine import USER_AGENT
     politica = replace(politica_de("comicvine"), max_intentos=1)
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+                timeout=10.0, follow_redirects=False,
+                headers={"User-Agent": USER_AGENT}) as client:
             r = await pedir_con_cortesia(
                 client, "GET", "https://comicvine.gamespot.com/api/search/",
                 politica=politica, espera_max_s=10.0, permitir_apagada=True,
@@ -412,6 +420,13 @@ async def _test_comic_vine(api_key: str) -> tuple[bool, str]:
         return False, ("No se ha probado: hay que esperar ~" f"{segundos} s por cortesía. "
                        "Inténtalo de nuevo en un momento.")
     except RespuestaNoTransitoria as exc:
+        if exc.codigo == 401:
+            return False, ("Comic Vine rechazó la clave (HTTP 401). Cópiala entera desde tu "
+                           "cuenta de Comic Vine (comicvine.gamespot.com/api) y vuelve a probar.")
+        if exc.codigo == 403:
+            return False, ("Comic Vine bloqueó la conexión (HTTP 403): es su protección contra "
+                           "programas, o tu red (VPN/proxy). Si la clave es correcta, prueba sin "
+                           "VPN o más tarde.")
         return False, f"Comic Vine respondió HTTP {exc.codigo}."
     except (ReintentosAgotados, FuenteApagada, httpx.HTTPError, ErrorDePeticion) as exc:
         logger.warning("ajustes.test_failed", integracion="comic_vine",
