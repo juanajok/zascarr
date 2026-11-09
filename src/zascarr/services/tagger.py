@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import structlog
-from sqlalchemy import select, text, tuple_
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
 from zascarr.core.comicinfo_write import (
@@ -580,7 +580,11 @@ class TaggerService:
             .outerjoin(Publisher, Series.publisher_id == Publisher.id)
             .where(File.file_format == FileFormat.CBZ)
             .where(File.is_missing.is_(False))
-            .order_by(File.imported_at, File.id)
+            # Orden GLOBAL por `File.id` (y no por imported_at): rescan ordena
+            # igual sus cambios y los advisory locks se piden en el mismo orden.
+            # Sin esto, dos procesos multi-fichero podían tomar A/B en órdenes
+            # opuestos y bloquearse mutuamente.
+            .order_by(File.id)
         )
         if file_ids is not None:
             q = q.where(File.id.in_(file_ids))
@@ -596,7 +600,7 @@ class TaggerService:
         while True:
             q = self._consulta(file_ids).limit(PAGINA)
             if ultimo is not None:
-                q = q.where(tuple_(File.imported_at, File.id) > tuple_(*ultimo))
+                q = q.where(File.id > ultimo)
             filas = (await self.db.execute(q)).all()
             if not filas:
                 return
@@ -604,7 +608,7 @@ class TaggerService:
                 yield fila
             if len(filas) < PAGINA:
                 return
-            ultimo = (filas[-1][0].imported_at, filas[-1][0].id)
+            ultimo = filas[-1][0].id
 
     async def run(
         self, limit: int = 20, *, dry_run: bool = True, solo_rellenar: bool = False,

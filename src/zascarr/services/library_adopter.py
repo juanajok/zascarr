@@ -272,6 +272,17 @@ class InventarioBiblioteca:
         return hashlib.sha256("\n".join(sorted(self.rutas_nuevas)).encode()).hexdigest()
 
 
+def _clave_de_orden_de_retriaje(fila_y_ruta: tuple) -> str:
+    """Orden GLOBAL de re-triaje por `File.id` (mismo que el tagger).
+
+    Los advisory locks se retienen hasta el commit del lote; si el tagger y el
+    rescan piden los locks de varios ficheros en órdenes distintos (tagger por
+    `imported_at,id`, rescan por ruta), dos procesos pueden tomar A/B al revés
+    y bloquearse mutuamente. Ordenar ambos por `File.id` elimina el ciclo.
+    """
+    return str(fila_y_ruta[1].id)
+
+
 class LibraryAdopter:
     def __init__(self, db: AsyncSession):
         self._db = db
@@ -561,7 +572,8 @@ class LibraryAdopter:
                 del report.errores[marca[8]:]
                 del report.omitidos[marca[9]:]
 
-            for _n, (path, fila) in enumerate(sorted(cambiados, key=lambda t: str(t[0])), start=1):
+            for _n, (path, fila) in enumerate(
+                    sorted(cambiados, key=_clave_de_orden_de_retriaje), start=1):
                 if pendientes == 0:
                     marca = _marca_del_lote()   # foto al EMPEZAR el lote: lo no acreditado se revierte a esto
                 try:
