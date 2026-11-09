@@ -103,6 +103,12 @@ def _mensaje_conexion_fallida(exc: httpx.HTTPError) -> str:
 router = APIRouter(prefix="/ui/ajustes", tags=["ui"])
 
 
+def _sin_cache(respuesta: HTMLResponse) -> HTMLResponse:
+    """AC-07/ajustes: ninguna respuesta con datos de acceso se sirve de caché."""
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
 def _contexto() -> dict:
     s = get_settings()
     return {
@@ -139,7 +145,7 @@ def _contexto() -> dict:
 
 @router.get("", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "ajustes.html", _contexto())
+    return _sin_cache(templates.TemplateResponse(request, "ajustes.html", _contexto()))
 
 
 @router.post("/guardar/comic-vine", response_class=HTMLResponse)
@@ -296,15 +302,20 @@ async def guardar_amule(
     return templates.TemplateResponse(request, "_ajustes_guardado.html", {"nombre": "aMule"})
 
 
-def _contexto_seguridad() -> dict:
-    """Lo que pinta la tarjeta de Seguridad, siempre desde el estado ACTUAL."""
+def _contexto_seguridad(*, incluir_valores: bool = True) -> dict:
+    """Lo que pinta la tarjeta de Seguridad, siempre desde el estado ACTUAL.
+
+    En la respuesta de ÉXITO que sustituye la tarjeta no se repintan `auth_username` ni
+    `base_url`: AC-07 exige que ningún valor del request (aunque se haya guardado) se
+    refleje en esa respuesta. La página completa, tras recargar, sí los muestra.
+    """
     s = get_settings()
     return {
         "auth_mode": s.auth_mode,
-        "auth_username": s.auth_username,
+        "auth_username": s.auth_username if incluir_valores else "",
         "auth_password_configurada": bool(s.auth_password_hash),
         "hay_contrasena": hay_contrasena(s),
-        "base_url": s.base_url,
+        "base_url": s.base_url if incluir_valores else "",
     }
 
 
@@ -321,7 +332,10 @@ async def guardar_seguridad(
     db: AsyncSession = Depends(get_db),
 ) -> HTMLResponse:
     if auth_mode not in MODOS:
-        raise HTTPException(status_code=400, detail="Modo de autenticación no reconocido")
+        raise HTTPException(
+            status_code=400, detail="Modo de autenticación no reconocido",
+            headers={"Cache-Control": "no-store"},
+        )
 
     # La regla (longitud, no dejar la app sin forma de entrar, versión de sesión y la contraseña
     # ACTUAL para cambiar cómo se entra) vive en services/seguridad.py. El router nunca usa la
@@ -334,7 +348,7 @@ async def guardar_seguridad(
         motivo = resultado.motivo_rechazo
         if motivo:
             logger.info("ajustes.seguridad_rechazada", motivo=motivo)
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        return _sin_cache(templates.TemplateResponse(request, "_ajustes_guardado.html", {
             "nombre": "Seguridad", "error": resultado.error,
             # la actual se vacía ante falta, incorrecta, cola llena y bloqueo (inválida si falta
             # o es incorrecta); las nuevas, ante bloqueo y si no coinciden
@@ -342,25 +356,25 @@ async def guardar_seguridad(
             "actual_invalida": motivo in ("falta_actual", "actual_incorrecta"),
             "vaciar_nuevas": motivo == "bloqueada" or resultado.error == MENSAJE_NO_COINCIDEN,
             "auth_password_configurada": bool(get_settings().auth_password_hash),
-        })
+        }))
 
     if resultado.cambios:
         logger.info("ajustes.seguridad_cambiada", cambios=list(resultado.cambios))
     if not resultado.cambia_credenciales:
         # Solo la dirección (o nada): como antes, al hueco del resultado, vaciando lo escrito.
-        return templates.TemplateResponse(request, "_ajustes_guardado.html", {
+        return _sin_cache(templates.TemplateResponse(request, "_ajustes_guardado.html", {
             "nombre": "Seguridad", "aviso": resultado.aviso,
             "vaciar_actual": True, "vaciar_nuevas": True,
             "auth_password_configurada": bool(get_settings().auth_password_hash),
-        })
+        }))
 
     # Cambio de credenciales: se sustituye TODA la tarjeta, pintada desde el estado nuevo (ya trae o
     # quita el campo de la contraseña actual, sin ningún `value`). El `Set-Cookie` viaja en la misma
     # respuesta: quien cambia la contraseña conserva SU sesión (las demás se cierran).
-    respuesta = templates.TemplateResponse(request, "_ajustes_seguridad.html", {
-        **_contexto_seguridad(), "mensaje_exito": True, "cambia_credenciales": True,
-        "aviso": resultado.aviso,
-    })
+    respuesta = _sin_cache(templates.TemplateResponse(request, "_ajustes_seguridad.html", {
+        **_contexto_seguridad(incluir_valores=False), "mensaje_exito": True,
+        "cambia_credenciales": True, "aviso": resultado.aviso,
+    }))
     respuesta.headers["HX-Retarget"] = "#tarjeta-seguridad"
     respuesta.headers["HX-Reswap"] = "outerHTML"
     settings = get_settings()
