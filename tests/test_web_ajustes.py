@@ -509,6 +509,44 @@ class TestAvisos:
         assert r.status_code == 403
 
 
+class TestCarpetasCompartidas:
+    def test_la_pagina_muestra_la_seccion_y_las_raices_conocidas(self):
+        s = get_settings()
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200
+        assert "Archivos compartidos" in r.text
+        assert 'name="carpetas_compartidas"' in r.text
+        assert str(s.library_path) in r.text
+        assert str(s.downloads_path) in r.text
+        assert "no puede saber si un archivo se comparte" in r.text
+
+    def test_guardar_solo_acepta_raices_conocidas_y_aplica(self, restaurar_settings):
+        s = get_settings()
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/compartidos", data={
+                "carpetas_compartidas": [
+                    str(s.library_path), str(s.downloads_path), "/etc/passwd", "../fuera",
+                ],
+            })
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200 and "guardado" in r.text.lower()
+        assert r.headers.get("cache-control") == "no-store"
+        assert s.carpetas_compartidas == [str(s.library_path), str(s.downloads_path)]
+
+    def test_guardar_sin_ninguna_raiz_deja_lista_vacia(self, restaurar_settings):
+        s = get_settings()
+        s.carpetas_compartidas = [str(s.library_path)]
+        app.dependency_overrides[get_db] = _override_get_db(FakeSession())
+        try:
+            r = TestClient(app).post("/ui/ajustes/guardar/compartidos", data={})
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+        assert r.status_code == 200
+        assert s.carpetas_compartidas == []
+
+
 class TestPresupuestoDeTextoYAcessibilidad:
     """U21: la frase de entrada y cada descripción de tarjeta caben en 20 palabras; el aviso de
     fuentes heredadas es un aviso (no un párrafo suelto), el enlace de la clave existe y las
