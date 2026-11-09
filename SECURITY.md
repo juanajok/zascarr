@@ -179,6 +179,11 @@ impacto que ves (qué se puede leer, modificar o ejecutar).
   contraseña. Se exige además una **longitud mínima de 12 caracteres**.
 - **Backups**: `scripts/backup.sh` verifica cada dump (`gzip -t`) antes de
   darlo por bueno; un backup corrupto nunca se presenta como válido.
+- **`ComicInfo.xml` de terceros (ETQ2, #538)**: se lee con `ElementTree` sin
+  entidades externas, el XML está acotado a **1 MiB** y los campos `<Tags>`/
+  `<Genre>` a **32 KiB**, **200 valores por campo**, **400 en total** y **64
+  caracteres por valor**. Lo que excede se ignora con aviso en el informe de
+  importación y nunca aborta el ciclo; no se escribe ni un byte del CBZ.
 
 ## Registros de acceso (#361)
 
