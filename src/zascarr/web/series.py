@@ -39,10 +39,11 @@ from zascarr.models import (
 from zascarr.services.archivos_por_numero import archivos_por_numero
 from zascarr.services.comic_vine import es_portada_de_relleno
 from zascarr.services.discrepancias import (
-    entrada as entrada_discrepancia,
+    clave_valida,
+    mantener_lo_mio,
 )
 from zascarr.services.discrepancias import (
-    mantener_lo_mio,
+    entrada as entrada_discrepancia,
 )
 from zascarr.services.enricher import puede_enlazarse_con_comic_vine
 from zascarr.services.enriquecimiento_plan import (
@@ -425,7 +426,9 @@ async def _archivo_e_issue(db: AsyncSession, series_id: UUID, file_id: UUID):
 
 
 async def _discrepancia_pendiente(db: AsyncSession, series_id: UUID, file_id: UUID, clave: str):
-    """La entrada de D4 que se puede mantener: existe, está pendiente y es de la relación actual."""
+    """La entrada de D4 que se puede mantener: clave válida, existe, está pendiente y es de la relación actual."""
+    if not clave_valida(clave):
+        raise HTTPException(status_code=404, detail="Propuesta no encontrada")
     f, issue, archivo, issue_obj = await _archivo_e_issue(db, series_id, file_id)
     if not es_protegida(estado_de_relacion(archivo, issue_obj)):
         raise HTTPException(status_code=404, detail="Ese archivo no tiene una relación protegida")

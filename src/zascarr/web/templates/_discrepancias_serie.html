@@ -9,21 +9,21 @@
   <ul class="discrepancias-lista">
     {% for d in a.discrepancias %}
     {% set prop = d.propuesta %}
-    <li class="discrepancia" data-clave="{{ d.clave }}">
+    <li class="discrepancia" data-clave="{{ d.clave|urlencode }}">
       <p class="caption">
         Confirmaste el número #{{ n.numero }} ({{ formatos_legibles.get(a.formato_publicacion, a.formato_publicacion) }}).
         {% if prop.numero %}
           La actualización propone el número #{{ prop.numero }}{% if prop.formato %} ({{ formatos_legibles.get(prop.formato, prop.formato) }}){% endif %}
-          {%- if prop.serie_destino_id and prop.serie_destino_id != series.id %} en otra serie{% endif %}.
+          {%- if prop.serie_destino_id and prop.serie_destino_id|string != series.id|string %} en otra serie{% endif %}.
         {% else %}
           La actualización no encuentra ninguna publicación de esta serie para el archivo.
         {% endif %}
         Tu relación sigue como estaba.
       </p>
       <p class="discrepancia-acciones">
-        <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/discrepancias/{{ d.clave }}/mantener"
+        <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/discrepancias/{{ d.clave|urlencode }}/mantener"
            aria-label="Mantener lo mío: seguir con el número #{{ n.numero }} de {{ a.nombre }}">Mantener lo mío</a>
-        {% if prop.serie_destino_id and prop.serie_destino_id != series.id %}
+        {% if prop.serie_destino_id and prop.serie_destino_id|string != series.id|string %}
         <a class="btn ghost sm" href="/ui/series/{{ series.id }}/asociar"
            aria-label="Revisar la identidad de la serie de {{ a.nombre }}">Revisar</a>
         {% else %}
