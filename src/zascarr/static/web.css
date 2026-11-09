@@ -1894,3 +1894,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }
+
+/* BL-R4 (#233): propuesta de otra publicación sin aplicar, junto a los archivos del número. */
+.discrepancias-archivo { margin: 8px 0 0; }
+.discrepancia-aviso { margin: 0 0 6px; }
+.discrepancias-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.discrepancia { border-left: 3px solid var(--amber-t); padding-left: 10px; }
+.discrepancia-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; align-items: center; }

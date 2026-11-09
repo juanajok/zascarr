@@ -1,0 +1,40 @@
+{#- #233/BL-R4: una actualización propone otra publicación y la relación confirmada NO se ha aplicado.
+    El aviso va junto a los archivos del número; «Mantener lo mío» recuerda SOLO esa propuesta (no silencia
+    a la fuente) y «Revisar» abre el camino de corrección existente. Sin JS propio. -#}
+{% if a.discrepancias %}
+<div class="discrepancias-archivo" id="discrepancias-{{ a.id }}">
+  <p class="discrepancia-aviso">
+    <strong>Una actualización propone otra publicación; no se ha aplicado.</strong>
+  </p>
+  <ul class="discrepancias-lista">
+    {% for d in a.discrepancias %}
+    {% set prop = d.propuesta %}
+    <li class="discrepancia" data-clave="{{ d.clave }}">
+      <p class="caption">
+        Confirmaste el número #{{ n.numero }} ({{ formatos_legibles.get(a.formato_publicacion, a.formato_publicacion) }}).
+        {% if prop.numero %}
+          La actualización propone el número #{{ prop.numero }}{% if prop.formato %} ({{ formatos_legibles.get(prop.formato, prop.formato) }}){% endif %}
+          {%- if prop.serie_destino_id and prop.serie_destino_id != series.id %} en otra serie{% endif %}.
+        {% else %}
+          La actualización no encuentra ninguna publicación de esta serie para el archivo.
+        {% endif %}
+        Tu relación sigue como estaba.
+      </p>
+      <p class="discrepancia-acciones">
+        <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/discrepancias/{{ d.clave }}/mantener"
+           aria-label="Mantener lo mío: seguir con el número #{{ n.numero }} de {{ a.nombre }}">Mantener lo mío</a>
+        {% if prop.serie_destino_id and prop.serie_destino_id != series.id %}
+        <a class="btn ghost sm" href="/ui/series/{{ series.id }}/asociar"
+           aria-label="Revisar la identidad de la serie de {{ a.nombre }}">Revisar</a>
+        {% else %}
+        <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/deshacer"
+           aria-label="Revisar la vinculación de {{ a.nombre }}">Revisar</a>
+        {% endif %}
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="caption">«Mantener lo mío» recuerda solo esta propuesta concreta: la fuente se seguirá consultando y
+    una propuesta distinta volverá a aparecer. No cambia la publicación ni toca los archivos.</p>
+</div>
+{% endif %}
