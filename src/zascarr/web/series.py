@@ -18,7 +18,7 @@ from uuid import UUID, uuid4
 
 import structlog
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -30,6 +30,7 @@ from zascarr.models import (
     File,
     Issue,
     MotivoRar,
+    ReadingStatus,
     Series,
     Wishlist,
     WishlistOrigin,
@@ -66,6 +67,16 @@ from zascarr.services.ficha_numero import (
 )
 from zascarr.services.ficha_numero import (
     TEXTOS as TEXTOS_FICHA,
+)
+from zascarr.services.lectura import (
+    TEXTOS_LECTURA,
+    EstadoInvalidoError,
+    IssueNoEncontradoError,
+    NotaInvalidaError,
+    ValoracionInvalidaError,
+    lectura_de,
+    lecturas_de_serie,
+    marcar,
 )
 from zascarr.services.legal import is_acknowledged
 from zascarr.services.politica import (
@@ -394,12 +405,17 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     # Las consultas de la ficha van AL FINAL: no desplazan las colas de los dobles de prueba
     # que ya consumían las consultas históricas de esta ruta.
     ficha = await cargar_ficha_serie(db, series_id)
+    lecturas = await lecturas_de_serie(db, series_id)
     sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis) if ficha else ("", "")
     serie_vacia = bool(ficha) and not (ficha.sinopsis or series.publisher or series.start_year
                                        or series.end_year or ficha.autores)
     respuesta = templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
         "ficha": ficha, "textos_ficha": TEXTOS_FICHA, "roles_ficha": ROLES_ES,
+        "lecturas": lecturas, "textos_lectura": TEXTOS_LECTURA,
+        "estados_lectura": ((ReadingStatus.UNREAD, "Sin leer"),
+                                                  (ReadingStatus.READING, "Leyendo"),
+                                                  (ReadingStatus.COMPLETED, "Leído")),
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
         "serie_vacia": serie_vacia,
         "missing": huecos.faltantes, "huecos": huecos,
@@ -706,7 +722,51 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
         "series": ficha.serie, "issue": ficha.issue, "ficha": ficha,
         "autores": autores, "textos": TEXTOS_FICHA,
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
+        "lectura": await lectura_de(db, issue_id), "textos_lectura": TEXTOS_LECTURA,
+        "estados_lectura": ((ReadingStatus.UNREAD, "Sin leer"),
+                            (ReadingStatus.READING, "Leyendo"),
+                            (ReadingStatus.COMPLETED, "Leído")),
     })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/numero/{issue_id}/lectura")
+@router.post("/{series_id}/numero/{issue_id}/leido")
+async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
+                       estado: str = Form(...), rating: str | None = Form(default=None),
+                       nota: str | None = Form(default=None),
+                       db: AsyncSession = Depends(get_db)) -> Response:
+    """Marca el número; el formulario funciona sin JS (303 a la ficha) y con HTMX (fila)."""
+    try:
+        lectura = await marcar(db, issue_id, estado, rating=rating, nota=nota,
+                               series_id=series_id)
+    except IssueNoEncontradoError:
+        raise HTTPException(status_code=404, detail="Número no encontrado") from None
+    except (EstadoInvalidoError, ValoracionInvalidaError, NotaInvalidaError) as exc:
+        if request.headers.get("HX-Request") == "true":
+            respuesta = templates.TemplateResponse(
+                request, "_lectura_control.html",
+                {"series": SimpleNamespace(id=series_id), "issue_id": str(issue_id),
+                 "lectura": None, "textos_lectura": TEXTOS_LECTURA, "modo": "fila",
+                 "error": str(exc), "estados_lectura": (
+                     (ReadingStatus.UNREAD, "Sin leer"), (ReadingStatus.READING, "Leyendo"),
+                     (ReadingStatus.COMPLETED, "Leído"))})
+            respuesta.headers["Cache-Control"] = "no-store"
+            return respuesta
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    if request.headers.get("HX-Request") == "true":
+        respuesta = templates.TemplateResponse(
+            request, "_lectura_control.html",
+            {"series": SimpleNamespace(id=series_id), "issue_id": str(issue_id),
+             "lectura": lectura, "textos_lectura": TEXTOS_LECTURA, "modo": "fila",
+             "guardado": lectura.estado_es,
+             "estados_lectura": (
+                 (ReadingStatus.UNREAD, "Sin leer"), (ReadingStatus.READING, "Leyendo"),
+                 (ReadingStatus.COMPLETED, "Leído"))})
+    else:
+        respuesta = RedirectResponse(url=f"/ui/series/{series_id}#archivos-por-numero",
+                                     status_code=303)
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
