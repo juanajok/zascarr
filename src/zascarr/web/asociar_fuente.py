@@ -22,8 +22,13 @@ from zascarr.services.asociar_fuente import (
     normalizar_consulta,
     tiene_identidad,
 )
+from zascarr.services.retirar_asociacion import (
+    ResultadoRetirarAsociacion,
+    RetirarAsociacionDeFuente,
+)
 from zascarr.services.tokens_revision import (
     MAX_TOKEN_ASOCIACION,
+    MAX_TOKEN_RETIRAR_ASOCIACION,
     verificar_token_asociacion,
 )
 from zascarr.services.vinculacion import ResultadoInciertoError, VinculacionError
@@ -169,5 +174,49 @@ async def confirmar(series_id: UUID, request: Request,
              "error": str(exc)}, status_code=400))
     return _sin_cache(templates.TemplateResponse(
         request, "asociar_fuente_resultado.html",
+        {**_contexto(serie), "resultado": resultado, "incierto": False, "token": token,
+         "error": None}))
+
+
+@router.get("/asociar/{fuente}/retirar", response_class=HTMLResponse)
+async def previsualizar_retirada(series_id: UUID, fuente: str, request: Request,
+                                 db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    serie = await _serie(db, series_id)
+    try:
+        elegida = MetadataSource(fuente)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Fuente desconocida") from None
+    try:
+        previa = await RetirarAsociacionDeFuente(
+            db, secret=get_settings().secret_key).previsualizar(series_id, elegida)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Serie no encontrada") from None
+    return _sin_cache(templates.TemplateResponse(
+        request, "asociar_fuente_retirar.html",
+        {**_contexto(serie), "previa": previa,
+         "nombre_fuente": dict((f.value, n) for f, n, _ in _FUENTES).get(
+             previa.fuente, previa.fuente)}))
+
+
+@router.post("/asociar/retirar/confirmar", response_class=HTMLResponse)
+async def confirmar_retirada(series_id: UUID, request: Request,
+                             token: str = Form(..., max_length=MAX_TOKEN_RETIRAR_ASOCIACION),
+                             db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    serie = await _serie(db, series_id)
+    servicio = RetirarAsociacionDeFuente(db, secret=get_settings().secret_key)
+    try:
+        resultado: ResultadoRetirarAsociacion = await servicio.confirmar(token)
+    except ResultadoInciertoError:
+        return _sin_cache(templates.TemplateResponse(
+            request, "asociar_fuente_retirar_resultado.html",
+            {**_contexto(serie), "resultado": None, "incierto": True, "token": token,
+             "error": None}, status_code=503))
+    except VinculacionError as exc:
+        return _sin_cache(templates.TemplateResponse(
+            request, "asociar_fuente_retirar_resultado.html",
+            {**_contexto(serie), "resultado": None, "incierto": False, "token": token,
+             "error": str(exc)}, status_code=400))
+    return _sin_cache(templates.TemplateResponse(
+        request, "asociar_fuente_retirar_resultado.html",
         {**_contexto(serie), "resultado": resultado, "incierto": False, "token": token,
          "error": None}))

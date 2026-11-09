@@ -57,7 +57,8 @@
   {% if procedencia.identidades %}
   <ul class="procedencia-identidades">
     {% for i in procedencia.identidades %}
-    <li>{{ i.fuente }}{% if i.fecha %} · asociada el {{ i.fecha }}{% else %} · procedencia no registrada{% endif %}</li>
+    <li>{{ i.fuente }}{% if i.fecha %} · asociada el {{ i.fecha }}{% else %} · procedencia no registrada{% endif %}
+      <a class="btn ghost sm" href="/ui/series/{{ series.id }}/asociar/{{ i.clave }}/retirar">Retirar</a></li>
     {% endfor %}
   </ul>
   {% endif %}

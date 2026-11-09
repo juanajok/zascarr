@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Retirar la asociación — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ serie.id }}">← Volver a la serie</a>
+<h1>Retirar la asociación</h1>
+{% if previa.estado == "ya_retirada" %}
+<p>{{ previa.mensaje }}</p>
+<p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% else %}
+<p>Vas a quitar la ficha de {{ nombre_fuente }} de esta serie. No se borra nada.</p>
+<dl class="asociar-preview">
+  <dt>Web</dt><dd>{{ nombre_fuente }}</dd>
+  <dt>Ficha</dt><dd>{{ previa.id_externo }}</dd>
+  <dt>Añadida</dt><dd>{% if previa.fecha %}el {{ previa.fecha }}{% else %}No consta cómo se añadió esta ficha.{% endif %}</dd>
+</dl>
+<p class="caption">La serie, sus números y tus archivos siguen igual. Queda en el historial.</p>
+<form method="post" action="/ui/series/{{ serie.id }}/asociar/retirar/confirmar">
+  <input type="hidden" name="token" value="{{ previa.token }}">
+  <button class="btn primary" type="submit">Retirar la asociación</button>
+</form>
+<a class="btn ghost" href="/ui/series/{{ serie.id }}">Cancelar</a>
+{% endif %}
+{% endblock %}

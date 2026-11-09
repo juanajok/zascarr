@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Resultado de retirar — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ serie.id }}">← Volver a la serie</a>
+{% if incierto %}
+<h1>Resultado sin confirmar</h1>
+<p class="caption" role="alert">La respuesta se perdió. No sabemos si se ha retirado. Compruébalo antes de repetir.</p>
+<form method="post" action="/ui/series/{{ serie.id }}/asociar/retirar/confirmar">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button class="btn primary" type="submit">Comprobar el resultado</button>
+</form>
+{% elif error %}
+<h1>No se ha podido retirar</h1>
+<p class="caption" role="alert">{{ error }}</p>
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% elif resultado and resultado.resultado == "retirada" %}
+<h1>Asociación retirada</h1>
+<p>{{ resultado.nombre_fuente }} ya no está asociada a esta serie. La serie, sus números y tus archivos siguen igual.</p>
+<p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% elif resultado and resultado.resultado == "ya_retirada" %}
+<h1>Ya estaba retirada</h1>
+<p>No se ha cambiado nada: esa ficha ya no estaba asociada.</p>
+<p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% elif resultado and resultado.motivo == "propuesta_desactualizada" %}
+<h1>Ficha desactualizada</h1>
+<p class="caption" role="alert">La asociación cambió desde que abriste la vista previa. No se ha retirado nada; vuelve a revisarla.</p>
+<p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% elif resultado and resultado.motivo == "token_caducado" %}
+<h1>Propuesta caducada</h1>
+<p class="caption" role="alert">Han pasado más de 15 minutos. No se ha cambiado nada; vuelve a revisar la ficha.</p>
+<p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% else %}
+<h1>Ya no estaba</h1>
+<p>No se ha cambiado nada: esa ficha ya no estaba asociada.</p>
+<p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
+{% endif %}
+{% endblock %}
