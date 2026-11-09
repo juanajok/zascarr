@@ -27,7 +27,7 @@
 <p><a class="btn primary" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
 {% elif resultado and resultado.motivo == "token_caducado" %}
 <h1>Propuesta caducada</h1>
-<p class="caption" role="alert">Han pasado más de 15 minutos. No se ha cambiado nada; vuelve a revisar la ficha.</p>
+<p class="caption" role="alert">{{ resultado.mensaje }}</p>
 <p><a class="btn ghost" href="/ui/series/{{ serie.id }}">Volver a la serie</a></p>
 {% else %}
 <h1>Ya no estaba</h1>
