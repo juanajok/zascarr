@@ -497,7 +497,7 @@ nombre sin prefijo.
 | ID | Historia | Aceptación | P | Est |
 |---|---|---|---|---|
 | ETQ1a | Como coleccionista, quiero etiquetar una serie con mis palabras desde su ficha (añadir, quitar y crear), para describir lo que trata sin tocar archivos | #403; AC-01…AC-05, AC-07 (ficha), AC-10, AC-12…AC-16 y AC-19 de `especificacion-etiquetas.md`; migración **0022**; reutiliza `tags`/`issue_tags` y añade `series_tags`; `manual` gana; D-6 ratificada (crear desde la ficha); UI según `ui-etiquetas.md` | P1 | ✅ Hecho (desplegado 2026-11-08) |
-| ETQ1b | Como coleccionista, quiero filtrar la biblioteca por etiquetas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #431; AC-06, AC-07 (Biblioteca), AC-08, AC-09, AC-11, AC-17, AC-18 y NFR-07; filtro sobre `#rejilla`; facetas de un solo grupo; **construida sobre ETQ1a** (#499, desplegada el 2026-11-08); fusionada en #514 | P1 | ✅ Hecho (pendiente de despliegue) |
+| ETQ1b | Como coleccionista, quiero filtrar la biblioteca por etiquetas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #431; AC-06, AC-07 (Biblioteca), AC-08, AC-09, AC-11, AC-17, AC-18 y NFR-07; filtro sobre `#rejilla`; facetas de un solo grupo; **construida sobre ETQ1a** (#499, desplegada el 2026-11-08); fusionada en #514 y desplegada el 2026-11-09 | P1 | ✅ Hecho (desplegado 2026-11-09) |
 | ETQ2 | Como coleccionista, quiero que las etiquetas que ya traen mis CBZ en ComicInfo aparezcan en ZascArr, para no teclearlas | `<Tags>`/`<Genre>` leídos con `source='comicinfo_xml'`, topes de volumen (hallazgo ALTO de seguridad), idempotente, sin pisar manual, sin escribir XML | P1 | M |
 | ETQ3 | Como coleccionista, quiero que géneros y personajes de las fuentes se guarden de verdad (hoy las tablas están dormidas), para filtrar por ellos | Poblar `Series.genres`/`Issue.characters` con los `field_list` actuales ampliados en la misma petición; respeta `locked_fields`; Tebeosfera sigue sin género (no se inventa) | P1 | M–L |
 | ETQ4 | Como coleccionista, quiero que las fuentes propongan etiquetas de tema sin pisar las mías | Mapeo al espacio `etiqueta` (D-1); `weight` = `rank` real de AniList; caché negativa H2 y espaciados de cortesía; `manual` no se toca | P2 | M |
@@ -519,8 +519,9 @@ nombre sin prefijo.
 La **migración es la 0022** (`down_revision="0021"`); la 0021 la ocupa BL-R9. ETQ1a
 (#403) está fusionada (#499, `c8bd267`) y **desplegada en la Pi el 2026-11-08 sobre
 `20e5f9f`**, con el arreglo de paridad Python/SQL de `normalize_tag` (#510, PR #512);
-ETQ1b (#431) está **fusionada (#514, `2f1621e`) y pendiente de despliegue**. Publicar
-la tarjeta **no autoriza código, migraciones en producción ni despliegue**.
+ETQ1b (#431) está **fusionada (#514, `2f1621e`) y desplegada por el PO el
+2026-11-09** (SHA exacto no registrado). Publicar la tarjeta **no autoriza código,
+migraciones en producción ni despliegue**.
 
 - **ETQ1a desplegada en la Pi (2026-11-08, `20e5f9f`).** El PO desplegó el código ya
   fusionado de #403 junto con la corrección de paridad de `normalize_tag` (#510, PR
@@ -533,17 +534,19 @@ la tarjeta **no autoriza código, migraciones en producción ni despliegue**.
   `success`. **Registro hecho a partir de la confirmación del PO; la Pi no se ha
   verificado desde aquí.**
 
-- **ETQ1b fusionada (2026-11-08, `2f1621e`), pendiente de despliegue.** PR #514
-  (issue #431), construida sobre el contrato de Biblioteca de BL-IT01: `etiquetas`
-  como filtro más, con chips, AND, exclusión, sugerencias y facetas sobre `#rejilla`,
-  sin regiones ni ids nuevos. `Filtros.etiquetas` normaliza la expresión en la URL
-  (`noir -escuela`, 12 tokens/100 caracteres) y `SeriesService` resuelve con
-  `EXISTS`/`NOT EXISTS` por token; los tokens desconocidos se explican sin romper y
-  la URL y la paginación conservan el filtro. **No añade migración, tablas ni
+- **ETQ1b desplegada en la Pi (confirmado por el PO el 2026-11-09).** PR #514
+  (issue #431), fusionada en `2f1621e` el 2026-11-08, construida sobre el contrato
+  de Biblioteca de BL-IT01:
+  `etiquetas` como filtro más, con chips, AND, exclusión, sugerencias y facetas sobre
+  `#rejilla`, sin regiones ni ids nuevos. `Filtros.etiquetas` normaliza la expresión
+  en la URL (`noir -escuela`, 12 tokens/100 caracteres) y `SeriesService` resuelve
+  con `EXISTS`/`NOT EXISTS` por token; los tokens desconocidos se explican sin romper
+  y la URL y la paginación conservan el filtro. **No añade migración, tablas ni
   dependencias.** Verificación de la PR: 361 pruebas acotadas en verde, prueba real
   con PostgreSQL y `ruff` limpio; **NOT RUN**: p95 en la Pi (NFR-07), navegador real
-  del flujo completo y lector de pantalla. La PR se fusionó el 2026-11-08 a las
-  21:14 UTC, después del despliegue de ETQ1a, así que **no viaja en `20e5f9f`**.
+  del flujo completo y lector de pantalla. El despliegue lo hizo el PO después del
+  merge de #514; **el SHA exacto no consta y la Pi no se ha verificado desde aquí**.
+  #514 **no viaja en `20e5f9f`**, que es el despliegue de ETQ1a.
 
 ### Épica D — "El sistema busca lo que me falta"
 
