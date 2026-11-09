@@ -1125,10 +1125,15 @@ ellas, B no se declara Ready.
 
 ### 8.16 NOT RUN de esta revisión
 
-- **Código B/C:** no existe; no se ha implementado nada en esta entrega.
-- **A token:** implementado en PR-S1 (token por candidata seleccionable, preview B1 sin escribir); B de persistencia sigue pendiente.
-- **Pruebas:** no se ha ejecutado la suite ni PostgreSQL; las pruebas de §8.12 están definidas, no
-  ejecutadas.
+- **Código A/B/C:** implementado y fusionado (A, S1, B, C y cierres de QA); sin migración ni
+  dependencias nuevas.
+- **Pruebas:** suite completa y PostgreSQL real ejecutados en CI para A/B/C (el PG cubre escritura,
+  comprobantes, R2, purgas y concurrencia). Los tests PG se saltan sin `TEST_DATABASE_URL`.
 - **Fuentes reales:** ninguna; no se ha comprobado `kind`/editorial en vivo.
-- **PO:** D-A/H10 y D-H16 **decididas el 2026-11-09** (restringir A y guardar H16 sin red); B las implementará.
-- **SHA:** `a87eabd`; si `main` avanza antes de implementar, re-ejecutar las citas.
+- **PO:** D-A/H10 y D-H16 **decididas el 2026-11-09** (restringir A y guardar H16 sin red);
+  implementadas y probadas.
+- **SHA:** `0ec0d11` (cierre #129); si `main` avanza antes de publicar, re-ejecutar las citas.
+
+**NOT RUN específico de A/B/C (2026-11-09).** No se ha probado en **navegador real**, **lector de
+pantalla**, **teclado físico**, a **360 px** ni en **Raspberry Pi**; no se midieron latencia, memoria
+ni el recorrido completo de asociar/retirar en esas condiciones. Esta entrega no los declara PASS.

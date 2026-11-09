@@ -174,6 +174,27 @@ def _resultado_repetido(informe: dict) -> ResultadoAsociacion:
     )
 
 
+def _entrada_historial_valida(e: object) -> bool:
+    """H3/H8: una entrada de historial solo acredita si cumple el mismo esquema que las activas.
+
+    El historial puede llevar `previo`/`deshecho`, pero un objeto suelto como
+    `{"operacion_id": ...}` no es evidencia de nada y se ignora.
+    """
+    if not isinstance(e, dict):
+        return False
+    activa = {k: v for k, v in e.items() if k not in ("deshecho", "previo")}
+    if not _entrada_valida(activa):
+        return False
+    deshecho = e.get("deshecho")
+    if not isinstance(deshecho, dict):
+        return False
+    try:
+        UUID(str(deshecho.get("operacion_id")))
+    except (ValueError, TypeError):
+        return False
+    return True
+
+
 class AsociacionDeFuente:
     """Confirma un token de A. Solo escribe si puede probar identidad, unicidad y huella."""
 
@@ -283,7 +304,7 @@ class AsociacionDeFuente:
                 await db.commit()
                 return self._omitida(firmada, "procedencia_invalida")
         for e in historial:
-            if e.get("operacion_id") == firmada.operacion:
+            if e.get("operacion_id") == firmada.operacion and _entrada_historial_valida(e):
                 await db.commit()
                 return self._ya_retirada(firmada)
         if not vigente:
