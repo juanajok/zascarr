@@ -32,8 +32,10 @@ def _serie(**extra):
 def test_ficha_de_numero_muestra_texto_plano_autores_y_archivos():
     serie = _serie()
     issue = _issue(series_id=serie.id, credits=[
-        SimpleNamespace(role=CreatorRole.WRITER, creator=SimpleNamespace(name="Ana")),
-        SimpleNamespace(role=CreatorRole.PENCILER, creator=SimpleNamespace(name="Bea")),
+        SimpleNamespace(role=CreatorRole.WRITER,
+                        creator=SimpleNamespace(name="Ana", metadata_source="manual")),
+        SimpleNamespace(role=CreatorRole.PENCILER,
+                        creator=SimpleNamespace(name="Bea", metadata_source="manual")),
     ], files=[
         SimpleNamespace(id=uuid4(), file_name="Thorgal 03.cbz", file_format=FileFormat.CBZ,
                         file_size_bytes=2 * 1048576, is_missing=False),
@@ -109,8 +111,7 @@ def test_series_fuentes_sigue_dentro_de_la_cabecera_y_chip_con_sr():
     html = r.text
     assert html.index("Fuentes y atribución") < html.index("Sobre esta serie")
     assert 'class="caption">Los que más números firman' in html
-    with open("src/zascarr/static/web.css", encoding="utf-8") as css:
-        assert "min-height: 40px" in css.read()
+    # La altura de 40 px se comprueba por selector en test_web_css_contraste.
 
 
 def test_procedencia_de_autores_muestra_nombres_y_origen(monkeypatch):
@@ -119,10 +120,33 @@ def test_procedencia_de_autores_muestra_nombres_y_origen(monkeypatch):
     serie = make_series(total_issues=1)
     ficha = FichaSerie(serie=serie, sinopsis="", autores={
         "writer": [AutorPrincipal(nombre="Ana", papel="writer", numeros=3)]},
-        origen_autores="Comic Vine")
+        origen_autores="Comic Vine", autores_texto="Guion: Ana")
     monkeypatch.setattr(web_series, "cargar_ficha_serie", AsyncMock(return_value=ficha))
     with use_fake_session(FakeSession([FakeExecResult([serie])]
                                       + [FakeExecResult([])] * 12)) as client:
         r = client.get(f"/ui/series/{serie.id}")
     assert "Guion: Ana" in r.text
     assert "Comic Vine" in r.text
+
+
+def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
+    from types import SimpleNamespace
+
+    from zascarr.services.archivos_por_numero import NumeroConArchivos
+    from zascarr.services.ficha_numero import FichaSerie, NumeroEnlace
+    from zascarr.web import series as web_series
+    serie = make_series(total_issues=1)
+    ficha = FichaSerie(serie=serie, sinopsis="", numeros=[
+        NumeroEnlace(id="issue-1", numero="01", tiene_archivos=True)])
+    monkeypatch.setattr(web_series, "cargar_ficha_serie", AsyncMock(return_value=ficha))
+    monkeypatch.setattr(web_series, "numeros_poseidos", AsyncMock(return_value={"01"}))
+    monkeypatch.setattr(web_series, "huecos_de_serie", AsyncMock(return_value=SimpleNamespace(
+        computable=True, faltantes=[], motivo=None)))
+    monkeypatch.setattr(web_series, "archivos_por_numero", AsyncMock(return_value=[
+        NumeroConArchivos(issue_id="issue-1", numero="01", archivos=[])]))
+    with use_fake_session(FakeSession([FakeExecResult([serie])]
+                                      + [FakeExecResult([])] * 8)) as client:
+        r = client.get(f"/ui/series/{serie.id}")
+    assert r.status_code == 200
+    assert f'href="/ui/series/{serie.id}/numero/issue-1"' in r.text
+    assert "ver información del número 01" in r.text

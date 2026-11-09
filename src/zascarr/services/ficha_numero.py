@@ -104,6 +104,7 @@ class FichaSerie:
     numeros: list[NumeroEnlace] = field(default_factory=list)
     numeros_por_id: dict[str, NumeroEnlace] = field(default_factory=dict)
     origen_autores: str = "Origen no registrado"
+    autores_texto: str = ""
 
     def enlace_para_numero(self, numero: object) -> NumeroEnlace | None:
         """Enlace robusto para el chip: normaliza «01»/1 y prefiere el número con archivos."""
@@ -165,6 +166,7 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
     # Solo Guion y Dibujo son «autores principales» de la serie (UX §2.4).
     todas: dict[str, list[AutorPrincipal]] = {}
     fuentes_creditos: set[str] = set()
+    credito_sin_fuente = False
     for rol, nombre, fuente_credito, cantidad in filas:
         clave = rol.value if hasattr(rol, "value") else str(rol)
         if clave in ("writer", "penciler"):
@@ -172,12 +174,14 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
                 AutorPrincipal(nombre=nombre, papel=clave, numeros=int(cantidad)))
             if fuente_credito:
                 fuentes_creditos.add(str(fuente_credito))
+            else:
+                credito_sin_fuente = True
     for clave, lista in todas.items():
         lista.sort(key=lambda a: (-a.numeros, natural_key(a.nombre)))
         autores[clave] = lista[:_TOPE_AUTORES]
     numeros = [NumeroEnlace(id=str(i.id), numero=i.issue_number or "(sin número)",
                             tiene_archivos=bool(getattr(i, "files", None))) for i in issues]
-    if not autores:
+    if not autores or credito_sin_fuente:
         origen = "Origen no registrado"
     elif len(fuentes_creditos) == 1:
         origen = _procedencia(next(iter(fuentes_creditos)), True)
@@ -185,9 +189,15 @@ async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | 
         origen = "Varias fuentes"
     else:
         origen = "Origen no registrado"
+    textos_autores = []
+    for clave, etiqueta in ROLES_ES:
+        if clave in ("writer", "penciler") and autores.get(clave):
+            textos_autores.append(etiqueta + ": " + ", ".join(a.nombre for a in autores[clave]))
+    autores_texto = "; ".join(textos_autores)
     return FichaSerie(serie=serie, sinopsis=_texto_sinopsis(getattr(serie, "description", None)),
                       autores=autores, numeros=numeros,
-                      numeros_por_id={n.numero: n for n in numeros}, origen_autores=origen)
+                      numeros_por_id={n.numero: n for n in numeros}, origen_autores=origen,
+                      autores_texto=autores_texto)
 
 
 async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
@@ -217,6 +227,19 @@ async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
                       key=lambda f: natural_key(f.file_name))]
     procedencia: dict[str, dict[str, str]] = {}
     nombre_fuente = _procedencia(getattr(issue, "metadata_source", None), True)
+    fuentes_credito = {getattr(c.creator, "metadata_source", None)
+                       for c in (getattr(issue, "credits", None) or [])}
+    if autores:
+        if any(f is None for f in fuentes_credito):
+            origen_autores = "Origen no registrado"
+        elif len(fuentes_credito) == 1:
+            origen_autores = _procedencia(next(iter(fuentes_credito)), True)
+        elif len(fuentes_credito) > 1:
+            origen_autores = "Varias fuentes"
+        else:
+            origen_autores = "Origen no registrado"
+    else:
+        origen_autores = "Origen no registrado"
     if issue.synopsis:
         procedencia[TEXTOS["sinopsis"]] = {"valor": issue.synopsis and _texto_sinopsis(issue.synopsis),
                                            "origen": nombre_fuente}
@@ -230,7 +253,7 @@ async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
             "origen": nombre_fuente}
     if autores:
         nombres = ", ".join(n for lista in autores.values() for n in lista)
-        procedencia[TEXTOS["autores_numero"]] = {"valor": nombres, "origen": nombre_fuente}
+        procedencia[TEXTOS["autores_numero"]] = {"valor": nombres, "origen": origen_autores}
     if archivos:
         procedencia[TEXTOS["archivos"]] = {
             "valor": ", ".join(a.nombre for a in archivos), "origen": "El propio archivo"}
