@@ -7,6 +7,7 @@ httpx se mockea para no depender de red.
 """
 from __future__ import annotations
 
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -517,7 +518,7 @@ class TestCarpetasCompartidas:
         assert 'name="carpetas_compartidas"' in r.text
         assert str(s.library_path) in r.text
         assert str(s.downloads_path) in r.text
-        assert "no puede saber si un archivo se está compartiendo" in r.text
+        assert "no puede saber si un archivo se comparte" in r.text
 
     def test_guardar_solo_acepta_raices_conocidas_y_aplica(self, restaurar_settings):
         s = get_settings()
@@ -543,3 +544,38 @@ class TestCarpetasCompartidas:
             app.dependency_overrides.pop(get_db, None)
         assert r.status_code == 200
         assert s.carpetas_compartidas == []
+
+
+class TestPresupuestoDeTextoYAcessibilidad:
+    """U21: la frase de entrada y cada descripción de tarjeta caben en 20 palabras; el aviso de
+    fuentes heredadas es un aviso (no un párrafo suelto), el enlace de la clave existe y las
+    tarjetas están agrupadas en tres secciones."""
+
+    @staticmethod
+    def _texto(fragmento: str) -> str:
+        return re.sub(r"<[^>]+>", " ", fragmento)
+
+    def test_la_frase_de_entrada_y_las_descripciones_caben_en_20_palabras(self):
+        r = TestClient(app).get("/ui/ajustes")
+        entrada = re.search(r'<p class="subtitle">(.*?)</p>', r.text, re.S).group(1)
+        assert len(self._texto(entrada).split()) <= 20
+        descripciones = re.findall(r'<p class="ajustes-desc">(.*?)</p>', r.text, re.S)
+        assert len(descripciones) >= 6
+        for desc in descripciones:
+            assert len(self._texto(desc).split()) <= 20, desc
+
+    def test_el_enlace_para_conseguir_la_clave_de_comic_vine(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert 'href="https://comicvine.gamespot.com/api/"' in r.text
+        assert 'rel="noopener noreferrer"' in r.text
+
+    def test_las_tarjetas_estan_agrupadas_en_tres_secciones(self):
+        r = TestClient(app).get("/ui/ajustes")
+        for ancla in ('id="ajustes-fuentes"', 'id="ajustes-descargas"', 'id="ajustes-propio"'):
+            assert ancla in r.text
+
+    def test_el_aviso_de_fuentes_heredadas_es_un_aviso(self):
+        """El aviso de compatibilidad ya no es un párrafo de texto plano: es un aviso ámbar."""
+        r = TestClient(app).get("/ui/ajustes")
+        assert 'id="aviso-fuentes-heredadas"' not in r.text      # sin heredadas, no hay aviso
+        # (el caso con heredadas se prueba en test_fuentes_apagadas_por_defecto.py)

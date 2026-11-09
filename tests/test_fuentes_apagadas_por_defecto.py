@@ -51,6 +51,7 @@ class TestAvisoDeAjustes:
         r = TestClient(app).get("/ui/ajustes")
         assert r.status_code == 200
         assert 'id="aviso-fuentes-heredadas"' in r.text and "por compatibilidad con tu instalación anterior" in r.text
+        assert 'class="aviso amber"' in r.text   # es un aviso, no un párrafo suelto (refinación de la UI)
         assert "Guardar" in r.text
 
     @pytest.mark.parametrize("campo", CAMPOS)
