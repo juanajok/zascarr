@@ -64,7 +64,7 @@ class FakeSession:
         self.flush = AsyncMock()
 
     async def execute(self, _statement):
-        return self._queue.pop(0)
+        return self._queue.pop(0) if self._queue else FakeExecResult([])
 
     async def get(self, _model, _id):
         return self._series
@@ -545,6 +545,9 @@ class TestPresupuestoTextoU21:
         # Presupuesto explícito de #304: .series-acciones tiene su propio límite
         # (test_presupuesto_de_la_accion_nueva); este cómputo mide la entrada de #208.
         antes = re.sub(r'<p class="series-acciones">.*?</p>', '', antes, flags=re.S)
+        # BL-INF1 (#447): el bloque informativo va después de la cabecera y no compite
+        # con el presupuesto de la entrada de #208.
+        antes = re.sub(r'<section class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
         # El contenido de un <details> cerrado no cuenta, pero su <summary>
         # visible sí (contrato de medición de #208).
         antes = re.sub(

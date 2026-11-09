@@ -1,0 +1,269 @@
+# ruff: noqa: E501
+"""Ficha de serie y de número: SOLO lectura, sin red y con un número FIJO de consultas (#447).
+
+No escribe, no enriquece y no consulta fuentes. La sinopsis se sirve como texto plano
+(`utils.texto_html.texto_plano`); los autores se agrupan por papel y los principales de la serie
+se calculan con un agregado, no con una consulta por número.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date
+from uuid import UUID
+
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from zascarr.core.importer_triage import natural_key
+from zascarr.models import Creator, Issue, IssueCreator, Series
+from zascarr.utils.texto_html import texto_plano
+
+#: Un solo sitio para el copy provisional hasta que llegue `ui-BL-INF1-ficha-numero.md`.
+TEXTOS = {
+    "serie_bloque": "Sobre esta serie",
+    "sinopsis": "Sinopsis",
+    "sinopsis_completa": "Leer la sinopsis completa",
+    "editorial": "Editorial",
+    "inicio": "Año de inicio",
+    "fin": "Año de fin",
+    "autores": "Autores principales",
+    "autores_numero": "Autores",
+    "serie": "Serie",
+    "formato": "Formato",
+    "fecha": "Fecha de portada",
+    "paginas": "Páginas",
+    "archivos": "Archivos",
+    "procedencia": "De dónde sale cada dato",
+    "sin_dato": "No consta todavía.",
+    "sin_sinopsis": "No consta todavía la sinopsis. Puede venir de una fuente de datos o de la ficha de tus archivos.",
+    "sin_sinopsis_numero": "No consta todavía la sinopsis.",
+    "sin_datos": "Todavía no hay información de esta serie. Puede venir de las fuentes de Ajustes o de la ficha de tus archivos.",
+    "sin_datos_numero": "Todavía no hay información de este número ni archivos vinculados. Puede venir de una fuente de datos o de la ficha del archivo.",
+    "sin_autores": "No constan todavía los autores. Pueden venir de una fuente o de los datos de la serie.",
+    "sin_autores_numero": "No constan todavía los autores. Pueden venir de la fuente o de la ficha del archivo.",
+    "sin_archivos": "No hay ningún archivo vinculado a este número. Puedes vincularlo desde la ficha de la serie.",
+    "sin_procedencia": "No consta todavía de dónde sale este dato.",
+    "portada_serie": "Portada de la serie",
+    "volver": "← Volver a la serie",
+    "ir_serie": "Ir a la serie",
+    "glosario": "Qué significan estos papeles",
+    "glosario_texto": "Guion: quién escribe el texto. Dibujo: quién dibuja las páginas. Tinta: quién entinta el dibujo. Color: quién da el color. Rotulación: quién rotula el texto. Portada: quién hizo la portada. Edición: quién coordina la publicación; no es una edición distinta del número. Traducción: quién traduce esta versión.",
+}
+
+ROLES_ES: tuple[tuple[str, str], ...] = (
+    ("writer", "Guion"),
+    ("penciler", "Dibujo"),
+    ("inker", "Tinta"),
+    ("colorist", "Color"),
+    ("letterer", "Rotulación"),
+    ("cover_artist", "Portada"),
+    ("editor", "Edición"),
+    ("translator", "Traducción"),
+)
+_ROLE_LABEL = dict(ROLES_ES)
+_TOPE_AUTORES = 3
+
+
+@dataclass(frozen=True)
+class AutorPrincipal:
+    nombre: str
+    papel: str
+    numeros: int
+
+
+@dataclass(frozen=True)
+class ArchivoDeNumero:
+    id: str
+    nombre: str
+    formato: str
+    tamano: int | None
+    falta_en_disco: bool
+
+
+@dataclass(frozen=True)
+class NumeroEnlace:
+    id: str
+    numero: str
+    tiene_archivos: bool
+
+
+@dataclass
+class FichaSerie:
+    serie: Series
+    sinopsis: str
+    autores: dict[str, list[AutorPrincipal]] = field(default_factory=dict)
+    numeros: list[NumeroEnlace] = field(default_factory=list)
+    numeros_por_id: dict[str, NumeroEnlace] = field(default_factory=dict)
+    origen_autores: str = "Origen no registrado"
+
+
+@dataclass
+class FichaNumero:
+    serie: Series
+    issue: Issue
+    sinopsis: str
+    autores: dict[str, list[str]] = field(default_factory=dict)
+    archivos: list[ArchivoDeNumero] = field(default_factory=list)
+    procedencia: dict[str, str] = field(default_factory=dict)
+    formato: str = ""
+    fecha_larga: str | None = None
+    paginas_texto: str | None = None
+    tiene_datos: bool = False
+
+
+def _fecha_llana(valor: date | None) -> str | None:
+    if valor is None:
+        return None
+    return valor.strftime("%d/%m/%Y")
+
+
+def _texto_sinopsis(valor: str | None) -> str:
+    return texto_plano(valor)
+
+
+async def cargar_ficha_serie(db: AsyncSession, series_id: UUID) -> FichaSerie | None:
+    """Serie + autores principales + números, en un número fijo de consultas."""
+    serie = (await db.execute(
+        select(Series).options(selectinload(Series.publisher)).where(Series.id == series_id)
+    )).scalar_one_or_none()
+    if serie is None:
+        return None
+    issues = (await db.execute(
+        select(Issue)
+        .options(selectinload(Issue.credits), selectinload(Issue.files))
+        .where(Issue.series_id == series_id)
+    )).scalars().all()
+    issues = sorted(issues, key=lambda i: (
+        getattr(i, "sort_order", None) is None, getattr(i, "sort_order", None) or 0.0,
+        natural_key(i.issue_number or ""), str(i.id)))
+    filas = (await db.execute(
+        select(IssueCreator.role, Creator.name, func.count(func.distinct(IssueCreator.issue_id)))
+        .join(Creator, Creator.id == IssueCreator.creator_id)
+        .join(Issue, Issue.id == IssueCreator.issue_id)
+        .where(Issue.series_id == series_id)
+        .group_by(IssueCreator.role, Creator.name)
+        .order_by(func.count(func.distinct(IssueCreator.issue_id)).desc(), Creator.name)
+    )).all()
+    autores: dict[str, list[AutorPrincipal]] = {}
+    # Solo Guion y Dibujo son «autores principales» de la serie (UX §2.4).
+    todas: dict[str, list[AutorPrincipal]] = {}
+    for rol, nombre, cantidad in filas:
+        clave = rol.value if hasattr(rol, "value") else str(rol)
+        if clave in ("writer", "penciler"):
+            todas.setdefault(clave, []).append(
+                AutorPrincipal(nombre=nombre, papel=clave, numeros=int(cantidad)))
+    for clave, lista in todas.items():
+        lista.sort(key=lambda a: (-a.numeros, natural_key(a.nombre)))
+        autores[clave] = lista[:_TOPE_AUTORES]
+    numeros = [NumeroEnlace(id=str(i.id), numero=i.issue_number or "(sin número)",
+                            tiene_archivos=bool(getattr(i, "files", None))) for i in issues]
+    fuentes = {getattr(i, "metadata_source", None) for i in issues
+               if getattr(i, "credits", None)}
+    fuentes.discard(None)
+    if not autores:
+        origen = "Origen no registrado"
+    elif len(fuentes) == 1:
+        origen = _procedencia(next(iter(fuentes)), True)
+    elif len(fuentes) > 1:
+        origen = "Varias fuentes"
+    else:
+        origen = "Origen no registrado"
+    return FichaSerie(serie=serie, sinopsis=_texto_sinopsis(getattr(serie, "description", None)),
+                      autores=autores, numeros=numeros,
+                      numeros_por_id={n.numero: n for n in numeros}, origen_autores=origen)
+
+
+async def cargar_ficha_numero(db: AsyncSession, series_id: UUID,
+                              issue_id: UUID) -> FichaNumero | None:
+    """Número de esa serie con autores y archivos; sin consultas por archivo ni por autor."""
+    issue = (await db.execute(
+        select(Issue)
+        .options(selectinload(Issue.credits).selectinload(IssueCreator.creator),
+                 selectinload(Issue.files))
+        .where(Issue.id == issue_id, Issue.series_id == series_id)
+    )).scalar_one_or_none()
+    if issue is None:
+        return None
+    serie = (await db.execute(
+        select(Series).options(selectinload(Series.publisher)).where(Series.id == series_id)
+    )).scalar_one_or_none()
+    if serie is None:
+        return None
+    autores: dict[str, list[str]] = {}
+    for credito in sorted(getattr(issue, "credits", None) or [],
+                          key=lambda c: (c.role.value, c.creator.name)):
+        autores.setdefault(credito.role.value, []).append(credito.creator.name)
+    archivos = [ArchivoDeNumero(
+        id=str(f.id), nombre=f.file_name, formato=f.file_format.value,
+        tamano=f.file_size_bytes, falta_en_disco=bool(f.is_missing),
+    ) for f in sorted(getattr(issue, "files", None) or [], key=lambda f: f.file_name)]
+    procedencia = {}
+    if issue.synopsis:
+        procedencia[TEXTOS["sinopsis"]] = _procedencia(getattr(issue, "metadata_source", None), True)
+    if getattr(issue, "release_date", None) is not None:
+        procedencia[TEXTOS["fecha"]] = _procedencia(getattr(issue, "metadata_source", None), True)
+    if getattr(issue, "page_count", None) is not None:
+        procedencia[TEXTOS["paginas"]] = _procedencia(getattr(issue, "metadata_source", None), True)
+    if autores:
+        fuentes = {getattr(issue, "metadata_source", None)}
+        fuentes.discard(None)
+        procedencia[TEXTOS["autores_numero"]] = (
+            _procedencia(next(iter(fuentes)), True) if len(fuentes) == 1
+            else ("Varias fuentes" if len(fuentes) > 1 else "Origen no registrado"))
+    if archivos:
+        procedencia[TEXTOS["archivos"]] = "El propio archivo"
+    formato = _FORMATO.get(getattr(getattr(issue, "format", None), "value", None), "")
+    fecha = getattr(issue, "release_date", None)
+    paginas = getattr(issue, "page_count", None)
+    tiene_datos = bool(issue.synopsis or fecha or paginas or autores or archivos)
+    return FichaNumero(
+        serie=serie, issue=issue, sinopsis=_texto_sinopsis(issue.synopsis),
+        autores=autores, archivos=archivos, procedencia=procedencia, formato=formato,
+        fecha_larga=fecha_larga(fecha),
+        paginas_texto=(f"{paginas} página" if paginas == 1 else f"{paginas} páginas") if paginas else None,
+        tiene_datos=tiene_datos)
+
+
+def _procedencia(metadata_source: str | None, presente: bool) -> str:
+    if not presente:
+        return TEXTOS["sin_procedencia"]
+    if not metadata_source:
+        return "Origen no registrado"
+    nombres = {
+        "comic_vine": "Comic Vine", "anilist": "AniList",
+        "tebeosfera": "Tebeosfera", "gcd": "GCD", "manual": "Puesto a mano",
+        "comicinfo_xml": "El propio archivo",
+    }
+    return nombres.get(str(metadata_source), "Origen no registrado")
+
+
+def etiqueta_rol(rol: str) -> str:
+    return _ROLE_LABEL.get(rol, rol)
+
+
+def fecha_llana(valor: date | None) -> str | None:
+    return _fecha_llana(valor)
+
+
+_FORMATO = {
+    "single_issue": "grapa", "trade_paperback": "tomo en rústica",
+    "hardcover": "tapa dura", "omnibus": "ómnibus", "graphic_novel": "novela gráfica",
+    "album": "álbum", "manga_tankobon": "tankōbon", "digital": "digital",
+}
+_MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+          "septiembre", "octubre", "noviembre", "diciembre")
+
+
+def fecha_larga(valor: date | None) -> str | None:
+    if valor is None:
+        return None
+    return f"{valor.day} de {_MESES[valor.month - 1]} de {valor.year}"
+
+
+def partir_sinopsis(texto: str, max_palabras: int = 40) -> tuple[str, str]:
+    """(visible, resto) sin partir palabras; sin «…» en el summary."""
+    palabras = texto.split()
+    if len(palabras) <= max_palabras:
+        return texto, ""
+    return " ".join(palabras[:max_palabras]), " ".join(palabras[max_palabras:])
