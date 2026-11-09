@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import structlog
+from fastapi import Form
 from fastapi.testclient import TestClient
 
 from tests.test_web_ajustes import FakeSession, _override_get_db
@@ -437,7 +438,13 @@ def _saves_sospechosos(fuente: str, ruta: str) -> list[int]:
     marcadas = []
     for nodo in ast.walk(ast.parse(fuente)):
         if not (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Attribute)
-                and nodo.func.attr == "save" and nodo.args):
+                and nodo.func.attr == "save"):
+            continue
+        if not nodo.args:
+            # `.save(**datos)`, `.save(datos)` con kwargs o `.save()` sin posición: también
+            # puede esconder claves de acceso.
+            if ruta not in SAVE_DE_IMAGENES:
+                marcadas.append(nodo.lineno)
             continue
         primero = nodo.args[0]
         if isinstance(primero, ast.Dict):
@@ -460,23 +467,36 @@ def _usos_del_escritor_privado(fuente: str) -> list[str]:
             usos.append(nodo.attr)
         elif isinstance(nodo, ast.ImportFrom):
             usos += [a.name for a in nodo.names if a.name in ESCRITOR_PRIVADO]
+        elif (isinstance(nodo, ast.Call) and isinstance(nodo.func, ast.Name)
+              and nodo.func.id == "getattr" and len(nodo.args) >= 2):
+            # getattr(seguridad, "_guardar_seguridad"), getattr(mod, "_comprobar_actual")
+            usos += [c.value for c in ast.walk(nodo.args[1])
+                     if isinstance(c, ast.Constant) and c.value in ESCRITOR_PRIVADO]
     return usos
 
 
 class TestEstaticas:
-    def test_los_parametros_del_router_son_str_form_vacio_sin_restricciones(self):
-        """AC-08: ninguna restricción de campo (con una incumplida el 422 devolvería lo escrito)."""
+    @staticmethod
+    def _parametros_inseguros(func) -> dict[str, object]:
+        malos = {}
+        for nombre, p in inspect.signature(func).parameters.items():
+            if nombre in {"request", "db"}:
+                continue
+            if (p.annotation not in (str, "str")
+                    or getattr(p.default, "default", None) != ""
+                    or getattr(p.default, "metadata", None)):
+                malos[nombre] = p
+        return malos
+
+    def test_cualquier_parametro_del_router_es_str_form_vacio_sin_restricciones(self):
+        """AC-08: no solo la lista esperada; cualquier parámetro nuevo también se valida."""
         from zascarr.web.ajustes import guardar_seguridad
-        esperados = {"auth_mode", "auth_username", "auth_password", "auth_password_actual",
-                     "auth_password_repetida", "base_url"}
-        encontrados = {}
-        for nombre, p in inspect.signature(guardar_seguridad).parameters.items():
-            if nombre in esperados:
-                encontrados[nombre] = p
-        assert set(encontrados) == esperados
-        for nombre, p in encontrados.items():
-            assert p.annotation in (str, "str"), nombre
-            assert p.default.default == "" and not p.default.metadata, f"{nombre} lleva restricciones"
+        assert self._parametros_inseguros(guardar_seguridad) == {}
+
+        def _ruta_con_parametro_nuevo(auth_mode: str = Form(default=""),
+                                      nuevo: int = Form(default=1)):
+            return auth_mode, nuevo
+        assert set(self._parametros_inseguros(_ruta_con_parametro_nuevo)) == {"nuevo"}
 
     def test_solo_el_instalador_usa_fijar_seguridad_desde_el_equipo_y_el_router_no_la_importa(self):
         """AC-12 (b)."""
@@ -518,6 +538,9 @@ class TestEstaticas:
         'cambios = {"auth_mode": "none"}\nawait RuntimeSettingsService(db).save(cambios)',     # variable
         'await RuntimeSettingsService(db).save({**extra})',                                    # desempaquetado
         'await servicio.save(construir())',                                                    # llamada
+        'await svc.save(**datos)',  # kwargs
+        'await svc.save(auth_mode="none")',  # kwargs con clave
+        'await svc.save()',  # sin argumentos
         'await svc.save({"secret_key": "x"})',
         'await svc.save({"base_url": ""})',
     ])
@@ -531,10 +554,12 @@ class TestEstaticas:
     def test_el_analisis_no_marca_las_escrituras_de_otras_claves(self, fuente):
         assert _saves_sospechosos(fuente, "web/ajustes.py") == []
 
-    def test_el_analisis_marca_el_uso_del_escritor_privado_aunque_sea_con_alias(self):
+    def test_el_analisis_marca_el_uso_del_escritor_privado_aunque_sea_con_alias_o_getattr(self):
         for fuente in ("from zascarr.services.seguridad import _guardar_seguridad as g",
                        "from zascarr.services import seguridad\nseguridad._guardar_seguridad(db)",
-                       "_comprobar_actual(settings)"):
+                       "_comprobar_actual(settings)",
+                       "getattr(seguridad, '_guardar_seguridad')(db)",
+                       "getattr(mod, '_comprobar_actual')(settings)"):
             assert _usos_del_escritor_privado(fuente), fuente
         assert _usos_del_escritor_privado("from zascarr.services.seguridad import fijar_seguridad") == []
 
@@ -553,3 +578,35 @@ class TestCli:
         monkeypatch.setattr(cli, "fijar_seguridad_desde_el_equipo", _equipo)
         codigo, _msg, _aviso = await cli.fijar_contrasena(MagicMock(), "una-contrasena-nueva-larga")
         assert codigo == cli.OK and usadas and usadas[0]["password"] == "una-contrasena-nueva-larga"
+
+
+class TestNoStoreYSentinelasDeExito:
+    def test_index_de_ajustes_es_no_store(self):
+        r = TestClient(app).get("/ui/ajustes")
+        assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+
+    def test_guardar_seguridad_no_store_en_error_exito_y_400(self, con_contrasena):
+        cliente = _cliente()
+        error = _post(cliente, auth_password=NUEVA, auth_password_repetida=NUEVA)  # falta actual
+        exito = _post(cliente, auth_password=NUEVA, auth_password_repetida=NUEVA,
+                      auth_password_actual=ACTUAL)
+        malo = cliente.post("/ui/ajustes/guardar/seguridad",
+                            data={"auth_mode": "no-existe", "auth_password_actual": ACTUAL})
+        assert error.status_code == 200 and exito.status_code == 200 and malo.status_code == 400
+        for r in (error, exito, malo):
+            assert r.headers.get("cache-control") == "no-store", r.status_code
+
+    def test_el_exito_no_repinta_centinelas_del_request(self, con_contrasena):
+        """AC-07: la tarjeta de éxito no refleja valores del request, aunque se hayan guardado."""
+        usuario = "CENTINELA-USUARIO-7f3a"
+        direccion = "https://centinela-direccion-7f3a.example.org"
+        nueva = "CENTINELA-NUEVA-7f3a-larga"
+        actual = ACTUAL
+        r = _post(_cliente(), auth_mode="user_password", auth_username=usuario,
+                  base_url=direccion, auth_password=nueva, auth_password_repetida=nueva,
+                  auth_password_actual=actual)
+        assert r.status_code == 200
+        assert r.headers.get("HX-Retarget") == "#tarjeta-seguridad"
+        for centinela in (usuario, direccion, nueva, actual):
+            assert centinela not in r.text
+        assert r.headers.get("cache-control") == "no-store"
