@@ -116,3 +116,60 @@ async def test_id_de_otra_serie_no_se_reasigna_pg(entorno):
         assert serie.gcd_id is None and serie.metadata_.get("asociaciones") is None
         otra_fila = (await s.execute(select(Series).where(Series.id == otra))).scalar_one()
         assert otra_fila.gcd_id == 123
+
+
+def _entrada_asociacion(fuente: str, id_externo: str) -> dict:
+    return {
+        "version": 1, "fuente": fuente, "id_externo": id_externo, "entidad": "serie",
+        "kind": "collection", "fecha": "2026-11-09T10:00:00+00:00",
+        "operacion_id": str(uuid4()), "origen": "confirmada", "modo": "busqueda",
+    }
+
+
+@pytest.mark.asyncio
+async def test_f1_relee_metadata_fresca_y_no_pierde_asociacion_de_otra_fuente_pg(entorno):
+    """Una serie cargada antes del FOR UPDATE no debe decidir con metadata vieja (F1)."""
+    sid = await serie_de_prueba(entorno, comic_vine_id=1)
+    op = str(uuid4())
+    async with entorno.banco.fabrica() as s_a:
+        # Como la ruta web: la serie se carga ANTES de que otra sesión escriba.
+        serie_a = (await s_a.execute(select(Series).where(Series.id == sid))).scalar_one()
+        token, _ = _firmada(serie_a, op=op)
+        async with entorno.banco.fabrica() as s_b:
+            serie_b = (await s_b.execute(select(Series).where(Series.id == sid))).scalar_one()
+            serie_b.anilist_id = 4242
+            serie_b.metadata_ = {"asociaciones": [_entrada_asociacion("anilist", "4242")]}
+            await s_b.commit()
+
+        r = await AsociacionDeFuente(s_a, secret=SECRETO).confirmar(token)
+        assert r.resultado == "omitida" and r.motivo == "propuesta_desactualizada"
+
+    async with entorno.banco.fabrica() as s:
+        serie = (await s.execute(select(Series).where(Series.id == sid))).scalar_one()
+        assert serie.gcd_id is None
+        assert serie.anilist_id == 4242
+        (entrada,) = serie.metadata_["asociaciones"]
+        assert entrada["fuente"] == "anilist" and entrada["id_externo"] == "4242"
+
+
+@pytest.mark.asyncio
+async def test_f1_confirma_con_metadata_fresca_y_conserva_claves_ajenas_pg(entorno):
+    """La metadata que no entra en la huella también debe partir del estado fresco."""
+    sid = await serie_de_prueba(entorno, comic_vine_id=1)
+    op = str(uuid4())
+    async with entorno.banco.fabrica() as s_a:
+        serie_a = (await s_a.execute(select(Series).where(Series.id == sid))).scalar_one()
+        token, _ = _firmada(serie_a, op=op)
+        async with entorno.banco.fabrica() as s_b:
+            serie_b = (await s_b.execute(select(Series).where(Series.id == sid))).scalar_one()
+            serie_b.metadata_ = {"ajuste_manual": "no-tocar"}
+            await s_b.commit()
+
+        r = await AsociacionDeFuente(s_a, secret=SECRETO).confirmar(token)
+        assert r.resultado == "asociada"
+
+    async with entorno.banco.fabrica() as s:
+        serie = (await s.execute(select(Series).where(Series.id == sid))).scalar_one()
+        assert serie.gcd_id == 123
+        assert serie.metadata_["ajuste_manual"] == "no-tocar"
+        assert serie.metadata_["asociaciones"][0]["fuente"] == "gcd"
