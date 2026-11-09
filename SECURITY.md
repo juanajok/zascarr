@@ -44,9 +44,13 @@ credenciales para toda la instalación, sin más ambición que esa (Épica
   (`dpkg-dev` salvo `dpkg-architecture` —GNUstep lo invoca en runtime—, `gnutls-bin`, `make`, `patch`, `binutils`,
   `graphviz` y utilidades de `perl`; se conservan `perl-base`/`libdpkg-perl`, que `dpkg-architecture` necesita). El
   `.dockerignore` deja fuera `.env`/`.env.*` (salvo `.env.example`), `.git`, cachés y scratch: probado con un `.env`
-  centinela que no llega a la imagen. La CI exige `unar`/`lsar` 1.10.8 y el flag en la suite y en la imagen, y un
-  presupuesto de 750 MiB (medido: 687,8 MiB con x86-64 tras la limpieza). Se apaga sin reconstruir con
-  `LECTOR_RAR_ENABLED=false` en el `.env`. El PO aceptó este riesgo por escrito: [ADR 0015](docs/adr/0015-lector-de-rar-con-unar.md).
+  centinela que no llega a la imagen. La CI exige `unar`/`lsar` 1.10.8 y el flag en la suite (runner fijado a
+  `ubuntu-26.04`; si cambiara, el gate falla alto) y en la imagen, y un presupuesto de 750 MiB. La limpieza de
+  ejecutables va en una **capa posterior**: **no reduce los bytes de la imagen** (medido 721.109.591 B antes /
+  721.174.975 B después, ≈687,8 MiB), pero sí el sistema de ficheros en ejecución (~11 MB en `/usr`); el
+  `.dockerignore` evita `.git`/scratch en el contexto (y en CI que `.git`, ≈51 MB, entre en la imagen). Se apaga sin
+  reconstruir con `LECTOR_RAR_ENABLED=false` en el `.env`. El PO aceptó este riesgo por escrito:
+  [ADR 0015](docs/adr/0015-lector-de-rar-con-unar.md).
 
 ## Si quieres acceder desde fuera de la Pi
 

@@ -10,7 +10,9 @@ on:
 jobs:
   test:
     name: Suite unitaria
-    runs-on: ubuntu-latest
+    # #530 R4: imagen fijada (26.04) con unar/lsar 1.10.8; `ubuntu-latest` podría cambiar. El gate
+    # de versión de más abajo sigue fallando alto si la imagen no trae 1.10.8, así que no pasa inadvertido.
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -142,7 +144,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # #530 R3: centinela de contexto. Si `.dockerignore` dejara de excluir `.env`, el build metería
+      # este fichero en la imagen y el paso de verificación de abajo fallaría.
+      - name: centinela .env para el contexto (#530 R3)
+        run: printf 'ZASCARR_CENTINELA=no-debe-entrar-en-la-imagen\n' > .env
       - run: docker build -t zascarr:ci .
+      # #530 R3: el centinela NO puede estar en /app; `.env.example` sí (no tiene valores).
+      - name: el centinela .env no entra en la imagen (#530 R3)
+        run: |
+          docker run --rm --entrypoint sh zascarr:ci -c 'test ! -e /app/.env' || \
+            { echo "::error::/app/.env entró en la imagen (¿se perdió el .dockerignore?)"; exit 1; }
+          docker run --rm --entrypoint sh zascarr:ci -c 'test -e /app/.env.example' || \
+            { echo "::error::/app/.env.example no está en la imagen"; exit 1; }
+          echo ".env ausente y .env.example presente en /app"
       # #528: la base trixie trae `unar`/`lsar` 1.10.8 y el flag que evita que un sólido grande repita
       # ~29 KB por entrada y reviente el tope de salida. Se comprueba VERSIÓN y FLAG en la imagen final.
       - name: unar/lsar 1.10.8 y el flag del listado de sólidos
@@ -178,3 +192,7 @@ jobs:
         run: |
           docker run --rm --security-opt no-new-privileges:true --pids-limit 256 --entrypoint runuser zascarr:ci \
             -u zascarr -- python -c "import zascarr.main"
+      # #530 R3: limpiar el centinela aunque algo haya fallado antes.
+      - name: limpiar el centinela .env (#530 R3)
+        if: always()
+        run: rm -f .env
