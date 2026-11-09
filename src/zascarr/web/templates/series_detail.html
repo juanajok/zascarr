@@ -83,8 +83,13 @@
 <section class="series-otras-fuentes" aria-labelledby="otras-fuentes-titulo">
   <h2 id="otras-fuentes-titulo">Otras fuentes</h2>
   <p class="muted">Todavía no hay otra fuente asociada.</p>
+  {% if series.comic_vine_id or series.anilist_id or series.tebeosfera_slug or series.gcd_id %}
   <a class="btn ghost sm" href="/ui/series/{{ series.id }}/asociar">Buscar en otra fuente</a>
   <p class="caption">Solo compara fichas: no se guarda nada hasta que lo confirmes.</p>
+  {% else %}
+  <button class="btn ghost sm" type="button" disabled>Buscar en otra fuente</button>
+  <p class="caption">Esta serie no tiene ninguna fuente asociada todavía. Añádela primero desde Descubrir o desde la ficha; después podrás buscar en otra web.</p>
+  {% endif %}
 </section>
 
 <details class="series-enriquecimiento">
