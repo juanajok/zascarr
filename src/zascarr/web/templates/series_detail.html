@@ -54,6 +54,13 @@
 <details class="procedencia-serie" id="procedencia-serie">
   <summary>De dónde sale cada dato</summary>
   <p class="muted">{{ procedencia.resumen }}</p>
+  {% if procedencia.identidades %}
+  <ul class="procedencia-identidades">
+    {% for i in procedencia.identidades %}
+    <li>{{ i.fuente }}{% if i.fecha %} · asociada el {{ i.fecha }}{% else %} · procedencia no registrada{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
   <dl class="procedencia-campos">
     {% for c in procedencia.campos %}
     <div class="procedencia-campo">

@@ -495,6 +495,9 @@ class FakeSession:
         self.flush = AsyncMock()
 
     async def execute(self, _statement):
+        if _statement.__class__.__name__ == "Update":
+            # H9 (#129 B): el enricher reclama la identidad con UPDATE condicional.
+            return SimpleNamespace(rowcount=1)
         return self._queue.pop(0)
 
 
