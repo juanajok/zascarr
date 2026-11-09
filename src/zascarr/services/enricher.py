@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
@@ -259,7 +259,22 @@ class EnrichmentService:
                 report.series_no_match.append(series.title)
                 continue
 
-            self._apply_series_match(series, match, id_field, source_value)
+            # H9 (#129 B): reclamar la identidad con un UPDATE condicional. Si otra
+            # operación (p. ej. una asociación confirmada) ya la escribió, rowcount=0 y
+            # NO se tocan ni el id ni los metadatos de esa serie.
+            if id_field in (series.locked_fields or []):
+                self._apply_series_match(series, match, id_field, source_value)
+            else:
+                reclamada = await self.db.execute(
+                    update(Series).where(Series.id == series.id,
+                                         getattr(Series, id_field).is_(None))
+                    .values({id_field: match.source_id})
+                    .execution_options(synchronize_session="fetch"))
+                if reclamada.rowcount != 1:
+                    logger.info("enricher.identity_claimed", series=series.title,
+                                source=source_label)
+                    continue
+                self._apply_series_match(series, match, id_field, source_value)
             await self.db.flush()
             report.series_enriched.append(series.title)
             logger.info("enricher.series_enriched", series=series.title,

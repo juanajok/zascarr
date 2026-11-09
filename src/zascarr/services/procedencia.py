@@ -67,10 +67,19 @@ class CampoProcedencia:
 
 
 @dataclass(frozen=True)
+class IdentidadDeFuente:
+    """Una línea por fuente con identidad en la columna; nunca pinta el id interno (H12)."""
+    fuente: str
+    fecha: str | None
+    procedencia: str
+
+
+@dataclass(frozen=True)
 class ProcedenciaDeSerie:
     campos: tuple[CampoProcedencia, ...]
     hay_datos: bool
     resumen: str
+    identidades: tuple[IdentidadDeFuente, ...] = ()
 
 
 def _texto(valor: object | None) -> str:
@@ -204,4 +213,51 @@ def procedencia_de_serie(series: Series) -> ProcedenciaDeSerie:
                    "una fuente ni a una edición manual.")
     if fecha_alta:
         resumen += f" El alta consta del {fecha_alta}."
-    return ProcedenciaDeSerie(campos=tuple(campos), hay_datos=hay_datos, resumen=resumen)
+    return ProcedenciaDeSerie(campos=tuple(campos), hay_datos=hay_datos, resumen=resumen,
+                              identidades=identidades_de_fuente(series))
+
+
+_FUENTE_DE_COLUMNA = {
+    "comic_vine_id": MetadataSource.COMIC_VINE.value,
+    "anilist_id": MetadataSource.ANILIST.value,
+    "tebeosfera_slug": MetadataSource.TEBEOSFERA.value,
+    "gcd_id": MetadataSource.GCD.value,
+}
+
+
+def identidades_de_fuente(series: Series) -> tuple[IdentidadDeFuente, ...]:
+    """H12: una línea por fuente; la fecha solo si hay una entrada activa válida.
+
+    Una columna con id pero sin procedencia no es huérfana: dice «origen no registrado».
+    El JSONB se lee con tolerancia; una entrada inválida nunca rompe la ficha.
+    """
+    meta = series.metadata_ if isinstance(series.metadata_, dict) else {}
+    asociaciones = meta.get("asociaciones") if isinstance(meta.get("asociaciones"), list) else []
+    validas: dict[str, dict] = {}
+    for entrada in asociaciones:
+        if not isinstance(entrada, dict):
+            continue
+        fuente = entrada.get("fuente")
+        if (entrada.get("version") != 1 or entrada.get("entidad") != "serie"
+                or entrada.get("id_externo") is None or fuente not in NOMBRE_DE_FUENTE):
+            continue
+        if entrada.get("origen") not in ("confirmada", "enriquecimiento"):
+            continue
+        if _fecha(entrada.get("fecha")) is None:
+            continue
+        validas.setdefault(str(fuente), entrada)
+    lineas: list[IdentidadDeFuente] = []
+    for columna, fuente in _FUENTE_DE_COLUMNA.items():
+        valor = getattr(series, columna, None)
+        if not valor:
+            continue
+        entrada = validas.get(fuente)
+        if entrada is not None and str(entrada.get("id_externo")) == str(valor):
+            lineas.append(IdentidadDeFuente(
+                fuente=NOMBRE_DE_FUENTE[fuente], fecha=_fecha(entrada.get("fecha")),
+                procedencia="registrada"))
+        else:
+            lineas.append(IdentidadDeFuente(
+                fuente=NOMBRE_DE_FUENTE[fuente], fecha=None,
+                procedencia="no registrada"))
+    return tuple(lineas)

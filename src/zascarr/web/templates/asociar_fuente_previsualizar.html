@@ -18,9 +18,8 @@
 <p class="caption">No se fusiona nada, no se copian datos de esa web y no se tocan tus archivos. Solo se guarda la relación; repetir no duplica.</p>
 <form method="post" action="/ui/series/{{ serie.id }}/asociar/confirmar">
   <input type="hidden" name="token" value="{{ token }}">
-  <button class="btn primary" type="submit" disabled title="La confirmación llega en la siguiente entrega">Asociar esta ficha</button>
+  <button class="btn primary" type="submit">Asociar esta ficha</button>
 </form>
-<p class="caption">Solo vista previa: aquí todavía no se guarda nada.</p>
 <a class="btn ghost" href="/ui/series/{{ serie.id }}">Cancelar</a>
 <details><summary>Volver a comparar</summary><p>Vuelve a la búsqueda para cambiar de ficha.</p></details>
 <details><summary>Qué hay ahora en esta serie</summary><p>La serie ya tiene al menos una fuente asociada.</p></details>
