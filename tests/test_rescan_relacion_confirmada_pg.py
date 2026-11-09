@@ -8,8 +8,10 @@ ahora. «Mantener lo mio» deja comprobante inmutable e es idempotente. Sin efec
 """
 from __future__ import annotations
 
+import os
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import func, select, text
 
 from tests.test_rescan_biblioteca_pg import (  # noqa: F401  (fixtures/ayudas compartidas)
@@ -25,6 +27,9 @@ from tests.test_rescan_biblioteca_pg import (  # noqa: F401  (fixtures/ayudas co
 from zascarr.models import File, FileFormat, VinculacionOperacion
 from zascarr.services.discrepancias import mantener_lo_mio
 from zascarr.services.tokens_revision import MantenerFirmada, crear_token_mantener
+
+URL = os.environ.get("TEST_DATABASE_URL")
+pytestmark = pytest.mark.skipif(not URL, reason="requiere TEST_DATABASE_URL (Postgres real)")
 
 SECRETO = "clave-de-prueba-para-mantener"
 FECHA = "2026-11-09T00:00:00+00:00"
