@@ -23,6 +23,7 @@ from zascarr.models import Series, Tag, series_tags
 
 NAMESPACE = "etiqueta"
 SOURCE_MANUAL = "manual"
+SOURCE_COMICINFO_XML = "comicinfo_xml"
 MAX_NOMBRE = 64
 MIN_SUGERENCIA = 2
 MAX_SUGERENCIAS = 8
