@@ -498,11 +498,19 @@ nombre sin prefijo.
 |---|---|---|---|---|
 | ETQ1a | Como coleccionista, quiero etiquetar una serie con mis palabras desde su ficha (añadir, quitar y crear), para describir lo que trata sin tocar archivos | #403; AC-01…AC-05, AC-07 (ficha), AC-10, AC-12…AC-16 y AC-19 de `especificacion-etiquetas.md`; migración **0022**; reutiliza `tags`/`issue_tags` y añade `series_tags`; `manual` gana; D-6 ratificada (crear desde la ficha); UI según `ui-etiquetas.md` | P1 | ✅ Hecho (desplegado 2026-11-08) |
 | ETQ1b | Como coleccionista, quiero filtrar la biblioteca por etiquetas (sumando y excluyendo), para reencontrar lo que tratan sin aprender sintaxis | #431; AC-06, AC-07 (Biblioteca), AC-08, AC-09, AC-11, AC-17, AC-18 y NFR-07; filtro sobre `#rejilla`; facetas de un solo grupo; **construida sobre ETQ1a** (#499, desplegada el 2026-11-08); fusionada en #514 y desplegada el 2026-11-09 | P1 | ✅ Hecho (desplegado 2026-11-09) |
-| ETQ2 | Como coleccionista, quiero que las etiquetas que ya traen mis CBZ en ComicInfo aparezcan en ZascArr, para no teclearlas | `<Tags>`/`<Genre>` leídos con `source='comicinfo_xml'`, topes de volumen (hallazgo ALTO de seguridad), idempotente, sin pisar manual, sin escribir XML. **Tarjeta: #538**; sin implementar | P1 | M (Lista para desarrollar) |
-| ETQ3 | Como coleccionista, quiero que géneros y personajes de las fuentes se guarden de verdad (hoy las tablas están dormidas), para filtrar por ellos | Poblar `Series.genres`/`Issue.characters` con los `field_list` actuales ampliados en la misma petición; respeta `locked_fields`; Tebeosfera sigue sin género (no se inventa) | P1 | M–L |
+| ETQ2 | Como coleccionista, quiero que las etiquetas que ya traen mis CBZ en ComicInfo aparezcan en ZascArr, para no teclearlas | `<Tags>`/`<Genre>` leídos con `source='comicinfo_xml'`, topes de volumen (hallazgo ALTO de seguridad), idempotente, sin pisar manual, sin escribir XML. **Tarjeta: #538**; **fusionada en #544 (2026-11-09)**; despliegue pendiente de confirmar | P1 | ✅ Hecho (fusionado en #544; desplegar) |
+| ETQ3 | Como coleccionista, quiero que géneros y personajes de las fuentes se guarden de verdad (hoy las tablas están dormidas), para filtrar por ellos | Poblar `Series.genres`/`Issue.characters` con los `field_list` actuales ampliados en la misma petición; respeta `locked_fields`; Tebeosfera sigue sin género (no se inventa) | P1 | M–L (en refinamiento; tarjeta #565) |
 | ETQ4 | Como coleccionista, quiero que las fuentes propongan etiquetas de tema sin pisar las mías | Mapeo al espacio `etiqueta` (D-1); `weight` = `rank` real de AniList; caché negativa H2 y espaciados de cortesía; `manual` no se toca | P2 | M |
 | ETQ5 | Como coleccionista, quiero que «super-man» y «superman» sean la misma etiqueta y que buscar una traiga sus implicaciones | Alias único normalizado, implicaciones sin ciclos ni autoimplicación, resueltas en consulta a profundidad ≤2; curación manual y confirmada | P2 | L |
 | ETQ6 | Como coleccionista, quiero que mis etiquetas viajen al `ComicInfo.xml` para que Kavita las lea | **NO APTO hoy**: exige extender el contrato B6 (plan, autoría, canonicidad, tope, política de `source`, ida/vuelta) y B20; no se autoriza antes | P2 | L |
+
+**Estado de cierre (2026-11-10):** historias hechas y desplegadas: ETQ1a (#403, 2026-11-08) y
+ETQ1b (#431, 2026-11-09); ETQ2 (#538) **fusionada en #544**, con el **despliegue pendiente** de
+confirmar. ETQ3 queda como fase siguiente con su tarjeta (#565) y en refinamiento hasta la medición
+de D-7 (etiquetas usadas de verdad y CBZ reales con `<Tags>`); ETQ4–ETQ5, solo si el uso lo pide;
+ETQ6, NO APTO hasta extender el contrato B6. La feature #402 se cierra como MVP cuando ETQ2 esté
+desplegada y su despliegue conste (registro como #515/#534). La nota de cierre y la decisión por
+hacer están en el comentario del 2026-11-10 de #402.
 
 **Decisiones del PO ratificadas el 2026-11-06** (detalle en
 `docs/design/especificacion-etiquetas.md` §0.1 y en el comentario de #402):
