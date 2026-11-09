@@ -1971,6 +1971,19 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .issue-header { grid-template-columns: 1fr; }
 }
 
+
+
+/* #150 BL-C3: control de lectura (pendiente/leyendo/leído) */
+.lectura-control { margin: 8px 0; padding: 6px 0; border-top: 1px dashed var(--linea); }
+.lectura-estado { margin: 0 0 4px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lectura-control form { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.lectura-control select { min-height: 40px; font: inherit; padding: 6px 8px; max-width: 100%; }
+.lectura-control textarea { width: 100%; max-width: 36rem; font: inherit; padding: 6px 8px; }
+.lectura-nota { flex-basis: 100%; }
+.lectura-nota summary { min-height: 40px; display: flex; align-items: center; }
+.tu-lectura { margin-top: 18px; }
+@media (max-width: 480px) { .lectura-control form { align-items: stretch; } }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

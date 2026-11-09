@@ -1,0 +1,51 @@
+{#- Control de lectura (#150 BL-C3). `modo="fila"` en la ficha de serie (solo estado,
+    guarda al cambiar); `modo="bloque"` en la ficha de número (estado + puntuación + nota). -#}
+{% set modo = modo or "fila" %}
+<div class="lectura-control" id="lectura-{{ issue_id }}">
+  {% if modo == "bloque" %}
+  <p class="caption">{{ textos_lectura.ayuda }}</p>
+  {% endif %}
+  <form method="post" action="/ui/series/{{ series.id }}/numero/{{ issue_id }}/lectura"
+        hx-post="/ui/series/{{ series.id }}/numero/{{ issue_id }}/lectura"
+        hx-target="closest .lectura-control" hx-swap="outerHTML"
+        {% if modo == "fila" %}hx-trigger="change" hx-sync="this:replace"{% endif %}>
+    <fieldset class="lectura-estados">
+      <legend class="sr">Estado de lectura</legend>
+      {% for valor, etiqueta in estados_lectura %}
+      <label class="lectura-opcion">
+        <input type="radio" name="estado" value="{{ valor.value }}"
+               {% if lectura and lectura.estado == valor %}checked{% elif not lectura and valor.value == "unread" %}checked{% endif %}>
+        <span>{{ etiqueta }}</span>
+      </label>
+      {% endfor %}
+    </fieldset>
+    {% if modo == "bloque" %}
+    <label for="rating-{{ issue_id }}">{{ textos_lectura.puntuacion }}</label>
+    <select id="rating-{{ issue_id }}" name="rating">
+      <option value="">{{ textos_lectura.sin_puntuacion }}</option>
+      {% for n in range(1, 6) %}<option value="{{ n }}" {% if lectura and lectura.rating == n %}selected{% endif %}>{{ n }}</option>{% endfor %}
+    </select>
+    <label for="nota-{{ issue_id }}">{{ textos_lectura.nota_corta }}</label>
+    <textarea id="nota-{{ issue_id }}" name="nota" maxlength="280" rows="2"
+              placeholder="Lo que te pareció…">{{ lectura.nota if lectura and lectura.nota else "" }}</textarea>
+    <p class="caption">{{ textos_lectura.max_nota }}</p>
+    <button class="btn primary" type="submit">{{ textos_lectura.guardar_mi_lectura }}</button>
+    {% endif %}
+  </form>
+  <p class="lectura-estado" role="status">
+    {% if error %}{{ textos_lectura.guardar_error }}
+    {% elif guardado %}{{ textos_lectura.guardado }} {{ guardado }}.
+    {% elif lectura %}{{ lectura.estado_es }}{% if lectura.rating %} · {{ "★" * lectura.rating }}{% endif %}
+    {% endif %}
+  </p>
+  {% if modo == "bloque" %}
+  <p class="caption">{{ textos_lectura.garantia }}</p>
+  {% if lectura and lectura.started_at and lectura.estado.value in ("reading", "completed") %}
+  <p class="caption">{{ textos_lectura.empezado }}: {{ lectura.started_at.strftime("%d/%m/%Y") }}</p>
+  {% endif %}
+  {% if lectura and lectura.completed_at and lectura.estado.value == "completed" %}
+  <p class="caption">{{ textos_lectura.terminado }}: {{ lectura.completed_at.strftime("%d/%m/%Y") }}</p>
+  {% endif %}
+  {% if not lectura %}<p class="caption">{{ textos_lectura.sin_guardar }}</p>{% endif %}
+  {% endif %}
+</div>
