@@ -18,13 +18,14 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import time
 from dataclasses import dataclass
 from uuid import UUID
 
 from zascarr.models import ComicTradition, IssueFormat, MetadataSource
 from zascarr.services.auth import sign_token, verify_token
-from zascarr.services.discovery import CAMPO_ID_EXTERNO, ProcedenciaTradicion
+from zascarr.services.discovery import CAMPO_ID_EXTERNO, CAMPOS_ID_DE_TEXTO, ProcedenciaTradicion
 from zascarr.utils.url_portada import LONGITUD_MAXIMA_URL
 
 TTL_SEGUNDOS = 15 * 60
@@ -38,6 +39,8 @@ PROPOSITO_CANDIDATA = "candidata"
 PROPOSITO_ALTA = "alta"
 PROPOSITO_VINCULAR = "vincular"
 PROPOSITO_DESVINCULAR = "desvincular"
+#: #129: propuesta de asociación de otra fuente (A no escribe; B la consumirá).
+PROPOSITO_ASOCIAR = "asociar_fuente"
 #: BL-SER1 (#303): retirar una serie de la biblioteca (sin tocar el disco).
 PROPOSITO_RETIRAR = "retirar_serie"
 #: La descripción que viaja en el token se recorta: no hace falta entera para dar de alta una serie.
@@ -753,3 +756,131 @@ def _longitud_peor_caso_del_token_de_retirada() -> int:
 #: El límite del campo `token` de `POST /api/series/{id}/retirada` y de su formulario en la UI: acotado e IGUAL al peor
 #: caso emitible.
 MAX_TOKEN_RETIRADA = _longitud_peor_caso_del_token_de_retirada()
+
+
+# ── Token de propuesta de asociación (#129 PR-S1) ───────────────────────────────────────────────
+
+VERSION_TOKEN_ASOCIAR = 1
+MAX_SITIO_URL = MAX_COVER_URL
+ANIO_MIN_ASOCIACION, ANIO_MAX_ASOCIACION = ANIO_MIN_FIRMABLE, ANIO_MAX_FIRMABLE
+MAX_ID_ASOCIACION = MAX_ID_EXTERNO
+
+
+def id_canonico(fuente: str, id_externo: object) -> str | None:
+    """Id canónico de una fuente (H17): entero positivo ASCII o slug de Tebeosfera acotado.
+
+    Un id no canónico no se firma en A y B lo rechazará: `+1`, ` 1`, `001`, Unicode, 0,
+    >2^63-1 o slug con `/`/`?`/`#`/controles no valen.
+    """
+    if isinstance(id_externo, bool):
+        return None
+    texto = str(id_externo) if id_externo is not None else ""
+    if not texto:
+        return None
+    try:
+        campo = CAMPO_ID_EXTERNO[MetadataSource(fuente)]
+    except (ValueError, KeyError):
+        return None
+    if campo not in CAMPOS_ID_DE_TEXTO:
+        if not re.fullmatch(r"[1-9][0-9]{0,18}", texto):
+            return None
+        numero = int(texto)
+        if numero > 2**63 - 1:
+            return None
+        return str(numero)
+    if len(texto) > MAX_ID_ASOCIACION or not texto_firmable(texto):
+        return None
+    if any(c.isspace() or c in "/?#" for c in texto):
+        return None
+    return texto
+
+
+@dataclass(frozen=True)
+class AsociacionFirmada:
+    """Lo que A vio y la persona puede previsualizar. El contexto firmado es el `series_id`.
+
+    `entidad` y `kind` van DENTRO del token y de la huella (H1): B rechaza cualquier cosa que no
+    sea una serie/colección. `caduca` es el `exp` ya verificado.
+    """
+    version: int
+    entidad: str
+    kind: str | None
+    fuente: str
+    id_externo: str
+    titulo: str
+    anio: int | None
+    sitio_url: str | None
+    huella: str
+    operacion: str
+    serie_id: str
+    caduca: int = 0
+
+
+def crear_token_asociacion(d: AsociacionFirmada, secret: str, *,
+                           ahora: float | None = None) -> str:
+    return crear_token(PROPOSITO_ASOCIAR, d.serie_id, {
+        "version": d.version, "entidad": d.entidad, "kind": d.kind, "fuente": d.fuente,
+        "id_externo": d.id_externo, "titulo": d.titulo, "anio": d.anio,
+        "sitio_url": d.sitio_url, "huella": d.huella, "operacion": d.operacion,
+        "serie_id": d.serie_id,
+    }, secret, ahora=ahora)
+
+
+def verificar_token_asociacion(token: str, secret: str, *, ahora: float | None = None,
+                               ignorar_caducidad: bool = False) -> AsociacionFirmada | None:
+    """Token de asociación válido, o `None`. Firma, propósito, contexto y esquema estricto."""
+    serie_id = _contexto_del_token(token, secret)
+    if serie_id is None or not _uuid_texto(serie_id):
+        return None
+    verificado = _verificar(token, PROPOSITO_ASOCIAR, serie_id, secret, ahora=ahora,
+                            ignorar_caducidad=ignorar_caducidad)
+    if verificado is None:
+        return None
+    d, caduca = verificado
+    if d.get("version") != VERSION_TOKEN_ASOCIAR or isinstance(d.get("version"), bool):
+        return None
+    if d.get("entidad") != "serie":
+        return None
+    if d.get("kind") not in (None, "collection", "saga"):
+        return None
+    fuente = d.get("fuente")
+    if not isinstance(fuente, str) or fuente not in {f.value for f in MetadataSource}:
+        return None
+    id_externo = d.get("id_externo")
+    canonico = id_canonico(fuente, id_externo)
+    if canonico is None or canonico != id_externo:
+        return None
+    titulo = d.get("titulo")
+    if not isinstance(titulo, str) or not titulo or len(titulo) > MAX_TITULO or not texto_firmable(titulo):
+        return None
+    anio = d.get("anio")
+    if not _anio_firmable(anio):
+        return None
+    sitio = d.get("sitio_url")
+    if sitio is not None:
+        if not isinstance(sitio, str) or len(sitio) > MAX_SITIO_URL or not texto_firmable(sitio):
+            return None
+        from urllib.parse import urlsplit
+        parte = urlsplit(sitio)
+        if parte.scheme not in ("http", "https") or not parte.hostname or parte.username or parte.password:
+            return None
+    if not _hex64(d.get("huella")) or not _uuid_texto(d.get("operacion")):
+        return None
+    if d.get("serie_id") != serie_id:
+        return None
+    return AsociacionFirmada(1, "serie", d.get("kind"), fuente, id_externo, titulo, anio,
+                             sitio, d["huella"], d["operacion"], serie_id, caduca)
+
+
+def _longitud_peor_caso_token_asociacion() -> int:
+    ident = "00000000-0000-4000-8000-000000000000"
+    caso = AsociacionFirmada(
+        version=1, entidad="serie", kind="collection", fuente="tebeosfera",
+        id_externo="s" * MAX_ID_ASOCIACION, titulo="t" * MAX_TITULO,
+        anio=ANIO_MAX_ASOCIACION, sitio_url="h" * MAX_SITIO_URL,
+        huella="f" * 64, operacion=ident, serie_id=ident)
+    return len(crear_token_asociacion(caso, "x" * 32, ahora=EPOCA_DEL_PEOR_CASO))
+
+
+#: Cota exacta del campo `token` de previsualizar/asociar (#129 PR-S1, H6).
+MAX_TOKEN_ASOCIACION = _longitud_peor_caso_token_asociacion()
