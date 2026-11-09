@@ -37,7 +37,6 @@ from zascarr.services.etiquetas import (
     resolver_etiquetas,
     sugerencias_filtro,
 )
-from zascarr.services.lectura import recuento_lectura
 from zascarr.services.series import SeriesService
 from zascarr.web.retorno import url_de_ficha
 from zascarr.web.routes import crear_templates
@@ -423,6 +422,29 @@ async def _contexto(
         pagina = 1
 
     paginas = (total + _PAGE_SIZE - 1) // _PAGE_SIZE if total else 0
+    recuento_lectura_texto = None
+    if filtros.leido:
+        # Denominador y numerador REALES con el resto de filtros, no la página actual.
+        base = dict(
+            page=1, page_size=1, tradition=filtros.tradition or None,
+            search=filtros.q or None, publisher_id=filtros.uuid("publisher_id"),
+            character_id=filtros.uuid("character_id"), story_arc_id=filtros.uuid("story_arc_id"),
+            etiquetas_positivas=tuple(expresion.positivas),
+            etiquetas_negativas=tuple(expresion.negativas))
+        try:
+            total_sin = (await service.list_series_paginado(**base))[1]
+            if filtros.leido == "leyendo":
+                con = (await service.list_series_paginado(**base, leido="leyendo"))[1]
+                recuento_lectura_texto = f"{con} de {total_sin} series con algún número en lectura."
+            elif filtros.leido == "no":
+                con = (await service.list_series_paginado(**base, leido="si"))[1]
+                recuento_lectura_texto = (
+                    f"{total_sin - con} de {total_sin} series sin ningún número leído.")
+            else:
+                con = (await service.list_series_paginado(**base, leido="si"))[1]
+                recuento_lectura_texto = f"{con} de {total_sin} series con algún número leído."
+        except SQLAlchemyError:
+            recuento_lectura_texto = None
     filtros_finales = Filtros(
         q=filtros.q,
         tradition=filtros.tradition,
@@ -456,8 +478,7 @@ async def _contexto(
         "url_serie": lambda series_id: url_de_ficha(series_id, url_canonica),
         "url_pagina": lambda p: _url_pagina(filtros_finales, page=p),
         "url_fragmento": lambda p: _url_fragmento(filtros_finales, page=p),
-        "recuento_lectura": (await recuento_lectura(
-            db, [s.id for s in items], filtros.leido) if filtros.leido else None),
+        "recuento_lectura": recuento_lectura_texto,
         "url_reintento": url_canonica,
         "url_reintento_fragmento": _url_fragmento(filtros_finales, page=pagina),
         "url_vista_tarjetas": _url_pagina(replace(filtros_finales, vista="tarjetas"), page=pagina),

@@ -71,6 +71,7 @@ from zascarr.services.ficha_numero import (
 from zascarr.services.lectura import (
     TEXTOS_LECTURA,
     EstadoInvalidoError,
+    EstadoLectura,
     IssueNoEncontradoError,
     NotaInvalidaError,
     ValoracionInvalidaError,
@@ -736,22 +737,38 @@ async def detalle_numero(series_id: UUID, issue_id: UUID, request: Request,
 async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
                        estado: str = Form(...), rating: str | None = Form(default=None),
                        nota: str | None = Form(default=None),
+                       origen: str = Form(default="fila"),
                        db: AsyncSession = Depends(get_db)) -> Response:
-    """Marca el número; el formulario funciona sin JS (303 a la ficha) y con HTMX (fila)."""
+    """Marca el número; 303 sin JS y fragmento completo (fila o bloque) con HTMX."""
+    modo = "bloque" if origen == "numero" else "fila"
+    extras = {}
+    if rating is not None:
+        extras["rating"] = rating
+    if nota is not None:
+        extras["nota"] = nota
     try:
-        lectura = await marcar(db, issue_id, estado, rating=rating, nota=nota,
-                               series_id=series_id)
+        lectura = await marcar(db, issue_id, estado, series_id=series_id, **extras)
     except IssueNoEncontradoError:
         raise HTTPException(status_code=404, detail="Número no encontrado") from None
     except (EstadoInvalidoError, ValoracionInvalidaError, NotaInvalidaError) as exc:
         if request.headers.get("HX-Request") == "true":
+            try:
+                estado_enum = ReadingStatus(estado)
+            except ValueError:
+                estado_enum = ReadingStatus.UNREAD
+            try:
+                rating_int = int(rating) if rating not in (None, "") else None
+            except (TypeError, ValueError):
+                rating_int = None
+            borrador = EstadoLectura(str(issue_id), estado_enum, rating_int, nota, None, None)
             respuesta = templates.TemplateResponse(
                 request, "_lectura_control.html",
                 {"series": SimpleNamespace(id=series_id), "issue_id": str(issue_id),
-                 "lectura": None, "textos_lectura": TEXTOS_LECTURA, "modo": "fila",
-                 "error": str(exc), "estados_lectura": (
-                     (ReadingStatus.UNREAD, "Sin leer"), (ReadingStatus.READING, "Leyendo"),
-                     (ReadingStatus.COMPLETED, "Leído"))})
+                 "lectura": borrador, "textos_lectura": TEXTOS_LECTURA, "modo": modo,
+                 "error": str(exc), "origen": origen,
+                 "estados_lectura": ((ReadingStatus.UNREAD, "Sin leer"),
+                                     (ReadingStatus.READING, "Leyendo"),
+                                     (ReadingStatus.COMPLETED, "Leído"))})
             respuesta.headers["Cache-Control"] = "no-store"
             return respuesta
         raise HTTPException(status_code=422, detail=str(exc)) from None
@@ -759,14 +776,15 @@ async def marcar_leido(series_id: UUID, issue_id: UUID, request: Request,
         respuesta = templates.TemplateResponse(
             request, "_lectura_control.html",
             {"series": SimpleNamespace(id=series_id), "issue_id": str(issue_id),
-             "lectura": lectura, "textos_lectura": TEXTOS_LECTURA, "modo": "fila",
-             "guardado": lectura.estado_es,
+             "lectura": lectura, "textos_lectura": TEXTOS_LECTURA, "modo": modo,
+             "guardado": lectura.estado_es, "origen": origen,
              "estados_lectura": (
                  (ReadingStatus.UNREAD, "Sin leer"), (ReadingStatus.READING, "Leyendo"),
                  (ReadingStatus.COMPLETED, "Leído"))})
     else:
-        respuesta = RedirectResponse(url=f"/ui/series/{series_id}#archivos-por-numero",
-                                     status_code=303)
+        destino = (f"/ui/series/{series_id}/numero/{issue_id}" if modo == "bloque"
+                   else f"/ui/series/{series_id}#archivos-por-numero")
+        respuesta = RedirectResponse(url=destino, status_code=303)
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 

@@ -9,12 +9,13 @@
         hx-post="/ui/series/{{ series.id }}/numero/{{ issue_id }}/lectura"
         hx-target="closest .lectura-control" hx-swap="outerHTML"
         {% if modo == "fila" %}hx-trigger="change" hx-sync="this:replace"{% endif %}>
+    <input type="hidden" name="origen" value="{{ 'numero' if modo == 'bloque' else 'fila' }}">
     <fieldset class="lectura-estados">
       <legend class="sr">Estado de lectura</legend>
       {% for valor, etiqueta in estados_lectura %}
       <label class="lectura-opcion">
         <input type="radio" name="estado" value="{{ valor.value }}"
-               {% if lectura and lectura.estado == valor %}checked{% elif not lectura and valor.value == "unread" %}checked{% endif %}>
+               {% if lectura and lectura.estado == valor %}checked autofocus{% elif not lectura and valor.value == "unread" %}checked{% endif %}>
         <span>{{ etiqueta }}</span>
       </label>
       {% endfor %}
@@ -31,6 +32,7 @@
     <p class="caption">{{ textos_lectura.max_nota }}</p>
     <button class="btn primary" type="submit">{{ textos_lectura.guardar_mi_lectura }}</button>
     {% endif %}
+    {% if modo == "fila" %}<noscript><button class="btn ghost sm" type="submit">Guardar</button></noscript>{% endif %}
   </form>
   <p class="lectura-estado" role="status">
     {% if error %}{{ textos_lectura.guardar_error }}
