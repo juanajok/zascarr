@@ -795,6 +795,45 @@ def id_canonico(fuente: str, id_externo: object) -> str | None:
     return texto
 
 
+def normalizar_sitio_asociacion(url: object) -> str | None:
+    """URL de ficha firmable: http(s), host, sin credenciales y <= MAX_SITIO_URL.
+
+    Lo inválido o demasiado largo se omite (se firma `None`), nunca se trunca ni se firma para
+    que el verificador lo rechace después.
+    """
+    if not isinstance(url, str) or not url or len(url) > MAX_SITIO_URL or not texto_firmable(url):
+        return None
+    try:
+        from urllib.parse import urlsplit
+        parte = urlsplit(url)
+    except (ValueError, UnicodeError):
+        return None
+    if (parte.scheme not in ("http", "https") or not parte.hostname
+            or parte.username or parte.password):
+        return None
+    return url
+
+
+def normalizar_candidata_asociacion(*, fuente: str, id_externo: object, titulo: object,
+                                    anio: object, sitio_url: object) -> dict | None:
+    """Datos de una candidata que A puede firmar (H6/H17), o `None` si no es firmable.
+
+    Valida ANTES de firmar: id canónico, título no vacío y acotado, año firmable y URL segura.
+    La URL inválida/larga se normaliza a `None`; el resto de datos no válidos no producen token.
+    Ningún texto con sustitutos Unicode llega a `json.dumps(...).encode()` (evita un 500).
+    """
+    canonico = id_canonico(fuente, id_externo)
+    if canonico is None:
+        return None
+    if (not isinstance(titulo, str) or not titulo or len(titulo) > MAX_TITULO
+            or not texto_firmable(titulo)):
+        return None
+    if not _anio_firmable(anio):
+        return None
+    return {"id_externo": canonico, "titulo": titulo, "anio": anio,
+            "sitio_url": normalizar_sitio_asociacion(sitio_url)}
+
+
 @dataclass(frozen=True)
 class AsociacionFirmada:
     """Lo que A vio y la persona puede previsualizar. El contexto firmado es el `series_id`.
@@ -818,10 +857,15 @@ class AsociacionFirmada:
 
 def crear_token_asociacion(d: AsociacionFirmada, secret: str, *,
                            ahora: float | None = None) -> str:
+    normal = normalizar_candidata_asociacion(
+        fuente=d.fuente, id_externo=d.id_externo, titulo=d.titulo, anio=d.anio,
+        sitio_url=d.sitio_url)
+    if normal is None:
+        raise ValueError("La candidata no se puede firmar: id, título o año inválidos.")
     return crear_token(PROPOSITO_ASOCIAR, d.serie_id, {
         "version": d.version, "entidad": d.entidad, "kind": d.kind, "fuente": d.fuente,
-        "id_externo": d.id_externo, "titulo": d.titulo, "anio": d.anio,
-        "sitio_url": d.sitio_url, "huella": d.huella, "operacion": d.operacion,
+        "id_externo": normal["id_externo"], "titulo": normal["titulo"], "anio": normal["anio"],
+        "sitio_url": normal["sitio_url"], "huella": d.huella, "operacion": d.operacion,
         "serie_id": d.serie_id,
     }, secret, ahora=ahora)
 
@@ -846,38 +890,32 @@ def verificar_token_asociacion(token: str, secret: str, *, ahora: float | None =
     fuente = d.get("fuente")
     if not isinstance(fuente, str) or fuente not in {f.value for f in MetadataSource}:
         return None
-    id_externo = d.get("id_externo")
-    canonico = id_canonico(fuente, id_externo)
-    if canonico is None or canonico != id_externo:
+    normal = normalizar_candidata_asociacion(
+        fuente=fuente, id_externo=d.get("id_externo"), titulo=d.get("titulo"),
+        anio=d.get("anio"), sitio_url=d.get("sitio_url"))
+    if normal is None or normal["id_externo"] != d.get("id_externo"):
         return None
-    titulo = d.get("titulo")
-    if not isinstance(titulo, str) or not titulo or len(titulo) > MAX_TITULO or not texto_firmable(titulo):
-        return None
-    anio = d.get("anio")
-    if not _anio_firmable(anio):
-        return None
-    sitio = d.get("sitio_url")
-    if sitio is not None:
-        if not isinstance(sitio, str) or len(sitio) > MAX_SITIO_URL or not texto_firmable(sitio):
-            return None
-        from urllib.parse import urlsplit
-        parte = urlsplit(sitio)
-        if parte.scheme not in ("http", "https") or not parte.hostname or parte.username or parte.password:
-            return None
+    titulo = normal["titulo"]
+    anio = normal["anio"]
+    sitio = normal["sitio_url"]
     if not _hex64(d.get("huella")) or not _uuid_texto(d.get("operacion")):
         return None
     if d.get("serie_id") != serie_id:
         return None
-    return AsociacionFirmada(1, "serie", d.get("kind"), fuente, id_externo, titulo, anio,
-                             sitio, d["huella"], d["operacion"], serie_id, caduca)
+    return AsociacionFirmada(1, "serie", d.get("kind"), fuente, normal["id_externo"], titulo,
+                             anio, sitio, d["huella"], d["operacion"], serie_id, caduca)
 
 
 def _longitud_peor_caso_token_asociacion() -> int:
+    """Peor token REAL: slug/título/URL con caracteres de 4 bytes y la URL válida más larga."""
     ident = "00000000-0000-4000-8000-000000000000"
+    ch = "\U0001F600"  # 4 bytes UTF-8; ensure_ascii=False no lo escapa
+    prefijo = "http://e.co/"
+    url = prefijo + ch * (MAX_SITIO_URL - len(prefijo))
     caso = AsociacionFirmada(
         version=1, entidad="serie", kind="collection", fuente="tebeosfera",
-        id_externo="s" * MAX_ID_ASOCIACION, titulo="t" * MAX_TITULO,
-        anio=ANIO_MAX_ASOCIACION, sitio_url="h" * MAX_SITIO_URL,
+        id_externo=ch * MAX_ID_ASOCIACION, titulo=ch * MAX_TITULO,
+        anio=ANIO_MAX_ASOCIACION, sitio_url=url,
         huella="f" * 64, operacion=ident, serie_id=ident)
     return len(crear_token_asociacion(caso, "x" * 32, ahora=EPOCA_DEL_PEOR_CASO))
 
