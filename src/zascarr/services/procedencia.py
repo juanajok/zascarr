@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from zascarr.models import MetadataSource, Series
+from zascarr.services.tokens_revision import id_canonico
 
 #: Campos gestionados que se muestran. `identidad` agrupa el id externo que corresponda; nunca se
 #: muestra el valor del identificador, solo si consta.
@@ -52,6 +53,12 @@ NOMBRE_DE_FUENTE = {
 ID_FIELDS = (
     "comic_vine_id", "anilist_id", "tebeosfera_slug", "gcd_id",
 )
+
+#: H8: una entrada activa con un campo desconocido o incompleta no se interpreta.
+_CLAVES_ENTRADA = frozenset({
+    "version", "fuente", "id_externo", "entidad", "kind", "fecha", "operacion_id",
+    "origen", "modo",
+})
 
 
 @dataclass(frozen=True)
@@ -111,6 +118,23 @@ def _fuente(nombre: str | None) -> str:
     if not nombre:
         return "una fuente"
     return NOMBRE_DE_FUENTE.get(str(nombre), "una fuente")
+
+
+def _entrada_valida(entrada: dict) -> bool:
+    if set(entrada) != _CLAVES_ENTRADA or entrada.get("version") != 1:
+        return False
+    fuente = entrada.get("fuente")
+    if fuente not in NOMBRE_DE_FUENTE or entrada.get("entidad") != "serie":
+        return False
+    if entrada.get("kind") not in (None, "collection", "saga"):
+        return False
+    if entrada.get("origen") not in ("confirmada", "enriquecimiento"):
+        return False
+    if entrada.get("modo") not in ("busqueda", "id_exacto"):
+        return False
+    if id_canonico(str(fuente), entrada.get("id_externo")) != entrada.get("id_externo"):
+        return False
+    return _fecha(entrada.get("fecha")) is not None
 
 
 def _id_externo(series: Series) -> tuple[str | None, bool]:
@@ -235,16 +259,9 @@ def identidades_de_fuente(series: Series) -> tuple[IdentidadDeFuente, ...]:
     asociaciones = meta.get("asociaciones") if isinstance(meta.get("asociaciones"), list) else []
     validas: dict[str, dict] = {}
     for entrada in asociaciones:
-        if not isinstance(entrada, dict):
+        if not isinstance(entrada, dict) or not _entrada_valida(entrada):
             continue
-        fuente = entrada.get("fuente")
-        if (entrada.get("version") != 1 or entrada.get("entidad") != "serie"
-                or entrada.get("id_externo") is None or fuente not in NOMBRE_DE_FUENTE):
-            continue
-        if entrada.get("origen") not in ("confirmada", "enriquecimiento"):
-            continue
-        if _fecha(entrada.get("fecha")) is None:
-            continue
+        fuente = entrada["fuente"]
         validas.setdefault(str(fuente), entrada)
     lineas: list[IdentidadDeFuente] = []
     for columna, fuente in _FUENTE_DE_COLUMNA.items():
