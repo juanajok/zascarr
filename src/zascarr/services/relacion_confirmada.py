@@ -21,6 +21,10 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+#: Versiones de `metadata.vinculo` que este código SABE interpretar. Lista CERRADA: una versión
+#: futura o desconocida no es evidencia de confirmación (no se adivina su esquema).
+VERSIONES_CONOCIDAS = frozenset({1})
+
 #: Estados del conjunto cerrado de D3-B4. Los valores son los que viajan en `relacion["estado"]`
 #: y en las pruebas; no son texto de pantalla.
 SIN_RELACION = "sin_relacion"
@@ -62,7 +66,8 @@ def vinculo_valido(metadata_: dict | None, series_id: object) -> dict | None:
     """El `metadata.vinculo` si es evidencia completa de una confirmación sobre ESA serie.
 
     Exige `operacion_id` UUID, `serie_id` UUID e igual a la serie del `Issue`, `version` entera
-    conocida y `fecha` ISO. Sin alguno de esos datos no hay confirmación acreditable (y no se
+    **conocida** (`VERSIONES_CONOCIDAS`; hoy solo la 1) y `fecha` ISO. Una versión futura no se
+    interpreta: no es evidencia. Sin alguno de esos datos no hay confirmación acreditable (y no se
     rellena a posteriori: D3 prohíbe la retroactividad).
     """
     v = (metadata_ or {}).get("vinculo") if isinstance(metadata_, dict) else None
@@ -73,7 +78,7 @@ def vinculo_valido(metadata_: dict | None, series_id: object) -> dict | None:
     if series_id is None or _uuid(v["serie_id"]) != _uuid(str(series_id)):
         return None
     version = v.get("version")
-    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+    if not isinstance(version, int) or isinstance(version, bool) or version not in VERSIONES_CONOCIDAS:
         return None
     if not _fecha_valida(v.get("fecha")):
         return None
