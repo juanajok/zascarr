@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from zascarr.services.relacion_confirmada import (
+    VERSIONES_CONOCIDAS,
     EstadoRelacion,
     es_protegida,
     estado_de_relacion,
@@ -58,8 +59,8 @@ def test_manual_sin_comprobante_no_es_confirmada_pero_si_se_protege():
 def test_manual_con_vinculo_invalido_no_se_marca_retroactivamente_como_confirmada():
     """D3: una relación manual antigua SIN comprobante no se convierte en confirmada al leerla."""
     for roto in (_vinculo(operacion_id="no-es-uuid"), _vinculo(serie_id=str(SERIE_2)),
-                 _vinculo(fecha="ayer"), _vinculo(version=0), _vinculo(version=True),
-                 _vinculo(version="1")):
+                 _vinculo(fecha="ayer"), _vinculo(version=0), _vinculo(version=2),
+                 _vinculo(version=True), _vinculo(version="1")):
         assert vinculo_valido({"vinculo": roto}, SERIE) is None
         assert estado_de_relacion(_archivo(metadata_source="manual", vinculo=roto),
                                   _issue()) is EstadoRelacion.MANUAL_SIN_COMPROBANTE
@@ -75,6 +76,18 @@ def test_sin_issue_no_se_inventa_confirmada():
     """Un `issue_id` sin fila cargada no puede acreditar la serie: se clasifica por procedencia."""
     assert estado_de_relacion(_archivo(metadata_source="manual", vinculo=_vinculo()), None) is EstadoRelacion.MANUAL_SIN_COMPROBANTE
     assert estado_de_relacion(_archivo(metadata_source="comicinfo_xml", vinculo=_vinculo()), None) is EstadoRelacion.AUTOMATICA
+
+
+def test_version_desconocida_no_es_evidencia_y_la_1_si():
+    """Regresión QA de #545: la spec exige versiones CONOCIDAS, no cualquier `>= 1`."""
+    assert frozenset({1}) == VERSIONES_CONOCIDAS
+    archivo_v1 = _archivo(metadata_source="manual", vinculo=_vinculo(version=1))
+    assert estado_de_relacion(archivo_v1, _issue()) is EstadoRelacion.CONFIRMADA
+    for version in (2, 0, -1, True, "1", 1.0, None):
+        roto = _vinculo(version=version)
+        assert vinculo_valido({"vinculo": roto}, SERIE) is None, version
+        assert estado_de_relacion(_archivo(metadata_source="manual", vinculo=roto),
+                                  _issue()) is EstadoRelacion.MANUAL_SIN_COMPROBANTE, version
 
 
 def test_vinculo_valido_acepta_fecha_z_y_no_acepta_dicts_rotos():
