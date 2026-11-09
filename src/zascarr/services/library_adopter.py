@@ -83,6 +83,7 @@ from zascarr.services.relacion_confirmada import (
     estado_de_relacion,
     relacion_actual,
 )
+from zascarr.utils.bloqueo_archivo import bloquear_archivo
 from zascarr.utils.fs import recorrer_comics
 from zascarr.utils.naming import parse_comic_filename
 
@@ -640,6 +641,17 @@ class LibraryAdopter:
             raise ArchivoCambiado(path.name)
         tr = outcome.tr
 
+        # F1 (#545): tagger, rescan, «Mantener lo mío» y la asignación manual comparten un
+        # advisory lock por `File.id`. Hay que tomarlo ANTES de releer y mantenerlo hasta el
+        # commit; si no, el rescan escribiría un `metadata_` leído antes de que «Mantener lo
+        # mío» confirmara y se perdería `mantenida`/`discrepancias`.
+        await bloquear_archivo(self._db, fila.id)
+        fila = (await self._db.execute(
+            select(File).where(File.id == fila.id).execution_options(populate_existing=True)
+        )).scalar_one_or_none()
+        if fila is None:
+            raise FileNotFoundError(str(path))
+
         if fila.review_dismissed:
             # Regla #326 §4.1: no se reactiva ningún descarte. Solo se actualiza la descripción de
             # los bytes (el stat debe describir el hash guardado, pase lo que pase con la clasificación).
@@ -712,9 +724,10 @@ class LibraryAdopter:
             anterior = str(fila.issue_id) if fila.issue_id else None
             nuevo = str(result.issue_id) if result.issue_id else None
             if anterior != nuevo and relacion is not None:
-                meta, _ = registrar(meta, crear_discrepancia(propuesta, relacion))
+                meta, registrada = registrar(meta, crear_discrepancia(propuesta, relacion))
                 report.re_triados_protegidos += 1
-                report.discrepancias_registradas += 1
+                if registrada:  # F4: repetir la misma observación no es una discrepancia nueva
+                    report.discrepancias_registradas += 1
             elif anterior == nuevo:
                 report.re_triados_igual += 1
             fila.metadata_ = meta
