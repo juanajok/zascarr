@@ -18,7 +18,10 @@ Kit mínimo de la medición de #477. **No es código de producción**. Todo lo q
 4. `seleccionar_muestra.py`: regla fija; copia 26 muestras, comprueba SHA-256 original=copia.
 5. `medir_muestras.sh`: un contenedor desechable **por copia**, `--network none --read-only`,
    512 MiB sin swap; el temporal va a `~/eval-cnv/trabajo` (disco, fuera de la biblioteca): `unar` + `zipfile(ZIP_STORED)`, manifiesto y `testzip`.
-6. Contraste: Transmission/aMule/Kavita y vulnerabilidades de `unar`.
+6. Prototipo de memoria baja (opcional): `convertir_streaming.py` / `medir_streaming.sh` usan
+   `unar -o - -i <archivo> <índice>` y escriben el ZIP_STORED en streaming. Se midió y **no es
+   viable**: mucho tiempo en sólidos y sin bajar el pico de 512 MiB; ver §4ter del informe.
+7. Contraste: Transmission/aMule/Kavita y vulnerabilidades de `unar`.
 
 Los scripts no montan la biblioteca en ningún contenedor de conversión. Las
 rutas y nombres de la muestra no se publican; solo los identificadores `m01…`.

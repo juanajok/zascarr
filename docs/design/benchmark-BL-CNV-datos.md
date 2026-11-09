@@ -123,6 +123,50 @@ Misma muestra de 26 copias (hashes original=copia comprobados de nuevo), mismos 
 
 **Lectura:** 1.10.8 **no arregla** los 3 fallos de extracción de la muestra; el tiempo y el RSS de base suben ligeramente (P10 RSS de 12,1 a 17,4 MiB; P90 de tiempo de 3,11 a 3,26 s), el pico cgroup grande sigue en 512 MiB y el resultado de tamaño/espacio no cambia. La producción no empeora la corrección, pero tampoco elimina los FAIL de memoria/extracción; la conclusión de BL-CNV0 se mantiene y ahora está confirmada con la versión desplegada.
 
+### 4ter. Prototipo de memoria baja: `unar -o -` + ZIP en streaming
+
+**Idea:** no extraer el RAR completo. `lsar` lista los índices; por cada entrada se ejecuta
+`unar -q -f -D -o - -i <copia> <índice>`, se lee su stdout por bloques de 1 MiB y se escribe
+directamente en el ZIP_STORED (`ZipFile.open(..., "w")`); no hay directorio de extracción.
+Scripts: `scripts/medicion/evaluacion_cnv/convertir_streaming.py` y `medir_streaming.sh`.
+Misma muestra, misma imagen de producción 1.10.8, mismo contenedor de 512 MiB, copias con hash.
+
+**Resultado:** **23/26 válidas** (misma cifra que el método de extracción completa) y **mismos
+3 casos** `m07`/`m14`/`m16`, pero con un modo de fallo distinto: `unar -o -` devuelve `rc=0` y
+**trunca la entrada a exactamente 262.144 B**; la comprobación de tamaño lo detecta, no se
+publica el CBZ y no se conta como éxito. Es un fallo silencioso que el método actual no tenía.
+
+| Métrica (23 válidas) | P10 | P50 | P90 | Máximo |
+|---|---:|---:|---:|---:|
+| Tiempo total (s) | **1,042** | 1,628 | **8,229** | **633,247** |
+| `unar` (s) | 1,042 | 1,628 | 8,229 | 633,245 |
+| `zipfile` (s) | 0,000 | 0,000 | 0,001 | 0,002 |
+| RSS (MiB) | **17,1** | 17,6 | **18,6** | **116,2** |
+| Pico cgroup (MiB) | **39,3** | 57,0 | **161,9** | **512,0** |
+| Espacio temporal / CBR | **0** | 0 | 0 | **0** |
+| CBZ / CBR | 1,000 | 1,026 | 1,072 | **1,113** |
+
+**Comparación con el método actual (extracción completa a disco, 1.10.8):**
+
+| Método | Válidas/26 | Tiempo P50/P90/máx (s) | RSS máx (MiB) | Cgroup P90/máx (MiB) | Temp. máx |
+|---|---:|---:|---:|---:|---:|
+| Extracción completa | **23** | 0,390 / 3,261 / **13,659** | 117,3 | **207,2 / 512,0** | 311 MB |
+| **Streaming `unar -o -`** | **23** | **1,628 / 8,229 / 633,247** | **116,2** | **161,9 / 512,0** | **0 B** |
+| Diferencia | 0 | **×4,2 P50 / ×2,5 P90 / ×46,3 máx** | −1,1 | P90 −45,3 / máx 0 | −311 MB |
+
+Casos concretos: `m01` (215,8 MiB sólido) tarda **633,25 s** frente a 13,66 s (×46,3) y sigue en
+**512 MiB**; `m05` tarda 9,15 s frente a 4,81 s (×1,9) y baja a 487 MiB; `m02` tarda 90,2 s
+frente a 3,64 s (×24,8). La memoria de cgroup P90 baja, pero el máximo no mejora y el tiempo se
+dispara en los sólidos y en los archivos con muchas entradas. El RSS es esencialmente el mismo.
+
+**Conclusión:** el prototipo **no es viable** como sustituto: `unar -o -` por índice funciona
+sintácticamente (m01/m05 se verifican) pero **no reduce el pico de 512 MiB**, multiplica el tiempo
+hasta 46× y añade un modo de truncado silencioso que obliga a mantener la comprobación de tamaño.
+La extracción completa a disco sigue siendo mejor en tiempo y igual de segura con la comprobación
+de manifiesto. **Propuesta:** conservar el método actual y, si se mantiene el contenedor de
+512 MiB, **limitar la conversión a CBR ≤ 150 MiB** (los dos casos que llegan a 512 MiB son 215,8
+y 296,6 MiB) o usar **1 GiB** para los grandes; no adoptar el streaming por índice.
+
 ## 5. Archivos compartidos (D3)
 
 Consultas de solo lectura a los clientes locales de la Pi:
@@ -149,7 +193,7 @@ La pasada histórica usa **unar 1.10.1** (`v1.10.1`; paquete Debian `1.10.1-2`) 
 
 - **Censo de formatos y sólidos por cabecera**: 4.531/4.545 legibles; 3.951 RAR4 (125 sólidos), 223 RAR5 (2 sólidos), 357 ZIP disfrazados; 0 cifrados; 14 ilegibles contados. Muestra `lsar`: 26/26 listables, 0 anidados.
 - **Muestra reproducible**: 26 copias, 943,5 MiB, hash original=copia, 4 sólidos y 4 RAR5; ZIP disfrazados incluidos.
-- **Tiempo/espacio/tamaño de las copias válidas (ambas versiones)**: P10/P90/máx de tiempo, RSS, espacio temporal y ratio CBZ/CBR dentro de los umbrales; con 1.10.1 P90 3,110 s y con 1.10.8 P90 3,261 s; pico cgroup P90 202,2/207,2 MiB; ratio y espacio temporal máx 1,113×.
+- **Tiempo/espacio/tamaño de las copias válidas (extracción completa, 1.10.1 y 1.10.8)**: P10/P90/máx de tiempo, RSS, espacio temporal y ratio CBZ/CBR dentro de los umbrales; con 1.10.1 P90 3,110 s y con 1.10.8 P90 3,261 s; pico cgroup P90 202,2/207,2 MiB; ratio y espacio temporal máx 1,113×. El streaming redujo el cgroup P90 a 161,9 MiB y el temporal a 0, pero falla el máximo/tiempo (ver §4ter).
 - **Verificación**: 23/23 conversiones válidas con nombres, tamaños, CRC y `testzip` correctos; originales intactos.
 - **D3**: 0 CBR/CBZ de la biblioteca en Transmission/aMule; 0/4.545 y 0/515.
 
@@ -157,6 +201,8 @@ La pasada histórica usa **unar 1.10.1** (`v1.10.1`; paquete Debian `1.10.1-2`) 
 
 - **Memoria de los casos grandes sin margen (persiste con 1.10.8)**: `m01` (215,8 MiB, sólido RAR4) y `m05` (296,6 MiB, RAR5) convierten y verifican, pero su **pico de cgroup es exactamente 512 MiB**, el límite del contenedor; el presupuesto pre-registrado de pico ≤ 384 MiB **no se cumple**. En el límite no hay margen para variaciones ni para el siguiente tamaño.
 - **`unar` falla en 3 de 24 RAR de la muestra** (`m07`, `m14`, `m16`) **también con 1.10.8**, pese a que `lsar -t` y `unrar t` dan resultados distintos; no se publica salida. La conversión con `unar` no cubre toda la biblioteca real sin una estrategia de fallback/validación.
+- **Prototipo streaming no viable**: `unar -o -` por índice multiplica el tiempo (P90 8,23 s; máximo 633 s; ×46 en `m01`), no reduce el pico de cgroup (512 MiB) y devuelve `rc=0` con truncado a 262.144 B en los mismos 3 casos; el guardián de tamaño lo evita, pero no hay ganancia de memoria y sí mucho más tiempo. Propuesta: mantener extracción completa y limitar a ≤150 MiB o usar 1 GiB para grandes.
+- **FAIL de memoria del método actual**: los dos CBR grandes del método de extracción completa alcanzan 512 MiB de cgroup; con 512 MiB no hay margen. La alternativa streaming no lo resuelve.
 
 ### NOT RUN
 
@@ -171,7 +217,7 @@ La pasada histórica usa **unar 1.10.1** (`v1.10.1`; paquete Debian `1.10.1-2`) 
 
 ## 9. Reproducción y límites
 
-- Scripts: `scripts/medicion/evaluacion_cnv/{censo_lsar.py,seleccionar_muestra.py,convertir_uno.py,medir_muestras.sh}`.
+- Scripts: `scripts/medicion/evaluacion_cnv/{censo_lsar.py,seleccionar_muestra.py,convertir_uno.py,medir_muestras.sh,convertir_streaming.py,medir_streaming.sh}`.
 - `censo_lsar.py` y `convertir_uno.py` se ejecutan dentro de contenedores desechables; `seleccionar_muestra.py` copia y verifica hash antes de medir. El temporal de conversión va a un directorio de disco fuera de la biblioteca (`~/eval-cnv/trabajo`).
 - La muestra está sesgada por la regla (sólidos, RAR5, típicos) y por la biblioteca de una sola instalación; no extrapola a toda la colección. Los ZIP disfrazados no se recomprimen. El barrido `lsar` completo no se completó (NOT RUN); el censo de formatos/sólidos/cifrados sí es completo por cabecera.
 - No se midió caché fría (los ficheros copiados estaban en el disco del sistema), ni concurrencia con Transmission/aMule/Kavita, ni la interfaz de usuario.
