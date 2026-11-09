@@ -186,6 +186,12 @@
           {% else %}
           <span class="muted archivo-razon" data-razon="{{ a.bloqueo }}">{{ razones_sin_boton[a.bloqueo] }}</span>
           {% endif %}
+          {% if a.formato == "cbr" %}
+          <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/convertir"
+             hx-get="/ui/series/{{ series.id }}/archivos/{{ a.id }}/convertir"
+             hx-target="#resultado-conversion-{{ a.id }}" hx-swap="innerHTML">Convertir a CBZ<span class="sr"> {{ a.nombre }}</span></a>
+          <div id="resultado-conversion-{{ a.id }}"></div>
+          {% endif %}
           {% include "_discrepancias_serie.html" %}
         </li>
         {% endfor %}
