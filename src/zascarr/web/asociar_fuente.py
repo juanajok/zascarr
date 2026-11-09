@@ -132,12 +132,15 @@ async def previsualizar(series_id: UUID, request: Request,
     serie = await _serie(db, series_id)
     secreto = get_settings().secret_key
     firmada = (verificar_token_asociacion(token, secreto) if secreto else None)
+    error = None
     if firmada is None or firmada.serie_id != str(series_id):
-        raise HTTPException(status_code=400, detail="La propuesta no es válida.")
-    if firmada.entidad != "serie" or firmada.kind == "saga":
-        raise HTTPException(status_code=400, detail="Esa ficha no es una serie.")
-    nombre = dict((f.value, n) for f, n, _ in _FUENTES).get(firmada.fuente, firmada.fuente)
+        error = "La propuesta no es válida: vuelve a buscar la ficha."
+    elif firmada.entidad != "serie" or firmada.kind == "saga":
+        error = "Esa ficha no es una serie y no se puede asociar."
+    nombre = (dict((f.value, n) for f, n, _ in _FUENTES).get(firmada.fuente, firmada.fuente)
+              if firmada is not None else "")
     return _sin_cache(templates.TemplateResponse(
         request, "asociar_fuente_previsualizar.html",
         {**_contexto(serie), "firmada": firmada, "nombre_fuente": nombre,
-         "token": token, "puede_asociar": tiene_identidad(serie)}))
+         "token": token, "puede_asociar": tiene_identidad(serie), "error": error},
+        status_code=400 if error else 200))

@@ -1,6 +1,7 @@
 """#129 A: comparación de solo lectura y rutas web. Sin red."""
 from __future__ import annotations
 
+import copy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -127,7 +128,7 @@ class TestModelo:
     async def test_no_escribe_nada_ni_muta_la_serie(self, fake_discovery):
         fake_discovery([_resultado()])
         serie = _serie()
-        antes = dict(serie.__dict__)
+        antes = copy.deepcopy(serie.__dict__)
         db = _DB(serie)
         await comparar(db, uuid4(), MetadataSource.GCD)
         assert db.added == [] and db.committed is False
@@ -324,6 +325,29 @@ class TestQAMaxYPrevisualizacion:
             f"/ui/series/{serie.id}/asociar/buscar", data={"fuente": "gcd"})
         assert 'aria-live="polite"' in r.text and "Ficha 123" in r.text
 
+    def test_el_token_maximo_real_no_da_422_en_la_preview(self, monkeypatch):
+        from zascarr.services.tokens_revision import (
+            MAX_ID_ASOCIACION,
+            MAX_SITIO_URL,
+            MAX_TITULO,
+            AsociacionFirmada,
+            crear_token_asociacion,
+        )
+        monkeypatch.setattr(web, "get_settings", lambda: SimpleNamespace(
+            secret_key="x" * 32, comicvine_enabled=True, anilist_enabled=True,
+            tebeosfera_enabled=True, gcd_enabled=True, comicvine_api_key="clave"))
+        serie = _serie()
+        ch = "\U0001F600"
+        url = "http://e.co/" + ch * (MAX_SITIO_URL - len("http://e.co/"))
+        token = crear_token_asociacion(AsociacionFirmada(
+            1, "serie", "collection", "tebeosfera", ch * MAX_ID_ASOCIACION,
+            ch * MAX_TITULO, 2006, url, "f" * 64,
+            "00000000-0000-4000-8000-000000000000", str(serie.id)), "x" * 32)
+        r = _web_client(FakeSession(serie)).post(
+            f"/ui/series/{serie.id}/asociar/previsualizar", data={"token": token})
+        assert r.status_code == 200, r.text
+        assert r.headers["cache-control"] == "no-store"
+
     def test_previsualizar_sin_escribir_y_sin_store(self, monkeypatch):
         from zascarr.services.tokens_revision import (
             AsociacionFirmada,
@@ -343,7 +367,7 @@ class TestQAMaxYPrevisualizacion:
             sitio_url="https://www.comics.org/series/123/", huella="f" * 64,
             operacion="00000000-0000-4000-8000-000000000000",
             serie_id=str(serie.id)), "x" * 32)
-        antes = dict(serie.__dict__)
+        antes = copy.deepcopy(serie.__dict__)
         r = _web_client(FakeSession(serie)).post(
             f"/ui/series/{serie.id}/asociar/previsualizar", data={"token": token})
         assert r.status_code == 200
