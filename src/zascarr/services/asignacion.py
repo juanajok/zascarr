@@ -58,6 +58,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from zascarr.models import EDITION_KIND_A_FORMAT, File, Issue, IssueFormat, MetadataSource, Series
+from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.importer import build_library_path
 from zascarr.services.review import MOTIVO_COLISION_EDICION, ReviewService
 from zascarr.utils.bloqueo_archivo import bloquear_archivo
@@ -584,6 +585,8 @@ class AsignacionService:
                 file.file_name = Path(op["destino"]).name
                 file.metadata_source = MetadataSource.MANUAL.value
                 await s.flush()
+                with contextlib.suppress(Exception):
+                    await aplicar_a_issue(s, issue, op["destino"])
                 if op["aprender_alias"]:
                     await ReviewService(s)._learn_alias(nombre_original, serie.id)
                 await s.execute(text("UPDATE asignacion_operaciones SET estado = 'confirmada', actualizada = now() "
