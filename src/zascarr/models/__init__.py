@@ -184,6 +184,29 @@ class ReadingStatus(enum.StrEnum):
     ON_HOLD   = "on_hold"
     DROPPED   = "dropped"
 
+class EstadoEvaluacion(enum.StrEnum):
+    """Estados de la evaluación de contexto (MIT-M7, #131 AC6)."""
+    PROPUESTA_DISPONIBLE = "propuesta_disponible"
+    FUERA_DE_ALCANCE = "fuera_de_alcance"
+    DESTINO_NO_DISPONIBLE = "destino_no_disponible"
+    CONFLICTO_DE_CORRESPONDENCIAS = "conflicto_de_correspondencias"
+    EVIDENCIA_INCOMPATIBLE = "evidencia_incompatible"
+    REGLA_DESACTUALIZADA = "regla_desactualizada"
+
+
+class TipoRegistro(enum.StrEnum):
+    """Tipo del registro local al que puede aplicar una correspondencia."""
+    ARCHIVO = "archivo"
+    SERIE = "serie"
+    PUBLICACION = "publicacion"
+
+
+class TipoDestino(enum.StrEnum):
+    """Destinos existentes admitidos por una correspondencia."""
+    SERIE = "serie"
+    PUBLICACION = "publicacion"
+
+
 class TipoSignificadoCarpeta(enum.StrEnum):
     """MIT-M7 (#130): qué significa una carpeta, no qué contiene."""
     AUTOR = "autor"
@@ -957,6 +980,58 @@ class DeclaracionCarpeta(Base):
     tipo_de_significado: Mapped[TipoSignificadoCarpeta] = mapped_column(
         Enum(TipoSignificadoCarpeta, name="tipo_significado_carpeta",
              values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    origen: Mapped[OrigenRegla] = mapped_column(
+        Enum(OrigenRegla, name="origen_regla",
+             values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    estado: Mapped[EstadoRegla] = mapped_column(
+        Enum(EstadoRegla, name="estado_regla",
+             values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    vigente_desde: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                    server_default=func.now())
+    vigente_hasta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    procedencia: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
+                                              server_default=text("'{}'::jsonb"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                server_default=func.now())
+
+
+class CorrespondenciaContexto(Base):
+    """MIT-M7 (#131): correspondencia local versionada carpeta → destino.
+
+    Referencia una versión exacta de una declaración; si la declaración cambia,
+    la correspondencia queda desactualizada y no se aplica. No crea, mueve ni
+    vincula nada: solo prepara propuestas.
+    """
+    __tablename__ = "correspondencias_contexto"
+    __table_args__ = (
+        UniqueConstraint("correspondencia_id", "version",
+                         name="uq_correspondencias_contexto_identidad_version"),
+        Index("uq_correspondencias_contexto_vigente", "correspondencia_id", unique=True,
+              postgresql_where=text("vigente_hasta IS NULL")),
+        Index("ix_correspondencias_contexto_declaracion", "declaracion_version_id"),
+        Index("ix_correspondencias_contexto_estado", "estado"),
+        Index("ix_correspondencias_contexto_destino", "destino_tipo", "destino_id"),
+        Index("ix_correspondencias_contexto_raiz", "contexto_raiz"),
+        Index("ix_correspondencias_contexto_vigente_hasta", "vigente_hasta"),
+    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    correspondencia_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    supersedes_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("correspondencias_contexto.id", ondelete="SET NULL"))
+    declaracion_version_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("declaraciones_carpeta.id", ondelete="RESTRICT"),
+        nullable=False)
+    contexto_raiz: Mapped[str] = mapped_column(Text, nullable=False)
+    incluir_descendientes: Mapped[bool] = mapped_column(Boolean, nullable=False,
+                                                        default=False, server_default=text("false"))
+    tipo_de_registro: Mapped[TipoRegistro | None] = mapped_column(
+        Enum(TipoRegistro, name="tipo_registro",
+             values_callable=lambda obj: [e.value for e in obj]))
+    destino_tipo: Mapped[TipoDestino] = mapped_column(
+        Enum(TipoDestino, name="tipo_destino",
+             values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    destino_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     origen: Mapped[OrigenRegla] = mapped_column(
         Enum(OrigenRegla, name="origen_regla",
              values_callable=lambda obj: [e.value for e in obj]), nullable=False)
