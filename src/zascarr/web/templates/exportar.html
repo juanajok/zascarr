@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Exportar colección y deseados — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/ajustes">Volver a Ajustes</a>
+<h1>Exportar colección y deseados</h1>
+<p class="subtitle">Descarga tu colección y tus deseados como hoja de cálculo CSV, sin rutas del disco.</p>
+
+<div class="aviso-panel">
+  {{ ui.aviso("amber", "Esto no es una copia de seguridad. La copia real es el volcado de la base de datos; puedes ver su estado en Estado.") }}
+</div>
+
+<section aria-labelledby="exportar-coleccion">
+  <h2 id="exportar-coleccion" class="seccion">Mi colección</h2>
+  <p class="caption">Una fila por archivo: serie, año, editorial, tradición, número, título, formato y estado.</p>
+  <p><a class="btn primary" href="/ui/exportar/coleccion.csv" download>Descargar colección (CSV)</a></p>
+</section>
+
+<section aria-labelledby="exportar-deseados">
+  <h2 id="exportar-deseados" class="seccion">Mis deseados</h2>
+  <p class="caption">Una fila por deseo: serie, número, estado, política de búsqueda y notas.</p>
+  <p><a class="btn ghost" href="/ui/exportar/deseados.csv" download>Descargar deseados (CSV)</a></p>
+</section>
+
+<details>
+  <summary>¿Qué incluye y qué no?</summary>
+  <p>La colección lleva una fila por archivo; el año es el del número y, si no consta, el de inicio de la serie. No incluye el estado «en papel» porque esa función (WK1) todavía no existe. Los deseados llevan una fila por deseo, con su estado y la política de búsqueda de la serie. No se incluyen rutas del disco ni se envía nada a ningún sitio.</p>
+</details>
+
+<p class="caption"><a href="/estado">Ver el estado de las copias de seguridad</a></p>
+{% endblock %}
