@@ -46,7 +46,8 @@ class _CV(_Cliente):
         self.detalle = {
             "cover_date": "1981-05-01", "description": "<p>Sinopsis <b>CV</b></p>",
             "person_credits": [{"name": "Ana", "role": "writer"},
-                               {"name": "Bob", "role": "penciler"}],
+                               {"name": "Bob", "role": "penciller"},
+                               {"name": "Cora", "role": "cover"}],
         }
 
     async def get_volume(self, _id):
@@ -62,18 +63,22 @@ class _Tebeosfera(_Cliente):
     def __init__(self, *, falla=False):
         self.llamadas = []
         self.falla = falla
+        self.esperas = []
         self.coleccion = SimpleNamespace(editorial="Editorial Tebeo", anio=1970,
-                                         url_ficha="https://tebeosfera/col")
+                                         url_ficha="https://tebeosfera/col",
+                                         numeros_slugs=("coleccion-1",))
         self.numero = SimpleNamespace(anio=1971, paginas=48)
 
-    async def get_collection(self, _slug):
+    async def get_collection(self, _slug, *, espera_max_s=None):
         self.llamadas.append("col")
+        self.esperas.append(espera_max_s)
         if self.falla:
             raise RuntimeError("caída")
         return self.coleccion
 
-    async def get_numero_de_coleccion(self, _slug, _numero):
+    async def get_numero(self, _slug, *, espera_max_s=None):
         self.llamadas.append("num")
+        self.esperas.append(espera_max_s)
         if self.falla:
             raise RuntimeError("caída")
         return self.numero
@@ -143,6 +148,9 @@ async def test_cv_construye_propuestas_y_no_escribe(entorno_base, tmp_path):
     assert por_tag["Publisher"].opciones[0].valor == "Editorial CV"
     assert por_tag["Summary"].opciones[0].valor == "Sinopsis CV"
     assert por_tag["Writer"].opciones[0].valor == "Ana"
+    assert por_tag["Penciller"].opciones[0].valor == "Bob"
+    assert por_tag["CoverArtist"].opciones[0].valor == "Cora"
+    assert por_tag["Year"].opciones[0].nivel.value == "numero"
     assert por_tag["Year"].estado.value == "proponer_sustitucion"   # 1981 de CV vs 1980
     estado_cv = next(e for e in resultado.estados
                      if e.fuente is FuenteComicInfo.COMIC_VINE)
@@ -223,3 +231,36 @@ async def test_cbr_no_toca_clientes(entorno_base, tmp_path):
             fabricas={FuenteComicInfo.COMIC_VINE: lambda _f: cv},
             actuales={}).proponer(f.id)
     assert r.campos == () and cv.llamadas == []
+
+
+@pytest.mark.asyncio
+async def test_tebeosfera_hace_dos_peticiones_y_pasa_espera(entorno_base, tmp_path):
+    sid, fid, _ruta = await _montar(entorno_base, tmp_path, cv=False, tebeo=True,
+                                    traicion=ComicTradition.FRANCO_BELGIAN)
+    tebeo = _Tebeosfera()
+    async with entorno_base.banco.fabrica() as s:
+        r = await PropuestasComicInfoService(
+            s, settings=_settings(tebeosfera_enabled=True),
+            fabricas={FuenteComicInfo.TEBEOSFERA: lambda _f: tebeo},
+            actuales={}).proponer(fid)
+    assert tebeo.llamadas == ["col", "num"]
+    assert tebeo.esperas == [3.0, 3.0]
+    assert r.peticiones == 2
+    por_tag = {c.tag: c for c in r.campos}
+    assert por_tag["PageCount"].opciones[0].valor == "48"
+
+
+@pytest.mark.asyncio
+async def test_anio_de_serie_conserva_nivel_serie_si_el_numero_no_tiene_fecha(entorno_base,
+                                                                              tmp_path):
+    sid, fid, _ruta = await _montar(entorno_base, tmp_path, cv=True)
+    cv = _CV()
+    cv.detalle = {"description": "Sin fecha", "person_credits": []}
+    async with entorno_base.banco.fabrica() as s:
+        r = await PropuestasComicInfoService(
+            s, settings=_settings(comicvine_enabled=True),
+            fabricas={FuenteComicInfo.COMIC_VINE: lambda _f: cv},
+            actuales={}).proponer(fid)
+    year = next(c for c in r.campos if c.tag == "Year")
+    assert year.opciones[0].valor == "1980"
+    assert year.opciones[0].nivel.value == "serie"

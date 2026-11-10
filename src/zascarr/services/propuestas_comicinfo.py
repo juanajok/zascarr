@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -140,6 +141,23 @@ def _anio(valor: object) -> int | None:
     return None
 
 
+_ALIAS_ROL = {
+    "penciller": "penciler",
+    "penciler": "penciler",
+    "cover": "cover_artist",
+    "cover_artist": "cover_artist",
+    "cover artist": "cover_artist",
+    "covers": "cover_artist",
+    "colorist": "colorist",
+    "colourist": "colorist",
+    "letterer": "letterer",
+    "editor": "editor",
+    "translator": "translator",
+    "writer": "writer",
+    "inker": "inker",
+}
+
+
 def _personas(detalle: Mapping[str, Any] | None) -> dict[str, list[str]]:
     """Roles crudos de CV → tags; no adivina roles desconocidos."""
     from zascarr.core.propuestas_comicinfo import RolAutor, role_a_tag
@@ -149,12 +167,25 @@ def _personas(detalle: Mapping[str, Any] | None) -> dict[str, list[str]]:
         if not isinstance(credito, Mapping):
             continue
         nombre = credito.get("name")
-        roles = str(credito.get("role") or "").lower().replace(" ", "_").split(",")
+        roles = str(credito.get("role") or "").lower().split(",")
         for rol in roles:
-            tag = role_a_tag(RolAutor(rol.strip())) if rol.strip() in RolAutor._value2member_map_ else None
+            limpio = _ALIAS_ROL.get(rol.strip().replace("_", " "), rol.strip().replace(" ", "_"))
+            tag = role_a_tag(RolAutor(limpio)) if limpio in RolAutor._value2member_map_ else None
             if tag and nombre:
                 por_tag.setdefault(tag, []).append(str(nombre))
     return por_tag
+
+
+def _slug_de_numero(slugs: object, numero: object) -> str | None:
+    """Slug de número enlazado en la colección (mismo criterio que el cliente)."""
+    try:
+        objetivo = str(int(numero))
+    except (TypeError, ValueError):
+        return None
+    for slug in slugs or ():
+        if re.search(rf"(?:^|[-_]){re.escape(objetivo)}$", str(slug)):
+            return str(slug)
+    return None
 
 
 class PropuestasComicInfoService:
@@ -339,10 +370,10 @@ class PropuestasComicInfoService:
         if fuente is FuenteComicInfo.TEBEOSFERA:
             if not presupuesto.cabe(fuente, 1):
                 return {}, gastadas
-            coleccion = await cliente.get_collection(str(identidad))
+            coleccion = await cliente.get_collection(str(identidad),
+                                                      espera_max_s=ESPERA_MAX_S)
             gastadas += 1
-            if not presupuesto.anotar(fuente, 1):
-                return {}, gastadas
+            presupuesto.anotar(fuente, 1)
             if coleccion is not None:
                 if getattr(coleccion, "editorial", None):
                     valores["Publisher"] = (coleccion.editorial, NivelDato.SERIE,
@@ -350,18 +381,21 @@ class PropuestasComicInfoService:
                 if getattr(coleccion, "anio", None) is not None:
                     valores["Year"] = (coleccion.anio, NivelDato.SERIE,
                                        getattr(coleccion, "url_ficha", None))
-            if getattr(issue, "issue_number", None):
+            if getattr(issue, "issue_number", None) and coleccion is not None:
                 if not presupuesto.cabe(fuente, 1):
                     return valores, gastadas
-                numero = await cliente.get_numero_de_coleccion(
-                    str(identidad), issue.issue_number)
-                gastadas += 1
-                presupuesto.anotar(fuente, 1)
-                if numero is not None:
-                    if getattr(numero, "anio", None) is not None:
-                        valores["Year"] = (numero.anio, NivelDato.NUMERO, None)
-                    if getattr(numero, "paginas", None) is not None:
-                        valores["PageCount"] = (numero.paginas, NivelDato.NUMERO, None)
+                slug_numero = _slug_de_numero(
+                    getattr(coleccion, "numeros_slugs", ()) or (), issue.issue_number)
+                if slug_numero is not None:
+                    numero = await cliente.get_numero(slug_numero,
+                                                      espera_max_s=ESPERA_MAX_S)
+                    gastadas += 1
+                    presupuesto.anotar(fuente, 1)
+                    if numero is not None:
+                        if getattr(numero, "anio", None) is not None:
+                            valores["Year"] = (numero.anio, NivelDato.NUMERO, None)
+                        if getattr(numero, "paginas", None) is not None:
+                            valores["PageCount"] = (numero.paginas, NivelDato.NUMERO, None)
             return valores, gastadas
 
         if fuente is FuenteComicInfo.GCD:
