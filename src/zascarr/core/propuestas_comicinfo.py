@@ -316,11 +316,16 @@ def campo_elegible(tag: str, fuente: FuenteComicInfo | None = None) -> bool:
 
 
 def crear_opcion(tag: str, valor: object, *, fuente: FuenteComicInfo,
-                 nivel: NivelDato, procedencia: str | None = None) -> OpcionPropuesta | None:
-    """Crea una opción solo si el campo está en la matriz de la fuente y el valor cumple."""
+                 nivel: NivelDato | None = None,
+                 procedencia: str | None = None) -> OpcionPropuesta | None:
+    """Crea una opción solo si el campo está en la matriz de la fuente y el valor cumple.
+
+    `nivel` explícito manda: `Year` de Comic Vine puede venir del número (cover_date) o de la
+    serie (start_year); no se debe etiquetar el año de serie como si fuera del número.
+    """
     if tag not in CAPACIDADES.get(fuente, {}) or tag in CAMPOS_IDENTIDAD:
         return None
-    if CAPACIDADES[fuente][tag] is not None:
+    if nivel is None:
         nivel = CAPACIDADES[fuente][tag]
     limpio, motivo = normalizar_valor(tag, valor)
     if limpio is None:
