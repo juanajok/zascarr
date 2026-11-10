@@ -10,9 +10,20 @@
   <p><strong>Alcance:</strong> {{ "Esta carpeta y sus subcarpetas" if c.incluir_descendientes else "Solo esta carpeta" }}</p>
 </div>
 {% if error %}<p class="declaracion-aviso" role="alert" tabindex="-1" autofocus>{{ error }}</p>{% endif %}
+<form method="get" action="/ui/pendientes/carpetas/correspondencias/cambiar/{{ c.correspondencia_id }}" class="declaracion-form">
+  <fieldset class="declaracion-fieldset"><legend>Buscar otro destino</legend>
+    <label class="declaracion-opcion"><input type="radio" name="tipo" value="serie" {% if tipo == "serie" %}checked{% endif %}> <span>Serie</span></label>
+    <label class="declaracion-opcion"><input type="radio" name="tipo" value="publicacion" {% if tipo == "publicacion" %}checked{% endif %}> <span>Publicación</span></label>
+    <div class="acciones-declaracion"><input type="search" name="q" value="{{ q }}" placeholder="Título…"><button class="btn ghost sm" type="submit">Buscar</button></div>
+  </fieldset>
+</form>
 <form method="post" action="/ui/pendientes/carpetas/correspondencias/cambiar/{{ c.correspondencia_id }}" class="declaracion-form">
-  <input type="hidden" name="destino_tipo" value="{{ c.destino_tipo.value }}">
-  <input type="hidden" name="destino_id" value="{{ c.destino_id }}">
+  <fieldset class="declaracion-fieldset"><legend>Destino</legend>
+    <label class="declaracion-opcion"><input type="radio" name="destino" value="{{ c.destino_tipo.value }}|{{ c.destino_id }}" checked> <span>Actual: {{ destino.texto if destino else "Destino no disponible" }}</span></label>
+    {% for d in resultados %}
+    <label class="declaracion-opcion"><input type="radio" name="destino" value="{{ d.tipo.value }}|{{ d.id }}"> <span>{{ d.texto }}</span></label>
+    {% endfor %}
+  </fieldset>
   <label for="tipo-registro">Se aplica a</label>
   <select id="tipo-registro" name="tipo_registro">
     <option value="">Cualquier registro</option>
