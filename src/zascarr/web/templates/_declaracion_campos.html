@@ -1,0 +1,40 @@
+{#- Campos compartidos para declarar/cambiar (130-b). Sin preselección al crear. -#}
+<fieldset class="declaracion-fieldset">
+  <legend>¿Qué significa esta carpeta?</legend>
+  <label class="declaracion-opcion">
+    <input type="radio" name="tipo" value="autor"
+           {% if tipo_actual == "autor" %}checked{% endif %} required>
+    <span><strong>Por autor</strong>
+      <small>La carpeta reúne obras de un autor. Orienta búsquedas y filtros; no elige ni crea una serie.</small>
+    </span>
+  </label>
+  <label class="declaracion-opcion">
+    <input type="radio" name="tipo" value="publicacion"
+           {% if tipo_actual == "publicacion" %}checked{% endif %} required>
+    <span><strong>Por publicación</strong>
+      <small>La carpeta corresponde a una publicación. Puede proponer su serie o publicación; no la confirma ni vincula archivos.</small>
+    </span>
+  </label>
+</fieldset>
+
+<fieldset class="declaracion-fieldset">
+  <legend>Alcance</legend>
+  <label class="declaracion-check">
+    <input type="checkbox" name="incluir" value="1" id="incluir"
+           {% if incluir_actual %}checked{% endif %} aria-describedby="alcance-ayuda">
+    <span>Incluir también las subcarpetas</span>
+  </label>
+  <p class="caption" id="alcance-ayuda">
+    Sin esta opción: solo esta carpeta; las subcarpetas quedan fuera.<br>
+    Con esta opción: esta carpeta y todas sus subcarpetas, también los archivos que aparezcan después.
+  </p>
+  <details>
+    <summary>Qué alcanza y qué no</summary>
+    <ul class="caption">
+      <li>No alcanza a carpetas hermanas ni a la carpeta de arriba.</li>
+      <li>No sigue una carpeta que se renombra o se mueve: la ruta es la identidad.</li>
+      <li>No reinterpreta lo ya vinculado ni cambia series, archivos o vínculos existentes.</li>
+      <li>Los archivos futuros que caigan dentro se interpretan con esta declaración.</li>
+    </ul>
+  </details>
+</fieldset>

@@ -2075,6 +2075,26 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 @media (prefers-reduced-motion: reduce) { .comicinfo-espera::before { animation: none; } }
 
+
+/* MIT-M7 130-b: declarar el significado de una carpeta. */
+.declaracion-form { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; max-width: 46rem; }
+.declaracion-fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.declaracion-fieldset legend { font-weight: 800; padding: 0; margin-bottom: 2px; }
+.declaracion-opcion, .declaracion-check { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 8px; border: 1px solid var(--ink-faint); border-radius: var(--radius-panel); cursor: pointer; }
+.declaracion-opcion input, .declaracion-check input { width: 24px; height: 24px; flex: 0 0 auto; margin-top: 2px; }
+.declaracion-opcion small { display: block; font-weight: 400; margin-top: 2px; }
+.declaracion-aviso { border-left: 4px solid var(--ink); padding-left: 10px; }
+.declaracion-version { font-size: .875rem; font-variant-numeric: tabular-nums; }
+.declaracion-ruta { overflow-wrap: anywhere; word-break: break-word; }
+.declaracion-resumen { border: 1px solid var(--ink-faint); border-radius: var(--radius-panel); padding: 10px 12px; margin: 10px 0; }
+.declaracion-efectos { border-left: 4px solid var(--amber, var(--ink)); padding-left: 10px; }
+.acciones-declaracion { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.acciones-declaracion form { margin: 0; }
+.declaraciones-lista { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.declaracion-card { border: 1px solid var(--ink-faint); border-radius: var(--radius-panel); padding: 12px; }
+.declaracion-chips { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.declaracion-card h3 { margin: 0 0 6px; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
