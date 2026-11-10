@@ -5,6 +5,8 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from zascarr.services.comicinfo import _leer_comicinfo
 
 
@@ -49,3 +51,31 @@ def test_xml_enorme_no_se_parsea(tmp_path):
     xml = "<ComicInfo><Summary>" + ("x" * (1024 * 1024 + 10)) + "</Summary></ComicInfo>"
     info, estado, avisos, _, _ = _leer_comicinfo(_cbz(tmp_path / "e.cbz", xml))
     assert info is None and estado == "ilegible" and avisos
+
+
+@pytest.mark.asyncio
+async def test_importer_llama_siempre_aunque_no_haya_tags_ni_generos(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from zascarr.services import importer as modulo
+
+    llamada = AsyncMock()
+    monkeypatch.setattr(modulo, "aplicar_a_issue", llamada)
+    monkeypatch.setattr(modulo, "aplicar_comicinfo", AsyncMock(
+        return_value=SimpleNamespace(avisos=())))
+    class _Nested:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return False
+
+    servicio = object.__new__(modulo.Importer)
+    servicio._db = SimpleNamespace(
+        get=AsyncMock(return_value=SimpleNamespace(id="i")),
+        begin_nested=lambda: _Nested())
+    result = SimpleNamespace(series_id="s", issue_id="i")
+    tr = SimpleNamespace(comic_info=SimpleNamespace(tags=[], genres=[], warnings=[]))
+    await modulo.Importer._aplicar_comicinfo(servicio, result, tr, Path("/tmp/x.cbz"))
+    llamada.assert_awaited_once()

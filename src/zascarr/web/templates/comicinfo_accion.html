@@ -12,9 +12,17 @@
   <div><dt>{{ textos.omitidos }}</dt><dd>{{ resultado.omitidos }}</dd></div>
   <div><dt>{{ textos.ilegibles }}</dt><dd>{{ resultado.ilegibles }}</dd></div>
 </dl>
-{% else %}
-<p>{{ textos.resumen.format(n=cbz, cbr=cbr) }}</p>
+<p class="caption">{{ resultado.total }} archivos CBZ; {{ resultado.cbr }} CBR no legibles.</p>
+{% if resultado.siguiente is not none %}
 <form method="post" action="/ui/biblioteca/comicinfo">
+  <input type="hidden" name="offset" value="{{ resultado.siguiente }}">
+  <button class="btn ghost" type="submit">{{ textos.seguir }}</button>
+</form>
+{% endif %}
+{% else %}
+<p>{{ textos.resumen.format(n=cbz, archivo="archivo" if cbz == 1 else "archivos", plural="" if cbz == 1 else "s", cbr=cbr) }}</p>
+<form method="post" action="/ui/biblioteca/comicinfo">
+  <input type="hidden" name="offset" value="{{ offset or 0 }}">
   <button class="btn primary" type="submit">{{ textos.ejecutar }}</button>
 </form>
 {% endif %}

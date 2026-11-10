@@ -6,8 +6,10 @@ Recibe SOLO el token. Hace, en UNA transacción: volver a comprobar todo, vincul
 motivo lo que no (impedimentos PREVISTOS) y guardar el informe INMUTABLE de la operación. Cualquier fallo
 inesperado revierte todo el intento: ni vínculos, ni `Issue`s, ni informe.
 
-Lo que NO hace: no mueve, copia, renombra ni borra ficheros; no lee su contenido ni calcula hashes (solo `stat`);
-no usa la red; no aprende alias; no desvincula; no reasigna jamás un archivo ya vinculado a otra serie o número.
+Lo que NO hace: no mueve, copia, renombra ni borra ficheros; **no lee su contenido ni calcula hashes**
+(solo `stat`); no aplica ComicInfo (BL-INF2 lo hace después la importación, la adopción o la acción
+explícita de la biblioteca, que sí leen el archivo); no usa la red; no aprende alias; no desvincula;
+no reasigna jamás un archivo ya vinculado a otra serie o número.
 
 Orden de bloqueos (el mismo que el alta y su deshacer): operación › [título] › serie (`FOR SHARE`) › archivos
 (`FOR UPDATE`, por id) › claves `(serie, número)` en orden › filas de `Issue` (`FOR UPDATE`).
@@ -27,7 +29,6 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-import structlog
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -44,7 +45,6 @@ from zascarr.models import (
     Series,
     VinculacionOperacion,
 )
-from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.tokens_revision import (
     TTL_SEGUNDOS,
     ArchivoFirmado,
@@ -53,8 +53,6 @@ from zascarr.services.tokens_revision import (
     verificar_token_vinculacion,
 )
 from zascarr.services.vinculacion_previa import _comprobar_origenes
-
-logger = structlog.get_logger()
 
 VERSION_RESULTADO = 1
 #: Retención del informe: 24 h Y token caducado (lo que tarde más). Purga acotada, solo de esta tabla.
@@ -401,13 +399,8 @@ class VinculacionDeArchivos:
             {"i": issue_id, "v": json.dumps(vinculo, ensure_ascii=False), "f": a.id})
         if r.rowcount != 1:
             raise RuntimeError("la fila bloqueada no se pudo vincular")
-        # BL-INF2: el ComicInfo se aplica DESPUÉS de vincular; un XML roto no tumba el enlace.
-        try:
-            issue = await self._db.get(Issue, issue_id)
-            if issue is not None:
-                await aplicar_a_issue(self._db, issue, f.file_path)
-        except Exception:  # noqa: BLE001 — leer un XML ajeno no puede tumbar la vinculación
-            logger.warning("vinculacion.comicinfo_fallido")
+        # BL-INF2: vincular NO lee el CBZ (garantía del contrato). El ComicInfo se aplica
+        # después desde la importación, la adopción o la acción explícita de la biblioteca.
 
     # ── Informe ──────────────────────────────────────────────────────────────────────────────────
 

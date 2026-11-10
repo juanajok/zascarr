@@ -23,7 +23,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -550,19 +550,21 @@ async def sugerir_etiquetas(
 
 
 @router.get("/comicinfo", response_class=HTMLResponse)
-async def comicinfo_accion(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+async def comicinfo_accion(request: Request, offset: int = 0,
+                           db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     cbz, cbr = await archivos_para_leer(db)
     respuesta = templates.TemplateResponse(
         request, "comicinfo_accion.html",
         {"textos": TEXTOS_COMICINFO, "cbz": cbz, "cbr": cbr,
-         "resultado": None})
+         "offset": max(0, offset), "resultado": None})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 
 
 @router.post("/comicinfo", response_class=HTMLResponse)
-async def comicinfo_ejecutar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    resultado = await leer_archivos_vinculados(db)
+async def comicinfo_ejecutar(request: Request, offset: int = Form(default=0),
+                             db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    resultado = await leer_archivos_vinculados(db, offset=max(0, offset))
     respuesta = templates.TemplateResponse(
         request, "comicinfo_accion.html",
         {"textos": TEXTOS_COMICINFO, "cbz": resultado.total, "cbr": resultado.cbr,
