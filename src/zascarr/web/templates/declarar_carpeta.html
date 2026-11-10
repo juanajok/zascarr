@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Declarar esta carpeta — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="{{ volver }}">← Volver a «Pendientes por carpeta»</a></p>
+<h1>Declarar esta carpeta</h1>
+<p>Elige qué significa esta carpeta y hasta dónde alcanza.</p>
+<p><strong>Ruta relativa</strong><br><span class="declaracion-ruta">{{ ruta }}</span></p>
+<p class="caption">Se toma desde la raíz de tu biblioteca. La ruta no se cambia aquí.</p>
+{% if error %}<p class="declaracion-aviso" role="alert">{{ error }}</p>{% endif %}
+
+{% if resumen.actual_local %}
+<section class="declaracion-resumen" aria-labelledby="ya-declarada">
+  <h2 id="ya-declarada" class="titulo-frase">
+    {% if resumen.actual.estado.value == "retirada" %}La última declaración de esta carpeta está retirada.
+    {% elif resumen.actual.estado.value == "desactivada" %}Esta carpeta tiene una declaración desactivada.
+    {% else %}Esta carpeta ya tiene una declaración activa.{% endif %}
+  </h2>
+  {% if resumen.actual.estado.value == "retirada" %}
+  <p>Puedes crear una declaración nueva; la retirada se conserva en el historial.</p>
+  {% else %}
+  <p>{{ resumen.actual.tipo_de_significado.value | replace("autor", "Por autor") | replace("publicacion", "Por publicación") }} · {{ resumen.actual.alcance }} · Versión {{ resumen.actual.version }}</p>
+  <p class="acciones-declaracion">
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/cambiar/{{ resumen.actual.id }}">Cambiar declaración</a>
+    {% if resumen.actual.estado.value == "activa" %}
+    <form method="post" action="/ui/pendientes/carpetas/desactivar/{{ resumen.actual.id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
+    {% else %}
+    <form method="post" action="/ui/pendientes/carpetas/reactivar/{{ resumen.actual.id }}"><button class="btn ghost sm" type="submit">Reactivar</button></form>
+    {% endif %}
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/retirar/{{ resumen.actual.id }}">Retirar</a>
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/contexto">Ver en Contexto declarado</a>
+  </p>
+  {% endif %}
+</section>
+
+{% endif %}
+
+{% if resumen.hay_importacion %}
+<div class="declaracion-aviso" role="status">
+  <strong>Esta carpeta tiene una declaración de importación; no es una decisión local.</strong>
+  <p>Se puede crear una local; la importada no se sobrescribe y queda como alternativa visible.</p>
+</div>
+{% endif %}
+
+{% if not resumen.actual_local or resumen.actual_local.estado.value == "retirada" %}
+<form method="post" action="/ui/pendientes/carpetas/declarar" class="declaracion-form">
+  <input type="hidden" name="clave" value="{{ clave }}">
+  {% with tipo_actual = tipo, incluir_actual = incluir %}{% include "_declaracion_campos.html" %}{% endwith %}
+  <div class="declaracion-efectos">
+    <strong>Efectos previstos</strong>
+    <p>Solo orientará cómo se interpretan las próximas evaluaciones de esta carpeta.</p>
+    <p>{{ mensaje_efectos }}</p>
+    <p>No cambia lo ya decidido ni reinterpreta el pasado.</p>
+  </div>
+  <button class="btn primary" type="submit">Guardar declaración</button>
+</form>
+{% endif %}
+{% endblock %}

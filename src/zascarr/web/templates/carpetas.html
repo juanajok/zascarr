@@ -27,6 +27,7 @@
 </div>
 {%- endmacro %}
 <h1>Pendientes por carpeta</h1>
+<p><a class="btn ghost sm" href="/ui/pendientes/carpetas/contexto">Contexto declarado</a></p>
 
 {% if error %}
 <p class="subtitle">No se han podido leer los pendientes.</p>
@@ -168,6 +169,11 @@
     <a class="btn ghost sm" href="/ui/pendientes/carpetas/asistente?clave={{ g.clave | urlencode }}{{ contexto_query }}">Elegir la serie de esta carpeta</a>
     <small>No se crea ni se asigna nada hasta que confirmes.</small>
     {% endif %}
+  </p>
+
+  <p class="carpeta-accion">
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/declarar?clave={{ g.clave | urlencode }}">Declarar esta carpeta</a>
+    <small>No crea series, no mueve archivos, no vincula nada; solo orienta próximas interpretaciones. No cambia lo ya decidido.</small>
   </p>
 
   <details class="carpeta-detalle">
