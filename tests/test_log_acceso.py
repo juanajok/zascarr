@@ -365,6 +365,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "leido",
     # BL-INF2 (#448): desplazamiento de la acción explícita por tandas.
     "offset",
+    # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
+    "desde",
 })
 
 
