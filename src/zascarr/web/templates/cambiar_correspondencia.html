@@ -14,7 +14,7 @@
   <fieldset class="declaracion-fieldset"><legend>Buscar otro destino</legend>
     <label class="declaracion-opcion"><input type="radio" name="tipo" value="serie" {% if tipo == "serie" %}checked{% endif %}> <span>Serie</span></label>
     <label class="declaracion-opcion"><input type="radio" name="tipo" value="publicacion" {% if tipo == "publicacion" %}checked{% endif %}> <span>Publicación</span></label>
-    <div class="acciones-declaracion"><input type="search" name="q" value="{{ q }}" placeholder="Título…"><button class="btn ghost sm" type="submit">Buscar</button></div>
+    <div class="acciones-declaracion"><input type="search" name="q" value="{{ q }}" placeholder="Título…" aria-label="Buscar serie o publicación por título"><button class="btn ghost sm" type="submit">Buscar</button></div>
   </fieldset>
 </form>
 <form method="post" action="/ui/pendientes/carpetas/correspondencias/cambiar/{{ c.correspondencia_id }}" class="declaracion-form">
