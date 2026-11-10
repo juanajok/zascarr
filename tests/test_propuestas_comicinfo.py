@@ -153,3 +153,29 @@ def test_mapeo_de_roles():
     assert role_a_tag(CreatorRole.WRITER) == "Writer"
     assert role_a_tag(CreatorRole.TRANSLATOR) == "Translator"
     assert role_a_tag("otro") is None
+
+
+def test_el_modulo_es_puro_sin_orm_config_ni_red(monkeypatch):
+    """#610: importar el módulo NO debe cargar models/database/config/httpx/clientes."""
+    import os
+    import subprocess
+    import sys
+
+    codigo = """
+import sys
+import zascarr.core.propuestas_comicinfo
+prohibidos = [
+    "zascarr.models", "zascarr.database", "zascarr.config", "httpx",
+    "zascarr.services.comic_vine", "zascarr.services.anilist",
+    "zascarr.services.tebeosfera", "zascarr.services.gcd",
+    "zascarr.services.discovery",
+]
+cargados = sorted(m for m in prohibidos if m in sys.modules)
+assert not cargados, cargados
+"""
+    env = dict(os.environ)
+    raiz = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    env["PYTHONPATH"] = os.path.join(raiz, "src") + os.pathsep + env.get("PYTHONPATH", "")
+    proc = subprocess.run([sys.executable, "-c", codigo], cwd=raiz, env=env,
+                          capture_output=True, text=True, timeout=60)
+    assert proc.returncode == 0, proc.stderr

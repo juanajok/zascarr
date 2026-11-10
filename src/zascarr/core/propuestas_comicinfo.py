@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from zascarr.core.comicinfo_write import CAMPOS_GESTIONADOS
-from zascarr.models import ComicTradition, CreatorRole
 from zascarr.services.estados_fuentes import (
     ESTADOS_DE_FUENTE,
     FUENTE_APAGADA,
@@ -34,6 +33,34 @@ MAX_PUBLISHER = 255
 MAX_LISTA = 500
 YEAR_MIN, YEAR_MAX = 1000, 2999
 PAGECOUNT_MIN, PAGECOUNT_MAX = 1, 10000
+
+
+class TradicionComicInfo(StrEnum):
+    """Espejo **puro** de `models.ComicTradition` (no importamos ORM/config).
+
+    Aceptamos también el enum del modelo en las funciones: su valor es el mismo string.
+    """
+    AMERICAN = "american"
+    FRANCO_BELGIAN = "franco_belgian"
+    MANGA = "manga"
+    TEBEO = "tebeo"
+    FUMETTI = "fumetti"
+    MANHWA = "manhwa"
+    MANHUA = "manhua"
+    BRITISH = "british"
+    OTHER = "other"
+
+
+class RolAutor(StrEnum):
+    """Espejo **puro** de `models.CreatorRole` para el mapeo de roles."""
+    WRITER = "writer"
+    PENCILER = "penciler"
+    INKER = "inker"
+    COLORIST = "colorist"
+    LETTERER = "letterer"
+    COVER_ARTIST = "cover_artist"
+    EDITOR = "editor"
+    TRANSLATOR = "translator"
 
 
 class FuenteComicInfo(StrEnum):
@@ -98,12 +125,15 @@ CAPACIDADES: dict[FuenteComicInfo, dict[str, NivelDato]] = {
 }
 
 #: Tradiciones que admite cada fuente (ADR 0002 / enricher; GCD para fumetti/BD antigua).
-TRADICIONES: dict[FuenteComicInfo, frozenset[ComicTradition]] = {
-    FuenteComicInfo.COMIC_VINE: frozenset({ComicTradition.AMERICAN, ComicTradition.BRITISH}),
-    FuenteComicInfo.ANILIST: frozenset({ComicTradition.MANGA, ComicTradition.MANHWA,
-                                        ComicTradition.MANHUA}),
-    FuenteComicInfo.TEBEOSFERA: frozenset({ComicTradition.TEBEO, ComicTradition.FRANCO_BELGIAN}),
-    FuenteComicInfo.GCD: frozenset({ComicTradition.FUMETTI, ComicTradition.FRANCO_BELGIAN}),
+TRADICIONES: dict[FuenteComicInfo, frozenset[TradicionComicInfo]] = {
+    FuenteComicInfo.COMIC_VINE: frozenset({TradicionComicInfo.AMERICAN,
+                                           TradicionComicInfo.BRITISH}),
+    FuenteComicInfo.ANILIST: frozenset({TradicionComicInfo.MANGA, TradicionComicInfo.MANHWA,
+                                        TradicionComicInfo.MANHUA}),
+    FuenteComicInfo.TEBEOSFERA: frozenset({TradicionComicInfo.TEBEO,
+                                           TradicionComicInfo.FRANCO_BELGIAN}),
+    FuenteComicInfo.GCD: frozenset({TradicionComicInfo.FUMETTI,
+                                    TradicionComicInfo.FRANCO_BELGIAN}),
 }
 
 #: Tags de autoría que comparten el lock `issue.locked_fields = ["credits"]`.
@@ -247,12 +277,23 @@ def normalizar_valor(tag: str, valor: object) -> tuple[str | None, str | None]:
     return texto, None
 
 
-def fuentes_para_tradicion(tradicion: ComicTradition) -> tuple[FuenteComicInfo, ...]:
-    return tuple(f for f, admitidas in TRADICIONES.items() if tradicion in admitidas)
+def _tradicion(tradicion: TradicionComicInfo | str) -> TradicionComicInfo | None:
+    try:
+        return TradicionComicInfo(getattr(tradicion, "value", tradicion))
+    except ValueError:
+        return None
+
+
+def fuentes_para_tradicion(
+        tradicion: TradicionComicInfo | str) -> tuple[FuenteComicInfo, ...]:
+    valor = _tradicion(tradicion)
+    if valor is None:
+        return ()
+    return tuple(f for f, admitidas in TRADICIONES.items() if valor in admitidas)
 
 
 def fuentes_elegibles(encendidas: Iterable[FuenteComicInfo | str],
-                      tradicion: ComicTradition) -> tuple[FuenteComicInfo, ...]:
+                      tradicion: TradicionComicInfo | str) -> tuple[FuenteComicInfo, ...]:
     """Fuentes encendidas Y admitidas por la tradición. No instancia ningún cliente."""
     activas: set[FuenteComicInfo] = set()
     for fuente in encendidas:
@@ -347,25 +388,26 @@ def resultado_fuente(fuente: FuenteComicInfo, estado: str, *, peticiones: int = 
 
 
 def sin_peticiones(encendidas: Iterable[FuenteComicInfo | str],
-                   tradicion: ComicTradition) -> tuple[ResultadoFuente, ...]:
+                   tradicion: TradicionComicInfo | str) -> tuple[ResultadoFuente, ...]:
     """Estados de las fuentes que no se consultan, con cero peticiones."""
     activas = fuentes_elegibles(encendidas, tradicion)
     return tuple(ResultadoFuente(f, FUENTE_APAGADA, 0) for f in FuenteComicInfo
                  if f not in activas)
 
 
-def role_a_tag(role: CreatorRole) -> str | None:
+def role_a_tag(role: RolAutor | str) -> str | None:
     """Rol de #448 → tag ComicInfo; el plan de B6 usa el mismo mapa."""
+    normalizado = getattr(role, "value", role)
     return {
-        CreatorRole.WRITER: "Writer",
-        CreatorRole.PENCILER: "Penciller",
-        CreatorRole.INKER: "Inker",
-        CreatorRole.COLORIST: "Colorist",
-        CreatorRole.LETTERER: "Letterer",
-        CreatorRole.COVER_ARTIST: "CoverArtist",
-        CreatorRole.EDITOR: "Editor",
-        CreatorRole.TRANSLATOR: "Translator",
-    }.get(role)
+        RolAutor.WRITER.value: "Writer",
+        RolAutor.PENCILER.value: "Penciller",
+        RolAutor.INKER.value: "Inker",
+        RolAutor.COLORIST.value: "Colorist",
+        RolAutor.LETTERER.value: "Letterer",
+        RolAutor.COVER_ARTIST.value: "CoverArtist",
+        RolAutor.EDITOR.value: "Editor",
+        RolAutor.TRANSLATOR.value: "Translator",
+    }.get(str(normalizado))
 
 
 __all__ = [
@@ -374,6 +416,7 @@ __all__ = [
     "PAGECOUNT_MIN", "PAGECOUNT_MAX", "FuenteComicInfo", "NivelDato", "EstadoPropuesta",
     "OpcionPropuesta", "PropuestaCampo", "ResultadoFuente", "Presupuesto",
     "CAPACIDADES", "TRADICIONES", "CAMPOS_IDENTIDAD", "NOMBRES_FUENTE", "TAGS_AUTOR",
+    "TradicionComicInfo", "RolAutor",
     "normalizar_texto", "normalizar_valor", "fuentes_para_tradicion", "fuentes_elegibles",
     "campos_elegibles", "campo_elegible", "crear_opcion", "construir_propuesta",
     "estado_es_vacio", "estado_es_error", "resultado_fuente", "sin_peticiones", "role_a_tag",
