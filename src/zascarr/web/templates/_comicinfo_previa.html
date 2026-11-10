@@ -23,7 +23,7 @@
     <p class="caption">Añade datos de tus fuentes al plan, campo a campo. No se guarda nada hasta elegir.</p>
     <button class="btn ghost" hx-get="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo/fuentes"
             hx-target="#comicinfo-fuentes" hx-swap="outerHTML"
-            hx-indicator="#comicinfo-fuentes-cargando" hx-disabled-elt="this">Buscar datos en las fuentes</button>
+            hx-indicator="#comicinfo-fuentes-cargando">Buscar datos en las fuentes</button>
     <span id="comicinfo-fuentes-cargando" class="caption htmx-indicator" role="status">
       Consultando las fuentes…</span>
     {% else %}
