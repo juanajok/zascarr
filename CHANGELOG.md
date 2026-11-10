@@ -50,6 +50,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Cambiado
 
+- **Convertir un CBR ahora se ve: espera y cierre claros.** Mientras dura la conversión se muestra
+  «Convirtiendo… no cierres esta página» con una rueda de espera y el botón se desactiva (en el
+  lote, «Convirtiendo la tanda…»). Al terminar, el cierre dice qué archivo se convirtió, el cambio
+  de tamaño y el aviso si parecía compartido, con «Deshacer» y «Volver a la serie»; si no se pudo,
+  explica el motivo y ofrece «Reintentar».
 - **`scripts/update.sh` exige indicar la rama** (`--rama main` o `BRANCH=<rama>`). Antes instalaba por su cuenta la rama en la que
   estuviera el repo —en la práctica, la cabeza de `main`— y cualquiera con acceso podía actualizar sin decidir qué versión instalaba.
   Sin rama, se detiene **antes de tocar nada** (ni copia de seguridad, ni referencia de rescate, ni Docker) y explica el comando.
