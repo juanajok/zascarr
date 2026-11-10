@@ -205,6 +205,7 @@ async def test_fallo_parcial_no_borra_las_demas_fuentes(entorno_base, tmp_path):
             actuales={}).proponer(fid)
     estados = {e.fuente: e for e in r.estados}
     assert estados[FuenteComicInfo.TEBEOSFERA].estado == FUENTE_FALLO_TRANSITORIO
+    assert r.peticiones == 3          # 1 intento Tebeosfera + 2 GCD
     assert estados[FuenteComicInfo.GCD].estado == FUENTE_OK
     assert {c.tag for c in r.campos} >= {"Year", "Publisher"}
     assert "Editorial GCD" in {o.valor for c in r.campos for o in c.opciones}

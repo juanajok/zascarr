@@ -272,6 +272,9 @@ class PropuestasComicInfoService:
                                       procedencia=procedencia)
                 if opcion is not None and opcion.valor:
                     opciones.setdefault(tag, []).append(opcion)
+                elif opcion is not None and opcion.motivo:
+                    avisos.append(f"Dato descartado para {tag} de "
+                                  f"{_ETIQUETA_FUENTE[fuente]}: {opcion.motivo}.")
         campos: list[PropuestaCampo] = []
         for tag in sorted(opciones):
             campos.append(construir_propuesta(tag, actuales.get(tag), opciones[tag]))
@@ -326,6 +329,8 @@ class PropuestasComicInfoService:
             return FUENTE_FALLO_TRANSITORIO, {}, gastadas
         if not valores:
             return FUENTE_SIN_RESULTADOS, {}, gastadas
+        if presupuesto.agotado:
+            return FUENTE_LIMITE_DE_CORTESIA, valores, gastadas
         return FUENTE_OK, valores, gastadas
 
     async def _pedir(self, fuente, cliente, serie: Series, issue: Issue, identidad: object,
@@ -343,21 +348,21 @@ class PropuestasComicInfoService:
         if fuente is FuenteComicInfo.COMIC_VINE:
             if not presupuesto.cabe(fuente, 1):
                 return {}, gastadas
-            volumen = await cliente.get_volume(int(identidad))
             gastadas += 1
-            if not presupuesto.anotar(fuente, 1):
-                return {}, gastadas
+            presupuesto.anotar(fuente, 1)
+            volumen = await cliente.get_volume(int(identidad))
             if volumen is not None:
                 valores["Publisher"] = (getattr(volumen, "publisher", None),
                                         NivelDato.SERIE, getattr(volumen, "site_url", None))
                 if getattr(volumen, "start_year", None) is not None:
-                    valores["Year"] = (volumen.start_year, NivelDato.SERIE, None)
+                    valores["Year"] = (volumen.start_year, NivelDato.SERIE,
+                                       getattr(volumen, "site_url", None))
             if getattr(issue, "comic_vine_id", None):
                 if not presupuesto.cabe(fuente, 1):
                     return valores, gastadas
-                detalle = await cliente.get_issue_detail(int(issue.comic_vine_id))
                 gastadas += 1
                 presupuesto.anotar(fuente, 1)
+                detalle = await cliente.get_issue_detail(int(issue.comic_vine_id))
                 if isinstance(detalle, Mapping):
                     if detalle.get("cover_date"):
                         valores["Year"] = (_anio(detalle["cover_date"]), NivelDato.NUMERO, None)
@@ -370,10 +375,10 @@ class PropuestasComicInfoService:
         if fuente is FuenteComicInfo.TEBEOSFERA:
             if not presupuesto.cabe(fuente, 1):
                 return {}, gastadas
-            coleccion = await cliente.get_collection(str(identidad),
-                                                      espera_max_s=ESPERA_MAX_S)
             gastadas += 1
             presupuesto.anotar(fuente, 1)
+            coleccion = await cliente.get_collection(str(identidad),
+                                                      espera_max_s=ESPERA_MAX_S)
             if coleccion is not None:
                 if getattr(coleccion, "editorial", None):
                     valores["Publisher"] = (coleccion.editorial, NivelDato.SERIE,
@@ -387,24 +392,25 @@ class PropuestasComicInfoService:
                 slug_numero = _slug_de_numero(
                     getattr(coleccion, "numeros_slugs", ()) or (), issue.issue_number)
                 if slug_numero is not None:
-                    numero = await cliente.get_numero(slug_numero,
-                                                      espera_max_s=ESPERA_MAX_S)
                     gastadas += 1
                     presupuesto.anotar(fuente, 1)
+                    numero = await cliente.get_numero(slug_numero,
+                                                      espera_max_s=ESPERA_MAX_S)
                     if numero is not None:
                         if getattr(numero, "anio", None) is not None:
-                            valores["Year"] = (numero.anio, NivelDato.NUMERO, None)
+                            valores["Year"] = (numero.anio, NivelDato.NUMERO,
+                                               getattr(numero, "url_ficha", None))
                         if getattr(numero, "paginas", None) is not None:
-                            valores["PageCount"] = (numero.paginas, NivelDato.NUMERO, None)
+                            valores["PageCount"] = (numero.paginas, NivelDato.NUMERO,
+                                                    getattr(numero, "url_ficha", None))
             return valores, gastadas
 
         if fuente is FuenteComicInfo.GCD:
             if not presupuesto.cabe(fuente, 1):
                 return {}, gastadas
-            serie_gcd = await cliente.get_series(int(identidad))
             gastadas += 1
-            if not presupuesto.anotar(fuente, 1):
-                return {}, gastadas
+            presupuesto.anotar(fuente, 1)
+            serie_gcd = await cliente.get_series(int(identidad))
             if serie_gcd is not None:
                 if getattr(serie_gcd, "year_began", None) is not None:
                     valores["Year"] = (serie_gcd.year_began, NivelDato.SERIE, None)
@@ -412,9 +418,9 @@ class PropuestasComicInfoService:
                 if editorial:
                     if not presupuesto.cabe(fuente, 1):
                         return valores, gastadas
-                    nombre = await cliente.get_publisher(editorial)
                     gastadas += 1
                     presupuesto.anotar(fuente, 1)
+                    nombre = await cliente.get_publisher(editorial)
                     if nombre:
                         valores["Publisher"] = (nombre, NivelDato.SERIE, None)
             return valores, gastadas
@@ -426,9 +432,9 @@ class PropuestasComicInfoService:
             return {}, gastadas
         if not presupuesto.cabe(fuente, 1):
             return {}, gastadas
-        candidato = await metodo(int(identidad))
         gastadas += 1
         presupuesto.anotar(fuente, 1)
+        candidato = await metodo(int(identidad))
         if candidato is None:
             return {}, gastadas
         if getattr(candidato, "start_year", None) is not None:
