@@ -22,7 +22,7 @@
   <p><strong>Destino:</strong> {{ destino.texto if destino else "Serie o publicación de la biblioteca" }}{% if destino and destino.url %} · <a href="{{ destino.url }}">Ver ficha</a>{% endif %}</p>
   <p><strong>Alcance:</strong> {{ "Esta carpeta y sus subcarpetas" if resultado.alcance.get("incluir_descendientes") else "Solo esta carpeta" }}</p>
   <p><strong>Se evalúan:</strong> archivos</p>
-  <p><strong>La regla se aplica a:</strong> {{ resultado.alcance.get("tipo_de_registro") or "Cualquier registro" }}</p>
+  <p><strong>La regla se aplica a:</strong> {% set tr = resultado.alcance.get("tipo_de_registro") %}{{ {"archivo": "Archivos", "serie": "Series", "publicacion": "Publicaciones"}.get(tr, "Cualquier registro") }}</p>
 </div>
 <p><strong>Esto es una propuesta, no una decisión.</strong> No se ha vinculado ni cambiado nada. La confirmación de la serie o publicación es otro paso.</p>
 <details>
@@ -49,8 +49,8 @@
   <li class="declaracion-card">
     <p><strong>Regla {{ loop.index }}</strong> · Versión {{ regla.version }}</p>
     <p><strong>Destino:</strong> {{ regla.destino.texto if regla.destino else "Destino no disponible" }}</p>
-    <p class="caption">Alcance: {{ regla.contexto_raiz if regla.contexto_raiz is defined else ruta }}</p>
-    <details><summary>Identidad y versión de la regla</summary><p class="declaracion-ruta">Código: {{ regla.correspondencia_id }}</p><p>Origen: {{ regla.origen }}</p></details>
+    <p class="caption">Alcance: {{ "Esta carpeta y sus subcarpetas" if regla.incluir_descendientes else "Solo esta carpeta" }} · Ruta: {{ regla.contexto_raiz }}</p>
+    <details><summary>Identidad y versión de la regla</summary><p class="declaracion-ruta">Código: {{ regla.correspondencia_id }}</p><p>Origen: {{ "Local" if regla.origen == "local" else "Importación" }}</p></details>
   </li>
   {% endfor %}
 </ul>

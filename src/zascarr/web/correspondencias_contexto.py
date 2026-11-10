@@ -136,6 +136,11 @@ async def lista(request: Request, aviso: str = Query(default=""),
         "url_lista": _url_lista()})
 
 
+async def _hay_correspondencia_activa(db: AsyncSession, raiz: str) -> bool:
+    filas = await svc.listar(db)
+    return any(c.contexto_raiz == raiz and c.estado is EstadoRegla.ACTIVA for c in filas)
+
+
 async def _declaracion_activa(db: AsyncSession, declaracion_id: UUID) -> DeclaracionCarpeta | None:
     fila = await db.get(DeclaracionCarpeta, declaracion_id)
     if fila is None or fila.estado is not EstadoRegla.ACTIVA:
@@ -159,6 +164,7 @@ async def crear_form(request: Request, declaracion: UUID, tipo: str = Query(defa
         "decl": decl, "tipo": tipo, "q": q, "tipo_registro": tipo_registro,
         "resultados": resultados, "mensaje_efectos": MSG_EFECTOS,
         "alcance": "Esta carpeta y sus subcarpetas" if decl.incluir_descendientes else "Solo esta carpeta",
+        "aviso_conflicto": await _hay_correspondencia_activa(db, decl.contexto_raiz),
         "error": "", "url_lista": _url_lista(), "url_crear": _url_crear(decl.id)})
 
 
@@ -196,7 +202,7 @@ async def crear_post(request: Request, declaracion: UUID = Form(...),
             "decl": decl, "tipo": tipo, "q": "", "tipo_registro": tipo_registro,
             "resultados": [], "mensaje_efectos": MSG_EFECTOS,
             "alcance": "Esta carpeta y sus subcarpetas" if decl.incluir_descendientes else "Solo esta carpeta",
-            "error": "Elige si el destino es una serie o una publicación.", "url_lista": _url_lista(),
+            "error": "Elige si el destino es una serie o una publicación.", "url_lista": _url_lista(), "aviso_conflicto": await _hay_correspondencia_activa(db, decl.contexto_raiz),
             "url_crear": _url_crear(decl.id)})
     if not destino_id:
         return _respuesta(request, "crear_correspondencia.html", {
@@ -204,7 +210,7 @@ async def crear_post(request: Request, declaracion: UUID = Form(...),
             "resultados": [],
             "mensaje_efectos": MSG_EFECTOS,
             "alcance": "Esta carpeta y sus subcarpetas" if decl.incluir_descendientes else "Solo esta carpeta",
-            "error": "Elige una serie o publicación de la lista.", "url_lista": _url_lista(),
+            "error": "Elige una serie o publicación de la lista.", "url_lista": _url_lista(), "aviso_conflicto": await _hay_correspondencia_activa(db, decl.contexto_raiz),
             "url_crear": _url_crear(decl.id)})
     try:
         did = UUID(destino_id)
@@ -234,38 +240,84 @@ async def crear_post(request: Request, declaracion: UUID = Form(...),
 
 @router.get("/correspondencias/cambiar/{correspondencia_id}", response_class=HTMLResponse)
 async def cambiar_form(request: Request, correspondencia_id: UUID,
+                       tipo: str = Query(default=""), q: str = Query(default=""),
                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     actual = await _actual(db, correspondencia_id)
     if actual is None:
         return _error(request, "Esa correspondencia ya no existe. Vuelve a «Correspondencias».")
+    if actual.estado is EstadoRegla.RETIRADA:
+        return _respuesta(request, "correspondencia_error.html", {
+            "mensaje": "Una correspondencia retirada no se puede cambiar.",
+            "volver": _url_lista()}, status_code=409)
     destino = (await _destinos_por_id(db, {actual.destino_id})).get(actual.destino_id)
+    resultados = await _buscar(db, tipo, q.strip()) if tipo in ("serie", "publicacion") and q.strip() else []
     return _respuesta(request, "cambiar_correspondencia.html", {
-        "c": actual, "destino": destino, "error": "",
+        "c": actual, "destino": destino, "error": "", "tipo": tipo, "q": q,
+        "resultados": resultados,
         "mensaje_efectos": MSG_EFECTOS, "url_lista": _url_lista()})
 
 
 @router.post("/correspondencias/cambiar/{correspondencia_id}", response_class=HTMLResponse)
 async def cambiar_post(request: Request, correspondencia_id: UUID,
+                       destino: str = Form(default=""),
                        destino_tipo: str = Form(default=""),
                        destino_id: str = Form(default=""),
                        tipo_registro: str = Form(default=""),
+                       confirmado: str = Form(default="0"),
                        db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     actual = await _actual(db, correspondencia_id)
     if actual is None:
         return _error(request, "Esa correspondencia ya no existe. Vuelve a «Correspondencias».")
-    try:
-        did = UUID(destino_id) if destino_id else None
-    except (ValueError, TypeError):
-        return _error(request, "El destino elegido ya no existe. Elige otra serie o publicación.")
-    try:
-        await svc.cambiar(db, correspondencia_id,
-                          destino_tipo=destino_tipo or None,
-                          destino_id=did,
-                          tipo_de_registro=tipo_registro or None)
-    except svc.CorrespondenciaError as exc:
-        destino = (await _destinos_por_id(db, {actual.destino_id})).get(actual.destino_id)
+    if actual.estado is EstadoRegla.RETIRADA:
+        return _respuesta(request, "correspondencia_error.html", {
+            "mensaje": "Una correspondencia retirada no se puede cambiar.",
+            "volver": _url_lista()}, status_code=409)
+    if destino:
+        try:
+            tipo, _, raw_id = destino.partition("|")
+            did = UUID(raw_id)
+        except (ValueError, TypeError):
+            return _error(request, "El destino elegido ya no existe. Elige otra serie o publicación.")
+    else:
+        tipo = destino_tipo or actual.destino_tipo.value
+        try:
+            did = UUID(destino_id) if destino_id else actual.destino_id
+        except (ValueError, TypeError):
+            return _error(request, "El destino elegido ya no existe. Elige otra serie o publicación.")
+    tipo_reg = tipo_registro or None
+    cambia_destino = tipo != actual.destino_tipo.value or did != actual.destino_id
+    if cambia_destino and confirmado != "1":
+        nuevo = (await _destinos_por_id(db, {did})).get(did)
+        if nuevo is None:
+            return _error(request, "El destino elegido ya no existe. Elige otra serie o publicación.")
+        return _respuesta(request, "confirmar_cambio_correspondencia.html", {
+            "c": actual, "destino": nuevo, "tipo": tipo,
+            "tipo_registro": tipo_registro, "url_lista": _url_lista(),
+            "mensaje_efectos": MSG_EFECTOS})
+    sin_cambio = (not cambia_destino
+                  and (tipo_reg is None and actual.tipo_de_registro is None
+                       or tipo_reg == (actual.tipo_de_registro.value if actual.tipo_de_registro else None)))
+    if sin_cambio:
+        destino_vm = (await _destinos_por_id(db, {actual.destino_id})).get(actual.destino_id)
         return _respuesta(request, "cambiar_correspondencia.html", {
-            "c": actual, "destino": destino, "error": str(exc),
+            "c": actual, "destino": destino_vm, "error": "No has cambiado nada.",
+            "tipo": actual.destino_tipo.value, "q": "", "resultados": [],
+            "mensaje_efectos": MSG_EFECTOS, "url_lista": _url_lista()})
+    try:
+        actualizada = await svc.cambiar(db, correspondencia_id, destino_tipo=tipo,
+                                        destino_id=did, tipo_de_registro=(
+                                            tipo_reg if tipo_reg is not None else None))
+    except svc.CorrespondenciaError as exc:
+        destino_vm = (await _destinos_por_id(db, {actual.destino_id})).get(actual.destino_id)
+        return _respuesta(request, "cambiar_correspondencia.html", {
+            "c": actual, "destino": destino_vm, "error": str(exc),
+            "tipo": tipo, "q": "", "resultados": [],
+            "mensaje_efectos": MSG_EFECTOS, "url_lista": _url_lista()})
+    if actualizada.version == actual.version:
+        destino_vm = (await _destinos_por_id(db, {actual.destino_id})).get(actual.destino_id)
+        return _respuesta(request, "cambiar_correspondencia.html", {
+            "c": actual, "destino": destino_vm, "error": "No has cambiado nada.",
+            "tipo": actual.destino_tipo.value, "q": "", "resultados": [],
             "mensaje_efectos": MSG_EFECTOS, "url_lista": _url_lista()})
     return _redir(f"{_url_lista()}?aviso=actualizada")
 
@@ -273,8 +325,13 @@ async def cambiar_post(request: Request, correspondencia_id: UUID,
 @router.post("/correspondencias/desactivar/{correspondencia_id}", response_class=HTMLResponse)
 async def desactivar(request: Request, correspondencia_id: UUID,
                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    if await _actual(db, correspondencia_id) is None:
+    actual = await _actual(db, correspondencia_id)
+    if actual is None:
         return _error(request, "Esa correspondencia ya no existe. Vuelve a «Correspondencias».")
+    if actual.estado is EstadoRegla.RETIRADA:
+        return _respuesta(request, "correspondencia_error.html", {
+            "mensaje": "Una correspondencia retirada no se puede desactivar.",
+            "volver": _url_lista()}, status_code=409)
     await svc.desactivar(db, correspondencia_id)
     return _redir(f"{_url_lista()}?aviso=desactivada")
 
@@ -282,12 +339,23 @@ async def desactivar(request: Request, correspondencia_id: UUID,
 @router.post("/correspondencias/reactivar/{correspondencia_id}", response_class=HTMLResponse)
 async def reactivar(request: Request, correspondencia_id: UUID,
                     db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    if await _actual(db, correspondencia_id) is None:
+    actual = await _actual(db, correspondencia_id)
+    if actual is None:
         return _error(request, "Esa correspondencia ya no existe. Vuelve a «Correspondencias».")
+    if actual.estado is EstadoRegla.RETIRADA:
+        return _respuesta(request, "correspondencia_error.html", {
+            "mensaje": "Una correspondencia retirada no se puede reactivar.",
+            "volver": _url_lista()}, status_code=409)
     try:
         await svc.activar(db, correspondencia_id)
+    except svc.CorrespondenciaRetiradaError:
+        return _respuesta(request, "correspondencia_error.html", {
+            "mensaje": "Una correspondencia retirada no se puede reactivar.",
+            "volver": _url_lista()}, status_code=409)
     except svc.CorrespondenciaError:
-        return _error(request, "La declaración ya no está activa; no se puede reactivar esta correspondencia.")
+        return _respuesta(request, "correspondencia_error.html", {
+            "mensaje": "La declaración ya no está activa; no se puede reactivar esta correspondencia.",
+            "volver": _url_lista()}, status_code=409)
     return _redir(f"{_url_lista()}?aviso=reactivada")
 
 
@@ -297,6 +365,10 @@ async def retirar_form(request: Request, correspondencia_id: UUID,
     actual = await _actual(db, correspondencia_id)
     if actual is None:
         return _error(request, "Esa correspondencia ya no existe. Vuelve a «Correspondencias».")
+    if actual.estado is EstadoRegla.RETIRADA:
+        return _respuesta(request, "correspondencia_error.html", {
+            "mensaje": "Una correspondencia retirada no se puede retirar otra vez.",
+            "volver": _url_lista()}, status_code=409)
     destino = (await _destinos_por_id(db, {actual.destino_id})).get(actual.destino_id)
     return _respuesta(request, "retirar_correspondencia.html", {
         "c": actual, "destino": destino, "url_lista": _url_lista()})
