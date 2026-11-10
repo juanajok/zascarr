@@ -699,3 +699,18 @@ class TestEtiquetasBiblioteca:
         assert "noir" in r.text and "34 series" in r.text
         assert "Añadir" in r.text and "Excluir" in r.text
         assert "etiquetas=noir" in r.text and "etiquetas=-noir" in r.text
+
+
+    def test_la_tarjeta_muestra_el_progreso_de_lectura(self):
+        series = make_series("Batman")
+        session = FakeSession([
+            FakeExecResult([]),
+            FakeExecResult(1),
+            FakeExecResult([(series, 3, 8)]),   # (serie, leídos, total)
+        ])
+        with use_fake_session(session) as client:
+            r = client.get("/ui/biblioteca")
+        assert r.status_code == 200
+        assert 'role="progressbar"' in r.text
+        assert "38% leído · 3 de 8" in r.text
+        assert 'aria-valuenow="38"' in r.text

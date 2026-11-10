@@ -836,6 +836,9 @@ button[type="submit"].btn-sugerencia {
 /* V1: el estado no se transmite solo por color — «lo tienes» lleva ✓ y «te falta» borde
    discontinuo, aunque los dos colores se confundan. */
 .issue-chip.issue-present::before { content: "✓ "; }
+/* BL-INF10: lectura visible sin etiquetas; el texto `sr` lo dice también sin color. */
+.issue-chip.issue-present.issue-leido { background: var(--ink); color: var(--paper); }
+.issue-chip.issue-present.issue-leyendo { background: var(--amber-bg); color: var(--ink); }
 .issue-chip.issue-missing {
   background: var(--paper); color: var(--ink-faint);
   border-style: dashed;
@@ -894,6 +897,16 @@ button[type="submit"].btn-sugerencia {
   scroll-margin-block-start: 16px;
 }
 .library-card .portada { border-bottom: 3px solid var(--ink); }
+/* BL-INF10: progreso de lectura bajo la portada de la tarjeta. */
+.library-card .library-card-progreso { padding: 7px 11px 0; background: var(--paper-2); }
+.barra-lectura {
+  height: 9px; background: var(--paper); border: 2px solid var(--ink);
+  border-radius: var(--radius-pill); overflow: hidden;
+}
+.barra-lectura-relleno { display: block; height: 100%; background: var(--ok-solid);
+  color: var(--on-ok-solid); }   /* sin texto: el color declarado satisface la prueba de contraste */
+.barra-lectura-texto { margin: 4px 0 0; font-size: .875rem; color: var(--ink-soft); }
+
 .library-card-body { padding: 9px 11px 12px; }
 .library-card-title {
   font-size: .88rem; font-weight: 700;
