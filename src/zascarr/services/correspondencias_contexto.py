@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from zascarr.models import (
     CorrespondenciaContexto,
     DeclaracionCarpeta,
+    EstadoEvaluacion,
     EstadoRegla,
     Issue,
     OrigenRegla,
@@ -30,6 +31,7 @@ from zascarr.models import (
 from zascarr.services.declaraciones_carpeta import normalizar_ruta
 
 MAX_VERSIONES = 10000
+_SIN_VALOR = object()
 
 
 class CorrespondenciaError(Exception):
@@ -196,8 +198,9 @@ async def _crear_fila(db: AsyncSession, *, correspondencia_id: UUID, version: in
                       supersedes_id: UUID | None, decl: DeclaracionCarpeta,
                       tipo_registro: TipoRegistro | None, destino_tipo: TipoDestino,
                       destino_id: UUID, origen: OrigenRegla, estado: EstadoRegla,
-                      ahora: datetime, procedencia: dict) -> CorrespondenciaContexto:
-    if decl.tipo_de_significado is TipoSignificadoCarpeta.AUTOR:
+                      ahora: datetime, procedencia: dict,
+                      validar_evidencia: bool = True) -> CorrespondenciaContexto:
+    if validar_evidencia and decl.tipo_de_significado is TipoSignificadoCarpeta.AUTOR:
         raise EvidenciaIncompatibleError(
             "Una carpeta «Por autor» no puede tener una correspondencia a un destino único.")
     fila = CorrespondenciaContexto(
@@ -253,17 +256,25 @@ async def cambiar(db: AsyncSession, correspondencia_id: UUID, *,
                   declaracion_version_id: UUID | None = None,
                   destino_tipo: TipoDestino | str | None = None,
                   destino_id: UUID | None = None,
-                  tipo_de_registro: TipoRegistro | str | None = None,
+                  tipo_de_registro: TipoRegistro | str | None | object = _SIN_VALOR,
                   ahora: datetime | None = None) -> CorrespondenciaVista:
     actual = await _actual(db, correspondencia_id)
     if actual.estado is EstadoRegla.RETIRADA:
         raise CorrespondenciaRetiradaError("Una correspondencia retirada no se puede cambiar.")
     decl = await _declaracion(db, declaracion_version_id or actual.declaracion_version_id)
     await _exigir_declaracion_vigente(db, decl)
+    decl_actual = await db.get(DeclaracionCarpeta, actual.declaracion_version_id)
+    if (decl_actual is not None
+            and (decl.declaracion_id != decl_actual.declaracion_id
+                 or decl.contexto_raiz != decl_actual.contexto_raiz)):
+        raise EvidenciaIncompatibleError(
+            "La raíz y la identidad de la declaración no se cambian en una correspondencia; crea otra.")
     tipo = _tipo_destino(destino_tipo) if destino_tipo is not None else actual.destino_tipo
     destino = destino_id if destino_id is not None else actual.destino_id
-    tipo_reg = (_tipo_registro(tipo_de_registro) if tipo_de_registro is not None
-                else actual.tipo_de_registro)
+    if tipo_de_registro is _SIN_VALOR:
+        tipo_reg = actual.tipo_de_registro
+    else:
+        tipo_reg = _tipo_registro(tipo_de_registro)
     await _validar_destino(db, tipo, destino)
     sin_cambios = (decl.id == actual.declaracion_version_id and tipo is actual.destino_tipo
                    and destino == actual.destino_id and tipo_reg is actual.tipo_de_registro)
@@ -276,7 +287,8 @@ async def cambiar(db: AsyncSession, correspondencia_id: UUID, *,
         supersedes_id=actual.id, decl=decl, tipo_registro=tipo_reg, destino_tipo=tipo,
         destino_id=destino, origen=actual.origen,
         estado=actual.estado if actual.estado is not EstadoRegla.RETIRADA else EstadoRegla.DESACTIVADA,
-        ahora=momento, procedencia=dict(actual.procedencia or {}))
+        ahora=momento, procedencia=dict(actual.procedencia or {}),
+        validar_evidencia=actual.estado is EstadoRegla.ACTIVA)
     await db.commit()
     await db.refresh(nueva)
     return CorrespondenciaVista.de(nueva)
@@ -296,7 +308,7 @@ async def desactivar(db: AsyncSession, correspondencia_id: UUID, *, ahora: datet
         supersedes_id=actual.id, decl=decl, tipo_registro=actual.tipo_de_registro,
         destino_tipo=actual.destino_tipo, destino_id=actual.destino_id,
         origen=actual.origen, estado=EstadoRegla.DESACTIVADA, ahora=momento,
-        procedencia=dict(actual.procedencia or {}))
+        procedencia=dict(actual.procedencia or {}), validar_evidencia=False)
     await db.commit()
     await db.refresh(nueva)
     return CorrespondenciaVista.de(nueva)
@@ -337,7 +349,7 @@ async def retirar(db: AsyncSession, correspondencia_id: UUID, *, ahora: datetime
         supersedes_id=actual.id, decl=decl, tipo_registro=actual.tipo_de_registro,
         destino_tipo=actual.destino_tipo, destino_id=actual.destino_id,
         origen=actual.origen, estado=EstadoRegla.RETIRADA, ahora=momento,
-        procedencia=dict(actual.procedencia or {}))
+        procedencia=dict(actual.procedencia or {}), validar_evidencia=False)
     await db.commit()
     await db.refresh(nueva)
     return CorrespondenciaVista.de(nueva)
@@ -372,6 +384,23 @@ async def historial(db: AsyncSession, correspondencia_id: UUID) -> list[Correspo
     return [CorrespondenciaVista.de(f) for f in filas]
 
 
+async def _version_actual_declaracion(db: AsyncSession, version_id: UUID) -> DeclaracionCarpeta | None:
+    """Versión vigente (o la última) de la declaración estable de una fila."""
+    fila = await db.get(DeclaracionCarpeta, version_id)
+    if fila is None:
+        return None
+    actual = (await db.execute(
+        select(DeclaracionCarpeta).where(
+            DeclaracionCarpeta.declaracion_id == fila.declaracion_id,
+            DeclaracionCarpeta.vigente_hasta.is_(None)))).scalar_one_or_none()
+    if actual is not None:
+        return actual
+    return (await db.execute(
+        select(DeclaracionCarpeta)
+        .where(DeclaracionCarpeta.declaracion_id == fila.declaracion_id)
+        .order_by(DeclaracionCarpeta.version.desc()).limit(1))).scalar_one_or_none()
+
+
 def _regla_dict(c: CorrespondenciaContexto) -> dict:
     return {"correspondencia_id": str(c.correspondencia_id), "version": c.version,
             "origen": c.origen.value, "destino_tipo": c.destino_tipo.value,
@@ -379,8 +408,15 @@ def _regla_dict(c: CorrespondenciaContexto) -> dict:
 
 
 async def evaluar(db: AsyncSession, registro: RegistroContextual, *,
-                  ahora: datetime | None = None) -> ResultadoEvaluacion:
-    """Evalúa una sola regla aplicable; no escribe ni crea nada."""
+                  ahora: datetime | None = None,
+                  retenida: Propuesta | None = None) -> ResultadoEvaluacion:
+    """Evalúa una sola regla aplicable; no escribe ni crea nada.
+
+    `retenida` valida una propuesta guardada contra la identidad y versión
+    actuales; si ya no es la vigente, devuelve `regla_desactualizada`.
+    """
+    if retenida is not None:
+        return await validar_propuesta(db, retenida)
     try:
         tipo = TipoRegistro(registro.tipo)
     except (TypeError, ValueError):
@@ -396,8 +432,7 @@ async def evaluar(db: AsyncSession, registro: RegistroContextual, *,
             DeclaracionCarpeta.estado == EstadoRegla.ACTIVA))).scalars().all()
     corr_actuales = (await db.execute(
         select(CorrespondenciaContexto).where(
-            CorrespondenciaContexto.vigente_hasta.is_(None),
-            CorrespondenciaContexto.estado == EstadoRegla.ACTIVA))).scalars().all()
+            CorrespondenciaContexto.vigente_hasta.is_(None)))).scalars().all()
 
     validas: list[tuple[CorrespondenciaContexto, DeclaracionCarpeta]] = []
     desactualizadas: list[CorrespondenciaContexto] = []
@@ -406,6 +441,9 @@ async def evaluar(db: AsyncSession, registro: RegistroContextual, *,
         if not cubre(c.contexto_raiz, c.incluir_descendientes, carpeta):
             continue
         if c.tipo_de_registro is not None and c.tipo_de_registro is not tipo:
+            continue
+        if c.estado is not EstadoRegla.ACTIVA:
+            desactualizadas.append(c)
             continue
         decl = await db.get(DeclaracionCarpeta, c.declaracion_version_id)
         if decl is None:
@@ -428,32 +466,35 @@ async def evaluar(db: AsyncSession, registro: RegistroContextual, *,
         if incompatibles and not desactualizadas:
             c = incompatibles[0]
             return ResultadoEvaluacion(
-                "evidencia_incompatible",
+                EstadoEvaluacion.EVIDENCIA_INCOMPATIBLE,
                 "La correspondencia no es coherente con su declaración.",
                 correspondencia_id=c.correspondencia_id, version_de_regla=c.version,
                 destino_tipo=c.destino_tipo, destino_id=c.destino_id,
                 reglas_involucradas=(_regla_dict(c),))
         if desactualizadas:
             c = desactualizadas[0]
+            decl_actual = await _version_actual_declaracion(db, c.declaracion_version_id)
             return ResultadoEvaluacion(
-                "regla_desactualizada",
-                "La declaración de esta correspondencia ya no es la vigente.",
+                EstadoEvaluacion.REGLA_DESACTUALIZADA,
+                "La declaración o la propia correspondencia ya no es la vigente.",
                 correspondencia_id=c.correspondencia_id, version_de_regla=c.version,
+                declaracion_id=decl_actual.declaracion_id if decl_actual else None,
+                version_declaracion=(decl_actual.version if decl_actual else None),
                 destino_tipo=c.destino_tipo, destino_id=c.destino_id,
                 reglas_involucradas=(_regla_dict(c),))
-        return ResultadoEvaluacion("fuera_de_alcance",
+        return ResultadoEvaluacion(EstadoEvaluacion.FUERA_DE_ALCANCE,
                                    "Ninguna declaración de carpeta cubre este registro.")
 
     locales = [(c, d) for c, d in validas if c.origen is OrigenRegla.LOCAL]
     importadas = [(c, d) for c, d in validas if c.origen is OrigenRegla.IMPORTACION]
     candidatas = locales if locales else importadas
     if len(candidatas) > 1:
+        destinos = {c.destino_id for c, _ in candidatas}
+        motivo = ("Hay varias correspondencias vigentes que proponen destinos distintos."
+                  if len(destinos) > 1 else
+                  "Hay varias correspondencias vigentes para esta carpeta y no se elige ninguna.")
         return ResultadoEvaluacion(
-            "conflicto_de_correspondencias",
-            "Hay varias correspondencias vigentes que proponen destinos distintos.",
-            correspondencia_id=candidatas[0][0].correspondencia_id,
-            version_de_regla=candidatas[0][0].version,
-            destino_tipo=candidatas[0][0].destino_tipo, destino_id=candidatas[0][0].destino_id,
+            EstadoEvaluacion.CONFLICTO_DE_CORRESPONDENCIAS, motivo,
             reglas_involucradas=tuple(_regla_dict(c) for c, _ in candidatas),
             conflicto_visible=tuple(_regla_dict(c) for c, _ in validas))
     c, decl = candidatas[0]
@@ -462,13 +503,13 @@ async def evaluar(db: AsyncSession, registro: RegistroContextual, *,
         otro_modelo = Issue if c.destino_tipo is TipoDestino.SERIE else Series
         if await db.get(otro_modelo, c.destino_id) is not None:
             return ResultadoEvaluacion(
-                "evidencia_incompatible",
+                EstadoEvaluacion.EVIDENCIA_INCOMPATIBLE,
                 "El destino existe, pero no es del tipo que declara la correspondencia.",
                 correspondencia_id=c.correspondencia_id, version_de_regla=c.version,
                 destino_tipo=c.destino_tipo, destino_id=c.destino_id,
                 reglas_involucradas=(_regla_dict(c),))
         return ResultadoEvaluacion(
-            "destino_no_disponible",
+            EstadoEvaluacion.DESTINO_NO_DISPONIBLE,
             "La correspondencia existe, pero su destino ya no está disponible.",
             correspondencia_id=c.correspondencia_id, version_de_regla=c.version,
             declaracion_id=decl.declaracion_id, version_declaracion=decl.version,
@@ -488,7 +529,7 @@ async def evaluar(db: AsyncSession, registro: RegistroContextual, *,
         origen=c.origen, precedencia_aplicada=c.origen.value,
         evidencia={"declaracion_version_id": str(decl.id), "version_declaracion": decl.version})
     return ResultadoEvaluacion(
-        "propuesta_disponible",
+        EstadoEvaluacion.PROPUESTA_DISPONIBLE,
         "Hay una correspondencia vigente para esta carpeta.",
         propuesta=propuesta, correspondencia_id=c.correspondencia_id,
         version_de_regla=c.version, declaracion_id=decl.declaracion_id,
@@ -497,3 +538,54 @@ async def evaluar(db: AsyncSession, registro: RegistroContextual, *,
         reglas_involucradas=(_regla_dict(c),),
         precedencia_aplicada=c.origen.value,
         conflicto_visible=tuple(_regla_dict(x) for x, _ in importadas) if locales else ())
+
+
+async def validar_propuesta(db: AsyncSession, propuesta: Propuesta) -> ResultadoEvaluacion:
+    """Valida una propuesta retenida contra la correspondencia/declaración actuales."""
+    actual = (await db.execute(
+        select(CorrespondenciaContexto).where(
+            CorrespondenciaContexto.correspondencia_id == propuesta.correspondencia_id,
+            CorrespondenciaContexto.vigente_hasta.is_(None)))).scalar_one_or_none()
+    decl = (await db.execute(
+        select(DeclaracionCarpeta).where(
+            DeclaracionCarpeta.declaracion_id == propuesta.declaracion_id,
+            DeclaracionCarpeta.version == propuesta.version_declaracion))).scalar_one_or_none()
+    decl_vigente = (await db.execute(
+        select(DeclaracionCarpeta).where(
+            DeclaracionCarpeta.declaracion_id == propuesta.declaracion_id,
+            DeclaracionCarpeta.vigente_hasta.is_(None),
+            DeclaracionCarpeta.estado == EstadoRegla.ACTIVA))).scalar_one_or_none()
+    if (actual is None or actual.version != propuesta.version_de_regla
+            or actual.estado is not EstadoRegla.ACTIVA
+            or decl is None or decl_vigente is None or decl_vigente.id != decl.id):
+        current = None
+        if actual is not None:
+            current = await _version_actual_declaracion(db, actual.declaracion_version_id)
+        return ResultadoEvaluacion(
+            EstadoEvaluacion.REGLA_DESACTUALIZADA,
+            "La propuesta ya no corresponde a la versión vigente.",
+            correspondencia_id=propuesta.correspondencia_id,
+            version_de_regla=propuesta.version_de_regla,
+            declaracion_id=current.declaracion_id if current else None,
+            version_declaracion=current.version if current else None,
+            destino_tipo=propuesta.destino_tipo, destino_id=propuesta.destino_id,
+            reglas_involucradas=({"correspondencia_id": str(propuesta.correspondencia_id),
+                                  "version": propuesta.version_de_regla},))
+    destino = await _destino(db, propuesta.destino_tipo, propuesta.destino_id)
+    if destino is None:
+        return ResultadoEvaluacion(
+            EstadoEvaluacion.DESTINO_NO_DISPONIBLE,
+            "La correspondencia existe, pero su destino ya no está disponible.",
+            correspondencia_id=propuesta.correspondencia_id,
+            version_de_regla=propuesta.version_de_regla,
+            declaracion_id=decl.declaracion_id, version_declaracion=decl.version,
+            destino_tipo=propuesta.destino_tipo, destino_id=propuesta.destino_id,
+            alcance=propuesta.alcance)
+    return ResultadoEvaluacion(
+        EstadoEvaluacion.PROPUESTA_DISPONIBLE,
+        "La propuesta sigue vigente.",
+        propuesta=propuesta, correspondencia_id=propuesta.correspondencia_id,
+        version_de_regla=propuesta.version_de_regla,
+        declaracion_id=decl.declaracion_id, version_declaracion=decl.version,
+        destino_tipo=propuesta.destino_tipo, destino_id=propuesta.destino_id,
+        alcance=propuesta.alcance, precedencia_aplicada=propuesta.precedencia_aplicada)
