@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Confirmar el alcance — ZascArr{% endblock %}
+{% block content %}
+<h1 tabindex="-1" autofocus>Confirmar el alcance</h1>
+<p>Vas a incluir también las subcarpetas.</p>
+<div class="declaracion-resumen">
+  <p><strong>Ruta:</strong> {{ clave }}</p>
+  <p><strong>Significado:</strong> {{ tipo_texto }}</p>
+  <p><strong>Alcance nuevo:</strong> esta carpeta y sus subcarpetas.</p>
+  {% if es_cambio %}<p>Versión actual: {{ version_actual }}. Se creará una versión nueva.</p>{% else %}<p>Será la primera declaración de esta carpeta; no hay versión anterior.</p>{% endif %}
+</div>
+<p>La nueva versión alcanzará esta carpeta y todas sus subcarpetas, también los archivos que aparezcan después.</p>
+<p>No alcanza a carpetas hermanas ni a la carpeta de arriba.</p>
+<p>No crea series, no mueve archivos ni vincula nada.</p>
+{% if es_cambio %}<p>La versión anterior dejará de aplicarse; el historial se conserva.</p>{% endif %}
+<form method="post" action="{{ accion }}" class="declaracion-form">
+  <input type="hidden" name="clave" value="{{ clave }}">
+  <input type="hidden" name="tipo" value="{{ tipo }}">
+  <input type="hidden" name="incluir" value="1">
+  <input type="hidden" name="confirmado" value="1">
+  <button class="btn primary" type="submit">Sí, incluir subcarpetas</button>
+  <a class="btn ghost" href="{{ volver_url }}">Volver sin cambiar</a>
+</form>
+{% endblock %}

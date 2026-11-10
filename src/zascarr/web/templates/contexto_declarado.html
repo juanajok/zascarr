@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Contexto declarado — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="{{ volver }}">← Volver a «Pendientes por carpeta»</a></p>
+<h1>Contexto declarado</h1>
+<p>Consulta y cambia el significado que has dado a tus carpetas.</p>
+<p>Las declaraciones solo orientan; no crean series ni tocan archivos.</p>
+{% if aviso == "guardada" %}<p class="declaracion-aviso" role="status">Declaración guardada.</p>{% endif %}
+{% if aviso == "actualizada" %}<p class="declaracion-aviso" role="status">Declaración actualizada. La versión anterior deja de aplicarse.</p>{% endif %}
+{% if aviso == "desactivada" %}<p class="declaracion-aviso" role="status">Declaración desactivada. Puedes reactivarla cuando quieras.</p>{% endif %}
+{% if aviso == "reactivada" %}<p class="declaracion-aviso" role="status">Declaración reactivada.</p>{% endif %}
+{% if aviso == "retirada" %}<p class="declaracion-aviso" role="status">Declaración retirada. El historial se conserva y no se ha tocado ningún archivo.</p>{% endif %}
+
+{% if not todas %}
+<div class="empty-state">
+  <h2>Todavía no has declarado ninguna carpeta.</h2>
+  <p>Las declaraciones orientan cómo se interpreta una carpeta; no crean series ni tocan archivos.</p>
+  <p><a class="btn ghost" href="{{ volver }}">Volver a «Pendientes por carpeta»</a></p>
+</div>
+{% else %}
+{% for estado, declaraciones in secciones %}
+{% if declaraciones %}
+<section class="declaraciones-seccion" aria-labelledby="decl-{{ estado }}">
+  <h2 id="decl-{{ estado }}" class="titulo-frase">{{ {"activa": "Activas", "desactivada": "Desactivadas", "retirada": "Retiradas"}[estado] }} ({{ declaraciones | length }})</h2>
+  <ul class="declaraciones-lista">
+    {% for d in declaraciones %}
+    <li class="declaracion-card">
+      <h3 class="titulo-frase declaracion-ruta">{{ d.contexto_raiz }}</h3>
+      <p class="declaracion-chips">
+        {{ ui.chip("info", "Por autor" if d.tipo_de_significado.value == "autor" else "Por publicación") }}
+        {{ ui.chip("neutro", "Local" if d.origen.value == "local" else "Importación") }}
+        {{ ui.chip("info" if d.estado.value == "activa" else "amber" if d.estado.value == "desactivada" else "warn", {"activa": "Activa", "desactivada": "Desactivada", "retirada": "Retirada"}[d.estado.value]) }}
+        <span class="declaracion-version">Versión {{ d.version }}</span>
+      </p>
+      <p><strong>Alcance:</strong> {{ d.alcance }}.{% if d.incluir_descendientes %} También los archivos que aparezcan después.{% endif %}</p>
+      <p class="caption">{{ d.efectos }} No cambia lo ya decidido.</p>
+      {% if d.estado.value == "retirada" %}
+      <p>Retirada: no se aplica a nuevas interpretaciones. El historial se conserva.</p>
+      {% elif d.origen.value == "importacion" %}
+      <p>Sugerencia importada; no es una decisión local. Se muestra, no se gestiona desde aquí.</p>
+      {% else %}
+      <p class="acciones-declaracion">
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/cambiar/{{ d.declaracion_id }}">Cambiar</a>
+        {% if d.estado.value == "activa" %}
+        <form method="post" action="/ui/pendientes/carpetas/desactivar/{{ d.declaracion_id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
+        {% else %}
+        <form method="post" action="/ui/pendientes/carpetas/reactivar/{{ d.declaracion_id }}"><button class="btn ghost sm" type="submit">Reactivar</button></form>
+        {% endif %}
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/retirar/{{ d.declaracion_id }}">Retirar</a>
+      </p>
+      {% if d.estado.value == "desactivada" %}<p class="caption">No se aplica a nuevas interpretaciones.</p>{% endif %}
+      {% endif %}
+      {% if d.origen.value == "local" and d.estado.value == "activa" and conflictos.get(d.contexto_raiz) %}
+      <p>{{ ui.chip("amber", "Conflicto visible") }}</p>
+      <details>
+        <summary>Ver las interpretaciones en conflicto</summary>
+        <p>Hay otra interpretación para esta carpeta. No se elige ninguna aquí.</p>
+        <p>La declaración local tiene prioridad; el alias no se borra y sigue visible.</p>
+        {% for alt in conflictos[d.contexto_raiz] %}
+        <p class="caption">Otra declaración: {{ "Por autor" if alt.tipo_de_significado.value == "autor" else "Por publicación" }} · {{ "Local" if alt.origen.value == "local" else "Importación" }} · {{ alt.estado.value }}.</p>
+        {% endfor %}
+      </details>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endblock %}
