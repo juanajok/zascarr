@@ -61,7 +61,9 @@ def _resultado(file_id, serie_id):
                                       FuenteComicInfo.COMIC_VINE, NivelDato.SERIE,
                                       "javascript:alert(1)"),), EstadoPropuesta.ANADIR),
         PropuestaCampo("Publisher", "Vieja", (OpcionPropuesta(
-            "Nueva", FuenteComicInfo.GCD, NivelDato.SERIE),), EstadoPropuesta.PROPONER_SUSTITUCION))
+            "Nueva", FuenteComicInfo.GCD, NivelDato.SERIE),), EstadoPropuesta.PROPONER_SUSTITUCION),
+        PropuestaCampo("Summary", "Ya está", (OpcionPropuesta(
+            "Ya está", FuenteComicInfo.COMIC_VINE, NivelDato.NUMERO),), EstadoPropuesta.YA_COINCIDE))
     return ResultadoPropuestas(str(file_id), str(serie_id), "Tebeo", "american", True,
                                (ResultadoFuente(FuenteComicInfo.COMIC_VINE, "ok"),),
                                campos, (), 1)
@@ -147,7 +149,7 @@ def test_post_guarda_eleccion_en_sesion_sin_escribir(monkeypatch, tmp_path):
                     data={"operacion_id": op, "campo:Year": clave})
         assert r2.status_code == 200
         assert ALMACEN.obtener(op).elecciones["Year"] == clave
-        assert "Has elegido 1 cambios" in r2.text
+        assert "Has elegido 1 cambio" in r2.text
         assert Path(file.file_path).read_bytes() == antes
         assert file.sha256_hash == "a" * 64
     finally:
@@ -246,3 +248,47 @@ def test_valores_y_enlaces_maliciosos_se_escapan(monkeypatch, tmp_path):
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
     assert "<script>alert(1)</script>" not in r.text
     assert "javascript:alert(1)" not in r.text
+
+
+def test_ux_feedback_live_accessible_names_y_details(monkeypatch, tmp_path):
+    c, serie, file = _cliente(monkeypatch, tmp_path)
+    try:
+        preview = c.get(_url(serie, file) + "/comicinfo")
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+    finally:
+        _cerrar()
+    assert "hx-indicator="#comicinfo-fuentes-cargando"" in preview.text
+    assert "Consultando las fuentes" in preview.text
+    assert 'aria-live="polite"' in preview.text
+    assert 'id="comicinfo-fuentes-anuncio"' in preview.text
+    assert "hx-swap-oob" in r.text
+    assert "aria-live" not in r.text        # la región viva no se inserta en el swap
+    assert "<fieldset" in r.text and "<legend>Año" in r.text
+    assert '<span class="sr">Año: </span>' in r.text
+    assert "Comic Vine" in r.text and "GCD" in r.text
+    assert "Ya coincide" in r.text
+    assert 'name="campo:Summary"' not in r.text
+    assert "Sin datos nuevos en las fuentes" in r.text
+    assert "Guionista" in r.text
+    assert 'method="post"' in r.text and 'action="/ui/series/' in r.text
+    assert "Guardando la selección" in r.text
+
+
+def test_cortesia_muestra_reintento(monkeypatch, tmp_path):
+    c, serie, file = _cliente(monkeypatch, tmp_path)
+
+    class _ConCortesia(_ServicioPropuestas):
+        async def proponer(self, _fid):
+            base = await super().proponer(_fid)
+            from dataclasses import replace
+            return replace(base, estados=(ResultadoFuente(
+                FuenteComicInfo.COMIC_VINE, "limite_de_cortesia", 1,
+                "Hay que esperar unos segundos antes de volver a preguntar."),),
+                campos=base.campos)
+
+    monkeypatch.setattr(web, "PropuestasComicInfoService", lambda _db: _ConCortesia(_resultado(file.id, serie.id)))
+    try:
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+    finally:
+        _cerrar()
+    assert "Reintentar" in r.text and "Hay que esperar unos segundos" in r.text

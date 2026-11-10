@@ -1,4 +1,5 @@
 {#- CNV5-3: propuestas de fuentes para el ComicInfo (solo lectura; la elección queda en sesión). -#}
+<div id="comicinfo-fuentes-anuncio" hx-swap-oob="innerHTML">{% if mensaje %}{{ mensaje }}{% elif sesion %}{{ sesion.resumen }}{% if avisos %} {{ avisos[0] }}{% endif %}{% endif %}</div>
 <section id="comicinfo-fuentes" class="comicinfo-fuentes" aria-labelledby="comicinfo-fuentes-titulo">
   <h2 id="comicinfo-fuentes-titulo" tabindex="-1" autofocus>Datos de las fuentes</h2>
   {% if mensaje %}
@@ -7,7 +8,7 @@
   {% elif not sesion %}
   <p class="caption">No hay propuestas que mostrar.</p>
   {% else %}
-  <p class="caption" aria-live="polite">{{ sesion.resumen }}</p>
+  <p class="caption">{{ sesion.resumen }}</p>
   {% if avisos %}
   <div class="comicinfo-avisos" role="status">
     {% for aviso in avisos %}{{ ui.aviso("amber", aviso) }}{% endfor %}
@@ -21,8 +22,13 @@
     </ul>
   </details>
   {% endif %}
+  {% if sesion.reintento_cortesia %}
+  <p><button class="btn ghost" hx-get="/ui/series/{{ series.id }}/archivos/{{ sesion.file_id }}/comicinfo/fuentes"
+             hx-target="#comicinfo-fuentes" hx-swap="outerHTML">Reintentar</button></p>
+  {% endif %}
   {% if campos %}
-  <form hx-post="/ui/series/{{ series.id }}/archivos/{{ sesion.file_id }}/comicinfo/fuentes"
+  <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ sesion.file_id }}/comicinfo/fuentes"
+        hx-post="/ui/series/{{ series.id }}/archivos/{{ sesion.file_id }}/comicinfo/fuentes"
         hx-target="#comicinfo-fuentes" hx-swap="outerHTML">
     <input type="hidden" name="operacion_id" value="{{ sesion.operacion_id }}">
     {% for campo in campos %}
@@ -32,14 +38,20 @@
       {% if campo.bloqueado %}
       {{ ui.chip("amber", "Protegido") }}
       <p class="caption">{{ campo.motivo or "No se toca" }}</p>
+      {% elif campo.estado == "ya_coincide" %}
+      {{ ui.chip("ok", "Ya coincide") }}
+      <p class="caption">No hay nada que cambiar en este campo.</p>
       {% else %}
-      <label><input type="radio" name="campo:{{ campo.tag }}" value=""
-                    {% if not campo.elegida %}checked{% endif %}> Conservar lo actual</label>
+      <label class="comicinfo-opcion">
+        <input type="radio" name="campo:{{ campo.tag }}" value=""
+               {% if not campo.elegida %}checked{% endif %}>
+        <span class="sr">{{ campo.etiqueta }}: </span>Conservar lo actual
+      </label>
       {% for opcion in campo.opciones %}
       <label class="comicinfo-opcion">
         <input type="radio" name="campo:{{ campo.tag }}" value="{{ opcion.clave }}"
                {% if campo.elegida == opcion.clave %}checked{% endif %}>
-        <span>{{ opcion.valor }}</span>
+        <span class="sr">{{ campo.etiqueta }}: </span><span>{{ opcion.valor }}</span>
         <span class="muted">— {{ opcion.nombre_fuente }}{% if opcion.nivel %} ({{ opcion.nivel }}){% endif %}</span>
         {% if opcion.procedencia %}<a href="{{ opcion.procedencia }}" rel="noopener noreferrer">Ver ficha</a>{% endif %}
       </label>
@@ -48,11 +60,21 @@
     </fieldset>
     {% endfor %}
     <div class="ajustes-actions">
-      <button class="btn ghost" type="submit">Guardar selección</button>
+      <button class="btn ghost" type="submit" hx-indicator="#comicinfo-fuentes-guardando"
+              hx-disabled-elt="this">Guardar selección</button>
+      <span id="comicinfo-fuentes-guardando" class="caption htmx-indicator" role="status">
+        Guardando la selección… no se ha escrito el tebeo.
+      </span>
     </div>
   </form>
   {% else %}
   <p class="caption">Las fuentes no tienen datos nuevos para este tebeo. Puedes guardar lo que ya tienes.</p>
+  {% endif %}
+  {% if sesion.campos_sin_datos %}
+  <details class="comicinfo-sin-datos">
+    <summary>Sin datos nuevos en las fuentes</summary>
+    <p>Campos revisados sin propuesta: {{ sesion.campos_sin_datos|map(attribute='etiqueta')|join(', ') }}.</p>
+  </details>
   {% endif %}
   {% endif %}
 </section>

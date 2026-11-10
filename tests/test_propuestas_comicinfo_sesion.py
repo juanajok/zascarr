@@ -53,7 +53,7 @@ def test_claves_opacas_y_eleccion_valida():
     clave = next(iter(sesion.claves_por_tag["Year"]))
     assert clave != "1980" and len(clave) == 32
     almacen.elegir(sesion.operacion_id, "Year", clave)
-    assert sesion.resumen.startswith("Has elegido 1 cambios")
+    assert sesion.resumen.startswith("Has elegido 1 cambio")
     campos = {c.tag: c for c in sesion.campos_ui()}
     assert campos["Year"].opciones[0].procedencia == "https://comicvine.example/v"
     with pytest.raises(KeyError):
