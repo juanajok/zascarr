@@ -1094,6 +1094,25 @@ class TestResumenPorEntidad:
         assert acciones["Summary"] == "cambia"
 
     @pytest.mark.asyncio
+    async def test_run_reevalua_al_pasar_issue_de_manual_a_cv(self, db, tmp_path):
+        carpeta = tmp_path / uuid4().hex
+        carpeta.mkdir()
+        archivo, _ruta = await _montar(db, carpeta, metadata_source="manual")
+        servicio = TaggerService(db)
+        await servicio.ejecutar(archivo, dry_run=False)
+        # Simula una marca antigua sin `comicinfo_propio` para probar la
+        # procedencia del Issue, no el comodín de autoría.
+        archivo.metadata_ = {k: v for k, v in (archivo.metadata_ or {}).items()
+                             if k != "comicinfo_propio"}
+        issue = await db.get(Issue, archivo.issue_id)
+        issue.metadata_source = "comic_vine"
+        await db.commit()
+        informe = await servicio.run(limit=0, dry_run=True, file_ids=[str(archivo.id)])
+        assert informe.ya_revisados == 0
+        acciones = {c.tag: c.accion.value for c in informe.resultados[0].campos}
+        assert acciones["Summary"] == "sin_dato"
+
+    @pytest.mark.asyncio
     async def test_locked_summary_sigue_bloqueado_con_issue_manual(self, db, tmp_path):
         archivo, _ruta = await _montar(
             db, tmp_path, metadata_source="manual", locked_issue=["synopsis"])
