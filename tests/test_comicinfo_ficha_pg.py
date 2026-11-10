@@ -275,7 +275,7 @@ async def test_plan_y_xml_con_autores_genero_y_paginas(entorno_base, tmp_path, m
 async def test_locked_creators_genres_y_pagecount(entorno_base, tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "estado_de_comparticion", _no_compartido)
     sid, fid, ruta = await _montar_autores(
-        entorno_base, tmp_path, cv=41, locked=("creators",), page_lock=True, genre_lock=True)
+        entorno_base, tmp_path, cv=41, locked=("credits",), page_lock=True, genre_lock=True)
     async with entorno_base.banco.fabrica() as s:
         servicio = _servicio(s)
         vista = await servicio.previsualizar(sid, fid)

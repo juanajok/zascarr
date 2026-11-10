@@ -73,15 +73,16 @@ _LOCK_DE: dict[str, tuple[str, str]] = {
     "Year": ("issue", "release_date"),
     "Publisher": ("series", "publisher_id"),
     "Summary": ("issue", "synopsis"),
-    # #481: un solo `creators` bloquea los ocho tags de autoría.
-    "Writer": ("issue", "creators"),
-    "Penciller": ("issue", "creators"),
-    "Inker": ("issue", "creators"),
-    "Colorist": ("issue", "creators"),
-    "Letterer": ("issue", "creators"),
-    "CoverArtist": ("issue", "creators"),
-    "Editor": ("issue", "creators"),
-    "Translator": ("issue", "creators"),
+    # #481: un solo `credits` bloquea los ocho tags de autoría (la clave que ya
+    # usa `Issue.locked_fields` para la tabla de créditos).
+    "Writer": ("issue", "credits"),
+    "Penciller": ("issue", "credits"),
+    "Inker": ("issue", "credits"),
+    "Colorist": ("issue", "credits"),
+    "Letterer": ("issue", "credits"),
+    "CoverArtist": ("issue", "credits"),
+    "Editor": ("issue", "credits"),
+    "Translator": ("issue", "credits"),
     "Genre": ("series", "genres"),
     "PageCount": ("issue", "page_count"),
 }
@@ -306,8 +307,11 @@ def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _
     generos = [str(getattr(g, "name", "") or "").strip()
                for g in (getattr(series, "genres", None) or [])]
     deseados["Genre"] = _unir_lista(generos)
-    deseados["PageCount"] = (str(issue.page_count)
-                             if getattr(issue, "page_count", None) is not None else None)
+    paginas = getattr(issue, "page_count", None)
+    # #481/SecOps: PageCount solo 1..10000; fuera de rango no es un dato válido.
+    deseados["PageCount"] = (
+        str(paginas) if isinstance(paginas, int) and not isinstance(paginas, bool)
+        and 1 <= paginas <= 10000 else None)
     entidades = {"issue": issue, "series": series}
     bloqueados = {
         tag for tag, (entidad, campo) in _LOCK_DE.items()
