@@ -151,6 +151,9 @@ def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
     assert f'href="/ui/series/{serie.id}/numero/issue-1"' in r.text
     assert "ver información del número 01" in r.text
     assert f'hx-get="/ui/series/{serie.id}/convertir"' in r.text
+    assert f'hx-get="/ui/series/{serie.id}/numero/issue-1/previa"' in r.text
+    assert 'class="previa-numero"' in r.text
+    assert 'id="previa-issue-1"' in r.text
 
 
 def test_ficha_de_numero_ofrece_convertir_solo_para_cbr():
