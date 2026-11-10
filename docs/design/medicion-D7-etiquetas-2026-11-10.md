@@ -62,6 +62,29 @@ Series con géneros: 0 · asignaciones de género: 0 · personajes de número: 0
   conste (registro como #515/#534). **Decisión del PO (2026-11-10): cerrar como MVP**; ETQ3 queda
   en refinamiento hasta que el uso lo pida.
 
+## Resultado de la relectura (ETQ2b, 2026-11-10)
+
+El pase de `scripts/backfill-comicinfo.sh` (solo lectura de ficheros; dry-run y `--aplicar`) da la
+cifra real de lo **registrado con serie**:
+
+```
+CBZ registrados con serie: 228
+  con ComicInfo: 77 · con <Tags>: 0 · con <Genre>: 76
+  sin ComicInfo: 151
+Series distintas con datos: 1 · etiquetas encontradas: 0 · géneros encontrados: 76
+CBR registrados (no se leen): 4545
+Aplicado: 0 etiquetas y 1 género en 1 serie · avisos: 75 («la serie ya tenía géneros»)
+```
+
+- Los 76 CBZ con `<Genre>` son **de la misma serie**: el pase puso 1 género y los otros 75 se
+  saltaron porque la serie ya tenía géneros. Etiquetas nuevas: **0**.
+- De los 518 CBZ del disco, solo **228 están registrados con serie**; el resto (290) no tiene
+  issue/serie (están sin ordenar o sin registrar). La medición sobre disco **sobreestima** el
+  universo accionable: lo que ETQ2/ETQ2b pueden tocar es «registrado con serie».
+- La lectura de D-7 no cambia: no hay etiquetas de ComicInfo y los géneros son casi inexistentes y
+  concentrados en una serie. El camino queda preparado; el universo crecerá con BL-CNV (4.545 CBR)
+  y cuando se ordenen/registren los CBZ sueltos.
+
 **Limitaciones**
 
 - ETQ2 aplica al **importar** o al re-triar un fichero que cambió (`rescan` no re-lee los
