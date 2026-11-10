@@ -1,10 +1,40 @@
-{#- #480: resultado de guardar ComicInfo. -#}
-<div class="comicinfo-resultado" id="comicinfo-resultado">
-  {% if resultado.resultado in ("guardado", "sin_cambios") %}
-  {{ ui.aviso("ok", resultado.mensaje) }}
+{#- #480: cierre de guardar ComicInfo. Un estado claro, lo que se ha escrito y las acciones siguientes. -#}
+{% set ok = resultado.resultado in ("guardado", "sin_cambios") %}
+{% set campos_cambiados = resultado.campos|selectattr("accion.value", "equalto", "cambia")|list %}
+<div class="comicinfo-resultado" id="comicinfo-resultado-{{ resultado.file_id }}" aria-live="polite">
+  {% if resultado.resultado == "guardado" %}
+  {{ ui.aviso("ok", "Listo: la información ya está guardada dentro del tebeo.") }}
+  <p class="caption">El XML viaja dentro del CBZ. La ficha del número no cambia.</p>
+  {% elif resultado.resultado == "sin_cambios" %}
+  {{ ui.aviso("ok", "No había nada que cambiar.") }}
+  <p class="caption">{{ resultado.mensaje }}</p>
   {% else %}
-  {{ ui.aviso("amber", resultado.mensaje) }}
+  {{ ui.aviso("amber", "No se ha guardado: " ~ resultado.mensaje) }}
+  {% if resultado.resultado == "caducado" %}
+  <p class="caption">La ficha o el archivo cambiaron desde la vista previa. Vuelve a abrirla para revisar los datos actuales.</p>
   {% endif %}
-  {% if resultado.advertencia %}<p class="caption">{{ resultado.advertencia }}</p>{% endif %}
-  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a></p>
+  {% endif %}
+
+  {% if resultado.forzado_compartido %}
+  <p class="caption">Se guardó con tu confirmación porque el archivo parecía compartido.</p>
+  {% elif resultado.advertencia and not ok %}
+  <p class="caption">{{ resultado.advertencia }}</p>
+  {% endif %}
+
+  {% if ok and campos_cambiados %}
+  <details class="ajustes-mas"><summary>Qué se ha escrito</summary>
+    <ul class="comicinfo-campos">
+      {% for c in campos_cambiados %}
+      <li><strong>{{ c.tag }}</strong>: {{ c.nuevo }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  <p class="comicinfo-resultado-acciones">
+    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/comicinfo"
+       hx-get="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/comicinfo"
+       hx-target="#comicinfo-resultado-{{ resultado.file_id }}" hx-swap="outerHTML">Revisar otra vez</a>
+    <a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
+  </p>
 </div>

@@ -21,7 +21,11 @@
   {{ ui.aviso("amber", "No se ha convertido: " ~ resultado.mensaje) }}
   {% endif %}
 
-  {% if resultado.advertencia %}{{ ui.aviso("amber", resultado.advertencia) }}{% endif %}
+  {% if resultado.forzado_compartido %}
+  <p class="caption">Se convirtió con tu confirmación porque el archivo parecía compartido.</p>
+  {% elif resultado.advertencia and not ok %}
+  {{ ui.aviso("amber", resultado.advertencia) }}
+  {% endif %}
 
   {% if antes or despues %}
   <details class="ajustes-mas"><summary>Qué ha cambiado</summary>

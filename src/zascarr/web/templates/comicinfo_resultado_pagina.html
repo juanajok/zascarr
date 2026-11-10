@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Información del tebeo — {{ series.title }} — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/series/{{ series.id }}">Volver a la serie</a>
+<section aria-labelledby="comicinfo-resultado-titulo">
+  <h1 id="comicinfo-resultado-titulo">Información del tebeo</h1>
+  {% include "comicinfo_resultado.html" %}
+</section>
+{% endblock %}
