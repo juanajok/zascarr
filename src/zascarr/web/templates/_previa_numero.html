@@ -1,3 +1,7 @@
-{#- BL-INF4: miniatura de la portada del número (hover/foco en la ficha). -#}
-<img class="previa-numero-img" width="140" decoding="async" alt=""
-     src="/ui/series/{{ series_id }}/numero/{{ issue_id }}/previa.jpg">
+{#- BL-INF4: tarjeta de previa de la portada del número (hover/foco en la ficha). -#}
+<span class="previa-card">
+  <img class="previa-numero-img" width="220" decoding="async" alt=""
+       src="/ui/series/{{ series_id }}/numero/{{ issue_id }}/previa.jpg">
+  <span class="previa-pie"><strong>Nº {{ numero }}</strong>{% if titulo %} · {{ titulo }}{% endif %}
+    <span class="previa-pista">Pulsa para abrir la ficha</span></span>
+</span>

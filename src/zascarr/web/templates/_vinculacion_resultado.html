@@ -22,7 +22,7 @@
       {% if fallo.repetible and token %}
       <form method="post" action="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/confirmar') }}"
             hx-post="{{ con_contexto('/ui/pendientes/carpetas/asistente/vinculacion/confirmar') }}" hx-target="#revision" hx-swap="outerHTML"
-            hx-disabled-elt="find button">
+            hx-disable="find button">
         <input type="hidden" name="token" value="{{ token }}">
         <input type="hidden" name="cursor_actual" value="{{ cursor_actual }}">
         {% for n, v in contexto_campos %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}

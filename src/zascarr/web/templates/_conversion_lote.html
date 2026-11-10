@@ -29,7 +29,7 @@
   </ul>
   <form method="post" action="/ui/series/{{ series.id }}/convertir"
         hx-post="/ui/series/{{ series.id }}/convertir"
-        hx-target="#conversion-lote" hx-swap="innerHTML" hx-disabled-elt="find button">
+        hx-target="#conversion-lote" hx-swap="innerHTML" hx-disable="find button">
     <p class="caption conversion-espera htmx-indicator" role="status">Convirtiendo la tanda… puede tardar unos minutos. No cierres esta página.</p>
     <button class="btn primary" type="submit">Convertir {{ lote.vistas|length }} CBR a CBZ</button>
   </form>

@@ -12,7 +12,7 @@
       Sigue en segundo plano: puedes cerrar esta página.{% endcall %}
   </div>
   <form class="audit-lanzar" hx-post="/ui/no-disponibles/comprobar"
-        hx-target="#comprobar-disco" hx-swap="outerHTML" hx-disabled-elt="find button">
+        hx-target="#comprobar-disco" hx-swap="outerHTML" hx-disable="find button">
     <button type="submit" class="btn-primary" aria-describedby="comprobar-aviso"
             {% if estado_ciclo.en_curso or estado_ciclo.fase.value == "ocupado" %}disabled{% endif %}>
       {{ "Comprobando…" if estado_ciclo.en_curso else "Comprobar el disco" }}
