@@ -515,7 +515,8 @@ class TestDictamenSecOps:
         resultado = wseries._primera_portada(archivos, tmp_path / "c", estado=estado)
         assert abiertos == ["1.cbr"], "tras `ocupado` no se abre ningún otro RAR (QA N01)"
         assert resultado is not None, "el CBZ posterior sí se evalúa (SecOps N-2 a)"
-        assert estado == {"ocupado": True}
+        assert estado["ocupado"] is True
+        assert "file_id" in estado      # BL-INF6: el archivo que dio la portada, para la elección
 
     def test_n2b_listar_y_leer_comparten_un_turno(self, tmp_path, falso, monkeypatch):
         """Un solo turno: el semáforo se toma una vez y sigue tomado entre el listado y la lectura."""
