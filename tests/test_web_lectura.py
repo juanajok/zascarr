@@ -107,11 +107,23 @@ def _render_control(monkeypatch, **extra):
     return env.get_template("_lectura_control.html").render(**ctx)
 
 
-def test_control_de_fila_pinta_el_estado_guardado_y_autofocus():
+def _radio(html, valor):
+    import re
+    return re.search(rf'<input[^>]*value="{valor}"[^>]*>', html).group(0)
+
+
+def test_control_de_fila_pinta_el_radio_concreto_del_numero_leido():
     html = _render_control(None, lectura=_estado(ReadingStatus.READING, rating=None, nota=None))
-    compacto = " ".join(html.split())
-    assert 'value="reading"' in compacto and "checked" in compacto and "autofocus" in compacto
+    radio = _radio(html, "reading")
+    assert "checked" in radio and "autofocus" in radio
+    assert "checked" not in _radio(html, "unread")
     assert "Leyendo" in html
+
+
+def test_sin_lectura_el_radio_marcado_es_sin_leer():
+    html = _render_control(None, lectura=None)
+    assert "checked" not in _radio(html, "reading")
+    assert "checked" in _radio(html, "unread")
 
 
 def test_bloque_de_numero_mantiene_rating_nota_y_boton():
@@ -131,8 +143,8 @@ def test_post_de_fila_no_envia_rating_ni_nota(monkeypatch):
                              data={"estado": "reading"}, headers={"HX-Request": "true"})
     finally:
         app.dependency_overrides.pop(get_db, None)
-    assert marca.await_args.kwargs.get("rating") is None
-    assert marca.await_args.kwargs.get("nota") is None
+    assert "rating" not in marca.await_args.kwargs
+    assert "nota" not in marca.await_args.kwargs
 
 
 def test_bloque_303_va_a_la_ficha_del_numero(monkeypatch):
@@ -187,3 +199,42 @@ async def test_recuento_biblioteca_usa_el_total_no_la_pagina(monkeypatch):
     filtros = lib._leer_filtros(1, "", "", "", "", "", "tarjetas", "", "si")
     ctx = await lib._contexto(FakeSession([]), filtros)
     assert ctx["recuento_lectura"] == "3 de 30 series con algún número leído."
+
+
+def test_css_de_lectura_usa_variables_definidas_y_no_parte_leido():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    regla = next(s for s in css.split("}") if ".lectura-estados label " in s)
+    assert "var(--ink)" in regla
+    assert "var(--linea)" not in regla
+    assert "white-space: nowrap" in regla
+    assert "--ink:" in css
+
+
+@pytest.mark.asyncio
+async def test_recuento_usa_etiquetas_resueltas_y_solo_series_con_issues(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from tests.test_web_library import FakeSession
+    from zascarr.web import library as lib
+
+    llamadas = []
+
+    class _Servicio:
+        def __init__(self, _db):
+            pass
+
+        async def list_series_paginado(self, **kwargs):
+            llamadas.append(kwargs)
+            if kwargs.get("leido") == "si":
+                return [], 2, 1
+            return [], 5, 1
+
+    monkeypatch.setattr(lib, "SeriesService", _Servicio)
+    monkeypatch.setattr(lib, "resolver_etiquetas", AsyncMock(return_value={}))
+    filtros = lib._leer_filtros(1, "", "", "", "", "", "tarjetas", "fantasma", "si")
+    ctx = await lib._contexto(FakeSession([]), filtros)
+    assert ctx["recuento_lectura"] == "2 de 5 series con algún número leído."
+    for kw in llamadas[-2:]:
+        assert kw["etiquetas_positivas"] == ()
+        assert kw["con_issues"] is True
