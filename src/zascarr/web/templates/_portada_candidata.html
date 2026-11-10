@@ -1,0 +1,21 @@
+{#- BL-INF6 (#592): una candidata del selector de portada.
+    `ui.portada` pinta el marcador debajo: si la miniatura no existe (un archivo ilegible), se ve el
+    marcador y NUNCA el icono de imagen rota. La imagen es `loading="lazy"`: solo se pide la que se
+    acerca al viewport. -#}
+<figure class="portada-candidata">
+  {{ ui.portada(series.title, series.id, c.miniatura, "portada-candidata-img", "lazy") }}
+  <figcaption>{% if c.url %}De {{ nombre_fuente }}{% else %}{{ c.origen }}{% endif %}</figcaption>
+  {% if c.elegida %}
+  <p class="caption">Es la portada elegida.</p>
+  {% else %}
+  <form method="post" action="/ui/series/{{ series.id }}/portada/elegir"
+        hx-post="/ui/series/{{ series.id }}/portada/elegir"
+        hx-target="#elegir-portada" hx-swap="outerHTML" hx-disable="find button">
+    <input type="hidden" name="tipo" value="{{ c.tipo }}">
+    {% if c.issue_id %}<input type="hidden" name="issue_id" value="{{ c.issue_id }}">{% endif %}
+    {% if c.file_id %}<input type="hidden" name="file_id" value="{{ c.file_id }}">{% endif %}
+    {% if c.url %}<input type="hidden" name="url" value="{{ c.url }}">{% endif %}
+    <button class="btn ghost sm" type="submit">Usar esta portada<span class="sr">: {% if c.url %}de {{ nombre_fuente }}{% else %}{{ c.origen }}{% endif %}</span></button>
+  </form>
+  {% endif %}
+</figure>
