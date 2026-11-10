@@ -217,3 +217,91 @@ async def test_fila_deja_de_ser_cbz_o_cambia_de_serie_tras_locks(entorno_base, t
         assert r2.resultado == "caducado" and r2.motivo == "propuesta_desactualizada"
     with zipfile.ZipFile(ruta2) as zf:
         assert "ComicInfo.xml" not in zf.namelist()
+
+
+async def _montar_autores(entorno_base, tmp_path, *, cv=40, locked=(), page_lock=False,
+                          genre_lock=False):
+    from zascarr.models import Creator, CreatorRole, Genre, IssueCreator, Series
+    sid = await serie_de_prueba(entorno_base, comic_vine_id=cv)
+    ruta = tmp_path / f"Autores {cv}.cbz"
+    with zipfile.ZipFile(ruta, "w") as zf:
+        zf.writestr("001.jpg", b"pagina")
+    sha = hashlib.sha256(ruta.read_bytes()).hexdigest()
+    async with entorno_base.banco.fabrica() as s:
+        serie = await s.get(Series, sid)
+        await s.refresh(serie, attribute_names=["genres"])
+        serie.genres = [Genre(name=f"Acción {cv}"), Genre(name=f"acción {cv}")]
+        if genre_lock:
+            serie.locked_fields = ["genres"]
+        ana = Creator(name="Ana")
+        bob = Creator(name="Bob")
+        s.add_all([ana, bob])
+        issue = Issue(id=uuid4(), series_id=sid, issue_number="1", volume=1,
+                      synopsis="Sinopsis", page_count=24,
+                      locked_fields=list(locked) + (["page_count"] if page_lock else []))
+        s.add(issue)
+        await s.flush()
+        s.add_all([IssueCreator(issue_id=issue.id, creator_id=ana.id, role=CreatorRole.WRITER),
+                   IssueCreator(issue_id=issue.id, creator_id=bob.id, role=CreatorRole.WRITER)])
+        f = File(id=uuid4(), issue_id=issue.id, file_path=str(ruta), file_name=ruta.name,
+                 file_format=FileFormat.CBZ, file_size_bytes=ruta.stat().st_size,
+                 file_mtime_ns=ruta.stat().st_mtime_ns, sha256_hash=sha, metadata_={})
+        s.add(f)
+        await s.commit()
+    return sid, f.id, ruta
+
+
+@pytest.mark.asyncio
+async def test_plan_y_xml_con_autores_genero_y_paginas(entorno_base, tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "estado_de_comparticion", _no_compartido)
+    sid, fid, ruta = await _montar_autores(entorno_base, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = _servicio(s)
+        vista = await servicio.previsualizar(sid, fid)
+        por_tag = {c.tag: c for c in vista.campos}
+        assert por_tag["Writer"].nuevo == "Ana, Bob"
+        assert por_tag["Writer"].accion.value == "cambia"
+        assert por_tag["Genre"].nuevo == "Acción 40"    # dedupe casefold
+        assert por_tag["PageCount"].nuevo == "24"
+        assert (await servicio.aplicar(vista.token, file_id_esperado=fid)).resultado == "guardado"
+    with zipfile.ZipFile(ruta) as zf:
+        xml = zf.read("ComicInfo.xml")
+    assert b"<Writer>Ana, Bob</Writer>" in xml
+    assert b"<Genre>Acci\xc3\xb3n 40</Genre>" in xml
+    assert b"<PageCount>24</PageCount>" in xml
+
+
+@pytest.mark.asyncio
+async def test_locked_creators_genres_y_pagecount(entorno_base, tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "estado_de_comparticion", _no_compartido)
+    sid, fid, ruta = await _montar_autores(
+        entorno_base, tmp_path, cv=41, locked=("creators",), page_lock=True, genre_lock=True)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = _servicio(s)
+        vista = await servicio.previsualizar(sid, fid)
+        por_tag = {c.tag: c.accion for c in vista.campos}
+        assert por_tag["Writer"].value == "bloqueado"
+        for tag in ("Penciller", "Inker", "Colorist", "Letterer",
+                    "CoverArtist", "Editor", "Translator"):
+            assert por_tag[tag].value in ("bloqueado", "sin_dato"), tag
+        assert por_tag["Genre"].value == "bloqueado"
+        assert por_tag["PageCount"].value == "bloqueado"
+        await servicio.aplicar(vista.token, file_id_esperado=fid)
+    with zipfile.ZipFile(ruta) as zf:
+        xml = zf.read("ComicInfo.xml")
+    for tag in (b"<Writer>", b"<Genre>", b"<PageCount>"):
+        assert tag not in xml
+
+
+@pytest.mark.asyncio
+async def test_la_consulta_de_b6_carga_creditos_y_generos_sin_lazy(entorno_base, tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "estado_de_comparticion", _no_compartido)
+    from zascarr.services.tagger import TaggerService
+
+    sid, fid, _ruta = await _montar_autores(entorno_base, tmp_path, cv=42)
+    async with entorno_base.banco.fabrica() as s:
+        informe = await TaggerService(s).run(limit=0, dry_run=True, file_ids=[str(fid)])
+        assert informe.errores == 0 and informe.previstos == 1
+        campos = {c.tag: c for c in informe.resultados[0].campos}
+        assert campos["Writer"].nuevo == "Ana, Bob"
+        assert campos["PageCount"].nuevo == "24"
