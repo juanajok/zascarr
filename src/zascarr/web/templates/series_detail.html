@@ -5,7 +5,12 @@
 {% if volver %}<a href="{{ volver }}" class="back-link">← Volver a la biblioteca</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
 <div class="series-header">
-  {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id, "series-cover") }}
+  {#- BL-INF6: el envoltorio lleva id para que el panel pueda refrescar la portada nueva por OOB
+      sin recargar; `display: contents` lo hace invisible para el flex del encabezado. El `?v=`
+      cambia al elegir una portada: el navegador no pinta 24 h la anterior (R-01). -#}
+  <span class="portada-serie-envoltura" id="portada-serie">
+    {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=%s" % (series.id, portada_version), "series-cover") }}
+  </span>
   <div>
     <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle" style="display:inline">({{ series.start_year }})</span>{% endif %}</h1>
     {% if series.publisher %}<p class="series-meta">{{ series.publisher.name }}</p>{% endif %}
@@ -40,6 +45,16 @@
     </details>
   </div>
 </div>
+
+{#- BL-INF6 (#592): «Elegir portada». El panel NO se pide hasta desplegarlo (cero miniaturas y
+    cero consultas en la carga de la ficha): el `toggle` nativo del <details> dispara el `hx-get`.
+    El `summary` va sin atributos para que siga siendo un desplegable normal de teclado. -#}
+<details class="elegir-portada" id="elegir-portada"
+         hx-get="/ui/series/{{ series.id }}/portada/elegir"
+         hx-trigger="toggle once" hx-target="this" hx-swap="outerHTML">
+  <summary>Elegir portada</summary>
+  <p class="muted">Cargando las portadas disponibles…</p>
+</details>
 
 <section class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
   <h2 id="ficha-serie-datos-titulo" class="titulo-frase">{{ textos_ficha.serie_bloque }}</h2>
@@ -163,9 +178,11 @@
   {% set enlace = ficha.enlace_para_numero(n) if ficha else none %}
   {% if enlace %}
   <span class="chip-previa">
-    <a class="issue-chip issue-present" href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
+    {% set lectura = lecturas.get(enlace.id) if lecturas else none %}
+    <a class="issue-chip issue-present{% if lectura and lectura.estado == "completed" %} issue-leido{% elif lectura and lectura.estado == "reading" %} issue-leyendo{% endif %}"
+       href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
        hx-get="/ui/series/{{ series.id }}/numero/{{ enlace.id }}/previa"
-       hx-trigger="mouseenter delay:150ms, focusin" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>
+       hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}{% if lectura and lectura.estado == "completed" %}<span class="sr"> leído</span>{% elif lectura and lectura.estado == "reading" %}<span class="sr"> leyendo</span>{% endif %}<span class="sr"> ver información del número {{ n }}</span></a>
     <span class="previa-numero" id="previa-{{ enlace.id }}" aria-hidden="true"></span>
   </span>
   {% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
@@ -178,7 +195,6 @@
 <section class="archivos-serie" id="archivos-por-numero" aria-labelledby="archivos-titulo">
   <h2 id="archivos-titulo">Archivos por número</h2>
   <p>Cada número de la serie con sus archivos.</p>
-  <p class="caption">El estado se guarda al tocarlo; cambiarlo no borra tu nota ni tu puntuación.</p>
   <p class="archivos-lote">
     <button class="btn ghost" type="button"
             hx-get="/ui/series/{{ series.id }}/convertir"
@@ -190,7 +206,6 @@
     {% for n in archivos_por_numero %}
     <li class="archivos-numero" data-numero="{{ n.numero }}">
       <h3 class="archivos-numero-titulo"><a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">#{{ n.numero }}<span class="sr"> ver información del número {{ n.numero }}</span></a></h3>
-      {% with issue_id = n.issue_id, modo = "fila", lectura = lecturas.get(n.issue_id) %}{% include "_lectura_control.html" %}{% endwith %}
       <ul class="archivos-lista">
         {% for a in n.archivos %}
         <li class="archivo-fila" data-archivo="{{ a.id }}">

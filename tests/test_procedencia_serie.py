@@ -167,3 +167,20 @@ def test_la_sinopsis_de_la_tabla_es_texto_plano_sin_html():
     valor = por_clave(proc)["description"].valor
     assert "<p>" not in valor and "<strong>" not in valor and "<a" not in valor
     assert "French series." in valor and "English" in valor
+
+
+def test_bl_inf6_la_portada_elegida_a_mano_es_manual_y_protegida_sin_cover_url():
+    """La portada elegida puede salir de un CBZ (sin `cover_url`): consta igualmente como manual,
+    con su chip, y el campo queda protegido para que el enriquecimiento no la sustituya."""
+    proc = procedencia_de_serie(serie(
+        cover_url=None, metadata_source=MetadataSource.COMIC_VINE.value,
+        locked_fields=["cover_url"],
+        metadata_={"portada": {"tipo": "archivo", "file_id": str(uuid4()),
+                               "fecha": "2026-11-10T10:00:00+00:00"}},
+    ))
+    campo = por_clave(proc)["cover_url"]
+    assert campo.valor == "Portada guardada"
+    assert campo.origen == "Elegida a mano"
+    assert campo.manual is True
+    assert campo.bloqueado is True
+    assert "Protegido: el enriquecimiento no lo sobrescribe." in campo.observaciones

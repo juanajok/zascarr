@@ -7,7 +7,7 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
-- **Al pasar el ratón por los números se acumulaban las previas de portada.** Cada chip conservaba
+- **La vista previa podía lanzar el lector de RAR con `LECTOR_RAR_ENABLED=false` (SecOps, ALTO).**\n  El servicio de miniaturas ahora respeta el interruptor igual que la portada de serie: con el\n  lector apagado, un `.cbr` no es candidato y no se envía a `lsar`/`unar`. Regresión incluida.\n- **El estado de lectura solo se toca dentro del número.** La ficha de serie ya no pinta los\n  controles «Sin leer / Leyendo / Leído» de cada número; se quitan también de su contexto y de\n  la consulta que los cargaba.\n- **Al pasar el ratón por los números se acumulaban las previas de portada.** Cada chip conservaba
   la suya al salir; ahora solo se muestra la del número que tiene el ratón o el foco y las demás
   quedan ocultas. En series de cientos de números la ficha vuelve a leerse.
 - **Los botones no se deshabilitaban durante una petición htmx.** El proyecto usa htmx 4.0.0, donde
@@ -43,6 +43,22 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Progreso de lectura en las tarjetas y pastillas (BL-INF10, #611).** Cada tarjeta de la
+  Biblioteca lleva una barra bajo la portada con el % de números leídos del total y «N de M»;
+  la consulta del listado ya trae el agregado (sin consultas por tarjeta). En la ficha de serie,
+  las pastillas se tiñen si el número está leído o leyendo, con texto para lectores de pantalla.
+- **La ficha del número enseña la portada del número y sus datos completos (BL-INF8, #600).**
+  Deja de mostrar la portada de la serie: usa la del propio número (600 px, caché por archivo y
+  ancho) y añade editorial, publicación (mes y año) e ISBN cuando consta, además de los autores por
+  papel, la sinopsis y los archivos.
+- **Elegir la portada de una serie entre varias (BL-INF6, #592).** En la ficha, «Elegir portada»
+  abre las disponibles —la que se ve ahora, las de los primeros números con archivo (de 12 en 12,
+  con «Ver más números») y la externa ya guardada— con su origen en llano («Del archivo del nº 3»,
+  «De Comic Vine»). «Usar esta portada» la fija al momento y solo en ZascArr: no se escribe,
+  mueve ni renombra ningún archivo. La elección se guarda como una referencia al archivo (si lo
+  reemplazas, la portada se vuelve a sacar de él), sobrevive a recargas y al enriquecimiento, y si
+  ese archivo deja de dar portada la ficha vuelve a la de siempre sin borrar tu elección. El
+  panel permite además volver a la portada automática. Miniaturas perezosas y sin JS nuevo.
 - **Vista previa de la portada de cada número (BL-INF4, #590).** Al pasar el ratón o enfocar un
   número en la ficha se enseña su portada, sin abrirlo: tarjeta de 220 px con «Nº N · título» y
   «Pulsa para abrir la ficha», flecha al chip y un pequeño retardo para no dispararse al barrer. La
