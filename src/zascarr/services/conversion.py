@@ -240,7 +240,7 @@ class ConversionDeArchivo:
         if decision.estado is EstadoComparticion.NO_COMPARTIDO:
             return None
         return (f"Cuidado: este archivo parece compartido ({decision.causa}). "
-                "Si conviertes, la siembra puede romperse.")
+                "Convertirlo puede romper la siembra.")
 
     async def _validar_firmada(self, f: File, firmada: ConversionFirmada) -> MotivoConversion | None:
         """#564 TOCTOU: el token debe seguir describiendo la fila y los bytes reales."""

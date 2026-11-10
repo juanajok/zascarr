@@ -11,6 +11,10 @@
     </ul>
   </details>
   {% endif %}
+  <p class="conversion-resultado-acciones">
+    <a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
+  </p>
+  <p class="caption">Las filas de la ficha se actualizan al abrirla de nuevo.</p>
   {% endif %}
 
   <h3>Convertir los CBR de esta serie</h3>
@@ -25,6 +29,7 @@
   <form method="post" action="/ui/series/{{ series.id }}/convertir"
         hx-post="/ui/series/{{ series.id }}/convertir"
         hx-target="#conversion-lote" hx-swap="innerHTML" hx-disabled-elt="find button">
+    <p class="caption conversion-espera htmx-indicator" role="status">Convirtiendo la tanda… puede tardar unos minutos. No cierres esta página.</p>
     <button class="btn primary" type="submit">Convertir {{ lote.vistas|length }} CBR a CBZ</button>
   </form>
   {% elif lote.compartidas or lote.bloqueadas %}

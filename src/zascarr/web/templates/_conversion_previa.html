@@ -17,6 +17,7 @@
     <label class="legal-checkbox"><input type="checkbox" name="forzar_compartido" value="1" required>
       Entiendo el riesgo para la siembra y quiero continuar.</label>
     {% endif %}
+    <p class="caption conversion-espera htmx-indicator" role="status">Convirtiendo… puede tardar unos segundos. No cierres esta página.</p>
     <div class="ajustes-actions">
       <button class="btn primary" type="submit">{{ "Deshacer la conversión" if modo == "deshacer" else "Convertir a CBZ" }}</button>
       <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
