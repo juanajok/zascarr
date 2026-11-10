@@ -1,0 +1,24 @@
+{#- #478: vista previa de conversión (fragmento HTMX; también se puede abrir directo). -#}
+<div class="conversion-previa" id="conversion-{{ vista.file_id }}">
+  {% if not vista.puede_convertir %}
+  {{ ui.aviso("amber", vista.mensaje) }}
+  <p class="caption">No se ha tocado el archivo.</p>
+  {% else %}
+  <p class="caption">De <strong>{{ vista.nombre_original }}</strong> a <strong>{{ vista.nombre_nuevo }}</strong>
+    · {{ (vista.tamano_entrada / 1048576)|round(1) }} MB → ≈{{ (vista.estimado_salida / 1048576)|round(1) }} MB
+    · {{ "renombrar el ZIP (sin recomprimir)" if vista.metodo == "renombrar_zip" else "extraer y guardar sin recomprimir" }}.</p>
+  {% if vista.advertencia %}{{ ui.aviso("amber", vista.advertencia) }}{% endif %}
+  <p class="caption">La serie, sus números y la relación con esta publicación no cambian. El original se aparta y se puede deshacer.</p>
+  <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ vista.file_id }}/convertir{{ '/deshacer' if modo == 'deshacer' else '' }}">
+    <input type="hidden" name="token" value="{{ vista.token }}">
+    {% if vista.advertencia %}
+    <label class="legal-checkbox"><input type="checkbox" name="forzar_compartido" value="1" required>
+      Entiendo el riesgo para la siembra y quiero continuar.</label>
+    {% endif %}
+    <div class="ajustes-actions">
+      <button class="btn primary" type="submit">{{ "Deshacer la conversión" if modo == "deshacer" else "Convertir a CBZ" }}</button>
+      <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
+    </div>
+  </form>
+  {% endif %}
+</div>

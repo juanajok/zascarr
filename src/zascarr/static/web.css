@@ -1972,6 +1972,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 }
 
 
+/* #478: conversión CBR→CBZ (vista previa y resultado). */
+.conversion-previa, .conversion-resultado { display: grid; gap: 8px; margin-top: 8px; }
+.conversion-previa form { display: grid; gap: 8px; justify-items: start; }
 
 /* #150 BL-C3: control de lectura (pendiente/leyendo/leído) */
 .lectura-control { margin: 8px 0; padding: 6px 0; border-top: 1px dashed var(--linea); }
