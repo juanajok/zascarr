@@ -1999,6 +1999,12 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .tu-lectura { margin-top: 18px; }
 @media (max-width: 480px) { .lectura-control form { align-items: stretch; } }
 
+
+/* #480: ComicInfo desde la ficha (vista previa y resultado). */
+.comicinfo-previa, .comicinfo-resultado { display: grid; gap: 8px; margin-top: 8px; }
+.comicinfo-campos { margin: 0; padding-left: 1.2rem; }
+.comicinfo-previa form { display: grid; gap: 8px; justify-items: start; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,

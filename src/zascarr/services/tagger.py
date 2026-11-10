@@ -579,6 +579,50 @@ class TaggerService:
 
         return await self._anotar_escritura(file, ctx, path, campos, original_para_guardar)
 
+    async def aplicar_plan(
+        self, file: File, campos: list[CampoPlan], *, estado_antes: tuple[int, int] | None = None,
+    ) -> ResultadoEtiquetado:
+        """#480: aplica EXACTAMENTE un plan ya calculado (vista previa firmada).
+
+        No vuelve a planificar ni consulta fuentes: lee el XML, fusiona solo esos campos, verifica
+        que el CBZ no cambió desde `estado_antes` y anota la escritura igual que B6. El llamante
+        mantiene los locks de `File.id` y el guardián de compartidos.
+        """
+        ctx = await self._contexto(file)
+        path = Path(file.file_path)
+        if estado_antes is None:
+            estado_antes = await asyncio.to_thread(_estado, path)
+        if await asyncio.to_thread(_estado, path) != estado_antes:
+            return ResultadoEtiquetado(
+                file.id, file.file_name, CADUCADO, campos,
+                "el archivo cambió desde la vista previa")
+        if not hay_cambios(campos):
+            return ResultadoEtiquetado(file.id, file.file_name, SALTADO, campos, "ya al día")
+        try:
+            xml = await asyncio.to_thread(leer_comicinfo, path)
+            nuevo = fusionar_xml(xml, campos)
+        except ComicInfoInvalidoError as exc:
+            return ResultadoEtiquetado(file.id, file.file_name, INVALIDO, campos,
+                                       f"ComicInfo.xml inválido: {exc}")
+        original_para_guardar: str | None = None
+        if file.original_sha256 is None and not (file.metadata_ or {}).get("comicinfo_propio"):
+            if file.sha256_hash is not None and file.file_size_bytes == estado_antes[0]:
+                original_para_guardar = file.sha256_hash
+            else:
+                original_para_guardar = await asyncio.to_thread(_sha256, path)
+        try:
+            await asyncio.to_thread(zcbz.reescribir_con_xml, path, nuevo)
+        except SinEspacioError as exc:
+            return ResultadoEtiquetado(file.id, file.file_name, SIN_ESPACIO, campos, str(exc))
+        except VerificacionError as exc:
+            return ResultadoEtiquetado(file.id, file.file_name, FALLO_VERIFICACION,
+                                       campos, str(exc))
+        except CbzInvalidoError as exc:
+            return ResultadoEtiquetado(file.id, file.file_name, INVALIDO, campos, str(exc))
+        except (CbzError, OSError) as exc:
+            return ResultadoEtiquetado(file.id, file.file_name, ERROR, campos, str(exc))
+        return await self._anotar_escritura(file, ctx, path, campos, original_para_guardar)
+
     async def _anotar_escritura(
         self, file: File, ctx: _Contexto, path: Path, campos: list[CampoPlan],
         original_para_guardar: str | None = None,

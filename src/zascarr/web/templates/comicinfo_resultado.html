@@ -1,0 +1,10 @@
+{#- #480: resultado de guardar ComicInfo. -#}
+<div class="comicinfo-resultado" id="comicinfo-resultado">
+  {% if resultado.resultado in ("guardado", "sin_cambios") %}
+  {{ ui.aviso("ok", resultado.mensaje) }}
+  {% else %}
+  {{ ui.aviso("amber", resultado.mensaje) }}
+  {% endif %}
+  {% if resultado.advertencia %}<p class="caption">{{ resultado.advertencia }}</p>{% endif %}
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a></p>
+</div>
