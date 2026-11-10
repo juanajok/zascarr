@@ -7,6 +7,15 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Los CBZ convertidos se creaban con permisos 0600 y otros programas no podían abrirlos.**
+  El CBZ se construía en un temporal de `mkstemp` y se publicaba tal cual; ahora se copia el modo
+  del CBR original (y el dueño, si se puede), así que Kavita, SMB u otra persona lo leen. Los CBZ
+  ya creados se arreglan con `chmod 644` una vez.
+- **El cierre de una conversión ya hecha enseñaba el UUID del archivo.** Ahora nombra el CBZ
+  («XIII 01…cbz») o dice «el tebeo» si no hay nombre; nunca el identificador interno.
+- **Un fallo al confirmar podía no verse**: si la vista previa caducaba o no era válida en una
+  petición HTMX, el aviso no se pintaba; ahora aparece dentro de la ficha con «Abrir la vista previa
+  de nuevo». Además el formulario de confirmar apunta por id al fragmento (no por `closest`).
 - **Convertir un CBR dejaba una página en blanco con el resultado.** El botón «Convertir a CBZ»
   de la vista previa era un envío normal del formulario, así que el navegador cargaba el fragmento
   del resultado como página suelta (sin menú ni estilos). Ahora la confirmación va por HTMX y el
