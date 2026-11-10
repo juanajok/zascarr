@@ -12,6 +12,46 @@
   </div>
 </div>
 
+<section id="cobertura" class="cobertura" aria-labelledby="cobertura-titulo">
+  <h2 id="cobertura-titulo" class="seccion titulo-frase">Qué información tengo</h2>
+  {% if cobertura_error %}
+    {% call ui.aviso("warn") %}
+      <strong>No se ha podido calcular la cobertura.</strong>
+      La página sigue funcionando; vuelve a cargarla para intentarlo de nuevo.
+    {% endcall %}
+  {% elif cobertura %}
+    <p class="cobertura-linea">{{ cobertura.texto_series }}</p>
+    <p class="cobertura-linea">{{ cobertura.texto_numeros }}</p>
+    {% if cobertura.texto_accion %}
+      {% call ui.aviso("warn") %}{{ cobertura.texto_accion }}{% endcall %}
+    {% endif %}
+    <details>
+      <summary>De dónde sale cada dato</summary>
+      <div class="cobertura-fuentes">
+        <table class="cobertura-tabla">
+          <caption>Series por procedencia</caption>
+          <thead><tr><th scope="col">Procedencia</th><th scope="col">Series</th></tr></thead>
+          <tbody>
+            {% for nombre, n in cobertura.filas_series() %}
+            <tr><th scope="row">{{ nombre }}</th><td class="cobertura-numero">{{ n }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <table class="cobertura-tabla">
+          <caption>Números por procedencia</caption>
+          <thead><tr><th scope="col">Procedencia</th><th scope="col">Números</th></tr></thead>
+          <tbody>
+            {% for nombre, n in cobertura.filas_numeros() %}
+            <tr><th scope="row">{{ nombre }}</th><td class="cobertura-numero">{{ n }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    <p class="caption">{{ cobertura.texto_fecha }}</p>
+  {% endif %}
+</section>
+
 <section id="cortesia" aria-labelledby="cortesia-titulo">
   <h2 id="cortesia-titulo" class="seccion titulo-frase">Esperas al pedir datos</h2>
   <p>{{ cortesia.subtitulo }}</p>
