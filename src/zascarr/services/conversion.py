@@ -406,6 +406,12 @@ class ConversionDeArchivo:
                             _VERSION, "conversion", firmada.operacion, str(f.id), "omitida",
                             nueva.estado.value, self._aviso(nueva) or "",
                             advertencia=self._aviso(nueva))
+                    # #564: hash FINAL del CBR justo antes de apartarlo. Si otro proceso
+                    # lo cambió durante la extracción, no se toca nada (ni cuarentena).
+                    if _sha256(ruta) != firmada.sha256:
+                        return _conflicto(
+                            MotivoConversion.PROPUESTA_DESACTUALIZADA,
+                            "El archivo cambió durante la conversión; no se ha tocado nada.")
                     # #564: apartar el original ANTES de publicar. Si la publicación falla,
                     # se compensa restaurándolo; nunca se queda sin original ni sin CBZ.
                     cuarentena.mkdir(parents=True, exist_ok=True)
@@ -416,7 +422,8 @@ class ConversionDeArchivo:
                         f, firmada, "preparada", original_apartado, ruta_original=ruta,
                         destino=destino, sha_original=firmada.sha256,
                         tamano_original=firmada.tamano, sha_nuevo=construccion.sha256,
-                        tamano_nuevo=construccion.tamano, metodo=analisis.metodo)
+                        tamano_nuevo=construccion.tamano, metodo=analisis.metodo,
+                        ruta_apartada=original_apartado)
                     os.replace(ruta, original_apartado)
                     _fsync_dir(cuarentena)
                     _fsync_dir(ruta.parent)
@@ -424,7 +431,8 @@ class ConversionDeArchivo:
                         f, firmada, "original_apartado", original_apartado,
                         ruta_original=ruta, destino=destino, sha_original=firmada.sha256,
                         tamano_original=firmada.tamano, sha_nuevo=construccion.sha256,
-                        tamano_nuevo=construccion.tamano, metodo=analisis.metodo)
+                        tamano_nuevo=construccion.tamano, metodo=analisis.metodo,
+                        ruta_apartada=original_apartado)
                     try:
                         _publicar_sin_sobrescribir(tmp, destino)
                     except FileExistsError:
@@ -436,7 +444,7 @@ class ConversionDeArchivo:
                             ruta_original=ruta, destino=destino,
                             sha_original=firmada.sha256, tamano_original=firmada.tamano,
                             sha_nuevo=construccion.sha256, tamano_nuevo=construccion.tamano,
-                            metodo=analisis.metodo)
+                            metodo=analisis.metodo, ruta_apartada=original_apartado)
                         return _conflicto(MotivoConversion.YA_EXISTE_CBZ)
                     except OSError:
                         with contextlib.suppress(OSError):
@@ -451,7 +459,7 @@ class ConversionDeArchivo:
                         f, firmada, "publicado", destino, ruta_original=ruta, destino=destino,
                         sha_original=firmada.sha256, tamano_original=firmada.tamano,
                         sha_nuevo=nuevo_sha, tamano_nuevo=nuevo_tamano,
-                        metodo=analisis.metodo)
+                        metodo=analisis.metodo, ruta_apartada=original_apartado)
                 self._actualizar_fila(f, firmada, ruta, destino, nuevo_sha, nuevo_tamano,
                                       metodo=analisis.metodo, original_ruta=original_ruta)
                 try:
@@ -517,7 +525,8 @@ class ConversionDeArchivo:
                          ruta_original: Path | None = None, destino: Path | None = None,
                          sha_original: str | None = None, tamano_original: int | None = None,
                          sha_nuevo: str | None = None, tamano_nuevo: int | None = None,
-                         metodo: str | None = None) -> None:
+                         metodo: str | None = None,
+                         ruta_apartada: Path | None = None) -> None:
         """Escribe el diario ANTES de tocar los bytes (write-ahead) y lo actualiza por fase.
 
         Si el proceso muere, `reconciliar_diario` comprueba hashes/tamaños y solo borra la
@@ -531,6 +540,7 @@ class ConversionDeArchivo:
                 "version": 1, "file_id": str(f.id), "operacion_id": firmada.operacion,
                 "estado": estado, "fecha": _ahora_iso(), "ruta": str(ruta),
                 "ruta_original": str(ruta_original) if ruta_original else None,
+                "ruta_apartada": str(ruta_apartada) if ruta_apartada else None,
                 "destino": str(destino) if destino else None,
                 "sha_original": sha_original, "tamano_original": tamano_original,
                 "sha_nuevo": sha_nuevo, "tamano_nuevo": tamano_nuevo,
@@ -565,6 +575,17 @@ class ConversionDeArchivo:
             "Se puede deshacer: el original vuelve a su sitio.", token=token)
 
     async def deshacer(self, token: str, *, forzar_compartido: bool = False,
+                        file_id_esperado: str | UUID | None = None,
+                        serie_id_esperado: str | UUID | None = None) -> ResultadoConversion:
+        """Deshacer con el cerrojo de ciclo: no compite con conversión/rescan/vaciar."""
+        async with self._cerrojo_ciclo() as libre:
+            if not libre:
+                return _conflicto(MotivoConversion.CONFLICTO_DE_BLOQUEO)
+            return await self._deshacer_sin_cerrojo(
+                token, forzar_compartido=forzar_compartido,
+                file_id_esperado=file_id_esperado, serie_id_esperado=serie_id_esperado)
+
+    async def _deshacer_sin_cerrojo(self, token: str, *, forzar_compartido: bool = False,
                         file_id_esperado: str | UUID | None = None,
                         serie_id_esperado: str | UUID | None = None) -> ResultadoConversion:
         firmada = verificar_token_conversion(token, self._secret, ahora=self._ahora,
@@ -717,19 +738,29 @@ class ConversionDeArchivo:
         """Cerrojo de sesión compartido con rescan/importador; sin él, no se vacía ni reconcilia."""
         libre = True
         obtenido = False
+        conexion = None
         with contextlib.suppress(Exception):
-            libre = bool((await self._db.execute(
-                text("SELECT pg_try_advisory_lock(:c, :o)"),
-                {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})).scalar())
-            obtenido = libre
+            # Conexión DEDICADA fuera de la sesión: los `commit` de la reconciliación no
+            # la devuelven al pool ni pierden el advisory lock de sesión que la protege.
+            bind = getattr(self._db, "bind", None)
+            if bind is not None:
+                conexion = await bind.connect()
+                libre = bool((await conexion.execute(
+                    text("SELECT pg_try_advisory_lock(:c, :o)"),
+                    {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})).scalar())
+                obtenido = libre
         try:
             yield libre
         finally:
-            if obtenido:
+            if conexion is not None:
+                if obtenido:
+                    with contextlib.suppress(Exception):
+                        await conexion.execute(
+                            text("SELECT pg_advisory_unlock(:c, :o)"),
+                            {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})
+                        await conexion.commit()
                 with contextlib.suppress(Exception):
-                    await self._db.execute(
-                        text("SELECT pg_advisory_unlock(:c, :o)"),
-                        {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})
+                    await conexion.close()
 
     def _coincide(self, ruta: Path, sha: str | None, tamano: int | None) -> bool:
         try:
@@ -799,11 +830,16 @@ class ConversionDeArchivo:
         hist = list(anterior.get("historial") or [])
         hist.append({"fecha": _ahora_iso(), "operacion_id": datos.get("operacion_id"),
                      "accion": "reconciliada", "metodo": datos.get("metodo")})
+        # #564: en recomprimir el original vive en `ruta_apartada`; en D5, en `ruta_original`.
+        if datos.get("metodo") == "renombrar_zip":
+            original_ruta = Path(datos.get("ruta_original") or "")
+        else:
+            original_ruta = Path(datos.get("ruta_apartada") or datos.get("ruta") or "")
         meta["conversion"] = {
             "version": 1, "estado": "convertida",
             "operacion_id": datos.get("operacion_id"), "metodo": datos.get("metodo"),
             "fecha": _ahora_iso(), "reconciliada": True,
-            "original": {"ruta": datos.get("ruta"), "nombre": Path(datos.get("ruta") or "").name,
+            "original": {"ruta": str(original_ruta), "nombre": original_ruta.name,
                          "sha256": datos.get("sha_original"),
                          "tamano": datos.get("tamano_original")},
             "nuevo": {"ruta": str(destino), "sha256": sha_nuevo, "tamano": tamano_nuevo},
@@ -824,6 +860,50 @@ class ConversionDeArchivo:
             await self._db.rollback()
             return False
         return await self._fila_coherente(str(file_id), destino, sha_nuevo, tamano_nuevo)
+
+    async def _reparar_deshacer_desde_diario(self, file_id: str, datos: dict) -> bool:
+        """Cierra un deshacer interrumpido: original de vuelta y fila CBR coherente."""
+        try:
+            f = await self._db.get(File, UUID(str(file_id)), populate_existing=True)
+        except (ValueError, TypeError):
+            return False
+        if f is None:
+            return False
+        original = Path(datos.get("ruta_original") or "")
+        apartada = Path(datos.get("ruta") or "")
+        destino = Path(datos.get("destino") or "")
+        sha_original = datos.get("sha_original")
+        tamano_original = datos.get("tamano_original")
+        if not (original.exists() and self._coincide(original, sha_original, tamano_original)):
+            return False
+        if destino.exists() and self._coincide(destino, datos.get("sha_nuevo"),
+                                               datos.get("tamano_nuevo")):
+            try:
+                _publicar_sin_sobrescribir(destino, apartada)
+            except OSError:
+                return False
+        meta = copy.deepcopy(f.metadata_ if isinstance(f.metadata_, dict) else {})
+        conv = meta.get("conversion") if isinstance(meta.get("conversion"), dict) else {}
+        conv.update({"estado": "deshecha", "deshecho_en": _ahora_iso()})
+        conv.setdefault("historial", []).append(
+            {"fecha": _ahora_iso(), "operacion_id": datos.get("operacion_id"),
+             "accion": "deshecha_reconciliada"})
+        meta["conversion"] = conv
+        f.file_path = str(original)
+        f.file_name = original.name
+        f.file_format = FileFormat.CBR
+        f.file_size_bytes = int(tamano_original or 0)
+        f.sha256_hash = sha_original
+        with contextlib.suppress(OSError):
+            f.file_mtime_ns = original.stat().st_mtime_ns
+        f.metadata_ = meta
+        try:
+            await self._db.commit()
+        except Exception:  # noqa: BLE001
+            await self._db.rollback()
+            return False
+        return bool(f.file_path == str(original) and f.file_format is FileFormat.CBR
+                    and f.sha256_hash == sha_original)
 
     async def _reconciliar_diario_sin_cerrojo(self) -> int:
         base = _diario(self._settings)
@@ -870,6 +950,13 @@ class ConversionDeArchivo:
                         original, sha_original, tamano_original):
                     # El write-ahead quedó antes de mover: nada que reparar y está verificado.
                     reparada = True
+            elif estado == "deshaciendo" and file_id:
+                reparada = await self._reparar_deshacer_desde_diario(str(file_id), datos)
+                if not reparada and destino.exists() and self._coincide(
+                        destino, sha_nuevo, tamano_nuevo):
+                    # El deshacer no llegó a mover nada: la fila sigue siendo el CBZ válido.
+                    reparada = await self._fila_coherente(
+                        str(file_id), destino, sha_nuevo, tamano_nuevo)
             elif estado == "deshecha" and file_id:
                 if original.exists() and self._coincide(
                         original, sha_original, tamano_original):

@@ -25,6 +25,8 @@ MAX_CBR_BYTES = 150 * 1024 * 1024
 MAX_ENTRADAS = 1000
 MAX_DECLARADOS = 500 * 1024 * 1024
 MAX_ENTRADA = MAX_ENTRADA_LEIDA
+#: D5 no recomprime, pero su contenido declarado tampoco puede superar el presupuesto del CBZ.
+MAX_D5_TOTAL = MAX_CBR_BYTES
 _CARPETAS_COMIC = frozenset({".cbr", ".cbz", ".rar", ".zip", ".7z", ".cb7", ".pdf"})
 
 
@@ -178,6 +180,9 @@ def analizar(ruta: Path, *, lector=lector_rar) -> Analisis:
             raise ConversionBloqueadaError(MotivoConversion.ILEGIBLE,
                                            _MENSAJES[MotivoConversion.ILEGIBLE]) from exc
         total = sum(m.tamano for m in marcas)
+        if total > MAX_D5_TOTAL:
+            raise ConversionBloqueadaError(MotivoConversion.DEMASIADO_GRANDE,
+                                           _MENSAJES[MotivoConversion.DEMASIADO_GRANDE])
         return Analisis("renombrar_zip", len(marcas), total, total)
     if not ruta.suffix.lower() == ".cbr":
         raise ConversionBloqueadaError(MotivoConversion.NO_ES_CBR,
@@ -199,6 +204,12 @@ def analizar(ruta: Path, *, lector=lector_rar) -> Analisis:
 
 
 def _manifiesto_de_zip(ruta: Path) -> tuple[EntradaManifiesto, ...]:
+    """Manifiesto de un ZIP ya construido o de un D5.
+
+    Los tamaños declarados se validan ANTES de `testzip`; un ZIP que declare tamaños
+    pequeños y luego infle el stream al descomprimir sigue siendo una limitación conocida
+    (condición no bloqueante de SecOps, documentada aquí): no se puede saber sin leer.
+    """
     marcas: list[EntradaManifiesto] = []
     with zipfile.ZipFile(ruta) as zf:
         # #564: mirar los TAMAÑOS DECLARADOS antes de `testzip` (que descomprime): un ZIP
