@@ -6,7 +6,7 @@
 <p>Elige qué significa esta carpeta y hasta dónde alcanza.</p>
 <p><strong>Ruta relativa</strong><br><span class="declaracion-ruta">{{ ruta }}</span></p>
 <p class="caption">Se toma desde la raíz de tu biblioteca. La ruta no se cambia aquí.</p>
-{% if error %}<p class="declaracion-aviso" role="alert">{{ error }}</p>{% endif %}
+{% if error %}<p class="declaracion-aviso" role="alert" tabindex="-1" autofocus>{{ error }}</p>{% endif %}
 
 {% if resumen.actual_local %}
 <section class="declaracion-resumen" aria-labelledby="ya-declarada">
@@ -20,13 +20,13 @@
   {% else %}
   <p>{{ resumen.actual.tipo_de_significado.value | replace("autor", "Por autor") | replace("publicacion", "Por publicación") }} · {{ resumen.actual.alcance }} · Versión {{ resumen.actual.version }}</p>
   <p class="acciones-declaracion">
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas/cambiar/{{ resumen.actual.id }}">Cambiar declaración</a>
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/cambiar/{{ resumen.actual.declaracion_id }}">Cambiar declaración</a>
     {% if resumen.actual.estado.value == "activa" %}
-    <form method="post" action="/ui/pendientes/carpetas/desactivar/{{ resumen.actual.id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
+    <form method="post" action="/ui/pendientes/carpetas/desactivar/{{ resumen.actual.declaracion_id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
     {% else %}
-    <form method="post" action="/ui/pendientes/carpetas/reactivar/{{ resumen.actual.id }}"><button class="btn ghost sm" type="submit">Reactivar</button></form>
+    <form method="post" action="/ui/pendientes/carpetas/reactivar/{{ resumen.actual.declaracion_id }}"><button class="btn ghost sm" type="submit">Reactivar</button></form>
     {% endif %}
-    <a class="btn ghost sm" href="/ui/pendientes/carpetas/retirar/{{ resumen.actual.id }}">Retirar</a>
+    <a class="btn ghost sm" href="/ui/pendientes/carpetas/retirar/{{ resumen.actual.declaracion_id }}">Retirar</a>
     <a class="btn ghost sm" href="/ui/pendientes/carpetas/contexto">Ver en Contexto declarado</a>
   </p>
   {% endif %}
@@ -38,6 +38,11 @@
 <div class="declaracion-aviso" role="status">
   <strong>Esta carpeta tiene una declaración de importación; no es una decisión local.</strong>
   <p>Se puede crear una local; la importada no se sobrescribe y queda como alternativa visible.</p>
+  <p>Hay otra interpretación para esta carpeta. No se elige ninguna aquí.</p>
+  <p>La declaración local tiene prioridad; el alias no se borra y sigue visible.</p>
+  {% for alt in resumen.alternativas %}
+  <p class="caption">Alternativa: {{ "Por autor" if alt.tipo_de_significado.value == "autor" else "Por publicación" }} · {{ "Local" if alt.origen.value == "local" else "Importación" }} · {{ alt.estado.value }}.</p>
+  {% endfor %}
 </div>
 {% endif %}
 

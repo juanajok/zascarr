@@ -40,13 +40,13 @@
       <p>Sugerencia importada; no es una decisión local. Se muestra, no se gestiona desde aquí.</p>
       {% else %}
       <p class="acciones-declaracion">
-        <a class="btn ghost sm" href="/ui/pendientes/carpetas/cambiar/{{ d.id }}">Cambiar</a>
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/cambiar/{{ d.declaracion_id }}">Cambiar</a>
         {% if d.estado.value == "activa" %}
-        <form method="post" action="/ui/pendientes/carpetas/desactivar/{{ d.id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
+        <form method="post" action="/ui/pendientes/carpetas/desactivar/{{ d.declaracion_id }}"><button class="btn ghost sm" type="submit">Desactivar</button></form>
         {% else %}
-        <form method="post" action="/ui/pendientes/carpetas/reactivar/{{ d.id }}"><button class="btn ghost sm" type="submit">Reactivar</button></form>
+        <form method="post" action="/ui/pendientes/carpetas/reactivar/{{ d.declaracion_id }}"><button class="btn ghost sm" type="submit">Reactivar</button></form>
         {% endif %}
-        <a class="btn ghost sm" href="/ui/pendientes/carpetas/retirar/{{ d.id }}">Retirar</a>
+        <a class="btn ghost sm" href="/ui/pendientes/carpetas/retirar/{{ d.declaracion_id }}">Retirar</a>
       </p>
       {% if d.estado.value == "desactivada" %}<p class="caption">No se aplica a nuevas interpretaciones.</p>{% endif %}
       {% endif %}

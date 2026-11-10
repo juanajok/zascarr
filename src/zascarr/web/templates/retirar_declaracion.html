@@ -10,7 +10,7 @@
   <p><strong>Significado:</strong> {{ "Por autor" if d.tipo_de_significado.value == "autor" else "Por publicación" }} · Versión {{ d.version }}</p>
   <p><strong>Alcance:</strong> {{ d.alcance }}</p>
 </div>
-<form method="post" action="/ui/pendientes/carpetas/retirar/{{ d.id }}" class="declaracion-form">
+<form method="post" action="/ui/pendientes/carpetas/retirar/{{ d.declaracion_id }}" class="declaracion-form">
   <button class="btn primary" type="submit">Sí, retirar la declaración</button>
   <a class="btn ghost" href="{{ volver }}">Volver sin retirar</a>
 </form>

@@ -2082,7 +2082,7 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .declaracion-fieldset legend { font-weight: 800; padding: 0; margin-bottom: 2px; }
 .declaracion-opcion, .declaracion-check { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; padding: 8px; border: 1px solid var(--ink-faint); border-radius: var(--radius-panel); cursor: pointer; }
 .declaracion-opcion input, .declaracion-check input { width: 24px; height: 24px; flex: 0 0 auto; margin-top: 2px; }
-.declaracion-opcion small { display: block; font-weight: 400; margin-top: 2px; }
+.declaracion-opcion small { display: block; font-weight: 400; font-size: .875rem; margin-top: 2px; }
 .declaracion-aviso { border-left: 4px solid var(--ink); padding-left: 10px; }
 .declaracion-version { font-size: .875rem; font-variant-numeric: tabular-nums; }
 .declaracion-ruta { overflow-wrap: anywhere; word-break: break-word; }
