@@ -285,6 +285,20 @@ async def lifespan(app: FastAPI):
         logger.exception("zascarr.db_unavailable_at_startup")
         app.state.db_degraded = True
 
+    if not app.state.db_degraded:
+        # #478/#564: consumir el diario de conversión de una ejecución anterior. Si una
+        # conversión murió entre apartar el original y publicar, se restaura; si murió
+        # después de publicar, se repara la fila. Sin esto, el diario crecería sin fin.
+        try:
+            from zascarr.services.conversion import ConversionDeArchivo
+            async with async_session_factory() as session:
+                servicio = ConversionDeArchivo(session, secret=get_settings().secret_key)
+                resueltas = await servicio.reconciliar_diario()
+            if resueltas:
+                logger.info("conversion.diario_reconciliado", resueltas=resueltas)
+        except Exception:
+            logger.exception("conversion.diario_reconciliacion_fallida")
+
     if app.state.db_degraded:
         # E6: «solo diagnóstico» también para el fondo. Sin BD, los cuatro ciclos
         # (auditoría, importación, enriquecimiento, orquestación) fallarían cada

@@ -1,0 +1,20 @@
+{#- #478: resultado de una conversión o de su deshacer. -#}
+<div class="conversion-resultado" id="conversion-resultado">
+  {% if resultado.resultado in ("convertida", "ya_convertida") %}
+  {{ ui.aviso("ok", resultado.mensaje) }}
+  {% elif resultado.resultado in ("revertida", "ya_revertida") %}
+  {{ ui.aviso("ok", resultado.mensaje) }}
+  {% else %}
+  {{ ui.aviso("amber", resultado.mensaje) }}
+  {% endif %}
+  {% if resultado.advertencia %}<p class="caption">{{ resultado.advertencia }}</p>{% endif %}
+  {% if resultado.antes or resultado.despues %}
+  <details class="ajustes-mas"><summary>Qué ha cambiado</summary>
+    <p class="caption">Antes: {{ resultado.antes.get("ruta", "") }} · Después: {{ resultado.despues.get("ruta", "") }}</p>
+  </details>
+  {% endif %}
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
+    {% if resultado.resultado in ("convertida", "ya_convertida") %}
+    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir/deshacer">Deshacer</a>
+    {% endif %}</p>
+</div>
