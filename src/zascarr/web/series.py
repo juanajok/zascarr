@@ -1000,6 +1000,26 @@ async def deshacer_conversion_confirmar(series_id: UUID, file_id: UUID, request:
         request, "conversion_resultado.html", {"series": series, "resultado": resultado}))
 
 
+@router.get("/{series_id}/convertir", response_class=HTMLResponse)
+async def convertir_lote_previa(series_id: UUID, request: Request,
+                                db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    lote = await _servicio_conversion(db).previsualizar_lote(series_id)
+    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_lote.html", {
+        "series": series, "lote": lote, "resultado": None}))
+
+
+@router.post("/{series_id}/convertir", response_class=HTMLResponse)
+async def convertir_lote_confirmar(series_id: UUID, request: Request,
+                                   db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    servicio = _servicio_conversion(db)
+    resultado = await servicio.convertir_lote(series_id)
+    lote = await servicio.previsualizar_lote(series_id)
+    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_lote.html", {
+        "series": series, "lote": lote, "resultado": resultado}))
+
+
 def _sin_cache_conversion(respuesta: HTMLResponse) -> HTMLResponse:
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
