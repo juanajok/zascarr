@@ -243,3 +243,21 @@ def test_d5_tope_total_declarado(monkeypatch, tmp_path):
     with pytest.raises(ConversionBloqueadaError) as exc:
         analizar(ruta, lector=_Lector([]))
     assert exc.value.motivo is MotivoConversion.DEMASIADO_GRANDE
+
+
+def test_el_cbz_publicado_hereda_el_modo_del_original(tmp_path):
+    """`mkstemp` crea el temporal con 0600; el CBZ debe quedar como el CBR original."""
+    import stat
+
+    from zascarr.services.conversion import _copiar_permisos
+
+    original = tmp_path / "original.cbr"
+    original.write_bytes(b"x")
+    original.chmod(0o640)
+    destino = tmp_path / "nuevo.cbz"
+    destino.write_bytes(b"y")
+    destino.chmod(0o600)
+
+    _copiar_permisos(destino, original.stat())
+
+    assert stat.S_IMODE(destino.stat().st_mode) == 0o640

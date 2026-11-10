@@ -3,18 +3,19 @@
 {% set deshecho = resultado.resultado in ("revertida", "ya_revertida") %}
 {% set antes = resultado.antes or {} %}
 {% set despues = resultado.despues or {} %}
-{% set nombre = (despues.get("ruta") or antes.get("ruta") or resultado.file_id).split("/")[-1] %}
+{% set ruta = despues.get("ruta") or antes.get("ruta") %}
+{% set nombre = ruta.split("/")[-1] if ruta else "" %}
 {% set tam_antes = antes.get("tamano") %}
 {% set tam_despues = despues.get("tamano") %}
 <div class="conversion-resultado" id="conversion-resultado" aria-live="polite">
   {% if ok %}
-  {{ ui.aviso("ok", "Listo: «" ~ nombre ~ "» ya es un CBZ.") }}
+  {{ ui.aviso("ok", ("Listo: «" ~ nombre ~ "» ya es un CBZ.") if nombre else "Listo: el tebeo ya es un CBZ.") }}
   <p class="caption">{{ resultado.mensaje }}</p>
   {% if tam_antes and tam_despues %}
   <p class="caption">Tamaño: {{ (tam_antes / 1048576)|round(1) }} MB → {{ (tam_despues / 1048576)|round(1) }} MB.</p>
   {% endif %}
   {% elif deshecho %}
-  {{ ui.aviso("ok", "Deshecho: «" ~ nombre ~ "» vuelve a ser el original.") }}
+  {{ ui.aviso("ok", ("Deshecho: «" ~ nombre ~ "» vuelve a ser el original.") if nombre else "Deshecho: el tebeo vuelve a ser el original.") }}
   <p class="caption">{{ resultado.mensaje }}</p>
   {% else %}
   {{ ui.aviso("amber", "No se ha convertido: " ~ resultado.mensaje) }}
@@ -37,6 +38,6 @@
     <a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
   </p>
   {% if ok %}
-  <p class="caption">El original se guarda aparte en una carpeta oculta de tu biblioteca, para poder deshacer. Ocupa espacio hasta que lo liberes en Duplicados.</p>
+  <p class="caption">El original se guarda aparte en una carpeta oculta de tu biblioteca, para poder deshacer. Ocupa espacio hasta que lo liberes en Duplicados. La ficha se actualiza al abrirla de nuevo.</p>
   {% endif %}
 </div>
