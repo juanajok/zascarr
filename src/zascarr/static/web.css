@@ -1994,11 +1994,14 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .previa-numero {
   position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
   width: 220px; z-index: 30; pointer-events: none;
-  display: block; overflow: hidden;
+  display: none; overflow: hidden;
   border: 3px solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); box-shadow: var(--shadow-ink-sm);
 }
-.previa-numero:empty { display: none; }
+/* Solo la previa del número que se está mirando: al salir del chip (o mover el foco) se oculta.
+   Antes cada chip conservaba la suya y se acumulaban todas. */
+.chip-previa:hover > .previa-numero:not(:empty),
+.chip-previa:focus-within > .previa-numero:not(:empty) { display: block; }
 .previa-numero img { display: block; width: 100%; height: auto; max-width: none; }
 .previa-pie {
   display: block; padding: 6px 10px;

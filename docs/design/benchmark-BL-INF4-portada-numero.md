@@ -40,6 +40,8 @@
 - Sin cambios en la petición: una miniatura por archivo, cacheada (`covers/v3/numero/<file_id>.jpg`),
   ETag y 24 h de caché privada.
 - Móvil y puntero grueso: no hay previa; tocar sigue abriendo el número.
+- **Solo una previa a la vez**: se muestra únicamente la del chip con ratón o foco; las demás quedan
+  ocultas (antes cada chip conservaba la suya y se acumulaban en series de cientos de números).
 
 ## 4. Hallazgo colateral (corregido en la misma PR)
 
