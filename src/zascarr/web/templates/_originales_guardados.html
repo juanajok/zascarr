@@ -1,0 +1,28 @@
+{#- BL-CNV2b: originales apartados de las conversiones: dónde están, cuánto ocupan y liberar. -#}
+<section id="originales" class="originales-guardados" aria-labelledby="originales-titulo">
+  <h2 id="originales-titulo" class="seccion">Originales guardados</h2>
+
+  {% if borrados is not none and borrados %}
+  {{ ui.aviso("ok", "Liberados " ~ borrados ~ " originales." ~
+      (" Quedan " ~ originales ~ " (" ~ (bytes|tamano) ~ ")." if originales else " No queda ninguno.")) }}
+  {% endif %}
+  {% if error %}{{ ui.aviso("amber", error) }}{% endif %}
+
+  {% if originales %}
+  <p class="caption">Al convertir un CBR, el original no se borra: se guarda aparte, en una carpeta
+    oculta dentro de tu biblioteca (<code>.zascarr</code>), para que puedas deshacer. No hace falta
+    que la abras ni que la toques.</p>
+  <p class="caption">Ahora hay <strong>{{ originales }}</strong> originales guardados y ocupan
+    <strong>{{ bytes|tamano }}</strong>. Si ya no necesitas deshacer esas conversiones, puedes liberar
+    ese espacio; después no se podrán recuperar.</p>
+  <form hx-post="/ui/auditoria/originales/vaciar" hx-target="#originales" hx-swap="outerHTML"
+        hx-disabled-elt="find button">
+    <label class="legal-checkbox"><input type="checkbox" name="confirmado" value="1" required>
+      Entiendo que no podré deshacer esas conversiones.</label>
+    <p class="caption htmx-indicator" role="status">Liberando… puede tardar unos segundos.</p>
+    <button class="btn" type="submit">Liberar espacio</button>
+  </form>
+  {% else %}
+  {{ ui.aviso("ok", "No hay originales guardados: todo el espacio de las conversiones está libre.") }}
+  {% endif %}
+</section>
