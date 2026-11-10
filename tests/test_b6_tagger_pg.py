@@ -1049,6 +1049,13 @@ class TestResumenPorEntidad:
         assert _acciones(r)["Summary"] == "sin_dato"
 
     @pytest.mark.asyncio
+    async def test_issue_none_con_file_manual_no_autoriza(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source=None, file_metadata_source="manual")
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "sin_dato"
+
+    @pytest.mark.asyncio
     async def test_issue_manual_con_file_cv_si_autoriza(self, db, tmp_path):
         archivo, _ruta = await _montar(
             db, tmp_path, metadata_source="manual", file_metadata_source="comic_vine")
