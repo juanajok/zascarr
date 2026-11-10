@@ -2036,3 +2036,13 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
   .portada-c, .portada-m, .portada-y { background: var(--paper-2); color: var(--ink); }
   .pagina-error h1 { text-shadow: none; }
 }
+
+/* #480: el resultado de ComicInfo tiene que leerse como un cierre, no como texto suelto. */
+.comicinfo-resultado-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.comicinfo-espera { font-weight: 700; }
+.comicinfo-espera::before {
+  content: ""; width: 12px; height: 12px; display: inline-block; margin-right: 8px;
+  vertical-align: -2px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: conversion-giro .8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .comicinfo-espera::before { animation: none; } }
