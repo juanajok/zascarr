@@ -219,6 +219,10 @@ class ParsedComicName:
     format: str = ""
     is_annual: bool = False
     extra_info: list[str] = field(default_factory=list)
+    #: Parte que se descartaba como «título del número» cuando iba ANTES del número
+    #: ("Superman - Godfall #01"). Sirve para no confundir colecciones distintas;
+    #: vacío si el subtítulo iba después del número ("Superman #01 - El origen").
+    subtitulo: str = ""
     original_filename: str = ""
     confidence: float = 0.0
     # B15 (2026-09-26): cuando issue_number viene de un marcador de
@@ -440,7 +444,10 @@ def parse_comic_filename(filename: str) -> ParsedComicName:
     # "Serie - Subtítulo" como "Serie -Subtítulo" ("La liga de los hombres
     # extraordinarios -La Tempestad"). El espacio DELANTE sí se exige, que
     # es lo que distingue el separador de un guion interno ("Spider-Man").
-    working = re.split(r"\s+-\s*", working, maxsplit=1)[0]
+    partes_subtitulo = re.split(r"\s+-\s*", working, maxsplit=1)
+    working = partes_subtitulo[0]
+    if len(partes_subtitulo) > 1:
+        result.subtitulo = partes_subtitulo[1].strip()
 
     series = working.strip()
     series = re.sub(r"[\.\-_]+", " ", series)
@@ -505,3 +512,30 @@ def _confidence(p: ParsedComicName) -> float:
     if p.volume:
         score += 0.05
     return min(score, 1.0)
+
+
+#: Marcas de edición/formato que no distinguen una colección de otra.
+_MARCAS_DE_EDICION = re.compile(
+    r"\b(?:vol(?:umen)?|tomo|integral|omnigold|deluxe|edicion|especial|annual|anual|extra|"
+    r"variant|variante|coleccion|serie)\b\.?\s*\d*",
+    re.IGNORECASE,
+)
+
+
+def clave_de_coleccion(nombre: str) -> str:
+    """La parte del nombre que identifica la COLECCIÓN, sin número ni marcas de edición.
+
+    "Superman - Godfall #01" -> "superman godfall"; "Superman #01" -> "superman";
+    "Superman Vol2 001 [SC]" -> "superman". Dos archivos de la misma colección
+    (CBR/CBZ, copia) comparten clave; dos tebeos distintos con el mismo número,
+    no. Vacío si no se puede afirmar nada: quien la use no debe bloquear por ello.
+    """
+    parsed = parse_comic_filename(nombre)
+    base = " ".join(parte for parte in (parsed.series, parsed.subtitulo) if parte)
+    base = normalize_series_name(base)
+    base = _MARCAS_DE_EDICION.sub(" ", base)
+    base = re.sub(r"\b\d+\b", " ", base)
+    base = re.sub(r"\s+", " ", base).strip()
+    if parsed.is_annual:
+        base = (base + " anual").strip()
+    return base
