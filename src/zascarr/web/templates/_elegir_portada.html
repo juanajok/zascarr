@@ -1,0 +1,46 @@
+{#- BL-INF6 (#592): panel «Elegir portada» de la ficha.
+    Lo pide el desplegable con `hx-get` al abrirse (nada de miniaturas antes) y lo repinta el POST
+    de la elección. Sin JS propio; `ui.portada` pinta el marcador debajo de cada miniatura, así que
+    una imagen que falta se ve como hueco de la app, nunca como imagen rota. -#}
+<details class="elegir-portada" id="elegir-portada" open>
+  <summary>Elegir portada</summary>
+  <div class="elegir-portada-panel">
+    <p class="caption">Solo cambia la portada en ZascArr; no se escribe en los CBZ. El enriquecimiento no la sustituirá.</p>
+    {% if error %}{{ ui.aviso("warn", error, foco=true) }}{% endif %}
+    {% if mensaje %}{{ ui.aviso("ok", mensaje, foco=true) }}{% endif %}
+
+    {% if portada_actual %}
+    <figure class="portada-actual">
+      {{ ui.portada(series.title, series.id, portada_actual, "portada-actual-img", "lazy") }}
+      <figcaption>La portada que se ve ahora en la ficha.</figcaption>
+    </figure>
+    {% endif %}
+
+    {% if candidatas %}
+    <p class="muted">Elige la que quieras. Pasa a ser la portada de la serie al momento.</p>
+    <div class="portada-candidatas" id="portada-candidatas">
+      {% for c in candidatas %}{% include "_portada_candidata.html" %}{% endfor %}
+    </div>
+    {% endif %}
+    {% include "_portada_ver_mas.html" %}
+    {% if not candidatas and not hay_mas %}
+    {{ ui.aviso("info", "No hay más portadas que elegir todavía: esta serie no tiene números con archivo ni una portada externa guardada. Cuando importes números, aparecerán aquí.") }}
+    {% endif %}
+
+    <p class="portada-acciones">
+      <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
+      {% if eleccion %}
+      <form method="post" action="/ui/series/{{ series.id }}/portada/quitar"
+            hx-post="/ui/series/{{ series.id }}/portada/quitar"
+            hx-target="#elegir-portada" hx-swap="outerHTML" hx-disable="find button">
+        <button class="btn ghost" type="submit">Volver a la portada automática</button>
+      </form>
+      {% endif %}
+      <span class="muted">Cancelar vuelve a la ficha y no cambia nada. Quitar la elección deja que ZascArr vuelva a elegirla; ningún archivo se toca.</span>
+    </p>
+  </div>
+  {% if actualizar_cabecera %}
+  {#- la cabecera de la ficha enseña la portada nueva sin recargar (mismo separador `?v=`) -#}
+  <span class="portada-serie-envoltura" id="portada-serie" hx-swap-oob="true">{{ ui.portada(series.title, series.id, portada_actual, "series-cover") }}</span>
+  {% endif %}
+</details>

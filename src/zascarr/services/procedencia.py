@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from zascarr.models import MetadataSource, Series
+from zascarr.services.portada_serie import eleccion_de_portada
 from zascarr.services.tokens_revision import id_canonico
 from zascarr.utils.texto_html import texto_plano
 
@@ -160,7 +161,11 @@ def _valor(clave: str, series: Series, id_presente: bool) -> str:
             return "Sin dato"
         return texto if len(texto) <= 160 else texto[:157].rstrip() + "…"
     if clave == "cover_url":
-        return "Portada guardada" if series.cover_url else "Sin portada"
+        # BL-INF6: la portada elegida a mano no tiene por qué estar en `cover_url` (puede salir
+        # de un CBZ), pero SÍ es la portada guardada de la serie.
+        if series.cover_url or eleccion_de_portada(series) is not None:
+            return "Portada guardada"
+        return "Sin portada"
     if clave == "total_issues":
         return _texto(series.total_issues)
     return "Identificador registrado" if id_presente else "Sin identificar"
@@ -175,7 +180,7 @@ def _tiene_valor(clave: str, series: Series, id_presente: bool) -> bool:
     if clave == "description":
         return bool(series.description)
     if clave == "cover_url":
-        return bool(series.cover_url)
+        return bool(series.cover_url) or eleccion_de_portada(series) is not None
     if clave == "total_issues":
         return series.total_issues is not None
     return id_presente
@@ -183,6 +188,11 @@ def _tiene_valor(clave: str, series: Series, id_presente: bool) -> bool:
 
 def _origen(clave: str, series: Series, alta: dict, id_presente: bool) -> tuple[str | None, bool]:
     """(texto de origen, es manual). Solo atribuye lo que el registro permite afirmar."""
+    # BL-INF6: la portada elegida a mano se registra ella misma (en `metadata_["portada"]`), así
+    # que consta como manual aunque `metadata_source` sea el de una fuente o la serie sea de alta
+    # manual.
+    if clave == "cover_url" and eleccion_de_portada(series) is not None:
+        return "Elegida a mano", True
     origen_alta = str(alta.get("origen") or "")
     fuente_alta = alta.get("fuente")
     manual = origen_alta == "manual" or series.metadata_source == MetadataSource.MANUAL.value
