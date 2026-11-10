@@ -1077,5 +1077,8 @@ async def comicinfo_guardar(series_id: UUID, file_id: UUID, request: Request,
             raise HTTPException(status_code=400, detail=str(exc),
                                 headers={"Cache-Control": "no-store"}) from None
         raise
+    plantilla = ("comicinfo_resultado.html"
+                 if request.headers.get("HX-Request") == "true"
+                 else "comicinfo_resultado_pagina.html")
     return _sin_cache_comicinfo(templates.TemplateResponse(
-        request, "comicinfo_resultado.html", {"series": series, "resultado": resultado}))
+        request, plantilla, {"series": series, "resultado": resultado}))
