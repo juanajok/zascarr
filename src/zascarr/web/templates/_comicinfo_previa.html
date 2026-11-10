@@ -22,13 +22,16 @@
     {% if fuentes_disponibles %}
     <p class="caption">Añade datos de tus fuentes al plan, campo a campo. No se guarda nada hasta elegir.</p>
     <button class="btn ghost" hx-get="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo/fuentes"
-            hx-target="#comicinfo-fuentes" hx-swap="outerHTML">Buscar datos en las fuentes</button>
+            hx-target="#comicinfo-fuentes" hx-swap="outerHTML"
+            hx-indicator="#comicinfo-fuentes-cargando" hx-disabled-elt="this">Buscar datos en las fuentes</button>
+    <span id="comicinfo-fuentes-cargando" class="caption htmx-indicator" role="status">
+      Consultando las fuentes…</span>
     {% else %}
     <p class="caption">{{ fuentes_mensaje }}</p>
     {% if fuentes_enlace %}<p><a class="btn ghost" href="{{ fuentes_enlace }}">Ir a la solución</a></p>{% endif %}
     {% endif %}
-    <div id="comicinfo-fuentes-resultado" aria-live="polite"></div>
   </section>
+  <div id="comicinfo-fuentes-anuncio" class="sr-only" aria-live="polite" aria-atomic="true"></div>
   <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
         hx-post="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
         hx-target="#comicinfo-{{ file_id }}" hx-swap="outerHTML"

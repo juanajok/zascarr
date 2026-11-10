@@ -24,6 +24,7 @@ from zascarr.core.propuestas_comicinfo import (
     OpcionPropuesta,
     PropuestaCampo,
     ResultadoFuente,
+    campos_elegibles,
 )
 
 TTL_SESION_S = 15 * 60
@@ -87,6 +88,7 @@ class CampoUI:
     bloqueado: bool = False
     motivo: str | None = None
     elegida: str | None = None
+    estado: str = "anadir"
 
 
 @dataclass
@@ -108,6 +110,17 @@ class SesionPropuestas:
     expira: float = 0.0
 
     @property
+    def campos_sin_datos(self) -> tuple[CampoUI, ...]:
+        con_propuesta = {p.tag for p in self.propuestas}
+        return tuple(CampoUI(tag, ETIQUETAS_CAMPO.get(tag, tag), None, (), False,
+                             "Sin datos nuevos en las fuentes", estado="sin_dato")
+                     for tag in sorted(campos_elegibles() - con_propuesta))
+
+    @property
+    def reintento_cortesia(self) -> bool:
+        return any(e.estado == "limite_de_cortesia" for e in self.estados)
+
+    @property
     def avisos_fuentes(self) -> tuple[str, ...]:
         avisos = []
         for estado in self.estados:
@@ -127,7 +140,8 @@ class SesionPropuestas:
             if valor and valor.strip().casefold() != actuales.get(tag, "").strip().casefold():
                 cambios += 1
         total = len([p for p in self.propuestas if not p.bloqueado])
-        return f"Has elegido {cambios} cambios de {total} campos con propuesta."
+        sustantivo = "cambio" if cambios == 1 else "cambios"
+        return f"Has elegido {cambios} {sustantivo} de {total} campos con propuesta."
 
     def campos_ui(self) -> tuple[CampoUI, ...]:
         salida: list[CampoUI] = []
@@ -146,6 +160,7 @@ class SesionPropuestas:
                 tag=p.tag, etiqueta=ETIQUETAS_CAMPO.get(p.tag, p.tag),
                 actual=p.actual, opciones=tuple(opciones), bloqueado=p.bloqueado,
                 motivo=p.motivo, elegida=self.elecciones.get(p.tag),
+                estado=p.estado.value,
             ))
         return tuple(salida)
 
