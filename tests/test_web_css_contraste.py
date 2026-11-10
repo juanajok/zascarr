@@ -478,13 +478,20 @@ class TestEstructura:
         ".topnav a", ".series-search", ".issue-input", ".search-input",
         ".politica-form select", '.ajustes-card input[type="text"]',
         '.login-form input[type="text"]', ".page-link", ".back-link",
-        ".issue-chip", ".archivos-numero-titulo a",
+        ".issue-chip", ".archivos-numero-titulo a", ".lectura-estados label",
     ])
     def test_controles_con_altura_minima_de_40_px(self, selector):
         alturas = [d.get("min-height") for s, d in _reglas()
                    if selector in [x.strip() for x in s.split(",")] and "min-height" in d]
         assert alturas, f"{selector}: sin min-height"
         assert all(float(re.match(r"([\d.]+)px", a).group(1)) >= 40 for a in alturas), alturas
+
+    def test_lectura_labels_con_altura_minima_de_44_px(self):
+        alturas = [d.get("min-height") for s, d in _reglas()
+                   if ".lectura-estados label" in [x.strip() for x in s.split(",")]
+                   and "min-height" in d]
+        assert alturas
+        assert all(float(re.match(r"([\d.]+)px", a).group(1)) >= 44 for a in alturas), alturas
 
     def test_botones_con_altura_minima_de_40_px(self):
         regla = next(d for s, d in _reglas() if s.startswith("button,") and "min-height" in d)
