@@ -6,8 +6,10 @@ Recibe SOLO el token. Hace, en UNA transacción: volver a comprobar todo, vincul
 motivo lo que no (impedimentos PREVISTOS) y guardar el informe INMUTABLE de la operación. Cualquier fallo
 inesperado revierte todo el intento: ni vínculos, ni `Issue`s, ni informe.
 
-Lo que NO hace: no mueve, copia, renombra ni borra ficheros; no lee su contenido ni calcula hashes (solo `stat`);
-no usa la red; no aprende alias; no desvincula; no reasigna jamás un archivo ya vinculado a otra serie o número.
+Lo que NO hace: no mueve, copia, renombra ni borra ficheros; **no lee su contenido ni calcula hashes**
+(solo `stat`); no aplica ComicInfo (BL-INF2 lo hace después la importación, la adopción o la acción
+explícita de la biblioteca, que sí leen el archivo); no usa la red; no aprende alias; no desvincula;
+no reasigna jamás un archivo ya vinculado a otra serie o número.
 
 Orden de bloqueos (el mismo que el alta y su deshacer): operación › [título] › serie (`FOR SHARE`) › archivos
 (`FOR UPDATE`, por id) › claves `(serie, número)` en orden › filas de `Issue` (`FOR UPDATE`).
@@ -397,6 +399,8 @@ class VinculacionDeArchivos:
             {"i": issue_id, "v": json.dumps(vinculo, ensure_ascii=False), "f": a.id})
         if r.rowcount != 1:
             raise RuntimeError("la fila bloqueada no se pudo vincular")
+        # BL-INF2: vincular NO lee el CBZ (garantía del contrato). El ComicInfo se aplica
+        # después desde la importación, la adopción o la acción explícita de la biblioteca.
 
     # ── Informe ──────────────────────────────────────────────────────────────────────────────────
 

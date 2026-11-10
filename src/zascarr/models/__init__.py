@@ -330,6 +330,11 @@ class Creator(Base):
     __tablename__ = "creators"
     id: Mapped[str] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     name:            Mapped[str]      = mapped_column(String(255), nullable=False)
+    # #448: normalización propia de nombres de autor (minúsculas, sin acentos, espacios
+    # colapsados); generada por Postgres con `f_creator_name_norm`.
+    name_norm: Mapped[str | None] = mapped_column(
+        String(255), Computed("f_creator_name_norm(name)", persisted=True)
+    )
     sort_name:       Mapped[str|None] = mapped_column(String(255))
     nationality:     Mapped[str|None] = mapped_column(String(100))
     birth_year:      Mapped[int|None] = mapped_column(SmallInteger)
