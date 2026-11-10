@@ -94,6 +94,20 @@ def test_vista_previa_muestra_garantia_y_token(monkeypatch):
     assert f'hx-target="#conversion-{servicio.vista.file_id}"' in r.text
     assert "parece compartido" in r.text and 'name="forzar_compartido"' in r.text
     assert "El original se aparta y se puede deshacer" in r.text
+    assert "<html" in r.text                       # sin HTMX, página completa (no fragmento suelto)
+
+
+def test_vista_previa_por_htmx_es_fragmento(monkeypatch):
+    serie = _serie()
+    servicio = _Servicio(vista=_vista())
+    c = _cliente(monkeypatch, servicio, serie)
+    try:
+        r = c.get(f"/ui/series/{serie.id}/archivos/{uuid4()}/convertir",
+                  headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200 and "<html" not in r.text
+    assert f'hx-target="#conversion-{servicio.vista.file_id}"' in r.text
 
 
 def test_confirmacion_muestra_resultado_y_enlace_deshacer(monkeypatch):
@@ -157,6 +171,7 @@ def test_deshacer_previa_y_resultado(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert previa.status_code == 200 and "Deshacer la conversión" in previa.text
+    assert "<html" in previa.text
     assert confirmado.status_code == 200 and "Original restaurado" in confirmado.text
 
 
@@ -256,3 +271,23 @@ def test_un_error_de_token_en_htmx_se_avisa_en_la_ficha(monkeypatch):
     assert respuesta.status_code == 200
     assert "La vista previa caducó" in respuesta.text
     assert "Abrir la vista previa de nuevo" in respuesta.text
+
+
+def test_un_404_en_htmx_no_inyecta_json(monkeypatch):
+    """htmx 4 intercambia los 4xx: un JSON crudo se vería dentro de la ficha."""
+    serie = _serie()
+    servicio = _Servicio(vista=_vista())
+    _cliente(monkeypatch, servicio, serie)
+    # La sesión devuelve None: la serie ya no existe.
+    async def _db_vacia():
+        yield _Sesion(None)
+    app.dependency_overrides[get_db] = _db_vacia
+    try:
+        r = TestClient(app).get(f"/ui/series/{uuid4()}/archivos/{uuid4()}/convertir",
+                                headers={"HX-Request": "true"})
+        sin_htmx = TestClient(app).get(f"/ui/series/{uuid4()}/archivos/{uuid4()}/convertir")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200 and r.text == ""
+    assert "detail" not in r.text
+    assert sin_htmx.status_code == 404 and "<html" in sin_htmx.text
