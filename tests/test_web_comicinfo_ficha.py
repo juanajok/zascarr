@@ -66,6 +66,8 @@ def test_previa_muestra_campos_token_y_guardar(monkeypatch):
     assert r.status_code == 200
     assert "Series" in r.text and "Thorgal" in r.text
     assert 'name="token"' in r.text and "Guardar información en el tebeo" in r.text
+    assert 'hx-post="/ui/series/' in r.text and 'hx-target="#comicinfo-' in r.text
+    assert "Guardando…" in r.text
 
 
 def test_previa_compartida_pide_confirmacion(monkeypatch):
@@ -103,7 +105,11 @@ def test_resultado_guardado(monkeypatch):
                    data={"token": "tok"})
     finally:
         app.dependency_overrides.pop(get_db, None)
-    assert r.status_code == 200 and "ComicInfo guardado" in r.text
+    assert r.status_code == 200
+    assert "<!doctype html>" in r.text  # sin HTMX, página completa, no un fragmento suelto
+    assert "Listo: la información ya está guardada dentro del tebeo." in r.text
+    assert "Revisar otra vez" in r.text and "Volver a la serie" in r.text
+    assert "Cuidado: este archivo parece compartido" not in r.text
 
 
 def test_ficha_de_serie_muestra_actualizar_comicinfo_en_cbz():
@@ -159,3 +165,37 @@ def test_errores_token_400_410_llevan_no_store(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert r410.status_code == 410
     assert r410.headers.get("cache-control") == "no-store"
+
+
+def test_resultado_htmx_es_solo_el_fragmento(monkeypatch):
+    serie = _serie()
+    resultado = ResultadoComicInfo(1, "comicinfo", str(uuid4()), str(uuid4()), "guardado",
+                                   None, "ComicInfo guardado en el tebeo.")
+    c = _cliente(monkeypatch, _Servicio(resultado=resultado), serie)
+    try:
+        r = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/comicinfo",
+                   data={"token": "tok"}, headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200
+    assert "<!doctype html>" not in r.text
+    assert 'class="comicinfo-resultado"' in r.text
+    assert "Listo: la información" in r.text
+
+
+def test_resultado_forzado_no_repite_el_aviso_de_compartido(monkeypatch):
+    serie = _serie()
+    resultado = ResultadoComicInfo(1, "comicinfo", str(uuid4()), str(uuid4()), "guardado",
+                                   None, "ComicInfo guardado en el tebeo.",
+                                   campos=[CampoPlan("Series", Accion.CAMBIA, None, "Thorgal")],
+                                   advertencia="Cuidado: este archivo parece compartido.",
+                                   forzado_compartido=True)
+    c = _cliente(monkeypatch, _Servicio(resultado=resultado), serie)
+    try:
+        r = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/comicinfo",
+                   data={"token": "tok"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert "Se guardó con tu confirmación porque el archivo parecía compartido." in r.text
+    assert "Cuidado: este archivo parece compartido" not in r.text
+    assert "Qué se ha escrito" in r.text and "Thorgal" in r.text

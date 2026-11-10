@@ -17,12 +17,16 @@
     {% endfor %}
   </ul>
   {% endif %}
-  <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo">
+  <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
+        hx-post="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
+        hx-target="#comicinfo-{{ file_id }}" hx-swap="outerHTML"
+        hx-disabled-elt="find button">
     <input type="hidden" name="token" value="{{ vista.token }}">
     {% if vista.advertencia %}
     <label class="legal-checkbox"><input type="checkbox" name="forzar_compartido" value="1" required>
       Entiendo el riesgo para la siembra y quiero continuar.</label>
     {% endif %}
+    <p class="caption comicinfo-espera htmx-indicator" role="status">Guardando… no cierres esta página.</p>
     <div class="ajustes-actions">
       <button class="btn primary" type="submit">Guardar información en el tebeo</button>
       <a class="btn ghost" href="/ui/series/{{ series.id }}">Cancelar</a>
