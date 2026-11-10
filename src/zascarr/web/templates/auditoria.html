@@ -21,4 +21,7 @@
 
 {#- BL-R9: rescan de la biblioteca (a demanda; el periódico corre solo). Se pide al cargar. -#}
 <div id="rescan" hx-get="/ui/auditoria/rescanear" hx-trigger="load" hx-swap="outerHTML"></div>
+
+{#- BL-CNV2b: originales apartados de las conversiones (dónde, cuánto y liberar). -#}
+<div id="originales" hx-get="/ui/auditoria/originales" hx-trigger="load" hx-swap="outerHTML"></div>
 {% endblock %}

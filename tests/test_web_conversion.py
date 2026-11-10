@@ -114,6 +114,7 @@ def test_confirmacion_muestra_resultado_y_enlace_deshacer(monkeypatch):
     assert "MB → " in respuesta.text
     assert f"/archivos/{r.file_id}/convertir/deshacer" in respuesta.text
     assert "Volver a la serie" in respuesta.text
+    assert "Duplicados" in respuesta.text
 
 
 def test_ficha_muestra_convertir_para_cbr():

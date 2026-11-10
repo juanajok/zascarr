@@ -1986,6 +1986,10 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (prefers-reduced-motion: reduce) { .conversion-espera::before { animation: none; } }
 .conversion-resultado-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
+/* BL-CNV2b: originales guardados de las conversiones (Duplicados). */
+.originales-guardados { margin: 18px 0; }
+.originales-guardados form { display: grid; gap: 8px; justify-items: start; margin-top: 4px; }
+
 /* #479: lote de conversión (vista previa, informe y siguiente tanda). */
 .conversion-lote { display: grid; gap: 8px; margin: 10px 0 14px; }
 .conversion-lote h3 { margin: 0; }
