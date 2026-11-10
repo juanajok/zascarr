@@ -57,7 +57,17 @@
   {% if ficha.archivos %}
   <ul class="archivos-lista issue-archivos">
     {% for a in ficha.archivos %}
-    <li class="archivo-fila"><span class="nombre-archivo">{{ a.nombre }}</span> <span class="muted">{{ a.formato|upper }}</span> {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}</li>
+    <li class="archivo-fila">
+      <span class="nombre-archivo">{{ a.nombre }}</span>
+      <span class="muted">{{ a.formato|upper }}</span>
+      {% if a.falta_en_disco %}{{ ui.chip("amber", "Quizá no esté en el disco") }}{% else %}{{ ui.chip("ok", "En el disco") }}{% endif %}
+      {% if a.formato == "cbr" %}
+      <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/convertir"
+         hx-get="/ui/series/{{ series.id }}/archivos/{{ a.id }}/convertir"
+         hx-target="#resultado-conversion-{{ a.id }}" hx-swap="innerHTML">Convertir a CBZ<span class="sr"> {{ a.nombre }}</span></a>
+      <div id="resultado-conversion-{{ a.id }}"></div>
+      {% endif %}
+    </li>
     {% endfor %}
   </ul>
   {% else %}
