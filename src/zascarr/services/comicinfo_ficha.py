@@ -171,7 +171,7 @@ class ComicInfoFichaService:
         token = crear_token(PROPOSITO_COMICINFO, str(f.id), {
             "version": 1, "operacion": operacion, "ruta": str(ruta),
             "tamano": st.st_size, "mtime_ns": st.st_mtime_ns, "sha256": sha,
-            "campos": _campos_para_token(campos), "huella": _huella(campos),
+            "huella": _huella(campos),
         }, self._secret, ahora=self._ahora, ttl=_TTL)
         return VistaComicInfo(
             str(f.id), str(serie_id), f.file_name, False, True, None,
@@ -189,10 +189,10 @@ class ComicInfoFichaService:
         if datos is None:
             raise TokenCaducadoError("La vista previa caducó o no es válida; no se ha escrito nada.",
                                      puede_haberse_aplicado=False)
-        campos = _campos_desde_token(datos.get("campos"))
-        if campos is None or datos.get("huella") != _huella(campos):
+        if not isinstance(datos.get("huella"), str) or len(datos["huella"]) != 64:
             raise TokenInvalidoError("El plan firmado no es válido; no se ha escrito nada.")
         operacion = str(datos.get("operacion", ""))
+        campos: list[CampoPlan] = []
         f = await self._db.get(File, UUID(str(file_id_esperado)), populate_existing=True)
         if f is None:
             raise TokenInvalidoError("Ese archivo ya no existe.")
@@ -244,13 +244,14 @@ class ComicInfoFichaService:
                 return _desactualizada(operacion, str(f.id),
                                        "El archivo ya no pertenece a esta serie; no se ha escrito nada.")
             try:
-                campos_frescos = await self._tagger.planificar(f)
+                campos = await self._tagger.planificar(f)
             except ComicInfoInvalidoError:
                 return _desactualizada(operacion, str(f.id),
                                        "El ComicInfo cambió desde la vista previa; no se ha escrito nada.")
-            # #583: si cambió un locked_field (o cualquier dato del plan) después de la
-            # vista previa, la huella ya no coincide y no se aplica el plan viejo.
-            if _huella(campos_frescos) != datos.get("huella"):
+            # #583/#586: el plan firmado es una huella, no una copia del texto. Si cambió
+            # un locked_field o cualquier dato de la ficha, la huella no coincide. Si
+            # coincide, se aplica el plan FRESCO (idéntico al firmado) sin volver a leer red.
+            if _huella(campos) != datos.get("huella"):
                 return _desactualizada(operacion, str(f.id),
                                        "La información del número cambió desde la vista previa; no se ha escrito nada.")
             shared = await estado_de_comparticion(ruta)

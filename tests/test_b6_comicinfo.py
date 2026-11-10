@@ -192,7 +192,7 @@ class TestCamposAutoresGeneroPaginas:
         assert _unir_lista(["Ana", "ana", " Bob ", "", None]) == "Ana, Bob"
         assert _unir_lista(["Zoe", "Álex"]) == "Zoe, Álex"
         assert _unir_lista([]) is None
-        assert _LOCK_DE["Writer"] == ("issue", "creators")
+        assert _LOCK_DE["Writer"] == ("issue", "credits")
         assert _LOCK_DE["Genre"] == ("series", "genres")
         assert _LOCK_DE["PageCount"] == ("issue", "page_count")
 
@@ -218,3 +218,42 @@ class TestCamposAutoresGeneroPaginas:
         assert acciones["Writer"] is Accion.CAMBIA
         assert acciones["Genre"] is Accion.SIN_DATO
         assert acciones["PageCount"] is Accion.SIN_DATO
+
+
+class TestPageCountYPrecedenciaNuevos:
+    """#481/SecOps: rango de páginas y precedencia de los campos nuevos."""
+
+    def test_page_count_solo_entre_1_y_10000(self):
+        from types import SimpleNamespace
+
+        from zascarr.services.tagger import _contexto_de
+
+        base = dict(title=None, issue_number="1", volume=1, release_date=None,
+                    synopsis=None, locked_fields=[], credits=[])
+        series = SimpleNamespace(title="S", publisher_id=None, locked_fields=[], genres=[])
+
+        def paginas(valor):
+            issue = SimpleNamespace(**{**base, "page_count": valor})
+            return _contexto_de(issue, series, None).deseados["PageCount"]
+
+        assert paginas(1) == "1"
+        assert paginas(10000) == "10000"
+        assert paginas(0) is None
+        assert paginas(-3) is None
+        assert paginas(10001) is None
+        assert paginas(None) is None
+
+    def test_precedencia_manual_propio_y_sin_dato_en_campos_nuevos(self):
+        actual = {"Writer": "Manual", "Genre": "Acción", "PageCount": "24"}
+        deseados = {"Writer": "Ana", "Genre": "Acción", "PageCount": "24"}
+        acciones = _por_tag(plan(actual, deseados))
+        assert acciones["Writer"] is Accion.CONSERVA
+        assert acciones["Genre"] is Accion.YA_COINCIDE
+        assert acciones["PageCount"] is Accion.YA_COINCIDE
+
+        propio = {"Writer": "Manual"}
+        acciones = _por_tag(plan(actual, {**deseados, "Writer": "Ana"}, propio))
+        assert acciones["Writer"] is Accion.CAMBIA
+
+        acciones = _por_tag(plan({}, {"Writer": None, "Genre": None, "PageCount": None}))
+        assert all(acciones[t] is Accion.SIN_DATO for t in ("Writer", "Genre", "PageCount"))
