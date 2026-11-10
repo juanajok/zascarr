@@ -78,6 +78,7 @@ from zascarr.services.lectura import (
     NotaInvalidaError,
     ValoracionInvalidaError,
     lectura_de,
+    lecturas_de_serie,
     marcar,
 )
 from zascarr.services.legal import is_acknowledged
@@ -409,12 +410,14 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     # Las consultas de la ficha van AL FINAL: no desplazan las colas de los dobles de prueba
     # que ya consumían las consultas históricas de esta ruta.
     ficha = await cargar_ficha_serie(db, series_id)
+    lecturas = await lecturas_de_serie(db, series_id)
     sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis) if ficha else ("", "")
     serie_vacia = bool(ficha) and not (ficha.sinopsis or series.publisher or series.start_year
                                        or series.end_year or ficha.autores)
     respuesta = templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
         "ficha": ficha, "textos_ficha": TEXTOS_FICHA, "roles_ficha": ROLES_ES,
+        "lecturas": lecturas,
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
         "serie_vacia": serie_vacia,
         "missing": huecos.faltantes, "huecos": huecos,

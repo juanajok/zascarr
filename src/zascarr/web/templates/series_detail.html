@@ -163,9 +163,11 @@
   {% set enlace = ficha.enlace_para_numero(n) if ficha else none %}
   {% if enlace %}
   <span class="chip-previa">
-    <a class="issue-chip issue-present" href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
+    {% set lectura = lecturas.get(enlace.id) if lecturas else none %}
+    <a class="issue-chip issue-present{% if lectura and lectura.estado == "completed" %} issue-leido{% elif lectura and lectura.estado == "reading" %} issue-leyendo{% endif %}"
+       href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
        hx-get="/ui/series/{{ series.id }}/numero/{{ enlace.id }}/previa"
-       hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>
+       hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}{% if lectura and lectura.estado == "completed" %}<span class="sr"> leído</span>{% elif lectura and lectura.estado == "reading" %}<span class="sr"> leyendo</span>{% endif %}<span class="sr"> ver información del número {{ n }}</span></a>
     <span class="previa-numero" id="previa-{{ enlace.id }}" aria-hidden="true"></span>
   </span>
   {% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}

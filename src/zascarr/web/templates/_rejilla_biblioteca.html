@@ -116,6 +116,18 @@
   {% for series in items %}
   <a class="library-card" id="serie-{{ series.id }}" href="{{ url_serie(series.id) }}">
     {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id) }}
+    {% set leidos = series.lectura_leidos|default(0, true) %}
+    {% set total_lectura = series.lectura_total|default(0, true) %}
+    {% if total_lectura %}
+    {% set pct = (leidos * 100 / total_lectura)|round|int %}
+    <div class="library-card-progreso">
+      <div class="barra-lectura" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+           aria-valuenow="{{ pct }}" aria-label="Leído: {{ pct }}% ({{ leidos }} de {{ total_lectura }} números)">
+        <span class="barra-lectura-relleno" style="width: {{ pct }}%"></span>
+      </div>
+      <p class="barra-lectura-texto">{{ pct }}% leído · {{ leidos }} de {{ total_lectura }}</p>
+    </div>
+    {% endif %}
     <div class="library-card-body">
       <div class="library-card-title" title="{{ series.title }}">{{ series.title }}</div>
       <div class="library-card-meta">

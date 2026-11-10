@@ -43,6 +43,10 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Progreso de lectura en las tarjetas y pastillas (BL-INF10, #611).** Cada tarjeta de la
+  Biblioteca lleva una barra bajo la portada con el % de números leídos del total y «N de M»;
+  la consulta del listado ya trae el agregado (sin consultas por tarjeta). En la ficha de serie,
+  las pastillas se tiñen si el número está leído o leyendo, con texto para lectores de pantalla.
 - **La ficha del número enseña la portada del número y sus datos completos (BL-INF8, #600).**\n  Deja de mostrar la portada de la serie: usa la del propio número (600 px, caché por archivo y\n  ancho) y añade editorial, publicación (mes y año) e ISBN cuando consta, además de los autores por\n  papel, la sinopsis y los archivos.\n- **Vista previa de la portada de cada número (BL-INF4, #590).** Al pasar el ratón o enfocar un
   número en la ficha se enseña su portada, sin abrirlo: tarjeta de 220 px con «Nº N · título» y
   «Pulsa para abrir la ficha», flecha al chip y un pequeño retardo para no dispararse al barrer. La

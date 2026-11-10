@@ -138,9 +138,40 @@ class SeriesService:
         )).scalar() or 0
 
         pagina = pagina_efectiva(page, total, page_size) if corregir_pagina else page
+        # BL-INF10: progreso de lectura sin una consulta por tarjeta. Dos subconsultas correladas
+        # en la misma SELECT de la página; se guardan como atributos transitorios de la serie.
+        leidos_lectura = (
+            select(func.count(ReadingProgress.id))
+            .join(Issue, Issue.id == ReadingProgress.issue_id)
+            .where(Issue.series_id == Series.id,
+                   ReadingProgress.status == ReadingStatus.COMPLETED)
+            .correlate(Series)
+            .scalar_subquery()
+        )
+        total_numeros = (
+            select(func.count(Issue.id))
+            .where(Issue.series_id == Series.id)
+            .correlate(Series)
+            .scalar_subquery()
+        )
         query = query.order_by(Series.sort_title, Series.start_year, Series.id)
+        query = query.add_columns(leidos_lectura.label("lectura_leidos"),
+                                  total_numeros.label("lectura_total"))
         query = query.offset((pagina - 1) * page_size).limit(page_size)
-        items = list((await self.db.execute(query)).scalars().all())
+        resultado = await self.db.execute(query)
+        # Los dobles de prueba antiguos solo implementan `.scalars()`.
+        filas = (resultado.all() if hasattr(resultado, "all")
+                 else list(resultado.scalars().all()))
+        items = []
+        for fila in filas:
+            if isinstance(fila, Series):
+                # Dobles de prueba que devuelven la serie suelta: sin agregado.
+                serie, leidos_n, total_n = fila, 0, 0
+            else:
+                serie, leidos_n, total_n = fila[0], fila[1], fila[2]
+            serie.lectura_leidos = int(leidos_n or 0)
+            serie.lectura_total = int(total_n or 0)
+            items.append(serie)
         return items, total, pagina
 
     async def list_series(
