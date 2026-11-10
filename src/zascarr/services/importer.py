@@ -53,6 +53,7 @@ from zascarr.models import (
     ResultadoComprobacion,
     Series,
 )
+from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.etiquetas_comicinfo import aplicar_comicinfo
 from zascarr.utils.fs import listar_comics, safe_move_async, sanitize_segment
 from zascarr.utils.naming import parse_comic_filename
@@ -778,13 +779,14 @@ class Importer:
             motivo = "; ".join(result.notes) or "sin match fiable"
             report.unsorted.append(f"{path.name} → _Unsorted ({motivo})")
         else:
-            avisos = await self._aplicar_comicinfo(result, tr)
+            avisos = await self._aplicar_comicinfo(result, tr, final_dest)
             sufijo = f" (ComicInfo: {'; '.join(avisos)})" if avisos else ""
             report.imported.append(
                 f"{path.name} → {final_dest.relative_to(self._library)}{sufijo}")
         logger.info("importer.imported", dest=str(final_dest), status=result.status)
 
-    async def _aplicar_comicinfo(self, result: MatchResult, tr: TriageResult) -> list[str]:
+    async def _aplicar_comicinfo(
+            self, result: MatchResult, tr: TriageResult, ruta: Path) -> list[str]:
         """ETQ2: vuelca `<Tags>`/`<Genre>` del ComicInfo en la serie enlazada.
 
         Solo para importaciones con serie; devuelve los avisos (topes del
@@ -800,6 +802,13 @@ class Importer:
             self._db, result.series_id,
             tags=tr.comic_info.tags, genres=tr.comic_info.genres,
         )
+        if result.issue_id is not None:
+            try:
+                issue = await self._db.get(Issue, result.issue_id)
+                if issue is not None:
+                    await aplicar_a_issue(self._db, issue, ruta)
+            except Exception:  # noqa: BLE001 — un XML ajeno no tumba la importación
+                pass
         return [*tr.comic_info.warnings, *aplicado.avisos]
 
     async def _reenlazar(

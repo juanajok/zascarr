@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ textos.titulo }} — ZascArr{% endblock %}
+{% block content %}
+<a class="back-link" href="/ui/biblioteca">← {{ textos.volver }}</a>
+<h1 class="titulo-frase">{{ textos.titulo }}</h1>
+<p>{{ textos.entrada }}</p>
+<p class="caption">{{ textos.no_automatico }}</p>
+{% if resultado %}
+<h2>Resultado</h2>
+<dl class="ficha-serie-meta">
+  <div><dt>{{ textos.aplicados }}</dt><dd>{{ resultado.aplicados }}</dd></div>
+  <div><dt>{{ textos.omitidos }}</dt><dd>{{ resultado.omitidos }}</dd></div>
+  <div><dt>{{ textos.ilegibles }}</dt><dd>{{ resultado.ilegibles }}</dd></div>
+</dl>
+{% else %}
+<p>{{ textos.resumen.format(n=cbz, cbr=cbr) }}</p>
+<form method="post" action="/ui/biblioteca/comicinfo">
+  <button class="btn primary" type="submit">{{ textos.ejecutar }}</button>
+</form>
+{% endif %}
+{% endblock %}
