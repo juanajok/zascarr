@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.core.comicinfo_write import MAX_COMICINFO_BYTES
@@ -106,17 +107,23 @@ async def _aplicar_creditos(db: AsyncSession, issue: Issue, info: ComicInfo, *,
                 avisos.append("Un nombre de ComicInfo es demasiado largo; se ignora")
                 continue
             norm = normalizar_nombre_autor(nombre)
-            creator = (await db.execute(
-                select(Creator).where(Creator.name_norm == norm))).scalar_one_or_none()
-            if creator is None:
-                creator = Creator(name=nombre, metadata_source="comicinfo_xml")
-                db.add(creator)
-                await db.flush()
-            clave = (str(creator.id), rol)
+            creado = await db.execute(
+                pg_insert(Creator)
+                .values(name=nombre, metadata_source="comicinfo_xml")
+                .on_conflict_do_nothing(index_elements=["name_norm"])
+                .returning(Creator.id))
+            creator_id = creado.scalar_one_or_none()
+            if creator_id is None:
+                creator_id = (await db.execute(
+                    select(Creator.id).where(Creator.name_norm == norm))).scalar_one()
+            clave = (str(creator_id), rol)
             if clave in existentes:
                 continue
-            db.add(IssueCreator(issue_id=issue.id, creator_id=creator.id,
-                                role=CreatorRole(rol)))
+            await db.execute(
+                pg_insert(IssueCreator)
+                .values(issue_id=issue.id, creator_id=creator_id, role=CreatorRole(rol))
+                .on_conflict_do_nothing(
+                    index_elements=["issue_id", "creator_id", "role"]))
             existentes.add(clave)
             añadidos += 1
     return añadidos

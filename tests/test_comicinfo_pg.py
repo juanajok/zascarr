@@ -244,3 +244,56 @@ async def test_paginas_32_a_50_y_999999_pg(entorno):
         assert issue.page_count == 50
         await aplicar_a_issue(s, issue, enorme)
         assert issue.page_count == 50
+
+
+@pytest.mark.asyncio
+async def test_ana_y_ana_normalizan_al_mismo_creator_pg(entorno):
+    _, iid, ruta = await _fila(entorno, XML.replace("Ana", "Ana, ana"))
+    async with entorno.banco.fabrica() as s:
+        issue = await s.get(Issue, iid)
+        await aplicar_a_issue(s, issue, ruta)
+        await s.commit()
+    async with entorno.banco.fabrica() as s:
+        creadores = (await s.execute(select(Creator).where(Creator.name_norm == "ana"))).scalars().all()
+        assert len(creadores) == 1
+        creds = (await s.execute(select(IssueCreator).where(
+            IssueCreator.issue_id == iid, IssueCreator.role == "writer"))).scalars().all()
+        assert len(creds) == 1
+
+
+def test_migracion_0023_fusiona_creadores_duplicados():
+    import asyncio
+
+    import sqlalchemy as sa
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from tests._pg import alembic, url_asyncpg
+    with bd_efimera_sync(URL) as url:
+        alembic(url, "upgrade", "0022")
+
+        async def _sembrar():
+            motor = create_async_engine(url_asyncpg(url))
+            try:
+                async with motor.begin() as c:
+                    sid, iid, c1, c2 = uuid4(), uuid4(), uuid4(), uuid4()
+                    await c.execute(sa.text("INSERT INTO series (id,title,tradition) VALUES (:s,'X','franco_belgian')"), {"s": sid})
+                    await c.execute(sa.text("INSERT INTO issues (id,series_id,issue_number,volume) VALUES (:i,:s,'1',1)"), {"i": iid, "s": sid})
+                    await c.execute(sa.text("INSERT INTO creators (id,name,created_at) VALUES (:i,'Ana',now())"), {"i": c1})
+                    await c.execute(sa.text("INSERT INTO creators (id,name,created_at) VALUES (:i,'ana',now()+interval '1 day')"), {"i": c2})
+                    await c.execute(sa.text("INSERT INTO issue_creators (issue_id,creator_id,role) VALUES (:i,:c,'writer')"), {"i": iid, "c": c1})
+                    await c.execute(sa.text("INSERT INTO issue_creators (issue_id,creator_id,role) VALUES (:i,:c,'writer')"), {"i": iid, "c": c2})
+            finally:
+                await motor.dispose()
+
+        async def _comprobar():
+            motor = create_async_engine(url_asyncpg(url))
+            try:
+                async with motor.connect() as c:
+                    assert (await c.execute(sa.text("SELECT count(*) FROM creators WHERE name_norm='ana'"))).scalar_one() == 1
+                    assert (await c.execute(sa.text("SELECT count(*) FROM issue_creators"))).scalar_one() == 1
+            finally:
+                await motor.dispose()
+
+        asyncio.run(_sembrar())
+        migrar_a_head(url)
+        asyncio.run(_comprobar())

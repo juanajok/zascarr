@@ -29,6 +29,49 @@ def upgrade() -> None:
     op.add_column("creators", sa.Column(
         "name_norm", sa.String(255),
         sa.Computed("f_creator_name_norm(name)", persisted=True)))
+    # Bases con datos: antes del índice único hay que fusionar los creadores que
+    # normalizan igual (p. ej. «Ana» y «ana»). Se conserva el más antiguo y se
+    # repuntan sus créditos, con ON CONFLICT para no chocar con el PK
+    # (issue_id, creator_id, role).
+    op.execute("""
+        WITH ranked AS (
+            SELECT id, name_norm,
+                   first_value(id) OVER (
+                       PARTITION BY name_norm ORDER BY created_at NULLS FIRST, id
+                   ) AS keep_id,
+                   row_number() OVER (
+                       PARTITION BY name_norm ORDER BY created_at NULLS FIRST, id
+                   ) AS rn
+            FROM creators WHERE name_norm IS NOT NULL
+        )
+        INSERT INTO issue_creators (issue_id, creator_id, role)
+        SELECT ic.issue_id, r.keep_id, ic.role
+        FROM issue_creators ic JOIN ranked r ON r.id = ic.creator_id
+        WHERE r.rn > 1
+        ON CONFLICT DO NOTHING
+    """)
+    op.execute("""
+        WITH ranked AS (
+            SELECT id, name_norm,
+                   row_number() OVER (
+                       PARTITION BY name_norm ORDER BY created_at NULLS FIRST, id
+                   ) AS rn
+            FROM creators WHERE name_norm IS NOT NULL
+        )
+        DELETE FROM issue_creators ic USING ranked r
+        WHERE ic.creator_id = r.id AND r.rn > 1
+    """)
+    op.execute("""
+        WITH ranked AS (
+            SELECT id, name_norm,
+                   row_number() OVER (
+                       PARTITION BY name_norm ORDER BY created_at NULLS FIRST, id
+                   ) AS rn
+            FROM creators WHERE name_norm IS NOT NULL
+        )
+        DELETE FROM creators c USING ranked r
+        WHERE c.id = r.id AND r.rn > 1
+    """)
     op.create_index("uq_creators_name_norm", "creators", ["name_norm"], unique=True)
 
 
