@@ -7,6 +7,9 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Al pasar el ratón por los números se acumulaban las previas de portada.** Cada chip conservaba
+  la suya al salir; ahora solo se muestra la del número que tiene el ratón o el foco y las demás
+  quedan ocultas. En series de cientos de números la ficha vuelve a leerse.
 - **Los botones no se deshabilitaban durante una petición htmx.** El proyecto usa htmx 4.0.0, donde
   el atributo es `hx-disable`; 14 plantillas seguían con `hx-disabled-elt` (htmx 2) y se ignoraba.
   Corregido en todas (convertir, tanda, originales, rescan, comprobación de disco, desvincular…).
