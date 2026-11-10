@@ -157,3 +157,13 @@ def test_h8_id_no_canonico_invalida_la_entrada():
         gcd_id=77, metadata_={"asociaciones": [_entrada(id_externo="077")]}))
     (identidad,) = proc.identidades
     assert identidad.procedencia == "no registrada"
+
+
+def test_la_sinopsis_de_la_tabla_es_texto_plano_sin_html():
+    """La fuente entrega la sinopsis en HTML; la tabla enseña texto, no etiquetas."""
+    proc = procedencia_de_serie(serie(
+        description="<p>French series.</p><p><strong>Translations :</strong></p>"
+                    '<ul><li>English : <a href="https://example.invalid">XIII</a></li></ul>'))
+    valor = por_clave(proc)["description"].valor
+    assert "<p>" not in valor and "<strong>" not in valor and "<a" not in valor
+    assert "French series." in valor and "English" in valor

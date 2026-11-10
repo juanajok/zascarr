@@ -1747,9 +1747,9 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .procedencia-campo dt { font-weight: 700; }
 .procedencia-campo dd {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
-  margin: 0;
+  margin: 0; min-width: 0;
 }
-.procedencia-valor { font-weight: 600; }
+.procedencia-valor { font-weight: 600; overflow-wrap: anywhere; }
 .procedencia-origen { color: var(--ink-soft); font-size: .875rem; }
 .procedencia-origen.manual { color: var(--ink); font-weight: 700; }
 /* Las observaciones son texto informativo: 14 px, no el `small` del navegador. */
