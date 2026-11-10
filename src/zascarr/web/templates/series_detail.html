@@ -5,7 +5,12 @@
 {% if volver %}<a href="{{ volver }}" class="back-link">← Volver a la biblioteca</a>{% else %}<a href="/ui/biblioteca" class="back-link">← Biblioteca</a>{% endif %}
 
 <div class="series-header">
-  {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=2" % series.id, "series-cover") }}
+  {#- BL-INF6: el envoltorio lleva id para que el panel pueda refrescar la portada nueva por OOB
+      sin recargar; `display: contents` lo hace invisible para el flex del encabezado. El `?v=`
+      cambia al elegir una portada: el navegador no pinta 24 h la anterior (R-01). -#}
+  <span class="portada-serie-envoltura" id="portada-serie">
+    {{ ui.portada(series.title, series.id, "/ui/series/%s/portada?v=%s" % (series.id, portada_version), "series-cover") }}
+  </span>
   <div>
     <h1>{{ series.title }}{% if series.start_year %} <span class="subtitle" style="display:inline">({{ series.start_year }})</span>{% endif %}</h1>
     {% if series.publisher %}<p class="series-meta">{{ series.publisher.name }}</p>{% endif %}
@@ -40,6 +45,16 @@
     </details>
   </div>
 </div>
+
+{#- BL-INF6 (#592): «Elegir portada». El panel NO se pide hasta desplegarlo (cero miniaturas y
+    cero consultas en la carga de la ficha): el `toggle` nativo del <details> dispara el `hx-get`.
+    El `summary` va sin atributos para que siga siendo un desplegable normal de teclado. -#}
+<details class="elegir-portada" id="elegir-portada"
+         hx-get="/ui/series/{{ series.id }}/portada/elegir"
+         hx-trigger="toggle once" hx-target="this" hx-swap="outerHTML">
+  <summary>Elegir portada</summary>
+  <p class="muted">Cargando las portadas disponibles…</p>
+</details>
 
 <section class="ficha-serie-datos" aria-labelledby="ficha-serie-datos-titulo">
   <h2 id="ficha-serie-datos-titulo" class="titulo-frase">{{ textos_ficha.serie_bloque }}</h2>

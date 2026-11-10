@@ -395,3 +395,31 @@ def write_cover_cache(dest: Path, data: bytes) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     comprobar_espacio(dest.parent, len(data), "guardar la portada")
     _publicar_atomico(dest, lambda temporal: temporal.write(data))
+
+
+def mejorar_portada_externa(covers: Path, series_id: UUID, *,
+                            ancho: int = SERIES_COVER_MAX_WIDTH) -> Path | None:
+    """Deja la portada EXTERNA cacheada lista para ser la portada de la serie (BL-INF6).
+
+    La reescala a `ancho` si se quedó corta (una externa antigua de 320 px) y la publica de forma
+    atómica; si ya tiene `ancho` o más, no la reescribe. No descarga, no amplía (Pillow) y no toca
+    la biblioteca. `None` si no hay externa cacheada o no se puede leer. Llamar dentro de
+    `asyncio.to_thread`: decodifica, redimensiona y escribe en disco."""
+    ruta = covers / CARPETA_EXTERNA / f"{series_id}.jpg"
+    try:
+        with open(ruta, "rb") as fh:
+            datos = fh.read(MAX_BYTES_PORTADA_PREVIA + 1)
+        if len(datos) > MAX_BYTES_PORTADA_PREVIA or not _jpeg_terminado(datos):
+            return None
+        with Image.open(io.BytesIO(datos)) as img:
+            if img.format != "JPEG":
+                return None
+            if img.width >= ancho:
+                return ruta
+        _resize_and_save(datos, ruta, ancho)
+    except FileNotFoundError:
+        return None
+    except Exception as exc:      # imagen ilegible: se avisa una vez, sin ruta (CLAUDE.md §5.4)
+        _avisar_previa_ilegible(ruta, exc)
+        return None
+    return ruta
