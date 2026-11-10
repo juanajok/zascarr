@@ -985,6 +985,13 @@ def _servicio_conversion(db):
     return ConversionDeArchivo(db, secret=get_settings().secret_key)
 
 
+def _plantilla_conversion(request: Request) -> str:
+    """Fragmento para HTMX; página completa cuando la piden navegando (enlace, URL a mano)."""
+    if request.headers.get("HX-Request") == "true":
+        return "_conversion_previa.html"
+    return "conversion_pagina.html"
+
+
 async def _serie_para_conversion(db, series_id, file_id):
     series = await _serie_o_404(db, series_id)
     return series
@@ -1000,8 +1007,9 @@ async def convertir_vista_previa(series_id: UUID, file_id: UUID, request: Reques
         if exc.__class__.__name__ in ("TokenInvalidoError", "SerieNoEncontrada"):
             raise HTTPException(status_code=404, detail="Archivo no encontrado") from None
         raise
-    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_previa.html", {
-        "series": series, "vista": vista, "modo": "convertir"}))
+    return _sin_cache_conversion(templates.TemplateResponse(
+        request, _plantilla_conversion(request), {
+            "series": series, "vista": vista, "modo": "convertir"}))
 
 
 @router.post("/{series_id}/archivos/{file_id}/convertir", response_class=HTMLResponse)
@@ -1036,8 +1044,9 @@ async def deshacer_conversion_previa(series_id: UUID, file_id: UUID, request: Re
         vista = await _servicio_conversion(db).previsualizar_deshacer(series_id, file_id)
     except Exception:  # noqa: BLE001
         raise HTTPException(status_code=404, detail="No hay conversión que deshacer") from None
-    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_previa.html", {
-        "series": series, "vista": vista, "modo": "deshacer"}))
+    return _sin_cache_conversion(templates.TemplateResponse(
+        request, _plantilla_conversion(request), {
+            "series": series, "vista": vista, "modo": "deshacer"}))
 
 
 @router.post("/{series_id}/archivos/{file_id}/convertir/deshacer", response_class=HTMLResponse)
