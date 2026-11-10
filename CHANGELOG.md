@@ -7,6 +7,11 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **Archivos de colecciones distintas ya no se mezclan en el mismo número (BL-INF11, #616).**
+  El nombre «Superman - Godfall #01» se entendía como «Superman» nº 1 y se colgaba del número 1
+  existente junto a «Superman #01» o «Origen Secreto #01». Ahora, si el número ya tiene archivos
+  de otro título, el nuevo va a Pendientes con aviso en vez de enlazarse; los números ya mezclados
+  se señalan en la ficha para poder desvincularlos.
 - **La vista previa podía lanzar el lector de RAR con `LECTOR_RAR_ENABLED=false` (SecOps, ALTO).**\n  El servicio de miniaturas ahora respeta el interruptor igual que la portada de serie: con el\n  lector apagado, un `.cbr` no es candidato y no se envía a `lsar`/`unar`. Regresión incluida.\n- **El estado de lectura solo se toca dentro del número.** La ficha de serie ya no pinta los\n  controles «Sin leer / Leyendo / Leído» de cada número; se quitan también de su contexto y de\n  la consulta que los cargaba.\n- **Al pasar el ratón por los números se acumulaban las previas de portada.** Cada chip conservaba
   la suya al salir; ahora solo se muestra la del número que tiene el ratón o el foco y las demás
   quedan ocultas. En series de cientos de números la ficha vuelve a leerse.

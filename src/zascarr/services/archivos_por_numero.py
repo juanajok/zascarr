@@ -24,6 +24,7 @@ from zascarr.services.relacion_confirmada import (
     estado_de_relacion,
     relacion_actual,
 )
+from zascarr.utils.naming import clave_de_coleccion
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,8 @@ class NumeroConArchivos:
     issue_id: str
     numero: str
     archivos: list[ArchivoDeNumero] = field(default_factory=list)
+    #: BL-INF11: hay archivos con claves de colección distintas (posible mezcla).
+    mezcla: bool = False
 
 
 async def archivos_por_numero(db: AsyncSession, series_id: UUID) -> list[NumeroConArchivos]:
@@ -78,4 +81,7 @@ async def archivos_por_numero(db: AsyncSession, series_id: UUID) -> list[NumeroC
         n.archivos.append(ArchivoDeNumero(
             id=str(f.id), nombre=f.file_name, formato=f.file_format.value, falta_en_disco=bool(f.is_missing),
             bloqueo=bloqueo, formato_publicacion=f.format.value, discrepancias=visibles))
+    for numero in por_numero.values():
+        claves = {c for a in numero.archivos if (c := clave_de_coleccion(a.nombre))}
+        numero.mezcla = len(claves) > 1
     return [por_numero[k] for k in sorted(por_numero, key=lambda k: orden[k])]

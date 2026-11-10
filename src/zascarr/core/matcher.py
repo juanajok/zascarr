@@ -51,6 +51,8 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zascarr.utils.naming import clave_de_coleccion
+
 # Umbral de similarity() de pg_trgm.
 # 0.35: discrimina bien títulos cortos con tokens distintivos ("Sandman").
 # Bajarlo genera cruces tipo "Thor" ~ "Thorgal".
@@ -63,6 +65,20 @@ FUZZY_THRESHOLD = 0.60      # por debajo: ruido, aunque supere el WHERE
 # en ningún sitio y no es el momento de romper esa frontera. Un test
 # (`test_formato_grapa_coincide_con_el_enum`) comprueba que siguen coincidiendo.
 FORMATO_GRAPA = "single_issue"
+
+
+def _seleccionar_issue(filas, formato_esperado: str | None) -> tuple[UUID | None, bool]:
+    """La misma regla de `find_issue`, separada para compartirla con `find_issue_con_archivos`."""
+    if not filas:
+        return None, False
+    if formato_esperado is None:
+        if len(filas) == 1 and filas[0].format == FORMATO_GRAPA:
+            return UUID(str(filas[0].id)), False
+        return None, True
+    coinciden = [f for f in filas if f.format == formato_esperado]
+    if len(coinciden) == 1:
+        return UUID(str(coinciden[0].id)), False
+    return None, True
 
 _ARTICLE_WORDS = r"the|el|la|los|las|le|les|il|lo|die|der|das"
 # Artículo inicial: "The Sandman" → "Sandman". El (?:\s+|$) en vez de \s+
@@ -116,6 +132,14 @@ class SeriesHit:
     title: str
     start_year: int | None
     score: float         # 1.0 si exacto tras normalizar; similarity() si trgm
+
+
+@dataclass(frozen=True)
+class IssueConArchivos:
+    """El Issue que corresponde a un número y los nombres de archivo que ya tiene."""
+    issue_id: UUID
+    format: str
+    archivos: tuple[str, ...] = ()
 
 
 @dataclass
@@ -247,39 +271,41 @@ class SeriesMatcher:
 
         Devuelve (issue_id, conflicto):
           (id, False)   — exactamente una candidata con el formato esperado.
-          (None, False) — no hay ningún issue registrado para ese número
-                          (hueco del enricher, comportamiento de siempre).
+          (None, False) — no hay ningún issue registrado para ese número.
           (None, True)  — hay issues pero el formato no permite decidir.
         """
-        # Normalización SIMÉTRICA a propósito: antes se recortaban ceros solo
-        # en la columna y el parámetro llegaba ya recortado, así que el #0
-        # nunca encontraba su fila — ltrim('0','0') es la cadena VACÍA y la
-        # comparación quedaba '' = '0'. Verificado contra Postgres real.
-        # `issue_number <> ''` cierra el caso degenerado de una fila sin
-        # número: si no, '' casaría con cualquier búsqueda de '0'.
+        # `issue_number <> ''` cierra el caso degenerado de una fila sin número.
         res = await self.db.execute(sa.text("""
             SELECT id, format FROM issues
             WHERE series_id = :sid
               AND issue_number <> ''
               AND ltrim(issue_number, '0') = ltrim(:num, '0')
         """), {"sid": str(series_id), "num": number})
+        return _seleccionar_issue(res.fetchall(), formato_esperado)
+
+    async def find_issue_con_archivos(
+        self, series_id: UUID, number: str, formato_esperado: str | None = None,
+    ) -> tuple[IssueConArchivos | None, bool]:
+        """Como `find_issue`, pero con los nombres de archivo que ya cuelgan del número.
+
+        Una sola consulta (LEFT JOIN + array_agg): la usa `_resolve` para no reutilizar un
+        número con archivos de otra colección. Misma semántica de selección que `find_issue`."""
+        res = await self.db.execute(sa.text("""
+            SELECT i.id, i.format,
+                   array_agg(f.file_name) FILTER (WHERE f.file_name IS NOT NULL) AS archivos
+            FROM issues i
+            LEFT JOIN files f ON f.issue_id = i.id
+            WHERE i.series_id = :sid
+              AND i.issue_number <> ''
+              AND ltrim(i.issue_number, '0') = ltrim(:num, '0')
+            GROUP BY i.id, i.format
+        """), {"sid": str(series_id), "num": number})
         filas = res.fetchall()
-        if not filas:
-            return None, False
-        if formato_esperado is None:
-            # Sin marcador NO hay evidencia del formato: solo se enlaza si hay
-            # una única candidata Y además es una grapa estándar. Una única
-            # recopilación/tomo tampoco se enlaza — «solo hay una fila» no
-            # demuestra que este archivo sin marcador sea ese tomo; podría ser
-            # la grapa #12, todavía sin catalogar. Es el mismo emparejamiento
-            # que rechaza el camino manual, así que los dos caminos coinciden.
-            if len(filas) == 1 and filas[0].format == FORMATO_GRAPA:
-                return UUID(str(filas[0].id)), False
-            return None, True
-        coinciden = [f for f in filas if f.format == formato_esperado]
-        if len(coinciden) == 1:
-            return UUID(str(coinciden[0].id)), False
-        return None, True
+        issue_id, conflicto = _seleccionar_issue(filas, formato_esperado)
+        if issue_id is None:
+            return None, conflicto
+        fila = next(f for f in filas if UUID(str(f.id)) == issue_id)
+        return IssueConArchivos(issue_id, fila.format, tuple(fila.archivos or ())), False
 
     # ── Decisión ─────────────────────────────────────────────────────────────
 
@@ -316,7 +342,7 @@ class SeriesMatcher:
         if alias_hit:
             return await self._resolve(alias_hit, number, [alias_hit],
                                         MatchStatus.DIRECT, ["alias local aprendido"],
-                                        formato_esperado)
+                                        formato_esperado, nombre=triage.path.name)
 
         hits = await self.find_series(title, year, volume)
         good = [h for h in hits if h.score >= FUZZY_THRESHOLD]
@@ -339,19 +365,24 @@ class SeriesMatcher:
 
         hit = good[0]
         status = MatchStatus.DIRECT if hit.score == 1.0 else MatchStatus.FUZZY
-        return await self._resolve(hit, number, good, status, [], formato_esperado)
+        return await self._resolve(hit, number, good, status, [], formato_esperado,
+                                   nombre=triage.path.name)
 
     async def _resolve(self, hit: SeriesHit, number: str, candidates: list[SeriesHit],
                         status: MatchStatus, extra_notes: list[str],
-                        formato_esperado: str | None = None) -> MatchResult:
-        """Cola común de decide(): buscar el issue exacto y componer el
-        MatchResult final, compartida entre el camino normal (fuzzy) y el
-        alias local (B13) — ambos terminan igual, solo cambia cómo se
-        encontró la serie.
+                        formato_esperado: str | None = None, *,
+                        nombre: str | None = None) -> MatchResult:
+        """Cola común de decide(): buscar el issue exacto y componer el MatchResult.
 
-        B15: si el número está compartido entre ediciones y el formato no
-        permite decidir, NO se enlaza ni se mueve: el archivo va a Pendientes."""
-        issue_id, conflicto = await self.find_issue(hit.series_id, number, formato_esperado)
+        B15: si el número está compartido entre ediciones y el formato no permite
+        decidir, NO se enlaza: el archivo va a Pendientes.
+
+        BL-INF11: si el número ya tiene archivos de OTRA colección (p. ej. «Superman -
+        Godfall #01» y «Superman #01»), tampoco se enlaza: un número con varios archivos
+        vale para la misma grapa en varios formatos/copias, no para tebeos distintos.
+        """
+        candidata, conflicto = await self.find_issue_con_archivos(
+            hit.series_id, number, formato_esperado)
         if conflicto:
             return MatchResult(
                 MatchStatus.UNSORTED,
@@ -359,6 +390,18 @@ class SeriesMatcher:
                 notes=[f"número '{number}' compartido entre ediciones en "
                        f"'{hit.title}': no se enlaza sin poder verificar el formato"],
             )
+        if candidata is not None and nombre and candidata.archivos:
+            clave = clave_de_coleccion(nombre)
+            otras = {clave_de_coleccion(f) for f in candidata.archivos}
+            otras.discard("")
+            if clave and otras and clave not in otras:
+                return MatchResult(
+                    MatchStatus.UNSORTED,
+                    candidates=candidates,
+                    notes=[f"el número '{number}' de '{hit.title}' ya tiene archivos con "
+                           "otro título: no se enlaza sin revisarlo (¿otra colección?)"],
+                )
+        issue_id = candidata.issue_id if candidata is not None else None
         notes = list(extra_notes)
         if not issue_id:
             notes.append(
@@ -366,7 +409,6 @@ class SeriesMatcher:
                 "posible hueco del enricher, encolar consulta a metadata.py"
             )
         return MatchResult(status, hit.series_id, issue_id, hit.score, candidates, notes)
-
 
 def _volume_matches(hit: SeriesHit, volume: int) -> bool:
     """Heurística conservadora de desambiguación por volumen.
