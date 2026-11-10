@@ -88,6 +88,9 @@ def test_vista_previa_muestra_garantia_y_token(monkeypatch):
     assert r.status_code == 200
     assert "Tebeo 01.cbr" in r.text and "Tebeo 01.cbz" in r.text
     assert 'name="token"' in r.text and "Convertir a CBZ" in r.text
+    # Confirmar por HTMX dentro de la ficha: si no, el navegador acaba en el fragmento suelto.
+    assert f'hx-post="/ui/series/{serie.id}/archivos/{servicio.vista.file_id}/convertir"' in r.text
+    assert 'hx-target="closest .conversion-previa"' in r.text
     assert "parece compartido" in r.text and 'name="forzar_compartido"' in r.text
     assert "El original se aparta y se puede deshacer" in r.text
 
@@ -189,6 +192,8 @@ def test_lote_previa_muestra_convertibles_y_boton(monkeypatch):
     assert r.status_code == 200
     assert "Convertir 1 CBR a CBZ" in r.text
     assert "Tebeo 01.cbr" in r.text
+    assert f'hx-post="/ui/series/{serie.id}/convertir"' in r.text
+    assert 'hx-target="#conversion-lote"' in r.text
     assert r.headers["Cache-Control"] == "no-store"
 
 

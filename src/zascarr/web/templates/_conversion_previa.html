@@ -9,7 +9,9 @@
     · {{ "renombrar el ZIP (sin recomprimir)" if vista.metodo == "renombrar_zip" else "extraer y guardar sin recomprimir" }}.</p>
   {% if vista.advertencia %}{{ ui.aviso("amber", vista.advertencia) }}{% endif %}
   <p class="caption">La serie, sus números y la relación con esta publicación no cambian. El original se aparta y se puede deshacer.</p>
-  <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ vista.file_id }}/convertir{{ '/deshacer' if modo == 'deshacer' else '' }}">
+  <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ vista.file_id }}/convertir{{ '/deshacer' if modo == 'deshacer' else '' }}"
+        hx-post="/ui/series/{{ series.id }}/archivos/{{ vista.file_id }}/convertir{{ '/deshacer' if modo == 'deshacer' else '' }}"
+        hx-target="closest .conversion-previa" hx-swap="outerHTML" hx-disabled-elt="find button">
     <input type="hidden" name="token" value="{{ vista.token }}">
     {% if vista.advertencia %}
     <label class="legal-checkbox"><input type="checkbox" name="forzar_compartido" value="1" required>
