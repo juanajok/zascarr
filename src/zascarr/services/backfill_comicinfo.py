@@ -213,6 +213,10 @@ async def ejecutar(*, aplicar: bool, fabrica: async_sessionmaker | None = None,
     return informe
 
 
+def _plural(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
 def imprimir(informe: Informe) -> None:
     modo = "APLICAR" if informe.aplicar else "DRY-RUN (no se ha escrito nada)"
     print("=== Relectura de ComicInfo de la biblioteca registrada (BL-ETQ2b) ===")
@@ -235,9 +239,10 @@ def imprimir(informe: Informe) -> None:
     if informe.ejemplos_error:
         print(f"Ejemplos de error: {', '.join(informe.ejemplos_error)}")
     if informe.aplicar:
-        print(f"Aplicado: {informe.etiquetas_aplicadas} etiquetas y "
-              f"{informe.generos_aplicados} géneros en {informe.series_tocadas} series"
-              f" · avisos: {informe.avisos}")
+        print("Aplicado: "
+              f"{_plural(informe.etiquetas_aplicadas, 'etiqueta', 'etiquetas')} y "
+              f"{_plural(informe.generos_aplicados, 'género', 'géneros')} en "
+              f"{_plural(informe.series_tocadas, 'serie', 'series')} · avisos: {informe.avisos}")
         if informe.avisos_texto:
             print(f"Avisos: {', '.join(informe.avisos_texto)}")
     else:
