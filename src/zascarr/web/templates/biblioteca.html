@@ -26,6 +26,13 @@
     {% endfor %}
   </select>
   {% endif %}
+  <label class="sr" for="f-leido">Lectura</label>
+  <select name="leido" id="f-leido">
+    <option value="">Toda la lectura</option>
+    <option value="si" {% if filtros.leido == "si" %}selected{% endif %}>Con leídos</option>
+    <option value="leyendo" {% if filtros.leido == "leyendo" %}selected{% endif %}>Leyendo</option>
+    <option value="no" {% if filtros.leido == "no" %}selected{% endif %}>Sin leídos</option>
+  </select>
   <input type="hidden" name="character_id" value="{{ filtros.character_id }}">
   <input type="hidden" name="story_arc_id" value="{{ filtros.story_arc_id }}">
   <input type="hidden" name="page" value="1">

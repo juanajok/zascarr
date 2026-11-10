@@ -18,7 +18,7 @@
         hx-swap="innerHTML">Reintentar</a></p>
   {% else %}
   {% call ui.region_viva("recuento-biblioteca") %}
-  <p class="subtitle recuento-biblioteca">{{ recuento }}</p>
+  <p class="subtitle recuento-biblioteca">{{ recuento }}{% if recuento_lectura %} · {{ recuento_lectura }}{% endif %}</p>
   {% endcall %}
   {% endif %}
 

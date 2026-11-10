@@ -96,7 +96,7 @@ def use_fake_session(session, *, ficha=True):
     # Las tres lecturas fijas de la ficha (#447) se declaran aquí, en el borde del test,
     # para que la sesión siga siendo estricta y una consulta inesperada falle.
     if ficha:
-        session._queue.extend([FakeExecResult([]), FakeExecResult([]), FakeExecResult([])])
+        session._queue.extend([FakeExecResult([]), FakeExecResult([]), FakeExecResult([]), FakeExecResult([])])
     class _Ctx:
         def __enter__(self):
             app.dependency_overrides[get_db] = override_get_db(session)

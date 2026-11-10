@@ -361,6 +361,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "etiqueta",
     # BL-ETQ1b (#431): expresión de etiquetas de Biblioteca.
     "etiquetas",
+    # BL-C3 (#150): filtro de estado de lectura (estado de la vista).
+    "leido",
 })
 
 
