@@ -7,6 +7,11 @@ no crea migraciones. Reutiliza el parser del triaje (`parse_comic_info`) y su l�
 **No se llama desde «vincular en su sitio»**: ese contrato garantiza que vincular no lee ficheros.
 Se aplica donde el archivo ya se lee (importación y adopción) y desde la acción explícita de la
 biblioteca, que cubre lo vinculado a mano.
+
+La procedencia se guarda **por campo** en `metadata.comicinfo_aplicado.aplicado`: un campo solo se
+actualiza si estaba vacío o si su valor actual es el que escribió este servicio. No se usa
+`metadata_source` como proxy para pisar datos de una fuente externa; la procedencia por campo
+completa llega con #109.
 """
 from __future__ import annotations
 
@@ -106,16 +111,19 @@ async def _aplicar_creditos(db: AsyncSession, issue: Issue, info: ComicInfo, *,
             if len(nombre) > MAX_NOMBRE:
                 avisos.append("Un nombre de ComicInfo es demasiado largo; se ignora")
                 continue
-            norm = normalizar_nombre_autor(nombre)
+            nombre_insert = " ".join(unicodedata.normalize("NFC", nombre).split())
             creado = await db.execute(
                 pg_insert(Creator)
-                .values(name=nombre, metadata_source="comicinfo_xml")
+                .values(name=nombre_insert, metadata_source="comicinfo_xml")
                 .on_conflict_do_nothing(index_elements=["name_norm"])
                 .returning(Creator.id))
             creator_id = creado.scalar_one_or_none()
             if creator_id is None:
+                # Paridad con la columna generada: normaliza el mismo nombre que insertamos
+                # (NFC y espacios colapsados) y deja que Postgres aplique su función.
                 creator_id = (await db.execute(
-                    select(Creator.id).where(Creator.name_norm == norm))).scalar_one()
+                    select(Creator.id).where(
+                        Creator.name_norm == func.f_creator_name_norm(nombre_insert)))).scalar_one()
             clave = (str(creator_id), rol)
             if clave in existentes:
                 continue
@@ -156,41 +164,60 @@ async def aplicar_a_issue(db: AsyncSession, issue: Issue, ruta: str | Path) -> R
     info, estado, avisos, mtime_ns, size = await asyncio.to_thread(_leer_comicinfo, ruta)
     if info is None:
         return ResultadoComicInfoIssue(estado, avisos=avisos)
-    marca = {"mtime_ns": mtime_ns, "size": size, "fecha": datetime.now(UTC).isoformat()}
-    anterior = (issue.metadata_ or {}).get("comicinfo_aplicado") if isinstance(issue.metadata_, dict) else None
+    actual_meta = issue.metadata_ if isinstance(issue.metadata_, dict) else {}
+    anterior = actual_meta.get("comicinfo_aplicado")
     if isinstance(anterior, dict) and anterior.get("mtime_ns") == mtime_ns and anterior.get("size") == size:
         return ResultadoComicInfoIssue("sin_cambios", avisos=avisos)
     if issue.metadata_source == "manual":
         return ResultadoComicInfoIssue("sin_cambios", avisos=(*avisos, "número marcado como manual"),
                                        campos_aplicados=())
     fuente_previa = issue.metadata_source
+    # Procedencia POR CAMPO: el issue solo recuerda qué valores escribió el ComicInfo.
+    # `metadata_source` es una procedencia global heredada; no se usa como proxy para
+    # pisar campos de fuentes externas (la procedencia por campo llega con #109).
+    previos = anterior.get("aplicado") if isinstance(anterior, dict) else {}
+    previos = previos if isinstance(previos, dict) else {}
+    nuevos: dict[str, object] = {}
     locked = set(issue.locked_fields or [])
     campos = 0
     aplicados: list[str] = []
     if "synopsis" not in locked:
         nuevo = _texto(info.summary, MAX_SINOPSIS)
         actual = issue.synopsis
-        if (nuevo and not _mismo(actual, nuevo)
-                and (not actual or fuente_previa == "comicinfo_xml")):
+        propio = (("synopsis" in previos and actual == previos.get("synopsis"))
+                  or (fuente_previa == "comicinfo_xml" and not previos and actual is not None))
+        if (nuevo and not _mismo(actual, nuevo) and (not actual or propio)):
             issue.synopsis = nuevo
+            nuevos["synopsis"] = nuevo
             campos += 1
             aplicados.append("sinopsis")
+        elif "synopsis" in previos and actual is not None:
+            nuevos["synopsis"] = actual
     archivos = (await db.execute(select(func.count(File.id)).where(
         File.issue_id == issue.id))).scalar_one()
-    if (archivos == 1 and "page_count" not in locked
-            and info.page_count and 1 <= info.page_count <= 10000
-            and (issue.page_count is None
-                 or (fuente_previa == "comicinfo_xml"
-                     and issue.page_count != info.page_count))):
-        issue.page_count = info.page_count
-        campos += 1
-        aplicados.append("páginas")
+    if ("page_count" not in locked and archivos == 1
+            and info.page_count and 1 <= info.page_count <= 10000):
+        actual_paginas = issue.page_count
+        propio = (("page_count" in previos and actual_paginas == previos.get("page_count"))
+                  or (fuente_previa == "comicinfo_xml" and not previos
+                      and actual_paginas is not None))
+        if not _mismo(str(actual_paginas) if actual_paginas is not None else None,
+                      str(info.page_count)) and (actual_paginas is None or propio):
+            issue.page_count = info.page_count
+            nuevos["page_count"] = info.page_count
+            campos += 1
+            aplicados.append("páginas")
+        elif "page_count" in previos and actual_paginas is not None:
+            nuevos["page_count"] = actual_paginas
     autores = 0 if "credits" in locked else await _aplicar_creditos(db, issue, info, avisos=list(avisos))
     series_campos = await _aplicar_editorial(db, issue, info)
-    if campos or autores:
+    marca = {
+        "mtime_ns": mtime_ns, "size": size, "fecha": datetime.now(UTC).isoformat(),
+        "aplicado": {**previos, **nuevos},
+    }
+    if (campos or autores) and fuente_previa in (None, "comicinfo_xml"):
         issue.metadata_source = "comicinfo_xml"
-    actual = issue.metadata_ if isinstance(issue.metadata_, dict) else {}
-    issue.metadata_ = {**actual, "comicinfo_aplicado": marca}
+    issue.metadata_ = {**actual_meta, "comicinfo_aplicado": marca}
     return ResultadoComicInfoIssue(
         "aplicado" if (campos or autores or series_campos) else "sin_cambios",
         campos=campos, autores=autores, series_campos=series_campos,
