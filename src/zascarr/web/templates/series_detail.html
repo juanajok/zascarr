@@ -165,7 +165,7 @@
   <span class="chip-previa">
     <a class="issue-chip issue-present" href="/ui/series/{{ series.id }}/numero/{{ enlace.id }}"
        hx-get="/ui/series/{{ series.id }}/numero/{{ enlace.id }}/previa"
-       hx-trigger="mouseenter delay:150ms, focusin" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>
+       hx-trigger="mouseenter delay:150ms, focusin delay:150ms" hx-target="#previa-{{ enlace.id }}" hx-swap="innerHTML">#{{ n }}<span class="sr"> ver información del número {{ n }}</span></a>
     <span class="previa-numero" id="previa-{{ enlace.id }}" aria-hidden="true"></span>
   </span>
   {% else %}<span class="issue-chip issue-present">#{{ n }}</span>{% endif %}
@@ -178,7 +178,6 @@
 <section class="archivos-serie" id="archivos-por-numero" aria-labelledby="archivos-titulo">
   <h2 id="archivos-titulo">Archivos por número</h2>
   <p>Cada número de la serie con sus archivos.</p>
-  <p class="caption">El estado se guarda al tocarlo; cambiarlo no borra tu nota ni tu puntuación.</p>
   <p class="archivos-lote">
     <button class="btn ghost" type="button"
             hx-get="/ui/series/{{ series.id }}/convertir"
@@ -190,7 +189,6 @@
     {% for n in archivos_por_numero %}
     <li class="archivos-numero" data-numero="{{ n.numero }}">
       <h3 class="archivos-numero-titulo"><a href="/ui/series/{{ series.id }}/numero/{{ n.issue_id }}">#{{ n.numero }}<span class="sr"> ver información del número {{ n.numero }}</span></a></h3>
-      {% with issue_id = n.issue_id, modo = "fila", lectura = lecturas.get(n.issue_id) %}{% include "_lectura_control.html" %}{% endwith %}
       <ul class="archivos-lista">
         {% for a in n.archivos %}
         <li class="archivo-fila" data-archivo="{{ a.id }}">

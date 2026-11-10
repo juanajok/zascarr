@@ -4,8 +4,8 @@
 <a class="back-link" href="/ui/series/{{ series.id }}">{{ textos.volver }}</a>
 <div class="issue-header">
   <div class="issue-portada">
-    {{ ui.portada(issue.issue_number or issue.title or series.title, issue.id, "/ui/series/%s/portada?v=2" % series.id, "issue-cover") }}
-    <p class="caption">{{ textos.portada_serie }}</p>
+    {{ ui.portada(issue.issue_number or issue.title or series.title, issue.id, "/ui/series/%s/numero/%s/portada.jpg" % (series.id, issue.id), "issue-cover") }}
+    <p class="caption">{{ textos.portada_numero }}</p>
   </div>
   <div>
     <h1>{% if issue.issue_number %}Número {{ issue.issue_number }}{% else %}Número{% endif %}</h1>
@@ -25,9 +25,11 @@
   <h2 id="issue-datos-titulo" class="titulo-frase">Datos del número</h2>
   <dl class="ficha-serie-meta">
     <div><dt>{{ textos.serie }}</dt><dd><a href="/ui/series/{{ series.id }}">{{ series.title }}</a></dd></div>
+    <div><dt>{{ textos.editorial }}</dt><dd>{% if ficha.editorial %}{{ ficha.editorial }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos.formato }}</dt><dd>{% if ficha.formato %}{{ ficha.formato }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
-    <div><dt>{{ textos.fecha }}</dt><dd>{% if ficha.fecha_larga %}{{ ficha.fecha_larga }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
+    <div><dt>{{ textos.publicacion }}</dt><dd>{% if ficha.fecha_larga %}{{ ficha.fecha_larga }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
     <div><dt>{{ textos.paginas }}</dt><dd>{% if ficha.paginas_texto %}{{ ficha.paginas_texto }}{% else %}{{ textos.sin_dato }}{% endif %}</dd></div>
+    {% if issue.isbn %}<div><dt>{{ textos.isbn }}</dt><dd>{{ issue.isbn }}</dd></div>{% endif %}
   </dl>
 </section>
 <section aria-labelledby="issue-sinopsis-titulo">

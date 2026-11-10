@@ -44,7 +44,11 @@ def test_ficha_de_numero_muestra_texto_plano_autores_y_archivos():
         r = client.get(f"/ui/series/{serie.id}/numero/{issue.id}")
     assert r.status_code == 200
     assert "Número 3" in r.text and "El país Qâ" in r.text
-    assert "Portada de la serie" in r.text
+    assert "Portada del número" in r.text
+    assert f"/ui/series/{serie.id}/numero/{issue.id}/portada.jpg" in r.text
+    assert f"/ui/series/{serie.id}/portada?v=2" not in r.text
+    assert "Editorial" in r.text and "Norma" in r.text
+    assert "Publicación" in r.text and "1 de junio de 1981" in r.text
     assert "Thorgal llega a un país." in r.text
     assert "<b>llega</b>" not in r.text
     assert "Guion" in r.text and "Dibujo" in r.text
@@ -154,7 +158,8 @@ def test_hrefs_de_chip_y_archivo_por_numero(monkeypatch):
     assert f'hx-get="/ui/series/{serie.id}/numero/issue-1/previa"' in r.text
     assert 'class="previa-numero"' in r.text
     assert 'id="previa-issue-1"' in r.text
-    assert 'hx-trigger="mouseenter delay:150ms, focusin"' in r.text
+    assert 'aria-hidden="true"' in r.text
+    assert 'hx-trigger="mouseenter delay:150ms, focusin delay:150ms"' in r.text
 
 
 def test_ficha_de_numero_ofrece_convertir_solo_para_cbr():

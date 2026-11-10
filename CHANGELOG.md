@@ -7,7 +7,7 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
-- **Al pasar el ratón por los números se acumulaban las previas de portada.** Cada chip conservaba
+- **La vista previa podía lanzar el lector de RAR con `LECTOR_RAR_ENABLED=false` (SecOps, ALTO).**\n  El servicio de miniaturas ahora respeta el interruptor igual que la portada de serie: con el\n  lector apagado, un `.cbr` no es candidato y no se envía a `lsar`/`unar`. Regresión incluida.\n- **El estado de lectura solo se toca dentro del número.** La ficha de serie ya no pinta los\n  controles «Sin leer / Leyendo / Leído» de cada número; se quitan también de su contexto y de\n  la consulta que los cargaba.\n- **Al pasar el ratón por los números se acumulaban las previas de portada.** Cada chip conservaba
   la suya al salir; ahora solo se muestra la del número que tiene el ratón o el foco y las demás
   quedan ocultas. En series de cientos de números la ficha vuelve a leerse.
 - **Los botones no se deshabilitaban durante una petición htmx.** El proyecto usa htmx 4.0.0, donde
@@ -43,7 +43,7 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
-- **Vista previa de la portada de cada número (BL-INF4, #590).** Al pasar el ratón o enfocar un
+- **La ficha del número enseña la portada del número y sus datos completos (BL-INF8, #600).**\n  Deja de mostrar la portada de la serie: usa la del propio número (600 px, caché por archivo y\n  ancho) y añade editorial, publicación (mes y año) e ISBN cuando consta, además de los autores por\n  papel, la sinopsis y los archivos.\n- **Vista previa de la portada de cada número (BL-INF4, #590).** Al pasar el ratón o enfocar un
   número en la ficha se enseña su portada, sin abrirlo: tarjeta de 220 px con «Nº N · título» y
   «Pulsa para abrir la ficha», flecha al chip y un pequeño retardo para no dispararse al barrer. La
   miniatura (240 px) se saca del propio

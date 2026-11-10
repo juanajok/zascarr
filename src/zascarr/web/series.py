@@ -78,7 +78,6 @@ from zascarr.services.lectura import (
     NotaInvalidaError,
     ValoracionInvalidaError,
     lectura_de,
-    lecturas_de_serie,
     marcar,
 )
 from zascarr.services.legal import is_acknowledged
@@ -89,7 +88,7 @@ from zascarr.services.politica import (
     retirar_de_serie,
     texto_de_cota,
 )
-from zascarr.services.portada_numero import ruta_previa
+from zascarr.services.portada_numero import ANCHO_FICHA, ruta_previa
 from zascarr.services.procedencia import procedencia_de_serie
 from zascarr.services.relacion_confirmada import (
     es_protegida,
@@ -410,17 +409,12 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
     # Las consultas de la ficha van AL FINAL: no desplazan las colas de los dobles de prueba
     # que ya consumían las consultas históricas de esta ruta.
     ficha = await cargar_ficha_serie(db, series_id)
-    lecturas = await lecturas_de_serie(db, series_id)
     sinopsis_visible, sinopsis_resto = partir_sinopsis(ficha.sinopsis) if ficha else ("", "")
     serie_vacia = bool(ficha) and not (ficha.sinopsis or series.publisher or series.start_year
                                        or series.end_year or ficha.autores)
     respuesta = templates.TemplateResponse(request, "series_detail.html", {
         "series": series, "present": sorted(poseidos),
         "ficha": ficha, "textos_ficha": TEXTOS_FICHA, "roles_ficha": ROLES_ES,
-        "lecturas": lecturas, "textos_lectura": TEXTOS_LECTURA,
-        "estados_lectura": ((ReadingStatus.UNREAD, "Sin leer"),
-                                                  (ReadingStatus.READING, "Leyendo"),
-                                                  (ReadingStatus.COMPLETED, "Leído")),
         "sinopsis_visible": sinopsis_visible, "sinopsis_resto": sinopsis_resto,
         "serie_vacia": serie_vacia,
         "missing": huecos.faltantes, "huecos": huecos,
@@ -800,6 +794,10 @@ async def previa_numero(series_id: UUID, issue_id: UUID, request: Request,
     diminuto; la imagen y la miniatura en disco ya se cachean."""
     issue = await db.get(Issue, issue_id)
     if issue is None or issue.series_id != series_id:
+        # htmx 4 intercambia también los 4xx: un chip obsoleto inyectaría el JSON del error en el
+        # hueco de la previa. En una petición HTMX, vacío; en una visita directa, 404.
+        if request.headers.get("HX-Request") == "true":
+            return HTMLResponse("", headers={"Cache-Control": "no-store"})
         raise HTTPException(status_code=404, detail="Número no encontrado")
     ruta = await ruta_previa(db, series_id, issue_id)
     if ruta is None:
@@ -823,8 +821,30 @@ async def previa_numero_imagen(series_id: UUID, issue_id: UUID, request: Request
     ruta = await ruta_previa(db, series_id, issue_id)
     if ruta is None:
         return Response(status_code=404, headers={"Cache-Control": "no-store"})
-    datos = await asyncio.to_thread(ruta.read_bytes)
-    return cached_image_response(request, datos, "image/jpeg", f'"{ruta.stat().st_mtime_ns}"')
+    try:
+        datos = await asyncio.to_thread(ruta.read_bytes)
+        etag = f'"{ruta.stat().st_mtime_ns}"'
+    except OSError:      # la caché desapareció entre leer y medir: sin previa, no 500
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    return cached_image_response(request, datos, "image/jpeg", etag)
+
+
+@router.get("/{series_id}/numero/{issue_id}/portada.jpg")
+async def portada_numero_imagen(series_id: UUID, issue_id: UUID, request: Request,
+                                db: AsyncSession = Depends(get_db)) -> Response:
+    """BL-INF8: la portada del número para su ficha (600 px), con ETag y caché privada."""
+    issue = await db.get(Issue, issue_id)
+    if issue is None or issue.series_id != series_id:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    ruta = await ruta_previa(db, series_id, issue_id, ancho=ANCHO_FICHA)
+    if ruta is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    try:
+        datos = await asyncio.to_thread(ruta.read_bytes)
+        etag = f'"{ruta.stat().st_mtime_ns}"'
+    except OSError:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    return cached_image_response(request, datos, "image/jpeg", etag)
 
 
 @router.get("/{series_id}/portada")
@@ -965,6 +985,13 @@ def _servicio_conversion(db):
     return ConversionDeArchivo(db, secret=get_settings().secret_key)
 
 
+def _plantilla_conversion(request: Request) -> str:
+    """Fragmento para HTMX; página completa cuando la piden navegando (enlace, URL a mano)."""
+    if request.headers.get("HX-Request") == "true":
+        return "_conversion_previa.html"
+    return "conversion_pagina.html"
+
+
 async def _serie_para_conversion(db, series_id, file_id):
     series = await _serie_o_404(db, series_id)
     return series
@@ -973,15 +1000,21 @@ async def _serie_para_conversion(db, series_id, file_id):
 @router.get("/{series_id}/archivos/{file_id}/convertir", response_class=HTMLResponse)
 async def convertir_vista_previa(series_id: UUID, file_id: UUID, request: Request,
                                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    series = await _serie_para_conversion(db, series_id, file_id)
+    try:
+        series = await _serie_para_conversion(db, series_id, file_id)
+    except HTTPException:
+        if request.headers.get("HX-Request") == "true":
+            return _sin_cache_conversion(HTMLResponse(""))
+        raise
     try:
         vista = await _servicio_conversion(db).previsualizar(series_id, file_id)
     except Exception as exc:  # noqa: BLE001 — archivo/serie no encontrado
         if exc.__class__.__name__ in ("TokenInvalidoError", "SerieNoEncontrada"):
             raise HTTPException(status_code=404, detail="Archivo no encontrado") from None
         raise
-    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_previa.html", {
-        "series": series, "vista": vista, "modo": "convertir"}))
+    return _sin_cache_conversion(templates.TemplateResponse(
+        request, _plantilla_conversion(request), {
+            "series": series, "vista": vista, "modo": "convertir"}))
 
 
 @router.post("/{series_id}/archivos/{file_id}/convertir", response_class=HTMLResponse)
@@ -1011,13 +1044,19 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
 @router.get("/{series_id}/archivos/{file_id}/convertir/deshacer", response_class=HTMLResponse)
 async def deshacer_conversion_previa(series_id: UUID, file_id: UUID, request: Request,
                                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    series = await _serie_o_404(db, series_id)
+    try:
+        series = await _serie_o_404(db, series_id)
+    except HTTPException:
+        if request.headers.get("HX-Request") == "true":
+            return _sin_cache_conversion(HTMLResponse(""))
+        raise
     try:
         vista = await _servicio_conversion(db).previsualizar_deshacer(series_id, file_id)
     except Exception:  # noqa: BLE001
         raise HTTPException(status_code=404, detail="No hay conversión que deshacer") from None
-    return _sin_cache_conversion(templates.TemplateResponse(request, "_conversion_previa.html", {
-        "series": series, "vista": vista, "modo": "deshacer"}))
+    return _sin_cache_conversion(templates.TemplateResponse(
+        request, _plantilla_conversion(request), {
+            "series": series, "vista": vista, "modo": "deshacer"}))
 
 
 @router.post("/{series_id}/archivos/{file_id}/convertir/deshacer", response_class=HTMLResponse)

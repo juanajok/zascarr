@@ -35,9 +35,13 @@
 
   <p class="conversion-resultado-acciones">
     {% if ok %}
-    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir/deshacer">Deshacer</a>
+    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir/deshacer"
+       hx-get="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir/deshacer"
+       hx-target="closest .conversion-resultado" hx-swap="outerHTML">Deshacer</a>
     {% elif not deshecho %}
-    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir">Reintentar</a>
+    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir"
+       hx-get="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir"
+       hx-target="closest .conversion-resultado" hx-swap="outerHTML">Reintentar</a>
     {% endif %}
     <a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
   </p>
