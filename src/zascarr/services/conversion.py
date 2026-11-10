@@ -363,6 +363,11 @@ class ConversionDeArchivo:
 
                 if analisis.metodo == "renombrar_zip":
                     # D5: `analizar` ya validó testzip/manifiesto y el token cubre el sha256.
+                    self._diario_escribir(
+                        f, firmada, "preparada", ruta, ruta_original=ruta, destino=destino,
+                        sha_original=firmada.sha256, tamano_original=firmada.tamano,
+                        sha_nuevo=firmada.sha256, tamano_nuevo=firmada.tamano,
+                        metodo=analisis.metodo)
                     try:
                         _publicar_sin_sobrescribir(ruta, destino)
                     except FileExistsError:
@@ -370,13 +375,16 @@ class ConversionDeArchivo:
                     nuevo_sha = _sha256(destino)
                     if nuevo_sha != firmada.sha256:
                         with contextlib.suppress(OSError):
-                            os.replace(destino, ruta)
+                            _publicar_sin_sobrescribir(destino, ruta)
                         return _conflicto(MotivoConversion.ILEGIBLE,
                                           "El ZIP cambió al renombrarlo; no se publica.")
                     nuevo_tamano = destino.stat().st_size
                     original_ruta = ruta
-                    self._diario_escribir(f, firmada, "publicado", destino,
-                                          ruta_original=ruta, destino=destino)
+                    self._diario_escribir(
+                        f, firmada, "publicado", destino, ruta_original=ruta, destino=destino,
+                        sha_original=firmada.sha256, tamano_original=firmada.tamano,
+                        sha_nuevo=nuevo_sha, tamano_nuevo=nuevo_tamano,
+                        metodo=analisis.metodo)
                 else:
                     cuarentena.parent.mkdir(parents=True, exist_ok=True)
                     if os.stat(destino.parent).st_dev != os.stat(cuarentena.parent).st_dev:
@@ -399,31 +407,48 @@ class ConversionDeArchivo:
                     # se compensa restaurándolo; nunca se queda sin original ni sin CBZ.
                     cuarentena.mkdir(parents=True, exist_ok=True)
                     original_apartado = cuarentena / ruta.name
+                    # Write-ahead ANTES de mover: si el proceso muere aquí, el diario sabe
+                    # dónde está el original y cómo verificar que vuelve íntegro.
+                    self._diario_escribir(
+                        f, firmada, "preparada", original_apartado, ruta_original=ruta,
+                        destino=destino, sha_original=firmada.sha256,
+                        tamano_original=firmada.tamano, sha_nuevo=construccion.sha256,
+                        tamano_nuevo=construccion.tamano, metodo=analisis.metodo)
                     os.replace(ruta, original_apartado)
                     _fsync_dir(cuarentena)
                     _fsync_dir(ruta.parent)
-                    self._diario_escribir(f, firmada, "original_apartado", original_apartado,
-                                          ruta_original=ruta, destino=destino)
+                    self._diario_escribir(
+                        f, firmada, "original_apartado", original_apartado,
+                        ruta_original=ruta, destino=destino, sha_original=firmada.sha256,
+                        tamano_original=firmada.tamano, sha_nuevo=construccion.sha256,
+                        tamano_nuevo=construccion.tamano, metodo=analisis.metodo)
                     try:
                         _publicar_sin_sobrescribir(tmp, destino)
                     except FileExistsError:
                         with contextlib.suppress(OSError):
-                            os.replace(original_apartado, ruta)
+                            _publicar_sin_sobrescribir(original_apartado, ruta)
                             _fsync_dir(ruta.parent)
-                        self._diario_escribir(f, firmada, "fallo_publicacion", original_apartado,
-                                              ruta_original=ruta, destino=destino)
+                        self._diario_escribir(
+                            f, firmada, "fallo_publicacion", original_apartado,
+                            ruta_original=ruta, destino=destino,
+                            sha_original=firmada.sha256, tamano_original=firmada.tamano,
+                            sha_nuevo=construccion.sha256, tamano_nuevo=construccion.tamano,
+                            metodo=analisis.metodo)
                         return _conflicto(MotivoConversion.YA_EXISTE_CBZ)
                     except OSError:
                         with contextlib.suppress(OSError):
-                            os.replace(original_apartado, ruta)
+                            _publicar_sin_sobrescribir(original_apartado, ruta)
                             _fsync_dir(ruta.parent)
                         return _conflicto(MotivoConversion.ILEGIBLE,
                                           "No se pudo publicar el CBZ; el original sigue en su sitio.")
                     nuevo_sha = construccion.sha256
                     nuevo_tamano = destino.stat().st_size
                     original_ruta = original_apartado
-                    self._diario_escribir(f, firmada, "publicado", destino,
-                                          ruta_original=ruta, destino=destino)
+                    self._diario_escribir(
+                        f, firmada, "publicado", destino, ruta_original=ruta, destino=destino,
+                        sha_original=firmada.sha256, tamano_original=firmada.tamano,
+                        sha_nuevo=nuevo_sha, tamano_nuevo=nuevo_tamano,
+                        metodo=analisis.metodo)
                 self._actualizar_fila(f, firmada, ruta, destino, nuevo_sha, nuevo_tamano,
                                       metodo=analisis.metodo, original_ruta=original_ruta)
                 try:
@@ -486,7 +511,15 @@ class ConversionDeArchivo:
         f.metadata_ = meta
 
     def _diario_escribir(self, f: File, firmada, estado: str, ruta: Path, *,
-                         ruta_original: Path | None = None, destino: Path | None = None) -> None:
+                         ruta_original: Path | None = None, destino: Path | None = None,
+                         sha_original: str | None = None, tamano_original: int | None = None,
+                         sha_nuevo: str | None = None, tamano_nuevo: int | None = None,
+                         metodo: str | None = None) -> None:
+        """Escribe el diario ANTES de tocar los bytes (write-ahead) y lo actualiza por fase.
+
+        Si el proceso muere, `reconciliar_diario` comprueba hashes/tamaños y solo borra la
+        entrada cuando ha reparado el original o la fila.
+        """
         try:
             base = _diario(self._settings) / str(f.id)
             base.mkdir(parents=True, exist_ok=True)
@@ -495,6 +528,9 @@ class ConversionDeArchivo:
                 "estado": estado, "fecha": _ahora_iso(), "ruta": str(ruta),
                 "ruta_original": str(ruta_original) if ruta_original else None,
                 "destino": str(destino) if destino else None,
+                "sha_original": sha_original, "tamano_original": tamano_original,
+                "sha_nuevo": sha_nuevo, "tamano_nuevo": tamano_nuevo,
+                "metodo": metodo,
             }, ensure_ascii=False), encoding="utf-8")
         except OSError:
             logger.warning("conversion.diario_no_escribible")
@@ -585,6 +621,18 @@ class ConversionDeArchivo:
         if not destino.exists() or (conv.get("metodo") != "renombrar_zip" and
                                     not Path((conv.get("original") or {}).get("ruta", "")).exists()):
             return _conflicto(MotivoConversion.ARCHIVO_AUSENTE)
+        # #564: revalidar el token de deshacer DESPUÉS del lock: ruta, stat, sha y operación.
+        try:
+            st_actual = destino.stat()
+        except OSError:
+            return _conflicto(MotivoConversion.ARCHIVO_AUSENTE)
+        if (firmada.ruta != str(destino)
+                or (st_actual.st_size, st_actual.st_mtime_ns) != (firmada.tamano, firmada.mtime_ns)
+                or _sha256(destino) != firmada.sha256
+                or _sha256(destino) != conv.get("nuevo", {}).get("sha256")
+                or st_actual.st_size != conv.get("nuevo", {}).get("tamano")):
+            return _conflicto(MotivoConversion.PROPUESTA_DESACTUALIZADA,
+                              "La conversión cambió; no se ha deshecho.")
         restaurar = destino.with_suffix(".cbr")
         shared = await self._compartida(restaurar)
         aviso = self._aviso(shared)
@@ -604,7 +652,7 @@ class ConversionDeArchivo:
                     _publicar_sin_sobrescribir(destino, apartado)
                 except OSError:
                     with contextlib.suppress(OSError):
-                        os.replace(restaurar, origen)
+                        _publicar_sin_sobrescribir(restaurar, origen)
                     return _conflicto(MotivoConversion.ILEGIBLE,
                                       "No se pudo apartar el CBZ; no se ha deshecho.")
         except OSError:
@@ -613,10 +661,10 @@ class ConversionDeArchivo:
         if _sha256(restaurar) != original.get("sha256"):
             with contextlib.suppress(OSError):
                 if conv.get("metodo") == "renombrar_zip":
-                    os.replace(restaurar, destino)
+                    _publicar_sin_sobrescribir(restaurar, destino)
                 else:
-                    os.replace(restaurar, origen)
-                    os.replace(apartado, destino)
+                    _publicar_sin_sobrescribir(restaurar, origen)
+                    _publicar_sin_sobrescribir(apartado, destino)
             return _conflicto(MotivoConversion.ILEGIBLE,
                               "El original no coincide con su hash; no se ha deshecho.")
         meta = copy.deepcopy(f.metadata_ if isinstance(f.metadata_, dict) else {})
@@ -646,29 +694,120 @@ class ConversionDeArchivo:
                                    forzado_compartido=bool(aviso and forzar_compartido),
                                    metodo=conv.get("metodo"), fecha=_ahora_iso())
 
-    def vaciar_originales(self, lote: int = 50) -> int:
-        """Borra, por tandas, los originales apartados más antiguos. Solo cuarentena."""
-        base = _cuarentena(self._settings)
-        if not base.exists():
-            return 0
-        borrados = 0
-        for operacion in sorted(base.glob("*/*")):
-            if borrados >= lote:
-                break
-            if operacion.is_dir():
-                padre = operacion.parent
-                shutil.rmtree(operacion, ignore_errors=True)
-                with contextlib.suppress(OSError):
-                    padre.rmdir()
-                borrados += 1
-        return borrados
+    @contextlib.asynccontextmanager
+    async def _cerrojo_ciclo(self):
+        """Cerrojo de sesión compartido con rescan/importador; sin él, no se vacía ni reconcilia."""
+        libre = True
+        obtenido = False
+        with contextlib.suppress(Exception):
+            libre = bool((await self._db.execute(
+                text("SELECT pg_try_advisory_lock(:c, :o)"),
+                {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})).scalar())
+            obtenido = libre
+        try:
+            yield libre
+        finally:
+            if obtenido:
+                with contextlib.suppress(Exception):
+                    await self._db.execute(
+                        text("SELECT pg_advisory_unlock(:c, :o)"),
+                        {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})
+
+    def _coincide(self, ruta: Path, sha: str | None, tamano: int | None) -> bool:
+        try:
+            if tamano is not None and ruta.stat().st_size != int(tamano):
+                return False
+            return bool(sha) and _sha256(ruta) == sha
+        except (OSError, ValueError):
+            return False
+
+    async def _fila_coherente(self, file_id: str, destino: Path, sha: str | None,
+                              tamano: int | None) -> bool:
+        try:
+            f = await self._db.get(File, UUID(str(file_id)), populate_existing=True)
+        except (ValueError, TypeError):
+            return False
+        return bool(f and f.file_path == str(destino) and f.file_format is FileFormat.CBZ
+                    and f.sha256_hash == sha and f.file_size_bytes == tamano)
+
+    async def vaciar_originales(self, lote: int = 50) -> int:
+        """Borra, por tandas, los originales apartados más antiguos, con el cerrojo de ciclo."""
+        async with self._cerrojo_ciclo() as libre:
+            if not libre:
+                return 0
+            base = _cuarentena(self._settings)
+            if not base.exists():
+                return 0
+            borrados = 0
+            for operacion in sorted(base.glob("*/*")):
+                if borrados >= lote:
+                    break
+                if operacion.is_dir():
+                    padre = operacion.parent
+                    shutil.rmtree(operacion, ignore_errors=True)
+                    with contextlib.suppress(OSError):
+                        padre.rmdir()
+                    borrados += 1
+            return borrados
 
     async def reconciliar_diario(self) -> int:
-        """#564: consume el diario; restaura originales de operaciones interrumpidas o repara filas.
+        """#564: consume el diario write-ahead con verificación y sin borrar si no repara.
 
-        Se ejecuta al arrancar/reintentar y desde el CLI. Las entradas resueltas se borran; no se
-        deja una cuarentena infinita ni un diario que crezca para siempre.
+        Solo se borra una entrada cuando el original volvió con su sha/tamaño o la fila quedó
+        coherente con el CBZ publicado. Si no se puede verificar, la entrada se conserva para el
+        siguiente intento (nunca se pierde la pista de un original).
         """
+        async with self._cerrojo_ciclo() as libre:
+            if not libre:
+                return 0
+            return await self._reconciliar_diario_sin_cerrojo()
+
+    async def _reparar_fila_desde_diario(self, file_id: str, datos: dict, destino: Path,
+                                         sha_nuevo: str | None,
+                                         tamano_nuevo: int | None) -> bool:
+        """Repara la fila si el CBZ se publicó pero el commit no llegó (sin migración)."""
+        try:
+            f = await self._db.get(File, UUID(str(file_id)), populate_existing=True)
+        except (ValueError, TypeError):
+            return False
+        if f is None or not destino.exists():
+            return False
+        try:
+            st = destino.stat()
+        except OSError:
+            return False
+        meta = copy.deepcopy(f.metadata_ if isinstance(f.metadata_, dict) else {})
+        anterior = meta.get("conversion") if isinstance(meta.get("conversion"), dict) else {}
+        hist = list(anterior.get("historial") or [])
+        hist.append({"fecha": _ahora_iso(), "operacion_id": datos.get("operacion_id"),
+                     "accion": "reconciliada", "metodo": datos.get("metodo")})
+        meta["conversion"] = {
+            "version": 1, "estado": "convertida",
+            "operacion_id": datos.get("operacion_id"), "metodo": datos.get("metodo"),
+            "fecha": _ahora_iso(), "reconciliada": True,
+            "original": {"ruta": datos.get("ruta"), "nombre": Path(datos.get("ruta") or "").name,
+                         "sha256": datos.get("sha_original"),
+                         "tamano": datos.get("tamano_original")},
+            "nuevo": {"ruta": str(destino), "sha256": sha_nuevo, "tamano": tamano_nuevo},
+            "historial": hist[-20:],
+        }
+        f.file_path = str(destino)
+        f.file_name = destino.name
+        f.file_format = FileFormat.CBZ
+        f.file_size_bytes = st.st_size
+        f.file_mtime_ns = st.st_mtime_ns
+        f.sha256_hash = sha_nuevo
+        if f.original_sha256 is None:
+            f.original_sha256 = datos.get("sha_original")
+        f.metadata_ = meta
+        try:
+            await self._db.commit()
+        except Exception:  # noqa: BLE001
+            await self._db.rollback()
+            return False
+        return await self._fila_coherente(str(file_id), destino, sha_nuevo, tamano_nuevo)
+
+    async def _reconciliar_diario_sin_cerrojo(self) -> int:
         base = _diario(self._settings)
         if not base.exists():
             return 0
@@ -682,28 +821,52 @@ class ConversionDeArchivo:
                 continue
             estado = datos.get("estado")
             file_id = datos.get("file_id")
-            if estado in ("original_apartado", "fallo_publicacion"):
-                original = Path(datos.get("ruta_original") or "")
-                apartado = Path(datos.get("ruta") or "")
-                destino = Path(datos.get("destino") or "")
-                if apartado.exists() and not destino.exists() and not original.exists():
+            original = Path(datos.get("ruta_original") or "")
+            apartado = Path(datos.get("ruta") or "")
+            destino = Path(datos.get("destino") or "")
+            sha_original = datos.get("sha_original")
+            tamano_original = datos.get("tamano_original")
+            sha_nuevo = datos.get("sha_nuevo")
+            tamano_nuevo = datos.get("tamano_nuevo")
+            reparada = False
+            if estado in ("preparada", "original_apartado", "fallo_publicacion"):
+                if destino.exists() and self._coincide(destino, sha_nuevo, tamano_nuevo):
+                    if file_id:
+                        await self.reconciliar(UUID(str(file_id)))
+                        reparada = await self._fila_coherente(
+                            str(file_id), destino, sha_nuevo, tamano_nuevo)
+                        if not reparada:
+                            reparada = await self._reparar_fila_desde_diario(
+                                str(file_id), datos, destino, sha_nuevo, tamano_nuevo)
+                elif apartado.exists() and not original.exists() and \
+                        self._coincide(apartado, sha_original, tamano_original):
+                    # Restaurar sin pisar nada: si el nombre original reapareció, no se toca.
                     try:
-                        os.replace(apartado, original)
+                        os.link(apartado, original)
+                        os.unlink(apartado)
                         _fsync_dir(original.parent)
-                        resueltas += 1
                     except OSError:
                         continue
-                elif destino.exists():
-                    resueltas += 1
+                    reparada = self._coincide(original, sha_original, tamano_original)
+                elif original.exists() and self._coincide(
+                        original, sha_original, tamano_original):
+                    # El write-ahead quedó antes de mover: nada que reparar y está verificado.
+                    reparada = True
             elif estado == "publicado" and file_id:
-                if await self.reconciliar(UUID(str(file_id))) or \
-                        Path(datos.get("destino") or "").exists():
-                    resueltas += 1
+                if self._coincide(destino, sha_nuevo, tamano_nuevo):
+                    await self.reconciliar(UUID(str(file_id)))
+                    reparada = await self._fila_coherente(
+                        str(file_id), destino, sha_nuevo, tamano_nuevo)
+                    if not reparada:
+                        reparada = await self._reparar_fila_desde_diario(
+                            str(file_id), datos, destino, sha_nuevo, tamano_nuevo)
             else:
                 continue
-            entrada.unlink(missing_ok=True)
-            with contextlib.suppress(OSError):
-                entrada.parent.rmdir()
+            if reparada:
+                resueltas += 1
+                entrada.unlink(missing_ok=True)
+                with contextlib.suppress(OSError):
+                    entrada.parent.rmdir()
         return resueltas
 
     async def reconciliar(self, file_id: UUID) -> bool:

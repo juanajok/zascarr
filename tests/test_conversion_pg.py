@@ -199,7 +199,7 @@ async def test_diario_vaciar_y_reconciliar(entorno_base, tmp_path):
         servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
         assert await servicio.reconciliar_diario() >= 1
     assert not diario.exists()
-    assert servicio.vaciar_originales() >= 1
+    assert await servicio.vaciar_originales() >= 1
     assert not any((tmp_path / ".zascarr" / "originales").iterdir())
 
     async with entorno_base.banco.fabrica() as s:
@@ -250,8 +250,14 @@ async def test_si_el_destino_aparece_tras_las_comprobaciones_se_restaura(entorno
     entorno = _EntornoConversion(entorno_base.banco, tmp_path)
     original = ruta.read_bytes()
 
-    def _existe(_origen, _destino):
-        raise FileExistsError("destino apareció")
+    real = mod._publicar_sin_sobrescribir
+    llamadas = []
+
+    def _existe(origen, destino):
+        if not llamadas:
+            llamadas.append(1)
+            raise FileExistsError("destino apareció")
+        return real(origen, destino)
 
     monkeypatch.setattr(mod, "_publicar_sin_sobrescribir", _existe)
     async with entorno_base.banco.fabrica() as s:
@@ -296,3 +302,96 @@ async def test_undo_rechaza_un_cbz_manipulado(entorno_base, tmp_path):
         f = (await s.execute(select(File).where(File.id == fid))).scalar_one()
         Path(f.file_path).write_bytes(b"CBZ-tocado")
         assert (await servicio.deshacer(previa.token)).resultado == "omitida"
+
+
+@pytest.mark.asyncio
+async def test_diario_write_ahead_restaura_original_y_solo_borra_si_repara(entorno_base, tmp_path):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path, comic_vine_id=4)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    original = ruta.read_bytes()
+    sha = hashlib.sha256(original).hexdigest()
+    cuarentena = tmp_path / ".zascarr" / "originales" / str(fid) / "op-vieja"
+    cuarentena.mkdir(parents=True)
+    apartado = cuarentena / ruta.name
+    apartado.write_bytes(original)
+    ruta.unlink()
+    (tmp_path / ".zascarr" / "diario" / str(fid)).mkdir(parents=True)
+    diario = tmp_path / ".zascarr" / "diario" / str(fid) / "op-vieja.json"
+    diario.write_text(__import__("json").dumps({
+        "version": 1, "file_id": str(fid), "operacion_id": "op-vieja",
+        "estado": "original_apartado", "ruta": str(apartado),
+        "ruta_original": str(ruta), "destino": str(ruta.with_suffix(".cbz")),
+        "sha_original": sha, "tamano_original": len(original),
+        "sha_nuevo": "0" * 64, "tamano_nuevo": 1, "metodo": "recomprimir",
+    }))
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        assert await servicio.reconciliar_diario() == 1
+    assert ruta.read_bytes() == original
+    assert not diario.exists()
+
+    # Un diario que no se puede verificar NO se borra.
+    (tmp_path / ".zascarr" / "diario" / str(fid)).mkdir(parents=True)
+    diario2 = tmp_path / ".zascarr" / "diario" / str(fid) / "op-rota.json"
+    diario2.write_text(__import__("json").dumps({
+        "version": 1, "file_id": str(fid), "operacion_id": "op-rota",
+        "estado": "original_apartado", "ruta": str(tmp_path / "no-existe"),
+        "ruta_original": str(tmp_path / "tampoco"), "destino": str(tmp_path / "nada.cbz"),
+        "sha_original": "1" * 64, "tamano_original": 10,
+    }))
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        assert await servicio.reconciliar_diario() == 0
+    assert diario2.exists()
+
+
+@pytest.mark.asyncio
+async def test_vaciar_y_reconciliar_respetan_el_cerrojo_de_ciclo(entorno_base, tmp_path):
+    from sqlalchemy import text
+
+    from zascarr.services.comprobacion_disco import CLAVE_CERROJO_CICLO
+
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path, comic_vine_id=5)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    async with entorno_base.banco.fabrica() as ocupada:
+        await ocupada.execute(text("SELECT pg_advisory_lock(:c, :o)"),
+                              {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})
+        await ocupada.commit()
+        async with entorno_base.banco.fabrica() as s:
+            servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings,
+                                           lector=lector)
+            assert await servicio.vaciar_originales() == 0
+            assert await servicio.reconciliar_diario() == 0
+        await ocupada.execute(text("SELECT pg_advisory_unlock(:c, :o)"),
+                              {"c": CLAVE_CERROJO_CICLO[0], "o": CLAVE_CERROJO_CICLO[1]})
+        await ocupada.commit()
+
+
+@pytest.mark.asyncio
+async def test_diario_repara_fila_si_el_commit_no_llego(entorno_base, tmp_path):
+    sid, fid, ruta, lector = await _montar(entorno_base, tmp_path, comic_vine_id=6)
+    entorno = _EntornoConversion(entorno_base.banco, tmp_path)
+    nuevo = ruta.with_suffix(".cbz")
+    nuevo.write_bytes(b"CBZ-ya-publicado")
+    sha_nuevo = hashlib.sha256(b"CBZ-ya-publicado").hexdigest()
+    cuarentena = tmp_path / ".zascarr" / "originales" / str(fid) / "op"
+    cuarentena.mkdir(parents=True)
+    ruta.rename(cuarentena / ruta.name)
+    (tmp_path / ".zascarr" / "diario" / str(fid)).mkdir(parents=True)
+    diario = tmp_path / ".zascarr" / "diario" / str(fid) / "op.json"
+    diario.write_text(__import__("json").dumps({
+        "version": 1, "file_id": str(fid), "operacion_id": str(uuid4()),
+        "estado": "publicado", "ruta": str(cuarentena / ruta.name),
+        "ruta_original": str(ruta), "destino": str(nuevo),
+        "sha_original": hashlib.sha256(b"RAR-falso").hexdigest(),
+        "tamano_original": len(b"RAR-falso"), "sha_nuevo": sha_nuevo,
+        "tamano_nuevo": len(b"CBZ-ya-publicado"), "metodo": "recomprimir",
+    }))
+    async with entorno_base.banco.fabrica() as s:
+        servicio = ConversionDeArchivo(s, secret=SECRETO, settings=entorno.settings, lector=lector)
+        assert await servicio.reconciliar_diario() == 1
+    async with entorno_base.banco.fabrica() as s:
+        f = (await s.execute(select(File).where(File.id == fid))).scalar_one()
+        assert f.file_format is FileFormat.CBZ and Path(f.file_path) == nuevo
+        assert f.sha256_hash == sha_nuevo
+    assert not diario.exists()

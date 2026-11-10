@@ -24,7 +24,7 @@ async def _ejecutar(args) -> int:
         if args.accion == "reconciliar":
             print(f"Conversiones reconciliadas: {await servicio.reconciliar_diario()}")
         else:
-            print(f"Originales borrados: {servicio.vaciar_originales(args.lote)}")
+            print(f"Originales borrados: {await servicio.vaciar_originales(args.lote)}")
     return 0
 
 

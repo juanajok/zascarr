@@ -136,3 +136,25 @@ def test_deshacer_previa_y_resultado(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert previa.status_code == 200 and "Deshacer la conversión" in previa.text
     assert confirmado.status_code == 200 and "Original restaurado" in confirmado.text
+
+
+def test_errores_de_token_son_400_y_410(monkeypatch):
+    from zascarr.services.vinculacion import TokenCaducadoError, TokenInvalidoError
+
+    class _Falla:
+        async def confirmar(self, *_a, **_k):
+            raise TokenInvalidoError("no vale")
+
+        async def deshacer(self, *_a, **_k):
+            raise TokenCaducadoError("caducó", puede_haberse_aplicado=False)
+
+    serie = _serie()
+    c = _cliente(monkeypatch, _Falla(), serie)
+    try:
+        r400 = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/convertir", data={"token": "x"})
+        r410 = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/convertir/deshacer",
+                      data={"token": "x"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r400.status_code == 400
+    assert r410.status_code == 410
