@@ -80,10 +80,6 @@ def pagina_error(request: Request, status: int, *, titulo: str | None = None,
 
 
 async def manejar_http(request: Request, exc: StarletteHTTPException) -> Response:
-    if "hx-request" in request.headers and exc.status_code in (404, 405):
-        # htmx 4 intercambia también los 4xx: devolver el JSON crudo lo metería dentro del
-        # fragmento. Un cuerpo vacío deja el hueco limpio (p. ej., un chip obsoleto).
-        return HTMLResponse("", status_code=200, headers={"Cache-Control": "no-store"})
     if not quiere_pagina(request):
         return await http_exception_handler(request, exc)
     detalle = exc.detail if _es_frase(exc.detail, exc.status_code) else None
