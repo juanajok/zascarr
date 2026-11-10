@@ -30,6 +30,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.database import get_db
 from zascarr.models import ComicTradition
+from zascarr.services.comicinfo import (
+    TEXTOS_COMICINFO,
+    archivos_para_leer,
+    leer_archivos_vinculados,
+)
 from zascarr.services.etiquetas import (
     ExpresionEtiquetas,
     facetas_etiquetas,
@@ -540,6 +545,28 @@ async def sugerir_etiquetas(
         request, "_sugerencias_etiquetas.html",
         {"sugerencias": datos},
     )
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.get("/comicinfo", response_class=HTMLResponse)
+async def comicinfo_accion(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    cbz, cbr = await archivos_para_leer(db)
+    respuesta = templates.TemplateResponse(
+        request, "comicinfo_accion.html",
+        {"textos": TEXTOS_COMICINFO, "cbz": cbz, "cbr": cbr,
+         "resultado": None})
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/comicinfo", response_class=HTMLResponse)
+async def comicinfo_ejecutar(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    resultado = await leer_archivos_vinculados(db)
+    respuesta = templates.TemplateResponse(
+        request, "comicinfo_accion.html",
+        {"textos": TEXTOS_COMICINFO, "cbz": resultado.total, "cbr": resultado.cbr,
+         "resultado": resultado})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 

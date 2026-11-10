@@ -61,6 +61,7 @@ from zascarr.core.cohort import (
 from zascarr.core.matcher import MatchStatus, normalize_title
 from zascarr.models import File, FileFormat, ImportRun, Issue, Series
 from zascarr.services.asignacion import _restriccion
+from zascarr.services.comicinfo import aplicar_a_issue
 from zascarr.services.discrepancias import (
     ORIGEN_COMICINFO,
     ORIGEN_RESCAN,
@@ -1038,6 +1039,13 @@ class LibraryAdopter:
         )
         self._db.add(file_rec)
         await self._db.flush()
+        if result.issue_id is not None:
+            try:
+                issue = await self._db.get(Issue, result.issue_id)
+                if issue is not None:
+                    await aplicar_a_issue(self._db, issue, path)
+            except Exception:  # noqa: BLE001 — no bloquea la adopción
+                pass
         report.added_rows.append((file_rec.id, str(path), None, False))
 
         if is_unsorted:
