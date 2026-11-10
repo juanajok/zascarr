@@ -1470,8 +1470,8 @@ def _fuentes_disponibles(series: Series) -> tuple[bool, str | None, str | None]:
     admitidas = set(fuentes_para_tradicion(series.tradition))
     if not any(encendidas[f] and f in admitidas for f in FuenteComicInfo):
         return (False,
-                "No hay fuentes de datos encendidas para esta serie. Enciéndelas en Ajustes "
-                "o guarda lo que ya tienes.", "/ui/ajustes")
+                "No hay fuentes de datos encendidas. Enciéndelas en Ajustes o guarda lo que ya "
+                "tienes.", "/ui/ajustes")
     return True, None, None
 
 

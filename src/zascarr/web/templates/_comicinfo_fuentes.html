@@ -33,7 +33,7 @@
     <input type="hidden" name="operacion_id" value="{{ sesion.operacion_id }}">
     {% for campo in campos %}
     <fieldset class="comicinfo-fuente-campo">
-      <legend>{{ campo.etiqueta }} <span class="sr">{{ campo.tag }}</span></legend>
+      <legend>{{ campo.etiqueta }}</legend>
       <p class="caption">Ahora: {{ campo.actual or "Sin dato" }}</p>
       {% if campo.bloqueado %}
       {{ ui.chip("amber", "Protegido") }}
@@ -70,7 +70,7 @@
   {% else %}
   <p class="caption">Las fuentes no tienen datos nuevos para este tebeo. Puedes guardar lo que ya tienes.</p>
   {% endif %}
-  {% if sesion.campos_sin_datos %}
+  {% if campos and sesion.campos_sin_datos %}
   <details class="comicinfo-sin-datos">
     <summary>Sin datos nuevos en las fuentes</summary>
     <p>Campos revisados sin propuesta: {{ sesion.campos_sin_datos|map(attribute='etiqueta')|join(', ') }}.</p>

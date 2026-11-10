@@ -31,7 +31,7 @@
     {% if fuentes_enlace %}<p><a class="btn ghost" href="{{ fuentes_enlace }}">Ir a la solución</a></p>{% endif %}
     {% endif %}
   </section>
-  <div id="comicinfo-fuentes-anuncio" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="comicinfo-fuentes-anuncio" class="sr" aria-live="polite" aria-atomic="true"></div>
   <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
         hx-post="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
         hx-target="#comicinfo-{{ file_id }}" hx-swap="outerHTML"

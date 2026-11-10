@@ -261,6 +261,8 @@ def test_ux_feedback_live_accessible_names_y_details(monkeypatch, tmp_path):
     assert "Consultando las fuentes" in preview.text
     assert 'aria-live="polite"' in preview.text
     assert 'id="comicinfo-fuentes-anuncio"' in preview.text
+    assert 'class="sr" aria-live="polite"' in preview.text
+    assert "sr-only" not in preview.text
     assert "hx-swap-oob" in r.text
     assert "aria-live" not in r.text        # la región viva no se inserta en el swap
     assert "<fieldset" in r.text and "<legend>Año" in r.text
@@ -292,3 +294,28 @@ def test_cortesia_muestra_reintento(monkeypatch, tmp_path):
     finally:
         _cerrar()
     assert "Reintentar" in r.text and "Hay que esperar unos segundos" in r.text
+
+
+def test_sin_campos_no_duplica_sin_datos_y_texto_de_fuentes(monkeypatch, tmp_path):
+    c, serie, file = _cliente(monkeypatch, tmp_path)
+    monkeypatch.setattr(web, "PropuestasComicInfoService", lambda _db: _ServicioPropuestas(
+        ResultadoPropuestas(str(file.id), str(serie.id), "Tebeo", "american", True, (), (), (), 0)))
+    try:
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+    finally:
+        _cerrar()
+    assert r.text.count("Las fuentes no tienen datos nuevos para este tebeo") == 1
+    assert "Sin datos nuevos en las fuentes" not in r.text
+
+
+def test_texto_exacto_de_ninguna_fuente_encendida(monkeypatch):
+
+    serie = SimpleNamespace(id=uuid4(), title="S", tradition="american", comic_vine_id=1)
+    settings = SimpleNamespace(comicvine_enabled=False, anilist_enabled=False,
+                               tebeosfera_enabled=False, gcd_enabled=False)
+    monkeypatch.setattr("zascarr.config.get_settings", lambda: settings)
+    disponible, mensaje, enlace = web._fuentes_disponibles(serie)
+    assert disponible is False
+    assert mensaje == ("No hay fuentes de datos encendidas. Enciéndelas en Ajustes o guarda lo "
+                       "que ya tienes.")
+    assert enlace == "/ui/ajustes"
