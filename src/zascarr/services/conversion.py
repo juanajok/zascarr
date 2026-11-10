@@ -1037,6 +1037,27 @@ class ConversionDeArchivo:
             return True
         return False
 
+    async def resumen_originales(self) -> tuple[int, int]:
+        """(cuántos originales apartados, bytes que ocupan). Solo lee el disco."""
+        base = _cuarentena(self._settings)
+
+        def _contar() -> tuple[int, int]:
+            if not base.is_dir():
+                return (0, 0)
+            cuantos = 0
+            total = 0
+            for operacion in base.glob("*/*"):
+                if not operacion.is_dir():
+                    continue
+                cuantos += 1
+                for fichero in operacion.rglob("*"):
+                    if fichero.is_file():
+                        with contextlib.suppress(OSError):
+                            total += fichero.stat().st_size
+            return cuantos, total
+
+        return await asyncio.to_thread(_contar)
+
     # ── #479 / BL-CNV2: lote (reutiliza la conversión de #478 por archivo) ───
     async def _cbrs_de_serie(self, serie_id: UUID) -> list[tuple[UUID, str]]:
         filas = (await self._db.execute(
