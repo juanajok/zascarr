@@ -184,6 +184,25 @@ class ReadingStatus(enum.StrEnum):
     ON_HOLD   = "on_hold"
     DROPPED   = "dropped"
 
+class TipoSignificadoCarpeta(enum.StrEnum):
+    """MIT-M7 (#130): qué significa una carpeta, no qué contiene."""
+    AUTOR = "autor"
+    PUBLICACION = "publicacion"
+
+
+class OrigenRegla(enum.StrEnum):
+    """De dónde sale una declaración: decisión local o regla importada."""
+    LOCAL = "local"
+    IMPORTACION = "importacion"
+
+
+class EstadoRegla(enum.StrEnum):
+    """Ciclo de vida de una declaración."""
+    ACTIVA = "activa"
+    DESACTIVADA = "desactivada"
+    RETIRADA = "retirada"
+
+
 class MetadataSource(enum.StrEnum):
     COMIC_VINE    = "comic_vine"
     GCD           = "gcd"
@@ -907,6 +926,50 @@ class RuntimeSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class DeclaracionCarpeta(Base):
+    """MIT-M7 (#130): significado declarado de una carpeta, versionado por filas.
+
+    Cada cambio semántico o de ciclo inserta una fila nueva y cierra la anterior
+    (`vigente_hasta`). No se borra historial ni se actualizan versiones cerradas.
+    `contexto_raiz` es una ruta relativa normalizada y es inmutable por
+    `declaracion_id`: cambiar de carpeta es una declaración nueva.
+    """
+    __tablename__ = "declaraciones_carpeta"
+    __table_args__ = (
+        UniqueConstraint("declaracion_id", "version",
+                         name="uq_declaraciones_carpeta_declaracion_version"),
+        Index("uq_declaraciones_carpeta_vigente", "declaracion_id", unique=True,
+              postgresql_where=text("vigente_hasta IS NULL")),
+        Index("uq_declaraciones_carpeta_raiz_local_activa", "contexto_raiz", unique=True,
+              postgresql_where=text(
+                  "vigente_hasta IS NULL AND origen = 'local' AND estado = 'activa'")),
+        Index("ix_declaraciones_carpeta_contexto_raiz", "contexto_raiz"),
+        Index("ix_declaraciones_carpeta_vigente_hasta", "vigente_hasta"),
+    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    declaracion_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    contexto_raiz: Mapped[str] = mapped_column(Text, nullable=False)
+    incluir_descendientes: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                                        server_default=text("false"))
+    tipo_de_significado: Mapped[TipoSignificadoCarpeta] = mapped_column(
+        Enum(TipoSignificadoCarpeta, name="tipo_significado_carpeta",
+             values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    origen: Mapped[OrigenRegla] = mapped_column(
+        Enum(OrigenRegla, name="origen_regla",
+             values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    estado: Mapped[EstadoRegla] = mapped_column(
+        Enum(EstadoRegla, name="estado_regla",
+             values_callable=lambda obj: [e.value for e in obj]), nullable=False)
+    vigente_desde: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                    server_default=func.now())
+    vigente_hasta: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    procedencia: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
+                                              server_default=text("'{}'::jsonb"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False,
+                                                server_default=func.now())
 
 
 class LocalAlias(Base):
