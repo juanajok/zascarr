@@ -36,7 +36,7 @@ def _cliente(monkeypatch, **mocks):
     app.dependency_overrides[get_db] = _get_db()
     for nombre, valor in mocks.items():
         monkeypatch.setattr(web.svc, nombre, valor)
-    return TestClient(app)
+    return TestClient(app, headers={"Origin": "http://localhost"})
 
 
 def _cerrar():
@@ -206,3 +206,39 @@ def test_confirmacion_pone_el_foco_en_el_titulo(monkeypatch):
     finally:
         _cerrar()
     assert '<h1 tabindex="-1" autofocus>Confirmar el alcance</h1>' in r.text
+
+
+def test_raiz_de_biblioteca_tiene_su_mensaje(monkeypatch):
+    c = _cliente(monkeypatch, listar=AsyncMock(return_value=[]))
+    try:
+        r = c.get("/ui/pendientes/carpetas/declarar?clave=%2Fmedia%2Flibrary")
+    finally:
+        _cerrar()
+    assert "No se puede declarar la raíz de la biblioteca" in r.text
+    assert "alcanzaría todas las carpetas" in r.text
+    assert "<form" not in r.text
+
+
+def test_aviso_de_error_recibe_foco(monkeypatch):
+    c = _cliente(monkeypatch, listar=AsyncMock(return_value=[]))
+    try:
+        r = c.post("/ui/pendientes/carpetas/declarar", data={"clave": "Comics/A"})
+    finally:
+        _cerrar()
+    assert 'role="alert" tabindex="-1" autofocus' in r.text
+
+
+def test_pequeno_texto_de_opcion_a_14_px():
+    from pathlib import Path
+    css = Path("src/zascarr/static/web.css").read_text(encoding="utf-8")
+    assert "font-size: .875rem" in css.split(".declaracion-opcion small", 1)[1][:120]
+
+
+def test_confirmacion_recuerda_la_seleccion_al_volver(monkeypatch):
+    c = _cliente(monkeypatch, listar=AsyncMock(return_value=[]))
+    try:
+        r = c.post("/ui/pendientes/carpetas/declarar",
+                   data={"clave": "Comics/A", "tipo": "autor", "incluir": "1"})
+    finally:
+        _cerrar()
+    assert "tipo=autor" in r.text and "incluir=1" in r.text
