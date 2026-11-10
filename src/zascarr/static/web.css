@@ -1986,18 +1986,37 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @media (prefers-reduced-motion: reduce) { .conversion-espera::before { animation: none; } }
 .conversion-resultado-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
-/* BL-INF4: vista previa de la portada del número al pasar el ratón o el foco. */
+/* BL-INF4: vista previa de la portada del número al pasar el ratón o el foco.
+   El contenedor lleva ancho propio: dentro de un chip, `max-width:100%` del img global lo
+   encogía al ancho del chip (~40 px). Va DEBAJO del chip para no tapar el rótulo de la sección;
+   `pointer-events:none` para no robar el hover ni el clic. */
 .chip-previa { position: relative; display: inline-flex; }
 .previa-numero {
-  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  z-index: 30; pointer-events: none;
-}
-.previa-numero:empty { display: none; }
-.previa-numero img {
-  display: block; width: 140px; height: auto;
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  width: 220px; z-index: 30; pointer-events: none;
+  display: block; overflow: hidden;
   border: 3px solid var(--ink); border-radius: var(--radius-panel);
   background: var(--paper); box-shadow: var(--shadow-ink-sm);
 }
+.previa-numero:empty { display: none; }
+.previa-numero img { display: block; width: 100%; height: auto; max-width: none; }
+.previa-pie {
+  display: block; padding: 6px 10px;
+  background: var(--caption-bg); color: var(--ink);
+  border-top: 2px solid var(--ink);
+  font-size: .875rem; line-height: 1.35;
+}
+.previa-pie strong { font-variant-numeric: tabular-nums; }
+/* Flecha: con chips tan juntos, el benchmark (NN/g) pide señalar a qué elemento pertenece. */
+.previa-numero::before {
+  content: ""; position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+  border: 9px solid transparent; border-top: 0; border-bottom-color: var(--ink);
+  width: 0; height: 0;
+}
+.previa-pie .previa-pista { display: block; color: var(--ink-soft); font-size: .875rem; }
+.previa-card { animation: previa-aparece .12s ease-out; }
+@keyframes previa-aparece { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .previa-card { animation: none; } }
 @media (max-width: 860px), (pointer: coarse) { .previa-numero { display: none; } }
 
 /* BL-CNV2b: originales guardados de las conversiones (Duplicados). */

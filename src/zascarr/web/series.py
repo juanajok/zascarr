@@ -807,7 +807,8 @@ async def previa_numero(series_id: UUID, issue_id: UUID, request: Request,
     else:
         respuesta = templates.TemplateResponse(
             request, "_previa_numero.html",
-            {"series_id": series_id, "issue_id": issue_id})
+            {"series_id": series_id, "issue_id": issue_id,
+             "numero": issue.issue_number or "", "titulo": issue.title or ""})
     respuesta.headers["Cache-Control"] = "no-store"
     return respuesta
 

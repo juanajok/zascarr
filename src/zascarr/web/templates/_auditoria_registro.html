@@ -4,12 +4,12 @@
 {% import "_componentes.html" as ui %}
 {%- macro boton(texto) -%}
 <button type="button" class="btn-primary" hx-post="/ui/auditoria/adoptar"
-        hx-target="#registro" hx-swap="outerHTML" hx-disabled-elt="this">{{ texto }}</button>
+        hx-target="#registro" hx-swap="outerHTML" hx-disable="this">{{ texto }}</button>
 {%- endmacro -%}
 
 {%- macro buscar(texto) -%}
 <button type="button" class="btn-secondary" hx-get="/ui/auditoria/nuevos"
-        hx-target="#registro" hx-swap="outerHTML" hx-disabled-elt="this">{{ texto }}</button>
+        hx-target="#registro" hx-swap="outerHTML" hx-disable="this">{{ texto }}</button>
 {%- endmacro -%}
 
 {%- macro aviso_aceptacion(ev, recien=false) -%}
@@ -29,7 +29,7 @@
   <div class="audit-acciones">
     {{ boton("Continuar el registro") }}
     <form hx-post="/ui/auditoria/aceptar-ilegibles" hx-target="#registro" hx-swap="outerHTML"
-          hx-disabled-elt="find button">
+          hx-disable="find button">
       <input type="hidden" name="run_id" value="{{ ev.run_id }}">
       <input type="hidden" name="count" value="{{ ev.unreadable }}">
       <button type="submit" aria-describedby="aceptar-ilegibles-consecuencia">Registrar de todos modos ({{ ev.unreadable }} sin leer)</button>
@@ -94,7 +94,7 @@
     <a href="/ui/pendientes">Por revisar</a>), como repetido de otro que ya tienes (no se añade) o como el reenlace de uno que ya conocías y que ha
     cambiado de sitio. Si alguno cambia mientras se lee, no se registra. No se mueve, renombra ni borra ningún archivo, no se consulta ninguna
     fuente de internet y no se vincula nada solo por el nombre de su carpeta.</p>
-  <form hx-post="/ui/auditoria/registrar-nuevos" hx-target="#registro" hx-swap="outerHTML" hx-disabled-elt="find button">
+  <form hx-post="/ui/auditoria/registrar-nuevos" hx-target="#registro" hx-swap="outerHTML" hx-disable="find button">
     <input type="hidden" name="huella" value="{{ inc.huella }}">
     <button type="submit" class="btn-primary">Registrar los {{ inc.nuevos }} archivos sin registrar</button>
   </form>

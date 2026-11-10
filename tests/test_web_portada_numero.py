@@ -15,7 +15,8 @@ from zascarr.web import series as web
 def _cliente(serie_id: UUID, *, previa):
     class _Sesion:
         async def get(self, _modelo, _id):
-            return SimpleNamespace(series_id=serie_id)
+            return SimpleNamespace(series_id=serie_id, issue_number="1",
+                                   title="El Día del Sol Negro")
 
     async def _db():
         yield _Sesion()
@@ -42,6 +43,8 @@ def test_fragmento_devuelve_la_miniatura(tmp_path):
     assert r.status_code == 200
     assert f"/ui/series/{serie}/numero/{issue}/previa.jpg" in r.text
     assert 'class="previa-numero-img"' in r.text
+    assert "Nº 1" in r.text and "El Día del Sol Negro" in r.text
+    assert "Pulsa para abrir la ficha" in r.text
     assert r.headers["Cache-Control"] == "no-store"
 
 
