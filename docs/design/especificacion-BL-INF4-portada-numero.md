@@ -80,6 +80,11 @@ GET /ui/series/{series_id}/numero/{issue_id}/previa.jpg
 
 ## 5. UX
 
+> **Actualizado tras el benchmark** (`benchmark-BL-INF4-portada-numero.md`): tarjeta de 220 px
+> con pie «Nº N · título» y «Pulsa para abrir la ficha», flecha al chip, retardo de 150 ms y
+> fundido (anulado con `prefers-reduced-motion`). Va **debajo** del chip para no tapar el rótulo de
+> la sección; sin flip automático (limitación declarada).
+
 - Chips «En tu biblioteca» de la ficha: cada chip es un enlace al número; se le añade
   `hx-get="…/previa"`, `hx-trigger="mouseenter, focusin"`, `hx-target="#previa-<issue_id>"` y un
   contenedor `<span class="previa-numero" aria-hidden="true">` dentro de un envoltorio
@@ -125,6 +130,9 @@ GET /ui/series/{series_id}/numero/{issue_id}/previa.jpg
 - `ruff check src/` limpio.
 
 ## 9. Referencias (benchmark §13)
+
+Benchmark de patrones: `docs/design/benchmark-BL-INF4-portada-numero.md`
+(MediaWiki Page Previews, NN/g y htmx 4), además de la ficha de #418.
 
 La extracción de portada ya está benchmarkeada y decidida en #418/BL-PORT1
 (`docs/design/benchmark-BL-PORT3*`, ADR-0015 para `unar`): esta historia **no elige una fuente ni un
