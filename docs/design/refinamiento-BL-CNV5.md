@@ -13,6 +13,13 @@
 > **Método:** lectura de código y documentos; sin pruebas ejecutadas, sin red, sin Pi. Lo no comprobado
 > va marcado **NOT RUN**; ninguna fuente real se ha consultado.
 
+> **Enmienda del PO (2026-11-10): CNV5-4 CANCELADA.** El alcance se queda en **solo lectura/local**:
+> no se escriben datos de fuentes en el `ComicInfo.xml` ni en `metadata.comicinfo_fuente`. El plan de
+> B6 solo propone `Summary` cuando la ficha es `manual`/`comicinfo_xml` o hay marcador
+> `comicinfo_propio`; con Comic Vine, AniList, Tebeosfera, GCD o procedencia `None`, `Summary` queda
+> `SIN_DATO` y se conserva el XML existente. La tabla de §8.1 y los AC de CNV5-4 se conservan como
+> histórico de la propuesta, no como alcance vigente.
+
 ---
 
 ## 0. Resumen para el PO
@@ -399,7 +406,7 @@ botón guarda el plan local como hoy; no se bloquea.
 | **CNV5-1 · Contrato y capacidades** | Módulo puro `propuestas_comicinfo` con la matriz fuente×campo, elegibilidad (identidad/`LanguageISO` fuera), normalización/topes, tipos `PropuestaCampo`/`OpcionPropuesta`, presupuesto de peticiones; pruebas unitarias. Sin red ni UI. | Nada | BD, archivos, red | #480/#481 (contrato), #133, ADR 0002 | **S (2)** |
 | **CNV5-2 · Propuestas desde fuentes asociadas** | Servicio de solo lectura que, para un archivo, consulta las fuentes asociadas+encendidas de la tradición, reúne detalles por fuente, construye propuestas por campo y estados #133; fallos parciales; sin UI ni escritura. Pruebas con dobles de los cuatro clientes y fixtures. | Nada (solo lee) | BD, archivos, sesión persistente | CNV5-1; #129 A (identidad); #488 no aplica (no escribe) | **M (5)** |
 | **CNV5-3 · UX de propuesta y selección** | Rutas `GET/POST …/comicinfo/fuentes`, almacén de sesiones en memoria con TTL, plantilla de tabla por campo, estados vacío/error, textos, accesibilidad; el guardado sigue siendo el de #480. Pruebas web/HTMX y composición. | Sesión en memoria; nada de BD/archivo | Archivo, BD, token nuevo | CNV5-2 | **M (5)** |
-| **CNV5-4 · Aplicar la selección con el plan firmado** | Construcción del plan con autorización explícita por campo, reutilización de `TaggerService.aplicar_plan`, `metadata.comicinfo_fuente`, validación token+sesión+stat/hash, guardián #488 con aviso/confirmación, idempotencia y resultado incierto; pruebas Postgres real + fichero. | `ComicInfo.xml` y `File.metadata_` | BD de catálogo, `Issue`/`Series`, archivos ajenos, `locked_fields` | CNV5-3, #480/#481/#488 | **M (5)** |
+| **CNV5-4 · Aplicar la selección con el plan firmado** | **CANCELADA por el PO (2026-11-10):** no se escriben datos de fuentes en el archivo ni en `metadata_`; el alcance queda en solo lectura/local (CNV5-1..3). Se conserva como histórico de la propuesta. | Nada | Archivo, BD, `metadata_` | — | **Cancelada** |
 
 **Núcleo: 2+5+5+5 = 17 puntos nominales**, por encima de los 13/XL originales; la estimación 13 era
 «confianza Baja» y este reparto es más honesto. Si el PO necesita ≤13, se puede fusionar CNV5-1 con
