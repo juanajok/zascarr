@@ -292,7 +292,7 @@ lo que se ve mientras; éxito = lo que sustituye; error = fragmento con 200 y av
   `noir` completo y pulsar «Añadir».
 - **Acción B — quitar:** botón con el icono `x` de un chip (formulario con `input hidden name="etiqueta"`).
 - **HTMX:** `hx-post="/ui/series/{id}/etiquetas"` / `…/etiquetas/quitar`, `hx-target="#etiquetas-serie"`,
-  `hx-swap="innerHTML"`, `hx-disabled-elt="find button"` (evita doble envío), sin `hx-confirm`.
+  `hx-swap="innerHTML"`, `hx-disable="find button"` (evita doble envío), sin `hx-confirm`.
 - **Marcado sin formularios anidados:** el campo se asocia al formulario de añadir con
   `form="anadir-etiqueta-serie"` (el input queda **fuera** del `<form>`, junto al desplegable). Cada
   sugerencia es un **formulario POST independiente** con su `input hidden name="etiqueta"` y su
@@ -394,8 +394,8 @@ El fragmento **no** repite layout, `<h1>`, nav ni pie (misma regla que `test_web
 | `<form id="filtros">` | `action="/ui/biblioteca" method="get" hx-get="/ui/biblioteca/resultados" hx-target="#rejilla" hx-swap="innerHTML" hx-trigger="submit, change from:#f-tradition, change from:#f-publisher" hx-push-url="true" hx-indicator="#cargando-resultados" hx-sync="this:replace"` |
 | `<input type="search">` de etiqueta | `name="etiquetas" hx-get="/ui/biblioteca/etiquetas/sugerir" hx-trigger="input changed delay:300ms, search" hx-target="#sugerencias-etiquetas" hx-swap="innerHTML" hx-sync="this:replace" hx-include="closest form" hx-indicator="#cargando-sugerencias" aria-describedby="ayuda-etiquetas"` |
 | Enlace «Añadir»/«Excluir»/faceta/chip | `href` real + `hx-get` + `hx-target="#rejilla" hx-swap="innerHTML" hx-push-url="true"` |
-| Formulario de quitar etiqueta (ficha) | `action="/ui/series/{id}/etiquetas/quitar" method="post"` + `hx-post=… hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button"` |
-| Formulario de añadir (ficha) | `action="/ui/series/{id}/etiquetas" method="post"` + `hx-post=… hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button"`; el campo se asocia con `form="anadir-etiqueta-serie"` |
+| Formulario de quitar etiqueta (ficha) | `action="/ui/series/{id}/etiquetas/quitar" method="post"` + `hx-post=… hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disable="find button"` |
+| Formulario de añadir (ficha) | `action="/ui/series/{id}/etiquetas" method="post"` + `hx-post=… hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disable="find button"`; el campo se asocia con `form="anadir-etiqueta-serie"` |
 | Sugerencia de la ficha | formulario POST propio (`action`/`method` + `hx-post` + `input hidden name="etiqueta"` + botón «Añadir»); nunca dentro de otro `<form>` |
 | Enlace «Añadir»/«Excluir» de sugerencia (biblioteca) | `href` real a `/ui/biblioteca/resultados?etiquetas=…` + `hx-get` a la misma URL + `hx-target="#rejilla" hx-swap="innerHTML" hx-push-url="true"` |
 | Indicadores | `<span id="cargando-resultados" class="htmx-indicator" role="status">Buscando…</span>` y `<span id="cargando-sugerencias" class="htmx-indicator indicador-diferido" role="status">Buscando etiquetas…</span>` |
@@ -439,7 +439,7 @@ sugerencias **no** cambian la URL (son una ayuda de escritura).
   bloquea la pantalla y no se anuncia dos veces (el recuento final va a la región viva).
 - La rejilla anterior se mantiene hasta que llega el fragmento; no se pinta un esqueleto que
   haga saltar la página en la Pi.
-- El botón «Añadir» de la ficha se deshabilita mientras dura el POST (`hx-disabled-elt`), y el
+- El botón «Añadir» de la ficha se deshabilita mientras dura el POST (`hx-disable`), y el
   CSS global de `[disabled]` ya lo pinta atenuado (`web.css` §16c).
 
 ### 7.4 Sincronizar el campo y quitar el foco perdido, sin JS
@@ -911,7 +911,7 @@ anidar formularios):
     {% for e in etiquetas %}<li>
       <form action="/ui/series/{{ series_id }}/etiquetas/quitar" method="post"
             hx-post="/ui/series/{{ series_id }}/etiquetas/quitar"
-            hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
+            hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disable="find button">
         <input type="hidden" name="etiqueta" value="{{ e.clave }}">
         <span class="chip chip-etiqueta">{{ e.clave }}</span>
         <button type="submit" class="chip-quitar" aria-label="Quitar {{ e.clave }} de esta serie">
@@ -936,7 +936,7 @@ anidar formularios):
           <span class="cuenta">{{ s.series }} {{ "serie" if s.series == 1 else "series" }}</span>
           <form action="/ui/series/{{ series_id }}/etiquetas" method="post"
                 hx-post="/ui/series/{{ series_id }}/etiquetas"
-                hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
+                hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disable="find button">
             <input type="hidden" name="etiqueta" value="{{ s.clave }}">
             <button type="submit" class="btn ghost sm">Añadir<span class="sr"> {{ s.clave }}</span></button>
           </form>
@@ -947,7 +947,7 @@ anidar formularios):
   </div>
   <form id="anadir-etiqueta-serie" action="/ui/series/{{ series_id }}/etiquetas" method="post"
         hx-post="/ui/series/{{ series_id }}/etiquetas"
-        hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disabled-elt="find button">
+        hx-target="#etiquetas-serie" hx-swap="innerHTML" hx-disable="find button">
     <button type="submit">Añadir</button>
   </form>
 </div>

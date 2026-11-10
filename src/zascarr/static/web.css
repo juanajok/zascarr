@@ -486,7 +486,7 @@ button,
   transition: transform .12s, box-shadow .12s;
 }
 
-/* Un botón deshabilitado (p. ej. con `hx-disabled-elt` mientras corre la petición) seguía levantándose:
+/* Un botón deshabilitado (p. ej. con `hx-disable` mientras corre la petición) seguía levantándose:
    estas reglas ganan en especificidad a la de `[disabled]`. `:where(:not([disabled]))` lo excluye SIN
    sumar especificidad, para que las variantes que anulan el levantamiento (`.btn-ignorar:hover`…) sigan
    ganando como antes. */
@@ -836,6 +836,9 @@ button[type="submit"].btn-sugerencia {
 /* V1: el estado no se transmite solo por color — «lo tienes» lleva ✓ y «te falta» borde
    discontinuo, aunque los dos colores se confundan. */
 .issue-chip.issue-present::before { content: "✓ "; }
+/* BL-INF10: lectura visible sin etiquetas; el texto `sr` lo dice también sin color. */
+.issue-chip.issue-present.issue-leido { background: var(--ink); color: var(--paper); }
+.issue-chip.issue-present.issue-leyendo { background: var(--amber-bg); color: var(--ink); }
 .issue-chip.issue-missing {
   background: var(--paper); color: var(--ink-faint);
   border-style: dashed;
@@ -894,6 +897,16 @@ button[type="submit"].btn-sugerencia {
   scroll-margin-block-start: 16px;
 }
 .library-card .portada { border-bottom: 3px solid var(--ink); }
+/* BL-INF10: progreso de lectura bajo la portada de la tarjeta. */
+.library-card .library-card-progreso { padding: 7px 11px 0; background: var(--paper-2); }
+.barra-lectura {
+  height: 9px; background: var(--paper); border: 2px solid var(--ink);
+  border-radius: var(--radius-pill); overflow: hidden;
+}
+.barra-lectura-relleno { display: block; height: 100%; background: var(--ok-solid);
+  color: var(--on-ok-solid); }   /* sin texto: el color declarado satisface la prueba de contraste */
+.barra-lectura-texto { margin: 4px 0 0; font-size: .875rem; color: var(--ink-soft); }
+
 .library-card-body { padding: 9px 11px 12px; }
 .library-card-title {
   font-size: .88rem; font-weight: 700;
@@ -2021,6 +2034,41 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 @keyframes previa-aparece { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .previa-card { animation: none; } }
 @media (max-width: 860px), (pointer: coarse) { .previa-numero { display: none; } }
+
+/* BL-INF6: «Elegir portada» — selector de la portada de la serie en la ficha.
+   El envoltorio del encabezado no participa del flex (así la portada sigue siendo un hijo directo
+   a efectos de maquetación) y el panel no pide NADA hasta que se despliega. */
+.portada-serie-envoltura { display: contents; }
+.elegir-portada { margin: 0 0 18px; }
+.elegir-portada > summary {
+  cursor: pointer; color: var(--ink-soft); font-size: .875rem; font-weight: 600;
+  padding: 8px 0; min-height: 40px;
+}
+.elegir-portada[open] > summary { margin-bottom: 0; }
+.elegir-portada[open] {
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+  background: var(--paper-2); padding: 4px 16px 14px;
+}
+.elegir-portada-panel { display: grid; gap: 10px; justify-items: start; }
+.elegir-portada-panel > p { margin: 0; max-width: 70ch; }
+.portada-actual { display: flex; gap: 12px; align-items: flex-start; margin: 0; flex-wrap: wrap; }
+.portada.portada-actual-img {
+  width: 120px; flex: none;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+}
+.portada-actual figcaption { font-size: .875rem; line-height: 1.4; }
+.portada-candidatas {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 14px; width: 100%;
+}
+.portada-candidata { display: grid; gap: 6px; align-content: start; margin: 0; }
+.portada.portada-candidata-img {
+  width: 100%;
+  border: 3px solid var(--ink); border-radius: var(--radius-panel);
+}
+.portada-candidata figcaption { font-size: .875rem; line-height: 1.35; }
+.portada-candidata form { margin: 0; }
+.portada-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 4px; }
 
 /* BL-CNV2b: originales guardados de las conversiones (Duplicados). */
 .originales-guardados { margin: 18px 0; }

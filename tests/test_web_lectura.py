@@ -2,6 +2,7 @@
 """#150 BL-C3 web: guardar lectura, fragmento y filtro de biblioteca."""
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -110,6 +111,15 @@ def _render_control(monkeypatch, **extra):
 def _radio(html, valor):
     import re
     return re.search(rf'<input[^>]*value="{valor}"[^>]*>', html).group(0)
+
+
+def test_la_ficha_de_serie_no_muestra_el_estado_de_lectura():
+    """El estado (sin leer/leyendo/leído) solo se toca dentro del número."""
+    plantilla = (Path(__file__).resolve().parents[1]
+                 / "src/zascarr/web/templates/series_detail.html").read_text()
+    assert "_lectura_control.html" not in plantilla
+    assert "estados_lectura" not in plantilla
+    assert "lectura-control" not in plantilla
 
 
 def test_control_de_fila_pinta_el_radio_concreto_del_numero_leido():

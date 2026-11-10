@@ -367,6 +367,8 @@ PARAMETROS_DE_QUERY = frozenset({
     "offset",
     # MIT-M7 (#130-b): contexto declarado (ruta, aviso y valores del formulario).
     "aviso", "incluir", "tipo", "error",
+    # BL-INF6 (#592): «Ver más números» del selector de portada (estado de la vista).
+    "desde",
 })
 
 

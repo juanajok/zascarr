@@ -508,6 +508,10 @@ Propuestas por campo con procedencia visible (patrón #128/#109), fuentes encend
 tradición (ADR 0002), cortesía compartida, nada se aplica sin confirmación y lo elegido pasa por el plan
 de #480. XL; probable partición al refinar; depende de #480/#481/#109/#449.
 
+> **Refinamiento y partición (2026-11-10):** contrato por campo, capacidades reales de los clientes,
+> encaje con #109/#480/#481, UX, seguridad/legal y reparto en historias en
+> [`refinamiento-BL-CNV5.md`](refinamiento-BL-CNV5.md). Este resumen queda como índice.
+
 ---
 
 ## 8. Riesgos, pruebas futuras y NOT RUN

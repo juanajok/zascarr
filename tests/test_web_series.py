@@ -553,6 +553,9 @@ class TestPresupuestoTextoU21:
         # BL-INF1 (#447): el bloque informativo va después de la cabecera y no compite
         # con el presupuesto de la entrada de #208.
         antes = re.sub(r'<section class="ficha-serie-datos".*?</section>', '', antes, flags=re.S)
+        # BL-INF6: «Elegir portada» es un CONTROL de acción (abre el selector), como los botones de
+        # `.series-acciones`: no es texto de entrada y no compite con el presupuesto de #208.
+        antes = re.sub(r'<details class="elegir-portada".*?</details>', '', antes, flags=re.S)
         # El contenido de un <details> cerrado no cuenta, pero su <summary>
         # visible sí (contrato de medición de #208).
         antes = re.sub(
