@@ -201,10 +201,21 @@ def analizar(ruta: Path, *, lector=lector_rar) -> Analisis:
 def _manifiesto_de_zip(ruta: Path) -> tuple[EntradaManifiesto, ...]:
     marcas: list[EntradaManifiesto] = []
     with zipfile.ZipFile(ruta) as zf:
+        # #564: mirar los TAMAÑOS DECLARADOS antes de `testzip` (que descomprime): un ZIP
+        # bomb puede declarar 100 GB y agotar la Pi antes de que nadie lo verifique.
+        infos = zf.infolist()
+        if len([i for i in infos if not i.is_dir()]) > MAX_ENTRADAS:
+            raise ConversionBloqueadaError(MotivoConversion.DEMASIADO_GRANDE,
+                                           _MENSAJES[MotivoConversion.DEMASIADO_GRANDE])
+        total_declarado = sum(i.file_size for i in infos if not i.is_dir())
+        if total_declarado > MAX_DECLARADOS or any(
+                (not i.is_dir() and i.file_size > MAX_ENTRADA) for i in infos):
+            raise ConversionBloqueadaError(MotivoConversion.DEMASIADO_GRANDE,
+                                           _MENSAJES[MotivoConversion.DEMASIADO_GRANDE])
         if zf.testzip() is not None:
             raise ConversionBloqueadaError(MotivoConversion.ILEGIBLE,
                                            _MENSAJES[MotivoConversion.ILEGIBLE])
-        for info in zf.infolist():
+        for info in infos:
             if info.is_dir():
                 continue
             with zf.open(info) as fh:

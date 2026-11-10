@@ -211,3 +211,21 @@ def test_el_cli_expone_reconciliar_y_vaciar():
 
     assert _parser().parse_args(["reconciliar"]).accion == "reconciliar"
     assert _parser().parse_args(["vaciar", "--lote", "5"]).lote == 5
+
+
+def test_d5_zip_bomb_se_rechaza_antes_de_testzip(tmp_path):
+    ruta = tmp_path / "bomba.cbr"
+    with zipfile.ZipFile(ruta, "w") as zf:
+        for i in range(1001):
+            zf.writestr(f"{i:04d}.jpg", b"x")
+    with pytest.raises(ConversionBloqueadaError) as exc:
+        analizar(ruta, lector=_Lector([]))
+    assert exc.value.motivo is MotivoConversion.DEMASIADO_GRANDE
+
+
+def test_el_cli_queda_instalado_como_zascarr_originales():
+    import tomllib
+    from pathlib import Path
+
+    datos = tomllib.loads((Path(__file__).parent.parent / "pyproject.toml").read_text())
+    assert datos["project"]["scripts"]["zascarr-originales"] == "zascarr.cli.originales:main"
