@@ -345,6 +345,8 @@ async def _contexto(
     etiquetas_activas: list[dict] = []
     facetas: list[dict] = []
     expresion: ExpresionEtiquetas = parse_expresion(filtros.etiquetas)
+    positivas: tuple[str, ...] = ()
+    negativas: tuple[str, ...] = ()
 
     try:
         resueltas = await resolver_etiquetas(
@@ -429,8 +431,8 @@ async def _contexto(
             page=1, page_size=1, tradition=filtros.tradition or None,
             search=filtros.q or None, publisher_id=filtros.uuid("publisher_id"),
             character_id=filtros.uuid("character_id"), story_arc_id=filtros.uuid("story_arc_id"),
-            etiquetas_positivas=tuple(expresion.positivas),
-            etiquetas_negativas=tuple(expresion.negativas))
+            etiquetas_positivas=positivas,
+            etiquetas_negativas=negativas, con_issues=True)
         try:
             total_sin = (await service.list_series_paginado(**base))[1]
             if filtros.leido == "leyendo":

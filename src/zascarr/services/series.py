@@ -67,6 +67,7 @@ class SeriesService:
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
+        con_issues: bool = False,
         *,
         corregir_pagina: bool = True,
     ) -> tuple[list[Series], int, int]:
@@ -127,6 +128,8 @@ class SeriesService:
             else:
                 query = query.where(Series.id.in_(select(Issue.series_id)))
                 query = query.where(Series.id.not_in(leidos))
+        if con_issues:
+            query = query.where(Series.id.in_(select(Issue.series_id)))
         if needs_distinct:
             query = query.distinct()
 
@@ -153,6 +156,7 @@ class SeriesService:
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
+        con_issues: bool = False,
     ) -> tuple[list[Series], int]:
         """Contrato histórico `(items, total)` para API y tests."""
         items, total, _ = await self._list_series(
@@ -160,7 +164,7 @@ class SeriesService:
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
-            etiquetas_negativas=etiquetas_negativas, leido=leido,
+            etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
             corregir_pagina=False,
         )
         return items, total
@@ -178,6 +182,7 @@ class SeriesService:
         etiquetas_positivas: tuple[str, ...] = (),
         etiquetas_negativas: tuple[str, ...] = (),
         leido: str | None = None,
+        con_issues: bool = False,
     ) -> tuple[list[Series], int, int]:
         """Como `list_series`, pero devuelve también la página efectiva.
 
@@ -189,7 +194,7 @@ class SeriesService:
             search=search, publisher_id=publisher_id, character_id=character_id,
             story_arc_id=story_arc_id,
             etiquetas_positivas=etiquetas_positivas,
-            etiquetas_negativas=etiquetas_negativas, leido=leido,
+            etiquetas_negativas=etiquetas_negativas, leido=leido, con_issues=con_issues,
         )
 
     async def list_publishers_with_series(self) -> list[Publisher]:
