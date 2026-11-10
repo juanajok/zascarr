@@ -18,7 +18,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE FUNCTION f_creator_name_norm(value text) RETURNS text
+        CREATE OR REPLACE FUNCTION f_creator_name_norm(value text) RETURNS text
         LANGUAGE sql IMMUTABLE AS $$
           SELECT regexp_replace(
             lower(translate(btrim(value),
