@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 
 from zascarr.models import MetadataSource, Series
 from zascarr.services.tokens_revision import id_canonico
+from zascarr.utils.texto_html import texto_plano
 
 #: Campos gestionados que se muestran. `identidad` agrupa el id externo que corresponda; nunca se
 #: muestra el valor del identificador, solo si consta.
@@ -153,7 +154,10 @@ def _valor(clave: str, series: Series, id_presente: bool) -> str:
     if clave == "description":
         if not series.description:
             return "Sin dato"
-        texto = " ".join(series.description.split())
+        # Las fuentes entregan la sinopsis en HTML: en la tabla se enseña texto plano, no etiquetas.
+        texto = texto_plano(series.description)
+        if not texto:
+            return "Sin dato"
         return texto if len(texto) <= 160 else texto[:157].rstrip() + "…"
     if clave == "cover_url":
         return "Portada guardada" if series.cover_url else "Sin portada"

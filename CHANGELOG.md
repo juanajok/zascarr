@@ -7,6 +7,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Corregido
 
+- **La ficha de serie enseñaba HTML y errores en crudo.** La tabla «De dónde sale cada dato»
+  pintaba el HTML con el que Comic Vine entrega la sinopsis, y un formulario de etiquetas sin el
+  campo (petición manipulada o plantilla vieja) devolvía un 422 con el JSON de validación dentro
+  de la página. Ahora la sinopsis se enseña en texto plano y el alta/baja de etiquetas acepta el
+  campo vacío y responde con su aviso en HTML; además, los valores largos de la tabla no pueden
+  ensanchar la página. Regresión: texto plano en la procedencia y POST sin `etiqueta` con aviso.
 - **«Probar conexión» de Comic Vine daba un 403 engañoso con una clave válida.** GameSpot bloquea con
   HTTP 403 («Anonymous Bot or Scraper Blocked») las peticiones cuyo `User-Agent` es el genérico de las
   librerías Python o no existe; el cliente real de ZascArr manda uno propio y funcionaba, pero la prueba
