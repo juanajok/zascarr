@@ -1,5 +1,5 @@
 {#- CNV5-3: propuestas de fuentes para el ComicInfo (solo lectura; la elección queda en sesión). -#}
-<div id="comicinfo-fuentes-anuncio" hx-swap-oob="innerHTML">{% if mensaje %}{{ mensaje }}{% elif sesion %}{{ sesion.resumen }}{% if avisos %} {{ avisos[0] }}{% endif %}{% endif %}</div>
+<div id="comicinfo-fuentes-anuncio" hx-swap-oob="innerHTML">{% if mensaje %}{{ mensaje }}{% elif sesion %}{{ sesion.resumen }}{% endif %}</div>
 <section id="comicinfo-fuentes" class="comicinfo-fuentes" aria-labelledby="comicinfo-fuentes-titulo">
   <h2 id="comicinfo-fuentes-titulo" tabindex="-1" autofocus>Datos de las fuentes</h2>
   {% if mensaje %}
@@ -67,8 +67,6 @@
       </span>
     </div>
   </form>
-  {% else %}
-  <p class="caption">Las fuentes no tienen datos nuevos para este tebeo. Puedes guardar lo que ya tienes.</p>
   {% endif %}
   {% if campos and sesion.campos_sin_datos %}
   <details class="comicinfo-sin-datos">
