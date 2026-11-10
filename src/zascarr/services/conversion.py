@@ -76,7 +76,8 @@ MENSAJES = {
     MotivoConversion.PROPUESTA_DESACTUALIZADA: "El archivo cambió desde la vista previa; no se ha tocado nada.",
     MotivoConversion.COMPARTIDO: "Parece compartido por un programa de descargas.",
     MotivoConversion.NO_SE_SABE: "No se puede saber si está compartido.",
-    MotivoConversion.CONFLICTO_DE_BLOQUEO: "Otra operación coincidió; no se ha convertido.",
+    MotivoConversion.CONFLICTO_DE_BLOQUEO:
+        "Otra operación está usando la biblioteca (importación, rescan u otra conversión). Espera a que termine y vuelve a intentarlo; no se ha tocado nada.",
     MotivoConversion.RESULTADO_INCIERTO: "No se sabe si la conversión llegó a publicarse.",
 }
 
