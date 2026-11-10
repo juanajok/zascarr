@@ -590,6 +590,9 @@ class TaggerService:
         """
         ctx = await self._contexto(file)
         path = Path(file.file_path)
+        if any(c.accion is Accion.CAMBIA and c.tag in ctx.bloqueados for c in campos):
+            return ResultadoEtiquetado(file.id, file.file_name, CADUCADO, campos,
+                                       "hay un campo bloqueado nuevo; vuelve a la vista previa")
         if estado_antes is None:
             estado_antes = await asyncio.to_thread(_estado, path)
         if await asyncio.to_thread(_estado, path) != estado_antes:

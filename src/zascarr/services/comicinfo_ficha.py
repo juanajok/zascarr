@@ -115,6 +115,12 @@ def _sha256(ruta: Path) -> str:
     return h.hexdigest()
 
 
+def _desactualizada(operacion: str, file_id: str, mensaje: str,
+                    campos: list[CampoPlan] | None = None) -> ResultadoComicInfo:
+    return ResultadoComicInfo(1, "comicinfo", operacion, file_id, "caducado",
+                              "propuesta_desactualizada", mensaje, campos=campos or [])
+
+
 class ComicInfoFichaService:
     def __init__(self, db: AsyncSession, *, secret: str | None = None, ahora: float | None = None):
         self._db = db
@@ -192,7 +198,8 @@ class ComicInfoFichaService:
             raise TokenInvalidoError("Ese archivo ya no existe.")
         if serie_id_esperado is not None and await self._leer(
                 UUID(str(serie_id_esperado)), UUID(str(file_id_esperado))) is None:
-            raise TokenInvalidoError("Esa propuesta no es para este archivo de esta serie.")
+            return _desactualizada(operacion, str(f.id),
+                                   "El archivo ya no pertenece a esta serie; no se ha escrito nada.")
         if f.file_format is not FileFormat.CBZ:
             return ResultadoComicInfo(1, "comicinfo", operacion, str(f.id), "omitido", "formato",
                                       "Solo se puede escribir ComicInfo en un CBZ.")
@@ -226,9 +233,26 @@ class ComicInfoFichaService:
             if (str(ruta), st.st_size, st.st_mtime_ns) != (
                     datos.get("ruta"), datos.get("tamano"), datos.get("mtime_ns")) or \
                     await asyncio.to_thread(_sha256, ruta) != datos.get("sha256"):
-                return ResultadoComicInfo(1, "comicinfo", operacion, str(f.id), "caducado",
-                                          "caducado",
-                                          "El archivo cambió desde la vista previa; no se ha escrito nada.")
+                return _desactualizada(operacion, str(f.id),
+                                       "El archivo cambió desde la vista previa; no se ha escrito nada.")
+            # #583: la fila fresca tiene que seguir siendo el MISMO CBZ en la MISMA serie.
+            if f.file_format is not FileFormat.CBZ or f.is_missing or f.issue_id is None:
+                return _desactualizada(operacion, str(f.id),
+                                       "El archivo o su relación cambiaron; no se ha escrito nada.")
+            if serie_id_esperado is not None and await self._leer(
+                    UUID(str(serie_id_esperado)), UUID(str(f.id))) is None:
+                return _desactualizada(operacion, str(f.id),
+                                       "El archivo ya no pertenece a esta serie; no se ha escrito nada.")
+            try:
+                campos_frescos = await self._tagger.planificar(f)
+            except ComicInfoInvalidoError:
+                return _desactualizada(operacion, str(f.id),
+                                       "El ComicInfo cambió desde la vista previa; no se ha escrito nada.")
+            # #583: si cambió un locked_field (o cualquier dato del plan) después de la
+            # vista previa, la huella ya no coincide y no se aplica el plan viejo.
+            if _huella(campos_frescos) != datos.get("huella"):
+                return _desactualizada(operacion, str(f.id),
+                                       "La información del número cambió desde la vista previa; no se ha escrito nada.")
             shared = await estado_de_comparticion(ruta)
             aviso = self._aviso(shared)
             if shared.bloquea and not forzar_compartido:
@@ -242,8 +266,9 @@ class ComicInfoFichaService:
                                       resultado.motivo or "Sin cambios.", campos=campos,
                                       advertencia=aviso)
         if resultado.accion == CADUCADO:
-            return ResultadoComicInfo(1, "comicinfo", operacion, str(f.id), "caducado",
-                                      "caducado", resultado.motivo or "Plan caducado.", campos=campos)
+            return _desactualizada(operacion, str(f.id),
+                                   resultado.motivo or "Plan caducado; no se ha escrito nada.",
+                                   campos)
         if resultado.accion != ESCRITO:
             return ResultadoComicInfo(1, "comicinfo", operacion, str(f.id), "omitido",
                                       resultado.accion, resultado.motivo or "No se escribió.",
