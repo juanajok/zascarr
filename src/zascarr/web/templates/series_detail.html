@@ -201,6 +201,12 @@
              hx-target="#resultado-conversion-{{ a.id }}" hx-swap="innerHTML">Convertir a CBZ<span class="sr"> {{ a.nombre }}</span></a>
           <div id="resultado-conversion-{{ a.id }}"></div>
           {% endif %}
+          {% if a.formato == "cbz" %}
+          <a class="btn ghost sm" href="/ui/series/{{ series.id }}/archivos/{{ a.id }}/comicinfo"
+             hx-get="/ui/series/{{ series.id }}/archivos/{{ a.id }}/comicinfo"
+             hx-target="#resultado-comicinfo-{{ a.id }}" hx-swap="innerHTML">Actualizar ComicInfo<span class="sr"> {{ a.nombre }}</span></a>
+          <div id="resultado-comicinfo-{{ a.id }}"></div>
+          {% endif %}
           {% include "_discrepancias_serie.html" %}
         </li>
         {% endfor %}
