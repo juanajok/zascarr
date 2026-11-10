@@ -1000,7 +1000,12 @@ async def _serie_para_conversion(db, series_id, file_id):
 @router.get("/{series_id}/archivos/{file_id}/convertir", response_class=HTMLResponse)
 async def convertir_vista_previa(series_id: UUID, file_id: UUID, request: Request,
                                  db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    series = await _serie_para_conversion(db, series_id, file_id)
+    try:
+        series = await _serie_para_conversion(db, series_id, file_id)
+    except HTTPException:
+        if request.headers.get("HX-Request") == "true":
+            return _sin_cache_conversion(HTMLResponse(""))
+        raise
     try:
         vista = await _servicio_conversion(db).previsualizar(series_id, file_id)
     except Exception as exc:  # noqa: BLE001 — archivo/serie no encontrado
@@ -1039,7 +1044,12 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
 @router.get("/{series_id}/archivos/{file_id}/convertir/deshacer", response_class=HTMLResponse)
 async def deshacer_conversion_previa(series_id: UUID, file_id: UUID, request: Request,
                                      db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    series = await _serie_o_404(db, series_id)
+    try:
+        series = await _serie_o_404(db, series_id)
+    except HTTPException:
+        if request.headers.get("HX-Request") == "true":
+            return _sin_cache_conversion(HTMLResponse(""))
+        raise
     try:
         vista = await _servicio_conversion(db).previsualizar_deshacer(series_id, file_id)
     except Exception:  # noqa: BLE001
