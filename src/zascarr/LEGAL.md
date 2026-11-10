@@ -111,7 +111,7 @@ Algunas fuentes de metadatos usadas por ZascArr tienen licencias propias:
 
 ZascArr **no escribe datos de fuentes externas** (sinopsis, créditos, editorial, año de fuente) dentro del `ComicInfo.xml` del archivo del coleccionista. Las propuestas de fuentes son de **solo lectura y locales**: sirven para consultarlas y decidir, pero no se embeben en el tebeo.
 
-El único texto largo que el etiquetador puede escribir es la **sinopsis de la ficha local**, y solo cuando esa ficha es de procedencia `manual` o `comicinfo_xml` (o ZascArr ya escribió antes ese `Summary`, marcador `comicinfo_propio`). Si la ficha viene de Comic Vine, AniList, Tebeosfera, GCD o no consta procedencia, el plan deja `Summary` en «sin dato» y **conserva el XML existente**.
+El único texto largo que el etiquetador puede escribir es la **sinopsis de la ficha local**, y solo cuando esa ficha es de procedencia `manual` o `comicinfo_xml` (o ZascArr ya escribió antes ese `Summary`, marcador `comicinfo_propio`). La procedencia que decide es la del **número** (`Issue.metadata_source`), no la del archivo (`File.metadata_source`). Si la ficha viene de Comic Vine, AniList, Tebeosfera, GCD o no consta procedencia, el plan deja `Summary` en «sin dato» y **conserva el XML existente**.
 
 Esta decisión sustituye a la parte de CNV5-4 que iba a aplicar datos de fuentes al archivo. No se crea una base de datos pre-poblada ni se redistribuyen metadatos de terceros; la caché local del usuario no cambia.
 

@@ -252,10 +252,14 @@ async def bloqueo_de_fichero(
 class _Contexto:
     deseados: dict[str, str | None]
     bloqueados: set[str]
+    #: Procedencia de los datos del NÚMERO (`Issue.metadata_source`). No es el
+    #: `File.metadata_source`: este último describe el archivo, no la sinopsis.
+    metadata_source: str | None = None
 
     def huella(self) -> dict:
         """Lo que se guarda en la marca: con qué se comparó esta revisión."""
-        return {"deseados": self.deseados, "bloqueados": sorted(self.bloqueados)}
+        return {"deseados": self.deseados, "bloqueados": sorted(self.bloqueados),
+                "metadata_source": self.metadata_source}
 
 
 _ROLE_A_TAG = {
@@ -290,16 +294,18 @@ def _unir_lista(valores: list[str]) -> str | None:
 _RESUMEN_PERMITIDO = frozenset({MetadataSource.MANUAL.value, MetadataSource.COMICINFO_XML.value})
 
 
-def _resumen_autorizado(file: File) -> bool:
+#: La fuente del `Summary` es la del NÚMERO (`Issue.metadata_source`); el
+#: `File.metadata_source` es la procedencia del archivo y NO autoriza el texto.
+def _resumen_autorizado(ctx: _Contexto, file: File) -> bool:
     propio = (file.metadata_ or {}).get("comicinfo_propio") or {}
-    return (getattr(file, "metadata_source", None) in _RESUMEN_PERMITIDO
-            or "Summary" in propio)
+    return ctx.metadata_source in _RESUMEN_PERMITIDO or "Summary" in propio
 
 
 def _filtrar_resumen(ctx: _Contexto, file: File) -> _Contexto:
-    if _resumen_autorizado(file):
+    if _resumen_autorizado(ctx, file):
         return ctx
-    return _Contexto({**ctx.deseados, "Summary": None}, set(ctx.bloqueados))
+    return _Contexto({**ctx.deseados, "Summary": None}, set(ctx.bloqueados),
+                     ctx.metadata_source)
 
 
 def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _Contexto:
@@ -344,7 +350,7 @@ def _contexto_de(issue: Issue, series: Series, publisher: Publisher | None) -> _
         tag for tag, (entidad, campo) in _LOCK_DE.items()
         if campo in (entidades[entidad].locked_fields or [])
     }
-    return _Contexto(deseados, bloqueados)
+    return _Contexto(deseados, bloqueados, getattr(issue, "metadata_source", None))
 
 
 class TaggerService:

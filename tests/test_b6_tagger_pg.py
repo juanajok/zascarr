@@ -104,6 +104,7 @@ async def _montar(
     locked_series: list[str] | None = None,
     metadata: dict | None = None,
     metadata_source: str | None = MetadataSource.MANUAL.value,
+    file_metadata_source: str | None = None,
 ):
     publisher = None
     if con_publisher:
@@ -124,6 +125,7 @@ async def _montar(
         id=uuid4(), series_id=serie.id, issue_number=issue_number, volume=volume,
         release_date=date(1980, 5, 1) if con_release_date else None,
         synopsis=synopsis, locked_fields=locked_issue or [],
+        metadata_source=metadata_source,
     )
     db.add(issue)
 
@@ -137,7 +139,7 @@ async def _montar(
         id=uuid4(), issue_id=issue.id, file_path=str(ruta), file_name=ruta.name,
         file_format=formato, file_size_bytes=ruta.stat().st_size,
         sha256_hash=_sha256(ruta), metadata_=metadata or {},
-        metadata_source=metadata_source,
+        metadata_source=file_metadata_source,
     )
     db.add(archivo)
     await db.flush()
@@ -1033,3 +1035,44 @@ class TestProcedenciaDelResumen:
             metadata={"comicinfo_propio": {"Summary": "Resumen de ZascArr"}})
         r = await TaggerService(db).ejecutar(archivo, dry_run=True)
         assert _acciones(r)["Summary"] == "cambia"
+
+
+class TestResumenPorEntidad:
+    """#620: la sinopsis es del Issue; el File no autoriza ni desautoriza el texto."""
+
+    @pytest.mark.asyncio
+    async def test_issue_cv_con_file_manual_no_autoriza(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source="comic_vine",
+            file_metadata_source="manual")
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "sin_dato"
+
+    @pytest.mark.asyncio
+    async def test_issue_manual_con_file_cv_si_autoriza(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source="manual", file_metadata_source="comic_vine")
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "cambia"
+
+    @pytest.mark.asyncio
+    async def test_issue_manual_sin_xml_escribe_y_luego_conserva(self, db, tmp_path):
+        archivo, ruta = await _montar(db, tmp_path, metadata_source="manual")
+        await TaggerService(db).ejecutar(archivo, dry_run=False)
+        root = ElementTree.fromstring(leer_comicinfo(ruta))
+        assert root.findtext("Summary") == "Resumen de ZascArr"
+        with zipfile.ZipFile(ruta) as zf:
+            xml = zf.read("ComicInfo.xml")
+        otra = tmp_path / "otra"
+        otra.mkdir()
+        archivo2, ruta2 = await _montar(
+            db, otra, xml=xml, metadata_source="manual")
+        r2 = await TaggerService(db).ejecutar(archivo2, dry_run=True)
+        assert _acciones(r2)["Summary"] == "ya_coincide"
+
+    @pytest.mark.asyncio
+    async def test_locked_summary_sigue_bloqueado_con_issue_manual(self, db, tmp_path):
+        archivo, _ruta = await _montar(
+            db, tmp_path, metadata_source="manual", locked_issue=["synopsis"])
+        r = await TaggerService(db).ejecutar(archivo, dry_run=True)
+        assert _acciones(r)["Summary"] == "bloqueado"
