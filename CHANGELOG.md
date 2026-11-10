@@ -22,6 +22,12 @@ versionado según [SemVer](https://semver.org/lang/es/). Fechas en `AAAA-MM-DD`.
 
 ### Añadido
 
+- **Convertir los CBR de una serie en lote (BL-CNV2, #479).** En «Archivos por número» de la
+  ficha, «Convertir los CBR» abre una vista previa y convierte **de 5 en 5**, reutilizando la
+  conversión verificada y reversible de #478 (token, guardián de compartidos y cuarentena del
+  original). Solo se analiza lo necesario para llenar la tanda; los bloqueados se muestran con su
+  motivo, los compartidos se omiten (se pueden convertir uno a uno desde su fila) y el informe
+  cuadra (convertidas + omitidas). Si una conversión acaba con resultado incierto, la tanda para.
 - **«Reescanear la biblioteca», a demanda y solo** (BL-R9). Un botón en Auditoría y una cadencia diaria
   configurable (`RESCAN_INTERVAL_MINUTES`, 1440 = una vez al día, 0 la apaga) reescanean la tebeoteca y
   actualizan el catálogo: los tebeos nuevos se registran (a su serie si se reconocen, y a «Por revisar» si

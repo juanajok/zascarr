@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 
 from zascarr.database import get_db
 from zascarr.main import app
-from zascarr.services.conversion import ResultadoConversion, VistaConversion
+from zascarr.services.conversion import (
+    LoteConversion,
+    ResultadoConversion,
+    ResultadoLote,
+    VistaConversion,
+)
 from zascarr.web import series as web
 
 
@@ -36,8 +41,9 @@ def _vista(**kw):
 
 
 class _Servicio:
-    def __init__(self, vista=None, resultado=None, deshacer=None):
+    def __init__(self, vista=None, resultado=None, deshacer=None, lote=None, lote_resultado=None):
         self.vista, self.resultado, self.deshacer_resultado = vista, resultado, deshacer
+        self.lote, self.lote_resultado = lote, lote_resultado
 
     async def previsualizar(self, *_a):
         return self.vista
@@ -51,6 +57,12 @@ class _Servicio:
 
     async def deshacer(self, _token, *, forzar_compartido=False, **_kw):
         return self.deshacer_resultado
+
+    async def previsualizar_lote(self, *_a):
+        return self.lote
+
+    async def convertir_lote(self, *_a):
+        return self.lote_resultado
 
 
 def _override(serie):
@@ -158,3 +170,39 @@ def test_errores_de_token_son_400_y_410(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert r400.status_code == 400
     assert r410.status_code == 410
+
+
+def _lote(vistas=()):
+    return LoteConversion(str(uuid4()), tuple(vistas), (), (), total_cbr=1,
+                          escaneados=1, limite=5)
+
+
+def test_lote_previa_muestra_convertibles_y_boton(monkeypatch):
+    serie = _serie()
+    servicio = _Servicio()
+    servicio.lote = _lote([_vista()])
+    servicio.lote_resultado = ResultadoLote(str(serie.id), 1, 0, (), 5)
+    cliente = _cliente(monkeypatch, servicio, serie)
+
+    r = cliente.get(f"/ui/series/{serie.id}/convertir")
+
+    assert r.status_code == 200
+    assert "Convertir 1 CBR a CBZ" in r.text
+    assert "Tebeo 01.cbr" in r.text
+    assert r.headers["Cache-Control"] == "no-store"
+
+
+def test_lote_confirmar_muestra_informe_y_la_siguiente_tanda(monkeypatch):
+    serie = _serie()
+    servicio = _Servicio()
+    servicio.lote = _lote([_vista()])
+    servicio.lote_resultado = ResultadoLote(
+        str(serie.id), 1, 0, (("Tebeo 01.cbr", "Convertida."),), 5)
+    cliente = _cliente(monkeypatch, servicio, serie)
+
+    r = cliente.post(f"/ui/series/{serie.id}/convertir")
+
+    assert r.status_code == 200
+    assert "Convertidos 1 CBR" in r.text
+    assert "Qué ha pasado con cada archivo" in r.text
+    assert r.headers["Cache-Control"] == "no-store"
