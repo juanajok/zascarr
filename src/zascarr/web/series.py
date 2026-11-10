@@ -960,10 +960,14 @@ async def convertir_confirmar(series_id: UUID, file_id: UUID, request: Request,
             token, forzar_compartido=bool(forzar_compartido),
             file_id_esperado=file_id, serie_id_esperado=series_id)
     except Exception as exc:  # noqa: BLE001
-        if exc.__class__.__name__ == "TokenCaducadoError":
-            raise HTTPException(status_code=410, detail=str(exc)) from None
-        if exc.__class__.__name__ == "TokenInvalidoError":
-            raise HTTPException(status_code=400, detail=str(exc)) from None
+        if exc.__class__.__name__ in ("TokenCaducadoError", "TokenInvalidoError"):
+            if request.headers.get("HX-Request") == "true":
+                # Un error en una petición HTMX no se pinta: se devuelve un fragmento con aviso.
+                return _sin_cache_conversion(templates.TemplateResponse(
+                    request, "_conversion_error.html",
+                    {"series": series, "file_id": file_id, "mensaje": str(exc)}))
+            codigo = 410 if exc.__class__.__name__ == "TokenCaducadoError" else 400
+            raise HTTPException(status_code=codigo, detail=str(exc)) from None
         raise
     return _sin_cache_conversion(templates.TemplateResponse(
         request, "conversion_resultado.html", {"series": series, "resultado": resultado}))
@@ -992,10 +996,14 @@ async def deshacer_conversion_confirmar(series_id: UUID, file_id: UUID, request:
             token, forzar_compartido=bool(forzar_compartido),
             file_id_esperado=file_id, serie_id_esperado=series_id)
     except Exception as exc:  # noqa: BLE001
-        if exc.__class__.__name__ == "TokenCaducadoError":
-            raise HTTPException(status_code=410, detail=str(exc)) from None
-        if exc.__class__.__name__ == "TokenInvalidoError":
-            raise HTTPException(status_code=400, detail=str(exc)) from None
+        if exc.__class__.__name__ in ("TokenCaducadoError", "TokenInvalidoError"):
+            if request.headers.get("HX-Request") == "true":
+                # Un error en una petición HTMX no se pinta: se devuelve un fragmento con aviso.
+                return _sin_cache_conversion(templates.TemplateResponse(
+                    request, "_conversion_error.html",
+                    {"series": series, "file_id": file_id, "mensaje": str(exc)}))
+            codigo = 410 if exc.__class__.__name__ == "TokenCaducadoError" else 400
+            raise HTTPException(status_code=codigo, detail=str(exc)) from None
         raise
     return _sin_cache_conversion(templates.TemplateResponse(
         request, "conversion_resultado.html", {"series": series, "resultado": resultado}))

@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -190,6 +191,17 @@ def _publicar_sin_sobrescribir(origen: Path, destino: Path) -> None:
     _fsync_dir(destino.parent)
 
 
+def _copiar_permisos(destino: Path, original: os.stat_result) -> None:
+    """`mkstemp` crea el temporal con 0600: se copia el modo del original (y el dueño si se
+    puede) para que Kavita, SMB u otra persona puedan abrir el CBZ, no solo ZascArr."""
+    try:
+        os.chmod(destino, stat.S_IMODE(original.st_mode))
+    except OSError:
+        return
+    with contextlib.suppress(OSError, NotImplementedError):
+        os.chown(destino, original.st_uid, original.st_gid)
+
+
 def _cuarentena(settings) -> Path:
     return Path(settings.library_path) / ".zascarr" / "originales"
 
@@ -323,7 +335,10 @@ class ConversionDeArchivo:
             if previo.get("operacion_id") == firmada.operacion:
                 return ResultadoConversion(_VERSION, "conversion", firmada.operacion, str(f.id),
                                            "ya_convertida", None, "Ya estaba convertida.",
-                                           repetida=True, fecha=previo.get("fecha"))
+                                           repetida=True, fecha=previo.get("fecha"),
+                                           antes={"ruta": f.file_path},
+                                           despues={"ruta": f.file_path,
+                                                    "tamano": f.file_size_bytes})
             return _conflicto(MotivoConversion.PROPUESTA_DESACTUALIZADA,
                               "Otra conversión cambió este archivo; vuelve a la vista previa.")
         motivo = await self._validar_firmada(f, firmada)
@@ -364,7 +379,9 @@ class ConversionDeArchivo:
                     if previo.get("operacion_id") == firmada.operacion:
                         return ResultadoConversion(
                             _VERSION, "conversion", firmada.operacion, str(f.id), "ya_convertida",
-                            None, "Ya estaba convertida.", repetida=True, fecha=previo.get("fecha"))
+                            None, "Ya estaba convertida.", repetida=True,
+                            fecha=previo.get("fecha"), antes={"ruta": f.file_path},
+                            despues={"ruta": f.file_path, "tamano": f.file_size_bytes})
                     return _conflicto(MotivoConversion.PROPUESTA_DESACTUALIZADA,
                                       "Otra conversión cambió este archivo; vuelve a la vista previa.")
                 ruta = Path(f.file_path)
@@ -395,6 +412,7 @@ class ConversionDeArchivo:
 
                 if analisis.metodo == "renombrar_zip":
                     # D5: `analizar` ya validó testzip/manifiesto y el token cubre el sha256.
+                    st_original = ruta.stat()
                     self._diario_escribir(
                         f, firmada, "preparada", ruta, ruta_original=ruta, destino=destino,
                         sha_original=firmada.sha256, tamano_original=firmada.tamano,
@@ -411,6 +429,7 @@ class ConversionDeArchivo:
                         return _conflicto(MotivoConversion.ILEGIBLE,
                                           "El ZIP cambió al renombrarlo; no se publica.")
                     nuevo_tamano = destino.stat().st_size
+                    _copiar_permisos(destino, st_original)
                     original_ruta = ruta
                     self._diario_escribir(
                         f, firmada, "publicado", destino, ruta_original=ruta, destino=destino,
@@ -443,6 +462,7 @@ class ConversionDeArchivo:
                             "El archivo cambió durante la conversión; no se ha tocado nada.")
                     # #564: apartar el original ANTES de publicar. Si la publicación falla,
                     # se compensa restaurándolo; nunca se queda sin original ni sin CBZ.
+                    st_original = ruta.stat()
                     cuarentena.mkdir(parents=True, exist_ok=True)
                     original_apartado = cuarentena / ruta.name
                     # Write-ahead ANTES de mover: si el proceso muere aquí, el diario sabe
@@ -483,6 +503,7 @@ class ConversionDeArchivo:
                                           "No se pudo publicar el CBZ; el original sigue en su sitio.")
                     nuevo_sha = construccion.sha256
                     nuevo_tamano = destino.stat().st_size
+                    _copiar_permisos(destino, st_original)
                     original_ruta = original_apartado
                     self._diario_escribir(
                         f, firmada, "publicado", destino, ruta_original=ruta, destino=destino,

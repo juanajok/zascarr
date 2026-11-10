@@ -91,7 +91,7 @@ def test_vista_previa_muestra_garantia_y_token(monkeypatch):
     assert "Convirtiendo" in r.text and "htmx-indicator" in r.text
     # Confirmar por HTMX dentro de la ficha: si no, el navegador acaba en el fragmento suelto.
     assert f'hx-post="/ui/series/{serie.id}/archivos/{servicio.vista.file_id}/convertir"' in r.text
-    assert 'hx-target="closest .conversion-previa"' in r.text
+    assert f'hx-target="#conversion-{servicio.vista.file_id}"' in r.text
     assert "parece compartido" in r.text and 'name="forzar_compartido"' in r.text
     assert "El original se aparta y se puede deshacer" in r.text
 
@@ -219,3 +219,40 @@ def test_lote_confirmar_muestra_informe_y_la_siguiente_tanda(monkeypatch):
     assert "Convertidos 1 CBR" in r.text
     assert "Qué ha pasado con cada archivo" in r.text
     assert r.headers["Cache-Control"] == "no-store"
+
+
+def test_cierre_de_ya_convertida_nombra_el_archivo_y_nunca_el_uuid(monkeypatch):
+    serie = _serie()
+    uid = uuid4()
+    r = ResultadoConversion(1, "conversion", str(uuid4()), str(uid), "ya_convertida", None,
+                            "Ya estaba convertida.", repetida=True)
+    c = _cliente(monkeypatch, _Servicio(resultado=r), serie)
+    try:
+        respuesta = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/convertir",
+                           data={"token": "tok"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert respuesta.status_code == 200
+    assert "el tebeo ya es un CBZ" in respuesta.text
+    assert f"«{uid}»" not in respuesta.text  # nunca el UUID como nombre
+
+
+def test_un_error_de_token_en_htmx_se_avisa_en_la_ficha(monkeypatch):
+    from zascarr.services.vinculacion import TokenCaducadoError
+
+    class _Falla:
+        async def confirmar(self, *_a, **_k):
+            raise TokenCaducadoError("La vista previa caducó.", puede_haberse_aplicado=False)
+
+    serie = _serie()
+    c = _cliente(monkeypatch, _Falla(), serie)
+    try:
+        respuesta = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/convertir",
+                           data={"token": "x"}, headers={"HX-Request": "true"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert respuesta.status_code == 200
+    assert "La vista previa caducó" in respuesta.text
+    assert "Abrir la vista previa de nuevo" in respuesta.text

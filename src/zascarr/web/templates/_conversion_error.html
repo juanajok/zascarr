@@ -1,0 +1,10 @@
+{#- #478: un error al confirmar no puede quedarse en silencio en una petición HTMX. -#}
+<div class="conversion-resultado" id="conversion-resultado" role="alert">
+  {{ ui.aviso("amber", "No se ha podido continuar: " ~ mensaje) }}
+  <p class="conversion-resultado-acciones">
+    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ file_id }}/convertir"
+       hx-get="/ui/series/{{ series.id }}/archivos/{{ file_id }}/convertir"
+       hx-target="#resultado-conversion-{{ file_id }}" hx-swap="innerHTML">Abrir la vista previa de nuevo</a>
+    <a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
+  </p>
+</div>
