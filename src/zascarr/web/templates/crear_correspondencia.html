@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Crear correspondencia — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="{{ url_lista }}">← Volver a «Correspondencias»</a></p>
+<h1>Crear correspondencia</h1>
+<p>Elige a qué serie o publicación existente apunta esta carpeta.</p>
+<div class="declaracion-resumen">
+  <p><strong>Declaración:</strong> {{ decl.contexto_raiz }}</p>
+  <p><strong>Significado:</strong> Por publicación · <strong>Versión {{ decl.version }}</strong></p>
+  <p><strong>Alcance:</strong> {{ alcance }}</p>
+  <p class="caption">La ruta y las subcarpetas se heredan de la declaración y no se editan aquí. Si la declaración cambia, esta correspondencia dejará de aplicarse.</p>
+</div>
+{% if error %}<p class="declaracion-aviso" role="alert" tabindex="-1" autofocus>{{ error }}</p>{% endif %}
+
+<form method="get" action="/ui/pendientes/carpetas/correspondencias/crear" class="declaracion-form">
+  <input type="hidden" name="declaracion" value="{{ decl.id }}">
+  <fieldset class="declaracion-fieldset">
+    <legend>¿A qué apunta?</legend>
+    <label class="declaracion-opcion"><input type="radio" name="tipo" value="serie" {% if tipo == "serie" %}checked{% endif %}> <span><strong>Serie</strong></span></label>
+    <label class="declaracion-opcion"><input type="radio" name="tipo" value="publicacion" {% if tipo == "publicacion" %}checked{% endif %}> <span><strong>Publicación</strong><small>Una publicación es un número o tomo de tu biblioteca.</small></span></label>
+  </fieldset>
+  <label for="q">Buscar en tu biblioteca</label>
+  <div class="acciones-declaracion"><input id="q" type="search" name="q" value="{{ q }}" maxlength="200"><button class="btn ghost sm" type="submit">Buscar</button></div>
+  <p class="caption">Solo busca en tu biblioteca; no consulta fuentes ni crea nada.</p>
+</form>
+
+<form method="post" action="/ui/pendientes/carpetas/correspondencias/crear" class="declaracion-form">
+  <input type="hidden" name="declaracion" value="{{ decl.id }}">
+  <input type="hidden" name="tipo" value="{{ tipo }}">
+  <fieldset class="declaracion-fieldset" aria-live="polite">
+    <legend>Resultados</legend>
+    {% if not tipo %}<p>Elige si el destino es una serie o una publicación.</p>
+    {% elif not q %}<p>Escribe un título para buscar en tu biblioteca.</p>
+    {% elif not resultados %}<p>No hay ninguna serie o publicación que coincida en tu biblioteca.</p><p>Prueba otro título; no se consultan fuentes.</p>
+    {% else %}
+    {% for d in resultados %}
+    <label class="declaracion-opcion"><input type="radio" name="destino_id" value="{{ d.id }}"> <span>{{ d.texto }}</span></label>
+    {% endfor %}
+    {% endif %}
+  </fieldset>
+  <label for="tipo-registro">Se aplica a</label>
+  <select id="tipo-registro" name="tipo_registro">
+    <option value="">Cualquier registro</option>
+    <option value="archivo" {% if tipo_registro == "archivo" %}selected{% endif %}>Archivos</option>
+    <option value="serie" {% if tipo_registro == "serie" %}selected{% endif %}>Series</option>
+    <option value="publicacion" {% if tipo_registro == "publicacion" %}selected{% endif %}>Publicaciones</option>
+  </select>
+  <p class="caption">Limita a qué registros se aplica; no cambia el destino.</p>
+  <div class="declaracion-efectos"><strong>Efectos</strong><p>{{ mensaje_efectos }}</p></div>
+  <button class="btn primary" type="submit">Revisar y crear</button>
+</form>
+{% endblock %}

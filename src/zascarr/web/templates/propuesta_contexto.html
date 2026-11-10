@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Propuesta de contexto — ZascArr{% endblock %}
+{% block content %}
+<p><a class="back-link" href="{{ volver }}">← Volver a «Pendientes por carpeta»</a></p>
+<h1>Propuesta de contexto</h1>
+<p>Consulta qué propone el contexto para los archivos de esta carpeta.</p>
+<p>No vincula archivos ni aplica metadatos.</p>
+<p class="declaracion-ruta"><strong>Carpeta:</strong> {{ ruta }}</p>
+{% set estado = resultado.estado.value %}
+<p>
+{% if estado == "propuesta_disponible" %}{{ ui.chip("ok", "Propuesta disponible") }}
+{% elif estado == "fuera_de_alcance" %}{{ ui.chip("neutro", "Fuera de alcance") }}
+{% elif estado == "destino_no_disponible" %}{{ ui.chip("warn", "Destino no disponible") }}
+{% elif estado == "conflicto_de_correspondencias" %}{{ ui.chip("amber", "Conflicto de correspondencias") }}
+{% elif estado == "evidencia_incompatible" %}{{ ui.chip("warn", "Regla incompatible") }}
+{% else %}{{ ui.chip("amber", "Desactualizada") }}{% endif %}
+</p>
+<p>{{ resultado.motivo }}</p>
+
+{% if estado == "propuesta_disponible" %}
+<div class="declaracion-resumen">
+  <p><strong>Destino:</strong> {{ destino.texto if destino else "Serie o publicación de la biblioteca" }}{% if destino and destino.url %} · <a href="{{ destino.url }}">Ver ficha</a>{% endif %}</p>
+  <p><strong>Alcance:</strong> {{ "Esta carpeta y sus subcarpetas" if resultado.alcance.get("incluir_descendientes") else "Solo esta carpeta" }}</p>
+  <p><strong>Se evalúan:</strong> archivos</p>
+  <p><strong>La regla se aplica a:</strong> {{ resultado.alcance.get("tipo_de_registro") or "Cualquier registro" }}</p>
+</div>
+<p><strong>Esto es una propuesta, no una decisión.</strong> No se ha vinculado ni cambiado nada. La confirmación de la serie o publicación es otro paso.</p>
+<details>
+  <summary>Identidad y versión de la regla</summary>
+  <p class="declaracion-ruta">Código de la correspondencia: {{ resultado.correspondencia_id }}</p>
+  <p>Versión de la regla: {{ resultado.version_de_regla }} · Declaración: versión {{ resultado.version_declaracion }}</p>
+  <p>Origen: {{ "Local" if resultado.precedencia_aplicada == "local" else "Importación" }}</p>
+</details>
+{% elif estado == "fuera_de_alcance" %}
+<p>Ninguna correspondencia activa cubre los archivos de esta carpeta. No se usa el parecido del nombre ni una regla vecina.</p>
+<p><a class="btn ghost sm" href="/ui/pendientes/carpetas/contexto">Contexto declarado</a>
+   <a class="btn ghost sm" href="/ui/pendientes/carpetas">Pendientes por carpeta</a></p>
+{% elif estado == "destino_no_disponible" %}
+<p>La correspondencia existe, pero su serie o publicación de destino ya no está. No se crea ni se sustituye otro destino.</p>
+<details>
+  <summary>Identidad y versión de la regla</summary>
+  <p>Código: {{ resultado.correspondencia_id }} · Versión {{ resultado.version_de_regla }}</p>
+</details>
+<p><a class="btn ghost sm" href="/ui/pendientes/carpetas/correspondencias">Correspondencias</a></p>
+{% elif estado == "conflicto_de_correspondencias" %}
+<p>Hay varias correspondencias activas para esta carpeta. No se elige ninguna. No se ordenan por fecha ni por origen para elegir.</p>
+<ul class="correspondencias-lista">
+  {% for regla in reglas %}
+  <li class="declaracion-card">
+    <p><strong>Regla {{ loop.index }}</strong> · Versión {{ regla.version }}</p>
+    <p><strong>Destino:</strong> {{ regla.destino.texto if regla.destino else "Destino no disponible" }}</p>
+    <p class="caption">Alcance: {{ regla.contexto_raiz if regla.contexto_raiz is defined else ruta }}</p>
+    <details><summary>Identidad y versión de la regla</summary><p class="declaracion-ruta">Código: {{ regla.correspondencia_id }}</p><p>Origen: {{ regla.origen }}</p></details>
+  </li>
+  {% endfor %}
+</ul>
+<p>Solo se muestran las reglas; no se aplica ninguna.</p>
+{% elif estado == "evidencia_incompatible" %}
+<p>La correspondencia no es coherente con su declaración o su destino. No se aplica ni se repara sola.</p>
+{% else %}
+<p>La declaración cambió, se desactivó o se retiró después de crear esta correspondencia. La regla anterior no se aplica; hay que reevaluar o crear una nueva.</p>
+{% if resultado.version_declaracion %} <p>Declaración vigente: versión {{ resultado.version_declaracion }}.</p>{% endif %}
+<p><a class="btn ghost sm" href="/ui/pendientes/carpetas/correspondencias">Correspondencias</a></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Retirar la correspondencia — ZascArr{% endblock %}
+{% block content %}
+<h1>Retirar la correspondencia</h1>
+<p>Dejará de preparar propuestas.</p>
+<p><strong>Es definitivo: una correspondencia retirada no se puede reactivar.</strong></p>
+<p>El historial se conserva. No se mueve ni se borra nada.</p>
+<div class="declaracion-resumen">
+  <p><strong>Ruta:</strong> {{ c.contexto_raiz }}</p>
+  <p><strong>Destino:</strong> {{ destino.texto if destino else "Destino no disponible" }}</p>
+  <p><strong>Alcance:</strong> {{ "Esta carpeta y sus subcarpetas" if c.incluir_descendientes else "Solo esta carpeta" }}</p>
+  <p><strong>Versión:</strong> {{ c.version }}</p>
+</div>
+<form method="post" action="/ui/pendientes/carpetas/correspondencias/retirar/{{ c.correspondencia_id }}" class="declaracion-form">
+  <button class="btn primary" type="submit">Sí, retirar la correspondencia</button>
+  <a class="btn ghost" href="{{ url_lista }}">Volver sin retirar</a>
+</form>
+{% endblock %}
