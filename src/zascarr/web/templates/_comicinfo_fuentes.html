@@ -1,0 +1,58 @@
+{#- CNV5-3: propuestas de fuentes para el ComicInfo (solo lectura; la elección queda en sesión). -#}
+<section id="comicinfo-fuentes" class="comicinfo-fuentes" aria-labelledby="comicinfo-fuentes-titulo">
+  <h2 id="comicinfo-fuentes-titulo" tabindex="-1" autofocus>Datos de las fuentes</h2>
+  {% if mensaje %}
+  {{ ui.aviso("amber", mensaje) }}
+  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la vista previa</a></p>
+  {% elif not sesion %}
+  <p class="caption">No hay propuestas que mostrar.</p>
+  {% else %}
+  <p class="caption" aria-live="polite">{{ sesion.resumen }}</p>
+  {% if avisos %}
+  <div class="comicinfo-avisos" role="status">
+    {% for aviso in avisos %}{{ ui.aviso("amber", aviso) }}{% endfor %}
+  </div>
+  {% endif %}
+  {% if sesion.avisos_fuentes %}
+  <details class="comicinfo-fuentes-estado">
+    <summary>Qué ha pasado con las fuentes</summary>
+    <ul>
+      {% for aviso in sesion.avisos_fuentes %}<li>{{ aviso }}</li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+  {% if campos %}
+  <form hx-post="/ui/series/{{ series.id }}/archivos/{{ sesion.file_id }}/comicinfo/fuentes"
+        hx-target="#comicinfo-fuentes" hx-swap="outerHTML">
+    <input type="hidden" name="operacion_id" value="{{ sesion.operacion_id }}">
+    {% for campo in campos %}
+    <fieldset class="comicinfo-fuente-campo">
+      <legend>{{ campo.etiqueta }} <span class="sr">{{ campo.tag }}</span></legend>
+      <p class="caption">Ahora: {{ campo.actual or "Sin dato" }}</p>
+      {% if campo.bloqueado %}
+      {{ ui.chip("amber", "Protegido") }}
+      <p class="caption">{{ campo.motivo or "No se toca" }}</p>
+      {% else %}
+      <label><input type="radio" name="campo:{{ campo.tag }}" value=""
+                    {% if not campo.elegida %}checked{% endif %}> Conservar lo actual</label>
+      {% for opcion in campo.opciones %}
+      <label class="comicinfo-opcion">
+        <input type="radio" name="campo:{{ campo.tag }}" value="{{ opcion.clave }}"
+               {% if campo.elegida == opcion.clave %}checked{% endif %}>
+        <span>{{ opcion.valor }}</span>
+        <span class="muted">— {{ opcion.nombre_fuente }}{% if opcion.nivel %} ({{ opcion.nivel }}){% endif %}</span>
+        {% if opcion.procedencia %}<a href="{{ opcion.procedencia }}" rel="noopener noreferrer">Ver ficha</a>{% endif %}
+      </label>
+      {% endfor %}
+      {% endif %}
+    </fieldset>
+    {% endfor %}
+    <div class="ajustes-actions">
+      <button class="btn ghost" type="submit">Guardar selección</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="caption">Las fuentes no tienen datos nuevos para este tebeo. Puedes guardar lo que ya tienes.</p>
+  {% endif %}
+  {% endif %}
+</section>

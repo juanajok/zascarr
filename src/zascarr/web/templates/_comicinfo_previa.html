@@ -17,6 +17,18 @@
     {% endfor %}
   </ul>
   {% endif %}
+  <section id="comicinfo-fuentes" class="comicinfo-fuentes" aria-labelledby="comicinfo-fuentes-inicial">
+    <h2 id="comicinfo-fuentes-inicial">Datos de las fuentes</h2>
+    {% if fuentes_disponibles %}
+    <p class="caption">Añade datos de tus fuentes al plan, campo a campo. No se guarda nada hasta elegir.</p>
+    <button class="btn ghost" hx-get="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo/fuentes"
+            hx-target="#comicinfo-fuentes" hx-swap="outerHTML">Buscar datos en las fuentes</button>
+    {% else %}
+    <p class="caption">{{ fuentes_mensaje }}</p>
+    {% if fuentes_enlace %}<p><a class="btn ghost" href="{{ fuentes_enlace }}">Ir a la solución</a></p>{% endif %}
+    {% endif %}
+    <div id="comicinfo-fuentes-resultado" aria-live="polite"></div>
+  </section>
   <form method="post" action="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
         hx-post="/ui/series/{{ series.id }}/archivos/{{ file_id }}/comicinfo"
         hx-target="#comicinfo-{{ file_id }}" hx-swap="outerHTML"
