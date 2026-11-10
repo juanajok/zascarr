@@ -17,7 +17,9 @@
 > no se escriben datos de fuentes en el `ComicInfo.xml` ni en `metadata.comicinfo_fuente`. El plan de
 > B6 solo propone `Summary` cuando la ficha es `manual`/`comicinfo_xml` o hay marcador
 > `comicinfo_propio`; con Comic Vine, AniList, Tebeosfera, GCD o procedencia `None`, `Summary` queda
-> `SIN_DATO` y se conserva el XML existente. La tabla de §8.1 y los AC de CNV5-4 se conservan como
+> `SIN_DATO` y se conserva el XML existente. La procedencia que decide es la del **número**
+> (`Issue.metadata_source`), no la del archivo (`File.metadata_source`); el marcador propio
+> (`comicinfo_propio`) sigue autorizando. La tabla de §8.1 y los AC de CNV5-4 se conservan como
 > histórico de la propuesta, no como alcance vigente.
 
 ---
