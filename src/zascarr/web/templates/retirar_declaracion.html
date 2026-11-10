@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Retirar la declaración — ZascArr{% endblock %}
+{% block content %}
+<h1>Retirar la declaración</h1>
+<p>Dejará de aplicarse para nuevas interpretaciones.</p>
+<p><strong>Es definitivo: una declaración retirada no se puede reactivar.</strong></p>
+<p>El historial se conserva. No se mueve, renombra ni borra ningún archivo.</p>
+<div class="declaracion-resumen">
+  <p><strong>Ruta:</strong> {{ d.contexto_raiz }}</p>
+  <p><strong>Significado:</strong> {{ "Por autor" if d.tipo_de_significado.value == "autor" else "Por publicación" }} · Versión {{ d.version }}</p>
+  <p><strong>Alcance:</strong> {{ d.alcance }}</p>
+</div>
+<form method="post" action="/ui/pendientes/carpetas/retirar/{{ d.declaracion_id }}" class="declaracion-form">
+  <button class="btn primary" type="submit">Sí, retirar la declaración</button>
+  <a class="btn ghost" href="{{ volver }}">Volver sin retirar</a>
+</form>
+{% endblock %}
