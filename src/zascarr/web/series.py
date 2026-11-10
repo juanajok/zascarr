@@ -1498,28 +1498,28 @@ def _fragmento_fuentes(request, series, sesion, *, estado: int = 200):
 async def comicinfo_fuentes(series_id: UUID, file_id: UUID, request: Request,
                             db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = await _serie_o_404(db, series_id)
+    file = await db.get(File, file_id)
+    issue = await db.get(Issue, file.issue_id) if file is not None and file.issue_id else None
+    if file is None or issue is None or issue.series_id != series_id:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado",
+                            headers={"Cache-Control": "no-store"})
     try:
         resultado = await PropuestasComicInfoService(db).proponer(file_id)
     except ArchivoSinIssueError:
-        raise HTTPException(status_code=404, detail="Archivo no encontrado") from None
-    file = await db.get(File, file_id)
-    if file is None:
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    issue = await db.get(Issue, file.issue_id) if file.issue_id else None
+        raise HTTPException(status_code=404, detail="Archivo no encontrado",
+                            headers={"Cache-Control": "no-store"}) from None
     ruta = Path(file.file_path)
     try:
         st = ruta.stat()
-    except OSError:
-        raise HTTPException(status_code=404, detail="Archivo no encontrado") from None
-    sha = file.sha256_hash
-    if not sha:
-        import hashlib
         sha = hashlib.sha256(await asyncio.to_thread(ruta.read_bytes)).hexdigest()
+    except OSError:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado",
+                            headers={"Cache-Control": "no-store"}) from None
     sesion = ALMACEN.crear(
         file_id=file.id, serie_id=series.id, ruta=str(ruta), tamano=st.st_size,
         mtime_ns=st.st_mtime_ns, sha256=sha, propuestas=resultado.campos,
         estados=resultado.estados, avisos=resultado.avisos,
-        bloqueados=_bloqueados_de(issue, series) if issue is not None else set())
+        bloqueados=_bloqueados_de(issue, series))
     return _fragmento_fuentes(request, series, sesion)
 
 
@@ -1532,42 +1532,58 @@ async def comicinfo_fuentes_guardar(series_id: UUID, file_id: UUID, request: Req
     try:
         sesion = ALMACEN.obtener(operacion_id)
     except SesionCaducadaError:
-        respuesta = templates.TemplateResponse(
-            request, "_comicinfo_fuentes.html",
-            {"series": series, "sesion": None, "campos": (), "estados": (), "avisos": (),
-             "mensaje": "La búsqueda de datos ha caducado. Vuelve a buscar; no se ha cambiado nada."})
-        respuesta.headers["Cache-Control"] = "no-store"
-        respuesta.status_code = 410
-        return respuesta
+        return _fragmento_caducado(request, series)
     if sesion.file_id != str(file_id) or sesion.serie_id != str(series_id):
-        raise HTTPException(status_code=400, detail="La propuesta no es para este archivo.")
+        raise HTTPException(status_code=400, detail="La propuesta no es para este archivo.",
+                            headers={"Cache-Control": "no-store"})
     file = await db.get(File, file_id)
-    if file is None:
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    issue = await db.get(Issue, file.issue_id) if file is not None and file.issue_id else None
+    if file is None or issue is None or issue.series_id != series_id:
+        raise HTTPException(status_code=400, detail="El archivo ya no pertenece a esta serie.",
+                            headers={"Cache-Control": "no-store"})
     ruta = Path(file.file_path)
     try:
         st = ruta.stat()
+        sha_actual = hashlib.sha256(await asyncio.to_thread(ruta.read_bytes)).hexdigest()
     except OSError:
         st = None
+        sha_actual = None
     if (st is None or str(ruta) != sesion.ruta or st.st_size != sesion.tamano
-            or st.st_mtime_ns != sesion.mtime_ns):
-        respuesta = templates.TemplateResponse(
-            request, "_comicinfo_fuentes.html",
-            {"series": series, "sesion": None, "campos": (), "estados": (), "avisos": (),
-             "mensaje": "El tebeo cambió desde que viste la vista previa. Vuelve a abrirla; "
-                        "no se ha cambiado nada."})
-        respuesta.headers["Cache-Control"] = "no-store"
-        respuesta.status_code = 409
-        return respuesta
-    for clave, valor in form.multi_items():
-        if clave.startswith("campo:"):
-            tag = clave.split(":", 1)[1]
-            try:
+            or st.st_mtime_ns != sesion.mtime_ns or sha_actual != sesion.sha256):
+        return _fragmento_cambiado(request, series)
+    try:
+        for clave, valor in form.multi_items():
+            if clave.startswith("campo:"):
+                tag = clave.split(":", 1)[1]
                 sesion = ALMACEN.elegir(operacion_id, tag, str(valor) or None)
-            except KeyError:
-                raise HTTPException(status_code=400,
-                                    detail="Esa opción no es válida para este campo.") from None
+    except SesionCaducadaError:
+        return _fragmento_caducado(request, series)
+    except KeyError:
+        raise HTTPException(status_code=400,
+                            detail="Esa opción no es válida para este campo.",
+                            headers={"Cache-Control": "no-store"}) from None
     return _fragmento_fuentes(request, series, sesion)
+
+
+def _fragmento_caducado(request, series):
+    respuesta = templates.TemplateResponse(
+        request, "_comicinfo_fuentes.html",
+        {"series": series, "sesion": None, "campos": (), "estados": (), "avisos": (),
+         "mensaje": "La búsqueda de datos ha caducado. Vuelve a buscar; no se ha cambiado nada."})
+    respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.status_code = 410
+    return respuesta
+
+
+def _fragmento_cambiado(request, series):
+    respuesta = templates.TemplateResponse(
+        request, "_comicinfo_fuentes.html",
+        {"series": series, "sesion": None, "campos": (), "estados": (), "avisos": (),
+         "mensaje": "El tebeo cambió desde que viste la vista previa. Vuelve a abrirla; "
+                    "no se ha cambiado nada."})
+    respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.status_code = 409
+    return respuesta
 
 
 # ── #480/BL-CNV3: ComicInfo desde la ficha (mismo plan de B6) ────────────────────────────────────

@@ -57,8 +57,9 @@ def _vista(file_id):
 
 def _resultado(file_id, serie_id):
     campos = (PropuestaCampo(
-        "Year", None, (OpcionPropuesta("1980", FuenteComicInfo.COMIC_VINE, NivelDato.SERIE,
-                                      "https://comicvine.example/v"),), EstadoPropuesta.ANADIR),
+        "Year", None, (OpcionPropuesta("<script>alert(1)</script>",
+                                      FuenteComicInfo.COMIC_VINE, NivelDato.SERIE,
+                                      "javascript:alert(1)"),), EstadoPropuesta.ANADIR),
         PropuestaCampo("Publisher", "Vieja", (OpcionPropuesta(
             "Nueva", FuenteComicInfo.GCD, NivelDato.SERIE),), EstadoPropuesta.PROPONER_SUSTITUCION))
     return ResultadoPropuestas(str(file_id), str(serie_id), "Tebeo", "american", True,
@@ -66,13 +67,16 @@ def _resultado(file_id, serie_id):
                                campos, (), 1)
 
 
-def _cliente(monkeypatch, tmp_path, *, disponibilidad=(True, None, None)):
+def _cliente(monkeypatch, tmp_path, *, disponibilidad=(True, None, None),
+             serie_id_archivo=None):
     serie = SimpleNamespace(id=uuid4(), title="Serie", tradition="american")
     ruta = tmp_path / "Tebeo.cbz"
     ruta.write_bytes(b"CBZ")
-    file = SimpleNamespace(id=uuid4(), file_path=str(ruta), issue_id=uuid4(),
+    issue_id = uuid4()
+    issue = SimpleNamespace(id=issue_id, series_id=serie_id_archivo or serie.id)
+    file = SimpleNamespace(id=uuid4(), file_path=str(ruta), issue_id=issue_id,
                            sha256_hash="a" * 64)
-    db = _DB(serie, file)
+    db = _DB(serie, file, issue)
     async def _dep():
         yield db
     app.dependency_overrides[get_db] = _dep
@@ -127,8 +131,8 @@ def test_get_fuentes_muestra_tabla_y_no_store(monkeypatch, tmp_path):
     assert 'name="campo:Year"' in r.text and 'name="campo:Publisher"' in r.text
     assert "Conservar lo actual" in r.text
     assert "(de la serie" in r.text or "de la serie, no del número" in r.text
-    assert "1980" in r.text
-    assert 'value="1980"' not in r.text          # las claves son opacas
+    assert "&lt;script&gt;" in r.text              # valor de fuente escapado
+    assert 'value="1980"' not in r.text            # las claves son opacas
 
 
 def test_post_guarda_eleccion_en_sesion_sin_escribir(monkeypatch, tmp_path):
@@ -162,3 +166,83 @@ def test_post_sesion_caducada_410_y_sin_escritura(monkeypatch, tmp_path):
     assert r.status_code == 410
     assert "ha caducado" in r.text
     assert r.headers.get("cache-control") == "no-store"
+
+
+def test_get_rechaza_archivo_de_otra_serie_sin_sesion(monkeypatch, tmp_path):
+    c, serie, file = _cliente(monkeypatch, tmp_path, serie_id_archivo=uuid4())
+    try:
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+    finally:
+        _cerrar()
+    assert r.status_code == 404
+    assert r.headers.get("cache-control") == "no-store"
+    assert not ALMACEN._datos
+
+
+def test_post_409_con_mismo_tamano_y_mtime_pero_sha_distinto(monkeypatch, tmp_path):
+    import os
+    c, serie, file = _cliente(monkeypatch, tmp_path)
+    try:
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+        op = re.search(r'name="operacion_id" value="([0-9a-f]+)"', r.text).group(1)
+        sesion = ALMACEN.obtener(op)
+        ruta = Path(file.file_path)
+        st = ruta.stat()
+        ruta.write_bytes(b"XYZ")                  # mismo tamaño
+        os.utime(ruta, ns=(st.st_atime_ns, st.st_mtime_ns))
+        r2 = c.post(_url(serie, file) + "/comicinfo/fuentes",
+                    data={"operacion_id": op, "campo:Year": next(iter(sesion.claves_por_tag["Year"]))})
+        assert r2.status_code == 409
+        assert r2.headers.get("cache-control") == "no-store"
+        assert "cambió" in r2.text
+    finally:
+        _cerrar()
+        ALMACEN.limpiar()
+
+
+def test_caducidad_a_mitad_del_bucle_es_410(monkeypatch, tmp_path):
+    from zascarr.services.propuestas_comicinfo_sesion import SesionCaducadaError
+    c, serie, file = _cliente(monkeypatch, tmp_path)
+    try:
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+        op = re.search(r'name="operacion_id" value="([0-9a-f]+)"', r.text).group(1)
+        sesion = ALMACEN.obtener(op)
+        clave = next(iter(sesion.claves_por_tag["Year"]))
+
+        def _caduca(*_a, **_k):
+            raise SesionCaducadaError("caducó")
+
+        monkeypatch.setattr(web.ALMACEN, "elegir", _caduca)
+        r2 = c.post(_url(serie, file) + "/comicinfo/fuentes",
+                    data={"operacion_id": op, "campo:Year": clave})
+        assert r2.status_code == 410
+        assert r2.headers.get("cache-control") == "no-store"
+        assert "ha caducado" in r2.text
+    finally:
+        _cerrar()
+        ALMACEN.limpiar()
+
+
+def test_400_por_opcion_invalida_lleva_no_store(monkeypatch, tmp_path):
+    c, serie, file = _cliente(monkeypatch, tmp_path)
+    try:
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+        op = re.search(r'name="operacion_id" value="([0-9a-f]+)"', r.text).group(1)
+        r2 = c.post(_url(serie, file) + "/comicinfo/fuentes",
+                    data={"operacion_id": op, "campo:Year": "clave-inventada"})
+        assert r2.status_code == 400
+        assert r2.headers.get("cache-control") == "no-store"
+    finally:
+        _cerrar()
+        ALMACEN.limpiar()
+
+
+def test_valores_y_enlaces_maliciosos_se_escapan(monkeypatch, tmp_path):
+    c, serie, file = _cliente(monkeypatch, tmp_path)
+    try:
+        r = c.get(_url(serie, file) + "/comicinfo/fuentes")
+    finally:
+        _cerrar()
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in r.text
+    assert "<script>alert(1)</script>" not in r.text
+    assert "javascript:alert(1)" not in r.text
