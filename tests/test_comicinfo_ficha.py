@@ -48,3 +48,16 @@ def test_token_ligado_al_archivo_y_caducidad():
 
 def test_huella_no_confunde_campos():
     assert hashlib.sha256(repr(_campos_para_token(_campos())).encode()).hexdigest() != _huella(_campos())
+
+
+def test_el_token_solo_lleva_la_huella_y_cabe_en_el_formulario():
+    from zascarr.core.comicinfo_write import CAMPOS_GESTIONADOS
+    from zascarr.services.comicinfo_ficha import MAX_TOKEN_COMICINFO
+
+    campos = [CampoPlan(t, Accion.CAMBIA, "x" * 1000, "y" * 1000)
+              for t in CAMPOS_GESTIONADOS]
+    token = crear_token(PROPOSITO_COMICINFO, str(uuid4()), {
+        "version": 1, "operacion": str(uuid4()), "ruta": "/media/library/tebeo.cbz",
+        "tamano": 1, "mtime_ns": 2, "sha256": "a" * 64, "huella": _huella(campos),
+    }, "x" * 32, ahora=1000.0)
+    assert len(token) < MAX_TOKEN_COMICINFO
