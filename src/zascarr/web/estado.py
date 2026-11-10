@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from zascarr.config import get_settings
 from zascarr.database import get_db
-from zascarr.services import disponibilidad
+from zascarr.services import cobertura, disponibilidad
 from zascarr.services.cortesia_estado import filas_cortesia, snapshot_publico
 from zascarr.web.disponibilidad import registrar_filtros
 from zascarr.web.routes import crear_templates
@@ -37,7 +37,8 @@ router = APIRouter(tags=["ui"])
 
 @router.get("/estado", response_class=HTMLResponse)
 async def estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLResponse:
-    contexto: dict = {"disponibilidad_error": False, "d": None, "no_disponibles": 0}
+    contexto: dict = {"disponibilidad_error": False, "d": None, "no_disponibles": 0,
+                      "cobertura": None, "cobertura_error": False}
     # §6.3: el mismo snapshot que el endpoint, pintado en servidor (sin JS nuevo).
     contexto["cortesia"] = filas_cortesia(snapshot_publico(get_settings()), get_settings())
     try:
@@ -49,6 +50,13 @@ async def estado(request: Request, db: AsyncSession = Depends(get_db)) -> HTMLRe
         contexto["disponibilidad_error"] = True
         contexto["d"] = None
         # si la sesión ya no responde, se sirve la página igualmente
+        with contextlib.suppress(Exception):
+            await db.rollback()
+    try:
+        contexto["cobertura"] = await cobertura.calcular(db)
+    except Exception as exc:  # noqa: BLE001 — Estado no puede caerse por una cifra
+        logger.warning("estado.cobertura_no_leida", error=type(exc).__name__)
+        contexto["cobertura_error"] = True
         with contextlib.suppress(Exception):
             await db.rollback()
     return templates.TemplateResponse(request, "estado.html", contexto)
