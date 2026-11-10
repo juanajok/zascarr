@@ -249,7 +249,7 @@ class SeriesMatcher:
             SELECT s.id, s.title, s.start_year
             FROM local_aliases la
             JOIN series s ON s.id = la.series_id
-            WHERE la.pattern_norm = :pattern
+            WHERE la.pattern_norm = :pattern AND la.estado = 'activo'
         """), {"pattern": pattern})).first()
         if not row:
             return None
