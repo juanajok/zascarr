@@ -1063,9 +1063,11 @@ async def comicinfo_guardar(series_id: UUID, file_id: UUID, request: Request,
             file_id_esperado=file_id, serie_id_esperado=series_id)
     except Exception as exc:  # noqa: BLE001
         if exc.__class__.__name__ == "TokenCaducadoError":
-            raise HTTPException(status_code=410, detail=str(exc)) from None
+            raise HTTPException(status_code=410, detail=str(exc),
+                                headers={"Cache-Control": "no-store"}) from None
         if exc.__class__.__name__ == "TokenInvalidoError":
-            raise HTTPException(status_code=400, detail=str(exc)) from None
+            raise HTTPException(status_code=400, detail=str(exc),
+                                headers={"Cache-Control": "no-store"}) from None
         raise
     return _sin_cache_comicinfo(templates.TemplateResponse(
         request, "comicinfo_resultado.html", {"series": series, "resultado": resultado}))

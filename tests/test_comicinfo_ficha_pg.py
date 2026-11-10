@@ -8,6 +8,7 @@ import zipfile
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 
 from tests.test_asociar_fuente_b_pg import entorno_base, url_bd  # noqa: F401
 from tests.test_vinculacion_previa_pg import serie_de_prueba
@@ -26,9 +27,10 @@ async def _no_compartido(_path):
 
 
 async def _montar(entorno_base, tmp_path, *, formato=FileFormat.CBZ,
-                  xml: bytes | None = None):
-    sid = await serie_de_prueba(entorno_base, comic_vine_id=1)
-    ruta = tmp_path / ("Tebeo 01.cbz" if formato is FileFormat.CBZ else "Tebeo 01.cbr")
+                  xml: bytes | None = None, comic_vine_id: int = 1,
+                  nombre: str = "Tebeo 01.cbz"):
+    sid = await serie_de_prueba(entorno_base, comic_vine_id=comic_vine_id)
+    ruta = tmp_path / (nombre if formato is FileFormat.CBZ else nombre[:-4] + ".cbr")
     if formato is FileFormat.CBZ:
         with zipfile.ZipFile(ruta, "w") as zf:
             zf.writestr("001.jpg", b"pagina")
@@ -157,3 +159,61 @@ async def test_campo_bloqueado_no_se_escribe(entorno_base, tmp_path, monkeypatch
     with zipfile.ZipFile(ruta) as zf:
         xml = zf.read("ComicInfo.xml")
     assert b"<Series>" not in xml
+
+
+@pytest.mark.asyncio
+async def test_locked_field_puesto_despues_de_la_previa_no_se_aplica(entorno_base, tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "estado_de_comparticion", _no_compartido)
+    from zascarr.models import Series
+    sid, fid, ruta = await _montar(entorno_base, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = _servicio(s)
+        vista = await servicio.previsualizar(sid, fid)
+    async with entorno_base.banco.fabrica() as s:
+        serie = await s.get(Series, sid)
+        serie.locked_fields = ["title"]          # bloqueo NUEVO tras la vista previa
+        await s.commit()
+    async with entorno_base.banco.fabrica() as s:
+        resultado = await _servicio(s).aplicar(vista.token, file_id_esperado=fid,
+                                               serie_id_esperado=sid)
+        assert resultado.resultado == "caducado"
+        assert resultado.motivo == "propuesta_desactualizada"
+    with zipfile.ZipFile(ruta) as zf:
+        assert "ComicInfo.xml" not in zf.namelist()
+
+
+@pytest.mark.asyncio
+async def test_fila_deja_de_ser_cbz_o_cambia_de_serie_tras_locks(entorno_base, tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "estado_de_comparticion", _no_compartido)
+    sid, fid, ruta = await _montar(entorno_base, tmp_path)
+    async with entorno_base.banco.fabrica() as s:
+        servicio = _servicio(s)
+        vista = await servicio.previsualizar(sid, fid)
+    async with entorno_base.banco.fabrica() as s:
+        f = (await s.execute(select(File).where(File.id == fid))).scalar_one()
+        f.is_missing = True                       # deja de ser un CBZ utilizable
+        await s.commit()
+    async with entorno_base.banco.fabrica() as s:
+        resultado = await _servicio(s).aplicar(vista.token, file_id_esperado=fid,
+                                               serie_id_esperado=sid)
+        assert resultado.resultado == "caducado"
+        assert resultado.motivo == "propuesta_desactualizada"
+    with zipfile.ZipFile(ruta) as zf:
+        assert "ComicInfo.xml" not in zf.namelist()
+
+    # Misma prueba cambiando la serie del número (y el File sigue CBZ/no missing).
+    sid2, fid2, ruta2 = await _montar(entorno_base, tmp_path, comic_vine_id=2,
+                                      nombre="Segundo.cbz")
+    async with entorno_base.banco.fabrica() as s:
+        vista2 = await _servicio(s).previsualizar(sid2, fid2)
+    async with entorno_base.banco.fabrica() as s:
+        f2 = (await s.execute(select(File).where(File.id == fid2))).scalar_one()
+        issue = (await s.execute(select(Issue).where(Issue.id == f2.issue_id))).scalar_one()
+        issue.series_id = await serie_de_prueba(entorno_base, comic_vine_id=30)
+        await s.commit()
+    async with entorno_base.banco.fabrica() as s:
+        r2 = await _servicio(s).aplicar(vista2.token, file_id_esperado=fid2,
+                                        serie_id_esperado=sid2)
+        assert r2.resultado == "caducado" and r2.motivo == "propuesta_desactualizada"
+    with zipfile.ZipFile(ruta2) as zf:
+        assert "ComicInfo.xml" not in zf.namelist()

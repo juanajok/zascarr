@@ -128,3 +128,34 @@ def test_ficha_de_serie_muestra_actualizar_comicinfo_en_cbz():
         r = c.get(f"/ui/series/{serie.id}")
     assert "Actualizar ComicInfo" in r.text
     assert f"/archivos/{archivo.id}/comicinfo" in r.text
+
+
+def test_errores_token_400_410_llevan_no_store(monkeypatch):
+    from zascarr.services.vinculacion import TokenCaducadoError, TokenInvalidoError
+
+    class _Falla:
+        async def aplicar(self, *_a, **_k):
+            raise TokenInvalidoError("no vale")
+
+    serie = _serie()
+    c = _cliente(monkeypatch, _Falla(), serie)
+    try:
+        r400 = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/comicinfo",
+                      data={"token": "x"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r400.status_code == 400
+    assert r400.headers.get("cache-control") == "no-store"
+
+    class _Caduca(_Falla):
+        async def aplicar(self, *_a, **_k):
+            raise TokenCaducadoError("caducó", puede_haberse_aplicado=False)
+
+    c = _cliente(monkeypatch, _Caduca(), serie)
+    try:
+        r410 = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/comicinfo",
+                      data={"token": "x"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r410.status_code == 410
+    assert r410.headers.get("cache-control") == "no-store"
