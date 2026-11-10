@@ -2010,6 +2010,15 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 .tu-lectura { margin-top: 18px; }
 @media (max-width: 480px) { .lectura-control form { align-items: stretch; } }
 
+/* #449 BL-INF3: cobertura de la información de la biblioteca. */
+.cobertura { margin-top: 1.25rem; }
+.cobertura-linea { font-variant-numeric: tabular-nums; margin: 0 0 .35rem; }
+.cobertura-fuentes { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.cobertura-tabla { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.cobertura-tabla caption { text-align: left; font-weight: 800; padding-bottom: .35rem; }
+.cobertura-tabla th, .cobertura-tabla td { text-align: left; padding: .35rem .25rem; border-bottom: 1px solid var(--ink-faint); }
+.cobertura-numero { text-align: right !important; font-variant-numeric: tabular-nums; font-weight: 800; }
+
 @media (prefers-contrast: more), (forced-colors: active) {
   body::before,
   .metric-card::before,
