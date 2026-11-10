@@ -90,7 +90,18 @@ from zascarr.services.politica import (
     texto_de_cota,
 )
 from zascarr.services.portada_numero import ANCHO_FICHA, ruta_previa
-from zascarr.services.procedencia import procedencia_de_serie
+from zascarr.services.portada_serie import (
+    MAX_CANDIDATAS,
+    TIPO_ARCHIVO,
+    TIPO_EXTERNA,
+    archivo_de_portada,
+    archivos_de_numero,
+    candidatas_de_portada,
+    eleccion_de_portada,
+    guardar_eleccion,
+    quitar_eleccion,
+)
+from zascarr.services.procedencia import NOMBRE_DE_FUENTE, procedencia_de_serie
 from zascarr.services.relacion_confirmada import (
     es_protegida,
     estado_de_relacion,
@@ -119,6 +130,7 @@ from zascarr.utils.cover import (
     es_candidato_de_portada,
     extract_cover_thumbnail,
     fetch_and_cache_cover,
+    mejorar_portada_externa,
     portada_previa_suficiente,
     write_cover_cache,
 )
@@ -250,11 +262,17 @@ def _primera_portada(archivos: list[tuple[UUID, str, dict | None]], covers: Path
         if not es_rar:
             result = extract_cover_thumbnail(path, formato, ancho=SERIES_COVER_MAX_WIDTH)
             if result:
+                if estado is not None:
+                    # BL-INF6: la elección guarda QUÉ archivo dio la portada, no solo el número.
+                    estado["file_id"] = file_id
                 return result
             logger.info("cover.candidato_sin_portada", intento=intentos)
             continue
         try:
-            return portada_de_rar(path, covers, ancho=SERIES_COVER_MAX_WIDTH)
+            resultado = portada_de_rar(path, covers, ancho=SERIES_COVER_MAX_WIDTH)
+            if estado is not None:
+                estado["file_id"] = file_id
+            return resultado
         except ErrorRar as exc:
             if exc.motivo is MotivoRar.OCUPADO:
                 # sin turno: este RAR no gastó intento y los siguientes se saltan en esta petición; los ZIP
@@ -428,6 +446,8 @@ async def detalle(series_id: UUID, request: Request, volver: str = Query(default
         "procedencia": procedencia_de_serie(series),
         "volver": volver_segura(volver, series_id),
         "razones_sin_boton": RAZONES_SIN_BOTON,
+        # BL-INF6: separador de caché del navegador de la portada; cambia al elegir otra.
+        "portada_version": await _version_de_portada(db, series),
     })
     # #233/BL-R4: el aviso de una propuesta sin aplicar y sus acciones no se sirven de caché.
     respuesta.headers["Cache-Control"] = "no-store"
@@ -853,14 +873,18 @@ async def portada_numero_imagen(series_id: UUID, issue_id: UUID, request: Reques
 @router.get("/{series_id}/portada")
 async def portada(series_id: UUID, request: Request,
                   db: AsyncSession = Depends(get_db)) -> Response:
-    """Cascada de portada de serie (BL-PORT1, #300; #435, #418):
+    """Cascada de portada de serie (BL-PORT1, #300; #435, #418; #592, #600):
 
-    0. Una portada previa con ancho suficiente (`portada_previa_suficiente`: la caché antigua
+    0. La portada ELEGIDA a mano (BL-INF6): manda sobre todo lo demás —también sobre la previa con
+       ancho suficiente de #435—; se materializa en `covers/v3/<id>.jpg` al elegir y se vuelve a
+       materializar si el archivo cambió. Si ya no da portada, se sigue con la cascada sin borrar
+       la elección. Ver `_portada_elegida`.
+    1. Una portada previa con ancho suficiente (`portada_previa_suficiente`: la caché antigua
        `covers/<id>.jpg` o la externa `covers/externa/<id>.jpg`, con >= 300 px, #435) → servirla
        (ETag por su `mtime`, 304) **sin** extraer, sin red, sin escribir y sin copiarla.
-    1. `covers/v3/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304). `v3` guarda SOLO portadas
+    2. `covers/v3/<id>.jpg` ya escrita → servirla (ETag por `mtime`, 304). `v3` guarda SOLO portadas
        sacadas de un archivo; una `v2` anterior se ignora (no se borra).
-    2. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419): solo los que
+    3. Si no, el primer `File` no ausente, por `sort_order`, que dé portada (#419): solo los que
        `es_candidato_de_portada` acepta (ZIP por contenido o RAR por firma, #418; ausencia conocida o
        firma ajena se saltan), con un tope de `MAX_INTENTOS_PORTADA` aperturas, de
        `MAX_EVALUADOS_PORTADA` archivos evaluados y de `PRESUPUESTO_PORTADA_S` segundos → extraer su
@@ -869,11 +893,11 @@ async def portada(series_id: UUID, request: Request,
        un ETag de sus bytes (FR-11, PR-2). Una sola generación por serie a la vez (FR-18). Si un RAR
        candidato se saltó por falta de turno y sale la portada de un archivo posterior, esa portada se
        sirve sin escribir `v3` y con `no-store` (H-1): la siguiente petición prueba el RAR.
-    3. Si no hay archivo utilizable, `covers/<id>.jpg` legada (de menos de 300 px) → servirla
+    4. Si no hay archivo utilizable, `covers/<id>.jpg` legada (de menos de 300 px) → servirla
        **sin red y sin copiarla** (respaldo que solo se lee).
-    4. Si tampoco, la externa pequeña ya descargada, o `cover_url` → descargar una vez a 600,
+    5. Si tampoco, la externa pequeña ya descargada, o `cover_url` → descargar una vez a 600,
        escribir `covers/externa/` (nunca en `v3`), servirla.
-    5. Nada de eso → 404: el `<img>` cae al marcador CSS, sin texto nuevo.
+    6. Nada de eso → 404: el `<img>` cae al marcador CSS, sin texto nuevo.
 
     La regeneración es **perezosa**: solo al pedir la imagen; el HTML de
     Biblioteca/Inicio/ficha no extrae ni escribe nada (FR-16). Una ausencia de portada
@@ -890,6 +914,12 @@ async def portada(series_id: UUID, request: Request,
     v2_path = covers / "v2" / f"{series_id}.jpg"
     legacy_path = covers / f"{series_id}.jpg"
     externa_path = covers / CARPETA_EXTERNA / f"{series_id}.jpg"
+
+    # BL-INF6 (#592): la portada elegida a mano manda sobre la cascada. Su caché es la que regenera
+    # la elección; si ya no está, `_portada_elegida` prueba a recuperarla y, si no, se sigue abajo.
+    elegida = await _portada_elegida(series, db, covers, request)
+    if elegida is not None:
+        return elegida
 
     # #435 (BL-PORT5): una portada previa con resolución suficiente (la caché antigua o la externa, >=
     # 300 px) se conserva: se sirve ANTES que `v3` y que los archivos, sin extraer, sin red y sin
@@ -980,6 +1010,302 @@ def _etag_de_bytes(data: bytes) -> str:
     servidos, así que el mismo dato da el mismo ETag y la segunda petición recibe un 304,
     sin depender del `mtime` de un fichero que no llegó a escribirse."""
     return f'"{hashlib.sha256(data).hexdigest()}"'
+
+
+# ── BL-INF6 (#592): elegir la portada de la serie entre varias ───────────────────────────────────
+
+#: El aviso que ve la persona cuando la candidata ya no está (archivo retirado, URL cambiada) o el
+#: formulario llegó manipulado. Nunca se distingue el caso: no hay nada que la persona pueda hacer
+#: distinto en uno u otro, y el detalle técnico no va a superficie (CLAUDE.md §6).
+AVISO_PORTADA_YA_NO_ESTA = (
+    "Esa portada ya no está disponible. No se ha cambiado nada: abre «Elegir portada» otra vez "
+    "y elige una de las que aparecen ahora."
+)
+#: Frase única de confirmación: la garantía va junto a la acción, no en la cabecera (§6).
+MENSAJE_PORTADA_ELEGIDA = (
+    "Portada cambiada. Solo en ZascArr: no se ha escrito, movido ni renombrado ningún archivo."
+)
+MENSAJE_PORTADA_LECTOR_OCUPADO = (
+    "Ahora mismo ZascArr está abriendo otro CBR. Espera unos segundos y vuelve a probar: no se ha "
+    "cambiado nada."
+)
+MENSAJE_PORTADA_NO_SALIO = (
+    "No se ha podido sacar la portada de ese archivo. Prueba con otro número: no se ha cambiado nada."
+)
+MENSAJE_PORTADA_SIN_ESPACIO = (
+    "No se ha podido guardar la portada en la caché de ZascArr (espacio o permisos). No se ha "
+    "cambiado nada."
+)
+MENSAJE_PORTADA_EXTERNA_PERDIDA = (
+    "Esa portada externa ya no está en la caché de ZascArr. No se ha cambiado nada: vuelve a abrir "
+    "la serie para que ZascArr la pueda volver a preparar."
+)
+MENSAJE_PORTADA_AUTOMATICA = (
+    "Portada automática otra vez: ZascArr la vuelve a elegir como antes. No se ha tocado ningún "
+    "archivo."
+)
+AVISO_SIN_ELECCION = (
+    "No hay una portada elegida a mano que quitar: ZascArr ya la elige automáticamente."
+)
+
+
+async def _version_de_portada(db: AsyncSession, series: Series) -> str:
+    """Separador de caché del navegador de la portada de la ficha. Cambia al elegir una portada,
+    para que el `<img>` con `?v=` no siga 24 h con la anterior (R-01 de BL-PORT1), y también si el
+    archivo elegido se reemplazó: la elección es una referencia, no bytes congelados. Sin elección,
+    el `2` de siempre."""
+    eleccion = eleccion_de_portada(series)
+    if eleccion is None:
+        return "2"
+    base = str(eleccion.get("fecha") or "")
+    if eleccion.get("tipo") == TIPO_ARCHIVO:
+        archivos = await archivo_de_portada(db, series.id, UUID(str(eleccion["file_id"])))
+        if archivos:
+            base += f":{archivos[0][3]}"      # mtime del archivo: cambia si se reemplaza
+    return hashlib.sha256(base.encode()).hexdigest()[:8]
+
+
+def _url_de_portada(series: Series, version: str) -> str:
+    return f"/ui/series/{series.id}/portada?v={version}"
+
+
+def _nombre_de_fuente(series: Series) -> str:
+    """El nombre de la fuente de la portada externa en llano («Comic Vine»), para el origen de la
+    candidata. Sin fuente registrada no se inventa una: «una fuente externa»."""
+    if not series.metadata_source:
+        return "una fuente externa"
+    return NOMBRE_DE_FUENTE.get(str(series.metadata_source), "una fuente externa")
+
+
+def _archivo_mas_nuevo_que_la_cache(ruta: Path, cache: Path, mtime_ns: int | None) -> bool:
+    """¿El archivo de la elección cambió después de materializar la portada en `cache`?
+
+    La elección guarda una REFERENCIA al archivo, no una copia congelada: si el CBZ se sustituye,
+    la portada se vuelve a sacar del archivo nuevo. El instante sale de `File.file_mtime_ns` (lo
+    escribe el rescan) y, si la fila no lo tiene, del propio disco; si no se puede leer, se sirve la
+    caché que hay (la caché manda mientras el archivo no demuestre ser más nuevo)."""
+    try:
+        de_cache = cache.stat().st_mtime_ns
+    except OSError:
+        return True
+    if mtime_ns is not None:
+        return mtime_ns > de_cache
+    try:
+        return ruta.stat().st_mtime_ns > de_cache
+    except OSError:
+        return False
+
+
+async def _portada_elegida(series: Series, db: AsyncSession, covers: Path,
+                           request: Request) -> Response | None:
+    """La portada elegida a mano (prioridad 0), o `None` para seguir la cascada de siempre.
+
+    La elección GANA a todo, también a la «previa con ancho suficiente» de #435 que hoy se sirve
+    antes de `covers/v3/<serie>.jpg`: si no, una externa previa taparía la elección. Es una
+    referencia al archivo: si el archivo se reemplazó, se materializa otra vez (una sola escritura
+    de 600 px) antes de servirlo. Si ya no da portada (archivo desaparecido, RAR con marca de
+    fallo), se cae a la cascada SIN borrar la elección ni marcar un error falso."""
+    eleccion = eleccion_de_portada(series)
+    if eleccion is None:
+        return None
+    v3_path = covers / CACHE_VERSION / f"{series.id}.jpg"
+    if eleccion["tipo"] == TIPO_EXTERNA:
+        externa_path = covers / CARPETA_EXTERNA / f"{series.id}.jpg"
+        if await asyncio.to_thread(externa_path.is_file):
+            data = await asyncio.to_thread(externa_path.read_bytes)
+            return cached_image_response(request, data, "image/jpeg", _etag_for(externa_path))
+        # La externa desapareció: la cascada la puede volver a intentar desde `cover_url`.
+        return None
+    archivos = await archivo_de_portada(db, series.id, UUID(str(eleccion["file_id"])))
+    if not archivos:
+        # El archivo elegido ya no está en la biblioteca: fallback, la elección se conserva por si
+        # vuelve (un disco desconectado, un reescaneo posterior).
+        return None
+    file_id, ruta, formato, mtime_ns = archivos[0]
+    if (await asyncio.to_thread(v3_path.is_file)
+            and not await asyncio.to_thread(_archivo_mas_nuevo_que_la_cache,
+                                            Path(ruta), v3_path, mtime_ns)):
+        data = await asyncio.to_thread(v3_path.read_bytes)
+        return cached_image_response(request, data, "image/jpeg", _etag_for(v3_path))
+    # El archivo cambió (o no hay caché): se materializa de nuevo; la caché vieja no se sirve.
+    resultado = await asyncio.to_thread(_primera_portada, [(file_id, ruta, formato)], covers)
+    if resultado is None:
+        return None
+    data, content_type = resultado
+    escrita = True
+    try:
+        await asyncio.to_thread(write_cover_cache, v3_path, data)
+    except OSError:
+        escrita = False
+    etag = _etag_for(v3_path) if escrita else _etag_de_bytes(data)
+    return cached_image_response(request, data, content_type, etag)
+
+
+async def _respuesta_panel_portada(series: Series, request: Request, db: AsyncSession, candidatas,
+                                   *, mensaje: str | None, error: str | None,
+                                   actualizar_cabecera: bool = False) -> HTMLResponse:
+    """El panel «Elegir portada» completo (lo pinta el GET perezoso y lo repinta el POST)."""
+    version = await _version_de_portada(db, series)
+    respuesta = templates.TemplateResponse(request, "_elegir_portada.html", {
+        "series": series,
+        "candidatas": ([candidatas.externa] if candidatas.externa else []) + list(candidatas.numeros),
+        "hay_mas": candidatas.hay_mas,
+        "siguiente_desde": MAX_CANDIDATAS,
+        "portada_actual": (_url_de_portada(series, version)
+                           if candidatas.hay_portada_actual else None),
+        "nombre_fuente": _nombre_de_fuente(series),
+        "eleccion": eleccion_de_portada(series),
+        "mensaje": mensaje,
+        "error": error,
+        "actualizar_cabecera": actualizar_cabecera,
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+async def _candidatas_para_panel(db: AsyncSession, series: Series, *, desde: int = 0):
+    return await candidatas_de_portada(db, series, desde=desde)
+
+
+@router.get("/{series_id}/portada/elegir", response_class=HTMLResponse)
+async def panel_elegir_portada(series_id: UUID, request: Request,
+                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-INF6: panel «Elegir portada». Se pide al desplegar (lazy): la ficha no genera ni pide
+    miniaturas hasta entonces."""
+    series = await _serie_o_404(db, series_id)
+    candidatas = await _candidatas_para_panel(db, series)
+    return await _respuesta_panel_portada(series, request, db, candidatas, mensaje=None, error=None)
+
+
+@router.get("/{series_id}/portada/candidatas", response_class=HTMLResponse)
+async def mas_candidatas_de_portada(series_id: UUID, request: Request,
+                                    desde: int = Query(default=MAX_CANDIDATAS, ge=0),
+                                    db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-INF6: la siguiente tanda de números para el «Ver más números» del panel."""
+    series = await _serie_o_404(db, series_id)
+    candidatas = await _candidatas_para_panel(db, series, desde=desde)
+    respuesta = templates.TemplateResponse(request, "_portada_candidatas.html", {
+        "series": series,
+        "candidatas": candidatas.numeros,
+        "hay_mas": candidatas.hay_mas,
+        "siguiente_desde": desde + MAX_CANDIDATAS,
+        "nombre_fuente": _nombre_de_fuente(series),
+    })
+    respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+@router.post("/{series_id}/portada/elegir", response_class=HTMLResponse)
+async def elegir_portada_serie(series_id: UUID, request: Request,
+                               tipo: str = Form(""), issue_id: str = Form(""),
+                               file_id: str = Form(""), url: str = Form(""),
+                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-INF6: guarda la portada elegida y regenera SU caché (600 px).
+
+    Seguridad sin token, por identidad del candidato: un `file_id` solo vale si es un archivo no
+    ausente de un número de ESTA serie, y una `url` externa solo vale si es la `cover_url` que la
+    serie ya tenía (la única externa que el panel ofrece). La acción es idempotente y reversible
+    eligiendo otra; lo peor que consigue un formulario manipulado es volver a elegir una portada
+    que ya estaba disponible. No se escribe en los archivos de la biblioteca.
+    """
+    series = await _serie_o_404(db, series_id)
+    covers = get_settings().covers_cache_path
+    mensaje = error = None
+
+    if tipo == TIPO_ARCHIVO:
+        try:
+            issue_uuid, file_uuid = UUID(issue_id), UUID(file_id)
+        except (ValueError, TypeError, AttributeError):
+            error = AVISO_PORTADA_YA_NO_ESTA
+        else:
+            archivos = await archivos_de_numero(db, series.id, issue_uuid, file_id=file_uuid)
+            if not archivos:
+                error = AVISO_PORTADA_YA_NO_ESTA
+            else:
+                estado: dict = {}
+                resultado = await asyncio.to_thread(
+                    _primera_portada, archivos, covers, estado=estado)
+                v3_path = covers / CACHE_VERSION / f"{series.id}.jpg"
+                if resultado is None:
+                    error = (MENSAJE_PORTADA_LECTOR_OCUPADO if estado.get("ocupado")
+                             else MENSAJE_PORTADA_NO_SALIO)
+                else:
+                    datos, _tipo_imagen = resultado
+                    try:
+                        await asyncio.to_thread(write_cover_cache, v3_path, datos)
+                    except OSError:
+                        logger.warning("cover.eleccion_sin_espacio", serie=series.id)
+                        error = MENSAJE_PORTADA_SIN_ESPACIO
+                    else:
+                        guardar_eleccion(series, tipo=TIPO_ARCHIVO,
+                                         file_id=estado.get("file_id", file_uuid))
+                        await db.flush()
+                        mensaje = MENSAJE_PORTADA_ELEGIDA
+    elif tipo == TIPO_EXTERNA:
+        elegible = (series.cover_url and not es_portada_de_relleno(series.cover_url)
+                    and url and url == series.cover_url)
+        if not elegible:
+            error = AVISO_PORTADA_YA_NO_ESTA
+        else:
+            ruta = await asyncio.to_thread(mejorar_portada_externa, covers, series.id)
+            if ruta is None:
+                error = MENSAJE_PORTADA_EXTERNA_PERDIDA
+            else:
+                guardar_eleccion(series, tipo=TIPO_EXTERNA, url=series.cover_url)
+                await db.flush()
+                mensaje = MENSAJE_PORTADA_ELEGIDA
+    else:
+        error = AVISO_PORTADA_YA_NO_ESTA
+
+    candidatas = await _candidatas_para_panel(db, series)
+    return await _respuesta_panel_portada(
+        series, request, db, candidatas, mensaje=mensaje, error=error,
+        actualizar_cabecera=mensaje is not None)
+
+
+@router.post("/{series_id}/portada/quitar", response_class=HTMLResponse)
+async def quitar_portada_serie(series_id: UUID, request: Request,
+                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    """BL-INF6: quita la elección y devuelve la serie a la portada automática.
+
+    No borra ningún archivo de la biblioteca. De la caché de archivo (`v3`) solo retira la
+    generada por la elección: si se quedara, la cascada seguiría sirviendo la portada elegida y
+    «volver a la automática» no sería verdad. La `v3` se regenera sola (perezosa) cuando haga falta."""
+    series = await _serie_o_404(db, series_id)
+    covers = get_settings().covers_cache_path
+    mensaje = error = None
+    eleccion = eleccion_de_portada(series)
+    if eleccion is None:
+        error = AVISO_SIN_ELECCION
+    else:
+        quitar_eleccion(series)
+        if eleccion["tipo"] == TIPO_ARCHIVO:
+            v3_path = covers / CACHE_VERSION / f"{series.id}.jpg"
+            try:
+                await asyncio.to_thread(v3_path.unlink, missing_ok=True)
+            except OSError:
+                logger.warning("cover.eleccion_cache_no_borrada", serie=series.id)
+        await db.flush()
+        mensaje = MENSAJE_PORTADA_AUTOMATICA
+    candidatas = await _candidatas_para_panel(db, series)
+    return await _respuesta_panel_portada(
+        series, request, db, candidatas, mensaje=mensaje, error=error,
+        actualizar_cabecera=mensaje is not None)
+
+
+@router.get("/{series_id}/portada/externa.jpg")
+async def portada_externa_imagen(series_id: UUID, request: Request,
+                                 db: AsyncSession = Depends(get_db)) -> Response:
+    """BL-INF6: la portada externa cacheada como miniatura del selector. Solo lectura: si no
+    existe, 404 sin caché (el marcador de `ui.portada` cubre el hueco)."""
+    series = await db.get(Series, series_id)
+    if series is None:
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    ruta = get_settings().covers_cache_path / CARPETA_EXTERNA / f"{series_id}.jpg"
+    if not await asyncio.to_thread(ruta.is_file):
+        return Response(status_code=404, headers={"Cache-Control": "no-store"})
+    datos = await asyncio.to_thread(ruta.read_bytes)
+    return cached_image_response(request, datos, "image/jpeg", f'"{ruta.stat().st_mtime_ns}"')
 
 
 # ── #478/BL-CNV1: conversión CBR→CBZ (vista previa + confirmación) ───────────────────────────────

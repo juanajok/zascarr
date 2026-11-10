@@ -1,0 +1,7 @@
+{#- BL-INF6 (#592): la siguiente tanda de números del selector («Ver más números»).
+    El botón se sustituye a sí mismo (`hx-target="this"`): la tanda nueva se inserta como hermana
+    después de las anteriores, sin JS propio y sin perder las que ya se veían. -#}
+<div class="portada-candidatas portada-candidatas-mas">
+  {% for c in candidatas %}{% include "_portada_candidata.html" %}{% endfor %}
+</div>
+{% include "_portada_ver_mas.html" %}

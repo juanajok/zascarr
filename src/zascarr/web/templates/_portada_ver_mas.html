@@ -1,0 +1,7 @@
+{#- BL-INF6 (#592): «Ver más números» del selector de portada. Si esta tanda fue la última, no
+    pinta nada (el botón desaparece solo). -#}
+{% if hay_mas %}
+<button class="btn ghost" type="button"
+        hx-get="/ui/series/{{ series.id }}/portada/candidatas?desde={{ siguiente_desde }}"
+        hx-target="this" hx-swap="outerHTML" hx-disable="this">Ver más números</button>
+{% endif %}
