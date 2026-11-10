@@ -88,6 +88,7 @@ def test_vista_previa_muestra_garantia_y_token(monkeypatch):
     assert r.status_code == 200
     assert "Tebeo 01.cbr" in r.text and "Tebeo 01.cbz" in r.text
     assert 'name="token"' in r.text and "Convertir a CBZ" in r.text
+    assert "Convirtiendo" in r.text and "htmx-indicator" in r.text
     # Confirmar por HTMX dentro de la ficha: si no, el navegador acaba en el fragmento suelto.
     assert f'hx-post="/ui/series/{serie.id}/archivos/{servicio.vista.file_id}/convertir"' in r.text
     assert 'hx-target="closest .conversion-previa"' in r.text
@@ -98,7 +99,9 @@ def test_vista_previa_muestra_garantia_y_token(monkeypatch):
 def test_confirmacion_muestra_resultado_y_enlace_deshacer(monkeypatch):
     serie = _serie()
     r = ResultadoConversion(1, "conversion", str(uuid4()), str(uuid4()), "convertida", None,
-                            "Convertida a CBZ.")
+                            "Convertida a CBZ.",
+                            antes={"ruta": "/lib/Tebeo 01.cbr", "tamano": 1048576},
+                            despues={"ruta": "/lib/Tebeo 01.cbz", "tamano": 524288})
     c = _cliente(monkeypatch, _Servicio(resultado=r), serie)
     try:
         respuesta = c.post(f"/ui/series/{serie.id}/archivos/{uuid4()}/convertir",
@@ -107,7 +110,10 @@ def test_confirmacion_muestra_resultado_y_enlace_deshacer(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert respuesta.status_code == 200
     assert "Convertida a CBZ" in respuesta.text
+    assert "ya es un CBZ" in respuesta.text and "Tebeo 01.cbz" in respuesta.text
+    assert "MB → " in respuesta.text
     assert f"/archivos/{r.file_id}/convertir/deshacer" in respuesta.text
+    assert "Volver a la serie" in respuesta.text
 
 
 def test_ficha_muestra_convertir_para_cbr():
@@ -192,6 +198,7 @@ def test_lote_previa_muestra_convertibles_y_boton(monkeypatch):
     assert r.status_code == 200
     assert "Convertir 1 CBR a CBZ" in r.text
     assert "Tebeo 01.cbr" in r.text
+    assert "Convirtiendo la tanda" in r.text and "htmx-indicator" in r.text
     assert f'hx-post="/ui/series/{serie.id}/convertir"' in r.text
     assert 'hx-target="#conversion-lote"' in r.text
     assert r.headers["Cache-Control"] == "no-store"

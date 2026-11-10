@@ -1975,6 +1975,17 @@ progress.progress::-moz-progress-bar { background: var(--yellow); }
 /* #478: conversión CBR→CBZ (vista previa y resultado). */
 .conversion-previa, .conversion-resultado { display: grid; gap: 8px; margin-top: 8px; }
 .conversion-previa form { display: grid; gap: 8px; justify-items: start; }
+/* #478/#479: espera visible durante la conversión y cierre con acciones. */
+.conversion-espera { font-weight: 700; }
+.conversion-espera::before {
+  content: ""; width: 12px; height: 12px; display: inline-block; margin-right: 8px;
+  vertical-align: -2px; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: conversion-giro .8s linear infinite;
+}
+@keyframes conversion-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .conversion-espera::before { animation: none; } }
+.conversion-resultado-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
 /* #479: lote de conversión (vista previa, informe y siguiente tanda). */
 .conversion-lote { display: grid; gap: 8px; margin: 10px 0 14px; }
 .conversion-lote h3 { margin: 0; }

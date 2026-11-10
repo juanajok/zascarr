@@ -1,20 +1,42 @@
-{#- #478: resultado de una conversión o de su deshacer. -#}
-<div class="conversion-resultado" id="conversion-resultado">
-  {% if resultado.resultado in ("convertida", "ya_convertida") %}
-  {{ ui.aviso("ok", resultado.mensaje) }}
-  {% elif resultado.resultado in ("revertida", "ya_revertida") %}
-  {{ ui.aviso("ok", resultado.mensaje) }}
-  {% else %}
-  {{ ui.aviso("amber", resultado.mensaje) }}
+{#- #478: cierre de la conversión (o del deshacer): un estado claro y las acciones siguientes. -#}
+{% set ok = resultado.resultado in ("convertida", "ya_convertida") %}
+{% set deshecho = resultado.resultado in ("revertida", "ya_revertida") %}
+{% set antes = resultado.antes or {} %}
+{% set despues = resultado.despues or {} %}
+{% set nombre = (despues.get("ruta") or antes.get("ruta") or resultado.file_id).split("/")[-1] %}
+{% set tam_antes = antes.get("tamano") %}
+{% set tam_despues = despues.get("tamano") %}
+<div class="conversion-resultado" id="conversion-resultado" aria-live="polite">
+  {% if ok %}
+  {{ ui.aviso("ok", "Listo: «" ~ nombre ~ "» ya es un CBZ.") }}
+  <p class="caption">{{ resultado.mensaje }}</p>
+  {% if tam_antes and tam_despues %}
+  <p class="caption">Tamaño: {{ (tam_antes / 1048576)|round(1) }} MB → {{ (tam_despues / 1048576)|round(1) }} MB.</p>
   {% endif %}
-  {% if resultado.advertencia %}<p class="caption">{{ resultado.advertencia }}</p>{% endif %}
-  {% if resultado.antes or resultado.despues %}
+  {% elif deshecho %}
+  {{ ui.aviso("ok", "Deshecho: «" ~ nombre ~ "» vuelve a ser el original.") }}
+  <p class="caption">{{ resultado.mensaje }}</p>
+  {% else %}
+  {{ ui.aviso("amber", "No se ha convertido: " ~ resultado.mensaje) }}
+  {% endif %}
+
+  {% if resultado.advertencia %}{{ ui.aviso("amber", resultado.advertencia) }}{% endif %}
+
+  {% if antes or despues %}
   <details class="ajustes-mas"><summary>Qué ha cambiado</summary>
-    <p class="caption">Antes: {{ resultado.antes.get("ruta", "") }} · Después: {{ resultado.despues.get("ruta", "") }}</p>
+    <p class="caption">Antes: {{ antes.get("ruta", "") }}<br>Después: {{ despues.get("ruta", "") }}</p>
   </details>
   {% endif %}
-  <p><a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
-    {% if resultado.resultado in ("convertida", "ya_convertida") %}
+
+  <p class="conversion-resultado-acciones">
+    {% if ok %}
     <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir/deshacer">Deshacer</a>
-    {% endif %}</p>
+    {% elif not deshecho %}
+    <a class="btn ghost" href="/ui/series/{{ series.id }}/archivos/{{ resultado.file_id }}/convertir">Reintentar</a>
+    {% endif %}
+    <a class="btn ghost" href="/ui/series/{{ series.id }}">Volver a la serie</a>
+  </p>
+  {% if ok %}
+  <p class="caption">El original queda apartado en la biblioteca; «Deshacer» lo restaura.</p>
+  {% endif %}
 </div>
