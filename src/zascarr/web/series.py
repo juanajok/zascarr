@@ -616,7 +616,7 @@ async def sugerir_etiqueta(series_id: UUID, request: Request, etiqueta: str = ""
 
 @router.post("/{series_id}/etiquetas", response_class=HTMLResponse)
 async def anadir_etiqueta_web(series_id: UUID, request: Request,
-                              etiqueta: str = Form(...),
+                              etiqueta: str = Form(""),
                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = await _serie_o_404(db, series_id)
     mensaje = error = None
@@ -636,7 +636,7 @@ async def anadir_etiqueta_web(series_id: UUID, request: Request,
 
 @router.post("/{series_id}/etiquetas/quitar", response_class=HTMLResponse)
 async def quitar_etiqueta_web(series_id: UUID, request: Request,
-                              etiqueta: str = Form(...),
+                              etiqueta: str = Form(""),
                               db: AsyncSession = Depends(get_db)) -> HTMLResponse:
     series = await _serie_o_404(db, series_id)
     mensaje = error = None
