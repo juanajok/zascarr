@@ -374,6 +374,7 @@ class TaggerService:
                 selectinload(Series.genres),
             )
             .where(Issue.id == file.issue_id)
+            .execution_options(populate_existing=True)
         )).first()
         if row is None:
             return _Contexto({}, set())
@@ -760,6 +761,7 @@ class TaggerService:
                 selectinload(Series.genres),
             )
             .where(File.file_format == FileFormat.CBZ)
+            .execution_options(populate_existing=True)
             .where(File.is_missing.is_(False))
             # Orden GLOBAL por `File.id` (y no por imported_at): rescan ordena
             # igual sus cambios y los advisory locks se piden en el mismo orden.
