@@ -184,6 +184,16 @@ class ReadingStatus(enum.StrEnum):
     ON_HOLD   = "on_hold"
     DROPPED   = "dropped"
 
+class EstadoEvaluacion(enum.StrEnum):
+    """Estados de la evaluación de contexto (MIT-M7, #131 AC6)."""
+    PROPUESTA_DISPONIBLE = "propuesta_disponible"
+    FUERA_DE_ALCANCE = "fuera_de_alcance"
+    DESTINO_NO_DISPONIBLE = "destino_no_disponible"
+    CONFLICTO_DE_CORRESPONDENCIAS = "conflicto_de_correspondencias"
+    EVIDENCIA_INCOMPATIBLE = "evidencia_incompatible"
+    REGLA_DESACTUALIZADA = "regla_desactualizada"
+
+
 class TipoRegistro(enum.StrEnum):
     """Tipo del registro local al que puede aplicar una correspondencia."""
     ARCHIVO = "archivo"
