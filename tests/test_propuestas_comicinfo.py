@@ -114,7 +114,7 @@ def test_crear_opcion_y_propuesta_estados():
     opcion = crear_opcion("Year", 1980, fuente=FuenteComicInfo.COMIC_VINE,
                           nivel=NivelDato.SERIE)
     assert opcion is not None and opcion.valor == "1980"
-    assert opcion.nivel is NivelDato.NUMERO       # la matriz manda sobre el nivel
+    assert opcion.nivel is NivelDato.SERIE        # el nivel explícito manda
     vacia = crear_opcion("Year", 99, fuente=FuenteComicInfo.COMIC_VINE,
                          nivel=NivelDato.NUMERO)
     assert vacia is not None and vacia.valor == "" and vacia.motivo

@@ -102,12 +102,21 @@ from zascarr.services.portada_serie import (
     quitar_eleccion,
 )
 from zascarr.services.procedencia import NOMBRE_DE_FUENTE, procedencia_de_serie
+from zascarr.services.propuestas_comicinfo import (
+    ArchivoSinIssueError,
+    PropuestasComicInfoService,
+)
+from zascarr.services.propuestas_comicinfo_sesion import (
+    ALMACEN,
+    SesionCaducadaError,
+)
 from zascarr.services.relacion_confirmada import (
     es_protegida,
     estado_de_relacion,
     relacion_actual,
 )
 from zascarr.services.series import razon_de_no_calculable
+from zascarr.services.tagger import _LOCK_DE
 from zascarr.services.tokens_revision import (
     MAX_TOKEN_CONVERSION,
     MAX_TOKEN_MANTENER,
@@ -1437,6 +1446,146 @@ def _sin_cache_conversion(respuesta: HTMLResponse) -> HTMLResponse:
     return respuesta
 
 
+# CNV5-3: qué decir en la sección de fuentes sin consultar ninguna fuente.
+def _fuentes_disponibles(series: Series) -> tuple[bool, str | None, str | None]:
+    from zascarr.config import get_settings
+    from zascarr.core.propuestas_comicinfo import (
+        FuenteComicInfo,
+        fuentes_para_tradicion,
+    )
+
+    identidades = any(getattr(series, campo, None) for campo in
+                      ("comic_vine_id", "anilist_id", "tebeosfera_slug", "gcd_id"))
+    if not identidades:
+        return (False,
+                "Esta serie todavía no está asociada a ninguna fuente. Asíciala primero para "
+                "poder completar sus datos.", f"/ui/series/{series.id}/asociar")
+    s = get_settings()
+    encendidas = {
+        FuenteComicInfo.COMIC_VINE: bool(getattr(s, "comicvine_enabled", False)),
+        FuenteComicInfo.ANILIST: bool(getattr(s, "anilist_enabled", False)),
+        FuenteComicInfo.TEBEOSFERA: bool(getattr(s, "tebeosfera_enabled", False)),
+        FuenteComicInfo.GCD: bool(getattr(s, "gcd_enabled", False)),
+    }
+    admitidas = set(fuentes_para_tradicion(series.tradition))
+    if not any(encendidas[f] and f in admitidas for f in FuenteComicInfo):
+        return (False,
+                "No hay fuentes de datos encendidas. Enciéndelas en Ajustes o guarda lo que ya "
+                "tienes.", "/ui/ajustes")
+    return True, None, None
+
+
+def _bloqueados_de(issue: Issue, series: Series) -> set[str]:
+    bloqueados: set[str] = set()
+    for tag, (entidad, campo) in _LOCK_DE.items():
+        objetivo = issue if entidad == "issue" else series
+        if campo in (getattr(objetivo, "locked_fields", None) or []):
+            bloqueados.add(tag)
+    return bloqueados
+
+
+def _fragmento_fuentes(request, series, sesion, *, estado: int = 200):
+    respuesta = templates.TemplateResponse(
+        request, "_comicinfo_fuentes.html",
+        {"series": series, "sesion": sesion, "campos": sesion.campos_ui(),
+         "estados": sesion.estados, "avisos": sesion.avisos})
+    respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.status_code = estado
+    return respuesta
+
+
+@router.get("/{series_id}/archivos/{file_id}/comicinfo/fuentes", response_class=HTMLResponse)
+async def comicinfo_fuentes(series_id: UUID, file_id: UUID, request: Request,
+                            db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    file = await db.get(File, file_id)
+    issue = await db.get(Issue, file.issue_id) if file is not None and file.issue_id else None
+    if file is None or issue is None or issue.series_id != series_id:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado",
+                            headers={"Cache-Control": "no-store"})
+    try:
+        resultado = await PropuestasComicInfoService(db).proponer(file_id)
+    except ArchivoSinIssueError:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado",
+                            headers={"Cache-Control": "no-store"}) from None
+    ruta = Path(file.file_path)
+    try:
+        st = ruta.stat()
+        sha = hashlib.sha256(await asyncio.to_thread(ruta.read_bytes)).hexdigest()
+    except OSError:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado",
+                            headers={"Cache-Control": "no-store"}) from None
+    sesion = ALMACEN.crear(
+        file_id=file.id, serie_id=series.id, ruta=str(ruta), tamano=st.st_size,
+        mtime_ns=st.st_mtime_ns, sha256=sha, propuestas=resultado.campos,
+        estados=resultado.estados, avisos=resultado.avisos,
+        bloqueados=_bloqueados_de(issue, series))
+    return _fragmento_fuentes(request, series, sesion)
+
+
+@router.post("/{series_id}/archivos/{file_id}/comicinfo/fuentes", response_class=HTMLResponse)
+async def comicinfo_fuentes_guardar(series_id: UUID, file_id: UUID, request: Request,
+                                    db: AsyncSession = Depends(get_db)) -> HTMLResponse:
+    series = await _serie_o_404(db, series_id)
+    form = await request.form()
+    operacion_id = str(form.get("operacion_id") or "")
+    try:
+        sesion = ALMACEN.obtener(operacion_id)
+    except SesionCaducadaError:
+        return _fragmento_caducado(request, series)
+    if sesion.file_id != str(file_id) or sesion.serie_id != str(series_id):
+        raise HTTPException(status_code=400, detail="La propuesta no es para este archivo.",
+                            headers={"Cache-Control": "no-store"})
+    file = await db.get(File, file_id)
+    issue = await db.get(Issue, file.issue_id) if file is not None and file.issue_id else None
+    if file is None or issue is None or issue.series_id != series_id:
+        raise HTTPException(status_code=400, detail="El archivo ya no pertenece a esta serie.",
+                            headers={"Cache-Control": "no-store"})
+    ruta = Path(file.file_path)
+    try:
+        st = ruta.stat()
+        sha_actual = hashlib.sha256(await asyncio.to_thread(ruta.read_bytes)).hexdigest()
+    except OSError:
+        st = None
+        sha_actual = None
+    if (st is None or str(ruta) != sesion.ruta or st.st_size != sesion.tamano
+            or st.st_mtime_ns != sesion.mtime_ns or sha_actual != sesion.sha256):
+        return _fragmento_cambiado(request, series)
+    try:
+        for clave, valor in form.multi_items():
+            if clave.startswith("campo:"):
+                tag = clave.split(":", 1)[1]
+                sesion = ALMACEN.elegir(operacion_id, tag, str(valor) or None)
+    except SesionCaducadaError:
+        return _fragmento_caducado(request, series)
+    except KeyError:
+        raise HTTPException(status_code=400,
+                            detail="Esa opción no es válida para este campo.",
+                            headers={"Cache-Control": "no-store"}) from None
+    return _fragmento_fuentes(request, series, sesion)
+
+
+def _fragmento_caducado(request, series):
+    respuesta = templates.TemplateResponse(
+        request, "_comicinfo_fuentes.html",
+        {"series": series, "sesion": None, "campos": (), "estados": (), "avisos": (),
+         "mensaje": "La búsqueda de datos ha caducado. Vuelve a buscar; no se ha cambiado nada."})
+    respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.status_code = 410
+    return respuesta
+
+
+def _fragmento_cambiado(request, series):
+    respuesta = templates.TemplateResponse(
+        request, "_comicinfo_fuentes.html",
+        {"series": series, "sesion": None, "campos": (), "estados": (), "avisos": (),
+         "mensaje": "El tebeo cambió desde que viste la vista previa. Vuelve a abrirla; "
+                    "no se ha cambiado nada."})
+    respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.status_code = 409
+    return respuesta
+
+
 # ── #480/BL-CNV3: ComicInfo desde la ficha (mismo plan de B6) ────────────────────────────────────
 
 def _servicio_comicinfo(db):
@@ -1458,8 +1607,13 @@ async def comicinfo_vista_previa(series_id: UUID, file_id: UUID, request: Reques
         if exc.__class__.__name__ == "TokenInvalidoError":
             raise HTTPException(status_code=404, detail="Archivo no encontrado") from None
         raise
+    disponibles, mensaje, enlace = _fuentes_disponibles(series)
     return _sin_cache_comicinfo(templates.TemplateResponse(
-        request, "_comicinfo_previa.html", {"series": series, "vista": vista, "file_id": file_id}))
+        request, "_comicinfo_previa.html", {
+            "series": series, "vista": vista, "file_id": file_id,
+            "fuentes_disponibles": disponibles, "fuentes_mensaje": mensaje,
+            "fuentes_enlace": enlace,
+        }))
 
 
 @router.post("/{series_id}/archivos/{file_id}/comicinfo", response_class=HTMLResponse)
