@@ -25,7 +25,11 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from zascarr.core.matcher import SeriesMatcher
+from pathlib import Path
+from unittest.mock import AsyncMock
+
+from zascarr.core.importer_triage import TriageResult
+from zascarr.core.matcher import MatchStatus, SeriesHit, SeriesMatcher
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(
@@ -111,5 +115,48 @@ async def test_find_issue_ambiguedad_real():
             assert await matcher.find_issue(sid, "12", "omnibus") == (omnibus, False)
             # Sin marcador hay dos candidatas y nada que las separe → a revisión.
             assert await matcher.find_issue(sid, "12", None) == (None, True)
+    finally:
+        await engine.dispose()
+
+
+_CREATE_TEMP_FILES = (
+    "CREATE TEMP TABLE files (id uuid PRIMARY KEY, issue_id uuid, file_name varchar)"
+)
+_INSERT_FILE = "INSERT INTO files (id, issue_id, file_name) VALUES (:id, :iid, :name)"
+
+
+@pytest.mark.asyncio
+async def test_no_enlaza_a_un_numero_con_archivos_de_otra_coleccion():
+    """BL-INF11: «Superman - Godfall #01» no se cuelga del #1 que ya tiene «Superman #01»."""
+    engine = create_async_engine(_url_asyncpg(TEST_DATABASE_URL))
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            await session.execute(text(_CREATE_TEMP_ISSUES))
+            await session.execute(text(_CREATE_TEMP_FILES))
+            sid, iid = uuid4(), uuid4()
+            await session.execute(text(_INSERT_ISSUE),
+                                  {"id": str(iid), "sid": str(sid), "num": "1",
+                                   "fmt": "single_issue"})
+            await session.execute(text(_INSERT_FILE),
+                                  {"id": str(uuid4()), "iid": str(iid),
+                                   "name": "Superman #01.cbz"})
+            matcher = SeriesMatcher(session)
+
+            async def _find_series(*_a, **_k):
+                return [SeriesHit(sid, "Superman", None, 1.0)]
+
+            matcher.find_series = _find_series
+            matcher.find_alias = AsyncMock(return_value=None)
+
+            triage = TriageResult(path=Path("Superman - Godfall #01.cbr"))
+            r = await matcher.decide(triage, extractor=lambda _n: ("Superman", "1", None))
+            assert r.status is MatchStatus.UNSORTED
+            assert any("otro título" in nota for nota in r.notes)
+            assert r.issue_id is None
+
+            # CBR/CBZ o copia del mismo título: sí puede compartir el número.
+            copia = TriageResult(path=Path("Superman #01 (copia).cbz"))
+            r2 = await matcher.decide(copia, extractor=lambda _n: ("Superman", "1", None))
+            assert r2.issue_id == iid
     finally:
         await engine.dispose()
