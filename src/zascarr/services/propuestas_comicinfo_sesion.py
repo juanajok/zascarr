@@ -5,6 +5,10 @@ Single worker: un dict con TTL de 15 minutos, tope de sesiones y claves opacas p
 BD, archivos ni `File.metadata_`; solo guarda propuestas, elecciones e identidad/stat/hash para que
 CNV5-4 pueda validar antes de escribir. Las claves son opacas: el valor crudo nunca viaja en el
 formulario.
+
+La sesión es **del proceso** (instalación de un solo operador y un solo worker), no de una cookie ni
+de un usuario: no hay identidad de persona que guardar. Al reiniciar se pierde y hay que volver a
+buscar; nunca se usa para autorizar por sí sola (CNV5-4 exige además token y archivo).
 """
 from __future__ import annotations
 
